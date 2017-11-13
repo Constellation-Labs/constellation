@@ -1,2 +1,2 @@
 # constellation
-Horizontally scalable distributed ledger
+A horizontally scalable DAG chain with smart contracts as microservices
