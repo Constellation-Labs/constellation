@@ -1,2 +1,2 @@
 # constellation
-A horizontally scalable DAG chain with smart contracts as microservices
+A blockchain microservice operating system
