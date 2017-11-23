@@ -1,33 +1,38 @@
-lazy val appSettings = Seq(
-  name := "constellation",
-  scalaVersion := "2.11.8",
-  version := "0.0.1"
-)
+name := "constellation"
 
-lazy val scalaTestVersion = "2.2.6"
+version := "0"
 
-lazy val akkaVersion = "2.4.2"
+scalaVersion := "2.12.2"
 
-lazy val lib = Seq(
-  "com.typesafe.akka" %% "akka-actor" % akkaVersion
-  exclude("org.scala-lang", "scala-library"),
-  "com.typesafe.akka" %% "akka-slf4j" % "2.4.16" ,
-  "com.typesafe.akka" %% "akka-stream" % "2.4.16",
-  "com.typesafe.akka" %% "akka-stream-testkit" % "2.4.16",
-  "com.typesafe.akka" %% "akka-testkit" % "2.4.16",
+resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases"
+
+enablePlugins(JavaAppPackaging)
+
+dockerExposedPorts := Seq( 9000, 2552 )
+
+lazy val versions = new {
+  val akka = "2.4.18"
+  val akkaHttp = "10.0.7"
+}
+
+libraryDependencies ++= Seq(
+  "com.roundeights" %% "hasher" % "1.2.0",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0",
-  "org.consensusresearch" %% "scorex-basics" % "1.+",
-  "org.consensusresearch" %% "scorex-consensus" % "1.+",
-  "org.consensusresearch" %% "scorex-perma" % "1.+",
-  "org.consensusresearch" %% "scorex-transaction" % "1.+")
-
-lazy val testLib = Seq(
-  "org.scalatest" %% "scalatest" % scalaTestVersion % Test withSources()
+  "org.scalactic" %% "scalactic" % "3.0.1",
+  "ch.qos.logback" % "logback-classic" % "1.1.7",
+  "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
+  "com.typesafe.akka" %% "akka-remote" % versions.akka,
+  "de.heikoseeberger" %% "akka-http-json4s" % "1.16.1",
+  "org.json4s" %% "json4s-native" % "3.5.2"
 )
 
-lazy val constellation = (project in file("."))
-  .settings(appSettings: _*)
-  .settings(
-    libraryDependencies ++= lib,
-    libraryDependencies ++= testLib
-  )
+//Test dependencies
+libraryDependencies ++= Seq(
+  "org.scalacheck" %% "scalacheck" % "1.13.4",
+  "org.scalatest" %% "scalatest" % "3.0.1",
+  "org.scalamock" %% "scalamock-scalatest-support" % "3.6.0",
+  "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
+  "com.typesafe.akka" %% "akka-testkit" % versions.akka
+).map(_ % "test" )
+
+mainClass := Some("org.constellation.BlockChainApp")
