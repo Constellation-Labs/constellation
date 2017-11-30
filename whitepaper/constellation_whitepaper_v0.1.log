@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.17 (TeX Live 2016) (preloaded format=pdflatex 2017.2.23)  30 NOV 2017 11:21
+This is pdfTeX, Version 3.14159265-2.6-1.40.17 (TeX Live 2016) (preloaded format=pdflatex 2017.2.23)  30 NOV 2017 12:05
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -479,7 +479,7 @@ LaTeX Font Info:    Redeclaring font encoding OMS on input line 635.
 LaTeX Info: Redefining \[ on input line 2739.
 LaTeX Info: Redefining \] on input line 2740.
 )
-No file constellation_whitepaper_v0.1.aux.
+(./constellation_whitepaper_v0.1.aux)
 \openout1 = `constellation_whitepaper_v0.1.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 15.
@@ -495,6 +495,7 @@ LaTeX Font Info:    ... okay on input line 15.
 LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 15.
 LaTeX Font Info:    ... okay on input line 15.
 \c@lstlisting=\count110
+
 (/usr/local/texlive/2016basic/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
 [Loading MPS to PDF converter (version 2006.09.02).]
 \scratchcounter=\count111
@@ -664,9 +665,9 @@ Overfull \hbox (4.94167pt too wide) in paragraph at lines 130--131
 [10] [11 <./hylochain-throughput-graph.png>] [12] [13] [14] [15]
 (./constellation_whitepaper_v0.1.aux) ) 
 Here is how much of TeX's memory you used:
- 4438 strings out of 494447
- 59024 string characters out of 6166766
- 121236 words of memory out of 5000000
+ 4440 strings out of 494447
+ 59092 string characters out of 6166766
+ 121238 words of memory out of 5000000
  7706 multiletter control sequences out of 15000+600000
  11802 words of font info for 46 fonts, out of 8000000 for 9000
  319 hyphenation exceptions out of 8191
@@ -683,7 +684,7 @@ e/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb></usr/local/texl
 ive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/local/te
 xlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></usr/local/
 texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb>
-Output written on constellation_whitepaper_v0.1.pdf (15 pages, 444456 bytes).
+Output written on constellation_whitepaper_v0.1.pdf (15 pages, 444514 bytes).
 PDF statistics:
  108 PDF objects out of 1000 (max. 8388607)
  69 compressed objects within 1 object stream
