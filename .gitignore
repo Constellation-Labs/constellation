@@ -3,6 +3,4 @@ project/target/
 project/project/
 target/
 *.iml
-constellation_whitepaper_v0.1.aux
-constellation_whitepaper_v0.1.log
-constellation_whitepaper_v0.1.synctex.gz
+.DS_STORE
