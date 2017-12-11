@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.17 (TeX Live 2016) (preloaded format=pdflatex 2017.2.23)  5 DEC 2017 00:23
+This is pdfTeX, Version 3.14159265-2.6-1.40.17 (TeX Live 2016) (preloaded format=pdflatex 2017.2.23)  11 DEC 2017 11:11
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -667,14 +667,14 @@ Overfull \hbox (4.94167pt too wide) in paragraph at lines 130--131
 <argument> .../viewdoc/download?doi=10.1.1.8.7554&
                                                   rep=rep1&type=pdf\@finalst...
 l.137 ...load?doi=10.1.1.8.7554&rep=rep1&type=pdf}
-                                                  . This model is used to de...
+                                                  . A corresponding determin...
 
 ? 
 ./constellation_whitepaper_v0.1.tex:137: Misplaced alignment tab character &.
 <argument> ...download?doi=10.1.1.8.7554&rep=rep1&
                                                   type=pdf\@finalstrut \stru...
 l.137 ...load?doi=10.1.1.8.7554&rep=rep1&type=pdf}
-                                                  . This model is used to de...
+                                                  . A corresponding determin...
 
 ? 
 
@@ -684,18 +684,18 @@ Underfull \hbox (badness 10000) in paragraph at lines 137--137
  []
 
 [11 <./hylochain-throughput-graph.png>]
-Underfull \hbox (badness 10000) in paragraph at lines 139--139
+Underfull \hbox (badness 10000) in paragraph at lines 143--143
 [][]\OT1/cmr/m/n/8 P. Otte, "Sybil-resistant trust mech-a-nisms in dis-tributed
  sys-tems"
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 139--139
+Underfull \hbox (badness 10000) in paragraph at lines 143--143
 \OT1/cmr/m/n/8 https://repository.tudelft.nl/islandora/object/uuid:17adc7bd-5c8
 2-4ad5-b1c8-
  []
 
-[12] [13] [14] [15] [16] (./constellation_whitepaper_v0.1.aux) ) 
+[12] [13] [14] [15] [16] [17] (./constellation_whitepaper_v0.1.aux) ) 
 Here is how much of TeX's memory you used:
  4441 strings out of 494447
  59100 string characters out of 6166766
@@ -704,23 +704,23 @@ Here is how much of TeX's memory you used:
  11802 words of font info for 46 fonts, out of 8000000 for 9000
  319 hyphenation exceptions out of 8191
  38i,8n,32p,1479b,222s stack positions out of 5000i,500n,10000p,200000b,80000s
-</usr/local/tex
-live/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></usr/local
-/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx9.pfb></usr/lo
-cal/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></us
-r/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb><
-/usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pf
-b></usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17
-.pfb></usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cm
-r6.pfb></usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/
-cmr7.pfb></usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/c
-m/cmr8.pfb></usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts
-/cm/cmr9.pfb></usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfon
-ts/cm/cmsy10.pfb>
-Output written on constellation_whitepaper_v0.1.pdf (16 pages, 446862 bytes).
+</usr/loca
+l/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></usr/
+local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx9.pfb></u
+sr/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb
+></usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.
+pfb></usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmr
+12.pfb></usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/cm/
+cmr17.pfb></usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfonts/
+cm/cmr6.pfb></usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfont
+s/cm/cmr7.pfb></usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/amsfo
+nts/cm/cmr8.pfb></usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/ams
+fonts/cm/cmr9.pfb></usr/local/texlive/2016basic/texmf-dist/fonts/type1/public/a
+msfonts/cm/cmsy10.pfb>
+Output written on constellation_whitepaper_v0.1.pdf (17 pages, 448947 bytes).
 PDF statistics:
- 111 PDF objects out of 1000 (max. 8388607)
- 71 compressed objects within 1 object stream
+ 114 PDF objects out of 1000 (max. 8388607)
+ 73 compressed objects within 1 object stream
  0 named destinations out of 1000 (max. 500000)
  26 words of extra memory for PDF output out of 10000 (max. 10000000)
 
