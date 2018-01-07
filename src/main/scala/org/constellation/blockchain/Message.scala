@@ -1,3 +1,5 @@
+package org.constellation.blockchain
+
 import akka.actor.ActorRef
 
 import scala.collection.mutable
@@ -9,7 +11,7 @@ import scala.collection.mutable
 /**
   * Parent type for data meant for storage in Blocks
   */
-trait Block
+trait BlockData
 
 /**
   *
@@ -25,7 +27,7 @@ case class Transaction(hashPointer: Array[Byte],
                        id: String,
                        counterPartyPubKey: String,
                        message: String,
-                       signature: String) extends Block
+                       signature: String) extends BlockData
 
 /**
   *
@@ -33,7 +35,7 @@ case class Transaction(hashPointer: Array[Byte],
   * @param signature the signature created using node's secret key on the concatenation of the binary representation of the five items above.
   */
 case class CheckpointMessage(txs: Seq[Transaction],
-                       signature: String) extends Block
+                             signature: String) extends BlockData
 
 /**
   *
@@ -51,6 +53,6 @@ case class Facilitators(facilitators: Seq[Transaction])
   */
 case class CheckpointBlock(hashPointer: Array[Byte],
                            sequenceNum: Long,
-                           consensusResultHashPointer: mutable.HashMap[ActorRef, Option[Block]], //TODO replace with compressed hash of each node's decision on consensus, not proposed subset as shown here (for stubbing byzantine consensus) which will also get added to the txBuffer
+                           consensusResultHashPointer: mutable.HashMap[ActorRef, Option[BlockData]], //TODO replace with compressed hash of each node's decision on consensus, not proposed subset as shown here (for stubbing byzantine consensus) which will also get added to the txBuffer
                            round: Long,
-                           signature: String) extends Block
+                           signature: String) extends BlockData
