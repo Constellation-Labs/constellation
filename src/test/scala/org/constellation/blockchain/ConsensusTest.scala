@@ -20,13 +20,13 @@ class ConsensusTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLike
     TestKit.shutdownActorSystem(system)
   }
 
-  trait WithMiningActor {
-    val miningActor = system.actorOf(Props[TestConsensusActor])
+  trait WithConsensusActor {
+    val consensusActor = system.actorOf(Props[TestConsensusActor])
   }
 
-  "A Mining actor" should "reply with the new block when a mining request is finished" in new WithMiningActor {
+  "A Mining actor" should "reply with the new block when a mining request is finished" in new WithConsensusActor {
 
-    miningActor ! MineBlock("testBlock")
+    consensusActor ! MineBlock("testBlock")
 
     expectMsgPF() {
       case ResponseBlock(block) => assert(block.data == "testBlock")
