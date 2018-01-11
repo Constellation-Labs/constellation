@@ -9,7 +9,7 @@ import scala.annotation.tailrec
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
-case class Block(index: Int, previousHash: String, timestamp: Long, data: String, hash: String)
+case class Block(index: Int, previousHash: String, timestamp: Long, data: String, hash: String, id1: Option[String] = None, id2: Option[String] = None)
 
 object GenesisBlock extends Block(0, "0", 1497359352, "Genesis block", "ccce7d8349cf9f5d9a9c8f9293756f584d02dfdb953361c5ee36809aa0f560b4")
 
@@ -61,7 +61,7 @@ case class Chain private(id: String, blocks: Seq[Block] ) {
     val nextTimestamp = new Date().getTime() / 1000
     val nextHash = calculateHash(nextIndex, previousBlock.hash, nextTimestamp, blockData)
 
-    Block(nextIndex, previousBlock.hash, nextTimestamp, blockData, nextHash)
+    Block(nextIndex, previousBlock.hash, nextTimestamp, blockData, nextHash, Some(id))
   }
 
   def validBlock( newBlock: Block ): Boolean = Chain.validBlock(newBlock, latestBlock)

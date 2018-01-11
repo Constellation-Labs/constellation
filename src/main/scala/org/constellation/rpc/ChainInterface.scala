@@ -27,6 +27,7 @@ trait ChainInterface {
   val logger = Logger("PeerToPeerCommunication")
 
   var blockChain: Chain
+  var buffer = Nil
 
   receiver {
     case QueryLatest => sender() ! responseLatest
@@ -51,6 +52,7 @@ trait ChainInterface {
 
       case latestReceivedBlock :: Nil if latestReceivedBlock.previousHash == localLatestBlock.hash =>
          logger.info("We can append the received block to our chain.")
+//        if latestReceivedBlock.
         //TODO here, if block id = actor id add to sign buffer
             blockChain.addBlock(latestReceivedBlock) match {
               case Success(newChain) =>
