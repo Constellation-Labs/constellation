@@ -13,13 +13,17 @@ import scala.concurrent.duration.Duration
 
 object PeerToPeer {
 
-  case class AddPeer( address: String )
+  case class AddPeer(address: String)
 
-  case class ResolvedPeer( actorRef: ActorRef )
+  case class ResolvedPeer(actorRef: ActorRef)
 
-  case class Peers( peers: Seq[String] )
+  case class Peers(peers: Seq[String])
+
+  case class Id(id: String)
 
   case object GetPeers
+
+  case object GetId
 
   case object HandShake
 }
