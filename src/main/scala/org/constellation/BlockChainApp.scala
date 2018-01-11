@@ -16,11 +16,12 @@ object BlockChainApp extends App with RPCInterface {
   implicit val materializer = ActorMaterializer()
   implicit val executionContext = system.dispatcher
 
-  val blockChainActor = system.actorOf(ChainActor.props(Chain()), "blockChainActor")
-
   val config = ConfigFactory.load()
   val logger = Logger("WebServer")
 
+  val id = args.headOption.getOrElse("ID")
+  println("id: " + id)
+  val blockChainActor = system.actorOf(ChainActor.props(Chain(id)), "blockChainActor")
   val seedHost = config.getString("blockchain.seedHost")
 
   if ( ! seedHost.isEmpty ) {
