@@ -13,7 +13,7 @@ class ChainTest extends FlatSpec with GeneratorDrivenPropertyChecks {
       length <- Gen.choose(0, 30)
       text <- Gen.listOfN(length, Gen.alphaNumStr)
     } yield {
-      val chain = Chain()
+      val chain = Chain("id")
       text.foreach { data => chain.addBlock(chain.generateNextBlock(data)) }
       chain
     }

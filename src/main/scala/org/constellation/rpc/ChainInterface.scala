@@ -48,6 +48,7 @@ trait ChainInterface {
 
       case latestReceivedBlock :: Nil if latestReceivedBlock.previousHash == localLatestBlock.hash =>
          logger.info("We can append the received block to our chain.")
+        //TODO here, if block id = actor id add to sign buffer
             blockChain.addBlock(latestReceivedBlock) match {
               case Success(newChain) =>
                 blockChain = newChain
@@ -60,7 +61,7 @@ trait ChainInterface {
 
       case _ =>
             logger.info("Received blockchain is longer than the current blockchain")
-            Chain(receivedBlocks) match {
+            Chain(blockChain.id, receivedBlocks) match {
               case Success(newChain) =>
                 blockChain = newChain
                 broadcast(responseBlockChain)

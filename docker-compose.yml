@@ -4,6 +4,7 @@ services:
         image: constellation:0
         environment:
             - JAVA_OPTS=-Dakka.remote.netty.tcp.hostname=node1
+        command: "node1"
         ports:
             - "9000:9000"
             
@@ -13,6 +14,7 @@ services:
             - node1:node1
         environment:
             - JAVA_OPTS=-Dblockchain.seedHost=akka.tcp://BlockChain@node1:2552/user/blockChainActor
+        command: "node2"
  
         ports:
             - "9001:9000"
@@ -22,6 +24,7 @@ services:
             - node1:node1
         environment:
             - JAVA_OPTS=-Dblockchain.seedHost=akka.tcp://BlockChain@node1:2552/user/blockChainActor
+        command: "node3"
  
         ports:
             - "9002:9000"
@@ -31,6 +34,7 @@ services:
             - node1:node1
         environment:
             - JAVA_OPTS=-Dblockchain.seedHost=akka.tcp://BlockChain@node1:2552/user/blockChainActor
+        command: "node4"
  
         ports:
             - "9003:9000"

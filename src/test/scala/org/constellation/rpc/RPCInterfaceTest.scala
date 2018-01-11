@@ -28,7 +28,7 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
 
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
       case QueryAll =>
-        sender ! ResponseBlockChain(Chain())
+        sender ! ResponseBlockChain(Chain("id"))
         TestActor.NoAutoPilot
       }
     }

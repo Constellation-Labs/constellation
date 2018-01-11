@@ -14,10 +14,10 @@ case class Block(index: Int, previousHash: String, timestamp: Long, data: String
 object GenesisBlock extends Block(0, "0", 1497359352, "Genesis block", "ccce7d8349cf9f5d9a9c8f9293756f584d02dfdb953361c5ee36809aa0f560b4")
 
 object Chain {
-  def apply(): Chain = new Chain(Seq(GenesisBlock))
+  def apply(id: String): Chain = new Chain(id, Seq(GenesisBlock))
 
-  def apply(blocks: Seq[Block]): Try[Chain] = {
-    if ( validChain(blocks) ) Success(new Chain(blocks))
+  def apply(id: String, blocks: Seq[Block]): Try[Chain] = {
+    if ( validChain(blocks) ) Success(new Chain(id, blocks))
     else Failure(new IllegalArgumentException("Invalid chain specified."))
   }
 
@@ -39,22 +39,23 @@ object Chain {
     s"$index:$previousHash:$timestamp:$data".sha256.hex
 }
 
-case class Chain private(blocks: Seq[Block] ) {
+case class Chain private(id: String, blocks: Seq[Block] ) {
 
   import Chain._
 
   val logger = Logger("BlockChain")
 
-  def addBlock( data: String ): Chain = new Chain(generateNextBlock(data) +: blocks)
+  def addBlock( data: String ): Chain = new Chain(id, generateNextBlock(data) +: blocks)
 
-  def addBlock( block: Block ): Try[ Chain ] =
-    if ( validBlock(block) ) Success( new Chain(block +: blocks ))
+  def addBlock( block: Block ): Try[Chain] =
+    if ( validBlock(block) ) Success(new Chain(id, block +: blocks ))
     else Failure( new IllegalArgumentException("Invalid block added"))
 
   def firstBlock: Block = blocks.last
   def latestBlock: Block = blocks.head
 
   def generateNextBlock( blockData: String ): Block = {
+    val data_id = blockData.split(":").tail
     val previousBlock = latestBlock
     val nextIndex = previousBlock.index + 1
     val nextTimestamp = new Date().getTime() / 1000

@@ -10,7 +10,7 @@ import org.constellation.rpc.ChainInterface
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, GivenWhenThen}
 
 class TestConsensusActor extends Receiver with Consensus with PeerToPeer with ChainInterface {
-  var blockChain = Chain()
+  var blockChain = Chain("id")
 }
 
 class ConsensusTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLike

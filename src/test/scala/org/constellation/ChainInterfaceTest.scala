@@ -21,7 +21,7 @@ class ChainInterfaceTest extends TestKit(ActorSystem("BlockChain")) with FlatSpe
   }
 
   trait WithTestActor {
-    val blockChain = Chain().addBlock("My test data")
+    val blockChain = Chain("id").addBlock("My test data")
     val blockChainCommunicationActor: ActorRef = system.actorOf(Props(classOf[ChainInterfaceActor], blockChain))
   }
 
