@@ -4,6 +4,7 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.actor.Receiver
 import org.constellation.blockchain.{Block, Chain}
 import org.constellation.p2p.PeerToPeer
+import org.constellation.p2p.PeerToPeer.{GetId, Id}
 
 import scala.util.{Failure, Success}
 
@@ -30,6 +31,8 @@ trait ChainInterface {
   receiver {
     case QueryLatest => sender() ! responseLatest
     case QueryAll => sender() ! responseBlockChain
+
+    case GetId => sender() ! Id(blockChain.id)
 
     //FIXME: This is inefficient
     case ResponseBlock(block) => handleBlockChainResponse(Seq(block))

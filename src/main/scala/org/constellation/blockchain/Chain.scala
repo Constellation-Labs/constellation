@@ -55,7 +55,7 @@ case class Chain private(id: String, blocks: Seq[Block] ) {
   def latestBlock: Block = blocks.head
 
   def generateNextBlock( blockData: String ): Block = {
-    val data_id = blockData.split(":").tail
+//    val data_id = blockData.split(":").tail
     val previousBlock = latestBlock
     val nextIndex = previousBlock.index + 1
     val nextTimestamp = new Date().getTime() / 1000

@@ -12,7 +12,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.blockchain.{Block, GenesisBlock}
 import ChainInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
 import org.constellation.blockchain.Consensus.MineBlock
-import org.constellation.p2p.PeerToPeer.{AddPeer, GetPeers, Peers}
+import org.constellation.p2p.PeerToPeer._
 import org.json4s.{DefaultFormats, Formats, native}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -43,6 +43,9 @@ trait RPCInterface extends Json4sSupport {
       path("peers") {
         complete( (blockChainActor ? GetPeers).mapTo[Peers] )
       }~
+        path("id") {
+          complete( (blockChainActor ? GetId).mapTo[Id] )
+        }~
       path("latestBlock") {
         complete( (blockChainActor ? QueryLatest).map {
           case ResponseBlock(GenesisBlock) => GenesisBlock.copy()

@@ -8,7 +8,7 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.blockchain.{Block, Chain, GenesisBlock}
 import ChainInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
 import org.constellation.blockchain.Consensus.MineBlock
-import org.constellation.p2p.PeerToPeer.{AddPeer, GetPeers, Peers}
+import org.constellation.p2p.PeerToPeer.{AddPeer, GetPeers, Id, Peers}
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.concurrent.ExecutionContext
@@ -18,6 +18,7 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
 
   trait RPCInterfaceFixture extends RPCInterface {
     val testProbe = TestProbe()
+    val id = "id"
 
     override val blockChainActor: ActorRef = testProbe.ref
     override val logger = Logger("TestLogger")
@@ -65,6 +66,18 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
     }
   }
 
+  it should "retrieve id for /id" in new RPCInterfaceFixture {
+    testProbe.setAutoPilot { (sender: ActorRef, msg: Any) =>
+      msg match {
+
+        case getId => sender ! Id(id)
+          TestActor.NoAutoPilot
+      }
+    }
+    Get("/id") ~> routes ~> check {
+      responseAs[Id] shouldEqual Id(id)
+    }
+  }
   it should "add a new peer for /addPeer" in new RPCInterfaceFixture {
     Post("/addPeer", HttpEntity(ContentTypes.`text/html(UTF-8)`, "TestPeer")) ~> routes ~> check {
       testProbe.expectMsg(AddPeer("TestPeer"))
