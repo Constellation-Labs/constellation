@@ -1,6 +1,6 @@
 package org.constellation
 
-import org.constellation.blockchain.{Chain, GenesisBlock}
+import org.constellation.blockchain.{Block, Chain, GenesisBlock}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.FlatSpec
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -41,5 +41,13 @@ class ChainTest extends FlatSpec with GeneratorDrivenPropertyChecks {
 
     assertResult(newChain.blocks.length)(currentBlockLength +1)
     assertResult(newChain.latestBlock)(firstNewBlock)
+  }
+
+    "Second signature" must "Be linked to first" in forAll { chain: Chain =>
+    val res = Block(0, "", 0, "testdata:node1:node2:node2", "", Some("node1"),  Some("node2"), Some("node2"))
+    val test = chain.generateNextBlock("testdata:node1:node2:node2")
+    assertResult(res.id1)(test.id1)
+    assertResult(res.recipient)(test.recipient)
+    assertResult(res.d2)(test.d2)
   }
 }

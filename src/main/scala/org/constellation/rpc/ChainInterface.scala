@@ -6,6 +6,7 @@ import org.constellation.blockchain.{Block, Chain}
 import org.constellation.p2p.PeerToPeer
 import org.constellation.p2p.PeerToPeer.{GetId, Id}
 
+import scala.collection.mutable
 import scala.util.{Failure, Success}
 
 
@@ -27,6 +28,7 @@ trait ChainInterface {
   val logger = Logger("PeerToPeerCommunication")
 
   var blockChain: Chain
+  val buffer: mutable.Buffer[Block] = mutable.Buffer[Block]()
 
   receiver {
     case QueryLatest => sender() ! responseLatest
@@ -48,9 +50,11 @@ trait ChainInterface {
 
       case latestReceivedBlock :: _ if latestReceivedBlock.index <= localLatestBlock.index =>
         logger.debug("received blockchain is not longer than received blockchain. Do nothing")
+        if (latestReceivedBlock.recipient.contains(blockChain.id)) buffer.append(latestReceivedBlock)
 
       case latestReceivedBlock :: Nil if latestReceivedBlock.previousHash == localLatestBlock.hash =>
          logger.info("We can append the received block to our chain.")
+//        if latestReceivedBlock.
         //TODO here, if block id = actor id add to sign buffer
             blockChain.addBlock(latestReceivedBlock) match {
               case Success(newChain) =>

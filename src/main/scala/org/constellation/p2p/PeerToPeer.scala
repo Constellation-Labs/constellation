@@ -9,6 +9,7 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.actor.Receiver
 import org.constellation.p2p.PeerToPeer._
 
+import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
 object PeerToPeer {
@@ -45,8 +46,10 @@ trait PeerToPeer {
 
     case AddPeer(peerAddress) =>
       logger.debug(s"Got request to add peer ${peerAddress}")
+      /*
+      adds peer to actor system, res is a future of actor ref, sends the actor ref back to this actor, handshake occurs below
+       */
       context.actorSelection(peerAddress).resolveOne().map( ResolvedPeer(_) ).pipeTo(self)
-
     case ResolvedPeer(newPeerRef: ActorRef) =>
 
       if ( ! peers.contains(newPeerRef) ) {
