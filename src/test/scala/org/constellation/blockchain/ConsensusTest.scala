@@ -33,4 +33,13 @@ class ConsensusTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLike
     }
 
   }
+
+//  "Neighbor nodes" should "receive gossiped messages" in new WithConsensusActor {
+//
+//    consensusActor ! MineBlock("testBlock")
+//
+//    expectMsgPF() {
+//      case ResponseBlock(block) => assert(block.data == "testBlock")
+//    }
+//  }
 }

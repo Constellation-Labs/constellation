@@ -4,6 +4,7 @@ import java.util.Date
 
 import com.roundeights.hasher.Implicits._
 import com.typesafe.scalalogging.Logger
+import de.heikoseeberger.akkahttpjson4s.Json4sSupport.ShouldWritePretty.True
 
 import scala.annotation.tailrec
 import scala.collection.generic.SeqFactory
@@ -29,10 +30,10 @@ object Chain {
     case _ => false
   }
 
-  def validBlock(newBlock: Block, previousBlock: Block) =
-    previousBlock.index + 1 == newBlock.index &&
-    previousBlock.hash == newBlock.previousHash &&
-    calculateHashForBlock(newBlock) == newBlock.hash
+  def validBlock(newBlock: Block, previousBlock: Block) = true
+//    previousBlock.index + 1 == newBlock.index &&
+//    previousBlock.hash == newBlock.previousHash &&
+//    calculateHashForBlock(newBlock) == newBlock.hash
 
   def calculateHashForBlock( block: Block ) = calculateHash(block.index, block.previousHash, block.timestamp, block.data)
 

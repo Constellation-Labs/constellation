@@ -39,7 +39,10 @@ trait PeerToPeer {
   var peers: Set[ActorRef] = Set.empty
 
   def broadcast(message: Any ): Unit = {
-    peers.foreach( _ ! message )
+    peers.foreach {  peer => peer ! message
+      logger.info(s"just broadcasted $message to $peer")
+    }
+
   }
 
   receiver {
