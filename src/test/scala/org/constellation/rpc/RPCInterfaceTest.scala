@@ -1,5 +1,7 @@
 package org.constellation.rpc
 
+import java.util.Date
+
 import akka.actor.ActorRef
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
@@ -96,6 +98,12 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
     Post("/mineBlock", HttpEntity(ContentTypes.`text/html(UTF-8)`, "MyBlock")) ~> routes ~> check {
       responseAs[Block] shouldEqual(Block(0, "", 0, "MyBlock", ""))
     }
+
+
+//    Post("/mineBlock", HttpEntity(ContentTypes.`text/html(UTF-8)`, "testdata:node1:node2:node2")) ~> routes ~> check {
+//
+//      responseAs[Block] shouldEqual(Block(0, "", 0, "testdata:node1:node2:node2", "", Some("node1"),  Some("node2"), Some("node2")))
+//    }
   }
 
 }
