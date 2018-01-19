@@ -36,7 +36,7 @@ class ChainTest extends FlatSpec with GeneratorDrivenPropertyChecks {
 
     val newChain = chain.addBlock(firstNewBlock).getOrElse( throw new IllegalStateException("Should succeed"))
 
-    // assert( ! newChain.validBlock(secondNewBlock) )
+    assert( ! newChain.validBlock(secondNewBlock) )
     newChain.addBlock(secondNewBlock)
 
     assertResult(newChain.blocks.length)(currentBlockLength +1)
