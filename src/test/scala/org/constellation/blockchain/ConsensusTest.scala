@@ -2,9 +2,9 @@ package org.constellation.blockchain
 
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}
+import org.constellation.Fixtures.tx
 import org.constellation.actor.Receiver
 import org.constellation.rpc.ChainInterface.ResponseBlock
-import org.constellation.blockchain.Consensus.MineBlock
 import org.constellation.p2p.PeerToPeer
 import org.constellation.rpc.ChainInterface
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, GivenWhenThen}
@@ -25,21 +25,11 @@ class ConsensusTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLike
   }
 
   "A Mining actor" should "reply with the new block when a mining request is finished" in new WithConsensusActor {
-
-    consensusActor ! MineBlock("testBlock")
+    consensusActor ! tx
 
     expectMsgPF() {
-      case ResponseBlock(block) => assert(block.data == "testBlock")
+      case ResponseBlock(block) => assert(block.data == "")
     }
 
   }
-
-//  "Neighbor nodes" should "receive gossiped messages" in new WithConsensusActor {
-//
-//    consensusActor ! MineBlock("testBlock")
-//
-//    expectMsgPF() {
-//      case ResponseBlock(block) => assert(block.data == "testBlock")
-//    }
-//  }
 }

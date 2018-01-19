@@ -23,7 +23,8 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
   "de.heikoseeberger" %% "akka-http-json4s" % "1.16.1",
-  "org.json4s" %% "json4s-native" % "3.5.2"
+  "org.json4s" %% "json4s-native" % "3.5.2",
+  "net.liftweb" %% "lift-json" % "3.1.1"
 )
 
 //Test dependencies
