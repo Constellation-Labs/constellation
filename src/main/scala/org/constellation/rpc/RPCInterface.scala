@@ -9,7 +9,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.blockchain.{Block, GenesisBlock}
+import org.constellation.blockchain.{Block, GenesisBlock, Transaction}
 import ChainInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
 import akka.http.scaladsl.server.Route
 import org.constellation.blockchain.Consensus.MineBlock
@@ -57,9 +57,9 @@ trait RPCInterface extends Json4sSupport {
     }~
     post {
      path("mineBlock") {
-       entity(as[String]) { data =>
+       entity(as[Transaction]) { data =>
             logger.info(s"Got request to add new block $data")
-            complete((blockChainActor ? MineBlock(data)).mapTo[ResponseBlock].map {
+            complete((blockChainActor ? data).mapTo[ResponseBlock].map {
               case ResponseBlock(block) => block
             })
        }
