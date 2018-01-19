@@ -23,14 +23,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
   "de.heikoseeberger" %% "akka-http-json4s" % "1.16.1",
-  "org.json4s" %% "json4s-native" % "3.5.2",
-  "com.madgag.spongycastle" % "core" % "1.58.0.0",
-  "com.madgag.spongycastle" % "prov" % "1.58.0.0",
- // "com.madgag.spongycastle" % "pkix" % "1.58.0.0",
-  "com.madgag.spongycastle" % "bcpkix-jdk15on" % "1.58.0.0",
-  //"com.madgag.spongycastle" % "pg" % "1.58.0.0",
-  "com.madgag.spongycastle" % "bcpg-jdk15on" % "1.58.0.0",
-  "com.madgag.spongycastle" % "bctls-jdk15on" % "1.58.0.0"
+  "org.json4s" %% "json4s-native" % "3.5.2"
 )
 
 //Test dependencies
