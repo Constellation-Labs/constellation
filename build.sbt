@@ -31,7 +31,8 @@ libraryDependencies ++= Seq(
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % "1.58.0.0",
   //"com.madgag.spongycastle" % "pg" % "1.58.0.0",
   "com.madgag.spongycastle" % "bcpg-jdk15on" % "1.58.0.0",
-  "com.madgag.spongycastle" % "bctls-jdk15on" % "1.58.0.0"
+  "com.madgag.spongycastle" % "bctls-jdk15on" % "1.58.0.0",
+  "net.liftweb" %% "lift-json" % "3.1.1"
 )
 
 //Test dependencies
