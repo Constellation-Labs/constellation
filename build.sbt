@@ -36,5 +36,3 @@ libraryDependencies ++= Seq(
 ).map(_ % "test" )
 
 mainClass := Some("org.constellation.BlockChainApp")
-
-parallelExecution in Test := false
