@@ -1,9 +1,33 @@
 package org.constellation.wallet
 
+import java.nio.ByteBuffer
 import java.security._
 import java.security.spec.ECGenParameterSpec
 import java.util.Base64
 
+import org.json4s.native.Serialization
+
+
+
+/**
+  * Need to compare this to:
+  * https://github.com/bitcoinj/bitcoinj/blob/master/core/src/main/java/org/bitcoinj/core/ECKey.java
+  *
+  * The implementation here is a lot simpler and from stackoverflow post linked below
+  * but has differences. Same library dependency but needs to be checked
+  *
+  * BitcoinJ is stuck on Java 6 for some things, so if we use it, probably better to pull
+  * out any relevant code rather than using as a dependency.
+  *
+  * Based on: http://www.bouncycastle.org/wiki/display/JA1/Elliptic+Curve+Key+Pair+Generation+and+Key+Factories
+  * I think most of the BitcoinJ extra code is just overhead for customization.
+  * Look at the `From Named Curves` section of above citation. Pretty consistent with stackoverflow code
+  * and below implementation.
+  *
+  * Need to review: http://www.bouncycastle.org/wiki/display/JA1/Using+the+Bouncy+Castle+Provider%27s+ImplicitlyCA+Facility
+  * for security policy implications.
+  *
+  */
 object KeyUtils {
 
   /**
@@ -90,4 +114,64 @@ object KeyUtils {
     result
   }
 
+
+  def bytesToLong(bytes: Array[Byte]): Long = {
+    val buffer = ByteBuffer.allocate(8)
+    buffer.put(bytes)
+    buffer.flip();//need flip
+    buffer.getLong()
+  }
+
+  def longToBytes(l: Long): Array[Byte] = {
+    val buffer = ByteBuffer.allocate(8)
+    buffer.putLong(0, l)
+    buffer.array()
+  }
+
+  // TODO : Use a more secure address function.
+  // Couldn't find a quick dependency for this, TBI
+  def publicKeyToAddress(
+                        key: PublicKey
+                        ): String = {
+    import com.roundeights.hasher.Implicits._
+    base64(key.getEncoded).sha256.hex.sha256.hex
+  }
+
+  case class TransactionInputData(
+                          sourcePubKey: PublicKey,
+                          destinationAddress: String,
+                          quantity: Long
+                        ) {
+    def encode = EncodedTransaction(
+      base64(sourcePubKey.getEncoded),
+      destinationAddress,
+      base64(longToBytes(quantity))
+    )
+  }
+
+  case class DecodedTransaction(
+                               sourceAddress: Array[Byte],
+                               destinationAddress: Array[Byte],
+                               quantity: Long
+                               )
+
+  case class EncodedTransaction(
+                                 sourceAddress: String,
+                                 destinationAddress: String,
+                                 quantity: String
+                               ) {
+    def decode = DecodedTransaction(
+      fromBase64(sourceAddress),
+      fromBase64(destinationAddress),
+      bytesToLong(fromBase64(quantity))
+    )
+    def ordered = Array(sourceAddress, destinationAddress, quantity)
+    def rendered: String = {
+      import org.json4s._
+      implicit val f: DefaultFormats.type = DefaultFormats
+      Serialization.write(ordered)
+    }
+  }
+
 }
+
