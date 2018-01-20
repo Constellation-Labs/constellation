@@ -15,8 +15,8 @@ trait Consensus {
   this: ChainInterface with PeerToPeer with Receiver =>
 
   receiver {
-    case MineBlock(data) =>
-      blockChain = blockChain.addBlock(data)
+    case transaction: Transaction =>
+      blockChain = blockChain.addBlock(transaction.message)
       val peerMessage = ResponseBlock(blockChain.latestBlock)
       broadcast(peerMessage)
       sender() ! peerMessage

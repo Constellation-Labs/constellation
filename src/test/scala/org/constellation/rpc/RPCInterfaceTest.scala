@@ -1,17 +1,16 @@
 package org.constellation.rpc
 
-import java.util.Date
-
 import akka.actor.ActorRef
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.testkit.{TestActor, TestKitBase, TestProbe}
 import com.typesafe.scalalogging.Logger
-import org.constellation.blockchain.{Block, Chain, GenesisBlock}
+import org.constellation.blockchain.{Block, Chain, GenesisBlock, Transaction}
 import ChainInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
 import org.constellation.blockchain.Consensus.MineBlock
 import org.constellation.p2p.PeerToPeer.{AddPeer, GetPeers, Id, Peers}
 import org.scalatest.{FlatSpec, Matchers}
+import org.constellation.Fixtures.{jsonToString, tx}
 
 import scala.concurrent.ExecutionContext
 
@@ -89,14 +88,14 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
 
   it should "add a new block for /addBlock" in new RPCInterfaceFixture {
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
-      case MineBlock(data) =>
-        sender ! ResponseBlock(Block(0, "", 0, data, ""))
+      case transaction: Transaction =>
+        sender ! ResponseBlock(Block(0, "", 0, transaction.message, ""))
         TestActor.NoAutoPilot
       }
     }
 
-    Post("/mineBlock", HttpEntity(ContentTypes.`text/html(UTF-8)`, "MyBlock")) ~> routes ~> check {
-      responseAs[Block] shouldEqual(Block(0, "", 0, "MyBlock", ""))
+    Post("/mineBlock", HttpEntity(ContentTypes.`application/json`, jsonToString(tx))) ~> routes ~> check {
+      responseAs[Block] shouldEqual(Block(0, "", 0, "", ""))
     }
 
 
