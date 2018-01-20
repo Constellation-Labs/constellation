@@ -32,6 +32,7 @@ object KeyUtils {
     * https://stackoverflow.com/questions/31485517/verify-ecdsa-signature-using-spongycastle
     * https://docs.oracle.com/javase/7/docs/technotes/guides/security/SunProviders.html
     * https://bouncycastle.org/specifications.html
+    * https://stackoverflow.com/questions/16662408/correct-way-to-sign-and-verify-signature-using-bouncycastle
     * @param bytes: Data to sign. Use text.toBytes or even better base64 encryption
     * @param signFunc: How to sign the data. There's a bunch of these,
     *                this needs to be made into an enum or something (instead of a val const),
