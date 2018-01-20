@@ -1,9 +1,7 @@
 package org.constellation.wallet
 
-import java.security.spec.ECGenParameterSpec
 
 import org.scalatest.FlatSpec
-import java.security.{PrivateKey, SecureRandom, Signature}
 
 
 class TestWalletFuncs  extends FlatSpec {

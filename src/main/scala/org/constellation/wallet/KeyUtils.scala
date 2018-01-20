@@ -63,11 +63,11 @@ object KeyUtils {
     *
     * YOU HAVE BEEN WARNED.
     *
-    * @param originalInputText: String input to verify, recommended that you
+    * @param originalInput: Byte input to verify, recommended that you
     *                         use base64 encoding if dealing with arbitrary text
     *                         meant to be shared over RPC / API protocols that
     *                         have issues with strange characters. If within same
-    *                         JVM then just use .getBytes (see unit tests for examples)
+    *                         JVM then just use text.getBytes (see unit tests for examples)
     * @param signedOutput: Byte array of output of calling signData method above
     * @param signFunc: Signature function to use. Use the default one for now.
     *                To be discussed elsewhere if revision necessary
