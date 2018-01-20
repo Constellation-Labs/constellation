@@ -9,7 +9,7 @@ import org.constellation.blockchain.Transaction
   */
 object Fixtures {
   implicit val formats = DefaultFormats
-  val tx = Transaction(Array.emptyByteArray, 0L, "", "" ,"", "")
+  val tx = Transaction(Array.emptyByteArray, 0L, "", "" , "", "", "")
 
   def jsonToString[T](obj: T): String = write(obj)
 

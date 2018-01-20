@@ -1,8 +1,9 @@
 package org.constellation.actor
 
 import akka.actor.Props
+import akka.stream.impl.fusing.Buffer
 import com.typesafe.scalalogging.Logger
-import org.constellation.blockchain.{Chain, Consensus}
+import org.constellation.blockchain.{BlockData, Chain, Consensus}
 import org.constellation.p2p.PeerToPeer
 import org.constellation.rpc.ChainInterface
 

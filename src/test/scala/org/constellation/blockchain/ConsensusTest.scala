@@ -28,7 +28,7 @@ class ConsensusTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLike
     consensusActor ! tx
 
     expectMsgPF() {
-      case ResponseBlock(block) => assert(block.data == "")
+      case ResponseBlock(block) => assert(block.data == "Genesis block")
     }
 
   }

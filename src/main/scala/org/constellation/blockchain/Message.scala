@@ -14,10 +14,16 @@ import scala.collection.mutable
 trait BlockData
 
 /**
+  * Parent type for data meant for storage in Blocks
+  */
+trait Tx extends BlockData
+
+/**
   *
   * @param hashPointer the hash pointer to the previous block.
   * @param sequenceNum the sequence number, current block number.
-  * @param id thetransactionidentifier,itshouldbegeneratedusingacryptographically secure pseudo-random number generator by the initiator of the transaction.
+  * @param id the transaction identifier,it should be generated using a cryptographically secure pseudo-random number generator by the initiator of the transaction.
+  * @param pubKey the public key of this node.
   * @param counterPartyPubKey the public key of the counterparty v.
   * @param message the transaction message.
   * @param signature the signature created using node's secret key on the concatenation of the binary representation of the five items above.
@@ -25,9 +31,21 @@ trait BlockData
 case class Transaction(hashPointer: Array[Byte],
                        sequenceNum: Long,
                        id: String,
+                       pubKey: String,
                        counterPartyPubKey: String,
                        message: String,
-                       signature: String) extends BlockData
+                       signature: String) extends Tx
+
+/**
+  *
+  * @param id the transaction identifier,it should be generated using a cryptographically secure pseudo-random number generator by the initiator of the transaction.
+  * @param counterPartyPubKey the public key of the counterparty v.
+  * @param signature the signature created using node's secret key on the concatenation of the binary representation of the five items above.
+  */
+case class SignTransaction(id: String,
+                           pubKey: String,
+                           counterPartyPubKey: String,
+                           signature: String) extends Tx
 
 /**
   *
