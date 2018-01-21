@@ -16,21 +16,24 @@ trait BlockData
 /**
   * Parent type for data meant for storage in Blocks
   */
-trait Tx extends BlockData
+trait Tx extends BlockData {
+  val id: String
+  val pubKey: String
+}
 
 /**
   *
   * @param hashPointer the hash pointer to the previous block.
-  * @param sequenceNum the sequence number, current block number.
   * @param id the transaction identifier,it should be generated using a cryptographically secure pseudo-random number generator by the initiator of the transaction.
+  * @param sequenceNum the sequence number, current block number.
   * @param pubKey the public key of this node.
   * @param counterPartyPubKey the public key of the counterparty v.
   * @param message the transaction message.
   * @param signature the signature created using node's secret key on the concatenation of the binary representation of the five items above.
   */
 case class Transaction(hashPointer: Array[Byte],
-                       sequenceNum: Long,
                        id: String,
+                       sequenceNum: Long,
                        pubKey: String,
                        counterPartyPubKey: String,
                        message: String,

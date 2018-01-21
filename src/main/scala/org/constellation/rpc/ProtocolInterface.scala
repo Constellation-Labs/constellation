@@ -10,7 +10,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 
 
-object ChainInterface {
+object ProtocolInterface {
 
   case object QueryLatest
   case object QueryAll
@@ -20,15 +20,14 @@ object ChainInterface {
 
 }
 
-trait ChainInterface {
+trait ProtocolInterface {
   this: PeerToPeer with Receiver =>
 
-  import ChainInterface._
+  import ProtocolInterface._
 
   val logger = Logger("PeerToPeerCommunication")
 
   var blockChain: Chain
-//  val buffer: mutable.Buffer[Block] = mutable.Buffer[Block]()
 
   receiver {
     case QueryLatest => sender() ! responseLatest

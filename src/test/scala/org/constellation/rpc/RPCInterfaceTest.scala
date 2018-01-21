@@ -6,7 +6,7 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.testkit.{TestActor, TestKitBase, TestProbe}
 import com.typesafe.scalalogging.Logger
 import org.constellation.blockchain.{Block, Chain, GenesisBlock, Transaction}
-import ChainInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
+import ProtocolInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
 import org.constellation.blockchain.Consensus.MineBlock
 import org.constellation.p2p.PeerToPeer.{AddPeer, GetPeers, Id, Peers}
 import org.scalatest.{FlatSpec, Matchers}

@@ -10,7 +10,7 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.blockchain.{Block, GenesisBlock, Transaction}
-import ChainInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
+import ProtocolInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
 import akka.http.scaladsl.server.Route
 import org.constellation.blockchain.Consensus.MineBlock
 import org.constellation.p2p.PeerToPeer._

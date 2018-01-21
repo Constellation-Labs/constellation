@@ -4,10 +4,8 @@ import java.util.Date
 
 import com.roundeights.hasher.Implicits._
 import com.typesafe.scalalogging.Logger
-import de.heikoseeberger.akkahttpjson4s.Json4sSupport.ShouldWritePretty.True
 
 import scala.annotation.tailrec
-import scala.collection.generic.SeqFactory
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 

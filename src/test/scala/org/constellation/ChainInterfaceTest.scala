@@ -3,15 +3,15 @@ package org.constellation
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}
 import org.constellation.actor.Receiver
-import org.constellation.rpc.ChainInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
+import org.constellation.rpc.ProtocolInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
 import org.constellation.blockchain.Chain
 import org.constellation.p2p.PeerToPeer
 import org.constellation.p2p.PeerToPeer.{AddPeer, GetPeers, HandShake}
-import org.constellation.rpc.ChainInterface
+import org.constellation.rpc.ProtocolInterface
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, GivenWhenThen, Matchers}
 
-class ChainInterfaceActor(var blockChain: Chain) extends
-  Receiver with ChainInterface with PeerToPeer
+class ProtocolInterfaceActor(var blockChain: Chain) extends
+  Receiver with ProtocolInterface with PeerToPeer
 
 class ChainInterfaceTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLike
   with ImplicitSender with GivenWhenThen with BeforeAndAfterAll with Matchers {
@@ -22,7 +22,7 @@ class ChainInterfaceTest extends TestKit(ActorSystem("BlockChain")) with FlatSpe
 
   trait WithTestActor {
     val blockChain = Chain("id").addBlock("My test data")
-    val blockChainCommunicationActor: ActorRef = system.actorOf(Props(classOf[ChainInterfaceActor], blockChain))
+    val blockChainCommunicationActor: ActorRef = system.actorOf(Props(classOf[ProtocolInterfaceActor], blockChain))
   }
 
   "A BlockChainCommunication actor" should "send the blockchain to anybody that requests it" in new WithTestActor {
