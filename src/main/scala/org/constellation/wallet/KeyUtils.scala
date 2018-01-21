@@ -1,11 +1,9 @@
 package org.constellation.wallet
 
-import java.nio.ByteBuffer
 import java.security._
 import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
 import java.util.Base64
 
-import org.json4s.native.Serialization
 
 
 
@@ -139,5 +137,6 @@ object KeyUtils {
     import com.roundeights.hasher.Implicits._
     base64(key.getEncoded).sha256.hex.sha256.hex
   }
+
 }
 

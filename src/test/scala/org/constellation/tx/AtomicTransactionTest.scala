@@ -28,19 +28,5 @@ class AtomicTransactionTest extends FlatSpec {
     assert(rendParse.decode == sampleTransactionInput)
   }
 
-  "Key Encoding" should "verify keys can be encoded and decoded with X509/PKCS8 spec" in {
-    val pub1 = kp.getPublic
-    val priv1 = kp.getPrivate
-
-    val encodedBytesPub = pub1.getEncoded
-    val pub2 = bytesToPublicKey(encodedBytesPub)
-    assert(pub1 == pub2)
-    assert(pub1.getEncoded.sameElements(pub2.getEncoded))
-
-    val encodedBytesPriv = priv1.getEncoded
-    val priv2 = bytesToPrivateKey(encodedBytesPriv)
-    assert(priv1 == priv2)
-    assert(priv1.getEncoded.sameElements(priv2.getEncoded))
-  }
 
 }
