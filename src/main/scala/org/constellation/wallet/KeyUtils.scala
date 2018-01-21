@@ -2,7 +2,7 @@ package org.constellation.wallet
 
 import java.nio.ByteBuffer
 import java.security._
-import java.security.spec.ECGenParameterSpec
+import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
 import java.util.Base64
 
 import org.json4s.native.Serialization
@@ -49,6 +49,7 @@ object KeyUtils {
   // through strange APIs that might take issue with your strings
   def base64(bytes: Array[Byte]): String = Base64.getEncoder.encodeToString(bytes)
   def fromBase64(b64Str: String): Array[Byte] = Base64.getDecoder.decode(b64Str)
+  def base64FromBytes(bytes: Array[Byte]): String = new String(bytes)
 
   val DefaultSignFunc = "SHA512withECDSA"
 
@@ -114,6 +115,21 @@ object KeyUtils {
     result
   }
 
+  // https://stackoverflow.com/questions/42651856/how-to-decode-rsa-public-keyin-java-from-a-text-view-in-android-studio
+  def bytesToPublicKey(encodedBytes: Array[Byte]): PublicKey = {
+    val spec = new X509EncodedKeySpec(encodedBytes)
+    import java.security.KeyFactory
+    val kf = KeyFactory.getInstance("ECDsA", "SC")
+    kf.generatePublic(spec)
+  }
+
+  def bytesToPrivateKey(encodedBytes: Array[Byte]): PrivateKey = {
+    val spec = new PKCS8EncodedKeySpec(encodedBytes)
+    import java.security.KeyFactory
+    val kf = KeyFactory.getInstance("ECDsA", "SC")
+    kf.generatePrivate(spec)
+  }
+
 
   def bytesToLong(bytes: Array[Byte]): Long = {
     val buffer = ByteBuffer.allocate(8)
@@ -130,6 +146,7 @@ object KeyUtils {
 
   // TODO : Use a more secure address function.
   // Couldn't find a quick dependency for this, TBI
+  // https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses
   def publicKeyToAddress(
                         key: PublicKey
                         ): String = {
@@ -149,20 +166,14 @@ object KeyUtils {
     )
   }
 
-  case class DecodedTransaction(
-                               sourceAddress: Array[Byte],
-                               destinationAddress: Array[Byte],
-                               quantity: Long
-                               )
-
   case class EncodedTransaction(
                                  sourceAddress: String,
                                  destinationAddress: String,
                                  quantity: String
                                ) {
-    def decode = DecodedTransaction(
-      fromBase64(sourceAddress),
-      fromBase64(destinationAddress),
+    def decode = TransactionInputData(
+      bytesToPublicKey(fromBase64(sourceAddress)),
+      destinationAddress,
       bytesToLong(fromBase64(quantity))
     )
     def ordered = Array(sourceAddress, destinationAddress, quantity)
@@ -171,6 +182,18 @@ object KeyUtils {
       implicit val f: DefaultFormats.type = DefaultFormats
       Serialization.write(ordered)
     }
+  }
+
+  def txFromArray(array: Array[String]): EncodedTransaction = {
+    val Array(sourceAddress, destinationAddress, quantity) = array
+    EncodedTransaction(sourceAddress, destinationAddress, quantity)
+  }
+
+  def txFromString(rendered: String): EncodedTransaction = {
+    import org.json4s._
+    implicit val f: DefaultFormats.type = DefaultFormats
+    val array = Serialization.read[Array[String]](rendered)
+    txFromArray(array)
   }
 
 }
