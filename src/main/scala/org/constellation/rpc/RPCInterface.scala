@@ -10,7 +10,7 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.blockchain.{Block, GenesisBlock, Transaction}
-import ProtocolInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
+import ProtocolInterface.{QueryAll, QueryLatest, ResponseBlock, FullChain}
 import akka.http.scaladsl.server.Route
 import org.constellation.p2p.PeerToPeer._
 import org.json4s.native.Serialization
@@ -37,7 +37,7 @@ trait RPCInterface extends Json4sSupport {
       path("blocks") {
         val chain: Future[Seq[Block]] = (blockChainActor ? QueryAll).map {
           //This is a bit of a hack, since JSON4S doesn't serialize case objects well
-          case ResponseBlockChain(blockChain) => blockChain.blocks.slice(0, blockChain.blocks.length -1) :+ GenesisBlock.copy()
+          case FullChain(blockChain) => blockChain.blocks.slice(0, blockChain.blocks.length -1) :+ GenesisBlock.copy()
         }
         complete(chain)
       }~
@@ -45,8 +45,8 @@ trait RPCInterface extends Json4sSupport {
         complete( (blockChainActor ? GetPeers).mapTo[Peers] )
       }~
         path("id") {
-          complete( (blockChainActor ? GetId).mapTo[Id] )
-        }~
+        complete( (blockChainActor ? GetId).mapTo[Id] )
+      }~
       path("latestBlock") {
         complete( (blockChainActor ? QueryLatest).map {
           case ResponseBlock(GenesisBlock) => GenesisBlock.copy()
@@ -69,6 +69,13 @@ trait RPCInterface extends Json4sSupport {
         blockChainActor ! AddPeer(peerAddress)
         complete(s"Added peer $peerAddress")
       }
-    }
+    }~
+     path("getBalance") {
+       entity(as[String]) { account =>
+         logger.info(s"Got request query account $account balance")
+         blockChainActor ! GetBalance(account)
+//         complete(s"Queried balance of account $account")
+       }
+     }
   }
 }

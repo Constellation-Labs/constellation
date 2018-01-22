@@ -22,9 +22,6 @@ object Consensus {
 trait Consensus {
   this: ProtocolInterface with PeerToPeer with Receiver =>
 
-  val buffer: ListBuffer[BlockData] = new ListBuffer[BlockData]()
-  val chainCache = mutable.HashMap[String, AccountData]()
-
   /*
   We're prob going to want a buffering service to handle validation/updates to chainCache
    */
@@ -47,6 +44,7 @@ trait Consensus {
   }
 
   receiver {
+    //TODO: Take blocks here
     case transaction: BlockData =>
       buffer += transaction
       broadcast(transaction)

@@ -76,8 +76,8 @@ case class Facilitators(facilitators: Seq[Transaction])
   * @param round the current round of consensus.
   * @param signature the signature created using node's secret key on the concatenation of the binary representation of the five items above.
   */
-case class CheckpointBlock(hashPointer: Array[Byte],
+case class CheckpointBlock(hashPointer: String,
                            sequenceNum: Long,
-                           consensusResultHashPointer: mutable.HashMap[ActorRef, Option[BlockData]], //TODO replace with compressed hash of each node's decision on consensus, not proposed subset as shown here (for stubbing byzantine consensus) which will also get added to the txBuffer
-                           round: Long,
+                           consensusResultHashPointer: mutable.HashMap[ActorRef, Option[BlockData]] = mutable.HashMap.empty[ActorRef, Option[BlockData]], //TODO replace with compressed hash of each node's decision on consensus, not proposed subset as shown here (for stubbing byzantine consensus) which will also get added to the txBuffer
+                           round: Long = 0L,
                            signature: String) extends BlockData

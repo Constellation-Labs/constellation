@@ -9,7 +9,6 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.actor.Receiver
 import org.constellation.p2p.PeerToPeer._
 
-import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
 object PeerToPeer {
@@ -25,6 +24,8 @@ object PeerToPeer {
   case object GetPeers
 
   case object GetId
+
+  case class GetBalance(account: String)
 
   case object HandShake
 }
@@ -42,7 +43,6 @@ trait PeerToPeer {
     peers.foreach {  peer => peer ! message
       logger.info(s"just broadcasted $message to $peer")
     }
-
   }
 
   receiver {

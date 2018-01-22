@@ -38,7 +38,7 @@ object Chain {
 
   def calculateHashForBlock( block: Block ) = calculateHash(block.index, block.previousHash, block.timestamp, block.data)
 
-  def calculateHash(index: Int, previousHash: String, timestamp: Long, data: String) =
+  def calculateHash(index: Int, previousHash: String, timestamp: Long, data: String): String =
     s"$index:$previousHash:$timestamp:$data".sha256.hex
 }
 

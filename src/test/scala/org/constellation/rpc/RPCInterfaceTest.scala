@@ -6,8 +6,8 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.testkit.{TestActor, TestKitBase, TestProbe}
 import com.typesafe.scalalogging.Logger
 import org.constellation.blockchain.{Block, Chain, GenesisBlock, Transaction}
-import ProtocolInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
-import org.constellation.p2p.PeerToPeer.{AddPeer, GetPeers, Id, Peers}
+import ProtocolInterface.{QueryAll, QueryLatest, ResponseBlock, FullChain}
+import org.constellation.p2p.PeerToPeer._
 import org.scalatest.{FlatSpec, Matchers}
 import org.constellation.Fixtures.{jsonToString, tx}
 
@@ -29,7 +29,7 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
 
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
       case QueryAll =>
-        sender ! ResponseBlockChain(Chain("id"))
+        sender ! FullChain(Chain("id"))
         TestActor.NoAutoPilot
       }
     }
@@ -95,14 +95,22 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
     }
 
     Post("/mineBlock", HttpEntity(ContentTypes.`application/json`, jsonToString(tx))) ~> routes ~> check {
-      responseAs[Block] shouldEqual(Block(0, "", 0, "0", ""))
+      responseAs[Block] shouldEqual(Block(0, "", 0, "1", ""))
+    }
+  }
+
+  it should "a balance should be returned for /getBalance " in new RPCInterfaceFixture {
+    testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
+      case GetBalance(account) =>
+
+        sender ! "Chain cache queried"
+        TestActor.NoAutoPilot
+      }
     }
 
-
-//    Post("/mineBlock", HttpEntity(ContentTypes.`text/html(UTF-8)`, "testdata:node1:node2:node2")) ~> routes ~> check {
-//
-//      responseAs[Block] shouldEqual(Block(0, "", 0, "testdata:node1:node2:node2", "", Some("node1"),  Some("node2"), Some("node2")))
-//    }
+    Post("/getBalance", HttpEntity(ContentTypes.`text/html(UTF-8)`, "1234")) ~> routes ~> check {
+      responseAs[String] shouldEqual("\"Queried balance of account 1234\"")
+    }
   }
 
 }

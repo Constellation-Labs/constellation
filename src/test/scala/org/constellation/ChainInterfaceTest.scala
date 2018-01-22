@@ -3,7 +3,7 @@ package org.constellation
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}
 import org.constellation.actor.Receiver
-import org.constellation.rpc.ProtocolInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
+import org.constellation.rpc.ProtocolInterface.{QueryAll, QueryLatest, ResponseBlock, FullChain}
 import org.constellation.blockchain.Chain
 import org.constellation.p2p.PeerToPeer
 import org.constellation.p2p.PeerToPeer.{AddPeer, GetPeers, HandShake}
@@ -27,7 +27,7 @@ class ChainInterfaceTest extends TestKit(ActorSystem("BlockChain")) with FlatSpe
 
   "A BlockChainCommunication actor" should "send the blockchain to anybody that requests it" in new WithTestActor {
     blockChainCommunicationActor ! QueryAll
-    expectMsg(ResponseBlockChain(blockChain))
+    expectMsg(FullChain(blockChain))
   }
 
   it should "send the latest block, and nothing more for a QueryLatest request" in new WithTestActor {
@@ -50,7 +50,7 @@ class ChainInterfaceTest extends TestKit(ActorSystem("BlockChain")) with FlatSpe
 
     Then("the new block should be added to the chain, and a broadcast should be sent")
     expectMsgPF() {
-      case ResponseBlockChain(blockChain) => blockChain.blocks shouldEqual( nextBlock +: oldBlocks )
+      case FullChain(blockChain) => blockChain.blocks shouldEqual( nextBlock +: oldBlocks )
     }
   }
 
@@ -66,10 +66,10 @@ class ChainInterfaceTest extends TestKit(ActorSystem("BlockChain")) with FlatSpe
     expectMsg(GetPeers)
 
     When("we receive this longer chain")
-    blockChainCommunicationActor ! ResponseBlockChain(longerChain)
+    blockChainCommunicationActor ! FullChain(longerChain)
 
     Then("The chain should be replaced, and a broadcast should be sent")
-    expectMsg(ResponseBlockChain(longerChain))
+    expectMsg(FullChain(longerChain))
 
   }
 
@@ -79,14 +79,14 @@ class ChainInterfaceTest extends TestKit(ActorSystem("BlockChain")) with FlatSpe
     val oldBlockChain = blockChain
     val newBlockChain = oldBlockChain .addBlock("Some new data") .addBlock("And more")
 
-    blockChainCommunicationActor ! ResponseBlockChain(newBlockChain)
+    blockChainCommunicationActor ! FullChain(newBlockChain)
 
     When("we receive the old blockchain")
-    blockChainCommunicationActor ! ResponseBlockChain(oldBlockChain)
+    blockChainCommunicationActor ! FullChain(oldBlockChain)
 
     Then("We expect the message to be discarded")
     blockChainCommunicationActor ! QueryAll
-    expectMsg(ResponseBlockChain(newBlockChain))
+    expectMsg(FullChain(newBlockChain))
   }
 
   it should "query for the full chain when we receive a single block that is further ahead in the chain" in new WithTestActor {
@@ -105,7 +105,7 @@ class ChainInterfaceTest extends TestKit(ActorSystem("BlockChain")) with FlatSpe
 
     Then("we expect the blockchain to be unchanged")
     blockChainCommunicationActor ! QueryAll
-    expectMsg(ResponseBlockChain(oldBlockChain))
+    expectMsg(FullChain(oldBlockChain))
 
   }
 

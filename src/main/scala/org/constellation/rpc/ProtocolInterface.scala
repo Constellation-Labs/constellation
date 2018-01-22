@@ -2,11 +2,12 @@ package org.constellation.rpc
 
 import com.typesafe.scalalogging.Logger
 import org.constellation.actor.Receiver
-import org.constellation.blockchain.{Block, Chain}
+import org.constellation.blockchain._
 import org.constellation.p2p.PeerToPeer
-import org.constellation.p2p.PeerToPeer.{GetId, Id}
+import org.constellation.p2p.PeerToPeer.{GetBalance, GetId, Id}
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 import scala.util.{Failure, Success}
 
 
@@ -15,13 +16,18 @@ object ProtocolInterface {
   case object QueryLatest
   case object QueryAll
 
-  case class ResponseBlockChain(blockChain: Chain)
+  case class FullChain(blockChain: Chain)
   case class ResponseBlock(block: Block)
 
 }
 
 trait ProtocolInterface {
   this: PeerToPeer with Receiver =>
+
+  val buffer: ListBuffer[BlockData] = new ListBuffer[BlockData]()
+  val chainCache = mutable.HashMap[String, AccountData]()
+
+  val chain = DAG
 
   import ProtocolInterface._
 
@@ -35,12 +41,16 @@ trait ProtocolInterface {
 
     case GetId => sender() ! Id(blockChain.id)
 
+    case GetBalance(account) => sender() ! chainCache.get(account).map(_.balance)
+    case CheckpointBlock =>
     //FIXME: This is inefficient
-    case ResponseBlock(block) => handleBlockChainResponse(Seq(block))
-    case ResponseBlockChain(blockChain) => handleBlockChainResponse(blockChain.blocks)
+    case ResponseBlock(block) => instantiateChain(Seq(block))
+    case FullChain(blockChain) => instantiateChain(blockChain.blocks)
   }
 
-  def handleBlockChainResponse( receivedBlocks: Seq[Block] ): Unit = {
+  def addBlock(block: Block): Unit = chain.globalChain.append(block)
+
+  def instantiateChain(receivedBlocks: Seq[Block] ): Unit = {
     val localLatestBlock = blockChain.latestBlock
     logger.info(s"${receivedBlocks.length} blocks received.")
 
@@ -78,7 +88,7 @@ trait ProtocolInterface {
 
   def responseLatest = ResponseBlock(blockChain.latestBlock)
 
-  def responseBlockChain = ResponseBlockChain(blockChain)
+  def responseBlockChain = FullChain(blockChain)
 
 }
 
