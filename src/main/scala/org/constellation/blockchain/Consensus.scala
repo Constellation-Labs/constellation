@@ -11,7 +11,7 @@ import org.constellation.rpc.ProtocolInterface
 import scala.collection.mutable
 
 object Consensus {
-  case class MineBlock( data: String )
+  case object MineBlock
 
   def validData(tx: BlockData) = true
 
@@ -23,12 +23,7 @@ trait Consensus {
   this: ProtocolInterface with PeerToPeer with Receiver =>
 
   val buffer: ListBuffer[BlockData] = new ListBuffer[BlockData]()
-  val chainCache = mutable.HashMap[String, Long]()
-  /*
-  I'd like to consolidate these two, maybe make an object for each pub key, storing balance, reputation and half finished tx's
-  Also, we should prob use some sort of db configurable based on tier.
-   */
-  val signatureCache = mutable.HashMap[String, Tx]()
+  val chainCache = mutable.HashMap[String, AccountData]()
 
   /*
   We're prob going to want a buffering service to handle validation/updates to chainCache
@@ -36,11 +31,17 @@ trait Consensus {
   def updateCache(buffer: ListBuffer[Tx]) = {
     val validatedBuffer: mutable.Seq[Tx] = buffer.filter(Consensus.validData)
 
-    validatedBuffer.foreach{tx: Tx =>
-      signatureCache.get(tx.id) match {
+    validatedBuffer.foreach { tx: Tx =>
+      val counterParty = chainCache.get(tx.counterPartyPubKey)
+      val initialTransaction = counterParty.flatMap(_.unsignedTxs.get(tx.id))
+
+      initialTransaction match {
         case Some(initialTx) if Consensus.validSignture(initialTx, tx) =>
-          chainCache.update(tx.pubKey, chainCache(tx.id) + 1L)//TODO turn message: String into Long
-        case None => signatureCache(tx.id) = tx
+          counterParty.foreach(acct => acct.unsignedTxs.remove(initialTx.id))
+          chainCache.get(tx.senderPubKey).foreach(acct => acct.balance -= tx.amount)
+          chainCache.get(tx.counterPartyPubKey).foreach(acct => acct.balance += tx.amount)
+        case None =>
+          counterParty.foreach(acct => acct.unsignedTxs.update(tx.id, tx))
       }
     }
   }
@@ -51,8 +52,8 @@ trait Consensus {
       broadcast(transaction)
       sender() ! transaction
 
-    case MineBlock(data) =>
-      blockChain = blockChain.addBlock(data)
+    case MineBlock =>
+      blockChain = blockChain.addBlock(buffer.mkString(" "))
       val peerMessage = ResponseBlock(blockChain.latestBlock)
       broadcast(peerMessage)
       sender() ! peerMessage

@@ -6,10 +6,13 @@ import com.roundeights.hasher.Implicits._
 import com.typesafe.scalalogging.Logger
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
-case class Block(index: Int, previousHash: String, timestamp: Long, data: String, hash: String, id1: Option[String] = None, recipient: Option[String] = None, d2: Option[String] = None)
+
+case class Block(index: Int, previousHash: String, timestamp: Long, data: String, hash: String, id1: Option[String] = None,
+                 recipient: Option[String] = None, d2: Option[String] = None)
 
 object GenesisBlock extends Block(0, "0", 1497359352, "Genesis block", "ccce7d8349cf9f5d9a9c8f9293756f584d02dfdb953361c5ee36809aa0f560b4")
 
@@ -38,6 +41,12 @@ object Chain {
   def calculateHash(index: Int, previousHash: String, timestamp: Long, data: String) =
     s"$index:$previousHash:$timestamp:$data".sha256.hex
 }
+
+case class AccountData(
+                        var balance: Long,
+                        unsignedTxs: mutable.HashMap[String, Tx] = mutable.HashMap[String, Tx](),
+                        metaData: List[BlockData] = Nil //TODO: we'll need to figure out some sort of buffering
+                      )
 
 case class Chain private(id: String, blocks: Seq[Block] ) {
 

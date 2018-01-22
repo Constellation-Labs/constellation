@@ -7,7 +7,6 @@ import akka.testkit.{TestActor, TestKitBase, TestProbe}
 import com.typesafe.scalalogging.Logger
 import org.constellation.blockchain.{Block, Chain, GenesisBlock, Transaction}
 import ProtocolInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
-import org.constellation.blockchain.Consensus.MineBlock
 import org.constellation.p2p.PeerToPeer.{AddPeer, GetPeers, Id, Peers}
 import org.scalatest.{FlatSpec, Matchers}
 import org.constellation.Fixtures.{jsonToString, tx}
@@ -89,13 +88,14 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
   it should "add a new block for /addBlock" in new RPCInterfaceFixture {
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
       case transaction: Transaction =>
-        sender ! ResponseBlock(Block(0, "", 0, transaction.message, ""))
+
+        sender ! ResponseBlock(Block(0, "", 0, transaction.amount.toString, ""))
         TestActor.NoAutoPilot
       }
     }
 
     Post("/mineBlock", HttpEntity(ContentTypes.`application/json`, jsonToString(tx))) ~> routes ~> check {
-      responseAs[Block] shouldEqual(Block(0, "", 0, "", ""))
+      responseAs[Block] shouldEqual(Block(0, "", 0, "0", ""))
     }
 
 

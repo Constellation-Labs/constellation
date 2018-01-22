@@ -18,7 +18,9 @@ trait BlockData
   */
 trait Tx extends BlockData {
   val id: String
-  val pubKey: String
+  val senderPubKey: String
+  val counterPartyPubKey: String
+  val amount: Long
 }
 
 /**
@@ -26,28 +28,30 @@ trait Tx extends BlockData {
   * @param hashPointer the hash pointer to the previous block.
   * @param id the transaction identifier,it should be generated using a cryptographically secure pseudo-random number generator by the initiator of the transaction.
   * @param sequenceNum the sequence number, current block number.
-  * @param pubKey the public key of this node.
+  * @param senderPubKey the public key of this node.
   * @param counterPartyPubKey the public key of the counterparty v.
-  * @param message the transaction message.
+  * @param amount amount to be sent.
   * @param signature the signature created using node's secret key on the concatenation of the binary representation of the five items above.
   */
 case class Transaction(hashPointer: Array[Byte],
                        id: String,
                        sequenceNum: Long,
-                       pubKey: String,
+                       senderPubKey: String,
                        counterPartyPubKey: String,
-                       message: String,
+                       amount: Long,
                        signature: String) extends Tx
 
 /**
   *
   * @param id the transaction identifier,it should be generated using a cryptographically secure pseudo-random number generator by the initiator of the transaction.
   * @param counterPartyPubKey the public key of the counterparty v.
+  * @param amount amount to be sent.
   * @param signature the signature created using node's secret key on the concatenation of the binary representation of the five items above.
   */
 case class SignTransaction(id: String,
-                           pubKey: String,
+                           senderPubKey: String,
                            counterPartyPubKey: String,
+                           amount: Long,
                            signature: String) extends Tx
 
 /**
