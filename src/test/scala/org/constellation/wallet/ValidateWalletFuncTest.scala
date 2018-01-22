@@ -2,13 +2,11 @@ package org.constellation.wallet
 
 
 import java.security.KeyPair
-
 import org.scalatest.FlatSpec
 
-import scala.util.Random
 import KeyUtils._
 
-class TestWalletFuncs  extends FlatSpec {
+class ValidateWalletFuncTest  extends FlatSpec {
 
   val kp: KeyPair = makeKeyPair()
 
@@ -45,20 +43,27 @@ class TestWalletFuncs  extends FlatSpec {
 
   }
 
-  "Address maker" should "create an address" in {
+  "Address maker" should "create valid address deterministically" in {
     val addr = publicKeyToAddress(kp.getPublic)
     assert(addr.length > 10)
     assert(addr.toCharArray.distinct.length > 5)
+    val addr2 = publicKeyToAddress(kp.getPublic)
+    assert(addr == addr2)
   }
 
-  val sampleTransactionInput = TransactionInputData(kp.getPublic, publicKeyToAddress(kp.getPublic), 1L)
+  "Key Encoding" should "verify keys can be encoded and decoded with X509/PKCS8 spec" in {
+    val pub1 = kp.getPublic
+    val priv1 = kp.getPrivate
 
-  "Transaction Input Data" should "render to json" in {
-    val r = sampleTransactionInput.encode.rendered
-    assert(r.contains('['))
-    assert(r.length > 50)
-    assert(r.toCharArray.distinct.length > 5)
-    assert(r.contains('"'))
+    val encodedBytesPub = pub1.getEncoded
+    val pub2 = bytesToPublicKey(encodedBytesPub)
+    assert(pub1 == pub2)
+    assert(pub1.getEncoded.sameElements(pub2.getEncoded))
+
+    val encodedBytesPriv = priv1.getEncoded
+    val priv2 = bytesToPrivateKey(encodedBytesPriv)
+    assert(priv1 == priv2)
+    assert(priv1.getEncoded.sameElements(priv2.getEncoded))
   }
 
 }
