@@ -9,8 +9,8 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.blockchain.{Block, GenesisBlock, Transaction}
-import ProtocolInterface.{QueryAll, QueryLatest, ResponseBlock, FullChain}
+import org.constellation.blockchain.{AccountData, Block, GenesisBlock, Transaction}
+import ProtocolInterface._
 import akka.http.scaladsl.server.Route
 import org.constellation.p2p.PeerToPeer._
 import org.json4s.native.Serialization
@@ -73,8 +73,7 @@ trait RPCInterface extends Json4sSupport {
      path("getBalance") {
        entity(as[String]) { account =>
          logger.info(s"Got request query account $account balance")
-         blockChainActor ! GetBalance(account)
-//         complete(s"Queried balance of account $account")
+         complete( (blockChainActor ? GetBalance(account)).mapTo[Balance] )
        }
      }
   }

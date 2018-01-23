@@ -18,6 +18,7 @@ object ProtocolInterface {
 
   case class FullChain(blockChain: Chain)
   case class ResponseBlock(block: Block)
+  case class Balance(balance: Long)
 
 }
 
@@ -41,7 +42,10 @@ trait ProtocolInterface {
 
     case GetId => sender() ! Id(blockChain.id)
 
-    case GetBalance(account) => sender() ! chainCache.get(account).map(_.balance)
+    case GetBalance(account) =>
+      val test: Long = chainCache.get(account).map(_.balance).getOrElse(0L)
+      logger.info(s"receiverd GetBalance request $test")
+      sender() ! Balance(test)
     case CheckpointBlock =>
     //FIXME: This is inefficient
     case ResponseBlock(block) => instantiateChain(Seq(block))
