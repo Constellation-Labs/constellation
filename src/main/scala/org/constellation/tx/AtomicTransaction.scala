@@ -22,6 +22,12 @@ object AtomicTransaction {
     buffer.array()
   }
 
+
+  // TODO: Change these to use json4s custom serializers.
+  // Working on this now in the wallet class
+  // Example: https://nmatpt.com/blog/2017/01/29/json4s-custom-serializer/
+  // I am not sure whether or not we'll need to use this case class at the
+  // encoded stage at some point. Need to figure this out.
   case class TransactionInputData(
                                    sourcePubKey: PublicKey,
                                    destinationAddress: String,

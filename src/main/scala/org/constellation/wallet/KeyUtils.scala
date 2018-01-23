@@ -4,6 +4,10 @@ import java.security._
 import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
 import java.util.Base64
 
+import org.json4s.{CustomSerializer, Extraction, Formats, JObject}
+import org.json4s.JsonAST.JString
+import org.json4s.native.Serialization
+
 
 
 
@@ -137,6 +141,44 @@ object KeyUtils {
     import com.roundeights.hasher.Implicits._
     base64(key.getEncoded).sha256.hex.sha256.hex
   }
+
+  class PrivateKeySerializer extends CustomSerializer[PrivateKey](format => ( {
+    case jObj: JObject =>
+      implicit val f: Formats = format
+      bytesToPrivateKey(fromBase64((jObj \ "key").extract[String]))
+  }, {
+    case key: PrivateKey =>
+      JObject("key" -> JString(KeyUtils.base64(key.getEncoded)))
+  }
+  ))
+
+  class PublicKeySerializer extends CustomSerializer[PublicKey](format => ( {
+    case jstr: JObject =>
+      implicit val f: Formats = format
+      bytesToPublicKey(fromBase64((jstr \ "key").extract[String]))
+  }, {
+    case key: PublicKey =>
+      JObject("key" -> JString(KeyUtils.base64(key.getEncoded)))
+  }
+  ))
+
+  class KeyPairSerializer extends CustomSerializer[KeyPair](format => ( {
+    case jObj: JObject =>
+      implicit val f: Formats = format
+      val pubKey = (jObj \ "publicKey").extract[PublicKey]
+      val privKey = (jObj \ "privateKey").extract[PrivateKey]
+      val kp = new KeyPair(pubKey, privKey)
+      kp
+  }, {
+    case key: KeyPair =>
+      implicit val f: Formats = format
+      JObject(
+        "publicKey" -> JObject("key" -> JString(KeyUtils.base64(key.getPublic.getEncoded))),
+        "privateKey" -> JObject("key" -> JString(KeyUtils.base64(key.getPrivate.getEncoded)))
+      )
+  }
+  ))
+
 
 }
 

@@ -65,7 +65,7 @@ class AtomicTransactionTest extends FlatSpec {
 
     // Below data is a mock which includes both valid and invalid transactions,
     // i.e. we expect some nodes to lie about the transaction history when the lookup occurs.
-    // The 'isValid' flag is a mockup assuming that there was some previous step where this node
+    // The 'isValid' flag is a mock-up assuming that there was some previous step where this node
     // either verified the transactions leading up to this one or we trusted the network to do that
     // according to reputation / consensus / whatever mechanism.
 
@@ -88,7 +88,7 @@ class AtomicTransactionTest extends FlatSpec {
     // Note: we will enforce the generation of many transactions to ensure KeyPairs get fully rotated every
     // transaction at the wallet level. We should not force users to rotate keys, because there may be a
     // situation where they wish to use an alternate wallet / key mechanism, or they may just transfer the entire
-    // amount at once. This is in line with the BTC whitepaper. We could consider forcing key rotations, but
+    // amount at once. This is in line with the BTC white paper. We could consider forcing key rotations, but
     // that means shutting down 3rd party transaction generators unless they enforce that protocol, which is
     // unnecessarily strict. We would rather anyone be able to send a valid transaction. The security of revealing
     // the PubKey for more than one transaction is on the implementation provider.
