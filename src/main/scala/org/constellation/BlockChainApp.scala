@@ -1,44 +1,41 @@
 package org.constellation
 
-import java.util.concurrent.TimeUnit
 
-import akka.actor.{ActorSystem, Props}
-import akka.http.scaladsl.Http
+import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
-import org.constellation.actor.ChainActor
-import org.constellation.blockchain.Chain
-import org.constellation.p2p.PeerToPeer.AddPeer
-import org.constellation.rpc.RPCInterface
+import org.constellation.app.AppNode
+
 
 import scala.concurrent.ExecutionContextExecutor
 
-object BlockChainApp extends App with RPCInterface {
+/**
+  * Main entry point for running a node.
+  * Note: this can only be used to run one node per JVM. This is the main
+  * initialization class for starting a Constellation node in practice.
+  *
+  * It initializes an ActorSystem (and you probably don't want multiple ActorSystems
+  * running per JVM) Use AppNode builder for constructing test nodes within same JVM.
+  */
+object BlockChainApp extends App {
+
+  val logger = Logger("AppInit")
 
   implicit val system: ActorSystem = ActorSystem("BlockChain")
-  implicit val materializer: ActorMaterializer = ActorMaterializer()
+  implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-  val config = ConfigFactory.load()
+  private val config = ConfigFactory.load()
+  private val timeout = config.getInt("blockchain.defaultRPCTimeoutSeconds")
+  private val seedHost = config.getString("blockchain.seedHost")
+  private val id = args.headOption.getOrElse("ID")
+  private val httpInterface = config.getString("http.interface")
+  private val httpPort = config.getInt("http.port")
 
-  override implicit val timeout: Timeout = Timeout(
-    config.getInt("blockchain.defaultRPCTimeoutSeconds"), TimeUnit.SECONDS)
+  logger.info(s"Initializing main BlackChainActor with id: $id and seedHost: $seedHost " +
+  s"with timeout: $timeout on interface: $httpInterface port: $httpPort")
 
-  val logger = Logger("WebServer")
+  val appNode = new AppNode(id, seedHost, httpInterface, httpPort, timeout)
 
-  val id = args.headOption.getOrElse("ID")
-  println("id: " + id)
-  val blockChainActor = system.actorOf(ChainActor.props(Chain(id)), "blockChainActor")
-  val seedHost = config.getString("blockchain.seedHost")
-
-  if ( ! seedHost.isEmpty ) {
-    logger.info(s"Attempting to connect to seed-host ${seedHost}")
-    blockChainActor ! AddPeer(seedHost)
-  } else {
-    logger.info("No seed host configured, waiting for messages.")
-  }
-
-  Http().bindAndHandle(routes, config.getString("http.interface"), config.getInt("http.port"))
 }
