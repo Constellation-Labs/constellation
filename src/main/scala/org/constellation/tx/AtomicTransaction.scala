@@ -3,6 +3,7 @@ package org.constellation.tx
 import java.nio.ByteBuffer
 import java.security.PublicKey
 
+import org.constellation.wallet.KeyUtils
 import org.constellation.wallet.KeyUtils.{base64, bytesToPublicKey, fromBase64}
 import org.json4s.native.Serialization
 
@@ -21,6 +22,12 @@ object AtomicTransaction {
     buffer.array()
   }
 
+
+  // TODO: Change these to use json4s custom serializers.
+  // Working on this now in the wallet class
+  // Example: https://nmatpt.com/blog/2017/01/29/json4s-custom-serializer/
+  // I am not sure whether or not we'll need to use this case class at the
+  // encoded stage at some point. Need to figure this out.
   case class TransactionInputData(
                                    sourcePubKey: PublicKey,
                                    destinationAddress: String,
@@ -31,6 +38,8 @@ object AtomicTransaction {
       destinationAddress,
       base64(longToBytes(quantity))
     )
+    def sourceAddress: String = KeyUtils.publicKeyToAddress(sourcePubKey)
+
   }
 
   case class EncodedTransaction(
