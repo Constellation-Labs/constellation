@@ -5,13 +5,13 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import org.constellation.app.AppNode
 import org.constellation.p2p.PeerToPeer.{GetPeers, Peers}
-import org.scalatest.FlatSpec
+import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 import akka.pattern.ask
 import akka.util.Timeout
 
 import scala.concurrent.{Await, ExecutionContextExecutor}
 
-class MultiAppTest extends FlatSpec {
+class MultiAppTest extends FlatSpec with BeforeAndAfterAll {
 
   implicit val system: ActorSystem = ActorSystem("BlockChain")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
@@ -46,6 +46,10 @@ class MultiAppTest extends FlatSpec {
 
     // Need to verify nodes are healthy
 
+  }
+
+  override def afterAll() {
+    system.terminate()
   }
 
 }
