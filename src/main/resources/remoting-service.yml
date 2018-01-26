@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: remoting-service
+spec:
+  clusterIP: None
+  ports:
+  - port: 2551
+    protocol: TCP
+    targetPort: 2551
+    name: akka-remote
+  selector:
+    type: constellation-node

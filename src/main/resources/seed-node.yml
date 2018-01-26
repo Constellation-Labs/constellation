@@ -1,0 +1,47 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: constellation-seed-node
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: constellation
+        type: constellation-node
+    spec:
+      containers:
+      - name: constellation-seed
+        image: constellation:0
+        imagePullPolicy: Never # Only use the local image
+        ports:
+        - containerPort: 8080  # The kubectl proxy will default to the first port in the list
+          name: akka-http
+          protocol: TCP
+        - containerPort: 2551
+          name: akka-remote
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 250m
+            memory: 384Mi
+          requests:
+            cpu: 250m
+            memory: 384Mi
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: AKKA_ACTOR_SYSTEM_NAME
+          value: constellation
+        - name: AKKA_REMOTING_BIND_PORT
+          value: '2551'
+        - name: AKKA_REMOTING_BIND_HOST
+          value: "node1" #can just do port if we export env variable
+        - name: AKKA_SEED_NODE_PORT
+          value: '2551'
+        - name: SAMPLE_HTTP_PORT
+          value: '8080'
+        - name: SAMPLE_HTTP_HOST
+          value: "node1"

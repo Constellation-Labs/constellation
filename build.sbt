@@ -8,7 +8,7 @@ resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases"
 
 enablePlugins(JavaAppPackaging)
 
-dockerExposedPorts := Seq( 9000, 2552 )
+dockerExposedPorts := Seq(2552)
 
 lazy val versions = new {
   val akka = "2.4.18"
@@ -42,6 +42,19 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
 ).map(_ % "test" )
+
+// These values will be filled in by the k8s StatefulSet and Deployment
+//dockerEntrypoint ++= Seq(
+//  """-DactorSystemName="$AKKA_ACTOR_SYSTEM_NAME"""",
+//  """-Dakka.remote.netty.tcp.hostname="$AKKA_REMOTING_BIND_HOST"""",
+//  """-Dakka.remote.netty.tcp.port="$AKKA_REMOTING_BIND_PORT"""",
+//  """-Dblockchain.seedHost="akka.tcp://${AKKA_ACTOR_SYSTEM_NAME}@${AKKA_SEED_NODE_HOST}:${AKKA_SEED_NODE_PORT}"""",
+//  """-Dsample.http.hostname="$SAMPLE_HTTP_HOST"""",
+//  """-Dsample.http.port="$SAMPLE_HTTP_PORT"""",
+//  "-Dakka.io.dns.resolver=async-dns",
+//  "-Dakka.io.dns.async-dns.resolve-srv=true",
+//  "-Dakka.io.dns.async-dns.resolv-conf=on"
+//)
 
 mainClass := Some("org.constellation.BlockChainApp")
 
