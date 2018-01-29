@@ -31,9 +31,9 @@ object BlockChainApp extends App with RPCInterface {
   val id = args.headOption.getOrElse("ID")
   println("id: " + id)
   val blockChainActor = system.actorOf(ChainActor.props(Chain(id)), "blockChainActor")
-  val seedHost = config.getString("blockchain.seedHost")
+  val seedHost: String = ""//config.getString("blockchain.seedHost")
 
-  if ( ! seedHost.isEmpty ) {
+  if (!seedHost.isEmpty) {
     logger.info(s"Attempting to connect to seed-host ${seedHost}")
     blockChainActor ! AddPeer(seedHost)
   } else {

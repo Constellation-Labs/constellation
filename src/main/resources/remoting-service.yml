@@ -8,6 +8,5 @@ spec:
   - port: 2551
     protocol: TCP
     targetPort: 2551
-    name: akka-remote
   selector:
-    type: constellation-node
+    app: constellation

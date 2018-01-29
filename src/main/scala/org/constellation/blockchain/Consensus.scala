@@ -16,6 +16,7 @@ trait Consensus {
 
   receiver {
     case transaction: Transaction =>
+      logger.info("received tx" + transaction.toString)
       blockChain = blockChain.addBlock(transaction.message)
       val peerMessage = ResponseBlock(blockChain.latestBlock)
       broadcast(peerMessage)
