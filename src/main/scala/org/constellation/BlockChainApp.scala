@@ -8,7 +8,7 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
-import org.constellation.actor.ChainActor
+import org.constellation.actor.Node
 import org.constellation.blockchain.Chain
 import org.constellation.p2p.PeerToPeer.AddPeer
 import org.constellation.rpc.RPCInterface
@@ -30,12 +30,15 @@ object BlockChainApp extends App with RPCInterface {
 
   val id = args.headOption.getOrElse("ID")
   println("id: " + id)
-  val blockChainActor = system.actorOf(ChainActor.props(Chain(id)), "blockChainActor")
-  val seedHost = config.getString("blockchain.seedHost")
+  val blockChainActor = system.actorOf(Node.props(id), "constellation")
+  val seedHosts = args.tail
 
-  if ( ! seedHost.isEmpty ) {
-    logger.info(s"Attempting to connect to seed-host ${seedHost}")
-    blockChainActor ! AddPeer(seedHost)
+
+  if (seedHosts.nonEmpty) {
+    logger.info(s"Attempting to connect to seed-host ${seedHosts.mkString(" ")}")
+    seedHosts.foreach { seedHost =>
+      blockChainActor ! AddPeer(seedHost)
+    }
   } else {
     logger.info("No seed host configured, waiting for messages.")
   }

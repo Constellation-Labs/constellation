@@ -5,12 +5,14 @@ import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.testkit.{TestActor, TestKitBase, TestProbe}
 import com.typesafe.scalalogging.Logger
-import org.constellation.blockchain.{Block, Chain, GenesisBlock, Transaction}
-import ProtocolInterface.{QueryAll, QueryLatest, ResponseBlock, FullChain}
+import org.constellation.blockchain._
+import ProtocolInterface._
+import org.constellation.Fixtures._
 import org.constellation.p2p.PeerToPeer._
 import org.scalatest.{FlatSpec, Matchers}
 import org.constellation.Fixtures.{jsonToString, tx}
 
+import scala.collection.mutable.ListBuffer
 import scala.concurrent.ExecutionContext
 
 class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
@@ -19,6 +21,7 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
   trait RPCInterfaceFixture extends RPCInterface {
     val testProbe = TestProbe()
     val id = "id"
+    val dag = DAG
 
     override val blockChainActor: ActorRef = testProbe.ref
     override val logger = Logger("TestLogger")
@@ -28,27 +31,27 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
   "A route " should "get the blockchain from the blockchain actor for /blocks" in new RPCInterfaceFixture {
 
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
-      case QueryAll =>
-        sender ! FullChain(Chain("id"))
+      case GetChain =>
+        sender ! FullChain(dag.globalChain)
         TestActor.NoAutoPilot
       }
     }
 
     Get("/blocks") ~> routes ~> check {
-      responseAs[Seq[Block]] shouldEqual Seq(GenesisBlock)
+      responseAs[ListBuffer[CheckpointBlock]] shouldEqual ListBuffer(genesisBlock)
     }
   }
 
   it should "return the latest block for /latestBlock" in new RPCInterfaceFixture {
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
-      case QueryLatest =>
-        sender ! ResponseBlock(GenesisBlock)
+      case getLatestBlock: GetLatestBlock =>
+        sender ! getLatestBlock
         TestActor.NoAutoPilot
       }
     }
 
     Get("/latestBlock") ~> routes ~> check {
-      responseAs[Block] shouldEqual GenesisBlock
+      responseAs[CheckpointBlock] shouldEqual GenesisBlock
     }
   }
 
@@ -89,13 +92,13 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
       case transaction: Transaction =>
 
-        sender ! ResponseBlock(Block(0, "", 0, transaction.amount.toString, ""))
+        sender ! transaction
         TestActor.NoAutoPilot
       }
     }
 
     Post("/mineBlock", HttpEntity(ContentTypes.`application/json`, jsonToString(tx))) ~> routes ~> check {
-      responseAs[Block] shouldEqual(Block(0, "", 0, "1", ""))
+      responseAs[CheckpointBlock] shouldEqual genesisBlock
     }
   }
 

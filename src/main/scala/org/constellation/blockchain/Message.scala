@@ -78,6 +78,6 @@ case class Facilitators(facilitators: Seq[Transaction])
   */
 case class CheckpointBlock(hashPointer: String,
                            sequenceNum: Long,
+                           signature: String,
                            consensusResultHashPointer: mutable.HashMap[ActorRef, Option[BlockData]] = mutable.HashMap.empty[ActorRef, Option[BlockData]], //TODO replace with compressed hash of each node's decision on consensus, not proposed subset as shown here (for stubbing byzantine consensus) which will also get added to the txBuffer
-                           round: Long = 0L,
-                           signature: String) extends BlockData
+                           round: Long = 0L) extends BlockData

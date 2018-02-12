@@ -8,92 +8,124 @@ import org.constellation.p2p.PeerToPeer.{GetBalance, GetId, Id}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-import scala.util.{Failure, Success}
-
 
 object ProtocolInterface {
 
-  case object QueryLatest
-  case object QueryAll
+  case class GetLatestBlock()
 
-  case class FullChain(blockChain: Chain)
-  case class ResponseBlock(block: Block)
+  case class GetChain()
+
+  case class FullChain(blockChain: Seq[CheckpointBlock])
+
+  case class ResponseBlock(block: CheckpointBlock)
+
   case class Balance(balance: Long)
 
+  /**
+    * Stubbed, this will use the checkpoint block and validSignature
+    *
+    * @param tx
+    * @return
+    */
+  def validBlockData(tx: BlockData): Boolean = true
+
+  def validCheckpointBlock(cp: CheckpointBlock): Boolean = true
+
+  /**
+    * This will require some logic in the DAG object, which passes the block and proposed delegate list to the generating
+    * function (coalgebra class)
+    *
+    * @return Boolean is this currently Node a delegate
+    */
+  def isDelegate: Boolean = true
+
+  def validSignature(tx1: Tx, tx2: Tx): Boolean = true
 }
 
 trait ProtocolInterface {
   this: PeerToPeer with Receiver =>
 
-  val buffer: ListBuffer[BlockData] = new ListBuffer[BlockData]()
-  val chainCache = mutable.HashMap[String, AccountData]()
-
-  val chain = DAG
-
   import ProtocolInterface._
 
-  val logger = Logger("PeerToPeerCommunication")
+  val logger = Logger("ProtocolInterface")
 
-  var blockChain: Chain
+  val buffer: ListBuffer[BlockData] = new ListBuffer[BlockData]()
+  val chainCache = mutable.HashMap[String, AccountData]()
+  val signatureBuffer = new ListBuffer[BlockData]()
+
+  val chain = DAG
+  val publicKey: String
 
   receiver {
-    case QueryLatest => sender() ! responseLatest
-    case QueryAll => sender() ! responseBlockChain
+    case transaction: BlockData =>
+      logger.info(s"received transaction from ${sender()}")
+      buffer += transaction
+      broadcast(transaction)
+      sender() ! transaction
 
-    case GetId => sender() ! Id(blockChain.id)
+    case GetLatestBlock =>
+      logger.info(s"received GetLatestBlock request from ${sender()}")
+      sender() ! chain.globalChain.head
+
+    case GetChain =>
+      logger.info(s"received GetChain request from ${sender()}")
+      sender() ! chain.globalChain
+
+    case GetId =>
+      logger.info(s"received GetId request ${sender()}")
+      sender() ! Id(publicKey)
 
     case GetBalance(account) =>
-      val test: Long = chainCache.get(account).map(_.balance).getOrElse(0L)
-      logger.info(s"receiverd GetBalance request $test")
-      sender() ! Balance(test)
-    case CheckpointBlock =>
-    //FIXME: This is inefficient
-    case ResponseBlock(block) => instantiateChain(Seq(block))
-    case FullChain(blockChain) => instantiateChain(blockChain.blocks)
+      val balance = chainCache.get(account).map(_.balance).getOrElse(0L)
+      logger.info(s"received GetBalance request, balance is: $balance")
+      sender() ! Balance(balance)
+
+    case checkpointBlock: CheckpointBlock =>
+      logger.info(s"received CheckpointBlock request ${sender()}")
+      if (validCheckpointBlock(checkpointBlock))
+        addBlock(checkpointBlock)
+
+    case fullChain: FullChain =>
+      val newBlocks = fullChain.blockChain.diff(chain.globalChain)
+      logger.info(s"received fullChain from ${sender()} \n diff is $newBlocks")
+      if (newBlocks.nonEmpty && newBlocks.forall(validCheckpointBlock))
+        newBlocks.foreach(addBlock)
   }
 
-  def addBlock(block: Block): Unit = chain.globalChain.append(block)
+  /**
+    * Append block to the globalChain
+    *
+    * @param block CheckpointBlock to be added
+    * @return Unit
+    */
+  def addBlock(block: CheckpointBlock) = {
+    logger.info(s"block $block Added")
+    chain.globalChain.append(block)
+  }
 
-  def instantiateChain(receivedBlocks: Seq[Block] ): Unit = {
-    val localLatestBlock = blockChain.latestBlock
-    logger.info(s"${receivedBlocks.length} blocks received.")
+  /**
+    * We're prob going to want a buffering service to handle validation/updates to chain cache, this is for maintaining
+    * balances on the ledger
+    *
+    * @param buffer ListBuffer[Tx] all Tx's within the buffer that will now be used to update chain state
+    */
+  def updateLedgerState(buffer: ListBuffer[Tx]): Unit = {
+    val validatedBuffer: mutable.Seq[Tx] = buffer.filter(validBlockData)
 
-    receivedBlocks match {
-      case Nil => logger.warn("Received an empty block list, discarding")
+    validatedBuffer.foreach { tx: Tx =>
+      val counterParty = chainCache.get(tx.counterPartyPubKey)
+      val initialTransaction = counterParty.flatMap(_.unsignedTxs.get(tx.id))
 
-      case latestReceivedBlock :: _ if latestReceivedBlock.index <= localLatestBlock.index =>
-        logger.debug("received blockchain is not longer than received blockchain. Do nothing")
-//        if (latestReceivedBlock.recipient.contains(blockChain.id)) buffer.append(latestReceivedBlock)
-
-      case latestReceivedBlock :: Nil if latestReceivedBlock.previousHash == localLatestBlock.hash =>
-         logger.info("We can append the received block to our chain.")
-//        if latestReceivedBlock.
-        //TODO here, if block id = actor id add to sign buffer
-            blockChain.addBlock(latestReceivedBlock) match {
-              case Success(newChain) =>
-                blockChain = newChain
-                broadcast(responseLatest)
-              case Failure(e) => logger.error("Refusing to add new block", e)
-            }
-      case _ :: Nil =>
-            logger.info("We have to query the chain from our peer")
-            broadcast(QueryAll)
-
-      case _ =>
-            logger.info("Received blockchain is longer than the current blockchain")
-            Chain(blockChain.id, receivedBlocks) match {
-              case Success(newChain) =>
-                blockChain = newChain
-                broadcast(responseBlockChain)
-              case Failure(s) => logger.error("Rejecting received chain.", s)
-            }
+      initialTransaction match {
+        case Some(initialTx) if validSignature(initialTx, tx) =>
+          counterParty.foreach(acct => acct.unsignedTxs.remove(initialTx.id))
+          chainCache.get(tx.senderPubKey).foreach(acct => acct.balance -= tx.amount)
+          chainCache.get(tx.counterPartyPubKey).foreach(acct => acct.balance += tx.amount)
+        case None =>
+          counterParty.foreach(acct => acct.unsignedTxs.update(tx.id, tx))
+      }
     }
   }
-
-  def responseLatest = ResponseBlock(blockChain.latestBlock)
-
-  def responseBlockChain = FullChain(blockChain)
-
 }
 
 

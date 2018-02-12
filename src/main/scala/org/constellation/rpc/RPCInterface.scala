@@ -4,19 +4,20 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorRef
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.blockchain.{AccountData, Block, GenesisBlock, Transaction}
-import ProtocolInterface._
-import akka.http.scaladsl.server.Route
+import org.constellation.blockchain.Consensus.PerformConsensus
+import org.constellation.blockchain._
 import org.constellation.p2p.PeerToPeer._
+import org.constellation.rpc.ProtocolInterface._
 import org.json4s.native.Serialization
 import org.json4s.{DefaultFormats, Formats, native}
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 trait RPCInterface extends Json4sSupport {
 
@@ -35,46 +36,40 @@ trait RPCInterface extends Json4sSupport {
   val routes: Route =
     get {
       path("blocks") {
-        val chain: Future[Seq[Block]] = (blockChainActor ? QueryAll).map {
-          //This is a bit of a hack, since JSON4S doesn't serialize case objects well
-          case FullChain(blockChain) => blockChain.blocks.slice(0, blockChain.blocks.length -1) :+ GenesisBlock.copy()
-        }
-        complete(chain)
-      }~
-      path("peers") {
-        complete( (blockChainActor ? GetPeers).mapTo[Peers] )
-      }~
+        complete((blockChainActor ? GetChain).mapTo[FullChain])
+      } ~
+        path("peers") {
+          complete((blockChainActor ? GetPeers).mapTo[Peers])
+        } ~
         path("id") {
-        complete( (blockChainActor ? GetId).mapTo[Id] )
-      }~
-      path("latestBlock") {
-        complete( (blockChainActor ? QueryLatest).map {
-          case ResponseBlock(GenesisBlock) => GenesisBlock.copy()
-          case ResponseBlock(block) => block
-        })
-      }
-    }~
-    post {
-     path("mineBlock") {
-       entity(as[Transaction]) { data =>
-            logger.info(s"Got request to add new block $data")
-            complete((blockChainActor ? data).mapTo[ResponseBlock].map {
-              case ResponseBlock(block) => block
-            })
-       }
-    }~
-    path("addPeer") {
-      entity(as[String]) { peerAddress =>
-        logger.info(s"Got request to add new peer $peerAddress")
-        blockChainActor ! AddPeer(peerAddress)
-        complete(s"Added peer $peerAddress")
-      }
-    }~
-     path("getBalance") {
-       entity(as[String]) { account =>
-         logger.info(s"Got request query account $account balance")
-         complete( (blockChainActor ? GetBalance(account)).mapTo[Balance] )
-       }
-     }
-  }
+          complete((blockChainActor ? GetId).mapTo[Id])
+        } ~
+        path("latestBlock") {
+          complete((blockChainActor ? GetLatestBlock).mapTo[CheckpointBlock])
+        }
+      path("performConsensus") {
+        complete((blockChainActor ? PerformConsensus).mapTo[CheckpointBlock])
+      } ~
+        post {
+          path("sendTx") {
+            entity(as[Transaction]) { transaction =>
+              logger.info(s"Got request to submit new transaction $transaction")
+              complete((blockChainActor ? transaction).mapTo[Transaction])
+            }
+          } ~
+            path("addPeer") {
+              entity(as[String]) { peerAddress =>
+                logger.info(s"Got request to add new peer $peerAddress")
+                blockChainActor ! AddPeer(peerAddress)
+                complete(s"Added peer $peerAddress")
+              }
+            } ~
+            path("getBalance") {
+              entity(as[String]) { account =>
+                logger.info(s"Got request query account $account balance")
+                complete((blockChainActor ? GetBalance(account)).mapTo[Balance])
+              }
+            }
+        }
+    }
 }

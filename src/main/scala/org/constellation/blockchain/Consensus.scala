@@ -1,59 +1,50 @@
 package org.constellation.blockchain
 
+import akka.remote.ContainerFormats.ActorRef
 import org.constellation.actor.Receiver
-import org.constellation.blockchain.Consensus.MineBlock
-import org.constellation.rpc.ProtocolInterface.ResponseBlock
-
-import scala.collection.mutable.ListBuffer
+import org.constellation.blockchain.Consensus.PerformConsensus
 import org.constellation.p2p.PeerToPeer
 import org.constellation.rpc.ProtocolInterface
 
-import scala.collection.mutable
+import scala.concurrent.Future
 
 object Consensus {
-  case object MineBlock
+  case class PerformConsensus()
 
-  def validData(tx: BlockData) = true
-
-  def validSignture(tx1: Tx, tx2: Tx) = true
+  /**
+    * Just a stub for now, res will be checkpoint block which will be used by updateCache
+    * @param actorRefs
+    * @return
+    */
+  def performConsensus(actorRefs: Seq[ActorRef]): CheckpointBlock = CheckpointBlock("hashPointer", 0L, "signature")
 }
 
-
+/**
+  * Interface for Consensus. We might want this to be its own actor if it affects transaction bandwidth
+  */
 trait Consensus {
   this: ProtocolInterface with PeerToPeer with Receiver =>
+  import Consensus.performConsensus
+  import ProtocolInterface.{isDelegate, validBlockData}
 
-  /*
-  We're prob going to want a buffering service to handle validation/updates to chainCache
-   */
-  def updateCache(buffer: ListBuffer[Tx]) = {
-    val validatedBuffer: mutable.Seq[Tx] = buffer.filter(Consensus.validData)
-
-    validatedBuffer.foreach { tx: Tx =>
-      val counterParty = chainCache.get(tx.counterPartyPubKey)
-      val initialTransaction = counterParty.flatMap(_.unsignedTxs.get(tx.id))
-
-      initialTransaction match {
-        case Some(initialTx) if Consensus.validSignture(initialTx, tx) =>
-          counterParty.foreach(acct => acct.unsignedTxs.remove(initialTx.id))
-          chainCache.get(tx.senderPubKey).foreach(acct => acct.balance -= tx.amount)
-          chainCache.get(tx.counterPartyPubKey).foreach(acct => acct.balance += tx.amount)
-        case None =>
-          counterParty.foreach(acct => acct.unsignedTxs.update(tx.id, tx))
-      }
-    }
-  }
 
   receiver {
-    //TODO: Take blocks here
-    case transaction: BlockData =>
-      buffer += transaction
-      broadcast(transaction)
-      sender() ! transaction
+    /**
+      * Right now we will send a message to kick off a consensus round. This will eventually be tripped by a counter in
+      * ProtocolInterface.
+      *
+      */
+    case PerformConsensus =>
+      val newBlock = Future.apply(performConsensus(Nil))
+      newBlock.foreach { block =>
+        chain.globalChain.append(block)
+        broadcast(block)
+        sender() ! block
+      }
 
-    case MineBlock =>
-      blockChain = blockChain.addBlock(buffer.mkString(" "))
-      val peerMessage = ResponseBlock(blockChain.latestBlock)
-      broadcast(peerMessage)
-      sender() ! peerMessage
+    case checkpointMessage: CheckpointMessage =>
+      if (validBlockData(checkpointMessage) && isDelegate) {
+
+      }
   }
 }
