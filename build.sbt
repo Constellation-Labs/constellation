@@ -33,8 +33,9 @@ libraryDependencies ++= Seq(
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % "1.58.0.0",
   //"com.madgag.spongycastle" % "pg" % "1.58.0.0",
   "com.madgag.spongycastle" % "bcpg-jdk15on" % "1.58.0.0",
-  "com.madgag.spongycastle" % "bctls-jdk15on" % "1.58.0.0"
-)
+  "com.madgag.spongycastle" % "bctls-jdk15on" % "1.58.0.0",
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.51"
+  )
 
 //Test dependencies
 libraryDependencies ++= Seq(
