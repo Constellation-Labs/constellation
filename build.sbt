@@ -1,6 +1,8 @@
+import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
+
 name := "constellation"
 
-version := "0"
+version := "2"
 
 scalaVersion := "2.12.2"
 
@@ -8,7 +10,7 @@ resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases"
 
 enablePlugins(JavaAppPackaging)
 
-dockerExposedPorts := Seq( 9000, 2552 )
+dockerExposedPorts := Seq(2551)
 
 lazy val versions = new {
   val akka = "2.4.18"
@@ -43,6 +45,28 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
 ).map(_ % "test" )
 
+// These values will be filled in by the k8s StatefulSet and Deployment
+dockerEntrypoint ++= Seq(
+  """-DactorSystemName="$AKKA_ACTOR_SYSTEM_NAME"""",
+  """-Dakka.remote.netty.tcp.hostname="$AKKA_REMOTING_BIND_HOST"""",
+  """-Dakka.remote.netty.tcp.port="$AKKA_REMOTING_BIND_PORT"""",
+  """-Dsample.http.hostname="$SAMPLE_HTTP_HOST"""",
+  """-Dsample.http.port="$SAMPLE_HTTP_PORT"""",
+  "-Dakka.io.dns.resolver=async-dns",
+  "-Dakka.io.dns.async-dns.resolve-srv=true",
+  "-Dakka.io.dns.async-dns.resolv-conf=on"
+)
+
 mainClass := Some("org.constellation.BlockChainApp")
 
 parallelExecution in Test := false
+
+dockerCommands :=
+  dockerCommands.value.flatMap {
+    case ExecCmd("ENTRYPOINT", args @ _*) => Seq(Cmd("ENTRYPOINT", args.mkString(" ")))
+    case v => Seq(v)
+  }
+
+dockerRepository := Some("constellation")
+// Update the latest tag when publishing
+dockerUpdateLatest := true
