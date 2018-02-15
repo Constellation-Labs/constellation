@@ -15,10 +15,12 @@ class ValidateWalletFuncTest  extends FlatSpec {
 
   "Wallet KeyStore" should "build a keystore properly" in {
 
+    val tmp = new File("tmp")
+    tmp.mkdir
     val file = new File("tmp", "keystoretest.p12")
     val file2 = new File("tmp", "keystoretest.bks")
     val res = makeWalletKeyStore(
-      saveCertTo = Some(file),
+      saveCertTo = Some(tmp),
       savePairsTo = Some(file2),
       password = "fakepassword".toCharArray,
       numECDSAKeys = 10
@@ -26,6 +28,7 @@ class ValidateWalletFuncTest  extends FlatSpec {
 
     file.delete()
     file2.delete()
+    tmp.delete()
 
     // Put more tests in here.
 
