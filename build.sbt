@@ -33,7 +33,9 @@ libraryDependencies ++= Seq(
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % "1.58.0.0",
   //"com.madgag.spongycastle" % "pg" % "1.58.0.0",
   "com.madgag.spongycastle" % "bcpg-jdk15on" % "1.58.0.0",
-  "com.madgag.spongycastle" % "bctls-jdk15on" % "1.58.0.0"
+  "com.madgag.spongycastle" % "bctls-jdk15on" % "1.58.0.0",
+  "org.iq80.leveldb"            % "leveldb"          % "0.10" withSources() withJavadoc(),
+  "org.fusesource.leveldbjni"   % "leveldbjni-all"   % "1.8" withSources() withJavadoc()
 )
 
 //Test dependencies
