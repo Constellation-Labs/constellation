@@ -18,7 +18,6 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
     TestKit.shutdownActorSystem(system)
   }
 
-
   trait WithPeerToPeerActor {
     val peerToPeerActor = system.actorOf(Props[PeerToPeerActor])
   }
@@ -30,9 +29,9 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
 
   it should "register new peers" in new WithPeerToPeerActor {
     val probe = TestProbe()
-    peerToPeerActor ! ResolvedPeer(probe.ref)
-
+    peerToPeerActor ! PeerRef(probe.ref)
     peerToPeerActor ! GetPeers
+
     expectMsgPF() {
       case Peers(Seq(address)) => address shouldEqual(probe.ref.path.toSerializationFormat)
     }
@@ -40,7 +39,6 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
 
   it should "add us as a peer when we send a handshake" in new WithPeerToPeerActor {
     peerToPeerActor ! HandShake
-
     peerToPeerActor ! GetPeers
 
     expectMsgPF() {

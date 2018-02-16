@@ -6,8 +6,11 @@ import org.constellation.blockchain.Consensus.PerformConsensus
 import org.constellation.p2p.PeerToPeer
 import org.constellation.rpc.ProtocolInterface
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 
+/**
+  * Ideally I'd like this to be instantiated as a Metamorphism.
+  */
 object Consensus {
   case class PerformConsensus()
 
@@ -20,13 +23,13 @@ object Consensus {
 }
 
 /**
-  * Interface for Consensus. We might want this to be its own actor if it affects transaction bandwidth
+  * Interface for Consensus. This needs to be its own actor and have a type corresponding to the metamorphism that
+  * implements proof of meme. The actual rep/dht will be dispatched via this actor.
   */
 trait Consensus {
   this: ProtocolInterface with PeerToPeer with Receiver =>
   import Consensus.performConsensus
   import ProtocolInterface.{isDelegate, validBlockData}
-
 
   receiver {
     /**
@@ -35,12 +38,9 @@ trait Consensus {
       *
       */
     case PerformConsensus =>
-      val newBlock = Future.apply(performConsensus(Nil))
-      newBlock.foreach { block =>
-        chain.globalChain.append(block)
-        broadcast(block)
-        sender() ! block
-      }
+      val newBlock = performConsensus(Nil)//TODO make this a future/non-blocking
+        chain.globalChain.append(newBlock)
+        broadcast(newBlock)
 
     case checkpointMessage: CheckpointMessage =>
       if (validBlockData(checkpointMessage) && isDelegate) {

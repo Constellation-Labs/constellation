@@ -53,7 +53,7 @@ trait ProtocolInterface {
   val chainCache = mutable.HashMap[String, AccountData]()
   val signatureBuffer = new ListBuffer[BlockData]()
 
-  val chain = DAG
+  val chain = new DAG
   val publicKey: String
 
   receiver {
@@ -65,31 +65,41 @@ trait ProtocolInterface {
 
     case GetLatestBlock =>
       logger.info(s"received GetLatestBlock request from ${sender()}")
-      sender() ! chain.globalChain.head
+      sender() ! chain.globalChain.headOption
 
     case GetChain =>
       logger.info(s"received GetChain request from ${sender()}")
-      sender() ! chain.globalChain
+      logger.info(s"chain is ${chain.globalChain}")
+      sender() ! FullChain(chain.globalChain)
 
     case GetId =>
       logger.info(s"received GetId request ${sender()}")
       sender() ! Id(publicKey)
 
+    /*
+    This should eventually query up the tiers. Would be part of a rest service for quick tx signing (ensuring both sigs in one block)
+     */
     case GetBalance(account) =>
       val balance = chainCache.get(account).map(_.balance).getOrElse(0L)
       logger.info(s"received GetBalance request, balance is: $balance")
       sender() ! Balance(balance)
 
+    /*
+      This should be coupled with a state transition and within a separate Consensus process.
+     */
     case checkpointBlock: CheckpointBlock =>
       logger.info(s"received CheckpointBlock request ${sender()}")
       if (validCheckpointBlock(checkpointBlock))
         addBlock(checkpointBlock)
+        sender() ! checkpointBlock
 
     case fullChain: FullChain =>
       val newBlocks = fullChain.blockChain.diff(chain.globalChain)
       logger.info(s"received fullChain from ${sender()} \n diff is $newBlocks")
-      if (newBlocks.nonEmpty && newBlocks.forall(validCheckpointBlock))
+      if (newBlocks.nonEmpty && newBlocks.forall(validCheckpointBlock)){
         newBlocks.foreach(addBlock)
+        sender() ! FullChain(chain.globalChain)
+      }
   }
 
   /**

@@ -21,7 +21,7 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
   trait RPCInterfaceFixture extends RPCInterface {
     val testProbe = TestProbe()
     val id = "id"
-    val dag = DAG
+    val dag = new DAG
 
     override val blockChainActor: ActorRef = testProbe.ref
     override val logger = Logger("TestLogger")
@@ -38,7 +38,7 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
     }
 
     Get("/blocks") ~> routes ~> check {
-      responseAs[ListBuffer[CheckpointBlock]] shouldEqual ListBuffer(genesisBlock)
+      responseAs[ListBuffer[CheckpointBlock]] shouldEqual ListBuffer.empty[CheckpointBlock]
     }
   }
 
