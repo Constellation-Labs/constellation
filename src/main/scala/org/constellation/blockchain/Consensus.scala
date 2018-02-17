@@ -1,11 +1,13 @@
 package org.constellation.blockchain
 
-import akka.remote.ContainerFormats.ActorRef
+import akka.actor.ActorRef
+//import akka.remote.ContainerFormats.ActorRef
 import org.constellation.actor.Receiver
 import org.constellation.blockchain.Consensus.PerformConsensus
 import org.constellation.p2p.PeerToPeer
 import org.constellation.rpc.ProtocolInterface
 
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 
 /**
@@ -19,7 +21,7 @@ object Consensus {
     * @param actorRefs
     * @return
     */
-  def performConsensus(actorRefs: Seq[ActorRef]): CheckpointBlock = CheckpointBlock("hashPointer", 0L, "signature")
+  def performConsensus(actorRefs: Seq[ActorRef]): CheckpointBlock = CheckpointBlock("hashPointer", 0L, "signature", mutable.HashMap[ActorRef, Option[BlockData]](), 0L)
 }
 
 /**

@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorRef
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
+import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, FromStringUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
@@ -16,6 +16,7 @@ import org.constellation.p2p.PeerToPeer._
 import org.constellation.rpc.ProtocolInterface._
 import org.json4s.native.Serialization
 import org.json4s.{DefaultFormats, Formats, native}
+import akka.http.scaladsl.marshalling.Marshaller._
 
 import scala.concurrent.ExecutionContext
 
@@ -24,8 +25,8 @@ trait RPCInterface extends Json4sSupport {
   val blockChainActor: ActorRef
   val logger: Logger
 
-  implicit val serialization: Serialization.type = native.Serialization
-  implicit val stringUnmarshallers: FromEntityUnmarshaller[String] = PredefinedFromEntityUnmarshallers.stringUnmarshaller
+  implicit val serialization = native.Serialization
+  implicit val stringUnmarshallers = PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
   implicit def json4sFormats: Formats = DefaultFormats
 
@@ -40,36 +41,35 @@ trait RPCInterface extends Json4sSupport {
       } ~
         path("peers") {
           complete((blockChainActor ? GetPeers).mapTo[Peers])
-        } ~
+        }~
         path("id") {
           complete((blockChainActor ? GetId).mapTo[Id])
-        } ~
-        path("latestBlock") {
-          complete((blockChainActor ? GetLatestBlock).mapTo[CheckpointBlock])
-        }
+        }~
       path("performConsensus") {
-        complete((blockChainActor ? PerformConsensus).mapTo[CheckpointBlock])
-      } ~
-        post {
-          path("sendTx") {
-            entity(as[Transaction]) { transaction =>
-              logger.info(s"Got request to submit new transaction $transaction")
-              complete((blockChainActor ? transaction).mapTo[Transaction])
-            }
-          } ~
-            path("addPeer") {
-              entity(as[String]) { peerAddress =>
-                logger.info(s"Got request to add new peer $peerAddress")
-                blockChainActor ! AddPeer(peerAddress)
-                complete(s"Added peer $peerAddress")
-              }
-            } ~
-            path("getBalance") {
-              entity(as[String]) { account =>
-                logger.info(s"Got request query account $account balance")
-                complete((blockChainActor ? GetBalance(account)).mapTo[Balance])
-              }
-            }
-        }
+        complete((blockChainActor ? PerformConsensus).mapTo[String])//TODO casting to string here as we need custom marshaling
+      }
+//      ~
+//        post {
+//          path("sendTx") {
+//            entity(as[Transaction]) { transaction =>
+//              logger.info(s"Got request to submit new transaction $transaction")
+//              complete((blockChainActor ? transaction).mapTo[Transaction])
+//            }
+//          } ~
+//            path("addPeer") {
+//              entity(as[String]) { peerAddress =>
+//                logger.info(s"Got request to add new peer $peerAddress")
+//                blockChainActor ! AddPeer(peerAddress)
+//                complete(s"Added peer $peerAddress")
+//              }
+//            }
+      //~
+//            path("getBalance") {
+//              entity(as[String]) { account =>
+//                logger.info(s"Got request query account $account balance")
+//                complete((blockChainActor ? GetBalance(account)).mapTo[Balance])
+//              }
+//            }
+//        }
     }
 }

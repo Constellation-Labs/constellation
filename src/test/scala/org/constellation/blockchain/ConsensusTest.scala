@@ -48,6 +48,6 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
   "A Consensus actor" should "reply with the new block when a consensus request is finished" in new WithConsensusActor {
     consensusActor ! PerformConsensus
-    probe.expectMsg(CheckpointBlock("hashPointer", 0L, "signature"))
+    probe.expectMsg(CheckpointBlock("hashPointer", 0L, "signature", mutable.HashMap[ActorRef, Option[BlockData]](), 0L))
   }
 }
