@@ -12,7 +12,7 @@ import scala.collection.mutable
   */
 object Fixtures {
   implicit val formats = DefaultFormats
-  val tx = Transaction(Array.emptyByteArray, "", 0L, "", "" , 1L, "")
+  val tx = Transaction("", "", 0L, "", "" , 1L, "")
   val signTx = SignTransaction("", "", "" , 1L, "")
   val checkpointBlock = CheckpointBlock("hashPointer", 0L, "signature", mutable.HashMap.empty[ActorRef, Option[BlockData]], 0L)
   val genesisBlock = CheckpointBlock("genesisBlock", 0L, "signature", mutable.HashMap.empty[ActorRef, Option[BlockData]], 0L)

@@ -9,7 +9,7 @@ import org.constellation.blockchain._
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.rpc.ProtocolInterface.{FullChain, GetLatestBlock, _}
 import org.scalatest.{FlatSpec, Matchers}
-import Fixtures._
+import Fixtures.{tx, _}
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import org.constellation.blockchain.Consensus.PerformConsensus
 
@@ -80,18 +80,18 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
     }
   }
 
-//  it should "add a new tx for /sendTx" in new RPCInterfaceFixture {
-//    testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
-//      case transaction: Transaction =>
-//        sender ! transaction.toString
-//        TestActor.NoAutoPilot
-//    }
-//    }
-//
-//    Post("/sendTx", HttpEntity(ContentTypes.`application/json`, jsonToString(tx))) ~> routes ~> check {
-//      testProbe.expectMsg(tx)
-//    }
-//  }
+  it should "add a new tx for /sendTx" in new RPCInterfaceFixture {
+    testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
+      case transaction: Transaction =>
+        sender ! transaction.toString
+        TestActor.NoAutoPilot
+    }
+    }
+
+    Post("/sendTx", HttpEntity(ContentTypes.`application/json`, jsonToString(tx))) ~> routes ~> check {
+      responseAs[String] shouldEqual tx.toString
+    }
+  }
 
   it should "add a new peer for /addPeer" in new RPCInterfaceFixture {
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
@@ -114,7 +114,7 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
     }
 
     Post("/getBalance", HttpEntity(ContentTypes.`text/html(UTF-8)`, "1234")) ~> routes ~> check {
-      responseAs[String] shouldEqual "Chain cache queried 1234"
+      responseAs[String] shouldEqual "Chain cache queried for 1234"
     }
   }
 
