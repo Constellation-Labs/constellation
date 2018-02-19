@@ -37,7 +37,6 @@ object BlockChainApp extends App with RPCInterface {
 
   val id = args.headOption.getOrElse("ID")
   println("id: " + id)
-
   val blockChainActor = system.actorOf(Node.props(id), "constellation")
   val seedHosts = args.tail
 
@@ -47,9 +46,6 @@ object BlockChainApp extends App with RPCInterface {
     seedHosts.foreach { seedHost =>
       blockChainActor ! AddPeer(seedHost)
     }
-  } else {
-    logger.info("No seed host configured, waiting for messages.")
   }
-
   Http().bindAndHandle(routes, config.getString("http.interface"), config.getInt("http.port"))
 }

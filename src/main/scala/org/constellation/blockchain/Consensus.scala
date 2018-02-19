@@ -49,9 +49,9 @@ trait Consensus {
       *
       */
     case PerformConsensus =>
-      val newBlock = performConsensus(Nil)//TODO make this a future/non-blocking
-        chain.globalChain.append(newBlock)
-        broadcast(newBlock)
+      val newBlock = performConsensus(Nil) //TODO make this a future/non-blocking
+      chain.globalChain.append(newBlock)
+      broadcast(newBlock)
 
     case checkpointMessage: CheckpointMessage =>
       if (validBlockData(checkpointMessage) && isDelegate) {

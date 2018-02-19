@@ -1,11 +1,13 @@
 package org.constellation.wallet
 
-import java.nio.ByteBuffer
 import java.security._
-import java.security.spec.ECGenParameterSpec
+import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
 import java.util.Base64
 
+import org.json4s.{CustomSerializer, Extraction, Formats, JObject}
+import org.json4s.JsonAST.JString
 import org.json4s.native.Serialization
+
 
 
 
@@ -49,6 +51,7 @@ object KeyUtils {
   // through strange APIs that might take issue with your strings
   def base64(bytes: Array[Byte]): String = Base64.getEncoder.encodeToString(bytes)
   def fromBase64(b64Str: String): Array[Byte] = Base64.getDecoder.decode(b64Str)
+  def base64FromBytes(bytes: Array[Byte]): String = new String(bytes)
 
   val DefaultSignFunc = "SHA512withECDSA"
 
@@ -114,64 +117,68 @@ object KeyUtils {
     result
   }
 
-
-  def bytesToLong(bytes: Array[Byte]): Long = {
-    val buffer = ByteBuffer.allocate(8)
-    buffer.put(bytes)
-    buffer.flip();//need flip
-    buffer.getLong()
+  // https://stackoverflow.com/questions/42651856/how-to-decode-rsa-public-keyin-java-from-a-text-view-in-android-studio
+  def bytesToPublicKey(encodedBytes: Array[Byte]): PublicKey = {
+    val spec = new X509EncodedKeySpec(encodedBytes)
+    import java.security.KeyFactory
+    val kf = KeyFactory.getInstance("ECDsA", "SC")
+    kf.generatePublic(spec)
   }
 
-  def longToBytes(l: Long): Array[Byte] = {
-    val buffer = ByteBuffer.allocate(8)
-    buffer.putLong(0, l)
-    buffer.array()
+  def bytesToPrivateKey(encodedBytes: Array[Byte]): PrivateKey = {
+    val spec = new PKCS8EncodedKeySpec(encodedBytes)
+    import java.security.KeyFactory
+    val kf = KeyFactory.getInstance("ECDsA", "SC")
+    kf.generatePrivate(spec)
   }
 
   // TODO : Use a more secure address function.
   // Couldn't find a quick dependency for this, TBI
+  // https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses
   def publicKeyToAddress(
-                        key: PublicKey
+                          key: PublicKey
                         ): String = {
     import com.roundeights.hasher.Implicits._
     base64(key.getEncoded).sha256.hex.sha256.hex
   }
 
-  case class TransactionInputData(
-                          sourcePubKey: PublicKey,
-                          destinationAddress: String,
-                          quantity: Long
-                        ) {
-    def encode = EncodedTransaction(
-      base64(sourcePubKey.getEncoded),
-      destinationAddress,
-      base64(longToBytes(quantity))
-    )
+  class PrivateKeySerializer extends CustomSerializer[PrivateKey](format => ( {
+    case jObj: JObject =>
+      implicit val f: Formats = format
+      bytesToPrivateKey(fromBase64((jObj \ "key").extract[String]))
+  }, {
+    case key: PrivateKey =>
+      JObject("key" -> JString(KeyUtils.base64(key.getEncoded)))
   }
+  ))
 
-  case class DecodedTransaction(
-                               sourceAddress: Array[Byte],
-                               destinationAddress: Array[Byte],
-                               quantity: Long
-                               )
-
-  case class EncodedTransaction(
-                                 sourceAddress: String,
-                                 destinationAddress: String,
-                                 quantity: String
-                               ) {
-    def decode = DecodedTransaction(
-      fromBase64(sourceAddress),
-      fromBase64(destinationAddress),
-      bytesToLong(fromBase64(quantity))
-    )
-    def ordered = Array(sourceAddress, destinationAddress, quantity)
-    def rendered: String = {
-      import org.json4s._
-      implicit val f: DefaultFormats.type = DefaultFormats
-      Serialization.write(ordered)
-    }
+  class PublicKeySerializer extends CustomSerializer[PublicKey](format => ( {
+    case jstr: JObject =>
+      implicit val f: Formats = format
+      bytesToPublicKey(fromBase64((jstr \ "key").extract[String]))
+  }, {
+    case key: PublicKey =>
+      JObject("key" -> JString(KeyUtils.base64(key.getEncoded)))
   }
+  ))
+
+  class KeyPairSerializer extends CustomSerializer[KeyPair](format => ( {
+    case jObj: JObject =>
+      implicit val f: Formats = format
+      val pubKey = (jObj \ "publicKey").extract[PublicKey]
+      val privKey = (jObj \ "privateKey").extract[PrivateKey]
+      val kp = new KeyPair(pubKey, privKey)
+      kp
+  }, {
+    case key: KeyPair =>
+      implicit val f: Formats = format
+      JObject(
+        "publicKey" -> JObject("key" -> JString(KeyUtils.base64(key.getPublic.getEncoded))),
+        "privateKey" -> JObject("key" -> JString(KeyUtils.base64(key.getPrivate.getEncoded)))
+      )
+  }
+  ))
+
 
 }
 

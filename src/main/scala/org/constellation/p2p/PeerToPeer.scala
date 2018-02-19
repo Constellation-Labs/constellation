@@ -57,12 +57,15 @@ trait PeerToPeer {
 
       if (!peers.contains(newPeerRef)){
         context.watch(newPeerRef)
+        logger.debug(s"Watching $newPeerRef}")
 
         //Introduce ourselves
         newPeerRef ! HandShake
+        logger.debug(s"HandShake $newPeerRef}")
 
         //Ask for its friends
         newPeerRef ! GetPeers
+        logger.debug(s"GetPeers $newPeerRef}")
 
         //Tell our existing peers
         broadcast(AddPeer(newPeerRef.path.toSerializationFormat))
