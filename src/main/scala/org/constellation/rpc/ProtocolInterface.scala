@@ -11,6 +11,11 @@ import scala.collection.mutable.ListBuffer
 
 object ProtocolInterface {
 
+  case class AccountData(var balance: Long,
+                         unsignedTxs: mutable.HashMap[String, Tx] = mutable.HashMap[String, Tx](),
+                         metaData: List[BlockData] = Nil //TODO: we'll need to figure out some sort of buffering
+                        )
+
   case class GetLatestBlock()
 
   case class GetChain()

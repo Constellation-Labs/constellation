@@ -42,11 +42,7 @@ object Chain {
     s"$index:$previousHash:$timestamp:$data".sha256.hex
 }
 
-case class AccountData(
-                        var balance: Long,
-                        unsignedTxs: mutable.HashMap[String, Tx] = mutable.HashMap[String, Tx](),
-                        metaData: List[BlockData] = Nil //TODO: we'll need to figure out some sort of buffering
-                      )
+
 
 case class Chain private(id: String, blocks: Seq[Block] ) {
 
