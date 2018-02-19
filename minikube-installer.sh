@@ -44,6 +44,4 @@ curl -Lo minikube https://storage.googleapis.com/minikube/releases/v0.25.0/minik
 chmod +x minikube
 sudo mv minikube /usr/local/bin/
 
-export CHANGE_MINIKUBE_NONE_USER=true
-
 echo "minikube machine setup complete!"

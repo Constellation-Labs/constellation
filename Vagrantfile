@@ -5,8 +5,9 @@ Vagrant.configure("2") do |config|
 
   config.vm.network "private_network", ip: "192.168.33.77"
 
-  # update to point to your host constellation repo location
-  config.vm.synced_folder "~/projects/constellationlabs/constellation", "/home/vagrant/constellation"
+  project_root = File.dirname(__FILE__)
+
+  config.vm.synced_folder project_root, "/home/vagrant/constellation"
 
   config.ssh.forward_agent = true
 

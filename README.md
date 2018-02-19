@@ -7,6 +7,7 @@ A blockchain microservice operating system
 3. run ```vagrant up```
 4. run ```./docker-local-publish.sh``` 
 5. run ```./start-minikube.sh```
+6. run ```./update-kube-resources.sh```
 
 ## todo: 
 1. explain how to iterate and publish updates to docker and kube
