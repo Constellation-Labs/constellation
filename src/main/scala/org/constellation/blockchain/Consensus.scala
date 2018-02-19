@@ -36,6 +36,8 @@ object Consensus {
   *
   * and also figure out a way to define the algebras in terms of a bialgebra given that http://comonad.com/reader/2009/recursion-schemes/
   * and we also need a vector space for proof of meme https://en.wikipedia.org/wiki/Bialgebra
+  *
+  * for ref http://www.cs.ox.ac.uk/jeremy.gibbons/publications/metamorphisms-scp.pdf
   */
 trait Consensus {
   this: ProtocolInterface with PeerToPeer with Receiver =>
