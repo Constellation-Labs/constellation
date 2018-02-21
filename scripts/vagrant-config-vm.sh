@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-echo "Starting minikube machine setup.........................."
+echo "Provisioning vagrant vm for constellation minikube host support.........................."
 
 # install openjdk java8
 echo "Installing java8.........................."
@@ -38,12 +38,26 @@ sudo apt-get install -y docker-ce
 echo "Installing kubectl.........................."
 wget https://storage.googleapis.com/kubernetes-release/release/v1.9.0/bin/linux/amd64/kubectl
 chmod +x kubectl
+
+KUBECTL_MD5_EXPECTED="01dce19bf06f7d49772a3cf687b6b586"
+KUBECTL_MD5_ACTUAL=$(md5sum kubectl)
+if [ $KUBECTL_MD5_ACTUAL -ne $KUBECTL_MD5 ]; then
+   echo "md5sum of kubectl did not match expected checksum. Exiting";
+   exit;
+fi
 sudo mv kubectl /usr/local/bin/kubectl
 
 # install minikube
 echo "Installing minikube.........................."
 curl -Lo minikube https://storage.googleapis.com/minikube/releases/v0.25.0/minikube-linux-amd64
 chmod +x minikube
+MINIKUBE_MD5_EXPECTED="c4b0f3a282efe690f554bdc7d93dbaae"
+MINIKUBE_MD5_ACTUAL=$(md5sum minikube)
+if [ $MINIKUBE_MD5_ACTUAL -ne $MINIKUBE_MD5_EXPECTED]; then
+   echo "md5sum of minikube did not match expected checksum. Exiting";
+   exit;
+fi
+
 sudo mv minikube /usr/local/bin/
 
 echo "minikube machine setup complete!"
