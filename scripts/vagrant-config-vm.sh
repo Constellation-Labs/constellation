@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 
-echo "Provisioning vagrant vm for constellation minikube host support.........................."
+echo "Provisioning vagrant vm for constellation minikube host support."
+echo "Note this is intended to be run through Vagrant (with 'vagrant up' cmd)."
+
+# fail if any commands below fail
+set -e
+
+echo "Checking we are in a vagrant environment.................."
+./constellation/scripts/is-vagrant.sh
 
 # install openjdk java8
 echo "Installing java8.........................."
@@ -43,21 +50,26 @@ KUBECTL_MD5_EXPECTED="01dce19bf06f7d49772a3cf687b6b586"
 KUBECTL_MD5_ACTUAL=$(md5sum kubectl)
 if [ $KUBECTL_MD5_ACTUAL -ne $KUBECTL_MD5 ]; then
    echo "md5sum of kubectl did not match expected checksum. Exiting";
-   exit;
+   exit 1;
 fi
 sudo mv kubectl /usr/local/bin/kubectl
 
+# install minikube
 # install minikube
 echo "Installing minikube.........................."
 curl -Lo minikube https://storage.googleapis.com/minikube/releases/v0.25.0/minikube-linux-amd64
 chmod +x minikube
 MINIKUBE_MD5_EXPECTED="c4b0f3a282efe690f554bdc7d93dbaae"
 MINIKUBE_MD5_ACTUAL=$(md5sum minikube)
-if [ $MINIKUBE_MD5_ACTUAL -ne $MINIKUBE_MD5_EXPECTED]; then
+if [ $MINIKUBE_MD5_ACTUAL -ne $MINIKUBE_MD5_EXPECTED ]; then
    echo "md5sum of minikube did not match expected checksum. Exiting";
-   exit;
+   exit 1;
 fi
 
+# docker local publish
 sudo mv minikube /usr/local/bin/
-
 echo "minikube machine setup complete!"
+
+# docker local publish
+cd /home/vagrant/constellation
+sudo sbt docker:publishLocal
