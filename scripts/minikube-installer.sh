@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 echo "Starting minikube machine setup.........................."
 
 # install openjdk java8

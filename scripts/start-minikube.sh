@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 vagrant ssh -c 'export CHANGE_MINIKUBE_NONE_USER=true; sudo minikube start --vm-driver none'
 vagrant ssh -c '
 # this for loop waits until kubectl can access the api server that Minikube has created
