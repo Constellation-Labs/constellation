@@ -7,7 +7,8 @@ echo "Note this is intended to be run through Vagrant (with 'vagrant up' cmd)."
 set -e
 
 echo "Checking we are in a vagrant environment.................."
-./constellation/scripts/is-vagrant.sh
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+$SCRIPT_DIR/is-vagrant.sh
 
 # install openjdk java8
 echo "Installing java8.........................."
