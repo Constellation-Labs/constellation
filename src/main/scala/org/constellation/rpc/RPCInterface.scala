@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorRef
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.unmarshalling.{PredefinedFromEntityUnmarshallers}
+import akka.http.scaladsl.unmarshalling.PredefinedFromEntityUnmarshallers
 import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
@@ -18,6 +18,7 @@ import org.json4s.{DefaultFormats, Formats, native}
 import akka.http.scaladsl.marshalling.Marshaller._
 
 import scala.concurrent.ExecutionContext
+import scala.util.{Failure, Success, Try}
 
 trait RPCInterface extends Json4sSupport {
 
@@ -52,7 +53,15 @@ trait RPCInterface extends Json4sSupport {
           path("sendTx") {
             entity(as[Transaction]) { transaction =>
               logger.info(s"Got request to submit new transaction $transaction")
-              complete((blockChainActor ? transaction).mapTo[String])
+              val eventualString = Try {
+                (blockChainActor ? transaction).mapTo[String]
+              } match {
+                case Success(x) => x
+                case Failure(e) =>
+                  e.printStackTrace()
+                  e.getMessage
+              }
+              complete(eventualString)
             }
           }~
             path("addPeer") {
