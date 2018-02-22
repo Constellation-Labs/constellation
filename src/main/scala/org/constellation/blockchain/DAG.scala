@@ -2,6 +2,8 @@ package org.constellation.blockchain
 
 import scala.collection.mutable.ListBuffer
 
+// TODO: Mutable is okay here for now, but these may need to invoke a DB / off heap queue / cache later
+
 /**
   * Created by Wyatt on 1/22/18.
   */

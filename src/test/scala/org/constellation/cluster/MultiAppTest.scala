@@ -4,7 +4,7 @@ package org.constellation.cluster
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import org.constellation.app.AppNode
-import org.constellation.p2p.PeerToPeer.{GetPeers, Peers}
+import org.constellation.p2p.PeerToPeer.{AddPeer, GetPeers, Peers}
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 import akka.pattern.ask
 import akka.util.Timeout
@@ -35,8 +35,16 @@ class MultiAppTest extends FlatSpec with BeforeAndAfterAll {
     val seedHostPath = seedHostNode.blockChainActor.path.toSerializationFormat
 
     val nodes = (1 to 3).map { _ =>
-      AppNode.apply(seedHostPath)
+      AppNode.apply()
     }
+
+    nodes.foreach{ n =>
+      n.blockChainActor ! AddPeer(seedHostPath)
+    }
+
+    // TODO : Remove this, I tried an ask above (which should return a response, but it timed out
+    // after 5 seconds. Only modifying this to make other fixes, needs revisiting.
+    Thread.sleep(500)
 
     nodes.foreach{ n =>
       import scala.concurrent.duration._
