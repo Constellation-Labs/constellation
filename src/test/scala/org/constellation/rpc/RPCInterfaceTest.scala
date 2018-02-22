@@ -21,7 +21,6 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
   trait RPCInterfaceFixture extends RPCInterface {
     val testProbe = TestProbe()
     val id = "id"
-//    val dag = new DAG
 
     override val blockChainActor: ActorRef = testProbe.ref
     override val logger = Logger("TestLogger")
@@ -96,7 +95,7 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
   it should "add a new peer for /addPeer" in new RPCInterfaceFixture {
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
       case peerAddress: AddPeer =>
-        sender ! s"Added peer $peerAddress"
+        sender ! s"Added peer ${peerAddress.address}"
         TestActor.NoAutoPilot
       }
     }

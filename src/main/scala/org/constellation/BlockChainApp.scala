@@ -9,7 +9,6 @@ import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import org.constellation.actor.Node
-import org.constellation.p2p.PeerToPeer.AddPeer
 import org.constellation.rpc.RPCInterface
 
 import scala.concurrent.ExecutionContextExecutor
@@ -35,16 +34,6 @@ object BlockChainApp extends App with RPCInterface {
   val logger = Logger("WebServer")
 
   val id = args.headOption.getOrElse("ID")
-  println("id: " + id)
   val blockChainActor = system.actorOf(Node.props(id), "constellation")
-  val seedHosts = args.tail
-
-
-  if (seedHosts.nonEmpty) {
-    logger.info(s"Attempting to connect to seed-host ${seedHosts.mkString(" ")}")
-    seedHosts.foreach { seedHost =>
-      blockChainActor ! AddPeer(seedHost)
-    }
-  }
   Http().bindAndHandle(routes, config.getString("http.interface"), config.getInt("http.port"))
 }

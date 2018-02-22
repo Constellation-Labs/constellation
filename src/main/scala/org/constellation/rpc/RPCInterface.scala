@@ -58,8 +58,9 @@ trait RPCInterface extends Json4sSupport {
             path("addPeer") {
               entity(as[String]) { peerAddress =>
                 logger.info(s"Got request to add new peer $peerAddress")
-                blockChainActor ! AddPeer(peerAddress)
-                complete(s"Added peer $peerAddress")
+//                blockChainActor ! AddPeer(peerAddress)
+                complete((blockChainActor ? AddPeer(peerAddress)).mapTo[String])
+//                complete(s"Added peer $peerAddress")
               }
             }~
             path("getBalance") {

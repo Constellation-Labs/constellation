@@ -19,7 +19,6 @@ class ProtocolInterfaceActor(val publicKey: String = "") extends
 
 class ChainInterfaceTest extends TestKit(ActorSystem("ChainInterfaceTest")) with FlatSpecLike
   with ImplicitSender with GivenWhenThen with BeforeAndAfterAll with Matchers {
-//  private implicit val system = ActorSystem("EchoSpec")
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
@@ -47,7 +46,6 @@ class ChainInterfaceTest extends TestKit(ActorSystem("ChainInterfaceTest")) with
   }
 
   it should "attach a block to the current chain when it receives a new block" in new WithTestActor {
-//    Given("and a new chain containing an extra block")
 
     When("we receive a message with the longer chain")
     blockChainCommunicationActor ! genesisBlock
@@ -57,28 +55,12 @@ class ChainInterfaceTest extends TestKit(ActorSystem("ChainInterfaceTest")) with
     expectMsg(genesisBlock)
   }
 
-//  it should "replace the chain if more than 1 new block is received" in new WithTestActor {
-//    Given("A blockchain with 3 new blocks")
-//    blockChainCommunicationActor ! GetChain
-//
-////    Then("The chain should be replaced, and a broadcast should be sent")
-////    expectMsg(genesisBlock)
-//
-//    When("we receive this longer chain")
-//    blockChainCommunicationActor ! FullChain(longerChain)
-//
-//    Then("The chain should be replaced, and a broadcast should be sent")
-//    expectMsg(FullChain(longerChain))
-//  }
 
 
   it should "do nothing if the received chain is valid but shorter than the current one" in new WithTestActor  {
     Given("the old blockchain and a current blockchain which is longer")
     When("we receive the old blockchain")
     blockChainCommunicationActor ! FullChain(shorterChain)
-
-//    Then("We expect the message to be discarded")
-//    blockChainCommunicationActor ! GetChain
     expectMsg(None)
   }
 }
