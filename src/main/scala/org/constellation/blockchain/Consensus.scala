@@ -1,14 +1,12 @@
 package org.constellation.blockchain
 
 import akka.actor.ActorRef
-//import akka.remote.ContainerFormats.ActorRef
 import org.constellation.actor.Receiver
 import org.constellation.blockchain.Consensus.PerformConsensus
 import org.constellation.p2p.PeerToPeer
 import org.constellation.rpc.ProtocolInterface
 
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 
 /**
   * Ideally I'd like this to be instantiated as a Metamorphism.

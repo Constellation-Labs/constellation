@@ -44,10 +44,6 @@ trait RPCInterface extends Json4sSupport {
         }~
         path("id") {
           complete((blockChainActor ? GetId).mapTo[Id])
-        }~
-        path("performConsensus") {
-          blockChainActor ! PerformConsensus
-          complete(s"received $PerformConsensus") //TODO casting to string here as we need custom marshaling
         }
     }~
       post {

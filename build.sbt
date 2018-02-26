@@ -11,7 +11,7 @@ resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases"
 enablePlugins(JavaAppPackaging)
 
 
-dockerExposedPorts := Seq(2551)
+dockerExposedPorts := Seq(2551, 9000)
 
 lazy val versions = new {
   val akka = "2.4.18"

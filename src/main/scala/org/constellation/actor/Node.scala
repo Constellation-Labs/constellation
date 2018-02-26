@@ -14,8 +14,3 @@ class Node(override val publicKey: String) extends Receiver with PeerToPeer
   with ProtocolInterface with Consensus {
   override val logger = Logger("Node")
 }
-
-
-
-
-
