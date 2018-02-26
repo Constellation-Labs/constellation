@@ -14,20 +14,45 @@ import scala.collection.mutable
 trait BlockData
 
 /**
+  * Parent type for data meant for storage in Blocks
+  */
+trait Tx extends BlockData {
+  val id: String
+  val senderPubKey: String
+  val counterPartyPubKey: String
+  val amount: Long
+}
+
+/**
   *
-  * @param hashPointer the hash pointer to the previous block.
+  * @param hashPointer the hash pointer to the previous block. //TODO will need to be Array[Byte]
+  * @param id the transaction identifier,it should be generated using a cryptographically secure pseudo-random number generator by the initiator of the transaction.
   * @param sequenceNum the sequence number, current block number.
-  * @param id thetransactionidentifier,itshouldbegeneratedusingacryptographically secure pseudo-random number generator by the initiator of the transaction.
+  * @param senderPubKey the public key of this node.
   * @param counterPartyPubKey the public key of the counterparty v.
-  * @param message the transaction message.
+  * @param amount amount to be sent.
   * @param signature the signature created using node's secret key on the concatenation of the binary representation of the five items above.
   */
-case class Transaction(hashPointer: Array[Byte],
-                       sequenceNum: Long,
+case class Transaction(hashPointer: String,
                        id: String,
+                       sequenceNum: Long,
+                       senderPubKey: String,
                        counterPartyPubKey: String,
-                       message: String,
-                       signature: String) extends BlockData
+                       amount: Long,
+                       signature: String) extends Tx
+
+/**
+  *
+  * @param id the transaction identifier,it should be generated using a cryptographically secure pseudo-random number generator by the initiator of the transaction.
+  * @param counterPartyPubKey the public key of the counterparty v.
+  * @param amount amount to be sent.
+  * @param signature the signature created using node's secret key on the concatenation of the binary representation of the five items above.
+  */
+case class SignTransaction(id: String,
+                           senderPubKey: String,
+                           counterPartyPubKey: String,
+                           amount: Long,
+                           signature: String) extends Tx
 
 /**
   *
@@ -51,8 +76,8 @@ case class Facilitators(facilitators: Seq[Transaction])
   * @param round the current round of consensus.
   * @param signature the signature created using node's secret key on the concatenation of the binary representation of the five items above.
   */
-case class CheckpointBlock(hashPointer: Array[Byte],
+case class CheckpointBlock(hashPointer: String,
                            sequenceNum: Long,
+                           signature: String,
                            consensusResultHashPointer: mutable.HashMap[ActorRef, Option[BlockData]], //TODO replace with compressed hash of each node's decision on consensus, not proposed subset as shown here (for stubbing byzantine consensus) which will also get added to the txBuffer
-                           round: Long,
-                           signature: String) extends BlockData
+                           round: Long = 0L) extends BlockData

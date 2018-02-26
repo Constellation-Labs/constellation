@@ -14,7 +14,7 @@ spec:
         image: constellation/constellation:latest
         imagePullPolicy: Never # Only use the local image
         ports:
-        - containerPort: 8080  # The kubectl proxy will default to the first port in the list
+        - containerPort: 9000  # The kubectl proxy will default to the first port in the list
           name: akka-http
           protocol: TCP
         - containerPort: 2551
