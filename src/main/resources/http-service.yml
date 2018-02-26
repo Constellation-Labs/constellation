@@ -4,9 +4,9 @@ metadata:
   name: constellation-node-rpc
 spec:
   ports:
-  - port: 80
+  - port: 9000
     protocol: TCP
-    targetPort: 8080
+    targetPort: 9000
     name: akka-http
   selector:
     app: constellation
