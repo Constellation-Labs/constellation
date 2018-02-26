@@ -66,19 +66,6 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
     }
   }
 
-  it should "return the latest block for /performConsensus" in new RPCInterfaceFixture {
-    testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
-      case PerformConsensus =>
-        sender ! genesisBlock.toString
-        TestActor.NoAutoPilot
-    }
-    }
-
-    Get("/performConsensus") ~> routes ~> check {
-      responseAs[String] shouldEqual "received PerformConsensus"
-    }
-  }
-
   it should "add a new tx for /sendTx" in new RPCInterfaceFixture {
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
       case transaction: Transaction =>
