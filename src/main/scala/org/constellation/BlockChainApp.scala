@@ -2,13 +2,14 @@ package org.constellation
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorSystem, Props}
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
-import org.constellation.actor.Node
+import org.constellation.actor.Protocol
+import org.constellation.blockchain.{Consensus, DAG}
 import org.constellation.rpc.RPCInterface
 
 import scala.concurrent.ExecutionContextExecutor
@@ -34,6 +35,8 @@ object BlockChainApp extends App with RPCInterface {
   val logger = Logger("WebServer")
 
   val id = args.headOption.getOrElse("ID")
-  val blockChainActor = system.actorOf(Node.props(id), "constellation")
+  val dag: DAG = new DAG
+  val protocol = system.actorOf(Props(new Protocol(id)), "protocol")
+  val consensus = system.actorOf(Props(new Consensus(dag)), "consensus")
   Http().bindAndHandle(routes, config.getString("http.interface"), config.getInt("http.port"))
 }

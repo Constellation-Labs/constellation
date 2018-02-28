@@ -1,6 +1,7 @@
 package org.constellation.blockchain
 
-import akka.actor.ActorRef
+import akka.actor.{ActorRef, FSM}
+import akka.actor.FSM.State
 import org.constellation.actor.Receiver
 import org.constellation.blockchain.Consensus.PerformConsensus
 import org.constellation.p2p.PeerToPeer
@@ -37,25 +38,6 @@ object Consensus {
   *
   * for ref http://www.cs.ox.ac.uk/jeremy.gibbons/publications/metamorphisms-scp.pdf
   */
-trait Consensus {
-  this: ProtocolInterface with PeerToPeer with Receiver =>
-  import Consensus.performConsensus
-  import ProtocolInterface.{isDelegate, validBlockData}
+class Consensus[T,U](chain: DAG) extends FSM[State[T,U], Unit] {
 
-  receiver {
-    /**
-      * Right now we will send a message to kick off a consensus round. This will eventually be tripped by a counter in
-      * ProtocolInterface.
-      *
-      */
-    case PerformConsensus =>
-      val newBlock = performConsensus(Nil) //TODO make this a future/non-blocking
-      chain.globalChain.append(newBlock)
-      broadcast(newBlock)
-
-    case checkpointMessage: CheckpointMessage =>
-      if (validBlockData(checkpointMessage) && isDelegate) {
-
-      }
-  }
 }
