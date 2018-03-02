@@ -11,7 +11,7 @@ import scala.collection.mutable
 /**
   * Parent type for data meant for storage in Blocks
   */
-trait BlockData
+sealed trait BlockData
 
 /**
   * Parent type for data meant for storage in Blocks

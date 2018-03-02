@@ -1,7 +1,7 @@
 package org.constellation.blockchain
 
 import akka.actor.{ActorRef, FSM}
-import akka.actor.FSM.State
+
 import scala.collection.mutable
 
 /**
@@ -30,4 +30,27 @@ object Consensus {
   def performConsensus(actorRefs: Seq[ActorRef]): CheckpointBlock = CheckpointBlock("hashPointer", 0L, "signature", mutable.HashMap[ActorRef, Option[BlockData]](), 0L)
 }
 
-class Consensus[T,U](chain: DAG) extends FSM[State[T,U], Unit]
+sealed trait State
+
+case object IsDelegate extends State
+case object IsValidator extends State
+
+class Consensus(chain: DAG, mostRecentBlock: BlockData = Consensus.performConsensus(Seq.empty[ActorRef])) extends FSM[State, BlockData] {
+  startWith(IsValidator, mostRecentBlock)
+
+  onTransition {
+    case IsValidator -> IsDelegate =>
+    /*
+    Initialize consensus process
+     */
+  }
+
+  onTransition {
+    case IsDelegate -> IsValidator =>
+    /*
+    Update local block and gossip result
+     */
+  }
+
+  initialize()
+}
