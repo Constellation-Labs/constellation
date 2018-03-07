@@ -1,41 +1,39 @@
 package org.constellation
 
+import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
+import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
-import org.constellation.app.AppNode
-
+import org.constellation.actor.Node
+import org.constellation.rpc.RPCInterface
 
 import scala.concurrent.ExecutionContextExecutor
 
 /**
-  * Main entry point for running a node.
-  * Note: this can only be used to run one node per JVM. This is the main
-  * initialization class for starting a Constellation node in practice.
-  *
-  * It initializes an ActorSystem (and you probably don't want multiple ActorSystems
-  * running per JVM) Use AppNode builder for constructing test nodes within same JVM.
+  * This needs to be refactored to spin up one or two proceses, one for protocol and one (or zero) for consensus
+  * the main method to this singleton needs to execute a hylomorphic method that takes types representing these actors
+  * ex:
+  * def hylo[F[_] : Functor, A, B](f: F[B] => B)(g: A => F[A]): A => B =
+      a => f(g(a) map hylo(f)(g))
   */
-object BlockChainApp extends App {
-
-  val logger = Logger("AppInit")
+object BlockChainApp extends App with RPCInterface {
 
   implicit val system: ActorSystem = ActorSystem("BlockChain")
-  implicit val materialize: ActorMaterializer = ActorMaterializer()
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-  private val config = ConfigFactory.load()
-  private val timeout = config.getInt("blockchain.defaultRPCTimeoutSeconds")
-  private val seedHost = config.getString("blockchain.seedHost")
-  private val id = args.headOption.getOrElse("ID")
-  private val httpInterface = config.getString("http.interface")
-  private val httpPort = config.getInt("http.port")
+  val config = ConfigFactory.load()
 
-  logger.info(s"Initializing main BlackChainActor with id: $id and seedHost: $seedHost " +
-  s"with timeout: $timeout on interface: $httpInterface port: $httpPort")
+  override implicit val timeout: Timeout = Timeout(
+    config.getInt("blockchain.defaultRPCTimeoutSeconds"), TimeUnit.SECONDS)
 
-  val appNode = new AppNode(id, seedHost, httpInterface, httpPort, timeout)
+  val logger = Logger("WebServer")
 
+  val id = args.headOption.getOrElse("ID")
+  val blockChainActor = system.actorOf(Node.props(id), "constellation")
+  Http().bindAndHandle(routes, config.getString("http.interface"), config.getInt("http.port"))
 }

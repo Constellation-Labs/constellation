@@ -9,24 +9,25 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.actor.Receiver
 import org.constellation.p2p.PeerToPeer._
 
-import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
 object PeerToPeer {
 
   case class AddPeer(address: String)
 
-  case class ResolvedPeer(actorRef: ActorRef)
+  case class PeerRef(actorRef: ActorRef)
 
   case class Peers(peers: Seq[String])
 
   case class Id(id: String)
 
-  case object GetPeers
+  case class GetPeers()
 
-  case object GetId
+  case class GetId()
 
-  case object HandShake
+  case class GetBalance(account: String)
+
+  case class HandShake()
 }
 
 trait PeerToPeer {
@@ -36,13 +37,12 @@ trait PeerToPeer {
   implicit val executionContext = context.system.dispatcher
 
   val logger: Logger
-  var peers: Set[ActorRef] = Set.empty
+  val peers: scala.collection.mutable.Set[ActorRef] = scala.collection.mutable.Set.empty[ActorRef]
 
   def broadcast(message: Any ): Unit = {
     peers.foreach {  peer => peer ! message
       logger.info(s"just broadcasted $message to $peer")
     }
-
   }
 
   receiver {
@@ -52,10 +52,10 @@ trait PeerToPeer {
       /*
       adds peer to actor system, res is a future of actor ref, sends the actor ref back to this actor, handshake occurs below
        */
-      context.actorSelection(peerAddress).resolveOne().map( ResolvedPeer(_) ).pipeTo(self)
-    case ResolvedPeer(newPeerRef: ActorRef) =>
+      context.actorSelection(peerAddress).resolveOne().map( PeerRef(_) ).pipeTo(self)
+    case PeerRef(newPeerRef: ActorRef) =>
 
-      if ( ! peers.contains(newPeerRef) ) {
+      if (!peers.contains(newPeerRef)){
         context.watch(newPeerRef)
         logger.debug(s"Watching $newPeerRef}")
 

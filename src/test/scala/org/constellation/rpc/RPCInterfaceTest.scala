@@ -1,16 +1,17 @@
 package org.constellation.rpc
 
 import akka.actor.ActorRef
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.testkit.{TestActor, TestKitBase, TestProbe}
 import com.typesafe.scalalogging.Logger
-import org.constellation.blockchain.{Block, Chain, GenesisBlock, Transaction}
-import ChainInterface.{QueryAll, QueryLatest, ResponseBlock, ResponseBlockChain}
-import org.constellation.blockchain.Consensus.MineBlock
-import org.constellation.p2p.PeerToPeer.{AddPeer, GetPeers, Id, Peers}
+import org.constellation.Fixtures
+import org.constellation.blockchain._
+import org.constellation.p2p.PeerToPeer._
+import org.constellation.rpc.ProtocolInterface.{FullChain, _}
 import org.scalatest.{FlatSpec, Matchers}
-import org.constellation.Fixtures.{jsonToString, tx}
+import Fixtures.{tx, _}
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
+import org.constellation.blockchain.Consensus.PerformConsensus
 
 import scala.concurrent.ExecutionContext
 
@@ -27,39 +28,24 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
   }
 
   "A route " should "get the blockchain from the blockchain actor for /blocks" in new RPCInterfaceFixture {
-
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
-      case QueryAll =>
-        sender ! ResponseBlockChain(Chain("id"))
+      case GetChain =>
+        sender ! FullChain(Nil)
         TestActor.NoAutoPilot
-      }
+    }
     }
 
     Get("/blocks") ~> routes ~> check {
-      responseAs[Seq[Block]] shouldEqual Seq(GenesisBlock)
-    }
-  }
-
-  it should "return the latest block for /latestBlock" in new RPCInterfaceFixture {
-    testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
-      case QueryLatest =>
-        sender ! ResponseBlock(GenesisBlock)
-        TestActor.NoAutoPilot
-      }
-    }
-
-    Get("/latestBlock") ~> routes ~> check {
-      responseAs[Block] shouldEqual GenesisBlock
+      responseAs[FullChain] shouldEqual FullChain(Nil)
     }
   }
 
   it should "retrieve all peers for /peers" in new RPCInterfaceFixture {
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
-
       case GetPeers =>
         sender ! Peers(Seq("PeerOne"))
         TestActor.NoAutoPilot
-      }
+    }
     }
 
     Get("/peers") ~> routes ~> check {
@@ -70,41 +56,53 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
   it should "retrieve id for /id" in new RPCInterfaceFixture {
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) =>
       msg match {
-
-        case getId => sender ! Id(id)
+        case GetId =>
+          sender ! Id("id")
           TestActor.NoAutoPilot
       }
     }
     Get("/id") ~> routes ~> check {
-      responseAs[Id] shouldEqual Id(id)
-    }
-  }
-  it should "add a new peer for /addPeer" in new RPCInterfaceFixture {
-    Post("/addPeer", HttpEntity(ContentTypes.`text/html(UTF-8)`, "TestPeer")) ~> routes ~> check {
-      testProbe.expectMsg(AddPeer("TestPeer"))
+      responseAs[Id] shouldEqual Id("id")
     }
   }
 
-
-  it should "add a new block for /addBlock" in new RPCInterfaceFixture {
+  it should "add a new tx for /sendTx" in new RPCInterfaceFixture {
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
       case transaction: Transaction =>
-        sender ! ResponseBlock(Block(0, "", 0, transaction.message, ""))
+        sender ! transaction
         TestActor.NoAutoPilot
-      }
+    }
     }
 
-    Post("/mineBlock", HttpEntity(ContentTypes.`application/json`, jsonToString(tx))) ~> routes ~> check {
-      responseAs[Block] shouldEqual(Block(0, "", 0, "", ""))
+    Post("/sendTx", HttpEntity(ContentTypes.`application/json`, jsonToString(tx))) ~> routes ~> check {
+      responseAs[Transaction] shouldEqual tx
+    }
+  }
+
+  it should "add a new peer for /addPeer" in new RPCInterfaceFixture {
+    testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
+      case peerAddress: AddPeer =>
+        sender ! s"Added peer ${peerAddress.address}"
+        TestActor.NoAutoPilot
+    }
+    }
+    Post("/addPeer", HttpEntity(ContentTypes.`text/html(UTF-8)`, "TestPeer")) ~> routes ~> check {
+      responseAs[String] shouldEqual s"Added peer TestPeer"
+    }
+  }
+
+  it should "a balance should be returned for /getBalance " in new RPCInterfaceFixture {
+    testProbe.setAutoPilot { (sender: ActorRef, msg: Any) => msg match {
+      case GetBalance(account) =>
+        sender ! Balance(0L) // s"Chain cache queried for $account"
+        TestActor.NoAutoPilot
+    }
     }
 
-
-//    Post("/mineBlock", HttpEntity(ContentTypes.`text/html(UTF-8)`, "testdata:node1:node2:node2")) ~> routes ~> check {
-//
-//      responseAs[Block] shouldEqual(Block(0, "", 0, "testdata:node1:node2:node2", "", Some("node1"),  Some("node2"), Some("node2")))
-//    }
+    Post("/getBalance", HttpEntity(ContentTypes.`text/plain(UTF-8)`, "1234")) ~> routes ~> check {
+      responseAs[Balance] shouldEqual Balance(0L)
+    }
   }
 
 }
-
 
