@@ -1,19 +1,20 @@
 package org.constellation
 
-import akka.actor.{ActorRef, ActorSystem, Props}
-import akka.testkit.{ImplicitSender, TestActorRef, TestKit, TestProbe}
+import java.security.PublicKey
+
+import akka.actor.{ActorSystem, Props}
+import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
 import org.constellation.actor.Receiver
-import org.constellation.blockchain.{CheckpointBlock, DAG}
+import org.constellation.blockchain.Block
 import org.constellation.p2p.PeerToPeer
-import org.constellation.p2p.PeerToPeer.{AddPeer, GetPeers, HandShake, PeerRef}
 import org.constellation.rpc.ProtocolInterface
-import org.constellation.rpc.ProtocolInterface.{FullChain, GetChain, GetLatestBlock, ResponseBlock}
+import org.constellation.rpc.ProtocolInterface.{FullChain, GetChain, GetLatestBlock}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, GivenWhenThen, Matchers}
 import Fixtures.{genesisBlock, _}
 
 import scala.collection.mutable.ListBuffer
 
-class ProtocolInterfaceActor(val publicKey: String = "") extends
+class ProtocolInterfaceActor(val publicKey: PublicKey = Fixtures.tempKey.getPublic) extends
   Receiver with ProtocolInterface with PeerToPeer{
 }
 
@@ -24,17 +25,17 @@ class ChainInterfaceTest extends TestKit(ActorSystem("ChainInterfaceTest")) with
   }
 
   trait WithTestActor {
-    val blockChainCommunicationActor = TestActorRef(Props(new ProtocolInterfaceActor("")))
+    val blockChainCommunicationActor = TestActorRef(Props(new ProtocolInterfaceActor()))
 
-    val longerChain: List[CheckpointBlock] =  checkpointBlock :: genesisBlock :: Nil
-    val shorterChain: List[CheckpointBlock] = genesisBlock :: Nil
+    val longerChain: List[Block] =  checkpointBlock :: genesisBlock :: Nil
+    val shorterChain: List[Block] = genesisBlock :: Nil
   }
 
   "A BlockChainCommunication actor" should "send the blockchain to anybody that requests it" in new WithTestActor {
     When("an empty chain is queried")
     blockChainCommunicationActor ! GetChain
     Then("we should receive this empty DAG's globalChain")
-    expectMsg(FullChain(ListBuffer.empty[CheckpointBlock]))
+    expectMsg(FullChain(ListBuffer.empty[Block]))
   }
 
   it should "send the latest block, and nothing more for a QueryLatest request" in new WithTestActor {

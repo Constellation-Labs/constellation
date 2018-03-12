@@ -1,5 +1,7 @@
 package org.constellation.rpc
 
+import java.security.PublicKey
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
@@ -9,6 +11,7 @@ import akka.stream.ActorMaterializer
 import org.constellation.blockchain.Transaction
 import org.json4s.{DefaultFormats, Formats, native}
 import org.json4s.native.Serialization
+
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
 
@@ -31,7 +34,7 @@ implicit val executionContext: ExecutionContextExecutor
   )
 }
 
-  def post[T <: AnyRef](suffix: String, t: T)(implicit f : Formats = DefaultFormats): Future[HttpResponse] = {
+  def post[T <: AnyRef](suffix: String, t: T)(implicit f : Formats = constellation.constellationFormats): Future[HttpResponse] = {
   val ser = Serialization.write(t)
   Http().singleRequest(
   HttpRequest(uri = base(suffix), method = HttpMethods.POST, entity = HttpEntity(
@@ -43,12 +46,12 @@ implicit val executionContext: ExecutionContextExecutor
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] = PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
   def read[T <: AnyRef](httpResponse: HttpResponse)(
-  implicit m : Manifest[T], f : Formats = DefaultFormats
+  implicit m : Manifest[T], f : Formats = constellation.constellationFormats
   ): Future[T] =
   Unmarshal(httpResponse.entity).to[String].map{r => Serialization.read[T](r)}
 
   def sendTx(transaction: Transaction): Future[HttpResponse] = post("sendTx", transaction)
 
-  def getBalance(account: String): Future[HttpResponse] = post("getBalance", account)
+  def getBalance(account: PublicKey): Future[HttpResponse] = post("getBalance", account)
 
 }

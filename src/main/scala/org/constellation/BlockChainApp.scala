@@ -1,5 +1,6 @@
 package org.constellation
 
+import java.security.PublicKey
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
@@ -10,8 +11,11 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import org.constellation.actor.Node
 import org.constellation.rpc.RPCInterface
+import org.constellation.wallet.KeyUtils
+import constellation._
 
 import scala.concurrent.ExecutionContextExecutor
+import scala.util.Try
 
 /**
   * This needs to be refactored to spin up one or two proceses, one for protocol and one (or zero) for consensus
@@ -33,7 +37,10 @@ object BlockChainApp extends App with RPCInterface {
 
   val logger = Logger("WebServer")
 
-  val id = args.headOption.getOrElse("ID")
+  val id = args.headOption
+    .flatMap{id => Try{id.x[PublicKey]}.toOption}
+    .getOrElse(KeyUtils.makeKeyPair().getPublic)
+
   val blockChainActor = system.actorOf(Node.props(id), "constellation")
   Http().bindAndHandle(routes, config.getString("http.interface"), config.getInt("http.port"))
 }

@@ -19,7 +19,7 @@ object Consensus {
     * @param actorRefs
     * @return
     */
-  def performConsensus(actorRefs: Seq[ActorRef]): CheckpointBlock = CheckpointBlock("hashPointer", 0L, "signature", mutable.HashMap[ActorRef, Option[BlockData]](), 0L)
+  def performConsensus(actorRefs: Seq[ActorRef]): Block = Block("hashPointer", 0L, "signature", mutable.HashMap[ActorRef, Option[BlockData]](), 0L)
 }
 
 /**

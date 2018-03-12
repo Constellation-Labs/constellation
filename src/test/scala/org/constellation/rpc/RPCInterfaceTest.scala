@@ -57,12 +57,12 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
     testProbe.setAutoPilot { (sender: ActorRef, msg: Any) =>
       msg match {
         case GetId =>
-          sender ! Id("id")
+          sender ! Id(Fixtures.tempKey.getPublic)
           TestActor.NoAutoPilot
       }
     }
     Get("/id") ~> routes ~> check {
-      responseAs[Id] shouldEqual Id("id")
+      responseAs[Id] shouldEqual Id(Fixtures.tempKey.getPublic)
     }
   }
 
@@ -74,7 +74,10 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
     }
     }
 
-    Post("/sendTx", HttpEntity(ContentTypes.`application/json`, jsonToString(tx))) ~> routes ~> check {
+    Post("/sendTx", HttpEntity(ContentTypes.`application/json`, {
+      import constellation._
+      tx.json
+    })) ~> routes ~> check {
       responseAs[Transaction] shouldEqual tx
     }
   }
@@ -99,7 +102,10 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
     }
     }
 
-    Post("/getBalance", HttpEntity(ContentTypes.`text/plain(UTF-8)`, "1234")) ~> routes ~> check {
+    Post("/getBalance", HttpEntity(ContentTypes.`application/json`, {
+      import constellation._
+      Fixtures.publicKey.json
+    })) ~> routes ~> check {
       responseAs[Balance] shouldEqual Balance(0L)
     }
   }

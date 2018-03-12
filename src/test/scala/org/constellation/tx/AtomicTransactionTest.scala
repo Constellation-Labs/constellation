@@ -2,6 +2,7 @@ package org.constellation.tx
 
 import java.security.KeyPair
 
+import org.constellation.blockchain.Transaction
 import org.constellation.tx.AtomicTransaction._
 import org.constellation.tx.FakeNodeResponseUtils.FakePriorTransaction
 import org.constellation.wallet.KeyUtils
@@ -24,6 +25,16 @@ object FakeNodeResponseUtils {
 }
 
 class AtomicTransactionTest extends FlatSpec {
+
+  "Proper TX" should "sign and countersign" in {
+
+    val kp0 = makeKeyPair()
+    val kp1 = makeKeyPair()
+    val genTX = Transaction(0L, kp0.getPublic, kp1.getPublic, 1e9.toLong)
+      .senderSign(kp0.getPrivate).counterPartySign(kp1.getPrivate)
+    assert(genTX.valid)
+
+  }
 
   val kp: KeyPair = makeKeyPair()
 

@@ -1,5 +1,6 @@
 package org.constellation.rpc
 
+import java.security.PublicKey
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorRef
@@ -28,7 +29,7 @@ trait RPCInterface extends Json4sSupport {
   implicit val serialization: Serialization.type = native.Serialization
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] = PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-  implicit def json4sFormats: Formats = DefaultFormats
+  implicit def json4sFormats: Formats = constellation.constellationFormats
 
   implicit val executionContext: ExecutionContext
 
@@ -50,7 +51,9 @@ trait RPCInterface extends Json4sSupport {
         path("sendTx") {
           entity(as[Transaction]) { transaction =>
             logger.info(s"Got request to submit new transaction $transaction")
-            complete((blockChainActor ? transaction).mapTo[Transaction])
+            blockChainActor ! transaction
+            // Had to remove the ask because otherwise it can create a loop with other nodes
+            complete(transaction) // (blockChainActor ? transaction).mapTo[Transaction]
           }
         }~
           path("addPeer") {
@@ -60,7 +63,7 @@ trait RPCInterface extends Json4sSupport {
             }
           }~
           path("getBalance") {
-            entity(as[String]) { account =>
+            entity(as[PublicKey]) { account =>
               logger.info(s"Got request query account $account balance")
               complete((blockChainActor ? GetBalance(account)).mapTo[Balance])
             }
