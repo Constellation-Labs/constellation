@@ -18,6 +18,6 @@ Vagrant.configure("2") do |config|
   end
 
   # run minikube installer script
-  config.vm.provision :shell, path: "minikube-installer.sh"
+  config.vm.provision :shell, path: "scripts/vagrant-config-vm.sh"
 
 end
