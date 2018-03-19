@@ -36,7 +36,7 @@ spec:
         - name: AKKA_SEED_NODE_PORT
           value: '2551'
         - name: SAMPLE_HTTP_PORT
-          value: '8080'
+          value: '9000'
         - name: SAMPLE_HTTP_HOST
           value: "$(POD_IP)"
         readinessProbe:
