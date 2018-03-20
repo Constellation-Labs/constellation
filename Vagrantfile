@@ -3,9 +3,8 @@ Vagrant.configure("2") do |config|
 
   config.vm.hostname = 'constellation'
 
-  config.vm.network "private_network", type: "dhcp"
-  config.vm.network "forwarded_port", guest: 8080, host: 8080
-  config.vm.network "forwarded_port", guest: 8001, host: 8001
+  config.vm.network "private_network", type: "dhcp", ip: "192.168.50.4"
+  config.vm.hostname = "constellation.local"
 
   project_root = File.dirname(__FILE__)
 
@@ -17,7 +16,7 @@ Vagrant.configure("2") do |config|
      vb.memory = "2048"
   end
 
-  # run minikube installer script
-  config.vm.provision :shell, path: "minikube-installer.sh"
+  # install dependencies
+  config.vm.provision :shell, path: "install-dependencies.sh"
 
 end

@@ -1,4 +1,4 @@
-echo "Starting minikube machine setup.........................."
+echo "Starting machine setup.........................."
 
 # install openjdk java8
 echo "Installing java8.........................."
@@ -32,16 +32,16 @@ sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubun
 sudo apt-get update
 sudo apt-get install -y docker-ce
 
-# install kubectl   
-echo "Installing kubectl.........................."
-wget https://storage.googleapis.com/kubernetes-release/release/v1.9.0/bin/linux/amd64/kubectl
-chmod +x kubectl
-sudo mv kubectl /usr/local/bin/kubectl
+# install kubectl
+sudo apt-get install -y kubectl
 
-# install minikube
-echo "Installing minikube.........................."
-curl -Lo minikube https://storage.googleapis.com/minikube/releases/v0.25.0/minikube-linux-amd64
-chmod +x minikube
-sudo mv minikube /usr/local/bin/
+# Install Google Cloud SDK
+export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)"
 
-echo "minikube machine setup complete!"
+echo "deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+
+curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+
+sudo apt-get update && sudo apt-get install -y google-cloud-sdk
+
+echo "machine setup complete!"
