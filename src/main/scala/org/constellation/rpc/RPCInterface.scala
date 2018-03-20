@@ -44,7 +44,10 @@ trait RPCInterface extends Json4sSupport {
         }~
         path("id") {
           complete((blockChainActor ? GetId).mapTo[Id])
-        }
+        } ~
+      path("actorPath") {
+        complete(blockChainActor.path.toSerializationFormat)
+      }
     }~
       post {
         path("sendTx") {
