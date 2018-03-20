@@ -32,7 +32,7 @@ class MultiAppTest extends FlatSpec with BeforeAndAfterAll {
 
     implicit val timeout: Timeout = seedHostNode.timeout
 
-    val seedHostPath = seedHostNode.blockChainActor.path.toSerializationFormat
+    val seedHostPath = seedHostNode.protocol.path.toSerializationFormat
 
     val nodes = (1 to 3).map { _ =>
       AppNode.apply(seedHostPath)
@@ -40,7 +40,7 @@ class MultiAppTest extends FlatSpec with BeforeAndAfterAll {
 
     nodes.foreach{ n =>
       import scala.concurrent.duration._
-      val response = Await.result(n.blockChainActor ? GetPeers, 5.seconds).asInstanceOf[Peers]
+      val response = Await.result(n.protocol ? GetPeers, 5.seconds).asInstanceOf[Peers]
       assert(response.peers.nonEmpty)
     }
 

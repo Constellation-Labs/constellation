@@ -22,7 +22,7 @@ import scala.concurrent.ExecutionContext
 
 trait RPCInterface extends Json4sSupport {
 
-  val blockChainActor: ActorRef
+  val protocol: ActorRef
   val logger: Logger
 
   implicit val serialization: Serialization.type = native.Serialization
@@ -37,32 +37,32 @@ trait RPCInterface extends Json4sSupport {
   val routes: Route =
     get {
       path("blocks") {
-        complete((blockChainActor ? GetChain).mapTo[FullChain])
+        complete((protocol ? GetChain).mapTo[FullChain])
       } ~
         path("peers") {
-          complete((blockChainActor ? GetPeers).mapTo[Peers])
+          complete((protocol ? GetPeers).mapTo[Peers])
         }~
         path("id") {
-          complete((blockChainActor ? GetId).mapTo[Id])
+          complete((protocol ? GetId).mapTo[Id])
         }
     }~
       post {
         path("sendTx") {
           entity(as[Transaction]) { transaction =>
             logger.info(s"Got request to submit new transaction $transaction")
-            complete((blockChainActor ? transaction).mapTo[Transaction])
+            complete((protocol ? transaction).mapTo[Transaction])
           }
         }~
           path("addPeer") {
             entity(as[String]) { peerAddress =>
               logger.info(s"Got request to add new peer $peerAddress")
-              complete((blockChainActor ? AddPeer(peerAddress)).mapTo[String])
+              complete((protocol ? AddPeer(peerAddress)).mapTo[String])
             }
           }~
           path("getBalance") {
             entity(as[String]) { account =>
               logger.info(s"Got request query account $account balance")
-              complete((blockChainActor ? GetBalance(account)).mapTo[Balance])
+              complete((protocol ? GetBalance(account)).mapTo[Balance])
             }
           }
       }

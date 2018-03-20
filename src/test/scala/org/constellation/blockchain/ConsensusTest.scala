@@ -14,7 +14,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, GivenWhenThen}
 import scala.collection.mutable
 import scala.concurrent.duration._
 
-class TestConsensusActor(override val peers: scala.collection.mutable.Set[ActorRef] = scala.collection.mutable.Set.empty[ActorRef]) extends Receiver with Consensus with PeerToPeer with ProtocolInterface {
+class TestConsensusActor(val peers: scala.collection.mutable.Set[ActorRef] = scala.collection.mutable.Set.empty[ActorRef], dag: DAG = new DAG) extends Consensus(dag) {
   val publicKey: String = Fixtures.publicKey
 }
 

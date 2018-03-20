@@ -2,12 +2,14 @@ package org.constellation.app
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorSystem, Props}
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
-import org.constellation.actor.Node
+import org.constellation.BlockChainApp.args
+import org.constellation.actor.Protocol
+import org.constellation.blockchain.{Consensus, DAG}
 import org.constellation.p2p.PeerToPeer.AddPeer
 import org.constellation.rpc.RPCInterface
 
@@ -26,14 +28,16 @@ class AppNode(
 ) extends RPCInterface {
 
   val actorName: String = "blockChainActor" + {if (appendActorIdToName) "_" + id else ""}
-  val blockChainActor = system.actorOf(Node.props(id), id)
+  val dag: DAG = new DAG
+  val protocol = system.actorOf(Props(new Protocol(id)), "protocol")
+  val consensus = system.actorOf(Props(new Consensus(dag)), "consensus")
   val logger = Logger("AppNode_" + id)
 
   override implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
 
   if (seedHost.nonEmpty) {
     logger.info(s"Attempting to connect to seed-host $seedHost")
-    blockChainActor ! AddPeer(seedHost)
+    protocol ! AddPeer(seedHost)
   } else {
     logger.info("No seed host configured, waiting for messages.")
   }

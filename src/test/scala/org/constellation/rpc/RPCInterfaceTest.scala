@@ -22,7 +22,7 @@ class RPCInterfaceTest extends FlatSpec with ScalatestRouteTest with TestKitBase
     val testProbe = TestProbe()
     val id = "id"
 
-    override val blockChainActor: ActorRef = testProbe.ref
+    override val protocol: ActorRef = testProbe.ref
     override val logger = Logger("TestLogger")
     override implicit val executionContext: ExecutionContext = ExecutionContext.global
   }
