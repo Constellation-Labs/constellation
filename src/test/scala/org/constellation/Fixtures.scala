@@ -3,11 +3,8 @@ package org.constellation
 import java.security.{KeyPair, PublicKey}
 
 import akka.actor.ActorRef
-import net.liftweb.json._
-import net.liftweb.json.Serialization.write
-import org.constellation.blockchain.{BlockData, Block, Transaction}
+import org.constellation.primitives.{Block, Transaction}
 import org.constellation.wallet.KeyUtils
-import org.constellation.wallet.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
 
 import scala.collection.mutable
 

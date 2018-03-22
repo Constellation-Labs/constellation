@@ -7,11 +7,10 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.Fixtures
 import org.constellation.blockchain._
 import org.constellation.p2p.PeerToPeer._
-import org.constellation.rpc.ProtocolInterface.{FullChain, _}
 import org.scalatest.{FlatSpec, Matchers}
 import Fixtures.{tx, _}
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
-import org.constellation.blockchain.Consensus.PerformConsensus
+import org.constellation.primitives.Transaction
 
 import scala.concurrent.ExecutionContext
 

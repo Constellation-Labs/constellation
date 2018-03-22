@@ -1,4 +1,4 @@
-package org.constellation.tx
+package org.constellation.transaction
 
 import java.nio.ByteBuffer
 import java.security.PublicKey
@@ -21,7 +21,6 @@ object AtomicTransaction {
     buffer.putLong(0, l)
     buffer.array()
   }
-
 
   // TODO: Change these to use json4s custom serializers.
   // Working on this now in the wallet class

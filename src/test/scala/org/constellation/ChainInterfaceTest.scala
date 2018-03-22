@@ -4,13 +4,10 @@ import java.security.PublicKey
 
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
-import org.constellation.actor.Receiver
-import org.constellation.blockchain.Block
 import org.constellation.p2p.PeerToPeer
-import org.constellation.rpc.ProtocolInterface
-import org.constellation.rpc.ProtocolInterface.{FullChain, GetChain, GetLatestBlock}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, GivenWhenThen, Matchers}
 import Fixtures.{genesisBlock, _}
+import org.constellation.primitives.Block
 
 import scala.collection.mutable.ListBuffer
 

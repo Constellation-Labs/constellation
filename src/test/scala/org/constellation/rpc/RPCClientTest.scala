@@ -3,14 +3,14 @@ package org.constellation.rpc
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
-import org.constellation.blockchain.Transaction
 import org.scalatest.FlatSpec
 
 import scala.concurrent.ExecutionContextExecutor
 import constellation._
 import org.constellation.Fixtures
-import org.constellation.app.AppNode
-import org.constellation.rpc.ProtocolInterface.Balance
+import org.constellation.app.TestNode
+import org.constellation.primitives.Transaction
+import .Balance
 
 class RPCClientTest extends FlatSpec {
 
@@ -25,7 +25,7 @@ class RPCClientTest extends FlatSpec {
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-  val appNode = AppNode()
+  val appNode = TestNode()
 
   val seedRPC = new RPCClient(port=appNode.httpPort)
 

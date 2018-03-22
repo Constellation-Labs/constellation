@@ -3,7 +3,6 @@ package org.constellation.p2p
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import com.typesafe.scalalogging.Logger
-import org.constellation.actor.Receiver
 import org.constellation.p2p.PeerToPeer._
 import org.scalatest._
 

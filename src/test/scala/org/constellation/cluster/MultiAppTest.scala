@@ -3,16 +3,13 @@ package org.constellation.cluster
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import org.constellation.app.AppNode
+import org.constellation.app.TestNode
 import org.constellation.p2p.PeerToPeer.{AddPeer, GetBalance, GetPeers, Peers}
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 import akka.pattern.ask
 import akka.util.Timeout
-import org.constellation.blockchain.Consensus.PerformConsensus
-import org.constellation.blockchain.{Block, Transaction}
-import org.constellation.rpc.ProtocolInterface._
+import org.constellation.primitives.Transaction
 import org.constellation.rpc.RPCClient
-import org.constellation.wallet.KeyUtils
 
 import scala.concurrent.{Await, ExecutionContextExecutor}
 import org.constellation.wallet.KeyUtils._
@@ -28,7 +25,7 @@ class MultiAppTest extends FlatSpec with BeforeAndAfterAll {
   "Multiple Apps" should "create and run multiple nodes within the same JVM" in {
 
     (1 to 3).foreach { _ =>
-      AppNode.apply()
+      TestNode.apply()
     }
     // Need for verifications as in SingleAppTest, i.e. health checks
 
@@ -36,14 +33,14 @@ class MultiAppTest extends FlatSpec with BeforeAndAfterAll {
 
   "Multiple Connected Apps" should "create and run multiple nodes and talk to each other" in {
 
-    val seedHostNode = AppNode.apply()
+    val seedHostNode = TestNode.apply()
 
     implicit val timeout: Timeout = seedHostNode.timeout
 
     val seedHostPath = seedHostNode.blockChainActor.path.toSerializationFormat
 
     val nodes = (1 to 3).map { _ =>
-      AppNode.apply(seedHostPath)
+      TestNode.apply(seedHostPath)
     }
 
     nodes.foreach{ n =>
@@ -70,7 +67,7 @@ class MultiAppTest extends FlatSpec with BeforeAndAfterAll {
 
     assert(genTX.valid)
 
-    val master = AppNode.apply()
+    val master = TestNode.apply()
     implicit val timeout: Timeout = master.timeout
     val mnode = master.blockChainActor
     val mrpc = new RPCClient(port = master.httpPort)
@@ -85,7 +82,7 @@ class MultiAppTest extends FlatSpec with BeforeAndAfterAll {
     val seedHostPath = mnode.path.toSerializationFormat
 
     val nodes = (1 to 3).map { _ =>
-      AppNode.apply(seedHostPath)
+      TestNode.apply(seedHostPath)
     }
 
     // This is here because for some reason the master wasn't connecting to one of the peers?
@@ -141,7 +138,6 @@ class MultiAppTest extends FlatSpec with BeforeAndAfterAll {
         (mnode ? GetAccountDetails(k.getPublic)).mapTo[Option[AccountData]].get()
       }
 
-
       println("" + chains.map{z =>
         s"${z.blockChain.size} block height, ${z.blockChain.last.transactions.length} tx last block, " +
           s"${z.blockChain.map{_.transactions.length}.sum} tx total - accounts: $accounts"
@@ -165,26 +161,7 @@ class MultiAppTest extends FlatSpec with BeforeAndAfterAll {
 
     }
 
-
-
-    /*
-
-
-
-
-        // Initialize cluster
-        seedHostNode.blockChainActor ! PerformConsensus
-
-        val block = (seedHostNode.blockChainActor ? GetLatestBlock).mapTo[Option[CheckpointBlock]].get()
-
-        println(" TEST OUTPUT " + block)
-    */
-
-
-
-
   }
-
 
   override def afterAll() {
     system.terminate()

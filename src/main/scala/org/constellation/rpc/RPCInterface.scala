@@ -11,23 +11,26 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.blockchain.Consensus.PerformConsensus
-import org.constellation.blockchain._
 import org.constellation.p2p.PeerToPeer._
-import org.constellation.rpc.ProtocolInterface._
-import org.json4s.{DefaultFormats, Formats, native}
+import org.json4s.{Formats, native}
 import akka.http.scaladsl.marshalling.Marshaller._
+import org.constellation.primitives.Transaction.Transaction
 import org.json4s.native.Serialization
 
 import scala.concurrent.ExecutionContext
 
 trait RPCInterface extends Json4sSupport {
 
-  val blockChainActor: ActorRef
+  val chainStateActor: ActorRef
+  val peerToPeerActor: ActorRef
+  val memPoolManagerActor: ActorRef
+
   val logger: Logger
 
   implicit val serialization: Serialization.type = native.Serialization
-  implicit val stringUnmarshaller: FromEntityUnmarshaller[String] = PredefinedFromEntityUnmarshallers.stringUnmarshaller
+
+  implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
+    PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
   implicit def json4sFormats: Formats = constellation.constellationFormats
 
@@ -38,35 +41,40 @@ trait RPCInterface extends Json4sSupport {
   val routes: Route =
     get {
       path("blocks") {
-        complete((blockChainActor ? GetChain).mapTo[FullChain])
+        // TODO: update
+      //  complete((chainStateActor ? GetChain).mapTo[FullChain])
+        complete("")
       } ~
-        path("peers") {
-          complete((blockChainActor ? GetPeers).mapTo[Peers])
-        }~
-        path("id") {
-          complete((blockChainActor ? GetId).mapTo[Id])
-        }
-    }~
-      post {
-        path("sendTx") {
-          entity(as[Transaction]) { transaction =>
-            logger.info(s"Got request to submit new transaction $transaction")
-            blockChainActor ! transaction
-            // Had to remove the ask because otherwise it can create a loop with other nodes
-            complete(transaction) // (blockChainActor ? transaction).mapTo[Transaction]
-          }
-        }~
-          path("addPeer") {
-            entity(as[String]) { peerAddress =>
-              logger.info(s"Got request to add new peer $peerAddress")
-              complete((blockChainActor ? AddPeer(peerAddress)).mapTo[String])
-            }
-          }~
-          path("getBalance") {
-            entity(as[PublicKey]) { account =>
-              logger.info(s"Got request query account $account balance")
-              complete((blockChainActor ? GetBalance(account)).mapTo[Balance])
-            }
-          }
+      path("peers") {
+
+        complete((peerToPeerActor ? GetPeers).mapTo[Peers])
+      } ~
+      path("id") {
+        complete((peerToPeerActor ? GetId).mapTo[Id])
       }
+    } ~
+    post {
+      path("sendTx") {
+        entity(as[Transaction]) { transaction =>
+          logger.info(s"Got request to submit new transaction $transaction")
+          memPoolManagerActor ! transaction
+          // Had to remove the ask because otherwise it can create a loop with other nodes
+          complete(transaction) // (blockChainActor ? transaction).mapTo[Transaction]
+        }
+      } ~
+      path("addPeer") {
+        entity(as[String]) { peerAddress =>
+          logger.info(s"Got request to add new peer $peerAddress")
+          complete((peerToPeerActor ? AddPeer(peerAddress)).mapTo[String])
+        }
+      } ~
+      path("getBalance") {
+        entity(as[PublicKey]) { account =>
+          logger.info(s"Got request query account $account balance")
+          // TODO: update balance
+         // complete((chainStateActor ? GetBalance(account)).mapTo[Balance])
+          complete("")
+        }
+      }
+    }
 }

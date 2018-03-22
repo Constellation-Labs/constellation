@@ -4,13 +4,13 @@ import java.security.PublicKey
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.Uri.Query
+import akka.http.scaladsl.model._
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers, Unmarshal}
 import akka.stream.ActorMaterializer
-import org.constellation.blockchain.Transaction
-import org.json4s.{DefaultFormats, Formats, native}
+import org.constellation.primitives.Transaction
 import org.json4s.native.Serialization
+import org.json4s.{Formats, native}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 

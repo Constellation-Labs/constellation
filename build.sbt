@@ -10,7 +10,6 @@ resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases"
 
 enablePlugins(JavaAppPackaging)
 
-
 dockerExposedPorts := Seq(2551, 9000)
 
 lazy val versions = new {
@@ -60,7 +59,7 @@ dockerEntrypoint ++= Seq(
   "-Dakka.io.dns.async-dns.resolv-conf=on"
 )
 
-mainClass := Some("org.constellation.BlockChainApp")
+mainClass := Some("org.constellation.ConstellationNode")
 
 parallelExecution in Test := false
 

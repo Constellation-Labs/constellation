@@ -2,8 +2,8 @@ package org.constellation.tx
 
 import java.security.KeyPair
 
-import org.constellation.blockchain.Transaction
-import org.constellation.tx.AtomicTransaction._
+import org.constellation.primitives.Transaction
+import org.constellation.transaction.AtomicTransaction._
 import org.constellation.tx.FakeNodeResponseUtils.FakePriorTransaction
 import org.constellation.wallet.KeyUtils
 import org.constellation.wallet.KeyUtils._

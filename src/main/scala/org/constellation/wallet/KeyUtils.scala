@@ -8,9 +8,6 @@ import org.json4s.{CustomSerializer, Extraction, Formats, JObject}
 import org.json4s.JsonAST.JString
 import org.json4s.native.Serialization
 
-
-
-
 /**
   * Need to compare this to:
   * https://github.com/bitcoinj/bitcoinj/blob/master/core/src/main/java/org/bitcoinj/core/ECKey.java
@@ -178,7 +175,6 @@ object KeyUtils {
       )
   }
   ))
-
 
 }
 
