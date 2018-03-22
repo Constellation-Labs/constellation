@@ -10,7 +10,7 @@ import constellation._
 import org.constellation.Fixtures
 import org.constellation.p2p.PeerToPeer.{Id, Peers}
 import org.constellation.primitives.Chain.Chain
-import org.constellation.primitives.Transaction.Transaction
+import org.constellation.primitives.Transaction
 import org.constellation.utils.{RPCClient, TestNode}
 import org.constellation.wallet.KeyUtils
 

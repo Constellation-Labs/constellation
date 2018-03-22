@@ -1,7 +1,5 @@
 package org.constellation.primitives
 
-import org.constellation.primitives.Block.Block
-
 import scala.collection.mutable.ListBuffer
 
 object Chain {

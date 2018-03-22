@@ -3,8 +3,8 @@ package org.constellation
 import java.security.{KeyPair, PublicKey}
 
 import akka.actor.ActorRef
-import org.constellation.primitives.Block.Block
-import org.constellation.primitives.Transaction.Transaction
+import org.constellation.primitives.Block
+import org.constellation.primitives.Transaction
 import org.constellation.wallet.KeyUtils
 
 import scala.collection.mutable

@@ -1,7 +1,7 @@
 package org.constellation.state
 
 import akka.actor.{Actor, ActorLogging}
-import org.constellation.primitives.Block.Block
+import org.constellation.primitives.Block
 import org.constellation.primitives.Chain.Chain
 import org.constellation.state.ChainStateManager.{AddBlock, CurrentChainStateUpdated, GetCurrentChainState}
 

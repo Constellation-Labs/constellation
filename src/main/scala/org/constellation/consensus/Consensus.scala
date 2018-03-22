@@ -4,7 +4,7 @@ import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import akka.actor.{Actor, ActorRef}
 import org.constellation.consensus.Consensus._
-import org.constellation.primitives.Block.Block
+import org.constellation.primitives.Block
 import org.constellation.wallet.KeyUtils
 
 import scala.collection.mutable

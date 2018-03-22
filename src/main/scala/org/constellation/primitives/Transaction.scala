@@ -5,20 +5,20 @@ import java.security.{PrivateKey, PublicKey}
 import constellation._
 import org.constellation.wallet.KeyUtils
 
+case class Transaction(sequenceNum: Long,
+                       senderPubKey: PublicKey,
+                       counterPartyPubKey: PublicKey,
+                       amount: Long,
+                       senderSignature: String = "",
+                       counterPartySignature: String = "",
+                       time: Long = System.currentTimeMillis())
+
+// TODO: fill these out and replace usage where applicable
+case class SenderSignedTransaction()
+case class CounterPartySignedTransaction()
+case class FullySignedTransaction()
+
 object Transaction {
-
-  case class Transaction(sequenceNum: Long,
-                         senderPubKey: PublicKey,
-                         counterPartyPubKey: PublicKey,
-                         amount: Long,
-                         senderSignature: String = "",
-                         counterPartySignature: String = "",
-                         time: Long = System.currentTimeMillis())
-
-  // TODO: fill these out and replace usage where applicable
-  case class SenderSignedTransaction()
-  case class CounterPartySignedTransaction()
-  case class FullySignedTransaction()
 
   private def senderSignInput(t: Transaction): Array[Byte] =
     Seq(t.sequenceNum, t.senderPubKey, t.counterPartyPubKey, t.amount).json.getBytes()

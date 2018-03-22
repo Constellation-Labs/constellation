@@ -2,7 +2,7 @@ package org.constellation.state
 
 import akka.actor.{Actor, ActorLogging}
 import org.constellation.consensus.Consensus.GetProposedBlock
-import org.constellation.primitives.Transaction.Transaction
+import org.constellation.primitives.Transaction
 import org.constellation.state.MemPoolManager.AddTransaction
 
 import scala.collection.mutable.ListBuffer

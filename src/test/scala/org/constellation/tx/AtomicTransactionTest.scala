@@ -23,7 +23,7 @@ class AtomicTransactionTest extends FlatSpec {
 
     val kp0 = makeKeyPair()
     val kp1 = makeKeyPair()
-    val transaction = Transaction.Transaction(0L, kp0.getPublic, kp1.getPublic, 1e9.toLong)
+    val transaction = Transaction(0L, kp0.getPublic, kp1.getPublic, 1e9.toLong)
     val senderSignedTransaction = Transaction.senderSign(transaction, kp0.getPrivate)
     val counterPartySignedTransaction = Transaction.counterPartySign(senderSignedTransaction, kp1.getPrivate)
 
