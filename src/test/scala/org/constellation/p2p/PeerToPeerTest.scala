@@ -1,8 +1,13 @@
 package org.constellation.p2p
 
-import akka.actor.{ActorSystem, Props}
+import java.security.KeyPair
+import java.util.concurrent.TimeUnit
+
+import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
+import akka.util.Timeout
 import org.constellation.p2p.PeerToPeer._
+import org.constellation.wallet.KeyUtils
 import org.scalatest._
 
 class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLike
@@ -13,7 +18,12 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
   }
 
   trait WithPeerToPeerActor {
-    val peerToPeerActor = system.actorOf(Props[PeerToPeer])
+    val keyPair: KeyPair = KeyUtils.makeKeyPair()
+
+    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+
+    val peerToPeerActor: ActorRef =
+      system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system)(timeout)))
   }
 
   "A PeerToPeer actor " should " start with an empty set of peers" in new WithPeerToPeerActor {

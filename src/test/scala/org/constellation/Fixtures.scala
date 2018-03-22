@@ -19,5 +19,3 @@ object Fixtures {
   val publicKey: PublicKey = tempKey.getPublic
 
 }
-
-

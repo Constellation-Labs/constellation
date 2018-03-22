@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.server.Route
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
@@ -40,29 +41,33 @@ class ConstellationNode(
                val seedPeers: Option[Seq[String]],
                val httpInterface: String,
                val httpPort: Int,
-               timeoutSeconds: Int = 5
+               timeoutSeconds: Int = 30
              )(
                implicit val system: ActorSystem,
                implicit val materialize: ActorMaterializer,
                implicit val executionContext: ExecutionContextExecutor
-             ) extends RPCInterface {
+             ){
 
   val publicKeyHash = keyPair.getPublic.hashCode()
 
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
-  override implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
+  implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
 
   // TODO: add root actor for routing
 
-  // TODO: in our p2p connection we need a blacklist of connections, and need to make sure someone can't access internal actors
+  // TODO: in our p2p connection we need a blacklist of connections,
+  // and need to make sure someone can't access internal actors
 
   // Setup actors
-  val peerToPeerActor: ActorRef = system.actorOf(Props(new PeerToPeer), s"ConstellationP2PActor_$publicKeyHash")
+  val peerToPeerActor: ActorRef =
+    system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system)(timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
-  val memPoolManagerActor: ActorRef = system.actorOf(Props(new MemPoolManager), s"ConstellationMemPoolManagerActor_$publicKeyHash")
+  val memPoolManagerActor: ActorRef =
+    system.actorOf(Props(new MemPoolManager), s"ConstellationMemPoolManagerActor_$publicKeyHash")
 
-  val chainStateActor: ActorRef = system.actorOf(Props(new ChainStateManager), s"ConstellationChainStateActor_$publicKeyHash")
+  val chainStateActor: ActorRef =
+    system.actorOf(Props(new ChainStateManager), s"ConstellationChainStateActor_$publicKeyHash")
 
   val consensusActor: ActorRef = system.actorOf(
     Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair)), s"ConstellationConsensusActor_$publicKeyHash")
@@ -76,6 +81,10 @@ class ConstellationNode(
   } else {
     logger.info("No seed host configured, waiting for messages.")
   }
+
+  // If we are exposing rpc then create routes
+  val routes: Route = new RPCInterface(chainStateActor,
+    peerToPeerActor, memPoolManagerActor)(executionContext, timeout).routes
 
   // Setup http server for rpc
   Http().bindAndHandle(routes, httpInterface, httpPort)

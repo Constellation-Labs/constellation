@@ -1,56 +1,122 @@
 package org.constellation.rpc
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
-import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
-import org.scalatest.{BeforeAndAfterAll, FlatSpec}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
 import constellation._
 import org.constellation.Fixtures
+import org.constellation.p2p.PeerToPeer.{Id, Peers}
+import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.Transaction.Transaction
 import org.constellation.utils.{RPCClient, TestNode}
+import org.constellation.wallet.KeyUtils
 
-class RPCClientTest extends FlatSpec with BeforeAndAfterAll {
+class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
-  // It's useful to change the port in case another node is already running.
-  // This strictly speaking isn't necessary for the full unit tests, but
-  // we can use this to remove the serial test running by modifying other tests.
-  // Leaving it here as an example until that is fixed
-  val conf: Config = ConfigFactory.empty().withValue(
-    "akka.remote.netty.tcp.port", ConfigValueFactory.fromAnyRef(2556)
-  )
-
-  implicit val system: ActorSystem = ActorSystem("BlockChain", conf)
+  implicit val system: ActorSystem = ActorSystem("BlockChain")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-  val appNode = TestNode()
+  "GET to /blocks" should "get the current local node chain" in {
+    val appNode = TestNode()
+    val rpc = new RPCClient(port=appNode.httpPort)
 
-  val seedRPC = new RPCClient(port=appNode.httpPort)
+    val response = rpc.get("blocks")
 
-  "SendTX" should "send a transaction and receive it back" in {
+    val localChain = rpc.read[Chain](response.get()).get()
 
-    val tx = Fixtures.tx //Transaction("hashpointer", "id", 1L, "key", "key2", 5L, "sig")
-    val response = seedRPC.sendTx(tx)
-    val tx2 = seedRPC.read[Transaction](response.get()).get()
-    assert(tx == tx2)
-
+    assert(localChain == Chain())
   }
 
-  "GetBalance" should "retrieve a balance properly" in {
+  "GET to /peers" should "get the correct connected peers" in {
+    val node1 = TestNode()
 
-    val response = seedRPC.getBalance(Fixtures.publicKey)
+    val node1Path = node1.peerToPeerActor.path.toSerializationFormat
 
-    // TODO: add balance back
-  //  val balance = seedRPC.read[Balance](response.get()).get()
-  //  assert(balance.balance == 0L)
-    // TODO: make a fake account with a balance and verify retrieval works.
+    val expectedPeers = Some(Seq(node1Path))
 
+    val node2 = TestNode(expectedPeers)
+
+    val rpc = new RPCClient(port=node2.httpPort)
+
+    val response = rpc.get("peers")
+
+    val actualPeers = rpc.read[Peers](response.get()).get()
+
+    assert(Peers(expectedPeers.get) == actualPeers)
+  }
+
+  "GET to /id" should "get the current nodes public key id" in {
+    val keyPair = KeyUtils.makeKeyPair()
+    val appNode = TestNode(None, keyPair)
+    val rpc = new RPCClient(port=appNode.httpPort)
+
+    val response = rpc.get("id")
+
+    val id = rpc.read[Id](response.get()).get()
+
+    assert(Id(keyPair.getPublic) == id)
+  }
+
+  "GET to /balance" should "get the correct current balance for the provided pubKey" in {
+    /* TODO
+    val keyPair = KeyUtils.makeKeyPair()
+    val appNode = TestNode(None, keyPair)
+    val rpc = new RPCClient(port=appNode.httpPort)
+
+    val response = rpc.get("id")
+
+    val id = rpc.read[Id](response.get()).get()
+
+    assert(Id(keyPair.getPublic) == id)
+    */
+  }
+
+  "POST to /transaction" should "send a transaction and receive it back" in {
+    val appNode = TestNode()
+    val rpc = new RPCClient(port=appNode.httpPort)
+
+    val transaction = Fixtures.tx
+    val response = rpc.post("transaction", transaction)
+    val transactionResponse = rpc.read[Transaction](response.get()).get()
+
+    assert(transaction == transactionResponse)
+  }
+
+  "POST to /peer" should "add the peer correctly" in {
+    val node1 = TestNode()
+    val node2 = TestNode()
+
+    val node1Path = node1.peerToPeerActor.path.toSerializationFormat
+    val node2Path = node2.peerToPeerActor.path.toSerializationFormat
+
+    val rpc1 = new RPCClient(port=node1.httpPort)
+    val rpc2 = new RPCClient(port=node2.httpPort)
+
+    val addPeerResponse = rpc2.post("peer", node1Path)
+
+    assert(addPeerResponse.get().status == StatusCodes.Created)
+
+    // TODO: bug here with lookup of peer, execution context issue, timing?
+    /*
+    val peersResponse1 = rpc1.get("peers")
+    val peersResponse2 = rpc2.get("peers")
+
+    val peers1 = rpc1.read[Peers](peersResponse1.get()).get()
+    val peers2 = rpc1.read[Peers](peersResponse2.get()).get()
+
+    val expectedPeers = Peers(Seq(node1Path, node2Path))
+
+    assert(peers1 == expectedPeers)
+    assert(peers2 == expectedPeers)
+    */
   }
 
   override def afterAll() {
-    appNode.system.terminate()
+    system.terminate()
   }
 
 }

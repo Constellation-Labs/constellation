@@ -25,7 +25,7 @@ class MultiAppTest extends FlatSpec with BeforeAndAfterAll {
   "Multiple Apps" should "create and run multiple nodes within the same JVM" in {
 
     (1 to 3).foreach { _ =>
-      val constellationNode = TestNode.apply()
+      val constellationNode = TestNode()
     }
     // Need for verifications as in SingleAppTest, i.e. health checks
 
@@ -33,14 +33,14 @@ class MultiAppTest extends FlatSpec with BeforeAndAfterAll {
 
   "Multiple Connected Apps" should "create and run multiple nodes and talk to each other" in {
 
-    val seedHostNode = TestNode.apply()
+    val seedHostNode = TestNode()
 
     implicit val timeout: Timeout = seedHostNode.timeout
 
     val seedHostPath = seedHostNode.peerToPeerActor.path.toSerializationFormat
 
     val nodes = (1 to 3).map { _ =>
-      TestNode.apply(seedHostPath)
+      TestNode(Some(Seq(seedHostPath)))
     }
 
     nodes.foreach{ n =>
@@ -53,6 +53,7 @@ class MultiAppTest extends FlatSpec with BeforeAndAfterAll {
 
   }
 
+  // TODO update
   "Simulation" should "run a simple transaction simulation starting from genesis" in {
 
     /*
@@ -68,7 +69,7 @@ class MultiAppTest extends FlatSpec with BeforeAndAfterAll {
 
     assert(genTX.valid)
 
-    val master = TestNode.apply()
+    val master = TestNode()
     implicit val timeout: Timeout = master.timeout
     val mnode = master.blockChainActor
     val mrpc = new RPCClient(port = master.httpPort)

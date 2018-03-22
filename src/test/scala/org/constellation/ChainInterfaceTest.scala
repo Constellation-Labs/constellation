@@ -19,13 +19,14 @@ with ImplicitSender with GivenWhenThen with BeforeAndAfterAll with Matchers {
     TestKit.shutdownActorSystem(system)
   }
 
-
   trait WithTestActor {
     val blockChainCommunicationActor = TestActorRef(Props(new ProtocolInterfaceActor()))
 
     val longerChain: List[Block] =  checkpointBlock :: genesisBlock :: Nil
     val shorterChain: List[Block] = genesisBlock :: Nil
   }
+
+  // TODO: move to chain state manager test
 
   "A BlockChainCommunication actor" should "send the blockchain to anybody that requests it" in new WithTestActor {
     When("an empty chain is queried")

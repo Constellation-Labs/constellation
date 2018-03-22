@@ -1,19 +1,15 @@
 package org.constellation.utils
 
-import java.security.PublicKey
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.Uri.Query
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers, Unmarshal}
 import akka.stream.ActorMaterializer
-import org.constellation.primitives.Transaction.Transaction
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
-
 
 // TODO : Implement all methods from RPCInterface here for a client SDK
 // This should also probably use scalaj http because it's bettermore standard.
@@ -28,17 +24,18 @@ implicit val executionContext: ExecutionContextExecutor
 
   def base(suffix: String) = Uri(s"$baseURI/$suffix")
 
-  def query(suffix: String, queryParams: Map[String,String] = Map()): Future[HttpResponse] = {
-  Http().singleRequest(
-  HttpRequest(uri = base(suffix).withQuery(Query(queryParams)))
+  def get(suffix: String, queryParams: Map[String,String] = Map()): Future[HttpResponse] = {
+    Http().singleRequest(
+    HttpRequest(uri = base(suffix).withQuery(Query(queryParams)))
   )
 }
 
   def post[T <: AnyRef](suffix: String, t: T)(implicit f : Formats = constellation.constellationFormats): Future[HttpResponse] = {
+
   val ser = Serialization.write(t)
-  Http().singleRequest(
-  HttpRequest(uri = base(suffix), method = HttpMethods.POST, entity = HttpEntity(
-  ContentTypes.`application/json`, ser)
+    Http().singleRequest(
+    HttpRequest(uri = base(suffix), method = HttpMethods.POST, entity = HttpEntity(
+    ContentTypes.`application/json`, ser)
   ))
 }
 
@@ -49,9 +46,5 @@ implicit val executionContext: ExecutionContextExecutor
   implicit m : Manifest[T], f : Formats = constellation.constellationFormats
   ): Future[T] =
   Unmarshal(httpResponse.entity).to[String].map{r => Serialization.read[T](r)}
-
-  def sendTx(transaction: Transaction): Future[HttpResponse] = post("sendTx", transaction)
-
-  def getBalance(account: PublicKey): Future[HttpResponse] = post("getBalance", account)
 
 }

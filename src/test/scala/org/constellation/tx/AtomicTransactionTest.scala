@@ -19,8 +19,6 @@ class AtomicTransactionTest extends FlatSpec {
                                    isValid: Boolean
                                  )
 
-
-
   "Proper TX" should "sign and countersign" in {
 
     val kp0 = makeKeyPair()

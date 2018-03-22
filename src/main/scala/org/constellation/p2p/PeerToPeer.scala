@@ -1,12 +1,13 @@
 package org.constellation.p2p
 
-import java.security.PublicKey
+import java.security.{KeyPair, PublicKey}
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Terminated}
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Terminated}
 import akka.pattern.pipe
 import akka.util.Timeout
 import org.constellation.p2p.PeerToPeer._
+import org.constellation.state.ChainStateManager.GetCurrentChainState
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.concurrent.duration.Duration
@@ -30,9 +31,8 @@ object PeerToPeer {
   case class HandShake()
 }
 
-class PeerToPeer extends Actor with ActorLogging {
+class PeerToPeer(publicKey: PublicKey, system: ActorSystem)(implicit timeout: Timeout) extends Actor with ActorLogging {
 
-  implicit val timeout: Timeout = Timeout(Duration(5, TimeUnit.SECONDS))
   implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
 
   val peers: scala.collection.mutable.Set[ActorRef] = scala.collection.mutable.Set.empty[ActorRef]
@@ -51,17 +51,17 @@ class PeerToPeer extends Actor with ActorLogging {
   override def receive: Receive = {
 
     case AddPeer(peerAddress) =>
-      log.debug(s"Got request to add peer $peerAddress")
+      log.debug(s"Received a request to add peer $peerAddress")
 
       /*
         adds peer to actor system, res is a future of actor ref,
         sends the actor ref back to this actor, handshake occurs below
       */
-      context.actorSelection(peerAddress).resolveOne().map( PeerRef(_) ).pipeTo(self)
+      context.actorSelection(peerAddress).resolveOne()(timeout).map( PeerRef(_) ).pipeTo(self)
 
     case PeerRef(newPeerRef: ActorRef) =>
 
-      if (!peers.contains(newPeerRef)){
+      if (!peers.contains(newPeerRef) && newPeerRef != self){
         context.watch(newPeerRef)
         log.debug(s"Watching $newPeerRef}")
 
@@ -79,9 +79,6 @@ class PeerToPeer extends Actor with ActorLogging {
         //Add to the current list of peers
         peers += newPeerRef
 
-        // TODO: update to use chain actor request
-      //  newPeerRef ! GetChain
-
       } else log.debug("We already know this peer, discarding")
 
     case Peers(peersI) => peersI.foreach( self ! AddPeer(_))
@@ -95,6 +92,9 @@ class PeerToPeer extends Actor with ActorLogging {
     case Terminated(actorRef) =>
       log.debug(s"Peer ${actorRef} has terminated. Removing it from the list.")
       peers -= actorRef
+
+    case GetId =>
+      sender() ! Id(publicKey)
 
   }
 
