@@ -1,4 +1,4 @@
-package org.constellation.app
+package org.constellation.utils
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
@@ -15,8 +15,8 @@ object TestNode {
     executionContext: ExecutionContextExecutor
   ): ConstellationNode = {
     val randomPort = scala.util.Random.nextInt(50000) + 5000
-    val pubKey = KeyUtils.makeKeyPair().getPublic
-    new ConstellationNode(pubKey, seedHost, "0.0.0.0", randomPort, actorNameSuffix = "ID_" + randomPort)
+    val keyPair = KeyUtils.makeKeyPair()
+    new ConstellationNode(keyPair, Some(Seq(seedHost)), "0.0.0.0", randomPort)
   }
 
 }

@@ -2,13 +2,8 @@ package org.constellation.p2p
 
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
-import com.typesafe.scalalogging.Logger
 import org.constellation.p2p.PeerToPeer._
 import org.scalatest._
-
-class PeerToPeerActor extends Receiver with PeerToPeer {
-  val logger = Logger("PeerToPeerActor")
-}
 
 class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLike
   with ImplicitSender with GivenWhenThen with BeforeAndAfterAll with Matchers {
@@ -18,7 +13,7 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
   }
 
   trait WithPeerToPeerActor {
-    val peerToPeerActor = system.actorOf(Props[PeerToPeerActor])
+    val peerToPeerActor = system.actorOf(Props[PeerToPeer])
   }
 
   "A PeerToPeer actor " should " start with an empty set of peers" in new WithPeerToPeerActor {

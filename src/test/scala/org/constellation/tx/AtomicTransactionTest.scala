@@ -4,35 +4,32 @@ import java.security.KeyPair
 
 import org.constellation.primitives.Transaction
 import org.constellation.transaction.AtomicTransaction._
-import org.constellation.tx.FakeNodeResponseUtils.FakePriorTransaction
 import org.constellation.wallet.KeyUtils
 import org.constellation.wallet.KeyUtils._
 import org.scalatest.FlatSpec
 
-
-object FakeNodeResponseUtils {
+class AtomicTransactionTest extends FlatSpec {
 
   // This is a mock-up for a transaction stored by the node network
   // which gets used during processing of a new transaction
   case class FakePriorTransaction(
-                            address: String, // This is the 'destination address' of this transaction,
-                            // or source address of next transaction
-                            quantity: Long,
-                            isValid: Boolean
-                            )
+                                   address: String, // This is the 'destination address' of this transaction,
+                                   // or source address of next transaction
+                                   quantity: Long,
+                                   isValid: Boolean
+                                 )
 
 
-}
-
-class AtomicTransactionTest extends FlatSpec {
 
   "Proper TX" should "sign and countersign" in {
 
     val kp0 = makeKeyPair()
     val kp1 = makeKeyPair()
-    val genTX = Transaction(0L, kp0.getPublic, kp1.getPublic, 1e9.toLong)
-      .senderSign(kp0.getPrivate).counterPartySign(kp1.getPrivate)
-    assert(genTX.valid)
+    val transaction = Transaction.Transaction(0L, kp0.getPublic, kp1.getPublic, 1e9.toLong)
+    val senderSignedTransaction = Transaction.senderSign(transaction, kp0.getPrivate)
+    val counterPartySignedTransaction = Transaction.counterPartySign(senderSignedTransaction, kp1.getPrivate)
+
+    assert(Transaction.valid(counterPartySignedTransaction))
 
   }
 

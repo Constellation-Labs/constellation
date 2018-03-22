@@ -1,4 +1,4 @@
-package org.constellation.rpc
+package org.constellation.utils
 
 import java.security.PublicKey
 
@@ -8,7 +8,7 @@ import akka.http.scaladsl.model.Uri.Query
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers, Unmarshal}
 import akka.stream.ActorMaterializer
-import org.constellation.primitives.Transaction
+import org.constellation.primitives.Transaction.Transaction
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 

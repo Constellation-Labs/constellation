@@ -32,41 +32,47 @@ object ConstellationNode extends App {
   val keyPair = KeyUtils.makeKeyPair()
 
   // TODO: add seeds from config
-  new ConstellationNode(keyPair, null, config.getString("http.interface"), config.getInt("http.port"), rpcTimeout)
+  new ConstellationNode(keyPair, None, config.getString("http.interface"), config.getInt("http.port"), rpcTimeout)
 }
 
 class ConstellationNode(
                val keyPair: KeyPair,
-               val seedHost: String,
+               val seedPeers: Option[Seq[String]],
                val httpInterface: String,
                val httpPort: Int,
-               timeoutSeconds: Int = 5,
-               actorNameSuffix: String = ""
+               timeoutSeconds: Int = 5
              )(
                implicit val system: ActorSystem,
                implicit val materialize: ActorMaterializer,
                implicit val executionContext: ExecutionContextExecutor
              ) extends RPCInterface {
-  val logger = Logger("ConstellationNode_" + actorNameSuffix)
+
+  val publicKeyHash = keyPair.getPublic.hashCode()
+
+  val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
   override implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
 
   // TODO: add root actor for routing
 
+  // TODO: in our p2p connection we need a blacklist of connections, and need to make sure someone can't access internal actors
+
   // Setup actors
-  val peerToPeerActor: ActorRef = system.actorOf(Props(new PeerToPeer), "ConstellationPeerToPeerActor")
+  val peerToPeerActor: ActorRef = system.actorOf(Props(new PeerToPeer), s"ConstellationP2PActor_$publicKeyHash")
 
-  val memPoolManagerActor: ActorRef = system.actorOf(Props(new MemPoolManager), "ConstellationPeerToPeerActor")
+  val memPoolManagerActor: ActorRef = system.actorOf(Props(new MemPoolManager), s"ConstellationMemPoolManagerActor_$publicKeyHash")
 
-  val chainStateActor: ActorRef = system.actorOf(Props(new ChainStateManager), "ConstellationPeerToPeerActor")
+  val chainStateActor: ActorRef = system.actorOf(Props(new ChainStateManager), s"ConstellationChainStateActor_$publicKeyHash")
 
   val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair)), "ConstellationConsensusActor")
+    Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair)), s"ConstellationConsensusActor_$publicKeyHash")
 
   // Seed peers
-  if (seedHost.nonEmpty) {
-    logger.info(s"Attempting to connect to seed-host $seedHost")
-    peerToPeerActor ! AddPeer(seedHost)
+  if (seedPeers.isDefined) {
+    seedPeers.get.foreach(peer => {
+      logger.info(s"Attempting to connect to seed-host $peer")
+      peerToPeerActor ! AddPeer(peer)
+    })
   } else {
     logger.info("No seed host configured, waiting for messages.")
   }
