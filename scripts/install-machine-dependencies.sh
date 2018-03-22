@@ -1,3 +1,11 @@
+#!/usr/bin/env bash
+
+echo "Provisioning vagrant vm for constellation."
+echo "Note this is intended to be run through Vagrant (with 'vagrant up' cmd)."
+
+# fail if any commands below fail
+set -e
+
 echo "Starting machine setup.........................."
 
 # install openjdk java8
@@ -33,7 +41,17 @@ sudo apt-get update
 sudo apt-get install -y docker-ce
 
 # install kubectl
-sudo apt-get install -y kubectl
+echo "Installing kubectl.........................."
+wget https://storage.googleapis.com/kubernetes-release/release/v1.9.0/bin/linux/amd64/kubectl
+chmod +x kubectl
+
+KUBECTL_MD5_EXPECTED="01dce19bf06f7d49772a3cf687b6b586"
+KUBECTL_MD5_ACTUAL=$(md5sum kubectl)
+if [ $KUBECTL_MD5_ACTUAL -ne $KUBECTL_MD5 ]; then
+   echo "md5sum of kubectl did not match expected checksum. Exiting";
+   exit 1;
+fi
+sudo mv kubectl /usr/local/bin/kubectl
 
 # Install Google Cloud SDK
 export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)"
@@ -45,3 +63,8 @@ curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
 sudo apt-get update && sudo apt-get install -y google-cloud-sdk
 
 echo "machine setup complete!"
+
+echo "publishing docker image locally"
+# docker local publish
+cd /home/vagrant/constellation
+sudo sbt docker:publishLocal

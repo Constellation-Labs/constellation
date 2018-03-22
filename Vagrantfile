@@ -17,6 +17,6 @@ Vagrant.configure("2") do |config|
   end
 
   # install dependencies
-  config.vm.provision :shell, path: "install-dependencies.sh"
+  config.vm.provision :shell, path: "scripts/install-machine-dependencies.sh"
 
 end
