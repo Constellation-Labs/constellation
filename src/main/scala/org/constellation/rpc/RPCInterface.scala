@@ -74,7 +74,7 @@ class RPCInterface(chainStateActor: ActorRef, peerToPeerActor: ActorRef, memPool
         entity(as[String]) { peerAddress =>
           logger.debug(s"Received request to add a new peer $peerAddress")
 
-          peerToPeerActor ! AddPeer(peerAddress)
+          peerToPeerActor ! AddPeer(peerAddress.replace("\"", ""))
 
           complete(StatusCodes.Created)
         }

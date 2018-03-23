@@ -101,18 +101,16 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     assert(addPeerResponse.get().status == StatusCodes.Created)
 
     // TODO: bug here with lookup of peer, execution context issue, timing?
-    /*
+
     val peersResponse1 = rpc1.get("peers")
     val peersResponse2 = rpc2.get("peers")
 
     val peers1 = rpc1.read[Peers](peersResponse1.get()).get()
     val peers2 = rpc1.read[Peers](peersResponse2.get()).get()
 
-    val expectedPeers = Peers(Seq(node1Path, node2Path))
+    assert(peers1 == Peers(Seq(node2Path)))
+    assert(peers2 == Peers(Seq(node1Path)))
 
-    assert(peers1 == expectedPeers)
-    assert(peers2 == expectedPeers)
-    */
   }
 
   override def afterAll() {
