@@ -48,6 +48,8 @@ class RPCInterface(chainStateActor: ActorRef, peerToPeerActor: ActorRef, memPool
       } ~
       path("id") {
         complete((peerToPeerActor ? GetId).mapTo[Id])
+      } ~ path("actorPath") {
+        complete(peerToPeerActor.path.toSerializationFormat)
       } ~
       path("balance") {
         entity(as[PublicKey]) { account =>

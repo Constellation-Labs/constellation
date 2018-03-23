@@ -1,14 +1,9 @@
 # constellation
 A blockchain microservice operating system
 
-# Testing
-## minikube test cluster setup
+# Compile machine setup
 1. download vagrant https://www.vagrantup.com
-3. run ```vagrant up```
-4. run ```./docker-local-publish.sh``` 
-5. run ```./start-minikube.sh```
-6. run ```./update-kube-resources.sh```
+2. run ```vagrant up```
 
-## todo: 
-1. explain how to iterate and publish updates to docker and kube
-2. add base test scripts to run against test kube cluster
+# Push to docker
+1. run ```./docker-local-publish.sh``` 
