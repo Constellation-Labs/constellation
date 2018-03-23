@@ -35,5 +35,7 @@ object BlockChainApp extends App with RPCInterface {
 
   val id = args.headOption.getOrElse("ID")
   val blockChainActor = system.actorOf(Node.props(id), "constellation")
+
+  logger.info("BlockChain actor serialized path:" + blockChainActor.path.toSerializationFormat)
   Http().bindAndHandle(routes, config.getString("http.interface"), config.getInt("http.port"))
 }

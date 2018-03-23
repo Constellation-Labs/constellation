@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 
-echo "Provisioning vagrant vm for constellation minikube host support."
+echo "Provisioning vagrant vm for constellation."
 echo "Note this is intended to be run through Vagrant (with 'vagrant up' cmd)."
 
 # fail if any commands below fail
 set -e
 
-echo "Checking we are in a vagrant environment.................."
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-$SCRIPT_DIR/is-vagrant.sh
+echo "Starting machine setup.........................."
 
 # install openjdk java8
 echo "Installing java8.........................."
@@ -42,7 +40,7 @@ sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubun
 sudo apt-get update
 sudo apt-get install -y docker-ce
 
-# install kubectl   
+# install kubectl
 echo "Installing kubectl.........................."
 wget https://storage.googleapis.com/kubernetes-release/release/v1.9.0/bin/linux/amd64/kubectl
 chmod +x kubectl
@@ -55,22 +53,18 @@ if [ $KUBECTL_MD5_ACTUAL -ne $KUBECTL_MD5 ]; then
 fi
 sudo mv kubectl /usr/local/bin/kubectl
 
-# install minikube
-# install minikube
-echo "Installing minikube.........................."
-curl -Lo minikube https://storage.googleapis.com/minikube/releases/v0.25.0/minikube-linux-amd64
-chmod +x minikube
-MINIKUBE_MD5_EXPECTED="c4b0f3a282efe690f554bdc7d93dbaae"
-MINIKUBE_MD5_ACTUAL=$(md5sum minikube)
-if [ $MINIKUBE_MD5_ACTUAL -ne $MINIKUBE_MD5_EXPECTED ]; then
-   echo "md5sum of minikube did not match expected checksum. Exiting";
-   exit 1;
-fi
+# Install Google Cloud SDK
+export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)"
 
-# docker local publish
-sudo mv minikube /usr/local/bin/
-echo "minikube machine setup complete!"
+echo "deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
 
+curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+
+sudo apt-get update && sudo apt-get install -y google-cloud-sdk
+
+echo "machine setup complete!"
+
+echo "publishing docker image locally"
 # docker local publish
 cd /home/vagrant/constellation
 sudo sbt docker:publishLocal
