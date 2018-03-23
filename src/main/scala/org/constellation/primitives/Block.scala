@@ -1,8 +1,6 @@
 package org.constellation.primitives
 
 import akka.actor.ActorRef
-import org.constellation.primitives.Transaction
-
 
 case class Block(parentHash: String,
                  height: Long,
