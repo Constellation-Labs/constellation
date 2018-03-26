@@ -43,36 +43,52 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     assert(facilitators == expectedFacilitators)
   }
 
-  "notifyFacilitatorsOfBlockProposal" should "notify all of the correct facilitators with the correct block" in {
-
-    val block = Block("hashPointer", 0L, "sig", Seq(), 0L, Seq())
+  "notifyFacilitatorsOfBlockProposal" should "not propose a block if it is currently not a facilitator" in {
 
     val self = TestProbe()
+    val peer1 = TestProbe()
 
+    val block = Block("hashPointer", 0L, "sig", Seq(peer1.ref), 0L, Seq())
+
+    val notify = Consensus.notifyFacilitatorsOfBlockProposal(block, self.ref)
+
+    assert(!notify)
+  }
+
+  "notifyFacilitatorsOfBlockProposal" should "notify all of the correct facilitators with the correct block" in {
+
+    val self = TestProbe()
     val peer1 = TestProbe()
     val peer2 = TestProbe()
     val peer3 = TestProbe()
 
-    val notify = Consensus.notifyFacilitatorsOfBlockProposal(block, Seq(peer1.ref, peer2.ref, peer3.ref), self.ref)
+    val block = Block("hashPointer", 0L, "sig", Seq(peer1.ref, self.ref, peer2.ref, peer3.ref), 0L, Seq())
+
+    val notify = Consensus.notifyFacilitatorsOfBlockProposal(block, self.ref)
 
     val peerProposedBlock = PeerProposedBlock(block, self.ref)
-
-    /* TODO
 
     peer1.expectMsg(peerProposedBlock)
     peer2.expectMsg(peerProposedBlock)
     peer3.expectMsg(peerProposedBlock)
-    */
+    self.expectNoMsg()
 
+    assert(notify)
   }
 
   "isFacilitator" should "return correctly if the actor is a facilitator" in {
 
-    val testProbe = TestProbe()
+    val self = TestProbe()
+    val peer1 = TestProbe()
+    val peer2 = TestProbe()
 
-    val isFacilitator = Consensus.isFacilitator(Seq(), testProbe.ref)
+    val isFacilitator = Consensus.isFacilitator(Seq(peer1.ref, self.ref, peer2.ref), self.ref)
 
-    // TODO add assertions
+    assert(isFacilitator)
+
+    val isNotFacilitator = Consensus.isFacilitator(Seq(peer1.ref, peer2.ref), self.ref)
+
+    assert(!isNotFacilitator)
   }
 
   "getConsensusBlock" should "return the correct consensus block or not based on the state of consensus proposals" in {

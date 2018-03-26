@@ -28,18 +28,22 @@ object Consensus {
   }
 
   def notifyFacilitatorsOfBlockProposal(proposedBlock: Block,
-                                        facilitators: Seq[ActorRef],
-                                        self: ActorRef): Unit = {
+                                        self: ActorRef): Boolean = {
+    val facilitators: Seq[ActorRef] = getFacilitators(proposedBlock)
+
     // make sure that we are a facilitator
     if (!isFacilitator(facilitators, self)) {
-      return
+      return false
     }
 
-    facilitators.foreach(f => {
+    val facilitatorsToNotify = facilitators.filter(p => p != self)
+
+    facilitatorsToNotify.foreach(f => {
       f ! PeerProposedBlock(proposedBlock, self)
     })
 
     // TODO: add signature round for each facilitator
+    true
   }
 
   def isFacilitator(facilitators: Seq[ActorRef], self: ActorRef): Boolean = {
@@ -86,9 +90,11 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
 
       // Start the ACS process once we have our new proposed block
       // TODO: cleanup
+
       if (consensusRoundState.proposedBlock.isDefined && consensusRoundState.previousBlock.isDefined) {
-        Consensus.notifyFacilitatorsOfBlockProposal(consensusRoundState.proposedBlock.get,
-          Consensus.getFacilitators(consensusRoundState.previousBlock.get), self)
+
+        Consensus.notifyFacilitatorsOfBlockProposal(consensusRoundState.proposedBlock.get, self)
+
       }
 
     case PeerProposedBlock(block, peer) =>
