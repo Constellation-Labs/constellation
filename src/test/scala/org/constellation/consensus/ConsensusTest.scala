@@ -48,9 +48,11 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val self = TestProbe()
     val peer1 = TestProbe()
 
+    val prevBlock = Block("hashPointer", 0L, "sig", Seq(peer1.ref), 0L, Seq())
+
     val block = Block("hashPointer", 0L, "sig", Seq(peer1.ref), 0L, Seq())
 
-    val notify = Consensus.notifyFacilitatorsOfBlockProposal(block, self.ref)
+    val notify = Consensus.notifyFacilitatorsOfBlockProposal(prevBlock, block, self.ref)
 
     assert(!notify)
   }
@@ -62,16 +64,17 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val peer2 = TestProbe()
     val peer3 = TestProbe()
 
+    val prevBlock = Block("prevhashPointer", 0L, "prevsig", Seq(peer1.ref, self.ref, peer2.ref, peer3.ref), 0L, Seq())
     val block = Block("hashPointer", 0L, "sig", Seq(peer1.ref, self.ref, peer2.ref, peer3.ref), 0L, Seq())
 
-    val notify = Consensus.notifyFacilitatorsOfBlockProposal(block, self.ref)
+    val notify = Consensus.notifyFacilitatorsOfBlockProposal(prevBlock, block, self.ref)
 
     val peerProposedBlock = PeerProposedBlock(block, self.ref)
 
     peer1.expectMsg(peerProposedBlock)
     peer2.expectMsg(peerProposedBlock)
     peer3.expectMsg(peerProposedBlock)
-    self.expectNoMsg()
+    self.expectMsg(peerProposedBlock)
 
     assert(notify)
   }

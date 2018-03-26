@@ -1,10 +1,11 @@
 package org.constellation.state
 
 import akka.actor.{Actor, ActorLogging}
-import org.constellation.consensus.Consensus.GetProposedBlock
+import org.constellation.consensus.Consensus.{GetMemPool, MemPoolUpdated}
 import org.constellation.primitives.Transaction
 import org.constellation.state.MemPoolManager.AddTransaction
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 object MemPoolManager {
@@ -19,15 +20,22 @@ class MemPoolManager extends Actor with ActorLogging {
 
   var memPool: ListBuffer[Transaction] = new ListBuffer[Transaction]
 
+  // TODO: pull from config
+  var memPoolProposalLimit = 20
+
   override def receive: Receive = {
     case AddTransaction(transaction) =>
       log.debug(s"received add transaction request $transaction")
 
       memPool.+=(transaction)
 
-    case GetProposedBlock(dealerPublicKey) =>
+    case GetMemPool(dealerPublicKey) =>
       log.debug(s"received get proposed block request $dealerPublicKey")
-      // TODO: call method to take from memPool, use deal key to sign, send to caller
+      // TODO: use dealer key to encrypt
+
+      val memPoolProposal: Seq[Transaction] = memPool.take(memPoolProposalLimit)
+
+      sender() ! MemPoolUpdated(memPoolProposal)
   }
 
 }
