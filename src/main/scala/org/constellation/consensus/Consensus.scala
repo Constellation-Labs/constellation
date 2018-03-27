@@ -48,7 +48,7 @@ import scala.concurrent.duration.Duration
 object Consensus {
 
   // Commands
-  case class GetMemPool(dealerPublicKey: PublicKey)
+  case class GetMemPool()
   case class CheckConsensusResult()
 
   case class Initialize()
@@ -139,7 +139,7 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef,
       val seedPeerRefs = Await.result(peerToPeerActor ? GetPeerActorRefs, 5.seconds).asInstanceOf[Set[ActorRef]]
 
       // TODO: add correct genesis block, temporary for testing
-      val genesisBlock = Block("tempGenesisParentHash", 0, "tempSig", seedPeerRefs, 0, Seq())
+      val genesisBlock = Block("tempGenesisParentHash", 0, "tempSig", seedPeerRefs.+(self), 0, Seq())
       chainManager ! AddBlock(genesisBlock)
 
     case BlockAddedToChain(prevBlock) =>
@@ -149,10 +149,7 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef,
 
       // If we are a facilitator this round then begin consensus
       if (Consensus.isFacilitator(consensusRoundState.currentFacilitators, self)) {
-        // TODO: here we need to replace to get public key from PTKE distributed dealer
-        val dealerPublicKey = KeyUtils.bytesToPublicKey("23lkjdsf".getBytes())
-
-        memPoolManager ! GetMemPool(dealerPublicKey)
+        memPoolManager ! GetMemPool()
       }
 
     case ProposedBlockUpdated(block) =>

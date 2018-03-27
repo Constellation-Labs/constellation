@@ -27,7 +27,7 @@ class ChainStateManager extends Actor with ActorLogging {
   override def receive: Receive = {
     case AddBlock(block) =>
       log.debug(s"received add block request $block")
-      chain.chain += block
+      chain = Chain(chain.chain :+ block)
       sender() ! BlockAddedToChain(block)
 
     case GetCurrentChainState =>

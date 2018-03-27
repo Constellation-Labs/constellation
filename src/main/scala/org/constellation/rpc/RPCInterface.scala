@@ -15,6 +15,7 @@ import org.json4s.{Formats, native}
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import org.constellation.consensus.Consensus.Initialize
+import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.Transaction
 import org.constellation.state.ChainStateManager.{CurrentChainStateUpdated, GetCurrentChainState}
 import org.json4s.native.Serialization
@@ -39,6 +40,13 @@ class RPCInterface(chainStateActor: ActorRef, peerToPeerActor: ActorRef, memPool
     get {
       // TODO: revisit
       path("health") {
+        complete(StatusCodes.OK)
+      } ~
+      // TODO: revist
+      path("initialize") {
+
+        consensusActor ! Initialize()
+
         complete(StatusCodes.OK)
       } ~
       path("blocks") {
@@ -81,13 +89,6 @@ class RPCInterface(chainStateActor: ActorRef, peerToPeerActor: ActorRef, memPool
 
           complete(StatusCodes.Created)
         }
-      } ~
-      // TODO: revist
-      path("initialize") {
-
-        consensusActor ! Initialize()
-
-        complete(StatusCodes.Created)
       }
     }
 }

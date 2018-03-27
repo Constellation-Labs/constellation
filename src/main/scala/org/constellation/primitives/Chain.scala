@@ -4,6 +4,6 @@ import scala.collection.mutable.ListBuffer
 
 object Chain {
 
-  case class Chain(chain: ListBuffer[Block] = ListBuffer.empty[Block])
+  case class Chain(chain: Seq[Block] = Seq())
 
 }

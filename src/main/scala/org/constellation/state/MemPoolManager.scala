@@ -29,8 +29,7 @@ class MemPoolManager extends Actor with ActorLogging {
 
       memPool.+=(transaction)
 
-    case GetMemPool(dealerPublicKey) =>
-      log.debug(s"received get proposed block request $dealerPublicKey")
+    case GetMemPool() =>
       // TODO: use dealer key to encrypt
 
       val memPoolProposal: Seq[Transaction] = memPool.take(memPoolProposalLimit)

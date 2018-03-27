@@ -202,6 +202,18 @@ class MultiNodeTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     assert(peers3.peers.diff(Seq(node1Path, node4Path, node2Path)).isEmpty)
     assert(peers4.peers.diff(Seq(node1Path, node3Path, node2Path)).isEmpty)
 
+    val initResponse = rpc1.get("initialize")
+
+    assert(initResponse.get().status == StatusCodes.OK)
+
+    Thread.sleep(4000)
+
+    val chainStateResponse = rpc1.get("blocks")
+
+    val chain1 = rpc1.read[Chain](chainStateResponse.get()).get()
+
+    assert(chain1 == Chain())
+
   }
 
   override def afterAll() {
