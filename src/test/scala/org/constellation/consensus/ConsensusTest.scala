@@ -1,11 +1,14 @@
 package org.constellation.consensus
 
 import java.security.KeyPair
+import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{TestKit, TestProbe}
+import akka.util.Timeout
 import org.constellation.consensus.Consensus._
 import org.constellation.primitives.Block
+import org.constellation.state.ChainStateManager.BlockAddedToChain
 import org.constellation.wallet.KeyUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
@@ -20,9 +23,14 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
   trait WithConsensusActor {
       val memPoolManagerActor = TestProbe()
       val chainStateManagerActor = TestProbe()
+      val peerToPeerActor = TestProbe()
       val keyPair: KeyPair = KeyUtils.makeKeyPair()
+
+     implicit val timeout: Timeout = Timeout(30, TimeUnit.SECONDS)
+
       val consensusActor: ActorRef =
-        system.actorOf(Props(new Consensus(memPoolManagerActor.ref, chainStateManagerActor.ref, keyPair)))
+        system.actorOf(Props(
+          new Consensus(memPoolManagerActor.ref, chainStateManagerActor.ref, peerToPeerActor.ref, keyPair)(timeout)))
   }
 
   "getFacilitators" should "give back the correct list of facilitators" in {
@@ -31,14 +39,14 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val node3 = TestProbe()
     val node4 = TestProbe()
 
-    val membersOfCluster = Seq(node1.ref, node2.ref, node3.ref, node4.ref)
+    val membersOfCluster = Set(node1.ref, node2.ref, node3.ref, node4.ref)
 
     val block = Block("hashPointer", 0L, "sig", membersOfCluster, 0L, Seq())
 
     val facilitators = Consensus.getFacilitators(block)
 
     // TODO: modify once we have subset filtering logic
-    val expectedFacilitators = Seq(node1.ref, node2.ref, node3.ref, node4.ref)
+    val expectedFacilitators = Set(node1.ref, node2.ref, node3.ref, node4.ref)
 
     assert(facilitators == expectedFacilitators)
   }
@@ -48,9 +56,9 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val self = TestProbe()
     val peer1 = TestProbe()
 
-    val prevBlock = Block("hashPointer", 0L, "sig", Seq(peer1.ref), 0L, Seq())
+    val prevBlock = Block("hashPointer", 0L, "sig", Set(peer1.ref), 0L, Seq())
 
-    val block = Block("hashPointer", 0L, "sig", Seq(peer1.ref), 0L, Seq())
+    val block = Block("hashPointer", 0L, "sig", Set(peer1.ref), 0L, Seq())
 
     val notify = Consensus.notifyFacilitatorsOfBlockProposal(prevBlock, block, self.ref)
 
@@ -64,8 +72,8 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val peer2 = TestProbe()
     val peer3 = TestProbe()
 
-    val prevBlock = Block("prevhashPointer", 0L, "prevsig", Seq(peer1.ref, self.ref, peer2.ref, peer3.ref), 0L, Seq())
-    val block = Block("hashPointer", 0L, "sig", Seq(peer1.ref, self.ref, peer2.ref, peer3.ref), 0L, Seq())
+    val prevBlock = Block("prevhashPointer", 0L, "prevsig", Set(peer1.ref, self.ref, peer2.ref, peer3.ref), 0L, Seq())
+    val block = Block("hashPointer", 0L, "sig", Set(peer1.ref, self.ref, peer2.ref, peer3.ref), 0L, Seq())
 
     val notify = Consensus.notifyFacilitatorsOfBlockProposal(prevBlock, block, self.ref)
 
@@ -85,11 +93,11 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val peer1 = TestProbe()
     val peer2 = TestProbe()
 
-    val isFacilitator = Consensus.isFacilitator(Seq(peer1.ref, self.ref, peer2.ref), self.ref)
+    val isFacilitator = Consensus.isFacilitator(Set(peer1.ref, self.ref, peer2.ref), self.ref)
 
     assert(isFacilitator)
 
-    val isNotFacilitator = Consensus.isFacilitator(Seq(peer1.ref, peer2.ref), self.ref)
+    val isNotFacilitator = Consensus.isFacilitator(Set(peer1.ref, peer2.ref), self.ref)
 
     assert(!isNotFacilitator)
   }
@@ -98,14 +106,14 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     val testProbe = TestProbe()
 
-    val consensusBlock: Option[Block] = Consensus.getConsensusBlock(mutable.HashMap(), Seq())
+    val consensusBlock: Option[Block] = Consensus.getConsensusBlock(mutable.HashMap(), Set())
 
     // TODO add assertions
   }
 
-  "A StartConsensusRound Message" should "be handled correctly" in new WithConsensusActor {
+  "A BlockAddedToChain Message" should "be handled correctly" in new WithConsensusActor {
 
-    consensusActor ! StartConsensusRound(Block("hashPointer", 0L, "sig", Seq(), 0L, Seq()))
+    consensusActor ! BlockAddedToChain(Block("hashPointer", 0L, "sig", Set(), 0L, Seq()))
 
     //memPoolManagerActor.expectMsg(GetProposedBlock)
 
@@ -114,7 +122,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
   "A ProposedBlockUpdated Message" should "be handled correctly" in new WithConsensusActor {
 
-    consensusActor ! ProposedBlockUpdated(Block("hashPointer", 0L, "sig", Seq(), 0L, Seq()))
+    consensusActor ! ProposedBlockUpdated(Block("hashPointer", 0L, "sig", Set(), 0L, Seq()))
 
     // TODO add assertions
   }
@@ -122,7 +130,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
   "A PeerProposedBlock Message" should "be handled correctly" in new WithConsensusActor {
     val peerProbe = TestProbe()
 
-    consensusActor ! PeerProposedBlock(Block("hashPointer", 0L, "sig", Seq(), 0L, Seq()), peerProbe.ref)
+    consensusActor ! PeerProposedBlock(Block("hashPointer", 0L, "sig", Set(), 0L, Seq()), peerProbe.ref)
 
     // TODO add assertions
   }

@@ -5,7 +5,7 @@ import akka.actor.ActorRef
 case class Block(parentHash: String,
                  height: Long,
                  signature: String = "",
-                 clusterParticipants: Seq[ActorRef] = Seq(),
+                 clusterParticipants: Set[ActorRef] = Set(),
                  round: Long = 0L,
                  transactions: Seq[Transaction] = Seq())
 

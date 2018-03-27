@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorLogging, ActorRef}
 import org.constellation.consensus.Consensus.ProposedBlockUpdated
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.primitives.Chain.Chain
-import org.constellation.state.ChainStateManager.{AddBlock, CreateBlockProposal, CurrentChainStateUpdated, GetCurrentChainState}
+import org.constellation.state.ChainStateManager._
 
 import scala.collection.mutable
 
@@ -16,20 +16,19 @@ object ChainStateManager {
   case class CreateBlockProposal(memPools: mutable.HashMap[ActorRef, Seq[Transaction]])
 
   // Events
+  case class BlockAddedToChain(previousBlock: Block)
   case class CurrentChainStateUpdated(chain: Chain)
-
 }
 
 class ChainStateManager extends Actor with ActorLogging {
 
   var chain: Chain = Chain()
 
-  // TODO: add genesis block from config
-
   override def receive: Receive = {
     case AddBlock(block) =>
       log.debug(s"received add block request $block")
       chain.chain += block
+      sender() ! BlockAddedToChain(block)
 
     case GetCurrentChainState =>
       log.debug(s"received GetCurrentChainState request")

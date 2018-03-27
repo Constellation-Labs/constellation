@@ -13,8 +13,11 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.rpc.RPCInterface
 import org.constellation.wallet.KeyUtils
 import org.constellation.consensus.Consensus
+import org.constellation.consensus.Consensus.Initialize
 import org.constellation.p2p.PeerToPeer
-import org.constellation.p2p.PeerToPeer.AddPeer
+import org.constellation.p2p.PeerToPeer.{AddPeer, GetPeers}
+import org.constellation.primitives.Block
+import org.constellation.state.ChainStateManager.AddBlock
 import org.constellation.state.{ChainStateManager, MemPoolManager}
 
 import scala.concurrent.ExecutionContextExecutor
@@ -70,7 +73,8 @@ class ConstellationNode(
     system.actorOf(Props(new ChainStateManager), s"ConstellationChainStateActor_$publicKeyHash")
 
   val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair)), s"ConstellationConsensusActor_$publicKeyHash")
+    Props(new Consensus(memPoolManagerActor, chainStateActor, peerToPeerActor, keyPair)(timeout)),
+    s"ConstellationConsensusActor_$publicKeyHash")
 
   // Seed peers
   if (seedPeers.isDefined) {
@@ -78,6 +82,13 @@ class ConstellationNode(
       logger.info(s"Attempting to connect to seed-host $peer")
       peerToPeerActor ! AddPeer(peer)
     })
+
+    // TODO: temp, wait for seed peers to connect
+    Thread.sleep(1000)
+
+    // Initialize the genesis block and start consensus loop
+    consensusActor ! Initialize()
+
   } else {
     logger.info("No seed host configured, waiting for messages.")
   }

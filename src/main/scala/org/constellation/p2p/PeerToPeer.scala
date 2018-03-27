@@ -24,6 +24,8 @@ object PeerToPeer {
 
   case class GetPeers()
 
+  case class GetPeerActorRefs()
+
   case class GetId()
 
   case class GetBalance(account: PublicKey)
@@ -31,11 +33,12 @@ object PeerToPeer {
   case class HandShake()
 }
 
-class PeerToPeer(publicKey: PublicKey, system: ActorSystem)(implicit timeout: Timeout) extends Actor with ActorLogging {
+class PeerToPeer(publicKey: PublicKey, system: ActorSystem)
+                (implicit timeout: Timeout) extends Actor with ActorLogging {
 
   implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
 
-  val peers: scala.collection.mutable.Set[ActorRef] = scala.collection.mutable.Set.empty[ActorRef]
+  var peers: Set[ActorRef] = Set.empty[ActorRef]
 
   def broadcast(message: Any ): Unit = {
     peers.foreach {
@@ -88,6 +91,8 @@ class PeerToPeer(publicKey: PublicKey, system: ActorSystem)(implicit timeout: Ti
       peers += sender()
 
     case GetPeers => sender() ! Peers(peers.toSeq.map(_.path.toSerializationFormat))
+
+    case GetPeerActorRefs => sender() ! peers
 
     case Terminated(actorRef) =>
       log.debug(s"Peer ${actorRef} has terminated. Removing it from the list.")
