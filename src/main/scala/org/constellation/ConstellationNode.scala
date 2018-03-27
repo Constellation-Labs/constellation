@@ -82,20 +82,13 @@ class ConstellationNode(
       logger.info(s"Attempting to connect to seed-host $peer")
       peerToPeerActor ! AddPeer(peer)
     })
-
-    // TODO: temp, wait for seed peers to connect
-    Thread.sleep(1000)
-
-    // Initialize the genesis block and start consensus loop
-    consensusActor ! Initialize()
-
   } else {
     logger.info("No seed host configured, waiting for messages.")
   }
 
   // If we are exposing rpc then create routes
   val routes: Route = new RPCInterface(chainStateActor,
-    peerToPeerActor, memPoolManagerActor)(executionContext, timeout).routes
+    peerToPeerActor, memPoolManagerActor, consensusActor)(executionContext, timeout).routes
 
   // Setup http server for rpc
   Http().bindAndHandle(routes, httpInterface, httpPort)
