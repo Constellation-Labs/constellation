@@ -82,8 +82,8 @@ class MultiNodeTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val peers3 = rpc3.read[Peers](node3PeersRequest.get()).get()
     val peers4 = rpc4.read[Peers](node4PeersRequest.get()).get()
 
-    assert(peers1 == Peers(Seq(node2Path)))
-    assert(peers2 == Peers(Seq(node1Path)))
+    assert(peers1.peers.diff(Seq(node2Path)).isEmpty)
+    assert(peers2.peers.diff(Seq(node1Path)).isEmpty)
 
     assert(peers3 == Peers(Seq()))
     assert(peers4 == Peers(Seq()))
@@ -106,11 +106,11 @@ class MultiNodeTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val peers3_2 = rpc3.read[Peers](node3PeersRequest_2.get()).get()
     val peers4_2 = rpc4.read[Peers](node4PeersRequest_2.get()).get()
 
-    assert(peers1_2 == Peers(Seq(node2Path)))
-    assert(peers2_2 == Peers(Seq(node1Path)))
+    assert(peers1_2.peers.diff(Seq(node2Path)).isEmpty)
+    assert(peers2_2.peers.diff(Seq(node1Path)).isEmpty)
 
-    assert(peers3_2 == Peers(Seq(node4Path)))
-    assert(peers4_2 == Peers(Seq(node3Path)))
+    assert(peers3_2.peers.diff(Seq(node4Path)).isEmpty)
+    assert(peers4_2.peers.diff(Seq(node3Path)).isEmpty)
 
     // Connect the two pairs
     rpc2.post("peer", node3Path)
@@ -130,124 +130,77 @@ class MultiNodeTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val peers3_3 = rpc3.read[Peers](node3PeersRequest_3.get()).get()
     val peers4_3 = rpc4.read[Peers](node4PeersRequest_3.get()).get()
 
-    assert(peers1_3 == Peers(Seq(node2Path, node3Path, node4Path)))
-    assert(peers2_3 == Peers(Seq(node1Path, node3Path, node4Path)))
+    assert(peers1_3.peers.diff(Seq(node2Path, node3Path, node4Path)).isEmpty)
+    assert(peers2_3.peers.diff(Seq(node1Path, node3Path, node4Path)).isEmpty)
 
-    assert(peers3_3 == Peers(Seq(node4Path, node2Path, node1Path)))
-    assert(peers4_3 == Peers(Seq(node3Path, node2Path, node1Path)))
+    assert(peers3_3.peers.diff(Seq(node4Path, node2Path, node1Path)).isEmpty)
+    assert(peers4_3.peers.diff(Seq(node3Path, node2Path, node1Path)).isEmpty)
 
   }
 
-  // TODO update
-  "Simulation" should "run a simple transaction simulation starting from genesis" in {
+  "Multiple Nodes" should "come to consensus on transactions after genesis block" in {
 
-    /*
+    // makeKeyPair
+    // Transaction()
+    // senderSign
+    // counterPartySign
 
-    val kp0 = makeKeyPair()
-    val kp1 = makeKeyPair()
+    // Create the nodes
+    val node1 = TestNode()
+    val node2 = TestNode()
+    val node3 = TestNode()
+    val node4 = TestNode()
 
-    import constellation._
+    val rpc1 = new RPCClient(port=node1.httpPort)
+    val rpc2 = new RPCClient(port=node2.httpPort)
+    val rpc3 = new RPCClient(port=node3.httpPort)
+    val rpc4 = new RPCClient(port=node4.httpPort)
 
-    val genQuantity = 1e9.toLong
-    val genTX = Transaction(0L, kp0.getPublic, kp1.getPublic, genQuantity)
-      .senderSign(kp0.getPrivate).counterPartySign(kp1.getPrivate)
+    val rpc1Response = rpc1.get("health")
+    val rpc2Response = rpc2.get("health")
+    val rpc3Response = rpc3.get("health")
+    val rpc4Response = rpc4.get("health")
 
-    assert(genTX.valid)
+    // verify that they are up
+    assert(rpc1Response.get().status == StatusCodes.OK)
+    assert(rpc2Response.get().status == StatusCodes.OK)
+    assert(rpc3Response.get().status == StatusCodes.OK)
+    assert(rpc4Response.get().status == StatusCodes.OK)
 
-    val master = TestNode()
-    implicit val timeout: Timeout = master.timeout
-    val mnode = master.blockChainActor
-    val mrpc = new RPCClient(port = master.httpPort)
+    // Connect them together
+    val node1Path = node1.peerToPeerActor.path.toSerializationFormat
+    val node2Path = node2.peerToPeerActor.path.toSerializationFormat
+    val node3Path = node3.peerToPeerActor.path.toSerializationFormat
+    val node4Path = node4.peerToPeerActor.path.toSerializationFormat
 
-    assert(mrpc.read[Transaction](mrpc.sendTx(genTX).get()).get() == genTX)
+    rpc1.post("peer", node2Path)
 
-    import akka.pattern._
-    val bal = (mnode ? GetBalance(kp1.getPublic)).mapTo[Balance].get()
+    // TODO: find better way
+    Thread.sleep(100)
 
-    assert(bal.balance == genQuantity)
+    rpc2.post("peer", node3Path)
 
-    val seedHostPath = mnode.path.toSerializationFormat
+    Thread.sleep(100)
 
-    val nodes = (1 to 3).map { _ =>
-      TestNode.apply(seedHostPath)
-    }
+    rpc3.post("peer", node4Path)
 
-    // This is here because for some reason the master wasn't connecting to one of the peers?
-    // Investigate later. 3 Peers were showing 4 responses, 1 was showing 3. One peer was missing on a response.
-    val allNodes = nodes :+ master
+    Thread.sleep(100)
 
-    allNodes.foreach{ n =>
-      allNodes.foreach{ m =>
-        n.blockChainActor ! AddPeer(m.blockChainActor.path.toSerializationFormat)
-      }
-    }
+    val node1PeersRequest = rpc1.get("peers")
+    val node2PeersRequest = rpc2.get("peers")
+    val node3PeersRequest = rpc3.get("peers")
+    val node4PeersRequest = rpc4.get("peers")
 
-    mnode ! SetMaster
+    val peers1 = rpc1.read[Peers](node1PeersRequest.get()).get()
+    val peers2 = rpc2.read[Peers](node2PeersRequest.get()).get()
+    val peers3 = rpc3.read[Peers](node3PeersRequest.get()).get()
+    val peers4 = rpc4.read[Peers](node4PeersRequest.get()).get()
 
-    nodes.foreach{ n =>
-      import scala.concurrent.duration._
-      val response = Await.result(n.blockChainActor ? GetPeers, 5.seconds).asInstanceOf[Peers]
-      assert(response.peers.nonEmpty)
-    }
-
-    val fullChain = (mnode ? GetChain).mapTo[FullChain].get()
-
-    assert(fullChain.blockChain.head.transactions.head == genTX)
-
-    val nodeFullChains = nodes.map{ n => (n.blockChainActor ? GetChain).mapTo[FullChain].get()}
-
-    assert(nodeFullChains.forall(_ == fullChain))
-
-    val distr = Seq.fill(nodes.length){makeKeyPair()}
-
-    val distrTX = distr.map{ d =>
-      Transaction(0L, kp1.getPublic, d.getPublic, 1e7.toLong)
-        .senderSign(kp0.getPrivate).counterPartySign(d.getPrivate)
-    }
-
-    distrTX.foreach{t => mnode ! t}
-
-    def getAllFullChains = allNodes.map{ n =>
-      (n.blockChainActor ? GetChain).mapTo[FullChain].get()
-    }
-
-    var i = 0
-    var done = false
-
-    val allKeys = distr ++ Seq(kp1)
-
-    while (!done) {
-      i += 1
-      if (i > 20) done = true
-      Thread.sleep(1000)
-      val chains = getAllFullChains
-      val accounts = allKeys.flatMap { k =>
-        (mnode ? GetAccountDetails(k.getPublic)).mapTo[Option[AccountData]].get()
-      }
-
-      println("" + chains.map{z =>
-        s"${z.blockChain.size} block height, ${z.blockChain.last.transactions.length} tx last block, " +
-          s"${z.blockChain.map{_.transactions.length}.sum} tx total - accounts: $accounts"
-      }.head)
-      if (chains.forall{_.blockChain.length > 2}) {
-
-        (0 until Random.nextInt(25) + 5).foreach{ txI =>
-
-          val sender = allKeys(Random.nextInt(allKeys.length))
-          val rx = allKeys(Random.nextInt(allKeys.length))
-          val details = (mnode ? GetAccountDetails(sender.getPublic)).mapTo[Option[AccountData]].get()
-          val sn = details.get.sequenceNumber
-          val t = Transaction(sn, sender.getPublic, rx.getPublic, Random.nextInt(1e3.toInt).toLong)
-            .senderSign(sender.getPrivate).counterPartySign(rx.getPrivate)
-          mnode ! t
-
-
-        }
-
-      }
-
-    }
-    */
+    // Verify that they are connected
+    assert(peers1.peers.diff(Seq(node2Path, node3Path, node4Path)).isEmpty)
+    assert(peers2.peers.diff(Seq(node1Path, node3Path, node4Path)).isEmpty)
+    assert(peers3.peers.diff(Seq(node1Path, node4Path, node2Path)).isEmpty)
+    assert(peers4.peers.diff(Seq(node1Path, node3Path, node2Path)).isEmpty)
 
   }
 
