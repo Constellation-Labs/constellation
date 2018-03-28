@@ -1,8 +1,11 @@
 
+import akka.actor.ActorRef
 import com.google.common.hash.Hashing
+import org.constellation.p2p.PeerToPeer.PeerRef
 import org.constellation.wallet.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
+import org.json4s.JsonAST.JString
 import org.json4s.native._
-import org.json4s.{DefaultFormats, Extraction, Formats, JValue}
+import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue}
 
 import scala.concurrent.{Await, Future}
 import scala.util.Try
@@ -46,6 +49,5 @@ package object constellation {
   implicit class SHA256Ext(s: String) {
     def sha256: String = Hashing.sha256().hashBytes(s.getBytes()).toString
   }
-
 
 }

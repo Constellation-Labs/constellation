@@ -10,7 +10,7 @@ import constellation._
 import org.constellation.Fixtures
 import org.constellation.p2p.PeerToPeer.{Id, Peers}
 import org.constellation.primitives.Chain.Chain
-import org.constellation.primitives.Transaction
+import org.constellation.primitives.{BlockSerialized, Transaction}
 import org.constellation.utils.{RPCClient, TestNode}
 import org.constellation.wallet.KeyUtils
 
@@ -206,13 +206,25 @@ class MultiNodeTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
     assert(initResponse.get().status == StatusCodes.OK)
 
-    Thread.sleep(4000)
+    Thread.sleep(100)
 
     val chainStateResponse = rpc1.get("blocks")
 
-    val chain1 = rpc1.read[Chain](chainStateResponse.get()).get()
+    val chain1 = rpc1.read[Seq[BlockSerialized]](chainStateResponse.get()).get()
 
-    assert(chain1 == Chain())
+    assert(chain1.size == 1)
+
+    assert(chain1.head.height == 0)
+
+    assert(chain1.head.round == 0)
+
+    assert(chain1.head.parentHash == "tempGenesisParentHash")
+
+    assert(chain1.head.signature == "tempSig")
+
+    assert(chain1.head.transactions == Seq())
+
+    assert(chain1.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
 
   }
 

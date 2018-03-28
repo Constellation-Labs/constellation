@@ -139,7 +139,7 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef,
       val seedPeerRefs = Await.result(peerToPeerActor ? GetPeerActorRefs, 5.seconds).asInstanceOf[Set[ActorRef]]
 
       // TODO: add correct genesis block, temporary for testing
-      val genesisBlock = Block("tempGenesisParentHash", 0, "tempSig", seedPeerRefs.+(self), 0, Seq())
+      val genesisBlock = Block("tempGenesisParentHash", 0, "tempSig", seedPeerRefs.+(peerToPeerActor), 0, Seq())
       chainManager ! AddBlock(genesisBlock)
 
     case BlockAddedToChain(prevBlock) =>
