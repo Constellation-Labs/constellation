@@ -22,8 +22,10 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
 
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
+    val consensusActor = TestProbe()
+
     val peerToPeerActor: ActorRef =
-      system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system)(timeout)))
+      system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor.ref)(timeout)))
   }
 
   "A PeerToPeer actor " should " start with an empty set of peers" in new WithPeerToPeerActor {

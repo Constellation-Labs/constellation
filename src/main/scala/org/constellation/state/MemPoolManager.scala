@@ -29,12 +29,12 @@ class MemPoolManager extends Actor with ActorLogging {
 
       memPool.+=(transaction)
 
-    case GetMemPool() =>
+    case GetMemPool(replyTo) =>
       // TODO: use dealer key to encrypt
 
       val memPoolProposal: Seq[Transaction] = memPool.take(memPoolProposalLimit)
 
-      sender() ! MemPoolUpdated(memPoolProposal)
+      replyTo ! MemPoolUpdated(memPoolProposal)
   }
 
 }

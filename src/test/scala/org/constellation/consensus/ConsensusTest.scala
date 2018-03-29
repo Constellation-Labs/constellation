@@ -12,6 +12,7 @@ import org.constellation.state.ChainStateManager.BlockAddedToChain
 import org.constellation.wallet.KeyUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
+import scala.collection.immutable.HashMap
 import scala.collection.mutable
 
 class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecLike with BeforeAndAfterAll {
@@ -30,7 +31,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
       val consensusActor: ActorRef =
         system.actorOf(Props(
-          new Consensus(memPoolManagerActor.ref, chainStateManagerActor.ref, peerToPeerActor.ref, keyPair)(timeout)))
+          new Consensus(memPoolManagerActor.ref, chainStateManagerActor.ref, keyPair)(timeout)))
   }
 
   "getFacilitators" should "give back the correct list of facilitators" in {
@@ -106,7 +107,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     val testProbe = TestProbe()
 
-    val consensusBlock: Option[Block] = Consensus.getConsensusBlock(mutable.HashMap(), Set())
+    val consensusBlock: Option[Block] = Consensus.getConsensusBlock(HashMap(), Set())
 
     // TODO add assertions
   }

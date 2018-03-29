@@ -6,6 +6,7 @@ import org.constellation.primitives.{Block, Transaction}
 import org.constellation.primitives.Chain.Chain
 import org.constellation.state.ChainStateManager._
 
+import scala.collection.immutable.HashMap
 import scala.collection.mutable
 
 object ChainStateManager {
@@ -13,7 +14,7 @@ object ChainStateManager {
   // Commands
   case class AddBlock(block: Block)
   case class GetCurrentChainState()
-  case class CreateBlockProposal(memPools: mutable.HashMap[ActorRef, Seq[Transaction]])
+  case class CreateBlockProposal(memPools: HashMap[ActorRef, Seq[Transaction]])
 
   // Events
   case class BlockAddedToChain(previousBlock: Block)
@@ -28,6 +29,7 @@ class ChainStateManager extends Actor with ActorLogging {
     case AddBlock(block) =>
       log.debug(s"received add block request $block")
       chain = Chain(chain.chain :+ block)
+      log.debug(s"updated chain for $self = $chain")
       sender() ! BlockAddedToChain(block)
 
     case GetCurrentChainState =>

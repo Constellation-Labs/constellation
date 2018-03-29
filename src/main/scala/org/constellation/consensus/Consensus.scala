@@ -11,6 +11,7 @@ import org.constellation.wallet.KeyUtils
 import akka.pattern.ask
 import akka.util.Timeout
 
+import scala.collection.immutable.HashMap
 import scala.concurrent.duration._
 import scala.collection.mutable
 import scala.concurrent.Await
@@ -48,10 +49,10 @@ import scala.concurrent.duration.Duration
 object Consensus {
 
   // Commands
-  case class GetMemPool()
+  case class GetMemPool(replyTo: ActorRef)
   case class CheckConsensusResult()
 
-  case class Initialize()
+  case class Initialize(selfRemoteActorRef: ActorRef)
 
   // Events
   case class ProposedBlockUpdated(block: Block)
@@ -69,11 +70,11 @@ object Consensus {
     facilitators.contains(self)
   }
 
-  def getConsensusBlock(peerBlockProposals: mutable.HashMap[ActorRef, Block],
+  def getConsensusBlock(peerBlockProposals: HashMap[ActorRef, Block],
                         currentFacilitators: Set[ActorRef]): Option[Block] = {
 
-    val facilitatorsWithoutBlockProposals = currentFacilitators.filterNot(f => {
-      peerBlockProposals.contains(f)
+    val facilitatorsWithoutBlockProposals = currentFacilitators.filter(f => {
+      !peerBlockProposals.contains(f)
     })
 
     var consensusBlock: Option[Block] = None
@@ -107,7 +108,9 @@ object Consensus {
   }
 
   def notifyFacilitatorsOfBlockProposal(previousBlock: Block, proposedBlock: Block, self: ActorRef): Boolean = {
-    notifyFacilitators(previousBlock, self, (f) => f ! PeerProposedBlock(proposedBlock, self))
+    notifyFacilitators(previousBlock, self, (f) => {
+      f ! PeerProposedBlock(proposedBlock, self)
+    })
   }
 
   def notifyFacilitatorsOfPeerMemPoolUpdated(previousBlock: Block, self: ActorRef,
@@ -121,35 +124,38 @@ object Consensus {
   case class ConsensusRoundState(proposedBlock: Option[Block] = None,
                                  previousBlock: Option[Block] = None,
                                  currentFacilitators: Set[ActorRef] = Set(),
-                                 peerMemPools: mutable.HashMap[ActorRef, Seq[Transaction]] = mutable.HashMap(),
-                                 peerBlockProposals: mutable.HashMap[ActorRef, Block] = mutable.HashMap())
+                                 peerMemPools: HashMap[ActorRef, Seq[Transaction]] = HashMap(),
+                                 peerBlockProposals: HashMap[ActorRef, Block] = HashMap())
 
 }
 
-class Consensus(memPoolManager: ActorRef, chainManager: ActorRef,
-                peerToPeerActor: ActorRef, keyPair: KeyPair)
+class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPair)
                (implicit timeout: Timeout) extends Actor with ActorLogging {
 
   var consensusRoundState: ConsensusRoundState = ConsensusRoundState()
 
+  var selfRemoteRef: ActorRef = _
+
   override def receive: Receive = {
-    case Initialize() =>
+    case Initialize(selfRemoteActorRef) =>
+
+      selfRemoteRef = selfRemoteActorRef
 
       // TODO: revist this
-      val seedPeerRefs = Await.result(peerToPeerActor ? GetPeerActorRefs, 5.seconds).asInstanceOf[Set[ActorRef]]
+      val seedPeerRefs = Await.result(selfRemoteRef ? GetPeerActorRefs, 5.seconds).asInstanceOf[Set[ActorRef]]
 
       // TODO: add correct genesis block, temporary for testing
-      val genesisBlock = Block("tempGenesisParentHash", 0, "tempSig", seedPeerRefs.+(peerToPeerActor), 0, Seq())
+      val genesisBlock = Block("tempGenesisParentHash", 0, "tempSig", seedPeerRefs.+(selfRemoteRef), 0, Seq())
       chainManager ! AddBlock(genesisBlock)
 
     case BlockAddedToChain(prevBlock) =>
 
       consensusRoundState = ConsensusRoundState(None,
-        Some(prevBlock), Consensus.getFacilitators(prevBlock), mutable.HashMap(), mutable.HashMap())
+        Some(prevBlock), Consensus.getFacilitators(prevBlock), HashMap(), HashMap())
 
       // If we are a facilitator this round then begin consensus
-      if (Consensus.isFacilitator(consensusRoundState.currentFacilitators, self)) {
-        memPoolManager ! GetMemPool()
+      if (Consensus.isFacilitator(consensusRoundState.currentFacilitators, selfRemoteRef)) {
+        memPoolManager ! GetMemPool(self)
       }
 
     case ProposedBlockUpdated(block) =>
@@ -160,33 +166,33 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef,
       val proposedBlock = consensusRoundState.proposedBlock
 
       if (proposedBlock.isDefined && previousBlock.isDefined) {
-        Consensus.notifyFacilitatorsOfBlockProposal(previousBlock.get, proposedBlock.get, self)
+        Consensus.notifyFacilitatorsOfBlockProposal(previousBlock.get, proposedBlock.get, selfRemoteRef)
       }
 
     case MemPoolUpdated(transactions) =>
-      Consensus.notifyFacilitatorsOfPeerMemPoolUpdated(consensusRoundState.previousBlock.get, self, transactions)
+      Consensus.notifyFacilitatorsOfPeerMemPoolUpdated(consensusRoundState.previousBlock.get, selfRemoteRef, transactions)
 
     case PeerMemPoolUpdated(transactions, peer) =>
 
-      // TODO: extract
-      consensusRoundState.peerMemPools.put(peer, transactions)
+      consensusRoundState = consensusRoundState.copy(peerMemPools = consensusRoundState.peerMemPools.+(peer -> transactions))
 
+      // TODO: extract
       // check if we have enough mem pools to create a block
 
-      val facilitatorsWithoutMemPools = consensusRoundState.currentFacilitators.filterNot(f => {
-        consensusRoundState.peerMemPools.contains(f)
-      })
+      if (!consensusRoundState.currentFacilitators.isEmpty) {
+        val facilitatorsWithoutMemPools = consensusRoundState.currentFacilitators.filter(f => {
+          !consensusRoundState.peerMemPools.contains(f)
+        })
 
-      if (facilitatorsWithoutMemPools.nonEmpty) {
-        log.debug("Have not received enough mem pools to create a block yet")
-      } else {
-        chainManager ! CreateBlockProposal(consensusRoundState.peerMemPools)
+        if (facilitatorsWithoutMemPools.nonEmpty) {
+          log.debug("Have not received enough mem pools to create a block yet")
+        } else {
+          chainManager ! CreateBlockProposal(consensusRoundState.peerMemPools)
+        }
       }
 
     case PeerProposedBlock(block, peer) =>
-      val updatedPeerBlockProposals = consensusRoundState.peerBlockProposals += (peer -> block)
-
-      consensusRoundState = consensusRoundState.copy(peerBlockProposals = updatedPeerBlockProposals)
+      consensusRoundState = consensusRoundState.copy(peerBlockProposals = consensusRoundState.peerBlockProposals.+(peer -> block))
 
       self ! CheckConsensusResult
 

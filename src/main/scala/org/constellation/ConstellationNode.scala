@@ -63,9 +63,6 @@ class ConstellationNode(
   // and need to make sure someone can't access internal actors
 
   // Setup actors
-  val peerToPeerActor: ActorRef =
-    system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system)(timeout)), s"ConstellationP2PActor_$publicKeyHash")
-
   val memPoolManagerActor: ActorRef =
     system.actorOf(Props(new MemPoolManager), s"ConstellationMemPoolManagerActor_$publicKeyHash")
 
@@ -73,8 +70,11 @@ class ConstellationNode(
     system.actorOf(Props(new ChainStateManager), s"ConstellationChainStateActor_$publicKeyHash")
 
   val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(memPoolManagerActor, chainStateActor, peerToPeerActor, keyPair)(timeout)),
+    Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair)(timeout)),
     s"ConstellationConsensusActor_$publicKeyHash")
+
+  val peerToPeerActor: ActorRef =
+    system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor)(timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
   // Seed peers
   if (seedPeers.isDefined) {

@@ -45,7 +45,7 @@ class RPCInterface(chainStateActor: ActorRef, peerToPeerActor: ActorRef, memPool
       // TODO: revist
       path("initialize") {
 
-        consensusActor ! Initialize()
+        consensusActor ! Initialize(peerToPeerActor)
 
         complete(StatusCodes.OK)
       } ~

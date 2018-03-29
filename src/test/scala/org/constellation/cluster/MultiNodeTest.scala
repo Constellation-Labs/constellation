@@ -3,20 +3,28 @@ package org.constellation.cluster
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import akka.testkit.{TestKit, TestProbe}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, FlatSpecLike, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
 import constellation._
 import org.constellation.Fixtures
+import org.constellation.consensus.Consensus.MemPoolUpdated
 import org.constellation.p2p.PeerToPeer.{Id, Peers}
 import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.{BlockSerialized, Transaction}
 import org.constellation.utils.{RPCClient, TestNode}
 import org.constellation.wallet.KeyUtils
+import scala.concurrent.duration._
 
-class MultiNodeTest extends FlatSpec with Matchers with BeforeAndAfterAll {
+import scala.concurrent.duration.Duration
 
-  implicit val system: ActorSystem = ActorSystem("TestConstellationActorSystem")
+class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem")) with FlatSpecLike with Matchers with BeforeAndAfterAll {
+
+  override def afterAll {
+    TestKit.shutdownActorSystem(system)
+  }
+
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
@@ -202,9 +210,23 @@ class MultiNodeTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     assert(peers3.peers.diff(Seq(node1Path, node4Path, node2Path)).isEmpty)
     assert(peers4.peers.diff(Seq(node1Path, node3Path, node2Path)).isEmpty)
 
-    val initResponse = rpc1.get("initialize")
+    // Init node 1
+    val initResponse1 = rpc1.get("initialize")
 
-    assert(initResponse.get().status == StatusCodes.OK)
+    assert(initResponse1.get().status == StatusCodes.OK)
+
+    // Init the rest of the nodes
+    val initResponse2 = rpc2.get("initialize")
+
+    assert(initResponse2.get().status == StatusCodes.OK)
+
+    val initResponse3 = rpc3.get("initialize")
+
+    assert(initResponse3.get().status == StatusCodes.OK)
+
+    val initResponse4 = rpc4.get("initialize")
+
+    assert(initResponse4.get().status == StatusCodes.OK)
 
     Thread.sleep(100)
 
@@ -226,10 +248,13 @@ class MultiNodeTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
     assert(chain1.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
 
-  }
+    /*
+    val probe = TestProbe()
 
-  override def afterAll() {
-    system.terminate()
+    probe watch node2.consensusActor
+
+    probe.expectMsg(120 seconds, MemPoolUpdated)
+    */
   }
 
 }

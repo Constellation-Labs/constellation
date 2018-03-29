@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Terminated}
 import akka.pattern.pipe
 import akka.util.Timeout
+import org.constellation.consensus.Consensus.{ConsensusRoundState, PeerMemPoolUpdated, PeerProposedBlock}
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.state.ChainStateManager.GetCurrentChainState
 
@@ -33,7 +34,7 @@ object PeerToPeer {
   case class HandShake()
 }
 
-class PeerToPeer(publicKey: PublicKey, system: ActorSystem)
+class PeerToPeer(publicKey: PublicKey, system: ActorSystem, consensusActor: ActorRef)
                 (implicit timeout: Timeout) extends Actor with ActorLogging {
 
   implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
@@ -100,6 +101,12 @@ class PeerToPeer(publicKey: PublicKey, system: ActorSystem)
 
     case GetId =>
       sender() ! Id(publicKey)
+
+    case PeerMemPoolUpdated(transactions, peer) =>
+      consensusActor ! PeerMemPoolUpdated(transactions, peer)
+
+    case PeerProposedBlock(block, peer) =>
+      consensusActor ! PeerProposedBlock(block, peer)
 
   }
 
