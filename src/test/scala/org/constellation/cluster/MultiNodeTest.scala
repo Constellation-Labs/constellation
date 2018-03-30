@@ -210,51 +210,125 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     assert(peers3.peers.diff(Seq(node1Path, node4Path, node2Path)).isEmpty)
     assert(peers4.peers.diff(Seq(node1Path, node3Path, node2Path)).isEmpty)
 
-    // Init node 1
-    val initResponse1 = rpc1.get("initialize")
+    // generate genesis block
+    val genResponse1 = rpc1.get("generateGenesisBlock")
 
-    assert(initResponse1.get().status == StatusCodes.OK)
+    assert(genResponse1.get().status == StatusCodes.OK)
 
-    // Init the rest of the nodes
-    val initResponse2 = rpc2.get("initialize")
+    val genResponse2 = rpc2.get("generateGenesisBlock")
 
-    assert(initResponse2.get().status == StatusCodes.OK)
+    assert(genResponse2.get().status == StatusCodes.OK)
 
-    val initResponse3 = rpc3.get("initialize")
+    val genResponse3 = rpc3.get("generateGenesisBlock")
 
-    assert(initResponse3.get().status == StatusCodes.OK)
+    assert(genResponse3.get().status == StatusCodes.OK)
 
-    val initResponse4 = rpc4.get("initialize")
+    val genResponse4 = rpc4.get("generateGenesisBlock")
 
-    assert(initResponse4.get().status == StatusCodes.OK)
+    assert(genResponse4.get().status == StatusCodes.OK)
 
     Thread.sleep(100)
 
-    val chainStateResponse = rpc1.get("blocks")
+    // TODO: extract below to func
+    // verify chain node 1
+    val chainStateNode1Response = rpc1.get("blocks")
 
-    val chain1 = rpc1.read[Seq[BlockSerialized]](chainStateResponse.get()).get()
+    val chainNode1 = rpc1.read[Seq[BlockSerialized]](chainStateNode1Response.get()).get()
 
-    assert(chain1.size == 1)
+    assert(chainNode1.size == 1)
 
-    assert(chain1.head.height == 0)
+    assert(chainNode1.head.height == 0)
 
-    assert(chain1.head.round == 0)
+    assert(chainNode1.head.round == 0)
 
-    assert(chain1.head.parentHash == "tempGenesisParentHash")
+    assert(chainNode1.head.parentHash == "tempGenesisParentHash")
 
-    assert(chain1.head.signature == "tempSig")
+    assert(chainNode1.head.signature == "tempSig")
 
-    assert(chain1.head.transactions == Seq())
+    assert(chainNode1.head.transactions == Seq())
 
-    assert(chain1.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
+    assert(chainNode1.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
 
-    /*
+    // verify chain node 2
+    val chainStateNode2Response = rpc2.get("blocks")
+
+    val chainNode2 = rpc2.read[Seq[BlockSerialized]](chainStateNode2Response.get()).get()
+
+    assert(chainNode2.size == 1)
+
+    assert(chainNode2.head.height == 0)
+
+    assert(chainNode2.head.round == 0)
+
+    assert(chainNode2.head.parentHash == "tempGenesisParentHash")
+
+    assert(chainNode2.head.signature == "tempSig")
+
+    assert(chainNode2.head.transactions == Seq())
+
+    assert(chainNode2.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
+
+    // verify chain node 3
+    val chainStateNode3Response = rpc3.get("blocks")
+
+    val chainNode3 = rpc3.read[Seq[BlockSerialized]](chainStateNode3Response.get()).get()
+
+    assert(chainNode3.size == 1)
+
+    assert(chainNode3.head.height == 0)
+
+    assert(chainNode3.head.round == 0)
+
+    assert(chainNode3.head.parentHash == "tempGenesisParentHash")
+
+    assert(chainNode3.head.signature == "tempSig")
+
+    assert(chainNode3.head.transactions == Seq())
+
+    assert(chainNode3.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
+
+    // verify chain node 4
+    val chainStateNode4Response = rpc4.get("blocks")
+
+    val chainNode4= rpc4.read[Seq[BlockSerialized]](chainStateNode4Response.get()).get()
+
+    assert(chainNode4.size == 1)
+
+    assert(chainNode4.head.height == 0)
+
+    assert(chainNode4.head.round == 0)
+
+    assert(chainNode4.head.parentHash == "tempGenesisParentHash")
+
+    assert(chainNode4.head.signature == "tempSig")
+
+    assert(chainNode4.head.transactions == Seq())
+
+    assert(chainNode4.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
+
+    // Enable consensus on the nodes
+    val consensusResponse1 = rpc1.get("enableConsensus")
+
+    assert(consensusResponse1.get().status == StatusCodes.OK)
+
+    val consensusResponse2 = rpc2.get("enableConsensus")
+
+    assert(consensusResponse2.get().status == StatusCodes.OK)
+
+    val consensusResponse3 = rpc3.get("enableConsensus")
+
+    assert(consensusResponse3.get().status == StatusCodes.OK)
+
+    val consensusResponse4 = rpc4.get("enableConsensus")
+
+    assert(consensusResponse4.get().status == StatusCodes.OK)
+
     val probe = TestProbe()
 
     probe watch node2.consensusActor
 
     probe.expectMsg(120 seconds, MemPoolUpdated)
-    */
+
   }
 
 }

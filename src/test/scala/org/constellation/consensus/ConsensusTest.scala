@@ -107,7 +107,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     val testProbe = TestProbe()
 
-    val consensusBlock: Option[Block] = Consensus.getConsensusBlock(HashMap(), Set())
+    val consensusBlock: Option[Block] = Consensus.getConsensusBlock(HashMap(), Set(), 0)
 
     // TODO add assertions
   }
@@ -137,7 +137,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
   }
 
   "A CheckConsensusResult Message" should "be handled correctly" in new WithConsensusActor {
-    consensusActor ! CheckConsensusResult()
+    consensusActor ! CheckConsensusResult(0)
 
     // TODO add assertions
   }

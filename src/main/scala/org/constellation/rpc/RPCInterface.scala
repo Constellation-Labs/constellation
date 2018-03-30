@@ -14,7 +14,7 @@ import org.constellation.p2p.PeerToPeer._
 import org.json4s.{Formats, native}
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
-import org.constellation.consensus.Consensus.Initialize
+import org.constellation.consensus.Consensus.{EnableConsensus, GenerateGenesisBlock}
 import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.{Block, BlockSerialized, Transaction}
 import org.constellation.state.ChainStateManager.{CurrentChainStateUpdated, GetCurrentChainState}
@@ -43,9 +43,15 @@ class RPCInterface(chainStateActor: ActorRef, peerToPeerActor: ActorRef, memPool
         complete(StatusCodes.OK)
       } ~
       // TODO: revist
-      path("initialize") {
+      path("generateGenesisBlock") {
 
-        consensusActor ! Initialize(peerToPeerActor)
+        consensusActor ! GenerateGenesisBlock(peerToPeerActor)
+
+        complete(StatusCodes.OK)
+      } ~
+      path("enableConsensus") {
+
+        consensusActor ! EnableConsensus()
 
         complete(StatusCodes.OK)
       } ~

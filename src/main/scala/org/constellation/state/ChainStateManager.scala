@@ -14,7 +14,7 @@ object ChainStateManager {
   // Commands
   case class AddBlock(block: Block)
   case class GetCurrentChainState()
-  case class CreateBlockProposal(memPools: HashMap[ActorRef, Seq[Transaction]])
+  case class CreateBlockProposal(memPools: HashMap[ActorRef, Seq[Transaction]], round: Long)
 
   // Events
   case class BlockAddedToChain(previousBlock: Block)
@@ -36,7 +36,7 @@ class ChainStateManager extends Actor with ActorLogging {
       log.debug(s"received GetCurrentChainState request")
       sender() ! CurrentChainStateUpdated(chain)
 
-    case CreateBlockProposal(memPools) =>
+    case CreateBlockProposal(memPools, round) =>
       log.debug("Attempting to create block proposal")
 
       val transactions: Seq[Transaction] = Seq()
@@ -47,9 +47,11 @@ class ChainStateManager extends Actor with ActorLogging {
 
       val lastBlock = chain.chain.last
 
+      val round = lastBlock.round + 1
+
       // TODO: update to use proper sigs and participants
       val blockProposal: Block =  Block(lastBlock.signature, lastBlock.height + 1, "",
-        lastBlock.clusterParticipants, lastBlock.round + 1, transactions)
+        lastBlock.clusterParticipants, round, transactions)
 
       sender() ! ProposedBlockUpdated(blockProposal)
   }

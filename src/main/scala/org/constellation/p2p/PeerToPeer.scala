@@ -102,8 +102,8 @@ class PeerToPeer(publicKey: PublicKey, system: ActorSystem, consensusActor: Acto
     case GetId =>
       sender() ! Id(publicKey)
 
-    case PeerMemPoolUpdated(transactions, peer) =>
-      consensusActor ! PeerMemPoolUpdated(transactions, peer)
+    case PeerMemPoolUpdated(transactions, peer, round) =>
+      consensusActor ! PeerMemPoolUpdated(transactions, peer, round)
 
     case PeerProposedBlock(block, peer) =>
       consensusActor ! PeerProposedBlock(block, peer)

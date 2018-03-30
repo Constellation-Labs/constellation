@@ -36,7 +36,9 @@ object ConstellationNode extends App {
   val keyPair = KeyUtils.makeKeyPair()
 
   // TODO: add seeds from config
-  new ConstellationNode(keyPair, None, config.getString("http.interface"), config.getInt("http.port"), rpcTimeout)
+  new ConstellationNode(keyPair, None, config.getString("http.interface"),
+    config.getInt("http.port"), rpcTimeout)
+
 }
 
 class ConstellationNode(
@@ -74,7 +76,8 @@ class ConstellationNode(
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val peerToPeerActor: ActorRef =
-    system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor)(timeout)), s"ConstellationP2PActor_$publicKeyHash")
+    system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor)
+    (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
   // Seed peers
   if (seedPeers.isDefined) {
