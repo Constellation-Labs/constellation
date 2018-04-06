@@ -13,11 +13,8 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.rpc.RPCInterface
 import org.constellation.wallet.KeyUtils
 import org.constellation.consensus.Consensus
-import org.constellation.consensus.Consensus.Initialize
 import org.constellation.p2p.PeerToPeer
-import org.constellation.p2p.PeerToPeer.{AddPeer, GetPeers}
-import org.constellation.primitives.Block
-import org.constellation.state.ChainStateManager.AddBlock
+import org.constellation.p2p.PeerToPeer.{AddPeer}
 import org.constellation.state.{ChainStateManager, MemPoolManager}
 
 import scala.concurrent.ExecutionContextExecutor

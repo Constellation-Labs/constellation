@@ -3,21 +3,15 @@ package org.constellation.cluster
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
-import akka.testkit.{TestKit, TestProbe}
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, FlatSpecLike, Matchers}
+import akka.testkit.TestKit
+import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 import constellation._
-import org.constellation.Fixtures
-import org.constellation.consensus.Consensus.MemPoolUpdated
-import org.constellation.p2p.PeerToPeer.{Id, Peers}
-import org.constellation.primitives.Chain.Chain
-import org.constellation.primitives.{BlockSerialized, Transaction}
+import org.constellation.p2p.PeerToPeer.Peers
+import org.constellation.primitives.BlockSerialized
 import org.constellation.utils.{RPCClient, TestNode}
-import org.constellation.wallet.KeyUtils
 import scala.concurrent.duration._
-
-import scala.concurrent.duration.Duration
 
 class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem")) with FlatSpecLike with Matchers with BeforeAndAfterAll {
 
@@ -323,11 +317,22 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     assert(consensusResponse4.get().status == StatusCodes.OK)
 
-    val probe = TestProbe()
+    val thread = new Thread {
+      override def run: Unit = {
+        Thread.sleep(100)
+      }
+    }
 
-    probe watch node2.consensusActor
+    val future = Future { thread.run }
 
-    probe.expectMsg(120 seconds, MemPoolUpdated)
+    Await.ready(future, 5 seconds)
+
+    val finalChainStateNode1Response = rpc1.get("blocks")
+
+    val finalChainNode1= rpc1.read[Seq[BlockSerialized]](finalChainStateNode1Response.get()).get()
+
+    // TODO: verify all nodes chain states
+    assert(finalChainNode1.size > 3)
 
   }
 

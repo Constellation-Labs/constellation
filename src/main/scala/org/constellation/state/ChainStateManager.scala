@@ -1,13 +1,12 @@
 package org.constellation.state
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
-import org.constellation.consensus.Consensus.ProposedBlockUpdated
+import org.constellation.consensus.Consensus.{ProposedBlockUpdated}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.primitives.Chain.Chain
 import org.constellation.state.ChainStateManager._
 
 import scala.collection.immutable.HashMap
-import scala.collection.mutable
 
 object ChainStateManager {
 

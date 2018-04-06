@@ -36,6 +36,14 @@ class RPCInterface(chainStateActor: ActorRef, peerToPeerActor: ActorRef, memPool
 
   val logger = Logger(s"RPCInterface")
 
+  // TODO: temp until someone can show me how to create one of these custom serializers
+  def serializeBlocks(blocks: Seq[Block]): Seq[BlockSerialized] = {
+    blocks.map(b => {
+      BlockSerialized(b.parentHash, b.height, b.signature,
+        b.clusterParticipants.map(a => a.path.toSerializationFormat), b.round, b.transactions)
+    })
+  }
+
   val routes: Route =
     get {
       // TODO: revisit
@@ -45,9 +53,13 @@ class RPCInterface(chainStateActor: ActorRef, peerToPeerActor: ActorRef, memPool
       // TODO: revist
       path("generateGenesisBlock") {
 
-        consensusActor ! GenerateGenesisBlock(peerToPeerActor)
+        val future = consensusActor ? GenerateGenesisBlock(peerToPeerActor)
 
-        complete(StatusCodes.OK)
+        val responseFuture: Future[Block] = future.mapTo[Block]
+
+        val genesisBlock = Await.result(responseFuture, timeout.duration)
+
+        complete(serializeBlocks(Seq(genesisBlock)).take(1))
       } ~
       path("enableConsensus") {
 
@@ -64,11 +76,7 @@ class RPCInterface(chainStateActor: ActorRef, peerToPeerActor: ActorRef, memPool
 
         val chain = chainStateUpdated.chain
 
-        // TODO: temp until someone can show me how to create one of these custom serializers
-        val blocks: Seq[BlockSerialized] = chain.chain.map(b => {
-          BlockSerialized(b.parentHash, b.height, b.signature,
-            b.clusterParticipants.map(a => a.path.toSerializationFormat), b.round, b.transactions)
-        })
+        val blocks = serializeBlocks(chain.chain)
 
         complete(blocks)
       } ~
