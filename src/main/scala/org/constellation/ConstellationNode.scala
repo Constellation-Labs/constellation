@@ -66,7 +66,7 @@ class ConstellationNode(
     system.actorOf(Props(new MemPoolManager), s"ConstellationMemPoolManagerActor_$publicKeyHash")
 
   val chainStateActor: ActorRef =
-    system.actorOf(Props(new ChainStateManager), s"ConstellationChainStateActor_$publicKeyHash")
+    system.actorOf(Props(new ChainStateManager(memPoolManagerActor: ActorRef)), s"ConstellationChainStateActor_$publicKeyHash")
 
   val consensusActor: ActorRef = system.actorOf(
     Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair)(timeout)),

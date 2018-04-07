@@ -18,6 +18,7 @@ import org.constellation.consensus.Consensus.{EnableConsensus, GenerateGenesisBl
 import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.{Block, BlockSerialized, Transaction}
 import org.constellation.state.ChainStateManager.{CurrentChainStateUpdated, GetCurrentChainState}
+import org.constellation.state.MemPoolManager.AddTransaction
 import org.constellation.wallet.KeyUtils
 import org.json4s.native.Serialization
 
@@ -104,7 +105,7 @@ class RPCInterface(chainStateActor: ActorRef, peerToPeerActor: ActorRef, memPool
         entity(as[Transaction]) { transaction =>
           logger.debug(s"Received request to submit a new transaction $transaction")
 
-          memPoolManagerActor ! transaction
+          memPoolManagerActor ! AddTransaction(transaction)
 
           complete(transaction)
         }

@@ -9,8 +9,9 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 import constellation._
 import org.constellation.p2p.PeerToPeer.Peers
-import org.constellation.primitives.BlockSerialized
+import org.constellation.primitives.{BlockSerialized, Transaction}
 import org.constellation.utils.{RPCClient, TestNode}
+
 import scala.concurrent.duration._
 
 class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem")) with FlatSpecLike with Matchers with BeforeAndAfterAll {
@@ -317,9 +318,47 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     assert(consensusResponse4.get().status == StatusCodes.OK)
 
+
+    // Send some random transactions
+
+    val node1PublicKey = node1.keyPair.getPublic
+    val node2PublicKey = node2.keyPair.getPublic
+    val node3PublicKey = node3.keyPair.getPublic
+    val node4PublicKey = node4.keyPair.getPublic
+
+    val transaction1 =
+      Transaction.senderSign(Transaction(0L, node1PublicKey, node2PublicKey, 1L), node1.keyPair.getPrivate)
+
+    rpc1.post("transaction", transaction1)
+
+    val transaction2 =
+      Transaction.senderSign(Transaction(0L, node2PublicKey, node3PublicKey, 20L), node2.keyPair.getPrivate)
+
+    rpc3.post("transaction", transaction2)
+
+    val transaction3 =
+      Transaction.senderSign(Transaction(0L, node1PublicKey, node4PublicKey, 33L), node1.keyPair.getPrivate)
+
+    rpc2.post("transaction", transaction3)
+
+    val transaction4 =
+      Transaction.senderSign(Transaction(0L, node3PublicKey, node4PublicKey, 10L), node3.keyPair.getPrivate)
+
+    rpc3.post("transaction", transaction4)
+
+    val transaction5 =
+      Transaction.senderSign(Transaction(0L, node3PublicKey, node4PublicKey, 5L), node3.keyPair.getPrivate)
+
+    rpc1.post("transaction", transaction5)
+
+    val transaction6 =
+      Transaction.senderSign(Transaction(0L, node3PublicKey, node2PublicKey, 1L), node3.keyPair.getPrivate)
+
+    rpc2.post("transaction", transaction6)
+
     val thread = new Thread {
       override def run: Unit = {
-        Thread.sleep(100)
+        Thread.sleep(500)
       }
     }
 
@@ -331,8 +370,85 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     val finalChainNode1= rpc1.read[Seq[BlockSerialized]](finalChainStateNode1Response.get()).get()
 
-    // TODO: verify all nodes chain states
-    assert(finalChainNode1.size > 3)
+    assert(finalChainNode1.size > 50)
+
+    val finalChainStateNode2Response = rpc2.get("blocks")
+
+    val finalChainNode2= rpc2.read[Seq[BlockSerialized]](finalChainStateNode2Response.get()).get()
+
+    assert(finalChainNode2.size > 50)
+
+    val finalChainStateNode3Response = rpc3.get("blocks")
+
+    val finalChainNode3= rpc3.read[Seq[BlockSerialized]](finalChainStateNode3Response.get()).get()
+
+    assert(finalChainNode3.size > 50)
+
+    val finalChainStateNode4Response = rpc4.get("blocks")
+
+    val finalChainNode4= rpc4.read[Seq[BlockSerialized]](finalChainStateNode4Response.get()).get()
+
+    assert(finalChainNode4.size > 50)
+
+    val chain1 = finalChainNode1.take(50)
+    val chain2 = finalChainNode2.take(50)
+    val chain3 = finalChainNode3.take(50)
+    val chain4 = finalChainNode4.take(50)
+
+    var chain1ContainsTransactions = false
+    var chain2ContainsTransactions = false
+    var chain3ContainsTransactions = false
+    var chain4ContainsTransactions = false
+
+    var chain1TransactionCount = 0
+    var chain2TransactionCount = 0
+    var chain3TransactionCount = 0
+    var chain4TransactionCount = 0
+
+    chain1.foreach(b => {
+      if (b.transactions.nonEmpty) {
+        chain1ContainsTransactions = true
+        chain1TransactionCount += b.transactions.size
+      }
+    })
+
+    chain2.foreach(b => {
+      if (b.transactions.nonEmpty) {
+        chain2ContainsTransactions = true
+        chain2TransactionCount += b.transactions.size
+      }
+    })
+
+    chain3.foreach(b => {
+      if (b.transactions.nonEmpty) {
+        chain3ContainsTransactions = true
+        chain3TransactionCount += b.transactions.size
+      }
+    })
+
+    chain4.foreach(b => {
+      if (b.transactions.nonEmpty) {
+        chain4ContainsTransactions = true
+        chain4TransactionCount += b.transactions.size
+      }
+    })
+
+    // Make sure that from the subset of blocks that we have it contains transactions
+    assert(chain1ContainsTransactions)
+    assert(chain2ContainsTransactions)
+    assert(chain3ContainsTransactions)
+    assert(chain4ContainsTransactions)
+
+    assert(chain1TransactionCount == 6)
+    assert(chain2TransactionCount == 6)
+    assert(chain3TransactionCount == 6)
+    assert(chain4TransactionCount == 6)
+
+    assert(chain1 equals chain2)
+
+    assert(chain2 equals chain3)
+
+    assert(chain3 equals chain4)
 
   }
 
