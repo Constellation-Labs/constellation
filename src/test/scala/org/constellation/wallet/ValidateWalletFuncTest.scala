@@ -37,6 +37,7 @@ class ValidateWalletFuncTest  extends FlatSpec {
     assert(deser3.getPrivate == kp.getPrivate)
     assert(deser3.getPublic == kp.getPublic)
 
+    assert(kp.getPublic.hashCode() == deser3.getPublic.hashCode())
     assert(kp.getPrivate.getAlgorithm == deser3.getPrivate.getAlgorithm)
     assert(kp.getPublic.getAlgorithm == deser3.getPublic.getAlgorithm)
     assert(kp.getPublic.getFormat == deser3.getPublic.getFormat)

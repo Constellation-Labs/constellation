@@ -1,7 +1,12 @@
 
-import akka.actor.ActorRef
+import java.net.InetSocketAddress
+
+import akka.actor.{ActorRef, ActorSystem}
+import akka.serialization.SerializationExtension
+import akka.util.ByteString
 import com.google.common.hash.Hashing
 import org.constellation.p2p.PeerToPeer.PeerRef
+import org.constellation.p2p.{SerializedUDPMessage, UDPSend}
 import org.constellation.wallet.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
 import org.json4s.JsonAST.JString
 import org.json4s.native._
@@ -50,4 +55,22 @@ package object constellation {
     def sha256: String = Hashing.sha256().hashBytes(s.getBytes()).toString
   }
 
+  import java.nio.ByteBuffer
+  import java.nio.ByteOrder
+
+  def intToByte(myInteger: Int): Array[Byte] =
+    ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(myInteger).array
+
+  def byteToInt(byteBarray: Array[Byte]): Int =
+    ByteBuffer.wrap(byteBarray).order(ByteOrder.BIG_ENDIAN).getInt
+
+  implicit class UDPActorExt(udpActor: ActorRef) {
+    def udpSend[T <: AnyRef](data: T, remote: InetSocketAddress)(implicit system: ActorSystem): Unit = {
+      val serialization = SerializationExtension(system)
+      val serializer = serialization.findSerializerFor(data)
+      val bytes = serializer.toBinary(data)
+      val serMsg = SerializedUDPMessage(bytes, serializer.identifier)
+      udpActor ! UDPSend(ByteString(serMsg.json), remote)
+    }
+  }
 }
