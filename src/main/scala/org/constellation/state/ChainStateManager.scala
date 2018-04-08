@@ -1,5 +1,7 @@
 package org.constellation.state
 
+import java.net.InetSocketAddress
+
 import akka.actor.{Actor, ActorLogging, ActorRef}
 import org.constellation.consensus.Consensus.ProposedBlockUpdated
 import org.constellation.primitives.{Block, Transaction}
@@ -14,7 +16,7 @@ object ChainStateManager {
   // Commands
   case class AddBlock(block: Block)
   case class GetCurrentChainState()
-  case class CreateBlockProposal(memPools: HashMap[ActorRef, Seq[Transaction]], round: Long)
+  case class CreateBlockProposal(memPools: HashMap[InetSocketAddress, Seq[Transaction]], round: Long)
 
   // Events
   case class BlockAddedToChain(previousBlock: Block)

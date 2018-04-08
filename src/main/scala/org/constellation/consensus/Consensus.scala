@@ -1,8 +1,9 @@
 package org.constellation.consensus
 
+import java.net.InetSocketAddress
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
-import akka.actor.{Actor, ActorLogging, ActorRef}
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.PeerToPeer.{GetPeerActorRefs, GetPeers, Peers}
 import org.constellation.primitives.{Block, Transaction}
@@ -10,12 +11,14 @@ import org.constellation.state.ChainStateManager.{AddBlock, BlockAddedToChain, C
 import org.constellation.wallet.KeyUtils
 import akka.pattern.ask
 import akka.util.Timeout
+import org.constellation.p2p.UDPActor
 
 import scala.collection.immutable.HashMap
 import scala.concurrent.duration._
 import scala.collection.mutable
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
+import constellation._
 
 /*
 
@@ -58,23 +61,23 @@ object Consensus {
   // Events
   case class ProposedBlockUpdated(block: Block)
   case class MemPoolUpdated(transactions: Seq[Transaction], round: Long)
-  case class PeerMemPoolUpdated(transactions: Seq[Transaction], peer: ActorRef, round: Long)
-  case class PeerProposedBlock(block: Block, peer: ActorRef)
+  case class PeerMemPoolUpdated(transactions: Seq[Transaction], peer: InetSocketAddress, round: Long)
+  case class PeerProposedBlock(block: Block, peer: InetSocketAddress)
 
   // Methods
 
-  def getFacilitators(previousBlock: Block): Set[ActorRef] = {
+  def getFacilitators(previousBlock: Block): Set[InetSocketAddress] = {
     // TODO: here is where we need to grab our random sampling fancy function
 
     previousBlock.clusterParticipants
   }
 
-  def isFacilitator(facilitators: Set[ActorRef], self: ActorRef): Boolean = {
+  def isFacilitator(facilitators: Set[InetSocketAddress], self: InetSocketAddress): Boolean = {
     facilitators.contains(self)
   }
 
-  def getConsensusBlock(peerBlockProposals: HashMap[Long, HashMap[ActorRef, Block]],
-                        currentFacilitators: Set[ActorRef], round: Long): Option[Block] = {
+  def getConsensusBlock(peerBlockProposals: HashMap[Long, HashMap[InetSocketAddress, Block]],
+                        currentFacilitators: Set[InetSocketAddress], round: Long): Option[Block] = {
 
     var consensusBlock: Option[Block] = None
 
@@ -101,8 +104,8 @@ object Consensus {
     consensusBlock
   }
 
-  def notifyFacilitators(previousBlock: Block, self: ActorRef, fx: ActorRef => Unit): Boolean = {
-    val facilitators: Set[ActorRef] = getFacilitators(previousBlock)
+  def notifyFacilitators(previousBlock: Block, self: InetSocketAddress, fx: InetSocketAddress => Unit): Boolean = {
+    val facilitators = getFacilitators(previousBlock)
 
     // make sure that we are a facilitator
     if (!isFacilitator(facilitators, self)) {
@@ -114,34 +117,49 @@ object Consensus {
     true
   }
 
-  def notifyFacilitatorsOfBlockProposal(previousBlock: Block, proposedBlock: Block, self: ActorRef): Boolean = {
+  def notifyFacilitatorsOfBlockProposal(
+                                         previousBlock: Block,
+                                         proposedBlock: Block,
+                                         self: InetSocketAddress,
+                                         udpActor: ActorRef
+                                       )(implicit system: ActorSystem): Boolean = {
     notifyFacilitators(previousBlock, self, (f) => {
-      f ! PeerProposedBlock(proposedBlock, self)
+      udpActor.udpSend(PeerProposedBlock(proposedBlock, self), f)
     })
   }
 
-  def notifyFacilitatorsOfPeerMemPoolUpdated(previousBlock: Block, self: ActorRef,
-                                             transactions: Seq[Transaction], round: Long): Boolean = {
+  def notifyFacilitatorsOfPeerMemPoolUpdated(
+                                              previousBlock: Block, self: InetSocketAddress,
+                                             transactions: Seq[Transaction], round: Long,
+                                              udpActor: ActorRef)(implicit system: ActorSystem): Boolean = {
     // Send all of the facilitators our current memPoolState
     Consensus.notifyFacilitators(previousBlock, self, (p) => {
-      p ! PeerMemPoolUpdated(transactions, self, round)
+      udpActor.udpSend(PeerMemPoolUpdated(transactions, self, round), p)
     })
   }
+
+  // TODO : Use public keys to identify nodes along with a socket address.
+  // I.e. we need to verify if the node associated with the IP is actually the right one and matches signature etc.
 
   case class ConsensusRoundState(selfPeerToPeerRef: Option[ActorRef] = None,
                                  enabled: Boolean = false,
                                  proposedBlock: Option[Block] = None,
                                  previousBlock: Option[Block] = None,
-                                 currentFacilitators: Set[ActorRef] = Set(),
-                                 peerMemPools: HashMap[Long, HashMap[ActorRef, Seq[Transaction]]] = HashMap(0L -> HashMap()),
-                                 peerBlockProposals: HashMap[Long, HashMap[ActorRef, Block]] = HashMap(0L -> HashMap()))
+                                 currentFacilitators: Set[InetSocketAddress] = Set(),
+                                 peerMemPools: HashMap[Long, HashMap[InetSocketAddress, Seq[Transaction]]] = HashMap(0L -> HashMap()),
+                                 peerBlockProposals: HashMap[Long, HashMap[InetSocketAddress, Block]] = HashMap(0L -> HashMap()))
 
 }
 
-class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPair)
+class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPair,
+                udpAddress: InetSocketAddress = new InetSocketAddress("127.0.0.1", 16180),
+                udpActor: ActorRef
+               )
                (implicit timeout: Timeout) extends Actor with ActorLogging {
 
   var consensusRoundState: ConsensusRoundState = ConsensusRoundState()
+
+  implicit val sys: ActorSystem = context.system
 
   override def receive: Receive = {
     case GenerateGenesisBlock(selfRemoteActorRef) =>
@@ -149,14 +167,14 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
 
       log.debug(s"generate genesis block = $consensusRoundState")
 
-      // TODO: revist this
-      val seedPeerRefs =
-        Await.result(consensusRoundState.selfPeerToPeerRef.get ? GetPeerActorRefs, 5.seconds)
-          .asInstanceOf[Set[ActorRef]]
+      import constellation._
+      // TODO: revisit this
+      val seedPeerRefs = (consensusRoundState.selfPeerToPeerRef.get ? GetPeers).mapTo[Peers].get()
+
+      val refs = seedPeerRefs.peers ++ Seq(udpAddress)
 
       // TODO: add correct genesis block, temporary for testing
-      val genesisBlock = Block("tempGenesisParentHash", 0, "tempSig",
-        seedPeerRefs.+(consensusRoundState.selfPeerToPeerRef.get), 0, Seq())
+      val genesisBlock = Block("tempGenesisParentHash", 0, "tempSig", refs.toSet, 0, Seq())
 
       chainManager ! AddBlock(genesisBlock)
 
@@ -169,7 +187,8 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
 
       // If we are a facilitator this round then begin consensus
       if (Consensus.isFacilitator(consensusRoundState.currentFacilitators,
-                                  consensusRoundState.selfPeerToPeerRef.get)) {
+        udpAddress)) {
+        log.debug("This node is a facilitator, getting mem pool")
         memPoolManager ! GetMemPool(self, 0L)
       }
 
@@ -180,15 +199,14 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
       val peerBlockProposalsCache = consensusRoundState.copy().peerBlockProposals.filter(f => f._1 > prevBlock.round)
 
       consensusRoundState = consensusRoundState.copy(proposedBlock = None,
-                                                     previousBlock = Some(prevBlock),
-                                                     currentFacilitators = Consensus.getFacilitators(prevBlock),
-                                                     peerMemPools = peerMemPoolCache,
-                                                     peerBlockProposals = peerBlockProposalsCache)
+        previousBlock = Some(prevBlock),
+        currentFacilitators = Consensus.getFacilitators(prevBlock),
+        peerMemPools = peerMemPoolCache,
+        peerBlockProposals = peerBlockProposalsCache)
 
       if (consensusRoundState.enabled) {
         // If we are a facilitator this round then begin consensus
-        if (Consensus.isFacilitator(consensusRoundState.currentFacilitators,
-                                    consensusRoundState.selfPeerToPeerRef.get)) {
+        if (Consensus.isFacilitator(consensusRoundState.currentFacilitators, udpAddress)) {
           memPoolManager ! GetMemPool(self, prevBlock.round + 1)
         }
       }
@@ -201,20 +219,24 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
       val proposedBlock = consensusRoundState.proposedBlock
 
       if (proposedBlock.isDefined && previousBlock.isDefined) {
-        Consensus.notifyFacilitatorsOfBlockProposal(previousBlock.get,
-                                                    proposedBlock.get,
-                                                    consensusRoundState.selfPeerToPeerRef.get)
+        Consensus.notifyFacilitatorsOfBlockProposal(
+          previousBlock.get,
+          proposedBlock.get,
+          udpAddress,
+          udpActor
+        )
       }
 
     case MemPoolUpdated(transactions, round) =>
+      log.debug("MemPoolUpdated -- notifying facilitators")
       Consensus.notifyFacilitatorsOfPeerMemPoolUpdated(
-        consensusRoundState.previousBlock.get, consensusRoundState.selfPeerToPeerRef.get, transactions, round)
+        consensusRoundState.previousBlock.get, udpAddress, transactions, round, udpActor)
 
     case CheckConsensusResult(round) =>
       val consensusBlock =
         Consensus.getConsensusBlock(consensusRoundState.peerBlockProposals,
-                                    consensusRoundState.currentFacilitators,
-                                    round)
+          consensusRoundState.currentFacilitators,
+          round)
 
       if (consensusBlock.isDefined) {
         chainManager ! AddBlock(consensusBlock.get)

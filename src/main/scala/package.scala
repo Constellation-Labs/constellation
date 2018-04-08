@@ -1,9 +1,16 @@
 
-import akka.actor.ActorRef
+import java.net.InetSocketAddress
+
+import akka.actor.{ActorRef, ActorSystem}
+import akka.serialization.SerializationExtension
+import akka.util.ByteString
 import com.google.common.hash.Hashing
 import org.constellation.p2p.PeerToPeer.PeerRef
+import org.constellation.p2p.{SerializedUDPMessage, UDPSend}
+import org.constellation.util.{POWExt, POWSignHelp}
 import org.constellation.wallet.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
-import org.json4s.JsonAST.JString
+import org.constellation.wallet.KeyUtilsExt
+import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
 import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue}
 
@@ -13,7 +20,10 @@ import scala.util.Try
 /**
   * Project wide convenience functions.
   */
-package object constellation {
+package object constellation extends KeyUtilsExt with POWExt
+ with POWSignHelp {
+
+  val minimumTime : Long = 1518898908367L
 
   implicit class EasyFutureBlock[T](f: Future[T]) {
     def get(t: Int = 5): T = {
@@ -22,8 +32,25 @@ package object constellation {
     }
   }
 
+  implicit def addressToSocket(peerAddress: String): InetSocketAddress =
+    peerAddress.split(":") match { case Array(ip, port) => new InetSocketAddress(ip, port.toInt)}
+
+  implicit def socketToAddress(peerAddress: InetSocketAddress): String =
+    peerAddress.getHostString + ":" + peerAddress.getPort
+
+  class InetSocketAddressSerializer extends CustomSerializer[InetSocketAddress](format => ( {
+    case jstr: JObject =>
+      val host = (jstr \ "host").extract[String]
+      val port = (jstr \ "port").extract[Int]
+      new InetSocketAddress(host, port)
+  }, {
+    case key: InetSocketAddress =>
+      JObject("host" -> JString(key.getHostString), "port" -> JInt(key.getPort))
+  }
+  ))
+
   implicit val constellationFormats: Formats = DefaultFormats +
-    new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer
+    new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer + new InetSocketAddressSerializer
 
   def caseClassToJson(message: Any): String = {
     compactRender(Extraction.decompose(message))
@@ -49,5 +76,25 @@ package object constellation {
   implicit class SHA256Ext(s: String) {
     def sha256: String = Hashing.sha256().hashBytes(s.getBytes()).toString
   }
+
+  import java.nio.ByteBuffer
+  import java.nio.ByteOrder
+
+  def intToByte(myInteger: Int): Array[Byte] =
+    ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(myInteger).array
+
+  def byteToInt(byteBarray: Array[Byte]): Int =
+    ByteBuffer.wrap(byteBarray).order(ByteOrder.BIG_ENDIAN).getInt
+
+  implicit class UDPActorExt(udpActor: ActorRef) {
+    def udpSend[T <: AnyRef](data: T, remote: InetSocketAddress)(implicit system: ActorSystem): Unit = {
+      val serialization = SerializationExtension(system)
+      val serializer = serialization.findSerializerFor(data)
+      val bytes = serializer.toBinary(data)
+      val serMsg = SerializedUDPMessage(bytes, serializer.identifier)
+      udpActor ! UDPSend(ByteString(serMsg.json), remote)
+    }
+  }
+
 
 }

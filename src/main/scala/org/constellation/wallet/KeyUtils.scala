@@ -8,6 +8,8 @@ import org.json4s.{CustomSerializer, Extraction, Formats, JObject}
 import org.json4s.JsonAST.JString
 import org.json4s.native.Serialization
 
+object KeyUtils extends KeyUtilsExt
+
 /**
   * Need to compare this to:
   * https://github.com/bitcoinj/bitcoinj/blob/master/core/src/main/java/org/bitcoinj/core/ECKey.java
@@ -27,7 +29,7 @@ import org.json4s.native.Serialization
   * for security policy implications.
   *
   */
-object KeyUtils {
+trait KeyUtilsExt {
 
   /**
     * Simple Bitcoin like wallet grabbed from some stackoverflow post
