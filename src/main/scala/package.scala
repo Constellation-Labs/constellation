@@ -8,7 +8,7 @@ import com.google.common.hash.Hashing
 import org.constellation.p2p.PeerToPeer.PeerRef
 import org.constellation.p2p.{SerializedUDPMessage, UDPSend}
 import org.constellation.wallet.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
-import org.json4s.JsonAST.JString
+import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
 import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue}
 
@@ -27,8 +27,25 @@ package object constellation {
     }
   }
 
+  implicit def addressToSocket(peerAddress: String): InetSocketAddress =
+    peerAddress.split(":") match { case Array(ip, port) => new InetSocketAddress(ip, port.toInt)}
+
+  implicit def socketToAddress(peerAddress: InetSocketAddress): String =
+    peerAddress.getHostString + ":" + peerAddress.getPort
+
+  class InetSocketAddressSerializer extends CustomSerializer[InetSocketAddress](format => ( {
+    case jstr: JObject =>
+      val host = (jstr \ "host").extract[String]
+      val port = (jstr \ "port").extract[Int]
+      new InetSocketAddress(host, port)
+  }, {
+    case key: InetSocketAddress =>
+      JObject("host" -> JString(key.getHostString), "port" -> JInt(key.getPort))
+  }
+  ))
+
   implicit val constellationFormats: Formats = DefaultFormats +
-    new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer
+    new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer + new InetSocketAddressSerializer
 
   def caseClassToJson(message: Any): String = {
     compactRender(Extraction.decompose(message))
@@ -73,4 +90,6 @@ package object constellation {
       udpActor ! UDPSend(ByteString(serMsg.json), remote)
     }
   }
+
+
 }

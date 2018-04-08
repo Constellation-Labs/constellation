@@ -1,5 +1,6 @@
 package org.constellation
 
+import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
@@ -13,8 +14,8 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.rpc.RPCInterface
 import org.constellation.wallet.KeyUtils
 import org.constellation.consensus.Consensus
-import org.constellation.p2p.PeerToPeer
-import org.constellation.p2p.PeerToPeer.{AddPeer}
+import org.constellation.p2p.{PeerToPeer, RegisterNextActor, UDPActor}
+import org.constellation.p2p.PeerToPeer.AddPeerFromLocal
 import org.constellation.state.{ChainStateManager, MemPoolManager}
 
 import scala.concurrent.ExecutionContextExecutor
@@ -33,16 +34,26 @@ object ConstellationNode extends App {
   val keyPair = KeyUtils.makeKeyPair()
 
   // TODO: add seeds from config
-  new ConstellationNode(keyPair, None, config.getString("http.interface"),
-    config.getInt("http.port"), rpcTimeout)
+  new ConstellationNode(
+    keyPair,
+    Seq(),
+    config.getString("http.interface"),
+    config.getInt("http.port"),
+    config.getString("udp.interface"),
+    config.getInt("udp.port"),
+    timeoutSeconds = rpcTimeout
+  )
 
 }
 
 class ConstellationNode(
                val keyPair: KeyPair,
-               val seedPeers: Option[Seq[String]],
+               val seedPeers: Seq[InetSocketAddress],
                val httpInterface: String,
                val httpPort: Int,
+               val udpInterface: String = "0.0.0.0",
+               val udpPort: Int = 16180,
+               val hostName: String = "127.0.0.1",
                timeoutSeconds: Int = 30
              )(
                implicit val system: ActorSystem,
@@ -62,6 +73,15 @@ class ConstellationNode(
   // and need to make sure someone can't access internal actors
 
   // Setup actors
+
+  val udpAddressString: String = hostName + ":" + udpPort
+  val udpAddress = new InetSocketAddress(hostName, udpPort)
+
+  val udpActor: ActorRef =
+    system.actorOf(
+      Props(new UDPActor(None, udpPort, udpInterface)), s"ConstellationUDPActor_$publicKeyHash"
+    )
+
   val memPoolManagerActor: ActorRef =
     system.actorOf(Props(new MemPoolManager), s"ConstellationMemPoolManagerActor_$publicKeyHash")
 
@@ -69,18 +89,21 @@ class ConstellationNode(
     system.actorOf(Props(new ChainStateManager(memPoolManagerActor: ActorRef)), s"ConstellationChainStateActor_$publicKeyHash")
 
   val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair)(timeout)),
+    Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair, udpAddress, udpActor)(timeout)),
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val peerToPeerActor: ActorRef =
-    system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor)
+    system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor, udpActor, udpAddress)
     (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
+  udpActor ! RegisterNextActor(peerToPeerActor)
+
+
   // Seed peers
-  if (seedPeers.isDefined) {
-    seedPeers.get.foreach(peer => {
+  if (seedPeers.nonEmpty) {
+    seedPeers.foreach(peer => {
       logger.info(s"Attempting to connect to seed-host $peer")
-      peerToPeerActor ! AddPeer(peer)
+      peerToPeerActor ! AddPeerFromLocal(peer)
     })
   } else {
     logger.info("No seed host configured, waiting for messages.")
@@ -88,7 +111,7 @@ class ConstellationNode(
 
   // If we are exposing rpc then create routes
   val routes: Route = new RPCInterface(chainStateActor,
-    peerToPeerActor, memPoolManagerActor, consensusActor)(executionContext, timeout).routes
+    peerToPeerActor, memPoolManagerActor, consensusActor, udpAddress)(executionContext, timeout).routes
 
   // Setup http server for rpc
   Http().bindAndHandle(routes, httpInterface, httpPort)

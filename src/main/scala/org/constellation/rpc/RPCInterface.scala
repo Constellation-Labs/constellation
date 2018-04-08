@@ -1,5 +1,6 @@
 package org.constellation.rpc
 
+import java.net.InetSocketAddress
 import java.security.PublicKey
 
 import akka.actor.ActorRef
@@ -25,7 +26,13 @@ import org.json4s.native.Serialization
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
-class RPCInterface(chainStateActor: ActorRef, peerToPeerActor: ActorRef, memPoolManagerActor: ActorRef, consensusActor: ActorRef)
+class RPCInterface(
+                    chainStateActor: ActorRef,
+                    peerToPeerActor: ActorRef,
+                    memPoolManagerActor: ActorRef,
+                    consensusActor: ActorRef,
+                    udpAddress: InetSocketAddress
+                  )
                   (implicit executionContext: ExecutionContext, timeout: Timeout) extends Json4sSupport {
 
   implicit val serialization: Serialization.type = native.Serialization
@@ -41,7 +48,7 @@ class RPCInterface(chainStateActor: ActorRef, peerToPeerActor: ActorRef, memPool
   def serializeBlocks(blocks: Seq[Block]): Seq[BlockSerialized] = {
     blocks.map(b => {
       BlockSerialized(b.parentHash, b.height, b.signature,
-        b.clusterParticipants.map(a => a.path.toSerializationFormat), b.round, b.transactions)
+        b.clusterParticipants, b.round, b.transactions)
     })
   }
 
@@ -113,9 +120,10 @@ class RPCInterface(chainStateActor: ActorRef, peerToPeerActor: ActorRef, memPool
       path("peer") {
         entity(as[String]) { peerAddress =>
           logger.debug(s"Received request to add a new peer $peerAddress")
-
-          peerToPeerActor ! AddPeer(peerAddress.replace("\"", ""))
-
+          peerToPeerActor ! AddPeerFromLocal(
+            peerAddress.replaceAll('"'.toString,"").split(":")
+            match { case Array(ip, port) => new InetSocketAddress(ip, port.toInt)}
+          )
           complete(StatusCodes.Created)
         }
       }

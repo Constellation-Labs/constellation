@@ -1,5 +1,6 @@
 package org.constellation.p2p
 
+import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
@@ -10,12 +11,17 @@ import org.constellation.p2p.PeerToPeer._
 import org.constellation.wallet.KeyUtils
 import org.scalatest._
 
+import scala.util.Random
+
 class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLike
   with ImplicitSender with GivenWhenThen with BeforeAndAfterAll with Matchers {
 
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
+
+  private val address: InetSocketAddress = constellation.addressToSocket("localhost:16180")
+  private val address2: InetSocketAddress = constellation.addressToSocket("localhost:16181")
 
   trait WithPeerToPeerActor {
     val keyPair: KeyPair = KeyUtils.makeKeyPair()
@@ -24,8 +30,17 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
 
     val consensusActor = TestProbe()
 
+    val udpActor: ActorRef =
+      system.actorOf(
+        Props(new UDPActor(None)), s"ConstellationUDPActor" + Random.nextInt()
+      )
+
     val peerToPeerActor: ActorRef =
-      system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor.ref)(timeout)))
+      system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor.ref, udpActor)(timeout)))
+
+    udpActor ! RegisterNextActor(peerToPeerActor)
+
+
   }
 
   "A PeerToPeer actor " should " start with an empty set of peers" in new WithPeerToPeerActor {
@@ -35,7 +50,7 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
 
   it should "register new peers" in new WithPeerToPeerActor {
     val probe = TestProbe()
-    peerToPeerActor ! PeerRef(probe.ref)
+    peerToPeerActor ! PeerRef(address)
     peerToPeerActor ! GetPeers
 
     expectMsgPF() {
@@ -48,7 +63,7 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
     peerToPeerActor ! GetPeers
 
     expectMsgPF() {
-      case Peers(Seq(peer)) => peer should include("testActor")
+      case Peers(Seq(peer)) => peer shouldEqual address
     }
   }
 
@@ -57,17 +72,17 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
     Given("an initial peer")
     val peerProbe = TestProbe()
 
-    peerToPeerActor ! AddPeer(peerProbe.ref.path.toStringWithoutAddress)
+    peerToPeerActor ! AddPeerFromLocal(address)
     peerProbe.expectMsg(HandShake)
     peerProbe.expectMsg(GetPeers)
 
     When("we register 2 new peers")
-    val probes = Seq(TestProbe(), TestProbe()).map(_.ref.path.toSerializationFormat)
+    val probes = Seq(address, address2)
     peerToPeerActor ! Peers(probes)
 
     Then("the original peer should receive a notification for each one")
-    peerProbe.expectMsg(AddPeer(probes(0)))
-    peerProbe.expectMsg(AddPeer(probes(1)))
+    peerProbe.expectMsg(AddPeerFromLocal(probes(0)))
+    peerProbe.expectMsg(AddPeerFromLocal(probes(1)))
 
   }
 

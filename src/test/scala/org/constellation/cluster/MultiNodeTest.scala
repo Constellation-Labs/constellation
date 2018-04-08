@@ -1,14 +1,17 @@
 package org.constellation.cluster
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
+import akka.util.Timeout
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 
 import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 import constellation._
-import org.constellation.p2p.PeerToPeer.Peers
+import org.constellation.p2p.PeerToPeer.{GetPeers, Peers}
 import org.constellation.primitives.{BlockSerialized, Transaction}
 import org.constellation.utils.{RPCClient, TestNode}
 
@@ -22,6 +25,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+  implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
   "Multiple Nodes" should "create and run within the same JVM context" in {
     val node1 = TestNode()
@@ -171,10 +175,10 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     assert(rpc4Response.get().status == StatusCodes.OK)
 
     // Connect them together
-    val node1Path = node1.peerToPeerActor.path.toSerializationFormat
-    val node2Path = node2.peerToPeerActor.path.toSerializationFormat
-    val node3Path = node3.peerToPeerActor.path.toSerializationFormat
-    val node4Path = node4.peerToPeerActor.path.toSerializationFormat
+    val node1Path = node1.udpAddressString
+    val node2Path = node2.udpAddressString
+    val node3Path = node3.udpAddressString
+    val node4Path = node4.udpAddressString
 
     rpc1.post("peer", node2Path)
 
@@ -200,10 +204,14 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     val peers4 = rpc4.read[Peers](node4PeersRequest.get()).get()
 
     // Verify that they are connected
-    assert(peers1.peers.diff(Seq(node2Path, node3Path, node4Path)).isEmpty)
-    assert(peers2.peers.diff(Seq(node1Path, node3Path, node4Path)).isEmpty)
-    assert(peers3.peers.diff(Seq(node1Path, node4Path, node2Path)).isEmpty)
-    assert(peers4.peers.diff(Seq(node1Path, node3Path, node2Path)).isEmpty)
+    assert(peers1.peers.map{socketToAddress}.diff(Seq(node2Path, node3Path, node4Path)).isEmpty)
+    assert(peers2.peers.map{socketToAddress}.diff(Seq(node1Path, node3Path, node4Path)).isEmpty)
+    assert(peers3.peers.map{socketToAddress}.diff(Seq(node1Path, node4Path, node2Path)).isEmpty)
+    assert(peers4.peers.map{socketToAddress}.diff(Seq(node1Path, node3Path, node2Path)).isEmpty)
+
+    import akka.pattern.ask
+    val peers = (node1.peerToPeerActor ? GetPeers).mapTo[Peers].get()
+    assert(peers.peers.nonEmpty)
 
     // generate genesis block
     val genResponse1 = rpc1.get("generateGenesisBlock")
