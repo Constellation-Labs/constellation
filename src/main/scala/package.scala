@@ -7,7 +7,9 @@ import akka.util.ByteString
 import com.google.common.hash.Hashing
 import org.constellation.p2p.PeerToPeer.PeerRef
 import org.constellation.p2p.{SerializedUDPMessage, UDPSend}
+import org.constellation.util.{POWExt, POWSignHelp}
 import org.constellation.wallet.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
+import org.constellation.wallet.KeyUtilsExt
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
 import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue}
@@ -18,7 +20,10 @@ import scala.util.Try
 /**
   * Project wide convenience functions.
   */
-package object constellation {
+package object constellation extends KeyUtilsExt with POWExt
+ with POWSignHelp {
+
+  val minimumTime : Long = 1518898908367L
 
   implicit class EasyFutureBlock[T](f: Future[T]) {
     def get(t: Int = 5): T = {
