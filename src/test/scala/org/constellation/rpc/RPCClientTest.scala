@@ -91,8 +91,8 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val node1 = TestNode()
     val node2 = TestNode()
 
-    val node1Path = node1.peerToPeerActor.path.toSerializationFormat
-    val node2Path = node2.peerToPeerActor.path.toSerializationFormat
+    val node1Path = node1.udpAddressString
+    val node2Path = node2.udpAddressString
 
     val rpc1 = new RPCClient(port=node1.httpPort)
     val rpc2 = new RPCClient(port=node2.httpPort)

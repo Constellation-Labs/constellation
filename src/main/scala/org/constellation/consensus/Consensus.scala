@@ -188,6 +188,7 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
       // If we are a facilitator this round then begin consensus
       if (Consensus.isFacilitator(consensusRoundState.currentFacilitators,
         udpAddress)) {
+        log.debug("This node is a facilitator, getting mem pool")
         memPoolManager ! GetMemPool(self, 0L)
       }
 
@@ -227,6 +228,7 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
       }
 
     case MemPoolUpdated(transactions, round) =>
+      log.debug("MemPoolUpdated -- notifying facilitators")
       Consensus.notifyFacilitatorsOfPeerMemPoolUpdated(
         consensusRoundState.previousBlock.get, udpAddress, transactions, round, udpActor)
 

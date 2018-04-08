@@ -83,11 +83,15 @@ class PeerToPeer(
     case GetId =>
       sender() ! Id(publicKey)
 
-    case PeerMemPoolUpdated(transactions, peer, round) =>
-      consensusActor ! PeerMemPoolUpdated(transactions, peer, round)
+      // All these UDP Messages need to check if remote ip is banned.
+    case UDPMessage(p: PeerRef, remote) =>
+      self ! p
 
-    case PeerProposedBlock(block, peer) =>
-      consensusActor ! PeerProposedBlock(block, peer)
+    case UDPMessage(p: PeerMemPoolUpdated, remote) =>
+      consensusActor ! p
+
+    case UDPMessage(p : PeerProposedBlock, remote) =>
+      consensusActor ! p
 
     case UDPMessage(_ : HandShake, remote) =>
       log.debug(s"Got handshake from $remote")
