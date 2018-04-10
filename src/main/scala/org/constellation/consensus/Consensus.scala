@@ -10,6 +10,7 @@ import org.constellation.state.ChainStateManager.{AddBlock, BlockAddedToChain, C
 import org.constellation.wallet.KeyUtils
 import akka.pattern.ask
 import akka.util.Timeout
+import org.constellation.state.MemPoolManager
 
 import scala.collection.immutable.HashMap
 import scala.concurrent.duration._
@@ -128,6 +129,30 @@ object Consensus {
     })
   }
 
+  def handleBlockAddedToChain(consensusRoundState: ConsensusRoundState,
+                              prevBlock: Block,
+                              memPoolManager: ActorRef,
+                              self: ActorRef): ConsensusRoundState = {
+    val peerMemPoolCache = consensusRoundState.copy().peerMemPools.filter(f => f._1 > prevBlock.round)
+    val peerBlockProposalsCache = consensusRoundState.copy().peerBlockProposals.filter(f => f._1 > prevBlock.round)
+
+    val state = consensusRoundState.copy(proposedBlock = None,
+      previousBlock = Some(prevBlock),
+      currentFacilitators = Consensus.getFacilitators(prevBlock),
+      peerMemPools = peerMemPoolCache,
+      peerBlockProposals = peerBlockProposalsCache)
+
+    if (consensusRoundState.enabled) {
+      // If we are a facilitator this round then begin consensus
+      if (Consensus.isFacilitator(consensusRoundState.currentFacilitators,
+        consensusRoundState.selfPeerToPeerRef.get)) {
+        memPoolManager ! GetMemPool(self, prevBlock.round + 1)
+      }
+    }
+
+    state
+  }
+
   case class ConsensusRoundState(selfPeerToPeerRef: Option[ActorRef] = None,
                                  enabled: Boolean = false,
                                  proposedBlock: Option[Block] = None,
@@ -176,22 +201,7 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
     case BlockAddedToChain(prevBlock) =>
       log.debug(s"block added to chain = $prevBlock")
 
-      val peerMemPoolCache = consensusRoundState.copy().peerMemPools.filter(f => f._1 > prevBlock.round)
-      val peerBlockProposalsCache = consensusRoundState.copy().peerBlockProposals.filter(f => f._1 > prevBlock.round)
-
-      consensusRoundState = consensusRoundState.copy(proposedBlock = None,
-                                                     previousBlock = Some(prevBlock),
-                                                     currentFacilitators = Consensus.getFacilitators(prevBlock),
-                                                     peerMemPools = peerMemPoolCache,
-                                                     peerBlockProposals = peerBlockProposalsCache)
-
-      if (consensusRoundState.enabled) {
-        // If we are a facilitator this round then begin consensus
-        if (Consensus.isFacilitator(consensusRoundState.currentFacilitators,
-                                    consensusRoundState.selfPeerToPeerRef.get)) {
-          memPoolManager ! GetMemPool(self, prevBlock.round + 1)
-        }
-      }
+      consensusRoundState = Consensus.handleBlockAddedToChain(consensusRoundState, prevBlock, memPoolManager, self)
 
     case ProposedBlockUpdated(block) =>
 
