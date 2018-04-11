@@ -130,27 +130,27 @@ object Consensus {
   }
 
   def handleBlockAddedToChain(consensusRoundState: ConsensusRoundState,
-                              prevBlock: Block,
+                              latestBlock: Block,
                               memPoolManager: ActorRef,
                               self: ActorRef): ConsensusRoundState = {
-    val peerMemPoolCache = consensusRoundState.copy().peerMemPools.filter(f => f._1 > prevBlock.round)
-    val peerBlockProposalsCache = consensusRoundState.copy().peerBlockProposals.filter(f => f._1 > prevBlock.round)
 
-    val state = consensusRoundState.copy(proposedBlock = None,
-      previousBlock = Some(prevBlock),
-      currentFacilitators = Consensus.getFacilitators(prevBlock),
+    val peerMemPoolCache = consensusRoundState.copy().peerMemPools.filter(f => f._1 > latestBlock.round)
+    val peerBlockProposalsCache= consensusRoundState.copy().peerBlockProposals.filter(f => f._1 > latestBlock.round)
+
+    val updatedState = consensusRoundState.copy(proposedBlock = None,
+      previousBlock = Some(latestBlock),
+      currentFacilitators = Consensus.getFacilitators(latestBlock),
       peerMemPools = peerMemPoolCache,
       peerBlockProposals = peerBlockProposalsCache)
 
-    if (consensusRoundState.enabled) {
+    if (updatedState.enabled) {
       // If we are a facilitator this round then begin consensus
-      if (Consensus.isFacilitator(consensusRoundState.currentFacilitators,
-        consensusRoundState.selfPeerToPeerRef.get)) {
-        memPoolManager ! GetMemPool(self, prevBlock.round + 1)
+      if (Consensus.isFacilitator(updatedState.currentFacilitators, updatedState.selfPeerToPeerRef.get)) {
+        memPoolManager ! GetMemPool(self, latestBlock.round + 1)
       }
     }
 
-    state
+    updatedState
   }
 
   case class ConsensusRoundState(selfPeerToPeerRef: Option[ActorRef] = None,
@@ -198,10 +198,10 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
         memPoolManager ! GetMemPool(self, 0L)
       }
 
-    case BlockAddedToChain(prevBlock) =>
-      log.debug(s"block added to chain = $prevBlock")
+    case BlockAddedToChain(latestBlock) =>
+      log.debug(s"block added to chain = $latestBlock")
 
-      consensusRoundState = Consensus.handleBlockAddedToChain(consensusRoundState, prevBlock, memPoolManager, self)
+      consensusRoundState = Consensus.handleBlockAddedToChain(consensusRoundState, latestBlock, memPoolManager, self)
 
     case ProposedBlockUpdated(block) =>
 

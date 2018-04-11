@@ -177,15 +177,105 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
   "the handleBlockAddedToChain" should "return the correct state and trigger a new consensus round" in new WithConsensusActor {
 
-    val consensusRoundState = ConsensusRoundState()
-    val prevBlock = Block("sig", 0, "", Set(), 0, Seq())
+    val node1 = TestProbe()
+    val node2 = TestProbe()
+    val node3 = TestProbe()
+    val node4 = TestProbe()
+    val node5 = TestProbe()
+
+    val node1KeyPair = KeyUtils.makeKeyPair()
+    val node2KeyPair = KeyUtils.makeKeyPair()
+
+    val proposedBlock = Block("sig", 0, "", Set(), 1L, Seq())
+    val prevBlock = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node4.ref), 0L, Seq())
+    val latestBlock = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node5.ref), 1L, Seq())
+
+    val transaction =
+      Transaction.senderSign(Transaction(0L, node1KeyPair.getPublic, node2KeyPair.getPublic, 33L), node1KeyPair.getPrivate)
+
+    // Test with consensus enabled and we are a facilitator
+    val consensusRoundState = ConsensusRoundState(
+      Some(node1.ref),
+      true,
+      Some(proposedBlock),
+      Some(prevBlock),
+      prevBlock.clusterParticipants,
+      HashMap(1L -> HashMap(node1.ref -> Seq(transaction))),
+      HashMap(1L -> HashMap(node1.ref -> proposedBlock)))
+
     val memPoolManager = TestProbe()
 
     val updatedConsensusState =
-      Consensus.handleBlockAddedToChain(consensusRoundState, prevBlock, memPoolManager.ref, consensusActor)
+      Consensus.handleBlockAddedToChain(consensusRoundState, latestBlock, memPoolManager.ref, node1.ref)
 
-//    memPoolManager.expectMsg(GetMemPool(consensusActor, prevBlock.round + 1))
+    val expectedConsensusState = ConsensusRoundState(
+      Some(node1.ref),
+      true,
+      None,
+      Some(latestBlock),
+      latestBlock.clusterParticipants,
+      HashMap(),
+      HashMap())
 
+    assert(updatedConsensusState == expectedConsensusState)
+
+    memPoolManager.expectMsg(GetMemPool(node1.ref, latestBlock.round + 1))
+
+    // Test with consensus enabled and we are not a facilitator
+    val consensusRoundState2 = ConsensusRoundState(
+      Some(node1.ref),
+      true,
+      Some(proposedBlock),
+      Some(prevBlock),
+      prevBlock.clusterParticipants,
+      HashMap(0L -> HashMap(node1.ref -> Seq(transaction))),
+      HashMap(0L -> HashMap(node1.ref -> proposedBlock)))
+
+    val latestBlock2 = Block("sig", 0, "", Set(node2.ref, node3.ref, node5.ref), 1L, Seq())
+
+    val updatedConsensusState2 =
+      Consensus.handleBlockAddedToChain(consensusRoundState2, latestBlock2, memPoolManager.ref, node1.ref)
+
+    val expectedConsensusState2 = ConsensusRoundState(
+      Some(node1.ref),
+      true,
+      None,
+      Some(latestBlock2),
+      latestBlock2.clusterParticipants,
+      HashMap(),
+      HashMap())
+
+    assert(updatedConsensusState2 == expectedConsensusState2)
+
+    memPoolManager.expectNoMsg()
+
+    // Test with consensus disabled, ensure we are not filtering current round caches
+    val consensusRoundState3 = ConsensusRoundState(
+      Some(node1.ref),
+      false,
+      Some(proposedBlock),
+      Some(prevBlock),
+      prevBlock.clusterParticipants,
+      HashMap(1L -> HashMap(node1.ref -> Seq(transaction)), 2L -> HashMap(node2.ref -> Seq(transaction))),
+      HashMap(1L -> HashMap(node1.ref -> proposedBlock), 2L -> HashMap(node2.ref -> proposedBlock)))
+
+    val latestBlock3 = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node5.ref), 1L, Seq())
+
+    val updatedConsensusState3 =
+      Consensus.handleBlockAddedToChain(consensusRoundState3, latestBlock3, memPoolManager.ref, node1.ref)
+
+    val expectedConsensusState3 = ConsensusRoundState(
+      Some(node1.ref),
+      false,
+      None,
+      Some(latestBlock3),
+      latestBlock3.clusterParticipants,
+      HashMap(2L -> HashMap(node2.ref -> Seq(transaction))),
+      HashMap(2L -> HashMap(node2.ref -> proposedBlock)))
+
+    assert(updatedConsensusState3 == expectedConsensusState3)
+
+    memPoolManager.expectNoMsg()
   }
 
   "A ProposedBlockUpdated Message" should "be handled correctly" in new WithConsensusActor {
