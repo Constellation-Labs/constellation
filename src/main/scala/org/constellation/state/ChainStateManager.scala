@@ -12,9 +12,9 @@ import scala.collection.immutable.HashMap
 object ChainStateManager {
 
   // Commands
-  case class AddBlock(block: Block)
+  case class AddBlock(block: Block, replyTo: ActorRef)
   case class GetCurrentChainState()
-  case class CreateBlockProposal(memPools: HashMap[ActorRef, Seq[Transaction]], round: Long)
+  case class CreateBlockProposal(memPools: HashMap[ActorRef, Seq[Transaction]], round: Long, replyTo: ActorRef)
 
   // Events
   case class BlockAddedToChain(previousBlock: Block)
@@ -26,21 +26,21 @@ class ChainStateManager(memPoolManagerActor: ActorRef) extends Actor with ActorL
   var chain: Chain = Chain()
 
   override def receive: Receive = {
-    case AddBlock(block) =>
+    case AddBlock(block, replyTo) =>
       log.debug(s"received add block request $block")
 
       if (!chain.chain.contains(block)) {
         chain = Chain(chain.chain :+ block)
         log.debug(s"updated chain for $self = $chain")
         memPoolManagerActor ! RemoveConfirmedTransactions(block.transactions)
-        sender() ! BlockAddedToChain(block)
+        replyTo ! BlockAddedToChain(block)
       }
 
     case GetCurrentChainState =>
       log.debug(s"received GetCurrentChainState request")
       sender() ! CurrentChainStateUpdated(chain)
 
-    case CreateBlockProposal(memPools, round) =>
+    case CreateBlockProposal(memPools, round, replyTo) =>
       log.debug("Attempting to create block proposal")
 
       val transactions: Seq[Transaction] = memPools.foldLeft(Seq[Transaction]()) {
@@ -57,7 +57,7 @@ class ChainStateManager(memPoolManagerActor: ActorRef) extends Actor with ActorL
       val blockProposal: Block =  Block(lastBlock.signature, lastBlock.height + 1, "",
         lastBlock.clusterParticipants, round, transactions)
 
-      sender() ! ProposedBlockUpdated(blockProposal)
+      replyTo ! ProposedBlockUpdated(blockProposal)
   }
 
 }

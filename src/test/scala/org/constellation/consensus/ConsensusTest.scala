@@ -278,24 +278,27 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     memPoolManager.expectNoMsg()
   }
 
-  "A ProposedBlockUpdated Message" should "be handled correctly" in new WithConsensusActor {
-
-    consensusActor ! ProposedBlockUpdated(Block("hashPointer", 0L, "sig", Set(), 0L, Seq()))
-
+  "the generateGenesisBlock method" should "work correctly" in new WithConsensusActor {
     // TODO add assertions
   }
 
-  "A PeerProposedBlock Message" should "be handled correctly" in new WithConsensusActor {
-    val peerProbe = TestProbe()
-
-    consensusActor ! PeerProposedBlock(Block("hashPointer", 0L, "sig", Set(), 0L, Seq()), peerProbe.ref)
-
+  "the enableConsensus method" should "work correctly" in new WithConsensusActor {
     // TODO add assertions
   }
 
-  "A CheckConsensusResult Message" should "be handled correctly" in new WithConsensusActor {
-    consensusActor ! CheckConsensusResult(0)
+  "the handleProposedBlockUpdated method" should "work correctly" in new WithConsensusActor {
+    // TODO add assertions
+  }
 
+  "the checkConsensusResult method" should "work correctly" in new WithConsensusActor {
+    // TODO add assertions
+  }
+
+  "the handlePeerMemPoolUpdated method" should "work correctly" in new WithConsensusActor {
+    // TODO add assertions
+  }
+
+  "the handlePeerProposedBlock method" should "work correctly" in new WithConsensusActor {
     // TODO add assertions
   }
 
