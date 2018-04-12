@@ -359,7 +359,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     val thread = new Thread {
       override def run: Unit = {
-        Thread.sleep(1000)
+        Thread.sleep(3000)
       }
     }
 
