@@ -351,13 +351,13 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     val thread = new Thread {
       override def run: Unit = {
-        Thread.sleep(3000)
+        Thread.sleep(5000)
       }
     }
 
     val future = Future { thread.run }
 
-    Await.ready(future, 5 seconds)
+    Await.ready(future, 10 seconds)
 
     val finalChainStateNode1Response = rpc1.get("blocks")
 

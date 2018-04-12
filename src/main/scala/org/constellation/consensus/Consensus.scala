@@ -201,7 +201,8 @@ object Consensus {
     updatedState
   }
 
-  def checkConsensusResult(consensusRoundState: ConsensusRoundState, round: Long, chainStateManager: ActorRef, self: ActorRef) = {
+  def checkConsensusResult(consensusRoundState: ConsensusRoundState, round: Long,
+                           chainStateManager: ActorRef, self: ActorRef): Unit = {
     val consensusBlock =
       Consensus.getConsensusBlock(consensusRoundState.peerBlockProposals,
                                   consensusRoundState.currentFacilitators,
