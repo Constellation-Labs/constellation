@@ -462,8 +462,108 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     assert(updatedConsensusState == expectedConsensusRoundState)
   }
 
-  "the checkConsensusResult method" should "work correctly" in new WithConsensusActor {
-    // TODO add assertions
+  "the checkConsensusResult method" should "add the block if in consensus" in new WithConsensusActor {
+    val node1 = TestProbe()
+    val node2 = TestProbe()
+    val node3 = TestProbe()
+    val node4 = TestProbe()
+
+    val node1KeyPair = KeyUtils.makeKeyPair()
+    val node2KeyPair = KeyUtils.makeKeyPair()
+    val node3KeyPair = KeyUtils.makeKeyPair()
+    val node4KeyPair = KeyUtils.makeKeyPair()
+
+    val transaction1 =
+      Transaction.senderSign(Transaction(0L, node1KeyPair.getPublic, node2KeyPair.getPublic, 33L), node1KeyPair.getPrivate)
+
+    val transaction2 =
+      Transaction.senderSign(Transaction(0L, node2KeyPair.getPublic, node4KeyPair.getPublic, 14L), node2KeyPair.getPrivate)
+
+    val transaction3 =
+      Transaction.senderSign(Transaction(0L, node4KeyPair.getPublic, node1KeyPair.getPublic, 2L), node4KeyPair.getPrivate)
+
+    val transaction4 =
+      Transaction.senderSign(Transaction(0L, node3KeyPair.getPublic, node2KeyPair.getPublic, 20L), node3KeyPair.getPrivate)
+
+    val node1Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
+    val node2Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
+    val node3Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
+    val node4Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
+
+    val peerBlockProposals = HashMap(0L -> HashMap(node1.ref -> node1Block, node2.ref -> node2Block, node3.ref -> node3Block, node4.ref -> node4Block))
+
+    val currentFacilitators = Set(node1.ref, node2.ref, node3.ref, node4.ref)
+
+    val prevBlock = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node4.ref), 0L, Seq())
+
+    val consensusRoundState = ConsensusRoundState(
+      Some(node1.ref),
+      true,
+      None,
+      Some(prevBlock),
+      currentFacilitators,
+      HashMap(1L -> HashMap(node2.ref -> Seq(transaction1))),
+      peerBlockProposals)
+
+    val chainStateManager = TestProbe()
+
+    val testConsensusActor = TestProbe()
+
+    Consensus.checkConsensusResult(consensusRoundState, 0L, chainStateManager.ref, testConsensusActor.ref)
+
+    chainStateManager.expectMsg(AddBlock(node1Block, testConsensusActor.ref))
+  }
+
+  "the checkConsensusResult method" should "not add the block if not in consensus" in new WithConsensusActor {
+    val node1 = TestProbe()
+    val node2 = TestProbe()
+    val node3 = TestProbe()
+    val node4 = TestProbe()
+
+    val node1KeyPair = KeyUtils.makeKeyPair()
+    val node2KeyPair = KeyUtils.makeKeyPair()
+    val node3KeyPair = KeyUtils.makeKeyPair()
+    val node4KeyPair = KeyUtils.makeKeyPair()
+
+    val transaction1 =
+      Transaction.senderSign(Transaction(0L, node1KeyPair.getPublic, node2KeyPair.getPublic, 33L), node1KeyPair.getPrivate)
+
+    val transaction2 =
+      Transaction.senderSign(Transaction(0L, node2KeyPair.getPublic, node4KeyPair.getPublic, 14L), node2KeyPair.getPrivate)
+
+    val transaction3 =
+      Transaction.senderSign(Transaction(0L, node4KeyPair.getPublic, node1KeyPair.getPublic, 2L), node4KeyPair.getPrivate)
+
+    val transaction4 =
+      Transaction.senderSign(Transaction(0L, node3KeyPair.getPublic, node2KeyPair.getPublic, 20L), node3KeyPair.getPrivate)
+
+    val node1Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3))
+    val node2Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
+    val node3Block = Block("sig", 0, "", Set(node1.ref, node3.ref, node4.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
+    val node4Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
+
+    val peerBlockProposals = HashMap(0L -> HashMap(node1.ref -> node1Block, node2.ref -> node2Block, node3.ref -> node3Block, node4.ref -> node4Block))
+
+    val currentFacilitators = Set(node1.ref, node2.ref, node3.ref, node4.ref)
+
+    val prevBlock = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node4.ref), 0L, Seq())
+
+    val consensusRoundState = ConsensusRoundState(
+      Some(node1.ref),
+      true,
+      None,
+      Some(prevBlock),
+      currentFacilitators,
+      HashMap(1L -> HashMap(node2.ref -> Seq(transaction1))),
+      peerBlockProposals)
+
+    val chainStateManager = TestProbe()
+
+    val testConsensusActor = TestProbe()
+
+    Consensus.checkConsensusResult(consensusRoundState, 0L, chainStateManager.ref, testConsensusActor.ref)
+
+    chainStateManager.expectNoMsg()
   }
 
   "the handlePeerMemPoolUpdated method" should "work correctly" in new WithConsensusActor {
