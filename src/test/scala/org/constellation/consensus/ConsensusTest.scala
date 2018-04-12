@@ -4,14 +4,16 @@ import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
-import akka.testkit.{TestKit, TestProbe}
+import akka.testkit.{TestActor, TestKit, TestProbe}
 import akka.util.Timeout
 import org.constellation.consensus.Consensus._
+import org.constellation.p2p.PeerToPeer.GetPeerActorRefs
 import org.constellation.primitives.{Block, Transaction}
-import org.constellation.state.ChainStateManager.BlockAddedToChain
+import org.constellation.state.ChainStateManager.{AddBlock, BlockAddedToChain}
 import org.constellation.wallet.KeyUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
+import scala.concurrent.duration._
 import scala.collection.immutable.HashMap
 import scala.collection.mutable
 
@@ -279,7 +281,67 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
   }
 
   "the generateGenesisBlock method" should "work correctly" in new WithConsensusActor {
-    // TODO add assertions
+    val node1 = TestProbe()
+    val node2 = TestProbe()
+    val node3 = TestProbe()
+    val node4 = TestProbe()
+    val node5 = TestProbe()
+
+    val node1KeyPair = KeyUtils.makeKeyPair()
+    val node2KeyPair = KeyUtils.makeKeyPair()
+
+    val proposedBlock = Block("sig", 0, "", Set(), 1L, Seq())
+    val prevBlock = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node4.ref), 0L, Seq())
+    val latestBlock = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node5.ref), 1L, Seq())
+
+    val transaction =
+      Transaction.senderSign(Transaction(0L, node1KeyPair.getPublic, node2KeyPair.getPublic, 33L), node1KeyPair.getPrivate)
+
+    val consensusRoundState = ConsensusRoundState(
+      None,
+      false,
+      None,
+      None,
+      Set(),
+      HashMap(0L -> HashMap(node2.ref -> Seq(transaction))),
+      HashMap(0L -> HashMap(node2.ref -> proposedBlock)))
+
+    val chainStateManager = TestProbe()
+
+    val requestActor = TestProbe()
+
+    val testConsensusActor = TestProbe()
+
+    node1.setAutoPilot(new TestActor.AutoPilot {
+      def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = {
+        sender ! Set(node2.ref, node3.ref, node4.ref, node5.ref)
+        TestActor.KeepRunning
+      }
+    })
+
+    val updatedConsensusState = Consensus.generateGenesisBlock(node1.ref, consensusRoundState, chainStateManager.ref,
+      requestActor.ref, testConsensusActor.ref)
+
+    node1.expectMsg(GetPeerActorRefs)
+
+    val expectedConsensusRoundState = ConsensusRoundState(
+      Some(node1.ref),
+      false,
+      None,
+      None,
+      Set(),
+      HashMap(0L -> HashMap(node2.ref -> Seq(transaction))),
+      HashMap(0L -> HashMap(node2.ref -> proposedBlock)))
+
+    assert(updatedConsensusState == expectedConsensusRoundState)
+
+    val genesisBlock = Block("tempGenesisParentHash", 0, "tempSig",
+      Set(node1.ref, node2.ref, node3.ref, node4.ref, node5.ref), 0, Seq())
+
+    chainStateManager.expectMsg(AddBlock(genesisBlock, testConsensusActor.ref))
+
+    requestActor.expectMsg(genesisBlock)
+
   }
 
   "the enableConsensus method" should "work correctly" in new WithConsensusActor {
