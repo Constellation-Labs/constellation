@@ -9,7 +9,7 @@ import akka.util.Timeout
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.PeerToPeer.GetPeerActorRefs
 import org.constellation.primitives.{Block, Transaction}
-import org.constellation.state.ChainStateManager.{AddBlock, BlockAddedToChain}
+import org.constellation.state.ChainStateManager.{AddBlock, BlockAddedToChain, CreateBlockProposal}
 import org.constellation.wallet.KeyUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
@@ -567,7 +567,107 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
   }
 
   "the handlePeerMemPoolUpdated method" should "work correctly" in new WithConsensusActor {
-    // TODO add assertions
+    val node1 = TestProbe()
+    val node2 = TestProbe()
+    val node3 = TestProbe()
+    val node4 = TestProbe()
+    val node5 = TestProbe()
+
+    val proposedBlock = Block("sig", 0, "", Set(), 1L, Seq())
+    val prevBlock = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node4.ref, node5.ref), 0L, Seq())
+
+    val node1KeyPair = KeyUtils.makeKeyPair()
+    val node2KeyPair = KeyUtils.makeKeyPair()
+    val node3KeyPair = KeyUtils.makeKeyPair()
+    val node4KeyPair = KeyUtils.makeKeyPair()
+
+    val transaction1 =
+      Transaction.senderSign(Transaction(0L, node1KeyPair.getPublic, node2KeyPair.getPublic, 33L), node1KeyPair.getPrivate)
+
+    val transaction2 =
+      Transaction.senderSign(Transaction(0L, node2KeyPair.getPublic, node4KeyPair.getPublic, 14L), node2KeyPair.getPrivate)
+
+    val transaction3 =
+      Transaction.senderSign(Transaction(0L, node4KeyPair.getPublic, node1KeyPair.getPublic, 2L), node4KeyPair.getPrivate)
+
+    val transaction4 =
+      Transaction.senderSign(Transaction(0L, node3KeyPair.getPublic, node2KeyPair.getPublic, 20L), node3KeyPair.getPrivate)
+
+    // verify that when all of this rounds mem pools are available we create a block proposal
+    val consensusRoundState = ConsensusRoundState(
+      Some(node1.ref),
+      true,
+      None,
+      Some(prevBlock),
+      Set(node1.ref, node2.ref, node3.ref, node4.ref, node5.ref),
+      HashMap(0L -> HashMap(
+        node1.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+        node2.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+        node3.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+        node4.ref -> Seq(transaction1, transaction2, transaction3, transaction4))),
+      HashMap())
+
+    val chainStateManager = TestProbe()
+    val testConsensusActor = TestProbe()
+
+    val updatedConsensusState = Consensus.handlePeerMemPoolUpdated(consensusRoundState, 0L, node5.ref,
+      Seq(transaction1, transaction2, transaction3, transaction4), chainStateManager.ref, testConsensusActor.ref)
+
+    chainStateManager.expectMsg(CreateBlockProposal(HashMap(
+      node1.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+      node2.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+      node3.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+      node4.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+      node5.ref -> Seq(transaction1, transaction2, transaction3, transaction4)), 0L, testConsensusActor.ref))
+
+    val expectedConsensusRoundState = ConsensusRoundState(
+      Some(node1.ref),
+      true,
+      None,
+      Some(prevBlock),
+      Set(node1.ref, node2.ref, node3.ref, node4.ref, node5.ref),
+      HashMap(0L -> HashMap(
+        node1.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+        node2.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+        node3.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+        node4.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+        node5.ref -> Seq(transaction1, transaction2, transaction3, transaction4))),
+      HashMap())
+
+    assert(updatedConsensusState == expectedConsensusRoundState)
+
+    // verify that when there are not all of the mem pools it does not create a block proposal
+    val consensusRoundState2 = ConsensusRoundState(
+      Some(node1.ref),
+      true,
+      None,
+      Some(prevBlock),
+      Set(node1.ref, node2.ref, node3.ref, node4.ref, node5.ref),
+      HashMap(0L -> HashMap(
+        node1.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+        node3.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+        node4.ref -> Seq(transaction1, transaction2, transaction3, transaction4))),
+      HashMap())
+
+    val updatedConsensusState2 = Consensus.handlePeerMemPoolUpdated(consensusRoundState2, 0L, node5.ref,
+      Seq(transaction1, transaction2, transaction3, transaction4), chainStateManager.ref, testConsensusActor.ref)
+
+    chainStateManager.expectNoMsg()
+
+    val expectedConsensusRoundState2 = ConsensusRoundState(
+      Some(node1.ref),
+      true,
+      None,
+      Some(prevBlock),
+      Set(node1.ref, node2.ref, node3.ref, node4.ref, node5.ref),
+      HashMap(0L -> HashMap(
+        node1.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+        node3.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+        node4.ref -> Seq(transaction1, transaction2, transaction3, transaction4),
+        node5.ref -> Seq(transaction1, transaction2, transaction3, transaction4))),
+      HashMap())
+
+    assert(updatedConsensusState2 == expectedConsensusRoundState2)
   }
 
   "the handlePeerProposedBlock method" should "work correctly" in new WithConsensusActor {
