@@ -24,8 +24,6 @@ object PeerToPeer {
 
   case class GetPeers()
 
-  case class GetPeerActorRefs()
-
   case class GetId()
 
   case class GetBalance(account: PublicKey)

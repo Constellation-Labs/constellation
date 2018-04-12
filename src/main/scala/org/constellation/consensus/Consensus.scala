@@ -5,7 +5,7 @@ import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
 import org.constellation.consensus.Consensus._
-import org.constellation.p2p.PeerToPeer.{GetPeerActorRefs, GetPeers, Peers}
+import org.constellation.p2p.PeerToPeer.{GetPeers, Peers}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.ChainStateManager.{AddBlock, BlockAddedToChain, CreateBlockProposal}
 import org.constellation.wallet.KeyUtils
@@ -145,7 +145,9 @@ object Consensus {
   def handleBlockAddedToChain(consensusRoundState: ConsensusRoundState,
                               latestBlock: Block,
                               memPoolManager: ActorRef,
-                              self: ActorRef): ConsensusRoundState = {
+                              self: ActorRef,
+                              udpAddress: InetSocketAddress
+                             ): ConsensusRoundState = {
 
     val peerMemPoolCache = consensusRoundState.copy().peerMemPools.filter(f => f._1 > latestBlock.round)
     val peerBlockProposalsCache= consensusRoundState.copy().peerBlockProposals.filter(f => f._1 > latestBlock.round)
@@ -158,7 +160,7 @@ object Consensus {
 
     if (updatedState.enabled) {
       // If we are a facilitator this round then begin consensus
-      if (Consensus.isFacilitator(updatedState.currentFacilitators, updatedState.selfPeerToPeerRef.get)) {
+      if (Consensus.isFacilitator(updatedState.currentFacilitators, udpAddress)) {
         memPoolManager ! GetMemPool(self, latestBlock.round + 1)
       }
     }
@@ -170,10 +172,10 @@ object Consensus {
   def generateGenesisBlock(selfRemoteActorRef: ActorRef, consensusRoundState: ConsensusRoundState,
                            chainStateManager: ActorRef, sender: ActorRef, replyTo: ActorRef,
                            udpAddress: InetSocketAddress)(implicit timeout: Timeout): ConsensusRoundState = {
-      val updatedState = consensusRoundState.copy(selfPeerToPeerRef = Some(selfRemoteActorRef))
+    val updatedState = consensusRoundState.copy(selfPeerToPeerRef = Some(selfRemoteActorRef))
     import constellation._
     // TODO: revisit this
-    val seedPeerRefs = (consensusRoundState.selfPeerToPeerRef.get ? GetPeers).mapTo[Peers].get()
+    val seedPeerRefs = (updatedState.selfPeerToPeerRef.get ? GetPeers).mapTo[Peers].get()
 
     val refs = seedPeerRefs.peers ++ Seq(udpAddress)
 
@@ -201,7 +203,8 @@ object Consensus {
   }
 
   def handleProposedBlockUpdated(consensusRoundState: ConsensusRoundState, block: Block,
-                                 udpAddress: InetSocketAddress, udpActor: ActorRef): ConsensusRoundState = {
+                                 udpAddress: InetSocketAddress, udpActor: ActorRef
+                                )(implicit system: ActorSystem): ConsensusRoundState = {
     val updatedState = consensusRoundState.copy(proposedBlock = Some(block))
 
     val previousBlock: Option[Block] = updatedState.previousBlock
@@ -229,7 +232,7 @@ object Consensus {
     }
   }
 
-  def handlePeerMemPoolUpdated(consensusRoundState: ConsensusRoundState, round: Long, peer: ActorRef,
+  def handlePeerMemPoolUpdated(consensusRoundState: ConsensusRoundState, round: Long, peer: InetSocketAddress,
                                transactions: Seq[Transaction], chainStateManager: ActorRef, replyTo: ActorRef): ConsensusRoundState = {
     val peerMemPools =
       consensusRoundState.peerMemPools +
@@ -250,7 +253,7 @@ object Consensus {
   }
 
   def handlePeerProposedBlock(consensusRoundState: ConsensusRoundState,
-                              replyTo: ActorRef, block: Block, peer: ActorRef): ConsensusRoundState = {
+                              replyTo: ActorRef, block: Block, peer: InetSocketAddress ): ConsensusRoundState = {
     val peerBlockProposals =
       consensusRoundState.peerBlockProposals +
         (block.round -> (consensusRoundState.peerBlockProposals.getOrElse(block.round, HashMap()) + (peer -> block)))
@@ -297,7 +300,9 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
     case BlockAddedToChain(latestBlock) =>
       log.debug(s"block added to chain = $latestBlock")
 
-      consensusRoundState = handleBlockAddedToChain(consensusRoundState, latestBlock, memPoolManager, self)
+      consensusRoundState = handleBlockAddedToChain(
+        consensusRoundState, latestBlock, memPoolManager, self, udpAddress
+      )
 
     case ProposedBlockUpdated(block) =>
       log.debug(s"self proposed block updated = $block")

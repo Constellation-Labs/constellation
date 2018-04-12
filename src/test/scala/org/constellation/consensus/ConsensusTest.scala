@@ -8,7 +8,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{TestActor, TestKit, TestProbe}
 import akka.util.Timeout
 import org.constellation.consensus.Consensus._
-import org.constellation.p2p.PeerToPeer.GetPeerActorRefs
+import org.constellation.p2p.PeerToPeer.{GetPeers, Peers}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.ChainStateManager.{AddBlock, BlockAddedToChain}
 import org.constellation.wallet.KeyUtils
@@ -27,6 +27,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
   private val address2: InetSocketAddress = constellation.addressToSocket("localhost:16182")
   private val address3: InetSocketAddress = constellation.addressToSocket("localhost:16183")
   private val address4: InetSocketAddress = constellation.addressToSocket("localhost:16184")
+  private val address5: InetSocketAddress = constellation.addressToSocket("localhost:16185")
 
   trait WithConsensusActor {
     val memPoolManagerActor = TestProbe()
@@ -123,11 +124,6 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
   // TODO: modify to use threshold
   "getConsensusBlock" should "return a consensus block if the proposals are in sync" in {
 
-    val node1 = TestProbe()
-    val node2 = TestProbe()
-    val node3 = TestProbe()
-    val node4 = TestProbe()
-
     val node1KeyPair = KeyUtils.makeKeyPair()
     val node2KeyPair = KeyUtils.makeKeyPair()
     val node3KeyPair = KeyUtils.makeKeyPair()
@@ -145,14 +141,16 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val transaction4 =
       Transaction.senderSign(Transaction(0L, node3KeyPair.getPublic, node2KeyPair.getPublic, 20L), node3KeyPair.getPrivate)
 
-    val node1Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
-    val node2Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
-    val node3Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
-    val node4Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
+    val node1Block = Block("sig", 0, "", Set(address1, address3), 0, Seq(transaction1, transaction2, transaction3, transaction4))
+    val node2Block = Block("sig", 0, "", Set(address1, address3), 0, Seq(transaction1, transaction2, transaction3, transaction4))
+    val node3Block = Block("sig", 0, "", Set(address1, address3), 0, Seq(transaction1, transaction2, transaction3, transaction4))
+    val node4Block = Block("sig", 0, "", Set(address1, address3), 0, Seq(transaction1, transaction2, transaction3, transaction4))
 
-    val peerBlockProposals = HashMap(0L -> HashMap(node1.ref -> node1Block, node2.ref -> node2Block, node3.ref -> node3Block, node4.ref -> node4Block))
+    val peerBlockProposals = HashMap(
+      0L -> HashMap(address1 -> node1Block, address2 -> node2Block, address3 -> node3Block, address4 -> node4Block)
+    )
 
-    val currentFacilitators = Set(node1.ref, node2.ref, node3.ref, node4.ref)
+    val currentFacilitators = Set(address1, address2, address3, address4)
 
     val consensusBlock: Option[Block] =
       Consensus.getConsensusBlock(peerBlockProposals, currentFacilitators, 0L)
@@ -164,10 +162,6 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
   "getConsensusBlock" should "not return a consensus block if the proposals are not in sync" in {
 
-    val node1 = TestProbe()
-    val node2 = TestProbe()
-    val node3 = TestProbe()
-    val node4 = TestProbe()
 
     val node1KeyPair = KeyUtils.makeKeyPair()
     val node2KeyPair = KeyUtils.makeKeyPair()
@@ -182,9 +176,11 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val node3Block = Block("sig", 0, "", Set(), 0, Seq())
     val node4Block = Block("sig", 0, "", Set(), 0, Seq())
 
-    val peerBlockProposals = HashMap(0L -> HashMap(node1.ref -> node1Block, node2.ref -> node2Block, node3.ref -> node3Block, node4.ref -> node4Block))
+    val peerBlockProposals = HashMap(
+      0L -> HashMap(address1 -> node1Block, address2 -> node2Block, address3 -> node3Block, address4 -> node4Block)
+    )
 
-    val currentFacilitators = Set(node1.ref, node2.ref, node3.ref, node4.ref)
+    val currentFacilitators = Set(address1, address2, address3, address4)
 
     val consensusBlock: Option[Block] =
       Consensus.getConsensusBlock(peerBlockProposals, currentFacilitators, 0L)
@@ -195,17 +191,13 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
   "the handleBlockAddedToChain" should "return the correct state and trigger a new consensus round" in new WithConsensusActor {
 
     val node1 = TestProbe()
-    val node2 = TestProbe()
-    val node3 = TestProbe()
-    val node4 = TestProbe()
-    val node5 = TestProbe()
 
     val node1KeyPair = KeyUtils.makeKeyPair()
     val node2KeyPair = KeyUtils.makeKeyPair()
 
     val proposedBlock = Block("sig", 0, "", Set(), 1L, Seq())
-    val prevBlock = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node4.ref), 0L, Seq())
-    val latestBlock = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node5.ref), 1L, Seq())
+    val prevBlock = Block("sig", 0, "", Set(address1, address2, address3, address4), 0L, Seq())
+    val latestBlock = Block("sig", 0, "", Set(address1, address2, address3, address5), 1L, Seq())
 
     val transaction =
       Transaction.senderSign(Transaction(0L, node1KeyPair.getPublic, node2KeyPair.getPublic, 33L), node1KeyPair.getPrivate)
@@ -217,13 +209,13 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
       Some(proposedBlock),
       Some(prevBlock),
       prevBlock.clusterParticipants,
-      HashMap(1L -> HashMap(node1.ref -> Seq(transaction))),
-      HashMap(1L -> HashMap(node1.ref -> proposedBlock)))
+      HashMap(1L -> HashMap(address1 -> Seq(transaction))),
+      HashMap(1L -> HashMap(address1 -> proposedBlock)))
 
     val memPoolManager = TestProbe()
 
     val updatedConsensusState =
-      Consensus.handleBlockAddedToChain(consensusRoundState, latestBlock, memPoolManager.ref, node1.ref)
+      Consensus.handleBlockAddedToChain(consensusRoundState, latestBlock, memPoolManager.ref, node1.ref, address1)
 
     val expectedConsensusState = ConsensusRoundState(
       Some(node1.ref),
@@ -245,13 +237,13 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
       Some(proposedBlock),
       Some(prevBlock),
       prevBlock.clusterParticipants,
-      HashMap(0L -> HashMap(node1.ref -> Seq(transaction))),
-      HashMap(0L -> HashMap(node1.ref -> proposedBlock)))
+      HashMap(0L -> HashMap(address1 -> Seq(transaction))),
+      HashMap(0L -> HashMap(address1 -> proposedBlock)))
 
-    val latestBlock2 = Block("sig", 0, "", Set(node2.ref, node3.ref, node5.ref), 1L, Seq())
+    val latestBlock2 = Block("sig", 0, "", Set(address2, address3, address5), 1L, Seq())
 
     val updatedConsensusState2 =
-      Consensus.handleBlockAddedToChain(consensusRoundState2, latestBlock2, memPoolManager.ref, node1.ref)
+      Consensus.handleBlockAddedToChain(consensusRoundState2, latestBlock2, memPoolManager.ref, node1.ref, address1)
 
     val expectedConsensusState2 = ConsensusRoundState(
       Some(node1.ref),
@@ -273,13 +265,13 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
       Some(proposedBlock),
       Some(prevBlock),
       prevBlock.clusterParticipants,
-      HashMap(1L -> HashMap(node1.ref -> Seq(transaction)), 2L -> HashMap(node2.ref -> Seq(transaction))),
-      HashMap(1L -> HashMap(node1.ref -> proposedBlock), 2L -> HashMap(node2.ref -> proposedBlock)))
+      HashMap(1L -> HashMap(address1 -> Seq(transaction)), 2L -> HashMap(address2 -> Seq(transaction))),
+      HashMap(1L -> HashMap(address1 -> proposedBlock), 2L -> HashMap(address2 -> proposedBlock)))
 
-    val latestBlock3 = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node5.ref), 1L, Seq())
+    val latestBlock3 = Block("sig", 0, "", Set(address1, address2, address3, address5), 1L, Seq())
 
     val updatedConsensusState3 =
-      Consensus.handleBlockAddedToChain(consensusRoundState3, latestBlock3, memPoolManager.ref, node1.ref)
+      Consensus.handleBlockAddedToChain(consensusRoundState3, latestBlock3, memPoolManager.ref, node1.ref, address1)
 
     val expectedConsensusState3 = ConsensusRoundState(
       Some(node1.ref),
@@ -287,8 +279,8 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
       None,
       Some(latestBlock3),
       latestBlock3.clusterParticipants,
-      HashMap(2L -> HashMap(node2.ref -> Seq(transaction))),
-      HashMap(2L -> HashMap(node2.ref -> proposedBlock)))
+      HashMap(2L -> HashMap(address2 -> Seq(transaction))),
+      HashMap(2L -> HashMap(address2 -> proposedBlock)))
 
     assert(updatedConsensusState3 == expectedConsensusState3)
 
@@ -306,8 +298,8 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val node2KeyPair = KeyUtils.makeKeyPair()
 
     val proposedBlock = Block("sig", 0, "", Set(), 1L, Seq())
-    val prevBlock = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node4.ref), 0L, Seq())
-    val latestBlock = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node5.ref), 1L, Seq())
+    val prevBlock = Block("sig", 0, "", Set(address1, address2, address3, address4), 0L, Seq())
+    val latestBlock = Block("sig", 0, "", Set(address1, address2, address3, address5), 1L, Seq())
 
     val transaction =
       Transaction.senderSign(Transaction(0L, node1KeyPair.getPublic, node2KeyPair.getPublic, 33L), node1KeyPair.getPrivate)
@@ -318,8 +310,8 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
       None,
       None,
       Set(),
-      HashMap(0L -> HashMap(node2.ref -> Seq(transaction))),
-      HashMap(0L -> HashMap(node2.ref -> proposedBlock)))
+      HashMap(0L -> HashMap(address2 -> Seq(transaction))),
+      HashMap(0L -> HashMap(address2 -> proposedBlock)))
 
     val chainStateManager = TestProbe()
 
@@ -329,15 +321,15 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     node1.setAutoPilot(new TestActor.AutoPilot {
       def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = {
-        sender ! Set(node2.ref, node3.ref, node4.ref, node5.ref)
+        sender ! Peers(Seq(address2, address3, address4, address5))
         TestActor.KeepRunning
       }
     })
 
     val updatedConsensusState = Consensus.generateGenesisBlock(node1.ref, consensusRoundState, chainStateManager.ref,
-      requestActor.ref, testConsensusActor.ref)
+      requestActor.ref, testConsensusActor.ref, address1)
 
-    node1.expectMsg(GetPeerActorRefs)
+    node1.expectMsg(GetPeers)
 
     val expectedConsensusRoundState = ConsensusRoundState(
       Some(node1.ref),
@@ -345,13 +337,13 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
       None,
       None,
       Set(),
-      HashMap(0L -> HashMap(node2.ref -> Seq(transaction))),
-      HashMap(0L -> HashMap(node2.ref -> proposedBlock)))
+      HashMap(0L -> HashMap(address2 -> Seq(transaction))),
+      HashMap(0L -> HashMap(address2 -> proposedBlock)))
 
     assert(updatedConsensusState == expectedConsensusRoundState)
 
     val genesisBlock = Block("tempGenesisParentHash", 0, "tempSig",
-      Set(node1.ref, node2.ref, node3.ref, node4.ref, node5.ref), 0, Seq())
+      Set(address1, address2, address3, address4, address5), 0, Seq())
 
     chainStateManager.expectMsg(AddBlock(genesisBlock, testConsensusActor.ref))
 
@@ -367,7 +359,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     // TODO add assertions
   }
 
-  "the checkConsensusResult method" should "work correctly" in new WithConsensusActor {
+  // "the checkConsensusResult method" should "work correctly" in new WithConsensusActor {
   "A PeerProposedBlock Message" should "be handled correctly" in new WithConsensusActor {
     val peerProbe = TestProbe()
 
