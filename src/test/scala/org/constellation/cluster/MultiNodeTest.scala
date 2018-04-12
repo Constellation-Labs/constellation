@@ -146,12 +146,6 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
   }
 
   "Multiple Nodes" should "come to consensus on transactions after genesis block" in {
-
-    // makeKeyPair
-    // Transaction()
-    // senderSign
-    // counterPartySign
-
     // Create the nodes
     val node1 = TestNode()
     val node2 = TestNode()
@@ -326,7 +320,6 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     assert(consensusResponse4.get().status == StatusCodes.OK)
 
-
     // Send some random transactions
 
     val node1PublicKey = node1.keyPair.getPublic
@@ -366,7 +359,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     val thread = new Thread {
       override def run: Unit = {
-        Thread.sleep(500)
+        Thread.sleep(1000)
       }
     }
 
