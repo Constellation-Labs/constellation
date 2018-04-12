@@ -415,7 +415,51 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
   }
 
   "the handleProposedBlockUpdated method" should "work correctly" in new WithConsensusActor {
-    // TODO add assertions
+    val node1 = TestProbe()
+    val node2 = TestProbe()
+    val node3 = TestProbe()
+    val node4 = TestProbe()
+    val node5 = TestProbe()
+
+    val node1KeyPair = KeyUtils.makeKeyPair()
+    val node2KeyPair = KeyUtils.makeKeyPair()
+
+    val proposedBlock = Block("sig", 0, "", Set(), 1L, Seq())
+    val prevBlock = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node4.ref, node5.ref), 0L, Seq())
+
+    val transaction =
+      Transaction.senderSign(Transaction(0L, node1KeyPair.getPublic, node2KeyPair.getPublic, 33L), node1KeyPair.getPrivate)
+
+    val consensusRoundState = ConsensusRoundState(
+      Some(node1.ref),
+      true,
+      None,
+      Some(prevBlock),
+      Set(node1.ref, node2.ref, node3.ref, node4.ref, node5.ref),
+      HashMap(0L -> HashMap(node2.ref -> Seq(transaction))),
+      HashMap(0L -> HashMap(node2.ref -> proposedBlock)))
+
+    val memPoolManager = TestProbe()
+    val testConsensusActor = TestProbe()
+
+    val updatedConsensusState = Consensus.handleProposedBlockUpdated(consensusRoundState, proposedBlock)
+
+    node1.expectMsg(PeerProposedBlock(proposedBlock, node1.ref))
+    node2.expectMsg(PeerProposedBlock(proposedBlock, node1.ref))
+    node3.expectMsg(PeerProposedBlock(proposedBlock, node1.ref))
+    node4.expectMsg(PeerProposedBlock(proposedBlock, node1.ref))
+    node5.expectMsg(PeerProposedBlock(proposedBlock, node1.ref))
+
+    val expectedConsensusRoundState = ConsensusRoundState(
+      Some(node1.ref),
+      true,
+      Some(proposedBlock),
+      Some(prevBlock),
+      Set(node1.ref, node2.ref, node3.ref, node4.ref, node5.ref),
+      HashMap(0L -> HashMap(node2.ref -> Seq(transaction))),
+      HashMap(0L -> HashMap(node2.ref -> proposedBlock)))
+
+    assert(updatedConsensusState == expectedConsensusRoundState)
   }
 
   "the checkConsensusResult method" should "work correctly" in new WithConsensusActor {
