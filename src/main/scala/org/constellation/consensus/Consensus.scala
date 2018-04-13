@@ -300,7 +300,6 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
       log.debug(s"peer proposed block = $block, $peer")
 
       consensusRoundState = handlePeerProposedBlock(consensusRoundState, self, block, peer)
-
   }
 
 }

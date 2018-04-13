@@ -19,6 +19,37 @@ object ChainStateManager {
   // Events
   case class BlockAddedToChain(previousBlock: Block)
   case class CurrentChainStateUpdated(chain: Chain)
+
+  def handleAddBlock(chain: Chain, block: Block, memPoolManager: ActorRef, replyTo: ActorRef): Chain = {
+    var updatedChain = chain
+
+    if (!updatedChain.chain.contains(block)) {
+      updatedChain = Chain(updatedChain.chain :+ block)
+      memPoolManager ! RemoveConfirmedTransactions(block.transactions)
+      replyTo ! BlockAddedToChain(block)
+    }
+
+    updatedChain
+  }
+
+  def handleCreateBlockProposal(memPools: Map[ActorRef, Seq[Transaction]], chain: Chain, round: Long, replyTo: ActorRef): Unit = {
+    val transactions: Seq[Transaction] = memPools.foldLeft(Seq[Transaction]()) {
+      (result, b) => {
+        result.union(b._2).distinct
+      }
+    }
+
+    val lastBlock = chain.chain.last
+
+    val round = lastBlock.round + 1
+
+    // TODO: update to use proper sigs and participants
+    val blockProposal: Block =  Block(lastBlock.signature, lastBlock.height + 1, "",
+      lastBlock.clusterParticipants, round, transactions)
+
+    replyTo ! ProposedBlockUpdated(blockProposal)
+  }
+
 }
 
 class ChainStateManager(memPoolManagerActor: ActorRef) extends Actor with ActorLogging {
@@ -27,14 +58,9 @@ class ChainStateManager(memPoolManagerActor: ActorRef) extends Actor with ActorL
 
   override def receive: Receive = {
     case AddBlock(block, replyTo) =>
-      log.debug(s"received add block request $block")
+      log.debug(s"received add block request $block, $replyTo")
 
-      if (!chain.chain.contains(block)) {
-        chain = Chain(chain.chain :+ block)
-        log.debug(s"updated chain for $self = $chain")
-        memPoolManagerActor ! RemoveConfirmedTransactions(block.transactions)
-        replyTo ! BlockAddedToChain(block)
-      }
+      chain = handleAddBlock(chain, block, memPoolManagerActor, replyTo)
 
     case GetCurrentChainState =>
       log.debug(s"received GetCurrentChainState request")
@@ -43,21 +69,7 @@ class ChainStateManager(memPoolManagerActor: ActorRef) extends Actor with ActorL
     case CreateBlockProposal(memPools, round, replyTo) =>
       log.debug("Attempting to create block proposal")
 
-      val transactions: Seq[Transaction] = memPools.foldLeft(Seq[Transaction]()) {
-        (result, b) => {
-          result.union(b._2).distinct
-        }
-      }
-
-      val lastBlock = chain.chain.last
-
-      val round = lastBlock.round + 1
-
-      // TODO: update to use proper sigs and participants
-      val blockProposal: Block =  Block(lastBlock.signature, lastBlock.height + 1, "",
-        lastBlock.clusterParticipants, round, transactions)
-
-      replyTo ! ProposedBlockUpdated(blockProposal)
+      handleCreateBlockProposal(memPools, chain, round, replyTo)
   }
 
 }
