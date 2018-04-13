@@ -680,7 +680,6 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val proposedBlock = Block("sig", 0, "", Set(), 1L, Seq())
     val prevBlock = Block("sig", 0, "", Set(node1.ref, node2.ref, node3.ref, node4.ref, node5.ref), 0L, Seq())
 
-    // verify that when all of this rounds mem pools are available we create a block proposal
     val consensusRoundState = ConsensusRoundState(
       Some(node1.ref),
       true,
