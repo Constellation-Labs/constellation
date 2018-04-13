@@ -35,7 +35,7 @@ object ChainStateManager {
   def handleCreateBlockProposal(memPools: Map[ActorRef, Seq[Transaction]], chain: Chain, round: Long, replyTo: ActorRef): Unit = {
     val transactions: Seq[Transaction] = memPools.foldLeft(Seq[Transaction]()) {
       (result, b) => {
-        result.union(b._2).distinct
+        result.union(b._2).distinct.sortBy(t => t.sequenceNum)
       }
     }
 
