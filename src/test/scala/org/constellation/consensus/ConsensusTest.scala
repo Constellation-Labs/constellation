@@ -414,6 +414,36 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     assert(updatedConsensusState2 == expectedConsensusRoundState2)
   }
 
+  "the disableConsensus method" should "work correctly" in new WithConsensusActor {
+    val node1 = TestProbe()
+    val node2 = TestProbe()
+    val node3 = TestProbe()
+    val node4 = TestProbe()
+    val node5 = TestProbe()
+
+    val consensusRoundState = ConsensusRoundState(
+      Some(node1.ref),
+      true,
+      None,
+      None,
+      Set(node1.ref, node2.ref, node3.ref, node4.ref, node5.ref),
+      HashMap(),
+      HashMap())
+
+    val updatedConsensusState = Consensus.disableConsensus(consensusRoundState)
+
+    val expectedConsensusRoundState = ConsensusRoundState(
+      Some(node1.ref),
+      false,
+      None,
+      None,
+      Set(node1.ref, node2.ref, node3.ref, node4.ref, node5.ref),
+      HashMap(),
+      HashMap())
+
+    assert(updatedConsensusState == expectedConsensusRoundState)
+  }
+
   "the handleProposedBlockUpdated method" should "work correctly" in new WithConsensusActor {
     val node1 = TestProbe()
     val node2 = TestProbe()

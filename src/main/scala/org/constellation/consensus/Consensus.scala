@@ -55,6 +55,7 @@ object Consensus {
 
   case class GenerateGenesisBlock(selfRemoteActorRef: ActorRef)
   case class EnableConsensus()
+  case class DisableConsensus()
 
   // Events
   case class ProposedBlockUpdated(block: Block)
@@ -186,6 +187,10 @@ object Consensus {
     updatedState
   }
 
+  def disableConsensus(consensusRoundState: ConsensusRoundState): ConsensusRoundState = {
+    consensusRoundState.copy(enabled = false)
+  }
+
   def handleProposedBlockUpdated(consensusRoundState: ConsensusRoundState, block: Block): ConsensusRoundState = {
     val updatedState = consensusRoundState.copy(proposedBlock = Some(block))
 
@@ -272,6 +277,11 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
 
       consensusRoundState = enableConsensus(consensusRoundState, memPoolManager, self)
 
+    case DisableConsensus() =>
+      log.debug(s"disable consensus request = $consensusRoundState")
+
+      consensusRoundState = disableConsensus(consensusRoundState)
+
     case BlockAddedToChain(latestBlock) =>
       log.debug(s"block added to chain = $latestBlock")
 
@@ -300,6 +310,7 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
       log.debug(s"peer proposed block = $block, $peer")
 
       consensusRoundState = handlePeerProposedBlock(consensusRoundState, self, block, peer)
+
   }
 
 }
