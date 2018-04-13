@@ -325,27 +325,27 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     rpc1.post("transaction", transaction1)
 
     val transaction2 =
-      Transaction.senderSign(Transaction(0L, node2PublicKey, node3PublicKey, 20L), node2.keyPair.getPrivate)
+      Transaction.senderSign(Transaction(1L, node2PublicKey, node3PublicKey, 20L), node2.keyPair.getPrivate)
 
     rpc3.post("transaction", transaction2)
 
     val transaction3 =
-      Transaction.senderSign(Transaction(0L, node1PublicKey, node4PublicKey, 33L), node1.keyPair.getPrivate)
+      Transaction.senderSign(Transaction(2L, node1PublicKey, node4PublicKey, 33L), node1.keyPair.getPrivate)
 
     rpc2.post("transaction", transaction3)
 
     val transaction4 =
-      Transaction.senderSign(Transaction(0L, node3PublicKey, node4PublicKey, 10L), node3.keyPair.getPrivate)
+      Transaction.senderSign(Transaction(3L, node3PublicKey, node4PublicKey, 10L), node3.keyPair.getPrivate)
 
     rpc3.post("transaction", transaction4)
 
     val transaction5 =
-      Transaction.senderSign(Transaction(0L, node3PublicKey, node4PublicKey, 5L), node3.keyPair.getPrivate)
+      Transaction.senderSign(Transaction(4L, node3PublicKey, node4PublicKey, 5L), node3.keyPair.getPrivate)
 
     rpc1.post("transaction", transaction5)
 
     val transaction6 =
-      Transaction.senderSign(Transaction(0L, node3PublicKey, node2PublicKey, 1L), node3.keyPair.getPrivate)
+      Transaction.senderSign(Transaction(5L, node3PublicKey, node2PublicKey, 1L), node3.keyPair.getPrivate)
 
     rpc2.post("transaction", transaction6)
 

@@ -122,13 +122,13 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
       Transaction.senderSign(Transaction(0L, node1KeyPair.getPublic, node2KeyPair.getPublic, 33L), node1KeyPair.getPrivate)
 
     val transaction2 =
-      Transaction.senderSign(Transaction(0L, node2KeyPair.getPublic, node4KeyPair.getPublic, 14L), node2KeyPair.getPrivate)
+      Transaction.senderSign(Transaction(1L, node2KeyPair.getPublic, node4KeyPair.getPublic, 14L), node2KeyPair.getPrivate)
 
     val transaction3 =
-      Transaction.senderSign(Transaction(0L, node4KeyPair.getPublic, node1KeyPair.getPublic, 2L), node4KeyPair.getPrivate)
+      Transaction.senderSign(Transaction(2L, node4KeyPair.getPublic, node1KeyPair.getPublic, 2L), node4KeyPair.getPrivate)
 
     val transaction4 =
-      Transaction.senderSign(Transaction(0L, node3KeyPair.getPublic, node2KeyPair.getPublic, 20L), node3KeyPair.getPrivate)
+      Transaction.senderSign(Transaction(3L, node3KeyPair.getPublic, node2KeyPair.getPublic, 20L), node3KeyPair.getPrivate)
 
     val node1Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
     val node2Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
@@ -477,13 +477,13 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
       Transaction.senderSign(Transaction(0L, node1KeyPair.getPublic, node2KeyPair.getPublic, 33L), node1KeyPair.getPrivate)
 
     val transaction2 =
-      Transaction.senderSign(Transaction(0L, node2KeyPair.getPublic, node4KeyPair.getPublic, 14L), node2KeyPair.getPrivate)
+      Transaction.senderSign(Transaction(1L, node2KeyPair.getPublic, node4KeyPair.getPublic, 14L), node2KeyPair.getPrivate)
 
     val transaction3 =
-      Transaction.senderSign(Transaction(0L, node4KeyPair.getPublic, node1KeyPair.getPublic, 2L), node4KeyPair.getPrivate)
+      Transaction.senderSign(Transaction(2L, node4KeyPair.getPublic, node1KeyPair.getPublic, 2L), node4KeyPair.getPrivate)
 
     val transaction4 =
-      Transaction.senderSign(Transaction(0L, node3KeyPair.getPublic, node2KeyPair.getPublic, 20L), node3KeyPair.getPrivate)
+      Transaction.senderSign(Transaction(3L, node3KeyPair.getPublic, node2KeyPair.getPublic, 20L), node3KeyPair.getPrivate)
 
     val node1Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
     val node2Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
@@ -529,13 +529,13 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
       Transaction.senderSign(Transaction(0L, node1KeyPair.getPublic, node2KeyPair.getPublic, 33L), node1KeyPair.getPrivate)
 
     val transaction2 =
-      Transaction.senderSign(Transaction(0L, node2KeyPair.getPublic, node4KeyPair.getPublic, 14L), node2KeyPair.getPrivate)
+      Transaction.senderSign(Transaction(1L, node2KeyPair.getPublic, node4KeyPair.getPublic, 14L), node2KeyPair.getPrivate)
 
     val transaction3 =
-      Transaction.senderSign(Transaction(0L, node4KeyPair.getPublic, node1KeyPair.getPublic, 2L), node4KeyPair.getPrivate)
+      Transaction.senderSign(Transaction(2L, node4KeyPair.getPublic, node1KeyPair.getPublic, 2L), node4KeyPair.getPrivate)
 
     val transaction4 =
-      Transaction.senderSign(Transaction(0L, node3KeyPair.getPublic, node2KeyPair.getPublic, 20L), node3KeyPair.getPrivate)
+      Transaction.senderSign(Transaction(3L, node3KeyPair.getPublic, node2KeyPair.getPublic, 20L), node3KeyPair.getPrivate)
 
     val node1Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3))
     val node2Block = Block("sig", 0, "", Set(node1.ref, node3.ref), 0, Seq(transaction1, transaction2, transaction3, transaction4))
@@ -585,13 +585,13 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
       Transaction.senderSign(Transaction(0L, node1KeyPair.getPublic, node2KeyPair.getPublic, 33L), node1KeyPair.getPrivate)
 
     val transaction2 =
-      Transaction.senderSign(Transaction(0L, node2KeyPair.getPublic, node4KeyPair.getPublic, 14L), node2KeyPair.getPrivate)
+      Transaction.senderSign(Transaction(1L, node2KeyPair.getPublic, node4KeyPair.getPublic, 14L), node2KeyPair.getPrivate)
 
     val transaction3 =
-      Transaction.senderSign(Transaction(0L, node4KeyPair.getPublic, node1KeyPair.getPublic, 2L), node4KeyPair.getPrivate)
+      Transaction.senderSign(Transaction(2L, node4KeyPair.getPublic, node1KeyPair.getPublic, 2L), node4KeyPair.getPrivate)
 
     val transaction4 =
-      Transaction.senderSign(Transaction(0L, node3KeyPair.getPublic, node2KeyPair.getPublic, 20L), node3KeyPair.getPrivate)
+      Transaction.senderSign(Transaction(3L, node3KeyPair.getPublic, node2KeyPair.getPublic, 20L), node3KeyPair.getPrivate)
 
     // verify that when all of this rounds mem pools are available we create a block proposal
     val consensusRoundState = ConsensusRoundState(
