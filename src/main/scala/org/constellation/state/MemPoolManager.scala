@@ -57,7 +57,6 @@ class MemPoolManager extends Actor with ActorLogging {
     case RemoveConfirmedTransactions(transactions) =>
       log.debug(s"received remove confirmed transactions request $transactions")
       MemPoolManager.handleRemoveConfirmedTransactions(transactions, memPool)
-
   }
 
 }
