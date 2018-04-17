@@ -1,15 +1,14 @@
 package org.constellation.p2p
 
-import akka.actor.{ActorSystem, Props}
-import akka.testkit.{ImplicitSender, TestKit, TestProbe}
-import com.typesafe.scalalogging.Logger
-import org.constellation.actor.Receiver
-import org.constellation.p2p.PeerToPeer._
-import org.scalatest._
+import java.security.KeyPair
+import java.util.concurrent.TimeUnit
 
-class PeerToPeerActor extends Receiver with PeerToPeer {
-  val logger = Logger("PeerToPeerActor")
-}
+import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.testkit.{ImplicitSender, TestKit, TestProbe}
+import akka.util.Timeout
+import org.constellation.p2p.PeerToPeer._
+import org.constellation.wallet.KeyUtils
+import org.scalatest._
 
 class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLike
   with ImplicitSender with GivenWhenThen with BeforeAndAfterAll with Matchers {
@@ -19,7 +18,14 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
   }
 
   trait WithPeerToPeerActor {
-    val peerToPeerActor = system.actorOf(Props[PeerToPeerActor])
+    val keyPair: KeyPair = KeyUtils.makeKeyPair()
+
+    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+
+    val consensusActor = TestProbe()
+
+    val peerToPeerActor: ActorRef =
+      system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor.ref)(timeout)))
   }
 
   "A PeerToPeer actor " should " start with an empty set of peers" in new WithPeerToPeerActor {

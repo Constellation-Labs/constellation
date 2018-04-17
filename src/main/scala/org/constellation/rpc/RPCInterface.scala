@@ -1,6 +1,6 @@
 package org.constellation.rpc
 
-import java.util.concurrent.TimeUnit
+import java.security.PublicKey
 
 import akka.actor.ActorRef
 import akka.http.scaladsl.server.Directives._
@@ -10,63 +10,120 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.blockchain.Consensus.PerformConsensus
-import org.constellation.blockchain._
 import org.constellation.p2p.PeerToPeer._
-import org.constellation.rpc.ProtocolInterface._
-import org.json4s.{DefaultFormats, Formats, native}
+import org.json4s.{Formats, native}
 import akka.http.scaladsl.marshalling.Marshaller._
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import org.constellation.consensus.Consensus.{DisableConsensus, EnableConsensus, GenerateGenesisBlock}
+import org.constellation.primitives.Chain.Chain
+import org.constellation.primitives.{Block, BlockSerialized, Transaction}
+import org.constellation.state.ChainStateManager.{CurrentChainStateUpdated, GetCurrentChainState}
+import org.constellation.state.MemPoolManager.AddTransaction
+import org.constellation.wallet.KeyUtils
 import org.json4s.native.Serialization
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext, Future}
 
-trait RPCInterface extends Json4sSupport {
-
-  val blockChainActor: ActorRef
-  val logger: Logger
+class RPCInterface(chainStateActor: ActorRef, peerToPeerActor: ActorRef, memPoolManagerActor: ActorRef, consensusActor: ActorRef)
+                  (implicit executionContext: ExecutionContext, timeout: Timeout) extends Json4sSupport {
 
   implicit val serialization: Serialization.type = native.Serialization
-  implicit val stringUnmarshaller: FromEntityUnmarshaller[String] = PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-  implicit def json4sFormats: Formats = DefaultFormats
+  implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
+    PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-  implicit val executionContext: ExecutionContext
+  implicit def json4sFormats: Formats = constellation.constellationFormats
 
-  implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+  val logger = Logger(s"RPCInterface")
+
+  // TODO: temp until someone can show me how to create one of these custom serializers
+  def serializeBlocks(blocks: Seq[Block]): Seq[BlockSerialized] = {
+    blocks.map(b => {
+      BlockSerialized(b.parentHash, b.height, b.signature,
+        b.clusterParticipants.map(a => a.path.toSerializationFormat), b.round, b.transactions)
+    })
+  }
 
   val routes: Route =
     get {
-      path("blocks") {
-        complete((blockChainActor ? GetChain).mapTo[FullChain])
+      // TODO: revisit
+      path("health") {
+        complete(StatusCodes.OK)
       } ~
-        path("peers") {
-          complete((blockChainActor ? GetPeers).mapTo[Peers])
-        }~
-        path("id") {
-          complete((blockChainActor ? GetId).mapTo[Id])
-        } ~
-      path("actorPath") {
-        complete(blockChainActor.path.toSerializationFormat)
+      // TODO: revist
+      path("generateGenesisBlock") {
+
+        val future = consensusActor ? GenerateGenesisBlock(peerToPeerActor)
+
+        val responseFuture: Future[Block] = future.mapTo[Block]
+
+        val genesisBlock = Await.result(responseFuture, timeout.duration)
+
+        complete(serializeBlocks(Seq(genesisBlock)).take(1))
+      } ~
+      path("enableConsensus") {
+
+        consensusActor ! EnableConsensus()
+
+        complete(StatusCodes.OK)
+      } ~
+      path("disableConsensus") {
+
+        consensusActor ! DisableConsensus()
+
+        complete(StatusCodes.OK)
+      } ~
+      path("blocks") {
+        val future = chainStateActor ? GetCurrentChainState
+
+        val responseFuture: Future[CurrentChainStateUpdated] = future.mapTo[CurrentChainStateUpdated]
+
+        val chainStateUpdated = Await.result(responseFuture, timeout.duration)
+
+        val chain = chainStateUpdated.chain
+
+        val blocks = serializeBlocks(chain.chain)
+
+        complete(blocks)
+      } ~
+      path("peers") {
+        complete((peerToPeerActor ? GetPeers).mapTo[Peers])
+      } ~
+      path("id") {
+        complete((peerToPeerActor ? GetId).mapTo[Id])
+      } ~ path("actorPath") {
+        complete(peerToPeerActor.path.toSerializationFormat)
+      } ~
+      path("balance") {
+        entity(as[PublicKey]) { account =>
+          logger.debug(s"Received request to query account $account balance")
+
+          // TODO: update balance
+          // complete((chainStateActor ? GetBalance(account)).mapTo[Balance])
+
+          complete(StatusCodes.OK)
+        }
       }
-    }~
-      post {
-        path("sendTx") {
-          entity(as[Transaction]) { transaction =>
-            logger.info(s"Got request to submit new transaction $transaction")
-            complete((blockChainActor ? transaction).mapTo[Transaction])
-          }
-        }~
-          path("addPeer") {
-            entity(as[String]) { peerAddress =>
-              logger.info(s"Got request to add new peer $peerAddress")
-              complete((blockChainActor ? AddPeer(peerAddress)).mapTo[String])
-            }
-          }~
-          path("getBalance") {
-            entity(as[String]) { account =>
-              logger.info(s"Got request query account $account balance")
-              complete((blockChainActor ? GetBalance(account)).mapTo[Balance])
-            }
-          }
+    } ~
+    post {
+      path("transaction") {
+        entity(as[Transaction]) { transaction =>
+          logger.debug(s"Received request to submit a new transaction $transaction")
+
+          memPoolManagerActor ! AddTransaction(transaction)
+
+          complete(transaction)
+        }
+      } ~
+      path("peer") {
+        entity(as[String]) { peerAddress =>
+          logger.debug(s"Received request to add a new peer $peerAddress")
+
+          peerToPeerActor ! AddPeer(peerAddress.replace("\"", ""))
+
+          complete(StatusCodes.Created)
+        }
       }
+    }
 }

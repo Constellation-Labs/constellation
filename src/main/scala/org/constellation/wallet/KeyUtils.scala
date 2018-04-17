@@ -1,15 +1,12 @@
 package org.constellation.wallet
 
-import java.security._
+import java.security.{SecureRandom, _}
 import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
 import java.util.Base64
 
 import org.json4s.{CustomSerializer, Extraction, Formats, JObject}
 import org.json4s.JsonAST.JString
 import org.json4s.native.Serialization
-
-
-
 
 /**
   * Need to compare this to:
@@ -38,12 +35,12 @@ object KeyUtils {
     * Source: https://stackoverflow.com/questions/29778852/how-to-create-ecdsa-keypair-256bit-for-bitcoin-curve-secp256k1-using-spongy
     * @return : Private / Public keys following BTC implementation
     */
-  def makeKeyPair(): KeyPair = {
+  def makeKeyPair(secureRandom: SecureRandom = new SecureRandom()): KeyPair = {
     import java.security.Security
     Security.insertProviderAt(new org.spongycastle.jce.provider.BouncyCastleProvider(), 1)
     val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance("ECDsA", "SC")
     val ecSpec = new ECGenParameterSpec("secp256k1")
-    keyGen.initialize(ecSpec, new SecureRandom())
+    keyGen.initialize(ecSpec, secureRandom)
     keyGen.generateKeyPair
   }
 
@@ -178,7 +175,6 @@ object KeyUtils {
       )
   }
   ))
-
 
 }
 
