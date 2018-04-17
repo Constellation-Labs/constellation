@@ -5,26 +5,29 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
+import akka.stream.testkit.GraphStageMessages.Failure
 import akka.testkit.TestKit
 import akka.util.Timeout
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, FlatSpecLike, Matchers}
 
-import scala.concurrent.{Await, ExecutionContextExecutor, Future}
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import constellation._
 import org.constellation.p2p.PeerToPeer.{GetPeers, Peers}
 import org.constellation.primitives.{BlockSerialized, Transaction}
 import org.constellation.utils.{RPCClient, TestNode}
+import org.scalatest.exceptions.TestFailedException
 
 import scala.concurrent.duration._
+import scala.util.Success
 
-class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem")) with FlatSpecLike with Matchers with BeforeAndAfterAll {
+class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem")) with AsyncFlatSpecLike with Matchers with BeforeAndAfterAll {
 
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
-  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+  implicit override val executionContext: ExecutionContextExecutor = system.dispatcher
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
   "Multiple Nodes" should "create and run within the same JVM context" in {
@@ -152,356 +155,371 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     val node3 = TestNode()
     val node4 = TestNode()
 
-    val rpc1 = new RPCClient(port=node1.httpPort)
-    val rpc2 = new RPCClient(port=node2.httpPort)
-    val rpc3 = new RPCClient(port=node3.httpPort)
-    val rpc4 = new RPCClient(port=node4.httpPort)
-
-    val rpc1Response = rpc1.get("health")
-    val rpc2Response = rpc2.get("health")
-    val rpc3Response = rpc3.get("health")
-    val rpc4Response = rpc4.get("health")
-
-    // verify that they are up
-    assert(rpc1Response.get().status == StatusCodes.OK)
-    assert(rpc2Response.get().status == StatusCodes.OK)
-    assert(rpc3Response.get().status == StatusCodes.OK)
-    assert(rpc4Response.get().status == StatusCodes.OK)
-
-    // Connect them together
     val node1Path = node1.udpAddressString
     val node2Path = node2.udpAddressString
     val node3Path = node3.udpAddressString
     val node4Path = node4.udpAddressString
 
-    rpc1.post("peer", node2Path)
-
-    // TODO: find better way
-    Thread.sleep(100)
-
-    rpc2.post("peer", node3Path)
-
-    Thread.sleep(100)
-
-    rpc3.post("peer", node4Path)
-
-    Thread.sleep(100)
-
-    val node1PeersRequest = rpc1.get("peers")
-    val node2PeersRequest = rpc2.get("peers")
-    val node3PeersRequest = rpc3.get("peers")
-    val node4PeersRequest = rpc4.get("peers")
-
-    val peers1 = rpc1.read[Peers](node1PeersRequest.get()).get()
-    val peers2 = rpc2.read[Peers](node2PeersRequest.get()).get()
-    val peers3 = rpc3.read[Peers](node3PeersRequest.get()).get()
-    val peers4 = rpc4.read[Peers](node4PeersRequest.get()).get()
-
-    // Verify that they are connected
-    assert(Seq(node2Path, node3Path, node4Path).diff(peers1.peers.map{socketToAddress}).isEmpty)
-    assert(Seq(node1Path, node3Path, node4Path).diff(peers2.peers.map{socketToAddress}).isEmpty)
-    assert(Seq(node1Path, node4Path, node2Path).diff(peers3.peers.map{socketToAddress}).isEmpty)
-    assert(Seq(node1Path, node3Path, node2Path).diff(peers4.peers.map{socketToAddress}).isEmpty)
-
-    import akka.pattern.ask
-    val peers = (node1.peerToPeerActor ? GetPeers).mapTo[Peers].get()
-    assert(peers.peers.nonEmpty)
-
-    // generate genesis block
-    val genResponse1 = rpc1.get("generateGenesisBlock")
-
-    assert(genResponse1.get().status == StatusCodes.OK)
-
-    val genResponse2 = rpc2.get("generateGenesisBlock")
-
-    assert(genResponse2.get().status == StatusCodes.OK)
-
-    val genResponse3 = rpc3.get("generateGenesisBlock")
-
-    assert(genResponse3.get().status == StatusCodes.OK)
-
-    val genResponse4 = rpc4.get("generateGenesisBlock")
-
-    assert(genResponse4.get().status == StatusCodes.OK)
-
-    Thread.sleep(100)
-
-    // TODO: extract below to func
-    // verify chain node 1
-    val chainStateNode1Response = rpc1.get("blocks")
-
-    val chainNode1 = rpc1.read[Seq[BlockSerialized]](chainStateNode1Response.get()).get()
-
-    assert(chainNode1.size == 1)
-
-    assert(chainNode1.head.height == 0)
-
-    assert(chainNode1.head.round == 0)
-
-    assert(chainNode1.head.parentHash == "tempGenesisParentHash")
-
-    assert(chainNode1.head.signature == "tempSig")
-
-    assert(chainNode1.head.transactions == Seq())
-
-    assert(chainNode1.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
-
-    // verify chain node 2
-    val chainStateNode2Response = rpc2.get("blocks")
-
-    val chainNode2 = rpc2.read[Seq[BlockSerialized]](chainStateNode2Response.get()).get()
-
-    assert(chainNode2.size == 1)
-
-    assert(chainNode2.head.height == 0)
-
-    assert(chainNode2.head.round == 0)
-
-    assert(chainNode2.head.parentHash == "tempGenesisParentHash")
-
-    assert(chainNode2.head.signature == "tempSig")
-
-    assert(chainNode2.head.transactions == Seq())
-
-    assert(chainNode2.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
-
-    // verify chain node 3
-    val chainStateNode3Response = rpc3.get("blocks")
-
-    val chainNode3 = rpc3.read[Seq[BlockSerialized]](chainStateNode3Response.get()).get()
-
-    assert(chainNode3.size == 1)
-
-    assert(chainNode3.head.height == 0)
-
-    assert(chainNode3.head.round == 0)
-
-    assert(chainNode3.head.parentHash == "tempGenesisParentHash")
-
-    assert(chainNode3.head.signature == "tempSig")
-
-    assert(chainNode3.head.transactions == Seq())
-
-    assert(chainNode3.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
-
-    // verify chain node 4
-    val chainStateNode4Response = rpc4.get("blocks")
-
-    val chainNode4= rpc4.read[Seq[BlockSerialized]](chainStateNode4Response.get()).get()
-
-    assert(chainNode4.size == 1)
-
-    assert(chainNode4.head.height == 0)
-
-    assert(chainNode4.head.round == 0)
-
-    assert(chainNode4.head.parentHash == "tempGenesisParentHash")
-
-    assert(chainNode4.head.signature == "tempSig")
-
-    assert(chainNode4.head.transactions == Seq())
-
-    assert(chainNode4.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
-
-    // Enable consensus on the nodes
-    val consensusResponse1 = rpc1.get("enableConsensus")
-
-    assert(consensusResponse1.get().status == StatusCodes.OK)
-
-    val consensusResponse2 = rpc2.get("enableConsensus")
-
-    assert(consensusResponse2.get().status == StatusCodes.OK)
-
-    val consensusResponse3 = rpc3.get("enableConsensus")
-
-    assert(consensusResponse3.get().status == StatusCodes.OK)
-
-    val consensusResponse4 = rpc4.get("enableConsensus")
-
-    assert(consensusResponse4.get().status == StatusCodes.OK)
-
-    // Send some random transactions
+    val rpc1 = new RPCClient(port=node1.httpPort)
+    val rpc2 = new RPCClient(port=node2.httpPort)
+    val rpc3 = new RPCClient(port=node3.httpPort)
+    val rpc4 = new RPCClient(port=node4.httpPort)
 
     val node1PublicKey = node1.keyPair.getPublic
     val node2PublicKey = node2.keyPair.getPublic
     val node3PublicKey = node3.keyPair.getPublic
     val node4PublicKey = node4.keyPair.getPublic
 
-    val transaction1 =
-      Transaction.senderSign(Transaction(0L, node1PublicKey, node2PublicKey, 1L), node1.keyPair.getPrivate)
+    val node1Future = Future {
+      val rpc1Response = rpc1.get("health")
 
-    rpc1.post("transaction", transaction1)
+      assert(rpc1Response.get().status == StatusCodes.OK)
 
-    val transaction2 =
-      Transaction.senderSign(Transaction(1L, node2PublicKey, node3PublicKey, 20L), node2.keyPair.getPrivate)
+      rpc1.post("peer", node2Path)
+      rpc1.post("peer", node3Path)
+      rpc1.post("peer", node4Path)
 
-    rpc3.post("transaction", transaction2)
+      // TODO: find better way
+      Thread.sleep(1000)
 
-    val transaction3 =
-      Transaction.senderSign(Transaction(2L, node1PublicKey, node4PublicKey, 33L), node1.keyPair.getPrivate)
+      val node1PeersRequest = rpc1.get("peers")
+      val peers1 = rpc1.read[Peers](node1PeersRequest.get()).get()
 
-    rpc2.post("transaction", transaction3)
+      assert(Seq(node2Path, node3Path, node4Path).diff(peers1.peers.map{socketToAddress}).isEmpty)
 
-    val transaction4 =
-      Transaction.senderSign(Transaction(3L, node3PublicKey, node4PublicKey, 10L), node3.keyPair.getPrivate)
+      val genResponse1 = rpc1.get("generateGenesisBlock")
+      assert(genResponse1.get().status == StatusCodes.OK)
+      val chainStateNode1Response = rpc1.get("blocks")
 
-    rpc3.post("transaction", transaction4)
+      val chainNode1 = rpc1.read[Seq[BlockSerialized]](chainStateNode1Response.get()).get()
 
-    val transaction5 =
-      Transaction.senderSign(Transaction(4L, node3PublicKey, node4PublicKey, 5L), node3.keyPair.getPrivate)
+      assert(chainNode1.size == 1)
 
-    rpc1.post("transaction", transaction5)
+      assert(chainNode1.head.height == 0)
 
-    val transaction6 =
-      Transaction.senderSign(Transaction(5L, node3PublicKey, node2PublicKey, 1L), node3.keyPair.getPrivate)
+      assert(chainNode1.head.round == 0)
 
-    rpc2.post("transaction", transaction6)
+      assert(chainNode1.head.parentHash == "tempGenesisParentHash")
 
-    val thread = new Thread {
-      override def run: Unit = {
-        Thread.sleep(5000)
-      }
+      assert(chainNode1.head.signature == "tempSig")
+
+      assert(chainNode1.head.transactions == Seq())
+
+      assert(chainNode1.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
+
+      val consensusResponse1 = rpc1.get("enableConsensus")
+
+      assert(consensusResponse1.get().status == StatusCodes.OK)
+
+      val transaction1 =
+        Transaction.senderSign(Transaction(0L, node1PublicKey, node2PublicKey, 1L), node1.keyPair.getPrivate)
+
+      rpc1.post("transaction", transaction1)
+
+      val transaction5 =
+        Transaction.senderSign(Transaction(4L, node3PublicKey, node4PublicKey, 5L), node3.keyPair.getPrivate)
+
+      rpc1.post("transaction", transaction5)
+
+      val disableConsensusResponse1 = rpc1.get("disableConsensus")
+
+      assert(disableConsensusResponse1.get().status == StatusCodes.OK)
+
+      true
     }
 
-    val future = Future { thread.run }
+    val node2Future = Future {
+      val rpc2Response = rpc2.get("health")
+      assert(rpc2Response.get().status == StatusCodes.OK)
 
-    // let the nodes process transactions and create blocks for a bit of time
-    Await.ready(future, 10 seconds)
+      rpc2.post("peer", node3Path)
+      rpc2.post("peer", node2Path)
+      rpc2.post("peer", node4Path)
 
-    // disable consensus on the nodes
-    val disableConsensusResponse1 = rpc1.get("disableConsensus")
+      Thread.sleep(1000)
 
-    assert(disableConsensusResponse1.get().status == StatusCodes.OK)
+      val node2PeersRequest = rpc2.get("peers")
+      val peers2 = rpc2.read[Peers](node2PeersRequest.get()).get()
 
-    val disableConsensusResponse2 = rpc2.get("disableConsensus")
+      assert(Seq(node1Path, node3Path, node4Path).diff(peers2.peers.map{socketToAddress}).isEmpty)
 
-    assert(disableConsensusResponse2.get().status == StatusCodes.OK)
+      val genResponse2 = rpc2.get("generateGenesisBlock")
+      assert(genResponse2.get().status == StatusCodes.OK)
 
-    val disableConsensusResponse3 = rpc3.get("disableConsensus")
+      val chainStateNode2Response = rpc2.get("blocks")
 
-    assert(disableConsensusResponse3.get().status == StatusCodes.OK)
+      val chainNode2 = rpc2.read[Seq[BlockSerialized]](chainStateNode2Response.get()).get()
 
-    val disableConsensusResponse4 = rpc4.get("disableConsensus")
+      assert(chainNode2.size == 1)
 
-    assert(disableConsensusResponse4.get().status == StatusCodes.OK)
+      assert(chainNode2.head.height == 0)
 
-    val finalChainStateNode1Response = rpc1.get("blocks")
+      assert(chainNode2.head.round == 0)
 
-    val finalChainNode1 = rpc1.read[Seq[BlockSerialized]](finalChainStateNode1Response.get()).get()
+      assert(chainNode2.head.parentHash == "tempGenesisParentHash")
 
-    val finalChainStateNode2Response = rpc2.get("blocks")
+      assert(chainNode2.head.signature == "tempSig")
 
-    val finalChainNode2 = rpc2.read[Seq[BlockSerialized]](finalChainStateNode2Response.get()).get()
+      assert(chainNode2.head.transactions == Seq())
 
-    val finalChainStateNode3Response = rpc3.get("blocks")
+      assert(chainNode2.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
 
-    val finalChainNode3 = rpc3.read[Seq[BlockSerialized]](finalChainStateNode3Response.get()).get()
+      val consensusResponse2 = rpc2.get("enableConsensus")
 
-    val finalChainStateNode4Response = rpc4.get("blocks")
+      assert(consensusResponse2.get().status == StatusCodes.OK)
 
-    val finalChainNode4 = rpc4.read[Seq[BlockSerialized]](finalChainStateNode4Response.get()).get()
+      val transaction3 =
+        Transaction.senderSign(Transaction(2L, node1PublicKey, node4PublicKey, 33L), node1.keyPair.getPrivate)
 
-    val shortestChainLength = List(finalChainNode1.size, finalChainNode2.size, finalChainNode3.size, finalChainNode4.size).min
+      rpc2.post("transaction", transaction3)
 
-    val chain1 = finalChainNode1.take(shortestChainLength)
-    val chain2 = finalChainNode2.take(shortestChainLength)
-    val chain3 = finalChainNode3.take(shortestChainLength)
-    val chain4 = finalChainNode4.take(shortestChainLength)
+      val transaction6 =
+        Transaction.senderSign(Transaction(5L, node3PublicKey, node2PublicKey, 1L), node3.keyPair.getPrivate)
 
-    var chain1ContainsTransactions = false
-    var chain2ContainsTransactions = false
-    var chain3ContainsTransactions = false
-    var chain4ContainsTransactions = false
+      rpc2.post("transaction", transaction6)
 
-    var chain1TransactionCount = 0
-    var chain2TransactionCount = 0
-    var chain3TransactionCount = 0
-    var chain4TransactionCount = 0
+      val disableConsensusResponse2 = rpc2.get("disableConsensus")
 
-    chain1.foreach(b => {
-      if (b.transactions.nonEmpty) {
-        chain1ContainsTransactions = true
-        chain1TransactionCount += b.transactions.size
-      }
+      assert(disableConsensusResponse2.get().status == StatusCodes.OK)
+
+      true
+    }
+
+    val node3Future = Future {
+      val rpc3Response = rpc3.get("health")
+      assert(rpc3Response.get().status == StatusCodes.OK)
+
+      rpc3.post("peer", node4Path)
+      rpc3.post("peer", node1Path)
+      rpc3.post("peer", node2Path)
+
+      Thread.sleep(1000)
+
+      val node3PeersRequest = rpc3.get("peers")
+      val peers3 = rpc3.read[Peers](node3PeersRequest.get()).get()
+
+      assert(Seq(node1Path, node4Path, node2Path).diff(peers3.peers.map{socketToAddress}).isEmpty)
+
+      val genResponse3 = rpc3.get("generateGenesisBlock")
+      assert(genResponse3.get().status == StatusCodes.OK)
+
+      val chainStateNode3Response = rpc3.get("blocks")
+
+      val chainNode3 = rpc3.read[Seq[BlockSerialized]](chainStateNode3Response.get()).get()
+
+      assert(chainNode3.size == 1)
+
+      assert(chainNode3.head.height == 0)
+
+      assert(chainNode3.head.round == 0)
+
+      assert(chainNode3.head.parentHash == "tempGenesisParentHash")
+
+      assert(chainNode3.head.signature == "tempSig")
+
+      assert(chainNode3.head.transactions == Seq())
+
+      assert(chainNode3.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
+
+      val consensusResponse3 = rpc3.get("enableConsensus")
+
+      assert(consensusResponse3.get().status == StatusCodes.OK)
+
+      val transaction2 =
+        Transaction.senderSign(Transaction(1L, node2PublicKey, node3PublicKey, 20L), node2.keyPair.getPrivate)
+
+      rpc3.post("transaction", transaction2)
+
+      val transaction4 =
+        Transaction.senderSign(Transaction(3L, node3PublicKey, node4PublicKey, 10L), node3.keyPair.getPrivate)
+
+      rpc3.post("transaction", transaction4)
+
+      val disableConsensusResponse3 = rpc3.get("disableConsensus")
+
+      assert(disableConsensusResponse3.get().status == StatusCodes.OK)
+
+      true
+    }
+
+    val node4Future = Future {
+      val rpc4Response = rpc4.get("health")
+      assert(rpc4Response.get().status == StatusCodes.OK)
+
+      rpc4.post("peer", node1Path)
+      rpc4.post("peer", node2Path)
+      rpc4.post("peer", node3Path)
+
+      Thread.sleep(1000)
+
+      val node4PeersRequest = rpc4.get("peers")
+      val peers4 = rpc4.read[Peers](node4PeersRequest.get()).get()
+
+      assert(Seq(node1Path, node3Path, node2Path).diff(peers4.peers.map{socketToAddress}).isEmpty)
+
+      val genResponse4 = rpc4.get("generateGenesisBlock")
+      assert(genResponse4.get().status == StatusCodes.OK)
+
+      val chainStateNode4Response = rpc4.get("blocks")
+
+      val chainNode4= rpc4.read[Seq[BlockSerialized]](chainStateNode4Response.get()).get()
+
+      assert(chainNode4.size == 1)
+
+      assert(chainNode4.head.height == 0)
+
+      assert(chainNode4.head.round == 0)
+
+      assert(chainNode4.head.parentHash == "tempGenesisParentHash")
+
+      assert(chainNode4.head.signature == "tempSig")
+
+      assert(chainNode4.head.transactions == Seq())
+
+      assert(chainNode4.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
+
+      val consensusResponse4 = rpc4.get("enableConsensus")
+
+      assert(consensusResponse4.get().status == StatusCodes.OK)
+
+      val disableConsensusResponse4 = rpc4.get("disableConsensus")
+
+      assert(disableConsensusResponse4.get().status == StatusCodes.OK)
+
+      true
+    }
+
+    node1Future.map(f => {
+      assert(f == true)
     })
 
-    chain2.foreach(b => {
-      if (b.transactions.nonEmpty) {
-        chain2ContainsTransactions = true
-        chain2TransactionCount += b.transactions.size
-      }
+    node2Future.map(f => {
+      assert(f == true)
     })
 
-    chain3.foreach(b => {
-      if (b.transactions.nonEmpty) {
-        chain3ContainsTransactions = true
-        chain3TransactionCount += b.transactions.size
-      }
+    node3Future.map(f => {
+      assert(f == true)
     })
 
-    chain4.foreach(b => {
-      if (b.transactions.nonEmpty) {
-        chain4ContainsTransactions = true
-        chain4TransactionCount += b.transactions.size
-      }
+    node4Future.map(f => {
+      assert(f == true)
     })
 
-    // Make sure that from the subset of blocks that we have it contains transactions
-    assert(chain1ContainsTransactions)
-    assert(chain2ContainsTransactions)
-    assert(chain3ContainsTransactions)
-    assert(chain4ContainsTransactions)
+    Future.sequence(Seq(node1Future, node2Future, node3Future, node4Future)).map(f => {
+      Thread.sleep(100000)
 
-    assert(chain1TransactionCount == 6)
-    assert(chain2TransactionCount == 6)
-    assert(chain3TransactionCount == 6)
-    assert(chain4TransactionCount == 6)
+      val finalChainStateNode1Response = rpc1.get("blocks")
 
-    println(s"CHAIN1: $chain1")
-    println(s"CHAIN2: $chain2")
+      val finalChainNode1 = rpc1.read[Seq[BlockSerialized]](finalChainStateNode1Response.get()).get()
 
-    assert(chain1.zip(chain2).forall{
-      case (b1, b2) =>
-        if (b1 != b2) {
-          println("BLOCK NOT EQUAL 1: " + b1)
-          println("BLOCK NOT EQUAL 2: " + b2)
-        } else {
-          println("BLOCK EQUAL")
+      val finalChainStateNode2Response = rpc2.get("blocks")
+
+      val finalChainNode2 = rpc2.read[Seq[BlockSerialized]](finalChainStateNode2Response.get()).get()
+
+      val finalChainStateNode3Response = rpc3.get("blocks")
+
+      val finalChainNode3 = rpc3.read[Seq[BlockSerialized]](finalChainStateNode3Response.get()).get()
+
+      val finalChainStateNode4Response = rpc4.get("blocks")
+
+      val finalChainNode4 = rpc4.read[Seq[BlockSerialized]](finalChainStateNode4Response.get()).get()
+
+      val shortestChainLength = List(finalChainNode1.size, finalChainNode2.size, finalChainNode3.size, finalChainNode4.size).min
+
+      val chain1 = finalChainNode1.take(shortestChainLength)
+      val chain2 = finalChainNode2.take(shortestChainLength)
+      val chain3 = finalChainNode3.take(shortestChainLength)
+      val chain4 = finalChainNode4.take(shortestChainLength)
+
+      var chain1ContainsTransactions = false
+      var chain2ContainsTransactions = false
+      var chain3ContainsTransactions = false
+      var chain4ContainsTransactions = false
+
+      var chain1TransactionCount = 0
+      var chain2TransactionCount = 0
+      var chain3TransactionCount = 0
+      var chain4TransactionCount = 0
+
+      chain1.foreach(b => {
+        if (b.transactions.nonEmpty) {
+          chain1ContainsTransactions = true
+          chain1TransactionCount += b.transactions.size
         }
-        b1 == b2
-    })
+      })
 
-    assert(chain2.zip(chain3).forall{
-      case (b1, b2) =>
-        if (b1 != b2) {
-          println("BLOCK NOT EQUAL 1: " + b1)
-          println("BLOCK NOT EQUAL 2: " + b2)
-        } else {
-          println("BLOCK EQUAL")
+      chain2.foreach(b => {
+        if (b.transactions.nonEmpty) {
+          chain2ContainsTransactions = true
+          chain2TransactionCount += b.transactions.size
         }
-        b1 == b2
-    })
+      })
 
-    assert(chain3.zip(chain4).forall{
-      case (b1, b2) =>
-        if (b1 != b2) {
-          println("BLOCK NOT EQUAL 1: " + b1)
-          println("BLOCK NOT EQUAL 2: " + b2)
-        } else {
-          println("BLOCK EQUAL")
+      chain3.foreach(b => {
+        if (b.transactions.nonEmpty) {
+          chain3ContainsTransactions = true
+          chain3TransactionCount += b.transactions.size
         }
-        b1 == b2
+      })
+
+      chain4.foreach(b => {
+        if (b.transactions.nonEmpty) {
+          chain4ContainsTransactions = true
+          chain4TransactionCount += b.transactions.size
+        }
+      })
+
+      // Make sure that from the subset of blocks that we have it contains transactions
+      assert(chain1ContainsTransactions)
+      assert(chain2ContainsTransactions)
+      assert(chain3ContainsTransactions)
+      assert(chain4ContainsTransactions)
+
+      assert(chain1TransactionCount == 6)
+      assert(chain2TransactionCount == 6)
+      assert(chain3TransactionCount == 6)
+      assert(chain4TransactionCount == 6)
+
+      println(s"CHAIN1: $chain1")
+      println(s"CHAIN2: $chain2")
+
+
+      assert(chain1.zip(chain2).forall{
+        case (b1, b2) =>
+          if (b1 != b2) {
+            println("BLOCK NOT EQUAL 1: " + b1)
+            println("BLOCK NOT EQUAL 2: " + b2)
+          } else {
+            println("BLOCK EQUAL")
+          }
+          b1 == b2
+      })
+
+      assert(chain2.zip(chain3).forall{
+        case (b1, b2) =>
+          if (b1 != b2) {
+            println("BLOCK NOT EQUAL 1: " + b1)
+            println("BLOCK NOT EQUAL 2: " + b2)
+          } else {
+            println("BLOCK EQUAL")
+          }
+          b1 == b2
+      })
+
+
+      assert(chain3.zip(chain4).forall{
+        case (b1, b2) =>
+          if (b1 != b2) {
+            println("BLOCK NOT EQUAL 1: " + b1)
+            println("BLOCK NOT EQUAL 2: " + b2)
+          } else {
+            println("BLOCK EQUAL")
+          }
+          b1 == b2
+      })
+
+      assert(f == true)
     })
-
-    // TODO : I have no idea what is going on here. The below test fails but the above is essentially the same thing?
-    // I can't see the difference in the logs if it exists? Probably some case class nonsense with Sets maybe?
-/*
-    assert(chain1.sameElements(chain2))
-    assert(chain2.sameElements(chain3))
-    assert(chain3.sameElements(chain4))
-*/
-
-    // TODO: validate chains
 
   }
 
