@@ -1,5 +1,7 @@
 package org.constellation.state
 
+import java.net.InetSocketAddress
+
 import akka.actor.{Actor, ActorLogging, ActorRef}
 import org.constellation.consensus.Consensus.ProposedBlockUpdated
 import org.constellation.primitives.{Block, Transaction}
@@ -14,7 +16,7 @@ object ChainStateManager {
   // Commands
   case class AddBlock(block: Block, replyTo: ActorRef)
   case class GetCurrentChainState()
-  case class CreateBlockProposal(memPools: HashMap[ActorRef, Seq[Transaction]], round: Long, replyTo: ActorRef)
+  case class CreateBlockProposal(memPools: HashMap[InetSocketAddress, Seq[Transaction]], round: Long, replyTo: ActorRef)
 
   // Events
   case class BlockAddedToChain(previousBlock: Block)
@@ -32,7 +34,7 @@ object ChainStateManager {
     updatedChain
   }
 
-  def handleCreateBlockProposal(memPools: Map[ActorRef, Seq[Transaction]], chain: Chain, round: Long, replyTo: ActorRef): Unit = {
+  def handleCreateBlockProposal(memPools: Map[InetSocketAddress, Seq[Transaction]], chain: Chain, round: Long, replyTo: ActorRef): Unit = {
     val transactions: Seq[Transaction] = memPools.foldLeft(Seq[Transaction]()) {
       (result, b) => {
         result.union(b._2).distinct.sortBy(t => t.sequenceNum)
