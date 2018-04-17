@@ -333,7 +333,6 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     val testProbe1 = TestProbe()
 
-
     testProbe1.setAutoPilot(new TestActor.AutoPilot {
       def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = {
         sender ! Peers(Seq(address2, address3, address4, address5))
@@ -347,8 +346,8 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     testProbe1.expectMsg(GetPeers)
 
     val expectedConsensusRoundState = ConsensusRoundState(
-      Some(node1.peerToPeerActor),
-      Some(node1.udpAddress),
+      Some(testProbe1.ref),
+      Some(address1),
       false,
       None,
       None,
