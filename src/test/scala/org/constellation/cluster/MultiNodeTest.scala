@@ -198,10 +198,10 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     val peers4 = rpc4.read[Peers](node4PeersRequest.get()).get()
 
     // Verify that they are connected
-    assert(peers1.peers.map{socketToAddress}.diff(Seq(node2Path, node3Path, node4Path)).isEmpty)
-    assert(peers2.peers.map{socketToAddress}.diff(Seq(node1Path, node3Path, node4Path)).isEmpty)
-    assert(peers3.peers.map{socketToAddress}.diff(Seq(node1Path, node4Path, node2Path)).isEmpty)
-    assert(peers4.peers.map{socketToAddress}.diff(Seq(node1Path, node3Path, node2Path)).isEmpty)
+    assert(Seq(node2Path, node3Path, node4Path).diff(peers1.peers.map{socketToAddress}).isEmpty)
+    assert(Seq(node1Path, node3Path, node4Path).diff(peers2.peers.map{socketToAddress}).isEmpty)
+    assert(Seq(node1Path, node4Path, node2Path).diff(peers3.peers.map{socketToAddress}).isEmpty)
+    assert(Seq(node1Path, node3Path, node2Path).diff(peers4.peers.map{socketToAddress}).isEmpty)
 
     import akka.pattern.ask
     val peers = (node1.peerToPeerActor ? GetPeers).mapTo[Peers].get()
@@ -456,7 +456,6 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     assert(chain2TransactionCount == 6)
     assert(chain3TransactionCount == 6)
     assert(chain4TransactionCount == 6)
-
 
     println(s"CHAIN1: $chain1")
     println(s"CHAIN2: $chain2")
