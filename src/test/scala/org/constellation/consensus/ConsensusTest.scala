@@ -10,7 +10,7 @@ import akka.testkit.{TestActor, TestKit, TestProbe}
 import akka.util.Timeout
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.PeerToPeer.{GetPeers, Peers}
-import org.constellation.p2p.RegisterNextActor
+import org.constellation.p2p.{RegisterNextActor, UDPMessage}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.ChainStateManager.{AddBlock, CreateBlockProposal}
 import org.constellation.utils.TestNode
@@ -515,11 +515,11 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     val updatedConsensusState = Consensus.handleProposedBlockUpdated(consensusRoundState, proposedBlock, node1.udpAddress, node1.udpActor)
 
-    probe1.expectMsg(PeerProposedBlock(proposedBlock, node1.udpAddress))
-    probe2.expectMsg(PeerProposedBlock(proposedBlock, node1.udpAddress))
-    probe3.expectMsg(PeerProposedBlock(proposedBlock, node1.udpAddress))
-    probe4.expectMsg(PeerProposedBlock(proposedBlock, node1.udpAddress))
-    probe5.expectMsg(PeerProposedBlock(proposedBlock, node1.udpAddress))
+    probe1.expectMsg(UDPMessage(PeerProposedBlock(proposedBlock, node1.udpAddress), node1.udpAddress))
+    probe2.expectMsg(UDPMessage(PeerProposedBlock(proposedBlock, node1.udpAddress), node1.udpAddress))
+    probe3.expectMsg(UDPMessage(PeerProposedBlock(proposedBlock, node1.udpAddress), node1.udpAddress))
+    probe4.expectMsg(UDPMessage(PeerProposedBlock(proposedBlock, node1.udpAddress), node1.udpAddress))
+    probe5.expectMsg(UDPMessage(PeerProposedBlock(proposedBlock, node1.udpAddress), node1.udpAddress))
 
     val expectedConsensusRoundState = ConsensusRoundState(
       Some(node1.peerToPeerActor),
