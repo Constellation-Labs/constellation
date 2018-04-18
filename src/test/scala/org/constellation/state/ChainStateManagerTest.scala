@@ -1,22 +1,24 @@
 package org.constellation.state
 
-import java.security.KeyPair
-import java.util.concurrent.TimeUnit
-
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.ActorSystem
+import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
-import akka.util.Timeout
 import org.constellation.consensus.Consensus.ProposedBlockUpdated
-import org.constellation.primitives.{Block, Transaction}
 import org.constellation.primitives.Chain.Chain
+import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.ChainStateManager.BlockAddedToChain
 import org.constellation.state.MemPoolManager.RemoveConfirmedTransactions
+import org.constellation.utils.TestNode
 import org.constellation.wallet.KeyUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.collection.immutable.HashMap
+import scala.concurrent.ExecutionContextExecutor
 
 class ChainStateManagerTest extends TestKit(ActorSystem("ChainStateManagerTest")) with FlatSpecLike with BeforeAndAfterAll {
+
+  implicit val materializer = ActorMaterializer()
+  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   override def afterAll {
     TestKit.shutdownActorSystem(system)
@@ -48,11 +50,17 @@ class ChainStateManagerTest extends TestKit(ActorSystem("ChainStateManagerTest")
   }
 
   "handleCreateBlockProposal" should "work correctly" in {
-    val node1 = TestProbe()
-    val node2 = TestProbe()
-    val node3 = TestProbe()
-    val node4 = TestProbe()
-    val node5 = TestProbe()
+//    val node1 = TestProbe()
+//    val node2 = TestProbe()
+//    val node3 = TestProbe()
+//    val node4 = TestProbe()
+//    val node5 = TestProbe()
+
+    val node1 = TestNode()
+    val node2 = TestNode()
+    val node3 = TestNode()
+    val node4 = TestNode()
+    val node5 = TestNode()
 
     val genesisBlock = Block("gen", 0, "", Set(), 0L, Seq())
 
@@ -76,10 +84,10 @@ class ChainStateManagerTest extends TestKit(ActorSystem("ChainStateManagerTest")
     val chain = Chain(Seq(genesisBlock))
 
     val memPools = HashMap(
-        node1.ref -> Seq(transaction1, transaction3),
-        node2.ref -> Seq(transaction2),
-        node3.ref -> Seq(transaction3, transaction2),
-        node4.ref -> Seq(transaction4))
+        node1.udpAddress -> Seq(transaction1, transaction3),
+        node2.udpAddress -> Seq(transaction2),
+        node3.udpAddress -> Seq(transaction3, transaction2),
+        node4.udpAddress -> Seq(transaction4))
 
     val replyTo = TestProbe()
 

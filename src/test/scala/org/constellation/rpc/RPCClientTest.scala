@@ -32,11 +32,12 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   }
 
   "GET to /peers" should "get the correct connected peers" in {
+
     val node1 = TestNode()
 
-    val node1Path = node1.peerToPeerActor.path.toSerializationFormat
+    val node1Path = node1.udpAddress
 
-    val expectedPeers = Some(Seq(node1Path))
+    val expectedPeers = Seq(node1Path)
 
     val node2 = TestNode(expectedPeers)
 
@@ -46,12 +47,12 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
     val actualPeers = rpc.read[Peers](response.get()).get()
 
-    assert(Peers(expectedPeers.get) == actualPeers)
+    assert(Peers(expectedPeers) == actualPeers)
   }
 
   "GET to /id" should "get the current nodes public key id" in {
     val keyPair = KeyUtils.makeKeyPair()
-    val appNode = TestNode(None, keyPair)
+    val appNode = TestNode(Seq(), keyPair)
     val rpc = new RPCClient(port=appNode.httpPort)
 
     val response = rpc.get("id")
@@ -90,8 +91,8 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val node1 = TestNode()
     val node2 = TestNode()
 
-    val node1Path = node1.peerToPeerActor.path.toSerializationFormat
-    val node2Path = node2.peerToPeerActor.path.toSerializationFormat
+    val node1Path = node1.udpAddressString
+    val node2Path = node2.udpAddressString
 
     val rpc1 = new RPCClient(port=node1.httpPort)
     val rpc2 = new RPCClient(port=node2.httpPort)
