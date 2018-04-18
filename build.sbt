@@ -50,16 +50,14 @@ dockerEntrypoint ++= Seq(
   """-Dakka.remote.netty.tcp.port="$AKKA_REMOTING_BIND_PORT"""",
   "-Dakka.io.dns.resolver=async-dns",
   "-Dakka.io.dns.async-dns.resolve-srv=true",
-  "-Dakka.io.dns.async-dns.resolv-conf=on",
-  """-DhttpHost="$HTTP_HOST"""",
-  """-DhttpPort="$HTTP_PORT""""
+  "-Dakka.io.dns.async-dns.resolv-conf=on"
 )
 
 mainClass := Some("org.constellation.ConstellationNode")
 
 parallelExecution in Test := false
 
-dockerExposedPorts := Seq(2551, 9000)
+dockerExposedPorts := Seq(2551, 9000, 16180)
 
 dockerCommands :=
   dockerCommands.value.flatMap {

@@ -12,6 +12,10 @@ spec:
   - port: 9000
     name: rpc
     targetPort: 9000
+  - port: 16180
+    targetPort: 16180
+    name: udp
+    protocol: UDP
   clusterIP: None
   selector:
     app: constellation
@@ -39,6 +43,10 @@ spec:
         - containerPort: 2551
           hostPort: 2551
           name: p2p
+        - containerPort: 16180
+          hostPort: 16180
+          name: udp
+          protocol: UDP
         env:
         - name: AKKA_ACTOR_SYSTEM_NAME
           value: constellation
