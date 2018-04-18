@@ -221,10 +221,6 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
       rpc1.post("transaction", transaction5)
 
-      val disableConsensusResponse1 = rpc1.get("disableConsensus")
-
-      assert(disableConsensusResponse1.get().status == StatusCodes.OK)
-
       true
     }
 
@@ -277,10 +273,6 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
         Transaction.senderSign(Transaction(5L, node3PublicKey, node2PublicKey, 1L), node3.keyPair.getPrivate)
 
       rpc2.post("transaction", transaction6)
-
-      val disableConsensusResponse2 = rpc2.get("disableConsensus")
-
-      assert(disableConsensusResponse2.get().status == StatusCodes.OK)
 
       true
     }
@@ -335,10 +327,6 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
       rpc3.post("transaction", transaction4)
 
-      val disableConsensusResponse3 = rpc3.get("disableConsensus")
-
-      assert(disableConsensusResponse3.get().status == StatusCodes.OK)
-
       true
     }
 
@@ -382,10 +370,6 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
       assert(consensusResponse4.get().status == StatusCodes.OK)
 
-      val disableConsensusResponse4 = rpc4.get("disableConsensus")
-
-      assert(disableConsensusResponse4.get().status == StatusCodes.OK)
-
       true
     }
 
@@ -406,7 +390,19 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     })
 
     Future.sequence(Seq(node1Future, node2Future, node3Future, node4Future)).map(f => {
-      Thread.sleep(100000)
+      Thread.sleep(40000)
+
+      val disableConsensusResponse1 = rpc1.get("disableConsensus")
+      assert(disableConsensusResponse1.get().status == StatusCodes.OK)
+
+      val disableConsensusResponse2 = rpc2.get("disableConsensus")
+      assert(disableConsensusResponse2.get().status == StatusCodes.OK)
+
+      val disableConsensusResponse3 = rpc3.get("disableConsensus")
+      assert(disableConsensusResponse3.get().status == StatusCodes.OK)
+
+      val disableConsensusResponse4 = rpc4.get("disableConsensus")
+      assert(disableConsensusResponse4.get().status == StatusCodes.OK)
 
       val finalChainStateNode1Response = rpc1.get("blocks")
 
@@ -482,7 +478,6 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
       println(s"CHAIN1: $chain1")
       println(s"CHAIN2: $chain2")
-
 
       assert(chain1.zip(chain2).forall{
         case (b1, b2) =>
