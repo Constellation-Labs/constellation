@@ -513,7 +513,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
           b1 == b2
       })
 
-      assert(f == true)
+      assert(f == Seq.fill(4)(true))
     })
 
   }
