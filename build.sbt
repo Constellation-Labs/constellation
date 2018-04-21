@@ -2,15 +2,13 @@ import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 
 name := "constellation"
 
-version := "2"
+version := "1.0.0"
 
 scalaVersion := "2.12.2"
 
 resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases"
 
 enablePlugins(JavaAppPackaging)
-
-dockerExposedPorts := Seq(2551)
 
 lazy val versions = new {
   val akka = "2.4.18"
@@ -29,11 +27,11 @@ libraryDependencies ++= Seq(
   "net.liftweb" %% "lift-json" % "3.1.1",
   "com.madgag.spongycastle" % "core" % "1.58.0.0",
   "com.madgag.spongycastle" % "prov" % "1.58.0.0",
- // "com.madgag.spongycastle" % "pkix" % "1.58.0.0",
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % "1.58.0.0",
-  //"com.madgag.spongycastle" % "pg" % "1.58.0.0",
   "com.madgag.spongycastle" % "bcpg-jdk15on" % "1.58.0.0",
   "com.madgag.spongycastle" % "bctls-jdk15on" % "1.58.0.0",
+  "net.liftweb" %% "lift-json" % "3.1.1",
+  "com.google.guava" % "guava" % "21.0",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.51"
   )
 
@@ -48,19 +46,19 @@ libraryDependencies ++= Seq(
 
 // These values will be filled in by the k8s StatefulSet and Deployment
 dockerEntrypoint ++= Seq(
-  """-DactorSystemName="$AKKA_ACTOR_SYSTEM_NAME"""",
-  """-Dakka.remote.netty.tcp.hostname="$AKKA_REMOTING_BIND_HOST"""",
+  """-DakkaActorSystemName="$AKKA_ACTOR_SYSTEM_NAME"""",
+  """-Dakka.remote.netty.tcp.hostname="$(eval "echo $AKKA_REMOTING_BIND_HOST")"""",
   """-Dakka.remote.netty.tcp.port="$AKKA_REMOTING_BIND_PORT"""",
-  """-Dsample.http.hostname="$SAMPLE_HTTP_HOST"""",
-  """-Dsample.http.port="$SAMPLE_HTTP_PORT"""",
   "-Dakka.io.dns.resolver=async-dns",
   "-Dakka.io.dns.async-dns.resolve-srv=true",
   "-Dakka.io.dns.async-dns.resolv-conf=on"
 )
 
-mainClass := Some("org.constellation.BlockChainApp")
+mainClass := Some("org.constellation.ConstellationNode")
 
 parallelExecution in Test := false
+
+dockerExposedPorts := Seq(2551, 9000, 16180)
 
 dockerCommands :=
   dockerCommands.value.flatMap {
@@ -68,6 +66,7 @@ dockerCommands :=
     case v => Seq(v)
   }
 
-dockerRepository := Some("constellation")
+dockerUsername := Some("constellationlabs")
+
 // Update the latest tag when publishing
 dockerUpdateLatest := true

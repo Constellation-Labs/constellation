@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: node-service
+  name: node-service
+spec:
+  ports:
+  - port: 2551
+    name: p2p
+    targetPort: 2551
+  - port: 9000
+    name: rpc
+    targetPort: 9000
+  - port: 16180
+    targetPort: 16180
+    name: udp
+    protocol: UDP
+  clusterIP: None
+  selector:
+    app: constellation
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: constellation
+spec:
+  serviceName: node-service
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: constellation
+    spec:
+      containers:
+      - name: constellation
+        image: gcr.io/esoteric-helix-197319/constellationlabs/constellation:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9000
+          hostPort: 9000
+          name: rpc
+        - containerPort: 2551
+          hostPort: 2551
+          name: p2p
+        - containerPort: 16180
+          hostPort: 16180
+          name: udp
+          protocol: UDP
+        env:
+        - name: AKKA_ACTOR_SYSTEM_NAME
+          value: constellation
+        - name: AKKA_REMOTING_BIND_PORT
+          value: '2551'
+        - name: AKKA_REMOTING_BIND_HOST
+          value: "$HOSTNAME"
+        - name: AKKA_SEED_NODE_PORT
+          value: '2551'
+        - name: HTTP_HOST
+          value: 0.0.0.0
+        - name: HTTP_PORT
+          value: '9000'
+        readinessProbe:
+          tcpSocket:
+            port: 2551
+          initialDelaySeconds: 30
+          timeoutSeconds: 30

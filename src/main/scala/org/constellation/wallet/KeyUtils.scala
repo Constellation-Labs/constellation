@@ -4,6 +4,7 @@ import java.io.{ByteArrayInputStream, File}
 import java.math.BigInteger
 import java.security._
 import java.security.cert.CertificateFactory
+import java.security.{SecureRandom, _}
 import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
 import java.util.{Base64, Date}
 
@@ -16,8 +17,7 @@ import org.spongycastle.asn1.x509.SubjectPublicKeyInfo
 import org.spongycastle.cert.X509v1CertificateBuilder
 import org.spongycastle.operator.jcajce.JcaContentSignerBuilder
 
-
-
+object KeyUtils extends KeyUtilsExt
 
 /**
   * Need to compare this to:
@@ -38,7 +38,7 @@ import org.spongycastle.operator.jcajce.JcaContentSignerBuilder
   * for security policy implications.
   *
   */
-object KeyUtils {
+trait KeyUtilsExt {
 
   def makeWalletKeyStore(
                           validityInDays: Int = 500000,
@@ -137,12 +137,12 @@ object KeyUtils {
     * Source: https://stackoverflow.com/questions/29778852/how-to-create-ecdsa-keypair-256bit-for-bitcoin-curve-secp256k1-using-spongy
     * @return : Private / Public keys following BTC implementation
     */
-  def makeKeyPair(): KeyPair = {
+  def makeKeyPair(secureRandom: SecureRandom = new SecureRandom()): KeyPair = {
     import java.security.Security
     Security.insertProviderAt(new org.spongycastle.jce.provider.BouncyCastleProvider(), 1)
     val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance("ECDsA", "SC")
     val ecSpec = new ECGenParameterSpec("secp256k1")
-    keyGen.initialize(ecSpec, new SecureRandom())
+    keyGen.initialize(ecSpec, secureRandom)
     keyGen.generateKeyPair
   }
 
