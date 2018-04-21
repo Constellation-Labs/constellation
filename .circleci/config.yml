@@ -125,7 +125,7 @@ jobs:
       - run:
           command: sudo /opt/google-cloud-sdk/bin/gcloud docker -- push gcr.io/$GOOGLE_PROJECT_ID/constellationlabs/constellation:$CIRCLE_SHA1
       - run:
-          command: kubectl apply -f ./deploy/kubernetes/node-deployment.yml
+          command: sudo kubectl apply -f ./deploy/kubernetes/node-deployment.yml
 
 
 workflows:
