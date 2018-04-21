@@ -11,11 +11,13 @@ import scala.tools.nsc.io.{File => SFile}
 
 class LevelDBTest extends FlatSpec {
 
+
   "LevelDB" should "create a database and run some queries and delete it" in {
     val options = new Options()
     options.createIfMissing(true)
     val file = new File("tmp" , "example")
     file.mkdir
+
     val db = factory.open(file, options)
     try {
       db.put(bytes("Tampa"), bytes("rocks"))
@@ -30,6 +32,23 @@ class LevelDBTest extends FlatSpec {
       db.close()
     }
 
+    SFile(file).deleteRecursively()
+
+  }
+
+  "LevelDB wrapper" should "do same but in a convenient fashion" in {
+
+    val file = new File("tmp" , "example")
+    file.mkdir
+
+    val ldb = new LevelDB(file)
+
+    ldb.put("Tampa", "rocks")
+    assert(ldb.getRaw("Tampa") == "rocks")
+    ldb.delete("Tampa")
+    assert(ldb.getRaw("Tampa") == null)
+
+    ldb.close()
     SFile(file).deleteRecursively()
 
   }
