@@ -1,91 +1,110 @@
 package org.constellation.p2p
 
-import java.util.concurrent.TimeUnit
+import java.net.InetSocketAddress
+import java.security.PublicKey
 
-import akka.actor.{Actor, ActorRef, ActorSelection, Terminated}
-import akka.pattern.pipe
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Terminated}
 import akka.util.Timeout
-import com.typesafe.scalalogging.Logger
-import org.constellation.actor.Receiver
+import constellation._
+import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock}
 import org.constellation.p2p.PeerToPeer._
 
-import scala.concurrent.Future
-import scala.concurrent.duration.Duration
+import scala.concurrent.ExecutionContextExecutor
 
 object PeerToPeer {
 
-  case class AddPeer(address: String)
+  case class AddPeerFromLocal(address: InetSocketAddress)
 
-  case class ResolvedPeer(actorRef: ActorRef)
+  case class PeerRef(address: InetSocketAddress)
 
-  case class Peers(peers: Seq[String])
+  case class Peers(peers: Seq[InetSocketAddress])
 
-  case class Id(id: String)
+  case class Id(id: PublicKey)
 
-  case object GetPeers
+  case class GetPeers()
 
-  case object GetId
+  case class GetId()
 
-  case object HandShake
+  case class GetBalance(account: PublicKey)
+
+  case class HandShake()
 }
 
-trait PeerToPeer {
-  this: Receiver =>
+class PeerToPeer(
+                  publicKey: PublicKey,
+                  system: ActorSystem,
+                  consensusActor: ActorRef,
+                  udpActor: ActorRef,
+                  selfAddress: InetSocketAddress = new InetSocketAddress("127.0.0.1", 16180)
+                )
+                (implicit timeout: Timeout) extends Actor with ActorLogging {
 
-  implicit val timeout = Timeout(Duration(5, TimeUnit.SECONDS))
-  implicit val executionContext = context.system.dispatcher
+  implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
+  implicit val actorSystem: ActorSystem = context.system
 
-  val logger: Logger
-  var peers: Set[ActorRef] = Set.empty
+  var peers: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
 
-  def broadcast(message: Any ): Unit = {
-    peers.foreach {  peer => peer ! message
-      logger.info(s"just broadcasted $message to $peer")
+  def broadcast[T <: AnyRef](message: T): Unit = {
+    peers.foreach {
+      peer => udpActor.udpSend(message, peer)
     }
-
   }
 
-  receiver {
+  override def receive: Receive = {
 
-    case AddPeer(peerAddress) =>
-      logger.debug(s"Got request to add peer ${peerAddress}")
-      /*
-      adds peer to actor system, res is a future of actor ref, sends the actor ref back to this actor, handshake occurs below
-       */
-      context.actorSelection(peerAddress).resolveOne().map( ResolvedPeer(_) ).pipeTo(self)
-    case ResolvedPeer(newPeerRef: ActorRef) =>
+    case AddPeerFromLocal(peerAddress) =>
+      log.debug(s"Received a request to add peer $peerAddress")
+      self ! PeerRef(peerAddress)
 
-      if ( ! peers.contains(newPeerRef) ) {
-        context.watch(newPeerRef)
-        logger.debug(s"Watching $newPeerRef}")
+    case p @ PeerRef(peerAddress) =>
+      // TODO: Add validation that the peer reference isn't banned
 
+      if (!peers.contains(peerAddress) && peerAddress != selfAddress){
+
+        log.debug(s"Sending handshake from $selfAddress to $peerAddress")
         //Introduce ourselves
-        newPeerRef ! HandShake
-        logger.debug(s"HandShake $newPeerRef}")
-
-        //Ask for its friends
-        newPeerRef ! GetPeers
-        logger.debug(s"GetPeers $newPeerRef}")
+        udpActor.udpSend(HandShake(), peerAddress)
 
         //Tell our existing peers
-        broadcast(AddPeer(newPeerRef.path.toSerializationFormat))
+        broadcast(p)
 
         //Add to the current list of peers
-        peers += newPeerRef
-      } else logger.debug("We already know this peer, discarding")
+        peers += peerAddress
 
-    case Peers(peers) => peers.foreach( self ! AddPeer(_))
+      } else log.debug(s"We already know $peerAddress, discarding")
 
-    case HandShake =>
-      logger.debug(s"Received a handshake from ${sender().path.toStringWithoutAddress}")
-      peers += sender()
+    case GetPeers => sender() ! Peers(peers.toSeq)
 
-    case GetPeers => sender() ! Peers(peers.toSeq.map(_.path.toSerializationFormat))
+    case GetId =>
+      sender() ! Id(publicKey)
 
-    case Terminated(actorRef) =>
-      logger.debug(s"Peer ${actorRef} has terminated. Removing it from the list.")
-      peers -= actorRef
+      // All these UDP Messages need to check if remote ip is banned.
+    case UDPMessage(p: PeerRef, remote) =>
+      self ! p
 
+    case UDPMessage(p: PeerMemPoolUpdated, remote) =>
+      consensusActor ! p
+
+    case UDPMessage(p : PeerProposedBlock, remote) =>
+      consensusActor ! p
+
+    case UDPMessage(_ : HandShake, remote) =>
+      log.debug(s"Got handshake from $remote")
+      self ! PeerRef(remote)
+      udpActor.udpSend(Peers(peers.toSeq), remote)
+
+    case UDPMessage(peersI: Peers, remote) =>
+      peersI.peers.foreach{
+        p =>
+          self ! PeerRef(p)
+      }
+
+    case UDPMessage(_: Terminated, remote) =>
+      log.debug(s"Peer $remote has terminated. Removing it from the list.")
+      peers -= remote
+
+    case u: UDPMessage =>
+      log.error(s"Unrecognized UDP message: $u")
   }
 
 }

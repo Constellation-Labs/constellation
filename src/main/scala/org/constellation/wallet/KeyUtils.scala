@@ -1,15 +1,23 @@
 package org.constellation.wallet
 
+import java.io.{ByteArrayInputStream, File}
+import java.math.BigInteger
 import java.security._
+import java.security.cert.CertificateFactory
+import java.security.{SecureRandom, _}
 import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
-import java.util.Base64
+import java.util.{Base64, Date}
 
 import org.json4s.{CustomSerializer, Extraction, Formats, JObject}
 import org.json4s.JsonAST.JString
 import org.json4s.native.Serialization
+import org.spongycastle.asn1.x500.X500NameBuilder
+import org.spongycastle.asn1.x500.style.BCStyle
+import org.spongycastle.asn1.x509.SubjectPublicKeyInfo
+import org.spongycastle.cert.X509v1CertificateBuilder
+import org.spongycastle.operator.jcajce.JcaContentSignerBuilder
 
-
-
+object KeyUtils extends KeyUtilsExt
 
 /**
   * Need to compare this to:
@@ -30,7 +38,98 @@ import org.json4s.native.Serialization
   * for security policy implications.
   *
   */
-object KeyUtils {
+trait KeyUtilsExt {
+
+  def makeWalletKeyStore(
+                          validityInDays: Int = 500000,
+                          orgName: String = "test",
+                          orgUnitName: String = "test",
+                          localityName: String = "test",
+                          password: Array[Char],
+                          numECDSAKeys: Int = 1000,
+                          certEntryName: String = "test_cert",
+                          rsaEntryName: String = "test_rsa",
+                          ecdsaEntryNamePrefix: String = "ecdsa",
+                          saveCertTo: Option[File] = None,
+                          savePairsTo: Option[File] = None,
+                          sslKeySize: Int = 4096
+                        ): (KeyStore, KeyStore) = {
+    import java.security.Security
+    // Note this requires JDK 8u151 +
+    // https://stackoverflow.com/questions/6481627/java-security-illegal-key-size-or-default-parameters
+    Security.setProperty("crypto.policy", "unlimited")
+    // java.lang.SecurityException: JCE cannot authenticate the provider SC
+    // Use BC for now, for some reason SC not working. Just google it theres a fix.
+    val bcProvider = new org.bouncycastle.jce.provider.BouncyCastleProvider()
+
+    val prov = bcProvider // makeProvider
+    Security.insertProviderAt(prov, 1)
+    val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance("RSA", prov)
+    keyGen.initialize(sslKeySize)
+    val keyPair = keyGen.generateKeyPair
+    val startDate = new Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000)
+    val endDate = new Date(System.currentTimeMillis() + validityInDays * 24 * 60 * 60 * 1000)
+
+    val nameBuilder = new X500NameBuilder(BCStyle.INSTANCE)
+    nameBuilder.addRDN(BCStyle.O,orgName)
+    nameBuilder.addRDN(BCStyle.OU,orgUnitName)
+    nameBuilder.addRDN(BCStyle.L,localityName)
+
+    val x500Name = nameBuilder.build()
+    val random = new SecureRandom()
+
+    val subjectPublicKeyInfo = SubjectPublicKeyInfo.getInstance(keyPair.getPublic.getEncoded)
+    val v1CertGen = new X509v1CertificateBuilder(
+      x500Name, BigInteger.valueOf(random.nextLong()),startDate,endDate,x500Name,subjectPublicKeyInfo
+    )
+
+    val sigGen = new JcaContentSignerBuilder("SHA256WithRSAEncryption")
+      .setProvider(prov).build(keyPair.getPrivate)
+
+    val x509CertificateHolder = v1CertGen.build(sigGen)
+
+    val certf = CertificateFactory.getInstance("X.509")
+    val cert = certf.generateCertificate(new ByteArrayInputStream(x509CertificateHolder.getEncoded))
+
+    // There's another solution here: https://stackoverflow.com/questions/13894699/java-how-to-store-a-key-in-keystore
+    // Maybe worth looking at we'll see. This works for now.
+    // Theres a lot of different keystores we actually need to support.
+    // PKCS12 for the SSL certs (between nodes unless they get a proper cert from lets encrypt) is easy
+    // BKS is also easy
+    // There's a lot more and more details to get into. This is pretty complicated but this can serve
+    // As an initial example to at least get the right classes in place.
+    val ks: KeyStore = KeyStore.getInstance("PKCS12", bcProvider)
+    ks.load(null, password)
+    // https://stackoverflow.com/questions/6656263/why-do-i-get-the-error-cannot-store-non-privatekeys-when-creating-an-ssl-socke
+    // ^ in case next step is confusing:
+
+    import java.io.FileOutputStream
+    import java.security.KeyStore
+    val bks = KeyStore.getInstance("BKS", "BC")
+    bks.load(null, null)
+
+    ks.setCertificateEntry(certEntryName, cert)
+    ks.setKeyEntry(rsaEntryName, keyPair.getPrivate, password, Array(cert))
+
+    val ecdsaKeys = Seq.fill(numECDSAKeys){makeKeyPairFrom(provider = prov)}
+
+    ecdsaKeys.zipWithIndex.foreach{
+      case (k, i) =>
+        bks.setCertificateEntry(certEntryName, cert)
+        bks.setKeyEntry(rsaEntryName, keyPair.getPrivate, password, Array(cert))
+        bks.setKeyEntry(s"${ecdsaEntryNamePrefix}_priv_" + i, k.getPrivate, password, Array(cert))
+        bks.setKeyEntry(s"${ecdsaEntryNamePrefix}_pub_" + i, k.getPublic, password, Array(cert))
+    }
+    savePairsTo.foreach { file =>
+      bks.store(new FileOutputStream(file), password)
+    }
+
+    saveCertTo.foreach { file =>
+      ks.store(new FileOutputStream(file), password)
+    }
+
+    ks -> bks
+  }
 
   /**
     * Simple Bitcoin like wallet grabbed from some stackoverflow post
@@ -38,10 +137,17 @@ object KeyUtils {
     * Source: https://stackoverflow.com/questions/29778852/how-to-create-ecdsa-keypair-256bit-for-bitcoin-curve-secp256k1-using-spongy
     * @return : Private / Public keys following BTC implementation
     */
-  def makeKeyPair(): KeyPair = {
+  def makeKeyPair(secureRandom: SecureRandom = new SecureRandom()): KeyPair = {
     import java.security.Security
     Security.insertProviderAt(new org.spongycastle.jce.provider.BouncyCastleProvider(), 1)
     val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance("ECDsA", "SC")
+    val ecSpec = new ECGenParameterSpec("secp256k1")
+    keyGen.initialize(ecSpec, secureRandom)
+    keyGen.generateKeyPair
+  }
+
+  def makeKeyPairFrom(provider: Provider): KeyPair = {
+    val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance("ECDsA", provider)
     val ecSpec = new ECGenParameterSpec("secp256k1")
     keyGen.initialize(ecSpec, new SecureRandom())
     keyGen.generateKeyPair

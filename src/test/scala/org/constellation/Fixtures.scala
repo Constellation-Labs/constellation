@@ -1,16 +1,18 @@
 package org.constellation
 
-import net.liftweb.json._
-import net.liftweb.json.Serialization.write
-import org.constellation.blockchain.Transaction
+import java.security.{KeyPair, PublicKey}
 
-/**
-  * Created by Wyatt on 1/19/18.
-  */
+import akka.actor.ActorRef
+import org.constellation.primitives.Block
+import org.constellation.primitives.Transaction
+import org.constellation.wallet.KeyUtils
+
+import scala.collection.mutable
+
 object Fixtures {
-  implicit val formats = DefaultFormats
-  val tx = Transaction(Array.emptyByteArray, 0L, "", "" ,"", "")
 
-  def jsonToString[T](obj: T): String = write(obj)
+  val tempKey: KeyPair = KeyUtils.makeKeyPair()
+  val tx = Transaction(0L, tempKey.getPublic, tempKey.getPublic, 1L)
+  val publicKey: PublicKey = tempKey.getPublic
 
 }
