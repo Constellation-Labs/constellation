@@ -4,6 +4,8 @@ import java.net.InetSocketAddress
 import java.security.PublicKey
 
 import akka.actor.ActorRef
+import akka.http.scaladsl.marshalling.Marshaller._
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
@@ -11,19 +13,14 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.p2p.PeerToPeer._
-import org.json4s.{Formats, native}
-import akka.http.scaladsl.marshalling.Marshaller._
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import org.constellation.consensus.Consensus.{DisableConsensus, EnableConsensus, GenerateGenesisBlock}
-import org.constellation.primitives.Chain.Chain
+import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.{Block, BlockSerialized, Transaction}
 import org.constellation.state.ChainStateManager.{CurrentChainStateUpdated, GetCurrentChainState}
 import org.constellation.state.MemPoolManager.AddTransaction
-import org.constellation.wallet.KeyUtils
 import org.json4s.native.Serialization
+import org.json4s.{Formats, native}
 
-import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 class RPCInterface(
@@ -127,8 +124,10 @@ class RPCInterface(
         entity(as[String]) { peerAddress =>
           logger.debug(s"Received request to add a new peer $peerAddress")
           peerToPeerActor ! AddPeerFromLocal(
-            peerAddress.replaceAll('"'.toString,"").split(":")
-            match { case Array(ip, port) => new InetSocketAddress(ip, port.toInt)}
+            peerAddress.replaceAll('"'.toString,"").split(":") match {
+              case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
+              case a@_ => { logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a"); }
+            }
           )
           complete(StatusCodes.Created)
         }
