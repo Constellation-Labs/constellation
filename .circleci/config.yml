@@ -89,9 +89,9 @@ jobs:
       # Download and cache dependencies
       - restore_cache:
           keys:
-          - publish-dependencies--{{ checksum "build.sbt" }}
+       #   - publish-dependencies--{{ checksum "build.sbt" }}
           # fallback to using the latest cache if no exact match is found
-          - publish-dependencies-
+          - publish-dependencies #-
 
       - run:
           command: sbt docker:publishLocal
@@ -102,7 +102,7 @@ jobs:
             - ~/iv2
             - lib_managed
             - ~/.sbt
-          key: publish-dependencies--{{ checksum "build.sbt" }}
+          key: publish-dependencies #--{{ checksum "build.sbt" }}
 
       - run:
           command: sudo docker tag constellationlabs/constellation:$CIRCLE_SHA1 gcr.io/$GOOGLE_PROJECT_ID/constellationlabs/constellation:$CIRCLE_SHA1
@@ -125,7 +125,7 @@ jobs:
       - run:
           command: sudo /opt/google-cloud-sdk/bin/gcloud docker -- push gcr.io/$GOOGLE_PROJECT_ID/constellationlabs/constellation:$CIRCLE_SHA1
       - run:
-          command: sudo kubectl apply -f ./deploy/kubernetes/node-deployment.yml
+          command: sudo  /opt/google-cloud-sdk/bin/kubectl apply -f ./deploy/kubernetes/node-deployment.yml
 
 
 workflows:
