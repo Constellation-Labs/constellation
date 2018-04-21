@@ -61,9 +61,11 @@ class ConstellationNode(
                implicit val executionContext: ExecutionContextExecutor
              ){
 
-  val publicKeyHash = keyPair.getPublic.hashCode()
+  val publicKeyHash: Int = keyPair.getPublic.hashCode()
 
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
+
+  logger.info(s"UDP Info - hostname: $hostName interface: $udpInterface port: $udpPort")
 
   implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
 
