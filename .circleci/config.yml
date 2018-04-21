@@ -99,7 +99,8 @@ jobs:
       - save_cache:
           paths:
             - ~/.m2
-            - ~/iv2
+            - ~/.iv2
+            - ~/.ivy2
             - lib_managed
             - ~/.sbt
           key: publish-dependencies #--{{ checksum "build.sbt" }}
@@ -126,6 +127,8 @@ jobs:
           command: sudo /opt/google-cloud-sdk/bin/gcloud docker -- push gcr.io/$GOOGLE_PROJECT_ID/constellationlabs/constellation:$CIRCLE_SHA1
       - run:
           command: sed "s/constellation:latest/constellation:$CIRCLE_SHA1/g" ./deploy/kubernetes/node-deployment.yml
+      - run:
+          command: cat ./deploy/kubernetes/node-deployment.yml
       - run:
           command: sudo  /opt/google-cloud-sdk/bin/kubectl apply -f ./deploy/kubernetes/node-deployment.yml
 
