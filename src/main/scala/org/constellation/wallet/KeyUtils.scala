@@ -47,8 +47,8 @@ object KeyUtils {
                           localityName: String = "test",
                           password: Array[Char],
                           numECDSAKeys: Int = 1000,
-                          certEntryName: String = "test",
-                          rsaEntryName: String = "test",
+                          certEntryName: String = "test_cert",
+                          rsaEntryName: String = "test_rsa",
                           ecdsaEntryNamePrefix: String = "ecdsa",
                           saveCertTo: Option[File] = None,
                           savePairsTo: Option[File] = None,
@@ -108,17 +108,17 @@ object KeyUtils {
     val bks = KeyStore.getInstance("BKS", "BC")
     bks.load(null, null)
 
-    ks.setCertificateEntry("test_cert", cert)
-    ks.setKeyEntry("test_ssl_priv", keyPair.getPrivate, password, Array(cert))
+    ks.setCertificateEntry(certEntryName, cert)
+    ks.setKeyEntry(rsaEntryName, keyPair.getPrivate, password, Array(cert))
 
     val ecdsaKeys = Seq.fill(numECDSAKeys){makeKeyPairFrom(provider = prov)}
 
     ecdsaKeys.zipWithIndex.foreach{
       case (k, i) =>
-        bks.setCertificateEntry("test_cert", cert)
-        bks.setKeyEntry("test_ssl_priv", keyPair.getPrivate, password, Array(cert))
-        bks.setKeyEntry("test_ecdsa_priv_" + i, k.getPrivate, password, Array(cert))
-        bks.setKeyEntry("test_ecdsa_pub_" + i, k.getPublic, password, Array(cert))
+        bks.setCertificateEntry(certEntryName, cert)
+        bks.setKeyEntry(rsaEntryName, keyPair.getPrivate, password, Array(cert))
+        bks.setKeyEntry(s"${ecdsaEntryNamePrefix}_priv_" + i, k.getPrivate, password, Array(cert))
+        bks.setKeyEntry(s"${ecdsaEntryNamePrefix}_pub_" + i, k.getPublic, password, Array(cert))
     }
     savePairsTo.foreach { file =>
       bks.store(new FileOutputStream(file), password)
