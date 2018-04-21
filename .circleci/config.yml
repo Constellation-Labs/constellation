@@ -56,6 +56,10 @@ jobs:
     # This doesn't appear to work... need something to cache dependencies.
     dependencies:
       cache_directories:
+        - "~/.iv2"
+        - "lib_managed" #### <-- need this
+        - "target"
+        - "project/target"
         - "~/.iv2/cache"
         - "~/.sbt"
         - "~/.m2"
@@ -111,6 +115,11 @@ jobs:
           command: sudo /opt/google-cloud-sdk/bin/gcloud --quiet container clusters get-credentials $GOOGLE_CLUSTER_NAME
       - run:
           command: sudo /opt/google-cloud-sdk/bin/gcloud docker -- push gcr.io/$GOOGLE_PROJECT_ID/constellationlabs/constellation:$CIRCLE_SHA1
+      - run:
+          command: sudo chown -R ubuntu:ubuntu /home/ubuntu/.kube
+      - run:
+          command: kubectl apply -F ./deploy/kubernetes/node-deployment.yml
+
 
 workflows:
   version: 2

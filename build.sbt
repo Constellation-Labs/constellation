@@ -2,7 +2,9 @@ import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 
 name := "constellation"
 
-version := "1.0.0"
+lazy val _version = "1.0.0"
+
+version := _version
 
 scalaVersion := "2.12.2"
 
@@ -67,6 +69,10 @@ dockerCommands :=
   }
 
 dockerUsername := Some("constellationlabs")
+
+dockerAlias := DockerAlias(None, Some("constellationlabs"), "constellation",
+  Some(sys.env.getOrElse("CIRCLE_SHA1", _version))
+)
 
 // Update the latest tag when publishing
 dockerUpdateLatest := true
