@@ -1,16 +1,45 @@
 package org.constellation.wallet
 
 
-import java.security.{KeyPair, PrivateKey, PublicKey}
+import java.io.{File, FileInputStream}
+import java.security.{KeyPair, KeyStore, PrivateKey, PublicKey}
 
 import org.scalatest.FlatSpec
 import KeyUtils._
 import org.json4s.{DefaultFormats, Formats, NoTypeHints}
 import org.json4s.native.Serialization
+import java.security.KeyStore
 
 class ValidateWalletFuncTest  extends FlatSpec {
 
   val kp: KeyPair = makeKeyPair()
+
+  "Wallet KeyStore" should "build a keystore properly" in {
+
+    val file = new File("keystoretest.p12")
+    val file2 = new File("keystoretest.bks")
+    val pass = "fakepassword".toCharArray
+    val (p12A, bksA) = makeWalletKeyStore(
+      saveCertTo = Some(file),
+      savePairsTo = Some(file2),
+      password = pass,
+      numECDSAKeys = 10
+    )
+
+    val p12 = KeyStore.getInstance("PKCS12", "BC")
+    p12.load(new FileInputStream(file), pass)
+
+    val bks = KeyStore.getInstance("BKS", "BC")
+    bks.load(new FileInputStream(file2), pass)
+
+    assert(p12A.getCertificate("test_cert") == p12.getCertificate("test_cert"))
+
+    file.delete()
+    file2.delete()
+
+    // Put more tests in here.
+
+  }
 
   "KeyGen" should "make proper keys" in {
     val privK = kp.getPrivate.toString
