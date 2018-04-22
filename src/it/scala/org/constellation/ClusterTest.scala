@@ -31,7 +31,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     val cmd = {if (isCircle) Seq("sudo", "/opt/google-cloud-sdk/bin/kubectl") else Seq("kubectl")} ++
       Seq("--output=json", "get", "services")
     val result = cmd.!!
-   // println(s"GetIP Result: $result")
+    // println(s"GetIP Result: $result")
     val items = (result.jValue \ "items").extract[JArray]
     val ips = items.arr.filter{ i =>
       (i \ "metadata" \ "name").extract[String].startsWith("rpc")
@@ -45,22 +45,21 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
 
     if (isCircle) {
+      println("Is circle, waiting for machines to come online")
       var done = false
       var i = 0
 
       while (!done) {
+        i += 1
+        Thread.sleep(5000)
         val t = Try{getIPs}
-        t.foreach { ps =>
+        println(s"Waiting for machines to come online $t ${i * 5} seconds")
+        done = t.toOption.exists { ps =>
           val validIPs = ps.forall { ip =>
             val res = "\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b".r.findAllIn(ip)
             res.nonEmpty
           }
-          if (ps.lengthCompare(3) == 0 && validIPs) done = true
-          else {
-            i += 1
-            Thread.sleep(5000)
-            println(s"Waiting for machines to come online $ps ${i * 5} seconds")
-          }
+          ps.lengthCompare(3) == 0 && validIPs
         }
       }
     }
@@ -76,17 +75,17 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
         r
     }
 
-/*
+    /*
 
-    rpcs.foreach{
-      r =>
-        ips.foreach { ip =>
-          val res = r.post("peer", ip + ":16180").get().unmarshal.get()
-          println("Peer response: " + res)
+        rpcs.foreach{
+          r =>
+            ips.foreach { ip =>
+              val res = r.post("peer", ip + ":16180").get().unmarshal.get()
+              println("Peer response: " + res)
 
+            }
         }
-    }
-*/
+    */
 
 
 
