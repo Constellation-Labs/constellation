@@ -5,6 +5,8 @@ metadata:
     app: node-service
   name: node-service
 spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
   ports:
   - port: 2551
     name: p2p
@@ -16,7 +18,7 @@ spec:
     targetPort: 16180
     name: udp
     protocol: UDP
-  clusterIP: None
+ # clusterIP: None
   selector:
     app: constellation
 ---
