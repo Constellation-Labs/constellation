@@ -2,40 +2,51 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: node-service
-  name: node-service
+    app: udp-node-service
+  name: udp-node-service
 spec:
   type: LoadBalancer
   externalTrafficPolicy: Local
   ports:
-  - port: 2551
-    name: p2p
-    targetPort: 2551
-  - port: 9000
-    name: rpc
-    targetPort: 9000
   - port: 16180
     targetPort: 16180
     name: udp
     protocol: UDP
  # clusterIP: None
   selector:
-    app: constellation
+    run: constellation-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: rpc-node-service
+  name: rpc-node-service
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  ports:
+  - port: 9000
+    name: rpc
+    targetPort: 9000
+  selector:
+    run: constellation-app
 ---
 apiVersion: apps/v1beta1
 kind: StatefulSet
 metadata:
-  name: constellation
+  name: constellation-app
 spec:
-  serviceName: node-service
-  replicas: 3
+  serviceName: rpc-node-service
+  serviceName: udp-node-service
+  replicas: 1
   template:
     metadata:
       labels:
-        app: constellation
+        run: constellation-app
     spec:
       containers:
-      - name: constellation
+      - name: constellation-app
         image: gcr.io/esoteric-helix-197319/constellationlabs/constellation:latest
         imagePullPolicy: Always
         ports:

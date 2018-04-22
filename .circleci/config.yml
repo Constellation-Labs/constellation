@@ -91,7 +91,7 @@ jobs:
           keys:
        #   - publish-dependencies--{{ checksum "build.sbt" }}
           # fallback to using the latest cache if no exact match is found
-          - publish-dependencies #-
+          - publish-dependencies2 #-
 
       - run:
           command: sbt docker:publishLocal
@@ -103,7 +103,7 @@ jobs:
             - ~/.ivy2
             - lib_managed
             - ~/.sbt
-          key: publish-dependencies #--{{ checksum "build.sbt" }}
+          key: publish-dependencies2 #--{{ checksum "build.sbt" }}
 
       - run:
           command: sudo docker tag constellationlabs/constellation:$CIRCLE_SHA1 gcr.io/$GOOGLE_PROJECT_ID/constellationlabs/constellation:$CIRCLE_SHA1
@@ -125,14 +125,16 @@ jobs:
           command: sudo /opt/google-cloud-sdk/bin/gcloud --quiet container clusters get-credentials $GOOGLE_CLUSTER_NAME
       - run:
           command: sudo /opt/google-cloud-sdk/bin/gcloud docker -- push gcr.io/$GOOGLE_PROJECT_ID/constellationlabs/constellation:$CIRCLE_SHA1
-      - run:
-          command: sudo  /opt/google-cloud-sdk/bin/kubectl delete -f ./deploy/kubernetes/node-deployment.yml
+   #   - run:
+   #       command: sudo  /opt/google-cloud-sdk/bin/kubectl delete -f ./deploy/kubernetes/node-deployment.yml
       - run:
           command: sed -i "s/constellation:latest/constellation:$CIRCLE_SHA1/g" ./deploy/kubernetes/node-deployment.yml
       - run:
           command: cat ./deploy/kubernetes/node-deployment.yml
       - run:
-          command: sudo  /opt/google-cloud-sdk/bin/kubectl apply -f ./deploy/kubernetes/node-deployment.yml
+          command: sudo ./deploy/kubernetes/deploy.sh
+   #   - run:
+   #       command: sudo  /opt/google-cloud-sdk/bin/kubectl apply -f ./deploy/kubernetes/node-deployment.yml
 
    # This also appears to not actually do anything.. it registers the event but the pods don't update.
    #   - run:
