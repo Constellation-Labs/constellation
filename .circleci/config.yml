@@ -132,7 +132,7 @@ jobs:
       - run:
           command: cat ./deploy/kubernetes/node-deployment.yml
       - run:
-          command: ./deploy/kubernetes/deploy.sh
+          command: chmod +x ./deploy/kubernetes/deploy.sh; ./deploy/kubernetes/deploy.sh
 
    #   - run:
    #       command: sudo  /opt/google-cloud-sdk/bin/kubectl apply -f ./deploy/kubernetes/node-deployment.yml
