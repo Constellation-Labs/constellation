@@ -1,23 +1,45 @@
 import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 
-name := "constellation"
+enablePlugins(JavaAppPackaging)
 
 lazy val _version = "1.0.0"
-
-version := _version
-
-scalaVersion := "2.12.2"
-
-resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases"
-
-enablePlugins(JavaAppPackaging)
 
 lazy val versions = new {
   val akka = "2.4.18"
   val akkaHttp = "10.0.7"
 }
 
-libraryDependencies ++= Seq(
+lazy val commonSettings = Seq(
+  version := _version,
+  scalaVersion := "2.12.2",
+  organization := "org.constellation",
+  name := "constellation",
+  mainClass := Some("org.constellation.ConstellationNode"),
+  parallelExecution in Test := false,
+  dockerExposedPorts := Seq(2551, 9000, 16180),
+  dockerCommands := dockerCommands.value.flatMap {
+    case ExecCmd("ENTRYPOINT", args @ _*) => Seq(Cmd("ENTRYPOINT", args.mkString(" ")))
+    case v => Seq(v)
+  },
+  dockerUsername := Some("constellationlabs"),
+  dockerAlias := DockerAlias(None, Some("constellationlabs"), "constellation",
+    Some(sys.env.getOrElse("CIRCLE_SHA1", _version))
+  ),
+  // Update the latest tag when publishing
+  dockerUpdateLatest := true,
+  // These values will be filled in by the k8s StatefulSet and Deployment
+  dockerEntrypoint ++= Seq(
+    """-DakkaActorSystemName="$AKKA_ACTOR_SYSTEM_NAME"""",
+    """-Dakka.remote.netty.tcp.hostname="$(eval "echo $AKKA_REMOTING_BIND_HOST")"""",
+    """-Dakka.remote.netty.tcp.port="$AKKA_REMOTING_BIND_PORT"""",
+    "-Dakka.io.dns.resolver=async-dns",
+    "-Dakka.io.dns.async-dns.resolve-srv=true",
+    "-Dakka.io.dns.async-dns.resolv-conf=on"
+  ),
+  resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases"
+)
+
+lazy val coreDependencies = Seq(
   "com.roundeights" %% "hasher" % "1.2.0",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0",
   "org.scalactic" %% "scalactic" % "3.0.1",
@@ -35,44 +57,24 @@ libraryDependencies ++= Seq(
   "net.liftweb" %% "lift-json" % "3.1.1",
   "com.google.guava" % "guava" % "21.0",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.51"
-  )
+)
 
 //Test dependencies
-libraryDependencies ++= Seq(
+lazy val testDependencies = Seq(
   "org.scalacheck" %% "scalacheck" % "1.13.4",
   "org.scalatest" %% "scalatest" % "3.0.1",
   "org.scalamock" %% "scalamock-scalatest-support" % "3.6.0",
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
-).map(_ % "test" )
+).map(_ % "it,test" )
 
-// These values will be filled in by the k8s StatefulSet and Deployment
-dockerEntrypoint ++= Seq(
-  """-DakkaActorSystemName="$AKKA_ACTOR_SYSTEM_NAME"""",
-  """-Dakka.remote.netty.tcp.hostname="$(eval "echo $AKKA_REMOTING_BIND_HOST")"""",
-  """-Dakka.remote.netty.tcp.port="$AKKA_REMOTING_BIND_PORT"""",
-  "-Dakka.io.dns.resolver=async-dns",
-  "-Dakka.io.dns.async-dns.resolve-srv=true",
-  "-Dakka.io.dns.async-dns.resolv-conf=on"
-)
 
-mainClass := Some("org.constellation.ConstellationNode")
 
-parallelExecution in Test := false
-
-dockerExposedPorts := Seq(2551, 9000, 16180)
-
-dockerCommands :=
-  dockerCommands.value.flatMap {
-    case ExecCmd("ENTRYPOINT", args @ _*) => Seq(Cmd("ENTRYPOINT", args.mkString(" ")))
-    case v => Seq(v)
-  }
-
-dockerUsername := Some("constellationlabs")
-
-dockerAlias := DockerAlias(None, Some("constellationlabs"), "constellation",
-  Some(sys.env.getOrElse("CIRCLE_SHA1", _version))
-)
-
-// Update the latest tag when publishing
-dockerUpdateLatest := true
+lazy val root = (project in file("."))
+  .configs(IntegrationTest)
+  .settings(
+    commonSettings,
+    Defaults.itSettings,
+    libraryDependencies ++= (coreDependencies ++ testDependencies)
+    // other settings here
+  )

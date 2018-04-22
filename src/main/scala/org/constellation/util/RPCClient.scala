@@ -1,4 +1,4 @@
-package org.constellation.utils
+package org.constellation.util
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
@@ -14,7 +14,7 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 // TODO : Implement all methods from RPCInterface here for a client SDK
 // This should also probably use scalaj http because it's bettermore standard.
 
-class RPCClient(host: String = "127.0.0.1", port: Int)(
+class RPCClient(val host: String = "127.0.0.1", val port: Int)(
 implicit val system: ActorSystem,
 implicit val materialize: ActorMaterializer,
 implicit val executionContext: ExecutionContextExecutor
@@ -29,6 +29,24 @@ implicit val executionContext: ExecutionContextExecutor
     HttpRequest(uri = base(suffix).withQuery(Query(queryParams)))
   )
 }
+
+  def getBlocking [T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeout: Int = 5)
+                               (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
+    import constellation.EasyFutureBlock
+    val httpResponse = Http().singleRequest(
+      HttpRequest(uri = base(suffix).withQuery(Query(queryParams)))
+    ).get(timeout)
+    Unmarshal(httpResponse.entity).to[String].map { r => Serialization.read[T](r) }.get()
+  }
+
+  def getBlockingStr[T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeout: Int = 5)
+                               (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): String = {
+    import constellation.EasyFutureBlock
+    val httpResponse = Http().singleRequest(
+      HttpRequest(uri = base(suffix).withQuery(Query(queryParams)))
+    ).get(timeout)
+    Unmarshal(httpResponse.entity).to[String].get()
+  }
 
   def post[T <: AnyRef](suffix: String, t: T)(implicit f : Formats = constellation.constellationFormats): Future[HttpResponse] = {
 
@@ -46,5 +64,13 @@ implicit val executionContext: ExecutionContextExecutor
   implicit m : Manifest[T], f : Formats = constellation.constellationFormats
   ): Future[T] =
   Unmarshal(httpResponse.entity).to[String].map{r => Serialization.read[T](r)}
+
+  def postRead[Q <: AnyRef, T <: AnyRef](suffix: String, t: T, timeout: Int = 5)(
+    implicit m : Manifest[Q], f : Formats = constellation.constellationFormats
+  ): Q = {
+    import constellation.EasyFutureBlock
+
+    read[Q](post(suffix, t).get(timeout)).get()
+  }
 
 }

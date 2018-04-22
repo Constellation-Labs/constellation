@@ -131,6 +131,16 @@ class RPCInterface(
           )
           complete(StatusCodes.Created)
         }
+      } ~
+      path("ip") {
+        entity(as[String]) { externalIp =>
+          val addr = externalIp.replaceAll('"'.toString,"").split(":") match {
+            case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
+            case a@_ => { logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a"); }
+          }
+          peerToPeerActor ! SetExternalAddress(addr)
+          complete(StatusCodes.OK)
+        }
       }
     }
 }

@@ -27,7 +27,16 @@ object PeerToPeer {
 
   case class GetBalance(account: PublicKey)
 
-  case class HandShake()
+  case class HandShake(
+                      id: Id,
+                      externalAddress: InetSocketAddress,
+                      peers: Peers
+                      )
+
+  case class SetExternalAddress(address: InetSocketAddress)
+
+  case class GetExternalAddress()
+
 }
 
 class PeerToPeer(
@@ -39,10 +48,13 @@ class PeerToPeer(
                 )
                 (implicit timeout: Timeout) extends Actor with ActorLogging {
 
+  private val id = Id(publicKey)
+
   implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
   implicit val actorSystem: ActorSystem = context.system
 
-  var peers: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
+  @volatile var peers: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
+  @volatile var externalAddress: InetSocketAddress = selfAddress
 
   def broadcast[T <: AnyRef](message: T): Unit = {
     peers.foreach {
@@ -52,6 +64,12 @@ class PeerToPeer(
 
   override def receive: Receive = {
 
+    case GetExternalAddress() => sender() ! externalAddress
+
+    case SetExternalAddress(addr) =>
+      log.debug(s"Setting external address to $addr from RPC request")
+      externalAddress = addr
+
     case AddPeerFromLocal(peerAddress) =>
       log.debug(s"Received a request to add peer $peerAddress")
       self ! PeerRef(peerAddress)
@@ -59,11 +77,11 @@ class PeerToPeer(
     case p @ PeerRef(peerAddress) =>
       // TODO: Add validation that the peer reference isn't banned
 
-      if (!peers.contains(peerAddress) && peerAddress != selfAddress){
+      if (!peers.contains(peerAddress) && peerAddress != externalAddress){
 
-        log.debug(s"Sending handshake from $selfAddress to $peerAddress")
+        log.debug(s"Sending handshake from $externalAddress to $peerAddress")
         //Introduce ourselves
-        udpActor.udpSend(HandShake(), peerAddress)
+        udpActor.udpSend(HandShake(id, externalAddress, Peers(peers.toSeq)), peerAddress)
 
         //Tell our existing peers
         broadcast(p)

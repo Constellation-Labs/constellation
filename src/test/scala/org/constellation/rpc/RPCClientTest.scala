@@ -11,7 +11,8 @@ import org.constellation.Fixtures
 import org.constellation.p2p.PeerToPeer.{Id, Peers}
 import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.Transaction
-import org.constellation.utils.{RPCClient, TestNode}
+import org.constellation.util.RPCClient
+import org.constellation.utils.TestNode
 import org.constellation.wallet.KeyUtils
 
 class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {

@@ -14,7 +14,8 @@ import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Futu
 import constellation._
 import org.constellation.p2p.PeerToPeer.{GetPeers, Peers}
 import org.constellation.primitives.{BlockSerialized, Transaction}
-import org.constellation.utils.{RPCClient, TestNode}
+import org.constellation.util.RPCClient
+import org.constellation.utils.TestNode
 import org.scalatest.exceptions.TestFailedException
 
 import scala.concurrent.duration._

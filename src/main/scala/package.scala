@@ -2,7 +2,10 @@
 import java.net.InetSocketAddress
 
 import akka.actor.{ActorRef, ActorSystem}
+import akka.http.scaladsl.model.HttpResponse
+import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers, Unmarshal}
 import akka.serialization.SerializationExtension
+import akka.stream.ActorMaterializer
 import akka.util.ByteString
 import com.google.common.hash.Hashing
 import org.constellation.p2p.PeerToPeer.PeerRef
@@ -12,7 +15,7 @@ import org.constellation.wallet.KeyUtils.{KeyPairSerializer, PrivateKeySerialize
 import org.constellation.wallet.KeyUtilsExt
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
-import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue}
+import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, native}
 
 import scala.concurrent.{Await, Future}
 import scala.util.Try
@@ -21,7 +24,7 @@ import scala.util.Try
   * Project wide convenience functions.
   */
 package object constellation extends KeyUtilsExt with POWExt
- with POWSignHelp {
+  with POWSignHelp {
 
   val minimumTime : Long = 1518898908367L
 
@@ -94,6 +97,11 @@ package object constellation extends KeyUtilsExt with POWExt
       val serMsg = SerializedUDPMessage(bytes, serializer.identifier)
       udpActor ! UDPSend(ByteString(serMsg.json), remote)
     }
+  }
+
+  implicit class HTTPHelp(httpResponse: HttpResponse)
+                         (implicit val materialize: ActorMaterializer) {
+    def unmarshal: Future[String] = Unmarshal(httpResponse.entity).to[String]
   }
 
 

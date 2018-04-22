@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import akka.util.Timeout
+import org.constellation.Fixtures
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.wallet.KeyUtils
 import org.scalatest._
@@ -59,7 +60,7 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
   }
 
   it should "add us as a peer when we send a handshake" in new WithPeerToPeerActor {
-    peerToPeerActor ! UDPMessage(HandShake(), address2)
+    peerToPeerActor ! UDPMessage(HandShake(Id(Fixtures.publicKey), address, Peers(Seq())), address2)
     Thread.sleep(100)
 
     peerToPeerActor ! GetPeers
