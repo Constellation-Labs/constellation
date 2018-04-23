@@ -37,7 +37,9 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
       )
 
     val peerToPeerActor: ActorRef =
-      system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor.ref, udpActor)(timeout)))
+      system.actorOf(Props(
+        new PeerToPeer(keyPair.getPublic, system, consensusActor.ref, udpActor, address, keyPair)(timeout)
+      ))
 
     udpActor ! RegisterNextActor(peerToPeerActor)
 

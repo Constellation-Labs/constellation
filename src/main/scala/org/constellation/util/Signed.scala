@@ -35,14 +35,16 @@ trait POWExt {
 trait ProductHash extends Product {
 
   def signInput: Array[Byte] = productSeq.json.getBytes()
-  def sign(privateKeys: Seq[PrivateKey]): Seq[String] = privateKeys.map { pk => base64(signData(signInput)(pk)) }
+  def signKeys(privateKeys: Seq[PrivateKey]): Seq[String] = privateKeys.map { pk => base64(signData(signInput)(pk)) }
   def powInput(signatures: Seq[String]): String = (productSeq ++ signatures).json
   def pow(signatures: Seq[String], difficulty: Int): String = POW.proofOfWork(powInput(signatures), Some(difficulty))
   def productSeq: Seq[Any] = this.productIterator.toArray.toSeq
 
 }
 
-case class POWSignData[T <: ProductHash](
+
+// TODO: Extend to monad, i.e. SignedData extends SignableData vs UnsignedData
+case class Signed[T <: ProductHash](
                                           data: T,
                                           startTime: Long,
                                           endTime: Long,
@@ -63,20 +65,20 @@ case class POWSignData[T <: ProductHash](
 trait POWSignHelp {
 
   implicit class LinearHashHelpers[T <: ProductHash](t: T) {
-    def powSign(keyPairs: Seq[KeyPair], difficulty: Int = 1): POWSignData[T] =
-      powSignData[T](t, keyPairs, difficulty)
+    def sign2(keyPairs: Seq[KeyPair], difficulty: Int = 1): Signed[T] =
+      sign[T](t, keyPairs, difficulty)
   }
 
-  def powSignData[T <: ProductHash](
+  def sign[T <: ProductHash](
                                      t: T,
                                      keyPairs: Seq[KeyPair],
-                                     difficulty: Int
-                                   ): POWSignData[T] = {
+                                     difficulty: Int = 0
+                                   ): Signed[T] = {
     val startTime = System.currentTimeMillis()
-    val signatures = t.sign(keyPairs.map{_.getPrivate})
+    val signatures = t.signKeys(keyPairs.map{_.getPrivate})
     val nonce = t.pow(signatures, difficulty)
     val endTime = System.currentTimeMillis()
-    POWSignData(
+    Signed(
       t, startTime, endTime, nonce, difficulty, keyPairs.map{_.getPublic}, signatures
     )
   }

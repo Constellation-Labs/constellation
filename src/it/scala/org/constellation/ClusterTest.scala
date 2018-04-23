@@ -19,7 +19,6 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     TestKit.shutdownActorSystem(system)
   }
 
-
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
@@ -31,7 +30,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     val cmd = {if (isCircle) Seq("sudo", "/opt/google-cloud-sdk/bin/kubectl") else Seq("kubectl")} ++
       Seq("--output=json", "get", "services")
     val result = cmd.!!
-     println(s"GetIP Result: $result")
+    // println(s"GetIP Result: $result")
     val items = (result.jValue \ "items").extract[JArray]
     val ips = items.arr.filter{ i =>
       (i \ "metadata" \ "name").extract[String].startsWith("rpc")
@@ -67,7 +66,6 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
     val ips = getIPs
 
-
     val rpcs = ips.map{
       ip =>
         val r = new RPCClient(ip, 9000)
@@ -77,17 +75,15 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
         r
     }
 
-    /*
+    rpcs.foreach{
+      r =>
+        ips.foreach { ip =>
+          val res = r.post("peer", ip + ":16180").get().unmarshal.get()
+          println("Peer response: " + res)
 
-        rpcs.foreach{
-          r =>
-            ips.foreach { ip =>
-              val res = r.post("peer", ip + ":16180").get().unmarshal.get()
-              println("Peer response: " + res)
-
-            }
         }
-    */
+    }
+
 
 
 

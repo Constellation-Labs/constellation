@@ -1,5 +1,6 @@
 
 import java.net.InetSocketAddress
+import java.security.KeyPair
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.model.HttpResponse
@@ -96,6 +97,11 @@ package object constellation extends KeyUtilsExt with POWExt
       val bytes = serializer.toBinary(data)
       val serMsg = SerializedUDPMessage(bytes, serializer.identifier)
       udpActor ! UDPSend(ByteString(serMsg.json), remote)
+    }
+
+    def udpSign[T <: AnyRef](data: T, remote: InetSocketAddress, difficulty: Int = 0)
+                            (implicit system: ActorSystem, keyPair: KeyPair): Unit = {
+      udpSend(sign(data, Seq(keyPair), difficulty), remote)
     }
   }
 

@@ -5,7 +5,7 @@ import java.security.PublicKey
 
 import akka.actor.ActorRef
 import akka.http.scaladsl.marshalling.Marshaller._
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
@@ -22,6 +22,7 @@ import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.Try
 
 class RPCInterface(
                     chainStateActor: ActorRef,
@@ -123,13 +124,24 @@ class RPCInterface(
       path("peer") {
         entity(as[String]) { peerAddress =>
           logger.debug(s"Received request to add a new peer $peerAddress")
-          peerToPeerActor ! AddPeerFromLocal(
+          Try {
             peerAddress.replaceAll('"'.toString,"").split(":") match {
               case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
-              case a@_ => { logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a"); }
+              case a@_ => logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a");
             }
-          )
-          complete(StatusCodes.Created)
+          }.toOption match {
+            case None =>
+              complete(StatusCodes.BadRequest)
+            case Some(v) =>
+              val fut = (peerToPeerActor ?  AddPeerFromLocal(v)).mapTo[StatusCode]
+              val res = Try{Await.result(fut, timeout.duration)}.toOption
+              res match {
+                case None =>
+                  complete(StatusCodes.RequestTimeout)
+                case Some(f) =>
+                  complete(f)
+              }
+          }
         }
       } ~
       path("ip") {
