@@ -4,6 +4,7 @@ import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
 import org.constellation.consensus.Consensus.ProposedBlockUpdated
+import org.constellation.p2p.PeerToPeer.Id
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.primitives.Chain.Chain
 import org.constellation.state.ChainStateManager._
@@ -16,7 +17,7 @@ object ChainStateManager {
   // Commands
   case class AddBlock(block: Block, replyTo: ActorRef)
   case class GetCurrentChainState()
-  case class CreateBlockProposal(memPools: HashMap[InetSocketAddress, Seq[Transaction]], round: Long, replyTo: ActorRef)
+  case class CreateBlockProposal(memPools: HashMap[Id, Seq[Transaction]], round: Long, replyTo: ActorRef)
 
   // Events
   case class BlockAddedToChain(previousBlock: Block)
@@ -34,7 +35,7 @@ object ChainStateManager {
     updatedChain
   }
 
-  def handleCreateBlockProposal(memPools: Map[InetSocketAddress, Seq[Transaction]], chain: Chain, round: Long, replyTo: ActorRef): Unit = {
+  def handleCreateBlockProposal(memPools: Map[Id, Seq[Transaction]], chain: Chain, round: Long, replyTo: ActorRef): Unit = {
     val transactions: Seq[Transaction] = memPools.foldLeft(Seq[Transaction]()) {
       (result, b) => {
         result.union(b._2).distinct.sortBy(t => t.sequenceNum)

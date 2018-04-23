@@ -12,8 +12,8 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, FlatSpecLike, Matche
 
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import constellation._
-import org.constellation.p2p.PeerToPeer.{GetPeers, Peers}
-import org.constellation.primitives.{BlockSerialized, Transaction}
+import org.constellation.p2p.PeerToPeer.{GetPeers, Id, Peers}
+import org.constellation.primitives.{Block, BlockSerialized, Transaction}
 import org.constellation.util.RPCClient
 import org.constellation.utils.TestNode
 import org.scalatest.exceptions.TestFailedException
@@ -171,6 +171,11 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     val node3PublicKey = node3.keyPair.getPublic
     val node4PublicKey = node4.keyPair.getPublic
 
+    val n1id = Id(node1.keyPair.getPublic)
+    val n2id = Id(node2.keyPair.getPublic)
+    val n3id = Id(node3.keyPair.getPublic)
+    val n4id = Id(node4.keyPair.getPublic)
+
     val node1Future = Future {
       val rpc1Response = rpc1.get("health")
 
@@ -192,7 +197,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       assert(genResponse1.get().status == StatusCodes.OK)
       val chainStateNode1Response = rpc1.get("blocks")
 
-      val chainNode1 = rpc1.read[Seq[BlockSerialized]](chainStateNode1Response.get()).get()
+      val chainNode1 = rpc1.read[Seq[Block]](chainStateNode1Response.get()).get()
 
       assert(chainNode1.size == 1)
 
@@ -206,7 +211,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
       assert(chainNode1.head.transactions == Seq())
 
-      assert(chainNode1.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
+      assert(chainNode1.head.clusterParticipants.diff(Set(n1id, n2id, n3id, n4id)).isEmpty)
 
       val consensusResponse1 = rpc1.get("enableConsensus")
 
@@ -259,7 +264,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
       assert(chainNode2.head.transactions == Seq())
 
-      assert(chainNode2.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
+      assert(chainNode2.head.clusterParticipants.diff(Set(n1id, n2id, n3id, n4id)).isEmpty)
 
       val consensusResponse2 = rpc2.get("enableConsensus")
 
@@ -312,7 +317,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
       assert(chainNode3.head.transactions == Seq())
 
-      assert(chainNode3.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
+      assert(chainNode3.head.clusterParticipants.diff(Set(n1id, n2id, n3id, n4id)).isEmpty)
 
       val consensusResponse3 = rpc3.get("enableConsensus")
 
@@ -365,7 +370,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
       assert(chainNode4.head.transactions == Seq())
 
-      assert(chainNode4.head.clusterParticipants.diff(Set(node1Path, node2Path, node3Path, node4Path)).isEmpty)
+      assert(chainNode4.head.clusterParticipants.diff(Set(n1id, n2id, n3id, n4id)).isEmpty)
 
       val consensusResponse4 = rpc4.get("enableConsensus")
 
@@ -407,19 +412,19 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
       val finalChainStateNode1Response = rpc1.get("blocks")
 
-      val finalChainNode1 = rpc1.read[Seq[BlockSerialized]](finalChainStateNode1Response.get()).get()
+      val finalChainNode1 = rpc1.read[Seq[Block]](finalChainStateNode1Response.get()).get()
 
       val finalChainStateNode2Response = rpc2.get("blocks")
 
-      val finalChainNode2 = rpc2.read[Seq[BlockSerialized]](finalChainStateNode2Response.get()).get()
+      val finalChainNode2 = rpc2.read[Seq[Block]](finalChainStateNode2Response.get()).get()
 
       val finalChainStateNode3Response = rpc3.get("blocks")
 
-      val finalChainNode3 = rpc3.read[Seq[BlockSerialized]](finalChainStateNode3Response.get()).get()
+      val finalChainNode3 = rpc3.read[Seq[Block]](finalChainStateNode3Response.get()).get()
 
       val finalChainStateNode4Response = rpc4.get("blocks")
 
-      val finalChainNode4 = rpc4.read[Seq[BlockSerialized]](finalChainStateNode4Response.get()).get()
+      val finalChainNode4 = rpc4.read[Seq[Block]](finalChainStateNode4Response.get()).get()
 
       val shortestChainLength = List(finalChainNode1.size, finalChainNode2.size, finalChainNode3.size, finalChainNode4.size).min
 
@@ -427,6 +432,11 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       val chain2 = finalChainNode2.take(shortestChainLength)
       val chain3 = finalChainNode3.take(shortestChainLength)
       val chain4 = finalChainNode4.take(shortestChainLength)
+
+      println("CHAIN1:" + chain1)
+      println("CHAIN2:" + chain2)
+      println("CHAIN3:" + chain3)
+      println("CHAIN4:" + chain4)
 
       var chain1ContainsTransactions = false
       var chain2ContainsTransactions = false

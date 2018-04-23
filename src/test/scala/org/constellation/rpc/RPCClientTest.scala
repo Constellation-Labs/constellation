@@ -32,6 +32,8 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     assert(localChain == Chain())
   }
 
+  import Fixtures._
+
   "GET to /peers" should "get the correct connected peers" in {
 
     val node1 = TestNode()
@@ -44,11 +46,15 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
     val rpc = new RPCClient(port=node2.httpPort)
 
+    Thread.sleep(2000)
+
     val response = rpc.get("peers")
 
     val actualPeers = rpc.read[Peers](response.get()).get()
 
-    assert(Peers(expectedPeers) == actualPeers)
+    println(actualPeers)
+
+    assert(actualPeers.peers.contains(node1Path))
   }
 
   "GET to /id" should "get the current nodes public key id" in {

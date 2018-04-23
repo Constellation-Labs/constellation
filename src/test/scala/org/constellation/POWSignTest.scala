@@ -28,7 +28,7 @@ class POWSignTest extends FlatSpec {
     val kp = makeKeyPair()
     val data = TestSignable("a", 1)
     (0 to 2).foreach { d =>
-      val powSigned = sign(data, Seq(kp), d)
+      val powSigned = signPairs(data, Seq(kp), d)
       assert(powSigned.data == data)
       println(powSigned.nonce)
       assert(powSigned.validSignatures)

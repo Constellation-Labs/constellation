@@ -62,7 +62,7 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
   }
 
   it should "add us as a peer when we send a handshake" in new WithPeerToPeerActor {
-    peerToPeerActor ! UDPMessage(HandShake(Id(Fixtures.publicKey), address, Peers(Seq())), address2)
+    peerToPeerActor ! UDPMessage(HandShake(Fixtures.signedPeer, Seq()), address2)
     Thread.sleep(100)
 
     peerToPeerActor ! GetPeers

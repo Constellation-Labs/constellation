@@ -44,10 +44,11 @@ class RPCInterface(
 
   // TODO: temp until someone can show me how to create one of these custom serializers
   def serializeBlocks(blocks: Seq[Block]): Seq[BlockSerialized] = {
-    blocks.map(b => {
+/*    blocks.map(b => {
       BlockSerialized(b.parentHash, b.height, b.signature,
-        b.clusterParticipants, b.round, b.transactions)
-    })
+        b.clusterParticipants.toSet, b.round, b.transactions)
+    })*/
+    Seq()
   }
 
   val routes: Route =
@@ -59,7 +60,7 @@ class RPCInterface(
       // TODO: revist
       path("generateGenesisBlock") {
 
-        val future = consensusActor ? GenerateGenesisBlock(peerToPeerActor)
+        val future = consensusActor ? GenerateGenesisBlock()
 
         val responseFuture: Future[Block] = future.mapTo[Block]
 
@@ -88,7 +89,7 @@ class RPCInterface(
 
         val chain = chainStateUpdated.chain
 
-        val blocks = serializeBlocks(chain.chain)
+        val blocks = chain.chain
 
         complete(blocks)
       } ~

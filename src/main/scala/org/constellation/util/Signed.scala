@@ -66,10 +66,11 @@ trait POWSignHelp {
 
   implicit class LinearHashHelpers[T <: ProductHash](t: T) {
     def sign2(keyPairs: Seq[KeyPair], difficulty: Int = 1): Signed[T] =
-      sign[T](t, keyPairs, difficulty)
+      signPairs[T](t, keyPairs, difficulty)
+    def signed(difficulty: Int = 0)(implicit keyPair: KeyPair): Signed[T] = signPairs(t, Seq(keyPair), difficulty)
   }
 
-  def sign[T <: ProductHash](
+  def signPairs[T <: ProductHash](
                                      t: T,
                                      keyPairs: Seq[KeyPair],
                                      difficulty: Int = 0

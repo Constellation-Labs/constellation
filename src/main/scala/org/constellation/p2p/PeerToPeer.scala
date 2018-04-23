@@ -26,19 +26,26 @@ object PeerToPeer {
 
   case class GetPeers()
 
+  case class GetPeersID()
+
+
   case class GetId()
 
   case class GetBalance(account: PublicKey)
 
   case class HandShake(
-                      id: Id,
-                      externalAddress: InetSocketAddress,
-                      peers: Seq[Peer]
+                        originPeer: Signed[Peer],
+                        peers: Seq[Signed[Peer]]
                       ) extends ProductHash
+
+  case class HandShakeMessage(handShake: Signed[HandShake])
+
+  case class HandShakeResponseMessage(hsr: Signed[HandShakeResponse])
 
   case class HandShakeResponse(
                               original: HandShake,
-                              response: HandShake
+                              response: HandShake,
+                              detectedRemote: InetSocketAddress
                               ) extends ProductHash
 
   case class SetExternalAddress(address: InetSocketAddress)
@@ -48,8 +55,8 @@ object PeerToPeer {
   case class Peer(
                  id: Id,
                  externalAddress: InetSocketAddress,
-                 remotes: Seq[InetSocketAddress] = Seq()
-                 )
+                 remotes: Set[InetSocketAddress] = Set()
+                 ) extends ProductHash
 
 }
 
@@ -64,7 +71,7 @@ class PeerToPeer(
                 (implicit timeout: Timeout) extends Actor with ActorLogging {
 
   private val id = Id(publicKey)
-  private implicit val kp: KeyPair = KeyPair
+  private implicit val kp: KeyPair = keyPair
 
   implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
   implicit val actorSystem: ActorSystem = context.system
@@ -72,10 +79,15 @@ class PeerToPeer(
   // @volatile private var peers: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
   @volatile private var remotes: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
   @volatile private var externalAddress: InetSocketAddress = selfAddress
-  @volatile private val peerLookup = mutable.HashMap[InetSocketAddress, Peer]()
+
+  private val peerLookup = mutable.HashMap[InetSocketAddress, Signed[Peer]]()
+
+  private def peerIDLookup = peerLookup.values.map{z => z.data.id -> z}.toMap
+
+  private def selfPeer = Peer(id, externalAddress, remotes).signed()
 
   private def peerIPs = {
-    peerLookup.keys ++ peerLookup.values.flatMap(z => z.remotes ++ Seq(z.externalAddress))
+    peerLookup.keys ++ peerLookup.values.flatMap(z => z.data.remotes ++ Seq(z.data.externalAddress))
   }.toSet
 
   private def peers = peerLookup.values.toSeq
@@ -86,7 +98,8 @@ class PeerToPeer(
     }
   }
 
-  private def handshake = HandShake(id, externalAddress, peers)
+  private def handshake = HandShakeMessage(HandShake(selfPeer, peers).signed())
+
 
   def addPeer(p: PeerRef): StatusCode = {
     val peerAddress = p.address
@@ -99,12 +112,33 @@ class PeerToPeer(
     } else {
       log.debug(s"Sending handshake from $externalAddress to $peerAddress")
       //Introduce ourselves
-      udpActor.udpSign(handshake, peerAddress)
+      udpActor.udpSend(handshake, peerAddress)
       //Tell our existing peers
       broadcast(p)
-      //Add to the current list of peers
-      peerIPs += peerAddress
       StatusCodes.Accepted
+    }
+  }
+
+  private def addPeer(value: Signed[PeerToPeer.Peer], address: InetSocketAddress): Unit = {
+    import akka.pattern.ask
+    log.debug("Requesting BanList")
+    val banList = (udpActor ? GetBanList).mapTo[Seq[InetSocketAddress]].get()
+    log.debug("Requested BanList")
+    if (!banList.contains(value.data.externalAddress)) {
+      log.debug(s"Adding peer $address $value")
+      addPeer(PeerRef(value.data.externalAddress))
+      peerLookup(value.data.externalAddress) = value
+      value.data.remotes.foreach(peerLookup(_) = value)
+    } else{
+      log.debug(s"Peer was banned! ${value.data.externalAddress}")
+    }
+    remotes += address
+  }
+
+  private def banOn[T](valid: => Boolean, remote: InetSocketAddress)(t: => T) = {
+    if (valid) t else {
+      log.debug(s"BANNING - Invalid HandShakeResponse from - $remote")
+      udpActor ! Ban(remote)
     }
   }
 
@@ -128,12 +162,17 @@ class PeerToPeer(
 
     case GetPeers => sender() ! Peers(peerIPs.toSeq)
 
+    case GetPeersID => sender() ! peers.map{_.data.id}
+
     case GetId =>
       sender() ! Id(publicKey)
 
-      // All these UDP Messages need to check if remote ip is banned.
-    case UDPMessage(p: PeerRef, remote) =>
-      self ! p
+    case UDPSendToID(data, remote) =>
+      peerIDLookup.get(remote).foreach{
+        r =>
+          udpActor ! UDPSend(data, r.data.externalAddress)
+      }
+
 
     case UDPMessage(p: PeerMemPoolUpdated, remote) =>
       consensusActor ! p
@@ -141,29 +180,24 @@ class PeerToPeer(
     case UDPMessage(p : PeerProposedBlock, remote) =>
       consensusActor ! p
 
-    case UDPMessage(sh : Signed[HandShakeResponse], remote) =>
-      if (sh.valid) {
+    case UDPMessage(sh: HandShakeResponseMessage, remote) =>
+      log.debug("HandShakeResponse missing")
+      banOn(sh.hsr.valid, remote) {
         log.debug(s"Got valid HandShakeResponse from $remote")
-        val hs = sh.data.response
-        val peer = Peer(hs.id, hs.externalAddress, remotes = Seq(remote))
-        peerLookup(hs.externalAddress) = peer
-        peerLookup(remote) = peer
-      } else {
-        log.debug(s"BANNING - Invalid HandShakeResponse from - $remote")
-        udpActor ! Ban(remote)
+        val hs = sh.hsr.data.response.originPeer
+        addPeer(hs, remote)
       }
 
-    case UDPMessage(sh : Signed[HandShake], remote) =>
-      // TODO: Make this a simple func above -- i.e. banResponse{valid}
-      if (sh.valid) {
+    case UDPMessage(sh: HandShakeMessage, remote) =>
+      banOn(sh.handShake.valid, remote) {
         log.debug(s"Got valid handshake from $remote")
-        val p = Peer(sh.data.id, sh.data.externalAddress)
-        val response = HandShakeResponse(sh.data, handshake)
-        udpActor.udpSign(response, remote)
-      } else {
-        log.debug(s"BANNING - Invalid handshake from - $remote")
-        udpActor ! Ban(remote)
+        val hs = sh.handShake.data
+        val op = hs.originPeer
+        addPeer(op, remote)
+        val response = HandShakeResponseMessage(HandShakeResponse(sh.handShake.data, hs, remote).signed())
+        udpActor.udpSend(response, remote)
       }
+
     case UDPMessage(peersI: Peers, remote) =>
       peersI.peers.foreach{
         p =>
@@ -172,7 +206,8 @@ class PeerToPeer(
 
     case UDPMessage(_: Terminated, remote) =>
       log.debug(s"Peer $remote has terminated. Removing it from the list.")
-      peerIPs -= remote
+      // TODO: FIX
+     // peerIPs -= remote
 
     case u: UDPMessage =>
       log.error(s"Unrecognized UDP message: $u")

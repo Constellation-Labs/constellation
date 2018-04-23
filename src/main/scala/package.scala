@@ -9,9 +9,9 @@ import akka.serialization.SerializationExtension
 import akka.stream.ActorMaterializer
 import akka.util.ByteString
 import com.google.common.hash.Hashing
-import org.constellation.p2p.PeerToPeer.PeerRef
-import org.constellation.p2p.{SerializedUDPMessage, UDPSend}
-import org.constellation.util.{POWExt, POWSignHelp}
+import org.constellation.p2p.PeerToPeer.{Id, PeerRef}
+import org.constellation.p2p.{SerializedUDPMessage, UDPSend, UDPSendToID}
+import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
 import org.constellation.wallet.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
 import org.constellation.wallet.KeyUtilsExt
 import org.json4s.JsonAST.{JInt, JString}
@@ -91,6 +91,13 @@ package object constellation extends KeyUtilsExt with POWExt
     ByteBuffer.wrap(byteBarray).order(ByteOrder.BIG_ENDIAN).getInt
 
   implicit class UDPActorExt(udpActor: ActorRef) {
+    def udpSendToId[T <: AnyRef](data: T, remote: Id)(implicit system: ActorSystem): Unit = {
+      val serialization = SerializationExtension(system)
+      val serializer = serialization.findSerializerFor(data)
+      val bytes = serializer.toBinary(data)
+      val serMsg = SerializedUDPMessage(bytes, serializer.identifier)
+      udpActor ! UDPSendToID(ByteString(serMsg.json), remote)
+    }
     def udpSend[T <: AnyRef](data: T, remote: InetSocketAddress)(implicit system: ActorSystem): Unit = {
       val serialization = SerializationExtension(system)
       val serializer = serialization.findSerializerFor(data)
@@ -99,9 +106,9 @@ package object constellation extends KeyUtilsExt with POWExt
       udpActor ! UDPSend(ByteString(serMsg.json), remote)
     }
 
-    def udpSign[T <: AnyRef](data: T, remote: InetSocketAddress, difficulty: Int = 0)
-                            (implicit system: ActorSystem, keyPair: KeyPair): Unit = {
-      udpSend(sign(data, Seq(keyPair), difficulty), remote)
+    def udpSign[T <: ProductHash](data: T, remote: InetSocketAddress, difficulty: Int = 0)
+                                 (implicit system: ActorSystem, keyPair: KeyPair): Unit = {
+      udpSend(signPairs(data, Seq(keyPair), difficulty), remote)
     }
   }
 

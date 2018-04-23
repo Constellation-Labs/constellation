@@ -14,6 +14,7 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.rpc.RPCInterface
 import org.constellation.wallet.KeyUtils
 import org.constellation.consensus.Consensus
+import org.constellation.consensus.Consensus.RegisterP2PActor
 import org.constellation.p2p.{PeerToPeer, RegisterNextActor, UDPActor}
 import org.constellation.p2p.PeerToPeer.AddPeerFromLocal
 import org.constellation.state.{ChainStateManager, MemPoolManager}
@@ -99,6 +100,8 @@ class ConstellationNode(
     (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
   udpActor ! RegisterNextActor(peerToPeerActor)
+
+  consensusActor ! RegisterP2PActor(peerToPeerActor)
 
 
   // Seed peers

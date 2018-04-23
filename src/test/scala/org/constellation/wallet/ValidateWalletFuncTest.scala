@@ -10,9 +10,19 @@ import org.json4s.{DefaultFormats, Formats, NoTypeHints}
 import org.json4s.native.Serialization
 import java.security.KeyStore
 
+case class SetSerialize(s: Set[String])
+
 class ValidateWalletFuncTest  extends FlatSpec {
 
   val kp: KeyPair = makeKeyPair()
+
+  "Set serialize" should "test" in {
+
+    import constellation._
+    val s = SetSerialize(Set("a", "b", "c"))
+    assert(s.json.x[SetSerialize] == s)
+
+  }
 
   "Wallet KeyStore" should "build a keystore properly" in {
 

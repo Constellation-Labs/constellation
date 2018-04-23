@@ -1,6 +1,7 @@
 package org.constellation
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import org.constellation.util.RPCClient
@@ -80,8 +81,15 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
         ips.foreach { ip =>
           val res = r.post("peer", ip + ":16180").get().unmarshal.get()
           println("Peer response: " + res)
-
         }
+    }
+
+    Thread.sleep(5000)
+
+    rpcs.foreach{
+      r =>
+        val genResponse1 = r.get("generateGenesisBlock")
+        assert(genResponse1.get().status == StatusCodes.OK)
     }
 
 

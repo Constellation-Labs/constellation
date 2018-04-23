@@ -6,13 +6,16 @@ import akka.actor.{Actor, ActorRef}
 import akka.io.{IO, Udp}
 import akka.serialization.SerializationExtension
 import akka.util.ByteString
+import org.constellation.p2p.PeerToPeer.Id
 
 case class UDPMessage(data: Any, remote: InetSocketAddress)
 case class GetUDPSocketRef()
 case class UDPSend(data: ByteString, remote: InetSocketAddress)
+case class UDPSendToID(data: ByteString, remote: Id)
 case class RegisterNextActor(nextActor: ActorRef)
 case class GetSelfAddress()
 case class Ban(address: InetSocketAddress)
+case class GetBanList()
 
 // This is using java serialization which is NOT secure. We need to update to use another serializer
 // Examples below:
@@ -32,7 +35,7 @@ class UDPActor(
   IO(Udp) ! Udp.Bind(self, address)
 
   @volatile var udpSocket: ActorRef = _
-  @volatile var bannedPeers: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
+  @volatile var bannedIPs: Seq[InetSocketAddress] = Seq.empty[InetSocketAddress]
 
   import constellation._
 
@@ -46,12 +49,12 @@ class UDPActor(
 
   def ready(socket: ActorRef): Receive = {
     case Udp.Received(data, remote) =>
-      if (!bannedPeers.contains(remote)) {
+      if (!bannedIPs.contains(remote)) {
         val str = data.utf8String
         val serialization = SerializationExtension(context.system)
         val serMsg = str.x[SerializedUDPMessage]
         val deser = serialization.deserialize(serMsg.data, serMsg.serializer, Some(classOf[Any]))
-        println(s"Received UDP message from $remote -- $deser -- sending to $nextActor")
+       // println(s"Received UDP message from $remote -- $deser -- sending to $nextActor")
         deser.foreach { d =>
           nextActor.foreach { n => n ! UDPMessage(d, remote) }
         }
@@ -64,7 +67,13 @@ class UDPActor(
     case UDPSend(data, remote) => socket ! Udp.Send(data, remote)
     case RegisterNextActor(next) => nextActor = Some(next)
     case GetSelfAddress => sender() ! address
-    case Ban(remote) => bannedPeers += remote
+    case Ban(remote) => bannedIPs = {bannedIPs ++ Seq(remote)}.distinct
+    case GetBanList => sender() ! bannedIPs
+    case u: UDPSendToID => {
+   //   println("UDPSendToID: " + u)
+      nextActor.foreach{ na => na ! u}
+    }
+
   }
 }
 
