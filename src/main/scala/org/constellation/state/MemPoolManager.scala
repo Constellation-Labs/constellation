@@ -1,7 +1,8 @@
 package org.constellation.state
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
-import org.constellation.consensus.Consensus.{GetMemPool, MemPoolUpdated}
+import com.typesafe.scalalogging.Logger
+import org.constellation.consensus.Consensus.{GetMemPool, GetMemPoolResponse}
 import org.constellation.primitives.Transaction
 import org.constellation.state.MemPoolManager.{AddTransaction, RemoveConfirmedTransactions}
 
@@ -25,7 +26,12 @@ object MemPoolManager {
 
     val memPoolProposal: Seq[Transaction] = memPool.take(memPoolProposalLimit)
 
-    replyTo ! MemPoolUpdated(memPoolProposal, round)
+    val response = GetMemPoolResponse(memPoolProposal, round)
+    if (memPoolProposal.nonEmpty) {
+      println(s"MemPoolProposalNonEmpty ${memPoolProposal.size}")
+    }
+
+    replyTo ! response
   }
 
   def handleRemoveConfirmedTransactions(transactions: Seq[Transaction], memPool: ListBuffer[Transaction]): Unit = {
@@ -38,24 +44,30 @@ object MemPoolManager {
 
 class MemPoolManager extends Actor with ActorLogging {
 
-  var memPool: ListBuffer[Transaction] = new ListBuffer[Transaction]
+  @volatile var memPool: ListBuffer[Transaction] = new ListBuffer[Transaction]
+  val logger = Logger(s"MemPoolManager")
 
   // TODO: pull from config
   var memPoolProposalLimit = 20
 
   override def receive: Receive = {
     case AddTransaction(transaction) =>
-      log.debug(s"received add transaction request $transaction")
+   //   log.debug(s"received add transaction request $transaction")
 
       MemPoolManager.handleAddTransaction(memPool, transaction)
+      if (memPool.nonEmpty){
+        logger.debug(s"received add transaction request2 ${memPool.size}")
+      }
+
+   //
 
     case GetMemPool(replyTo, round) =>
-      log.debug(s"received get mem pool request $replyTo, $round")
+      logger.debug(s"received get mem pool request $replyTo, $round, memPool Size: ${memPool.size}")
 
       MemPoolManager.handleGetMemPool(memPool, replyTo, round, memPoolProposalLimit)
 
     case RemoveConfirmedTransactions(transactions) =>
-      log.debug(s"received remove confirmed transactions request $transactions")
+   //   log.debug(s"received remove confirmed transactions request $transactions")
       MemPoolManager.handleRemoveConfirmedTransactions(transactions, memPool)
   }
 

@@ -6,6 +6,7 @@ import java.security.KeyPair
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.util.Timeout
+import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.PeerToPeer._
@@ -57,7 +58,7 @@ object Consensus {
 
   // Events
   case class ProposedBlockUpdated(block: Block)
-  case class MemPoolUpdated(transactions: Seq[Transaction], round: Long)
+  case class GetMemPoolResponse(transactions: Seq[Transaction], round: Long)
   case class PeerMemPoolUpdated(transactions: Seq[Transaction], peer: Id, round: Long)
   case class PeerProposedBlock(block: Block, peer: Id)
 
@@ -125,12 +126,13 @@ object Consensus {
     })
   }
 
-  def notifyFacilitatorsOfPeerMemPoolUpdated(
+  def notifyFacilitatorsOfMemPool(
                                               previousBlock: Block, self: Id,
                                               transactions: Seq[Transaction], round: Long,
                                               udpActor: ActorRef)(implicit system: ActorSystem): Boolean = {
     // Send all of the facilitators our current memPoolState
     Consensus.notifyFacilitators(previousBlock, self, (p) => {
+      //println("Notifying faciliators of PeerMemPoolUpdated")
       udpActor.udpSendToId(PeerMemPoolUpdated(transactions, self, round), p)
     })
   }
@@ -175,7 +177,9 @@ object Consensus {
     // TODO: revisit this
     val ids = (value ? GetPeersID).mapTo[Seq[Id]].get()
 
-    val refs = ids ++ Seq(consensusRoundState.selfId)
+    val refs = (ids ++ Seq(consensusRoundState.selfId)).toSet
+
+    println(s"Number of refs in genesis: ${refs.size}")
 
     // TODO: add correct genesis block, temporary for testing
     val genesisBlock = Block("tempGenesisParentHash", 0, "tempSig", refs.toSet, 0, Seq())
@@ -193,6 +197,8 @@ object Consensus {
     // If we are a facilitator this round then begin consensus
     if (Consensus.isFacilitator(consensusRoundState.currentFacilitators,
       consensusRoundState.selfId)) {
+      // This is what starts consensus, it returns a response to actor of GetMemPoolResponse
+      // Processing continues under receive in Consensus
       memPoolManager ! GetMemPool(self, 0L)
     }
 
@@ -236,6 +242,8 @@ object Consensus {
 
   def handlePeerMemPoolUpdated(consensusRoundState: ConsensusRoundState, round: Long, peer: Id,
                                transactions: Seq[Transaction], chainStateManager: ActorRef, replyTo: ActorRef): ConsensusRoundState = {
+
+
     val peerMemPools =
       consensusRoundState.peerMemPools +
         (round -> (consensusRoundState.peerMemPools.getOrElse(round, HashMap()) + (peer -> transactions)))
@@ -246,6 +254,8 @@ object Consensus {
     val facilitatorsWithoutMemPools = updatedState.currentFacilitators.filter(f => {
       !updatedState.peerMemPools(round).contains(f)
     })
+
+    println("handlePeerMemPoolUpdated" + facilitatorsWithoutMemPools.size)
 
     if (facilitatorsWithoutMemPools.isEmpty) {
       chainStateManager ! CreateBlockProposal(updatedState.peerMemPools(round), round, replyTo)
@@ -286,6 +296,7 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
                (implicit timeout: Timeout) extends Actor with ActorLogging {
 
   implicit val sys: ActorSystem = context.system
+  val logger = Logger(s"Consensus")
 
   var consensusRoundState: ConsensusRoundState = ConsensusRoundState(selfId = Id(keyPair.getPublic))
 
@@ -311,33 +322,49 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
       consensusRoundState = disableConsensus(consensusRoundState)
 
     case BlockAddedToChain(latestBlock) =>
-      log.debug(s"block added to chain = $latestBlock")
+   //   log.debug(s"block added to chain = $latestBlock")
 
       consensusRoundState = handleBlockAddedToChain(
         consensusRoundState, latestBlock, memPoolManager, self, udpAddress
       )
 
     case ProposedBlockUpdated(block) =>
-      log.debug(s"self proposed block updated = $block")
+    //  log.debug(s"self proposed block updated = $block")
 
       consensusRoundState = handleProposedBlockUpdated(consensusRoundState, block, udpAddress, udpActor)
 
-    case MemPoolUpdated(transactions, round) =>
-      notifyFacilitatorsOfPeerMemPoolUpdated(consensusRoundState.previousBlock.get,
+    case g @ GetMemPoolResponse(transactions, round) =>
+      // This originally is triggered by enableConsensus which starts the GetMemPool request
+      // This was sent by the ChainStateManager, it will then
+      // go over UDP to P2P actor, the next call is PeerMemPoolUpdated (below) on remote side.
+      logger.debug(s"GetMemPoolResponse in Consensus :$g")
+      if (transactions.nonEmpty) {
+        logger.debug("GetMemPoolResponse has transactions")
+      }
+
+      val peerMemPools =
+        consensusRoundState.peerMemPools +
+          (round -> (consensusRoundState.peerMemPools.getOrElse(round, HashMap()) + (consensusRoundState.selfId -> transactions)))
+
+      val updatedState = consensusRoundState.copy(peerMemPools = peerMemPools)
+      consensusRoundState = updatedState
+
+
+      notifyFacilitatorsOfMemPool(consensusRoundState.previousBlock.get,
         consensusRoundState.selfId, transactions, round, udpActor)
 
     case CheckConsensusResult(round) =>
-      log.debug(s"check consensus result = $round")
+  //    log.debug(s"check consensus result = $round")
 
       checkConsensusResult(consensusRoundState, round, chainManager, self)
 
     case PeerMemPoolUpdated(transactions, peer, round) =>
-      log.debug(s"peer mem pool updated = $transactions, $peer, $round")
+       logger.debug(s"peer mem pool updated = $round")
 
       consensusRoundState = handlePeerMemPoolUpdated(consensusRoundState, round, peer, transactions, chainManager, self)
 
     case PeerProposedBlock(block, peer) =>
-      log.debug(s"peer proposed block = $block, $peer")
+   //   log.debug(s"peer proposed block = $block, $peer")
 
       consensusRoundState = handlePeerProposedBlock(consensusRoundState, self, block, peer)
 

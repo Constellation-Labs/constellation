@@ -6,7 +6,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
-import org.constellation.consensus.Consensus.MemPoolUpdated
+import org.constellation.consensus.Consensus.GetMemPoolResponse
 import org.constellation.primitives.Transaction
 import org.constellation.wallet.KeyUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
@@ -62,7 +62,7 @@ class MemPoolManagerTest extends TestKit(ActorSystem("MemPoolManagerTest")) with
 
     val expectedMemPoolSample = Seq(transaction1, transaction2)
 
-    replyTo.expectMsg(MemPoolUpdated(expectedMemPoolSample, 0L))
+    replyTo.expectMsg(GetMemPoolResponse(expectedMemPoolSample, 0L))
   }
 
   "handleRemoveConfirmedTransactions" should "work correctly" in {

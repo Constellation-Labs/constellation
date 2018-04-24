@@ -191,7 +191,10 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       val node1PeersRequest = rpc1.get("peers")
       val peers1 = rpc1.read[Peers](node1PeersRequest.get()).get()
 
-      assert(Seq(node2Path, node3Path, node4Path).diff(peers1.peers.map{socketToAddress}).isEmpty)
+      val peers1Sockets = peers1.peers.map{socketToAddress}
+      println("Peers1Sockets " + peers1Sockets)
+
+      assert(Seq(node2Path, node3Path, node4Path).diff(peers1Sockets).isEmpty)
 
       val genResponse1 = rpc1.get("generateGenesisBlock")
       assert(genResponse1.get().status == StatusCodes.OK)
@@ -235,7 +238,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       assert(rpc2Response.get().status == StatusCodes.OK)
 
       rpc2.post("peer", node3Path)
-      rpc2.post("peer", node2Path)
+      rpc2.post("peer", node1Path)
       rpc2.post("peer", node4Path)
 
       Thread.sleep(1000)

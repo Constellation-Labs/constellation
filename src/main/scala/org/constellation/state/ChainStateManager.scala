@@ -3,6 +3,7 @@ package org.constellation.state
 import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
+import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.Consensus.ProposedBlockUpdated
 import org.constellation.p2p.PeerToPeer.Id
 import org.constellation.primitives.{Block, Transaction}
@@ -58,19 +59,23 @@ object ChainStateManager {
 class ChainStateManager(memPoolManagerActor: ActorRef) extends Actor with ActorLogging {
 
   var chain: Chain = Chain()
+  val logger = Logger(s"ChainStateManager")
 
   override def receive: Receive = {
     case AddBlock(block, replyTo) =>
-      log.debug(s"received add block request $block, $replyTo")
+
+      if (block.transactions.nonEmpty) {
+        logger.debug(s"received add block request $block")
+      }
 
       chain = handleAddBlock(chain, block, memPoolManagerActor, replyTo)
 
     case GetCurrentChainState =>
-      log.debug(s"received GetCurrentChainState request")
+      //   log.debug(s"received GetCurrentChainState request")
       sender() ! CurrentChainStateUpdated(chain)
 
     case CreateBlockProposal(memPools, round, replyTo) =>
-      log.debug("Attempting to create block proposal")
+         logger.debug("Attempting to create block proposal")
 
       handleCreateBlockProposal(memPools, chain, round, replyTo)
   }

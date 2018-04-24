@@ -115,7 +115,7 @@ class RPCInterface(
     post {
       path("transaction") {
         entity(as[Transaction]) { transaction =>
-          logger.debug(s"Received request to submit a new transaction $transaction")
+        //  logger.debug(s"Received request to submit a new transaction $transaction")
 
           memPoolManagerActor ! AddTransaction(transaction)
 
@@ -125,24 +125,26 @@ class RPCInterface(
       path("peer") {
         entity(as[String]) { peerAddress =>
           logger.debug(s"Received request to add a new peer $peerAddress")
-          Try {
+          val result = Try {
             peerAddress.replaceAll('"'.toString,"").split(":") match {
               case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
               case a@_ => logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a");
             }
           }.toOption match {
             case None =>
-              complete(StatusCodes.BadRequest)
+              StatusCodes.BadRequest
             case Some(v) =>
               val fut = (peerToPeerActor ?  AddPeerFromLocal(v)).mapTo[StatusCode]
               val res = Try{Await.result(fut, timeout.duration)}.toOption
               res match {
                 case None =>
-                  complete(StatusCodes.RequestTimeout)
+                  StatusCodes.RequestTimeout
                 case Some(f) =>
-                  complete(f)
+                  f
               }
           }
+          logger.debug(s"New peer request $peerAddress statusCode: $result")
+          complete(result)
         }
       } ~
       path("ip") {
