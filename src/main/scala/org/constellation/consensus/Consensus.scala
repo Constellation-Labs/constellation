@@ -63,7 +63,9 @@ object Consensus {
   case class PeerMemPoolUpdated(transactions: Seq[Transaction], peer: Id, round: Long)
   case class PeerProposedBlock(block: Block, peer: Id)
 
-  case class RequestBlockProposal(round: Long)
+  case class RequestBlockProposal(
+                                   //round: Long
+  )
 
   // Methods
 

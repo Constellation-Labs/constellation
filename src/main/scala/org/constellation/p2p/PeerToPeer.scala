@@ -229,7 +229,7 @@ class PeerToPeer(
       }
 
     case UDPMessage(sh: HandShakeResponseMessage, remote) =>
-      // logger.debug("HandShakeResponse missing")
+       logger.debug("HandShakeResponseMessage")
     //  val o = sh.handShakeResponse.data.original
    //   val fromUs = o.valid && o.publicKeys.head == id.id
      // val valid = fromUs && sh.handShakeResponse.valid

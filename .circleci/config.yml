@@ -56,11 +56,11 @@ jobs:
     # This doesn't appear to work... need something to cache dependencies.
     dependencies:
       cache_directories:
-        - "~/.iv2"
+        - "~/.ivy2"
         - "lib_managed" #### <-- need this
         - "target"
         - "project/target"
-        - "~/.iv2/cache"
+        - "~/.ivy2/cache"
         - "~/.sbt"
         - "~/.m2"
         - "target/resolution-cache"
