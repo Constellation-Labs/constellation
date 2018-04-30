@@ -171,6 +171,11 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     val node3PublicKey = node3.keyPair.getPublic
     val node4PublicKey = node4.keyPair.getPublic
 
+    print(s"Node1key $node1PublicKey")
+    print(s"Node2key $node2PublicKey")
+    print(s"Node3key $node3PublicKey")
+    print(s"Node4key $node4PublicKey")
+
     val n1id = Id(node1.keyPair.getPublic)
     val n2id = Id(node2.keyPair.getPublic)
     val n3id = Id(node3.keyPair.getPublic)
@@ -186,7 +191,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       rpc1.post("peer", node4Path)
 
       // TODO: find better way
-      Thread.sleep(1000)
+      Thread.sleep(3000)
 
       val node1PeersRequest = rpc1.get("peers")
       val peers1 = rpc1.read[Peers](node1PeersRequest.get()).get()
@@ -241,7 +246,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       rpc2.post("peer", node1Path)
       rpc2.post("peer", node4Path)
 
-      Thread.sleep(1000)
+      Thread.sleep(3000)
 
       val node2PeersRequest = rpc2.get("peers")
       val peers2 = rpc2.read[Peers](node2PeersRequest.get()).get()
@@ -294,7 +299,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       rpc3.post("peer", node1Path)
       rpc3.post("peer", node2Path)
 
-      Thread.sleep(1000)
+      Thread.sleep(3000)
 
       val node3PeersRequest = rpc3.get("peers")
       val peers3 = rpc3.read[Peers](node3PeersRequest.get()).get()
@@ -347,7 +352,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       rpc4.post("peer", node2Path)
       rpc4.post("peer", node3Path)
 
-      Thread.sleep(1000)
+      Thread.sleep(3000)
 
       val node4PeersRequest = rpc4.get("peers")
       val peers4 = rpc4.read[Peers](node4PeersRequest.get()).get()
@@ -429,17 +434,20 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
       val finalChainNode4 = rpc4.read[Seq[Block]](finalChainStateNode4Response.get()).get()
 
-      val shortestChainLength = List(finalChainNode1.size, finalChainNode2.size, finalChainNode3.size, finalChainNode4.size).min
+      val chainSizes = List(finalChainNode1.size, finalChainNode2.size, finalChainNode3.size, finalChainNode4.size)
+      val shortestChainLength = chainSizes.min
 
       val chain1 = finalChainNode1.take(shortestChainLength)
       val chain2 = finalChainNode2.take(shortestChainLength)
       val chain3 = finalChainNode3.take(shortestChainLength)
       val chain4 = finalChainNode4.take(shortestChainLength)
 
-      println("CHAIN1:" + chain1)
-      println("CHAIN2:" + chain2)
-      println("CHAIN3:" + chain3)
-      println("CHAIN4:" + chain4)
+      println(s"Chain sizes $chainSizes")
+
+  //    println("CHAIN1:" + chain1)
+ //     println("CHAIN2:" + chain2)
+ //     println("CHAIN3:" + chain3)
+ //     println("CHAIN4:" + chain4)
 
       var chain1ContainsTransactions = false
       var chain2ContainsTransactions = false
@@ -490,8 +498,8 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       assert(chain3TransactionCount == 6)
       assert(chain4TransactionCount == 6)
 
-      println(s"CHAIN1: $chain1")
-      println(s"CHAIN2: $chain2")
+   //   println(s"CHAIN1: $chain1")
+  //    println(s"CHAIN2: $chain2")
 
       assert(chain1.zip(chain2).forall{
         case (b1, b2) =>

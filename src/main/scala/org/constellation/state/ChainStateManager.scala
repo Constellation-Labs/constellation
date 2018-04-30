@@ -23,6 +23,7 @@ object ChainStateManager {
   // Events
   case class BlockAddedToChain(previousBlock: Block)
   case class CurrentChainStateUpdated(chain: Chain)
+  case class GetLastBlockProposal()
 
   def handleAddBlock(chain: Chain, block: Block, memPoolManager: ActorRef, replyTo: ActorRef): Chain = {
     var updatedChain = chain
@@ -36,7 +37,7 @@ object ChainStateManager {
     updatedChain
   }
 
-  def handleCreateBlockProposal(memPools: Map[Id, Seq[Transaction]], chain: Chain, round: Long, replyTo: ActorRef): Unit = {
+  def handleCreateBlockProposal(memPools: Map[Id, Seq[Transaction]], chain: Chain, round: Long, replyTo: ActorRef): Block = {
     val transactions: Seq[Transaction] = memPools.foldLeft(Seq[Transaction]()) {
       (result, b) => {
         result.union(b._2).distinct.sortBy(t => t.sequenceNum)
@@ -52,6 +53,7 @@ object ChainStateManager {
       lastBlock.clusterParticipants, round, transactions)
 
     replyTo ! ProposedBlockUpdated(blockProposal)
+    blockProposal
   }
 
 }
@@ -60,12 +62,13 @@ class ChainStateManager(memPoolManagerActor: ActorRef) extends Actor with ActorL
 
   var chain: Chain = Chain()
   val logger = Logger(s"ChainStateManager")
+  @volatile var lastBlockProposed: Option[Block] = None
 
   override def receive: Receive = {
     case AddBlock(block, replyTo) =>
 
       if (block.transactions.nonEmpty) {
-        logger.debug(s"received add block request $block")
+       // logger.debug(s"received add block request $block")
       }
 
       chain = handleAddBlock(chain, block, memPoolManagerActor, replyTo)
@@ -75,9 +78,24 @@ class ChainStateManager(memPoolManagerActor: ActorRef) extends Actor with ActorL
       sender() ! CurrentChainStateUpdated(chain)
 
     case CreateBlockProposal(memPools, round, replyTo) =>
-         logger.debug("Attempting to create block proposal")
+       //  logger.debug("Attempting to create block proposal")
 
-      handleCreateBlockProposal(memPools, chain, round, replyTo)
+      lastBlockProposed = Some(handleCreateBlockProposal(memPools, chain, round, replyTo))
+
+    case GetLastBlockProposal =>
+      if (lastBlockProposed.nonEmpty) {
+        sender() ! lastBlockProposed
+      } else {
+        val transactions: Seq[Transaction] = Seq()
+        val lastBlock = chain.chain.last
+        val round = lastBlock.round + 1
+        // TODO: update to use proper sigs and participants
+        val blockProposal: Block =  Block(lastBlock.signature, lastBlock.height + 1, "",
+          lastBlock.clusterParticipants, round, transactions)
+        lastBlockProposed = Some(blockProposal)
+        sender() ! lastBlockProposed
+      }
   }
 
 }
+

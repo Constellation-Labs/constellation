@@ -8,8 +8,10 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock}
+import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock, RequestBlockProposal}
 import org.constellation.p2p.PeerToPeer._
+import org.constellation.primitives.Block
+import org.constellation.state.ChainStateManager.GetLastBlockProposal
 import org.constellation.util.{ProductHash, Signed}
 
 import scala.collection.mutable
@@ -24,7 +26,9 @@ object PeerToPeer {
 
   case class Peers(peers: Seq[InetSocketAddress])
 
-  case class Id(id: PublicKey)
+  case class Id(id: PublicKey) {
+    def short: String = id.toString.slice(15, 20)
+  }
 
   case class GetPeers()
 
@@ -70,7 +74,8 @@ class PeerToPeer(
                   consensusActor: ActorRef,
                   udpActor: ActorRef,
                   selfAddress: InetSocketAddress = new InetSocketAddress("127.0.0.1", 16180),
-                  keyPair: KeyPair = null
+                  keyPair: KeyPair = null,
+                  chainStateActor : ActorRef = null
                 )
                 (implicit timeout: Timeout) extends Actor with ActorLogging {
 
@@ -142,10 +147,12 @@ class PeerToPeer(
                        newPeers: Seq[Signed[Peer]] = Seq()
                      ): Unit = {
 
-    peerLookup(value.data.externalAddress) = value
-    value.data.remotes.foreach(peerLookup(_) = value)
-    logger.debug(s"Peer added, total peers: ${peerIDLookup.keys.size} on $selfAddress")
-    newPeers.foreach{np => initiatePeerHandshake(PeerRef(np.data.externalAddress))}
+    this.synchronized {
+      peerLookup(value.data.externalAddress) = value
+      value.data.remotes.foreach(peerLookup(_) = value)
+      logger.debug(s"Peer added, total peers: ${peerIDLookup.keys.size} on $selfAddress")
+      newPeers.foreach { np => initiatePeerHandshake(PeerRef(np.data.externalAddress)) }
+    }
   }
 
   private def banOn[T](valid: => Boolean, remote: InetSocketAddress)(t: => T) = {
@@ -201,7 +208,6 @@ class PeerToPeer(
           udpActor ! UDPSend(data, r.data.externalAddress)
       }
 
-
     case UDPMessage(p: PeerMemPoolUpdated, remote) =>
     //  logger.debug("UDP PeerMemPoolUpdated received")
       consensusActor ! p
@@ -209,12 +215,26 @@ class PeerToPeer(
     case UDPMessage(p : PeerProposedBlock, remote) =>
       consensusActor ! p
 
+    case UDPMessage(p : RequestBlockProposal, remote) =>
+
+      println("RequestBlockProposal on " + id.short)
+      import akka.pattern.ask
+      val res = (chainStateActor ? GetLastBlockProposal).mapTo[Option[Block]].get()
+      println("RequestBlockProposal on " + id.short + s" result: $res")
+
+      res.foreach{
+        r =>
+          println("Sending block proposal on " + id.short + s" result: $res")
+          udpActor.udpSend(PeerProposedBlock(r, id), remote)
+      }
+
     case UDPMessage(sh: HandShakeResponseMessage, remote) =>
       // logger.debug("HandShakeResponse missing")
-      val o = sh.handShakeResponse.data.original
-      val fromUs = o.valid && o.publicKeys.head == id.id
-      val valid = fromUs && sh.handShakeResponse.valid
-      banOn(valid, remote) {
+    //  val o = sh.handShakeResponse.data.original
+   //   val fromUs = o.valid && o.publicKeys.head == id.id
+     // val valid = fromUs && sh.handShakeResponse.valid
+      // ^ TODO : Fix validation
+      banOn(sh.handShakeResponse.valid, remote) {
         logger.debug(s"Got valid HandShakeResponse from $remote")
         val value = sh.handShakeResponse.data.response.originPeer
         val newPeers = sh.handShakeResponse.data.response.peers

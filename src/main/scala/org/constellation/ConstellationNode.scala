@@ -96,7 +96,7 @@ class ConstellationNode(
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val peerToPeerActor: ActorRef =
-    system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor, udpActor, udpAddress, keyPair)
+    system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor, udpActor, udpAddress, keyPair, chainStateActor)
     (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
   udpActor ! RegisterNextActor(peerToPeerActor)
