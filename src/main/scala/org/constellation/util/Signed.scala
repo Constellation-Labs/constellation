@@ -42,6 +42,11 @@ trait ProductHash extends Product {
 
 }
 
+/*
+Option = SignableData
+None = Unsigned
+Some = signed
+ */
 
 // TODO: Extend to monad, i.e. SignedData extends SignableData vs UnsignedData
 case class Signed[T <: ProductHash](

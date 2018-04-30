@@ -326,12 +326,14 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
     })
 
     val numMissing = facilitatorsWithoutBlockProposals.size
+/*
 
     logger.debug(s"Heartbeat " +
       s"${consensusRoundState.selfId.short} " +
       s"round: $highestRound " +
       s"missing: $numMissing " +
       s"missingIds: ${facilitatorsWithoutBlockProposals.map{_.short}.mkString(" ")}")
+*/
 
     facilitatorsWithoutBlockProposals.foreach{
       f =>
