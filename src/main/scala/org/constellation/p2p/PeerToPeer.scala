@@ -41,8 +41,8 @@ object PeerToPeer {
 
   case class HandShake(
                         originPeer: Signed[Peer],
-                        peers: Seq[Signed[Peer]],
-                        destination: Option[InetSocketAddress] = None
+             //           peers: Seq[Signed[Peer]],
+              //          destination: Option[InetSocketAddress] = None
                       ) extends ProductHash
 
   // These exist because type erasure messes up pattern matching on Signed[T] such that
@@ -51,7 +51,7 @@ object PeerToPeer {
   case class HandShakeResponseMessage(handShakeResponse: Signed[HandShakeResponse])
 
   case class HandShakeResponse(
-                                original: Signed[HandShake],
+             //                   original: Signed[HandShake],
                                 response: HandShake,
                                 detectedRemote: InetSocketAddress
                               ) extends ProductHash
@@ -97,9 +97,13 @@ class PeerToPeer(
 
   private def selfPeer = Peer(id, externalAddress, remotes).signed()
 
+  private def peerIPs = peerLookup.values.map(z => z.data.externalAddress).toSet
+/*
+
   private def peerIPs = {
     peerLookup.keys ++ peerLookup.values.flatMap(z => z.data.remotes ++ Seq(z.data.externalAddress))
   }.toSet
+*/
 
   private def peers = peerLookup.values.toSeq.distinct
 
@@ -110,7 +114,7 @@ class PeerToPeer(
   }
 
   private def handShakeInner = {
-    HandShake(selfPeer, peers)
+    HandShake(selfPeer) //, peers)
   }
 
   def initiatePeerHandshake(p: PeerRef): StatusCode = {
@@ -127,7 +131,8 @@ class PeerToPeer(
       } else {
         logger.debug(s"Sending handshake from $externalAddress to $peerAddress with ${peers.size} known peers")
         //Introduce ourselves
-        val message = HandShakeMessage(handShakeInner.copy(destination = Some(peerAddress)).signed())
+        // val message = HandShakeMessage(handShakeInner.copy(destination = Some(peerAddress)).signed())
+        val message = HandShakeMessage(handShakeInner.signed())
         udpActor.udpSend(
           message, peerAddress
         )
@@ -175,7 +180,8 @@ class PeerToPeer(
       externalAddress = addr
 
     case AddPeerFromLocal(peerAddress) =>
-      // logger.info(s"Received a request to add peer $peerAddress")
+      logger.debug(s"AddPeerFromLocal inet: ${pprintInet(peerAddress)}")
+
       peerLookup.get(peerAddress) match {
         case Some(peer) =>
           logger.debug(s"Disregarding request, already familiar with peer on $peerAddress - $peer")
@@ -241,7 +247,7 @@ class PeerToPeer(
       banOn(sh.handShakeResponse.valid, remote) {
      //   logger.debug(s"Got valid HandShakeResponse from $remote")
         val value = sh.handShakeResponse.data.response.originPeer
-        val newPeers = sh.handShakeResponse.data.response.peers
+        val newPeers = Seq() //sh.handShakeResponse.data.response.peers
         addPeer(value, newPeers)
         remotes += remote
       }
@@ -249,9 +255,10 @@ class PeerToPeer(
     case UDPMessage(sh: HandShakeMessage, remote) =>
       logger.debug(s"Got handshake from $remote on $externalAddress, sending response to $remote")
       banOn(sh.handShake.valid, remote) {
-        logger.debug(s"Got handshake inner from $remote on $externalAddress, sending response to $remote")
+        logger.debug(s"Got handshake inner from $remote on $externalAddress, sending response to $remote inet: ${pprintInet(remote)}")
         val response = HandShakeResponseMessage(
-          HandShakeResponse(sh.handShake, handShakeInner.copy(destination = Some(remote)), remote).signed()
+          // HandShakeResponse(sh.handShake, handShakeInner.copy(destination = Some(remote)), remote).signed()
+          HandShakeResponse(handShakeInner, remote).signed()
         )
         udpActor.udpSend(response, remote)
         initiatePeerHandshake(PeerRef(sh.handShake.data.originPeer.data.externalAddress))

@@ -117,5 +117,10 @@ package object constellation extends KeyUtilsExt with POWExt
     def unmarshal: Future[String] = Unmarshal(httpResponse.entity).to[String]
   }
 
+  def pprintInet(inetSocketAddress: InetSocketAddress): String = {
+    s"address: ${inetSocketAddress.getAddress}, hostname: ${inetSocketAddress.getHostName}, " +
+      s"hostString: ${inetSocketAddress.getHostString}, port: ${inetSocketAddress.getPort}"
+  }
+
 
 }

@@ -19,7 +19,9 @@ object TestNode {
   ): ConstellationNode = {
     val randomPort = scala.util.Random.nextInt(50000) + 5000
     val randomUDPPort = scala.util.Random.nextInt(50000) + 5000
-    new ConstellationNode(keyPair, seedHosts, "0.0.0.0", randomPort, udpPort = randomUDPPort)
+    new ConstellationNode(keyPair, seedHosts, "0.0.0.0", randomPort, udpPort = randomUDPPort
+      //, udpInterface = "127.0.0.1"
+    )
   }
 
 }

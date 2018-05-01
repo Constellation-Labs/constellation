@@ -99,7 +99,9 @@ class ConstellationNode(
     system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor, udpActor, udpAddress, keyPair, chainStateActor)
     (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
-  udpActor ! RegisterNextActor(peerToPeerActor)
+  private val register = RegisterNextActor(peerToPeerActor)
+  logger.info(s"Sending UDP Actor registration: $register")
+  udpActor ! register
 
   consensusActor ! RegisterP2PActor(peerToPeerActor)
 

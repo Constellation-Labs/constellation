@@ -2,7 +2,7 @@ package org.constellation.cluster
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.stream.testkit.GraphStageMessages.Failure
@@ -12,6 +12,7 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, FlatSpecLike, Matche
 
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import constellation._
+import org.constellation.p2p.{GetUDPSocketRef, TestMessage}
 import org.constellation.p2p.PeerToPeer.{GetPeers, Id, Peers}
 import org.constellation.primitives.{Block, BlockSerialized, Transaction}
 import org.constellation.util.RPCClient
@@ -43,10 +44,12 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     val rpc1Response = rpc1.get("health")
     val rpc2Response = rpc2.get("health")
     val rpc3Response = rpc3.get("health")
+    Thread.sleep(3400)
 
     assert(rpc1Response.get().status == StatusCodes.OK)
     assert(rpc2Response.get().status == StatusCodes.OK)
     assert(rpc3Response.get().status == StatusCodes.OK)
+
   }
 
   "Multiple peers" should "connect nodes together" in {
@@ -82,6 +85,12 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     val node1 = TestNode()
     val node2 = TestNode()
 
+    Thread.sleep(4000)
+
+
+    node1.udpActor.udpSend(TestMessage("a", 2), node2.udpAddress)
+    node2.udpActor.udpSend(TestMessage("a", 2), node1.udpAddress)
+
     val rpc1 = new RPCClient(port=node1.httpPort)
     val rpc2 = new RPCClient(port=node2.httpPort)
 
@@ -98,8 +107,17 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     println(s"Peers1: $peers1")
     println(s"Peers2: $peers2")
 
-    assert(peers1.peers == Seq(node2.udpAddressString))
-    assert(peers2.peers == Seq(node1.udpAddressString))
+    import akka.pattern.ask
+    val udpSocket = (node2.udpActor ? GetUDPSocketRef).mapTo[ActorRef].get()
+    println(s"UDP Actor 2 socket response $udpSocket")
+
+    node1.udpActor.udpSend(TestMessage("a", 2), node2.udpAddress)
+    node2.udpActor.udpSend(TestMessage("a", 2), node1.udpAddress)
+
+    Thread.sleep(1000)
+
+    assert(peers1.peers.map{socketToAddress} == Seq(node2.udpAddressString))
+    assert(peers2.peers.map{socketToAddress} == Seq(node1.udpAddressString))
 
   }
 
