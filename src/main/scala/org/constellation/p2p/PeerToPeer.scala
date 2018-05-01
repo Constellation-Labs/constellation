@@ -125,10 +125,11 @@ class PeerToPeer(
     //    logger.debug(s"Peer is same as self $peerAddress, discarding")
         StatusCodes.BadRequest
       } else {
-        logger.debug(s"Sending handshake from $externalAddress to $peerAddress")
+        logger.debug(s"Sending handshake from $externalAddress to $peerAddress with ${peers.size} known peers")
         //Introduce ourselves
+        val message = HandShakeMessage(handShakeInner.copy(destination = Some(peerAddress)).signed())
         udpActor.udpSend(
-          HandShakeMessage(handShakeInner.copy(destination = Some(peerAddress)).signed()), peerAddress
+          message, peerAddress
         )
         //Tell our existing peers
         //broadcast(p)
@@ -151,7 +152,10 @@ class PeerToPeer(
       peerLookup(value.data.externalAddress) = value
       value.data.remotes.foreach(peerLookup(_) = value)
       logger.debug(s"Peer added, total peers: ${peerIDLookup.keys.size} on $selfAddress")
-      newPeers.foreach { np => initiatePeerHandshake(PeerRef(np.data.externalAddress)) }
+      newPeers.foreach { np =>
+        logger.debug(s"Attempting to add new peer from peer reference handshake response $np")
+        initiatePeerHandshake(PeerRef(np.data.externalAddress))
+      }
     }
   }
 
@@ -229,13 +233,13 @@ class PeerToPeer(
       }
 
     case UDPMessage(sh: HandShakeResponseMessage, remote) =>
-       logger.debug("HandShakeResponseMessage")
+       logger.debug(s"HandShakeResponseMessage from $remote on $externalAddress")
     //  val o = sh.handShakeResponse.data.original
    //   val fromUs = o.valid && o.publicKeys.head == id.id
      // val valid = fromUs && sh.handShakeResponse.valid
       // ^ TODO : Fix validation
       banOn(sh.handShakeResponse.valid, remote) {
-        logger.debug(s"Got valid HandShakeResponse from $remote")
+     //   logger.debug(s"Got valid HandShakeResponse from $remote")
         val value = sh.handShakeResponse.data.response.originPeer
         val newPeers = sh.handShakeResponse.data.response.peers
         addPeer(value, newPeers)
@@ -243,12 +247,14 @@ class PeerToPeer(
       }
 
     case UDPMessage(sh: HandShakeMessage, remote) =>
+      logger.debug(s"Got handshake from $remote on $externalAddress, sending response to $remote")
       banOn(sh.handShake.valid, remote) {
-        //   logger.debug(s"Got valid handshake from $remote")
+        logger.debug(s"Got handshake inner from $remote on $externalAddress, sending response to $remote")
         val response = HandShakeResponseMessage(
           HandShakeResponse(sh.handShake, handShakeInner.copy(destination = Some(remote)), remote).signed()
         )
         udpActor.udpSend(response, remote)
+        initiatePeerHandshake(PeerRef(sh.handShake.data.originPeer.data.externalAddress))
       }
 
     case UDPMessage(peersI: Peers, remote) =>

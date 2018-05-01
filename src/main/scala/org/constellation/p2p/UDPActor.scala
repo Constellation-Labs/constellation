@@ -54,7 +54,7 @@ class UDPActor(
         val serialization = SerializationExtension(context.system)
         val serMsg = str.x[SerializedUDPMessage]
         val deser = serialization.deserialize(serMsg.data, serMsg.serializer, Some(classOf[Any]))
-       // println(s"Received UDP message from $remote -- $deser -- sending to $nextActor")
+        println(s"Received UDP message from $remote -- $deser -- sending to $nextActor")
         deser.foreach { d =>
           nextActor.foreach { n => n ! UDPMessage(d, remote) }
         }
@@ -64,7 +64,10 @@ class UDPActor(
     case Udp.Unbind => socket ! Udp.Unbind
     case Udp.Unbound => context.stop(self)
     case GetUDPSocketRef => sender() ! udpSocket
-    case UDPSend(data, remote) => socket ! Udp.Send(data, remote)
+    case UDPSend(data, remote) => {
+      println("UDPSend")
+      socket ! Udp.Send(data, remote)
+    }
     case RegisterNextActor(next) => nextActor = Some(next)
     case GetSelfAddress => sender() ! address
     case Ban(remote) => bannedIPs = {bannedIPs ++ Seq(remote)}.distinct

@@ -49,6 +49,61 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     assert(rpc3Response.get().status == StatusCodes.OK)
   }
 
+  "Multiple peers" should "connect nodes together" in {
+
+    val node1 = TestNode()
+    val node2 = TestNode()
+
+    val rpc1 = new RPCClient(port=node1.httpPort)
+    val rpc2 = new RPCClient(port=node2.httpPort)
+
+    rpc1.post("peer", node2.udpAddressString)
+    rpc2.post("peer", node1.udpAddressString)
+
+    Thread.sleep(3000)
+
+    val node1PeersRequest = rpc1.get("peers")
+    val peers1 = rpc1.read[Peers](node1PeersRequest.get()).get()
+
+    val node2PeersRequest = rpc2.get("peers")
+    val peers2 = rpc2.read[Peers](node2PeersRequest.get()).get()
+
+    println(s"Peers1: $peers1")
+    println(s"Peers2: $peers2")
+
+    assert(peers1.peers.map{socketToAddress} == Seq(node2.udpAddressString))
+    assert(peers2.peers.map{socketToAddress} == Seq(node1.udpAddressString))
+
+  }
+
+  // Figure out why the below is broken
+  "Multiple peers" should "connect nodes with only one peer add" in {
+
+    val node1 = TestNode()
+    val node2 = TestNode()
+
+    val rpc1 = new RPCClient(port=node1.httpPort)
+    val rpc2 = new RPCClient(port=node2.httpPort)
+
+    rpc1.post("peer", node2.udpAddressString)
+
+    Thread.sleep(6000)
+
+    val node1PeersRequest = rpc1.get("peers")
+    val peers1 = rpc1.read[Peers](node1PeersRequest.get()).get()
+
+    val node2PeersRequest = rpc2.get("peers")
+    val peers2 = rpc2.read[Peers](node2PeersRequest.get()).get()
+
+    println(s"Peers1: $peers1")
+    println(s"Peers2: $peers2")
+
+    assert(peers1.peers == Seq(node2.udpAddressString))
+    assert(peers2.peers == Seq(node1.udpAddressString))
+
+  }
+
+
   "Multiple Nodes" should "be able to gossip peers and join a cluster together correctly" in {
     val node1 = TestNode()
     val node2 = TestNode()
@@ -181,17 +236,44 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     val n3id = Id(node3.keyPair.getPublic)
     val n4id = Id(node4.keyPair.getPublic)
 
+    def awaitPeersAdded(rpc: RPCClient, paths: Seq[String]) = {
+
+      var attempt = 0
+      var done = false
+      var peersToAdd = paths
+
+      while (attempt < 5 || !done) {
+
+        attempt += 1
+        peersToAdd.foreach { p =>
+          rpc.post("peer", p)
+        }
+
+        // TODO: find better way
+        Thread.sleep(1000)
+
+        val node1PeersRequest = rpc.get("peers")
+        val peers1 = rpc.read[Peers](node1PeersRequest.get()).get()
+
+        val peers1Sockets = peers1.peers.map {
+           socketToAddress
+        }
+
+        peersToAdd = peersToAdd.filter{p => !peers1Sockets.contains(p)}
+
+        println(s"PeersSockets attempt $attempt " + peers1Sockets)
+
+        done = paths.diff(peers1Sockets).isEmpty
+
+      }
+    }
+
     val node1Future = Future {
       val rpc1Response = rpc1.get("health")
 
       assert(rpc1Response.get().status == StatusCodes.OK)
 
-      rpc1.post("peer", node2Path)
-      rpc1.post("peer", node3Path)
-      rpc1.post("peer", node4Path)
-
-      // TODO: find better way
-      Thread.sleep(3000)
+      awaitPeersAdded(rpc1, Seq(node2Path, node3Path, node4Path))
 
       val node1PeersRequest = rpc1.get("peers")
       val peers1 = rpc1.read[Peers](node1PeersRequest.get()).get()
@@ -242,11 +324,8 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       val rpc2Response = rpc2.get("health")
       assert(rpc2Response.get().status == StatusCodes.OK)
 
-      rpc2.post("peer", node3Path)
-      rpc2.post("peer", node1Path)
-      rpc2.post("peer", node4Path)
+      awaitPeersAdded(rpc2, Seq(node1Path, node3Path, node4Path))
 
-      Thread.sleep(3000)
 
       val node2PeersRequest = rpc2.get("peers")
       val peers2 = rpc2.read[Peers](node2PeersRequest.get()).get()
@@ -295,11 +374,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       val rpc3Response = rpc3.get("health")
       assert(rpc3Response.get().status == StatusCodes.OK)
 
-      rpc3.post("peer", node4Path)
-      rpc3.post("peer", node1Path)
-      rpc3.post("peer", node2Path)
-
-      Thread.sleep(3000)
+      awaitPeersAdded(rpc3, Seq(node2Path, node1Path, node4Path))
 
       val node3PeersRequest = rpc3.get("peers")
       val peers3 = rpc3.read[Peers](node3PeersRequest.get()).get()
@@ -348,11 +423,8 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       val rpc4Response = rpc4.get("health")
       assert(rpc4Response.get().status == StatusCodes.OK)
 
-      rpc4.post("peer", node1Path)
-      rpc4.post("peer", node2Path)
-      rpc4.post("peer", node3Path)
+      awaitPeersAdded(rpc4, Seq(node2Path, node3Path, node1Path))
 
-      Thread.sleep(3000)
 
       val node4PeersRequest = rpc4.get("peers")
       val peers4 = rpc4.read[Peers](node4PeersRequest.get()).get()
