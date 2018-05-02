@@ -10,7 +10,7 @@ import akka.stream.ActorMaterializer
 import akka.util.ByteString
 import com.google.common.hash.Hashing
 import org.constellation.p2p.PeerToPeer.{Id, PeerRef}
-import org.constellation.p2p.{SerializedUDPMessage, UDPSend, UDPSendToID}
+import org.constellation.p2p.{SerializedUDPMessage, UDPSend, UDPSendToIDByte}
 import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
 import org.constellation.wallet.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
 import org.constellation.wallet.KeyUtilsExt
@@ -96,7 +96,7 @@ package object constellation extends KeyUtilsExt with POWExt
       val serializer = serialization.findSerializerFor(data)
       val bytes = serializer.toBinary(data)
       val serMsg = SerializedUDPMessage(bytes, serializer.identifier)
-      udpActor ! UDPSendToID(ByteString(serMsg.json), remote)
+      udpActor ! UDPSendToIDByte(ByteString(serMsg.json), remote)
     }
     def udpSend[T <: AnyRef](data: T, remote: InetSocketAddress)(implicit system: ActorSystem): Unit = {
       val serialization = SerializationExtension(system)

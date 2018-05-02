@@ -15,9 +15,9 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 // This should also probably use scalaj http because it's bettermore standard.
 
 class RPCClient(val host: String = "127.0.0.1", val port: Int)(
-implicit val system: ActorSystem,
-implicit val materialize: ActorMaterializer,
-implicit val executionContext: ExecutionContextExecutor
+  implicit val system: ActorSystem,
+  implicit val materialize: ActorMaterializer,
+  implicit val executionContext: ExecutionContextExecutor
 ) {
 
   val baseURI = s"http://$host:$port"
@@ -26,9 +26,16 @@ implicit val executionContext: ExecutionContextExecutor
 
   def get(suffix: String, queryParams: Map[String,String] = Map()): Future[HttpResponse] = {
     Http().singleRequest(
-    HttpRequest(uri = base(suffix).withQuery(Query(queryParams)))
-  )
-}
+      HttpRequest(uri = base(suffix).withQuery(Query(queryParams)))
+    )
+  }
+
+  def getSync(suffix: String, queryParams: Map[String,String] = Map()): HttpResponse = {
+    import constellation._
+    Http().singleRequest(
+      HttpRequest(uri = base(suffix).withQuery(Query(queryParams)))
+    ).get()
+  }
 
   def getBlocking [T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeout: Int = 5)
                                (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
@@ -40,7 +47,7 @@ implicit val executionContext: ExecutionContextExecutor
   }
 
   def getBlockingStr[T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeout: Int = 5)
-                               (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): String = {
+                                 (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): String = {
     import constellation.EasyFutureBlock
     val httpResponse = Http().singleRequest(
       HttpRequest(uri = base(suffix).withQuery(Query(queryParams)))
@@ -50,20 +57,27 @@ implicit val executionContext: ExecutionContextExecutor
 
   def post[T <: AnyRef](suffix: String, t: T)(implicit f : Formats = constellation.constellationFormats): Future[HttpResponse] = {
 
-  val ser = Serialization.write(t)
+    val ser = Serialization.write(t)
     Http().singleRequest(
-    HttpRequest(uri = base(suffix), method = HttpMethods.POST, entity = HttpEntity(
-    ContentTypes.`application/json`, ser)
-  ))
-}
+      HttpRequest(uri = base(suffix), method = HttpMethods.POST, entity = HttpEntity(
+        ContentTypes.`application/json`, ser)
+      ))
+  }
+
+  def postSync[T <: AnyRef](suffix: String, t: T)(
+    implicit f : Formats = constellation.constellationFormats
+  ): HttpResponse = {
+    import constellation.EasyFutureBlock
+    post(suffix, t).get()
+  }
 
   implicit val serialization: Serialization.type = native.Serialization
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] = PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
   def read[T <: AnyRef](httpResponse: HttpResponse)(
-  implicit m : Manifest[T], f : Formats = constellation.constellationFormats
+    implicit m : Manifest[T], f : Formats = constellation.constellationFormats
   ): Future[T] =
-  Unmarshal(httpResponse.entity).to[String].map{r => Serialization.read[T](r)}
+    Unmarshal(httpResponse.entity).to[String].map{r => Serialization.read[T](r)}
 
   def postRead[Q <: AnyRef, T <: AnyRef](suffix: String, t: T, timeout: Int = 5)(
     implicit m : Manifest[Q], f : Formats = constellation.constellationFormats

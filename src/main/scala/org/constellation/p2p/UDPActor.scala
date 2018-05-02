@@ -12,7 +12,8 @@ import org.constellation.p2p.PeerToPeer.Id
 case class UDPMessage(data: Any, remote: InetSocketAddress)
 case class GetUDPSocketRef()
 case class UDPSend(data: ByteString, remote: InetSocketAddress)
-case class UDPSendToID(data: ByteString, remote: Id)
+case class UDPSendToIDByte(data: ByteString, remote: Id)
+case class UDPSendToID[T](data: T, remote: Id)
 case class RegisterNextActor(nextActor: ActorRef)
 case class GetSelfAddress()
 case class Ban(address: InetSocketAddress)
@@ -50,12 +51,15 @@ class UDPActor(
       val ref = sender()
       udpSocket = ref
       context.become(ready(ref))
-    case RegisterNextActor(next) => nextActor = Some(next)
+    case RegisterNextActor(next) =>
+     // println(s"Registered next actor for udp on port $port")
+      nextActor = Some(next)
+
   }
 
   def ready(socket: ActorRef): Receive = {
     case Udp.Received(data, remote) =>
-      println(s"Received UDP message from $remote -- sending to $nextActor")
+     // println(s"Received UDP message from $remote -- sending to $nextActor")
       if (!bannedIPs.contains(remote)) {
         val str = data.utf8String
         val serialization = SerializationExtension(context.system)
@@ -71,24 +75,26 @@ class UDPActor(
     case Udp.Unbound => context.stop(self)
     case GetUDPSocketRef => sender() ! udpSocket
     case UDPSend(data, remote) => {
-      println(s"Attempting UDPSend from port: $port to $remote of data length: ${data.length}")
+   //   println(s"Attempting UDPSend from port: $port to $remote of data length: ${data.length}")
       import akka.pattern.ask
       //val res = (socket ? Udp.Send(data, remote)).get()
       val res = (socket ! Udp.Send(data, remote))
-      println(s"UDPSend Response $res")
+    //  println(s"UDPSend Response $res")
 
     }
     case RegisterNextActor(next) => {
-      println(s"Registered next actor for udp on port $port")
+    //  println(s"Registered next actor for udp on port $port")
       nextActor = Some(next)
     }
     case GetSelfAddress => sender() ! address
     case Ban(remote) => bannedIPs = {bannedIPs ++ Seq(remote)}.distinct
     case GetBanList => sender() ! bannedIPs
-    case u: UDPSendToID => {
+    case u: UDPSendToIDByte => {
      // println("UDPSendToID: " + u)
       nextActor.foreach{ na => na ! u}
     }
+    case x =>
+      println(s"UDPActor unrecognized message: $x")
 
   }
 }

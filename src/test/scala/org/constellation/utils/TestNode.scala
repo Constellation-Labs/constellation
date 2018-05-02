@@ -10,6 +10,8 @@ import org.constellation.wallet.KeyUtils
 
 import scala.concurrent.ExecutionContextExecutor
 
+
+
 object TestNode {
 
   def apply(seedHosts: Seq[InetSocketAddress] = Seq(), keyPair: KeyPair = KeyUtils.makeKeyPair())(

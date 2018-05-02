@@ -96,6 +96,9 @@ class RPCInterface(
       path("peers") {
         complete((peerToPeerActor ? GetPeers).mapTo[Peers])
       } ~
+      path("peerids") {
+        complete((peerToPeerActor ? GetPeersData).mapTo[Seq[Peer]])
+      } ~
       path("id") {
         complete((peerToPeerActor ? GetId).mapTo[Id])
       } ~ path("actorPath") {
@@ -124,7 +127,7 @@ class RPCInterface(
       } ~
       path("peer") {
         entity(as[String]) { peerAddress =>
-          logger.debug(s"Received request to add a new peer $peerAddress")
+      //    logger.debug(s"Received request to add a new peer $peerAddress")
           val result = Try {
             peerAddress.replaceAll('"'.toString,"").split(":") match {
               case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
@@ -140,10 +143,24 @@ class RPCInterface(
                 case None =>
                   StatusCodes.RequestTimeout
                 case Some(f) =>
-                  f
+                  if (f == StatusCodes.Accepted) {
+                    var attempts = 0
+                    var peerAdded = false
+                    while (attempts < 5) {
+                      attempts += 1
+                      Thread.sleep(500)
+                      import constellation.EasyFutureBlock
+                      val peers = (peerToPeerActor ? GetPeersData).mapTo[Seq[Peer]].get()
+                   //   peers.foreach{println}
+                   //   println(v)
+                      peerAdded = peers.exists(p => v == p.externalAddress)
+                    }
+                    if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
+                  } else f
               }
           }
-          logger.debug(s"New peer request $peerAddress statusCode: $result")
+
+      //    logger.debug(s"New peer request $peerAddress statusCode: $result")
           complete(result)
         }
       } ~
