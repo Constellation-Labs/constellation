@@ -307,11 +307,14 @@ object Consensus {
                                  selfId: Id = null
                                 )
 
+  case object ToggleHeartbeat
+
 }
 
 class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPair,
                 udpAddress: InetSocketAddress = new InetSocketAddress("127.0.0.1", 16180),
-                udpActor: ActorRef)
+                udpActor: ActorRef,
+                heartbeatEnabled: Boolean = false)
                (implicit timeout: Timeout) extends Actor with ActorLogging {
 
   implicit val sys: ActorSystem = context.system
@@ -321,7 +324,6 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
   @volatile var consensusRoundState: ConsensusRoundState = ConsensusRoundState(selfId = selfId)
 
 
-  val heartBeat = new ScheduledThreadPoolExecutor(10)
   private val bufferTask = new Runnable { def run(): Unit = {
 
     Try {
@@ -373,10 +375,19 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
 
   } }
 
-  val heartBeatMonitor: ScheduledFuture[_] = heartBeat.scheduleAtFixedRate(bufferTask, 1, 2, TimeUnit.SECONDS)
+  var heartBeatMonitor: ScheduledFuture[_] = _
+  var heartBeat: ScheduledThreadPoolExecutor = _
 
+
+  if (heartbeatEnabled) {
+    heartBeat = new ScheduledThreadPoolExecutor(10)
+    heartBeatMonitor = heartBeat.scheduleAtFixedRate(bufferTask, 1, 2, TimeUnit.SECONDS)
+  }
 
   override def receive: Receive = {
+
+    case ToggleHeartbeat =>
+      heartBeat.shutdownNow()
 
     case RegisterP2PActor(p2pActor) =>
       consensusRoundState = consensusRoundState.copy(selfPeerToPeerActorRef = Some(p2pActor))

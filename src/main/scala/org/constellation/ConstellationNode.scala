@@ -6,7 +6,7 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server.Route
 import akka.io.Udp
 import akka.stream.ActorMaterializer
@@ -59,7 +59,8 @@ class ConstellationNode(
                val udpInterface: String = "0.0.0.0",
                val udpPort: Int = 16180,
                val hostName: String = "127.0.0.1",
-               timeoutSeconds: Int = 30
+               timeoutSeconds: Int = 30,
+               heartbeatEnabled: Boolean = false
              )(
                implicit val system: ActorSystem,
                implicit val materialize: ActorMaterializer,
@@ -103,7 +104,7 @@ class ConstellationNode(
     system.actorOf(Props(new ChainStateManager(memPoolManagerActor: ActorRef, id)), s"ConstellationChainStateActor_$publicKeyHash")
 
   val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair, udpAddress, udpActor)(timeout)),
+    Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair, udpAddress, udpActor, heartbeatEnabled)(timeout)),
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val peerToPeerActor: ActorRef =
@@ -139,7 +140,7 @@ class ConstellationNode(
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
   val rpc = new RPCClient(port=httpPort)
   def healthy: Boolean = Try{rpc.getSync("health").status == StatusCodes.OK}.getOrElse(false)
-  def add(other: ConstellationNode) = rpc.postSync("peer", other.udpAddressString)
+  def add(other: ConstellationNode): HttpResponse = rpc.postSync("peer", other.udpAddressString)
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind

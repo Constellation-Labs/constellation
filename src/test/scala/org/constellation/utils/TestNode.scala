@@ -14,14 +14,16 @@ import scala.concurrent.ExecutionContextExecutor
 
 object TestNode {
 
-  def apply(seedHosts: Seq[InetSocketAddress] = Seq(), keyPair: KeyPair = KeyUtils.makeKeyPair())(
+  def apply(seedHosts: Seq[InetSocketAddress] = Seq(), keyPair: KeyPair = KeyUtils.makeKeyPair(),
+            heartbeatEnabled: Boolean = false)(
     implicit system: ActorSystem,
     materialize: ActorMaterializer,
     executionContext: ExecutionContextExecutor
   ): ConstellationNode = {
     val randomPort = scala.util.Random.nextInt(50000) + 5000
     val randomUDPPort = scala.util.Random.nextInt(50000) + 5000
-    new ConstellationNode(keyPair, seedHosts, "0.0.0.0", randomPort, udpPort = randomUDPPort
+    new ConstellationNode(keyPair, seedHosts, "0.0.0.0", randomPort, udpPort = randomUDPPort,
+      heartbeatEnabled = heartbeatEnabled
       //, udpInterface = "127.0.0.1"
     )
   }
