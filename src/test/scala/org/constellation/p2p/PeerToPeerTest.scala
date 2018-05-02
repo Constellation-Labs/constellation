@@ -51,16 +51,19 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
       expectMsg(Peers(Nil))
   }
 
-  it should "register new peers" in new WithPeerToPeerActor {
+/*  it should "register new peers" in new WithPeerToPeerActor {
     val probe = TestProbe()
-    peerToPeerActor ! PeerRef(address2)
     import akka.pattern.ask
     import constellation._
+    val response = peerToPeerActor ? PeerRef(address2)
     Thread.sleep(100)
     val res: Peers = (peerToPeerActor ? GetPeers).mapTo[Peers].get()
     assert(res == Peers(Seq(address2)))
   }
+  */
 
+  // This needs a security check on the peer we're adding. Automatic peer approval is disabled temporarily.
+/*
   it should "add us as a peer when we send a handshake" in new WithPeerToPeerActor {
     peerToPeerActor ! UDPMessage(HandShake(Fixtures.signedPeer), address2)
     Thread.sleep(100)
@@ -71,6 +74,7 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
       case Peers(Seq(peer)) => peer shouldEqual address2
     }
   }
+*/
 
   // TODO: Reimplement -- this test is already covered by multi-node and is much more complex now with UDP
   // Fix later

@@ -8,6 +8,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
+import akka.io.Udp
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
@@ -139,5 +140,9 @@ class ConstellationNode(
   val rpc = new RPCClient(port=httpPort)
   def healthy: Boolean = Try{rpc.getSync("health").status == StatusCodes.OK}.getOrElse(false)
   def add(other: ConstellationNode) = rpc.postSync("peer", other.udpAddressString)
+
+  def shutdown(): Unit = {
+    udpActor ! Udp.Unbind
+  }
 
 }

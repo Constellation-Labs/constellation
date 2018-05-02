@@ -150,15 +150,15 @@ jobs:
 
 workflows:
   version: 2
- # build:
- #   jobs:
- #     - build
+  build:
+    jobs:
+      - build
   publish:
     jobs:
-  #    - build
+      - build
       - publish:
-   #       requires:
-   #         - build
+          requires:
+            - build
           filters:
             branches:
               only: rg-udp-debug
