@@ -155,10 +155,10 @@ jobs:
 
 workflows:
   version: 2
-  build:
+  build-flow:
     jobs:
       - build
-  publish:
+  publish-flow:
     jobs:
       - build
       - publish:
@@ -166,4 +166,5 @@ workflows:
             - build
           filters:
             branches:
-              only: master
+              only:
+                - rg-udp-debug
