@@ -33,9 +33,14 @@ jobs:
 
       - run: cat /dev/null | sbt test:compile
 
+      # Update this to use the cache defined in the other step.
       - save_cache:
           paths:
             - ~/.m2
+            - ~/.iv2
+            - ~/.ivy2
+            - lib_managed
+            - ~/.sbt
           key: v1-dependencies--{{ checksum "build.sbt" }}
         
       # run tests!
@@ -161,4 +166,4 @@ workflows:
             - build
           filters:
             branches:
-              only: rg-udp-debug
+              only: master

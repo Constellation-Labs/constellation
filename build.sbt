@@ -2,7 +2,7 @@ import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 
 enablePlugins(JavaAppPackaging)
 
-lazy val _version = "1.0.0"
+lazy val _version = "1.0.1"
 
 lazy val versions = new {
   val akka = "2.4.18"
