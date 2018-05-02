@@ -9,7 +9,7 @@ import akka.serialization.SerializationExtension
 import akka.util.{ByteString, Timeout}
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock, RequestBlockProposal}
+import org.constellation.consensus.Consensus.{Heartbeat, PeerMemPoolUpdated, PeerProposedBlock, RequestBlockProposal}
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Block
 import org.constellation.state.ChainStateManager.GetLastBlockProposal
@@ -290,6 +290,8 @@ class PeerToPeer(
         p =>
           self ! PeerRef(p)
       }
+    case UDPMessage(h: Heartbeat, remote) =>
+      logger.debug(s"Received heartbeat on ${id.short} from ${h.id.short}")
 
     case UDPMessage(_: Terminated, remote) =>
       logger.debug(s"Peer $remote has terminated. Removing it from the list.")

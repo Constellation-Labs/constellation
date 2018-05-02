@@ -65,6 +65,7 @@ object Consensus {
   case class PeerProposedBlock(block: Block, peer: Id)
 
   case class RequestBlockProposal(round: Long, id: Id)
+  case class Heartbeat(id: Id)
 
 
   // Methods
@@ -316,7 +317,8 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
   implicit val sys: ActorSystem = context.system
   val logger = Logger(s"Consensus")
 
-  @volatile var consensusRoundState: ConsensusRoundState = ConsensusRoundState(selfId = Id(keyPair.getPublic))
+  private val selfId = Id(keyPair.getPublic)
+  @volatile var consensusRoundState: ConsensusRoundState = ConsensusRoundState(selfId = selfId)
 
 
   val heartBeat = new ScheduledThreadPoolExecutor(10)
@@ -324,33 +326,45 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
 
     Try {
 
-      val keys = consensusRoundState.peerBlockProposals.keys.toSeq
-      logger.debug(s"Heartbeat " +
-        s"Keys: $keys " + {
-        if (keys.isEmpty) "" else {
-          val highestRound = consensusRoundState.peerBlockProposals.keys.max
-          val facilitatorsWithoutBlockProposals = consensusRoundState.currentFacilitators.filter(f => {
-            !consensusRoundState.peerBlockProposals(highestRound).contains(f)
-          })
-          val numMissing = facilitatorsWithoutBlockProposals.size
+      this.synchronized {
+        val keys = consensusRoundState.peerBlockProposals.keys.toSeq
+        logger.debug(s"Heartbeat " +
+          s"Keys: $keys " + {
+          if (keys.isEmpty) "" else {
+            val highestRound = consensusRoundState.peerBlockProposals.keys.max
 
-          facilitatorsWithoutBlockProposals.foreach {
-            f =>
-              udpActor.udpSendToId(RequestBlockProposal(highestRound, consensusRoundState.selfId), f)
+            consensusRoundState.currentFacilitators.foreach {
+              cf =>
+                udpActor.udpSendToId(Heartbeat(consensusRoundState.selfId), cf)
+            }
+            val facilitatorsWithoutBlockProposals = consensusRoundState.currentFacilitators.filter(f => {
+              !consensusRoundState.peerBlockProposals(highestRound).contains(f)
+            })
+            val numMissing = facilitatorsWithoutBlockProposals.size
+
+/*
+            facilitatorsWithoutBlockProposals.foreach {
+              f =>
+                if (f != selfId) {
+                  udpActor.udpSendToId(RequestBlockProposal(highestRound, consensusRoundState.selfId), f)
+                }
+            }
+*/
+
+            s"${consensusRoundState.selfId.short} " +
+              s"round: $highestRound " +
+              s"numFacilitators: ${consensusRoundState.currentFacilitators.size} " +
+              s"missing: $numMissing " +
+              s"missingIds: ${
+                facilitatorsWithoutBlockProposals.map {
+                  _.short
+                }.mkString(" ")
+              }"
           }
-
-          s"${consensusRoundState.selfId.short} " +
-            s"round: $highestRound " +
-            s"missing: $numMissing " +
-            s"missingIds: ${
-              facilitatorsWithoutBlockProposals.map {
-                _.short
-              }.mkString(" ")
-            }"
         }
-      }
-      )
+        )
 
+      }
 
     } match {
       case Failure(e) => e.printStackTrace()

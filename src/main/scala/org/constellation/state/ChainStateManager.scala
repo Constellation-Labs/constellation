@@ -13,6 +13,7 @@ import org.constellation.state.ChainStateManager._
 import org.constellation.state.MemPoolManager.RemoveConfirmedTransactions
 
 import scala.collection.immutable.HashMap
+import scala.util.{Failure, Try}
 
 object ChainStateManager {
 
@@ -71,17 +72,22 @@ class ChainStateManager(memPoolManagerActor: ActorRef, selfId: Id = null) extend
 
       logger.debug(s"RequestBlockProposal round: $round send to: ${id.short}")
 
-      if (lastBlockProposed.nonEmpty) {
-        sender() ! UDPSendToID(PeerProposedBlock(lastBlockProposed.get, selfId), id)
-      } else {
-        val transactions: Seq[Transaction] = Seq()
-        val lastBlock = chain.chain.last
-        val round = lastBlock.round + 1
-        // TODO: update to use proper sigs and participants
-        val blockProposal: Block = Block(lastBlock.signature, lastBlock.height + 1, "",
-          lastBlock.clusterParticipants, round, transactions)
-        lastBlockProposed = Some(blockProposal)
-        sender() ! UDPSendToID(PeerProposedBlock(lastBlockProposed.get, selfId), id)
+      Try {
+        if (lastBlockProposed.nonEmpty) {
+          sender() ! UDPSendToID(PeerProposedBlock(lastBlockProposed.get, selfId), id)
+        } else {
+          val transactions: Seq[Transaction] = Seq()
+          val lastBlock = chain.chain.last
+          val round = lastBlock.round + 1
+          // TODO: update to use proper sigs and participants
+          val blockProposal: Block = Block(lastBlock.signature, lastBlock.height + 1, "",
+            lastBlock.clusterParticipants, round, transactions)
+          lastBlockProposed = Some(blockProposal)
+          sender() ! UDPSendToID(PeerProposedBlock(lastBlockProposed.get, selfId), id)
+        }
+      } match {
+        case Failure(e) => e.printStackTrace()
+        case _ =>
       }
 
     case AddBlock(block, replyTo) =>
