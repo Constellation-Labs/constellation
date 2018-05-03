@@ -160,7 +160,6 @@ workflows:
       - build
   publish:
     jobs:
-      - build
       - publish:
           requires:
             - build
