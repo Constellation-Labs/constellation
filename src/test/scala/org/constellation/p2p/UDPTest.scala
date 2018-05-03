@@ -149,10 +149,10 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 
   "UDP Bulk" should "send UDP packets in groups and decode properly" in {
 
-    val rx1 = system.actorOf(Props(new TestReceiveUDP), s"rx1")
+    val rx1 = system.actorOf(Props(new TestReceiveUDP), s"rx12")
 
     val rPort1 = scala.util.Random.nextInt(50000) + 5000
-    val listener1 = system.actorOf(Props(new UDPActor(Some(rx1), rPort1)), s"listener1")
+    val listener1 = system.actorOf(Props(new UDPActor(Some(rx1), rPort1)), s"listener12")
 
     Thread.sleep(100)
 
