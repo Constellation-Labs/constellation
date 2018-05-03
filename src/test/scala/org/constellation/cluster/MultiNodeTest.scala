@@ -245,7 +245,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
   "Multiple Nodes" should "come to consensus on transactions after genesis block" in {
 
-    val nodes = Seq.fill(2)(TestNode())
+    val nodes = Seq.fill(2)(TestNode(heartbeatEnabled = true))
 
     for (node <- nodes) {
       assert(node.healthy)
@@ -268,7 +268,6 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       assert(peers.length == (nodes.length - 1))
     }
 
-
     for (node <- nodes) {
 
       val rpc1 = node.rpc
@@ -284,7 +283,10 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
       val chainStateNode1Response = rpc1.get("blocks")
 
-      val chainNode1 = rpc1.read[Seq[Block]](chainStateNode1Response.get()).get()
+      val response = chainStateNode1Response.get()
+      println(s"ChainStateResponse $response")
+
+      val chainNode1 = Seq(rpc1.readDebug[Block](response).get())
 
       assert(chainNode1.size == 1)
 

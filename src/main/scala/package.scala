@@ -90,6 +90,19 @@ package object constellation extends KeyUtilsExt with POWExt
   def byteToInt(byteBarray: Array[Byte]): Int =
     ByteBuffer.wrap(byteBarray).order(ByteOrder.BIG_ENDIAN).getInt
 
+  implicit class UDPSerExt[T <: AnyRef](data: T)(implicit system: ActorSystem) {
+    def udpSerialize(
+                      packetGroup: Option[Long] = None,
+                      packetGroupSize: Option[Long] = None, packetGroupId: Option[Int] = None
+                    ): SerializedUDPMessage = {
+      val serialization = SerializationExtension(system)
+      val serializer = serialization.findSerializerFor(data)
+      val bytes = serializer.toBinary(data)
+      val serMsg = SerializedUDPMessage(bytes, serializer.identifier)
+      serMsg
+    }
+  }
+
   implicit class UDPActorExt(udpActor: ActorRef) {
     def udpSendToId[T <: AnyRef](data: T, remote: Id)(implicit system: ActorSystem): Unit = {
       val serialization = SerializationExtension(system)
@@ -108,7 +121,7 @@ package object constellation extends KeyUtilsExt with POWExt
 
     def udpSign[T <: ProductHash](data: T, remote: InetSocketAddress, difficulty: Int = 0)
                                  (implicit system: ActorSystem, keyPair: KeyPair): Unit = {
-      udpSend(signPairs(data, Seq(keyPair), difficulty), remote)
+      udpActor ! UDPSend(ByteString(data.udpSerialize().json), remote)
     }
   }
 

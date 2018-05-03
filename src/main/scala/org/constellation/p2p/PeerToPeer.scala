@@ -291,7 +291,7 @@ class PeerToPeer(
           self ! PeerRef(p)
       }
     case UDPMessage(h: Heartbeat, remote) =>
-      logger.debug(s"Received heartbeat on ${id.short} from ${h.id.short}")
+      logger.debug(s"Received heartbeat on ${id.short} from ${h.id.short} : $remote")
 
     case UDPMessage(_: Terminated, remote) =>
       logger.debug(s"Peer $remote has terminated. Removing it from the list.")

@@ -65,8 +65,11 @@ class RPCInterface(
         val responseFuture: Future[Block] = future.mapTo[Block]
 
         val genesisBlock = Await.result(responseFuture, timeout.duration)
-
-        complete(serializeBlocks(Seq(genesisBlock)).take(1))
+        println("Genesis Block in RPC interface " + genesisBlock)
+        import constellation.SerExt
+        val json = genesisBlock.json
+        println("Genesis Block in RPC interface serialized " + json)
+        complete(json)
       } ~
       path("enableConsensus") {
 

@@ -399,14 +399,16 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
           generateGenesisBlock(consensusRoundState, chainManager, sender, self, udpAddress)
       }
     case EnableConsensus() =>
-      log.debug(s"enable consensus request = $consensusRoundState")
+      // log.debug(s"enable consensus request = $consensusRoundState")
 
-      consensusRoundState = enableConsensus(consensusRoundState, memPoolManager, self)
+      consensusRoundState = consensusRoundState.copy(enabled = true)
+        //enableConsensus(consensusRoundState, memPoolManager, self)
 
     case DisableConsensus() =>
-      log.debug(s"disable consensus request = $consensusRoundState")
+     // log.debug(s"disable consensus request = $consensusRoundState")
 
-      consensusRoundState = disableConsensus(consensusRoundState)
+      consensusRoundState = consensusRoundState.copy(enabled = true)
+        //disableConsensus(consensusRoundState)
 
     case BlockAddedToChain(latestBlock) =>
       //   log.debug(s"block added to chain = $latestBlock")
