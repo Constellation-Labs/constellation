@@ -166,3 +166,11 @@ workflows:
           filters:
             branches:
               only: master
+  publish-override:
+    jobs:
+      - hold:
+          type: approval
+      - publish:
+          requires:
+            - hold
+            - build
