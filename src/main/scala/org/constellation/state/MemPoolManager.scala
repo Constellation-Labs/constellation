@@ -3,8 +3,8 @@ package org.constellation.state
 import akka.actor.{Actor, ActorLogging, ActorRef}
 import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.Consensus.{GetMemPool, GetMemPoolResponse}
-import org.constellation.primitives.Transaction
-import org.constellation.state.MemPoolManager.{AddTransaction, RemoveConfirmedTransactions}
+import org.constellation.primitives.{Block, Transaction}
+import org.constellation.state.MemPoolManager.{AddTransaction, GetMemPoolDirect, RemoveConfirmedTransactions}
 
 import scala.collection.mutable.ListBuffer
 
@@ -22,7 +22,7 @@ object MemPoolManager {
   }
 
   def handleGetMemPool(memPool: ListBuffer[Transaction], replyTo: ActorRef, round: Long, memPoolProposalLimit: Int): Unit = {
-     // TODO: use dealer key to encrypt
+    // TODO: use dealer key to encrypt
 
     val memPoolProposal: Seq[Transaction] = memPool.take(memPoolProposalLimit)
 
@@ -40,6 +40,8 @@ object MemPoolManager {
     })
   }
 
+  case object GetMemPoolDirect
+
 }
 
 class MemPoolManager extends Actor with ActorLogging {
@@ -51,15 +53,24 @@ class MemPoolManager extends Actor with ActorLogging {
   var memPoolProposalLimit = 20
 
   override def receive: Receive = {
+
+    case b: Block =>
+      logger.debug(s"Received block ${b.short}, removing ${b.transactions.length} txs from mempool of size ${memPool.size}")
+      b.transactions.foreach{memPool.-=}
+      logger.debug(s"Received block ${b.short}, removed ${b.transactions.length} txs - new mempool size ${memPool.size}")
+
+    case GetMemPoolDirect =>
+      sender() ! memPool
+
     case AddTransaction(transaction) =>
-   //   log.debug(s"received add transaction request $transaction")
+      //   log.debug(s"received add transaction request $transaction")
 
       MemPoolManager.handleAddTransaction(memPool, transaction)
-      if (memPool.nonEmpty){
-        logger.debug(s"received add transaction request2 ${memPool.size}")
+      if (memPool.nonEmpty) {
+        logger.debug(s"Added transaction ${transaction.short} - mem pool size: ${memPool.size}")
       }
 
-   //
+    //
 
     case GetMemPool(replyTo, round) =>
       logger.debug(s"received get mem pool request $replyTo, $round, memPool Size: ${memPool.size}")
@@ -67,7 +78,7 @@ class MemPoolManager extends Actor with ActorLogging {
       MemPoolManager.handleGetMemPool(memPool, replyTo, round, memPoolProposalLimit)
 
     case RemoveConfirmedTransactions(transactions) =>
-   //   log.debug(s"received remove confirmed transactions request $transactions")
+      //   log.debug(s"received remove confirmed transactions request $transactions")
       MemPoolManager.handleRemoveConfirmedTransactions(transactions, memPool)
   }
 

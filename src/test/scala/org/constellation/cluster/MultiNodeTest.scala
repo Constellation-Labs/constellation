@@ -245,11 +245,13 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
   "Multiple Nodes" should "come to consensus on transactions after genesis block" in {
 
-    val nodes = Seq.fill(2)(TestNode(heartbeatEnabled = true))
+    val nodes = Seq.fill(3)(TestNode(heartbeatEnabled = true))
 
     for (node <- nodes) {
       assert(node.healthy)
     }
+
+    nodes.head.rpc.get("master")
 
     for (n1 <- nodes) {
       println(s"Trying to add nodes to $n1")
@@ -347,54 +349,21 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     print("Block lengths : " +blocks.map{_.length})
     val chainSizes = blocks.map{_.length}
-    val shortestChainLength = chainSizes.min
-
     val totalNumTrx = blocks.flatMap(_.flatMap(_.transactions)).length
 
     println(s"Total number of transactions: $totalNumTrx")
 
-//    assert(totalNumTrx > 0)
+    assert(totalNumTrx > 0)
 
+    blocks.foreach{ b =>
+      assert(b.flatMap{_.transactions}.size == (nodes.length * 2))
+    }
+
+    val minSize = blocks.map(_.length).min
+    assert(blocks.map{_.slice(0, minSize)}.distinct.size == 1)
+    assert(totalNumTrx == (nodes.length * 2 * nodes.length))
     assert(true)
 
-    /*
-          assert(chain1.zip(chain2).forall{
-            case (b1, b2) =>
-              if (b1 != b2) {
-                println("BLOCK NOT EQUAL 1: " + b1)
-                println("BLOCK NOT EQUAL 2: " + b2)
-              } else {
-                println("BLOCK EQUAL")
-              }
-              b1 == b2
-          })
-
-          assert(chain2.zip(chain3).forall{
-            case (b1, b2) =>
-              if (b1 != b2) {
-                println("BLOCK NOT EQUAL 1: " + b1)
-                println("BLOCK NOT EQUAL 2: " + b2)
-              } else {
-                println("BLOCK EQUAL")
-              }
-              b1 == b2
-          })
-
-
-          assert(chain3.zip(chain4).forall{
-            case (b1, b2) =>
-              if (b1 != b2) {
-                println("BLOCK NOT EQUAL 1: " + b1)
-                println("BLOCK NOT EQUAL 2: " + b2)
-              } else {
-                println("BLOCK EQUAL")
-              }
-              b1 == b2
-          })
-
-          assert(f == Seq.fill(4)(true))
-        })
-    */
 
   }
 

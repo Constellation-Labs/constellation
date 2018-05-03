@@ -11,8 +11,9 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.consensus.Consensus.{Heartbeat, PeerMemPoolUpdated, PeerProposedBlock, RequestBlockProposal}
 import org.constellation.p2p.PeerToPeer._
-import org.constellation.primitives.Block
+import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.ChainStateManager.GetLastBlockProposal
+import org.constellation.state.MemPoolManager.AddTransaction
 import org.constellation.util.{ProductHash, Signed}
 
 import scala.collection.mutable
@@ -70,6 +71,8 @@ object PeerToPeer {
                    remotes: Set[InetSocketAddress] = Set()
                  ) extends ProductHash
 
+  case class Broadcast[T <: AnyRef](data: T)
+
 }
 
 class PeerToPeer(
@@ -79,7 +82,8 @@ class PeerToPeer(
                   udpActor: ActorRef,
                   selfAddress: InetSocketAddress = new InetSocketAddress("127.0.0.1", 16180),
                   keyPair: KeyPair = null,
-                  chainStateActor : ActorRef = null
+                  chainStateActor : ActorRef = null,
+                  memPoolActor : ActorRef = null
                 )
                 (implicit timeout: Timeout) extends Actor with ActorLogging {
 
@@ -102,19 +106,16 @@ class PeerToPeer(
   private def selfPeer = Peer(id, externalAddress, Set()).signed()
 
   private def peerIPs = peerLookup.values.map(z => z.data.externalAddress).toSet
-  /*
 
-    private def peerIPs = {
-      peerLookup.keys ++ peerLookup.values.flatMap(z => z.data.remotes ++ Seq(z.data.externalAddress))
-    }.toSet
-  */
+  private def allPeerIPs = {
+    peerLookup.keys ++ peerLookup.values.flatMap(z => z.data.remotes ++ Seq(z.data.externalAddress))
+  }.toSet
+
 
   private def peers = peerLookup.values.toSeq.distinct
 
   def broadcast[T <: AnyRef](message: T): Unit = {
-    peerIPs.foreach {
-      peer => udpActor.udpSend(message, peer)
-    }
+    peerIDLookup.keys.foreach{ i => self ! UDPSendToID(message, i)}
   }
 
   private def handShakeInner = {
@@ -176,6 +177,18 @@ class PeerToPeer(
   }
 
   override def receive: Receive = {
+
+    case Broadcast(data) => broadcast(data.asInstanceOf[AnyRef])
+
+    case UDPMessage(b: Block, _) =>
+      chainStateActor ! b
+
+    case a @ AddTransaction(transaction) =>
+      logger.debug(s"Broadcasting TX ${transaction.short} on ${id.short}")
+      broadcast(a)
+
+    case UDPMessage(t: AddTransaction, remote) =>
+      memPoolActor ! t
 
     case GetExternalAddress() => sender() ! externalAddress
 

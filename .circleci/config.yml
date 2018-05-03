@@ -158,13 +158,13 @@ workflows:
   build:
     jobs:
       - build
-#  publish-flow:
- #   jobs:
- #     - build
- #     - publish:
- #         requires:
- #           - build
- #         filters:
-  #          branches:
-  #            only:
-  #              - rg-udp-debug
+  publish:
+    jobs:
+      - build
+      - publish:
+          requires:
+            - build
+          filters:
+            branches:
+              only:
+                - master

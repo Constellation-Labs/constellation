@@ -13,7 +13,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.consensus.Consensus.{DisableConsensus, EnableConsensus, GenerateGenesisBlock}
+import org.constellation.consensus.Consensus.{DisableConsensus, EnableConsensus, GenerateGenesisBlock, SetMaster}
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.{Block, BlockSerialized, Transaction}
 import org.constellation.state.ChainStateManager.{CurrentChainStateUpdated, GetCurrentChainState}
@@ -65,11 +65,16 @@ class RPCInterface(
         val responseFuture: Future[Block] = future.mapTo[Block]
 
         val genesisBlock = Await.result(responseFuture, timeout.duration)
-        println("Genesis Block in RPC interface " + genesisBlock)
+        // Issue with serialization here, it returns an array on the rpcclient side with 1 element (the block)
+     //   println("Genesis Block in RPC interface " + genesisBlock)
         import constellation.SerExt
         val json = genesisBlock.json
-        println("Genesis Block in RPC interface serialized " + json)
+      //  println("Genesis Block in RPC interface serialized " + json)
         complete(json)
+      } ~
+      path("master") {
+        consensusActor ! SetMaster
+        complete(StatusCodes.OK)
       } ~
       path("enableConsensus") {
 
@@ -123,8 +128,9 @@ class RPCInterface(
         entity(as[Transaction]) { transaction =>
         //  logger.debug(s"Received request to submit a new transaction $transaction")
 
-          memPoolManagerActor ! AddTransaction(transaction)
-
+          val tx = AddTransaction(transaction)
+          peerToPeerActor ! tx
+          memPoolManagerActor ! tx
           complete(transaction)
         }
       } ~

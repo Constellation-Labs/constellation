@@ -64,11 +64,17 @@ object ChainStateManager {
 
 class ChainStateManager(memPoolManagerActor: ActorRef, selfId: Id = null) extends Actor with ActorLogging {
 
-  var chain: Chain = Chain()
+  @volatile var chain: Chain = Chain()
   val logger = Logger(s"ChainStateManager")
   @volatile var lastBlockProposed: Option[Block] = None
 
   override def receive: Receive = {
+
+    case b: Block =>
+
+      chain = chain.copy(chain.chain :+ b)
+      logger.debug(s"Block ${b.short} added to chain, total blocks: ${chain.chain.size}")
+      memPoolManagerActor ! b
 
     case GetChain => sender() ! chain
 
