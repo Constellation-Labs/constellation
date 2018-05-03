@@ -34,7 +34,9 @@ trait POWExt {
 
 trait ProductHash extends Product {
 
-  def signInput: Array[Byte] = productSeq.json.getBytes()
+  def signInput: Array[Byte] = hash.getBytes()
+  def hash = productSeq.json.sha256
+  def short = hash.slice(0, 5)
   def signKeys(privateKeys: Seq[PrivateKey]): Seq[String] = privateKeys.map { pk => base64(signData(signInput)(pk)) }
   def powInput(signatures: Seq[String]): String = (productSeq ++ signatures).json
   def pow(signatures: Seq[String], difficulty: Int): String = POW.proofOfWork(powInput(signatures), Some(difficulty))

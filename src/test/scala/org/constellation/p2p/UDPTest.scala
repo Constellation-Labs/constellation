@@ -5,16 +5,20 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorSystem, Props}
 import akka.io.Udp
+import akka.serialization.SerializationExtension
 import akka.testkit.{ImplicitSender, TestKit}
-import akka.util.Timeout
+import akka.util.{ByteString, Timeout}
 import org.json4s.native.Serialization
 import org.scalatest._
+
+import scala.util.{Random, Try}
 
 case class TestMessage(a: String, b: Int)
 
 class TestReceiveUDP extends Actor {
 
   var done = false
+  var msg: TestMessage = _
 
   def receive: PartialFunction[Any, Unit] = {
     case u @ UDPMessage(t: TestMessage, remote) =>
@@ -22,7 +26,9 @@ class TestReceiveUDP extends Actor {
         s"Success on ${self.path.name}! " +
           s"Receive loop got a properly decoded case class of correct type: " + u
       )
+      msg = t
       done = true
+    case "msg" => sender() ! msg
     case _ => sender() ! done
   }
 
@@ -63,6 +69,124 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 
     listener1 ! Udp.Unbind
     listener2 ! Udp.Unbind
+    Thread.sleep(100)
+
+  }
+
+  "UDP Serialize" should "work" in {
+
+    val data = TestMessage("a"*10000, 1)
+    val groupSize = 500
+
+    val serialization = SerializationExtension(system)
+    val serializer = serialization.findSerializerFor(data)
+    val bytes = serializer.toBinary(data)
+    val idx = bytes.grouped(groupSize).zipWithIndex.toSeq
+    val packetGroups = scala.collection.mutable.HashMap[Long, Seq[SerializedUDPMessage]]()
+
+    val pg = Random.nextLong()
+    val msgs = idx.map { case (b, i) =>
+      SerializedUDPMessage(b, serializer.identifier,
+        packetGroup = Some(pg), packetGroupSize = Some(idx.length), packetGroupId = Some(i))
+    }
+    var deser: Any = null
+
+    msgs.foreach{
+      serMsg =>
+        val pg = serMsg.packetGroup.get
+        packetGroups.get(pg) match {
+          case Some(messages) =>
+            if (messages.length + 1 == serMsg.packetGroupSize.get) {
+              // Done
+              val dat = {messages ++ Seq(serMsg)}.sortBy(_.packetGroupId.get).flatMap{_.data}.toArray
+              deser = serialization.deserialize(dat, serMsg.serializer, Some(classOf[Any])).get
+              packetGroups.remove(pg)
+            } else {
+              packetGroups(pg) = messages ++ Seq(serMsg)
+            }
+          case None =>
+            packetGroups(pg) = Seq(serMsg)
+        }
+    }
+
+    assert(deser == data)
+
+
+  }
+
+  "UDP Serialize" should "work with regular methods" in {
+
+    val data = TestMessage("a"*10000, 1)
+
+    import constellation._
+    val msgs = data.udpSerializeGrouped()
+    var deser: Any = null
+    val packetGroups = scala.collection.mutable.HashMap[Long, Seq[SerializedUDPMessage]]()
+    val serialization = SerializationExtension(system)
+
+    msgs.foreach{
+      serMsg =>
+        val pg = serMsg.packetGroup.get
+        packetGroups.get(pg) match {
+          case Some(messages) =>
+            if (messages.length + 1 == serMsg.packetGroupSize.get) {
+              // Done
+              val dat = {messages ++ Seq(serMsg)}.sortBy(_.packetGroupId.get).flatMap{_.data}.toArray
+              deser = serialization.deserialize(dat, serMsg.serializer, Some(classOf[Any])).get
+              packetGroups.remove(pg)
+            } else {
+              packetGroups(pg) = messages ++ Seq(serMsg)
+            }
+          case None =>
+            packetGroups(pg) = Seq(serMsg)
+        }
+    }
+
+    assert(deser == data)
+
+
+  }
+
+  "UDP Bulk" should "send UDP packets in groups and decode properly" in {
+
+    val rx1 = system.actorOf(Props(new TestReceiveUDP), s"rx12")
+
+    val rPort1 = scala.util.Random.nextInt(50000) + 5000
+    val listener1 = system.actorOf(Props(new UDPActor(Some(rx1), rPort1)), s"listener12")
+
+    Thread.sleep(100)
+
+    import constellation._
+
+    val data = TestMessage("a"*1000, 1)
+
+    val ser = data.udpSerializeGrouped(50)
+
+    ser.foreach { d =>
+      listener1 ! UDPSend(ByteString(d.json),  new InetSocketAddress("localhost", rPort1))
+    }
+
+    Thread.sleep(1000)
+
+    import akka.pattern.ask
+    val pgs = (listener1 ? GetPacketGroups).mapTo[scala.collection.mutable.HashMap[Long, Seq[SerializedUDPMessage]]].get()
+
+    val messages = pgs.values.flatten.toSeq.sortBy(_.packetGroupId.get)
+
+    println(s"Sizes pg: ${messages.size} original: ${ser.size}")
+
+    messages.zip(ser).foreach{
+      case (m1, m2) =>
+        assert(m1.data.sameElements(m2.data))
+    }
+
+
+    Thread.sleep(700)
+
+    assert((rx1 ? "done?").mapTo[Boolean].get())
+    assert((rx1 ? "msg").mapTo[TestMessage].get() == data)
+
+    listener1 ! Udp.Unbind
     Thread.sleep(100)
 
   }
