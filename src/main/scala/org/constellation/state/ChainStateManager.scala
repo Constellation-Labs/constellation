@@ -58,6 +58,8 @@ object ChainStateManager {
     blockProposal
   }
 
+  case object GetChain
+
 }
 
 class ChainStateManager(memPoolManagerActor: ActorRef, selfId: Id = null) extends Actor with ActorLogging {
@@ -67,6 +69,8 @@ class ChainStateManager(memPoolManagerActor: ActorRef, selfId: Id = null) extend
   @volatile var lastBlockProposed: Option[Block] = None
 
   override def receive: Receive = {
+
+    case GetChain => sender() ! chain
 
     case RequestBlockProposal(round, id) =>
 

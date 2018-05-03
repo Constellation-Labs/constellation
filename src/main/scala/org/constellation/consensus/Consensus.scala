@@ -11,8 +11,9 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.PeerToPeer._
+import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.{Block, Transaction}
-import org.constellation.state.ChainStateManager.{AddBlock, BlockAddedToChain, CreateBlockProposal}
+import org.constellation.state.ChainStateManager.{AddBlock, BlockAddedToChain, CreateBlockProposal, GetChain}
 import org.constellation.util.Signed
 
 import scala.collection.immutable.HashMap
@@ -328,21 +329,34 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
 
     Try {
 
-      this.synchronized {
-        val keys = consensusRoundState.peerBlockProposals.keys.toSeq
-        logger.debug(s"Heartbeat " +
-          s"Keys: $keys " + {
-          if (keys.isEmpty) "" else {
-            val highestRound = consensusRoundState.peerBlockProposals.keys.max
+      val value = consensusRoundState.selfPeerToPeerActorRef.get
+      val ids = (value ? GetPeersID).mapTo[Seq[Id]].get()
 
-            consensusRoundState.currentFacilitators.foreach {
-              cf =>
-                udpActor.udpSendToId(Heartbeat(consensusRoundState.selfId), cf)
-            }
-            val facilitatorsWithoutBlockProposals = consensusRoundState.currentFacilitators.filter(f => {
-              !consensusRoundState.peerBlockProposals(highestRound).contains(f)
-            })
-            val numMissing = facilitatorsWithoutBlockProposals.size
+      val chain = (chainManager ? GetChain).mapTo[Chain].get()
+
+
+      logger.debug(s"Heartbeat on ${selfId.short} - numPeers: ${ids.length}, chainLength: ${chain.chain.length}, " +
+        s"")
+
+      ids.foreach { cf => udpActor.udpSendToId(Heartbeat(selfId), cf)}
+
+      /*
+
+            this.synchronized {
+              val keys = consensusRoundState.peerBlockProposals.keys.toSeq
+              logger.debug(s"Heartbeat " +
+                s"Keys: $keys " + {
+                if (keys.isEmpty) "" else {
+                  val highestRound = consensusRoundState.peerBlockProposals.keys.max
+                  consensusRoundState.currentFacilitators.foreach {
+                    cf =>
+                      udpActor.udpSendToId(Heartbeat(consensusRoundState.selfId), cf)
+                  }
+                  val facilitatorsWithoutBlockProposals = consensusRoundState.currentFacilitators.filter(f => {
+                    !consensusRoundState.peerBlockProposals(highestRound).contains(f)
+                  })
+                  val numMissing = facilitatorsWithoutBlockProposals.size
+      */
 
 /*
             facilitatorsWithoutBlockProposals.foreach {
@@ -352,6 +366,7 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
                 }
             }
 */
+/*
 
             s"${consensusRoundState.selfId.short} " +
               s"round: $highestRound " +
@@ -367,6 +382,7 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
         )
 
       }
+*/
 
     } match {
       case Failure(e) => e.printStackTrace()
@@ -381,7 +397,7 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
 
   if (heartbeatEnabled) {
     heartBeat = new ScheduledThreadPoolExecutor(10)
-    heartBeatMonitor = heartBeat.scheduleAtFixedRate(bufferTask, 1, 2, TimeUnit.SECONDS)
+    heartBeatMonitor = heartBeat.scheduleAtFixedRate(bufferTask, 1, 3, TimeUnit.SECONDS)
   }
 
   override def receive: Receive = {
@@ -402,13 +418,13 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
       // log.debug(s"enable consensus request = $consensusRoundState")
 
       consensusRoundState = consensusRoundState.copy(enabled = true)
-        //enableConsensus(consensusRoundState, memPoolManager, self)
+       // enableConsensus(consensusRoundState, memPoolManager, self)
 
     case DisableConsensus() =>
      // log.debug(s"disable consensus request = $consensusRoundState")
 
-      consensusRoundState = consensusRoundState.copy(enabled = true)
-        //disableConsensus(consensusRoundState)
+      consensusRoundState = //consensusRoundState.copy(enabled = true)
+        disableConsensus(consensusRoundState)
 
     case BlockAddedToChain(latestBlock) =>
       //   log.debug(s"block added to chain = $latestBlock")

@@ -10,7 +10,7 @@ import akka.stream.ActorMaterializer
 import akka.util.ByteString
 import com.google.common.hash.Hashing
 import org.constellation.p2p.PeerToPeer.{Id, PeerRef}
-import org.constellation.p2p.{SerializedUDPMessage, UDPSend, UDPSendToIDByte}
+import org.constellation.p2p._
 import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
 import org.constellation.wallet.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
 import org.constellation.wallet.KeyUtilsExt
@@ -19,7 +19,7 @@ import org.json4s.native._
 import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, native}
 
 import scala.concurrent.{Await, Future}
-import scala.util.Try
+import scala.util.{Random, Try}
 
 /**
   * Project wide convenience functions.
@@ -101,27 +101,39 @@ package object constellation extends KeyUtilsExt with POWExt
       val serMsg = SerializedUDPMessage(bytes, serializer.identifier)
       serMsg
     }
+    def udpSerializeGrouped(groupSize: Int = 500): Seq[SerializedUDPMessage] = {
+      val serialization = SerializationExtension(system)
+      val serializer = serialization.findSerializerFor(data)
+      val bytes = serializer.toBinary(data)
+      if (bytes.length < groupSize) {
+        Seq(SerializedUDPMessage(bytes, serializer.identifier))
+      } else {
+        val idx = bytes.grouped(groupSize).zipWithIndex.toSeq
+        val pg = Random.nextLong()
+        idx.map { case (b, i) =>
+          SerializedUDPMessage(b, serializer.identifier,
+            packetGroup = Some(pg), packetGroupSize = Some(idx.length), packetGroupId = Some(i))
+        }
+      }
+    }
+
   }
 
   implicit class UDPActorExt(udpActor: ActorRef) {
+
     def udpSendToId[T <: AnyRef](data: T, remote: Id)(implicit system: ActorSystem): Unit = {
-      val serialization = SerializationExtension(system)
-      val serializer = serialization.findSerializerFor(data)
-      val bytes = serializer.toBinary(data)
-      val serMsg = SerializedUDPMessage(bytes, serializer.identifier)
-      udpActor ! UDPSendToIDByte(ByteString(serMsg.json), remote)
+      udpActor ! UDPSendToID(data, remote)
     }
+
     def udpSend[T <: AnyRef](data: T, remote: InetSocketAddress)(implicit system: ActorSystem): Unit = {
-      val serialization = SerializationExtension(system)
-      val serializer = serialization.findSerializerFor(data)
-      val bytes = serializer.toBinary(data)
-      val serMsg = SerializedUDPMessage(bytes, serializer.identifier)
-      udpActor ! UDPSend(ByteString(serMsg.json), remote)
+      data.udpSerializeGrouped().foreach { d =>
+        udpActor ! UDPSend(ByteString(d.json), remote)
+      }
     }
 
     def udpSign[T <: ProductHash](data: T, remote: InetSocketAddress, difficulty: Int = 0)
                                  (implicit system: ActorSystem, keyPair: KeyPair): Unit = {
-      udpActor ! UDPSend(ByteString(data.udpSerialize().json), remote)
+      udpActor ! UDPSendTyped(data.signed(), remote)
     }
   }
 

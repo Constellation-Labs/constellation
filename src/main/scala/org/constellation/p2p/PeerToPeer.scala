@@ -216,24 +216,15 @@ class PeerToPeer(
       sender() ! Id(publicKey)
 
     case UDPSendToID(dataA, remoteId) =>
-      val data = dataA.asInstanceOf[AnyRef]
-      val serialization = SerializationExtension(system)
-      val serializer = serialization.findSerializerFor(data)
-      val bytes = serializer.toBinary(data)
-      val serMsg = SerializedUDPMessage(bytes, serializer.identifier)
-      println("UDPSendToId works")
-      self ! UDPSendToID(ByteString(serMsg.json), remoteId)
-
-    case UDPSendToIDByte(data, remoteId) =>
-      //  logger.debug(s"UDPSend to ID on consensus : $data $remote")
-
       peerIDLookup.get(remoteId).foreach{
         r =>
-           //    logger.debug(s"UDPSendFOUND to ID on consensus : $data $remoteId")
-
-          udpActor ! UDPSend(data, r.data.externalAddress)
+          //    logger.debug(s"UDPSendFOUND to ID on consensus : $data $remoteId")
+          udpActor ! UDPSendTyped(dataA, r.data.externalAddress)
       }
 
+    // Add type bounds here on all the command forwarding types
+    // I.e. PeerMemPoolUpdated extends ConsensusCommand
+    // Just check on ConsensusCommand and send to consensus actor automatically
     case UDPMessage(p: PeerMemPoolUpdated, remote) =>
       //  logger.debug("UDP PeerMemPoolUpdated received")
       consensusActor ! p
