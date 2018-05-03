@@ -5,7 +5,7 @@ import java.security.PublicKey
 
 import akka.actor.ActorRef
 import akka.http.scaladsl.marshalling.Marshaller._
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
@@ -22,6 +22,7 @@ import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.Try
 
 class RPCInterface(
                     chainStateActor: ActorRef,
@@ -43,10 +44,11 @@ class RPCInterface(
 
   // TODO: temp until someone can show me how to create one of these custom serializers
   def serializeBlocks(blocks: Seq[Block]): Seq[BlockSerialized] = {
-    blocks.map(b => {
+/*    blocks.map(b => {
       BlockSerialized(b.parentHash, b.height, b.signature,
-        b.clusterParticipants, b.round, b.transactions)
-    })
+        b.clusterParticipants.toSet, b.round, b.transactions)
+    })*/
+    Seq()
   }
 
   val routes: Route =
@@ -58,7 +60,7 @@ class RPCInterface(
       // TODO: revist
       path("generateGenesisBlock") {
 
-        val future = consensusActor ? GenerateGenesisBlock(peerToPeerActor)
+        val future = consensusActor ? GenerateGenesisBlock()
 
         val responseFuture: Future[Block] = future.mapTo[Block]
 
@@ -87,12 +89,15 @@ class RPCInterface(
 
         val chain = chainStateUpdated.chain
 
-        val blocks = serializeBlocks(chain.chain)
+        val blocks = chain.chain
 
         complete(blocks)
       } ~
       path("peers") {
         complete((peerToPeerActor ? GetPeers).mapTo[Peers])
+      } ~
+      path("peerids") {
+        complete((peerToPeerActor ? GetPeersData).mapTo[Seq[Peer]])
       } ~
       path("id") {
         complete((peerToPeerActor ? GetId).mapTo[Id])
@@ -113,7 +118,7 @@ class RPCInterface(
     post {
       path("transaction") {
         entity(as[Transaction]) { transaction =>
-          logger.debug(s"Received request to submit a new transaction $transaction")
+        //  logger.debug(s"Received request to submit a new transaction $transaction")
 
           memPoolManagerActor ! AddTransaction(transaction)
 
@@ -122,14 +127,51 @@ class RPCInterface(
       } ~
       path("peer") {
         entity(as[String]) { peerAddress =>
-          logger.debug(s"Received request to add a new peer $peerAddress")
-          peerToPeerActor ! AddPeerFromLocal(
+      //    logger.debug(s"Received request to add a new peer $peerAddress")
+          val result = Try {
             peerAddress.replaceAll('"'.toString,"").split(":") match {
               case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
-              case a@_ => { logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a"); }
+              case a@_ => logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a");
             }
-          )
-          complete(StatusCodes.Created)
+          }.toOption match {
+            case None =>
+              StatusCodes.BadRequest
+            case Some(v) =>
+              val fut = (peerToPeerActor ?  AddPeerFromLocal(v)).mapTo[StatusCode]
+              val res = Try{Await.result(fut, timeout.duration)}.toOption
+              res match {
+                case None =>
+                  StatusCodes.RequestTimeout
+                case Some(f) =>
+                  if (f == StatusCodes.Accepted) {
+                    var attempts = 0
+                    var peerAdded = false
+                    while (attempts < 5) {
+                      attempts += 1
+                      Thread.sleep(500)
+                      import constellation.EasyFutureBlock
+                      val peers = (peerToPeerActor ? GetPeersData).mapTo[Seq[Peer]].get()
+                   //   peers.foreach{println}
+                   //   println(v)
+                      peerAdded = peers.exists(p => v == p.externalAddress)
+                    }
+                    if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
+                  } else f
+              }
+          }
+
+      //    logger.debug(s"New peer request $peerAddress statusCode: $result")
+          complete(result)
+        }
+      } ~
+      path("ip") {
+        entity(as[String]) { externalIp =>
+          val addr = externalIp.replaceAll('"'.toString,"").split(":") match {
+            case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
+            case a@_ => { logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a"); }
+          }
+          peerToPeerActor ! SetExternalAddress(addr)
+          complete(StatusCodes.OK)
         }
       }
     }

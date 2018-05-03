@@ -1,18 +1,22 @@
 
 import java.net.InetSocketAddress
+import java.security.KeyPair
 
 import akka.actor.{ActorRef, ActorSystem}
+import akka.http.scaladsl.model.HttpResponse
+import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers, Unmarshal}
 import akka.serialization.SerializationExtension
+import akka.stream.ActorMaterializer
 import akka.util.ByteString
 import com.google.common.hash.Hashing
-import org.constellation.p2p.PeerToPeer.PeerRef
-import org.constellation.p2p.{SerializedUDPMessage, UDPSend}
-import org.constellation.util.{POWExt, POWSignHelp}
+import org.constellation.p2p.PeerToPeer.{Id, PeerRef}
+import org.constellation.p2p.{SerializedUDPMessage, UDPSend, UDPSendToIDByte}
+import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
 import org.constellation.wallet.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
 import org.constellation.wallet.KeyUtilsExt
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
-import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue}
+import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, native}
 
 import scala.concurrent.{Await, Future}
 import scala.util.Try
@@ -21,7 +25,7 @@ import scala.util.Try
   * Project wide convenience functions.
   */
 package object constellation extends KeyUtilsExt with POWExt
- with POWSignHelp {
+  with POWSignHelp {
 
   val minimumTime : Long = 1518898908367L
 
@@ -87,6 +91,13 @@ package object constellation extends KeyUtilsExt with POWExt
     ByteBuffer.wrap(byteBarray).order(ByteOrder.BIG_ENDIAN).getInt
 
   implicit class UDPActorExt(udpActor: ActorRef) {
+    def udpSendToId[T <: AnyRef](data: T, remote: Id)(implicit system: ActorSystem): Unit = {
+      val serialization = SerializationExtension(system)
+      val serializer = serialization.findSerializerFor(data)
+      val bytes = serializer.toBinary(data)
+      val serMsg = SerializedUDPMessage(bytes, serializer.identifier)
+      udpActor ! UDPSendToIDByte(ByteString(serMsg.json), remote)
+    }
     def udpSend[T <: AnyRef](data: T, remote: InetSocketAddress)(implicit system: ActorSystem): Unit = {
       val serialization = SerializationExtension(system)
       val serializer = serialization.findSerializerFor(data)
@@ -94,6 +105,21 @@ package object constellation extends KeyUtilsExt with POWExt
       val serMsg = SerializedUDPMessage(bytes, serializer.identifier)
       udpActor ! UDPSend(ByteString(serMsg.json), remote)
     }
+
+    def udpSign[T <: ProductHash](data: T, remote: InetSocketAddress, difficulty: Int = 0)
+                                 (implicit system: ActorSystem, keyPair: KeyPair): Unit = {
+      udpSend(signPairs(data, Seq(keyPair), difficulty), remote)
+    }
+  }
+
+  implicit class HTTPHelp(httpResponse: HttpResponse)
+                         (implicit val materialize: ActorMaterializer) {
+    def unmarshal: Future[String] = Unmarshal(httpResponse.entity).to[String]
+  }
+
+  def pprintInet(inetSocketAddress: InetSocketAddress): String = {
+    s"address: ${inetSocketAddress.getAddress}, hostname: ${inetSocketAddress.getHostName}, " +
+      s"hostString: ${inetSocketAddress.getHostString}, port: ${inetSocketAddress.getPort}"
   }
 
 

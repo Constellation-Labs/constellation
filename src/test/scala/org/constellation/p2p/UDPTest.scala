@@ -41,8 +41,11 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 
     val rx1 = system.actorOf(Props(new TestReceiveUDP), s"rx1")
     val rx2 = system.actorOf(Props(new TestReceiveUDP), s"rx2")
-    val listener1 = system.actorOf(Props(new UDPActor(Some(rx1), 16180)), s"listener1")
-    val listener2 = system.actorOf(Props(new UDPActor(Some(rx2), 16181)), s"listener2")
+
+    val rPort1 = scala.util.Random.nextInt(50000) + 5000
+    val rPort2 = scala.util.Random.nextInt(50000) + 5000
+    val listener1 = system.actorOf(Props(new UDPActor(Some(rx1), rPort1)), s"listener1")
+    val listener2 = system.actorOf(Props(new UDPActor(Some(rx2), rPort2)), s"listener2")
 
     Thread.sleep(100)
 
@@ -50,9 +53,9 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 
     val data = TestMessage("a", 1)
 
-    listener1.udpSend(data, new InetSocketAddress("localhost", 16181))
-    listener2.udpSend(data, new InetSocketAddress("localhost", 16180))
-    Thread.sleep(100)
+    listener1.udpSend(data, new InetSocketAddress("localhost", rPort1))
+    listener2.udpSend(data, new InetSocketAddress("localhost", rPort2))
+    Thread.sleep(500)
     import akka.pattern.ask
 
     assert((rx1 ? "done?").mapTo[Boolean].get())
