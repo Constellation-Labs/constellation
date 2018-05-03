@@ -151,6 +151,10 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     val minSize = blocks.map(_.length).min
     assert(blocks.map{_.slice(0, minSize)}.distinct.size == 1)
     assert(totalNumTrx == (nodes.length * 2 * nodes.length))
+
+    nodes.foreach{
+      _.shutdown()
+    }
     assert(true)
 
 

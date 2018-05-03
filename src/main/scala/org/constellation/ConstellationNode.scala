@@ -16,7 +16,7 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.rpc.RPCInterface
 import org.constellation.wallet.KeyUtils
 import org.constellation.consensus.Consensus
-import org.constellation.consensus.Consensus.RegisterP2PActor
+import org.constellation.consensus.Consensus.{RegisterP2PActor, ToggleHeartbeat}
 import org.constellation.p2p.{PeerToPeer, RegisterNextActor, UDPActor}
 import org.constellation.p2p.PeerToPeer.{AddPeerFromLocal, Id}
 import org.constellation.state.{ChainStateManager, MemPoolManager}
@@ -144,6 +144,7 @@ class ConstellationNode(
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind
+    consensusActor ! ToggleHeartbeat
   }
 
 }
