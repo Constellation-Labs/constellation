@@ -158,8 +158,6 @@ workflows:
   build:
     jobs:
       - build
-  publish:
-    jobs:
       - publish:
           requires:
             - build
@@ -170,6 +168,9 @@ workflows:
     jobs:
       - hold:
           type: approval
+      - build:
+          requires:
+            - hold
       - publish:
           requires:
             - hold

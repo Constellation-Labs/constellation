@@ -8,8 +8,10 @@ import org.constellation.util.RPCClient
 import org.json4s.JsonAST.JArray
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import constellation._
+import org.constellation.p2p.PeerToPeer.Peer
+import org.constellation.primitives.{Block, Transaction}
 
 import scala.util.Try
 
@@ -76,23 +78,108 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
         r
     }
 
-    rpcs.foreach{
-      r =>
-        ips.foreach { ip =>
-          val res = r.post("peer", ip + ":16180").get().unmarshal.get()
-          println("Peer response: " + res)
-        }
+    rpcs.head.get("master")
+
+    for (rpc <- rpcs) {
+      println(s"Trying to add nodes to $rpc")
+      val others = rpcs.filter{_ != rpc}
+      others.foreach{
+        n =>
+          Future {
+            val peerStr = n.host + ":16180"
+            val res = rpc.postSync("peer", peerStr)
+            println(s"Trying to add $peerStr to $rpc res: $res")
+          }
+      }
+    }
+
+    Thread.sleep(25000)
+
+
+/*
+
+    Thread.sleep(5000)
+
+    for (rpc <- rpcs) {
+      val peers = rpc.getBlocking[Seq[Peer]]("peerids")
+      println(s"Peers length: ${peers.length}")
+      assert(peers.length == (rpcs.length - 1))
+    }
+
+    for (rpc <- rpcs) {
+
+      val genResponse1 = rpc.get("generateGenesisBlock")
+      assert(genResponse1.get().status == StatusCodes.OK)
+
+    }
+
+    Thread.sleep(2000)
+
+    for (rpc1 <- rpcs) {
+
+      val chainStateNode1Response = rpc1.get("blocks")
+
+      val response = chainStateNode1Response.get()
+      println(s"ChainStateResponse $response")
+
+      val chainNode1 = Seq(rpc1.readDebug[Block](response).get())
+
+      assert(chainNode1.size == 1)
+
+      assert(chainNode1.head.height == 0)
+
+      assert(chainNode1.head.round == 0)
+
+      assert(chainNode1.head.parentHash == "tempGenesisParentHash")
+
+      assert(chainNode1.head.signature == "tempSig")
+
+      assert(chainNode1.head.transactions == Seq())
+
+      val consensusResponse1 = rpc1.get("enableConsensus")
+
+      assert(consensusResponse1.get().status == StatusCodes.OK)
+
     }
 
     Thread.sleep(5000)
 
-    rpcs.foreach{
-      r =>
-        val genResponse1 = r.get("generateGenesisBlock")
-        assert(genResponse1.get().status == StatusCodes.OK)
+    import Fixtures._
+
+    val txs = Seq(transaction1, transaction2, transaction3, transaction4)
+
+    txs.foreach{ tx =>
+      val rpc1 = rpcs.head
+      rpc1.post("transaction", tx)
+
     }
 
+    Thread.sleep(6000)
 
+    val blocks = rpcs.map{ n=>
+      val finalChainStateNode1Response = n.get("blocks")
+      val finalChainNode1 = n.read[Seq[Block]](finalChainStateNode1Response.get()).get()
+      finalChainNode1
+    }
+
+    print("Block lengths : " +blocks.map{_.length})
+    val chainSizes = blocks.map{_.length}
+    val totalNumTrx = blocks.flatMap(_.flatMap(_.transactions)).length
+
+    println(s"Total number of transactions: $totalNumTrx")
+
+*/
+
+
+
+    /*
+
+        rpcs.foreach{
+          r =>
+            val genResponse1 = r.get("generateGenesisBlock")
+            assert(genResponse1.get().status == StatusCodes.OK)
+        }
+    */
 
 
   }
