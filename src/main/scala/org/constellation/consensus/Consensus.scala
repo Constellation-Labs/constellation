@@ -348,7 +348,7 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
       chain.chain.lastOption.foreach { lastBlock =>
 
         val tipAgeValid = System.currentTimeMillis() > (lastBlockTime + 3000)
-        if (isMaster && tipAgeValid ) {
+        if (isMaster && tipAgeValid && consensusRoundState.enabled) {
           logger.debug("Creating block")
           val txs = (memPoolManager ? GetMemPoolDirect).mapTo[ListBuffer[Transaction]].get().toArray.toSeq
           val b = Block(lastBlock.parentHash, lastBlock.height + 1, "", ids.toSet, lastBlock.height + 1, txs)

@@ -83,7 +83,7 @@ class ChainStateManagerTest extends TestKit(ActorSystem("ChainStateManagerTest")
 
     val chain = Chain(Seq(genesisBlock))
 
-    import org.constellation.Fixtures._
+    import org.constellation.Fixtures2._
     val memPools = HashMap(
         id1 -> Seq(transaction1, transaction3),
         id2 -> Seq(transaction2),

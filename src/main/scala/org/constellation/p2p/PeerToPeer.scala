@@ -46,6 +46,7 @@ object PeerToPeer {
 
   case class HandShake(
                         originPeer: Signed[Peer],
+                        requestExternalAddressCheck: Boolean = false
                         //           peers: Seq[Signed[Peer]],
                         //          destination: Option[InetSocketAddress] = None
                       ) extends ProductHash
@@ -83,7 +84,8 @@ class PeerToPeer(
                   selfAddress: InetSocketAddress = new InetSocketAddress("127.0.0.1", 16180),
                   keyPair: KeyPair = null,
                   chainStateActor : ActorRef = null,
-                  memPoolActor : ActorRef = null
+                  memPoolActor : ActorRef = null,
+                  @volatile var requestExternalAddressCheck: Boolean = false
                 )
                 (implicit timeout: Timeout) extends Actor with ActorLogging {
 
@@ -119,7 +121,7 @@ class PeerToPeer(
   }
 
   private def handShakeInner = {
-    HandShake(selfPeer) //, peers)
+    HandShake(selfPeer, requestExternalAddressCheck) //, peers)
   }
 
   def initiatePeerHandshake(p: PeerRef): StatusCode = {
@@ -263,6 +265,11 @@ class PeerToPeer(
       //   val fromUs = o.valid && o.publicKeys.head == id.id
       // val valid = fromUs && sh.handShakeResponse.valid
       val address = sh.handShakeResponse.data.response.originPeer.data.externalAddress
+      if (requestExternalAddressCheck) {
+        externalAddress = sh.handShakeResponse.data.detectedRemote
+        requestExternalAddressCheck = false
+      }
+
       // ^ TODO : Fix validation
       banOn(sh.handShakeResponse.valid, remote) {
         logger.debug(s"Got valid HandShakeResponse from $remote / $address on $externalAddress")
@@ -273,19 +280,22 @@ class PeerToPeer(
       }
 
     case UDPMessage(sh: HandShakeMessage, remote) =>
-      val address = sh.handShake.data.originPeer.data.externalAddress
-      logger.debug(s"Got handshake from $remote on $externalAddress, sending response to $address")
+      val hs = sh.handShake.data
+      val address = hs.originPeer.data.externalAddress
+      val responseAddr = if (hs.requestExternalAddressCheck) remote else address
+
+      logger.debug(s"Got handshake from $remote on $externalAddress, sending response to $responseAddr")
       banOn(sh.handShake.valid, remote) {
         logger.debug(s"Got handshake inner from $remote on $externalAddress, " +
         s"sending response to $remote inet: ${pprintInet(remote)} " +
-        s"peers externally reported address: ${sh.handShake.data.originPeer.data.externalAddress} inet: " +
+        s"peers externally reported address: ${hs.originPeer.data.externalAddress} inet: " +
         s"${pprintInet(address)}")
         val response = HandShakeResponseMessage(
           // HandShakeResponse(sh.handShake, handShakeInner.copy(destination = Some(remote)), remote).signed()
           HandShakeResponse(handShakeInner, remote).signed()
         )
-        udpActor.udpSend(response, address)
-        //  initiatePeerHandshake(PeerRef(sh.handShake.data.originPeer.data.externalAddress))
+        udpActor.udpSend(response, responseAddr)
+        initiatePeerHandshake(PeerRef(responseAddr))
       }
 
     case UDPMessage(peersI: Peers, remote) =>

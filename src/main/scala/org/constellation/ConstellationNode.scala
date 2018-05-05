@@ -35,18 +35,31 @@ object ConstellationNode extends App {
 
   val rpcTimeout = config.getInt("blockchain.defaultRPCTimeoutSeconds")
 
+  val seeds = args.headOption.map(_.split(",").map{constellation.addressToSocket}.toSeq).getOrElse(Seq())
+
+  private val hostName = if (args.length > 1) {
+    args(1)
+  } else "127.0.0.1"
+
+  private val requestExternalAddressCheck = if (args.length > 2) {
+    args(2).toBoolean
+  } else false
+
   // TODO: update to take from config
   val keyPair = KeyUtils.makeKeyPair()
 
   // TODO: add seeds from config
   new ConstellationNode(
     keyPair,
-    Seq(),
+    seeds,
     config.getString("http.interface"),
     config.getInt("http.port"),
     config.getString("udp.interface"),
     config.getInt("udp.port"),
-    timeoutSeconds = rpcTimeout
+    timeoutSeconds = rpcTimeout,
+    heartbeatEnabled = true,
+    hostName = hostName,
+    requestExternalAddressCheck = requestExternalAddressCheck
   )
 
 }
@@ -60,7 +73,8 @@ class ConstellationNode(
                val udpPort: Int = 16180,
                val hostName: String = "127.0.0.1",
                timeoutSeconds: Int = 30,
-               heartbeatEnabled: Boolean = false
+               heartbeatEnabled: Boolean = false,
+               requestExternalAddressCheck : Boolean = false
              )(
                implicit val system: ActorSystem,
                implicit val materialize: ActorMaterializer,
@@ -108,7 +122,7 @@ class ConstellationNode(
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val peerToPeerActor: ActorRef =
-    system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor, udpActor, udpAddress, keyPair, chainStateActor, memPoolManagerActor)
+    system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor, udpActor, udpAddress, keyPair, chainStateActor, memPoolManagerActor, requestExternalAddressCheck)
     (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
   private val register = RegisterNextActor(peerToPeerActor)

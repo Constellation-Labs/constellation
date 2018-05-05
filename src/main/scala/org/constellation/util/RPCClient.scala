@@ -80,14 +80,6 @@ class RPCClient(val host: String = "127.0.0.1", val port: Int)(
   ): Future[T] =
     Unmarshal(httpResponse.entity).to[String].map{r => Serialization.read[T](r)}
 
-  def readDebug[T <: AnyRef](httpResponse: HttpResponse)(
-    implicit m : Manifest[T], f : Formats = constellation.constellationFormats
-  ): Future[T] =
-    Unmarshal(httpResponse.entity).to[String].map{r =>
-      import constellation.ParseExt
-      r.jValue.asInstanceOf[JArray].arr.head.extract[T]
-    }
-
   def postRead[Q <: AnyRef, T <: AnyRef](suffix: String, t: T, timeout: Int = 5)(
     implicit m : Manifest[Q], f : Formats = constellation.constellationFormats
   ): Q = {

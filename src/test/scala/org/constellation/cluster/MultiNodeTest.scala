@@ -77,7 +77,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       val response = chainStateNode1Response.get()
       println(s"ChainStateResponse $response")
 
-      val chainNode1 = Seq(rpc1.readDebug[Block](response).get())
+      val chainNode1 = rpc1.read[Seq[Block]](response).get()
 
       assert(chainNode1.size == 1)
 

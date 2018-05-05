@@ -2,48 +2,35 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: udp-node-service
-  name: udp-node-service
+    app: node-service
+  name: node-service
 spec:
-  type: LoadBalancer
-  externalTrafficPolicy: Local
   ports:
+  - port: 2551
+    name: p2p
+    targetPort: 2551
+  - port: 9000
+    name: rpc
+    targetPort: 9000
   - port: 16180
     targetPort: 16180
     name: udp
     protocol: UDP
- # clusterIP: None
+  clusterIP: None
   selector:
-    run: constellation-app
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: rpc-node-service
-  name: rpc-node-service
-spec:
-  type: LoadBalancer
-  externalTrafficPolicy: Local
-  ports:
-  - port: 9000
-    name: rpc
-    targetPort: 9000
-  selector:
-    run: constellation-app
+    app: constellation-app
 ---
 apiVersion: apps/v1beta1
 kind: StatefulSet
 metadata:
   name: constellation-app
 spec:
-  serviceName: rpc-node-service
-  serviceName: udp-node-service
-  replicas: 1
+  serviceName: node-service
+  replicas: 3
   template:
     metadata:
       labels:
-        run: constellation-app
+        app: constellation-app
     spec:
       containers:
       - name: constellation-app
@@ -51,6 +38,7 @@ spec:
         imagePullPolicy: Always
         ports:
         - containerPort: 9000
+        # TODO: Remove host port, this makes the RPC publicly accessible.
           hostPort: 9000
           name: rpc
         - containerPort: 2551
@@ -74,7 +62,14 @@ spec:
         - name: HTTP_PORT
           value: '9000'
         readinessProbe:
-          tcpSocket:
-            port: 2551
+          httpGet:
+            port: 9000
+            path: /health
           initialDelaySeconds: 30
           timeoutSeconds: 30
+        livenessProbe:
+          httpGet:
+            port: 9000
+            path: /health
+          initialDelaySeconds: 30
+          periodSeconds: 3

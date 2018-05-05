@@ -168,10 +168,6 @@ workflows:
     jobs:
       - hold:
           type: approval
-      - build:
-          requires:
-            - hold
       - publish:
           requires:
             - hold
-            - build

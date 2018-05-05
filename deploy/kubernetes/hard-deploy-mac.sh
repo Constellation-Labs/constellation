@@ -3,11 +3,10 @@
 
 GOOGLE_PROJECT_ID="esoteric-helix-197319"
 GOOGLE_CLUSTER_NAME="constellation-test"
-IMAGE_TAG=$USER
+IMAGE_TAG=$USER-test
 
 sbt docker:publishLocal
 docker tag constellationlabs/constellation:latest gcr.io/$GOOGLE_PROJECT_ID/constellationlabs/constellation:$IMAGE_TAG
-
 gcloud --quiet container clusters get-credentials $GOOGLE_CLUSTER_NAME
 gcloud docker -- push gcr.io/$GOOGLE_PROJECT_ID/constellationlabs/constellation:$IMAGE_TAG
 
@@ -27,3 +26,5 @@ done
 
 rm ./deploy/kubernetes/node-deployment-impl.yml
 rm ./deploy/kubernetes/node-deployment-impl.yml.bak
+
+# kubectl rolling-update myapp --image=us.gcr.io/project-107012/myapp:5c3dda6b --image-pull-policy Always

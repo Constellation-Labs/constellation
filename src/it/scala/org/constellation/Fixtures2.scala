@@ -9,7 +9,7 @@ import org.constellation.primitives.{Block, Transaction}
 import org.constellation.util.Signed
 import org.constellation.wallet.KeyUtils
 
-object Fixtures {
+object Fixtures2 {
 
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()

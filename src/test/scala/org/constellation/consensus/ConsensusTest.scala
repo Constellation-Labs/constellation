@@ -18,7 +18,7 @@ import org.constellation.wallet.KeyUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.collection.immutable.HashMap
-import org.constellation.Fixtures._
+import org.constellation.Fixtures2._
 
 import scala.concurrent.ExecutionContextExecutor
 
