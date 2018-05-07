@@ -179,6 +179,7 @@ class RPCInterface(
             case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
             case a@_ => { logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a"); }
           }
+          logger.debug(s"Set external IP RPC request $externalIp $addr")
           peerToPeerActor ! SetExternalAddress(addr)
           complete(StatusCodes.OK)
         }

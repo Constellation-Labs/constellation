@@ -340,15 +340,15 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
       val chain = (chainManager ? GetChain).mapTo[Chain].get()
 
 
-      logger.debug(s"Heartbeat on ${selfId.short} - numPeers: ${ids.length}, chainLength: ${chain.chain.length}, " +
-        s"")
+      logger.debug(s"Heartbeat2 on ${selfId.short} - numPeers: ${ids.length}, chainLength: ${chain.chain.length}, " +
+        s"consensusEnabled: ${consensusRoundState.enabled}")
 
       ids.foreach { cf => udpActor.udpSendToId(Heartbeat(selfId), cf)}
 
       chain.chain.lastOption.foreach { lastBlock =>
 
         val tipAgeValid = System.currentTimeMillis() > (lastBlockTime + 3000)
-        if (isMaster && tipAgeValid ) {
+        if (isMaster && tipAgeValid && consensusRoundState.enabled) {
           logger.debug("Creating block")
           val txs = (memPoolManager ? GetMemPoolDirect).mapTo[ListBuffer[Transaction]].get().toArray.toSeq
           val b = Block(lastBlock.parentHash, lastBlock.height + 1, "", ids.toSet, lastBlock.height + 1, txs)
