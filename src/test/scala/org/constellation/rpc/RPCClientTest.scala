@@ -7,7 +7,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
 import constellation._
-import org.constellation.Fixtures2
+import org.constellation.Fixtures
 import org.constellation.p2p.PeerToPeer.{Id, Peers}
 import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.Transaction
@@ -32,7 +32,7 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     assert(localChain == Chain())
   }
 
-  import Fixtures2._
+  import Fixtures._
 
   "GET to /peers" should "get the correct connected peers" in {
 
@@ -87,7 +87,7 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val appNode = TestNode()
     val rpc = new RPCClient(port=appNode.httpPort)
 
-    val transaction = Fixtures2.tx
+    val transaction = Fixtures.tx
     val response = rpc.post("transaction", transaction)
     val transactionResponse = rpc.read[Transaction](response.get()).get()
 
