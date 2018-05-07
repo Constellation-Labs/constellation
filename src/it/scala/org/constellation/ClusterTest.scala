@@ -84,9 +84,13 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
   "Cluster" should "ping a cluster" in {
 
+    // Done on CI now V
+/*
+
     println("Getting rollout status")
     val rollOut = (kubectl ++ Seq("rollout", "status", "sts", "constellation-app")).!!
     println(s"rollout: $rollOut")
+*/
 
     if (isCircle) {
       println("Is circle, waiting for machines to come online")
