@@ -92,6 +92,9 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     println(s"rollout: $rollOut")
 */
 
+
+    // No longer necessary unless using loadbalancers.
+/*
     if (isCircle) {
       println("Is circle, waiting for machines to come online")
       var done = false
@@ -109,6 +112,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       }
       Thread.sleep(10000)
     }
+*/
 
     val ips = getNodeIPs
 
