@@ -4,6 +4,7 @@ GOOGLE_PROJECT_ID="esoteric-helix-197319"
 GOOGLE_CLUSTER_NAME="constellation-test"
 IMAGE=gcr.io/$GOOGLE_PROJECT_ID/constellationlabs/constellation:$CIRCLE_SHA1
 
-kubectl patch statefulset constellation-app --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/image", "value":"'$IMAGE'"}]'
+sudo /opt/google-cloud-sdk/bin/kubectl patch statefulset constellation-app --type='json' \
+-p='[{"op": "replace", "path": "/spec/template/spec/containers/0/image", "value":"'$IMAGE'"}]'
 
-kubectl rollout status sts constellation-app
+sudo  /opt/google-cloud-sdk/bin/kubectl rollout status sts constellation-app
