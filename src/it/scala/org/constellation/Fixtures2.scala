@@ -3,17 +3,13 @@ package org.constellation
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
-import akka.actor.ActorRef
-import org.constellation.p2p.PeerToPeer.{Id, Peer}
-import org.constellation.primitives.Block
-import org.constellation.primitives.Transaction
-import org.constellation.wallet.KeyUtils
 import constellation._
+import org.constellation.p2p.PeerToPeer.{Id, Peer}
+import org.constellation.primitives.{Block, Transaction}
 import org.constellation.util.Signed
+import org.constellation.wallet.KeyUtils
 
-import scala.collection.mutable
-
-object Fixtures {
+object Fixtures2 {
 
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()
@@ -50,17 +46,17 @@ object Fixtures {
   val prevBlock4 = Block("sig", 0, "", idSet4, 0L, Seq())
   val latestBlock4B = Block("sig", 0, "", idSet4B, 1L, Seq())
 
-  val transaction1 =
-    Transaction.senderSign(Transaction(0L, tempKey1.getPublic, tempKey2.getPublic, 33L), tempKey1.getPrivate)
+  val transaction1: Transaction =
+    Transaction.senderSign(Transaction(0L, tempKey1.getPublic, tempKey4.getPublic, 33L), tempKey1.getPrivate)
 
-  val transaction2 =
-    Transaction.senderSign(Transaction(1L, tempKey2.getPublic, tempKey4.getPublic, 14L), tempKey2.getPrivate)
+  val transaction2: Transaction =
+    Transaction.senderSign(Transaction(1L, tempKey2.getPublic, tempKey3.getPublic, 14L), tempKey2.getPrivate)
 
-  val transaction3 =
-    Transaction.senderSign(Transaction(2L, tempKey4.getPublic, tempKey4.getPublic, 2L), tempKey4.getPrivate)
+  val transaction3: Transaction =
+    Transaction.senderSign(Transaction(2L, tempKey3.getPublic, tempKey2.getPublic, 2L), tempKey3.getPrivate)
 
-  val transaction4 =
-    Transaction.senderSign(Transaction(3L, tempKey3.getPublic, tempKey2.getPublic, 20L), tempKey3.getPrivate)
+  val transaction4: Transaction =
+    Transaction.senderSign(Transaction(3L, tempKey4.getPublic, tempKey1.getPublic, 20L), tempKey4.getPrivate)
 
 
 }

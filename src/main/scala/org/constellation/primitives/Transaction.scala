@@ -3,6 +3,7 @@ package org.constellation.primitives
 import java.security.{PrivateKey, PublicKey}
 
 import constellation._
+import org.constellation.util.ProductHash
 import org.constellation.wallet.KeyUtils
 
 case class Transaction(sequenceNum: Long,
@@ -11,7 +12,7 @@ case class Transaction(sequenceNum: Long,
                        amount: Long,
                        senderSignature: String = "",
                        counterPartySignature: String = "",
-                       time: Long = System.currentTimeMillis())
+                       time: Long = System.currentTimeMillis()) extends ProductHash
 
 // TODO: fill these out and replace usage where applicable
 case class SenderSignedTransaction()

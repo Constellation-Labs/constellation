@@ -7,10 +7,10 @@ case class TestSignable(a: String, b: Int) extends ProductHash
 
 import constellation._
 
-class POWSignTest extends FlatSpec {
+class SignTest extends FlatSpec {
 
 
-  "POW" should "do a proof of work and verify it" in {
+  "Hashing" should "should work on test data" in {
 
     val input = "Input"
     val diff = Some(1)
@@ -23,16 +23,18 @@ class POWSignTest extends FlatSpec {
 
   }
 
-  "Simple POWSign" should "sign and pow a simple fake case class properly" in {
+  "Simple Sign" should "sign and hash a simple fake case class properly" in {
 
     val kp = makeKeyPair()
     val data = TestSignable("a", 1)
-    val powSigned = powSignData(data, Seq(kp), 1)
-    assert(powSigned.data == data)
-    println(powSigned.nonce)
-    assert(powSigned.validSignatures)
-    assert(powSigned.validPOW)
-    assert(powSigned.valid)
+    (0 to 2).foreach { d =>
+      val powSigned = signPairs(data, Seq(kp), d)
+      assert(powSigned.data == data)
+      println(powSigned.nonce)
+      assert(powSigned.validSignatures)
+      assert(powSigned.validPOW)
+      assert(powSigned.valid)
+    }
 
   }
 

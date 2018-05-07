@@ -18,26 +18,32 @@ spec:
     protocol: UDP
   clusterIP: None
   selector:
-    app: constellation
+    app: constellation-app
 ---
 apiVersion: apps/v1beta1
 kind: StatefulSet
 metadata:
-  name: constellation
+  name: constellation-app
 spec:
   serviceName: node-service
   replicas: 3
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 3
   template:
     metadata:
       labels:
-        app: constellation
+        app: constellation-app
     spec:
       containers:
-      - name: constellation
+      - name: constellation-app
         image: gcr.io/esoteric-helix-197319/constellationlabs/constellation:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 9000
+        # TODO: Remove host port, this makes the RPC publicly accessible.
           hostPort: 9000
           name: rpc
         - containerPort: 2551
@@ -61,7 +67,14 @@ spec:
         - name: HTTP_PORT
           value: '9000'
         readinessProbe:
-          tcpSocket:
-            port: 2551
+          httpGet:
+            port: 9000
+            path: /health
           initialDelaySeconds: 30
           timeoutSeconds: 30
+        livenessProbe:
+          httpGet:
+            port: 9000
+            path: /health
+          initialDelaySeconds: 30
+          periodSeconds: 3

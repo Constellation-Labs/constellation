@@ -83,11 +83,12 @@ class ChainStateManagerTest extends TestKit(ActorSystem("ChainStateManagerTest")
 
     val chain = Chain(Seq(genesisBlock))
 
+    import org.constellation.Fixtures._
     val memPools = HashMap(
-        node1.udpAddress -> Seq(transaction1, transaction3),
-        node2.udpAddress -> Seq(transaction2),
-        node3.udpAddress -> Seq(transaction3, transaction2),
-        node4.udpAddress -> Seq(transaction4))
+        id1 -> Seq(transaction1, transaction3),
+        id2 -> Seq(transaction2),
+        id3 -> Seq(transaction3, transaction2),
+        id4 -> Seq(transaction4))
 
     val replyTo = TestProbe()
 
