@@ -27,6 +27,11 @@ metadata:
 spec:
   serviceName: node-service
   replicas: 3
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 3
   template:
     metadata:
       labels:

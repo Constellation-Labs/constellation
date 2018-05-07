@@ -340,8 +340,8 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
       val chain = (chainManager ? GetChain).mapTo[Chain].get()
 
 
-      logger.debug(s"HeartbeatC on ${selfId.short} - numPeers: ${ids.length}, chainLength: ${chain.chain.length}, " +
-        s"")
+      logger.debug(s"Heartbeat2 on ${selfId.short} - numPeers: ${ids.length}, chainLength: ${chain.chain.length}, " +
+        s"consensusEnabled: ${consensusRoundState.enabled}")
 
       ids.foreach { cf => udpActor.udpSendToId(Heartbeat(selfId), cf)}
 

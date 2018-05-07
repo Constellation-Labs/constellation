@@ -21,29 +21,14 @@ import scala.util.Try
 object ClusterTest {
 
   private val ipRegex = "\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b".r
+  private val isCircle = System.getenv("CIRCLE_SHA1") != null
+  val kubectl = if (isCircle) Seq("sudo", "/opt/google-cloud-sdk/bin/kubectl") else Seq("kubectl")
 
   case class KubeIPs(id: Int, rpcIP: String, udpIP: String) {
     def valid: Boolean =  {
       ipRegex.findAllIn(rpcIP).nonEmpty && ipRegex.findAllIn(udpIP).nonEmpty
     }
   }
-
-}
-
-class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
-
-  override def afterAll {
-    TestKit.shutdownActorSystem(system)
-  }
-
-  implicit val materialize: ActorMaterializer = ActorMaterializer()
-  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
-
-  private val isCircle = System.getenv("CIRCLE_SHA1") != null
-
-  private val kubectl = if (isCircle) Seq("sudo", "/opt/google-cloud-sdk/bin/kubectl") else Seq("kubectl")
-
-  private val kp = makeKeyPair()
 
   // Use node IPs for now -- this was for previous tests
   @deprecated
@@ -67,6 +52,21 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     }.toList
   }
 
+}
+
+class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
+
+  override def afterAll {
+    TestKit.shutdownActorSystem(system)
+  }
+
+  implicit val materialize: ActorMaterializer = ActorMaterializer()
+  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+
+  import ClusterTest.{kubectl, isCircle}
+
+  private val kp = makeKeyPair()
+
   def getNodeIPs: Seq[String] = {
     val result = {kubectl ++ Seq("get", "-o", "json", "nodes")}.!!
     val items = (result.jValue \ "items").extract[JArray]
@@ -83,6 +83,10 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
   }
 
   "Cluster" should "ping a cluster" in {
+
+    println("Getting rollout status")
+    val rollOut = (kubectl ++ Seq("rollout", "status", "sts", "constellation-app")).!!
+    println(s"rollout: $rollOut")
 
     if (isCircle) {
       println("Is circle, waiting for machines to come online")
@@ -112,9 +116,9 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       r
     }
 
-/*
+
     for (rpc  <- rpcs) {
-      assert(r.post("ip", ip + ":16180").get().unmarshal.get() == "OK")
+      assert(rpc.post("ip", rpc.host + ":16180").get().unmarshal.get() == "OK")
     }
 
     Thread.sleep(5000)
@@ -153,9 +157,9 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       assert(genResponse1.get().status == StatusCodes.OK)
 
     }
-*/
 
-    Thread.sleep(2000)
+
+    Thread.sleep(5000)
 
     for (rpc1 <- rpcs) {
 
@@ -178,13 +182,12 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       assert(chainNode1.head.signature == "tempSig")
 
       assert(chainNode1.head.transactions == Seq())
-/*
+
       val consensusResponse1 = rpc1.get("enableConsensus")
 
-      assert(consensusResponse1.get().status == StatusCodes.OK)*/
+      assert(consensusResponse1.get().status == StatusCodes.OK)
 
     }
-/*
 
     Thread.sleep(5000)
 
@@ -195,10 +198,9 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     txs.foreach{ tx =>
       val rpc1 = rpcs.head
       rpc1.post("transaction", tx)
-
     }
 
-    Thread.sleep(6000)
+    Thread.sleep(10000)
 
     val blocks = rpcs.map{ n=>
       val finalChainStateNode1Response = n.get("blocks")
@@ -212,8 +214,6 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
     println(s"Total number of transactions: $totalNumTrx")
 
-
-*/
 
 
 
