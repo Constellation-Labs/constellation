@@ -34,13 +34,11 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
   "E2E Multiple Nodes" should "add peers and build blocks with transactions" in {
 
-    val nodes = Seq.fill(3)(TestNode(heartbeatEnabled = true))
+    val nodes = Seq.fill(3)(TestNode())
 
     for (node <- nodes) {
       assert(node.healthy)
     }
-
-    nodes.head.rpc.get("master")
 
     for (n1 <- nodes) {
       println(s"Trying to add nodes to $n1")
@@ -59,12 +57,12 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       assert(peers.length == (nodes.length - 1))
     }
 
-    for (node <- nodes) {
-
-      val rpc1 = node.rpc
-      val genResponse1 = rpc1.get("generateGenesisBlock")
-      assert(genResponse1.get().status == StatusCodes.OK)
-
+    nodes.foreach { node =>
+      Future {
+        val rpc1 = node.rpc
+        val genResponse1 = rpc1.get("generateGenesisBlock")
+        assert(genResponse1.get().status == StatusCodes.OK)
+      }
     }
 
     Thread.sleep(2000)
@@ -99,25 +97,33 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     }
 
-    Thread.sleep(5000)
-
-    val transactions = nodes.flatMap{ node =>
-
-      val rpc1 = node.rpc
-
-      val transaction1 =
-        Transaction.senderSign(Transaction(0L, node.id.id, nodes.head.id.id, 1L), node.keyPair.getPrivate)
-
-      rpc1.post("transaction", transaction1)
-
-      val transaction5 =
-        Transaction.senderSign(Transaction(0L, node.id.id, nodes.last.id.id, 1L), node.keyPair.getPrivate)
-
-      rpc1.post("transaction", transaction5)
-
-      Seq(transaction1, transaction5)
+    nodes.foreach { node =>
+      Future {
+        val rpc = node.rpc
+        val enableResponse = rpc.get("enableConsensus")
+        assert(enableResponse.get().status == StatusCodes.OK)
+      }
     }
 
+    Thread.sleep(5000)
+
+    nodes.foreach { node =>
+      Future {
+        val rpc1 = node.rpc
+
+        val transaction1 =
+          Transaction.senderSign(Transaction(0L, node.id.id, nodes.head.id.id, 1L), node.keyPair.getPrivate)
+
+        rpc1.post("transaction", transaction1)
+
+        val transaction5 =
+          Transaction.senderSign(Transaction(0L, node.id.id, nodes.last.id.id, 1L), node.keyPair.getPrivate)
+
+        rpc1.post("transaction", transaction5)
+
+        Seq(transaction1, transaction5)
+      }
+    }
 
     Thread.sleep(15000)
 
@@ -137,6 +143,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     }
 
     print("Block lengths : " +blocks.map{_.length})
+
     val chainSizes = blocks.map{_.length}
     val totalNumTrx = blocks.flatMap(_.flatMap(_.transactions)).length
 
@@ -155,8 +162,8 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     nodes.foreach{
       _.shutdown()
     }
-    assert(true)
 
+    assert(true)
 
   }
 

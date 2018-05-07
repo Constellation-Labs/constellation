@@ -16,7 +16,7 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.rpc.RPCInterface
 import org.constellation.wallet.KeyUtils
 import org.constellation.consensus.Consensus
-import org.constellation.consensus.Consensus.{RegisterP2PActor, ToggleHeartbeat}
+import org.constellation.consensus.Consensus.RegisterP2PActor
 import org.constellation.p2p.{PeerToPeer, RegisterNextActor, UDPActor}
 import org.constellation.p2p.PeerToPeer.{AddPeerFromLocal, Id}
 import org.constellation.state.{ChainStateManager, MemPoolManager}
@@ -57,7 +57,6 @@ object ConstellationNode extends App {
     config.getString("udp.interface"),
     config.getInt("udp.port"),
     timeoutSeconds = rpcTimeout,
-    heartbeatEnabled = true,
     hostName = hostName,
     requestExternalAddressCheck = requestExternalAddressCheck
   )
@@ -73,7 +72,6 @@ class ConstellationNode(
                val udpPort: Int = 16180,
                val hostName: String = "127.0.0.1",
                timeoutSeconds: Int = 30,
-               heartbeatEnabled: Boolean = false,
                requestExternalAddressCheck : Boolean = false
              )(
                implicit val system: ActorSystem,
@@ -87,8 +85,6 @@ class ConstellationNode(
 
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
- // logger.info(s"UDP Info - hostname: $hostName interface: $udpInterface port: $udpPort")
-
   implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
 
   // TODO: add root actor for routing
@@ -100,11 +96,6 @@ class ConstellationNode(
 
   val udpAddressString: String = hostName + ":" + udpPort
   val udpAddress = new InetSocketAddress(hostName, udpPort)
-
-  {
-    import constellation._
-   // logger.info(s"UDP inet pretty: ${pprintInet(udpAddress)}")
-  }
 
   val udpActor: ActorRef =
     system.actorOf(
@@ -118,7 +109,7 @@ class ConstellationNode(
     system.actorOf(Props(new ChainStateManager(memPoolManagerActor: ActorRef, id)), s"ConstellationChainStateActor_$publicKeyHash")
 
   val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair, udpAddress, udpActor, heartbeatEnabled)(timeout)),
+    Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair, udpAddress, udpActor)(timeout)),
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val peerToPeerActor: ActorRef =
@@ -126,11 +117,10 @@ class ConstellationNode(
     (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
   private val register = RegisterNextActor(peerToPeerActor)
-  // logger.info(s"Sending UDP Actor registration: $register")
+
   udpActor ! register
 
   consensusActor ! RegisterP2PActor(peerToPeerActor)
-
 
   // Seed peers
   if (seedPeers.nonEmpty) {
@@ -138,8 +128,6 @@ class ConstellationNode(
       logger.info(s"Attempting to connect to seed-host $peer")
       peerToPeerActor ! AddPeerFromLocal(peer)
     })
-  } else {
-   // logger.info("No seed host configured, waiting for messages.")
   }
 
   // If we are exposing rpc then create routes
@@ -158,7 +146,6 @@ class ConstellationNode(
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind
-    consensusActor ! ToggleHeartbeat
   }
 
 }
