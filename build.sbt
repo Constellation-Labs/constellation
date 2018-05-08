@@ -56,7 +56,9 @@ lazy val coreDependencies = Seq(
   "com.madgag.spongycastle" % "bctls-jdk15on" % "1.58.0.0",
   "net.liftweb" %% "lift-json" % "3.1.1",
   "com.google.guava" % "guava" % "21.0",
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.51"
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.51",
+  "org.iq80.leveldb"            % "leveldb"          % "0.10" withSources() withJavadoc(),
+  "org.fusesource.leveldbjni"   % "leveldbjni-all"   % "1.8" withSources() withJavadoc()
 )
 
 //Test dependencies
