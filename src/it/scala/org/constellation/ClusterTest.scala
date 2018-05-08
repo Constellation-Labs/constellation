@@ -125,7 +125,6 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       r
     }
 
-
     for (rpc  <- rpcs) {
       assert(rpc.post("ip", rpc.host + ":16180").get().unmarshal.get() == "OK")
     }
@@ -133,8 +132,6 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     Thread.sleep(5000)
 
     val r1 = rpcs.head
-
-    r1.get("master")
 
     for (rpc  <- rpcs) {
       val ip = rpc.host
@@ -160,13 +157,12 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       assert(peers.length == (rpcs.length - 1))
     }
 
-    for (rpc <- rpcs) {
-
-      val genResponse1 = rpc.get("generateGenesisBlock")
-      assert(genResponse1.get().status == StatusCodes.OK)
-
+    rpcs.foreach { rpc =>
+      Future {
+        val genResponse1 = rpc.get("generateGenesisBlock")
+        assert(genResponse1.get().status == StatusCodes.OK)
+      }
     }
-
 
     Thread.sleep(5000)
 
@@ -211,6 +207,15 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
     Thread.sleep(10000)
 
+    rpcs.foreach { rpc =>
+      Future {
+        val disableConsensusResponse1 = rpc.get("disableConsensus")
+        assert(disableConsensusResponse1.get().status == StatusCodes.OK)
+      }
+    }
+
+    Thread.sleep(1000)
+
     val blocks = rpcs.map{ n=>
       val finalChainStateNode1Response = n.get("blocks")
       val finalChainNode1 = n.read[Seq[Block]](finalChainStateNode1Response.get()).get()
@@ -218,13 +223,12 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     }
 
     print("Block lengths : " +blocks.map{_.length})
+
     val chainSizes = blocks.map{_.length}
     val totalNumTrx = blocks.flatMap(_.flatMap(_.transactions)).length
 
     println(s"Total number of transactions: $totalNumTrx")
 
-
   }
-
 
 }

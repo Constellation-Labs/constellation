@@ -12,7 +12,6 @@ import constellation._
 import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock, RequestBlockProposal}
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.{Block, Transaction}
-import org.constellation.state.ChainStateManager.GetLastBlockProposal
 import org.constellation.state.MemPoolManager.AddTransaction
 import org.constellation.util.{ProductHash, Signed}
 
@@ -38,7 +37,6 @@ object PeerToPeer {
 
   final case object GetPeersID extends Command
   final case object GetPeersData extends Command
-
 
   case class GetId()
 
@@ -112,7 +110,6 @@ class PeerToPeer(
   private def allPeerIPs = {
     peerLookup.keys ++ peerLookup.values.flatMap(z => z.data.remotes ++ Seq(z.data.externalAddress))
   }.toSet
-
 
   private def peers = peerLookup.values.toSeq.distinct
 
