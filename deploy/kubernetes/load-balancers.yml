@@ -1,3 +1,4 @@
+# Deprecated temporarily, may use later.
 apiVersion: v1
 kind: Service
 metadata:

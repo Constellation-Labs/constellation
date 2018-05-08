@@ -30,7 +30,7 @@ object ClusterTest {
     }
   }
 
-  // Use node IPs for now -- this was for previous tests
+  // Use node IPs for now -- this was for previous tests but may be useful later.
   @deprecated
   def getServiceIPs: List[KubeIPs] = {
     val cmd = kubectl ++ Seq("--output=json", "get", "services")
@@ -52,6 +52,48 @@ object ClusterTest {
     }.toList
   }
 
+  case class NodeIPs(internalIP: String, externalIP: String)
+
+  def getNodeIPs: Seq[NodeIPs] = {
+    val result = {kubectl ++ Seq("get", "-o", "json", "nodes")}.!!
+    val items = (result.jValue \ "items").extract[JArray]
+    val res = items.arr.flatMap{ i =>
+      val kind =  (i \ "kind").extract[String]
+      if (kind == "Node") {
+
+        val externalIP = (i \ "status" \ "addresses").extract[JArray].arr.collectFirst{
+          case x if (x \ "type").extract[String] == "ExternalIP" =>
+            (x \ "address").extract[String]
+        }.get
+        val internalIP = (i \ "status" \ "addresses").extract[JArray].arr.collectFirst{
+          case x if (x \ "type").extract[String] == "InternalIP" =>
+            (x \ "address").extract[String]
+        }.get
+        Some(NodeIPs(internalIP, externalIP))
+      } else None
+    }
+    res
+  }
+
+  case class PodIPName(podAppName: String, internalIP: String, externalIP: String)
+
+  def getPodMappings(namePrefix: String): List[PodIPName] = {
+
+    val pods = ((kubectl ++ Seq("get", "-o", "json", "pods")).!!.jValue \ "items").extract[JArray]
+    val nodes = getNodeIPs
+
+    val hostIPToName = pods.filter { p =>
+      Try {
+        (p \ "metadata" \ "name").extract[String].startsWith(namePrefix)
+      }.getOrElse(false)
+    }.map { p =>
+      val hostIPInternal = (p \ "status" \ "hostIP").extract[String]
+      val externalIP = nodes.collectFirst{case x if x.internalIP == hostIPInternal => x.externalIP}.get
+      PodIPName((p \ "metadata" \ "name").extract[String], hostIPInternal, externalIP)
+    }
+    hostIPToName
+  }
+
 }
 
 class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
@@ -63,59 +105,18 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-  import ClusterTest.{kubectl, isCircle}
+  import ClusterTest._
 
   private val kp = makeKeyPair()
 
-  def getNodeIPs: Seq[String] = {
-    val result = {kubectl ++ Seq("get", "-o", "json", "nodes")}.!!
-    val items = (result.jValue \ "items").extract[JArray]
-    val res = items.arr.flatMap{ i =>
-      val kind =  (i \ "kind").extract[String]
-      if (kind == "Node") {
-        (i \ "status" \ "addresses").extract[JArray].arr.collectFirst{
-          case x if (x \ "type").extract[String] == "ExternalIP" =>
-            (x \ "address").extract[String]
-        }
-      } else None
-    }
-    res
-  }
+  private val clusterId = sys.env.getOrElse("CLUSTER_ID", "constellation-app")
 
-  "Cluster" should "ping a cluster" in {
+  "Cluster integration" should "ping a cluster, check health, go through genesis flow" in {
 
-    // Done on CI now V
-/*
+    val mappings = getPodMappings(clusterId)
+    mappings.foreach{println}
 
-    println("Getting rollout status")
-    val rollOut = (kubectl ++ Seq("rollout", "status", "sts", "constellation-app")).!!
-    println(s"rollout: $rollOut")
-*/
-
-
-    // No longer necessary unless using loadbalancers.
-/*
-    if (isCircle) {
-      println("Is circle, waiting for machines to come online")
-      var done = false
-      var i = 0
-
-      while (!done) {
-        i += 1
-        Thread.sleep(30000)
-        val t = Try{getNodeIPs}
-        println(s"Waiting for machines to come online $t ${i * 30} seconds")
-        done = t.toOption.exists { ps =>
-          val validIPs = ps.forall {z =>  ipRegex.findAllIn(z).nonEmpty}
-          ps.lengthCompare(3) == 0 && validIPs
-        }
-      }
-      Thread.sleep(10000)
-    }
-*/
-
-    val ips = getNodeIPs
-
+    val ips = mappings.map{_.externalIP}
 
     val rpcs = ips.map{ ip =>
       val r = new RPCClient(ip, 9000)
@@ -221,18 +222,6 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     val totalNumTrx = blocks.flatMap(_.flatMap(_.transactions)).length
 
     println(s"Total number of transactions: $totalNumTrx")
-
-
-
-
-    /*
-
-        rpcs.foreach{
-          r =>
-            val genResponse1 = r.get("generateGenesisBlock")
-            assert(genResponse1.get().status == StatusCodes.OK)
-        }
-    */
 
 
   }
