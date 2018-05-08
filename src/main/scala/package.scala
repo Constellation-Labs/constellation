@@ -1,6 +1,6 @@
 
 import java.net.InetSocketAddress
-import java.security.KeyPair
+import java.security.{KeyPair, PublicKey}
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.model.HttpResponse
@@ -11,6 +11,7 @@ import akka.util.ByteString
 import com.google.common.hash.Hashing
 import org.constellation.p2p.PeerToPeer.{Id, PeerRef}
 import org.constellation.p2p._
+import org.constellation.primitives.Schema.Address
 import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
 import org.constellation.wallet.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
 import org.constellation.wallet.KeyUtilsExt
@@ -146,6 +147,9 @@ package object constellation extends KeyUtilsExt with POWExt
     s"address: ${inetSocketAddress.getAddress}, hostname: ${inetSocketAddress.getHostName}, " +
       s"hostString: ${inetSocketAddress.getHostString}, port: ${inetSocketAddress.getPort}"
   }
+
+  implicit def pubKeyToAddress(key: PublicKey): Address =  Address(publicKeyToAddressString(key))
+  implicit def pubKeysToAddress(key: Seq[PublicKey]): Address =  Address(publicKeysToAddressString(key))
 
 
 }
