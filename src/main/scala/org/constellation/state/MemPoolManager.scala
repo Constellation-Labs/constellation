@@ -18,7 +18,13 @@ object MemPoolManager {
   // Events
 
   def handleAddTransaction(memPool: Seq[Transaction], transaction: Transaction): Seq[Transaction] = {
-    memPool :+ transaction
+    var updatedMemPool = memPool
+
+    if (!memPool.contains(transaction)) {
+      updatedMemPool = memPool :+ transaction
+    }
+
+    updatedMemPool
   }
 
   def handleGetMemPool(memPool: Seq[Transaction], replyTo: ActorRef, round: Long, memPoolProposalLimit: Int): Unit = {

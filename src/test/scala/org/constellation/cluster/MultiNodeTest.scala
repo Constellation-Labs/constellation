@@ -19,6 +19,7 @@ import org.constellation.util.RPCClient
 import org.constellation.utils.TestNode
 import org.scalatest.exceptions.TestFailedException
 
+import scala.collection.immutable.HashMap
 import scala.concurrent.duration._
 import scala.util.Success
 
@@ -99,37 +100,29 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     Thread.sleep(5000)
 
+    var expectedTransactions = Set[Transaction]()
+
     nodes.foreach { node =>
-      Future {
-        val rpc1 = node.rpc
+      val rpc = node.rpc
 
-        val transaction1 =
-          Transaction.senderSign(Transaction(0L, node.id.id, nodes.head.id.id, 1L), node.keyPair.getPrivate)
+      val transaction1 =
+        Transaction.senderSign(Transaction(0L, node.id.id, nodes.head.id.id, 1L), node.keyPair.getPrivate)
 
-        rpc1.post("transaction", transaction1)
+      expectedTransactions = expectedTransactions.+(transaction1)
 
-        val transaction5 =
-          Transaction.senderSign(Transaction(0L, node.id.id, nodes.last.id.id, 1L), node.keyPair.getPrivate)
+      rpc.post("transaction", transaction1)
 
-        rpc1.post("transaction", transaction5)
+      val transaction2 =
+        Transaction.senderSign(Transaction(0L, node.id.id, nodes.last.id.id, 1L), node.keyPair.getPrivate)
 
-        Seq(transaction1, transaction5)
-      }
+      expectedTransactions = expectedTransactions.+(transaction2)
+
+      rpc.post("transaction", transaction2)
     }
 
+    assert(expectedTransactions.size == (nodes.length * 2))
 
     Thread.sleep(15000)
-
-    val blocks = nodes.map{ n=>
-      val finalChainStateNode1Response = n.rpc.get("blocks")
-      val finalChainNode1 = n.rpc.read[Seq[Block]](finalChainStateNode1Response.get()).get()
-      finalChainNode1
-    }
-
-    print("Block lengths : " +blocks.map{_.length})
-
-    val chainSizes = blocks.map{_.length}
-    val totalNumTrx = blocks.flatMap(_.flatMap(_.transactions)).length
 
     nodes.foreach { n =>
       Future {
@@ -140,25 +133,32 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     Thread.sleep(1000)
 
-    println(s"Total number of transactions: $totalNumTrx")
+    val blocks = nodes.map { n =>
+      val finalChainStateNodeResponse = n.rpc.get("blocks")
+      val finalChainNode = n.rpc.read[Seq[Block]](finalChainStateNodeResponse.get()).get()
+      n.id -> finalChainNode
+    }.toMap
 
-    assert(totalNumTrx > 0)
+    blocks.foreach(f => {
+      val id = f._1
+      val blockSize = f._2.size
 
-    blocks.foreach{ b =>
-      assert(b.flatMap{_.transactions}.size == (nodes.length * 2))
-    }
+      val transactions = f._2.flatMap(b => b.transactions).toSet
 
-    val minSize = blocks.map(_.length).min
+      println(s"for id = $id block size = $blockSize, transactionsSize = ${transactions.size}, transactions $transactions")
 
-    assert(blocks.map{_.slice(0, minSize)}.distinct.size == 1)
-    assert(totalNumTrx == (nodes.length * 2 * nodes.length))
+      assert(transactions.nonEmpty)
+
+      assert(transactions.size == (nodes.size * 2))
+
+      assert(transactions == expectedTransactions)
+    })
 
     nodes.foreach{
       _.shutdown()
     }
 
     assert(true)
-
   }
 
 }

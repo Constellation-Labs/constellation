@@ -12,7 +12,7 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 import constellation._
 import org.constellation.ClusterTest.{KubeIPs, ipRegex}
 import org.constellation.p2p.PeerToPeer.Peer
-import org.constellation.primitives.Block
+import org.constellation.primitives.{Block, Transaction}
 
 import scala.sys.process._
 import scala.util.Try
@@ -92,6 +92,7 @@ object ClusterTest {
       val externalIP = nodes.collectFirst{case x if x.internalIP == hostIPInternal => x.externalIP}.get
       PodIPName((p \ "metadata" \ "name").extract[String], hostIPInternal, externalIP)
     }
+
     hostIPToName
   }
 
@@ -195,6 +196,57 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
     Thread.sleep(3000)
 
+    var expectedTransactions = Set[Transaction]()
+
+    import Fixtures2._
+
+    val txs = Seq(transaction1, transaction2, transaction3, transaction4)
+
+    rpcs.foreach { rpc =>
+
+      txs.foreach{ tx =>
+        rpc.post("transaction", tx)
+
+        expectedTransactions = expectedTransactions.+(tx)
+      }
+    }
+
+    assert(expectedTransactions.size == txs.length)
+
+    Thread.sleep(15000)
+
+    rpcs.foreach { rpc =>
+      val disableConsensusResponse1 = rpc.get("disableConsensus")
+      assert(disableConsensusResponse1.get().status == StatusCodes.OK)
+    }
+
+    Thread.sleep(1000)
+
+    val blocks = rpcs.map { rpc =>
+      val finalChainStateNodeResponse = rpc.get("blocks")
+      val finalChainNode = rpc.read[Seq[Block]](finalChainStateNodeResponse.get()).get()
+      finalChainNode
+    }
+
+    blocks.foreach(f => {
+      val blockSize = f.size
+
+      val transactions = f.flatMap(b => b.transactions).toSet
+
+      println(s"for id = $id block size = $blockSize, transactionsSize = ${transactions.size}, transactions $transactions")
+
+      assert(transactions.nonEmpty)
+
+      assert(transactions.size == txs.size)
+
+      assert(transactions == expectedTransactions)
+    })
+
+    assert(true)
+
+    ///
+
+    /*
     import Fixtures2._
 
     val txs = Seq(transaction1, transaction2, transaction3, transaction4)
@@ -239,8 +291,10 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
     println(s"Total number of transactions: $totalNumTrx")
 
+    assert(totalNumTrx > 0)
+
     blocks.foreach{ b =>
-       assert(b.flatMap{_.transactions}.size == (rpcs.length * 2))
+      assert(b.flatMap{_.transactions}.size == (rpcs.length * 2))
     }
 
     val minSize = blocks.map(_.length).min
@@ -249,6 +303,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     assert(totalNumTrx == (rpcs.length * 2 * rpcs.length))
 
     assert(true)
+    */
   }
 
 }
