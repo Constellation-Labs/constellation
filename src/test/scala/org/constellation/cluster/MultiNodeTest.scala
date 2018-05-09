@@ -117,6 +117,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       }
     }
 
+
     Thread.sleep(15000)
 
     val blocks = nodes.map{ n=>

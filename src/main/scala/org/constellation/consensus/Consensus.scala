@@ -95,8 +95,6 @@ object Consensus {
       !peerBlockProposals(round).contains(f)
     })
 
-    println(s"facilitatorsWithoutBlockProposals = $facilitatorsWithoutBlockProposals")
-
     if (facilitatorsWithoutBlockProposals.isEmpty) {
 
       val blocks = peerBlockProposals(round).values
@@ -336,8 +334,6 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
       consensusRoundState = disableConsensus(consensusRoundState)
 
     case BlockAddedToChain(latestBlock) =>
-      //   log.debug(s"block added to chain = $latestBlock")
-
       logger.debug(s"$selfId block added to chain, $latestBlock")
 
       this.synchronized {
@@ -372,9 +368,6 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
 
       this.synchronized {
 
-        logger.debug(s"$selfId get mem pool response transactions= $transactions, round=$round")
-
-        /*
         if (transactions.nonEmpty) {
           //     logger.debug("GetMemPoolResponse has transactions")
         }
@@ -384,7 +377,6 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
             (round -> (consensusRoundState.peerMemPools.getOrElse(round, HashMap()) + (consensusRoundState.selfId -> transactions)))
 
         consensusRoundState = consensusRoundState.copy(peerMemPools = peerMemPools)
-        */
 
         notifyFacilitatorsOfMemPool(consensusRoundState.previousBlock.get,
           consensusRoundState.selfId, transactions, round, udpActor)
