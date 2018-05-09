@@ -119,15 +119,6 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     Thread.sleep(15000)
 
-    nodes.foreach { n =>
-      Future {
-        val disableConsensusResponse1 = n.rpc.get("disableConsensus")
-        assert(disableConsensusResponse1.get().status == StatusCodes.OK)
-      }
-    }
-
-    Thread.sleep(1000)
-
     val blocks = nodes.map{ n=>
       val finalChainStateNode1Response = n.rpc.get("blocks")
       val finalChainNode1 = n.rpc.read[Seq[Block]](finalChainStateNode1Response.get()).get()
@@ -138,6 +129,15 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     val chainSizes = blocks.map{_.length}
     val totalNumTrx = blocks.flatMap(_.flatMap(_.transactions)).length
+
+    nodes.foreach { n =>
+      Future {
+        val disableConsensusResponse1 = n.rpc.get("disableConsensus")
+        assert(disableConsensusResponse1.get().status == StatusCodes.OK)
+      }
+    }
+
+    Thread.sleep(1000)
 
     println(s"Total number of transactions: $totalNumTrx")
 

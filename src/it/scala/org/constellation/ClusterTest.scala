@@ -84,7 +84,8 @@ object ClusterTest {
 
     val hostIPToName = pods.filter { p =>
       Try {
-        (p \ "metadata" \ "name").extract[String].startsWith(namePrefix)
+        val name = (p \ "metadata" \ "name").extract[String]
+        name.split("-").dropRight(1).mkString("-") == namePrefix
       }.getOrElse(false)
     }.map { p =>
       val hostIPInternal = (p \ "status" \ "hostIP").extract[String]
@@ -129,9 +130,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       assert(rpc.post("ip", rpc.host + ":16180").get().unmarshal.get() == "OK")
     }
 
-    Thread.sleep(5000)
-
-    val r1 = rpcs.head
+    Thread.sleep(3000)
 
     for (rpc  <- rpcs) {
       val ip = rpc.host
@@ -146,7 +145,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       }
     }
 
-    Thread.sleep(5000)
+    Thread.sleep(3000)
 
     val peers1 = rpcs.head.get("peerids").get()
     println(s"Peers1 : $peers1")
@@ -164,7 +163,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       }
     }
 
-    Thread.sleep(5000)
+    Thread.sleep(3000)
 
     for (rpc1 <- rpcs) {
 
@@ -194,7 +193,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
     }
 
-    Thread.sleep(5000)
+    Thread.sleep(3000)
 
     import Fixtures2._
 
@@ -205,7 +204,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       rpc1.post("transaction", tx)
     }
 
-    Thread.sleep(10000)
+    Thread.sleep(6000)
 
     rpcs.foreach { rpc =>
       Future {
@@ -214,7 +213,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       }
     }
 
-    Thread.sleep(1000)
+    Thread.sleep(3000)
 
     val blocks = rpcs.map{ n=>
       val finalChainStateNode1Response = n.get("blocks")
@@ -225,10 +224,23 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     print("Block lengths : " +blocks.map{_.length})
 
     val chainSizes = blocks.map{_.length}
+
+    print("chain sizes : " + chainSizes)
+
     val totalNumTrx = blocks.flatMap(_.flatMap(_.transactions)).length
 
     println(s"Total number of transactions: $totalNumTrx")
 
+    blocks.foreach{ b =>
+       assert(b.flatMap{_.transactions}.size == (rpcs.length * 2))
+    }
+
+    val minSize = blocks.map(_.length).min
+
+    assert(blocks.map{_.slice(0, minSize)}.distinct.size == 1)
+    assert(totalNumTrx == (rpcs.length * 2 * rpcs.length))
+
+    assert(true)
   }
 
 }
