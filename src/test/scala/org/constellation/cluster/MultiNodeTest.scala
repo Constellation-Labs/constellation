@@ -33,7 +33,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
   implicit override val executionContext: ExecutionContextExecutor = system.dispatcher
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-  "E2E Multiple Nodes" should "add peers and build blocks with transactions" in {
+  "E2E Multiple Nodes" should "add peers and build blocks with transactions" ignore {
 
     val nodes = Seq.fill(3)(TestNode())
 
