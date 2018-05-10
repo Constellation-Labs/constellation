@@ -12,7 +12,7 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 import constellation._
 import org.constellation.ClusterTest.{KubeIPs, ipRegex}
 import org.constellation.p2p.PeerToPeer.Peer
-import org.constellation.primitives.Block
+import org.constellation.primitives.{Block, Transaction}
 
 import scala.sys.process._
 import scala.util.Try
@@ -84,13 +84,15 @@ object ClusterTest {
 
     val hostIPToName = pods.filter { p =>
       Try {
-        (p \ "metadata" \ "name").extract[String].startsWith(namePrefix)
+        val name = (p \ "metadata" \ "name").extract[String]
+        name.split("-").dropRight(1).mkString("-") == namePrefix
       }.getOrElse(false)
     }.map { p =>
       val hostIPInternal = (p \ "status" \ "hostIP").extract[String]
       val externalIP = nodes.collectFirst{case x if x.internalIP == hostIPInternal => x.externalIP}.get
       PodIPName((p \ "metadata" \ "name").extract[String], hostIPInternal, externalIP)
     }
+
     hostIPToName
   }
 
@@ -125,16 +127,11 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       r
     }
 
-
     for (rpc  <- rpcs) {
       assert(rpc.post("ip", rpc.host + ":16180").get().unmarshal.get() == "OK")
     }
 
     Thread.sleep(5000)
-
-    val r1 = rpcs.head
-
-    r1.get("master")
 
     for (rpc  <- rpcs) {
       val ip = rpc.host
@@ -149,7 +146,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       }
     }
 
-    Thread.sleep(5000)
+    Thread.sleep(3000)
 
     val peers1 = rpcs.head.get("peerids").get()
     println(s"Peers1 : $peers1")
@@ -160,13 +157,12 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       assert(peers.length == (rpcs.length - 1))
     }
 
-    for (rpc <- rpcs) {
-
-      val genResponse1 = rpc.get("generateGenesisBlock")
-      assert(genResponse1.get().status == StatusCodes.OK)
-
+    rpcs.foreach { rpc =>
+      Future {
+        val genResponse1 = rpc.get("generateGenesisBlock")
+        assert(genResponse1.get().status == StatusCodes.OK)
+      }
     }
-
 
     Thread.sleep(5000)
 
@@ -198,33 +194,56 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
     }
 
-    Thread.sleep(5000)
+    Thread.sleep(3000)
+
+    var expectedTransactions = Set[Transaction]()
 
     import Fixtures2._
 
     val txs = Seq(transaction1, transaction2, transaction3, transaction4)
 
-    txs.foreach{ tx =>
-      val rpc1 = rpcs.head
-      rpc1.post("transaction", tx)
+    rpcs.foreach { rpc =>
+
+      txs.foreach{ tx =>
+        rpc.post("transaction", tx)
+
+        expectedTransactions = expectedTransactions.+(tx)
+      }
     }
 
-    Thread.sleep(10000)
+    assert(expectedTransactions.size == txs.length)
 
-    val blocks = rpcs.map{ n=>
-      val finalChainStateNode1Response = n.get("blocks")
-      val finalChainNode1 = n.read[Seq[Block]](finalChainStateNode1Response.get()).get()
-      finalChainNode1
+    Thread.sleep(15000)
+
+    rpcs.foreach { rpc =>
+      val disableConsensusResponse1 = rpc.get("disableConsensus")
+      assert(disableConsensusResponse1.get().status == StatusCodes.OK)
     }
 
-    print("Block lengths : " +blocks.map{_.length})
-    val chainSizes = blocks.map{_.length}
-    val totalNumTrx = blocks.flatMap(_.flatMap(_.transactions)).length
+    Thread.sleep(1000)
 
-    println(s"Total number of transactions: $totalNumTrx")
+    val blocks = rpcs.map { rpc =>
+      val finalChainStateNodeResponse = rpc.get("blocks")
+      val finalChainNode = rpc.read[Seq[Block]](finalChainStateNodeResponse.get()).get()
+      finalChainNode
+    }
 
+    blocks.foreach(f => {
+      val blockSize = f.size
+
+      val transactions = f.flatMap(b => b.transactions).toSet
+
+      println(s"for id = $id block size = $blockSize, transactionsSize = ${transactions.size}, transactions $transactions")
+
+      assert(transactions.nonEmpty)
+
+      assert(transactions.size == txs.size)
+
+      assert(transactions == expectedTransactions)
+    })
+
+    assert(true)
 
   }
-
 
 }

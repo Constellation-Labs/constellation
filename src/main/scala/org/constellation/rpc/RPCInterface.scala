@@ -13,7 +13,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.consensus.Consensus.{DisableConsensus, EnableConsensus, GenerateGenesisBlock, SetMaster}
+import org.constellation.consensus.Consensus.{DisableConsensus, EnableConsensus, GenerateGenesisBlock}
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.{Block, BlockSerialized, Transaction}
 import org.constellation.state.ChainStateManager.{CurrentChainStateUpdated, GetCurrentChainState}
@@ -71,10 +71,6 @@ class RPCInterface(
         val json = genesisBlock.json
       //  println("Genesis Block in RPC interface serialized " + json)
         complete(json)
-      } ~
-      path("master") {
-        consensusActor ! SetMaster
-        complete(StatusCodes.OK)
       } ~
       path("enableConsensus") {
 

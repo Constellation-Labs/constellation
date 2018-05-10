@@ -9,10 +9,9 @@ import akka.serialization.SerializationExtension
 import akka.util.{ByteString, Timeout}
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.consensus.Consensus.{Heartbeat, PeerMemPoolUpdated, PeerProposedBlock, RequestBlockProposal}
+import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock, RequestBlockProposal}
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.{Block, Transaction}
-import org.constellation.state.ChainStateManager.GetLastBlockProposal
 import org.constellation.state.MemPoolManager.AddTransaction
 import org.constellation.util.{ProductHash, Signed}
 
@@ -38,7 +37,6 @@ object PeerToPeer {
 
   final case object GetPeersID extends Command
   final case object GetPeersData extends Command
-
 
   case class GetId()
 
@@ -112,7 +110,6 @@ class PeerToPeer(
   private def allPeerIPs = {
     peerLookup.keys ++ peerLookup.values.flatMap(z => z.data.remotes ++ Seq(z.data.externalAddress))
   }.toSet
-
 
   private def peers = peerLookup.values.toSeq.distinct
 
@@ -247,23 +244,17 @@ class PeerToPeer(
     case UDPMessage(p : RequestBlockProposal, remote) =>
 
       println("RequestBlockProposal on " + id.short)
-      import akka.pattern.ask
-      chainStateActor ! p
-    /*
-    val res = (chainStateActor ? GetLastBlockProposal).mapTo[Option[Block]].get()
-    println("RequestBlockProposal on " + id.short + s" result: $res")
 
-    res.foreach{
-      r =>
-        println("Sending block proposal on " + id.short + s" result: $res")
-        udpActor.udpSend(PeerProposedBlock(r, id), remote)
-    }
-*/
+      import akka.pattern.ask
+
+      chainStateActor ! p
+
     case UDPMessage(sh: HandShakeResponseMessage, remote) =>
       //    logger.debug(s"HandShakeResponseMessage from $remote on $externalAddress second remote: $remote")
       //  val o = sh.handShakeResponse.data.original
       //   val fromUs = o.valid && o.publicKeys.head == id.id
       // val valid = fromUs && sh.handShakeResponse.valid
+
       val address = sh.handShakeResponse.data.response.originPeer.data.externalAddress
       if (requestExternalAddressCheck) {
         externalAddress = sh.handShakeResponse.data.detectedRemote
@@ -303,8 +294,6 @@ class PeerToPeer(
         p =>
           self ! PeerRef(p)
       }
-    case UDPMessage(h: Heartbeat, remote) =>
-      logger.debug(s"Received heartbeat on ${id.short} from ${h.id.short} : $remote")
 
     case UDPMessage(_: Terminated, remote) =>
       logger.debug(s"Peer $remote has terminated. Removing it from the list.")
