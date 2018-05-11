@@ -40,23 +40,23 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     val nodes = Seq.fill(numberOfNodes)(TestNode())
 
-    val pool = Executors.newFixedThreadPool(numberOfNodes)
-
-    class NodeRunnable(node: ConstellationNode) extends Runnable {
-      override def run(): Unit = {
+    val futures = nodes.map(node => {
+      Future {
 
         assert(node.healthy)
 
         for (n1 <- nodes) {
           println(s"Trying to add nodes to $n1")
-          val others = nodes.filter{_ != n1}
-          others.foreach{
-            n =>
-              Future {println(s"Trying to add $n to $n1 res: ${n1.add(n)}")}
-          }
-        }
 
-        Thread.sleep(5000)
+          val others = nodes.filter{_ != n1}
+
+          others.foreach { n => {
+            n1.add(n)
+            println(s"Trying to add $n to $n1")
+            }
+          }
+
+        }
 
         val peers = node.rpc.getBlocking[Seq[Peer]]("peerids")
         println(s"Peers length: ${peers.length}")
@@ -66,7 +66,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
         val genResponse1 = rpc1.get("generateGenesisBlock")
         assert(genResponse1.get().status == StatusCodes.OK)
 
-        Thread.sleep(2000)
+        Thread.sleep(3000)
 
         val chainStateNode1Response = rpc1.get("blocks")
 
@@ -93,7 +93,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
         assert(consensusResponse1.get().status == StatusCodes.OK)
 
-        Thread.sleep(1000)
+        Thread.sleep(3000)
 
         val rpc = node.rpc
 
@@ -106,14 +106,18 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
           Transaction.senderSign(Transaction(0L, node.id.id, nodes.last.id.id, 1L), node.keyPair.getPrivate)
 
         rpc.post("transaction", transaction2)
-      }
-    }
 
-    nodes.foreach(n => {
-      pool.submit(new NodeRunnable(n))
+        Thread.sleep(6000)
+
+        true
+      }
     })
 
-    Thread.sleep(30000)
+    val sequence = Future.sequence(futures)
+
+    Await.result(sequence, 45 seconds)
+
+    Thread.sleep(10000)
 
     val blocks = nodes.map { n =>
 
