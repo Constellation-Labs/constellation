@@ -1,5 +1,6 @@
 package org.constellation
 
+import java.io.File
 import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
@@ -81,11 +82,19 @@ class ConstellationNode(
                implicit val executionContext: ExecutionContextExecutor
              ){
 
+
   val publicKeyHash: Int = keyPair.getPublic.hashCode()
 
   val id : Id = Id(keyPair.getPublic)
 
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
+
+
+  val tmpDir = new File("tmp")
+  val tmpDirId = new File("tmp", id.medium)
+  Try{tmpDir.mkdirs()}
+  Try{tmpDirId.mkdirs()}
+  val db = new LevelDB(new File(tmpDirId, "db"))
 
  // logger.info(s"UDP Info - hostname: $hostName interface: $udpInterface port: $udpPort")
 
@@ -112,17 +121,19 @@ class ConstellationNode(
     )
 
   val memPoolManagerActor: ActorRef =
-    system.actorOf(Props(new MemPoolManager), s"ConstellationMemPoolManagerActor_$publicKeyHash")
+    system.actorOf(Props(new MemPoolManager(db)), s"ConstellationMemPoolManagerActor_$publicKeyHash")
 
   val chainStateActor: ActorRef =
-    system.actorOf(Props(new ChainStateManager(memPoolManagerActor: ActorRef, id)), s"ConstellationChainStateActor_$publicKeyHash")
+    system.actorOf(Props(new ChainStateManager(memPoolManagerActor: ActorRef, id, db)), s"ConstellationChainStateActor_$publicKeyHash")
 
   val consensusActor: ActorRef = system.actorOf(
     Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair, udpAddress, udpActor, heartbeatEnabled)(timeout)),
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val peerToPeerActor: ActorRef =
-    system.actorOf(Props(new PeerToPeer(keyPair.getPublic, system, consensusActor, udpActor, udpAddress, keyPair, chainStateActor, memPoolManagerActor, requestExternalAddressCheck)
+    system.actorOf(Props(new PeerToPeer(
+      keyPair.getPublic, system, consensusActor, udpActor, udpAddress, keyPair,
+      chainStateActor, memPoolManagerActor, requestExternalAddressCheck, heartbeatEnabled=heartbeatEnabled, db=db)
     (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
   private val register = RegisterNextActor(peerToPeerActor)
@@ -144,7 +155,7 @@ class ConstellationNode(
 
   // If we are exposing rpc then create routes
   val routes: Route = new RPCInterface(chainStateActor,
-    peerToPeerActor, memPoolManagerActor, consensusActor, udpAddress)(executionContext, timeout).routes
+    peerToPeerActor, memPoolManagerActor, consensusActor, udpAddress, keyPair, db=db)(executionContext, timeout).routes
 
   // Setup http server for rpc
   Http().bindAndHandle(routes, httpInterface, httpPort)

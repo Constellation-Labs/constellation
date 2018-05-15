@@ -1,11 +1,12 @@
 package org.constellation.rpc
 
+import java.io.File
 import java.net.InetSocketAddress
-import java.security.PublicKey
+import java.security.{KeyPair, PublicKey}
 
 import akka.actor.ActorRef
 import akka.http.scaladsl.marshalling.Marshaller._
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
@@ -13,9 +14,11 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+import org.constellation.LevelDB
 import org.constellation.consensus.Consensus.{DisableConsensus, EnableConsensus, GenerateGenesisBlock, SetMaster}
 import org.constellation.p2p.PeerToPeer._
-import org.constellation.primitives.{Block, BlockSerialized, Transaction}
+import org.constellation.primitives.Schema._
+import org.constellation.primitives.{Block, BlockSerialized, Schema, Transaction}
 import org.constellation.state.ChainStateManager.{CurrentChainStateUpdated, GetCurrentChainState}
 import org.constellation.state.MemPoolManager.AddTransaction
 import org.json4s.native.Serialization
@@ -29,30 +32,104 @@ class RPCInterface(
                     peerToPeerActor: ActorRef,
                     memPoolManagerActor: ActorRef,
                     consensusActor: ActorRef,
-                    udpAddress: InetSocketAddress
+                    udpAddress: InetSocketAddress,
+                    keyPair: KeyPair = null,
+                    db: LevelDB = null,
+                    val jsPrefix: String = "./ui/target/scala-2.11/ui"
                   )
                   (implicit executionContext: ExecutionContext, timeout: Timeout) extends Json4sSupport {
+
+  implicit val id : Id = Id(keyPair.getPublic)
 
   implicit val serialization: Serialization.type = native.Serialization
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-  implicit def json4sFormats: Formats = constellation.constellationFormats
 
+  import constellation._
   val logger = Logger(s"RPCInterface")
 
-  // TODO: temp until someone can show me how to create one of these custom serializers
-  def serializeBlocks(blocks: Seq[Block]): Seq[BlockSerialized] = {
-/*    blocks.map(b => {
-      BlockSerialized(b.parentHash, b.height, b.signature,
-        b.clusterParticipants.toSet, b.round, b.transactions)
-    })*/
-    Seq()
+
+  // TODO: Not this.
+  @volatile var wallet : Seq[KeyPair] = Seq()
+
+  private def walletPair = {
+    val pair = constellation.makeKeyPair()
+    wallet :+= pair
+    pair
+  }
+
+  def addresses: Seq[String] = wallet.map{_.address.address}
+
+  def addressToKeyPair: Map[String, KeyPair] = wallet.map{ w => w.address.address -> w}.toMap
+
+  private def walletAddressInfo = {
+    wallet.map{_.address.address}.flatMap{k => db.getAs[TX](k).map{k -> _}}.toMap
+  }
+
+  def outputBalances: Seq[Address] = walletAddressInfo.flatMap{
+    case (k,v) =>
+      v.output(k)
+  }.toSeq
+
+  private def UTXO = (chainStateActor ? GetUTXO).mapTo[Map[String, Long]].get()
+
+  def utxoBalance: Map[String, Long] = {
+    UTXO.filter{case (x,y) => addresses.contains(x)}
   }
 
   val routes: Route =
     get {
+      path("walletAddressInfo") {
+        complete(walletAddressInfo)
+      } ~
+      path("balances") {
+        complete(outputBalances)
+      } ~
+      path("makeKeyPair") {
+        val pair = constellation.makeKeyPair()
+        wallet :+= pair
+        complete(pair)
+      } ~
+        path("genesis" / LongNumber) { numCoins =>
+          import constellation._
+
+          val debtAddress = walletPair
+          val dstAddress = walletPair
+
+          val amount = numCoins * Schema.NormalizationFactor
+          val tx = TX(
+            TXData(
+              Seq(debtAddress.address.copy(balance = -1*amount, isGenesis = true)),
+              dstAddress.address.copy(balance=amount, isGenesis = true),
+              amount,
+              dstAccount = Some(id.id),
+              isGenesis = true
+            ).signed()(debtAddress)
+          )
+          peerToPeerActor ! tx
+          complete(tx.json)
+        } ~
+        path("makeKeyPairs" / IntNumber) { numPairs =>
+        val pair = Seq.fill(numPairs){constellation.makeKeyPair()}
+        wallet ++= pair
+        complete(pair)
+      } ~
+      path("wallet") {
+        complete(wallet)
+      } ~
+      path("address") {
+        val pair = constellation.makeKeyPair()
+        wallet :+= pair
+        complete(constellation.pubKeyToAddress(pair.getPublic))
+      } ~
+      path("id") {
+        complete(id)
+      } ~
+      path("nodeKeyPair") {
+        complete(keyPair)
+      } ~
       // TODO: revisit
       path("health") {
         complete(StatusCodes.OK)
@@ -121,9 +198,104 @@ class RPCInterface(
 
           complete(StatusCodes.OK)
         }
-      }
-    } ~
+      } ~
+        pathPrefix("ui") {
+          get {
+            extractUnmatchedPath { path =>
+              logger.info(s"UI Request $path")
+              getFromFile(new File(jsPrefix + path.toString))
+            }
+          }
+        } ~
+               complete { //complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Say hello to akka-http</h1>"))
+                 logger.info("Serve main page")
+                 val html = """<!DOCTYPE html>
+                              |<html lang="en">
+                              |<head>
+                              |    <meta charset="UTF-8">
+                              |    <title>Constellation</title>
+                              |</head>
+                              |<body style="background-color:#060613">
+                              |<script src="ui-fastopt.js" type="text/javascript"></script>
+                              |<script type="text/javascript">
+                              |org.constellation.ui.App().main()
+                              |</script>
+                              |</body>
+                              |</html>""".stripMargin.replaceAll("\n", "")
+                 logger.info("Serving: " + html)
+
+                 val entity = HttpEntity(ContentTypes.`text/html(UTF-8)`, html)
+                 HttpResponse(entity = entity)
+                 //getFromResource("index.html",ContentTypes.`text/html(UTF-8)`)
+               }
+          } ~
     post {
+      path ("sendToAddress") {
+        entity(as[SendToAddress]) { s =>
+
+
+          val ut = utxoBalance
+
+          val (addressWithSufficientBalance, prvBalance) = ut.filter{_._2 > s.amountActual}.head
+          val txAssociated = walletAddressInfo(addressWithSufficientBalance)
+          val addressMeta = txAssociated.output(addressWithSufficientBalance).get
+
+          val ukp = addressToKeyPair(addressWithSufficientBalance)
+
+          val remainder = walletPair
+
+          import constellation._
+          val remainderBalance = prvBalance - s.amountActual
+
+          println(s"Send To Address $prvBalance $addressWithSufficientBalance $addressMeta $txAssociated")
+
+          val genHash = if (txAssociated.tx.data.isGenesis) Some(txAssociated.hash) else txAssociated.tx.data.genesisTXHash
+
+          val txD = TXData(
+            Seq(addressMeta.copy(
+              balance = 0L, // TODO: Allow funds to remain later if user prompts, more complex.
+              rootTransactionHash = Some(txAssociated.hash),
+              genesisTXHash = genHash
+            )),
+            s.address.copy(
+              balance = s.amountActual,
+              rootTransactionHash = Some(txAssociated.hash), // On updates, re-assign this value to the next TX hash.
+              genesisTXHash = genHash
+            ),
+            s.amountActual,
+            remainder = Some(remainder.address.copy(
+              balance = remainderBalance,
+              rootTransactionHash = Some(txAssociated.hash),
+              genesisTXHash = genHash
+            )),
+            srcAccount = Some(id.id),
+            dstAccount = s.account
+          )
+          val tx = TX(txD.multiSigned()(Seq(ukp, keyPair)))
+
+          logger.info(s"SendToAddress RPC Transaction: ${tx.pretty}")
+
+          peerToPeerActor ! tx
+
+          complete(tx)
+
+     //   complete(StatusCodes.OK)
+
+        }
+      } ~
+      path("db") {
+        entity(as[String]){ e: String =>
+          import constellation.EasyFutureBlock
+          val res = (peerToPeerActor ? DBQuery(e.replaceAll('"'.toString, ""))).mapTo[Option[String]].get()
+          complete(res)
+      }
+      } ~
+      path ("tx") {
+        entity(as[TX]) { tx =>
+          peerToPeerActor ! tx
+          complete(StatusCodes.OK)
+        }
+      } ~
       path("transaction") {
         entity(as[Transaction]) { transaction =>
         //  logger.debug(s"Received request to submit a new transaction $transaction")

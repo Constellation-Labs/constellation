@@ -2,10 +2,13 @@ package org.constellation.state
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
 import com.typesafe.scalalogging.Logger
+import org.constellation.LevelDB
 import org.constellation.consensus.Consensus.{GetMemPool, GetMemPoolResponse}
+import org.constellation.primitives.Schema.{GetUTXO, TX}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.MemPoolManager.{AddTransaction, GetMemPoolDirect, RemoveConfirmedTransactions}
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 object MemPoolManager {
@@ -44,7 +47,7 @@ object MemPoolManager {
 
 }
 
-class MemPoolManager extends Actor with ActorLogging {
+class MemPoolManager(db: LevelDB = null) extends Actor with ActorLogging {
 
   @volatile var memPool: ListBuffer[Transaction] = new ListBuffer[Transaction]
   val logger = Logger(s"MemPoolManager")
@@ -52,7 +55,13 @@ class MemPoolManager extends Actor with ActorLogging {
   // TODO: pull from config
   var memPoolProposalLimit = 20
 
+  @volatile var memPoolTX: Set[TX] = Set()
+
+
   override def receive: Receive = {
+
+    case tx: TX =>
+      memPoolTX = memPoolTX ++ Set(tx)
 
     case b: Block =>
       logger.debug(s"Received block ${b.short}, removing ${b.transactions.length} txs from mempool of size ${memPool.size}")

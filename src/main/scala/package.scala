@@ -1,13 +1,14 @@
 
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
+import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers, Unmarshal}
 import akka.serialization.SerializationExtension
 import akka.stream.ActorMaterializer
-import akka.util.ByteString
+import akka.util.{ByteString, Timeout}
 import com.google.common.hash.Hashing
 import org.constellation.p2p.PeerToPeer.{Id, PeerRef}
 import org.constellation.p2p._
@@ -20,6 +21,7 @@ import org.json4s.native._
 import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, native}
 
 import scala.concurrent.{Await, Future}
+import scala.reflect.ClassTag
 import scala.util.{Random, Try}
 
 /**
@@ -150,6 +152,26 @@ package object constellation extends KeyUtilsExt with POWExt
 
   implicit def pubKeyToAddress(key: PublicKey): Address =  Address(publicKeyToAddressString(key))
   implicit def pubKeysToAddress(key: Seq[PublicKey]): Address =  Address(publicKeysToAddressString(key))
+
+  implicit class KeyPairFix(kp: KeyPair) {
+
+    // This is because the equals method on keypair relies on an object hash code instead of an actual check on the data.
+    // The equals method for public and private keys is totally fine though.
+
+    def dataEqual(other: KeyPair): Boolean = {
+      kp.getPrivate == other.getPrivate &&
+      kp.getPublic == other.getPublic
+    }
+
+    def address: Address = pubKeyToAddress(kp.getPublic)
+
+  }
+
+  implicit class ActorQuery(a: ActorRef) {
+    import akka.pattern.ask
+    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+    def query[T: ClassTag](m: Any): T = (a ? m).mapTo[T].get()
+  }
 
 
 }

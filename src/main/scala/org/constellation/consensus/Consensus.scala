@@ -12,6 +12,7 @@ import constellation._
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Chain.Chain
+import org.constellation.primitives.Schema.GetPeersID
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.ChainStateManager.{AddBlock, BlockAddedToChain, CreateBlockProposal, GetChain}
 import org.constellation.state.MemPoolManager.GetMemPoolDirect
@@ -417,8 +418,8 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
 
 
   if (heartbeatEnabled) {
-    heartBeat = new ScheduledThreadPoolExecutor(10)
-    heartBeatMonitor = heartBeat.scheduleAtFixedRate(bufferTask, 1, 3, TimeUnit.SECONDS)
+   // heartBeat = new ScheduledThreadPoolExecutor(10)
+  // heartBeatMonitor = heartBeat.scheduleAtFixedRate(bufferTask, 1, 3, TimeUnit.SECONDS)
   }
 
   override def receive: Receive = {
