@@ -33,7 +33,7 @@ class AtomicTransactionTest extends FlatSpec {
 
   val kp: KeyPair = makeKeyPair()
 
-  val sampleSelfTXInput = TransactionInputData(kp.getPublic, publicKeyToAddress(kp.getPublic), 1L)
+  val sampleSelfTXInput = TransactionInputData(kp.getPublic, publicKeyToAddressString(kp.getPublic), 1L)
 
   "Transaction Input Data" should "render to json" in {
     val r = sampleSelfTXInput.encode.rendered
@@ -55,7 +55,7 @@ class AtomicTransactionTest extends FlatSpec {
 
   "Sample transaction" should "sign and verify a transaction using mocked history" in {
 
-    val sampleTX = TransactionInputData(kp.getPublic, publicKeyToAddress(kp2.getPublic), 1L)
+    val sampleTX = TransactionInputData(kp.getPublic, publicKeyToAddressString(kp2.getPublic), 1L)
 
     // To run this test, first we need a way to find the source public key's address
     // And look up all transactions ( groupBy address ) find those that were verified to go there.

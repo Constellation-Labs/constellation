@@ -9,7 +9,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestActor, TestKit, TestProbe}
 import akka.util.Timeout
 import org.constellation.consensus.Consensus._
-import org.constellation.p2p.PeerToPeer.{GetPeers, GetPeersID, Id, Peers}
+import org.constellation.p2p.PeerToPeer.{GetPeers, Id, Peers}
 import org.constellation.p2p.{RegisterNextActor, UDPMessage}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.ChainStateManager.{AddBlock, CreateBlockProposal}
@@ -19,6 +19,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.collection.immutable.HashMap
 import org.constellation.Fixtures._
+import org.constellation.primitives.Schema.GetPeersID
 
 import scala.concurrent.ExecutionContextExecutor
 

@@ -107,10 +107,10 @@ class ValidateWalletFuncTest  extends FlatSpec {
   }
 
   "Address maker" should "create valid address deterministically" in {
-    val addr = publicKeyToAddress(kp.getPublic)
+    val addr = publicKeyToAddressString(kp.getPublic)
     assert(addr.length > 10)
     assert(addr.toCharArray.distinct.length > 5)
-    val addr2 = publicKeyToAddress(kp.getPublic)
+    val addr2 = publicKeyToAddressString(kp.getPublic)
     assert(addr == addr2)
   }
 

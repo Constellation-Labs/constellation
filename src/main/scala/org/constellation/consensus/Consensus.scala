@@ -12,6 +12,7 @@ import constellation._
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Chain.Chain
+import org.constellation.primitives.Schema.GetPeersID
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.ChainStateManager.{AddBlock, BlockAddedToChain, CreateBlockProposal, GetChain}
 import org.constellation.util.Signed
@@ -67,6 +68,7 @@ object Consensus {
   case class PeerProposedBlock(block: Block, peer: Id)
 
   case class RequestBlockProposal(round: Long, id: Id)
+  case class Heartbeat(id: Id)
 
   // Methods
 

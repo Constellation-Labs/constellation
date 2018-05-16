@@ -35,8 +35,8 @@ trait POWExt {
 trait ProductHash extends Product {
 
   def signInput: Array[Byte] = hash.getBytes()
-  def hash = productSeq.json.sha256
-  def short = hash.slice(0, 5)
+  def hash: String = productSeq.json.sha256
+  def short: String = hash.slice(0, 5)
   def signKeys(privateKeys: Seq[PrivateKey]): Seq[String] = privateKeys.map { pk => base64(signData(signInput)(pk)) }
   def powInput(signatures: Seq[String]): String = (productSeq ++ signatures).json
   def pow(signatures: Seq[String], difficulty: Int): String = POW.proofOfWork(powInput(signatures), Some(difficulty))
@@ -50,6 +50,9 @@ None = Unsigned
 Some = signed
  */
 
+// Add flatten method? To allow merging of multiple signed datas -- need to preserve hashes by stack depth though.
+// i.e. two people signing one transaction is different from one person signing it, and then another signing
+// the signed transaction.
 // TODO: Extend to monad, i.e. SignedData extends SignableData vs UnsignedData
 case class Signed[T <: ProductHash](
                                           data: T,
@@ -75,6 +78,7 @@ trait POWSignHelp {
     def sign2(keyPairs: Seq[KeyPair], difficulty: Int = 1): Signed[T] =
       signPairs[T](t, keyPairs, difficulty)
     def signed(difficulty: Int = 0)(implicit keyPair: KeyPair): Signed[T] = signPairs(t, Seq(keyPair), difficulty)
+    def multiSigned(difficulty: Int = 0)(implicit keyPairs: Seq[KeyPair]): Signed[T] = signPairs(t, keyPairs, difficulty)
   }
 
   def signPairs[T <: ProductHash](

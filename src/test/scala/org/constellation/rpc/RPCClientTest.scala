@@ -21,6 +21,18 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
+  /*
+
+    val kp1 = r1.getBlocking[KeyPair]("makeKeyPair")
+    val kp2 = r1.getBlocking[KeyPair]("makeKeyPair")
+    val wallet = r1.getBlocking[Seq[KeyPair]]("wallet")
+
+    assert(!kp1.dataEqual(kp2))
+    assert(wallet.head.dataEqual(kp1))
+    assert(wallet.last.dataEqual(kp2))
+
+   */
+
   "GET to /blocks" should "get the current local node chain" in {
     val appNode = TestNode()
     val rpc = new RPCClient(port=appNode.httpPort)

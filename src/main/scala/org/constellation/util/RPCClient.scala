@@ -56,7 +56,7 @@ class RPCClient(val host: String = "127.0.0.1", val port: Int)(
     Unmarshal(httpResponse.entity).to[String].get()
   }
 
-  def post[T <: AnyRef](suffix: String, t: T)(implicit f : Formats = constellation.constellationFormats): Future[HttpResponse] = {
+  def post(suffix: String, t: AnyRef)(implicit f : Formats = constellation.constellationFormats): Future[HttpResponse] = {
 
     val ser = Serialization.write(t)
     Http().singleRequest(
@@ -80,7 +80,7 @@ class RPCClient(val host: String = "127.0.0.1", val port: Int)(
   ): Future[T] =
     Unmarshal(httpResponse.entity).to[String].map{r => Serialization.read[T](r)}
 
-  def postRead[Q <: AnyRef, T <: AnyRef](suffix: String, t: T, timeout: Int = 5)(
+  def postRead[Q <: AnyRef](suffix: String, t: AnyRef, timeout: Int = 5)(
     implicit m : Manifest[Q], f : Formats = constellation.constellationFormats
   ): Q = {
     import constellation.EasyFutureBlock

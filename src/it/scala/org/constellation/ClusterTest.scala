@@ -22,8 +22,8 @@ import scala.util.Random._
 object ClusterTest {
 
   private val ipRegex = "\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b".r
-  private val isCircle = System.getenv("CIRCLE_SHA1") != null
-  val kubectl: Seq[String] = if (isCircle) Seq("sudo", "/opt/google-cloud-sdk/bin/kubectl") else Seq("kubectl")
+  private def isCircle = System.getenv("CIRCLE_SHA1") != null
+  def kubectl: Seq[String] = if (isCircle) Seq("sudo", "/opt/google-cloud-sdk/bin/kubectl") else Seq("kubectl")
 
   case class KubeIPs(id: Int, rpcIP: String, udpIP: String) {
     def valid: Boolean =  {
