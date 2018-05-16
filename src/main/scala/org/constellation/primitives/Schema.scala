@@ -55,7 +55,11 @@ object Schema {
     def normalizedBalance: Long = balance / NormalizationFactor
   }
 
-  case class CounterPartyTXRequest(dst: Address, counterParty: Address) extends ProductHash
+  case class CounterPartyTXRequest(
+                                    dst: Address,
+                                    counterParty: Address,
+                                    counterPartyAccount: Option[PublicKey]
+                                  ) extends ProductHash
 
   /*
   Forwarding rules:
