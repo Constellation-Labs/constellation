@@ -159,50 +159,6 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       assert(peers.length == (rpcs.length - 1))
     }
 
-    /*
-
-    rpcs.foreach { rpc =>
-      Future {
-        val genResponse1 = rpc.get("generateGenesisBlock")
-        assert(genResponse1.get().status == StatusCodes.OK)
-      }
-    }
-
-    Thread.sleep(5000)
-
-    for (rpc1 <- rpcs) {
-
-      val chainStateNode1Response = rpc1.get("blocks")
-
-      val response = chainStateNode1Response.get()
-
-      println(s"ChainStateResponse $response")
-
-      val chainNode1 = rpc1.read[Seq[Block]](response).get().toList
-
-      println(s"Genesis: ${chainNode1.head}")
-
-      assert(chainNode1.head.height == 0)
-
-      assert(chainNode1.head.round == 0)
-
-      assert(chainNode1.head.parentHash == "tempGenesisParentHash")
-
-      assert(chainNode1.head.signature == "tempSig")
-
-      assert(chainNode1.head.transactions == Seq())
-
-      val consensusResponse1 = rpc1.get("enableConsensus")
-
-      assert(consensusResponse1.get().status == StatusCodes.OK)
-
-    }
-
-    Thread.sleep(3000)
-    */
-
-    var expectedTransactions = Seq[Transaction]()
-
     import Fixtures2._
 
     val txs = Seq(transaction1, transaction2, transaction3, transaction4)
