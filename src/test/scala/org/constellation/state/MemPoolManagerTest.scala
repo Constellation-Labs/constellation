@@ -21,7 +21,7 @@ class MemPoolManagerTest extends TestKit(ActorSystem("MemPoolManagerTest")) with
 
   "handleAddTransaction" should "work correctly" in {
 
-    val memPool = new ListBuffer[Transaction]
+    val memPool = Seq[Transaction]()
 
     val node1KeyPair = KeyUtils.makeKeyPair()
     val node2KeyPair = KeyUtils.makeKeyPair()
@@ -31,7 +31,7 @@ class MemPoolManagerTest extends TestKit(ActorSystem("MemPoolManagerTest")) with
 
     val result = MemPoolManager.handleAddTransaction(memPool, transaction1)
 
-    val expected = new ListBuffer[Transaction].+=(transaction1)
+    val expected = Seq[Transaction](transaction1)
 
     assert(result == expected)
   }
@@ -66,7 +66,7 @@ class MemPoolManagerTest extends TestKit(ActorSystem("MemPoolManagerTest")) with
   }
 
   "handleRemoveConfirmedTransactions" should "work correctly" in {
-    var memPool = new ListBuffer[Transaction]
+    var memPool = Seq[Transaction]()
 
     val node1KeyPair = KeyUtils.makeKeyPair()
     val node2KeyPair = KeyUtils.makeKeyPair()
@@ -81,15 +81,15 @@ class MemPoolManagerTest extends TestKit(ActorSystem("MemPoolManagerTest")) with
     val transaction3 =
       Transaction.senderSign(Transaction(2L, node3KeyPair.getPublic, node2KeyPair.getPublic, 10L), node3KeyPair.getPrivate)
 
-    memPool.+=(transaction1)
-    memPool.+=(transaction2)
-    memPool.+=(transaction3)
+    memPool = memPool :+ transaction1
+    memPool = memPool :+ transaction2
+    memPool = memPool :+ transaction3
 
-    MemPoolManager.handleRemoveConfirmedTransactions(Seq(transaction1, transaction3), memPool)
+    val updatedMemPool = MemPoolManager.handleRemoveConfirmedTransactions(Seq(transaction1, transaction3), memPool)
 
-    val expectedMemPool = new ListBuffer[Transaction]
-    expectedMemPool.+=(transaction2)
+    var expectedMemPool = Seq[Transaction]()
+    expectedMemPool = expectedMemPool :+ transaction2
 
-    assert(memPool == expectedMemPool)
+    assert(updatedMemPool == expectedMemPool)
   }
 }

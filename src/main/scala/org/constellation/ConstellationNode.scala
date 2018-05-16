@@ -17,7 +17,7 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.rpc.RPCInterface
 import org.constellation.wallet.KeyUtils
 import org.constellation.consensus.Consensus
-import org.constellation.consensus.Consensus.{RegisterP2PActor, ToggleHeartbeat}
+import org.constellation.consensus.Consensus.RegisterP2PActor
 import org.constellation.p2p.{PeerToPeer, RegisterNextActor, UDPActor}
 import org.constellation.p2p.PeerToPeer.{AddPeerFromLocal, Id}
 import org.constellation.state.{ChainStateManager, MemPoolManager}
@@ -82,7 +82,6 @@ class ConstellationNode(
                implicit val executionContext: ExecutionContextExecutor
              ){
 
-
   val publicKeyHash: Int = keyPair.getPublic.hashCode()
 
   val id : Id = Id(keyPair.getPublic)
@@ -110,11 +109,6 @@ class ConstellationNode(
   val udpAddressString: String = hostName + ":" + udpPort
   val udpAddress = new InetSocketAddress(hostName, udpPort)
 
-  {
-    import constellation._
-   // logger.info(s"UDP inet pretty: ${pprintInet(udpAddress)}")
-  }
-
   val udpActor: ActorRef =
     system.actorOf(
       Props(new UDPActor(None, udpPort, udpInterface)), s"ConstellationUDPActor_$publicKeyHash"
@@ -127,7 +121,7 @@ class ConstellationNode(
     system.actorOf(Props(new ChainStateManager(memPoolManagerActor: ActorRef, id, db)), s"ConstellationChainStateActor_$publicKeyHash")
 
   val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair, udpAddress, udpActor, heartbeatEnabled)(timeout)),
+    Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair, udpAddress, udpActor)(timeout)),
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val peerToPeerActor: ActorRef =
@@ -137,11 +131,10 @@ class ConstellationNode(
     (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
   private val register = RegisterNextActor(peerToPeerActor)
-  // logger.info(s"Sending UDP Actor registration: $register")
+
   udpActor ! register
 
   consensusActor ! RegisterP2PActor(peerToPeerActor)
-
 
   // Seed peers
   if (seedPeers.nonEmpty) {
@@ -149,8 +142,6 @@ class ConstellationNode(
       logger.info(s"Attempting to connect to seed-host $peer")
       peerToPeerActor ! AddPeerFromLocal(peer)
     })
-  } else {
-   // logger.info("No seed host configured, waiting for messages.")
   }
 
   // If we are exposing rpc then create routes
@@ -169,7 +160,7 @@ class ConstellationNode(
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind
-    consensusActor ! ToggleHeartbeat
+    peerToPeerActor ! ToggleHeartbeat
   }
 
 }

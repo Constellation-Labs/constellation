@@ -19,6 +19,7 @@ import org.constellation.util.RPCClient
 import org.constellation.utils.TestNode
 import org.scalatest.exceptions.TestFailedException
 
+import scala.collection.immutable.HashMap
 import scala.concurrent.duration._
 import scala.util.Success
 
@@ -32,15 +33,13 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
   implicit override val executionContext: ExecutionContextExecutor = system.dispatcher
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-  "E2E Multiple Nodes" should "add peers and build blocks with transactions" in {
+  "E2E Multiple Nodes" should "add peers and build blocks with transactions" ignore {
 
-    val nodes = Seq.fill(3)(TestNode(heartbeatEnabled = true))
+    val nodes = Seq.fill(3)(TestNode())
 
     for (node <- nodes) {
       assert(node.healthy)
     }
-
-    nodes.head.rpc.get("master")
 
     for (n1 <- nodes) {
       println(s"Trying to add nodes to $n1")
@@ -59,12 +58,12 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       assert(peers.length == (nodes.length - 1))
     }
 
-    for (node <- nodes) {
-
-      val rpc1 = node.rpc
-      val genResponse1 = rpc1.get("generateGenesisBlock")
-      assert(genResponse1.get().status == StatusCodes.OK)
-
+    nodes.foreach { node =>
+      Future {
+        val rpc1 = node.rpc
+        val genResponse1 = rpc1.get("generateGenesisBlock")
+        assert(genResponse1.get().status == StatusCodes.OK)
+      }
     }
 
     Thread.sleep(2000)
@@ -101,23 +100,27 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     Thread.sleep(5000)
 
-    val transactions = nodes.flatMap{ node =>
+    var expectedTransactions = Set[Transaction]()
 
-      val rpc1 = node.rpc
+    nodes.foreach { node =>
+      val rpc = node.rpc
 
       val transaction1 =
         Transaction.senderSign(Transaction(0L, node.id.id, nodes.head.id.id, 1L), node.keyPair.getPrivate)
 
-      rpc1.post("transaction", transaction1)
+      expectedTransactions = expectedTransactions.+(transaction1)
 
-      val transaction5 =
+      rpc.post("transaction", transaction1)
+
+      val transaction2 =
         Transaction.senderSign(Transaction(0L, node.id.id, nodes.last.id.id, 1L), node.keyPair.getPrivate)
 
-      rpc1.post("transaction", transaction5)
+      expectedTransactions = expectedTransactions.+(transaction2)
 
-      Seq(transaction1, transaction5)
+      rpc.post("transaction", transaction2)
     }
 
+    assert(expectedTransactions.size == (nodes.length * 2))
 
     Thread.sleep(15000)
 
@@ -130,34 +133,32 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     Thread.sleep(1000)
 
-    val blocks = nodes.map{ n=>
-      val finalChainStateNode1Response = n.rpc.get("blocks")
-      val finalChainNode1 = n.rpc.read[Seq[Block]](finalChainStateNode1Response.get()).get()
-      finalChainNode1
-    }
+    val blocks = nodes.map { n =>
+      val finalChainStateNodeResponse = n.rpc.get("blocks")
+      val finalChainNode = n.rpc.read[Seq[Block]](finalChainStateNodeResponse.get()).get()
+      n.id -> finalChainNode
+    }.toMap
 
-    print("Block lengths : " +blocks.map{_.length})
-    val chainSizes = blocks.map{_.length}
-    val totalNumTrx = blocks.flatMap(_.flatMap(_.transactions)).length
+    blocks.foreach(f => {
+      val id = f._1
+      val blockSize = f._2.size
 
-    println(s"Total number of transactions: $totalNumTrx")
+      val transactions = f._2.flatMap(b => b.transactions).toSet
 
-    assert(totalNumTrx > 0)
+      println(s"for id = $id block size = $blockSize, transactionsSize = ${transactions.size}, transactions $transactions")
 
-    blocks.foreach{ b =>
-      assert(b.flatMap{_.transactions}.size == (nodes.length * 2))
-    }
+      assert(transactions.nonEmpty)
 
-    val minSize = blocks.map(_.length).min
-    assert(blocks.map{_.slice(0, minSize)}.distinct.size == 1)
-    assert(totalNumTrx == (nodes.length * 2 * nodes.length))
+      assert(transactions.size == (nodes.size * 2))
+
+      assert(transactions == expectedTransactions)
+    })
 
     nodes.foreach{
       _.shutdown()
     }
+
     assert(true)
-
-
   }
 
 }
