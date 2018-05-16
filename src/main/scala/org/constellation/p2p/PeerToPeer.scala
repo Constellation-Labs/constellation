@@ -188,9 +188,14 @@ class PeerToPeer(
 
   private val bufferTask = new Runnable { def run(): Unit = {
 
+    // TODO: This may not be necessary when full metrics collector are set up,
+    // Also this could be triggered by regular events instead of async.
+    // Needs to be revisited if its required, certainly useful for debugging UDP connectivity though.
     Try {
       // TODO: Add debug information to log metrics like number of peers / messages total etc.
      // logger.debug(s"P2P Heartbeat on ${id.short} - numPeers: ${peers.length}")
+
+      // Send heartbeat here to other peers.
     } match {
       case Failure(e) => e.printStackTrace()
       case _ =>

@@ -182,6 +182,7 @@ object Schema {
   final case object GetPeersID extends InternalCommand
   final case object GetPeersData extends InternalCommand
   final case object GetUTXO extends InternalCommand
+  final case object ToggleHeartbeat extends InternalCommand
 
 
 }

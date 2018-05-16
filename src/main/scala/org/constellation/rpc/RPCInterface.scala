@@ -16,7 +16,6 @@ import com.typesafe.scalalogging.Logger
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.consensus.Consensus.{DisableConsensus, EnableConsensus, GenerateGenesisBlock}
 import org.constellation.LevelDB
-import org.constellation.consensus.Consensus.{DisableConsensus, EnableConsensus, GenerateGenesisBlock, SetMaster}
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{Block, BlockSerialized, Schema, Transaction}
