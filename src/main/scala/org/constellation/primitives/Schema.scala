@@ -29,6 +29,7 @@ object Schema {
     def amountActual: Long = if (normalized) amount * NormalizationFactor else amount
   }
 
+  // TODO: Revisit - need more indices here
   case class AddressVertexCache(
                          up: Option[TX],
                          down: Option[TX] = None // Not present for genesis
