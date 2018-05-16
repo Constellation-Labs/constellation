@@ -8,7 +8,7 @@ import org.constellation.util.RPCClient
 import org.json4s.JsonAST.JArray
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 import constellation._
 import org.constellation.ClusterTest.{KubeIPs, ipRegex}
 import org.constellation.p2p.PeerToPeer.Peer
@@ -16,7 +16,8 @@ import org.constellation.primitives.{Block, Transaction}
 
 import scala.sys.process._
 import scala.util.Try
-
+import scala.concurrent.duration._
+import scala.util.Random._
 
 object ClusterTest {
 
@@ -116,6 +117,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
   "Cluster integration" should "ping a cluster, check health, go through genesis flow" in {
 
     val mappings = getPodMappings(clusterId)
+
     mappings.foreach{println}
 
     val ips = mappings.map{_.externalIP}
@@ -157,6 +159,8 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       assert(peers.length == (rpcs.length - 1))
     }
 
+    /*
+
     rpcs.foreach { rpc =>
       Future {
         val genResponse1 = rpc.get("generateGenesisBlock")
@@ -195,52 +199,153 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     }
 
     Thread.sleep(3000)
+    */
 
-    var expectedTransactions = Set[Transaction]()
+    var expectedTransactions = Seq[Transaction]()
 
     import Fixtures2._
 
     val txs = Seq(transaction1, transaction2, transaction3, transaction4)
 
-    rpcs.foreach { rpc =>
+    val slideNum = txs.size / rpcs.size
 
-      txs.foreach{ tx =>
-        rpc.post("transaction", tx)
+    val randomizedTransactions = shuffle(txs).toList.sliding(slideNum, slideNum).toList
 
-        expectedTransactions = expectedTransactions.+(tx)
+    val initGenesisFutures = rpcs.map(rpc => {
+      Future {
+
+        val genResponse = rpc.get("generateGenesisBlock")
+        assert(genResponse.get().status == StatusCodes.OK)
+
+        true
       }
-    }
+    })
 
-    assert(expectedTransactions.size == txs.length)
+    val initGenesisSequence = Future.sequence(initGenesisFutures)
 
-    Thread.sleep(15000)
+    Await.result(initGenesisSequence, 30 seconds)
 
-    rpcs.foreach { rpc =>
-      val disableConsensusResponse1 = rpc.get("disableConsensus")
-      assert(disableConsensusResponse1.get().status == StatusCodes.OK)
-    }
+    val validateGenesisBlockFutures = rpcs.map(rpc => {
+      Future {
+
+        val chainStateNode1Response = rpc.get("blocks")
+
+        val response = chainStateNode1Response.get()
+
+        val chainNode = rpc.read[Seq[Block]](response).get()
+
+        assert(chainNode.size == 1)
+
+        assert(chainNode.head.height == 0)
+
+        assert(chainNode.head.round == 0)
+
+        assert(chainNode.head.parentHash == "tempGenesisParentHash")
+
+        assert(chainNode.head.signature == "tempSig")
+
+        assert(chainNode.head.transactions == Seq())
+
+        val consensusResponse = rpc.get("enableConsensus")
+
+        assert(consensusResponse.get().status == StatusCodes.OK)
+
+        true
+      }
+    })
+
+    val validateGenesisBlockSequence = Future.sequence(validateGenesisBlockFutures)
+
+    Await.result(validateGenesisBlockSequence, 30 seconds)
+
+    val makeTransactionsFutures = rpcs.zipWithIndex.map { case (rpc, index) => {
+      Future {
+        var transactionCallsMade = Seq[Transaction]()
+
+        def makeTransactionCalls(idx: Int): Unit = {
+          if (randomizedTransactions.isDefinedAt(idx)) {
+            randomizedTransactions(idx).foreach(transaction => {
+              rpc.post("transaction", transaction)
+              transactionCallsMade = transactionCallsMade.:+(transaction)
+            })
+          }
+        }
+
+        makeTransactionCalls(index)
+
+        // If we are on the last node but there are still transactions left then send them to the last node
+        if (index + 1 == rpcs.length) {
+          makeTransactionCalls(index + 1)
+        }
+
+        transactionCallsMade
+      }
+    }}
+
+    val makeTransactionsSequence = Future.sequence(makeTransactionsFutures)
+
+    Await.result(makeTransactionsSequence, 30 seconds)
+
+    val waitUntilTransactionsExistInBlocksFutures = rpcs.map(rpc => {
+      Future {
+
+        def chainContainsAllTransactions(): Boolean = {
+          val finalChainStateNodeResponse = rpc.get("blocks")
+          val finalChainNode = rpc.read[Seq[Block]](finalChainStateNodeResponse.get()).get()
+
+          val transactionsInChain = finalChainNode.flatMap(c => c.transactions).size
+
+          println(s"chain length = ${finalChainNode.size}")
+
+          println(s"expectedTransactions size = ${txs.size}")
+
+          println(s"transactions in chain = $transactionsInChain")
+
+          transactionsInChain == txs.size
+        }
+
+        while(!chainContainsAllTransactions()) {
+          true
+        }
+
+        true
+      }
+    })
+
+    val waitUntilTransactionsExistSequence = Future.sequence(waitUntilTransactionsExistInBlocksFutures)
+
+    Await.result(waitUntilTransactionsExistSequence, 180 seconds)
 
     Thread.sleep(1000)
 
-    val blocks = rpcs.map { rpc =>
+    val chains = rpcs.map { rpc =>
+      val disableConsensusResponse = rpc.get("disableConsensus")
+      assert(disableConsensusResponse.get().status == StatusCodes.OK)
+
       val finalChainStateNodeResponse = rpc.get("blocks")
-      val finalChainNode = rpc.read[Seq[Block]](finalChainStateNodeResponse.get()).get()
-      finalChainNode
+      rpc.read[Seq[Block]](finalChainStateNodeResponse.get()).get()
     }
 
-    blocks.foreach(f => {
-      val blockSize = f.size
+    val smallestChainLength = chains.map(_.size).min
 
-      val transactions = f.flatMap(b => b.transactions).toSet
+    println(s"smallest chain length = $smallestChainLength")
 
-      println(s"for id = $id block size = $blockSize, transactionsSize = ${transactions.size}, transactions $transactions")
+    val trimmedChains = chains.map(c => c.take(smallestChainLength))
 
-      assert(transactions.nonEmpty)
+    // validate that all of the chains from each node are the same
+    assert(trimmedChains.forall(_ == trimmedChains.head))
 
-      assert(transactions.size == txs.size)
-
-      assert(transactions == expectedTransactions)
+    val transactions = chains.map(f => {
+      f.flatMap(b => b.transactions).toSeq
     })
+
+    println(s"expected transactions size = ${txs.size}")
+
+    assert(transactions.forall(_.size == txs.size))
+
+    assert(txs.toSet.size == txs.size)
+
+    assert(transactions.forall(_.toSet == txs.toSet))
 
     assert(true)
 
