@@ -5,7 +5,7 @@ import akka.actor.FSM
 /**
   * Created by Wyatt on 5/15/18.
   */
-class AtMostOnceFSM[S, D] extends FSM[S, D] {
+trait AtMostOnceFSM[S, D] extends FSM[S, D] {
 
   /**
     * TODO: do local lookup, this is where we will handle rate limiting

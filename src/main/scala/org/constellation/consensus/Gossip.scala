@@ -46,12 +46,12 @@ class Gossip extends AtMostOnceFSM[State, Data] {
 
     case Event(tx@Tx, _) =>
       if (validTx(tx)) broadcast(tx)
-      else performConsensus()
+      //TODO put instaban gossip here
       stay()
 
     case Event(Offline, _) => goto(Offline)
   }
-  
+
   when(Offline) {
     case Event(Gossiper, _) => goto(Gossiper)
 
