@@ -58,6 +58,8 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       }
     }
 
+    // Block here instead of sleep on result of these futures ^ TODO: Fix
+
     Thread.sleep(8000)
 
     for (node <- nodes) {
