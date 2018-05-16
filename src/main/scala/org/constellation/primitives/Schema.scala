@@ -35,6 +35,8 @@ object Schema {
                          down: Option[TX] = None // Not present for genesis
                          )
 
+  // TODO: We also need a hash pointer to represent the post-tx counter party signing data, add later
+
   case class Address(
                       address: String,
                       balance: Long = 0L,
