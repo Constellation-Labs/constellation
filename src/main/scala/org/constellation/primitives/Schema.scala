@@ -43,7 +43,11 @@ object Schema {
                       // ^ the hash last depositing to srcAddress is stored under src.lastTransactionHash
                       // These will be blank for the DESTINATION address of a new transaction
                       // A second transaction to the same destination updates both quantities
+                      lastForwardHash: Option[String] = None,
+                      // ^ the data dependency link of a transaction using an address in this chains history.
+                      lastDirectChainHash: Option[String] = None,
                       isGenesis: Boolean = false,
+                    // ^ TODO: Remove and use genesisTXHash presence.
                       genesisTXHash: Option[String] = None
                     ) extends ProductHash {
     def normalizedBalance: Long = balance / NormalizationFactor
