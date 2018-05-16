@@ -89,6 +89,9 @@ object Schema {
   We actually can still allow spends from an existing address (although we should incredibly strongly
   discourage this because it messes up the hash lookups) but it still needs to be added to the DAG
   AFTER the forwarding address in order to preserve immutability. Requires more discussion.
+
+  The second TX that re-uses an address contains a reference to BOTH the original address and the forwarded
+  chain should forwarding be enabled.
    */
   case class TXData(
                  src: Seq[Address],
