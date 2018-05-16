@@ -48,8 +48,9 @@ object Schema {
                       // ^ the data dependency link of a transaction using an address in this chains history.
                       lastDirectChainHash: Option[String] = None,
                       isGenesis: Boolean = false,
-                    // ^ TODO: Remove and use genesisTXHash presence.
+                    // ^ TODO: Remove and use genesisTXHash presence
                       genesisTXHash: Option[String] = None
+                      // ^ hash should also only be necessary on top level TXData (most likely?)
                     ) extends ProductHash {
     def normalizedBalance: Long = balance / NormalizationFactor
   }
