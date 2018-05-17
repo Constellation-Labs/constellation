@@ -5,17 +5,17 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 /**
   * Created by Wyatt on 5/10/18.
   */
-class GossipTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecLike with BeforeAndAfterAll {
+class NodeStateManagerTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecLike with BeforeAndAfterAll {
 
   "Gossiper gossiper FSM" should "initialize correctly" in {
-    val gossiper = TestFSMRef(new Gossip)
+    val gossiper = TestFSMRef(new NodeStateManager)
     assert(gossiper.stateName == Offline)
   }
 
   "Gossiper gossiper FSM" should "transition on correctly" in {
-    val gossiper = TestFSMRef(new Gossip)
-    gossiper ! Gossiper
-    assert(gossiper.stateName == Gossiper)
+    val gossiper = TestFSMRef(new NodeStateManager)
+    gossiper ! Online
+    assert(gossiper.stateName == Online)
 
   }
 

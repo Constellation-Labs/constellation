@@ -5,7 +5,7 @@ import akka.actor.FSM
 /**
   * Created by Wyatt on 5/15/18.
   */
-trait AtMostOnceFSM[S, D] extends FSM[S, D] {
+trait RateLimitedFSM[S, D] extends FSM[S, D] {
 
   /**
     * TODO: do local lookup, this is where we will handle rate limiting
@@ -16,7 +16,7 @@ trait AtMostOnceFSM[S, D] extends FSM[S, D] {
     false
   }
 
-  def AtMostOnce(stateFunction: StateFunction): StateFunction = new StateFunction() {
+  def rateLimit(stateFunction: StateFunction): StateFunction = new StateFunction() {
     override def isDefinedAt(msg: Event): Boolean = stateFunction.isDefinedAt(msg)
 
     override def apply(msg: Event): State = msg match {
