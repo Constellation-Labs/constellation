@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorLogging, ActorRef}
 import com.typesafe.scalalogging.Logger
 import org.constellation.LevelDB
 import org.constellation.consensus.Consensus.{GetMemPool, GetMemPoolResponse}
-import org.constellation.primitives.Schema.{GetUTXO, TX}
+import org.constellation.primitives.Schema.{Bundle, GetUTXO, TX}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.MemPoolManager.{AddTransaction, RemoveConfirmedTransactions}
 
@@ -67,11 +67,20 @@ class MemPoolManager(db: LevelDB = null) extends Actor with ActorLogging {
 
   @volatile var memPoolTX: Set[TX] = Set()
 
+  @volatile var bundlePool: Set[Bundle] = Set()
 
   override def receive: Receive = {
 
     case tx: TX =>
-      memPoolTX = memPoolTX ++ Set(tx)
+
+      if (!memPoolTX.contains(tx)) {
+        memPoolTX += tx
+      }
+
+    case b: Bundle =>
+      if (!bundlePool.contains(b)) {
+        bundlePool += b
+      }
 
     case AddTransaction(transaction) =>
       memPool = MemPoolManager.handleAddTransaction(memPool, transaction)

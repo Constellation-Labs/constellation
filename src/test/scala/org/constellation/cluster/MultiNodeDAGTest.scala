@@ -46,25 +46,20 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     Thread.sleep(500)
 
-    for (node <- nodes) {
-      //  println(s"Trying to add nodes to $n1")
+    val results = nodes.flatMap{ node =>
       val others = nodes.filter{_ != node}
-      others.foreach{
+      others.map{
         n =>
           Future {
-            val response = node.add(n)
-            //  println(s"Trying to add $n to $n1 res: ${response}")
+            node.add(n)
           }
       }
     }
-
-    // Block here instead of sleep on result of these futures ^ TODO: Fix
 
     Thread.sleep(8000)
 
     for (node <- nodes) {
       val peers = node.rpc.getBlocking[Seq[Peer]]("peerids")
-      println(s"Peers length: ${peers.length}")
       assert(peers.length == (nodes.length - 1))
     }
 
@@ -78,7 +73,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     assert(tx.valid)
 
     Thread.sleep(2000)
-/*
+
 
     for (node <- nodes) {
       val lkup = node.rpc.postRead[Option[TX]]("db", tx.hash)
@@ -143,7 +138,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     println(b22)
     println(b3)
     println(n2UTXO)
-*/
+
 
 
     // println(b3)

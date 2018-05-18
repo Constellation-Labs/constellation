@@ -180,7 +180,7 @@ class PeerToPeer(
 
   private def banOn[T](valid: => Boolean, remote: InetSocketAddress)(t: => T) = {
     if (valid) t else {
-      logger.debug(s"BANNING - Invalid HandShakeResponse from - $remote")
+      logger.debug(s"BANNING - Invalid data from - $remote")
       udpActor ! Ban(remote)
     }
   }

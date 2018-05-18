@@ -105,7 +105,8 @@ class RPCInterface(
               dstAddress.address.copy(balance=amount),
               amount,
               dstAccount = Some(id.id),
-              genesisTXHash = Some("coinbase hash")
+              genesisTXHash = None,
+              isGenesis = true
             ).signed()(debtAddress)
           )
           peerToPeerActor ! tx
@@ -204,6 +205,7 @@ class RPCInterface(
           }
         } ~
                complete { //complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Say hello to akka-http</h1>"))
+
                  logger.info("Serve main page")
                  val html = """<!DOCTYPE html>
                               |<html lang="en">
@@ -240,12 +242,12 @@ class RPCInterface(
 
           val remainder = walletPair
 
-          import constellation._
           val remainderBalance = prvBalance - s.amountActual
 
           println(s"Send To Address $prvBalance $addressWithSufficientBalance $addressMeta $txAssociated")
 
-          val genHash = if (txAssociated.tx.data.genesisTXHash.isEmpty) Some(txAssociated.hash) else txAssociated.tx.data.genesisTXHash
+          val genHash = if (txAssociated.tx.data.genesisTXHash.isEmpty && txAssociated.tx.data.isGenesis)
+            Some(txAssociated.hash) else txAssociated.tx.data.genesisTXHash
 
           // TODO: Fix hashes.
           val txD = TXData(
@@ -264,6 +266,7 @@ class RPCInterface(
             dstAccount = s.account,
             genesisTXHash = genHash
           )
+
           val tx = TX(txD.multiSigned()(Seq(ukp, keyPair)))
 
           logger.info(s"SendToAddress RPC Transaction: ${tx.pretty}")
