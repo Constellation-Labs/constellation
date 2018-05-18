@@ -17,7 +17,6 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.rpc.RPCInterface
 import org.constellation.wallet.KeyUtils
 import org.constellation.consensus.Consensus
-import org.constellation.consensus.Consensus.RegisterP2PActor
 import org.constellation.p2p.{PeerToPeer, RegisterNextActor, UDPActor}
 import org.constellation.p2p.PeerToPeer.{AddPeerFromLocal, Id}
 import org.constellation.primitives.Schema.ToggleHeartbeat
@@ -89,7 +88,6 @@ class ConstellationNode(
 
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
-
   val tmpDir = new File("tmp")
   val tmpDirId = new File("tmp", id.medium)
   Try{tmpDir.mkdirs()}
@@ -134,8 +132,6 @@ class ConstellationNode(
   private val register = RegisterNextActor(peerToPeerActor)
 
   udpActor ! register
-
-  consensusActor ! RegisterP2PActor(peerToPeerActor)
 
   // Seed peers
   if (seedPeers.nonEmpty) {

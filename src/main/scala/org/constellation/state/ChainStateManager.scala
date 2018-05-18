@@ -5,7 +5,7 @@ import java.net.InetSocketAddress
 import akka.actor.{Actor, ActorLogging, ActorRef}
 import com.typesafe.scalalogging.Logger
 import org.constellation.LevelDB
-import org.constellation.consensus.Consensus.{PeerProposedBlock, ProposedBlockUpdated, RequestBlockProposal}
+import org.constellation.consensus.Consensus.{PeerProposedBlock, ProposedBlockUpdated}
 import org.constellation.p2p.PeerToPeer.Id
 import org.constellation.p2p.{UDPSendToID, UDPSendToIDByte}
 import org.constellation.primitives.{Block, Transaction}

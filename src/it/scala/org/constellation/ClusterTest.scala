@@ -114,7 +114,8 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
   private val clusterId = sys.env.getOrElse("CLUSTER_ID", "constellation-app")
 
-  "Cluster integration" should "ping a cluster, check health, go through genesis flow" in {
+  // TODO: disabling until we port over to our new consensus mechanism
+  "Cluster integration" should "ping a cluster, check health, go through genesis flow" ignore {
 
     val mappings = getPodMappings(clusterId)
 

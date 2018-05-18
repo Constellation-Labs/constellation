@@ -14,7 +14,6 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.consensus.Consensus.{DisableConsensus, EnableConsensus, GenerateGenesisBlock}
 import org.constellation.LevelDB
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Schema._
@@ -46,10 +45,8 @@ class RPCInterface(
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-
   import constellation._
   val logger = Logger(s"RPCInterface")
-
 
   // TODO: Not this.
   @volatile var wallet : Seq[KeyPair] = Seq()
@@ -92,26 +89,26 @@ class RPCInterface(
         wallet :+= pair
         complete(pair)
       } ~
-        path("genesis" / LongNumber) { numCoins =>
-          import constellation._
+      path("genesis" / LongNumber) { numCoins =>
+        import constellation._
 
-          val debtAddress = walletPair
-          val dstAddress = walletPair
+        val debtAddress = walletPair
+        val dstAddress = walletPair
 
-          val amount = numCoins * Schema.NormalizationFactor
-          val tx = TX(
-            TXData(
-              Seq(debtAddress.address.copy(balance = -1*amount, isGenesis = true)),
-              dstAddress.address.copy(balance=amount, isGenesis = true),
-              amount,
-              dstAccount = Some(id.id),
-              isGenesis = true
-            ).signed()(debtAddress)
-          )
-          peerToPeerActor ! tx
-          complete(tx.json)
-        } ~
-        path("makeKeyPairs" / IntNumber) { numPairs =>
+        val amount = numCoins * Schema.NormalizationFactor
+        val tx = TX(
+          TXData(
+            Seq(debtAddress.address.copy(balance = -1*amount, isGenesis = true)),
+            dstAddress.address.copy(balance=amount, isGenesis = true),
+            amount,
+            dstAccount = Some(id.id),
+            isGenesis = true
+          ).signed()(debtAddress)
+        )
+        peerToPeerActor ! tx
+        complete(tx.json)
+      } ~
+      path("makeKeyPairs" / IntNumber) { numPairs =>
         val pair = Seq.fill(numPairs){constellation.makeKeyPair()}
         wallet ++= pair
         complete(pair)
@@ -132,33 +129,6 @@ class RPCInterface(
       } ~
       // TODO: revisit
       path("health") {
-        complete(StatusCodes.OK)
-      } ~
-      // TODO: revist
-      path("generateGenesisBlock") {
-
-        val future = consensusActor ? GenerateGenesisBlock()
-
-        val responseFuture: Future[Block] = future.mapTo[Block]
-
-        val genesisBlock = Await.result(responseFuture, timeout.duration)
-        // Issue with serialization here, it returns an array on the rpcclient side with 1 element (the block)
-     //   println("Genesis Block in RPC interface " + genesisBlock)
-        import constellation.SerExt
-        val json = genesisBlock.json
-      //  println("Genesis Block in RPC interface serialized " + json)
-        complete(json)
-      } ~
-      path("enableConsensus") {
-
-        consensusActor ! EnableConsensus()
-
-        complete(StatusCodes.OK)
-      } ~
-      path("disableConsensus") {
-
-        consensusActor ! DisableConsensus()
-
         complete(StatusCodes.OK)
       } ~
       path("blocks") {
