@@ -101,11 +101,11 @@ class RPCInterface(
           val amount = numCoins * Schema.NormalizationFactor
           val tx = TX(
             TXData(
-              Seq(debtAddress.address.copy(balance = -1*amount, isGenesis = true)),
-              dstAddress.address.copy(balance=amount, isGenesis = true),
+              Seq(debtAddress.address.copy(balance = -1*amount)),
+              dstAddress.address.copy(balance=amount),
               amount,
               dstAccount = Some(id.id),
-              isGenesis = true
+              genesisTXHash = Some("coinbase hash")
             ).signed()(debtAddress)
           )
           peerToPeerActor ! tx
@@ -245,27 +245,24 @@ class RPCInterface(
 
           println(s"Send To Address $prvBalance $addressWithSufficientBalance $addressMeta $txAssociated")
 
-          val genHash = if (txAssociated.tx.data.isGenesis) Some(txAssociated.hash) else txAssociated.tx.data.genesisTXHash
+          val genHash = if (txAssociated.tx.data.genesisTXHash.isEmpty) Some(txAssociated.hash) else txAssociated.tx.data.genesisTXHash
 
+          // TODO: Fix hashes.
           val txD = TXData(
             Seq(addressMeta.copy(
-              balance = 0L, // TODO: Allow funds to remain later if user prompts, more complex.
-              rootTransactionHash = Some(txAssociated.hash),
-              genesisTXHash = genHash
+              balance = 0L,
+              txHash = addressMeta.txHash :+ txAssociated.hash
             )),
             s.address.copy(
-              balance = s.amountActual,
-              rootTransactionHash = Some(txAssociated.hash), // On updates, re-assign this value to the next TX hash.
-              genesisTXHash = genHash
+              balance = s.amountActual
             ),
             s.amountActual,
             remainder = Some(remainder.address.copy(
-              balance = remainderBalance,
-              rootTransactionHash = Some(txAssociated.hash),
-              genesisTXHash = genHash
+              balance = remainderBalance
             )),
             srcAccount = Some(id.id),
-            dstAccount = s.account
+            dstAccount = s.account,
+            genesisTXHash = genHash
           )
           val tx = TX(txD.multiSigned()(Seq(ukp, keyPair)))
 

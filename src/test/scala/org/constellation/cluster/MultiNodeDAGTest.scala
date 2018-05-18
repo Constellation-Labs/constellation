@@ -78,6 +78,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     assert(tx.valid)
 
     Thread.sleep(2000)
+/*
 
     for (node <- nodes) {
       val lkup = node.rpc.postRead[Option[TX]]("db", tx.hash)
@@ -142,6 +143,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     println(b22)
     println(b3)
     println(n2UTXO)
+*/
 
 
     // println(b3)

@@ -5,7 +5,7 @@ import java.security.KeyPair
 import org.constellation.Fixtures
 import org.scalatest.FlatSpec
 import constellation._
-import org.constellation.primitives.Schema.{Gossip, TX, TXData}
+import org.constellation.primitives.Schema._
 
 class TXTest extends FlatSpec {
 
@@ -65,6 +65,22 @@ class TXTest extends FlatSpec {
     assert(iter3.flatMap{_.publicKeys}.toSet.diff(Set(tempKey, tempKey1, tempKey2).map{_.getPublic}).isEmpty)
 
     assert(iter3.head.data == tx)
+
+  }
+
+  "Bundle" should "demonstrate recursive bundling" in {
+
+    val b = Bundle(BundleData(Seq(tx)).signed()(tempKey))
+
+    val bb = Bundle(BundleData(Seq(b, tx)).signed()(tempKey1))
+
+    val bbb = Bundle(BundleData(Seq(b, bb, tx)).signed()(tempKey2))
+
+    assert(bbb.maxStackDepth == 3)
+    assert(bbb.totalNumEvents == 8)
+
+
+
 
   }
 

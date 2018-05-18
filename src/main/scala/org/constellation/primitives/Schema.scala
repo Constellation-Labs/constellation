@@ -35,24 +35,16 @@ object Schema {
                          down: Option[TX] = None // Not present for genesis
                          )
 
-  // TODO: We also need a hash pointer to represent the post-tx counter party signing data, add later
 
+
+
+  // TODO: We also need a hash pointer to represent the post-tx counter party signing data, add later
   case class Address(
                       address: String,
                       balance: Long = 0L,
-                      lastTransactionHash: Option[String] = None,
-                      rootTransactionHash: Option[String] = None,
-                      // ^ the hash of the first transaction that created srcAddress
-                      // ^ the hash last depositing to srcAddress is stored under src.lastTransactionHash
-                      // These will be blank for the DESTINATION address of a new transaction
-                      // A second transaction to the same destination updates both quantities
-                      lastForwardHash: Option[String] = None,
-                      // ^ the data dependency link of a transaction using an address in this chains history.
-                      lastDirectChainHash: Option[String] = None,
-                      isGenesis: Boolean = false,
-                    // ^ TODO: Remove and use genesisTXHash presence
-                      genesisTXHash: Option[String] = None
-                      // ^ hash should also only be necessary on top level TXData (most likely?)
+                      txHash: Seq[String] = Seq(),
+                      txHashOverflowPointer: Option[String] = None,
+                      oneTimeUse: Boolean = false
                     ) extends ProductHash {
     def normalizedBalance: Long = balance / NormalizationFactor
   }
@@ -63,42 +55,9 @@ object Schema {
                                     counterPartyAccount: Option[PublicKey]
                                   ) extends ProductHash
 
-  /*
-  Forwarding rules:
 
-  - History is immutable, once an address is 'spent' the data can no longer be modified.
+  sealed trait Event
 
-  - This is designed to attempt to prevent cycles in the DAG (i.e. re-use of a key)
-    and ensure key uniqueness
-
-  - The remainder serves as the 'forwarding address' to continue receiving funds / and/or act as a terminal
- for adding additional data under the re-use of a previous address
-
-  - Forwarding addresses are not guaranteed respond quickly due to large number of hashes.
-
-  - If the remainder is missing, the output is used to forward.
-
-  - This is how we continue to support people putting up a QR code on TV for instance or long
-  standing addresses while preserving immutability. This is not an ideal use case, as
-  the closer we can get to one-time-use addresses the more efficient the data structure becomes.
-
-  If someone doesn't ever send from an address, this isn't an issue at all. It's only once they
-  attempt to make a TX outward from the address that this is a problem.
-
-  Receipt addresses must act like a 'terminal', only allowing 1 new TX to be added to their data endpoint
-  at a time, this is synonymous with the Ethereum account increment counter - except much better.
-
-  Also - the network should vastly prioritize addresses that only receive a single TX, we want
-  to discourage using the same destination address for multiple TXs because it will speed
-  up the hashing optimizations dramatically
-
-  We actually can still allow spends from an existing address (although we should incredibly strongly
-  discourage this because it messes up the hash lookups) but it still needs to be added to the DAG
-  AFTER the forwarding address in order to preserve immutability. Requires more discussion.
-
-  The second TX that re-uses an address contains a reference to BOTH the original address and the forwarded
-  chain should forwarding be enabled.
-   */
   case class TXData(
                  src: Seq[Address],
                  dst: Address,
@@ -111,19 +70,14 @@ object Schema {
                  // revealing it's address key -- requires receiver link dst to counterParty addresses.
                  keyMap: Seq[Int] = Seq(), // for multi-signature transactions
                  confirmationWindowSeconds: Int = 5,
-                 allowForwarding: Boolean = false,
-                 allowReuse: Boolean = false,
-                 allowMultipleInputTXs: Boolean = false,
-                 // ^ More optimization / security options which help keep the DAG clean.
-                 isGenesis: Boolean = false, // TODO: Remove this and rely on presence of genesisTXHash
-                 // it was just simpler to use this flag for now for other reasons.
-                 genesisTXHash: Option[String] = None
+                 genesisTXHash: Option[String] = None,
+                 isGenesis: Boolean = false
                ) extends ProductHash {
     def inverseAmount: Long = -1*amount
     // def remainderAmount
   }
 
-  case class TX(tx: Signed[TXData]) extends ProductHash {
+  case class TX(tx: Signed[TXData]) extends ProductHash with Event {
     def valid: Boolean = {
 
       // Last key is used for srcAccount when filled out.
@@ -159,6 +113,47 @@ object Schema {
       s"${tx.data.remainder.map{_.address}.getOrElse("empty").slice(0, 5)} " +
       s"amount ${tx.data.amount}"
   }
+
+
+  final case class BundleData(
+                               bundles: Seq[Event],
+                               overflowHashPointer: Option[String] = None
+                             ) extends ProductHash
+
+  final case class Bundle(
+                           bundles: Signed[BundleData]
+                         ) extends ProductHash with Event {
+
+    def maxStackDepth: Int = {
+      def process(s: Signed[BundleData]): Int = {
+        val bd = s.data
+        val depths = bd.bundles.map {
+          case b2: Bundle =>
+            process(b2.bundles) + 1
+          case _ => 0
+        }
+        depths.max
+      }
+      process(bundles) + 1
+    }
+
+    def totalNumEvents: Int = {
+      def process(s: Signed[BundleData]): Int = {
+        val bd = s.data
+        val depths = bd.bundles.map {
+          case b2: Bundle =>
+            process(b2.bundles) + 1
+          case _ => 1
+        }
+        depths.sum
+      }
+      process(bundles) + 1
+    }
+
+
+  }
+
+
 
   case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash {
     def iter: Seq[Signed[_ >: T <: ProductHash]] = {
