@@ -12,6 +12,7 @@ import constellation._
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Chain.Chain
+import org.constellation.primitives.Schema.GetPeersID
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.ChainStateManager.{AddBlock, BlockAddedToChain, CreateBlockProposal, GetChain}
 import org.constellation.util.Signed
@@ -67,6 +68,7 @@ object Consensus {
   case class PeerProposedBlock(block: Block, peer: Id)
 
   case class RequestBlockProposal(round: Long, id: Id)
+  case class Heartbeat(id: Id)
 
   // Methods
 
@@ -207,7 +209,7 @@ object Consensus {
       consensusRoundState.selfId)) {
       // This is what starts consensus, it returns a response to actor of GetMemPoolResponse
       // Processing continues under receive in Consensus
-      memPoolManager ! GetMemPool(self, 0L)
+      memPoolManager ! GetMemPool(self, consensusRoundState.currentRound)
     }
 
     updatedState
@@ -254,6 +256,10 @@ object Consensus {
   def handlePeerMemPoolUpdated(consensusRoundState: ConsensusRoundState, round: Long, peer: Id,
                                transactions: Seq[Transaction], chainStateManager: ActorRef, replyTo: ActorRef): ConsensusRoundState = {
 
+    if (round < consensusRoundState.currentRound) {
+      return consensusRoundState
+    }
+
     val peerMemPools =
       consensusRoundState.peerMemPools +
         (round -> (consensusRoundState.peerMemPools.getOrElse(round, HashMap()) + (peer -> transactions)))
@@ -275,6 +281,10 @@ object Consensus {
   def handlePeerProposedBlock(consensusRoundState: ConsensusRoundState,
                               replyTo: ActorRef, block: Block, peer: Id ): ConsensusRoundState = {
 
+    if (block.round < consensusRoundState.currentRound) {
+      return consensusRoundState
+    }
+
     val peerBlockProposals =
       consensusRoundState.peerBlockProposals +
         (block.round -> (consensusRoundState.peerBlockProposals.getOrElse(block.round, HashMap()) + (peer -> block)))
@@ -294,7 +304,8 @@ object Consensus {
                                  currentFacilitators: Set[Id] = Set(),
                                  peerMemPools: HashMap[Long, HashMap[Id, Seq[Transaction]]] = HashMap(0L -> HashMap()),
                                  peerBlockProposals: HashMap[Long, HashMap[Id, Block]] = HashMap(0L -> HashMap()),
-                                 selfId: Id = null
+                                 selfId: Id = null,
+                                 currentRound: Long = 0
                                 )
 }
 
@@ -336,75 +347,55 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
     case BlockAddedToChain(latestBlock) =>
       logger.debug(s"$selfId block added to chain, $latestBlock")
 
-      this.synchronized {
-        consensusRoundState =
-          handleBlockAddedToChain(
-            consensusRoundState, latestBlock, memPoolManager, self, udpAddress
-          )
-      }
+      consensusRoundState = consensusRoundState.copy(currentRound = latestBlock.round + 1)
+
+      consensusRoundState =
+        handleBlockAddedToChain(
+          consensusRoundState, latestBlock, memPoolManager, self, udpAddress
+        )
 
     case ProposedBlockUpdated(block) =>
       logger.debug(s"$selfId proposed block updated= $block")
 
-      this.synchronized {
+      // This used to happen inside handlePeerProposed block but since we're routing those messages
+      // over UDP, need to make this call directly since its a self-interaction
+      val peerBlockProposals =
+      consensusRoundState.peerBlockProposals +
+        (block.round -> (consensusRoundState.peerBlockProposals.getOrElse(block.round, HashMap()) +
+          (consensusRoundState.selfId -> block)))
 
-        // This used to happen inside handlePeerProposed block but since we're routing those messages
-        // over UDP, need to make this call directly since its a self-interaction
-        val peerBlockProposals =
-        consensusRoundState.peerBlockProposals +
-          (block.round -> (consensusRoundState.peerBlockProposals.getOrElse(block.round, HashMap()) +
-            (consensusRoundState.selfId -> block)))
+      consensusRoundState = consensusRoundState.copy(peerBlockProposals = peerBlockProposals)
 
-        consensusRoundState = consensusRoundState.copy(peerBlockProposals = peerBlockProposals)
-
-        consensusRoundState = handleProposedBlockUpdated(consensusRoundState, block, udpAddress, udpActor)
-      }
+      consensusRoundState = handleProposedBlockUpdated(consensusRoundState, block, udpAddress, udpActor)
 
     case g @ GetMemPoolResponse(transactions, round) =>
 
-      // This originally is triggered by enableConsensus which starts the GetMemPool request
-      // This was sent by the ChainStateManager, it will then
-      // go over UDP to P2P actor, the next call is PeerMemPoolUpdated (below) on remote side.
+      val peerMemPools =
+        consensusRoundState.peerMemPools +
+          (round -> (consensusRoundState.peerMemPools.getOrElse(round, HashMap()) + (consensusRoundState.selfId -> transactions)))
 
-      this.synchronized {
+      consensusRoundState = consensusRoundState.copy(peerMemPools = peerMemPools)
 
-        if (transactions.nonEmpty) {
-          //     logger.debug("GetMemPoolResponse has transactions")
-        }
+      notifyFacilitatorsOfMemPool(consensusRoundState.previousBlock.get,
+        consensusRoundState.selfId, transactions, round, udpActor)
 
-        val peerMemPools =
-          consensusRoundState.peerMemPools +
-            (round -> (consensusRoundState.peerMemPools.getOrElse(round, HashMap()) + (consensusRoundState.selfId -> transactions)))
-
-        consensusRoundState = consensusRoundState.copy(peerMemPools = peerMemPools)
-
-        notifyFacilitatorsOfMemPool(consensusRoundState.previousBlock.get,
-          consensusRoundState.selfId, transactions, round, udpActor)
-
-        self ! PeerMemPoolUpdated(transactions, consensusRoundState.selfId, round)
-      }
+      self ! PeerMemPoolUpdated(transactions, consensusRoundState.selfId, round)
 
     case CheckConsensusResult(round) =>
       logger.debug(s"$selfId check consensus result round= $round")
 
-      this.synchronized {
-        val block = checkConsensusResult(consensusRoundState, round, chainManager, self)
-        logger.debug(s"$selfId check consensus result block = $block for round $round")
-      }
+      val block = checkConsensusResult(consensusRoundState, round, chainManager, self)
+      logger.debug(s"$selfId check consensus result block = $block for round $round")
 
     case PeerMemPoolUpdated(transactions, peer, round) =>
       logger.debug(s"$selfId peer mem pool updated peer = $peer, $transactions")
 
-      this.synchronized {
-        consensusRoundState = handlePeerMemPoolUpdated(consensusRoundState, round, peer, transactions, chainManager, self)
-      }
+      consensusRoundState = handlePeerMemPoolUpdated(consensusRoundState, round, peer, transactions, chainManager, self)
 
     case PeerProposedBlock(block, peer) =>
       logger.debug(s"$selfId peer proposed block = received from ${peer.short} on ${consensusRoundState.selfId.short}")
 
-      this.synchronized {
-        consensusRoundState = handlePeerProposedBlock(consensusRoundState, self, block, peer)
-      }
+      consensusRoundState = handlePeerProposedBlock(consensusRoundState, self, block, peer)
 
   }
 

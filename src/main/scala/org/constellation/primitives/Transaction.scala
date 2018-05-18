@@ -6,7 +6,8 @@ import constellation._
 import org.constellation.util.ProductHash
 import org.constellation.wallet.KeyUtils
 
-case class Transaction(sequenceNum: Long,
+case class Transaction(
+                        sequenceNum: Long,
                        senderPubKey: PublicKey,
                        counterPartyPubKey: PublicKey,
                        amount: Long,
@@ -42,10 +43,12 @@ object Transaction {
     )(privateKey))
   )
 
+/*
   // Hash of TX info
   def hash(t: Transaction): String = Seq(
     t.sequenceNum, t.senderPubKey, t.counterPartyPubKey, t.amount, t.senderSignature, t.counterPartySignature
   ).json.sha256
+*/
 
   def validCounterPartySignature(transaction: Transaction): Boolean = {
     KeyUtils.verifySignature(

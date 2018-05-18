@@ -58,7 +58,10 @@ lazy val coreDependencies = Seq(
   "com.google.guava" % "guava" % "21.0",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.51",
   "org.iq80.leveldb"            % "leveldb"          % "0.10" withSources() withJavadoc(),
-  "org.fusesource.leveldbjni"   % "leveldbjni-all"   % "1.8" withSources() withJavadoc()
+  "org.fusesource.leveldbjni"   % "leveldbjni-all"   % "1.8" withSources() withJavadoc(),
+  "com.codahale" % "shamir" % "0.6.0" withSources() withJavadoc(),
+  "org.json4s" %% "json4s-ext" % "3.5.2",
+  "org.scalaj" %% "scalaj-http" % "2.3.0" withJavadoc() withSources()
 )
 
 //Test dependencies
@@ -69,7 +72,6 @@ lazy val testDependencies = Seq(
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
 ).map(_ % "it,test" )
-
 
 
 lazy val root = (project in file("."))

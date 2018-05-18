@@ -241,11 +241,18 @@ trait KeyUtilsExt {
   // TODO : Use a more secure address function.
   // Couldn't find a quick dependency for this, TBI
   // https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses
-  def publicKeyToAddress(
+  def publicKeyToAddressString(
                           key: PublicKey
                         ): String = {
-    import com.roundeights.hasher.Implicits._
-    base64(key.getEncoded).sha256.hex.sha256.hex
+    import constellation.SHA256Ext
+    base64(key.getEncoded).sha256.sha256
+  }
+
+  def publicKeysToAddressString(
+                          key: Seq[PublicKey]
+                        ): String = {
+    import constellation.SHA256Ext
+    key.map{z => base64(z.getEncoded)}.mkString.sha256.sha256
   }
 
   class PrivateKeySerializer extends CustomSerializer[PrivateKey](format => ( {

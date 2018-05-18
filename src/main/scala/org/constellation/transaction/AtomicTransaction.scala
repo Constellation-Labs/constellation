@@ -37,7 +37,7 @@ object AtomicTransaction {
       destinationAddress,
       base64(longToBytes(quantity))
     )
-    def sourceAddress: String = KeyUtils.publicKeyToAddress(sourcePubKey)
+    def sourceAddress: String = KeyUtils.publicKeyToAddressString(sourcePubKey)
 
   }
 
