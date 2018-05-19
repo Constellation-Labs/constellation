@@ -4,6 +4,7 @@ package org.constellation.primitives
 import java.security.PublicKey
 
 import akka.stream.scaladsl.Balance
+import org.constellation.consensus
 import org.constellation.util.{ProductHash, Signed}
 
 // This can't be a trait due to serialization issues
@@ -56,7 +57,13 @@ object Schema {
                                   ) extends ProductHash
 
 
-  sealed trait Event
+  trait Event
+  case object SyncChain extends Event
+  case object Sleep extends Event
+
+  trait NodeState
+  case object Online extends NodeState
+  case object Offline extends NodeState
 
   case class TXData(
                  src: Seq[Address],
@@ -121,7 +128,8 @@ object Schema {
                              ) extends ProductHash
 
   final case class Bundle(
-                           bundles: Signed[BundleData]
+                           bundles: Signed[BundleData],
+                           bundleData: Option[TXData] = None
                          ) extends ProductHash with Event {
 
     def maxStackDepth: Int = {
@@ -153,7 +161,12 @@ object Schema {
 
   }
 
-
+//case class SingleBundle(
+//                         bundles: Signed[BundleData],
+//                         bundleData: Option[TXData] = None
+//                       ) extends Bundle(bundles, bundleData) {
+//  assert(bundles.signatures.size == 1)
+//}
 
   case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash {
     def iter: Seq[Signed[_ >: T <: ProductHash]] = {

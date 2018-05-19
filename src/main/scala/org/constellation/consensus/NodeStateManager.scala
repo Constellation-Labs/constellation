@@ -1,88 +1,58 @@
 package org.constellation.consensus
-import akka.actor.{Actor, FSM}
+import java.security.{KeyPair, PublicKey}
+
+import akka.actor.{Actor, ActorRef, ActorSystem, FSM, PoisonPill, Props}
+import org.constellation.p2p.PeerToPeer
 import org.constellation.primitives.Block
 import org.constellation.state.RateLimitedFSM
+import org.constellation.transaction.AtomicTransaction.TransactionInputData
+import org.constellation.wallet.KeyUtils.makeKeyPair
 
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
-
+import org.constellation.{p2p, _}
+import org.constellation.primitives.Schema._
+import org.constellation.util.POWSignHelp
+import org.constellation.primitives.Schema.Event
 /**
   * Created by Wyatt on 5/10/18.
   */
-sealed trait State
-case object Online extends State
-case object Offline extends State
 
-sealed trait Event
-case object Tx extends Event
-case object Bundle extends Event
-case object SyncChain extends Event
-case object Sleep extends Event
 
+
+/*
+TODO put instantiation in ConstellationNode App into NodeStateManager object
+ */
 object NodeStateManager {
-  def performConsensus(): Future[Unit] =
-    /*
-    should be Future[Block] the result of consensus
-     */
-    Future()
+  def propagate[B <: Bundle](bundle: B) = {}
 
-  def broadcast(tx: Event*): Unit = {
-    /*
-    Use local rep scored to selectively sample neighbors according to a distribution
-     */
-  }
+  /**
+    * Main control flow
+    * @param args
+    */
+  def apply(args: Array[String]) = {
 
-  def syncChain(): Future[Unit] =
-    /*
-    chain sync logic in consensus actor should go here
-     */
-    Future()
-
-  def validBundle(cp: Event*): Boolean = true
-
-  def validTx(tx: Event): Boolean = true
-
-  def setUp(): Unit = {
-    /*
-    instantiate actors for sub processes
-     */
   }
 }
 
-class NodeStateManager extends RateLimitedFSM[State, Event] {
+class NodeStateManager(val keyPair: KeyPair = makeKeyPair(), system: ActorSystem) extends FSM[NodeState, Event] {
   import NodeStateManager._
-  //TODO mixin AtMostOnce FSM StateFunction
+  //TODO make both akkaStreams FSM and self reference
+  val p2p = system.actorOf(Props(new Topology))
+  val validator = system.actorOf(Props(new Manifold))
+
   startWith(Offline, SyncChain)
 
-  when(Online)(rateLimit {
-    case Event(cpBlock@Bundle, _) =>
-      if (validBundle(cpBlock)) broadcast(cpBlock)
-      else performConsensus()
-      stay()
-
-    case Event(tx@Tx, _) =>
-      if (validTx(tx)) broadcast(tx)
-      //else TODO put instaban gossip here
-      stay()
-
-    case Event(Offline, _) => goto(Offline)
-  })
-
-  when(Offline)(rateLimit {
+  when(Offline){
     case Event(Online, _) => goto(Online)
-
-    case Event(tx@Tx, _) =>
-      broadcast(tx)
-      stay
-  })
+    case Event(bundle: Bundle, _) =>
+      propagate(bundle)
+      stay()
+  }
 
   onTransition {
-    case Offline -> Online =>
-
-      syncChain()
-
-    case Online -> Offline =>
-      broadcast(Sleep)
+    case Offline -> Online => linkNetwork(Online)
+    case Online -> Offline => linkNetwork(Online)
   }
 
   whenUnhandled {
@@ -91,5 +61,9 @@ class NodeStateManager extends RateLimitedFSM[State, Event] {
       stay
   }
 
+  def linkNetwork(nodeState: NodeState): Unit = {
+    p2p ! nodeState
+    validator ! nodeState
+  }
   initialize()
 }

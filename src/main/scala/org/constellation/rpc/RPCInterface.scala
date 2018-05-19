@@ -54,7 +54,7 @@ class RPCInterface(
   // TODO: Not this.
   @volatile var wallet : Seq[KeyPair] = Seq()
 
-  private def walletPair = {
+  private def walletPair: KeyPair = {
     val pair = constellation.makeKeyPair()
     wallet :+= pair
     pair
@@ -64,11 +64,11 @@ class RPCInterface(
 
   def addressToKeyPair: Map[String, KeyPair] = wallet.map{ w => w.address.address -> w}.toMap
 
-  private def walletAddressInfo = {
+  private def walletAddressInfo: Map[String, TX] = {
     wallet.map{_.address.address}.flatMap{k => db.getAs[TX](k).map{k -> _}}.toMap
   }
 
-  def outputBalances: Seq[Address] = walletAddressInfo.flatMap{
+  def outputBalances: Seq[Address] = walletAddressInfo.flatMap {
     case (k,v) =>
       v.output(k)
   }.toSeq
@@ -232,11 +232,11 @@ class RPCInterface(
         entity(as[SendToAddress]) { s =>
 
 
-          val ut = utxoBalance
+          val ut: Map[String, Long] = utxoBalance
 
-          val (addressWithSufficientBalance, prvBalance) = ut.filter{_._2 > s.amountActual}.head
+          val (addressWithSufficientBalance: String, prvBalance) = ut.filter{_._2 > s.amountActual}.head
           val txAssociated = walletAddressInfo(addressWithSufficientBalance)
-          val addressMeta = txAssociated.output(addressWithSufficientBalance).get
+          val addressMeta: Address = txAssociated.output(addressWithSufficientBalance).get
 
           val ukp = addressToKeyPair(addressWithSufficientBalance)
 

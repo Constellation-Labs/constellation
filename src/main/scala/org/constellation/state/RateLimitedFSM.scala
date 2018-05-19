@@ -1,6 +1,6 @@
 package org.constellation.state
 
-import akka.actor.FSM
+import akka.actor.{ActorRef, FSM}
 
 /**
   * Created by Wyatt on 5/15/18.
@@ -29,4 +29,8 @@ trait RateLimitedFSM[S, D] extends FSM[S, D] {
       case msg@_ => stateFunction(msg)
     }
   }
+}
+
+trait Semigroup[A] {
+  def combine(x: A, y: A): A
 }
