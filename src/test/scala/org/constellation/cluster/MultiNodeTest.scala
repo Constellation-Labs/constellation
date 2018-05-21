@@ -54,7 +54,8 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     })
   }
 
-  "E2E Multiple Nodes" should "add peers and build blocks with transactions" in {
+  // TODO: disabling until we port over to our new consensus mechanism
+  "E2E Multiple Nodes" should "add peers and build blocks with transactions" ignore {
 
     val numberOfNodes = 3
 

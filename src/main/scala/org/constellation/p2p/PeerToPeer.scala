@@ -11,9 +11,9 @@ import akka.serialization.SerializationExtension
 import akka.util.{ByteString, Timeout}
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock, RequestBlockProposal}
+import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock}
 import org.constellation.LevelDB
-import org.constellation.consensus.Consensus.{Heartbeat, PeerMemPoolUpdated, PeerProposedBlock, RequestBlockProposal}
+import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock}
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.Schema.{Gossip, TX}
@@ -206,7 +206,6 @@ class PeerToPeer(
   var heartBeatMonitor: ScheduledFuture[_] = _
   var heartBeat: ScheduledThreadPoolExecutor = _
 
-
   if (heartbeatEnabled) {
     heartBeat = new ScheduledThreadPoolExecutor(10)
     heartBeatMonitor = heartBeat.scheduleAtFixedRate(bufferTask, 1, 3, TimeUnit.SECONDS)
@@ -383,14 +382,6 @@ class PeerToPeer(
     case UDPMessage(p : PeerProposedBlock, remote) =>
       consensusActor ! p
 
-    case UDPMessage(p : RequestBlockProposal, remote) =>
-
-      println("RequestBlockProposal on " + id.short)
-
-      import akka.pattern.ask
-
-      chainStateActor ! p
-
     case UDPMessage(sh: HandShakeResponseMessage, remote) =>
       //    logger.debug(s"HandShakeResponseMessage from $remote on $externalAddress second remote: $remote")
       //  val o = sh.handShakeResponse.data.original
@@ -436,8 +427,6 @@ class PeerToPeer(
         p =>
           self ! PeerRef(p)
       }
-    case UDPMessage(h: Heartbeat, remote) =>
-      logger.debug(s"Received heartbeat on ${id.short} from ${h.id.short} : $remote")
 
     case UDPMessage(_: Terminated, remote) =>
       logger.debug(s"Peer $remote has terminated. Removing it from the list.")

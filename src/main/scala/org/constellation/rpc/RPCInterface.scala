@@ -14,7 +14,6 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.consensus.Consensus.{DisableConsensus, EnableConsensus, GenerateGenesisBlock}
 import org.constellation.LevelDB
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Schema._
@@ -46,10 +45,8 @@ class RPCInterface(
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-
   import constellation._
   val logger = Logger(s"RPCInterface")
-
 
   // TODO: Not this.
   @volatile var wallet : Seq[KeyPair] = Seq()
@@ -92,7 +89,7 @@ class RPCInterface(
         wallet :+= pair
         complete(pair)
       } ~
-        path("genesis" / LongNumber) { numCoins =>
+      path("genesis" / LongNumber) { numCoins =>
 
           val debtAddress = walletPair
           val dstAddress = walletPair
@@ -132,33 +129,6 @@ class RPCInterface(
       } ~
       // TODO: revisit
       path("health") {
-        complete(StatusCodes.OK)
-      } ~
-      // TODO: revist
-      path("generateGenesisBlock") {
-
-        val future = consensusActor ? GenerateGenesisBlock()
-
-        val responseFuture: Future[Block] = future.mapTo[Block]
-
-        val genesisBlock = Await.result(responseFuture, timeout.duration)
-        // Issue with serialization here, it returns an array on the rpcclient side with 1 element (the block)
-     //   println("Genesis Block in RPC interface " + genesisBlock)
-        import constellation.SerExt
-        val json = genesisBlock.json
-      //  println("Genesis Block in RPC interface serialized " + json)
-        complete(json)
-      } ~
-      path("enableConsensus") {
-
-        consensusActor ! EnableConsensus()
-
-        complete(StatusCodes.OK)
-      } ~
-      path("disableConsensus") {
-
-        consensusActor ! DisableConsensus()
-
         complete(StatusCodes.OK)
       } ~
       path("blocks") {
@@ -204,7 +174,6 @@ class RPCInterface(
           }
         } ~
                complete { //complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Say hello to akka-http</h1>"))
-
                  logger.info("Serve main page")
                  val html = """<!DOCTYPE html>
                               |<html lang="en">
