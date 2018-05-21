@@ -17,10 +17,11 @@ import org.constellation.utils.TestNode
 import org.constellation.wallet.KeyUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
-import scala.collection.immutable.HashMap
+import scala.collection.immutable.{HashMap, Map}
 import org.constellation.Fixtures._
 import org.constellation.primitives.Schema.GetPeersID
 
+import scala.concurrent.duration._
 import scala.concurrent.ExecutionContextExecutor
 
 class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecLike with BeforeAndAfterAll {
@@ -53,20 +54,6 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
           memPoolManagerActor.ref, chainStateManagerActor.ref, keyPair, address1, udpActor.ref
         )(timeout))
       )
-  }
-
-  "getFacilitators" should "give back the correct list of facilitators" in {
-
-    val membersOfCluster = idSet4
-
-    val block = Block("hashPointer", 0L, "sig", membersOfCluster, 0L, Seq())
-
-    val facilitators = Consensus.getFacilitators(block)
-
-    // TODO: modify once we have subset filtering logic
-    val expectedFacilitators = idSet4
-
-    assert(facilitators == expectedFacilitators)
   }
 
   "notifyFacilitatorsOfBlockProposal" should "not propose a block if it is currently not a facilitator" in {
@@ -106,7 +93,6 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     self.expectMsg(peerProposedBlock)
 
     assert(notify)
-
 
   }
 */
@@ -323,6 +309,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     node3.udpActor ! RegisterNextActor(probe3.ref)
     node4.udpActor ! RegisterNextActor(probe4.ref)
     node5.udpActor ! RegisterNextActor(probe5.ref)
+
     val ids: Set[Id] = Seq(node1, node2, node3, node4, node5).map{_.id}.toSet
 
     val node1KeyPair = KeyUtils.makeKeyPair()
@@ -524,7 +511,6 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
       id4 -> Seq(transaction1, transaction2, transaction3, transaction4),
       id5 -> Seq(transaction1, transaction2, transaction3, transaction4)), 0L, testConsensusActor.ref))
 
-
     val expectedConsensusRoundState = ConsensusRoundState(
       Some(node1.peerToPeerActor),
       Some(node1.udpAddress),
@@ -611,6 +597,81 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
       HashMap(1L -> HashMap(id2 -> proposedBlock, id1 -> proposedBlock)))
 
     assert(updatedConsensusState == expectedConsensusRoundState)
+  }
+
+  "the PerformConsensusRound" should "complete and respond with a consensus result" in new WithConsensusActor {
+    val node2 = TestNode()
+    val node3 = TestNode()
+    val node4 = TestNode()
+
+    val transaction1 =
+      Transaction.senderSign(Transaction(0L, keyPair.getPublic, node2.keyPair.getPublic, 33L), keyPair.getPrivate)
+
+    val transaction2 =
+      Transaction.senderSign(Transaction(1L, node2.keyPair.getPublic, node4.keyPair.getPublic, 14L), node2.keyPair.getPrivate)
+
+    memPoolManagerActor.setAutoPilot(new TestActor.AutoPilot {
+      def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = {
+        msg match {
+          case GetMemPool(consensusActor, 0L) ⇒ {
+            consensusActor ! GetMemPoolResponse(Seq(transaction1, transaction2), 0L)
+            TestActor.KeepRunning
+          }
+          case _ ⇒ {
+            TestActor.KeepRunning
+          }
+        }
+      }
+    })
+
+    val peerMemPools = HashMap(0L -> HashMap(
+      Id(keyPair.getPublic) -> Seq(transaction1, transaction2),
+      Id(node2.keyPair.getPublic) -> Seq(transaction1),
+      Id(node3.keyPair.getPublic) -> Seq(transaction1, transaction2),
+      Id(node4.keyPair.getPublic) -> Seq(transaction2)))
+
+    val proposedBlock = Block("sig", 1, "", Set(Id(keyPair.getPublic), Id(node2.keyPair.getPublic),
+      Id(node3.keyPair.getPublic), Id(node4.keyPair.getPublic)), 0, Seq(transaction1, transaction2))
+
+    chainStateManagerActor.setAutoPilot(new TestActor.AutoPilot {
+      def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = {
+        msg match {
+          case CreateBlockProposal(peerMemPools, 0L, consensusActor) ⇒ {
+            consensusActor ! ProposedBlockUpdated(proposedBlock)
+            TestActor.KeepRunning
+          }
+          case _ ⇒ {
+            TestActor.KeepRunning
+          }
+        }
+      }
+    })
+
+    val facilitators = Set(Id(keyPair.getPublic), Id(node2.keyPair.getPublic),
+      Id(node3.keyPair.getPublic), Id(node4.keyPair.getPublic))
+
+    val replyTo = TestProbe()
+
+    consensusActor ! PerformConsensusRound(facilitators, 0L, replyTo.ref)
+
+    // TODO: add message to tell peers to perform consensus round
+
+    consensusActor ! PeerMemPoolUpdated(Seq(transaction1), Id(node2.keyPair.getPublic), 0L)
+
+    consensusActor ! PeerMemPoolUpdated(Seq(transaction1, transaction2), Id(node3.keyPair.getPublic), 0L)
+
+    consensusActor ! PeerMemPoolUpdated(Seq(transaction2), Id(node4.keyPair.getPublic), 0L)
+
+    consensusActor ! PeerProposedBlock(proposedBlock, Id(node2.keyPair.getPublic))
+
+    consensusActor ! PeerProposedBlock(proposedBlock, Id(node3.keyPair.getPublic))
+
+    consensusActor ! PeerProposedBlock(proposedBlock, Id(node4.keyPair.getPublic))
+
+    val consensusBlock = Block("sig", 1, "", Set(Id(keyPair.getPublic), Id(node2.keyPair.getPublic),
+      Id(node3.keyPair.getPublic), Id(node4.keyPair.getPublic)), 0, Seq(transaction1, transaction2))
+
+    replyTo.expectMsg(30 seconds, ConsensusResult(consensusBlock, 0L))
   }
 
 }

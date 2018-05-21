@@ -66,12 +66,6 @@ object Consensus {
 
   // Methods
 
-  def getFacilitators(previousBlock: Block): Set[Id] = {
-    // TODO: here is where we need to grab our random sampling fancy function
-
-    previousBlock.clusterParticipants
-  }
-
   def isFacilitator(facilitators: Set[Id], self: Id): Boolean = {
     facilitators.contains(self)
   }
@@ -110,8 +104,7 @@ object Consensus {
     consensusBlock
   }
 
-  def notifyFacilitators(previousBlock: Block, self: Id, fx: Id => Unit): Boolean = {
-    val facilitators = getFacilitators(previousBlock)
+  def notifyFacilitators(facilitators: Set[Id], self: Id, fx: Id => Unit): Boolean = {
 
     // make sure that we are a facilitator
     if (!isFacilitator(facilitators, self)) {
@@ -123,24 +116,26 @@ object Consensus {
     true
   }
 
-  def notifyFacilitatorsOfBlockProposal(previousBlock: Block,
+  def notifyFacilitatorsOfBlockProposal(facilitators: Set[Id],
                                         proposedBlock: Block,
                                         self: Id,
                                         udpActor: ActorRef)(implicit system: ActorSystem): Boolean = {
 
     // TODO: here replace with call to gossip actor
 
-    notifyFacilitators(previousBlock, self, (f) => {
+    notifyFacilitators(facilitators, self, (f) => {
       udpActor.udpSendToId(PeerProposedBlock(proposedBlock, self), f)
     })
   }
 
-  def notifyFacilitatorsOfMemPool(previousBlock: Block, self: Id,
-                                  transactions: Seq[Transaction], round: Long,
+  def notifyFacilitatorsOfMemPool(facilitators: Set[Id],
+                                  self: Id,
+                                  transactions: Seq[Transaction],
+                                  round: Long,
                                   udpActor: ActorRef)(implicit system: ActorSystem): Boolean = {
     // TODO: here replace with call to gossip actor
 
-    notifyFacilitators(previousBlock, self, (p) => {
+    notifyFacilitators(facilitators, self, (p) => {
       udpActor.udpSendToId(PeerMemPoolUpdated(transactions, self, round), p)
     })
   }
@@ -176,11 +171,10 @@ object Consensus {
                                 )(implicit system: ActorSystem): ConsensusRoundState = {
     val updatedState = consensusRoundState.copy(proposedBlock = Some(block))
 
-    val previousBlock: Option[Block] = updatedState.previousBlock
     val proposedBlock: Option[Block] = updatedState.proposedBlock
 
-    if (proposedBlock.isDefined && previousBlock.isDefined) {
-      Consensus.notifyFacilitatorsOfBlockProposal(previousBlock.get,
+    if (proposedBlock.isDefined) {
+      Consensus.notifyFacilitatorsOfBlockProposal(consensusRoundState.currentFacilitators,
         proposedBlock.get,
         consensusRoundState.selfId,
         udpActor
@@ -284,6 +278,8 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
       consensusRoundState =
         performConsensusRound(consensusRoundState, round, facilitators, memPoolManager, self, udpAddress, replyTo)
 
+      // gossip to others that we need to perform a consensus round
+
     case ProposedBlockUpdated(block) =>
       logger.debug(s"$selfId proposed block updated= $block")
 
@@ -296,6 +292,8 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
 
       consensusRoundState = handleProposedBlockUpdated(consensusRoundState, block, udpAddress, udpActor)
 
+      consensusRoundState = handlePeerProposedBlock(consensusRoundState, self, block, selfId)
+
     case GetMemPoolResponse(transactions, round) =>
 
       val peerMemPools =
@@ -304,7 +302,7 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
 
       consensusRoundState = consensusRoundState.copy(peerMemPools = peerMemPools)
 
-      notifyFacilitatorsOfMemPool(consensusRoundState.previousBlock.get,
+      notifyFacilitatorsOfMemPool(consensusRoundState.currentFacilitators,
         consensusRoundState.selfId, transactions, round, udpActor)
 
       self ! PeerMemPoolUpdated(transactions, consensusRoundState.selfId, round)
