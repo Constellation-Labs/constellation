@@ -63,6 +63,7 @@ object Consensus {
   case class PeerMemPoolUpdated(transactions: Seq[Transaction], peer: Id, round: Long)
   case class PeerProposedBlock(block: Block, peer: Id)
   case class ConsensusResult(block: Block, round: Long)
+  case class ConsensusRoundRequested(requester: Id)
 
   // Methods
 
@@ -114,6 +115,16 @@ object Consensus {
     facilitators.filter(p => p != self).foreach(fx)
 
     true
+  }
+
+  def notifyFacilitatorsToStartConsensusRound(facilitators: Set[Id], self: Id, udpActor: ActorRef)
+                                             (implicit system: ActorSystem): Boolean = {
+
+    // TODO: here replace with call to gossip actor
+
+    notifyFacilitators(facilitators, self, (f) => {
+      udpActor.udpSendToId(ConsensusRoundRequested(self), f)
+    })
   }
 
   def notifyFacilitatorsOfBlockProposal(facilitators: Set[Id],
@@ -277,8 +288,6 @@ class Consensus(memPoolManager: ActorRef, chainManager: ActorRef, keyPair: KeyPa
 
       consensusRoundState =
         performConsensusRound(consensusRoundState, round, facilitators, memPoolManager, self, udpAddress, replyTo)
-
-      // gossip to others that we need to perform a consensus round
 
     case ProposedBlockUpdated(block) =>
       logger.debug(s"$selfId proposed block updated= $block")

@@ -10,7 +10,7 @@ import akka.testkit.{TestActor, TestKit, TestProbe}
 import akka.util.Timeout
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.PeerToPeer.{GetPeers, Id, Peers}
-import org.constellation.p2p.{RegisterNextActor, UDPMessage}
+import org.constellation.p2p.{RegisterNextActor, UDPMessage, UDPSendToID}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.ChainStateManager.{AddBlock, CreateBlockProposal}
 import org.constellation.utils.TestNode
@@ -654,7 +654,11 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     consensusActor ! PerformConsensusRound(facilitators, 0L, replyTo.ref)
 
-    // TODO: add message to tell peers to perform consensus round
+    udpActor.expectMsg(UDPSendToID(PeerMemPoolUpdated(Seq(transaction1, transaction2), Id(keyPair.getPublic), 0L), Id(node2.keyPair.getPublic)))
+
+    udpActor.expectMsg(UDPSendToID(PeerMemPoolUpdated(Seq(transaction1, transaction2), Id(keyPair.getPublic), 0L), Id(node3.keyPair.getPublic)))
+
+    udpActor.expectMsg(UDPSendToID(PeerMemPoolUpdated(Seq(transaction1, transaction2), Id(keyPair.getPublic), 0L), Id(node4.keyPair.getPublic)))
 
     consensusActor ! PeerMemPoolUpdated(Seq(transaction1), Id(node2.keyPair.getPublic), 0L)
 
@@ -667,6 +671,12 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     consensusActor ! PeerProposedBlock(proposedBlock, Id(node3.keyPair.getPublic))
 
     consensusActor ! PeerProposedBlock(proposedBlock, Id(node4.keyPair.getPublic))
+
+    udpActor.expectMsg(UDPSendToID(PeerProposedBlock(proposedBlock, Id(keyPair.getPublic)), Id(node2.keyPair.getPublic)))
+
+    udpActor.expectMsg(UDPSendToID(PeerProposedBlock(proposedBlock, Id(keyPair.getPublic)), Id(node3.keyPair.getPublic)))
+
+    udpActor.expectMsg(UDPSendToID(PeerProposedBlock(proposedBlock, Id(keyPair.getPublic)), Id(node4.keyPair.getPublic)))
 
     val consensusBlock = Block("sig", 1, "", Set(Id(keyPair.getPublic), Id(node2.keyPair.getPublic),
       Id(node3.keyPair.getPublic), Id(node4.keyPair.getPublic)), 0, Seq(transaction1, transaction2))
