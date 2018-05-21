@@ -66,6 +66,13 @@ class TXTest extends FlatSpec {
 
     assert(iter3.head.data == tx)
 
+    println(g.iter.map{_.hash})
+    println(gg.iter.map{_.hash})
+    println(ggg.iter.map{_.hash})
+
+    println(ggg.iter.map{_.hash}.zip(g.iter.map{_.hash}))
+
+
   }
 
   "Bundle" should "demonstrate recursive bundling" in {

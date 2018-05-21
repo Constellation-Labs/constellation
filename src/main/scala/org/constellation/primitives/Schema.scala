@@ -6,45 +6,36 @@ import java.security.PublicKey
 import akka.stream.scaladsl.Balance
 import org.constellation.util.{ProductHash, Signed}
 
+import scala.collection.mutable
+
 // This can't be a trait due to serialization issues
 object Schema {
 
   // I.e. equivalent to number of sat per btc
   val NormalizationFactor: Long = 1e8.toLong
 
-  case class AddressCache(
-                         cache: Map[Address, AddressVertexCache]
-                         ) {
-    def balance(a: Address): Option[Long] = cache.get(a).map{
-      _.down.map{_.tx.data.amount}.sum
-    }
-  }
 
   case class SendToAddress(
                             address: Address,
                             amount: Long,
-                            account: Option[PublicKey],
-                            normalized: Boolean = true
+                            account: Option[PublicKey] = None,
+                            normalized: Boolean = true,
+                            oneTimeUse: Boolean = false
                           ) {
     def amountActual: Long = if (normalized) amount * NormalizationFactor else amount
   }
 
-  // TODO: Revisit - need more indices here
-  case class AddressVertexCache(
-                         up: Option[TX],
-                         down: Option[TX] = None // Not present for genesis
-                         )
-
-
-
 
   // TODO: We also need a hash pointer to represent the post-tx counter party signing data, add later
+  // TX should still be accepted even if metadata is incorrect, it just serves to help validation rounds.
   case class Address(
                       address: String,
                       balance: Long = 0L,
-                      txHash: Seq[String] = Seq(),
+                      lastValidTransactionHash: Option[String] = None,
+                      txHashPool: Seq[String] = Seq(),
                       txHashOverflowPointer: Option[String] = None,
-                      oneTimeUse: Boolean = false
+                      oneTimeUse: Boolean = false,
+                      depth: Int = 0
                     ) extends ProductHash {
     def normalizedBalance: Long = balance / NormalizationFactor
   }
@@ -55,26 +46,25 @@ object Schema {
                                     counterPartyAccount: Option[PublicKey]
                                   ) extends ProductHash
 
-
   sealed trait Event
 
   case class TXData(
-                 src: Seq[Address],
-                 dst: Address,
-                 amount: Long,
-                 remainder: Option[Address] = None,
-                 srcAccount: Option[PublicKey] = None,
-                 dstAccount: Option[PublicKey] = None,
-                 counterPartySigningRequest: Option[Signed[CounterPartyTXRequest]] = None,
-                 // ^ this is for extra security where a receiver can confirm a transaction without
-                 // revealing it's address key -- requires receiver link dst to counterParty addresses.
-                 keyMap: Seq[Int] = Seq(), // for multi-signature transactions
-                 confirmationWindowSeconds: Int = 5,
-                 genesisTXHash: Option[String] = None,
-                 isGenesis: Boolean = false
-               ) extends ProductHash {
+                     src: Seq[Address],
+                     dst: Address,
+                     amount: Long,
+                     remainder: Option[Address] = None,
+                     srcAccount: Option[PublicKey] = None,
+                     dstAccount: Option[PublicKey] = None,
+                     counterPartySigningRequest: Option[Signed[CounterPartyTXRequest]] = None,
+                     // ^ this is for extra security where a receiver can confirm a transaction without
+                     // revealing it's address key -- requires receiver link dst to counterParty addresses.
+                     keyMap: Seq[Int] = Seq(), // for multi-signature transactions
+                     confirmationWindowSeconds: Int = 5,
+                     genesisTXHash: Option[String] = None,
+                     isGenesis: Boolean = false
+                     // TODO: Add threshold maps
+                   ) extends ProductHash {
     def inverseAmount: Long = -1*amount
-    // def remainderAmount
   }
 
   case class TX(tx: Signed[TXData]) extends ProductHash with Event {
@@ -112,50 +102,94 @@ object Schema {
       s" TO ${tx.data.dst.address.slice(0, 5)} REMAINDER " +
       s"${tx.data.remainder.map{_.address}.getOrElse("empty").slice(0, 5)} " +
       s"amount ${tx.data.amount}"
+
+    def utxoValid(utxo: mutable.HashMap[String, Long]): Boolean = {
+      val srcSum = tx.data.src.map{_.hash}.flatMap{utxo.get}.sum
+      srcSum >= tx.data.amount && valid
+    }
+
+    def updateUTXO(UTXO: mutable.HashMap[String, Long]): Unit = {
+      val txDat = tx.data
+      if (txDat.isGenesis) {
+        // UTXO(txDat.src.head.address) = txDat.inverseAmount
+        // Move elsewhere ^ too complex.
+        UTXO(txDat.dst.address) = txDat.amount
+      } else {
+
+        val total = txDat.src.map{s => UTXO(s.address)}.sum
+        val remainder = total - txDat.amount
+
+        // Empty src balance.
+        txDat.src.foreach{
+          s =>
+            UTXO(s.address) = 0L
+        }
+
+        val prevDstBalance = UTXO.getOrElse(txDat.dst.address, 0L)
+        UTXO(txDat.dst.address) = prevDstBalance + txDat.amount
+
+        txDat.remainder.foreach{ r =>
+          val prv = UTXO.getOrElse(r.address, 0L)
+          UTXO(r.address) = prv + remainder
+        }
+
+        // Repopulate head src with remainder if no remainder address specified
+        if (txDat.remainder.isEmpty && remainder != 0) {
+          UTXO(txDat.src.head.address) = remainder
+        }
+
+      }
+    }
   }
 
+  final case class VoteData(accept: Seq[TX], reject: Seq[TX]) extends ProductHash
 
-  final case class BundleData(
-                               bundles: Seq[Event],
-                               overflowHashPointer: Option[String] = None
-                             ) extends ProductHash
+  final case class Vote(vote: Signed[VoteData]) extends ProductHash with Event
+
+  // Participants are notarized via signatures.
+  final case class BundleBlock(
+                                parentHash: String,
+                                height: Long,
+                                txHash: Seq[String]
+                              ) extends ProductHash with Event
+
+  final case class BundleHash(hash: String) extends Event
+
+  final case class BundleData(bundles: Seq[Event]) extends ProductHash
 
   final case class Bundle(
-                           bundles: Signed[BundleData]
+                           bundleData: Signed[BundleData]
                          ) extends ProductHash with Event {
 
     def maxStackDepth: Int = {
       def process(s: Signed[BundleData]): Int = {
-        val bd = s.data
-        val depths = bd.bundles.map {
+        val bd = s.data.bundles
+        val depths = bd.map {
           case b2: Bundle =>
-            process(b2.bundles) + 1
+            process(b2.bundleData) + 1
           case _ => 0
         }
         depths.max
       }
-      process(bundles) + 1
+      process(bundleData) + 1
     }
 
     def totalNumEvents: Int = {
       def process(s: Signed[BundleData]): Int = {
-        val bd = s.data
-        val depths = bd.bundles.map {
+        val bd = s.data.bundles
+        val depths = bd.map {
           case b2: Bundle =>
-            process(b2.bundles) + 1
+            process(b2.bundleData) + 1
           case _ => 1
         }
         depths.sum
       }
-      process(bundles) + 1
+      process(bundleData) + 1
     }
-
 
   }
 
-
-
-  case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash {
+  case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash with Event {
     def iter: Seq[Signed[_ >: T <: ProductHash]] = {
       def process[Q <: ProductHash](s: Signed[Q]): Seq[Signed[ProductHash]] = {
         s.data match {
@@ -188,6 +222,8 @@ object Schema {
   final case object GetPeersData extends InternalCommand
   final case object GetUTXO extends InternalCommand
   final case object ToggleHeartbeat extends InternalCommand
+
+  final case class ValidateTransaction(tx: TX) extends InternalCommand
 
 
 }

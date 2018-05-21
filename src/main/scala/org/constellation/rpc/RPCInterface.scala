@@ -93,7 +93,6 @@ class RPCInterface(
         complete(pair)
       } ~
         path("genesis" / LongNumber) { numCoins =>
-          import constellation._
 
           val debtAddress = walletPair
           val dstAddress = walletPair
@@ -253,7 +252,7 @@ class RPCInterface(
           val txD = TXData(
             Seq(addressMeta.copy(
               balance = 0L,
-              txHash = addressMeta.txHash :+ txAssociated.hash
+              txHashPool = addressMeta.txHashPool :+ txAssociated.hash
             )),
             s.address.copy(
               balance = s.amountActual
