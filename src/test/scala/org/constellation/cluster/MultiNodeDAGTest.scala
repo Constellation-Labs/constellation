@@ -94,6 +94,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     assert(filteredCache.head.normalizedBalance == numCoinsInitial)
 */
 
+/*
 
 
     val b1 = r1.getBlocking[Seq[Address]]("balances")
@@ -140,6 +141,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     println(b3)
    // println(n2UTXO)
 
+*/
 
 
     // println(b3)
