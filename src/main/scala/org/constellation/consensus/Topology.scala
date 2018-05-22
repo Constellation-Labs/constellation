@@ -1,35 +1,44 @@
 package org.constellation.consensus
 
-import java.security.KeyPair
-
-import akka.actor.{Actor, FSM}
+import akka.actor.FSM
+import cats.Functor
+import cats.implicits._
 import org.constellation.primitives.Schema._
-import org.constellation.state.{RateLimitedFSM, Semigroup}
-
 /**
   * Created by Wyatt on 5/18/18.
   */
 object Topology {
   def broadcast[T <: Event](tx: T*): Unit = {
-    /*
-    Use local rep scored to selectively sample neighbors according to a distribution
-     */
+    // TODO Use local rep scored to selectively sample neighbors according to a distribution
+  }
+
+  def algebra[B](f: Functor[B]): B = {
+    //TODO cata: flatten over future/promise, essentially just return the value of the raw fiber data after validation
+  }
+
+  def coAlgebra[B](g: B): Functor[B] = {
+    //TODO ana: enque from mempool into this future, begin validation process with the metadata from last block B, pull data from mempool manager, via ask
   }
 
   /**
-    * This is the source stream io monad, p2p => validator
+    * This is the source of a stream io monad, also colapses into new source for new stream (hash pointer)
     */
-  def hyloMorphism[S <: Semigroup[Event]]() = {}
-  //TODO PartialFunction? We want to handle ring buffering here, the ring buffer is a continuous reduce over
-  // semigroup/monoid (when Bundle is still empty) operation, ring buffer of Bundle[Event] <: Future,
-  // when the result of isvalid comes back from manifold, "pop" the z element and the Bundle together.
+
+  def hylo[F[_] : Functor, A, B](f: F[B] => B)(g: A => F[A]): A => B = a => f(g(a) map hylo(f)(g))
+  //  def hylo[F[_]: Functor, A, B](a: A)(f: Algebra[F, B], g: Coalgebra[F, A])): B
+
 }
 
-class Topology[S, D] extends FSM[S, D]{//TODO use akka streams/typed streams
+class Topology[S, D] extends FSM[NodeState, Event]{//TODO use akka streams/typed streams
   // extends PeerToPeer with MempoolManager
-  //TODO hyloMorphism partial function
 
-  //TODO put these in util
-  //  def signBundle(keyPair: KeyPair, transaction: TXData) = TX(transaction.signed()(keyPair))
-  //  def validTx(tx: TXData): Boolean = true
+  startWith(Offline, SyncChain)
+
+  when(Offline){
+    case Event(bundle: Bundle, _) =>
+      //ringBuffer.parFold(hyloMorphism(bundle))
+      stay()
+    case Event(Offline, _) => goto(Offline)
+  }
+  initialize()
 }

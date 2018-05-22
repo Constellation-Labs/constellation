@@ -2,6 +2,7 @@ package org.constellation.consensus
 import java.security.{KeyPair, PublicKey}
 
 import akka.actor.{Actor, ActorRef, ActorSystem, FSM, PoisonPill, Props}
+import cats.Functor
 import org.constellation.p2p.PeerToPeer
 import org.constellation.primitives.Block
 import org.constellation.state.RateLimitedFSM
@@ -17,17 +18,11 @@ import org.constellation.primitives.Schema.Event
 /**
   * Created by Wyatt on 5/10/18.
   */
-
-
-
-/*
-TODO put instantiation in ConstellationNode App into NodeStateManager object
- */
 object NodeStateManager {
   def propagate[B <: Bundle](bundle: B) = {}
 
   /**
-    * Main control flow
+    * TODO put instantiation in ConstellationNode App into NodeStateManager object
     * @param args
     */
   def apply(args: Array[String]) = {
@@ -51,8 +46,8 @@ class NodeStateManager(val keyPair: KeyPair = makeKeyPair(), system: ActorSystem
   }
 
   onTransition {
-    case Offline -> Online => linkNetwork(Online)
-    case Online -> Offline => linkNetwork(Online)
+    case Offline -> Online => toggleNetworkConnection(Online)
+    case Online -> Offline => toggleNetworkConnection(Online)
   }
 
   whenUnhandled {
@@ -61,7 +56,7 @@ class NodeStateManager(val keyPair: KeyPair = makeKeyPair(), system: ActorSystem
       stay
   }
 
-  def linkNetwork(nodeState: NodeState): Unit = {
+  def toggleNetworkConnection(nodeState: NodeState): Unit = {
     p2p ! nodeState
     validator ! nodeState
   }
