@@ -7,16 +7,16 @@ import org.constellation.primitives.Schema._
 /**
   * Created by Wyatt on 5/18/18.
   */
-object Topology {
+object Topology extends Recursive {
   def broadcast[T <: Event](tx: T*): Unit = {
     // TODO Use local rep scored to selectively sample neighbors according to a distribution
   }
 
-  def algebra[B](f: Functor[B]): B = {
+  override def algebra[B](f: Functor[B]): B = {
     //TODO cata: flatten over future/promise, essentially just return the value of the raw fiber data after validation
   }
 
-  def coAlgebra[B](g: B): Functor[B] = {
+  override def coAlgebra[B](g: B): Functor[B] = {
     //TODO ana: enque from mempool into this future, begin validation process with the metadata from last block B, pull data from mempool manager, via ask
   }
 

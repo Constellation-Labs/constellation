@@ -1,9 +1,8 @@
 package org.constellation.consensus
 
 import cats.Functor
-import org.constellation.consensus.Fiber._
 
-object Manifold {
+object Manifold extends Recursive {
   def algebra[B](f: Functor[B]): B = {
     //TODO fires off and retries until successful, result is enqueued again with new call tree
   }

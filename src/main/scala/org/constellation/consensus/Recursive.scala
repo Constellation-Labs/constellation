@@ -17,7 +17,7 @@ trait Fiber
   * and value. In the limit, higher dimensional manifolds have more memetic influence. Higher dimensional manifolds
   * are also very expensive, allowing us to prevent spam attacks like a proof of work step.
   */
-case class Bundle(fibers: Fiber*) extends Fiber
+case class Bundle(fibers: Recursive*) extends Recursive
 
 /**
   * This is a covering of covers. Conflicting bundles are gathered, consensus is applied, then the result is scattered. Consensus is a gather apply scatter
@@ -31,9 +31,12 @@ case class Block(bundles: Bundle*)
   * Entropic flow, is the use of entropy as a measure for a hausdorff clustering which seeks to find the optimal covering
   * of a lipschitz function.
   */
-abstract class Cell extends Functor[Fiber]
+abstract class Cell extends Functor[Recursive]
 
-object Fiber {
+trait Recursive {
+
+  def algebra[B](f: Functor[B]): B
+  def coAlgebra[B](g: B): Functor[B]
 
   case class Fix[F[_]](unfix: F[Fix[F]])
   //Type A => F[A] is a Coalgebra.
