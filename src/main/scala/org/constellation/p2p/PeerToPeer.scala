@@ -16,7 +16,7 @@ import org.constellation.LevelDB
 import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock}
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Chain.Chain
-import org.constellation.primitives.Schema.{AddressVertexCache, Gossip, TX}
+import org.constellation.primitives.Schema.{Gossip, TX}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.MemPoolManager.AddTransaction
 import org.constellation.util.{ProductHash, Signed}
@@ -180,7 +180,7 @@ class PeerToPeer(
 
   private def banOn[T](valid: => Boolean, remote: InetSocketAddress)(t: => T) = {
     if (valid) t else {
-      logger.debug(s"BANNING - Invalid HandShakeResponse from - $remote")
+      logger.debug(s"BANNING - Invalid data from - $remote")
       udpActor ! Ban(remote)
     }
   }
@@ -211,6 +211,25 @@ class PeerToPeer(
     heartBeatMonitor = heartBeat.scheduleAtFixedRate(bufferTask, 1, 3, TimeUnit.SECONDS)
   }
 
+  @volatile var memPoolTX: Set[TX] = Set()
+
+  @volatile var validTX: Set[TX] = Set()
+
+ // @volatile var bundlePool: Set[Bundle] = Set()
+
+ // @volatile var superSelfBundle : Option[Bundle] = None
+
+  private val validUTXO = mutable.HashMap[String, Long]()
+
+  private val memPoolUTXO = mutable.HashMap[String, Long]()
+
+  // TODO: Make this a graph to prevent duplicate storages.
+  private val txToGossipChains = mutable.HashMap[String, Seq[Gossip[_]]]()
+
+  // This should be identical to levelDB hashes but I'm putting here as a way to double check
+  // Ideally the hash workload should prioritize memory and dump to disk later but can be revisited.
+  private val addressToTX = mutable.HashMap[String, TX]()
+
   override def receive: Receive = {
 
     case DBQuery(key) =>
@@ -218,43 +237,82 @@ class PeerToPeer(
       sender() ! db.get(key)
 
     case tx: TX =>
-      memPoolActor ! tx
-      chainStateActor ! tx
-      val g = Gossip(tx.signed())
-      broadcast(g)
+
+      this.synchronized {
+        if (tx.utxoValid(validUTXO) && tx.utxoValid(memPoolUTXO) && !memPoolTX.contains(tx)) {
+          tx.updateUTXO(memPoolUTXO)
+          memPoolTX += tx
+          val g = Gossip(tx.signed())
+          broadcast(g)
+        }
+      }
 
     case UDPMessage(g @ Gossip(e), remote) =>
 
-      val gossipSeq = g.iter
-      val tx = gossipSeq.head.data.asInstanceOf[TX]
+      this.synchronized {
 
-      memPoolActor ! tx
-      chainStateActor ! tx
+        val gossipSeq = g.iter
+        val tx = gossipSeq.head.data.asInstanceOf[TX]
 
-      val peer = peerLookup(remote).data.id
-      val gossipKeys = gossipSeq.flatMap{_.publicKeys}.distinct.map{Id}
-      val containsSelf = gossipKeys.contains(id)
-      val underMaxDepth = g.stackDepth < 6
+        if (validTX.contains(tx)) {
+          logger.debug(s"Ignoring gossip on already validated transaction: ${tx.short}")
+        } else {
 
-      val transitionProbabilities = Seq(1.0, 0.5, 0.2, 0.1, 0.05, 0.001)
-      val prob = transitionProbabilities(g.stackDepth - 1)
-      val emit = scala.util.Random.nextDouble() < prob
+          if (!tx.utxoValid(validUTXO)) {
+            logger.debug(s"Ignoring invalid transaction ${tx.short} detected from p2p gossip")
+          } else if (!tx.utxoValid(memPoolUTXO)) {
+            logger.debug(s"Conflicting transactions detected ${tx.short}")
+            // Find conflicting transactions
+            val conflicts = memPoolTX.toSeq.filter{ m =>
+              tx.tx.data.src.map{_.address}.intersect(m.tx.data.src.map{_.address}).nonEmpty
+            }
+            conflicts.map{c => txToGossipChains.get(c.hash)}
 
-      val skipIDs = (gossipKeys :+ peer).distinct
-      val idsCanSendTo = peerIDLookup.keys.filter{k => !skipIDs.contains(k)}.toSeq
+          } else {
 
-      val peerTransitionProbabilities = Seq(1.0, 0.8, 0.5, 0.3, 0.2, 0.1)
-      val peerProb = peerTransitionProbabilities(g.stackDepth - 1)
-      val numPeersToSendTo = (idsCanSendTo.size.toDouble * peerProb).toInt
-      val shuffled = scala.util.Random.shuffle(idsCanSendTo)
-      val peersToSendTo = shuffled.slice(0, numPeersToSendTo)
+            val chains = txToGossipChains.get(tx.hash)
+            if (chains.isEmpty) txToGossipChains(tx.hash) = Seq(g)
+            else {
+              val chainsA = chains.get
+              chainsA.filter{ c =>
+                val ele = c.iter.map{_.hash}.zip(gossipSeq.map{_.hash})
+                true
+              }
+            }
 
- ///     logger.debug(s"Gossip nodeId: ${id.medium}, tx: ${tx.short}, depth: ${g.stackDepth}, prob: $prob, emit: $emit, " +
-  //      s"numPeersToSend: $numPeersToSendTo")
+            memPoolTX += tx
+            // Continue gossip.
+            val peer = peerLookup(remote).data.id
+            val gossipKeys = gossipSeq.flatMap {
+              _.publicKeys
+            }.distinct.map {
+              Id
+            }
+            val containsSelf = gossipKeys.contains(id)
+            val underMaxDepth = g.stackDepth < 6
 
-      if (underMaxDepth && !containsSelf && emit) {
-        val gPrime = Gossip(g.signed())
-        broadcast(gPrime, skipIDs = skipIDs, idSubset = peersToSendTo)
+            val transitionProbabilities = Seq(1.0, 0.5, 0.2, 0.1, 0.05, 0.001)
+            val prob = transitionProbabilities(g.stackDepth - 1)
+            val emit = scala.util.Random.nextDouble() < prob
+
+            val skipIDs = (gossipKeys :+ peer).distinct
+            val idsCanSendTo = peerIDLookup.keys.filter { k => !skipIDs.contains(k) }.toSeq
+
+            val peerTransitionProbabilities = Seq(1.0, 0.8, 0.5, 0.3, 0.2, 0.1)
+            val peerProb = peerTransitionProbabilities(g.stackDepth - 1)
+            val numPeersToSendTo = (idsCanSendTo.size.toDouble * peerProb).toInt
+            val shuffled = scala.util.Random.shuffle(idsCanSendTo)
+            val peersToSendTo = shuffled.slice(0, numPeersToSendTo)
+
+            ///     logger.debug(s"Gossip nodeId: ${id.medium}, tx: ${tx.short}, depth: ${g.stackDepth}, prob: $prob, emit: $emit, " +
+            //      s"numPeersToSend: $numPeersToSendTo")
+
+            if (underMaxDepth && !containsSelf && emit) {
+              val gPrime = Gossip(g.signed())
+              broadcast(gPrime, skipIDs = skipIDs, idSubset = peersToSendTo)
+            }
+          }
+        }
       }
 
     case Broadcast(data) => broadcast(data.asInstanceOf[AnyRef])
@@ -380,3 +438,4 @@ class PeerToPeer(
   }
 
 }
+

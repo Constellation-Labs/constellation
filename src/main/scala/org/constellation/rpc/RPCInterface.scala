@@ -90,25 +90,25 @@ class RPCInterface(
         complete(pair)
       } ~
       path("genesis" / LongNumber) { numCoins =>
-        import constellation._
 
-        val debtAddress = walletPair
-        val dstAddress = walletPair
+          val debtAddress = walletPair
+          val dstAddress = walletPair
 
-        val amount = numCoins * Schema.NormalizationFactor
-        val tx = TX(
-          TXData(
-            Seq(debtAddress.address.copy(balance = -1*amount, isGenesis = true)),
-            dstAddress.address.copy(balance=amount, isGenesis = true),
-            amount,
-            dstAccount = Some(id.id),
-            isGenesis = true
-          ).signed()(debtAddress)
-        )
-        peerToPeerActor ! tx
-        complete(tx.json)
-      } ~
-      path("makeKeyPairs" / IntNumber) { numPairs =>
+          val amount = numCoins * Schema.NormalizationFactor
+          val tx = TX(
+            TXData(
+              Seq(debtAddress.address.copy(balance = -1*amount)),
+              dstAddress.address.copy(balance=amount),
+              amount,
+              dstAccount = Some(id.id),
+              genesisTXHash = None,
+              isGenesis = true
+            ).signed()(debtAddress)
+          )
+          peerToPeerActor ! tx
+          complete(tx.json)
+        } ~
+        path("makeKeyPairs" / IntNumber) { numPairs =>
         val pair = Seq.fill(numPairs){constellation.makeKeyPair()}
         wallet ++= pair
         complete(pair)
@@ -210,33 +210,31 @@ class RPCInterface(
 
           val remainder = walletPair
 
-          import constellation._
           val remainderBalance = prvBalance - s.amountActual
 
           println(s"Send To Address $prvBalance $addressWithSufficientBalance $addressMeta $txAssociated")
 
-          val genHash = if (txAssociated.tx.data.isGenesis) Some(txAssociated.hash) else txAssociated.tx.data.genesisTXHash
+          val genHash = if (txAssociated.tx.data.genesisTXHash.isEmpty && txAssociated.tx.data.isGenesis)
+            Some(txAssociated.hash) else txAssociated.tx.data.genesisTXHash
 
+          // TODO: Fix hashes.
           val txD = TXData(
             Seq(addressMeta.copy(
-              balance = 0L, // TODO: Allow funds to remain later if user prompts, more complex.
-              rootTransactionHash = Some(txAssociated.hash),
-              genesisTXHash = genHash
+              balance = 0L,
+              txHashPool = addressMeta.txHashPool :+ txAssociated.hash
             )),
             s.address.copy(
-              balance = s.amountActual,
-              rootTransactionHash = Some(txAssociated.hash), // On updates, re-assign this value to the next TX hash.
-              genesisTXHash = genHash
+              balance = s.amountActual
             ),
             s.amountActual,
             remainder = Some(remainder.address.copy(
-              balance = remainderBalance,
-              rootTransactionHash = Some(txAssociated.hash),
-              genesisTXHash = genHash
+              balance = remainderBalance
             )),
             srcAccount = Some(id.id),
-            dstAccount = s.account
+            dstAccount = s.account,
+            genesisTXHash = genHash
           )
+
           val tx = TX(txD.multiSigned()(Seq(ukp, keyPair)))
 
           logger.info(s"SendToAddress RPC Transaction: ${tx.pretty}")
