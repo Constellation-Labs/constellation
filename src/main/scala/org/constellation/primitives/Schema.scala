@@ -142,7 +142,9 @@ object Schema {
     }
   }
 
-  final case class VoteData(accept: Seq[TX], reject: Seq[TX]) extends ProductHash
+  final case class VoteCandidate(tx: TX, gossip: Seq[Gossip[ProductHash]])
+
+  final case class VoteData(accept: Seq[VoteCandidate], reject: Seq[VoteCandidate]) extends ProductHash
 
   final case class Vote(vote: Signed[VoteData]) extends ProductHash with Event
 
@@ -221,6 +223,7 @@ object Schema {
   final case object GetPeersID extends InternalCommand
   final case object GetPeersData extends InternalCommand
   final case object GetUTXO extends InternalCommand
+  final case object GetMemPoolUTXO extends InternalCommand
   final case object ToggleHeartbeat extends InternalCommand
 
   final case class ValidateTransaction(tx: TX) extends InternalCommand

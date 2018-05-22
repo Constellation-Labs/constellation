@@ -167,6 +167,11 @@ package object constellation extends KeyUtilsExt with POWExt
 
   }
 
+  implicit class PubKeyExt(publicKey: PublicKey) {
+    // Conflict with old schema, add later
+  //  def address: Address = pubKeyToAddress(publicKey)
+  }
+
   implicit class ActorQuery(a: ActorRef) {
     import akka.pattern.ask
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)

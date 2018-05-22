@@ -39,6 +39,7 @@ object PeerToPeer {
   case class Id(id: PublicKey) {
     def short: String = id.toString.slice(15, 20)
     def medium: String = id.toString.slice(15, 25).replaceAll(":", "")
+    def address: Address = pubKeyToAddress(id)
   }
 
   case class GetPeers()
@@ -224,13 +225,19 @@ class PeerToPeer(
   private val memPoolUTXO = mutable.HashMap[String, Long]()
 
   // TODO: Make this a graph to prevent duplicate storages.
-  private val txToGossipChains = mutable.HashMap[String, Seq[Gossip[_]]]()
+  private val txToGossipChains = mutable.HashMap[String, Seq[Gossip[ProductHash]]]()
 
   // This should be identical to levelDB hashes but I'm putting here as a way to double check
   // Ideally the hash workload should prioritize memory and dump to disk later but can be revisited.
   private val addressToTX = mutable.HashMap[String, TX]()
 
   override def receive: Receive = {
+
+    case GetUTXO =>
+      sender() ! validUTXO.toMap
+
+    case GetMemPoolUTXO =>
+      sender() ! memPoolUTXO.toMap
 
     case DBQuery(key) =>
 
@@ -239,12 +246,14 @@ class PeerToPeer(
     case tx: TX =>
 
       this.synchronized {
-        if (tx.utxoValid(validUTXO) && tx.utxoValid(memPoolUTXO) && !memPoolTX.contains(tx)) {
+        //if (tx.utxoValid(validUTXO) && tx.utxoValid(memPoolUTXO) && !memPoolTX.contains(tx)) {
+        if (!memPoolTX.contains(tx)) {
           tx.updateUTXO(memPoolUTXO)
           memPoolTX += tx
-          val g = Gossip(tx.signed())
-          broadcast(g)
         }
+
+        val g = Gossip(tx.signed())
+        broadcast(g)
       }
 
     case UDPMessage(g @ Gossip(e), remote) =>
@@ -266,21 +275,33 @@ class PeerToPeer(
             val conflicts = memPoolTX.toSeq.filter{ m =>
               tx.tx.data.src.map{_.address}.intersect(m.tx.data.src.map{_.address}).nonEmpty
             }
-            conflicts.map{c => txToGossipChains.get(c.hash)}
+            val chains = conflicts.map{c =>
+              VoteCandidate(c, txToGossipChains.getOrElse(c.hash, Seq()))
+            }
+            val newTXVote = VoteCandidate(tx, txToGossipChains.getOrElse(tx.hash, Seq()))
+            val chooseOld = chains.map{_.gossip.size}.sum > newTXVote.gossip.size
+
+            val accept = if (chooseOld) chains else Seq(newTXVote)
+            val reject = if (!chooseOld) chains else Seq(newTXVote)
+            broadcast(Vote(VoteData(accept, reject).signed()))
 
           } else {
+
+            if (!memPoolTX.contains(tx)) {
+              tx.updateUTXO(memPoolUTXO)
+              memPoolTX += tx
+            }
 
             val chains = txToGossipChains.get(tx.hash)
             if (chains.isEmpty) txToGossipChains(tx.hash) = Seq(g)
             else {
               val chainsA = chains.get
-              chainsA.filter{ c =>
-                val ele = c.iter.map{_.hash}.zip(gossipSeq.map{_.hash})
-                true
-              }
+              val updatedGossipChains = chainsA.filter{ c =>
+                !c.iter.map{_.hash}.zip(gossipSeq.map{_.hash}).forall{case (x,y) => x == y}
+              } :+ g
+              txToGossipChains(tx.hash) = updatedGossipChains
             }
 
-            memPoolTX += tx
             // Continue gossip.
             val peer = peerLookup(remote).data.id
             val gossipKeys = gossipSeq.flatMap {

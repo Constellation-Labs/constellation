@@ -25,6 +25,7 @@ import org.json4s.{Formats, native}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.Try
+import constellation._
 
 class RPCInterface(
                     chainStateActor: ActorRef,
@@ -40,12 +41,13 @@ class RPCInterface(
 
   implicit val id : Id = Id(keyPair.getPublic)
 
+  private val selfAddress = id.address
+
   implicit val serialization: Serialization.type = native.Serialization
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-  import constellation._
   val logger = Logger(s"RPCInterface")
 
   // TODO: Not this.
@@ -70,7 +72,10 @@ class RPCInterface(
       v.output(k)
   }.toSeq
 
-  private def UTXO = (chainStateActor ? GetUTXO).mapTo[Map[String, Long]].get()
+  private def UTXO = (peerToPeerActor ? GetUTXO).mapTo[Map[String, Long]].get()
+  private def memPoolUTXO = (peerToPeerActor ? GetMemPoolUTXO).mapTo[Map[String, Long]].get()
+
+  def selfIdBalance: Option[Long] = memPoolUTXO.get(selfAddress.address)
 
   def utxoBalance: Map[String, Long] = {
     UTXO.filter{case (x,y) => addresses.contains(x)}
@@ -92,19 +97,19 @@ class RPCInterface(
       path("genesis" / LongNumber) { numCoins =>
 
           val debtAddress = walletPair
-          val dstAddress = walletPair
+       //   val dstAddress = walletPair
 
           val amount = numCoins * Schema.NormalizationFactor
           val tx = TX(
             TXData(
               Seq(debtAddress.address.copy(balance = -1*amount)),
-              dstAddress.address.copy(balance=amount),
+              selfAddress,
               amount,
-              dstAccount = Some(id.id),
               genesisTXHash = None,
               isGenesis = true
             ).signed()(debtAddress)
           )
+
           peerToPeerActor ! tx
           complete(tx.json)
         } ~
@@ -199,16 +204,29 @@ class RPCInterface(
       path ("sendToAddress") {
         entity(as[SendToAddress]) { s =>
 
+          val srcAddress = selfAddress
+          val dstAddress = s.address
 
-          val ut = utxoBalance
+          val tx = TX(
+            TXData(
+              Seq(srcAddress), dstAddress, s.amountActual
+            ).signed()(keyPair)
+          )
 
+          logger.info(s"SendToAddress RPC Transaction: ${tx.pretty}")
+
+          peerToPeerActor ! tx
+
+          complete(tx) //, StatusCodes.Accepted)
+
+          // Do full UTXO later, simplifying it for now to use 1 address.
+/*          val ut = utxoBalance
           val (addressWithSufficientBalance, prvBalance) = ut.filter{_._2 > s.amountActual}.head
           val txAssociated = walletAddressInfo(addressWithSufficientBalance)
           val addressMeta = txAssociated.output(addressWithSufficientBalance).get
-
           val ukp = addressToKeyPair(addressWithSufficientBalance)
-
           val remainder = walletPair
+
 
           val remainderBalance = prvBalance - s.amountActual
 
@@ -236,12 +254,7 @@ class RPCInterface(
           )
 
           val tx = TX(txD.multiSigned()(Seq(ukp, keyPair)))
-
-          logger.info(s"SendToAddress RPC Transaction: ${tx.pretty}")
-
-          peerToPeerActor ! tx
-
-          complete(tx)
+*/
 
      //   complete(StatusCodes.OK)
 
