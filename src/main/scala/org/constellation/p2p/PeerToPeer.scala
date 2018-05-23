@@ -11,9 +11,7 @@ import akka.serialization.SerializationExtension
 import akka.util.{ByteString, Timeout}
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock}
-import org.constellation.LevelDB
-import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock}
+import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock, PeerProposedBundle, PeerVote}
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.Schema.{Gossip, TX}
@@ -25,7 +23,6 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.{Failure, Try}
-
 import org.constellation.primitives.Schema._
 
 object PeerToPeer {
@@ -375,11 +372,11 @@ class PeerToPeer(
     // Add type bounds here on all the command forwarding types
     // I.e. PeerMemPoolUpdated extends ConsensusCommand
     // Just check on ConsensusCommand and send to consensus actor automatically
-    case UDPMessage(p: PeerMemPoolUpdated, remote) =>
+    case UDPMessage(p: PeerVote, remote) =>
       //  logger.debug("UDP PeerMemPoolUpdated received")
       consensusActor ! p
 
-    case UDPMessage(p : PeerProposedBlock, remote) =>
+    case UDPMessage(p : PeerProposedBundle, remote) =>
       consensusActor ! p
 
     case UDPMessage(sh: HandShakeResponseMessage, remote) =>

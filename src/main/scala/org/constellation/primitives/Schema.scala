@@ -5,6 +5,7 @@ import java.security.PublicKey
 
 import akka.stream.scaladsl.Balance
 import org.constellation.util.{ProductHash, Signed}
+import org.json4s.native.Json
 
 import scala.collection.mutable
 
@@ -142,7 +143,12 @@ object Schema {
     }
   }
 
-  final case class VoteData(accept: Seq[TX], reject: Seq[TX]) extends ProductHash
+  final case class VoteData(accept: Seq[TX], reject: Seq[TX]) extends ProductHash {
+    // used to determine what voting round we are talking about
+    def voteRoundHash: String = {
+      accept.++(reject).sortBy(t => t.hashCode()).map(f => f.hash).mkString("-")
+    }
+  }
 
   final case class Vote(vote: Signed[VoteData]) extends ProductHash with Event
 

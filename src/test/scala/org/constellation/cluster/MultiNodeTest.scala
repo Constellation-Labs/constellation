@@ -16,7 +16,7 @@ import constellation._
 import org.constellation.ConstellationNode
 import org.constellation.p2p.{GetUDPSocketRef, TestMessage}
 import org.constellation.p2p.PeerToPeer.{GetPeers, Id, Peer, Peers}
-import org.constellation.primitives.{Block, BlockSerialized, Transaction}
+import org.constellation.primitives.{Block, Transaction}
 import org.constellation.util.RPCClient
 import org.constellation.utils.TestNode
 import org.scalatest.exceptions.TestFailedException

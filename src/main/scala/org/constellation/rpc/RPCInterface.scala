@@ -17,7 +17,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.LevelDB
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{Block, BlockSerialized, Schema, Transaction}
+import org.constellation.primitives.{Block, Schema, Transaction}
 import org.constellation.state.ChainStateManager.{CurrentChainStateUpdated, GetCurrentChainState}
 import org.constellation.state.MemPoolManager.AddTransaction
 import org.json4s.native.Serialization
