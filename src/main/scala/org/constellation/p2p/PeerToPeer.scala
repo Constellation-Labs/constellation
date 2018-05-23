@@ -187,31 +187,6 @@ class PeerToPeer(
   }
 
 
-  private val bufferTask = new Runnable { def run(): Unit = {
-
-    // TODO: This may not be necessary when full metrics collector are set up,
-    // Also this could be triggered by regular events instead of async.
-    // Needs to be revisited if its required, certainly useful for debugging UDP connectivity though.
-    Try {
-      // TODO: Add debug information to log metrics like number of peers / messages total etc.
-     // logger.debug(s"P2P Heartbeat on ${id.short} - numPeers: ${peers.length}")
-
-      // Send heartbeat here to other peers.
-    } match {
-      case Failure(e) => e.printStackTrace()
-      case _ =>
-    }
-
-  } }
-
-  var heartBeatMonitor: ScheduledFuture[_] = _
-  var heartBeat: ScheduledThreadPoolExecutor = _
-
-  if (heartbeatEnabled) {
-    heartBeat = new ScheduledThreadPoolExecutor(10)
-    heartBeatMonitor = heartBeat.scheduleAtFixedRate(bufferTask, 1, 3, TimeUnit.SECONDS)
-  }
-
   @volatile var memPoolTX: Set[TX] = Set()
 
   @volatile var validTX: Set[TX] = Set()
@@ -231,7 +206,66 @@ class PeerToPeer(
   // Ideally the hash workload should prioritize memory and dump to disk later but can be revisited.
   private val addressToTX = mutable.HashMap[String, TX]()
 
+
+  private val bufferTask = new Runnable { def run(): Unit = {
+
+    // TODO: This may not be necessary when full metrics collector are set up,
+    // Also this could be triggered by regular events instead of async.
+    // Needs to be revisited if its required, certainly useful for debugging UDP connectivity though.
+    Try {
+
+      logger.debug("Heartbeat P2P")
+
+      this.synchronized {
+        val gs = txToGossipChains.values.map { g =>
+          val tx = g.head.iter.head.data.asInstanceOf[TX]
+          tx -> g
+        }.toSeq
+
+        val filtered = gs.filter { case (tx, g) =>
+          val lastTime = g.map {
+            _.iter.last.endTime
+          }.max
+          val sufficientTimePassed = lastTime < (System.currentTimeMillis() - 5)
+          sufficientTimePassed
+        }
+
+        val acceptedTXs = filtered.map {_._1}
+
+        acceptedTXs.foreach {
+          tx =>
+            validTX += tx
+            tx.updateUTXO(validUTXO)
+        }
+
+        if (acceptedTXs.nonEmpty) {
+          logger.debug(s"Accepted transactions: ${acceptedTXs.map{_.short}}")
+        }
+
+        // TODO: Add debug information to log metrics like number of peers / messages total etc.
+        // logger.debug(s"P2P Heartbeat on ${id.short} - numPeers: ${peers.length}")
+
+        // Send heartbeat here to other peers.
+      }
+    } match {
+      case Failure(e) => e.printStackTrace()
+      case _ =>
+    }
+
+  } }
+
+  var heartBeatMonitor: ScheduledFuture[_] = _
+  var heartBeat: ScheduledThreadPoolExecutor = _
+
+  if (heartbeatEnabled) {
+    heartBeat = new ScheduledThreadPoolExecutor(10)
+    heartBeatMonitor = heartBeat.scheduleAtFixedRate(bufferTask, 1, 3, TimeUnit.SECONDS)
+  }
+
+
   override def receive: Receive = {
+
+    case GetValidTX => sender() ! validTX
 
     case GetUTXO =>
       sender() ! validUTXO.toMap
@@ -247,13 +281,27 @@ class PeerToPeer(
 
       this.synchronized {
         //if (tx.utxoValid(validUTXO) && tx.utxoValid(memPoolUTXO) && !memPoolTX.contains(tx)) {
-        if (!memPoolTX.contains(tx)) {
+        if (!memPoolTX.contains(tx) && !tx.tx.data.isGenesis) {
           tx.updateUTXO(memPoolUTXO)
           memPoolTX += tx
         }
 
+        if (tx.tx.data.isGenesis) {
+          validTX += tx
+
+        }
+
         val g = Gossip(tx.signed())
         broadcast(g)
+      }
+
+    case UDPMessage(cd: ConflictDetected, _) =>
+
+      // TODO: Verify it's an actual conflict relative to our current validation state
+      // by reapplying the balances.
+      memPoolTX -= cd.conflict.data.detectedOn
+      cd.conflict.data.conflicts.foreach{ c =>
+        memPoolTX -= c
       }
 
     case UDPMessage(g @ Gossip(e), remote) =>
@@ -280,11 +328,16 @@ class PeerToPeer(
             }
             val newTXVote = VoteCandidate(tx, txToGossipChains.getOrElse(tx.hash, Seq()))
             val chooseOld = chains.map{_.gossip.size}.sum > newTXVote.gossip.size
-
             val accept = if (chooseOld) chains else Seq(newTXVote)
             val reject = if (!chooseOld) chains else Seq(newTXVote)
-            broadcast(Vote(VoteData(accept, reject).signed()))
 
+            memPoolTX -= tx
+            conflicts.foreach{ c =>
+              memPoolTX -= c
+            }
+
+            // broadcast(Vote(VoteData(accept, reject).signed()))
+            broadcast(ConflictDetected(ConflictDetectedData(tx, conflicts).signed()))
           } else {
 
             if (!memPoolTX.contains(tx)) {
@@ -309,6 +362,7 @@ class PeerToPeer(
             }.distinct.map {
               Id
             }
+
             val containsSelf = gossipKeys.contains(id)
             val underMaxDepth = g.stackDepth < 6
 

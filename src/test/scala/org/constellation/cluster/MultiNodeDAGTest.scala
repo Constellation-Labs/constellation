@@ -71,9 +71,15 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val tx = r1.getBlocking[TX]("genesis/" + numCoinsInitial)
     assert(tx.valid)
 
-    Thread.sleep(2000)
+    Thread.sleep(10000)
 
-
+    nodes.tail.foreach{ n =>
+      val a = n.rpc.getBlocking[Address]("address")
+      val id = n.rpc.getBlocking[Id]("id")
+      val s = SendToAddress(a, 1e7.toLong, Some(id.id))
+      r1.post("sendToAddress", s)
+      Thread.sleep(500)
+    }
 
 
 
@@ -148,20 +154,15 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
 
     /*
-      nodes.tail.foreach{ n =>
-        val a = n.rpc.getBlocking[Address]("address")
-        val id = n.rpc.getBlocking[Id]("id")
-        val s = SendToAddress(a, 1e6.toLong, Some(id.id))
-        r1.post("sendToAddress", s)
-        Thread.sleep(500)
-      }
+
 
 
   */
 
 
 
-  //  Thread.sleep(10000)
+    //Thread.sleep(1000000)
+    Thread.sleep(1000000)
 
     // Cleanup DBs
     import scala.tools.nsc.io.{File => SFile}

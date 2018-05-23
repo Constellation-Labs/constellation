@@ -104,8 +104,10 @@ object Schema {
       s"amount ${tx.data.amount}"
 
     def utxoValid(utxo: mutable.HashMap[String, Long]): Boolean = {
-      val srcSum = tx.data.src.map{_.hash}.flatMap{utxo.get}.sum
-      srcSum >= tx.data.amount && valid
+      if (tx.data.isGenesis) !utxo.contains(hash) else {
+        val srcSum = tx.data.src.map {_.hash}.flatMap {utxo.get}.sum
+        srcSum >= tx.data.amount && valid
+      }
     }
 
     def updateUTXO(UTXO: mutable.HashMap[String, Long]): Unit = {
@@ -116,7 +118,7 @@ object Schema {
         UTXO(txDat.dst.address) = txDat.amount
       } else {
 
-        val total = txDat.src.map{s => UTXO(s.address)}.sum
+        val total = txDat.src.flatMap{s => UTXO.get(s.address)}.sum
         val remainder = total - txDat.amount
 
         // Empty src balance.
@@ -141,6 +143,10 @@ object Schema {
       }
     }
   }
+
+  final case class ConflictDetectedData(detectedOn: TX, conflicts: Seq[TX]) extends ProductHash
+
+  final case class ConflictDetected(conflict: Signed[ConflictDetectedData]) extends ProductHash
 
   final case class VoteCandidate(tx: TX, gossip: Seq[Gossip[ProductHash]])
 
@@ -223,6 +229,7 @@ object Schema {
   final case object GetPeersID extends InternalCommand
   final case object GetPeersData extends InternalCommand
   final case object GetUTXO extends InternalCommand
+  final case object GetValidTX extends InternalCommand
   final case object GetMemPoolUTXO extends InternalCommand
   final case object ToggleHeartbeat extends InternalCommand
 

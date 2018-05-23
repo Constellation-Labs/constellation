@@ -180,13 +180,18 @@ class RPCInterface(
         } ~
                complete { //complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Say hello to akka-http</h1>"))
                  logger.info("Serve main page")
-                 val html = """<!DOCTYPE html>
+
+                 val numPeers = (peerToPeerActor ? GetPeers).mapTo[Peers].get().peers.size
+                 val bodyText = s"Balance: $selfIdBalance numPeers: $numPeers "
+
+                 val html = s"""<!DOCTYPE html>
                               |<html lang="en">
                               |<head>
                               |    <meta charset="UTF-8">
                               |    <title>Constellation</title>
                               |</head>
-                              |<body style="background-color:#060613">
+                              |<body style="background-color:#060613;color:white">
+                              |$bodyText
                               |<script src="ui-fastopt.js" type="text/javascript"></script>
                               |<script type="text/javascript">
                               |org.constellation.ui.App().main()
