@@ -2,7 +2,7 @@ package org.constellation.cluster
 
 import java.io.File
 import java.security.KeyPair
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ForkJoinPool, TimeUnit}
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
@@ -10,14 +10,16 @@ import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import akka.util.Timeout
 import constellation._
+import org.constellation.ConstellationNode
 import org.constellation.p2p.PeerToPeer.{Id, Peer}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.utils.TestNode
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
 
-import scala.concurrent.{ExecutionContextExecutor, Future}
-import scala.util.Try
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.util.{Random, Try}
+import akka.pattern.ask
 
 class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem")) with AsyncFlatSpecLike with Matchers with BeforeAndAfterAll {
 
@@ -36,15 +38,23 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val tmpDir = new File("tmp")
     Try{SFile(tmpDir).deleteRecursively()}
 
+    val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false)
+    val r1 = n1.rpc
 
-    val nodes = Seq(TestNode(heartbeatEnabled = true, randomizePorts = false)) ++
-      Seq.fill(3)(TestNode(heartbeatEnabled = true))
+    val nodes = Seq(n1) ++ Seq.fill(3)(TestNode(heartbeatEnabled = true))
 
     for (node <- nodes) {
       assert(node.healthy)
     }
 
     Thread.sleep(500)
+
+    // Create a genesis transaction
+
+    val numCoinsInitial = 4e9.toLong
+    val genTx = r1.getBlocking[TX]("genesis/" + numCoinsInitial)
+
+    Thread.sleep(1000)
 
     val results = nodes.flatMap{ node =>
       val others = nodes.filter{_ != node}
@@ -63,23 +73,67 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       assert(peers.length == (nodes.length - 1))
     }
 
-    val n1 = nodes.head
-    val r1 = nodes.head.rpc
-    // Create a genesis transaction
+    Thread.sleep(2000)
 
-    val numCoinsInitial = 4e9.toLong
-    val tx = r1.getBlocking[TX]("genesis/" + numCoinsInitial)
-    assert(tx.valid)
+    val initialDistrTX = nodes.tail.map{ n =>
+      val s = SendToAddress(n.id.address, 1e7.toLong)
+      r1.postRead[TX]("sendToAddress", s)
+    }
 
     Thread.sleep(10000)
 
-    nodes.tail.foreach{ n =>
-      val a = n.rpc.getBlocking[Address]("address")
-      val id = n.rpc.getBlocking[Id]("id")
-      val s = SendToAddress(a, 1e7.toLong, Some(id.id))
-      r1.post("sendToAddress", s)
-      Thread.sleep(500)
+    def randomNode: ConstellationNode = nodes(Random.nextInt(nodes.length))
+    def randomOtherNode(not: ConstellationNode): ConstellationNode =
+      nodes.filter{_ != not}(Random.nextInt(nodes.length - 1))
+
+    val ec = ExecutionContext.fromExecutorService(new ForkJoinPool(100))
+
+    def sendRandomTransaction = {
+      Future {
+        val src = randomNode
+        val dst = randomOtherNode(src)
+        val s = SendToAddress(dst.id.address, Random.nextInt(1000).toLong)
+        src.rpc.postRead[TX]("sendToAddress", s)
+      }(ec)
     }
+
+    val numTX = 200
+
+    val start = System.currentTimeMillis()
+
+
+    val txResponse = Seq.fill(numTX) {
+      // Thread.sleep(100)
+      sendRandomTransaction
+    }
+
+    val txResponseFut = Future.sequence(txResponse)
+
+    val txs = txResponseFut.get(100).toSet
+
+    val allTX = Set(genTx) ++ initialDistrTX.toSet ++ txs
+
+    var done = false
+
+    while (!done) {
+      val nodeStatus = nodes.map { n =>
+        val validTX = (n.peerToPeerActor ? GetValidTX).mapTo[Set[TX]].get()
+        val percentComplete = 100 - (allTX.diff(validTX).size.toDouble / allTX.size.toDouble) * 100
+        println(s"Node ${n.id.short} validTXSize: ${validTX.size} allTXSize: ${allTX.size} % complete: $percentComplete")
+        Thread.sleep(1000)
+        validTX == allTX
+      }
+
+      if (nodeStatus.forall { x => x }) {
+        done = true
+      }
+    }
+
+    val end = System.currentTimeMillis()
+
+    println(s"Completion time seconds: ${(end-start) / 1000}")
+
+
 
 
 

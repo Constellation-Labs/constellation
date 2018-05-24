@@ -104,8 +104,8 @@ object Schema {
       s"amount ${tx.data.amount}"
 
     def utxoValid(utxo: mutable.HashMap[String, Long]): Boolean = {
-      if (tx.data.isGenesis) !utxo.contains(hash) else {
-        val srcSum = tx.data.src.map {_.hash}.flatMap {utxo.get}.sum
+      if (tx.data.isGenesis) !utxo.contains(tx.data.dst.address) else {
+        val srcSum = tx.data.src.map {_.address}.flatMap {utxo.get}.sum
         srcSum >= tx.data.amount && valid
       }
     }
@@ -232,8 +232,15 @@ object Schema {
   final case object GetValidTX extends InternalCommand
   final case object GetMemPoolUTXO extends InternalCommand
   final case object ToggleHeartbeat extends InternalCommand
+  final case object InternalHeartbeat extends InternalCommand
 
   final case class ValidateTransaction(tx: TX) extends InternalCommand
+
+  case class DownloadRequest()
+
+  case class DownloadResponse(validTX: Set[TX], validUTXO: Map[String, Long])
+
+  case class SyncData(validTX: Set[TX])
 
 
 }

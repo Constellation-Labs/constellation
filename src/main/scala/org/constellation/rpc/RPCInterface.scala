@@ -122,9 +122,10 @@ class RPCInterface(
         complete(wallet)
       } ~
       path("address") {
-        val pair = constellation.makeKeyPair()
-        wallet :+= pair
-        complete(constellation.pubKeyToAddress(pair.getPublic))
+      //  val pair = constellation.makeKeyPair()
+      //  wallet :+= pair
+      //  complete(constellation.pubKeyToAddress(pair.getPublic))
+        complete(id.address)
       } ~
       path("id") {
         complete(id)
@@ -198,7 +199,7 @@ class RPCInterface(
                               |</script>
                               |</body>
                               |</html>""".stripMargin.replaceAll("\n", "")
-                 logger.info("Serving: " + html)
+                // logger.info("Serving: " + html)
 
                  val entity = HttpEntity(ContentTypes.`text/html(UTF-8)`, html)
                  HttpResponse(entity = entity)
@@ -218,7 +219,7 @@ class RPCInterface(
             ).signed()(keyPair)
           )
 
-          logger.info(s"SendToAddress RPC Transaction: ${tx.pretty}")
+       //   logger.info(s"SendToAddress RPC Transaction: ${tx.pretty}")
 
           peerToPeerActor ! tx
 

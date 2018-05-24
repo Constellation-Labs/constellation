@@ -61,7 +61,9 @@ lazy val coreDependencies = Seq(
   "org.fusesource.leveldbjni"   % "leveldbjni-all"   % "1.8" withSources() withJavadoc(),
   "com.codahale" % "shamir" % "0.6.0" withSources() withJavadoc(),
   "org.json4s" %% "json4s-ext" % "3.5.2",
-  "org.scalaj" %% "scalaj-http" % "2.3.0" withJavadoc() withSources()
+  "org.scalaj" %% "scalaj-http" % "2.3.0" withJavadoc() withSources(),
+  "com.twitter" %% "chill" % "0.9.1"
+  // "com.esotericsoftware" % "kryo" % "4.0.2"
 )
 
 //Test dependencies

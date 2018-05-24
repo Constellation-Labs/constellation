@@ -206,52 +206,12 @@ class PeerToPeer(
   // Ideally the hash workload should prioritize memory and dump to disk later but can be revisited.
   private val addressToTX = mutable.HashMap[String, TX]()
 
+  def selfBalance: Option[Long] = validUTXO.get(id.address.address)
+
 
   private val bufferTask = new Runnable { def run(): Unit = {
 
-    // TODO: This may not be necessary when full metrics collector are set up,
-    // Also this could be triggered by regular events instead of async.
-    // Needs to be revisited if its required, certainly useful for debugging UDP connectivity though.
-    Try {
-
-      logger.debug("Heartbeat P2P")
-
-      this.synchronized {
-        val gs = txToGossipChains.values.map { g =>
-          val tx = g.head.iter.head.data.asInstanceOf[TX]
-          tx -> g
-        }.toSeq
-
-        val filtered = gs.filter { case (tx, g) =>
-          val lastTime = g.map {
-            _.iter.last.endTime
-          }.max
-          val sufficientTimePassed = lastTime < (System.currentTimeMillis() - 5)
-          sufficientTimePassed
-        }
-
-        val acceptedTXs = filtered.map {_._1}
-
-        acceptedTXs.foreach {
-          tx =>
-            validTX += tx
-            tx.updateUTXO(validUTXO)
-        }
-
-        if (acceptedTXs.nonEmpty) {
-          logger.debug(s"Accepted transactions: ${acceptedTXs.map{_.short}}")
-        }
-
-        // TODO: Add debug information to log metrics like number of peers / messages total etc.
-        // logger.debug(s"P2P Heartbeat on ${id.short} - numPeers: ${peers.length}")
-
-        // Send heartbeat here to other peers.
-      }
-    } match {
-      case Failure(e) => e.printStackTrace()
-      case _ =>
-    }
-
+    self ! InternalHeartbeat
   } }
 
   var heartBeatMonitor: ScheduledFuture[_] = _
@@ -262,8 +222,107 @@ class PeerToPeer(
     heartBeatMonitor = heartBeat.scheduleAtFixedRate(bufferTask, 1, 3, TimeUnit.SECONDS)
   }
 
+  def acceptTransaction(tx: TX): Unit = {
+    validTX += tx
+    memPoolTX -= tx
+    tx.updateUTXO(validUTXO)
+    if (tx.tx.data.isGenesis) {
+      tx.updateUTXO(memPoolUTXO)
+    }
+  }
+
+  @volatile var downloadMode: Boolean = true
+
+  @volatile var totalNumGossipMessages = 0
+
+  // @volatile var downloadResponses = Seq[DownloadResponse]()
 
   override def receive: Receive = {
+
+    case InternalHeartbeat =>
+
+      // TODO: This may not be necessary when full metrics collector are set up,
+      // Also this could be triggered by regular events instead of async.
+      // Needs to be revisited if its required, certainly useful for debugging UDP connectivity though.
+      Try {
+
+        if (downloadMode && peers.nonEmpty) {
+          logger.debug("Requesting data download")
+          broadcast(DownloadRequest())
+        }
+
+        broadcast(SyncData(validTX))
+
+        val numAccepted = this.synchronized {
+          val gs = txToGossipChains.values.map { g =>
+            val tx = g.head.iter.head.data.asInstanceOf[TX]
+            tx -> g
+          }.toSeq
+
+          val filtered = gs.filter { case (tx, g) =>
+            val lastTime = g.map {
+              _.iter.last.endTime
+            }.max
+            val sufficientTimePassed = lastTime < (System.currentTimeMillis() - 5)
+            sufficientTimePassed
+          }
+
+          val acceptedTXs = filtered.map {_._1}
+
+          acceptedTXs.foreach {
+            tx =>
+              validTX += tx
+              tx.updateUTXO(validUTXO)
+              txToGossipChains.remove(tx.hash)
+          }
+
+          if (acceptedTXs.nonEmpty) {
+            // logger.debug(s"Accepted transactions on ${id.short}: ${acceptedTXs.map{_.short}}")
+          }
+
+          // TODO: Add debug information to log metrics like number of peers / messages total etc.
+          // logger.debug(s"P2P Heartbeat on ${id.short} - numPeers: ${peers.length}")
+
+          // Send heartbeat here to other peers.
+          acceptedTXs.size
+        }
+        logger.debug(
+          s"Heartbeat: ${id.short}, gossip: $totalNumGossipMessages, balance: $selfBalance, " +
+            s"numAccepted: $numAccepted, numTotalValid: ${validTX.size} " +
+            s"validUTXO: ${validUTXO.map{case (k,v) => k.slice(0, 5) -> v}} "
+        )
+
+      } match {
+        case Failure(e) => e.printStackTrace()
+        case _ =>
+      }
+
+
+    case UDPMessage(d: DownloadResponse, remote) =>
+
+      if (d.validTX.nonEmpty && d.validUTXO.nonEmpty) {
+        validTX = d.validTX
+        d.validUTXO.foreach{ case (k,v) =>
+          validUTXO(k) = v
+          memPoolUTXO(k) = v
+        }
+        downloadMode = false
+        logger.debug("Downloaded data")
+      }
+
+    case UDPMessage(d: SyncData, remote) =>
+
+      logger.debug(s"SyncData message size: ${d.validTX.size} on ${validTX.size} ${id.short}")
+      d.validTX.filter{
+        !validTX.contains(_)
+      }.foreach{
+        acceptTransaction
+      }
+
+    case UDPMessage(d: DownloadRequest, remote) =>
+
+      val downloadResponse = DownloadResponse(validTX, validUTXO.toMap)
+      udpActor.udpSend(downloadResponse, remote)
 
     case GetValidTX => sender() ! validTX
 
@@ -287,8 +346,9 @@ class PeerToPeer(
         }
 
         if (tx.tx.data.isGenesis) {
-          validTX += tx
-
+          acceptTransaction(tx)
+          // We started genesis
+          downloadMode = false
         }
 
         val g = Gossip(tx.signed())
@@ -306,85 +366,98 @@ class PeerToPeer(
 
     case UDPMessage(g @ Gossip(e), remote) =>
 
+      totalNumGossipMessages += 1
       this.synchronized {
 
         val gossipSeq = g.iter
         val tx = gossipSeq.head.data.asInstanceOf[TX]
 
-        if (validTX.contains(tx)) {
-          logger.debug(s"Ignoring gossip on already validated transaction: ${tx.short}")
-        } else {
+        if (tx.tx.data.isGenesis) {
+          acceptTransaction(tx)
+        } else if (!downloadMode) {
 
-          if (!tx.utxoValid(validUTXO)) {
-            logger.debug(s"Ignoring invalid transaction ${tx.short} detected from p2p gossip")
-          } else if (!tx.utxoValid(memPoolUTXO)) {
-            logger.debug(s"Conflicting transactions detected ${tx.short}")
-            // Find conflicting transactions
-            val conflicts = memPoolTX.toSeq.filter{ m =>
-              tx.tx.data.src.map{_.address}.intersect(m.tx.data.src.map{_.address}).nonEmpty
-            }
-            val chains = conflicts.map{c =>
-              VoteCandidate(c, txToGossipChains.getOrElse(c.hash, Seq()))
-            }
-            val newTXVote = VoteCandidate(tx, txToGossipChains.getOrElse(tx.hash, Seq()))
-            val chooseOld = chains.map{_.gossip.size}.sum > newTXVote.gossip.size
-            val accept = if (chooseOld) chains else Seq(newTXVote)
-            val reject = if (!chooseOld) chains else Seq(newTXVote)
-
-            memPoolTX -= tx
-            conflicts.foreach{ c =>
-              memPoolTX -= c
-            }
-
-            // broadcast(Vote(VoteData(accept, reject).signed()))
-            broadcast(ConflictDetected(ConflictDetectedData(tx, conflicts).signed()))
+          if (validTX.contains(tx)) {
+         //   logger.debug(s"Ignoring gossip on already validated transaction: ${tx.short}")
           } else {
 
-            if (!memPoolTX.contains(tx)) {
-              tx.updateUTXO(memPoolUTXO)
-              memPoolTX += tx
-            }
+            if (!tx.utxoValid(validUTXO)) {
+              // TODO: Add info explaining why transaction was invalid. I.e. InsufficientBalanceException etc.
+              logger.debug(s"Ignoring invalid transaction ${tx.short} detected from p2p gossip")
+            } else if (!tx.utxoValid(memPoolUTXO)) {
+              logger.debug(s"Conflicting transactions detected ${tx.short}")
+              // Find conflicting transactions
+              val conflicts = memPoolTX.toSeq.filter { m =>
+                tx.tx.data.src.map {
+                  _.address
+                }.intersect(m.tx.data.src.map {
+                  _.address
+                }).nonEmpty
+              }
+              val chains = conflicts.map { c =>
+                VoteCandidate(c, txToGossipChains.getOrElse(c.hash, Seq()))
+              }
+              val newTXVote = VoteCandidate(tx, txToGossipChains.getOrElse(tx.hash, Seq()))
+              val chooseOld = chains.map {
+                _.gossip.size
+              }.sum > newTXVote.gossip.size
+              val accept = if (chooseOld) chains else Seq(newTXVote)
+              val reject = if (!chooseOld) chains else Seq(newTXVote)
 
-            val chains = txToGossipChains.get(tx.hash)
-            if (chains.isEmpty) txToGossipChains(tx.hash) = Seq(g)
-            else {
-              val chainsA = chains.get
-              val updatedGossipChains = chainsA.filter{ c =>
-                !c.iter.map{_.hash}.zip(gossipSeq.map{_.hash}).forall{case (x,y) => x == y}
-              } :+ g
-              txToGossipChains(tx.hash) = updatedGossipChains
-            }
+              memPoolTX -= tx
+              conflicts.foreach { c =>
+                memPoolTX -= c
+              }
 
-            // Continue gossip.
-            val peer = peerLookup(remote).data.id
-            val gossipKeys = gossipSeq.flatMap {
-              _.publicKeys
-            }.distinct.map {
-              Id
-            }
+              // broadcast(Vote(VoteData(accept, reject).signed()))
+              broadcast(ConflictDetected(ConflictDetectedData(tx, conflicts).signed()))
+            } else {
 
-            val containsSelf = gossipKeys.contains(id)
-            val underMaxDepth = g.stackDepth < 6
+              if (!memPoolTX.contains(tx)) {
+                tx.updateUTXO(memPoolUTXO)
+                memPoolTX += tx
+              }
 
-            val transitionProbabilities = Seq(1.0, 0.5, 0.2, 0.1, 0.05, 0.001)
-            val prob = transitionProbabilities(g.stackDepth - 1)
-            val emit = scala.util.Random.nextDouble() < prob
+              val chains = txToGossipChains.get(tx.hash)
+              if (chains.isEmpty) txToGossipChains(tx.hash) = Seq(g)
+              else {
+                val chainsA = chains.get
+                val updatedGossipChains = chainsA.filter { c =>
+                  !c.iter.map {
+                    _.hash
+                  }.zip(gossipSeq.map {
+                    _.hash
+                  }).forall { case (x, y) => x == y }
+                } :+ g
+                txToGossipChains(tx.hash) = updatedGossipChains
+              }
 
-            val skipIDs = (gossipKeys :+ peer).distinct
-            val idsCanSendTo = peerIDLookup.keys.filter { k => !skipIDs.contains(k) }.toSeq
+              // Continue gossip.
+              val peer = peerLookup(remote).data.id
+              val gossipKeys = gossipSeq.tail.flatMap{_.publicKeys}.distinct.map{Id}
 
-            val peerTransitionProbabilities = Seq(1.0, 0.8, 0.5, 0.3, 0.2, 0.1)
-            val peerProb = peerTransitionProbabilities(g.stackDepth - 1)
-            val numPeersToSendTo = (idsCanSendTo.size.toDouble * peerProb).toInt
-            val shuffled = scala.util.Random.shuffle(idsCanSendTo)
-            val peersToSendTo = shuffled.slice(0, numPeersToSendTo)
+              val containsSelf = gossipKeys.contains(id)
+              val underMaxDepth = g.stackDepth < 6
 
-            ///     logger.debug(s"Gossip nodeId: ${id.medium}, tx: ${tx.short}, depth: ${g.stackDepth}, prob: $prob, emit: $emit, " +
-            //      s"numPeersToSend: $numPeersToSendTo")
+              val transitionProbabilities = Seq(1.0, 1.0, 0.2, 0.1, 0.05, 0.001)
+              val prob = transitionProbabilities(g.stackDepth - 1)
+              val emit = scala.util.Random.nextDouble() < prob
 
-            if (underMaxDepth && !containsSelf && emit) {
-              val gPrime = Gossip(g.signed())
-              broadcast(gPrime, skipIDs = skipIDs, idSubset = peersToSendTo)
+              val skipIDs = (gossipKeys :+ peer).distinct
+              val idsCanSendTo = peerIDLookup.keys.filter { k => !skipIDs.contains(k) }.toSeq
+
+              val peerTransitionProbabilities = Seq(1.0, 1.0, 0.5, 0.3, 0.2, 0.1)
+              val peerProb = peerTransitionProbabilities(g.stackDepth - 1)
+              val numPeersToSendTo = (idsCanSendTo.size.toDouble * peerProb).toInt
+              val shuffled = scala.util.Random.shuffle(idsCanSendTo)
+              val peersToSendTo = shuffled.slice(0, numPeersToSendTo)
+
+              ///     logger.debug(s"Gossip nodeId: ${id.medium}, tx: ${tx.short}, depth: ${g.stackDepth}, prob: $prob, emit: $emit, " +
+              //      s"numPeersToSend: $numPeersToSendTo")
+
+              if (underMaxDepth && !containsSelf && emit) {
+                val gPrime = Gossip(g.signed())
+                broadcast(gPrime, skipIDs = skipIDs, idSubset = peersToSendTo)
+              }
             }
           }
         }

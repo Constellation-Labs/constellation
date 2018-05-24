@@ -7,8 +7,11 @@ import akka.actor.{Actor, ActorRef}
 import akka.io.{IO, Udp}
 import akka.serialization.SerializationExtension
 import akka.util.{ByteString, Timeout}
+import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.Input
 import org.constellation.p2p.PeerToPeer.Id
 
+// Consider adding ID to all UDP messages? Possibly easier.
 case class UDPMessage(data: Any, remote: InetSocketAddress)
 case class GetUDPSocketRef()
 case class UDPSend(data: ByteString, remote: InetSocketAddress)
@@ -29,6 +32,8 @@ case object GetPacketGroups
 // https://github.com/dnvriend/akka-serialization-test/tree/master/src/main/scala/com/github/dnvriend/serializer
 // Serialization below is just a temporary hack to avoid having to make more changes for now.
 
+
+// Need to catch alert messages to detect socket closure.
 class UDPActor(
                 @volatile var nextActor: Option[ActorRef] = None,
                 port: Int = 16180,
@@ -39,8 +44,8 @@ class UDPActor(
 
   private val address = new InetSocketAddress(bindInterface, port)
   IO(Udp) ! Udp.Bind(self, address, List(
-    //  Udp.SO.ReceiveBufferSize(1024 * 1024 * 20),
-    //  Udp.SO.SendBufferSize(1024 * 1024 * 20),
+      Udp.SO.ReceiveBufferSize(1024 * 1024 * 20),
+      Udp.SO.SendBufferSize(1024 * 1024 * 20),
     Udp.SO.ReuseAddress.apply(true))
   )
 
@@ -50,6 +55,7 @@ class UDPActor(
   private val packetGroups = scala.collection.mutable.HashMap[Long, Seq[SerializedUDPMessage]]()
 
   import constellation._
+
 
   def receive: PartialFunction[Any, Unit] = {
     case Udp.Bound(_) =>
@@ -69,9 +75,12 @@ class UDPActor(
     case Udp.Received(data, remote) =>
       // println(s"Received UDP message from $remote -- sending to $nextActor")
       if (!bannedIPs.contains(remote)) {
-        val str = data.utf8String
         val serialization = SerializationExtension(context.system)
+
+        val str = data.utf8String
         val serMsg = str.x[SerializedUDPMessage]
+        // val bb = data.toArray
+        //val serMsg = bb.kryoRead.asInstanceOf[SerializedUDPMessage]
         this.synchronized {
           if (serMsg.packetGroup.nonEmpty) {
             val pg = serMsg.packetGroup.get
@@ -79,9 +88,12 @@ class UDPActor(
               case Some(messages) =>
                 if (messages.length + 1 == serMsg.packetGroupSize.get) {
                   // Done
+                //  println("UDP Receiver")
                   val dat = {messages ++ Seq(serMsg)}.sortBy(_.packetGroupId.get).flatMap{_.data}.toArray
                   val deser = serialization.deserialize(dat, serMsg.serializer, Some(classOf[Any]))
-               //   println(s"Received BULK UDP message from $remote -- $deser -- sending to $nextActor")
+               //   val kryoInput = new Input(dat)
+               //   val deser = Some(kryo.readClassAndObject(kryoInput))
+                 // println(s"Received BULK UDP message from $remote -- $deser -- sending to $nextActor")
                   deser.foreach { d =>
                     nextActor.foreach { n => n ! UDPMessage(d, remote) }
                   }
@@ -93,7 +105,10 @@ class UDPActor(
                 packetGroups(pg) = Seq(serMsg)
             }
           } else {
+
             val deser = serialization.deserialize(serMsg.data, serMsg.serializer, Some(classOf[Any]))
+         //   val kryoInput = new Input(serMsg.data)
+         //   val deser = Some(kryo.readObject(kryoInput, classOf[Any]))
             //    println(s"Received UDP message from $remote -- $deser -- sending to $nextActor")
             deser.foreach { d =>
               nextActor.foreach { n => n ! UDPMessage(d, remote) }
@@ -112,9 +127,11 @@ class UDPActor(
       import constellation.UDPSerExt
       val ser = dataA.asInstanceOf[AnyRef].udpSerializeGrouped()
       ser.foreach{ s => self ! UDPSend(ByteString(s.json), remote)}
+     // ser.foreach{ s => self ! UDPSend(ByteString(s.kryoWrite), remote)}
 
     case UDPSendJSON(data, remote) =>
       self ! UDPSend(ByteString(data.json), remote)
+      //self ! UDPSend(ByteString(data.kryoWrite), remote)
 
     case u @ UDPSendToID(_, _) => nextActor.foreach{ na => na ! u}
 
