@@ -133,8 +133,7 @@ object Consensus {
 
     val updatedRoundState = roundState.copy(votes = updatedVotes)
 
-    val updatedRoundStates = consensusRoundState.roundStates +
-      (roundHash -> consensusRoundState.roundStates.getOrElse(roundHash, updatedRoundState))
+    val updatedRoundStates = consensusRoundState.roundStates + (roundHash ->  updatedRoundState)
 
     var updatedState = consensusRoundState.copy(roundStates = updatedRoundStates)
 
@@ -157,7 +156,8 @@ object Consensus {
       val facilitators = roundState.facilitators
 
       // TODO: temp logic
-      val bundle = Bundle(BundleData(votes(consensusRoundState.selfId.get).vote.data.accept).signed())
+      val vote = votes(consensusRoundState.selfId.get)
+      val bundle = Bundle(BundleData(vote.vote.data.accept).signed()(keyPair = keyPair))
 
       // cache bundle and gossip bundle info
       updatedState = handlePeerProposedBundle(consensusRoundState, consensusRoundState.selfId.get, bundle, roundHash)
@@ -185,8 +185,7 @@ object Consensus {
 
     val updatedRoundState = roundState.copy(bundles = updatedBundles)
 
-    val updatedRoundStates = consensusRoundState.roundStates +
-      (roundHash -> consensusRoundState.roundStates.getOrElse(roundHash, updatedRoundState))
+    val updatedRoundStates = consensusRoundState.roundStates + (roundHash -> updatedRoundState)
 
     consensusRoundState.copy(roundStates = updatedRoundStates)
   }
