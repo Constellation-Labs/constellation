@@ -29,7 +29,7 @@ object Consensus {
                                    gossipHistory: Seq[Gossip[_ <: ProductHash]],
                                    replyTo: ActorRef)
 
-  // TODO: do we need to gossip after recieving this message from an external node to the other nodes?
+  // TODO: do we need to gossip after receiving this message from an external node to the other nodes?
   case class StartConsensusRound(id: Id, vote: Vote)
 
   // Events
@@ -196,9 +196,6 @@ object Consensus {
                                roundHash: RoundHash): ConsensusRoundState = {
 
     var updatedState = addBundleToCache(consensusRoundState, peer, bundle, roundHash)
-
-    // TODO: check if we have enough bundles then call the callback
-    // with the majority bundle, gossip that we have accepted it
 
     // check if we have enough votes to make a bundle decision
     val facilitatorsWithoutBundleProposals = updatedState.roundStates.getOrElse(roundHash, RoundState()).facilitators.filter(f => {
