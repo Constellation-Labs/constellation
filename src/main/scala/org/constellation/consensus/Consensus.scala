@@ -26,9 +26,10 @@ object Consensus {
   // Commands
   case class PerformConsensusRound(facilitators: Set[Id],
                                    vote: Vote,
-                                   gossipHistory: Seq[Gossip[ProductHash]],
+                                   gossipHistory: Seq[Gossip[_ <: ProductHash]],
                                    replyTo: ActorRef)
 
+  // TODO: do we need to gossip after recieving this message from an external node to the other nodes?
   case class StartConsensusRound(id: Id, vote: Vote)
 
   // Events
@@ -94,9 +95,9 @@ object Consensus {
 
   def performConsensusRound(consensusRoundState: ConsensusRoundState,
                             vote: Vote,
-                            gossipHistory: Seq[Gossip[ProductHash]],
+                            gossipHistory: Seq[Gossip[_ <: ProductHash]],
                             facilitators: Set[Id],
-                            replyTo: ActorRef): ConsensusRoundState = {
+                            replyTo: ActorRef)(implicit system: ActorSystem): ConsensusRoundState = {
 
     // store our local vote
     val voteRoundHash = vote.vote.data.voteRoundHash
@@ -124,7 +125,7 @@ object Consensus {
   def handlePeerVote(consensusRoundState: ConsensusRoundState,
                      peer: Id,
                      vote: Vote,
-                     roundHash: RoundHash): ConsensusRoundState = {
+                     roundHash: RoundHash)(implicit system: ActorSystem, keyPair: KeyPair): ConsensusRoundState = {
 
     val roundState = consensusRoundState.roundStates.getOrElse(roundHash, RoundState())
 
@@ -156,8 +157,7 @@ object Consensus {
       val facilitators = roundState.facilitators
 
       // TODO: temp logic
-      val bundle = Bundle(BundleData(votes.get(consensusRoundState.selfId.get)
-        .map(v => v.vote).flatten.toSeq).signed())
+      val bundle = Bundle(BundleData(votes(consensusRoundState.selfId.get).vote.data.accept).signed())
 
       // cache bundle and gossip bundle info
       updatedState = handlePeerProposedBundle(consensusRoundState, consensusRoundState.selfId.get, bundle, roundHash)
@@ -169,6 +169,8 @@ object Consensus {
         roundHash,
         consensusRoundState.udpActor.get)
     }
+
+    // TODO: we gossip each vote?
 
     updatedState
   }
@@ -248,6 +250,7 @@ object Consensus {
 class Consensus(keyPair: KeyPair, udpActor: ActorRef)(implicit timeout: Timeout) extends Actor with ActorLogging {
 
   implicit val sys: ActorSystem = context.system
+  implicit val kp: KeyPair = keyPair
 
   val logger = Logger(s"Consensus")
 

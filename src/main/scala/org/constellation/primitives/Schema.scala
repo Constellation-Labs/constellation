@@ -15,7 +15,6 @@ object Schema {
   // I.e. equivalent to number of sat per btc
   val NormalizationFactor: Long = 1e8.toLong
 
-
   case class SendToAddress(
                             address: Address,
                             amount: Long,
@@ -25,7 +24,6 @@ object Schema {
                           ) {
     def amountActual: Long = if (normalized) amount * NormalizationFactor else amount
   }
-
 
   // TODO: We also need a hash pointer to represent the post-tx counter party signing data, add later
   // TX should still be accepted even if metadata is incorrect, it just serves to help validation rounds.
@@ -220,7 +218,6 @@ object Schema {
 
   }
 
-
   // TODO: Move other messages here.
   sealed trait InternalCommand
 
@@ -230,6 +227,5 @@ object Schema {
   final case object ToggleHeartbeat extends InternalCommand
 
   final case class ValidateTransaction(tx: TX) extends InternalCommand
-
 
 }

@@ -5,7 +5,6 @@ import java.net.InetSocketAddress
 import akka.actor.{Actor, ActorLogging, ActorRef}
 import com.typesafe.scalalogging.Logger
 import org.constellation.LevelDB
-import org.constellation.consensus.Consensus.{PeerProposedBlock, ProposedBlockUpdated}
 import org.constellation.p2p.PeerToPeer.Id
 import org.constellation.p2p.{UDPSendToID, UDPSendToIDByte}
 import org.constellation.primitives.{Block, Transaction}
@@ -56,7 +55,7 @@ object ChainStateManager {
     val blockProposal: Block =  Block(lastBlock.signature, lastBlock.height + 1, "",
       lastBlock.clusterParticipants, round, transactions)
 
-    replyTo ! ProposedBlockUpdated(blockProposal)
+   // replyTo ! ProposedBlockUpdated(blockProposal)
     blockProposal
   }
 

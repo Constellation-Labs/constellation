@@ -11,7 +11,8 @@ import akka.serialization.SerializationExtension
 import akka.util.{ByteString, Timeout}
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock, PeerProposedBundle, PeerVote}
+import org.constellation.LevelDB
+import org.constellation.consensus.Consensus.{PeerProposedBundle, PeerVote}
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.Schema.{Gossip, TX}
