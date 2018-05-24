@@ -160,8 +160,7 @@ object Consensus {
         .map(v => v.vote).flatten.toSeq).signed())
 
       // cache bundle and gossip bundle info
-
-      updatedState = addBundleToCache(consensusRoundState, consensusRoundState.selfId.get, bundle, roundHash)
+      updatedState = handlePeerProposedBundle(consensusRoundState, consensusRoundState.selfId.get, bundle, roundHash)
 
       notifyFacilitatorsOfBundle(
         facilitators,
@@ -195,10 +194,40 @@ object Consensus {
                                bundle: Bundle,
                                roundHash: RoundHash): ConsensusRoundState = {
 
-    val updatedState = addBundleToCache(consensusRoundState, peer, bundle, roundHash)
+    var updatedState = addBundleToCache(consensusRoundState, peer, bundle, roundHash)
 
     // TODO: check if we have enough bundles then call the callback
     // with the majority bundle, gossip that we have accepted it
+
+    // check if we have enough votes to make a bundle decision
+    val facilitatorsWithoutBundleProposals = updatedState.roundStates.getOrElse(roundHash, RoundState()).facilitators.filter(f => {
+      val votes = updatedState.roundStates.getOrElse(roundHash, RoundState()).bundles
+      !votes.contains(f)
+    })
+
+    // TODO: update here to require a threshold, not every facilitator
+    if (facilitatorsWithoutBundleProposals.isEmpty) {
+      // figure out what the majority of bundles agreed upon
+      val bundles = updatedState.roundStates.getOrElse(roundHash, RoundState()).bundles
+
+      // take those transactions bundle and sign them
+      // TODO: temp logic
+      val bundle = bundles.get(updatedState.selfId.get)
+
+      val replyTo = updatedState.roundStates.getOrElse(roundHash, RoundState()).replyTo
+
+      // call actor callback with accepted bundle
+      if (replyTo.isDefined) {
+        replyTo.get ! ConsensusRoundResult(bundle.get, roundHash)
+      }
+
+      // TODO: do we need to gossip this event also?
+
+      // cleanup the cache
+      val roundStates = updatedState.roundStates.-(roundHash)
+
+      updatedState = updatedState.copy(roundStates = roundStates)
+    }
 
     updatedState
   }
