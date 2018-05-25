@@ -55,6 +55,7 @@ object Consensus {
     true
   }
 
+  // TODO: consolidate these three functions
   def notifyFacilitatorsToStartConsensusRound(facilitators: Set[Id],
                                               self: Id,
                                               vote: Vote,
@@ -229,6 +230,14 @@ object Consensus {
 
     updatedState
   }
+
+  // Functions
+  // 1. update cache with type of (peer -> bundle) or (peer -> vote) or (peer -> Seq(TX)) or (peer -> bundle)
+  // 2. check if we meet the threshold of votes or proposals
+  // 3. if we do, perform logic of creating vote or bundle
+  // 4. optionally gossip information
+  // 5. optionally clean up cache
+  // 6. optionally call callback
 
   case class RoundHash(hash: String)
 
