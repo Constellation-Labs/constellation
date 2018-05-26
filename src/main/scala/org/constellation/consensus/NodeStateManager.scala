@@ -1,20 +1,10 @@
 package org.constellation.consensus
-import java.security.{KeyPair, PublicKey}
+import java.security.KeyPair
 
-import akka.actor.{Actor, ActorRef, ActorSystem, FSM, PoisonPill, Props}
-import cats.Functor
-import org.constellation.p2p.PeerToPeer
-import org.constellation.primitives.Block
-import org.constellation.state.RateLimitedFSM
-import org.constellation.transaction.AtomicTransaction.TransactionInputData
+import akka.actor.{ActorSystem, FSM, Props}
+import org.constellation.consensus.TopologyManager
+import org.constellation.primitives.Schema.{Event, _}
 import org.constellation.wallet.KeyUtils.makeKeyPair
-
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext.Implicits.global
-import org.constellation.{p2p, _}
-import org.constellation.primitives.Schema._
-import org.constellation.util.POWSignHelp
-import org.constellation.primitives.Schema.Event
 /**
   * Created by Wyatt on 5/10/18.
   */
@@ -33,8 +23,8 @@ object NodeStateManager {
 class NodeStateManager(val keyPair: KeyPair = makeKeyPair(), system: ActorSystem) extends FSM[NodeState, Event] {
   import NodeStateManager._
   //TODO make both akkaStreams FSM and self reference
-  val p2p = system.actorOf(Props(new Topology))
-  val validator = system.actorOf(Props(new Manifold))
+  val p2p = system.actorOf(Props(new TopologyManager))
+  val validator = system.actorOf(Props(new ManifoldManager))
 
   startWith(Offline, SyncChain)
 
