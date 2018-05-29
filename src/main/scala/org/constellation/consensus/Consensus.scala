@@ -128,15 +128,13 @@ object Consensus {
                      vote: Vote,
                      roundHash: RoundHash)(implicit system: ActorSystem, keyPair: KeyPair): ConsensusRoundState = {
 
-    val roundState = consensusRoundState.roundStates.getOrElse(roundHash, RoundState())
+    val updateRoundState =
+      (roundState: RoundState, peer: Id, vote: Vote) => {
+        val updatedVotes = roundState.votes + (peer -> vote)
+        roundState.copy(votes = updatedVotes)
+      }
 
-    val updatedVotes = roundState.votes + (peer -> vote)
-
-    val updatedRoundState = roundState.copy(votes = updatedVotes)
-
-    val updatedRoundStates = consensusRoundState.roundStates + (roundHash ->  updatedRoundState)
-
-    var updatedState = consensusRoundState.copy(roundStates = updatedRoundStates)
+    var updatedState = updateRoundCache(consensusRoundState, peer, roundHash, updateRoundState, vote)
 
     // check if we have enough votes to make a bundle proposal
     val facilitatorsWithoutVotes = updatedState.roundStates.getOrElse(roundHash, RoundState()).facilitators.filter(f => {
@@ -176,15 +174,18 @@ object Consensus {
     updatedState
   }
 
-  def addBundleToCache(consensusRoundState: ConsensusRoundState,
+  // roundHash: seq public keys + roundType(conflict, checkpoint)
+  // votes: HashMap[Id, _ <: Event]
+  // bundleProposals: HashMap[Id, Bundle]
+  def updateRoundCache[T](consensusRoundState: ConsensusRoundState,
                        peer: Id,
-                       bundle: Bundle,
-                       roundHash: RoundHash): ConsensusRoundState = {
+                       roundHash: RoundHash,
+                       updateRoundState: (RoundState, Id, T) => RoundState,
+                       event: T): ConsensusRoundState = {
+
     val roundState = consensusRoundState.roundStates.getOrElse(roundHash, RoundState())
 
-    val updatedBundles = roundState.bundles + (peer -> bundle)
-
-    val updatedRoundState = roundState.copy(bundles = updatedBundles)
+    val updatedRoundState = updateRoundState(roundState, peer, event)
 
     val updatedRoundStates = consensusRoundState.roundStates + (roundHash -> updatedRoundState)
 
@@ -196,7 +197,13 @@ object Consensus {
                                bundle: Bundle,
                                roundHash: RoundHash): ConsensusRoundState = {
 
-    var updatedState = addBundleToCache(consensusRoundState, peer, bundle, roundHash)
+    val updateRoundState =
+      (roundState: RoundState, peer: Id, bundle: Bundle) => {
+        val updatedBundles = roundState.bundles + (peer -> bundle)
+        roundState.copy(bundles = updatedBundles)
+      }
+
+    var updatedState = updateRoundCache[Bundle](consensusRoundState, peer, roundHash, updateRoundState, bundle)
 
     // check if we have enough votes to make a bundle decision
     val facilitatorsWithoutBundleProposals = updatedState.roundStates.getOrElse(roundHash, RoundState()).facilitators.filter(f => {
@@ -232,7 +239,10 @@ object Consensus {
   }
 
   // Functions
+  // Complete
   // 1. update cache with type of (peer -> bundle) or (peer -> vote) or (peer -> Seq(TX)) or (peer -> bundle)
+
+  // TODO
   // 2. check if we meet the threshold of votes or proposals
   // 3. if we do, perform logic of creating vote or bundle
   // 4. optionally gossip information
