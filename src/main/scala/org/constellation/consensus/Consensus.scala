@@ -123,6 +123,35 @@ object Consensus {
     updatedState
   }
 
+  // roundHash: seq public keys + roundType(conflict, checkpoint)
+  // votes: HashMap[Id, _ <: Event]
+  // bundleProposals: HashMap[Id, Bundle]
+  def updateRoundCache[T](consensusRoundState: ConsensusRoundState,
+                          peer: Id,
+                          roundHash: RoundHash,
+                          updateRoundState: (RoundState, Id, T) => RoundState,
+                          event: T): ConsensusRoundState = {
+
+    val roundState = consensusRoundState.roundStates.getOrElse(roundHash, RoundState())
+
+    val updatedRoundState = updateRoundState(roundState, peer, event)
+
+    val updatedRoundStates = consensusRoundState.roundStates + (roundHash -> updatedRoundState)
+
+    consensusRoundState.copy(roundStates = updatedRoundStates)
+  }
+
+  def peerThresholdMet(consensusRoundState: ConsensusRoundState, roundHash: RoundHash)
+                      (r: RoundState => HashMap[Id, _]): Boolean = {
+    val facilitatorsMissingInfo =
+      consensusRoundState.roundStates.getOrElse(roundHash, RoundState()).facilitators.filter(f => {
+        val votes = r(consensusRoundState.roundStates.getOrElse(roundHash, RoundState()))
+        !votes.contains(f)
+      })
+
+    facilitatorsMissingInfo.isEmpty
+  }
+
   def handlePeerVote(consensusRoundState: ConsensusRoundState,
                      peer: Id,
                      vote: Vote,
@@ -136,14 +165,8 @@ object Consensus {
 
     var updatedState = updateRoundCache(consensusRoundState, peer, roundHash, updateRoundState, vote)
 
-    // check if we have enough votes to make a bundle proposal
-    val facilitatorsWithoutVotes = updatedState.roundStates.getOrElse(roundHash, RoundState()).facilitators.filter(f => {
-      val votes = updatedState.roundStates.getOrElse(roundHash, RoundState()).votes
-      !votes.contains(f)
-    })
-
     // TODO: update here to require a threshold, not every facilitator
-    if (facilitatorsWithoutVotes.isEmpty) {
+    if (peerThresholdMet(updatedState, roundHash)(_.votes)) {
       // create a bundle proposal
 
       // figure out what the majority of votes agreed upon
@@ -174,24 +197,6 @@ object Consensus {
     updatedState
   }
 
-  // roundHash: seq public keys + roundType(conflict, checkpoint)
-  // votes: HashMap[Id, _ <: Event]
-  // bundleProposals: HashMap[Id, Bundle]
-  def updateRoundCache[T](consensusRoundState: ConsensusRoundState,
-                       peer: Id,
-                       roundHash: RoundHash,
-                       updateRoundState: (RoundState, Id, T) => RoundState,
-                       event: T): ConsensusRoundState = {
-
-    val roundState = consensusRoundState.roundStates.getOrElse(roundHash, RoundState())
-
-    val updatedRoundState = updateRoundState(roundState, peer, event)
-
-    val updatedRoundStates = consensusRoundState.roundStates + (roundHash -> updatedRoundState)
-
-    consensusRoundState.copy(roundStates = updatedRoundStates)
-  }
-
   def handlePeerProposedBundle(consensusRoundState: ConsensusRoundState,
                                peer: Id,
                                bundle: Bundle,
@@ -205,14 +210,8 @@ object Consensus {
 
     var updatedState = updateRoundCache[Bundle](consensusRoundState, peer, roundHash, updateRoundState, bundle)
 
-    // check if we have enough votes to make a bundle decision
-    val facilitatorsWithoutBundleProposals = updatedState.roundStates.getOrElse(roundHash, RoundState()).facilitators.filter(f => {
-      val votes = updatedState.roundStates.getOrElse(roundHash, RoundState()).bundles
-      !votes.contains(f)
-    })
-
     // TODO: update here to require a threshold, not every facilitator
-    if (facilitatorsWithoutBundleProposals.isEmpty) {
+    if (peerThresholdMet(updatedState, roundHash)(_.bundles)) {
       // figure out what the majority of bundles agreed upon
       val bundles = updatedState.roundStates.getOrElse(roundHash, RoundState()).bundles
 
@@ -241,9 +240,9 @@ object Consensus {
   // Functions
   // Complete
   // 1. update cache with type of (peer -> bundle) or (peer -> vote) or (peer -> Seq(TX)) or (peer -> bundle)
+  // 2. check if we meet the threshold of votes or proposals
 
   // TODO
-  // 2. check if we meet the threshold of votes or proposals
   // 3. if we do, perform logic of creating vote or bundle
   // 4. optionally gossip information
   // 5. optionally clean up cache
