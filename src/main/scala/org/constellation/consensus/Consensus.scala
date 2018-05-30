@@ -30,11 +30,12 @@ object Consensus {
                                    replyTo: ActorRef)
 
   // TODO: do we need to gossip after receiving this message from an external node to the other nodes?
-  case class StartConsensusRound(id: Id, vote: Vote)
+  case class StartConsensusRound(id: Id, vote: Vote) extends RemoteMessage
 
   // Events
-  case class PeerVote(id: Id, vote: Vote, roundHash: RoundHash)
-  case class PeerProposedBundle(id: Id, bundle: Bundle, roundHash: RoundHash)
+  trait RemoteMessage
+  case class PeerVote(id: Id, vote: Vote, roundHash: RoundHash) extends RemoteMessage
+  case class PeerProposedBundle(id: Id, bundle: Bundle, roundHash: RoundHash) extends RemoteMessage
   case class ConsensusRoundResult(bundle: Bundle, roundHash: RoundHash)
 
   // Methods
@@ -55,43 +56,29 @@ object Consensus {
     true
   }
 
-  // TODO: consolidate these three functions
-  def notifyFacilitatorsToStartConsensusRound(facilitators: Set[Id],
-                                              self: Id,
-                                              vote: Vote,
-                                              udpActor: ActorRef)(implicit system: ActorSystem): Boolean = {
-
-    // TODO: here replace with call to gossip actor
-
-    notifyFacilitators(facilitators, self, (f) => {
-      udpActor.udpSendToId(StartConsensusRound(self, vote), f)
-    })
-  }
-
   def notifyFacilitatorsOfVote(facilitators: Set[Id],
                                self: Id,
                                vote: Vote,
                                roundHash: RoundHash,
                                udpActor: ActorRef)(implicit system: ActorSystem): Boolean = {
 
-    // TODO: here replace with call to gossip actor
 
     notifyFacilitators(facilitators, self, (f) => {
       udpActor.udpSendToId(PeerVote(self, vote, roundHash), f)
     })
   }
 
-  def notifyFacilitatorsOfBundle(facilitators: Set[Id],
-                                 self: Id,
-                                 bundle: Bundle,
-                                 roundHash: RoundHash,
-                                 udpActor: ActorRef)(implicit system: ActorSystem): Boolean = {
+  def notifyFacilitatorsOfMessage(facilitators: Set[Id],
+                                  self: Id,
+                                  message: RemoteMessage,
+                                  udpActor: ActorRef)(implicit system: ActorSystem): Boolean = {
 
     // TODO: here replace with call to gossip actor
-
-    notifyFacilitators(facilitators, self, (f) => {
-      udpActor.udpSendToId(PeerProposedBundle(self, bundle, roundHash), f)
+    notifyFacilitators(facilitators, self, f => {
+      udpActor.udpSendToId(message, f)
     })
+
+    true
   }
 
   def performConsensusRound(consensusRoundState: ConsensusRoundState,
@@ -100,54 +87,79 @@ object Consensus {
                             facilitators: Set[Id],
                             replyTo: ActorRef)(implicit system: ActorSystem): ConsensusRoundState = {
 
+    val self = consensusRoundState.selfId.get
+    val udpActor = consensusRoundState.udpActor.get
+
     // store our local vote
-    val voteRoundHash = vote.vote.data.voteRoundHash
+    val roundHash = RoundHash(vote.vote.data.voteRoundHash)
 
-    val updatedVotes = consensusRoundState.roundStates.getOrElse(RoundHash(voteRoundHash),
-      RoundState()).votes + (consensusRoundState.selfId.get -> vote)
+    var updatedState = updateVoteCache(consensusRoundState, self, roundHash, vote)
 
-    val updatedRoundState = RoundState(facilitators = facilitators, votes = updatedVotes, replyTo = Some(replyTo))
+    val updatedRoundStates = updatedState.roundStates +
+      (roundHash -> getCurrentRoundState(updatedState, roundHash).copy(facilitators = facilitators, replyTo = Some(replyTo)))
 
-    val updatedRoundStates = consensusRoundState.roundStates +
-      (RoundHash(voteRoundHash) -> consensusRoundState.roundStates.getOrElse(RoundHash(voteRoundHash), updatedRoundState))
-
-    val updatedState = consensusRoundState.copy(roundStates = updatedRoundStates)
+    updatedState = updatedState.copy(roundStates = updatedRoundStates)
 
     // tell everyone to perform a vote given the options
-    notifyFacilitatorsToStartConsensusRound(
-      facilitators,
-      consensusRoundState.selfId.get,
-      vote,
-      consensusRoundState.udpActor.get)
+    notifyFacilitatorsOfMessage(facilitators, self, StartConsensusRound(self, vote), udpActor)
 
     updatedState
   }
 
-  // roundHash: seq public keys + roundType(conflict, checkpoint)
-  // votes: HashMap[Id, _ <: Event]
-  // bundleProposals: HashMap[Id, Bundle]
+  def getCurrentRoundState(consensusRoundState: ConsensusRoundState, roundHash: RoundHash): RoundState = {
+    consensusRoundState.roundStates.getOrElse(roundHash, RoundState())
+  }
+
   def updateRoundCache[T](consensusRoundState: ConsensusRoundState,
                           peer: Id,
                           roundHash: RoundHash,
-                          updateRoundState: (RoundState, Id, T) => RoundState,
-                          event: T): ConsensusRoundState = {
+                          event: T)
+                         (r: RoundState => HashMap[Id, T])
+                         (t: (RoundState, HashMap[Id, T]) => RoundState): ConsensusRoundState = {
 
-    val roundState = consensusRoundState.roundStates.getOrElse(roundHash, RoundState())
+    val roundState = getCurrentRoundState(consensusRoundState, roundHash)
 
-    val updatedRoundState = updateRoundState(roundState, peer, event)
+    val updatedBundles = r(roundState) + (peer -> event)
+
+    val updatedRoundState = t(roundState, updatedBundles)
 
     val updatedRoundStates = consensusRoundState.roundStates + (roundHash -> updatedRoundState)
 
     consensusRoundState.copy(roundStates = updatedRoundStates)
   }
 
+  def updateVoteCache(consensusRoundState: ConsensusRoundState,
+                      peer: Id,
+                      roundHash: RoundHash,
+                      vote: Vote): ConsensusRoundState = {
+    updateRoundCache[Vote](consensusRoundState, peer, roundHash, vote)(_.votes)((t, r) => {
+      t.votes = r
+      t
+    })
+  }
+
+  def updateBundleCache(consensusRoundState: ConsensusRoundState,
+                        peer: Id,
+                        roundHash: RoundHash,
+                        bundle: Bundle): ConsensusRoundState = {
+    updateRoundCache[Bundle](consensusRoundState, peer, roundHash, bundle)(_.bundles)((t, r) => {
+      t.bundles = r
+      t
+    })
+  }
+
+  def cleanupRoundStateCache(consensusRoundState: ConsensusRoundState, roundHash: RoundHash): ConsensusRoundState = {
+    val roundStates = consensusRoundState.roundStates.-(roundHash)
+    consensusRoundState.copy(roundStates = roundStates)
+  }
+
   def peerThresholdMet(consensusRoundState: ConsensusRoundState, roundHash: RoundHash)
                       (r: RoundState => HashMap[Id, _]): Boolean = {
-    val facilitatorsMissingInfo =
-      consensusRoundState.roundStates.getOrElse(roundHash, RoundState()).facilitators.filter(f => {
-        val votes = r(consensusRoundState.roundStates.getOrElse(roundHash, RoundState()))
-        !votes.contains(f)
-      })
+
+    val roundState = getCurrentRoundState(consensusRoundState, roundHash)
+
+    // TODO: update here to require a threshold, not every facilitator
+    val facilitatorsMissingInfo = roundState.facilitators.filter(f => !r(roundState).contains(f))
 
     facilitatorsMissingInfo.isEmpty
   }
@@ -157,24 +169,18 @@ object Consensus {
                      vote: Vote,
                      roundHash: RoundHash)(implicit system: ActorSystem, keyPair: KeyPair): ConsensusRoundState = {
 
-    val updateRoundState =
-      (roundState: RoundState, peer: Id, vote: Vote) => {
-        val updatedVotes = roundState.votes + (peer -> vote)
-        roundState.copy(votes = updatedVotes)
-      }
+    var updatedState = updateVoteCache(consensusRoundState, peer, roundHash, vote)
 
-    var updatedState = updateRoundCache(consensusRoundState, peer, roundHash, updateRoundState, vote)
-
-    // TODO: update here to require a threshold, not every facilitator
     if (peerThresholdMet(updatedState, roundHash)(_.votes)) {
+
+      val roundState = getCurrentRoundState(updatedState, roundHash)
+
       // create a bundle proposal
 
       // figure out what the majority of votes agreed upon
-      val votes = updatedState.roundStates.getOrElse(roundHash, RoundState()).votes
+      val votes = roundState.votes
 
       // take those transactions bundle and sign them
-      val roundState = updatedState.roundStates.getOrElse(roundHash, RoundState())
-
       val facilitators = roundState.facilitators
 
       // TODO: temp logic
@@ -182,14 +188,14 @@ object Consensus {
       val bundle = Bundle(BundleData(vote.vote.data.accept).signed()(keyPair = keyPair))
 
       // cache bundle and gossip bundle info
-      updatedState = handlePeerProposedBundle(consensusRoundState, consensusRoundState.selfId.get, bundle, roundHash)
+      updatedState =
+        handlePeerProposedBundle(consensusRoundState, consensusRoundState.selfId.get, bundle, roundHash)
 
-      notifyFacilitatorsOfBundle(
-        facilitators,
-        consensusRoundState.selfId.get,
-        bundle,
-        roundHash,
-        consensusRoundState.udpActor.get)
+      val self = consensusRoundState.selfId.get
+      val udpActor = consensusRoundState.udpActor.get
+
+      notifyFacilitatorsOfMessage(facilitators,
+        self, PeerProposedBundle(self, bundle, roundHash), udpActor)
     }
 
     // TODO: we gossip each vote?
@@ -202,24 +208,20 @@ object Consensus {
                                bundle: Bundle,
                                roundHash: RoundHash): ConsensusRoundState = {
 
-    val updateRoundState =
-      (roundState: RoundState, peer: Id, bundle: Bundle) => {
-        val updatedBundles = roundState.bundles + (peer -> bundle)
-        roundState.copy(bundles = updatedBundles)
-      }
+    var updatedState = updateBundleCache(consensusRoundState, peer, roundHash, bundle)
 
-    var updatedState = updateRoundCache[Bundle](consensusRoundState, peer, roundHash, updateRoundState, bundle)
-
-    // TODO: update here to require a threshold, not every facilitator
     if (peerThresholdMet(updatedState, roundHash)(_.bundles)) {
+
+      val roundState = getCurrentRoundState(updatedState, roundHash)
+
       // figure out what the majority of bundles agreed upon
-      val bundles = updatedState.roundStates.getOrElse(roundHash, RoundState()).bundles
+      val bundles = roundState.bundles
 
       // take those transactions bundle and sign them
       // TODO: temp logic
       val bundle = bundles.get(updatedState.selfId.get)
 
-      val replyTo = updatedState.roundStates.getOrElse(roundHash, RoundState()).replyTo
+      val replyTo = roundState.replyTo
 
       // call actor callback with accepted bundle
       if (replyTo.isDefined) {
@@ -228,10 +230,7 @@ object Consensus {
 
       // TODO: do we need to gossip this event also?
 
-      // cleanup the cache
-      val roundStates = updatedState.roundStates.-(roundHash)
-
-      updatedState = updatedState.copy(roundStates = roundStates)
+      updatedState = cleanupRoundStateCache(updatedState, roundHash)
     }
 
     updatedState
@@ -248,11 +247,15 @@ object Consensus {
   // 5. optionally clean up cache
   // 6. optionally call callback
 
+  // roundHash: seq public keys + roundType(conflict, checkpoint)
+  // votes: HashMap[Id, _ <: Event]
+  // bundleProposals: HashMap[Id, Bundle]
+
   case class RoundHash(hash: String)
 
   case class RoundState(facilitators: Set[Id] = Set(),
-                        votes: HashMap[Id, Vote] = HashMap(),
-                        bundles: HashMap[Id, Bundle] = HashMap(),
+                        var votes: HashMap[Id, Vote] = HashMap(),
+                        var bundles: HashMap[Id, Bundle] = HashMap(),
                         replyTo: Option[ActorRef] = None)
 
   case class ConsensusRoundState(selfId: Option[Id] = None,
@@ -275,10 +278,7 @@ class Consensus(keyPair: KeyPair, udpActor: ActorRef)(implicit timeout: Timeout)
   override def receive: Receive = {
 
     case PerformConsensusRound(facilitators, vote, gossipHistory, replyTo) =>
-      logger.debug(s"$selfId init consensus round with facilitators = $facilitators and vote = $vote")
-
-      consensusRoundState =
-        performConsensusRound(consensusRoundState, vote, gossipHistory, facilitators, replyTo)
+      consensusRoundState = performConsensusRound(consensusRoundState, vote, gossipHistory, facilitators, replyTo)
 
     case PeerVote(id, vote, roundHash) =>
       consensusRoundState = handlePeerVote(consensusRoundState, id, vote, roundHash)
