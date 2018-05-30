@@ -1,4 +1,4 @@
-package org.constellation.rpc
+package org.constellation
 
 import java.io.File
 import java.net.InetSocketAddress
@@ -7,27 +7,26 @@ import java.security.{KeyPair, PublicKey}
 import akka.actor.ActorRef
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Directives.{entity, path, _}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
+import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.LevelDB
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{Block, BlockSerialized, Schema, Transaction}
+import org.constellation.primitives.{Schema, Transaction}
 import org.constellation.state.ChainStateManager.{CurrentChainStateUpdated, GetCurrentChainState}
 import org.constellation.state.MemPoolManager.AddTransaction
+import org.json4s.native
 import org.json4s.native.Serialization
-import org.json4s.{Formats, native}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.Try
-import constellation._
 
-class RPCInterface(
+class API(
                     chainStateActor: ActorRef,
                     peerToPeerActor: ActorRef,
                     memPoolManagerActor: ActorRef,
@@ -37,7 +36,7 @@ class RPCInterface(
                     db: LevelDB = null,
                     val jsPrefix: String = "./ui/target/scala-2.11/ui"
                   )
-                  (implicit executionContext: ExecutionContext, timeout: Timeout) extends Json4sSupport {
+         (implicit executionContext: ExecutionContext, timeout: Timeout) extends Json4sSupport {
 
   implicit val id : Id = Id(keyPair.getPublic)
 
@@ -83,6 +82,9 @@ class RPCInterface(
 
   val routes: Route =
     get {
+      path("validTX") {
+        complete((peerToPeerActor ? GetValidTX).mapTo[Set[TX]].get())
+      } ~
       path("walletAddressInfo") {
         complete(walletAddressInfo)
       } ~
@@ -156,9 +158,7 @@ class RPCInterface(
       path("peerids") {
         complete((peerToPeerActor ? GetPeersData).mapTo[Seq[Peer]])
       } ~
-      path("id") {
-        complete((peerToPeerActor ? GetId).mapTo[Id])
-      } ~ path("actorPath") {
+        path("actorPath") {
         complete(peerToPeerActor.path.toSerializationFormat)
       } ~
       path("balance") {
@@ -336,6 +336,12 @@ class RPCInterface(
           }
           logger.debug(s"Set external IP RPC request $externalIp $addr")
           peerToPeerActor ! SetExternalAddress(addr)
+          complete(StatusCodes.OK)
+        }
+      } ~
+      path("reputation") {
+        entity(as[Seq[UpdateReputation]]) { ur =>
+          peerToPeerActor ! ur
           complete(StatusCodes.OK)
         }
       }

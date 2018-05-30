@@ -1,16 +1,15 @@
-package org.constellation.wallet
+package org.constellation.crypto
 
 import java.io.{ByteArrayInputStream, File}
 import java.math.BigInteger
-import java.security._
 import java.security.cert.CertificateFactory
-import java.security.{SecureRandom, _}
 import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
+import java.security.{SecureRandom, _}
 import java.util.{Base64, Date}
 
-import org.json4s.{CustomSerializer, Extraction, Formats, JObject}
+import org.constellation.util.EncodedPublicKey
 import org.json4s.JsonAST.JString
-import org.json4s.native.Serialization
+import org.json4s.{CustomSerializer, Formats, JObject}
 import org.spongycastle.asn1.x500.X500NameBuilder
 import org.spongycastle.asn1.x500.style.BCStyle
 import org.spongycastle.asn1.x509.SubjectPublicKeyInfo
@@ -291,6 +290,12 @@ trait KeyUtilsExt {
       )
   }
   ))
+
+  implicit class PublicKeyExt(publicKey: PublicKey) {
+    // Conflict with old schema, add later
+    //  def address: Address = pubKeyToAddress(publicKey)
+    def encoded: EncodedPublicKey = EncodedPublicKey(base64(publicKey.getEncoded))
+  }
 
 
 }

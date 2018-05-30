@@ -7,8 +7,8 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.constellation.consensus.Consensus.GetMemPoolResponse
+import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Transaction
-import org.constellation.wallet.KeyUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.collection.mutable.ListBuffer

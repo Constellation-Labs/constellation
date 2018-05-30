@@ -4,12 +4,12 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import org.constellation.consensus.Consensus.ProposedBlockUpdated
+import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.ChainStateManager.BlockAddedToChain
 import org.constellation.state.MemPoolManager.RemoveConfirmedTransactions
-import org.constellation.utils.TestNode
-import org.constellation.wallet.KeyUtils
+import org.constellation.util.TestNode
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.collection.immutable.HashMap

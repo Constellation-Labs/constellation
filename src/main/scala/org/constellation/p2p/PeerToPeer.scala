@@ -1,31 +1,24 @@
 package org.constellation.p2p
 
-import java.io.File
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
-import java.util.concurrent.{ScheduledFuture, ScheduledThreadPoolExecutor, TimeUnit}
 
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Terminated}
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
-import akka.serialization.SerializationExtension
-import akka.util.{ByteString, Timeout}
+import akka.http.scaladsl.model.StatusCodes
+import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock}
 import org.constellation.LevelDB
 import org.constellation.consensus.Consensus.{PeerMemPoolUpdated, PeerProposedBlock}
 import org.constellation.p2p.PeerToPeer._
-import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.Schema.{Gossip, TX}
-import org.constellation.primitives.{Block, Transaction}
+import org.constellation.primitives.Block
 import org.constellation.state.MemPoolManager.AddTransaction
-import org.constellation.util.{ProductHash, Signed}
+import org.constellation.util.{Heartbeat, ProductHash, Signed}
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.{Failure, Try}
-
 import org.constellation.primitives.Schema._
 
 object PeerToPeer {
@@ -87,115 +80,39 @@ class PeerToPeer(
                   publicKey: PublicKey,
                   system: ActorSystem,
                   consensusActor: ActorRef,
-                  udpActor: ActorRef,
-                  selfAddress: InetSocketAddress = new InetSocketAddress("127.0.0.1", 16180),
+                  val udpActor: ActorRef,
+                  val selfAddress: InetSocketAddress = new InetSocketAddress("127.0.0.1", 16180),
                   keyPair: KeyPair = null,
                   chainStateActor : ActorRef = null,
                   memPoolActor : ActorRef = null,
-                  @volatile var requestExternalAddressCheck: Boolean = false,
-                  heartbeatEnabled: Boolean = false,
+                  var requestExternalAddressCheck: Boolean = false,
+                  val heartbeatEnabled: Boolean = false,
                   db: LevelDB = null
                 )
-                (implicit timeout: Timeout) extends Actor with ActorLogging {
+                (implicit timeoutI: Timeout) extends Actor with ActorLogging with PeerAuth with Heartbeat {
 
-  private val id = Id(publicKey)
-  private implicit val kp: KeyPair = keyPair
+  val id = Id(publicKey)
+  implicit val timeout: Timeout = timeoutI
+  implicit val kp: KeyPair = keyPair
 
   implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
   implicit val actorSystem: ActorSystem = context.system
 
   val logger = Logger(s"PeerToPeer")
 
-  // @volatile private var peers: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
-  @volatile private var remotes: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
-  @volatile private var externalAddress: InetSocketAddress = selfAddress
-
-  private val peerLookup = mutable.HashMap[InetSocketAddress, Signed[Peer]]()
-
-  private def peerIDLookup = peerLookup.values.map{z => z.data.id -> z}.toMap
-
-  private def selfPeer = Peer(id, externalAddress, Set()).signed()
-
-  private def peerIPs = peerLookup.values.map(z => z.data.externalAddress).toSet
-
-  private def allPeerIPs = {
-    peerLookup.keys ++ peerLookup.values.flatMap(z => z.data.remotes ++ Seq(z.data.externalAddress))
-  }.toSet
-
-  private def peers = peerLookup.values.toSeq.distinct
-
-  def broadcast[T <: AnyRef](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
-    val dest = if (idSubset.isEmpty) peerIDLookup.keys else idSubset
-    dest.foreach{ i =>
-      if (!skipIDs.contains(i)) self ! UDPSendToID(message, i)
-    }
-  }
-
-  private def handShakeInner = {
-    HandShake(selfPeer, requestExternalAddressCheck) //, peers)
-  }
-
-  def initiatePeerHandshake(p: PeerRef): StatusCode = {
-    val peerAddress = p.address
-    import akka.pattern.ask
-    val banList = (udpActor ? GetBanList).mapTo[Seq[InetSocketAddress]].get()
-    if (!banList.contains(peerAddress)) {
-      val res = if (peerIPs.contains(peerAddress)) {
-        logger.debug(s"We already know $peerAddress, discarding")
-        StatusCodes.AlreadyReported
-      } else if (peerAddress == externalAddress || remotes.contains(peerAddress)) {
-        logger.debug(s"Peer is same as self $peerAddress, discarding")
-        StatusCodes.BadRequest
-      } else {
-        logger.debug(s"Sending handshake from $externalAddress to $peerAddress with ${peers.size} known peers")
-        //Introduce ourselves
-        // val message = HandShakeMessage(handShakeInner.copy(destination = Some(peerAddress)).signed())
-        val message = HandShakeMessage(handShakeInner.signed())
-        udpActor.udpSend(message, peerAddress)
-        //Tell our existing peers
-        //broadcast(p)
-        StatusCodes.Accepted
-      }
-      res
-    } else {
-      logger.debug(s"Attempted to add peer but peer was previously banned! $peerAddress")
-      StatusCodes.Forbidden
-    }
-  }
-
-  private def addPeer(
-                       value: Signed[Peer],
-                       newPeers: Seq[Signed[Peer]] = Seq()
-                     ): Unit = {
-
-    this.synchronized {
-      peerLookup(value.data.externalAddress) = value
-      value.data.remotes.foreach(peerLookup(_) = value)
-      logger.debug(s"Peer added, total peers: ${peerIDLookup.keys.size} on $selfAddress")
-      newPeers.foreach { np =>
-        //    logger.debug(s"Attempting to add new peer from peer reference handshake response $np")
-        //   initiatePeerHandshake(PeerRef(np.data.externalAddress))
-      }
-    }
-  }
-
-  private def banOn[T](valid: => Boolean, remote: InetSocketAddress)(t: => T) = {
-    if (valid) t else {
-      logger.debug(s"BANNING - Invalid data from - $remote")
-      udpActor ! Ban(remote)
-    }
-  }
-
-
   @volatile var memPoolTX: Set[TX] = Set()
 
   @volatile var validTX: Set[TX] = Set()
+
+  @volatile var validSyncPendingTX: Set[TX] = Set()
 
  // @volatile var bundlePool: Set[Bundle] = Set()
 
  // @volatile var superSelfBundle : Option[Bundle] = None
 
   private val validUTXO = mutable.HashMap[String, Long]()
+
+  private val validSyncPendingUTXO = mutable.HashMap[String, Long]()
 
   private val memPoolUTXO = mutable.HashMap[String, Long]()
 
@@ -208,73 +125,84 @@ class PeerToPeer(
 
   def selfBalance: Option[Long] = validUTXO.get(id.address.address)
 
-
-  private val bufferTask = new Runnable { def run(): Unit = {
-
-    self ! InternalHeartbeat
-  } }
-
-  var heartBeatMonitor: ScheduledFuture[_] = _
-  var heartBeat: ScheduledThreadPoolExecutor = _
-
-  if (heartbeatEnabled) {
-    heartBeat = new ScheduledThreadPoolExecutor(10)
-    heartBeatMonitor = heartBeat.scheduleAtFixedRate(bufferTask, 1, 3, TimeUnit.SECONDS)
-  }
-
-  def acceptTransaction(tx: TX): Unit = {
+  def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
     validTX += tx
     memPoolTX -= tx
+    if (updatePending) {
+      tx.updateUTXO(validSyncPendingUTXO)
+    }
+    validSyncPendingTX -= tx
     tx.updateUTXO(validUTXO)
     if (tx.tx.data.isGenesis) {
       tx.updateUTXO(memPoolUTXO)
     }
+//    txToGossipChains.remove(tx.hash) // TODO: Remove after a certain period of time instead. Cleanup gossip data.
+    val txSeconds = (System.currentTimeMillis() - tx.tx.time) / 1000
+  //  logger.debug(s"Accepted TX from $txSeconds seconds ago: ${tx.short} on ${id.short} " +
+   //   s"new mempool size: ${memPoolTX.size} valid: ${validTX.size} isGenesis: ${tx.tx.data.isGenesis}")
   }
 
   @volatile var downloadMode: Boolean = true
 
   @volatile var totalNumGossipMessages = 0
 
+  var lastHeartbeatTime: Long = System.currentTimeMillis()
+
   // @volatile var downloadResponses = Seq[DownloadResponse]()
+  var secretReputation: Map[Id, Double] = Map()
+  var publicReputation: Map[Id, Double] = Map()
+  var deterministicReputation: Map[Id, Double] = Map()
+
+  def updateGossipChains(txHash: String, g: Gossip[ProductHash]): Unit = {
+    val gossipSeq = g.iter
+    val chains = txToGossipChains.get(txHash)
+    if (chains.isEmpty) txToGossipChains(txHash) = Seq(g)
+    else {
+      val chainsA = chains.get
+      val updatedGossipChains = chainsA.filter { c =>
+        !c.iter.map {_.hash}.zip(gossipSeq.map {_.hash}).forall { case (x, y) => x == y }
+      } :+ g
+      txToGossipChains(txHash) = updatedGossipChains
+    }
+  }
 
   override def receive: Receive = {
 
+    // This is unsafe due to type erasure, fix later.
+    case ur: Seq[UpdateReputation] =>
+  //    logger.debug(s"Reputation updates: $ur")
+      secretReputation = ur.flatMap{ r => r.secretReputation.map{id -> _}}.toMap
+      publicReputation = ur.flatMap{ r => r.publicReputation.map{id -> _}}.toMap
+
     case InternalHeartbeat =>
 
-      // TODO: This may not be necessary when full metrics collector are set up,
-      // Also this could be triggered by regular events instead of async.
-      // Needs to be revisited if its required, certainly useful for debugging UDP connectivity though.
-      Try {
-
+      processHeartbeat {
         if (downloadMode && peers.nonEmpty) {
           logger.debug("Requesting data download")
           broadcast(DownloadRequest())
         }
 
-        broadcast(SyncData(validTX))
+        if (!downloadMode) {
+    //      broadcast(SyncData(validTX, memPoolTX))
+        }
 
         val numAccepted = this.synchronized {
           val gs = txToGossipChains.values.map { g =>
             val tx = g.head.iter.head.data.asInstanceOf[TX]
             tx -> g
-          }.toSeq
+          }.toSeq.filter{z => !validTX.contains(z._1)}
 
           val filtered = gs.filter { case (tx, g) =>
             val lastTime = g.map {
-              _.iter.last.endTime
+              _.iter.last.time
             }.max
-            val sufficientTimePassed = lastTime < (System.currentTimeMillis() - 5)
+            val sufficientTimePassed = lastTime < (System.currentTimeMillis() - 5000)
             sufficientTimePassed
           }
 
           val acceptedTXs = filtered.map {_._1}
 
-          acceptedTXs.foreach {
-            tx =>
-              validTX += tx
-              tx.updateUTXO(validUTXO)
-              txToGossipChains.remove(tx.hash)
-          }
+          acceptedTXs.foreach { z => acceptTransaction(z)}
 
           if (acceptedTXs.nonEmpty) {
             // logger.debug(s"Accepted transactions on ${id.short}: ${acceptedTXs.map{_.short}}")
@@ -286,17 +214,25 @@ class PeerToPeer(
           // Send heartbeat here to other peers.
           acceptedTXs.size
         }
+
+        validSyncPendingTX.foreach{
+          tx =>
+            val chains = txToGossipChains.get(tx.hash)
+            chains.foreach{
+              c =>
+                val lastTime = c.map {_.iter.last.time}.max
+                val sufficientTimePassed = lastTime < (System.currentTimeMillis() - 5000)
+                sufficientTimePassed
+            }
+        }
+
         logger.debug(
-          s"Heartbeat: ${id.short}, gossip: $totalNumGossipMessages, balance: $selfBalance, " +
+          s"Heartbeat: ${id.short}, memPool: ${memPoolTX.size} numPeers: ${peers.size} gossip: $totalNumGossipMessages, balance: $selfBalance, " +
             s"numAccepted: $numAccepted, numTotalValid: ${validTX.size} " +
-            s"validUTXO: ${validUTXO.map{case (k,v) => k.slice(0, 5) -> v}} "
+            s"validUTXO: ${validUTXO.map { case (k, v) => k.slice(0, 5) -> v }} " +
+            s"peers: ${peers.map { p => p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes }.mkString(",")}"
         )
-
-      } match {
-        case Failure(e) => e.printStackTrace()
-        case _ =>
-      }
-
+    }
 
     case UDPMessage(d: DownloadResponse, remote) =>
 
@@ -310,14 +246,63 @@ class PeerToPeer(
         logger.debug("Downloaded data")
       }
 
+
+    case UDPMessage(d: RequestTXProof, remote) =>
+      val t = d.txHash
+      val gossipChains = txToGossipChains.getOrElse(t, Seq())
+      if (gossipChains.nonEmpty) {
+        val t = gossipChains.head.iter.head.data.asInstanceOf[TX]
+        udpActor.udpSend(MissingTXProof(t, gossipChains), remote)
+      }
+
+    case UDPMessage(d: MissingTXProof, remote) =>
+
+      val t = d.tx
+
+      if (!validSyncPendingTX.contains(t)) {
+        if (t.utxoValid(validSyncPendingUTXO)) {
+          t.updateUTXO(validSyncPendingUTXO)
+        } else {
+          // Handle double spend conflict here later, for now just drop
+        }
+      }
+
+      d.gossip.foreach{
+        g =>
+          updateGossipChains(d.tx.hash, g)
+      }
+
     case UDPMessage(d: SyncData, remote) =>
 
-      logger.debug(s"SyncData message size: ${d.validTX.size} on ${validTX.size} ${id.short}")
-      d.validTX.filter{
-        !validTX.contains(_)
-      }.foreach{
-        acceptTransaction
+      val rid = peerLookup(remote)
+      val diff = d.validTX.diff(validTX)
+      if (diff.nonEmpty) {
+        logger.debug(s"Desynchronization detected between remote: ${rid.short} and self: ${id.short} - diff size : ${diff.size}")
       }
+
+      val selfMissing = d.validTX.filter{!validTX.contains(_)}
+
+      selfMissing.foreach{ t =>
+        if (!validSyncPendingTX.contains(t)) {
+          if (t.utxoValid(validSyncPendingUTXO)) {
+            t.updateUTXO(validSyncPendingUTXO)
+          } else {
+            // Handle double spend conflict here later, for now just drop
+          }
+        }
+        validSyncPendingTX += t
+        broadcast(RequestTXProof(t.hash))
+      }
+
+      val otherMissing = validTX.filter{!d.validTX.contains(_)}
+      otherMissing.toSeq.foreach{ t =>
+        val gossipChains = txToGossipChains.getOrElse(t.hash, Seq())
+        if (gossipChains.nonEmpty) {
+          udpActor.udpSend(MissingTXProof(t, gossipChains), remote)
+        }
+      }
+
+     // logger.debug(s"SyncData message size: ${d.validTX.size} on ${validTX.size} ${id.short}")
 
     case UDPMessage(d: DownloadRequest, remote) =>
 
@@ -415,25 +400,14 @@ class PeerToPeer(
               if (!memPoolTX.contains(tx)) {
                 tx.updateUTXO(memPoolUTXO)
                 memPoolTX += tx
+            //    logger.debug(s"Adding TX to mempool - new size ${memPoolTX.size}")
               }
 
-              val chains = txToGossipChains.get(tx.hash)
-              if (chains.isEmpty) txToGossipChains(tx.hash) = Seq(g)
-              else {
-                val chainsA = chains.get
-                val updatedGossipChains = chainsA.filter { c =>
-                  !c.iter.map {
-                    _.hash
-                  }.zip(gossipSeq.map {
-                    _.hash
-                  }).forall { case (x, y) => x == y }
-                } :+ g
-                txToGossipChains(tx.hash) = updatedGossipChains
-              }
+              updateGossipChains(tx.hash, g)
 
               // Continue gossip.
               val peer = peerLookup(remote).data.id
-              val gossipKeys = gossipSeq.tail.flatMap{_.publicKeys}.distinct.map{Id}
+              val gossipKeys = gossipSeq.tail.flatMap{_.encodedPublicKeys}.distinct.map{_.toPublicKey}.map{Id}
 
               val containsSelf = gossipKeys.contains(id)
               val underMaxDepth = g.stackDepth < 6
@@ -510,9 +484,6 @@ class PeerToPeer(
     case GetPeersID => sender() ! peers.map{_.data.id}
     case GetPeersData => sender() ! peers.map{_.data}
 
-    case GetId =>
-      sender() ! Id(publicKey)
-
     case UDPSendToID(dataA, remoteId) =>
       peerIDLookup.get(remoteId).foreach{
         r =>
@@ -531,44 +502,10 @@ class PeerToPeer(
       consensusActor ! p
 
     case UDPMessage(sh: HandShakeResponseMessage, remote) =>
-      //    logger.debug(s"HandShakeResponseMessage from $remote on $externalAddress second remote: $remote")
-      //  val o = sh.handShakeResponse.data.original
-      //   val fromUs = o.valid && o.publicKeys.head == id.id
-      // val valid = fromUs && sh.handShakeResponse.valid
-
-      val address = sh.handShakeResponse.data.response.originPeer.data.externalAddress
-      if (requestExternalAddressCheck) {
-        externalAddress = sh.handShakeResponse.data.detectedRemote
-        requestExternalAddressCheck = false
-      }
-
-      // ^ TODO : Fix validation
-      banOn(sh.handShakeResponse.valid, remote) {
-        logger.debug(s"Got valid HandShakeResponse from $remote / $address on $externalAddress")
-        val value = sh.handShakeResponse.data.response.originPeer
-        val newPeers = Seq() //sh.handShakeResponse.data.response.peers
-        addPeer(value, newPeers)
-        remotes += remote
-      }
+      handleHandShakeResponse(sh, remote)
 
     case UDPMessage(sh: HandShakeMessage, remote) =>
-      val hs = sh.handShake.data
-      val address = hs.originPeer.data.externalAddress
-      val responseAddr = if (hs.requestExternalAddressCheck) remote else address
-
-      logger.debug(s"Got handshake from $remote on $externalAddress, sending response to $responseAddr")
-      banOn(sh.handShake.valid, remote) {
-        logger.debug(s"Got handshake inner from $remote on $externalAddress, " +
-        s"sending response to $remote inet: ${pprintInet(remote)} " +
-        s"peers externally reported address: ${hs.originPeer.data.externalAddress} inet: " +
-        s"${pprintInet(address)}")
-        val response = HandShakeResponseMessage(
-          // HandShakeResponse(sh.handShake, handShakeInner.copy(destination = Some(remote)), remote).signed()
-          HandShakeResponse(handShakeInner, remote).signed()
-        )
-        udpActor.udpSend(response, responseAddr)
-        initiatePeerHandshake(PeerRef(responseAddr))
-      }
+      handleHandShake(sh, remote)
 
     case UDPMessage(peersI: Peers, remote) =>
       peersI.peers.foreach{

@@ -17,8 +17,8 @@ import org.constellation.ConstellationNode
 import org.constellation.p2p.{GetUDPSocketRef, TestMessage}
 import org.constellation.p2p.PeerToPeer.{GetPeers, Id, Peer, Peers}
 import org.constellation.primitives.{Block, BlockSerialized, Transaction}
-import org.constellation.util.RPCClient
-import org.constellation.utils.TestNode
+import org.constellation.util.APIClient
+import org.constellation.util.TestNode
 import org.scalatest.exceptions.TestFailedException
 import sun.security.provider.NativePRNG.Blocking
 
@@ -91,7 +91,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
         }
 
-        val peers = node.rpc.getBlocking[Seq[Peer]]("peerids")
+        val peers = node.api.getBlocking[Seq[Peer]]("peerids")
         println(s"Peers length: ${peers.length}")
         assert(peers.length == (nodes.length - 1))
 
@@ -106,7 +106,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     val initGenesisFutures = nodes.map(node => {
       Future {
 
-        val rpc = node.rpc
+        val rpc = node.api
         val genResponse = rpc.get("generateGenesisBlock")
         assert(genResponse.get().status == StatusCodes.OK)
 
@@ -121,7 +121,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
     val validateGenesisBlockFutures = nodes.map(node => {
       Future {
 
-        val rpc = node.rpc
+        val rpc = node.api
 
         val chainStateNode1Response = rpc.get("blocks")
 
@@ -159,7 +159,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
       Future {
         var transactionCallsMade = Seq[Transaction]()
 
-        val rpc = node.rpc
+        val rpc = node.api
 
         def makeTransactionCalls(idx: Int): Unit = {
           if (randomizedTransactions.isDefinedAt(idx)) {
@@ -187,7 +187,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     val waitUntilTransactionsExistInBlocksFutures = nodes.map(node => {
       Future {
-        val rpc = node.rpc
+        val rpc = node.api
 
         def chainContainsAllTransactions(): Boolean = {
           val finalChainStateNodeResponse = rpc.get("blocks")
@@ -210,11 +210,11 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
     val chainsMap: Map[Id, Seq[Block]] = nodes.map { n =>
 
-      val disableConsensusResponse = n.rpc.get("disableConsensus")
+      val disableConsensusResponse = n.api.get("disableConsensus")
       assert(disableConsensusResponse.get().status == StatusCodes.OK)
 
-      val finalChainStateNodeResponse = n.rpc.get("blocks")
-      val finalChainNode = n.rpc.read[Seq[Block]](finalChainStateNodeResponse.get()).get()
+      val finalChainStateNodeResponse = n.api.get("blocks")
+      val finalChainNode = n.api.read[Seq[Block]](finalChainStateNodeResponse.get()).get()
       n.id -> finalChainNode
     }.toMap
 

@@ -2,10 +2,10 @@ package org.constellation.tx
 
 import java.security.KeyPair
 
+import org.constellation.crypto.KeyUtils
+import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Transaction
 import org.constellation.transaction.AtomicTransaction._
-import org.constellation.wallet.KeyUtils
-import org.constellation.wallet.KeyUtils._
 import org.scalatest.FlatSpec
 
 class AtomicTransactionTest extends FlatSpec {

@@ -6,6 +6,7 @@ import akka.http.scaladsl.model.Uri.Query
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers, Unmarshal}
 import akka.stream.ActorMaterializer
+import org.constellation.p2p.PeerToPeer.Id
 import org.json4s.JsonAST.JArray
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
@@ -15,11 +16,13 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 // TODO : Implement all methods from RPCInterface here for a client SDK
 // This should also probably use scalaj http because it's bettermore standard.
 
-class RPCClient(val host: String = "127.0.0.1", val port: Int)(
+class APIClient(val host: String = "127.0.0.1", val port: Int)(
   implicit val system: ActorSystem,
   implicit val materialize: ActorMaterializer,
   implicit val executionContext: ExecutionContextExecutor
 ) {
+
+  var id: Id = null
 
   val baseURI = s"http://$host:$port"
 

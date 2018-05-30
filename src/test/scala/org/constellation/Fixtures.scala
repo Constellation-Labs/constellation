@@ -7,8 +7,8 @@ import akka.actor.ActorRef
 import org.constellation.p2p.PeerToPeer.{Id, Peer}
 import org.constellation.primitives.Block
 import org.constellation.primitives.Transaction
-import org.constellation.wallet.KeyUtils
 import constellation._
+import org.constellation.crypto.KeyUtils
 import org.constellation.util.Signed
 
 import scala.collection.mutable

@@ -13,12 +13,12 @@ import org.constellation.p2p.PeerToPeer.{GetPeers, Id, Peers}
 import org.constellation.p2p.{RegisterNextActor, UDPMessage, UDPSendToID}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.ChainStateManager.{AddBlock, CreateBlockProposal}
-import org.constellation.utils.TestNode
-import org.constellation.wallet.KeyUtils
+import org.constellation.util.TestNode
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.collection.immutable.{HashMap, Map}
 import org.constellation.Fixtures._
+import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.GetPeersID
 
 import scala.concurrent.duration._

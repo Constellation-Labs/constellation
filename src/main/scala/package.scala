@@ -18,8 +18,8 @@ import org.constellation.p2p.PeerToPeer.{Id, PeerRef}
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.Address
 import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
-import org.constellation.wallet.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
-import org.constellation.wallet.KeyUtilsExt
+import org.constellation.crypto.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
+import org.constellation.crypto.KeyUtilsExt
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
 import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, native}
@@ -37,7 +37,7 @@ package object constellation extends KeyUtilsExt with POWExt
   val minimumTime : Long = 1518898908367L
 
   implicit class EasyFutureBlock[T](f: Future[T]) {
-    def get(t: Int = 5): T = {
+    def get(t: Int = 15): T = {
       import scala.concurrent.duration._
       Await.result(f, t.seconds)
     }
@@ -287,10 +287,6 @@ package object constellation extends KeyUtilsExt with POWExt
 
   }
 
-  implicit class PubKeyExt(publicKey: PublicKey) {
-    // Conflict with old schema, add later
-    //  def address: Address = pubKeyToAddress(publicKey)
-  }
 
   implicit class ActorQuery(a: ActorRef) {
     import akka.pattern.ask

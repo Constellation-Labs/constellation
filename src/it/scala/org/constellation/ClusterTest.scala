@@ -1,21 +1,24 @@
 package org.constellation
 
+import java.util.concurrent.ForkJoinPool
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
-import org.constellation.util.RPCClient
+import org.constellation.util.APIClient
 import org.json4s.JsonAST.JArray
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
-import scala.concurrent.{Await, ExecutionContextExecutor, Future}
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import constellation._
 import org.constellation.ClusterTest.{KubeIPs, ipRegex}
-import org.constellation.p2p.PeerToPeer.Peer
+import org.constellation.p2p.PeerToPeer.{Id, Peer}
+import org.constellation.primitives.Schema.{Address, SendToAddress, TX}
 import org.constellation.primitives.{Block, Transaction}
 
 import scala.sys.process._
-import scala.util.Try
+import scala.util.{Random, Try}
 import scala.concurrent.duration._
 import scala.util.Random._
 
@@ -115,7 +118,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
   private val clusterId = sys.env.getOrElse("CLUSTER_ID", "constellation-app")
 
   // TODO: disabling until we port over to our new consensus mechanism
-  "Cluster integration" should "ping a cluster, check health, go through genesis flow" ignore {
+  "Cluster integration" should "ping a cluster, check health, go through genesis flow" in {
 
     val mappings = getPodMappings(clusterId)
 
@@ -124,15 +127,24 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     val ips = mappings.map{_.externalIP}
 
     val rpcs = ips.map{ ip =>
-      val r = new RPCClient(ip, 9000)
+      val r = new APIClient(ip, 9000)
       assert(r.getBlockingStr[String]("health", timeout = 100) == "OK")
       println(s"Health ok on $ip")
+      val id = r.getBlocking[Id]("id")
+      r.id = id
       r
     }
 
     for (rpc  <- rpcs) {
       assert(rpc.post("ip", rpc.host + ":16180").get().unmarshal.get() == "OK")
     }
+
+
+    val r1 = rpcs.head
+
+    // Create a genesis transaction
+    val numCoinsInitial = 4e9.toLong
+    val genTx = r1.getBlocking[TX]("genesis/" + numCoinsInitial)
 
     Thread.sleep(5000)
 
@@ -160,151 +172,62 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       assert(peers.length == (rpcs.length - 1))
     }
 
-    import Fixtures2._
-
-    val txs = Seq(transaction1, transaction2, transaction3, transaction4)
-
-    val slideNum = txs.size / rpcs.size
-
-    val randomizedTransactions = shuffle(txs).toList.sliding(slideNum, slideNum).toList
-
-    val initGenesisFutures = rpcs.map(rpc => {
-      Future {
-
-        val genResponse = rpc.get("generateGenesisBlock")
-        assert(genResponse.get().status == StatusCodes.OK)
-
-        true
-      }
-    })
-
-    val initGenesisSequence = Future.sequence(initGenesisFutures)
-
-    Await.result(initGenesisSequence, 30 seconds)
-
-    val validateGenesisBlockFutures = rpcs.map(rpc => {
-      Future {
-
-        val chainStateNode1Response = rpc.get("blocks")
-
-        val response = chainStateNode1Response.get()
-
-        val chainNode = rpc.read[Seq[Block]](response).get()
-
-        assert(chainNode.size == 1)
-
-        assert(chainNode.head.height == 0)
-
-        assert(chainNode.head.round == 0)
-
-        assert(chainNode.head.parentHash == "tempGenesisParentHash")
-
-        assert(chainNode.head.signature == "tempSig")
-
-        assert(chainNode.head.transactions == Seq())
-
-        val consensusResponse = rpc.get("enableConsensus")
-
-        assert(consensusResponse.get().status == StatusCodes.OK)
-
-        true
-      }
-    })
-
-    val validateGenesisBlockSequence = Future.sequence(validateGenesisBlockFutures)
-
-    Await.result(validateGenesisBlockSequence, 30 seconds)
-
-    val makeTransactionsFutures = rpcs.zipWithIndex.map { case (rpc, index) => {
-      Future {
-        var transactionCallsMade = Seq[Transaction]()
-
-        def makeTransactionCalls(idx: Int): Unit = {
-          if (randomizedTransactions.isDefinedAt(idx)) {
-            randomizedTransactions(idx).foreach(transaction => {
-              rpc.post("transaction", transaction)
-              transactionCallsMade = transactionCallsMade.:+(transaction)
-            })
-          }
-        }
-
-        makeTransactionCalls(index)
-
-        // If we are on the last node but there are still transactions left then send them to the last node
-        if (index + 1 == rpcs.length) {
-          makeTransactionCalls(index + 1)
-        }
-
-        transactionCallsMade
-      }
-    }}
-
-    val makeTransactionsSequence = Future.sequence(makeTransactionsFutures)
-
-    Await.result(makeTransactionsSequence, 30 seconds)
-
-    val waitUntilTransactionsExistInBlocksFutures = rpcs.map(rpc => {
-      Future {
-
-        def chainContainsAllTransactions(): Boolean = {
-          val finalChainStateNodeResponse = rpc.get("blocks")
-          val finalChainNode = rpc.read[Seq[Block]](finalChainStateNodeResponse.get()).get()
-
-          val transactionsInChain = finalChainNode.flatMap(c => c.transactions).size
-
-          println(s"chain length = ${finalChainNode.size}")
-
-          println(s"expectedTransactions size = ${txs.size}")
-
-          println(s"transactions in chain = $transactionsInChain")
-
-          transactionsInChain == txs.size
-        }
-
-        while(!chainContainsAllTransactions()) {
-          true
-        }
-
-        true
-      }
-    })
-
-    val waitUntilTransactionsExistSequence = Future.sequence(waitUntilTransactionsExistInBlocksFutures)
-
-    Await.result(waitUntilTransactionsExistSequence, 180 seconds)
-
-    Thread.sleep(1000)
-
-    val chains = rpcs.map { rpc =>
-      val disableConsensusResponse = rpc.get("disableConsensus")
-      assert(disableConsensusResponse.get().status == StatusCodes.OK)
-
-      val finalChainStateNodeResponse = rpc.get("blocks")
-      rpc.read[Seq[Block]](finalChainStateNodeResponse.get()).get()
+    val initialDistrTX = rpcs.tail.map{ n =>
+      val dst = n.getBlocking[Address]("address")
+      val s = SendToAddress(dst, 1e7.toLong)
+      r1.postRead[TX]("sendToAddress", s)
     }
 
-    val smallestChainLength = chains.map(_.size).min
+    Thread.sleep(10000)
 
-    println(s"smallest chain length = $smallestChainLength")
+    def randomNode = rpcs(Random.nextInt(rpcs.length))
+    def randomOtherNode(not: APIClient) = rpcs.filter{_ != not}(Random.nextInt(rpcs.length - 1))
 
-    val trimmedChains = chains.map(c => c.take(smallestChainLength))
+    val ec = ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
-    // validate that all of the chains from each node are the same
-    assert(trimmedChains.forall(_ == trimmedChains.head))
+    def sendRandomTransaction = {
+      Future {
+        val src = randomNode
+        val dst = randomOtherNode(src).getBlocking[Address]("address")
+        val s = SendToAddress(dst, Random.nextInt(1000).toLong)
+        src.postRead[TX]("sendToAddress", s)
+      }(ec)
+    }
 
-    val transactions = chains.map(f => {
-      f.flatMap(b => b.transactions).toSeq
-    })
+    val numTX = 200
 
-    println(s"expected transactions size = ${txs.size}")
+    val start = System.currentTimeMillis()
 
-    assert(transactions.forall(_.size == txs.size))
+    val txResponse = Seq.fill(numTX) {
+      // Thread.sleep(100)
+      sendRandomTransaction
+    }
 
-    assert(txs.toSet.size == txs.size)
+    val txResponseFut = Future.sequence(txResponse)
 
-    assert(transactions.forall(_.toSet == txs.toSet))
+    val txs = txResponseFut.get(100).toSet
 
-    assert(true)
+    val allTX = Set(genTx) ++ initialDistrTX.toSet ++ txs
+
+    var done = false
+
+    while (!done) {
+      val nodeStatus = rpcs.map { n =>
+        val validTX = n.getBlocking[Set[TX]]("validTX")
+        val percentComplete = 100 - (allTX.diff(validTX).size.toDouble / allTX.size.toDouble) * 100
+        println(s"Node ${n.id.short} validTXSize: ${validTX.size} allTXSize: ${allTX.size} % complete: $percentComplete")
+        Thread.sleep(1000)
+        validTX == allTX
+      }
+
+      if (nodeStatus.forall { x => x }) {
+        done = true
+      }
+    }
+
+    val end = System.currentTimeMillis()
+
+    println(s"Completion time seconds: ${(end-start) / 1000}")
 
   }
 

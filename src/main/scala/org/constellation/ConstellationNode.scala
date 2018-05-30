@@ -14,14 +14,13 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
-import org.constellation.rpc.RPCInterface
-import org.constellation.wallet.KeyUtils
 import org.constellation.consensus.Consensus
+import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.{PeerToPeer, RegisterNextActor, UDPActor}
 import org.constellation.p2p.PeerToPeer.{AddPeerFromLocal, Id}
 import org.constellation.primitives.Schema.ToggleHeartbeat
 import org.constellation.state.{ChainStateManager, MemPoolManager}
-import org.constellation.util.RPCClient
+import org.constellation.util.APIClient
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.Try
@@ -142,7 +141,7 @@ class ConstellationNode(
   }
 
   // If we are exposing rpc then create routes
-  val routes: Route = new RPCInterface(chainStateActor,
+  val routes: Route = new API(chainStateActor,
     peerToPeerActor, memPoolManagerActor, consensusActor, udpAddress, keyPair, db=db)(executionContext, timeout).routes
 
   // Setup http server for rpc
@@ -151,9 +150,9 @@ class ConstellationNode(
   // TODO : Move to separate test class - these are within jvm only but won't hurt anything
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
-  val rpc = new RPCClient(port=httpPort)
-  def healthy: Boolean = Try{rpc.getSync("health").status == StatusCodes.OK}.getOrElse(false)
-  def add(other: ConstellationNode): HttpResponse = rpc.postSync("peer", other.udpAddressString)
+  val api = new APIClient(port=httpPort)
+  def healthy: Boolean = Try{api.getSync("health").status == StatusCodes.OK}.getOrElse(false)
+  def add(other: ConstellationNode): HttpResponse = api.postSync("peer", other.udpAddressString)
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind

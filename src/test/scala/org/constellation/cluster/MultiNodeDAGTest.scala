@@ -1,23 +1,20 @@
 package org.constellation.cluster
 
 import java.io.File
-import java.security.KeyPair
 import java.util.concurrent.{ForkJoinPool, TimeUnit}
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import akka.util.Timeout
 import constellation._
 import org.constellation.ConstellationNode
-import org.constellation.p2p.PeerToPeer.{Id, Peer}
+import org.constellation.p2p.PeerToPeer.{Peer}
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{Block, Transaction}
-import org.constellation.utils.TestNode
+import org.constellation.util.TestNode
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 import akka.pattern.ask
 
@@ -33,27 +30,26 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
   "E2E Multiple Nodes DAG" should "add peers and build DAG with transactions" in {
 
+    val totalNumNodes = 5
+
     // Cleanup DBs
     import scala.tools.nsc.io.{File => SFile}
     val tmpDir = new File("tmp")
     Try{SFile(tmpDir).deleteRecursively()}
 
     val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false)
-    val r1 = n1.rpc
 
-    val nodes = Seq(n1) ++ Seq.fill(3)(TestNode(heartbeatEnabled = true))
+    val r1 = n1.api
+
+    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true))
 
     for (node <- nodes) {
       assert(node.healthy)
     }
 
-    Thread.sleep(500)
-
     // Create a genesis transaction
-
     val numCoinsInitial = 4e9.toLong
     val genTx = r1.getBlocking[TX]("genesis/" + numCoinsInitial)
-
     Thread.sleep(1000)
 
     val results = nodes.flatMap{ node =>
@@ -61,22 +57,34 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       others.map{
         n =>
           Future {
-            node.add(n)
+            node.api.postSync("peer", n.udpAddressString)
           }
       }
     }
 
-    Thread.sleep(8000)
+    import scala.concurrent.duration._
+    Await.result(Future.sequence(results), 30.seconds)
 
     for (node <- nodes) {
-      val peers = node.rpc.getBlocking[Seq[Peer]]("peerids")
+      val peers = node.api.getBlocking[Seq[Peer]]("peerids")
       assert(peers.length == (nodes.length - 1))
+      val others = nodes.filter{_ != node}
+      val havePublic = Random.nextDouble() > 0.5
+      val haveSecret = Random.nextDouble() > 0.5 || havePublic
+      node.api.postSync("reputation", others.map{o =>
+        UpdateReputation(
+          o.id,
+          if (haveSecret) Some(Random.nextDouble()) else None,
+          if (havePublic) Some(Random.nextDouble()) else None
+        )
+      })
     }
 
-    Thread.sleep(2000)
+    Thread.sleep(6000)
 
     val initialDistrTX = nodes.tail.map{ n =>
-      val s = SendToAddress(n.id.address, 1e7.toLong)
+      val dst = n.api.getBlocking[Address]("address")
+      val s = SendToAddress(dst, 1e7.toLong)
       r1.postRead[TX]("sendToAddress", s)
     }
 
@@ -93,14 +101,13 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
         val src = randomNode
         val dst = randomOtherNode(src)
         val s = SendToAddress(dst.id.address, Random.nextInt(1000).toLong)
-        src.rpc.postRead[TX]("sendToAddress", s)
+        src.api.postRead[TX]("sendToAddress", s)
       }(ec)
     }
 
     val numTX = 200
 
     val start = System.currentTimeMillis()
-
 
     val txResponse = Seq.fill(numTX) {
       // Thread.sleep(100)
@@ -117,11 +124,12 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     while (!done) {
       val nodeStatus = nodes.map { n =>
-        val validTX = (n.peerToPeerActor ? GetValidTX).mapTo[Set[TX]].get()
-        val percentComplete = 100 - (allTX.diff(validTX).size.toDouble / allTX.size.toDouble) * 100
-        println(s"Node ${n.id.short} validTXSize: ${validTX.size} allTXSize: ${allTX.size} % complete: $percentComplete")
-        Thread.sleep(1000)
-        validTX == allTX
+        Try{(n.peerToPeerActor ? GetValidTX).mapTo[Set[TX]].get()}.map { validTX =>
+          val percentComplete = 100 - (allTX.diff(validTX).size.toDouble / allTX.size.toDouble) * 100
+          println(s"Node ${n.id.short} validTXSize: ${validTX.size} allTXSize: ${allTX.size} % complete: $percentComplete")
+          Thread.sleep(1000)
+          validTX == allTX
+        }.getOrElse(false)
       }
 
       if (nodeStatus.forall { x => x }) {
@@ -132,7 +140,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val end = System.currentTimeMillis()
 
     println(s"Completion time seconds: ${(end-start) / 1000}")
-
 
 
 
@@ -216,7 +223,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
 
     //Thread.sleep(1000000)
-    Thread.sleep(1000000)
+    // Thread.sleep(1000000)
 
     // Cleanup DBs
     import scala.tools.nsc.io.{File => SFile}

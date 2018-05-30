@@ -4,12 +4,15 @@ package org.constellation.primitives
 import java.security.PublicKey
 
 import akka.stream.scaladsl.Balance
-import org.constellation.util.{ProductHash, Signed}
+import org.constellation.p2p.PeerToPeer.Id
+import org.constellation.util.{EncodedPublicKey, ProductHash, Signed}
 
 import scala.collection.mutable
 
 // This can't be a trait due to serialization issues
 object Schema {
+
+  case class UpdateReputation(id: Id, secretReputation: Option[Double], publicReputation: Option[Double])
 
   // I.e. equivalent to number of sat per btc
   val NormalizationFactor: Long = 1e8.toLong
@@ -43,18 +46,18 @@ object Schema {
   case class CounterPartyTXRequest(
                                     dst: Address,
                                     counterParty: Address,
-                                    counterPartyAccount: Option[PublicKey]
+                                    counterPartyAccount: Option[EncodedPublicKey]
                                   ) extends ProductHash
 
-  sealed trait Event
+  sealed trait Fiber
 
   case class TXData(
                      src: Seq[Address],
                      dst: Address,
                      amount: Long,
                      remainder: Option[Address] = None,
-                     srcAccount: Option[PublicKey] = None,
-                     dstAccount: Option[PublicKey] = None,
+                     srcAccount: Option[EncodedPublicKey] = None,
+                     dstAccount: Option[EncodedPublicKey] = None,
                      counterPartySigningRequest: Option[Signed[CounterPartyTXRequest]] = None,
                      // ^ this is for extra security where a receiver can confirm a transaction without
                      // revealing it's address key -- requires receiver link dst to counterParty addresses.
@@ -67,26 +70,26 @@ object Schema {
     def inverseAmount: Long = -1*amount
   }
 
-  case class TX(tx: Signed[TXData]) extends ProductHash with Event {
+  case class TX(tx: Signed[TXData]) extends ProductHash with Fiber {
     def valid: Boolean = {
 
       // Last key is used for srcAccount when filled out.
       val addressKeys = if (tx.data.srcAccount.nonEmpty) {
-        tx.publicKeys.slice(0, tx.publicKeys.size - 1)
-      } else tx.publicKeys
+        tx.encodedPublicKeys.slice(0, tx.encodedPublicKeys.size - 1)
+      } else tx.encodedPublicKeys
 
       val km = tx.data.keyMap
       val signatureAddresses = if (km.nonEmpty) {
         val store = Array.fill(km.toSet.size)(Seq[PublicKey]())
         km.zipWithIndex.foreach{ case (keyGroupIdx, keyIdx) =>
-          store(keyGroupIdx) = store(keyGroupIdx) :+ addressKeys(keyIdx)
+          store(keyGroupIdx) = store(keyGroupIdx) :+ addressKeys(keyIdx).toPublicKey
         }
         store.map{constellation.pubKeysToAddress}.toSeq
       } else {
-        addressKeys.map{constellation.pubKeyToAddress}
+        addressKeys.map{_.toPublicKey}.map{constellation.pubKeyToAddress}
       }
 
-      val matchingAccountValid = tx.data.srcAccount.forall(_ == tx.publicKeys.last)
+      val matchingAccountValid = tx.data.srcAccount.forall(_ == tx.encodedPublicKeys.last)
 
       val validInputAddresses = signatureAddresses.map{_.address} == tx.data.src.map{_.address}
       validInputAddresses && tx.valid && matchingAccountValid
@@ -152,22 +155,22 @@ object Schema {
 
   final case class VoteData(accept: Seq[VoteCandidate], reject: Seq[VoteCandidate]) extends ProductHash
 
-  final case class Vote(vote: Signed[VoteData]) extends ProductHash with Event
+  final case class Vote(vote: Signed[VoteData]) extends ProductHash with Fiber
 
   // Participants are notarized via signatures.
   final case class BundleBlock(
                                 parentHash: String,
                                 height: Long,
                                 txHash: Seq[String]
-                              ) extends ProductHash with Event
+                              ) extends ProductHash with Fiber
 
-  final case class BundleHash(hash: String) extends Event
+  final case class BundleHash(hash: String) extends Fiber
 
-  final case class BundleData(bundles: Seq[Event]) extends ProductHash
+  final case class BundleData(bundles: Seq[Fiber]) extends ProductHash
 
   final case class Bundle(
                            bundleData: Signed[BundleData]
-                         ) extends ProductHash with Event {
+                         ) extends ProductHash with Fiber {
 
     def maxStackDepth: Int = {
       def process(s: Signed[BundleData]): Int = {
@@ -197,7 +200,7 @@ object Schema {
 
   }
 
-  case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash with Event {
+  case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash with Fiber {
     def iter: Seq[Signed[_ >: T <: ProductHash]] = {
       def process[Q <: ProductHash](s: Signed[Q]): Seq[Signed[ProductHash]] = {
         s.data match {
@@ -240,7 +243,10 @@ object Schema {
 
   case class DownloadResponse(validTX: Set[TX], validUTXO: Map[String, Long])
 
-  case class SyncData(validTX: Set[TX])
+  case class SyncData(validTX: Set[TX], memPoolTX: Set[TX])
 
+  case class MissingTXProof(tx: TX, gossip: Seq[Gossip[ProductHash]])
+
+  case class RequestTXProof(txHash: String)
 
 }

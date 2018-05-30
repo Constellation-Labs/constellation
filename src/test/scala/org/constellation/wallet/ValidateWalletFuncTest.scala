@@ -5,7 +5,7 @@ import java.io.{File, FileInputStream}
 import java.security.{KeyPair, KeyStore, PrivateKey, PublicKey}
 
 import org.scalatest.FlatSpec
-import KeyUtils._
+import org.constellation.crypto.KeyUtils._
 import org.json4s.{DefaultFormats, Formats, NoTypeHints}
 import org.json4s.native.Serialization
 import java.security.KeyStore
