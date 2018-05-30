@@ -56,18 +56,6 @@ object Consensus {
     true
   }
 
-  def notifyFacilitatorsOfVote(facilitators: Set[Id],
-                               self: Id,
-                               vote: Vote,
-                               roundHash: RoundHash,
-                               udpActor: ActorRef)(implicit system: ActorSystem): Boolean = {
-
-
-    notifyFacilitators(facilitators, self, (f) => {
-      udpActor.udpSendToId(PeerVote(self, vote, roundHash), f)
-    })
-  }
-
   def notifyFacilitatorsOfMessage(facilitators: Set[Id],
                                   self: Id,
                                   message: RemoteMessage,
@@ -96,7 +84,8 @@ object Consensus {
     var updatedState = updateVoteCache(consensusRoundState, self, roundHash, vote)
 
     val updatedRoundStates = updatedState.roundStates +
-      (roundHash -> getCurrentRoundState(updatedState, roundHash).copy(facilitators = facilitators, replyTo = Some(replyTo)))
+      (roundHash -> getCurrentRoundState(updatedState, roundHash)
+        .copy(facilitators = facilitators, replyTo = Some(replyTo)))
 
     updatedState = updatedState.copy(roundStates = updatedRoundStates)
 
@@ -271,21 +260,18 @@ class Consensus(keyPair: KeyPair, udpActor: ActorRef)(implicit timeout: Timeout)
 
   val logger = Logger(s"Consensus")
 
-  private val selfId = Id(keyPair.getPublic)
+  def receive: Receive = consensus(ConsensusRoundState(selfId = Some(Id(keyPair.getPublic)), udpActor = Some(udpActor)))
 
-  var consensusRoundState: ConsensusRoundState = ConsensusRoundState(selfId = Some(selfId), udpActor = Some(udpActor))
-
-  override def receive: Receive = {
+  def consensus(consensusRoundState: ConsensusRoundState): Receive = {
 
     case PerformConsensusRound(facilitators, vote, gossipHistory, replyTo) =>
-      consensusRoundState = performConsensusRound(consensusRoundState, vote, gossipHistory, facilitators, replyTo)
+      context.become(consensus(performConsensusRound(consensusRoundState, vote, gossipHistory, facilitators, replyTo)))
 
     case PeerVote(id, vote, roundHash) =>
-      consensusRoundState = handlePeerVote(consensusRoundState, id, vote, roundHash)
+      context.become(consensus(handlePeerVote(consensusRoundState, id, vote, roundHash)))
 
     case PeerProposedBundle(id, bundle, roundHash) =>
-      consensusRoundState = handlePeerProposedBundle(consensusRoundState, id, bundle, roundHash)
-
+      context.become(consensus(handlePeerProposedBundle(consensusRoundState, id, bundle, roundHash)))
   }
 
 }
