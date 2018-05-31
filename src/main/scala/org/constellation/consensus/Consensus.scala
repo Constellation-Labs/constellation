@@ -22,24 +22,42 @@ import scala.collection.mutable.ListBuffer
 import scala.util.{Failure, Try}
 
 object Consensus {
+  sealed trait CC
+
+  sealed trait Conflict extends CC
+  sealed trait Checkpoint extends CC
+
+  sealed trait VoteData[T <: CC]
+  sealed trait ProposalData[T <: CC]
+
+  case class CheckpointVote(data: Bundle) extends VoteData[Checkpoint]
+  case class ConflictVote(data: Vote) extends VoteData[Conflict]
+
+  sealed trait RemoteMessage
+
+  case class RoundHash[T <: CC](hash: String)
+
+  case class ConsensusVote[T <: CC](id: Id, data: VoteData[T], roundHash: RoundHash[T]) extends RemoteMessage
+  case class ConsensusProposal[T <: CC](id: Id, data: ProposalData[T], roundHash: RoundHash[T]) extends RemoteMessage
 
   // Commands
-  case class PerformConsensusRound(facilitators: Set[Id],
-                                   vote: Vote,
-                                   gossipHistory: Seq[Gossip[_ <: ProductHash]],
-                                   replyTo: ActorRef)
+  case class InitializeConsensusRound[T <: CC](facilitators: Set[Id], roundHash: RoundHash[T], replyTo: ActorRef)
 
   // TODO: do we need to gossip after receiving this message from an external node to the other nodes?
-  case class StartConsensusRound(id: Id, vote: Vote) extends RemoteMessage
+  case class StartConsensusRound[T <: CC](id: Id, data: VoteData[T]) extends RemoteMessage
 
-  // Events
-  trait RemoteMessage
-  case class PeerVote(id: Id, vote: Vote, roundHash: RoundHash) extends RemoteMessage
-  case class PeerProposedBundle(id: Id, bundle: Bundle, roundHash: RoundHash) extends RemoteMessage
-  case class ConsensusRoundResult(bundle: Bundle, roundHash: RoundHash)
+  case class ConsensusRoundResult[T <: CC](bundle: Bundle, roundHash: RoundHash[T])
+
+  case class RoundState(facilitators: Set[Id] = Set(),
+                        var votes: HashMap[Id, VoteData[_ <: CC]] = HashMap(),
+                        var proposals: HashMap[Id, ProposalData[_ <: CC]] = HashMap(),
+                        replyTo: Option[ActorRef] = None)
+
+  case class ConsensusRoundState(selfId: Option[Id] = None,
+                                 udpActor: Option[ActorRef] = None,
+                                 roundStates: HashMap[RoundHash[_ <: CC], RoundState] = HashMap())
 
   // Methods
-
   def isFacilitator(facilitators: Set[Id], self: Id): Boolean = {
     facilitators.contains(self)
   }
@@ -69,11 +87,10 @@ object Consensus {
     true
   }
 
-  def performConsensusRound(consensusRoundState: ConsensusRoundState,
-                            vote: Vote,
-                            gossipHistory: Seq[Gossip[_ <: ProductHash]],
-                            facilitators: Set[Id],
-                            replyTo: ActorRef)(implicit system: ActorSystem): ConsensusRoundState = {
+  def initializeConsensusRound[T <: CC](consensusRoundState: ConsensusRoundState,
+                                        facilitators: Set[Id],
+                                        roundHash: RoundHash[T],
+                                        replyTo: ActorRef)(implicit system: ActorSystem): ConsensusRoundState = {
 
     val self = consensusRoundState.selfId.get
     val udpActor = consensusRoundState.udpActor.get
@@ -131,8 +148,8 @@ object Consensus {
                         peer: Id,
                         roundHash: RoundHash,
                         bundle: Bundle): ConsensusRoundState = {
-    updateRoundCache[Bundle](consensusRoundState, peer, roundHash, bundle)(_.bundles)((t, r) => {
-      t.bundles = r
+    updateRoundCache[Bundle](consensusRoundState, peer, roundHash, bundle)(_.proposals)((t, r) => {
+      t.proposals = r
       t
     })
   }
@@ -199,12 +216,12 @@ object Consensus {
 
     var updatedState = updateBundleCache(consensusRoundState, peer, roundHash, bundle)
 
-    if (peerThresholdMet(updatedState, roundHash)(_.bundles)) {
+    if (peerThresholdMet(updatedState, roundHash)(_.proposals)) {
 
       val roundState = getCurrentRoundState(updatedState, roundHash)
 
       // figure out what the majority of bundles agreed upon
-      val bundles = roundState.bundles
+      val bundles = roundState.proposals
 
       // take those transactions bundle and sign them
       // TODO: temp logic
@@ -224,33 +241,6 @@ object Consensus {
 
     updatedState
   }
-
-  // Functions
-  // Complete
-  // 1. update cache with type of (peer -> bundle) or (peer -> vote) or (peer -> Seq(TX)) or (peer -> bundle)
-  // 2. check if we meet the threshold of votes or proposals
-
-  // TODO
-  // 3. if we do, perform logic of creating vote or bundle
-  // 4. optionally gossip information
-  // 5. optionally clean up cache
-  // 6. optionally call callback
-
-  // roundHash: seq public keys + roundType(conflict, checkpoint)
-  // votes: HashMap[Id, _ <: Event]
-  // bundleProposals: HashMap[Id, Bundle]
-
-  case class RoundHash(hash: String)
-
-  case class RoundState(facilitators: Set[Id] = Set(),
-                        var votes: HashMap[Id, Vote] = HashMap(),
-                        var bundles: HashMap[Id, Bundle] = HashMap(),
-                        replyTo: Option[ActorRef] = None)
-
-  case class ConsensusRoundState(selfId: Option[Id] = None,
-                                 udpActor: Option[ActorRef] = None,
-                                 roundStates: HashMap[RoundHash, RoundState] = HashMap())
-
 }
 
 class Consensus(keyPair: KeyPair, udpActor: ActorRef)(implicit timeout: Timeout) extends Actor with ActorLogging {
@@ -264,8 +254,8 @@ class Consensus(keyPair: KeyPair, udpActor: ActorRef)(implicit timeout: Timeout)
 
   def consensus(consensusRoundState: ConsensusRoundState): Receive = {
 
-    case PerformConsensusRound(facilitators, vote, gossipHistory, replyTo) =>
-      context.become(consensus(performConsensusRound(consensusRoundState, vote, gossipHistory, facilitators, replyTo)))
+    case InitializeConsensusRound(facilitators, roundHash, replyTo) =>
+      context.become(consensus(initializeConsensusRound(consensusRoundState, facilitators, roundHash, replyTo)))
 
     case PeerVote(id, vote, roundHash) =>
       context.become(consensus(handlePeerVote(consensusRoundState, id, vote, roundHash)))
