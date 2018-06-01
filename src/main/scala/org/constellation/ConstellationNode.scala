@@ -119,7 +119,7 @@ class ConstellationNode(
     system.actorOf(Props(new ChainStateManager(memPoolManagerActor: ActorRef, id, db)), s"ConstellationChainStateActor_$publicKeyHash")
 
   val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair, udpAddress, udpActor)(timeout)),
+    Props(new Consensus(keyPair, udpActor)(timeout)),
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val peerToPeerActor: ActorRef =
