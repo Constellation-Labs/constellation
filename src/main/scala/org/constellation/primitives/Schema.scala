@@ -277,4 +277,7 @@ object Schema {
 
   case class RequestTXProof(txHash: String)
 
+  case class Metrics(metrics: Map[String, String])
+
+
 }

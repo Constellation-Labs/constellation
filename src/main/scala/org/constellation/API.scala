@@ -82,6 +82,9 @@ class API(
 
   val routes: Route =
     get {
+      path("metrics") {
+        complete(Metrics(Map("m1" -> "v1", "m2" -> "v2")))
+      } ~
       path("validTX") {
         complete((peerToPeerActor ? GetValidTX).mapTo[Set[TX]].get())
       } ~
