@@ -106,9 +106,9 @@ class PeerToPeer(
 
   @volatile var validSyncPendingTX: Set[TX] = Set()
 
- // @volatile var bundlePool: Set[Bundle] = Set()
+  // @volatile var bundlePool: Set[Bundle] = Set()
 
- // @volatile var superSelfBundle : Option[Bundle] = None
+  // @volatile var superSelfBundle : Option[Bundle] = None
 
   private val validUTXO = mutable.HashMap[String, Long]()
 
@@ -136,17 +136,15 @@ class PeerToPeer(
     if (tx.tx.data.isGenesis) {
       tx.updateUTXO(memPoolUTXO)
     }
-//    txToGossipChains.remove(tx.hash) // TODO: Remove after a certain period of time instead. Cleanup gossip data.
+    //    txToGossipChains.remove(tx.hash) // TODO: Remove after a certain period of time instead. Cleanup gossip data.
     val txSeconds = (System.currentTimeMillis() - tx.tx.time) / 1000
-  //  logger.debug(s"Accepted TX from $txSeconds seconds ago: ${tx.short} on ${id.short} " +
-   //   s"new mempool size: ${memPoolTX.size} valid: ${validTX.size} isGenesis: ${tx.tx.data.isGenesis}")
+    //  logger.debug(s"Accepted TX from $txSeconds seconds ago: ${tx.short} on ${id.short} " +
+    //   s"new mempool size: ${memPoolTX.size} valid: ${validTX.size} isGenesis: ${tx.tx.data.isGenesis}")
   }
 
   @volatile var downloadMode: Boolean = true
 
   @volatile var totalNumGossipMessages = 0
-
-  var lastHeartbeatTime: Long = System.currentTimeMillis()
 
   // @volatile var downloadResponses = Seq[DownloadResponse]()
   var secretReputation: Map[Id, Double] = Map()
@@ -166,11 +164,19 @@ class PeerToPeer(
     }
   }
 
+  // var txsGossipedAbout = Set[TX]()
+
+  // val txToPeersObserved
+
+  var bundles: Set[Bundle] = Set[Bundle]()
+  var bundleBuffer: Set[Bundle] = Set[Bundle]()
+
+
   override def receive: Receive = {
 
     // This is unsafe due to type erasure, fix later.
     case ur: Seq[UpdateReputation] =>
-  //    logger.debug(s"Reputation updates: $ur")
+      //    logger.debug(s"Reputation updates: $ur")
       secretReputation = ur.flatMap{ r => r.secretReputation.map{id -> _}}.toMap
       publicReputation = ur.flatMap{ r => r.publicReputation.map{id -> _}}.toMap
 
@@ -183,7 +189,7 @@ class PeerToPeer(
         }
 
         if (!downloadMode) {
-    //      broadcast(SyncData(validTX, memPoolTX))
+          //      broadcast(SyncData(validTX, memPoolTX))
         }
 
         val numAccepted = this.synchronized {
@@ -232,7 +238,7 @@ class PeerToPeer(
             s"validUTXO: ${validUTXO.map { case (k, v) => k.slice(0, 5) -> v }} " +
             s"peers: ${peers.map { p => p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes }.mkString(",")}"
         )
-    }
+      }
 
     case UDPMessage(d: DownloadResponse, remote) =>
 
@@ -302,7 +308,7 @@ class PeerToPeer(
         }
       }
 
-     // logger.debug(s"SyncData message size: ${d.validTX.size} on ${validTX.size} ${id.short}")
+    // logger.debug(s"SyncData message size: ${d.validTX.size} on ${validTX.size} ${id.short}")
 
     case UDPMessage(d: DownloadRequest, remote) =>
 
@@ -323,22 +329,38 @@ class PeerToPeer(
 
     case tx: TX =>
 
-      this.synchronized {
-        //if (tx.utxoValid(validUTXO) && tx.utxoValid(memPoolUTXO) && !memPoolTX.contains(tx)) {
-        if (!memPoolTX.contains(tx) && !tx.tx.data.isGenesis) {
-          tx.updateUTXO(memPoolUTXO)
-          memPoolTX += tx
-        }
-
-        if (tx.tx.data.isGenesis) {
-          acceptTransaction(tx)
-          // We started genesis
-          downloadMode = false
-        }
-
-        val g = Gossip(tx.signed())
-        broadcast(g)
+      //if (tx.utxoValid(validUTXO) && tx.utxoValid(memPoolUTXO) && !memPoolTX.contains(tx)) {
+      if (!memPoolTX.contains(tx) && !tx.tx.data.isGenesis) {
+        tx.updateUTXO(memPoolUTXO)
+        memPoolTX += tx
       }
+
+      if (tx.tx.data.isGenesis) {
+        acceptTransaction(tx)
+        // We started genesis
+        downloadMode = false
+      }
+
+      // val g = Gossip(tx.signed())
+      // broadcast(g)
+     // val unspokenTX = memPoolTX.filter{!txsGossipedAbout.contains(_)}
+    //  txsGossipedAbout ++= unspokenTX
+      val unspokenTX = memPoolTX
+      val b = Bundle(BundleData(unspokenTX.toSeq).signed())
+      broadcast(b)
+
+    case UDPMessage(b: Bundle, remote) =>
+
+      val idsInBundle = b.extractIds
+      val txsInBundle = b.extractTX
+
+      if (bundles.nonEmpty) {
+        BundleData((bundles.toSeq :+ b).distinct).signed()
+      }
+
+      // val newTXs = memPoolTX.filter{!txsInBundle.contains(_)}
+      bundles += b
+
 
     case UDPMessage(cd: ConflictDetected, _) =>
 
@@ -362,7 +384,7 @@ class PeerToPeer(
         } else if (!downloadMode) {
 
           if (validTX.contains(tx)) {
-         //   logger.debug(s"Ignoring gossip on already validated transaction: ${tx.short}")
+            //   logger.debug(s"Ignoring gossip on already validated transaction: ${tx.short}")
           } else {
 
             if (!tx.utxoValid(validUTXO)) {
@@ -400,7 +422,7 @@ class PeerToPeer(
               if (!memPoolTX.contains(tx)) {
                 tx.updateUTXO(memPoolUTXO)
                 memPoolTX += tx
-            //    logger.debug(s"Adding TX to mempool - new size ${memPoolTX.size}")
+                //    logger.debug(s"Adding TX to mempool - new size ${memPoolTX.size}")
               }
 
               updateGossipChains(tx.hash, g)

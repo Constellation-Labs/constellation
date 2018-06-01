@@ -83,6 +83,7 @@ class TXTest extends FlatSpec {
 
     val bbb = Bundle(BundleData(Seq(b, bb, tx)).signed()(tempKey2))
 
+    assert(b.maxStackDepth == 1)
     assert(bbb.maxStackDepth == 3)
     assert(bbb.totalNumEvents == 8)
 

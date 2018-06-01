@@ -172,6 +172,34 @@ object Schema {
                            bundleData: Signed[BundleData]
                          ) extends ProductHash with Fiber {
 
+
+    def extractTX: Set[TX] = {
+      def process(s: Signed[BundleData]): Set[TX] = {
+        val bd = s.data.bundles
+        val depths = bd.map {
+          case b2: Bundle =>
+            process(b2.bundleData)
+          case tx: TX => Set(tx)
+        }
+        depths.reduce(_ ++ _)
+      }
+      process(bundleData)
+    }
+
+    def extractIds: Set[Id] = {
+      def process(s: Signed[BundleData]): Set[Id] = {
+        val bd = s.data.bundles
+        val depths = bd.map {
+          case b2: Bundle =>
+            b2.bundleData.publicKeys.map{Id}.toSet ++ process(b2.bundleData)
+          case _ => Set[Id]()
+        }
+        depths.reduce(_ ++ _)
+      }
+      process(bundleData)
+    }
+
+
     def maxStackDepth: Int = {
       def process(s: Signed[BundleData]): Int = {
         val bd = s.data.bundles
@@ -225,7 +253,6 @@ object Schema {
 
   }
 
-
   // TODO: Move other messages here.
   sealed trait InternalCommand
 
@@ -236,6 +263,7 @@ object Schema {
   final case object GetMemPoolUTXO extends InternalCommand
   final case object ToggleHeartbeat extends InternalCommand
   final case object InternalHeartbeat extends InternalCommand
+  final case object InternalBundleHeartbeat extends InternalCommand
 
   final case class ValidateTransaction(tx: TX) extends InternalCommand
 

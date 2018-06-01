@@ -122,6 +122,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     var done = false
 
+/*
     while (!done) {
       val nodeStatus = nodes.map { n =>
         Try{(n.peerToPeerActor ? GetValidTX).mapTo[Set[TX]].get()}.map { validTX =>
@@ -141,8 +142,10 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     println(s"Completion time seconds: ${(end-start) / 1000}")
 
+*/
 
 
+    Thread.sleep(30000)
 
 /*
     for (node <- nodes) {
