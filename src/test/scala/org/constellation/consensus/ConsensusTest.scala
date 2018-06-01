@@ -91,56 +91,59 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val round = RoundHash(vote.vote.data.voteRoundHash)
     val gossipHistory = Seq(Gossip(tx1.signed()))
     val bundle = Bundle(BundleData(vote.vote.data.accept).signed()(keyPair = keyPair))
+    val roundHash = "testHash"
 
-    consensusActor ! PerformConsensusRound(facilitators, vote, gossipHistory, replyTo.ref)
+    consensusActor ! InitializeConsensusRound(facilitators, RoundHash(roundHash), replyTo.ref)
 
+    /*
     udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), vote), Id(node2.keyPair.getPublic)))
 
     udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), vote), Id(node3.keyPair.getPublic)))
 
     udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), vote), Id(node4.keyPair.getPublic)))
+    */
 
-    consensusActor ! PeerVote(Id(node2.keyPair.getPublic), vote, round)
+    consensusActor ! ConsensusVote(Id(node2.keyPair.getPublic), ConflictVote(vote), round)
 
-    consensusActor ! PeerVote(Id(node3.keyPair.getPublic), vote, round)
+    consensusActor ! ConsensusVote(Id(node3.keyPair.getPublic), ConflictVote(vote), round)
 
-    consensusActor ! PeerVote(Id(node4.keyPair.getPublic), vote, round)
+    consensusActor ! ConsensusVote(Id(node4.keyPair.getPublic), ConflictVote(vote), round)
 
     // TODO: make more robust after update to bundles
     udpActor.expectMsgPF() {
-      case UDPSendToID(message: PeerProposedBundle, id: Id) => {
+      case UDPSendToID(message: ConsensusProposal[Conflict], id: Id) => {
         assert(id == Id(node2.keyPair.getPublic))
-        assert(message.bundle.bundleData.data.bundles == bundle.bundleData.data.bundles)
+        assert(message.data == bundle.bundleData.data.bundles)
         assert(message.roundHash == round)
       }
     }
 
     udpActor.expectMsgPF() {
-      case UDPSendToID(message: PeerProposedBundle, id: Id) => {
+      case UDPSendToID(message: ConsensusProposal[Conflict], id: Id) => {
         assert(id == Id(node3.keyPair.getPublic))
-        assert(message.bundle.bundleData.data.bundles == bundle.bundleData.data.bundles)
+        assert(message.data == bundle.bundleData.data.bundles)
         assert(message.roundHash == round)
       }
     }
 
     udpActor.expectMsgPF() {
-      case UDPSendToID(message: PeerProposedBundle, id: Id) => {
+      case UDPSendToID(message: ConsensusProposal[Conflict], id: Id) => {
         assert(id == Id(node4.keyPair.getPublic))
-        assert(message.bundle.bundleData.data.bundles == bundle.bundleData.data.bundles)
+        assert(message.data == bundle.bundleData.data.bundles)
         assert(message.roundHash == round)
       }
     }
 
-    consensusActor ! PeerProposedBundle(Id(node2.keyPair.getPublic), bundle, round)
+    consensusActor ! ConsensusProposal(Id(node2.keyPair.getPublic), ConflictProposal(bundle), round)
 
-    consensusActor ! PeerProposedBundle(Id(node3.keyPair.getPublic), bundle, round)
+    consensusActor ! ConsensusProposal(Id(node3.keyPair.getPublic), ConflictProposal(bundle), round)
 
-    consensusActor ! PeerProposedBundle(Id(node4.keyPair.getPublic), bundle, round)
+    consensusActor ! ConsensusProposal(Id(node4.keyPair.getPublic), ConflictProposal(bundle), round)
 
     val consensusBundle = Bundle(BundleData(vote.vote.data.accept).signed())
 
     replyTo.expectMsgPF() {
-      case ConsensusRoundResult(bundle: Bundle, roundHash: RoundHash) => {
+      case ConsensusRoundResult(bundle: Bundle, roundHash: RoundHash[Conflict]) => {
         assert(bundle.bundleData.data.bundles == bundle.bundleData.data.bundles)
         assert(roundHash == round)
       }

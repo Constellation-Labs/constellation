@@ -12,7 +12,7 @@ import akka.util.{ByteString, Timeout}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.LevelDB
-import org.constellation.consensus.Consensus.{PeerProposedBundle, PeerVote}
+import org.constellation.consensus.Consensus.{Checkpoint, Conflict, ConsensusProposal, ConsensusVote}
 import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.Schema.{Gossip, TX}
@@ -373,11 +373,18 @@ class PeerToPeer(
     // Add type bounds here on all the command forwarding types
     // I.e. PeerMemPoolUpdated extends ConsensusCommand
     // Just check on ConsensusCommand and send to consensus actor automatically
-    case UDPMessage(p: PeerVote, remote) =>
+    case UDPMessage(p: ConsensusVote[Conflict], remote) =>
       //  logger.debug("UDP PeerMemPoolUpdated received")
       consensusActor ! p
 
-    case UDPMessage(p : PeerProposedBundle, remote) =>
+    case UDPMessage(p: ConsensusVote[Checkpoint], remote) =>
+      //  logger.debug("UDP PeerMemPoolUpdated received")
+      consensusActor ! p
+
+    case UDPMessage(p : ConsensusProposal[Conflict], remote) =>
+      consensusActor ! p
+
+    case UDPMessage(p : ConsensusProposal[Checkpoint], remote) =>
       consensusActor ! p
 
     case UDPMessage(sh: HandShakeResponseMessage, remote) =>
