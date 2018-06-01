@@ -5,6 +5,7 @@ import java.security.PublicKey
 
 import akka.stream.scaladsl.Balance
 import org.constellation.util.{ProductHash, Signed}
+import org.json4s.native.Json
 
 import scala.collection.mutable
 
@@ -13,7 +14,6 @@ object Schema {
 
   // I.e. equivalent to number of sat per btc
   val NormalizationFactor: Long = 1e8.toLong
-
 
   case class SendToAddress(
                             address: Address,
@@ -24,7 +24,6 @@ object Schema {
                           ) {
     def amountActual: Long = if (normalized) amount * NormalizationFactor else amount
   }
-
 
   // TODO: We also need a hash pointer to represent the post-tx counter party signing data, add later
   // TX should still be accepted even if metadata is incorrect, it just serves to help validation rounds.
@@ -142,7 +141,12 @@ object Schema {
     }
   }
 
-  final case class VoteData(accept: Seq[TX], reject: Seq[TX]) extends ProductHash
+  final case class VoteData(accept: Seq[TX], reject: Seq[TX]) extends ProductHash {
+    // used to determine what voting round we are talking about
+    def voteRoundHash: String = {
+      accept.++(reject).sortBy(t => t.hashCode()).map(f => f.hash).mkString("-")
+    }
+  }
 
   final case class Vote(vote: Signed[VoteData]) extends ProductHash with Event
 
@@ -214,7 +218,6 @@ object Schema {
 
   }
 
-
   // TODO: Move other messages here.
   sealed trait InternalCommand
 
@@ -224,6 +227,5 @@ object Schema {
   final case object ToggleHeartbeat extends InternalCommand
 
   final case class ValidateTransaction(tx: TX) extends InternalCommand
-
 
 }

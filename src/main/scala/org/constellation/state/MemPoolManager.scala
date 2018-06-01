@@ -5,7 +5,6 @@ import java.util.concurrent.{ScheduledFuture, ScheduledThreadPoolExecutor, TimeU
 import akka.actor.{Actor, ActorLogging, ActorRef}
 import com.typesafe.scalalogging.Logger
 import org.constellation.LevelDB
-import org.constellation.consensus.Consensus.{GetMemPool, GetMemPoolResponse}
 import org.constellation.primitives.Schema.{Bundle, BundleData, GetUTXO, TX}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.MemPoolManager.{AddTransaction, RemoveConfirmedTransactions}
@@ -33,20 +32,6 @@ object MemPoolManager {
     updatedMemPool
   }
 
-  def handleGetMemPool(memPool: Seq[Transaction], replyTo: ActorRef, round: Long, memPoolProposalLimit: Int): Unit = {
-    // TODO: use dealer key to encrypt
-
-    val memPoolProposal: Seq[Transaction] = memPool.take(memPoolProposalLimit)
-
-    val response = GetMemPoolResponse(memPoolProposal, round)
-
-    if (memPoolProposal.nonEmpty) {
-      println(s"MemPoolProposalNonEmpty ${memPoolProposal.size}")
-    }
-
-    replyTo ! response
-  }
-
   def handleRemoveConfirmedTransactions(transactions: Seq[Transaction], memPool: Seq[Transaction]): Seq[Transaction] = {
     var memPoolUpdated = memPool
 
@@ -58,7 +43,6 @@ object MemPoolManager {
   }
 
 }
-
 
 class MemPoolManager(db: LevelDB = null, heartbeatEnabled: Boolean = false) extends Actor with ActorLogging {
 
@@ -77,11 +61,6 @@ class MemPoolManager(db: LevelDB = null, heartbeatEnabled: Boolean = false) exte
       if (memPool.nonEmpty) {
         logger.debug(s"Added transaction ${transaction.short} - mem pool size: ${memPool.size}")
       }
-
-    case GetMemPool(replyTo, round) =>
-      logger.debug(s"received get mem pool request $replyTo, $round, memPool Size: ${memPool.size}")
-
-      MemPoolManager.handleGetMemPool(memPool, replyTo, round, memPoolProposalLimit)
 
     case RemoveConfirmedTransactions(transactions) =>
       memPool = MemPoolManager.handleRemoveConfirmedTransactions(transactions, memPool)
