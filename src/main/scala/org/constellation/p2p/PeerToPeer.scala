@@ -341,13 +341,13 @@ class PeerToPeer(
         downloadMode = false
       }
 
-      // val g = Gossip(tx.signed())
-      // broadcast(g)
+       val g = Gossip(tx.signed())
+       broadcast(g)
      // val unspokenTX = memPoolTX.filter{!txsGossipedAbout.contains(_)}
     //  txsGossipedAbout ++= unspokenTX
-      val unspokenTX = memPoolTX
-      val b = Bundle(BundleData(unspokenTX.toSeq).signed())
-      broadcast(b)
+  //    val unspokenTX = memPoolTX
+      // val b = Bundle(BundleData(unspokenTX.toSeq).signed())
+      // broadcast(b)
 
     case UDPMessage(b: Bundle, remote) =>
 
