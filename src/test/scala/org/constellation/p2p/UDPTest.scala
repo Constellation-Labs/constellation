@@ -16,7 +16,7 @@ import org.scalatest._
 
 import scala.util.{Random, Try}
 import constellation._
-import org.constellation.p2p.PeerToPeer.{HandShake, HandShakeMessage, Id, Peer}
+import org.constellation.primitives.Schema.{Id, Peer}
 import org.constellation.util.{ProductHash, Signed}
 
 case class TestMessage(a: String, b: Int) extends ProductHash

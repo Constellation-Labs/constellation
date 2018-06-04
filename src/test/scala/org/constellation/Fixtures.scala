@@ -4,11 +4,11 @@ import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
 import akka.actor.ActorRef
-import org.constellation.p2p.PeerToPeer.{Id, Peer}
 import org.constellation.primitives.Block
 import org.constellation.primitives.Transaction
 import constellation._
 import org.constellation.crypto.KeyUtils
+import org.constellation.primitives.Schema.{Id, Peer}
 import org.constellation.util.Signed
 
 import scala.collection.mutable

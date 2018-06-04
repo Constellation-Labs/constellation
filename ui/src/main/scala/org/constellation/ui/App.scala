@@ -23,19 +23,35 @@ object App extends JSApp {
     import scalatags.JsDom.all._
     println("hello world")
 
-    val metricsDiv = dom.document.body.appendChild(div(id := "metrics").render).asInstanceOf[HTMLDivElement]
+    val dash = dom.document.body.appendChild(div(id := "dash").render).asInstanceOf[HTMLDivElement]
 
+    val forms = dash.appendChild(div(id := "forms").render).asInstanceOf[HTMLDivElement]
+
+    val f = form(
+      action := "/setKeyPair",
+      "Set node KeyPair:  ",
+      input(
+        `type` := "text", name := "keyPair", value := ""
+      )
+    ).render
+
+    forms.appendChild(f)
+
+    val metricsDiv = dash.appendChild(div(id := "metrics").render).asInstanceOf[HTMLDivElement]
 
     implicit val scheduler: DomScheduler = new DomScheduler()
 
-    val heartBeat = Timer(1000.millis)
+    val heartBeat = Timer(5000.millis)
 
     heartBeat.foreach( _ => {
       XHR.get[Metrics]({z: Metrics =>
         metricsDiv.innerHTML = ""
         val mets = z.metrics.toSeq.sortBy(_._1).map{
           case (k,v) =>
-            tr(td(k), td(v))
+            tr(
+              td(k),
+              td(v)
+            )
         }
         val tbl = table(
           tr(
@@ -45,7 +61,7 @@ object App extends JSApp {
           mets
         ).render
         metricsDiv.appendChild(tbl)
-        println(z)
+      //  println(z)
       }, "/metrics")
     }
     )

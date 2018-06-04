@@ -9,7 +9,7 @@ import akka.serialization.SerializationExtension
 import akka.util.{ByteString, Timeout}
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.Input
-import org.constellation.p2p.PeerToPeer.Id
+import org.constellation.primitives.Schema.Id
 
 // Consider adding ID to all UDP messages? Possibly easier.
 case class UDPMessage(data: Any, remote: InetSocketAddress)

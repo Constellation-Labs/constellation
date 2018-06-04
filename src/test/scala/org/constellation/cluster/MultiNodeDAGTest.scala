@@ -9,7 +9,6 @@ import akka.testkit.TestKit
 import akka.util.Timeout
 import constellation._
 import org.constellation.ConstellationNode
-import org.constellation.p2p.PeerToPeer.{Peer}
 import org.constellation.primitives.Schema._
 import org.constellation.util.TestNode
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
@@ -73,7 +72,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       val haveSecret = Random.nextDouble() > 0.5 || havePublic
       node.api.postSync("reputation", others.map{o =>
         UpdateReputation(
-          o.id,
+          o.data.id,
           if (haveSecret) Some(Random.nextDouble()) else None,
           if (havePublic) Some(Random.nextDouble()) else None
         )
@@ -100,7 +99,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       Future {
         val src = randomNode
         val dst = randomOtherNode(src)
-        val s = SendToAddress(dst.id.address, Random.nextInt(1000).toLong)
+        val s = SendToAddress(dst.data.id.address, Random.nextInt(1000).toLong)
         src.api.postRead[TX]("sendToAddress", s)
       }(ec)
     }

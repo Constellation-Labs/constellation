@@ -244,33 +244,33 @@ trait KeyUtilsExt {
                           key: PublicKey
                         ): String = {
     import constellation.SHA256Ext
-    base64(key.getEncoded).sha256.sha256
+    Base58.encode(base64(key.getEncoded).sha256.sha256.getBytes())
   }
 
   def publicKeysToAddressString(
                           key: Seq[PublicKey]
                         ): String = {
     import constellation.SHA256Ext
-    key.map{z => base64(z.getEncoded)}.mkString.sha256.sha256
+    Base58.encode(key.map{z => base64(z.getEncoded)}.mkString.sha256.sha256.getBytes())
   }
 
   class PrivateKeySerializer extends CustomSerializer[PrivateKey](format => ( {
     case jObj: JObject =>
       implicit val f: Formats = format
-      bytesToPrivateKey(fromBase64((jObj \ "key").extract[String]))
+      bytesToPrivateKey(Base58.decode((jObj \ "key").extract[String]))
   }, {
     case key: PrivateKey =>
-      JObject("key" -> JString(KeyUtils.base64(key.getEncoded)))
+      JObject("key" -> JString(Base58.encode(key.getEncoded)))
   }
   ))
 
   class PublicKeySerializer extends CustomSerializer[PublicKey](format => ( {
     case jstr: JObject =>
       implicit val f: Formats = format
-      bytesToPublicKey(fromBase64((jstr \ "key").extract[String]))
+      bytesToPublicKey(Base58.decode((jstr \ "key").extract[String]))
   }, {
     case key: PublicKey =>
-      JObject("key" -> JString(KeyUtils.base64(key.getEncoded)))
+      JObject("key" -> JString(Base58.encode(key.getEncoded)))
   }
   ))
 
@@ -285,8 +285,8 @@ trait KeyUtilsExt {
     case key: KeyPair =>
       implicit val f: Formats = format
       JObject(
-        "publicKey" -> JObject("key" -> JString(KeyUtils.base64(key.getPublic.getEncoded))),
-        "privateKey" -> JObject("key" -> JString(KeyUtils.base64(key.getPrivate.getEncoded)))
+        "publicKey" -> JObject("key" -> JString(Base58.encode(key.getPublic.getEncoded))),
+        "privateKey" -> JObject("key" -> JString(Base58.encode(key.getPrivate.getEncoded)))
       )
   }
   ))
@@ -294,7 +294,7 @@ trait KeyUtilsExt {
   implicit class PublicKeyExt(publicKey: PublicKey) {
     // Conflict with old schema, add later
     //  def address: Address = pubKeyToAddress(publicKey)
-    def encoded: EncodedPublicKey = EncodedPublicKey(base64(publicKey.getEncoded))
+    def encoded: EncodedPublicKey = EncodedPublicKey(Base58.encode(publicKey.getEncoded))
   }
 
 

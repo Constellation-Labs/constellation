@@ -6,7 +6,7 @@ import akka.http.scaladsl.model.Uri.Query
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers, Unmarshal}
 import akka.stream.ActorMaterializer
-import org.constellation.p2p.PeerToPeer.Id
+import org.constellation.primitives.Schema.Id
 import org.json4s.JsonAST.JArray
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}

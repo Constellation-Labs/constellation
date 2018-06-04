@@ -7,45 +7,27 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
-import org.constellation.p2p.PeerToPeer._
 import org.constellation.util.Signed
 
-import scala.collection.mutable
 import constellation._
+import org.constellation.Data
 
 import scala.concurrent.ExecutionContextExecutor
+import scala.util.{Failure, Try}
+import org.constellation.primitives.Schema._
 
 trait PeerAuth {
 
+  val data: Data
+  import data._
   val udpActor: ActorRef
-  val selfAddress: InetSocketAddress
-  val id: Id
   var requestExternalAddressCheck: Boolean
   val self: ActorRef
   val logger: Logger
-  implicit val kp: KeyPair
   implicit val timeout: Timeout
   implicit val executionContext: ExecutionContextExecutor
   implicit val actorSystem: ActorSystem
 
-
-  // @volatile private var peers: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
-  var remotes: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
-  var externalAddress: InetSocketAddress = selfAddress
-
-  val peerLookup: mutable.HashMap[InetSocketAddress, Signed[Peer]] = mutable.HashMap[InetSocketAddress, Signed[Peer]]()
-
-  def peerIDLookup: Map[Id, Signed[Peer]] = peerLookup.values.map{ z => z.data.id -> z}.toMap
-
-  def selfPeer: Signed[Peer] = Peer(id, externalAddress, Set()).signed()
-
-  def peerIPs: Set[InetSocketAddress] = peerLookup.values.map(z => z.data.externalAddress).toSet
-
-  def allPeerIPs: Set[InetSocketAddress] = {
-    peerLookup.keys ++ peerLookup.values.flatMap(z => z.data.remotes ++ Seq(z.data.externalAddress))
-  }.toSet
-
-  def peers: Seq[Signed[Peer]] = peerLookup.values.toSeq.distinct
 
   def broadcast[T <: AnyRef](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
     val dest = if (idSubset.isEmpty) peerIDLookup.keys else idSubset
@@ -58,8 +40,7 @@ trait PeerAuth {
     HandShake(selfPeer, requestExternalAddressCheck) //, peers)
   }
 
-  def initiatePeerHandshake(p: PeerRef): StatusCode = {
-    val peerAddress = p.address
+  def initiatePeerHandshake(peerAddress: InetSocketAddress): StatusCode = {
     import akka.pattern.ask
     val banList = (udpActor ? GetBanList).mapTo[Seq[InetSocketAddress]].get()
     if (!banList.contains(peerAddress)) {
@@ -87,9 +68,9 @@ trait PeerAuth {
   }
 
   def addPeer(
-                       value: Signed[Peer],
-                       newPeers: Seq[Signed[Peer]] = Seq()
-                     ): Unit = {
+               value: Signed[Peer],
+               newPeers: Seq[Signed[Peer]] = Seq()
+             ): Unit = {
 
     this.synchronized {
       peerLookup(value.data.externalAddress) = value
@@ -125,7 +106,7 @@ trait PeerAuth {
         HandShakeResponse(handShakeInner, remote).signed()
       )
       udpActor.udpSend(response, responseAddr)
-      initiatePeerHandshake(PeerRef(responseAddr))
+      initiatePeerHandshake(responseAddr)
     }
   }
 
@@ -150,6 +131,33 @@ trait PeerAuth {
       remotes += remote
     }
   }
+
+  def addPeerFromLocal(peerAddress: InetSocketAddress): StatusCode = {
+    logger.debug(s"AddPeerFromLocal inet: ${pprintInet(peerAddress)}")
+
+    peerLookup.get(peerAddress) match {
+      case Some(peer) =>
+        logger.debug(s"Disregarding request, already familiar with peer on $peerAddress - $peer")
+        StatusCodes.AlreadyReported
+      case None =>
+        logger.debug(s"Peer $peerAddress unrecognized, adding peer")
+        val attempt = Try {
+          initiatePeerHandshake(peerAddress)
+        }
+        attempt match {
+          case Failure(e) => e.printStackTrace(
+          )
+          case _ =>
+        }
+
+        val code = attempt.getOrElse(StatusCodes.InternalServerError)
+        code
+    }
+
+
+  }
+
+  // TODO: Send other peers termination message on shutdown.
 
 
 

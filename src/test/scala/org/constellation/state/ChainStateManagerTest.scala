@@ -3,7 +3,6 @@ package org.constellation.state
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
-import org.constellation.consensus.Consensus.ProposedBlockUpdated
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Chain.Chain
 import org.constellation.primitives.{Block, Transaction}

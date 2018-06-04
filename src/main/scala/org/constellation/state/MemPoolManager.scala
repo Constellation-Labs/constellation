@@ -1,17 +1,11 @@
 package org.constellation.state
 
-import java.util.concurrent.{ScheduledFuture, ScheduledThreadPoolExecutor, TimeUnit}
 
-import akka.actor.{Actor, ActorLogging, ActorRef}
+import akka.actor.{Actor, ActorLogging}
 import com.typesafe.scalalogging.Logger
 import org.constellation.LevelDB
-import org.constellation.primitives.Schema.{Bundle, BundleData, GetUTXO, TX}
-import org.constellation.primitives.{Block, Transaction}
+import org.constellation.primitives.Transaction
 import org.constellation.state.MemPoolManager.{AddTransaction, RemoveConfirmedTransactions}
-
-import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
-import scala.util.{Failure, Try}
 
 object MemPoolManager {
 

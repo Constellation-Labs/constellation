@@ -1,18 +1,26 @@
 package org.constellation.primitives
 
 
+import java.net.InetSocketAddress
 import java.security.PublicKey
 
-import akka.stream.scaladsl.Balance
-import org.constellation.p2p.PeerToPeer.Id
+import constellation.pubKeyToAddress
 import org.constellation.util.{EncodedPublicKey, ProductHash, Signed}
 import org.constellation.util.{ProductHash, Signed}
-import org.json4s.native.Json
 
-import scala.collection.mutable
+import scala.collection.concurrent.TrieMap
 
 // This can't be a trait due to serialization issues
 object Schema {
+
+  sealed trait NodeState
+  final case object PendingDownload extends NodeState
+  final case object Ready extends NodeState
+
+
+  sealed trait ConfigUpdate
+
+  final case class ReputationUpdates(updates: Seq[UpdateReputation]) extends ConfigUpdate
 
   case class UpdateReputation(id: Id, secretReputation: Option[Double], publicReputation: Option[Double])
 
@@ -24,7 +32,8 @@ object Schema {
                             amount: Long,
                             account: Option[PublicKey] = None,
                             normalized: Boolean = true,
-                            oneTimeUse: Boolean = false
+                            oneTimeUse: Boolean = false,
+                            useNodeKey: Boolean = true
                           ) {
     def amountActual: Long = if (normalized) amount * NormalizationFactor else amount
   }
@@ -106,14 +115,14 @@ object Schema {
       s"${tx.data.remainder.map{_.address}.getOrElse("empty").slice(0, 5)} " +
       s"amount ${tx.data.amount}"
 
-    def utxoValid(utxo: mutable.HashMap[String, Long]): Boolean = {
+    def utxoValid(utxo: TrieMap[String, Long]): Boolean = {
       if (tx.data.isGenesis) !utxo.contains(tx.data.dst.address) else {
         val srcSum = tx.data.src.map {_.address}.flatMap {utxo.get}.sum
         srcSum >= tx.data.amount && valid
       }
     }
 
-    def updateUTXO(UTXO: mutable.HashMap[String, Long]): Unit = {
+    def updateUTXO(UTXO: TrieMap[String, Long]): Unit = {
       val txDat = tx.data
       if (txDat.isGenesis) {
         // UTXO(txDat.src.head.address) = txDat.inverseAmount
@@ -159,7 +168,7 @@ object Schema {
 
   final case class VoteCandidate(tx: TX, gossip: Seq[Gossip[ProductHash]])
 
-  final case class VoteData(accept: Seq[VoteCandidate], reject: Seq[VoteCandidate]) extends ProductHash
+  final case class VoteDataSimpler(accept: Seq[VoteCandidate], reject: Seq[VoteCandidate]) extends ProductHash
 
   final case class Vote(vote: Signed[VoteData]) extends ProductHash with Fiber
 
@@ -284,6 +293,46 @@ object Schema {
   case class RequestTXProof(txHash: String)
 
   case class Metrics(metrics: Map[String, String])
+
+  final case class AddPeerFromLocal(address: InetSocketAddress) extends InternalCommand
+
+
+  case class Peers(peers: Seq[InetSocketAddress])
+
+  case class Id(id: PublicKey) {
+    def short: String = id.toString.slice(15, 20)
+    def medium: String = id.toString.slice(15, 25).replaceAll(":", "")
+    def address: Address = pubKeyToAddress(id)
+  }
+
+
+  case class GetId()
+
+  case class GetBalance(account: PublicKey)
+
+  case class HandShake(
+                        originPeer: Signed[Peer],
+                        requestExternalAddressCheck: Boolean = false
+                        //           peers: Seq[Signed[Peer]],
+                        //          destination: Option[InetSocketAddress] = None
+                      ) extends ProductHash
+
+  // These exist because type erasure messes up pattern matching on Signed[T] such that
+  // you need a wrapper case class like this
+  case class HandShakeMessage(handShake: Signed[HandShake])
+  case class HandShakeResponseMessage(handShakeResponse: Signed[HandShakeResponse])
+
+  case class HandShakeResponse(
+                                //                   original: Signed[HandShake],
+                                response: HandShake,
+                                detectedRemote: InetSocketAddress
+                              ) extends ProductHash
+
+  case class Peer(
+                   id: Id,
+                   externalAddress: InetSocketAddress,
+                   remotes: Set[InetSocketAddress] = Set()
+                 ) extends ProductHash
 
 
 }

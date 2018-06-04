@@ -13,9 +13,9 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import constellation._
 import org.constellation.ClusterTest.{KubeIPs, ipRegex}
-import org.constellation.p2p.PeerToPeer.{Id, Peer}
 import org.constellation.primitives.Schema.{Address, SendToAddress, TX}
 import org.constellation.primitives.{Block, Transaction}
+import org.constellation.primitives.Schema._
 
 import scala.sys.process._
 import scala.util.{Random, Try}

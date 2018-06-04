@@ -1,8 +1,8 @@
 package org.constellation.cluster
 
 import java.util.concurrent.{Executors, TimeUnit}
-import scala.concurrent._
 
+import scala.concurrent._
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
@@ -15,7 +15,7 @@ import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Futu
 import constellation._
 import org.constellation.ConstellationNode
 import org.constellation.p2p.{GetUDPSocketRef, TestMessage}
-import org.constellation.p2p.PeerToPeer.{GetPeers, Id, Peer, Peers}
+import org.constellation.primitives.Schema.{Id, Peer}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.util.APIClient
 import org.constellation.util.TestNode
@@ -50,8 +50,8 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
       val receiver = getRandomNode(nodes.filterNot(n => n == sender))
 
-      Transaction.senderSign(Transaction(0L, sender.id.id,
-        receiver.id.id, nextInt(10000).toLong), sender.keyPair.getPrivate)
+      Transaction.senderSign(Transaction(0L, sender.data.id.id,
+        receiver.data.id.id, nextInt(10000).toLong), sender.configKeyPair.getPrivate)
     })
   }
 
@@ -142,7 +142,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
         assert(chainNode.head.transactions == Seq())
 
-        assert(chainNode.head.clusterParticipants.diff(nodes.map {_.id}.toSet).isEmpty)
+        assert(chainNode.head.clusterParticipants.diff(nodes.map {_.data.id}.toSet).isEmpty)
 
         val consensusResponse = rpc.get("enableConsensus")
 
@@ -216,7 +216,7 @@ class MultiNodeTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
 
       val finalChainStateNodeResponse = n.api.get("blocks")
       val finalChainNode = n.api.read[Seq[Block]](finalChainStateNodeResponse.get()).get()
-      n.id -> finalChainNode
+      n.data.id -> finalChainNode
     }.toMap
 
     val chains = chainsMap.values

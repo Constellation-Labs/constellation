@@ -9,8 +9,8 @@ import scala.concurrent.ExecutionContextExecutor
 import constellation._
 import org.constellation.Fixtures
 import org.constellation.crypto.KeyUtils
-import org.constellation.p2p.PeerToPeer.{Id, Peers}
 import org.constellation.primitives.Chain.Chain
+import org.constellation.primitives.Schema.{Id, Peers}
 import org.constellation.primitives.Transaction
 import org.constellation.util.APIClient
 import org.constellation.util.TestNode

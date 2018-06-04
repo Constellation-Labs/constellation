@@ -5,7 +5,7 @@ import java.security.{KeyPair, PublicKey}
 
 import constellation._
 import org.constellation.crypto.KeyUtils
-import org.constellation.p2p.PeerToPeer.{Id, Peer}
+import org.constellation.primitives.Schema.{Id, Peer}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.util.Signed
 

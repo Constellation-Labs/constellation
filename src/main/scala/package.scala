@@ -14,9 +14,8 @@ import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.google.common.hash.Hashing
 import com.twitter.chill.{IKryoRegistrar, KryoBase, ScalaKryoInstantiator}
-import org.constellation.p2p.PeerToPeer.{Id, PeerRef}
 import org.constellation.p2p._
-import org.constellation.primitives.Schema.Address
+import org.constellation.primitives.Schema.{Address, Id}
 import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
 import org.constellation.crypto.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
 import org.constellation.crypto.KeyUtilsExt
