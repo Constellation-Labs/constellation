@@ -44,9 +44,22 @@ object App extends JSApp {
     val heartBeat = Timer(5000.millis)
 
     heartBeat.foreach( _ => {
-      XHR.get[Metrics]({z: Metrics =>
+      XHR.get[Metrics]({zo: Metrics =>
         metricsDiv.innerHTML = ""
-        val mets = z.metrics.toSeq.sortBy(_._1).map{
+        val zmt = zo.metrics.toSeq.map{
+          case ("address", v) =>
+            "address" -> Seq(a(href := s"/address/$v", v))
+          case ("peers", v) =>
+            val vs = v.split(" --- ").map{
+              pr =>
+                val fullStr = pr.split("API: ")
+                val address = fullStr.last.split(" ").head
+                div(fullStr.head,  a(href := address, address))
+            }.toSeq
+            "peers" -> vs
+          case (k,v) => k -> Seq(div(v))
+        }
+        val mets = zmt.sortBy(_._1).map{
           case (k,v) =>
             tr(
               td(k),

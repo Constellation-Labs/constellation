@@ -188,7 +188,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     def sendRandomTransaction = {
       Future {
         val src = randomNode
-        val dst = randomOtherNode(src).getBlocking[Address]("address")
+        val dst = randomOtherNode(src).getBlocking[Address]("selfAddress")
         val s = SendToAddress(dst, Random.nextInt(1000).toLong)
         src.postRead[TX]("sendToAddress", s)
       }(ec)

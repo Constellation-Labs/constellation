@@ -16,7 +16,7 @@ class AlgebirdTest extends FlatSpec {
     TX(TXData(Seq(kp.address), kp2.address, 1L).signed()(kp))
   }
 
-  private val randomIds = randomTX.map{_.tx.encodedPublicKeys.head.b64Encoded}
+  private val randomIds = randomTX.map{_.tx.encodedPublicKeys.head.b58Encoded}
 
   private val txHash = randomTX.map{_.hash}.map {_.getBytes}
 

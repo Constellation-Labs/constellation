@@ -36,7 +36,7 @@ package object constellation extends KeyUtilsExt with POWExt
   val minimumTime : Long = 1518898908367L
 
   implicit class EasyFutureBlock[T](f: Future[T]) {
-    def get(t: Int = 15): T = {
+    def get(t: Int = 30): T = {
       import scala.concurrent.duration._
       Await.result(f, t.seconds)
     }

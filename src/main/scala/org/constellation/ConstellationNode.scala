@@ -101,6 +101,7 @@ class ConstellationNode(
   val udpAddressString: String = hostName + ":" + udpPort
   val udpAddress = new InetSocketAddress(hostName, udpPort)
   data.externalAddress = udpAddress
+  data.apiAddress = new InetSocketAddress(hostName, httpPort)
 
   val udpActor: ActorRef =
     system.actorOf(

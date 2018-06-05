@@ -41,6 +41,20 @@ class PeerToPeer(
 
   override def receive: Receive = {
 
+    // Local commands
+
+    case tx: TX => handleLocalTransactionAdd(tx)
+
+    case AddPeerFromLocal(peerAddress) => sender() ! addPeerFromLocal(peerAddress)
+
+    case UDPSendToID(dataA, remoteId) =>
+      peerIDLookup.get(remoteId).foreach{
+        r =>
+          udpActor ! UDPSendTyped(dataA, r.data.externalAddress)
+      }
+
+    // Regular state checks
+
     case InternalHeartbeat =>
 
       processHeartbeat {
@@ -50,12 +64,17 @@ class PeerToPeer(
         val numAccepted = gossipHeartbeat()
 
         logger.debug(
-          s"Heartbeat: ${id.short}, memPool: ${memPoolTX.size} numPeers: ${peers.size} gossip: $totalNumGossipMessages, balance: $selfBalance, " +
+          s"Heartbeat: ${id.short}, memPool: ${memPoolTX.size} numPeers: ${peers.size} " +
+            s"gossip: $totalNumGossipMessages, balance: $selfBalance, " +
             s"numAccepted: $numAccepted, numTotalValid: ${validTX.size} " +
             s"validUTXO: ${validUTXO.map { case (k, v) => k.slice(0, 5) -> v }} " +
-            s"peers: ${peers.map { p => p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes }.mkString(",")}"
+            s"peers: ${peers.map { p =>
+              p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes
+            }.mkString(",")}"
         )
       }
+
+    // Peer messages
 
     case UDPMessage(message: Any, remote) =>
 
@@ -71,18 +90,13 @@ class PeerToPeer(
 
         case message: RemoteMessage => consensusActor ! message
 
+        case g @ Gossip(_) => handleGossip(g, remote)
+
+        // Deprecated
+        case t: AddTransaction => memPoolActor ! t
+
         case u =>
           logger.error(s"Unrecognized UDP message: $u")
-      }
-
-    case tx: TX => handleLocalTransactionAdd(tx)
-
-    case AddPeerFromLocal(peerAddress) => sender() ! addPeerFromLocal(peerAddress)
-
-    case UDPSendToID(dataA, remoteId) =>
-      peerIDLookup.get(remoteId).foreach{
-        r =>
-          udpActor ! UDPSendTyped(dataA, r.data.externalAddress)
       }
 
 
@@ -91,9 +105,6 @@ class PeerToPeer(
     case a @ AddTransaction(transaction) =>
       logger.debug(s"Broadcasting TX ${transaction.short} on ${id.short}")
       broadcast(a)
-
-    case UDPMessage(t: AddTransaction, remote) =>
-      memPoolActor ! t
 
   }
 

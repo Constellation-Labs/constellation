@@ -62,13 +62,14 @@ class Data {
   @volatile var bundleBuffer: Set[Bundle] = Set[Bundle]()
 
   @volatile var externalAddress: InetSocketAddress = _
+  @volatile var apiAddress: InetSocketAddress = _
   // @volatile private var peers: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
   var remotes: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
   val peerLookup: mutable.HashMap[InetSocketAddress, Signed[Peer]] = mutable.HashMap[InetSocketAddress, Signed[Peer]]()
 
   def peerIDLookup: Map[Id, Signed[Peer]] = peerLookup.values.map{ z => z.data.id -> z}.toMap
 
-  def selfPeer: Signed[Peer] = Peer(id, externalAddress, Set()).signed()
+  def selfPeer: Signed[Peer] = Peer(id, externalAddress, Set(), apiAddress).signed()
 
   def peerIPs: Set[InetSocketAddress] = peerLookup.values.map(z => z.data.externalAddress).toSet
 
@@ -79,6 +80,8 @@ class Data {
   def peers: Seq[Signed[Peer]] = peerLookup.values.toSeq.distinct
 
   var genesisTXHash: String = _
+
+  @volatile var totalNumGossipMessages = 0
 
 
 }

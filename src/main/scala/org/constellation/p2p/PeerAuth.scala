@@ -75,7 +75,7 @@ trait PeerAuth {
     this.synchronized {
       peerLookup(value.data.externalAddress) = value
       value.data.remotes.foreach(peerLookup(_) = value)
-      logger.debug(s"Peer added, total peers: ${peerIDLookup.keys.size} on $selfAddress")
+      logger.debug(s"Peer added, total peers: ${peerIDLookup.keys.size} on ${id.short}")
       newPeers.foreach { np =>
         //    logger.debug(s"Attempting to add new peer from peer reference handshake response $np")
         //   initiatePeerHandshake(PeerRef(np.data.externalAddress))

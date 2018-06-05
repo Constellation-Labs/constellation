@@ -1,6 +1,5 @@
 package org.constellation
 
-import java.io.File
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
@@ -16,7 +15,6 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.crypto.UTXOWallet
-import org.constellation.p2p.PeerToPeer._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{Schema, Transaction}
 import org.constellation.state.ChainStateManager.{CurrentChainStateUpdated, GetCurrentChainState}
@@ -26,7 +24,7 @@ import org.json4s.native
 import org.json4s.native.Serialization
 
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 class API(
            chainStateActor: ActorRef,
@@ -52,6 +50,16 @@ class API(
 
   val routes: Route =
     get {
+      pathPrefix("address") {
+        get {
+          extractUnmatchedPath { p =>
+            logger.debug(s"Unmatched path on address result $p")
+            val ps = p.toString().tail
+            val balance = validUTXO.getOrElse(ps, 0).toString
+            complete(s"Balance: $balance")
+          }
+        }
+      } ~
       path("setKeyPair") {
         parameter('keyPair) { kpp =>
           logger.debug("Set key pair " + kpp)
@@ -66,12 +74,23 @@ class API(
         }
       } ~
         path("metrics") {
+
           complete(Metrics(Map(
             "address" -> selfAddress.address,
-            "balance" -> selfIdBalance.getOrElse(0L).toString,
-            "id" -> id.id.json,
+            "balance" -> (selfIdBalance.getOrElse(0L) / Schema.NormalizationFactor).toString,
+            "id" -> id.b58,
             "keyPair" -> keyPair.json,
-            "shortId" -> id.short
+            "shortId" -> id.short,
+            "numValidTransactions" -> validTX.size.toString,
+            "memPoolSize" -> memPoolTX.size.toString,
+            "totalNumGossipMessages" -> totalNumGossipMessages.toString,
+            "numPeers" -> peers.size.toString,
+            "peers" -> peers.map{ z =>
+              val addr = s"http://${z.data.apiAddress.getHostName}:${z.data.apiAddress.getPort}"
+              s"${z.data.id.short} API: $addr "
+            }.mkString(" --- "),
+            "z_peers" -> peers.map{_.data}.json,
+            "z_UTXO" -> validUTXO.toMap.json
           )))
         } ~
         path("validTX") {
@@ -115,7 +134,7 @@ class API(
         path("wallet") {
           complete(wallet)
         } ~
-        path("address") {
+        path("selfAddress") {
           //  val pair = constellation.makeKeyPair()
           //  wallet :+= pair
           //  complete(constellation.pubKeyToAddress(pair.getPublic))
@@ -198,51 +217,61 @@ class API(
           } ~
           path("peer") {
             entity(as[String]) { peerAddress =>
-              //    logger.debug(s"Received request to add a new peer $peerAddress")
-              val result = Try {
-                peerAddress.replaceAll('"'.toString,"").split(":") match {
-                  case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
-                  case a@_ => logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a");
-                }
-              }.toOption match {
-                case None =>
-                  StatusCodes.BadRequest
-                case Some(v) =>
-                  val fut = (peerToPeerActor ?  AddPeerFromLocal(v)).mapTo[StatusCode]
-                  val res = Try{Await.result(fut, timeout.duration)}.toOption
-                  res match {
-                    case None =>
-                      StatusCodes.RequestTimeout
-                    case Some(f) =>
-                      if (f == StatusCodes.Accepted) {
-                        var attempts = 0
-                        var peerAdded = false
-                        while (attempts < 5) {
-                          attempts += 1
-                          Thread.sleep(500)
-                          import constellation.EasyFutureBlock
-                          val peers = (peerToPeerActor ? GetPeersData).mapTo[Seq[Peer]].get()
-                          //   peers.foreach{println}
-                          //   println(v)
-                          peerAdded = peers.exists(p => v == p.externalAddress)
-                        }
-                        if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
-                      } else f
-                  }
-              }
 
-              //    logger.debug(s"New peer request $peerAddress statusCode: $result")
-              complete(result)
+              Try {
+                //    logger.debug(s"Received request to add a new peer $peerAddress")
+                val result = Try {
+                  peerAddress.replaceAll('"'.toString, "").split(":") match {
+                    case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
+                    case a@_ => logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a");
+                  }
+                }.toOption match {
+                  case None =>
+                    StatusCodes.BadRequest
+                  case Some(v) =>
+                    val fut = (peerToPeerActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
+                    val res = Try {
+                      Await.result(fut, timeout.duration)
+                    }.toOption
+                    res match {
+                      case None =>
+                        StatusCodes.RequestTimeout
+                      case Some(f) =>
+                        if (f == StatusCodes.Accepted) {
+                          var attempts = 0
+                          var peerAdded = false
+                          while (attempts < 5) {
+                            attempts += 1
+                            Thread.sleep(1500)
+                            //peerAdded = peers.exists(p => v == p.data.externalAddress)
+                            peerAdded = peerLookup.contains(v)
+                          }
+                          if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
+                        } else f
+                    }
+                }
+
+                logger.debug(s"New peer request $peerAddress statusCode: $result")
+                result
+              } match {
+                case Failure(e) => e.printStackTrace()
+                  complete(StatusCodes.InternalServerError)
+                case Success(x) => complete(x)
+              }
             }
           } ~
           path("ip") {
             entity(as[String]) { externalIp =>
+              var ipp : String = ""
               val addr = externalIp.replaceAll('"'.toString,"").split(":") match {
-                case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
+                case Array(ip, port) =>
+                  ipp = ip
+                  new InetSocketAddress(ip, port.toInt)
                 case a@_ => { logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a"); }
               }
               logger.debug(s"Set external IP RPC request $externalIp $addr")
               data.externalAddress = addr
+              if (ipp.nonEmpty) data.apiAddress = new InetSocketAddress(ipp, addr.getPort)
               complete(StatusCodes.OK)
             }
           } ~

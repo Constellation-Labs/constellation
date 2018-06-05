@@ -5,6 +5,7 @@ import java.net.InetSocketAddress
 import java.security.PublicKey
 
 import constellation.pubKeyToAddress
+import org.constellation.crypto.Base58
 import org.constellation.util.{EncodedPublicKey, ProductHash, Signed}
 import org.constellation.util.{ProductHash, Signed}
 
@@ -195,6 +196,7 @@ object Schema {
           case b2: Bundle =>
             process(b2.bundleData)
           case tx: TX => Set(tx)
+          case _ => Set[TX]()
         }
         depths.reduce(_ ++ _)
       }
@@ -303,6 +305,7 @@ object Schema {
     def short: String = id.toString.slice(15, 20)
     def medium: String = id.toString.slice(15, 25).replaceAll(":", "")
     def address: Address = pubKeyToAddress(id)
+    def b58 = Base58.encode(id.getEncoded)
   }
 
 
@@ -331,7 +334,8 @@ object Schema {
   case class Peer(
                    id: Id,
                    externalAddress: InetSocketAddress,
-                   remotes: Set[InetSocketAddress] = Set()
+                   remotes: Set[InetSocketAddress] = Set(),
+                   apiAddress: InetSocketAddress = null
                  ) extends ProductHash
 
 

@@ -29,7 +29,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
   "E2E Multiple Nodes DAG" should "add peers and build DAG with transactions" in {
 
-    val totalNumNodes = 5
+    val totalNumNodes = 3
 
     // Cleanup DBs
     import scala.tools.nsc.io.{File => SFile}
@@ -82,7 +82,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     Thread.sleep(6000)
 
     val initialDistrTX = nodes.tail.map{ n =>
-      val dst = n.api.getBlocking[Address]("address")
+      val dst = n.data.selfAddress
       val s = SendToAddress(dst, 1e7.toLong)
       r1.postRead[TX]("sendToAddress", s)
     }
@@ -121,12 +121,12 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     var done = false
 
-/*
+
     while (!done) {
       val nodeStatus = nodes.map { n =>
         Try{(n.peerToPeerActor ? GetValidTX).mapTo[Set[TX]].get()}.map { validTX =>
           val percentComplete = 100 - (allTX.diff(validTX).size.toDouble / allTX.size.toDouble) * 100
-          println(s"Node ${n.id.short} validTXSize: ${validTX.size} allTXSize: ${allTX.size} % complete: $percentComplete")
+          println(s"Node ${n.data.id.short} validTXSize: ${validTX.size} allTXSize: ${allTX.size} % complete: $percentComplete")
           Thread.sleep(1000)
           validTX == allTX
         }.getOrElse(false)
@@ -141,10 +141,9 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     println(s"Completion time seconds: ${(end-start) / 1000}")
 
-*/
 
 
-    Thread.sleep(30000)
+    Thread.sleep(3000000)
 
 /*
     for (node <- nodes) {

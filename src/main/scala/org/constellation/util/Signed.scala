@@ -3,6 +3,7 @@ package org.constellation.util
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import constellation._
+import org.constellation.crypto.Base58
 
 object POW extends POWExt
 
@@ -50,8 +51,8 @@ None = Unsigned
 Some = signed
  */
 
-case class EncodedPublicKey(b64Encoded: String) {
-  def toPublicKey: PublicKey = bytesToPublicKey(fromBase64(b64Encoded))
+case class EncodedPublicKey(b58Encoded: String) {
+  def toPublicKey: PublicKey = bytesToPublicKey(Base58.decode(b58Encoded))
 }
 
 // TODO: Move POW to separate class for rate liming.
