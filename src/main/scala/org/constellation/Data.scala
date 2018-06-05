@@ -28,6 +28,24 @@ class Data {
     db = new LevelDB(new File(tmpDirId, "db"))
   }
 
+  def transactionData(txHash: String): TransactionQueryResponse = {
+    val txOpt = txHashToTX.get(txHash)
+    val gossip = txToGossipChains.getOrElse(txHash, Seq())
+    TransactionQueryResponse(
+      txHash,
+      txOpt,
+      txHashToTX.contains(txHash),
+      txOpt.exists{memPoolTX.contains},
+      txOpt.exists{validTX.contains},
+      gossip.length,
+      gossip.map{_.stackDepth},
+      gossip
+    )
+  }
+
+  val txHashToTX: TrieMap[String, TX] = TrieMap()
+
+  @volatile var sentTX: Seq[TX] = Seq()
   @volatile var memPoolTX: Set[TX] = Set()
   @volatile var validTX: Set[TX] = Set()
   @volatile var validSyncPendingTX: Set[TX] = Set()

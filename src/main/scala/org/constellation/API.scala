@@ -14,7 +14,7 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.crypto.UTXOWallet
+import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{Schema, Transaction}
 import org.constellation.state.ChainStateManager.{CurrentChainStateUpdated, GetCurrentChainState}
@@ -36,7 +36,7 @@ class API(
            val jsPrefix: String = "./ui/target/scala-2.11/ui"
          )
          (implicit executionContext: ExecutionContext, val timeout: Timeout) extends Json4sSupport
-  with UTXOWallet
+  with Wallet
   with ServeUI {
 
   import data._
@@ -50,6 +50,12 @@ class API(
 
   val routes: Route =
     get {
+
+      path("submitTX") {
+        parameter('address, 'amount) { case (address, amount) =>
+          handleSendRequest(SendToAddress(Address(address), amount.toLong))
+        }
+      }
       pathPrefix("address") {
         get {
           extractUnmatchedPath { p =>
@@ -57,6 +63,15 @@ class API(
             val ps = p.toString().tail
             val balance = validUTXO.getOrElse(ps, 0).toString
             complete(s"Balance: $balance")
+          }
+        }
+      } ~
+      pathPrefix("txHash") {
+        get {
+          extractUnmatchedPath { p =>
+            logger.debug(s"Unmatched path on address result $p")
+            val ps = p.toString().tail
+            complete(transactionData(ps).prettyJson)
           }
         }
       } ~
@@ -89,6 +104,7 @@ class API(
               val addr = s"http://${z.data.apiAddress.getHostName}:${z.data.apiAddress.getPort}"
               s"${z.data.id.short} API: $addr "
             }.mkString(" --- "),
+            "last10TXHash" -> sentTX.reverse.slice(0, 10).map{_.hash}.mkString(","),
             "z_peers" -> peers.map{_.data}.json,
             "z_UTXO" -> validUTXO.toMap.json
           )))

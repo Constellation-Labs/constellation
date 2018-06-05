@@ -72,6 +72,7 @@ package object constellation extends KeyUtilsExt with POWExt
 
   implicit class SerExt(jsonSerializable: Any) {
     def json: String = caseClassToJson(jsonSerializable)
+    def prettyJson: String = Serialization.writePretty(Extraction.decompose(jsonSerializable))
     def tryJson: Try[String] = Try{caseClassToJson(jsonSerializable)}
     def j: String = json
     def jsonSave(f: String): Unit = scala.tools.nsc.io.File(f).writeAll(json)

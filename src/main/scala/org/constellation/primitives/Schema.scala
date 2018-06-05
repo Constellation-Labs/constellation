@@ -6,13 +6,24 @@ import java.security.PublicKey
 
 import constellation.pubKeyToAddress
 import org.constellation.crypto.Base58
-import org.constellation.util.{EncodedPublicKey, ProductHash, Signed}
+import org.constellation.util.EncodedPublicKey
 import org.constellation.util.{ProductHash, Signed}
 
 import scala.collection.concurrent.TrieMap
 
 // This can't be a trait due to serialization issues
 object Schema {
+
+  case class TransactionQueryResponse(
+                                     hash: String,
+                                     tx: Option[TX],
+                                     observed: Boolean,
+                                     inMemPool: Boolean,
+                                     confirmed: Boolean,
+                                     numGossipChains: Int,
+                                     gossipStackDepths: Seq[Int],
+                                     gossip: Seq[Gossip[ProductHash]]
+                                     )
 
   sealed trait NodeState
   final case object PendingDownload extends NodeState
@@ -157,9 +168,12 @@ object Schema {
     }
   }
 
+  sealed trait GossipMessage
+
   final case class ConflictDetectedData(detectedOn: TX, conflicts: Seq[TX]) extends ProductHash
 
-  final case class ConflictDetected(conflict: Signed[ConflictDetectedData]) extends ProductHash
+  final case class ConflictDetected(conflict: Signed[ConflictDetectedData]) extends ProductHash with GossipMessage
+
   final case class VoteData(accept: Seq[TX], reject: Seq[TX]) extends ProductHash {
     // used to determine what voting round we are talking about
     def voteRoundHash: String = {
@@ -186,7 +200,7 @@ object Schema {
 
   final case class Bundle(
                            bundleData: Signed[BundleData]
-                         ) extends ProductHash with Fiber {
+                         ) extends ProductHash with Fiber with GossipMessage {
 
 
     def extractTX: Set[TX] = {
@@ -245,7 +259,10 @@ object Schema {
 
   }
 
-  case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash with Fiber {
+
+  final case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash
+    with Fiber
+    with GossipMessage {
     def iter: Seq[Signed[_ >: T <: ProductHash]] = {
       def process[Q <: ProductHash](s: Signed[Q]): Seq[Signed[ProductHash]] = {
         s.data match {

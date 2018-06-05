@@ -27,21 +27,36 @@ object App extends JSApp {
 
     val forms = dash.appendChild(div(id := "forms").render).asInstanceOf[HTMLDivElement]
 
-    val f = form(
-      action := "/setKeyPair",
-      "Set node KeyPair:  ",
-      input(
-        `type` := "text", name := "keyPair", value := ""
+    val formsSeq = Seq(
+      form(
+        action := "/setKeyPair",
+        "Set node KeyPair:  ",
+        input(
+          `type` := "text", name := "keyPair", value := ""
+        )
+      ),
+      form(
+        action := "/submitTX",
+        "Submit transaction - address:  ",
+        input(
+          `type` := "text", name := "address", value := ""
+        ),
+        "amount:  ",
+        input(
+          `type` := "text", name := "amount", value := ""
+        )
       )
-    ).render
 
-    forms.appendChild(f)
+    )
+
+    formsSeq.foreach{ f => forms.appendChild(f.render)}
+
 
     val metricsDiv = dash.appendChild(div(id := "metrics").render).asInstanceOf[HTMLDivElement]
 
     implicit val scheduler: DomScheduler = new DomScheduler()
 
-    val heartBeat = Timer(5000.millis)
+    val heartBeat = Timer(3000.millis)
 
     heartBeat.foreach( _ => {
       XHR.get[Metrics]({zo: Metrics =>
@@ -57,6 +72,10 @@ object App extends JSApp {
                 div(fullStr.head,  a(href := address, address))
             }.toSeq
             "peers" -> vs
+          case ("last10TXHash", v) =>
+            "last10TXHash" -> v.split(",").map{ addr =>
+              div(a(href := s"/txHash/$addr", addr))
+            }.toSeq
           case (k,v) => k -> Seq(div(v))
         }
         val mets = zmt.sortBy(_._1).map{
@@ -74,7 +93,7 @@ object App extends JSApp {
           mets
         ).render
         metricsDiv.appendChild(tbl)
-      //  println(z)
+        //  println(z)
       }, "/metrics")
     }
     )

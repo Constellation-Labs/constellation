@@ -104,12 +104,12 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       }(ec)
     }
 
-    val numTX = 200
+    val numTX = 4000
 
     val start = System.currentTimeMillis()
 
     val txResponse = Seq.fill(numTX) {
-      // Thread.sleep(100)
+      Thread.sleep(1000)
       sendRandomTransaction
     }
 

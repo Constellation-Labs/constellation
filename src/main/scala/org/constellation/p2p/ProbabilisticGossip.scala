@@ -102,6 +102,8 @@ trait ProbabilisticGossip extends PeerAuth {
 
   def handleLocalTransactionAdd(tx: TX): Unit = {
 
+    if (!txHashToTX.contains(tx.hash)) txHashToTX(tx.hash) = tx
+
     // TODO: Assume TX has already been validated during API request.
     updateMempool(tx)
 
@@ -128,6 +130,7 @@ trait ProbabilisticGossip extends PeerAuth {
 
     val gossipSeq = g.iter
     val tx = gossipSeq.head.data.asInstanceOf[TX]
+    if (!txHashToTX.contains(tx.hash)) txHashToTX(tx.hash) = tx
 
     if (tx.tx.data.isGenesis) {
       acceptTransaction(tx)

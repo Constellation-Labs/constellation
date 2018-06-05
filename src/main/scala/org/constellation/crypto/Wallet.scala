@@ -1,7 +1,6 @@
 package org.constellation.crypto
 
 import java.security.KeyPair
-import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorRef
 import akka.http.scaladsl.model.StatusCodes
@@ -9,11 +8,10 @@ import akka.http.scaladsl.server.Directives.complete
 import akka.http.scaladsl.server.StandardRoute
 import org.constellation.primitives.Schema._
 import constellation._
-import akka.pattern.ask
 import akka.util.Timeout
-import org.constellation.{Data, LevelDB}
+import org.constellation.Data
 
-trait UTXOWallet {
+trait Wallet {
 
   val peerToPeerActor : ActorRef
   val data: Data
@@ -62,6 +60,8 @@ trait UTXOWallet {
           Seq(srcAddress), dstAddress, s.amountActual
         ).signed()(keyPair)
       )
+
+      sentTX :+= tx
 
       //   logger.info(s"SendToAddress RPC Transaction: ${tx.pretty}")
 
