@@ -43,10 +43,10 @@ trait Wallet {
       v.output(k)
   }.toSeq
 
-  def selfIdBalance: Option[Long] = memPoolUTXO.get(selfAddress.address)
+  def selfIdBalance: Option[Long] = memPoolLedger.get(selfAddress.address)
 
   def utxoBalance: Map[String, Long] = {
-    validUTXO.filter{case (x,y) => addresses.contains(x)}
+    validLedger.filter{case (x,y) => addresses.contains(x)}
   }.toMap
 
   def handleSendRequest(s: SendToAddress): StandardRoute = {
@@ -61,13 +61,15 @@ trait Wallet {
         ).signed()(keyPair)
       )
 
+      txHashToTX(tx.hash) = tx
+
       sentTX :+= tx
 
       //   logger.info(s"SendToAddress RPC Transaction: ${tx.pretty}")
 
       peerToPeerActor ! tx
 
-      complete(tx.json)
+      complete(transactionData(tx.hash).prettyJson)
 
     } else {
       complete(StatusCodes.BadRequest)

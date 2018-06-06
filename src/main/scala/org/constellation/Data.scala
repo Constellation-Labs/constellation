@@ -50,8 +50,8 @@ class Data {
   @volatile var validTX: Set[TX] = Set()
   @volatile var validSyncPendingTX: Set[TX] = Set()
 
-  val validUTXO: TrieMap[String, Long] = TrieMap()
-  val memPoolUTXO: TrieMap[String, Long] = TrieMap()
+  val validLedger: TrieMap[String, Long] = TrieMap()
+  val memPoolLedger: TrieMap[String, Long] = TrieMap()
   val validSyncPendingUTXO: TrieMap[String, Long] = TrieMap()
 
   // @volatile var bundlePool: Set[Bundle] = Set()
@@ -64,7 +64,7 @@ class Data {
   // Ideally the hash workload should prioritize memory and dump to disk later but can be revisited.
   val addressToTX: TrieMap[String, TX] = TrieMap()
 
-  def selfBalance: Option[Long] = validUTXO.get(id.address.address)
+  def selfBalance: Option[Long] = validLedger.get(id.address.address)
 
   @volatile var downloadMode: Boolean = true
 
@@ -78,6 +78,8 @@ class Data {
 
   @volatile var bundles: Set[Bundle] = Set[Bundle]()
   @volatile var bundleBuffer: Set[Bundle] = Set[Bundle]()
+  val bestBundles: TrieMap[Id, Bundle] = TrieMap()
+
 
   @volatile var externalAddress: InetSocketAddress = _
   @volatile var apiAddress: InetSocketAddress = _
@@ -99,7 +101,11 @@ class Data {
 
   var genesisTXHash: String = _
 
+  var lastSuperBundleHash: String = _
+
   @volatile var totalNumGossipMessages = 0
+  @volatile var totalNumBundleMessages = 0
+  @volatile var totalNumBroadcastMessages = 0
 
 
 }

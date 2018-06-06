@@ -21,9 +21,13 @@ trait Download extends PeerAuth {
   def handleDownloadResponse(d: DownloadResponse): Unit = {
     if (d.validTX.nonEmpty && d.validUTXO.nonEmpty) {
       validTX = d.validTX
+      validTX.filter{_.tx.data.isGenesis}.foreach{
+        z =>
+          genesisTXHash = z.hash
+      }
       d.validUTXO.foreach{ case (k,v) =>
-        validUTXO(k) = v
-        memPoolUTXO(k) = v
+        validLedger(k) = v
+        memPoolLedger(k) = v
       }
       downloadMode = false
       logger.debug("Downloaded data")
@@ -31,7 +35,7 @@ trait Download extends PeerAuth {
   }
 
   def handleDownloadRequest(d: DownloadRequest, remote: InetSocketAddress): Unit = {
-    val downloadResponse = DownloadResponse(validTX, validUTXO.toMap)
+    val downloadResponse = DownloadResponse(validTX, validLedger.toMap)
     udpActor.udpSend(downloadResponse, remote)
   }
 

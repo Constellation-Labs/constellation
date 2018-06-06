@@ -50,18 +50,18 @@ class API(
 
   val routes: Route =
     get {
-
       path("submitTX") {
-        parameter('address, 'amount) { case (address, amount) =>
+        parameter('address, 'amount) { (address, amount) =>
+          logger.error(s"SubmitTX : $address $amount")
           handleSendRequest(SendToAddress(Address(address), amount.toLong))
         }
-      }
+      } ~
       pathPrefix("address") {
         get {
           extractUnmatchedPath { p =>
             logger.debug(s"Unmatched path on address result $p")
             val ps = p.toString().tail
-            val balance = validUTXO.getOrElse(ps, 0).toString
+            val balance = validLedger.getOrElse(ps, 0).toString
             complete(s"Balance: $balance")
           }
         }
@@ -106,7 +106,7 @@ class API(
             }.mkString(" --- "),
             "last10TXHash" -> sentTX.reverse.slice(0, 10).map{_.hash}.mkString(","),
             "z_peers" -> peers.map{_.data}.json,
-            "z_UTXO" -> validUTXO.toMap.json
+            "z_UTXO" -> validLedger.toMap.json
           )))
         } ~
         path("validTX") {

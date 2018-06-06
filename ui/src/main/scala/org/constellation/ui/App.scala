@@ -8,7 +8,6 @@ import rx.ops.{DomScheduler, Timer}
 import scala.scalajs.js
 import scala.scalajs.js.{Date, JSApp}
 import scala.scalajs.js.annotation.JSExport
-import scala.util.Try
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -44,9 +43,12 @@ object App extends JSApp {
         "amount:  ",
         input(
           `type` := "text", name := "amount", value := ""
+        ),
+        button(
+          `type` := "submit",
+          "Submit"
         )
       )
-
     )
 
     formsSeq.foreach{ f => forms.appendChild(f.render)}

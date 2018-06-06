@@ -64,10 +64,15 @@ class PeerToPeer(
         val numAccepted = gossipHeartbeat()
 
         logger.debug(
-          s"Heartbeat: ${id.short}, memPool: ${memPoolTX.size} numPeers: ${peers.size} " +
-            s"gossip: $totalNumGossipMessages, balance: $selfBalance, " +
+          s"Heartbeat: ${id.short}, " +
+            s"bundles: $totalNumBundleMessages, " +
+            s"broadcasts: $totalNumBroadcastMessages, " +
+            s"numBundles: ${bundles.size}, " +
+            s"gossip: $totalNumGossipMessages, " +
+            s"balance: $selfBalance, " +
+            s"memPool: ${memPoolTX.size} numPeers: ${peers.size} " +
             s"numAccepted: $numAccepted, numTotalValid: ${validTX.size} " +
-            s"validUTXO: ${validUTXO.map { case (k, v) => k.slice(0, 5) -> v }} " +
+            s"validUTXO: ${validLedger.map { case (k, v) => k.slice(0, 5) -> v }} " +
             s"peers: ${peers.map { p =>
               p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes
             }.mkString(",")}"
@@ -90,7 +95,8 @@ class PeerToPeer(
 
         case message: RemoteMessage => consensusActor ! message
 
-        case g @ Gossip(_) => handleGossip(g, remote)
+        // case g @ Gossip(_) => handleGossip(g, remote)
+        case gm : GossipMessage => handleGossip(gm, remote)
 
         // Deprecated
         case t: AddTransaction => memPoolActor ! t

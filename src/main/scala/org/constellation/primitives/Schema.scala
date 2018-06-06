@@ -29,6 +29,12 @@ object Schema {
   final case object PendingDownload extends NodeState
   final case object Ready extends NodeState
 
+  sealed trait ValidationStatus
+
+  final case object Valid extends ValidationStatus
+  final case object MempoolValid extends ValidationStatus
+  final case object DoubleSpend extends ValidationStatus
+
 
   sealed trait ConfigUpdate
 
@@ -127,41 +133,41 @@ object Schema {
       s"${tx.data.remainder.map{_.address}.getOrElse("empty").slice(0, 5)} " +
       s"amount ${tx.data.amount}"
 
-    def utxoValid(utxo: TrieMap[String, Long]): Boolean = {
-      if (tx.data.isGenesis) !utxo.contains(tx.data.dst.address) else {
-        val srcSum = tx.data.src.map {_.address}.flatMap {utxo.get}.sum
+    def ledgerValid(ledger: TrieMap[String, Long]): Boolean = {
+      if (tx.data.isGenesis) !ledger.contains(tx.data.dst.address) else {
+        val srcSum = tx.data.src.map {_.address}.flatMap {ledger.get}.sum
         srcSum >= tx.data.amount && valid
       }
     }
 
-    def updateUTXO(UTXO: TrieMap[String, Long]): Unit = {
+    def updateLedger(ledger: TrieMap[String, Long]): Unit = {
       val txDat = tx.data
       if (txDat.isGenesis) {
         // UTXO(txDat.src.head.address) = txDat.inverseAmount
         // Move elsewhere ^ too complex.
-        UTXO(txDat.dst.address) = txDat.amount
+        ledger(txDat.dst.address) = txDat.amount
       } else {
 
-        val total = txDat.src.flatMap{s => UTXO.get(s.address)}.sum
+        val total = txDat.src.flatMap{s => ledger.get(s.address)}.sum
         val remainder = total - txDat.amount
 
         // Empty src balance.
         txDat.src.foreach{
           s =>
-            UTXO(s.address) = 0L
+            ledger(s.address) = 0L
         }
 
-        val prevDstBalance = UTXO.getOrElse(txDat.dst.address, 0L)
-        UTXO(txDat.dst.address) = prevDstBalance + txDat.amount
+        val prevDstBalance = ledger.getOrElse(txDat.dst.address, 0L)
+        ledger(txDat.dst.address) = prevDstBalance + txDat.amount
 
         txDat.remainder.foreach{ r =>
-          val prv = UTXO.getOrElse(r.address, 0L)
-          UTXO(r.address) = prv + remainder
+          val prv = ledger.getOrElse(r.address, 0L)
+          ledger(r.address) = prv + remainder
         }
 
         // Repopulate head src with remainder if no remainder address specified
         if (txDat.remainder.isEmpty && remainder != 0) {
-          UTXO(txDat.src.head.address) = remainder
+          ledger(txDat.src.head.address) = remainder
         }
 
       }
@@ -198,6 +204,8 @@ object Schema {
 
   final case class BundleData(bundles: Seq[Fiber]) extends ProductHash
 
+  final case class BestBundle(bundle: Bundle) extends GossipMessage
+
   final case class Bundle(
                            bundleData: Signed[BundleData]
                          ) extends ProductHash with Fiber with GossipMessage {
@@ -229,7 +237,6 @@ object Schema {
       }
       process(bundleData)
     }
-
 
     def maxStackDepth: Int = {
       def process(s: Signed[BundleData]): Int = {
@@ -301,15 +308,16 @@ object Schema {
 
   final case class ValidateTransaction(tx: TX) extends InternalCommand
 
-  case class DownloadRequest()
+  sealed trait DownloadMessage
 
-  case class DownloadResponse(validTX: Set[TX], validUTXO: Map[String, Long])
+  case class DownloadRequest() extends DownloadMessage
+  case class DownloadResponse(validTX: Set[TX], validUTXO: Map[String, Long]) extends DownloadMessage
 
-  case class SyncData(validTX: Set[TX], memPoolTX: Set[TX])
+  final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage
 
-  case class MissingTXProof(tx: TX, gossip: Seq[Gossip[ProductHash]])
+  case class MissingTXProof(tx: TX, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage
 
-  case class RequestTXProof(txHash: String)
+  final case class RequestTXProof(txHash: String) extends GossipMessage
 
   case class Metrics(metrics: Map[String, String])
 

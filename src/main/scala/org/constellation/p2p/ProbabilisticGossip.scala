@@ -12,8 +12,6 @@ trait ProbabilisticGossip extends PeerAuth {
   val data: Data
   import data._
 
-
-
   def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
     validTX += tx
     memPoolTX -= tx
@@ -21,9 +19,9 @@ trait ProbabilisticGossip extends PeerAuth {
           tx.updateUTXO(validSyncPendingUTXO)
         }*/
     validSyncPendingTX -= tx
-    tx.updateUTXO(validUTXO)
+    tx.updateLedger(validLedger)
     if (tx.tx.data.isGenesis) {
-      tx.updateUTXO(memPoolUTXO)
+      tx.updateLedger(memPoolLedger)
     }
     //    txToGossipChains.remove(tx.hash) // TODO: Remove after a certain period of time instead. Cleanup gossip data.
     val txSeconds = (System.currentTimeMillis() - tx.tx.time) / 1000
@@ -47,57 +45,66 @@ trait ProbabilisticGossip extends PeerAuth {
   def gossipHeartbeat(): Int = {
 
     if (!downloadMode) {
-      //      broadcast(SyncData(validTX, memPoolTX))
-    }
+      //  broadcast(SyncData(validTX, memPoolTX))
 
-    val numAccepted = this.synchronized {
-      val gs = txToGossipChains.values.map { g =>
-        val tx = g.head.iter.head.data.asInstanceOf[TX]
-        tx -> g
-      }.toSeq.filter{z => !validTX.contains(z._1)}
 
-      val filtered = gs.filter { case (tx, g) =>
-        val lastTime = g.map {
-          _.iter.last.time
-        }.max
-        val sufficientTimePassed = lastTime < (System.currentTimeMillis() - 5000)
-        sufficientTimePassed
-      }
+      val numAccepted = this.synchronized {
+        val gs = txToGossipChains.values.map { g =>
+          val tx = g.head.iter.head.data.asInstanceOf[TX]
+          tx -> g
+        }.toSeq.filter{z => !validTX.contains(z._1)}
 
-      val acceptedTXs = filtered.map {_._1}
-
-      acceptedTXs.foreach { z => acceptTransaction(z)}
-
-      if (acceptedTXs.nonEmpty) {
-        // logger.debug(s"Accepted transactions on ${id.short}: ${acceptedTXs.map{_.short}}")
-      }
-
-      // TODO: Add debug information to log metrics like number of peers / messages total etc.
-      // logger.debug(s"P2P Heartbeat on ${id.short} - numPeers: ${peers.length}")
-
-      // Send heartbeat here to other peers.
-      acceptedTXs.size
-    }
-
-    validSyncPendingTX.foreach{
-      tx =>
-        val chains = txToGossipChains.get(tx.hash)
-        chains.foreach{
-          c =>
-            val lastTime = c.map {_.iter.last.time}.max
-            val sufficientTimePassed = lastTime < (System.currentTimeMillis() - 5000)
-            sufficientTimePassed
+        val filtered = gs.filter { case (tx, g) =>
+          val lastTime = g.map {
+            _.iter.last.time
+          }.max
+          val sufficientTimePassed = lastTime < (System.currentTimeMillis() - 5000)
+          sufficientTimePassed
         }
-    }
 
-    numAccepted
+        val acceptedTXs = filtered.map {_._1}
+
+        acceptedTXs.foreach { z => acceptTransaction(z)}
+
+        if (acceptedTXs.nonEmpty) {
+          // logger.debug(s"Accepted transactions on ${id.short}: ${acceptedTXs.map{_.short}}")
+        }
+
+        // TODO: Add debug information to log metrics like number of peers / messages total etc.
+        // logger.debug(s"P2P Heartbeat on ${id.short} - numPeers: ${peers.length}")
+
+        // Send heartbeat here to other peers.
+        acceptedTXs.size
+      }
+      /*
+
+          validSyncPendingTX.foreach{
+            tx =>
+              val chains = txToGossipChains.get(tx.hash)
+              chains.foreach{
+                c =>
+                  val lastTime = c.map {_.iter.last.time}.max
+                  val sufficientTimePassed = lastTime < (System.currentTimeMillis() - 5000)
+                  sufficientTimePassed
+              }
+          }
+      */
+
+      bundleHeartbeat()
+
+
+      numAccepted
+
+    } else 0
   }
 
-  def updateMempool(tx: TX): Unit = {
-    if (!memPoolTX.contains(tx) && !tx.tx.data.isGenesis) {
-      tx.updateUTXO(memPoolUTXO)
+  def updateMempool(tx: TX): Boolean = {
+    val validUpdate = !memPoolTX.contains(tx) && !tx.tx.data.isGenesis && tx.valid && tx.ledgerValid(memPoolLedger)
+    if (validUpdate) {
+      tx.updateLedger(memPoolLedger)
       memPoolTX += tx
     }
+    validUpdate
   }
 
   def handleLocalTransactionAdd(tx: TX): Unit = {
@@ -109,22 +116,139 @@ trait ProbabilisticGossip extends PeerAuth {
 
     // TODO: Fix this
     if (tx.tx.data.isGenesis) {
+      genesisTXHash = tx.hash
       acceptTransaction(tx)
       // We started genesis
       downloadMode = false
     }
 
+    // Temp
     val g = Gossip(tx.signed())
     broadcast(g)
-    // val unspokenTX = memPoolTX.filter{!txsGossipedAbout.contains(_)}
+
+    //val unspokenTX = memPoolTX.filter{!txsGossipedAbout.contains(_)}
     //  txsGossipedAbout ++= unspokenTX
-    //    val unspokenTX = memPoolTX
-    // val b = Bundle(BundleData(unspokenTX.toSeq).signed())
-    // broadcast(b)
+
+    if (!tx.tx.data.isGenesis) {
+      // val unspokenTX = memPoolTX
+      val b = Bundle(BundleData(Seq(tx)).signed())
+      broadcast(b)
+    }
 
   }
 
-  def handleGossip(g: Gossip[ProductHash], remote: InetSocketAddress): Unit = {
+  def bundleHeartbeat(): Unit = {
+
+    if (bundles.nonEmpty) {
+
+      val bestBundle = bundles.toSeq
+        .groupBy(_.extractTX.size).maxBy(_._1)._2
+        .groupBy(_.maxStackDepth).maxBy{_._1}._2
+        .groupBy(_.extractTX.toSeq.map{_.hash}.sorted.mkString).maxBy(_._1)._2
+        .maxBy(_.hash)
+
+      logger.debug(s"best bundle on ${id.short} ${bestBundle.short} ${bestBundle.extractTX.map{_.short}}" +
+        s" hashes: ${bundles.toSeq.map{z: Bundle => z.maxStackDepth -> z.extractTX.map{_.short}}}")
+
+      broadcast(BestBundle(bestBundle))
+    }
+
+
+   /* val oldBundles = bundles.filter{ bi =>
+      bi.bundleData.time < (System.currentTimeMillis() - 25000)
+    }
+    bundles --= oldBundles
+
+    if (bundles.nonEmpty) {
+      val b = Bundle(BundleData(bundles.toSeq).signed())
+      broadcast(b)
+    }
+    */
+  }
+
+
+  def handleBundle(bundle: Bundle): Unit = {
+    totalNumBundleMessages += 1
+    val txs = bundle.extractTX
+    val valid = txs.forall(t => t.ledgerValid(validLedger) && t.valid && t.ledgerValid(memPoolLedger))
+    val newTX = txs.exists{t => !memPoolTX.contains(t)}
+    if (valid) {
+      txs.foreach(updateMempool)
+      var newTXs = txs
+      val filtered = bundles.filter{ bi =>
+        val theseTX = bi.extractTX
+        val timeValid = bi.bundleData.time > (bundle.bundleData.time - 25000)
+        val res = timeValid && theseTX.exists(!newTXs.contains(_))
+        if (res) newTXs ++= theseTX
+        res
+      }.toSeq
+      val emitter = filtered :+ bundle
+      bundles += bundle
+      if (newTX) {
+        val b = Bundle(BundleData(emitter).signed())
+        broadcast(b)
+      }
+    }
+  }
+
+  // def handleGossip(g: Gossip[ProductHash], remote: InetSocketAddress): Unit = {
+  def handleGossip(gm : GossipMessage, remote: InetSocketAddress): Unit = {
+
+    val rid = peerLookup(remote).data.id
+
+    gm match {
+      case g : Gossip[ProductHash] =>
+      //  handleGossipRegular(g, remote)
+      case bb: BestBundle =>
+        bestBundles(rid) = bb.bundle
+      case b: Bundle =>
+        handleBundle(b)
+      case sd: SyncData =>
+      //      handleSyncData(sd, remote)
+      case _ =>
+        logger.debug("Unrecognized gossip message")
+    }
+  }
+
+
+  def handleSyncData(d: SyncData, remote: InetSocketAddress): Unit = {
+
+    val rid = peerLookup(remote)
+    val diff = d.validTX.diff(validTX)
+    if (diff.nonEmpty) {
+      logger.debug(s"Desynchronization detected between " +
+        s"remote: ${rid.short} and self: ${id.short} - diff size : ${diff.size}")
+    }
+
+    val selfMissing = d.validTX.filter{!validTX.contains(_)}
+
+    selfMissing.foreach{ t =>
+      if (!validSyncPendingTX.contains(t)) {
+        if (t.ledgerValid(validSyncPendingUTXO)) {
+          t.updateLedger(validSyncPendingUTXO)
+        } else {
+          // Handle double spend conflict here later, for now just drop
+        }
+      }
+      validSyncPendingTX += t
+      broadcast(RequestTXProof(t.hash))
+    }
+
+
+    val otherMissing = validTX.filter{!d.validTX.contains(_)}
+    otherMissing.toSeq.foreach{ t =>
+      val gossipChains = txToGossipChains.getOrElse(t.hash, Seq())
+      if (gossipChains.nonEmpty) {
+        udpActor.udpSend(MissingTXProof(t, gossipChains), remote)
+      }
+    }
+
+    // logger.debug(s"SyncData message size: ${d.validTX.size} on ${validTX.size} ${id.short}")
+
+  }
+
+
+  def handleGossipRegular(g: Gossip[ProductHash], remote: InetSocketAddress): Unit = {
 
     totalNumGossipMessages += 1
 
@@ -140,18 +264,14 @@ trait ProbabilisticGossip extends PeerAuth {
         //   logger.debug(s"Ignoring gossip on already validated transaction: ${tx.short}")
       } else {
 
-        if (!tx.utxoValid(validUTXO)) {
+        if (!tx.ledgerValid(validLedger)) {
           // TODO: Add info explaining why transaction was invalid. I.e. InsufficientBalanceException etc.
           logger.debug(s"Ignoring invalid transaction ${tx.short} detected from p2p gossip")
-        } else if (!tx.utxoValid(memPoolUTXO)) {
+        } else if (!tx.ledgerValid(memPoolLedger)) {
           logger.debug(s"Conflicting transactions detected ${tx.short}")
           // Find conflicting transactions
           val conflicts = memPoolTX.toSeq.filter { m =>
-            tx.tx.data.src.map {
-              _.address
-            }.intersect(m.tx.data.src.map {
-              _.address
-            }).nonEmpty
+            tx.tx.data.src.map {_.address}.intersect(m.tx.data.src.map {_.address}).nonEmpty
           }
           val chains = conflicts.map { c =>
             VoteCandidate(c, txToGossipChains.getOrElse(c.hash, Seq()))
@@ -173,7 +293,7 @@ trait ProbabilisticGossip extends PeerAuth {
         } else {
 
           if (!memPoolTX.contains(tx)) {
-            tx.updateUTXO(memPoolUTXO)
+            tx.updateLedger(memPoolLedger)
             memPoolTX += tx
             //    logger.debug(s"Adding TX to mempool - new size ${memPoolTX.size}")
           }
@@ -247,37 +367,6 @@ trait ProbabilisticGossip extends PeerAuth {
 
     case UDPMessage(d: SyncData, remote) =>
 
-      val rid = peerLookup(remote)
-      val diff = d.validTX.diff(validTX)
-      if (diff.nonEmpty) {
-        logger.debug(s"Desynchronization detected between remote: ${rid.short} and self: ${id.short} - diff size : ${diff.size}")
-      }
-
-      val selfMissing = d.validTX.filter{!validTX.contains(_)}
-/*
-
-      selfMissing.foreach{ t =>
-        if (!validSyncPendingTX.contains(t)) {
-          if (t.utxoValid(validSyncPendingUTXO)) {
-            t.updateUTXO(validSyncPendingUTXO)
-          } else {
-            // Handle double spend conflict here later, for now just drop
-          }
-        }
-        validSyncPendingTX += t
-        broadcast(RequestTXProof(t.hash))
-      }
-*/
-
-      val otherMissing = validTX.filter{!d.validTX.contains(_)}
-      otherMissing.toSeq.foreach{ t =>
-        val gossipChains = txToGossipChains.getOrElse(t.hash, Seq())
-        if (gossipChains.nonEmpty) {
-          udpActor.udpSend(MissingTXProof(t, gossipChains), remote)
-        }
-      }
-
-    // logger.debug(s"SyncData message size: ${d.validTX.size} on ${validTX.size} ${id.short}")
     case UDPMessage(b: Bundle, remote) =>
 
       val idsInBundle = b.extractIds

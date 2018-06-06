@@ -32,7 +32,10 @@ trait PeerAuth {
   def broadcast[T <: AnyRef](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
     val dest = if (idSubset.isEmpty) peerIDLookup.keys else idSubset
     dest.foreach{ i =>
-      if (!skipIDs.contains(i)) self ! UDPSendToID(message, i)
+      if (!skipIDs.contains(i)) {
+        totalNumBroadcastMessages += 1
+        self ! UDPSendToID(message, i)
+      }
     }
   }
 
