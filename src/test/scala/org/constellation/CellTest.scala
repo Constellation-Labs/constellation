@@ -1,6 +1,7 @@
-package org.constellation.consensus
+package org.constellation
+
 import akka.actor.ActorSystem
-import akka.testkit.{TestFSMRef, TestKit}
+import akka.testkit.TestKit
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 /**
   * Created by Wyatt on 5/10/18.
