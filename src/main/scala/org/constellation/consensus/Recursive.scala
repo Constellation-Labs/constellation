@@ -54,6 +54,8 @@ object Cell {
       case Bundle(sheaf) => Bundle(sheaf)
       case Fiber(a, next) => Fiber(f(a), next)
     }
+
+   override def lift[A, B](f: A => B): Cell[A] => Cell[B] = fa => map(fa)(f)
   }
 
   val coAlgebra: Sheaf => Cell[Sheaf] = s => if (s.depth > 0) fiber(s.copy(depth = 0), s) else bundle()
@@ -66,6 +68,18 @@ object Cell {
   def fiber[A](a: A, next: Sheaf): Cell[A] = Fiber(a, next)
 
   def hylo[F[_]: Functor, A, B](f: F[B] => B)(g: A => F[A]): A => B = a => f(g(a) map hylo(f)(g))
+
+  /**
+    * https://patternsinfp.wordpress.com/2017/10/04/metamorphisms/ see Streaming
+    * @param f
+    * @param g
+    * @tparam F
+    * @tparam A
+    * @tparam B
+    * @return
+    */
+  def meta[F[_]: Functor, A, B](f: A => Cell[A])(g: Cell[B] => B): F[A] => F[B] = a => a map hylo(g)(f)//basically just a lift
+
   def openStream(sheaf: Sheaf) = hylo(algebra)(coAlgebra).apply(sheaf)
 
 }
