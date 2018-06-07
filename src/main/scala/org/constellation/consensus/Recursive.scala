@@ -2,7 +2,7 @@ package org.constellation.consensus
 import cats.Functor
 import cats.implicits._
 import cats.kernel.{Eq, Monoid}
-import org.constellation.consensus.TopologyManager.{algebra, coAlgebra}
+//import org.constellation.consensus.TopologyManager.{algebra, coAlgebra, hylo}
 
 import scala.concurrent.{CanAwait, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -14,15 +14,18 @@ import scala.concurrent.ExecutionContext.Implicits.global
 trait thang
 
 
+case class Fiber[A](bundle: A, germ: Sheaf) extends Cell[A]
+
 //TODO: Copy param list from Tx()
-case class Fiber() extends thang
+//case class Germ(data: Option[Int] = None) extends Sheaf
 
 /**
   * Wrapper for maintaining metadata about manifold topology. Useful for combining logic contained in product operators
   */
-trait Sheaf extends Monoid[Fiber] {
-  def empty = Fiber()
-  def combine(x: Fiber, y: Fiber) = Fiber()
+case class Sheaf(data: Option[Int] = None, var depth: Int = -11) extends Monoid[Sheaf] {
+
+  def empty = Sheaf()
+  def combine(x: Sheaf, y: Sheaf = this) = Sheaf(None, x.depth)
 }
 
 /**
@@ -31,14 +34,7 @@ trait Sheaf extends Monoid[Fiber] {
   * and value. In the limit, higher dimensional manifolds have more memetic influence. Higher dimensional manifolds
   * are also very expensive, allowing us to prevent spam attacks like a proof of work step.
   */
-case class Bundle(fibers: Fiber*) extends Sheaf
-
-/**
-  * This is a covering of covers. Conflicting bundles are gathered, consensus is applied, then the result is scattered. Consensus is a gather apply scatter
-  * @param bundles pev referenced bundles
-  */
-//case class Block(amendment: Fiber, bundles: Fiber*) extends Sheaf
-
+case class Bundle[A](fibers: Sheaf) extends Cell[A]
 
 /**
   * TODO make this a monoid?
@@ -47,17 +43,33 @@ case class Bundle(fibers: Fiber*) extends Sheaf
   * Entropic flow, is the use of entropy as a measure for a hausdorff clustering which seeks to find the optimal covering
   * of a lipschitz function.
   */
+trait Cell[A]
 
 object Cell {
  implicit val cellFunctor: Functor[Cell] {
    def map[A, B](fa: Cell[A])
                 (f: A => B): Cell[B]
  } = new Functor[Cell] {
-    override def map[A, B](fa: Cell[A])(f: (A) => B): Cell[B] = Cell(f(fa.sheaf))
+    override def map[A, B](fa: Cell[A])(f: (A) => B): Cell[B] = fa match {
+      case Bundle(sheaf) => Bundle(sheaf)
+      case Fiber(a, next) => Fiber(f(a), next)
+    }
   }
+
+  val coAlgebra: Sheaf => Cell[Sheaf] = s => if (s.depth > 0) fiber(s.copy(depth = 0), s) else bundle()
+  val algebra: Cell[Sheaf] => Sheaf = {
+    case Bundle(result) => result
+    case Fiber(acc, next) => acc.combine(next)
+  }
+
+  def bundle[A](result: Sheaf = Sheaf(None)): Cell[A] = Bundle(result)
+  def fiber[A](a: A, next: Sheaf): Cell[A] = Fiber(a, next)
+
+  def hylo[F[_]: Functor, A, B](f: F[B] => B)(g: A => F[A]): A => B = a => f(g(a) map hylo(f)(g))
+  def openStream(sheaf: Sheaf) = hylo(algebra)(coAlgebra).apply(sheaf)
+
 }
 
-case class Cell[A](sheaf: A)
 
 
 trait Recursive {

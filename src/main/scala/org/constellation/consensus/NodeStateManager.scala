@@ -9,7 +9,7 @@ import org.constellation.wallet.KeyUtils.makeKeyPair
   * Created by Wyatt on 5/10/18.
   */
 object NodeStateManager {
-  def propagate[B <: Bundle](bundle: B) = {}
+//  def propagate[B <: Bundle](bundle: B) = {}
 
   /**
     * TODO put instantiation in ConstellationNode App into NodeStateManager object
@@ -30,9 +30,9 @@ class NodeStateManager(val keyPair: KeyPair = makeKeyPair(), system: ActorSystem
 
   when(Offline){
     case Event(Online, _) => goto(Online)
-    case Event(bundle: Bundle, _) =>
-      propagate(bundle)
-      stay()
+//    case Event(bundle: Bundle, _) =>
+//      propagate(bundle)
+//      stay()
   }
 
   onTransition {
