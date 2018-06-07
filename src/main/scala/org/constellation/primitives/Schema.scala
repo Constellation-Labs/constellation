@@ -210,6 +210,22 @@ object Schema {
                            bundleData: Signed[BundleData]
                          ) extends ProductHash with Fiber with GossipMessage {
 
+    def extractSubBundlesMinSize(minSize: Int = 2) = {
+      extractSubBundles.filter{_.maxStackDepth >= minSize}
+    }
+
+    def extractSubBundles: Set[Bundle] = {
+      def process(s: Signed[BundleData]): Set[Bundle] = {
+        val bd = s.data.bundles
+        val depths = bd.map {
+          case b2: Bundle =>
+            Set(b2) ++ process(b2.bundleData)
+          case _ => Set[Bundle]()
+        }
+        depths.reduce(_ ++ _)
+      }
+      process(bundleData)
+    }
 
     def extractTX: Set[TX] = {
       def process(s: Signed[BundleData]): Set[TX] = {

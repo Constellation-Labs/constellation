@@ -51,7 +51,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val genTx = r1.getBlocking[TX]("genesis/" + numCoinsInitial)
     Thread.sleep(1000)
 
-/*
+
     val results = nodes.flatMap{ node =>
       val others = nodes.filter{_ != node}
       others.map{
@@ -88,7 +88,17 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       r1.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
     }
 
+    Thread.sleep(1000)
+
+    nodes.foreach{
+      n =>
+        initialDistrTX.foreach { t =>
+          n.api.postSync("setTXValid", t)
+        }
+    }
+
     Thread.sleep(10000)
+
 
     def randomNode: ConstellationNode = nodes(Random.nextInt(nodes.length))
     def randomOtherNode(not: ConstellationNode): ConstellationNode =
@@ -106,12 +116,12 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     }
 
 
-    val numTX = 200
+    val numTX = 1000
 
     val start = System.currentTimeMillis()
 
     val txResponse = Seq.fill(numTX) {
-   //   Thread.sleep(1000)
+      Thread.sleep(2000)
       sendRandomTransaction
     }
 
@@ -143,10 +153,11 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     println(s"Completion time seconds: ${(end-start) / 1000}")
 
-*/
 
 
-  //  Thread.sleep(3000000)
+
+
+  Thread.sleep(3000000)
 
 /*
     for (node <- nodes) {

@@ -202,6 +202,13 @@ class API(
         serveMainPage
     } ~
       post {
+        path("setTXValid") {
+          entity(as[TX]) { tx =>
+            acceptTransaction(tx)
+            tx.updateLedger(memPoolLedger)
+            complete(StatusCodes.OK)
+          }
+        } ~
         path ("sendToAddress") {
           entity(as[SendToAddress]) { s =>
             handleSendRequest(s)
