@@ -51,6 +51,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val genTx = r1.getBlocking[TX]("genesis/" + numCoinsInitial)
     Thread.sleep(1000)
 
+/*
     val results = nodes.flatMap{ node =>
       val others = nodes.filter{_ != node}
       others.map{
@@ -142,6 +143,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     println(s"Completion time seconds: ${(end-start) / 1000}")
 
+*/
 
 
   //  Thread.sleep(3000000)
