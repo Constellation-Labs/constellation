@@ -10,6 +10,7 @@ import constellation._
 trait ProbabilisticGossip extends PeerAuth {
 
   val data: Data
+
   import data._
 
   def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
@@ -36,7 +37,11 @@ trait ProbabilisticGossip extends PeerAuth {
     else {
       val chainsA = chains.get
       val updatedGossipChains = chainsA.filter { c =>
-        !c.iter.map {_.hash}.zip(gossipSeq.map {_.hash}).forall { case (x, y) => x == y }
+        !c.iter.map {
+          _.hash
+        }.zip(gossipSeq.map {
+          _.hash
+        }).forall { case (x, y) => x == y }
       } :+ g
       txToGossipChains(txHash) = updatedGossipChains
     }
@@ -52,7 +57,7 @@ trait ProbabilisticGossip extends PeerAuth {
         val gs = txToGossipChains.values.map { g =>
           val tx = g.head.iter.head.data.asInstanceOf[TX]
           tx -> g
-        }.toSeq.filter{z => !validTX.contains(z._1)}
+        }.toSeq.filter { z => !validTX.contains(z._1) }
 
         val filtered = gs.filter { case (tx, g) =>
           val lastTime = g.map {
@@ -62,9 +67,11 @@ trait ProbabilisticGossip extends PeerAuth {
           sufficientTimePassed
         }
 
-        val acceptedTXs = filtered.map {_._1}
+        val acceptedTXs = filtered.map {
+          _._1
+        }
 
-        acceptedTXs.foreach { z => acceptTransaction(z)}
+        acceptedTXs.foreach { z => acceptTransaction(z) }
 
         if (acceptedTXs.nonEmpty) {
           // logger.debug(s"Accepted transactions on ${id.short}: ${acceptedTXs.map{_.short}}")
@@ -139,32 +146,76 @@ trait ProbabilisticGossip extends PeerAuth {
 
   def bundleHeartbeat(): Unit = {
 
-    if (bundles.nonEmpty) {
+
+    val bb = if (bundles.nonEmpty) {
 
       val bestBundle = bundles.toSeq
         .groupBy(_.extractTX.size).maxBy(_._1)._2
-        .groupBy(_.maxStackDepth).maxBy{_._1}._2
-        .groupBy(_.extractTX.toSeq.map{_.hash}.sorted.mkString).maxBy(_._1)._2
+        .groupBy(_.maxStackDepth).maxBy {
+        _._1
+      }._2
+        .groupBy(_.extractTX.toSeq.map {
+          _.hash
+        }.sorted.mkString).maxBy(_._1)._2
         .maxBy(_.hash)
 
-      logger.debug(s"best bundle on ${id.short} ${bestBundle.short} ${bestBundle.extractTX.map{_.short}}" +
-        s" hashes: ${bundles.toSeq.map{z: Bundle => z.maxStackDepth -> z.extractTX.map{_.short}}}")
-
-      broadcast(BestBundle(bestBundle))
+      logger.debug(s"best bundle on ${id.short} ${bestBundle.short} ${
+        bestBundle.extractTX.map {
+          _.short
+        }
+      }" +
+        s" hashes: ${
+          bundles.toSeq.map { z: Bundle => z.maxStackDepth -> z.extractTX.map {
+            _.short
+          }
+          }
+        }")
+      Some(bestBundle)
     }
+    else None
+
+    broadcast(BestBundle(bb, bestBundleSelf))
+
+    /*
+        if (bestBundles.nonEmpty) {
+
+          val b2Id = {
+            bestBundles.toSeq.map { case (peerId, b) => b -> peerId } ++ Seq(bestBundle -> id)
+          }.groupBy(_._1)
+
+          val best = b2Id.map {
+            case (b, ids) =>
+              b.short -> ids.length
+          }
+
+          logger.debug(s"peer bundles on ${id.short} mine ${bestBundle.short} - $best")
+
+          if (b2Id.keys.toSeq.map {
+            _.extractTX
+          }.toSet.size == 1 && bestBundles.keys.size == peers.size) {
+            // all TX the same in all bundles received
+            val bundle = b2Id.maxBy(_._2.size)._1
+            bestBundleSelf = bundle
+            bundles -= bundle
+          }
 
 
-   /* val oldBundles = bundles.filter{ bi =>
-      bi.bundleData.time < (System.currentTimeMillis() - 25000)
-    }
-    bundles --= oldBundles
-
-    if (bundles.nonEmpty) {
-      val b = Bundle(BundleData(bundles.toSeq).signed())
-      broadcast(b)
-    }
+        }
     */
+
   }
+
+
+  /* val oldBundles = bundles.filter{ bi =>
+     bi.bundleData.time < (System.currentTimeMillis() - 25000)
+   }
+   bundles --= oldBundles
+
+   if (bundles.nonEmpty) {
+     val b = Bundle(BundleData(bundles.toSeq).signed())
+     broadcast(b)
+   }
+   */
 
 
   def handleBundle(bundle: Bundle): Unit = {
@@ -198,11 +249,11 @@ trait ProbabilisticGossip extends PeerAuth {
 
     gm match {
       case g : Gossip[ProductHash] =>
-      //  handleGossipRegular(g, remote)
+        handleGossipRegular(g, remote)
       case bb: BestBundle =>
-        bestBundles(rid) = bb.bundle
+     //   bestBundles(rid) = bb.bundle
       case b: Bundle =>
-        handleBundle(b)
+     //   handleBundle(b)
       case sd: SyncData =>
       //      handleSyncData(sd, remote)
       case _ =>

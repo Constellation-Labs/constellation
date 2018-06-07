@@ -1,6 +1,7 @@
 package org.constellation
 
 import java.io.File
+import java.nio.file.{Files, Paths}
 
 import org.scalatest.FlatSpec
 import com.codahale.shamir.Scheme
@@ -8,9 +9,13 @@ import constellation._
 
 import scala.collection.JavaConverters._
 
-case class ShamirOutput(fileName: String, part: Int, b64Bytes: String)
+case class ShamirOutput(fileName: String, part: Int, hex: String)
 
 class ShamirETHTest extends FlatSpec {
+
+  val encodedStore = new File(System.getenv("HOME"), "yourfile.txt")
+  val ethKeyStore = new File(System.getenv("HOME"), "Library/Ethereum/keystore")
+
 
   "Shamir java" should "work" in {
 
@@ -24,28 +29,27 @@ class ShamirETHTest extends FlatSpec {
 
   }
 
-  "Shamir" should "work" in {
+  "Shamir" should "work" ignore {
 
-    new File(System.getenv("HOME"), "Library/Ethereum/keystore").listFiles().map{
-      f =>
-        val data = scala.io.Source.fromFile(f).getLines().mkString
-        val scheme = Scheme.of(3, 2)
-        val secret = data.getBytes
-        val parts = scheme.split(secret)
-        val done = parts.asScala.map{ case (index, bytes) =>
-          ShamirOutput(f.getName, index, base64(bytes))
-        }.toSeq
-        done.foreach{z => println(z.json)}
-        done
-    }
-
+    val files = ethKeyStore.listFiles().filter {
+      _.getName != ".DS_Store"
+    }.flatMap{
+        f =>
+          val scheme = Scheme.of(3, 2)
+          val secret = Files.readAllBytes(f.toPath)
+          val parts = scheme.split(secret)
+          val done = parts.asScala.map{ case (index, bytes) =>
+            ShamirOutput(f.getName, index, bytes2hex(bytes))
+          }.toSeq
+          done.foreach{z => println(z.json)}
+          done
+      }
+    scala.tools.nsc.io.File(encodedStore).writeAll(files.map{_.json}.mkString("\n"))
   }
 
-  "Shamir read in" should "work" in {
+  "Shamir read in" should "work" ignore {
 
-    val input = new File(System.getenv("HOME"), "yourfile.txt")
-
-    val data = scala.io.Source.fromFile(input).getLines().toSeq.map{_.x[ShamirOutput]}
+    val data = scala.io.Source.fromFile(encodedStore).getLines().toSeq.map{_.x[ShamirOutput]}
 
     val scheme = Scheme.of(3, 2)
 
@@ -54,10 +58,11 @@ class ShamirETHTest extends FlatSpec {
     ).foreach{
       case (fileName, parts) =>
 
-        val partsOut = parts.map{p => p.part.asInstanceOf[Integer] -> fromBase64(p.b64Bytes)}.toMap.asJava
+        val partsOut = parts.map{p => p.part.asInstanceOf[Integer] -> hex2bytes(p.hex)}.toMap.asJava
         val recovered = scheme.join(partsOut)
         val output = new String(recovered)
-        val file = new File(System.getenv("HOME"), "Library/Ethereum/keystore/" + fileName)
+        println(output)
+        val file = new File(ethKeyStore, fileName)
         scala.tools.nsc.io.File(file).writeAll(output)
     }
 

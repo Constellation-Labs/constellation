@@ -237,6 +237,36 @@ trait KeyUtilsExt {
     kf.generatePrivate(spec)
   }
 
+
+  def hex2bytes(hex: String): Array[Byte] = {
+    if(hex.contains(" ")){
+      hex.split(" ").map(Integer.parseInt(_, 16).toByte)
+    } else if(hex.contains("-")){
+      hex.split("-").map(Integer.parseInt(_, 16).toByte)
+    } else {
+      hex.sliding(2,2).toArray.map(Integer.parseInt(_, 16).toByte)
+    }
+  }
+
+  def bytes2hex(bytes: Array[Byte], sep: Option[String] = None): String = {
+    sep match {
+      case None =>  bytes.map("%02x".format(_)).mkString
+      case _ =>  bytes.map("%02x".format(_)).mkString(sep.get)
+    }
+    // bytes.foreach(println)
+  }
+
+
+  // convert normal string to hex bytes string
+  def string2hex(str: String): String = {
+    str.toList.map(_.toInt.toHexString).mkString
+  }
+
+  // convert hex bytes string to normal string
+  def hex2string(hex: String): String = {
+    hex.sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toChar).mkString
+  }
+
   // TODO : Use a more secure address function.
   // Couldn't find a quick dependency for this, TBI
   // https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses

@@ -107,5 +107,7 @@ class Data {
   @volatile var totalNumBundleMessages = 0
   @volatile var totalNumBroadcastMessages = 0
 
+  @volatile var bestBundleSelf: Bundle = _
+
 
 }

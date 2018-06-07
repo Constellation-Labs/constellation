@@ -62,7 +62,7 @@ class PeerToPeer(
         downloadHeartbeat()
 
         val numAccepted = gossipHeartbeat()
-
+/*
         logger.debug(
           s"Heartbeat: ${id.short}, " +
             s"bundles: $totalNumBundleMessages, " +
@@ -77,6 +77,8 @@ class PeerToPeer(
               p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes
             }.mkString(",")}"
         )
+
+        */
       }
 
     // Peer messages
