@@ -89,7 +89,7 @@ object Cell {
     * @param sheaf
     * @return
     */
-  def lift(sheaf: Cell[Sheaf]): Cell[Sheaf] = meta(algebra)(coAlgebra)(sheaf)
+  def liftF(sheaf: Cell[Sheaf]): Cell[Sheaf] = meta(algebra)(coAlgebra)(sheaf)
 }
 
 /**

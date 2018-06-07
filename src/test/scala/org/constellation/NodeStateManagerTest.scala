@@ -9,4 +9,5 @@ import akka.stream.ActorMaterializer
 class NodeStateManagerTest {
   implicit val system: ActorSystem = ActorSystem("NodeStateManagerTest")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
+  
 }

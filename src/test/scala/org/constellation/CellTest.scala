@@ -22,13 +22,13 @@ class CellTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecLike w
 
   "Cell metamorphism" should "not recurse" in {
     val test = Sheaf(None, 0)
-    val res = Cell.lift(Bundle(test))
+    val res = Cell.liftF(Bundle(test))
     assert(res === Bundle(Sheaf(None, 0)))
   }
 
   "Cell metamorphism" should "recurse once" in {
     val test = Sheaf(None, 1)
-    val res = Cell.lift(Bundle(test))
+    val res = Cell.liftF(Bundle(test))
     assert(res === Bundle(Sheaf(None, 1)))
   }
 }
