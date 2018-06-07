@@ -71,20 +71,25 @@ object Cell {
     *
     * @param f
     * @param g
-    * @tparam F
     * @tparam A
     * @tparam B
     * @return
     */
-  def meta[F[_] : Functor, A, B](f: A => Cell[A])(g: Cell[B] => B): F[A] => F[B] = a => a map hylo(g)(f)
+  def meta[A, B](g: Cell[B] => B)(f: A => Cell[A]): Cell[A] => Cell[B] = a => a map hylo(g)(f)
 
   /**
     *
     * @param sheaf
     * @return
     */
-  def ioF(sheaf: Sheaf) = hylo(algebra)(coAlgebra).apply(sheaf)
+  def ioF(sheaf: Sheaf): Sheaf = hylo(algebra)(coAlgebra).apply(sheaf)
 
+  /**
+    *
+    * @param sheaf
+    * @return
+    */
+  def lift(sheaf: Cell[Sheaf]): Cell[Sheaf] = meta(algebra)(coAlgebra)(sheaf)
 }
 
 /**
