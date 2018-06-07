@@ -62,7 +62,8 @@ lazy val coreDependencies = Seq(
   "com.codahale" % "shamir" % "0.6.0" withSources() withJavadoc(),
   "org.json4s" %% "json4s-ext" % "3.5.2",
   "org.scalaj" %% "scalaj-http" % "2.3.0" withJavadoc() withSources(),
-  "org.typelevel" %% "cats-core" % "1.0.1"
+  "org.typelevel" %% "cats-core" % "1.0.1",
+  "com.typesafe.akka" %% "akka-stream" % "2.4.16"
 )
 
 //Test dependencies
@@ -71,7 +72,8 @@ lazy val testDependencies = Seq(
   "org.scalatest" %% "scalatest" % "3.0.1",
   "org.scalamock" %% "scalamock-scalatest-support" % "3.6.0",
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
-  "com.typesafe.akka" %% "akka-testkit" % versions.akka
+  "com.typesafe.akka" %% "akka-testkit" % versions.akka,
+  "com.typesafe.akka" %% "akka-stream-testkit" % "2.4.16"
 ).map(_ % "it,test" )
 
 

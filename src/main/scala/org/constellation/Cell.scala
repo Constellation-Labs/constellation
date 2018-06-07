@@ -114,7 +114,6 @@ case class Fiber[A](bundle: A, germ: Sheaf) extends Cell[A]
 case class Sheaf(data: Option[Int] = None, var depth: Int = -11) extends Monoid[Sheaf] {
   //TODO call the method that invokes minhash/combine 'section' https://arxiv.org/pdf/0907.0995.pdf
   def empty = Sheaf()
-
   def combine(x: Sheaf, y: Sheaf = this) = Sheaf(None, x.depth)
 }
 

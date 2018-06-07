@@ -1,33 +1,40 @@
-package org.constellation
-
-import java.security.KeyPair
-
-import akka.NotUsed
-import akka.actor.{ActorRef, ActorSystem}
-import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.Source
-import org.constellation.wallet.KeyUtils.makeKeyPair
-/**
-  * Created by Wyatt on 5/10/18.
-  */
-
-/**
-  * Idea is to provide buffering when accessing chain state and signing data.
-  * TODO use Source in p2p actor for buffering data from NodeStateManager if we want routing hapenning in p2p, it may come from validation.
-  * @param keyPair
-  * @param system
-  */
-class NodeStateManager(p2pActor: ActorRef, val keyPair: KeyPair = makeKeyPair(), system: ActorSystem,
-                       eventStream: Source[Int, NotUsed] = Source(1 to 100))(implicit val materializer: ActorMaterializer) {
-  /**
-    * 'embed' event into our local manifold by 'lifting' into cell functor.
-    * @param event
-    * @return
-    */
-  def embed(event: Int): Cell[Sheaf] = Bundle(Sheaf())
-
-  eventStream.runForeach { event =>
-    val embeddedEvent = embed(event)
-    p2pActor ! embeddedEvent
-  }(materializer)
-}
+//package org.constellation
+//
+//import java.security.KeyPair
+//
+//import akka.NotUsed
+//import akka.actor.Status.Success
+//import akka.actor.{ActorRef, ActorSystem}
+//import akka.stream.{ActorMaterializer, OverflowStrategy}
+//import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
+//import org.constellation.wallet.KeyUtils.makeKeyPair
+//import org.reactivestreams.Publisher
+//import org.reactivestreams.Subscriber
+//
+//import scala.concurrent.Future
+///**
+//  * Created by Wyatt on 5/10/18.
+//  */
+//
+///**
+//  * Equivalent to a ring buffer, provide buffering when accessing chain state and signing data.
+//  * @param keyPair
+//  * @param system
+//  */
+//class NodeStateManager(val keyPair: KeyPair = makeKeyPair(), system: ActorSystem,
+//                       router: ActorRef,
+//                       eventStream: Flow[Int, Sheaf, NotUsed]
+//                      )(implicit val materializer: ActorMaterializer) {
+//
+//  /**
+//    * Pipes messages sent to ActorRef into async buffer, will need mapAsync when returning futures (ask's to chain state manager)
+//    */
+// val buffer =  Source.actorRef[Int](100, OverflowStrategy.backpressure).map(embed).async.to(Sink.actorRef(router, Success)).run()
+//
+//  /**
+//    * 'embed' event into our local manifold by 'lifting' into cell functor.
+//    * @param event
+//    * @return
+//    */
+//  def embed(event: Int): Sheaf = Cell.ioF(Sheaf())
+//}
