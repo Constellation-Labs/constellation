@@ -2,7 +2,7 @@ package org.constellation.primitives
 
 import java.net.InetSocketAddress
 
-import org.constellation.p2p.PeerToPeer.Id
+import org.constellation.primitives.Schema.Id
 import org.constellation.util.ProductHash
 
 case class Block(parentHash: String,

@@ -3,8 +3,8 @@ package org.constellation.transaction
 import java.nio.ByteBuffer
 import java.security.PublicKey
 
-import org.constellation.wallet.KeyUtils
-import org.constellation.wallet.KeyUtils.{base64, bytesToPublicKey, fromBase64}
+import org.constellation.crypto.KeyUtils
+import org.constellation.crypto.KeyUtils._
 import org.json4s.native.Serialization
 
 object AtomicTransaction {
@@ -37,7 +37,7 @@ object AtomicTransaction {
       destinationAddress,
       base64(longToBytes(quantity))
     )
-    def sourceAddress: String = KeyUtils.publicKeyToAddressString(sourcePubKey)
+    def sourceAddress: String = publicKeyToAddressString(sourcePubKey)
 
   }
 

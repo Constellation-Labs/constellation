@@ -9,16 +9,16 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestActor, TestKit, TestProbe}
 import akka.util.Timeout
 import org.constellation.consensus.Consensus._
-import org.constellation.p2p.PeerToPeer.{GetPeers, Id, Peers}
 import org.constellation.p2p.{RegisterNextActor, UDPMessage, UDPSendToID}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.state.ChainStateManager.{AddBlock, CreateBlockProposal}
-import org.constellation.utils.TestNode
-import org.constellation.wallet.KeyUtils
+import org.constellation.util.TestNode
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.collection.immutable.{HashMap, Map}
 import org.constellation.Fixtures._
+import org.constellation.crypto.KeyUtils
+import org.constellation.primitives.Schema.GetPeersID
 import org.constellation.primitives.Schema._
 
 import scala.concurrent.duration._
@@ -63,12 +63,12 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val node3 = TestNode()
     val node4 = TestNode()
 
-    val tx1 = TX(TXData(Seq(keyPair.getPublic), node2.keyPair.getPublic, 33L).signed())
+    val tx1 = TX(TXData(Seq(keyPair.getPublic), node2.configKeyPair.getPublic, 33L).signed())
 
-    val tx2 = TX(TXData(Seq(node2.keyPair.getPublic), node4.keyPair.getPublic, 14L).signed()(keyPair = node2.keyPair))
+    val tx2 = TX(TXData(Seq(node2.configKeyPair.getPublic), node4.configKeyPair.getPublic, 14L).signed()(keyPair = node2.configKeyPair))
 
-    val facilitators = Set(Id(keyPair.getPublic), Id(node2.keyPair.getPublic),
-      Id(node3.keyPair.getPublic), Id(node4.keyPair.getPublic))
+    val facilitators = Set(Id(keyPair.getPublic), Id(node2.configKeyPair.getPublic),
+      Id(node3.configKeyPair.getPublic), Id(node4.configKeyPair.getPublic))
 
     val replyTo = TestProbe()
 
@@ -78,22 +78,22 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     consensusActor ! InitializeConsensusRound(facilitators, roundHash, replyTo.ref, ConflictVote(vote))
 
-    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), ConflictVote(vote)), Id(node2.keyPair.getPublic)))
+    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), ConflictVote(vote)), Id(node2.configKeyPair.getPublic)))
 
-    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), ConflictVote(vote)), Id(node3.keyPair.getPublic)))
+    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), ConflictVote(vote)), Id(node3.configKeyPair.getPublic)))
 
-    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), ConflictVote(vote)), Id(node4.keyPair.getPublic)))
+    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), ConflictVote(vote)), Id(node4.configKeyPair.getPublic)))
 
-    consensusActor ! ConsensusVote(Id(node2.keyPair.getPublic), ConflictVote(vote), roundHash)
+    consensusActor ! ConsensusVote(Id(node2.configKeyPair.getPublic), ConflictVote(vote), roundHash)
 
-    consensusActor ! ConsensusVote(Id(node3.keyPair.getPublic), ConflictVote(vote), roundHash)
+    consensusActor ! ConsensusVote(Id(node3.configKeyPair.getPublic), ConflictVote(vote), roundHash)
 
-    consensusActor ! ConsensusVote(Id(node4.keyPair.getPublic), ConflictVote(vote), roundHash)
+    consensusActor ! ConsensusVote(Id(node4.configKeyPair.getPublic), ConflictVote(vote), roundHash)
 
     // TODO: make more robust after update to bundles
     udpActor.expectMsgPF() {
       case UDPSendToID(message: ConsensusProposal[Conflict], id: Id) => {
-        assert(id == Id(node2.keyPair.getPublic))
+        assert(id == Id(node2.configKeyPair.getPublic))
        // assert(message.data == ConflictProposal(bundle))
         assert(message.roundHash == roundHash)
       }
@@ -101,7 +101,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     udpActor.expectMsgPF() {
       case UDPSendToID(message: ConsensusProposal[Conflict], id: Id) => {
-        assert(id == Id(node3.keyPair.getPublic))
+        assert(id == Id(node3.configKeyPair.getPublic))
        // assert(message.data == ConflictProposal(bundle))
         assert(message.roundHash == roundHash)
       }
@@ -109,17 +109,17 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     udpActor.expectMsgPF() {
       case UDPSendToID(message: ConsensusProposal[Conflict], id: Id) => {
-        assert(id == Id(node4.keyPair.getPublic))
+        assert(id == Id(node4.configKeyPair.getPublic))
       //  assert(message.data == ConflictProposal(bundle))
         assert(message.roundHash == roundHash)
       }
     }
 
-    consensusActor ! ConsensusProposal(Id(node2.keyPair.getPublic), ConflictProposal(bundle), roundHash)
+    consensusActor ! ConsensusProposal(Id(node2.configKeyPair.getPublic), ConflictProposal(bundle), roundHash)
 
-    consensusActor ! ConsensusProposal(Id(node3.keyPair.getPublic), ConflictProposal(bundle), roundHash)
+    consensusActor ! ConsensusProposal(Id(node3.configKeyPair.getPublic), ConflictProposal(bundle), roundHash)
 
-    consensusActor ! ConsensusProposal(Id(node4.keyPair.getPublic), ConflictProposal(bundle), roundHash)
+    consensusActor ! ConsensusProposal(Id(node4.configKeyPair.getPublic), ConflictProposal(bundle), roundHash)
 
     val consensusBundle = Bundle(BundleData(vote.vote.data.accept).signed())
 
@@ -139,12 +139,12 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val node3 = TestNode()
     val node4 = TestNode()
 
-    val tx1 = TX(TXData(Seq(keyPair.getPublic), node2.keyPair.getPublic, 33L).signed())
+    val tx1 = TX(TXData(Seq(keyPair.getPublic), node2.configKeyPair.getPublic, 33L).signed())
 
-    val tx2 = TX(TXData(Seq(node2.keyPair.getPublic), node4.keyPair.getPublic, 14L).signed()(keyPair = node2.keyPair))
+    val tx2 = TX(TXData(Seq(node2.configKeyPair.getPublic), node4.configKeyPair.getPublic, 14L).signed()(keyPair = node2.configKeyPair))
 
-    val facilitators = Set(Id(keyPair.getPublic), Id(node2.keyPair.getPublic),
-      Id(node3.keyPair.getPublic), Id(node4.keyPair.getPublic))
+    val facilitators = Set(Id(keyPair.getPublic), Id(node2.configKeyPair.getPublic),
+      Id(node3.configKeyPair.getPublic), Id(node4.configKeyPair.getPublic))
 
     val replyTo = TestProbe()
 
@@ -154,22 +154,22 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     consensusActor ! InitializeConsensusRound(facilitators, roundHash, replyTo.ref, CheckpointVote(bundle))
 
-    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), CheckpointVote(bundle)), Id(node2.keyPair.getPublic)))
+    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), CheckpointVote(bundle)), Id(node2.configKeyPair.getPublic)))
 
-    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), CheckpointVote(bundle)), Id(node3.keyPair.getPublic)))
+    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), CheckpointVote(bundle)), Id(node3.configKeyPair.getPublic)))
 
-    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), CheckpointVote(bundle)), Id(node4.keyPair.getPublic)))
+    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), CheckpointVote(bundle)), Id(node4.configKeyPair.getPublic)))
 
-    consensusActor ! ConsensusVote(Id(node2.keyPair.getPublic), CheckpointVote(bundle), roundHash)
+    consensusActor ! ConsensusVote(Id(node2.configKeyPair.getPublic), CheckpointVote(bundle), roundHash)
 
-    consensusActor ! ConsensusVote(Id(node3.keyPair.getPublic), CheckpointVote(bundle), roundHash)
+    consensusActor ! ConsensusVote(Id(node3.configKeyPair.getPublic), CheckpointVote(bundle), roundHash)
 
-    consensusActor ! ConsensusVote(Id(node4.keyPair.getPublic), CheckpointVote(bundle), roundHash)
+    consensusActor ! ConsensusVote(Id(node4.configKeyPair.getPublic), CheckpointVote(bundle), roundHash)
 
     // TODO: make more robust after update to bundles
     udpActor.expectMsgPF() {
       case UDPSendToID(message: ConsensusProposal[Checkpoint], id: Id) => {
-        assert(id == Id(node2.keyPair.getPublic))
+        assert(id == Id(node2.configKeyPair.getPublic))
         // assert(message.data == ConflictProposal(bundle))
         assert(message.roundHash == roundHash)
       }
@@ -177,7 +177,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     udpActor.expectMsgPF() {
       case UDPSendToID(message: ConsensusProposal[Checkpoint], id: Id) => {
-        assert(id == Id(node3.keyPair.getPublic))
+        assert(id == Id(node3.configKeyPair.getPublic))
         // assert(message.data == ConflictProposal(bundle))
         assert(message.roundHash == roundHash)
       }
@@ -185,17 +185,17 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     udpActor.expectMsgPF() {
       case UDPSendToID(message: ConsensusProposal[Checkpoint], id: Id) => {
-        assert(id == Id(node4.keyPair.getPublic))
+        assert(id == Id(node4.configKeyPair.getPublic))
         //  assert(message.data == ConflictProposal(bundle))
         assert(message.roundHash == roundHash)
       }
     }
 
-    consensusActor ! ConsensusProposal(Id(node2.keyPair.getPublic), CheckpointProposal(bundle), roundHash)
+    consensusActor ! ConsensusProposal(Id(node2.configKeyPair.getPublic), CheckpointProposal(bundle), roundHash)
 
-    consensusActor ! ConsensusProposal(Id(node3.keyPair.getPublic), CheckpointProposal(bundle), roundHash)
+    consensusActor ! ConsensusProposal(Id(node3.configKeyPair.getPublic), CheckpointProposal(bundle), roundHash)
 
-    consensusActor ! ConsensusProposal(Id(node4.keyPair.getPublic), CheckpointProposal(bundle), roundHash)
+    consensusActor ! ConsensusProposal(Id(node4.configKeyPair.getPublic), CheckpointProposal(bundle), roundHash)
 
     replyTo.expectMsgPF() {
       case ConsensusRoundResult(bundle: Bundle, roundHash: RoundHash[Checkpoint]) => {

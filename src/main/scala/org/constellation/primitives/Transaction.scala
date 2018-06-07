@@ -3,8 +3,8 @@ package org.constellation.primitives
 import java.security.{PrivateKey, PublicKey}
 
 import constellation._
+import org.constellation.crypto.KeyUtils
 import org.constellation.util.ProductHash
-import org.constellation.wallet.KeyUtils
 
 case class Transaction(
                         sequenceNum: Long,

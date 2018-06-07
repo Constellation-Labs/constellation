@@ -1,21 +1,16 @@
 package org.constellation.state
 
-import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
 import com.typesafe.scalalogging.Logger
 import org.constellation.LevelDB
-import org.constellation.p2p.PeerToPeer.Id
-import org.constellation.p2p.{UDPSendToID, UDPSendToIDByte}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.primitives.Chain.Chain
-import org.constellation.primitives.Schema.{GetUTXO, TX, ValidateTransaction}
+import org.constellation.primitives.Schema.Id
 import org.constellation.state.ChainStateManager._
 import org.constellation.state.MemPoolManager.RemoveConfirmedTransactions
 
 import scala.collection.immutable.HashMap
-import scala.collection.mutable
-import scala.util.{Failure, Try}
 
 object ChainStateManager {
 
@@ -63,7 +58,7 @@ object ChainStateManager {
 
 }
 
-class ChainStateManager(memPoolManagerActor: ActorRef, selfId: Id = null, db: LevelDB = null) extends Actor with ActorLogging {
+class ChainStateManager(memPoolManagerActor: ActorRef) extends Actor with ActorLogging {
 
   @volatile var chain: Chain = Chain()
   val logger = Logger(s"ChainStateManager")

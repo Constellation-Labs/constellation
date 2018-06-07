@@ -8,14 +8,14 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import scala.concurrent.ExecutionContextExecutor
 import constellation._
 import org.constellation.Fixtures
-import org.constellation.p2p.PeerToPeer.{Id, Peers}
+import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Chain.Chain
+import org.constellation.primitives.Schema.{Id, Peers}
 import org.constellation.primitives.Transaction
-import org.constellation.util.RPCClient
-import org.constellation.utils.TestNode
-import org.constellation.wallet.KeyUtils
+import org.constellation.util.APIClient
+import org.constellation.util.TestNode
 
-class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
+class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
   implicit val system: ActorSystem = ActorSystem("BlockChain")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
@@ -35,7 +35,7 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
   "GET to /blocks" should "get the current local node chain" in {
     val appNode = TestNode()
-    val rpc = new RPCClient(port=appNode.httpPort)
+    val rpc = new APIClient(port=appNode.httpPort)
 
     val response = rpc.get("blocks")
 
@@ -56,7 +56,7 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
     val node2 = TestNode(expectedPeers)
 
-    val rpc = new RPCClient(port=node2.httpPort)
+    val rpc = new APIClient(port=node2.httpPort)
 
     Thread.sleep(2000)
 
@@ -72,7 +72,7 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   "GET to /id" should "get the current nodes public key id" in {
     val keyPair = KeyUtils.makeKeyPair()
     val appNode = TestNode(Seq(), keyPair)
-    val rpc = new RPCClient(port=appNode.httpPort)
+    val rpc = new APIClient(port=appNode.httpPort)
 
     val response = rpc.get("id")
 
@@ -97,7 +97,7 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
   "POST to /transaction" should "send a transaction and receive it back" in {
     val appNode = TestNode()
-    val rpc = new RPCClient(port=appNode.httpPort)
+    val rpc = new APIClient(port=appNode.httpPort)
 
     val transaction = Fixtures.tx
     val response = rpc.post("transaction", transaction)
@@ -113,8 +113,8 @@ class RPCClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val node1Path = node1.udpAddressString
     val node2Path = node2.udpAddressString
 
-    val rpc1 = new RPCClient(port=node1.httpPort)
-    val rpc2 = new RPCClient(port=node2.httpPort)
+    val rpc1 = new APIClient(port=node1.httpPort)
+    val rpc2 = new APIClient(port=node2.httpPort)
 
     val addPeerResponse = rpc2.post("peer", node1Path)
 

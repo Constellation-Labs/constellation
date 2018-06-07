@@ -1,16 +1,46 @@
 package org.constellation.primitives
 
 
+import java.net.InetSocketAddress
 import java.security.PublicKey
 
-import akka.stream.scaladsl.Balance
+import constellation.pubKeyToAddress
+import org.constellation.crypto.Base58
+import org.constellation.util.EncodedPublicKey
 import org.constellation.util.{ProductHash, Signed}
-import org.json4s.native.Json
 
-import scala.collection.mutable
+import scala.collection.concurrent.TrieMap
 
 // This can't be a trait due to serialization issues
 object Schema {
+
+  case class TransactionQueryResponse(
+                                     hash: String,
+                                     tx: Option[TX],
+                                     observed: Boolean,
+                                     inMemPool: Boolean,
+                                     confirmed: Boolean,
+                                     numGossipChains: Int,
+                                     gossipStackDepths: Seq[Int],
+                                     gossip: Seq[Gossip[ProductHash]]
+                                     )
+
+  sealed trait NodeState
+  final case object PendingDownload extends NodeState
+  final case object Ready extends NodeState
+
+  sealed trait ValidationStatus
+
+  final case object Valid extends ValidationStatus
+  final case object MempoolValid extends ValidationStatus
+  final case object DoubleSpend extends ValidationStatus
+
+
+  sealed trait ConfigUpdate
+
+  final case class ReputationUpdates(updates: Seq[UpdateReputation]) extends ConfigUpdate
+
+  case class UpdateReputation(id: Id, secretReputation: Option[Double], publicReputation: Option[Double])
 
   // I.e. equivalent to number of sat per btc
   val NormalizationFactor: Long = 1e8.toLong
@@ -20,7 +50,8 @@ object Schema {
                             amount: Long,
                             account: Option[PublicKey] = None,
                             normalized: Boolean = true,
-                            oneTimeUse: Boolean = false
+                            oneTimeUse: Boolean = false,
+                            useNodeKey: Boolean = true
                           ) {
     def amountActual: Long = if (normalized) amount * NormalizationFactor else amount
   }
@@ -42,18 +73,18 @@ object Schema {
   case class CounterPartyTXRequest(
                                     dst: Address,
                                     counterParty: Address,
-                                    counterPartyAccount: Option[PublicKey]
+                                    counterPartyAccount: Option[EncodedPublicKey]
                                   ) extends ProductHash
 
-  sealed trait Event
+  sealed trait Fiber
 
   case class TXData(
                      src: Seq[Address],
                      dst: Address,
                      amount: Long,
                      remainder: Option[Address] = None,
-                     srcAccount: Option[PublicKey] = None,
-                     dstAccount: Option[PublicKey] = None,
+                     srcAccount: Option[EncodedPublicKey] = None,
+                     dstAccount: Option[EncodedPublicKey] = None,
                      counterPartySigningRequest: Option[Signed[CounterPartyTXRequest]] = None,
                      // ^ this is for extra security where a receiver can confirm a transaction without
                      // revealing it's address key -- requires receiver link dst to counterParty addresses.
@@ -66,26 +97,26 @@ object Schema {
     def inverseAmount: Long = -1*amount
   }
 
-  case class TX(tx: Signed[TXData]) extends ProductHash with Event {
+  case class TX(tx: Signed[TXData]) extends ProductHash with Fiber {
     def valid: Boolean = {
 
       // Last key is used for srcAccount when filled out.
       val addressKeys = if (tx.data.srcAccount.nonEmpty) {
-        tx.publicKeys.slice(0, tx.publicKeys.size - 1)
-      } else tx.publicKeys
+        tx.encodedPublicKeys.slice(0, tx.encodedPublicKeys.size - 1)
+      } else tx.encodedPublicKeys
 
       val km = tx.data.keyMap
       val signatureAddresses = if (km.nonEmpty) {
         val store = Array.fill(km.toSet.size)(Seq[PublicKey]())
         km.zipWithIndex.foreach{ case (keyGroupIdx, keyIdx) =>
-          store(keyGroupIdx) = store(keyGroupIdx) :+ addressKeys(keyIdx)
+          store(keyGroupIdx) = store(keyGroupIdx) :+ addressKeys(keyIdx).toPublicKey
         }
         store.map{constellation.pubKeysToAddress}.toSeq
       } else {
-        addressKeys.map{constellation.pubKeyToAddress}
+        addressKeys.map{_.toPublicKey}.map{constellation.pubKeyToAddress}
       }
 
-      val matchingAccountValid = tx.data.srcAccount.forall(_ == tx.publicKeys.last)
+      val matchingAccountValid = tx.data.srcAccount.forall(_ == tx.encodedPublicKeys.last)
 
       val validInputAddresses = signatureAddresses.map{_.address} == tx.data.src.map{_.address}
       validInputAddresses && tx.valid && matchingAccountValid
@@ -102,44 +133,52 @@ object Schema {
       s"${tx.data.remainder.map{_.address}.getOrElse("empty").slice(0, 5)} " +
       s"amount ${tx.data.amount}"
 
-    def utxoValid(utxo: mutable.HashMap[String, Long]): Boolean = {
-      val srcSum = tx.data.src.map{_.hash}.flatMap{utxo.get}.sum
-      srcSum >= tx.data.amount && valid
+    def ledgerValid(ledger: TrieMap[String, Long]): Boolean = {
+      if (tx.data.isGenesis) !ledger.contains(tx.data.dst.address) else {
+        val srcSum = tx.data.src.map {_.address}.flatMap {ledger.get}.sum
+        srcSum >= tx.data.amount && valid
+      }
     }
 
-    def updateUTXO(UTXO: mutable.HashMap[String, Long]): Unit = {
+    def updateLedger(ledger: TrieMap[String, Long]): Unit = {
       val txDat = tx.data
       if (txDat.isGenesis) {
         // UTXO(txDat.src.head.address) = txDat.inverseAmount
         // Move elsewhere ^ too complex.
-        UTXO(txDat.dst.address) = txDat.amount
+        ledger(txDat.dst.address) = txDat.amount
       } else {
 
-        val total = txDat.src.map{s => UTXO(s.address)}.sum
+        val total = txDat.src.flatMap{s => ledger.get(s.address)}.sum
         val remainder = total - txDat.amount
 
         // Empty src balance.
         txDat.src.foreach{
           s =>
-            UTXO(s.address) = 0L
+            ledger(s.address) = 0L
         }
 
-        val prevDstBalance = UTXO.getOrElse(txDat.dst.address, 0L)
-        UTXO(txDat.dst.address) = prevDstBalance + txDat.amount
+        val prevDstBalance = ledger.getOrElse(txDat.dst.address, 0L)
+        ledger(txDat.dst.address) = prevDstBalance + txDat.amount
 
         txDat.remainder.foreach{ r =>
-          val prv = UTXO.getOrElse(r.address, 0L)
-          UTXO(r.address) = prv + remainder
+          val prv = ledger.getOrElse(r.address, 0L)
+          ledger(r.address) = prv + remainder
         }
 
         // Repopulate head src with remainder if no remainder address specified
         if (txDat.remainder.isEmpty && remainder != 0) {
-          UTXO(txDat.src.head.address) = remainder
+          ledger(txDat.src.head.address) = remainder
         }
 
       }
     }
   }
+
+  sealed trait GossipMessage
+
+  final case class ConflictDetectedData(detectedOn: TX, conflicts: Seq[TX]) extends ProductHash
+
+  final case class ConflictDetected(conflict: Signed[ConflictDetectedData]) extends ProductHash with GossipMessage
 
   final case class VoteData(accept: Seq[TX], reject: Seq[TX]) extends ProductHash {
     // used to determine what voting round we are talking about
@@ -148,22 +187,56 @@ object Schema {
     }
   }
 
-  final case class Vote(vote: Signed[VoteData]) extends ProductHash with Event
+  final case class VoteCandidate(tx: TX, gossip: Seq[Gossip[ProductHash]])
+
+  final case class VoteDataSimpler(accept: Seq[VoteCandidate], reject: Seq[VoteCandidate]) extends ProductHash
+
+  final case class Vote(vote: Signed[VoteData]) extends ProductHash with Fiber
 
   // Participants are notarized via signatures.
   final case class BundleBlock(
                                 parentHash: String,
                                 height: Long,
                                 txHash: Seq[String]
-                              ) extends ProductHash with Event
+                              ) extends ProductHash with Fiber
 
-  final case class BundleHash(hash: String) extends Event
+  final case class BundleHash(hash: String) extends Fiber
 
-  final case class BundleData(bundles: Seq[Event]) extends ProductHash
+  final case class BundleData(bundles: Seq[Fiber]) extends ProductHash
+
+  final case class BestBundle(bundle: Option[Bundle], lastBestBundle: Bundle) extends GossipMessage
 
   final case class Bundle(
                            bundleData: Signed[BundleData]
-                         ) extends ProductHash with Event {
+                         ) extends ProductHash with Fiber with GossipMessage {
+
+
+    def extractTX: Set[TX] = {
+      def process(s: Signed[BundleData]): Set[TX] = {
+        val bd = s.data.bundles
+        val depths = bd.map {
+          case b2: Bundle =>
+            process(b2.bundleData)
+          case tx: TX => Set(tx)
+          case _ => Set[TX]()
+        }
+        depths.reduce(_ ++ _)
+      }
+      process(bundleData)
+    }
+
+    def extractIds: Set[Id] = {
+      def process(s: Signed[BundleData]): Set[Id] = {
+        val bd = s.data.bundles
+        val depths = bd.map {
+          case b2: Bundle =>
+            b2.bundleData.publicKeys.map{Id}.toSet ++ process(b2.bundleData)
+          case _ => Set[Id]()
+        }
+        depths.reduce(_ ++ _)
+      }
+      process(bundleData)
+    }
 
     def maxStackDepth: Int = {
       def process(s: Signed[BundleData]): Int = {
@@ -193,7 +266,10 @@ object Schema {
 
   }
 
-  case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash with Event {
+
+  final case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash
+    with Fiber
+    with GossipMessage {
     def iter: Seq[Signed[_ >: T <: ProductHash]] = {
       def process[Q <: ProductHash](s: Signed[Q]): Seq[Signed[ProductHash]] = {
         s.data match {
@@ -224,8 +300,68 @@ object Schema {
   final case object GetPeersID extends InternalCommand
   final case object GetPeersData extends InternalCommand
   final case object GetUTXO extends InternalCommand
+  final case object GetValidTX extends InternalCommand
+  final case object GetMemPoolUTXO extends InternalCommand
   final case object ToggleHeartbeat extends InternalCommand
+  final case object InternalHeartbeat extends InternalCommand
+  final case object InternalBundleHeartbeat extends InternalCommand
 
   final case class ValidateTransaction(tx: TX) extends InternalCommand
+
+  sealed trait DownloadMessage
+
+  case class DownloadRequest() extends DownloadMessage
+  case class DownloadResponse(validTX: Set[TX], validUTXO: Map[String, Long]) extends DownloadMessage
+
+  final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage
+
+  case class MissingTXProof(tx: TX, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage
+
+  final case class RequestTXProof(txHash: String) extends GossipMessage
+
+  case class Metrics(metrics: Map[String, String])
+
+  final case class AddPeerFromLocal(address: InetSocketAddress) extends InternalCommand
+
+
+  case class Peers(peers: Seq[InetSocketAddress])
+
+  case class Id(id: PublicKey) {
+    def short: String = id.toString.slice(15, 20)
+    def medium: String = id.toString.slice(15, 25).replaceAll(":", "")
+    def address: Address = pubKeyToAddress(id)
+    def b58 = Base58.encode(id.getEncoded)
+  }
+
+
+  case class GetId()
+
+  case class GetBalance(account: PublicKey)
+
+  case class HandShake(
+                        originPeer: Signed[Peer],
+                        requestExternalAddressCheck: Boolean = false
+                        //           peers: Seq[Signed[Peer]],
+                        //          destination: Option[InetSocketAddress] = None
+                      ) extends ProductHash
+
+  // These exist because type erasure messes up pattern matching on Signed[T] such that
+  // you need a wrapper case class like this
+  case class HandShakeMessage(handShake: Signed[HandShake])
+  case class HandShakeResponseMessage(handShakeResponse: Signed[HandShakeResponse])
+
+  case class HandShakeResponse(
+                                //                   original: Signed[HandShake],
+                                response: HandShake,
+                                detectedRemote: InetSocketAddress
+                              ) extends ProductHash
+
+  case class Peer(
+                   id: Id,
+                   externalAddress: InetSocketAddress,
+                   remotes: Set[InetSocketAddress] = Set(),
+                   apiAddress: InetSocketAddress = null
+                 ) extends ProductHash
+
 
 }
