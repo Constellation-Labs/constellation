@@ -14,15 +14,12 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
-import org.constellation.rpc.RPCInterface
-import org.constellation.wallet.KeyUtils
 import org.constellation.consensus.Consensus
-import org.constellation.consensus.Consensus.RegisterP2PActor
+import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.{PeerToPeer, RegisterNextActor, UDPActor}
-import org.constellation.p2p.PeerToPeer.{AddPeerFromLocal, Id}
-import org.constellation.primitives.Schema.ToggleHeartbeat
+import org.constellation.primitives.Schema.{AddPeerFromLocal, ToggleHeartbeat}
 import org.constellation.state.{ChainStateManager, MemPoolManager}
-import org.constellation.util.RPCClient
+import org.constellation.util.APIClient
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.Try
@@ -67,34 +64,28 @@ object ConstellationNode extends App {
 }
 
 class ConstellationNode(
-               val keyPair: KeyPair,
-               val seedPeers: Seq[InetSocketAddress],
-               val httpInterface: String,
-               val httpPort: Int,
-               val udpInterface: String = "0.0.0.0",
-               val udpPort: Int = 16180,
-               val hostName: String = "127.0.0.1",
-               timeoutSeconds: Int = 30,
-               heartbeatEnabled: Boolean = false,
-               requestExternalAddressCheck : Boolean = false
+                         val configKeyPair: KeyPair,
+                         val seedPeers: Seq[InetSocketAddress],
+                         val httpInterface: String,
+                         val httpPort: Int,
+                         val udpInterface: String = "0.0.0.0",
+                         val udpPort: Int = 16180,
+                         val hostName: String = "127.0.0.1",
+                         timeoutSeconds: Int = 30,
+                         heartbeatEnabled: Boolean = false,
+                         requestExternalAddressCheck : Boolean = false
              )(
                implicit val system: ActorSystem,
                implicit val materialize: ActorMaterializer,
                implicit val executionContext: ExecutionContextExecutor
              ){
 
-  val publicKeyHash: Int = keyPair.getPublic.hashCode()
-
-  val id : Id = Id(keyPair.getPublic)
+  val data = new Data()
+  data.updateKeyPair(configKeyPair)
+  import data._
 
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
-
-  val tmpDir = new File("tmp")
-  val tmpDirId = new File("tmp", id.medium)
-  Try{tmpDir.mkdirs()}
-  Try{tmpDirId.mkdirs()}
-  val db = new LevelDB(new File(tmpDirId, "db"))
 
  // logger.info(s"UDP Info - hostname: $hostName interface: $udpInterface port: $udpPort")
 
@@ -109,6 +100,8 @@ class ConstellationNode(
 
   val udpAddressString: String = hostName + ":" + udpPort
   val udpAddress = new InetSocketAddress(hostName, udpPort)
+  data.externalAddress = udpAddress
+  data.apiAddress = new InetSocketAddress(hostName, httpPort)
 
   val udpActor: ActorRef =
     system.actorOf(
@@ -119,23 +112,21 @@ class ConstellationNode(
     system.actorOf(Props(new MemPoolManager(db)), s"ConstellationMemPoolManagerActor_$publicKeyHash")
 
   val chainStateActor: ActorRef =
-    system.actorOf(Props(new ChainStateManager(memPoolManagerActor: ActorRef, id, db)), s"ConstellationChainStateActor_$publicKeyHash")
+    system.actorOf(Props(new ChainStateManager(memPoolManagerActor: ActorRef)), s"ConstellationChainStateActor_$publicKeyHash")
 
   val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(memPoolManagerActor, chainStateActor, keyPair, udpAddress, udpActor)(timeout)),
+    Props(new Consensus(configKeyPair, udpActor)(timeout)),
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val peerToPeerActor: ActorRef =
     system.actorOf(Props(new PeerToPeer(
-      keyPair.getPublic, system, consensusActor, udpActor, udpAddress, keyPair,
-      chainStateActor, memPoolManagerActor, requestExternalAddressCheck, heartbeatEnabled=heartbeatEnabled, db=db)
+      configKeyPair.getPublic, system, consensusActor, udpActor, data,
+      chainStateActor, memPoolManagerActor, requestExternalAddressCheck, heartbeatEnabled=heartbeatEnabled)
     (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
   private val register = RegisterNextActor(peerToPeerActor)
 
   udpActor ! register
-
-  consensusActor ! RegisterP2PActor(peerToPeerActor)
 
   // Seed peers
   if (seedPeers.nonEmpty) {
@@ -146,8 +137,8 @@ class ConstellationNode(
   }
 
   // If we are exposing rpc then create routes
-  val routes: Route = new RPCInterface(chainStateActor,
-    peerToPeerActor, memPoolManagerActor, consensusActor, udpAddress, keyPair, db=db)(executionContext, timeout).routes
+  val routes: Route = new API(chainStateActor,
+    peerToPeerActor, memPoolManagerActor, consensusActor, udpAddress, data)(executionContext, timeout).routes
 
   // Setup http server for rpc
   Http().bindAndHandle(routes, httpInterface, httpPort)
@@ -155,9 +146,9 @@ class ConstellationNode(
   // TODO : Move to separate test class - these are within jvm only but won't hurt anything
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
-  val rpc = new RPCClient(port=httpPort)
-  def healthy: Boolean = Try{rpc.getSync("health").status == StatusCodes.OK}.getOrElse(false)
-  def add(other: ConstellationNode): HttpResponse = rpc.postSync("peer", other.udpAddressString)
+  val api = new APIClient(port=httpPort)
+  def healthy: Boolean = Try{api.getSync("health").status == StatusCodes.OK}.getOrElse(false)
+  def add(other: ConstellationNode): HttpResponse = api.postSync("peer", other.udpAddressString)
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind

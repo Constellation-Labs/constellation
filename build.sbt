@@ -63,7 +63,11 @@ lazy val coreDependencies = Seq(
   "org.json4s" %% "json4s-ext" % "3.5.2",
   "org.scalaj" %% "scalaj-http" % "2.3.0" withJavadoc() withSources(),
   "org.typelevel" %% "cats-core" % "1.0.1",
-  "com.typesafe.akka" %% "akka-stream" % "2.4.16"
+  "com.typesafe.akka" %% "akka-stream" % "2.4.16",
+  "com.twitter" %% "chill" % "0.9.1",
+  "com.twitter" %% "algebird-core" % "0.13.4",
+  "net.glxn" % "qrgen" % "1.4"
+  // "com.esotericsoftware" % "kryo" % "4.0.2"
 )
 
 //Test dependencies

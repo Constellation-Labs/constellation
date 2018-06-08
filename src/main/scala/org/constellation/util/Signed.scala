@@ -3,6 +3,7 @@ package org.constellation.util
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import constellation._
+import org.constellation.crypto.Base58
 
 object POW extends POWExt
 
@@ -50,25 +51,33 @@ None = Unsigned
 Some = signed
  */
 
+case class EncodedPublicKey(b58Encoded: String) {
+  def toPublicKey: PublicKey = bytesToPublicKey(Base58.decode(b58Encoded))
+}
+
+// TODO: Move POW to separate class for rate liming.
 // Add flatten method? To allow merging of multiple signed datas -- need to preserve hashes by stack depth though.
 // i.e. two people signing one transaction is different from one person signing it, and then another signing
 // the signed transaction.
 // TODO: Extend to monad, i.e. SignedData extends SignableData vs UnsignedData
 case class Signed[T <: ProductHash](
-                                          data: T,
-                                          startTime: Long,
-                                          endTime: Long,
-                                          nonce: String,
-                                          difficulty: Int,
-                                          publicKeys: Seq[PublicKey],
-                                          signatures: Seq[String]
+                                     data: T,
+                                     time: Long,
+                                     //        startTime: Long,
+                                     //        endTime: Long,
+                                     //        nonce: String,
+                                     //        difficulty: Int,
+                                     encodedPublicKeys: Seq[EncodedPublicKey],
+                                     signatures: Seq[String]
                                         ) extends ProductHash {
-  def validSignatures: Boolean = signatures.zip(publicKeys).forall{ case (sig, pub) =>
-    verifySignature(data.signInput, fromBase64(sig))(pub) && signatures.nonEmpty && publicKeys.nonEmpty
+  def publicKeys: Seq[PublicKey] = encodedPublicKeys.map{_.toPublicKey}
+  def validSignatures: Boolean = signatures.zip(encodedPublicKeys).forall{ case (sig, pubEncoded) =>
+    val pub = pubEncoded.toPublicKey
+    verifySignature(data.signInput, fromBase64(sig))(pub) && signatures.nonEmpty && encodedPublicKeys.nonEmpty
   }
-  def validPOW: Boolean = POW.verifyPOW(data.powInput(signatures), nonce, Some(difficulty))
-  def valid: Boolean = validSignatures && validPOW && startTime > minimumTime &&
-    endTime > minimumTime
+ // def validPOW: Boolean = POW.verifyPOW(data.powInput(signatures), nonce, Some(difficulty))
+  def valid: Boolean = validSignatures && time > minimumTime
+  // && validPOW && startTime > minimumTime && endTime > minimumTime
 
 }
 
@@ -88,10 +97,10 @@ trait POWSignHelp {
                                    ): Signed[T] = {
     val startTime = System.currentTimeMillis()
     val signatures = t.signKeys(keyPairs.map{_.getPrivate})
-    val nonce = t.pow(signatures, difficulty)
-    val endTime = System.currentTimeMillis()
+  //  val nonce = t.pow(signatures, difficulty)
+  //  val endTime = System.currentTimeMillis()
     Signed(
-      t, startTime, endTime, nonce, difficulty, keyPairs.map{_.getPublic}, signatures
+      t, startTime, keyPairs.map{_.getPublic.encoded}, signatures
     )
   }
 

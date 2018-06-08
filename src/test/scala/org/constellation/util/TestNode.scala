@@ -1,4 +1,4 @@
-package org.constellation.utils
+package org.constellation.util
 
 import java.net.InetSocketAddress
 import java.security.KeyPair
@@ -6,7 +6,7 @@ import java.security.KeyPair
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import org.constellation.ConstellationNode
-import org.constellation.wallet.KeyUtils
+import org.constellation.crypto.KeyUtils
 
 import scala.concurrent.ExecutionContextExecutor
 

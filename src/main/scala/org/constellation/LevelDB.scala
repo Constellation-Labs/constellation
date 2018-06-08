@@ -9,12 +9,14 @@ import org.iq80.leveldb._
 import org.iq80.leveldb.impl.Iq80DBFactory._
 import constellation.SerExt
 import constellation.ParseExt
+import scala.tools.nsc.io.{File => SFile}
+
 // https://doc.akka.io/docs/akka/2.5/persistence-query-leveldb.html
 
 class LevelDB(val file: File) {
   val options = new Options()
   options.createIfMissing(true)
-  Try{file.mkdir}
+  Try{file.mkdirs}
   val db: DB = factory.open(file, options)
 
   def getSafe(s: String): Try[String] =
@@ -64,5 +66,10 @@ class LevelDB(val file: File) {
   }
 
   def close(): Unit = db.close()
+
+  def destroy(): Unit = {
+    close()
+    SFile(file).deleteRecursively()
+  }
 
 }

@@ -18,7 +18,7 @@ trait Cell[A]
 object Cell {
   implicit val cellFunctor: Functor[Cell] {def map[A, B](fa: Cell[A])(f: A => B): Cell[B]} = new Functor[Cell] {
     override def map[A, B](fa: Cell[A])(f: (A) => B): Cell[B] = fa match {
-      case Bundle(sheaf) => Bundle(sheaf)
+      case FiberBundle(sheaf) => FiberBundle(sheaf)
       case Fiber(a, next) => Fiber(f(a), next)
     }
   }
@@ -32,7 +32,7 @@ object Cell {
     * Teardown
     */
   val algebra: Cell[Sheaf] => Sheaf = {
-    case Bundle(result) => result
+    case FiberBundle(result) => result
     case Fiber(acc, next) => acc.combine(next)
   }
 
@@ -43,7 +43,7 @@ object Cell {
     * @tparam A
     * @return
     */
-  def bundle[A](result: Sheaf = Sheaf(None)): Cell[A] = Bundle(result)
+  def bundle[A](result: Sheaf = Sheaf(None)): Cell[A] = FiberBundle(result)
 
   /**
     * Constructor to improve type inference
@@ -98,7 +98,7 @@ object Cell {
   * and value. In the limit, higher dimensional manifolds have more memetic influence. Higher dimensional manifolds
   * are also very expensive, allowing us to prevent spam attacks like a proof of work step.
   */
-case class Bundle[A](fibers: Sheaf) extends Cell[A]
+case class FiberBundle[A](fibers: Sheaf) extends Cell[A]
 
 /**
   *

@@ -1,6 +1,7 @@
 package org.constellation.p2p
 
 import java.net.InetSocketAddress
+import java.security.{KeyPair, PrivateKey, PublicKey}
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorSystem, Props}
@@ -8,12 +9,20 @@ import akka.io.Udp
 import akka.serialization.SerializationExtension
 import akka.testkit.{ImplicitSender, TestKit}
 import akka.util.{ByteString, Timeout}
+import com.esotericsoftware.kryo.io.{Input, Output}
+import constellation.kryo
 import org.json4s.native.Serialization
 import org.scalatest._
 
 import scala.util.{Random, Try}
+import constellation._
+import org.constellation.primitives.Schema.{Id, Peer}
+import org.constellation.util.{ProductHash, Signed}
 
-case class TestMessage(a: String, b: Int)
+case class TestMessage(a: String, b: Int) extends ProductHash
+
+case class AnotherPublicKey(c: Id, seq: Seq[PublicKey])
+case class TestManyPublicKeys(a: PublicKey, b: Seq[PublicKey], d: AnotherPublicKey)
 
 class TestReceiveUDP extends Actor {
 
@@ -42,6 +51,9 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
+
+  // Initialize
+  kryo
 
   "UDP Test" should "send UDP packets and receive them properly" in {
 
@@ -73,48 +85,7 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 
   }
 
-  "UDP Serialize" should "work" in {
-
-    val data = TestMessage("a"*10000, 1)
-    val groupSize = 500
-
-    val serialization = SerializationExtension(system)
-    val serializer = serialization.findSerializerFor(data)
-    val bytes = serializer.toBinary(data)
-    val idx = bytes.grouped(groupSize).zipWithIndex.toSeq
-    val packetGroups = scala.collection.mutable.HashMap[Long, Seq[SerializedUDPMessage]]()
-
-    val pg = Random.nextLong()
-    val msgs = idx.map { case (b, i) =>
-      SerializedUDPMessage(b, serializer.identifier,
-        packetGroup = Some(pg), packetGroupSize = Some(idx.length), packetGroupId = Some(i))
-    }
-    var deser: Any = null
-
-    msgs.foreach{
-      serMsg =>
-        val pg = serMsg.packetGroup.get
-        packetGroups.get(pg) match {
-          case Some(messages) =>
-            if (messages.length + 1 == serMsg.packetGroupSize.get) {
-              // Done
-              val dat = {messages ++ Seq(serMsg)}.sortBy(_.packetGroupId.get).flatMap{_.data}.toArray
-              deser = serialization.deserialize(dat, serMsg.serializer, Some(classOf[Any])).get
-              packetGroups.remove(pg)
-            } else {
-              packetGroups(pg) = messages ++ Seq(serMsg)
-            }
-          case None =>
-            packetGroups(pg) = Seq(serMsg)
-        }
-    }
-
-    assert(deser == data)
-
-
-  }
-
-  "UDP Serialize" should "work with regular methods" in {
+/*  "UDP Serialize" should "work with regular methods" in {
 
     val data = TestMessage("a"*10000, 1)
 
@@ -122,7 +93,6 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
     val msgs = data.udpSerializeGrouped()
     var deser: Any = null
     val packetGroups = scala.collection.mutable.HashMap[Long, Seq[SerializedUDPMessage]]()
-    val serialization = SerializationExtension(system)
 
     msgs.foreach{
       serMsg =>
@@ -132,7 +102,9 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
             if (messages.length + 1 == serMsg.packetGroupSize.get) {
               // Done
               val dat = {messages ++ Seq(serMsg)}.sortBy(_.packetGroupId.get).flatMap{_.data}.toArray
-              deser = serialization.deserialize(dat, serMsg.serializer, Some(classOf[Any])).get
+           //   deser = serialization.deserialize(dat, serMsg.serializer, Some(classOf[Any])).get
+              val kryoInput = new Input(dat)
+              deser = kryo.readClassAndObject(kryoInput)
               packetGroups.remove(pg)
             } else {
               packetGroups(pg) = messages ++ Seq(serMsg)
@@ -144,8 +116,9 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 
     assert(deser == data)
 
-
   }
+
+  */
 
   "UDP Bulk" should "send UDP packets in groups and decode properly" in {
 
@@ -164,6 +137,7 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 
     ser.foreach { d =>
       listener1 ! UDPSend(ByteString(d.json),  new InetSocketAddress("localhost", rPort1))
+    //  listener1 ! UDPSend(ByteString(d.kryoWrite),  new InetSocketAddress("localhost", rPort1))
     }
 
     Thread.sleep(1000)
@@ -207,6 +181,70 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
     addr.toString shouldEqual "localhost/127.0.0.1:5000"
 */
   }
+
+  "Kryo serialize" should "work with keys" in {
+
+    val kp = makeKeyPair()
+    val prv = kp.getPrivate
+    val stuff = prv.kryoWrite
+    val pub = kp.getPublic
+    val pubWrite = pub.kryoWrite
+    assert(pubWrite.kryoRead.asInstanceOf[PublicKey] == pub)
+   // assert(stuff.kryoRead.asInstanceOf[PrivateKey] == prv)
+
+  }
+
+
+  "Kryo serialize large class" should "work with keys" in {
+
+    val kp = makeKeyPair()
+
+    val pub = kp.getPublic
+
+    val peer = Peer(Id(pub), new InetSocketAddress("localhost", 16180))
+
+    val peerBytes = peer.kryoWrite
+    val peerRead = peerBytes.kryoRead.asInstanceOf[Peer]
+    assert(peerRead == peer)
+
+    import org.constellation.Fixtures._
+    val tm = TestManyPublicKeys(publicKey, Seq(publicKey1, publicKey2), AnotherPublicKey(Id(publicKey3), Seq(publicKey4)))
+    val tm2 = tm.kryoWrite.kryoRead.asInstanceOf[TestManyPublicKeys]
+    assert(tm == tm2)
+
+  }
+
+  "Kryo serialize signed" should "work with signing data" in {
+
+    val kp = makeKeyPair()
+
+    val pub = kp.getPublic
+    // val peer = Peer(Id(pub), new InetSocketAddress("localhost", 16180))
+    val tm = TestMessage("a", 1)
+    val hm = tm.signed()(kp)
+    val hm2 = hm.kryoWrite.kryoRead.asInstanceOf[Signed[TestMessage]]
+    assert(hm2 == hm)
+
+  }
+
+/*
+  // TODO: GET THIS TO WORK PROPERLY
+  "Kryo serialize signed2" should "work with signing data" in {
+
+    val kp = makeKeyPair()
+
+    val pub = kp.getPublic
+    val peer = Peer(Id(pub), new InetSocketAddress("localhost", 16180))
+    val hm = peer.signed()(kp)
+    val written = hm.kryoWrite
+    val readin = written.kryoRead
+    val asin = readin.asInstanceOf[Signed[Peer]]
+    val hm2 = asin
+
+    assert(hm2 == hm)
+
+  }
+*/
 
 
 
