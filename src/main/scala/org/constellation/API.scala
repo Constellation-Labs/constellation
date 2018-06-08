@@ -89,7 +89,6 @@ class API(
         }
       } ~
         path("metrics") {
-
           complete(Metrics(Map(
             "address" -> selfAddress.address,
             "balance" -> (selfIdBalance.getOrElse(0L) / Schema.NormalizationFactor).toString,
@@ -106,7 +105,12 @@ class API(
             }.mkString(" --- "),
             "last10TXHash" -> sentTX.reverse.slice(0, 10).map{_.hash}.mkString(","),
             "z_peers" -> peers.map{_.data}.json,
-            "z_UTXO" -> validLedger.toMap.json
+            "z_UTXO" -> validLedger.toMap.json,
+            "z_Bundles" -> bundles.sorted.map{
+              b =>
+                s"tx:${b.extractTX.size}, ${b.}"
+
+            }.mkString("\n")
           )))
         } ~
         path("validTX") {

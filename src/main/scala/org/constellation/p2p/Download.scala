@@ -25,6 +25,7 @@ trait Download extends PeerAuth {
         z =>
           genesisTXHash = z.hash
       }
+      genesisBundle = d.genesisBundle
       d.validUTXO.foreach{ case (k,v) =>
         validLedger(k) = v
         memPoolLedger(k) = v
@@ -35,7 +36,7 @@ trait Download extends PeerAuth {
   }
 
   def handleDownloadRequest(d: DownloadRequest, remote: InetSocketAddress): Unit = {
-    val downloadResponse = DownloadResponse(validTX, validLedger.toMap)
+    val downloadResponse = DownloadResponse(validTX, validLedger.toMap, genesisBundle)
     udpActor.udpSend(downloadResponse, remote)
   }
 

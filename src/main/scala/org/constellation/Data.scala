@@ -126,4 +126,6 @@ class Data {
     //   s"new mempool size: ${memPoolTX.size} valid: ${validTX.size} isGenesis: ${tx.tx.data.isGenesis}")
   }
 
+  var genesisBundle : Bundle = _
+
 }

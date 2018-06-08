@@ -8,6 +8,7 @@ import org.constellation.util.ProductHash
 import constellation._
 
 import scala.collection.concurrent.TrieMap
+import scala.util.Random
 
 trait ProbabilisticGossip extends PeerAuth {
 
@@ -111,6 +112,7 @@ trait ProbabilisticGossip extends PeerAuth {
     if (tx.tx.data.isGenesis) {
       genesisTXHash = tx.hash
       acceptTransaction(tx)
+      genesisBundle = Bundle(BundleData(Seq(BundleHash(genesisTXHash), tx)).signed())
       // We started genesis
       downloadMode = false
     }
@@ -216,7 +218,9 @@ trait ProbabilisticGossip extends PeerAuth {
 
   //  val searchLeft = bundles.slice(0, 10)
   //  val searchRight = bundles.slice(10, bundles.length)
-  def findCommonSubBundles(): Unit = {
+
+
+  def findCommonSubBundles() = {
 
     val results = bundles.combinations(2).toSeq.flatMap{
       case Seq(l,r) =>
@@ -231,7 +235,7 @@ trait ProbabilisticGossip extends PeerAuth {
 
     val debug = results.map{case (x,y) => (x.short, x.extractTX.size, y)}.toSeq.sortBy{_._2}.reverse.slice(0, 10)
     println(s"bundle common ${id.short} : ${results.size} $debug")
-
+    results
   }
 
   def handleBundle(bundle: Bundle): Unit = {
@@ -240,28 +244,42 @@ trait ProbabilisticGossip extends PeerAuth {
     val txs = bundle.extractTX
     val ids = bundle.extractIds
 
+    val commonSubBundles = findCommonSubBundles()
+
+    if (bundles.length > 30) {
+      if (Random.nextDouble() < 0.4) {
+        val remove = Random.shuffle(bundles.filter{ b => !commonSubBundles.contains(b)}).slice(0, 10)
+        bundles = bundles.filterNot(remove.contains)
+        if (commonSubBundles.size > 1) {
+          commonSubBundles.toSeq.sortBy(_._2)
+        }
+      }
+    }
+
     val valid = txs.forall(t => t.ledgerValid(validLedger) && t.valid && t.ledgerValid(memPoolLedger))
     val newTX = txs.exists{t => !memPoolTX.contains(t)}
     if (valid) {
       txs.foreach(updateMempool)
       var newTXs = txs
-      val filtered = bundles.filter{ bi =>
+      val filtered = (bundles ++ commonSubBundles.keys).filter{ bi =>
         val theseTX = bi.extractTX
         val timeValid = bi.bundleData.time > (bundle.bundleData.time - 25000)
-        val res = timeValid && theseTX.exists(!newTXs.contains(_))
+        val res = theseTX.exists(!newTXs.contains(_)) && timeValid
         if (res) newTXs ++= theseTX
         res
       }
       val fIds = filtered.flatMap{_.extractIds}.toSet ++ ids
       val emitter = filtered :+ bundle
+      if (!bundles.contains(bundle))
       bundles :+= bundle
       if (newTX) {
         val b = Bundle(BundleData(emitter).signed())
-        bundles :+= b
-        broadcast(b, skipIDs = fIds.toSeq)
+        if (!bundles.contains(b)) {
+          bundles :+= b
+          broadcast(b, skipIDs = fIds.toSeq)
+        }
       }
       // bundles = bundles.sorted
-      findCommonSubBundles()
     }
   }
 

@@ -33,6 +33,7 @@ object Schema {
 
   final case object Valid extends ValidationStatus
   final case object MempoolValid extends ValidationStatus
+  final case object Unknown extends ValidationStatus
   final case object DoubleSpend extends ValidationStatus
 
 
@@ -51,7 +52,8 @@ object Schema {
                             account: Option[PublicKey] = None,
                             normalized: Boolean = true,
                             oneTimeUse: Boolean = false,
-                            useNodeKey: Boolean = true
+                            useNodeKey: Boolean = true,
+                            doGossip: Boolean = true
                           ) {
     def amountActual: Long = if (normalized) amount * NormalizationFactor else amount
   }
@@ -327,7 +329,7 @@ object Schema {
   sealed trait DownloadMessage
 
   case class DownloadRequest() extends DownloadMessage
-  case class DownloadResponse(validTX: Set[TX], validUTXO: Map[String, Long]) extends DownloadMessage
+  case class DownloadResponse(validTX: Set[TX], validUTXO: Map[String, Long], genesisBundle: Bundle) extends DownloadMessage
 
   final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage
 

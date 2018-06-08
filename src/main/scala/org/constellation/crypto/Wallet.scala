@@ -67,8 +67,9 @@ trait Wallet {
 
       //   logger.info(s"SendToAddress RPC Transaction: ${tx.pretty}")
 
-      peerToPeerActor ! tx
-
+      if (s.doGossip) {
+        peerToPeerActor ! tx
+      }
       complete(transactionData(tx.hash).prettyJson)
 
     } else {
