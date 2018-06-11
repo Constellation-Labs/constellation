@@ -86,10 +86,6 @@ class TXTest extends FlatSpec {
     assert(b.maxStackDepth == 1)
     assert(bbb.maxStackDepth == 3)
     assert(bbb.totalNumEvents == 8)
-
-
-
-
   }
 
 }
