@@ -50,23 +50,34 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val numCoinsInitial = 4e9.toLong
     val genTx = r1.getBlocking[TX]("genesis/" + numCoinsInitial)
     Thread.sleep(1000)
-
 /*
+>>>>>>> master
     val results = nodes.flatMap{ node =>
       val others = nodes.filter{_ != node}
       others.map{
         n =>
           Future {
+<<<<<<< HEAD
+            node.add(n)
+=======
             node.api.postSync("peer", n.udpAddressString)
+>>>>>>> master
           }
       }
     }
 
+<<<<<<< HEAD
+    Thread.sleep(8000)
+
+    for (node <- nodes) {
+      val peers = node.rpc.getBlocking[Seq[Peer]]("peerids")
+=======
     import scala.concurrent.duration._
     Await.result(Future.sequence(results), 30.seconds)
 
     for (node <- nodes) {
       val peers = node.api.getBlocking[Seq[Peer]]("peerids")
+>>>>>>> master
       assert(peers.length == (nodes.length - 1))
       val others = nodes.filter{_ != node}
       val havePublic = Random.nextDouble() > 0.5
@@ -119,6 +130,9 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     val txs = txResponseFut.get(100).toSet
 
+<<<<<<< HEAD
+
+=======
     val allTX = Set(genTx) ++ initialDistrTX.toSet ++ txs
 
     var done = false
@@ -149,6 +163,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
   //  Thread.sleep(3000000)
 
 /*
+>>>>>>> master
     for (node <- nodes) {
       val lkup = node.rpc.postRead[Option[TX]]("db", tx.hash)
       assert(lkup.get == tx)
@@ -213,6 +228,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
    // println(n2UTXO)
 
 */
+
 
 
     // println(b3)

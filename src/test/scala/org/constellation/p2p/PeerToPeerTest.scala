@@ -7,9 +7,8 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import akka.util.Timeout
-import org.constellation.Fixtures
+import org.constellation.{Fixtures, Sheaf}
 import org.constellation.crypto.KeyUtils
-import org.constellation.p2p.PeerToPeer._
 import org.scalatest._
 
 import scala.util.Random
@@ -46,6 +45,11 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
 
   }
 
+  "A PeerToPeer actor " should " start with an empty set of peers" in new WithPeerToPeerActor {
+    //TODO is this file fucked?
+//    peerToPeerActor ! Sheaf()
+//    consensusActor.expectMsg(Sheaf)
+  }
 /*  "A PeerToPeer actor " should " start with an empty set of peers" in new WithPeerToPeerActor {
       peerToPeerActor ! GetPeers
       expectMsg(Peers(Nil))

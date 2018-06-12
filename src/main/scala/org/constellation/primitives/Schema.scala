@@ -15,14 +15,14 @@ import scala.collection.concurrent.TrieMap
 object Schema {
 
   case class TransactionQueryResponse(
-                                     hash: String,
-                                     tx: Option[TX],
-                                     observed: Boolean,
-                                     inMemPool: Boolean,
-                                     confirmed: Boolean,
-                                     numGossipChains: Int,
-                                     gossipStackDepths: Seq[Int],
-                                     gossip: Seq[Gossip[ProductHash]]
+                                       hash: String,
+                                       tx: Option[TX],
+                                       observed: Boolean,
+                                       inMemPool: Boolean,
+                                       confirmed: Boolean,
+                                       numGossipChains: Int,
+                                       gossipStackDepths: Seq[Int],
+                                       gossip: Seq[Gossip[ProductHash]]
                                      )
 
   sealed trait NodeState
