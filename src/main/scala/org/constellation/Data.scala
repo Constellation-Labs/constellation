@@ -68,6 +68,8 @@ class Data {
 
   @volatile var downloadMode: Boolean = true
 
+  @volatile var checkpointInProgress: Boolean = false
+
   @volatile var nodeState: NodeState = PendingDownload
 
   // @volatile var downloadResponses = Seq[DownloadResponse]()
@@ -75,11 +77,9 @@ class Data {
   @volatile var publicReputation: Map[Id, Double] = Map()
   @volatile var deterministicReputation: Map[Id, Double] = Map()
 
-
   @volatile var bundles: Set[Bundle] = Set[Bundle]()
   @volatile var bundleBuffer: Set[Bundle] = Set[Bundle]()
   val bestBundles: TrieMap[Id, Bundle] = TrieMap()
-
 
   @volatile var externalAddress: InetSocketAddress = _
   @volatile var apiAddress: InetSocketAddress = _
@@ -108,6 +108,5 @@ class Data {
   @volatile var totalNumBroadcastMessages = 0
 
   @volatile var bestBundleSelf: Bundle = _
-
 
 }

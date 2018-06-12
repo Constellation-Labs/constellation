@@ -35,7 +35,6 @@ object Schema {
   final case object MempoolValid extends ValidationStatus
   final case object DoubleSpend extends ValidationStatus
 
-
   sealed trait ConfigUpdate
 
   final case class ReputationUpdates(updates: Seq[UpdateReputation]) extends ConfigUpdate
@@ -323,7 +322,6 @@ object Schema {
 
   final case class AddPeerFromLocal(address: InetSocketAddress) extends InternalCommand
 
-
   case class Peers(peers: Seq[InetSocketAddress])
 
   case class Id(id: PublicKey) {
@@ -332,7 +330,6 @@ object Schema {
     def address: Address = pubKeyToAddress(id)
     def b58 = Base58.encode(id.getEncoded)
   }
-
 
   case class GetId()
 

@@ -70,13 +70,18 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val facilitators = Set(Id(keyPair.getPublic), Id(node2.configKeyPair.getPublic),
       Id(node3.configKeyPair.getPublic), Id(node4.configKeyPair.getPublic))
 
-    val replyTo = TestProbe()
 
     val vote = Vote(VoteData(Seq(tx1), Seq(tx2)).signed()(keyPair = keyPair))
     val roundHash: RoundHash[Conflict] = RoundHash[Conflict](vote.vote.data.voteRoundHash)
     val bundle = Bundle(BundleData(vote.vote.data.accept).signed()(keyPair = keyPair))
 
-    consensusActor ! InitializeConsensusRound(facilitators, roundHash, replyTo.ref, ConflictVote(vote))
+    val callback = (result: ConsensusRoundResult[_ <: CC]) => {
+      assert(result.bundle.bundleData.data.bundles == bundle.bundleData.data.bundles)
+      assert(result.roundHash == roundHash)
+      ()
+    }
+
+    consensusActor ! InitializeConsensusRound(facilitators, roundHash, callback, ConflictVote(vote))
 
     udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), ConflictVote(vote)), Id(node2.configKeyPair.getPublic)))
 
@@ -123,13 +128,6 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     val consensusBundle = Bundle(BundleData(vote.vote.data.accept).signed())
 
-    replyTo.expectMsgPF() {
-      case ConsensusRoundResult(bundle: Bundle, roundHash: RoundHash[Conflict]) => {
-        assert(bundle.bundleData.data.bundles == bundle.bundleData.data.bundles)
-        assert(roundHash == roundHash)
-      }
-    }
-
   }
 
   "the PerformConsensusRound" should "initialize and complete correctly in the CHECKPOINT scenario" in new WithConsensusActor {
@@ -146,13 +144,17 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val facilitators = Set(Id(keyPair.getPublic), Id(node2.configKeyPair.getPublic),
       Id(node3.configKeyPair.getPublic), Id(node4.configKeyPair.getPublic))
 
-    val replyTo = TestProbe()
-
     val vote = Vote(VoteData(Seq(tx1), Seq(tx2)).signed()(keyPair = keyPair))
     val roundHash: RoundHash[Checkpoint] = RoundHash[Checkpoint](vote.vote.data.voteRoundHash)
     val bundle = Bundle(BundleData(vote.vote.data.accept).signed()(keyPair = keyPair))
 
-    consensusActor ! InitializeConsensusRound(facilitators, roundHash, replyTo.ref, CheckpointVote(bundle))
+    val callback = (result: ConsensusRoundResult[_ <: CC]) => {
+      assert(result.bundle.bundleData.data.bundles == bundle.bundleData.data.bundles)
+      assert(result.roundHash == roundHash)
+      ()
+    }
+
+    consensusActor ! InitializeConsensusRound(facilitators, roundHash, callback, CheckpointVote(bundle))
 
     udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), CheckpointVote(bundle)), Id(node2.configKeyPair.getPublic)))
 
@@ -196,13 +198,6 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     consensusActor ! ConsensusProposal(Id(node3.configKeyPair.getPublic), CheckpointProposal(bundle), roundHash)
 
     consensusActor ! ConsensusProposal(Id(node4.configKeyPair.getPublic), CheckpointProposal(bundle), roundHash)
-
-    replyTo.expectMsgPF() {
-      case ConsensusRoundResult(bundle: Bundle, roundHash: RoundHash[Checkpoint]) => {
-        assert(bundle.bundleData.data.bundles == bundle.bundleData.data.bundles)
-        assert(roundHash == roundHash)
-      }
-    }
 
   }
 

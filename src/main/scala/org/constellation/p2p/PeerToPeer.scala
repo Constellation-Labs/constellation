@@ -14,9 +14,9 @@ import org.constellation.util.Heartbeat
 import scala.concurrent.ExecutionContextExecutor
 
 class PeerToPeer(
-                  publicKey: PublicKey,
+                  val publicKey: PublicKey,
                   system: ActorSystem,
-                  consensusActor: ActorRef,
+                  val consensusActor: ActorRef,
                   val udpActor: ActorRef,
                   val data: Data = null,
                   chainStateActor : ActorRef = null,
@@ -29,6 +29,7 @@ class PeerToPeer(
   with PeerAuth
   with Heartbeat
   with ProbabilisticGossip
+  with Checkpoint
   with Download {
 
   import data._
@@ -60,6 +61,8 @@ class PeerToPeer(
       processHeartbeat {
 
         downloadHeartbeat()
+
+        checkpointHeartbeat()
 
         val numAccepted = gossipHeartbeat()
 /*

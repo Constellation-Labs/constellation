@@ -28,7 +28,6 @@ trait PeerAuth {
   implicit val executionContext: ExecutionContextExecutor
   implicit val actorSystem: ActorSystem
 
-
   def broadcast[T <: AnyRef](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
     val dest = if (idSubset.isEmpty) peerIDLookup.keys else idSubset
     dest.foreach{ i =>
