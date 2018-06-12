@@ -15,7 +15,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 import com.google.common.hash.Hashing
 import com.twitter.chill.{IKryoRegistrar, KryoBase, ScalaKryoInstantiator}
 import org.constellation.p2p._
-import org.constellation.primitives.Schema.{Address, Id}
+import org.constellation.primitives.Schema.{Address, Bundle, Id}
 import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
 import org.constellation.crypto.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
 import org.constellation.crypto.KeyUtilsExt
@@ -293,6 +293,11 @@ package object constellation extends KeyUtilsExt with POWExt
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
     def query[T: ClassTag](m: Any): T = (a ? m).mapTo[T].get()
   }
+
+  implicit def orderingByBundle[A <: Bundle]: Ordering[A] =
+    Ordering.by(e =>
+      (e.extractTX.size, e.extractIds.size, e.totalNumEvents, e.maxStackDepth, e.hash)
+    )
 
 
 }
