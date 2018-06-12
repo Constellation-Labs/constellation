@@ -237,48 +237,97 @@ trait ProbabilisticGossip extends PeerAuth {
     results
   }
 
-  def handleBundle(bundle: Bundle): Unit = {
-
+  def processNewBundleMetadata(bundle: Bundle, idsAbove: Set[Id] = Set()): Unit = {
     totalNumBundleMessages += 1
-    val txs = bundle.extractTX
-    val ids = bundle.extractIds
 
-    val commonSubBundles = findCommonSubBundles()
+    // Never before seen bundle
+    if (!bundleHashToBundle.contains(bundle.hash)) {
 
-    if (bundles.length > 30) {
-      if (Random.nextDouble() < 0.4) {
-        val remove = Random.shuffle(bundles.filter{ b => !commonSubBundles.contains(b)}).slice(0, 10)
-        bundles = bundles.filterNot(remove.contains)
-        if (commonSubBundles.size > 1) {
-          commonSubBundles.toSeq.sortBy(_._2)
-        }
+      bundleHashToIdsAbove(bundle.hash) = idsAbove)
+
+      val txs = bundle.extractTX
+      val ids = bundle.extractIds
+
+      bundleHashToIdsBelow(bundle.hash) = ids
+      bundleHashToTXBelow(bundle.hash) = txs.map{_.hash}
+
+      bundleHashToFirstRXTime(bundle.hash) = System.currentTimeMillis()
+      bundleHashToBundle(bundle.hash) = bundle
+      val sb = bundle.extractSubBundles
+      val sbh = sb.map {_.hash}
+      bundleHashToBundleHashesBelow(bundle.hash) = sbh
+      sb.foreach{s => processNewBundleMetadata(s, idsAbove ++ Set(bundle.bundleData.id))}
+      sbh.foreach{ s =>
+        bundleHashToBundleHashesAbove(s) += bundle.hash
       }
     }
 
-    val valid = txs.forall(t => t.ledgerValid(validLedger) && t.valid && t.ledgerValid(memPoolLedger))
-    val newTX = txs.exists{t => !memPoolTX.contains(t)}
+  }
+
+  def validateTransactionBatch(txs: Set[TX], ledger: TrieMap[String, Long]) = {
+
+    // val tempLedger =
+
+    txs.toSeq.map{ tx =>
+      val bal = tx.srcLedgerBalance(ledger)
+      tx.tx.data.src.head.address
+
+    }
+  }
+
+  def handleBundle(bundle: Bundle): Unit = {
+
+    val txs = bundle.extractTX
+
+    val valid = txs.forall(t => t.ledgerValid(validLedger) && t.ledgerValid(memPoolLedger))
+
     if (valid) {
       txs.foreach(updateMempool)
-      var newTXs = txs
-      val filtered = (bundles ++ commonSubBundles.keys).filter{ bi =>
-        val theseTX = bi.extractTX
-        val timeValid = bi.bundleData.time > (bundle.bundleData.time - 25000)
-        val res = theseTX.exists(!newTXs.contains(_)) && timeValid
-        if (res) newTXs ++= theseTX
-        res
-      }
-      val fIds = filtered.flatMap{_.extractIds}.toSet ++ ids
-      val emitter = filtered :+ bundle
-      if (!bundles.contains(bundle))
-      bundles :+= bundle
-      if (newTX) {
-        val b = Bundle(BundleData(emitter).signed())
-        if (!bundles.contains(b)) {
-          bundles :+= b
-          broadcast(b, skipIDs = fIds.toSeq)
+      processNewBundleMetadata(bundle)
+    }
+
+    val ids = bundle.extractIds
+
+    if (!ids.contains(id)) {
+
+      val commonSubBundles = findCommonSubBundles()
+
+      if (bundles.length > 30) {
+        if (Random.nextDouble() < 0.4) {
+          val remove = Random.shuffle(bundles.filter { b => !commonSubBundles.contains(b) }).slice(0, 10)
+          bundles = bundles.filterNot(remove.contains)
+          if (commonSubBundles.size > 1) {
+            commonSubBundles.toSeq.sortBy(_._2)
+          }
         }
       }
-      // bundles = bundles.sorted
+
+      val newTX = txs.exists { t => !memPoolTX.contains(t) }
+      if (valid) {
+        txs.foreach(updateMempool)
+        var newTXs = txs
+        val filtered = (bundles ++ commonSubBundles.keys).filter { bi =>
+          val theseTX = bi.extractTX
+          val timeValid = bi.bundleData.time > (bundle.bundleData.time - 25000)
+          val res = theseTX.exists(!newTXs.contains(_)) && timeValid
+          if (res) newTXs ++= theseTX
+          res
+        }
+        val fIds = filtered.flatMap {
+          _.extractIds
+        }.toSet ++ ids
+        val emitter = filtered :+ bundle
+        if (!bundles.contains(bundle))
+          bundles :+= bundle
+        if (newTX) {
+          val b = Bundle(BundleData(emitter).signed())
+          if (!bundles.contains(b)) {
+            bundles :+= b
+            broadcast(b, skipIDs = fIds.toSeq)
+          }
+        }
+        // bundles = bundles.sorted
+      }
     }
   }
 

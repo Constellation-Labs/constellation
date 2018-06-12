@@ -4,6 +4,7 @@ import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import constellation._
 import org.constellation.crypto.Base58
+import org.constellation.primitives.Schema.Id
 
 object POW extends POWExt
 
@@ -71,6 +72,7 @@ case class Signed[T <: ProductHash](
                                      signatures: Seq[String]
                                         ) extends ProductHash {
   def publicKeys: Seq[PublicKey] = encodedPublicKeys.map{_.toPublicKey}
+  def id: Id = Id(publicKeys.head)
   def validSignatures: Boolean = signatures.zip(encodedPublicKeys).forall{ case (sig, pubEncoded) =>
     val pub = pubEncoded.toPublicKey
     verifySignature(data.signInput, fromBase64(sig))(pub) && signatures.nonEmpty && encodedPublicKeys.nonEmpty

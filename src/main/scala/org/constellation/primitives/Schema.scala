@@ -135,9 +135,13 @@ object Schema {
       s"${tx.data.remainder.map{_.address}.getOrElse("empty").slice(0, 5)} " +
       s"amount ${tx.data.amount}"
 
+    def srcLedgerBalance(ledger: TrieMap[String, Long]): Long = {
+      tx.data.src.map {_.address}.flatMap {ledger.get}.sum
+    }
+
     def ledgerValid(ledger: TrieMap[String, Long]): Boolean = {
       if (tx.data.isGenesis) !ledger.contains(tx.data.dst.address) else {
-        val srcSum = tx.data.src.map {_.address}.flatMap {ledger.get}.sum
+        val srcSum = srcLedgerBalance(ledger)
         srcSum >= tx.data.amount && valid
       }
     }

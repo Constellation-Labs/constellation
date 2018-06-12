@@ -131,4 +131,22 @@ class Data {
 
   @volatile var rootBundleHashes: Seq[String] = Seq()
 
+  val bundleHashToIdsAbove: TrieMap[String, Set[Id]] = TrieMap()
+
+  val bundleHashToBundleHashesAbove : TrieMap[String, Set[String]] = TrieMap()
+
+  val bundleHashToBundleHashesBelow : TrieMap[String, Set[String]] = TrieMap()
+
+  // val bundlesByStackDepth: TrieMap[Int, Set[String]] = TrieMap()
+
+  val bundleHashToBundle: TrieMap[String, Bundle] = TrieMap()
+
+  val bundleHashToFirstRXTime: TrieMap[String, Long] = TrieMap()
+
+  val bundleHashToIdsBelow: TrieMap[String, Set[Id]] = TrieMap()
+
+  val bundleHashToTXBelow: TrieMap[String, Set[String]] = TrieMap()
+
+
+
 }
