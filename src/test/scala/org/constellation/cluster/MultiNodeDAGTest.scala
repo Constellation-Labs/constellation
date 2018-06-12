@@ -114,7 +114,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     }
 
 
-    val numTX = 1
+    val numTX = 1000
 
     val start = System.currentTimeMillis()
 

@@ -126,7 +126,10 @@ trait ProbabilisticGossip extends PeerAuth {
 
     if (!tx.tx.data.isGenesis) {
       // val unspokenTX = memPoolTX
-      val b = Bundle(BundleData(Seq(tx)).signed())
+      val b = Bundle(BundleData(Seq(
+        tx,
+        BundleHash(rootBundleHashes.lastOption.getOrElse(genesisTXHash))
+        )).signed())
       bundles :+= b
       broadcast(b)
     }

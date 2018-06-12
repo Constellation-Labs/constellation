@@ -109,6 +109,7 @@ class Data {
 
   @volatile var bestBundleSelf: Bundle = _
 
+
   def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
     validTX += tx
     memPoolTX -= tx
@@ -127,5 +128,7 @@ class Data {
   }
 
   var genesisBundle : Bundle = _
+
+  @volatile var rootBundleHashes: Seq[String] = Seq()
 
 }
