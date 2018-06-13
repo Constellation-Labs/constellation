@@ -135,6 +135,14 @@ object Schema {
       s"${tx.data.remainder.map{_.address}.getOrElse("empty").slice(0, 5)} " +
       s"amount ${tx.data.amount}"
 
+    def srcLedgerBalanceAll(ledger: TrieMap[String, Long]): Seq[Long] = {
+      tx.data.src.map{_.address}.map{a => ledger.getOrElse(a, 0L)}
+    }
+
+    def srcLedgerBalanceAllAccount(ledger: TrieMap[String, Long]): Seq[(String, Long)] = {
+      tx.data.src.map{_.address}.map{a => a -> ledger.getOrElse(a, 0L)}
+    }
+
     def srcLedgerBalance(ledger: TrieMap[String, Long]): Long = {
       tx.data.src.map {_.address}.flatMap {ledger.get}.sum
     }
@@ -215,6 +223,33 @@ object Schema {
   final case class Bundle(
                            bundleData: Signed[BundleData]
                          ) extends ProductHash with Fiber with GossipMessage {
+
+
+    def extractBundleHash: BundleHash = {
+      def process(s: Signed[BundleData]): BundleHash = {
+        val bd = s.data.bundles
+        val depths = bd.collectFirst{
+          case b2: Bundle =>
+            process(b2.bundleData)
+          case bh: BundleHash => bh
+        }.get
+        depths
+      }
+      process(bundleData)
+    }
+
+    def extractBundleHashId: (BundleHash, Id) = {
+      def process(s: Signed[BundleData]): (BundleHash, Id) = {
+        val bd = s.data.bundles
+        val depths = bd.collectFirst{
+          case b2: Bundle =>
+            process(b2.bundleData)
+          case bh: BundleHash => bh -> s.id
+        }.get
+        depths
+      }
+      process(bundleData)
+    }
 
     def extractSubBundlesMinSize(minSize: Int = 2) = {
       extractSubBundles.filter{_.maxStackDepth >= minSize}
@@ -333,7 +368,11 @@ object Schema {
   sealed trait DownloadMessage
 
   case class DownloadRequest() extends DownloadMessage
-  case class DownloadResponse(validTX: Set[TX], validUTXO: Map[String, Long], genesisBundle: Bundle) extends DownloadMessage
+  case class DownloadResponse(
+                               genesisBundle: Bundle,
+                               validBundles: Seq[Bundle],
+                               ledger: Map[String, Long]
+                             ) extends DownloadMessage
 
   final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage
 

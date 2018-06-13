@@ -294,10 +294,12 @@ package object constellation extends KeyUtilsExt with POWExt
     def query[T: ClassTag](m: Any): T = (a ? m).mapTo[T].get()
   }
 
+/*
   implicit def orderingByBundle[A <: Bundle]: Ordering[A] =
     Ordering.by(e =>
       (e.extractTX.size, e.extractIds.size, e.totalNumEvents, e.maxStackDepth, e.hash)
     )
 
+*/
 
 }

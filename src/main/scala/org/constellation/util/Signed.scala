@@ -4,7 +4,7 @@ import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import constellation._
 import org.constellation.crypto.Base58
-import org.constellation.primitives.Schema.Id
+import org.constellation.primitives.Schema.{BundleHash, Id}
 
 object POW extends POWExt
 
@@ -38,6 +38,7 @@ trait ProductHash extends Product {
 
   def signInput: Array[Byte] = hash.getBytes()
   def hash: String = productSeq.json.sha256
+  def bundleHash = BundleHash(hash)
   def short: String = hash.slice(0, 5)
   def signKeys(privateKeys: Seq[PrivateKey]): Seq[String] = privateKeys.map { pk => base64(signData(signInput)(pk)) }
   def powInput(signatures: Seq[String]): String = (productSeq ++ signatures).json

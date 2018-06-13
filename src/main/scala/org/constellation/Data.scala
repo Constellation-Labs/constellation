@@ -76,11 +76,6 @@ class Data {
   @volatile var deterministicReputation: Map[Id, Double] = Map()
 
 
-  @volatile var bundles: Seq[Bundle] = Seq[Bundle]()
-  @volatile var bundleBuffer: Set[Bundle] = Set[Bundle]()
-  val bestBundles: TrieMap[Id, BestBundle] = TrieMap()
-
-
   @volatile var externalAddress: InetSocketAddress = _
   @volatile var apiAddress: InetSocketAddress = _
   // @volatile private var peers: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
@@ -99,24 +94,63 @@ class Data {
 
   def peers: Seq[Signed[Peer]] = peerLookup.values.toSeq.distinct
 
-  var genesisTXHash: String = _
+  def createGenesis(tx: TX): Unit = {
+    if (tx.tx.data.isGenesis) {
+      genesisBundle = Bundle(BundleData(Seq(BundleHash(tx.hash), tx)).signed())
+      validBundles = Seq(genesisBundle)
+    }
+  }
 
-  var lastSuperBundleHash: String = _
+  @volatile var bundles: Seq[Bundle] = Seq[Bundle]()
+  @volatile var bundleBuffer: Set[Bundle] = Set[Bundle]()
+  val bestBundles: TrieMap[Id, BestBundle] = TrieMap()
+
+  var genesisBundle : Bundle = _
+  def genesisTXHash: String = genesisBundle.extractTX.head.hash
+  @volatile var validBundles : Seq[Bundle] = _
+  def lastBundleHash = BundleHash(validBundles.lastOption.map{_.hash}.getOrElse(genesisBundle.hash))
+  @volatile var bestBundleBase: Bundle = _
+  @volatile var bestBundleCandidateHashes: Set[BundleHash] = Set()
+
+
+  def processNewBundleMetadata(bundle: Bundle, idsAbove: Set[Id] = Set()): Boolean = {
+    totalNumBundleMessages += 1
+
+    // Never before seen bundle
+    val notPresent = !bundleHashToBundle.contains(bundle.hash)
+    if (notPresent) {
+
+      bundles :+= bundle
+      bundleHashToBundle(bundle.hash) = bundle
+      bundleHashToIdsAbove(bundle.hash) = idsAbove
+
+      val txs = bundle.extractTX
+      val ids = bundle.extractIds
+
+      bundleHashToIdsBelow(bundle.hash) = ids
+      bundleHashToTXBelow(bundle.hash) = txs.map{_.hash}
+      bundleHashToFirstRXTime(bundle.hash) = System.currentTimeMillis()
+
+      val sb = bundle.extractSubBundles
+      val sbh = sb.map {_.hash}
+      bundleHashToBundleHashesBelow(bundle.hash) = sbh
+      sb.foreach{s => processNewBundleMetadata(s, idsAbove ++ Set(bundle.bundleData.id))}
+      sbh.foreach{ s =>
+        bundleHashToBundleHashesAbove(s) += bundle.hash
+      }
+    }
+    notPresent
+  }
 
   @volatile var totalNumGossipMessages = 0
   @volatile var totalNumBundleMessages = 0
   @volatile var totalNumBroadcastMessages = 0
 
-  @volatile var bestBundleSelf: Bundle = _
 
 
   def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
     validTX += tx
     memPoolTX -= tx
-    /*    if (updatePending) {
-          tx.updateUTXO(validSyncPendingUTXO)
-        }*/
-    validSyncPendingTX -= tx
     tx.updateLedger(validLedger)
     if (tx.tx.data.isGenesis) {
       tx.updateLedger(memPoolLedger)
@@ -127,9 +161,6 @@ class Data {
     //   s"new mempool size: ${memPoolTX.size} valid: ${validTX.size} isGenesis: ${tx.tx.data.isGenesis}")
   }
 
-  var genesisBundle : Bundle = _
-
-  @volatile var rootBundleHashes: Seq[String] = Seq()
 
   val bundleHashToIdsAbove: TrieMap[String, Set[Id]] = TrieMap()
 
@@ -146,6 +177,8 @@ class Data {
   val bundleHashToIdsBelow: TrieMap[String, Set[Id]] = TrieMap()
 
   val bundleHashToTXBelow: TrieMap[String, Set[String]] = TrieMap()
+
+  val bundleHashToDepth: TrieMap[String, Int] = TrieMap()
 
 
 

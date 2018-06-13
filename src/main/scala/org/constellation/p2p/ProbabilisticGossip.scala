@@ -110,9 +110,8 @@ trait ProbabilisticGossip extends PeerAuth {
 
     // TODO: Fix this
     if (tx.tx.data.isGenesis) {
-      genesisTXHash = tx.hash
+      createGenesis(tx)
       acceptTransaction(tx)
-      genesisBundle = Bundle(BundleData(Seq(BundleHash(genesisTXHash), tx)).signed())
       // We started genesis
       downloadMode = false
     }
@@ -128,8 +127,8 @@ trait ProbabilisticGossip extends PeerAuth {
       // val unspokenTX = memPoolTX
       val b = Bundle(BundleData(Seq(
         tx,
-        BundleHash(rootBundleHashes.lastOption.getOrElse(genesisTXHash))
-        )).signed())
+        lastBundleHash
+      )).signed())
       bundles :+= b
       broadcast(b)
     }
@@ -237,97 +236,125 @@ trait ProbabilisticGossip extends PeerAuth {
     results
   }
 
-  def processNewBundleMetadata(bundle: Bundle, idsAbove: Set[Id] = Set()): Unit = {
-    totalNumBundleMessages += 1
-
-    // Never before seen bundle
-    if (!bundleHashToBundle.contains(bundle.hash)) {
-
-      bundleHashToIdsAbove(bundle.hash) = idsAbove)
-
-      val txs = bundle.extractTX
-      val ids = bundle.extractIds
-
-      bundleHashToIdsBelow(bundle.hash) = ids
-      bundleHashToTXBelow(bundle.hash) = txs.map{_.hash}
-
-      bundleHashToFirstRXTime(bundle.hash) = System.currentTimeMillis()
-      bundleHashToBundle(bundle.hash) = bundle
-      val sb = bundle.extractSubBundles
-      val sbh = sb.map {_.hash}
-      bundleHashToBundleHashesBelow(bundle.hash) = sbh
-      sb.foreach{s => processNewBundleMetadata(s, idsAbove ++ Set(bundle.bundleData.id))}
-      sbh.foreach{ s =>
-        bundleHashToBundleHashesAbove(s) += bundle.hash
-      }
+  def validateTransactionBatch(txs: Set[TX], ledger: TrieMap[String, Long]): Boolean = {
+    txs.toSeq.map{ tx =>
+      tx.tx.data.src.head.address -> tx.tx.data.amount
+    }.groupBy(_._1).forall{
+      case (a, seq) =>
+        val bal = ledger.getOrElse(a, 0L)
+        bal >= seq.map{_._2}.sum
     }
-
   }
 
-  def validateTransactionBatch(txs: Set[TX], ledger: TrieMap[String, Long]) = {
+  def jaccard[T](t1: Set[T], t2: Set[T]): Double = {
+    t1.intersect(t2).size.toDouble / t1.union(t2).size.toDouble
+  }
 
-    // val tempLedger =
-
-    txs.toSeq.map{ tx =>
-      val bal = tx.srcLedgerBalance(ledger)
-      tx.tx.data.src.head.address
-
+  implicit class BundleExtData(b: Bundle) {
+    def txBelow = bundleHashToTXBelow(b.hash)
+    def idBelow = bundleHashToIdsBelow(b.hash)
+    def idAbove = bundleHashToIdsAbove(b.hash)
+    def bundleScore: Int = {
+      txBelow.size + (idBelow.size * 5) + idAbove.size
     }
+    def pretty: String = s"nodeId: ${id.short} hash: ${b.short} numTX: ${txBelow.size}, numId: ${idBelow.size}, " +
+      s"numIdAbove ${idAbove.size}, score: $bundleScore"
+  }
+
+
+
+  case class BundleComparison(b1: Bundle, b2: Bundle) {
+    def txJaccard: Double = jaccard(bundleHashToTXBelow(b1.hash), bundleHashToTXBelow(b2.hash))
+    def idJaccard: Double = jaccard(bundleHashToIdsBelow(b1.hash), bundleHashToIdsBelow(b2.hash))
+    def idAboveJaccard: Double = jaccard(bundleHashToIdsAbove(b1.hash), bundleHashToIdsAbove(b2.hash))
+  }
+
+  def squashBundle(b: Bundle): Unit = {
+    logger.debug(s"Squashing bundle - ${b.pretty}")
+    val squashed = Bundle(BundleData(Seq(b.bundleHash)).signed())
+    bestBundleBase = b
+    bestBundleCandidateHashes += b.bundleHash
+    broadcast(squashed)
   }
 
   def handleBundle(bundle: Bundle): Unit = {
 
     val txs = bundle.extractTX
 
-    val valid = txs.forall(t => t.ledgerValid(validLedger) && t.ledgerValid(memPoolLedger))
+    // Also need to verify there are not multiple occurrences of same id re-signing bundle, and reps.
+    val valid = validateTransactionBatch(txs, memPoolLedger) && validateTransactionBatch(txs, validLedger)
+    val hasCorrectBaseHash = bundle.extractBundleHash == lastBundleHash
+    val hasNewTransactions = txs.exists{ t => !memPoolTX.contains(t)}
 
     if (valid) {
-      txs.foreach(updateMempool)
-      processNewBundleMetadata(bundle)
-    }
 
-    val ids = bundle.extractIds
+      val neverSeen = processNewBundleMetadata(bundle)
 
-    if (!ids.contains(id)) {
-
-      val commonSubBundles = findCommonSubBundles()
-
-      if (bundles.length > 30) {
-        if (Random.nextDouble() < 0.4) {
-          val remove = Random.shuffle(bundles.filter { b => !commonSubBundles.contains(b) }).slice(0, 10)
-          bundles = bundles.filterNot(remove.contains)
-          if (commonSubBundles.size > 1) {
-            commonSubBundles.toSeq.sortBy(_._2)
-          }
-        }
+      if (!hasCorrectBaseHash) {
+        bestBundleCandidateHashes += bundle.extractBundleHash
       }
 
-      val newTX = txs.exists { t => !memPoolTX.contains(t) }
-      if (valid) {
+      if (neverSeen) {
+
         txs.foreach(updateMempool)
-        var newTXs = txs
-        val filtered = (bundles ++ commonSubBundles.keys).filter { bi =>
-          val theseTX = bi.extractTX
-          val timeValid = bi.bundleData.time > (bundle.bundleData.time - 25000)
-          val res = theseTX.exists(!newTXs.contains(_)) && timeValid
-          if (res) newTXs ++= theseTX
-          res
+        val ids = bundle.extractIds
+
+        // This bundle doesn't contain an observation from us, (apart from any squashed in a BundleHash)
+        // Hence we should process it.
+
+        if (
+          lastBundleHash == genesisBundle.bundleHash && // This is the first bundle creation attempt after genesis
+            genesisBundle.extractIds.head == id && // This node created the genesis bundle
+            txs.size > 2 && ids.size > 2 // Bundle is sufficient to package
+        ) {
+          squashBundle(bundle)
+          validBundles :+= bundle
         }
-        val fIds = filtered.flatMap {
-          _.extractIds
-        }.toSet ++ ids
-        val emitter = filtered :+ bundle
-        if (!bundles.contains(bundle))
-          bundles :+= bundle
-        if (newTX) {
-          val b = Bundle(BundleData(emitter).signed())
-          if (!bundles.contains(b)) {
-            bundles :+= b
-            broadcast(b, skipIDs = fIds.toSeq)
+
+        if (!ids.contains(id)) {
+
+          bundles = bundles.sortBy { b => -1 * b.bundleScore }
+
+
+          // Find similar bundles to merge this with to span the maximal set of ids of similar stack depth.
+
+          val commonSubBundles = findCommonSubBundles()
+
+          if (bundles.length > 30) {
+            if (Random.nextDouble() < 0.4) {
+              val remove = Random.shuffle(bundles.filter { b => !commonSubBundles.contains(b) }).slice(0, 10)
+              bundles = bundles.filterNot(remove.contains)
+              if (commonSubBundles.size > 1) {
+                commonSubBundles.toSeq.sortBy(_._2)
+              }
+            }
           }
+
+          var newTXs = txs
+          val filtered = (bundles ++ commonSubBundles.keys).filter { bi =>
+            val theseTX = bi.extractTX
+            val timeValid = bi.bundleData.time > (bundle.bundleData.time - 25000)
+            val res = theseTX.exists(!newTXs.contains(_)) && timeValid
+            if (res) newTXs ++= theseTX
+            res
+          }
+          val fIds = filtered.flatMap {
+            _.extractIds
+          }.toSet ++ ids
+          val emitter = filtered :+ bundle
+          if (!bundles.contains(bundle))
+            bundles :+= bundle
+          if (hasNewTransactions) {
+            val b = Bundle(BundleData(emitter).signed())
+            if (!bundles.contains(b)) {
+              bundles :+= b
+              broadcast(b, skipIDs = fIds.toSeq)
+            }
+          }
+          // bundles = bundles.sorted
         }
-        // bundles = bundles.sorted
       }
+
     }
   }
 
