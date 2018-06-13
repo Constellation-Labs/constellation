@@ -80,6 +80,8 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       })
     }
 
+    Thread.sleep(10000)
+
 
     val initialDistrTX = nodes.tail.map{ n =>
       val dst = n.data.selfAddress
@@ -87,6 +89,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       r1.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
     }
 
+/*
 
     nodes.foreach{
       n =>
@@ -94,6 +97,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
           n.api.postSync("setTXValid", t)
         }
     }
+*/
 
     Thread.sleep(5000)
 
@@ -113,7 +117,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       }(ec)
     }
 
-
+/*
     val numTX = 1000
 
     val start = System.currentTimeMillis()
@@ -124,6 +128,8 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     }
 
     val txResponseFut = Future.sequence(txResponse)
+    */
+
 /*
 
     val txs = txResponseFut.get(100).toSet

@@ -105,13 +105,13 @@ class API(
             }.mkString(" --- "),
             "last10TXHash" -> sentTX.reverse.slice(0, 10).map{_.hash}.mkString(","),
             "z_peers" -> peers.map{_.data}.json,
-            "z_UTXO" -> validLedger.toMap.json,
+            "z_UTXO" -> validLedger.toMap.json/*,
             "z_Bundles" -> bundles.sorted.map{
               b =>
                 s"id: ${b.short} tx: ${b.extractTX.size}, depth: ${b.maxStackDepth}, events: ${b.totalNumEvents}, " +
                   s" subBundleSize: ${b.extractSubBundlesMinSize().size}"
 
-            }.mkString("\n\n")
+            }.mkString("\n\n")*/
           )))
         } ~
         path("validTX") {
