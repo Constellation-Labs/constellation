@@ -29,6 +29,8 @@ trait Download extends PeerAuth {
           validLedger(k) = v
           memPoolLedger(k) = v
       }
+
+      validTX ++= validBundles.flatMap(_.extractTX).toSet
       downloadMode = false
       logger.debug("Downloaded data")
     }

@@ -83,9 +83,13 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     Thread.sleep(10000)
 
 
+    println("-"*10)
+    println("Initial distribution")
+    println("-"*10)
+
     val initialDistrTX = nodes.tail.map{ n =>
       val dst = n.data.selfAddress
-      val s = SendToAddress(dst, 1e7.toLong, doGossip=false)
+      val s = SendToAddress(dst, 1e7.toLong)
       r1.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
     }
 

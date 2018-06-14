@@ -97,6 +97,7 @@ class Data {
   def createGenesis(tx: TX): Unit = {
     if (tx.tx.data.isGenesis) {
       genesisBundle = Bundle(BundleData(Seq(BundleHash(tx.hash), tx)).signed())
+      processNewBundleMetadata(genesisBundle)
       validBundles = Seq(genesisBundle)
     }
   }
@@ -107,8 +108,8 @@ class Data {
 
   var genesisBundle : Bundle = _
   def genesisTXHash: String = genesisBundle.extractTX.head.hash
-  @volatile var validBundles : Seq[Bundle] = _
-  def lastBundleHash = BundleHash(validBundles.lastOption.map{_.hash}.getOrElse(genesisBundle.hash))
+  @volatile var validBundles : Seq[Bundle] = Seq()
+  def lastBundleHash = BundleHash(validBundles.lastOption.map{_.hash}.getOrElse(Option(genesisBundle).map{_.hash}.getOrElse("")))
   @volatile var bestBundleBase: Bundle = _
   @volatile var bestBundleCandidateHashes: Set[BundleHash] = Set()
 
@@ -136,7 +137,8 @@ class Data {
       bundleHashToBundleHashesBelow(bundle.hash) = sbh
       sb.foreach{s => processNewBundleMetadata(s, idsAbove ++ Set(bundle.bundleData.id))}
       sbh.foreach{ s =>
-        bundleHashToBundleHashesAbove(s) += bundle.hash
+        if (bundleHashToBundleHashesAbove.contains(s)) bundleHashToBundleHashesAbove(s) += bundle.hash
+        else bundleHashToBundleHashesAbove(s) = Set(bundle.hash)
       }
     }
     notPresent
@@ -145,8 +147,6 @@ class Data {
   @volatile var totalNumGossipMessages = 0
   @volatile var totalNumBundleMessages = 0
   @volatile var totalNumBroadcastMessages = 0
-
-
 
   def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
     validTX += tx

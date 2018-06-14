@@ -103,7 +103,14 @@ class API(
               val addr = s"http://${z.data.apiAddress.getHostName}:${z.data.apiAddress.getPort}"
               s"${z.data.id.short} API: $addr "
             }.mkString(" --- "),
+            "genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
+            "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
+            "numActiveBundles" -> bundles.size.toString,
             "last10TXHash" -> sentTX.reverse.slice(0, 10).map{_.hash}.mkString(","),
+            "last10ValidBundleHashes" -> validBundles.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
+            "lastValidBundleHash" -> lastBundleHash.hash,
+            "genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
+            "genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
             "z_peers" -> peers.map{_.data}.json,
             "z_UTXO" -> validLedger.toMap.json/*,
             "z_Bundles" -> bundles.sorted.map{

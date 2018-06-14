@@ -8,7 +8,7 @@ import org.constellation.util.ProductHash
 import constellation._
 
 import scala.collection.concurrent.TrieMap
-import scala.util.Random
+import scala.util.{Random, Try}
 
 trait ProbabilisticGossip extends PeerAuth {
 
@@ -302,10 +302,14 @@ trait ProbabilisticGossip extends PeerAuth {
         // This bundle doesn't contain an observation from us, (apart from any squashed in a BundleHash)
         // Hence we should process it.
 
+        if (genesisBundle.extractIds.head == id) {
+          logger.debug("GENESIS NODE ON RX2")
+        }
+
         if (
           lastBundleHash == genesisBundle.bundleHash && // This is the first bundle creation attempt after genesis
             genesisBundle.extractIds.head == id && // This node created the genesis bundle
-            txs.size > 2 && ids.size > 2 // Bundle is sufficient to package
+            ids.size >= 2 // Bundle is sufficient to package
         ) {
           squashBundle(bundle)
           validBundles :+= bundle
@@ -313,8 +317,7 @@ trait ProbabilisticGossip extends PeerAuth {
 
         if (!ids.contains(id)) {
 
-          bundles = bundles.sortBy { b => -1 * b.bundleScore }
-
+          val sortedBundles = bundles.filter{ b => Try{b.bundleScore}.isSuccess}.sortBy { b => -1 * b.bundleScore }
 
           // Find similar bundles to merge this with to span the maximal set of ids of similar stack depth.
 

@@ -290,7 +290,7 @@ object Schema {
             b2.bundleData.publicKeys.map{Id}.toSet ++ process(b2.bundleData)
           case _ => Set[Id]()
         }
-        depths.reduce(_ ++ _)
+        depths.reduce(_ ++ _) ++ s.publicKeys.map{Id}.toSet
       }
       process(bundleData)
     }
