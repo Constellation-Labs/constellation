@@ -65,7 +65,7 @@ class PeerToPeer(
         checkpointHeartbeat()
 
         val numAccepted = gossipHeartbeat()
-/*
+
         logger.debug(
           s"Heartbeat: ${id.short}, " +
             s"bundles: $totalNumBundleMessages, " +
@@ -81,7 +81,6 @@ class PeerToPeer(
             }.mkString(",")}"
         )
 
-        */
       }
 
     // Peer messages
@@ -97,6 +96,16 @@ class PeerToPeer(
         case sh: HandShakeMessage => handleHandShake(sh, remote)
 
         case sh: HandShakeResponseMessage => handleHandShakeResponse(sh, remote)
+
+        case m @ StartConsensusRound(id, data, roundHash) => {
+          data match {
+            case CheckpointVote(d) =>
+              consensusActor ! ConsensusVote(id, data, roundHash)
+              logger.debug(s"received checkpoint start consensus round message = $m")
+            case ConflictVote(d) =>
+              logger.debug(s"received conflict start consensus round message = $m")
+          }
+        }
 
         case message: RemoteMessage => consensusActor ! message
 

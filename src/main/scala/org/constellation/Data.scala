@@ -11,6 +11,7 @@ import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.util.Try
 import constellation._
+import org.constellation.consensus.Consensus.{CC, RoundHash}
 
 class Data {
 
@@ -81,6 +82,8 @@ class Data {
   @volatile var bundleBuffer: Set[Bundle] = Set[Bundle]()
   val bestBundles: TrieMap[Id, Bundle] = TrieMap()
 
+  @volatile var previousCheckpointBundle: Option[Bundle] = None
+
   @volatile var externalAddress: InetSocketAddress = _
   @volatile var apiAddress: InetSocketAddress = _
   // @volatile private var peers: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
@@ -108,5 +111,14 @@ class Data {
   @volatile var totalNumBroadcastMessages = 0
 
   @volatile var bestBundleSelf: Bundle = _
+
+  def getCurrentRoundHash(): RoundHash[_ <: CC] = {
+    previousCheckpointBundle match {
+      case Some(value) =>
+        RoundHash(value.hash)
+      case None =>
+        RoundHash(genesisTXHash)
+    }
+  }
 
 }

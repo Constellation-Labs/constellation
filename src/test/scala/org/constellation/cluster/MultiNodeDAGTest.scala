@@ -51,7 +51,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val genTx = r1.getBlocking[TX]("genesis/" + numCoinsInitial)
     Thread.sleep(1000)
 
-/*
     val results = nodes.flatMap{ node =>
       val others = nodes.filter{_ != node}
       others.map{
@@ -62,88 +61,90 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       }
     }
 
-    import scala.concurrent.duration._
-    Await.result(Future.sequence(results), 30.seconds)
+    /*
 
-    for (node <- nodes) {
-      val peers = node.api.getBlocking[Seq[Peer]]("peerids")
-      assert(peers.length == (nodes.length - 1))
-      val others = nodes.filter{_ != node}
-      val havePublic = Random.nextDouble() > 0.5
-      val haveSecret = Random.nextDouble() > 0.5 || havePublic
-      node.api.postSync("reputation", others.map{o =>
-        UpdateReputation(
-          o.data.id,
-          if (haveSecret) Some(Random.nextDouble()) else None,
-          if (havePublic) Some(Random.nextDouble()) else None
-        )
-      })
-    }
+        import scala.concurrent.duration._
+        Await.result(Future.sequence(results), 30.seconds)
 
-    Thread.sleep(6000)
+        for (node <- nodes) {
+          val peers = node.api.getBlocking[Seq[Peer]]("peerids")
+          assert(peers.length == (nodes.length - 1))
+          val others = nodes.filter{_ != node}
+          val havePublic = Random.nextDouble() > 0.5
+          val haveSecret = Random.nextDouble() > 0.5 || havePublic
+          node.api.postSync("reputation", others.map{o =>
+            UpdateReputation(
+              o.data.id,
+              if (haveSecret) Some(Random.nextDouble()) else None,
+              if (havePublic) Some(Random.nextDouble()) else None
+            )
+          })
+        }
 
-    val initialDistrTX = nodes.tail.map{ n =>
-      val dst = n.data.selfAddress
-      val s = SendToAddress(dst, 1e7.toLong)
-      r1.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
-    }
+        Thread.sleep(6000)
 
-    Thread.sleep(10000)
+        val initialDistrTX = nodes.tail.map{ n =>
+          val dst = n.data.selfAddress
+          val s = SendToAddress(dst, 1e7.toLong)
+          r1.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
+        }
 
-    def randomNode: ConstellationNode = nodes(Random.nextInt(nodes.length))
-    def randomOtherNode(not: ConstellationNode): ConstellationNode =
-      nodes.filter{_ != not}(Random.nextInt(nodes.length - 1))
+        Thread.sleep(10000)
 
-    val ec = ExecutionContext.fromExecutorService(new ForkJoinPool(100))
+        def randomNode: ConstellationNode = nodes(Random.nextInt(nodes.length))
+        def randomOtherNode(not: ConstellationNode): ConstellationNode =
+          nodes.filter{_ != not}(Random.nextInt(nodes.length - 1))
 
-    def sendRandomTransaction = {
-      Future {
-        val src = randomNode
-        val dst = randomOtherNode(src)
-        val s = SendToAddress(dst.data.id.address, Random.nextInt(1000).toLong)
-        src.api.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
-      }(ec)
-    }
+        val ec = ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
-
-    val numTX = 200
-
-    val start = System.currentTimeMillis()
-
-    val txResponse = Seq.fill(numTX) {
-   //   Thread.sleep(1000)
-      sendRandomTransaction
-    }
-
-    val txResponseFut = Future.sequence(txResponse)
-
-    val txs = txResponseFut.get(100).toSet
-
-    val allTX = Set(genTx) ++ initialDistrTX.toSet ++ txs
-
-    var done = false
+        def sendRandomTransaction = {
+          Future {
+            val src = randomNode
+            val dst = randomOtherNode(src)
+            val s = SendToAddress(dst.data.id.address, Random.nextInt(1000).toLong)
+            src.api.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
+          }(ec)
+        }
 
 
-    while (!done) {
-      val nodeStatus = nodes.map { n =>
-        Try{(n.peerToPeerActor ? GetValidTX).mapTo[Set[TX]].get()}.map { validTX =>
-          val percentComplete = 100 - (allTX.diff(validTX).size.toDouble / allTX.size.toDouble) * 100
-          println(s"Node ${n.data.id.short} validTXSize: ${validTX.size} allTXSize: ${allTX.size} % complete: $percentComplete")
-          Thread.sleep(1000)
-          validTX == allTX
-        }.getOrElse(false)
-      }
+        val numTX = 200
 
-      if (nodeStatus.forall { x => x }) {
-        done = true
-      }
-    }
+        val start = System.currentTimeMillis()
 
-    val end = System.currentTimeMillis()
+        val txResponse = Seq.fill(numTX) {
+       //   Thread.sleep(1000)
+          sendRandomTransaction
+        }
 
-    println(s"Completion time seconds: ${(end-start) / 1000}")
+        val txResponseFut = Future.sequence(txResponse)
 
-*/
+        val txs = txResponseFut.get(100).toSet
+
+        val allTX = Set(genTx) ++ initialDistrTX.toSet ++ txs
+
+        var done = false
+
+
+        while (!done) {
+          val nodeStatus = nodes.map { n =>
+            Try{(n.peerToPeerActor ? GetValidTX).mapTo[Set[TX]].get()}.map { validTX =>
+              val percentComplete = 100 - (allTX.diff(validTX).size.toDouble / allTX.size.toDouble) * 100
+              println(s"Node ${n.data.id.short} validTXSize: ${validTX.size} allTXSize: ${allTX.size} % complete: $percentComplete")
+              Thread.sleep(1000)
+              validTX == allTX
+            }.getOrElse(false)
+          }
+
+          if (nodeStatus.forall { x => x }) {
+            done = true
+          }
+        }
+
+        val end = System.currentTimeMillis()
+
+        println(s"Completion time seconds: ${(end-start) / 1000}")
+
+    */
 
 
   //  Thread.sleep(3000000)
@@ -226,7 +227,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
 
 
-    //Thread.sleep(1000000)
+    Thread.sleep(1000000)
     // Thread.sleep(1000000)
 
     // Cleanup DBs

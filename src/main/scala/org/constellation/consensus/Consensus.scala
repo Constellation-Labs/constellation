@@ -33,7 +33,7 @@ object Consensus {
 
   case class ConsensusVote[+T <: CC](id: Id, data: VoteData[T], roundHash: RoundHash[T]) extends RemoteMessage
   case class ConsensusProposal[+T <: CC](id: Id, data: ProposalData[T], roundHash: RoundHash[T]) extends RemoteMessage
-  case class StartConsensusRound[T <: CC](id: Id, data: VoteData[T]) extends RemoteMessage
+  case class StartConsensusRound[T <: CC](id: Id, data: VoteData[T], roundHash: RoundHash[T]) extends RemoteMessage
 
   case class InitializeConsensusRound[+T <: CC](facilitators: Set[Id],
                                                 roundHash: RoundHash[T],
@@ -100,7 +100,8 @@ object Consensus {
       handlePeerVote(consensusRoundState.copy(roundStates = updatedRoundStates), self, vote, roundHash)
 
     // tell everyone to perform a vote
-    notifyFacilitatorsOfMessage(facilitators, self, StartConsensusRound(self, vote), udpActor)
+    // TODO: update to only run during conflict voting, for now it's ignored
+    notifyFacilitatorsOfMessage(facilitators, self, StartConsensusRound(self, vote, roundHash), udpActor)
 
     updatedState
   }
@@ -190,7 +191,14 @@ object Consensus {
       val votes = roundState.votes
 
       // TODO: temp logic
-      val vote = votes(updatedState.selfId.get)
+
+      try {
+        val vote = votes(updatedState.selfId.get)
+      } catch {
+        case _: Throwable => {
+          val test = false
+        }
+      }
 
       val proposal = vote match {
         case CheckpointVote(data) =>
@@ -226,7 +234,7 @@ object Consensus {
       roundState.callback(ConsensusRoundResult(bundle, roundHash))
 
       // TODO: do we need to gossip this event also?
-      updatedState = cleanupRoundStateCache(updatedState, roundHash)
+   //   updatedState = cleanupRoundStateCache(updatedState, roundHash)
     }
 
     updatedState

@@ -83,11 +83,11 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     consensusActor ! InitializeConsensusRound(facilitators, roundHash, callback, ConflictVote(vote))
 
-    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), ConflictVote(vote)), Id(node2.configKeyPair.getPublic)))
+    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), ConflictVote(vote), roundHash), Id(node2.configKeyPair.getPublic)))
 
-    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), ConflictVote(vote)), Id(node3.configKeyPair.getPublic)))
+    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), ConflictVote(vote), roundHash), Id(node3.configKeyPair.getPublic)))
 
-    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), ConflictVote(vote)), Id(node4.configKeyPair.getPublic)))
+    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), ConflictVote(vote), roundHash), Id(node4.configKeyPair.getPublic)))
 
     consensusActor ! ConsensusVote(Id(node2.configKeyPair.getPublic), ConflictVote(vote), roundHash)
 
@@ -156,11 +156,11 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     consensusActor ! InitializeConsensusRound(facilitators, roundHash, callback, CheckpointVote(bundle))
 
-    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), CheckpointVote(bundle)), Id(node2.configKeyPair.getPublic)))
+    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), CheckpointVote(bundle), roundHash), Id(node2.configKeyPair.getPublic)))
 
-    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), CheckpointVote(bundle)), Id(node3.configKeyPair.getPublic)))
+    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), CheckpointVote(bundle), roundHash), Id(node3.configKeyPair.getPublic)))
 
-    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), CheckpointVote(bundle)), Id(node4.configKeyPair.getPublic)))
+    udpActor.expectMsg(UDPSendToID(StartConsensusRound(Id(keyPair.getPublic), CheckpointVote(bundle), roundHash), Id(node4.configKeyPair.getPublic)))
 
     consensusActor ! ConsensusVote(Id(node2.configKeyPair.getPublic), CheckpointVote(bundle), roundHash)
 

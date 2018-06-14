@@ -156,12 +156,9 @@ trait PeerAuth {
         code
     }
 
-
   }
 
   // TODO: Send other peers termination message on shutdown.
-
-
 
 
 }

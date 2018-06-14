@@ -18,15 +18,15 @@ trait Checkpoint extends PeerAuth {
 
   def checkpointHeartbeat(): Unit = {
 
-    if (!checkpointInProgress) {
+    if (!checkpointInProgress && !downloadMode) {
       checkpointInProgress = true
 
-      val memPoolSample = memPoolTX.take(20).toSeq
+      val memPoolSample = memPoolTX.toSeq
 
       // TODO: temporarily using all
       val facilitators = peerIDLookup.keys.toSet + Id(publicKey)
 
-      val roundHash = RoundHash("test")
+      val roundHash = getCurrentRoundHash()
 
       val bundle = Bundle(BundleData(memPoolSample).signed())
 
@@ -34,6 +34,15 @@ trait Checkpoint extends PeerAuth {
 
       val callback = (bundle: ConsensusRoundResult[_ <: CC]) =>  {
         logger.debug(s"got checkpoint heartbeat callback = $bundle")
+
+        if (bundle.bundle.bundleData.data.bundles.nonEmpty) {
+          bundles = bundles + bundle.bundle
+        }
+
+        logger.debug(s"bundles = $bundles")
+
+        previousCheckpointBundle = Some(bundle.bundle)
+
         checkpointInProgress = false
       }
 
