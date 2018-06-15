@@ -67,23 +67,23 @@ class PeerToPeer(
         downloadHeartbeat()
 
         val numAccepted = gossipHeartbeat()
-        /*
-                logger.debug(
-                  s"Heartbeat: ${id.short}, " +
-                    s"bundles: $totalNumBundleMessages, " +
-                    s"broadcasts: $totalNumBroadcastMessages, " +
-                    s"numBundles: ${bundles.size}, " +
-                    s"gossip: $totalNumGossipMessages, " +
-                    s"balance: $selfBalance, " +
-                    s"memPool: ${memPoolTX.size} numPeers: ${peers.size} " +
-                    s"numAccepted: $numAccepted, numTotalValid: ${validTX.size} " +
-                    s"validUTXO: ${validLedger.map { case (k, v) => k.slice(0, 5) -> v }} " +
-                    s"peers: ${peers.map { p =>
-                      p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes
-                    }.mkString(",")}"
-                )
 
-                */
+        logger.debug(
+          s"Heartbeat: ${id.short}, " +
+            s"bundles: $totalNumBundleMessages, " +
+            s"broadcasts: $totalNumBroadcastMessages, " +
+            s"numBundles: ${bundles.size}, " +
+            s"gossip: $totalNumGossipMessages, " +
+            s"balance: $selfBalance, " +
+            s"memPool: ${memPoolTX.size} numPeers: ${peers.size} " +
+            s"numAccepted: $numAccepted, numTotalValid: ${validTX.size} " +
+            s"validUTXO: ${validLedger.map { case (k, v) => k.slice(0, 5) -> v }} " +
+            s"peers: ${peers.map { p =>
+              p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes
+            }.mkString(",")}"
+        )
+
+
       }
 
     // Peer messages
@@ -107,7 +107,7 @@ class PeerToPeer(
 
         // Deprecated
         case t: AddTransaction => memPoolActor ! t
-        case sheaf: Sheaf => ring ! sheaf
+        case sheaf: Sheaf => ringBuf ! sheaf
         case u =>
           logger.error(s"Unrecognized UDP message: $u")
       }
@@ -124,9 +124,10 @@ class PeerToPeer(
   /**
     * Pipes messages sent to ActorRef into async buffer, will need mapAsync when returning futures (ask's to chain state manager)
     */
+  import constellation._
   val buffer = Source.actorRef[Sheaf](100, OverflowStrategy.dropNew)
   val liftedEvents = buffer.map(embed)
-  val ring = Flow[Sheaf].to(Sink.actorRef(consensusActor, "bogus")).runWith(liftedEvents)
+  val ringBuf = Flow[Sheaf].to(Sink.actorRef(consensusActor, "bogus")).runWith(liftedEvents)
 
-  def embed(event: Sheaf): Sheaf = Cell.ioF(Sheaf())
+  def embed(event: Sheaf): Sheaf = Cell.ioF(Sheaf().signed())
 }

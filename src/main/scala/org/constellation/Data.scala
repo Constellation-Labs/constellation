@@ -76,9 +76,9 @@ class Data {
   @volatile var deterministicReputation: Map[Id, Double] = Map()
 
 
-  @volatile var bundles: Set[Bundle] = Set[Bundle]()
+  @volatile var bundles: Seq[Bundle] = Seq[Bundle]()
   @volatile var bundleBuffer: Set[Bundle] = Set[Bundle]()
-  val bestBundles: TrieMap[Id, Bundle] = TrieMap()
+  val bestBundles: TrieMap[Id, BestBundle] = TrieMap()
 
 
   @volatile var externalAddress: InetSocketAddress = _
@@ -109,5 +109,23 @@ class Data {
 
   @volatile var bestBundleSelf: Bundle = _
 
+  def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
+    validTX += tx
+    memPoolTX -= tx
+    /*    if (updatePending) {
+          tx.updateUTXO(validSyncPendingUTXO)
+        }*/
+    validSyncPendingTX -= tx
+    tx.updateLedger(validLedger)
+    if (tx.tx.data.isGenesis) {
+      tx.updateLedger(memPoolLedger)
+    }
+    //    txToGossipChains.remove(tx.hash) // TODO: Remove after a certain period of time instead. Cleanup gossip data.
+    val txSeconds = (System.currentTimeMillis() - tx.tx.time) / 1000
+    //  logger.debug(s"Accepted TX from $txSeconds seconds ago: ${tx.short} on ${id.short} " +
+    //   s"new mempool size: ${memPoolTX.size} valid: ${validTX.size} isGenesis: ${tx.tx.data.isGenesis}")
+  }
+
+  var genesisBundle : Bundle = _
 
 }

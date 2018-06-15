@@ -43,7 +43,7 @@ trait Wallet {
       v.output(k)
   }.toSeq
 
-  def selfIdBalance: Option[Long] = memPoolLedger.get(selfAddress.address)
+  def selfIdBalance: Option[Long] = validLedger.get(selfAddress.address)
 
   def utxoBalance: Map[String, Long] = {
     validLedger.filter{case (x,y) => addresses.contains(x)}
@@ -67,8 +67,9 @@ trait Wallet {
 
       //   logger.info(s"SendToAddress RPC Transaction: ${tx.pretty}")
 
-      peerToPeerActor ! tx
-
+      if (s.doGossip) {
+        peerToPeerActor ! tx
+      }
       complete(transactionData(tx.hash).prettyJson)
 
     } else {

@@ -89,7 +89,6 @@ class API(
         }
       } ~
         path("metrics") {
-
           complete(Metrics(Map(
             "address" -> selfAddress.address,
             "balance" -> (selfIdBalance.getOrElse(0L) / Schema.NormalizationFactor).toString,
@@ -107,6 +106,11 @@ class API(
             "last10TXHash" -> sentTX.reverse.slice(0, 10).map{_.hash}.mkString(","),
             "z_peers" -> peers.map{_.data}.json,
             "z_UTXO" -> validLedger.toMap.json
+            /*"z_Bundles" -> bundles.sorted.map{
+              b =>
+                s"tx:${b.extractTX.size},"
+
+            }.mkString("\n")*/
           )))
         } ~
         path("validTX") {
@@ -202,6 +206,13 @@ class API(
         serveMainPage
     } ~
       post {
+        path("setTXValid") {
+          entity(as[TX]) { tx =>
+            acceptTransaction(tx)
+            tx.updateLedger(memPoolLedger)
+            complete(StatusCodes.OK)
+          }
+        } ~
         path ("sendToAddress") {
           entity(as[SendToAddress]) { s =>
             handleSendRequest(s)

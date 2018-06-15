@@ -3,6 +3,7 @@ package org.constellation.util
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import constellation._
+import org.constellation.Sheaf
 import org.constellation.crypto.Base58
 
 object POW extends POWExt
@@ -69,7 +70,7 @@ case class Signed[T <: ProductHash](
                                      //        difficulty: Int,
                                      encodedPublicKeys: Seq[EncodedPublicKey],
                                      signatures: Seq[String]
-                                        ) extends ProductHash {
+                                        ) extends Sheaf {
   def publicKeys: Seq[PublicKey] = encodedPublicKeys.map{_.toPublicKey}
   def validSignatures: Boolean = signatures.zip(encodedPublicKeys).forall{ case (sig, pubEncoded) =>
     val pub = pubEncoded.toPublicKey

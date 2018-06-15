@@ -7,28 +7,15 @@ import org.constellation.primitives.Schema._
 import org.constellation.util.ProductHash
 import constellation._
 
+import scala.collection.concurrent.TrieMap
+import scala.util.Random
+
 trait ProbabilisticGossip extends PeerAuth {
 
   val data: Data
 
   import data._
 
-  def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
-    validTX += tx
-    memPoolTX -= tx
-    /*    if (updatePending) {
-          tx.updateUTXO(validSyncPendingUTXO)
-        }*/
-    validSyncPendingTX -= tx
-    tx.updateLedger(validLedger)
-    if (tx.tx.data.isGenesis) {
-      tx.updateLedger(memPoolLedger)
-    }
-    //    txToGossipChains.remove(tx.hash) // TODO: Remove after a certain period of time instead. Cleanup gossip data.
-    val txSeconds = (System.currentTimeMillis() - tx.tx.time) / 1000
-    //  logger.debug(s"Accepted TX from $txSeconds seconds ago: ${tx.short} on ${id.short} " +
-    //   s"new mempool size: ${memPoolTX.size} valid: ${validTX.size} isGenesis: ${tx.tx.data.isGenesis}")
-  }
 
   def updateGossipChains(txHash: String, g: Gossip[ProductHash]): Unit = {
     val gossipSeq = g.iter
@@ -125,13 +112,14 @@ trait ProbabilisticGossip extends PeerAuth {
     if (tx.tx.data.isGenesis) {
       genesisTXHash = tx.hash
       acceptTransaction(tx)
+      genesisBundle = Bundle(BundleData(Seq(BundleHash(genesisTXHash), tx)).signed())
       // We started genesis
       downloadMode = false
     }
 
     // Temp
-    val g = Gossip(tx.signed())
-    broadcast(g)
+    //  val g = Gossip(tx.signed())
+    // broadcast(g)
 
     //val unspokenTX = memPoolTX.filter{!txsGossipedAbout.contains(_)}
     //  txsGossipedAbout ++= unspokenTX
@@ -139,6 +127,7 @@ trait ProbabilisticGossip extends PeerAuth {
     if (!tx.tx.data.isGenesis) {
       // val unspokenTX = memPoolTX
       val b = Bundle(BundleData(Seq(tx)).signed())
+      bundles :+= b
       broadcast(b)
     }
 
@@ -146,35 +135,37 @@ trait ProbabilisticGossip extends PeerAuth {
 
   def bundleHeartbeat(): Unit = {
 
+    /*
 
-    val bb = if (bundles.nonEmpty) {
+        val bb = if (bundles.nonEmpty) {
 
-      val bestBundle = bundles.toSeq
-        .groupBy(_.extractTX.size).maxBy(_._1)._2
-        .groupBy(_.maxStackDepth).maxBy {
-        _._1
-      }._2
-        .groupBy(_.extractTX.toSeq.map {
-          _.hash
-        }.sorted.mkString).maxBy(_._1)._2
-        .maxBy(_.hash)
+          val bestBundle = bundles.toSeq
+            .groupBy(_.extractTX.size).maxBy(_._1)._2
+            .groupBy(_.maxStackDepth).maxBy {
+            _._1
+          }._2
+            .groupBy(_.extractTX.toSeq.map {
+              _.hash
+            }.sorted.mkString).maxBy(_._1)._2
+            .maxBy(_.hash)
 
-      logger.debug(s"best bundle on ${id.short} ${bestBundle.short} ${
-        bestBundle.extractTX.map {
-          _.short
+          logger.debug(s"best bundle on ${id.short} ${bestBundle.short} ${
+            bestBundle.extractTX.map {
+              _.short
+            }
+          }" +
+            s" hashes: ${
+              bundles.toSeq.map { z: Bundle => z.maxStackDepth -> z.extractTX.map {
+                _.short
+              }
+              }
+            }")
+          Some(bestBundle)
         }
-      }" +
-        s" hashes: ${
-          bundles.toSeq.map { z: Bundle => z.maxStackDepth -> z.extractTX.map {
-            _.short
-          }
-          }
-        }")
-      Some(bestBundle)
-    }
-    else None
+        else None
 
-    broadcast(BestBundle(bb, bestBundleSelf))
+        broadcast(BestBundle(bb, bestBundleSelf))
+    */
 
     /*
         if (bestBundles.nonEmpty) {
@@ -217,28 +208,81 @@ trait ProbabilisticGossip extends PeerAuth {
    }
    */
 
+  implicit def orderingByBundle[A <: Bundle]: Ordering[A] =
+    Ordering.by(e =>
+      (e.extractTX.size, e.extractIds.size, e.totalNumEvents, e.maxStackDepth, e.hash)
+    )
+
+  //val results = searchLeft.flatMap{ l =>
+  //searchRight.flatMap{ r =>
+
+  //  val searchLeft = bundles.slice(0, 10)
+  //  val searchRight = bundles.slice(10, bundles.length)
+
+
+  def findCommonSubBundles(): Map[Bundle, Int] = {
+
+    val results: Map[Bundle, Int] = bundles.combinations(2).toSeq.flatMap{
+      case Seq(l,r) =>
+        val sub = l.extractSubBundlesMinSize()
+        val subr = r.extractSubBundlesMinSize()
+        sub.intersect(subr).toSeq.map {
+          b => b -> 1
+        }
+    }.groupBy(_._1).map{
+      case (x,y) => x -> y.size
+    }
+
+    val debug = results.map{case (x,y) => (x.short, x.extractTX.size, y)}.toSeq.sortBy{_._2}.reverse.slice(0, 10)
+    println(s"bundle common ${id.short} : ${results.size} $debug")
+    results
+  }
+
+  def updateState(bundle: Bundle, commonSubBundles: Map[Bundle, Int]): Unit = {
+    totalNumBundleMessages += 1
+    if (bundles.length > 30) {
+      if (Random.nextDouble() < 0.4) {
+        val remove = Random.shuffle(bundles.filter { b => !commonSubBundles.contains(b)}).slice(0, 10)
+        bundles = bundles.filterNot(remove.contains)
+        if (commonSubBundles.size > 1) {
+          commonSubBundles.toSeq.sortBy(_._2)
+        }
+      }
+    }
+  }
 
   def handleBundle(bundle: Bundle): Unit = {
-    totalNumBundleMessages += 1
     val txs = bundle.extractTX
+    val ids = bundle.extractIds
+    val commonSubBundles: Map[Bundle, Int] = findCommonSubBundles()
+    updateState(bundle, commonSubBundles)
+
     val valid = txs.forall(t => t.ledgerValid(validLedger) && t.valid && t.ledgerValid(memPoolLedger))
     val newTX = txs.exists{t => !memPoolTX.contains(t)}
     if (valid) {
       txs.foreach(updateMempool)
-      var newTXs = txs
-      val filtered = bundles.filter{ bi =>
+      var newTXs: Set[TX] = txs
+      val filtered: Seq[Bundle] = (bundles ++ commonSubBundles.keys).filter{ bi =>
         val theseTX = bi.extractTX
         val timeValid = bi.bundleData.time > (bundle.bundleData.time - 25000)
-        val res = timeValid && theseTX.exists(!newTXs.contains(_))
+        val res = theseTX.exists(!newTXs.contains(_)) && timeValid
         if (res) newTXs ++= theseTX
         res
-      }.toSeq
-      val emitter = filtered :+ bundle
-      bundles += bundle
-      if (newTX) {
-        val b = Bundle(BundleData(emitter).signed())
-        broadcast(b)
       }
+      val fIds: Set[Id] = filtered.flatMap{_.extractIds}.toSet ++ ids
+      val emitter: Seq[Bundle] = filtered :+ bundle
+      if (!bundles.contains(bundle))
+      bundles :+= bundle
+      if (newTX) {
+
+
+        val b = Bundle(BundleData(emitter).signed())
+        if (!bundles.contains(b)) {
+          bundles :+= b
+          broadcast(b, skipIDs = fIds.toSeq)
+        }
+      }
+      // bundles = bundles.sorted
     }
   }
 
@@ -249,11 +293,11 @@ trait ProbabilisticGossip extends PeerAuth {
 
     gm match {
       case g : Gossip[ProductHash] =>
-        handleGossipRegular(g, remote)
+      //     handleGossipRegular(g, remote)
       case bb: BestBundle =>
-     //   bestBundles(rid) = bb.bundle
+      //    bestBundles(rid) = bb
       case b: Bundle =>
-     //   handleBundle(b)
+        handleBundle(b)
       case sd: SyncData =>
       //      handleSyncData(sd, remote)
       case _ =>

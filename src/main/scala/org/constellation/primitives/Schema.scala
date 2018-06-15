@@ -33,6 +33,7 @@ object Schema {
 
   final case object Valid extends ValidationStatus
   final case object MempoolValid extends ValidationStatus
+  final case object Unknown extends ValidationStatus
   final case object DoubleSpend extends ValidationStatus
 
 
@@ -51,7 +52,8 @@ object Schema {
                             account: Option[PublicKey] = None,
                             normalized: Boolean = true,
                             oneTimeUse: Boolean = false,
-                            useNodeKey: Boolean = true
+                            useNodeKey: Boolean = true,
+                            doGossip: Boolean = true
                           ) {
     def amountActual: Long = if (normalized) amount * NormalizationFactor else amount
   }
@@ -210,6 +212,22 @@ object Schema {
                            bundleData: Signed[BundleData]
                          ) extends ProductHash with Fiber with GossipMessage {
 
+    def extractSubBundlesMinSize(minSize: Int = 2): Set[Bundle] = {
+      extractSubBundles.filter{_.maxStackDepth >= minSize}
+    }
+
+    def extractSubBundles: Set[Bundle] = {
+      def process(s: Signed[BundleData]): Set[Bundle] = {
+        val bd = s.data.bundles
+        val depths = bd.map {
+          case b2: Bundle =>
+            Set(b2) ++ process(b2.bundleData)
+          case _ => Set[Bundle]()
+        }
+        depths.reduce(_ ++ _)
+      }
+      process(bundleData)
+    }
 
     def extractTX: Set[TX] = {
       def process(s: Signed[BundleData]): Set[TX] = {
@@ -291,7 +309,6 @@ object Schema {
       }
       process(event) + 1
     }
-
   }
 
   // TODO: Move other messages here.
@@ -311,7 +328,7 @@ object Schema {
   sealed trait DownloadMessage
 
   case class DownloadRequest() extends DownloadMessage
-  case class DownloadResponse(validTX: Set[TX], validUTXO: Map[String, Long]) extends DownloadMessage
+  case class DownloadResponse(validTX: Set[TX], validUTXO: Map[String, Long], genesisBundle: Bundle) extends DownloadMessage
 
   final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage
 
