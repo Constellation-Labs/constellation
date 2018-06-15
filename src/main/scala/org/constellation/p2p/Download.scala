@@ -29,13 +29,17 @@ trait Download extends PeerAuth {
         validLedger(k) = v
         memPoolLedger(k) = v
       }
+
       downloadMode = false
+
+      lastCheckpointBundle = d.lastCheckpointBundle
+
       logger.debug("Downloaded data")
     }
   }
 
   def handleDownloadRequest(d: DownloadRequest, remote: InetSocketAddress): Unit = {
-    val downloadResponse = DownloadResponse(validTX, validLedger.toMap)
+    val downloadResponse = DownloadResponse(validTX, validLedger.toMap, lastCheckpointBundle)
     udpActor.udpSend(downloadResponse, remote)
   }
 

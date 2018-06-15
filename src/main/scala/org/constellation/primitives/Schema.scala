@@ -5,11 +5,14 @@ import java.net.InetSocketAddress
 import java.security.PublicKey
 
 import constellation.pubKeyToAddress
+import org.constellation.consensus.Consensus.{CC, RoundHash}
 import org.constellation.crypto.Base58
 import org.constellation.util.EncodedPublicKey
 import org.constellation.util.{ProductHash, Signed}
 
 import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
+import scala.util.Random
 
 // This can't be a trait due to serialization issues
 object Schema {
@@ -34,7 +37,6 @@ object Schema {
   final case object Valid extends ValidationStatus
   final case object MempoolValid extends ValidationStatus
   final case object DoubleSpend extends ValidationStatus
-
 
   sealed trait ConfigUpdate
 
@@ -210,6 +212,7 @@ object Schema {
                            bundleData: Signed[BundleData]
                          ) extends ProductHash with Fiber with GossipMessage {
 
+    val bundleNumber: Long = Random.nextLong()
 
     def extractTX: Set[TX] = {
       def process(s: Signed[BundleData]): Set[TX] = {
@@ -220,7 +223,11 @@ object Schema {
           case tx: TX => Set(tx)
           case _ => Set[TX]()
         }
-        depths.reduce(_ ++ _)
+        if (depths.nonEmpty) {
+          depths.reduce(_ ++ _)
+        } else {
+          Set()
+        }
       }
       process(bundleData)
     }
@@ -264,8 +271,11 @@ object Schema {
       process(bundleData) + 1
     }
 
-  }
+    def roundHash: String = {
+      bundleNumber.toString
+    }
 
+  }
 
   final case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash
     with Fiber
@@ -311,7 +321,10 @@ object Schema {
   sealed trait DownloadMessage
 
   case class DownloadRequest() extends DownloadMessage
-  case class DownloadResponse(validTX: Set[TX], validUTXO: Map[String, Long]) extends DownloadMessage
+
+  case class DownloadResponse(validTX: Set[TX],
+                              validUTXO: Map[String, Long],
+                              lastCheckpointBundle: Option[Bundle]) extends DownloadMessage
 
   final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage
 
@@ -323,7 +336,6 @@ object Schema {
 
   final case class AddPeerFromLocal(address: InetSocketAddress) extends InternalCommand
 
-
   case class Peers(peers: Seq[InetSocketAddress])
 
   case class Id(id: PublicKey) {
@@ -332,7 +344,6 @@ object Schema {
     def address: Address = pubKeyToAddress(id)
     def b58 = Base58.encode(id.getEncoded)
   }
-
 
   case class GetId()
 

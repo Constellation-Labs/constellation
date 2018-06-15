@@ -11,6 +11,7 @@ import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.util.Try
 import constellation._
+import org.constellation.consensus.Consensus.{CC, RoundHash}
 
 class Data {
 
@@ -68,6 +69,8 @@ class Data {
 
   @volatile var downloadMode: Boolean = true
 
+  val checkpointsInProgress: TrieMap[RoundHash[_ <: CC], Boolean] = TrieMap()
+
   @volatile var nodeState: NodeState = PendingDownload
 
   // @volatile var downloadResponses = Seq[DownloadResponse]()
@@ -75,11 +78,11 @@ class Data {
   @volatile var publicReputation: Map[Id, Double] = Map()
   @volatile var deterministicReputation: Map[Id, Double] = Map()
 
-
   @volatile var bundles: Set[Bundle] = Set[Bundle]()
   @volatile var bundleBuffer: Set[Bundle] = Set[Bundle]()
   val bestBundles: TrieMap[Id, Bundle] = TrieMap()
 
+  @volatile var previousCheckpointBundle: Option[Bundle] = None
 
   @volatile var externalAddress: InetSocketAddress = _
   @volatile var apiAddress: InetSocketAddress = _
@@ -109,5 +112,6 @@ class Data {
 
   @volatile var bestBundleSelf: Bundle = _
 
+  @volatile var lastCheckpointBundle: Option[Bundle] = None
 
 }

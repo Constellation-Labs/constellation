@@ -35,7 +35,6 @@ class LevelDB(val file: File) {
     get(t.hash).nonEmpty
   }
 
-
   def putHash[T <: ProductHash, Q <: ProductHash](t: T, q: Q): Try[Unit] = {
     put(t.hash, q.hash)
   }
@@ -47,7 +46,6 @@ class LevelDB(val file: File) {
   def put(k: String, t: AnyRef): Try[Unit] = {
     put(k, t.json)
   }
-
 
   def put[T <: ProductHash](t: T): Try[Unit] = {
     put(t.hash, t.json)
