@@ -15,14 +15,14 @@ import scala.collection.concurrent.TrieMap
 object Schema {
 
   case class TransactionQueryResponse(
-                                     hash: String,
-                                     tx: Option[TX],
-                                     observed: Boolean,
-                                     inMemPool: Boolean,
-                                     confirmed: Boolean,
-                                     numGossipChains: Int,
-                                     gossipStackDepths: Seq[Int],
-                                     gossip: Seq[Gossip[ProductHash]]
+                                       hash: String,
+                                       tx: Option[TX],
+                                       observed: Boolean,
+                                       inMemPool: Boolean,
+                                       confirmed: Boolean,
+                                       numGossipChains: Int,
+                                       gossipStackDepths: Seq[Int],
+                                       gossip: Seq[Gossip[ProductHash]]
                                      )
 
   sealed trait NodeState
@@ -216,9 +216,15 @@ object Schema {
 
   final case class BundleHash(hash: String) extends Fiber
 
+  // TODO: Make another bundle data with additional metadata for depth etc.
   final case class BundleData(bundles: Seq[Fiber]) extends ProductHash
 
-  final case class BestBundle(bundle: Option[Bundle], lastBestBundle: Bundle, squashed: Option[Bundle] = None) extends GossipMessage
+  final case class PeerSync(
+                               bundle: Option[Bundle],
+                               lastBestBundle: Bundle,
+                               squashed: Option[Bundle] = None,
+                               memPool: Set[TX] = Set()
+                             ) extends GossipMessage
 
   final case class Bundle(
                            bundleData: Signed[BundleData]

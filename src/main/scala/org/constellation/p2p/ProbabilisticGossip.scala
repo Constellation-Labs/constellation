@@ -116,21 +116,23 @@ trait ProbabilisticGossip extends PeerAuth {
     }
 
     // Temp
-   // val g = Gossip(tx.signed())
-   // broadcast(g)
+    // val g = Gossip(tx.signed())
+    // broadcast(g)
 
     //val unspokenTX = memPoolTX.filter{!txsGossipedAbout.contains(_)}
     //  txsGossipedAbout ++= unspokenTX
 
-    if (!tx.tx.data.isGenesis) {
-      // val unspokenTX = memPoolTX
-      val b = Bundle(BundleData(Seq(
-        tx,
-        lastBundleHash
-      )).signed())
-      processNewBundleMetadata(b)
-      broadcast(b)
-    }
+    /*
+        if (!tx.tx.data.isGenesis) {
+          // val unspokenTX = memPoolTX
+          val b = Bundle(BundleData(Seq(
+            tx,
+            lastBundleHash
+          )).signed())
+          processNewBundleMetadata(b)
+          broadcast(b)
+        }
+    */
 
   }
 
@@ -142,6 +144,10 @@ trait ProbabilisticGossip extends PeerAuth {
     activeBundles = Seq()
   }
 
+  def genesisAdditionCheck: Boolean =
+    lastBundleHash == genesisBundle.bundleHash && // This is the first bundle creation attempt after genesis
+      genesisBundle.extractIds.head == id // This node created the genesis bundle
+
   def bundleHeartbeat(): Unit = {
 
     val bb: Option[Bundle] = if (activeBundles.isEmpty) None else {
@@ -151,21 +157,27 @@ trait ProbabilisticGossip extends PeerAuth {
     bb.foreach{bestBundle = _}
 
     if (!downloadMode) {
-      broadcast(BestBundle(bb, lastBundle, lastSquashed))
+      broadcast(PeerSync(bb, lastBundle, lastSquashed, memPoolTX))
     }
 
+    val memPoolEmit = Random.nextInt() < 0.5
 
-    if (
-      lastBundleHash == genesisBundle.bundleHash && // This is the first bundle creation attempt after genesis
-        genesisBundle.extractIds.head == id && // This node created the genesis bundle
-        Option(bestBundle).exists{_.extractIds.size >= 2} // Bundle is sufficient to package
+    if ((memPoolTX.nonEmpty && memPoolEmit) || genesisAdditionCheck) {
+      // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
+      val b = Bundle(BundleData(memPoolTX.toSeq :+ lastBundleHash).signed())
+      processNewBundleMetadata(b)
+      broadcast(b)
+    }
+
+    if ( genesisAdditionCheck &&
+        Option(bestBundle).exists{_.extractIds.size >= 2} // Bundle has at least one new facilitator.
     ) {
       // squashBundle(bestBundle)
       acceptBundle(bestBundle)
     }
 
     if (lastBundleHash == genesisBundle.bundleHash && !(genesisBundle.extractIds.head == id)) {
-      bestBundles.get(genesisBundle.extractIds.head).foreach{ b =>
+      peerSync.get(genesisBundle.extractIds.head).foreach{ b =>
         b.bundle.foreach{ ba =>
           if (ba.extractIds.size >= 2) {
             acceptBundle(ba)
@@ -292,9 +304,13 @@ trait ProbabilisticGossip extends PeerAuth {
     bestBundleBase = b
     bestBundleCandidateHashes += b.bundleHash
     lastSquashed = Some(squashed)
-   // broadcast(squashed)
+    // broadcast(squashed)
     squashed
   }
+
+  def validateTXBatch(txs: Set[TX]): Boolean =
+    validateTransactionBatch(txs, memPoolLedger) &&
+    validateTransactionBatch(txs, validLedger)
 
   def handleBundle(bundle: Bundle): Unit = {
 
@@ -303,67 +319,76 @@ trait ProbabilisticGossip extends PeerAuth {
     val txs = bundle.extractTX
 
     // Also need to verify there are not multiple occurrences of same id re-signing bundle, and reps.
-    val valid = validateTransactionBatch(txs, memPoolLedger) && validateTransactionBatch(txs, validLedger)
-    val hasCorrectBaseHash = bundle.extractBundleHash == lastBundleHash
-    val hasNewTransactions = txs.exists{ t => !memPoolTX.contains(t)}
+    val valid = validateTXBatch(txs)
+   // val hasCorrectBaseHash = bundle.extractBundleHash == lastBundleHash
+    // val hasNewTransactions = txs.exists{ t => !memPoolTX.contains(t)}
 
     if (valid) {
 
       val neverSeen = processNewBundleMetadata(bundle)
 
-      if (!hasCorrectBaseHash) {
-        bestBundleCandidateHashes += bundle.extractBundleHash
+      if (neverSeen) {
+        txs.foreach(updateMempool)
       }
 
-      if (neverSeen) {
+      //
+      //  if (!hasCorrectBaseHash) {
+      //      bestBundleCandidateHashes += bundle.extractBundleHash
+      // }
 
-        txs.foreach(updateMempool)
-        val ids = bundle.extractIds
+      /*
+            if (neverSeen) {
 
-        // This bundle doesn't contain an observation from us, (apart from any squashed in a BundleHash)
-        // Hence we should process it.
+              txs.foreach(updateMempool)
 
-        if (!ids.contains(id)) {
 
-          val sortedBundles = activeBundles.filter{ b => Try{b.bundleScore}.isSuccess}.sortBy { b => -1 * b.bundleScore }
+              val ids = bundle.extractIds
 
-          // Find similar bundles to merge this with to span the maximal set of ids of similar stack depth.
+              // This bundle doesn't contain an observation from us, (apart from any squashed in a BundleHash)
+              // Hence we should process it.
 
-          val commonSubBundles = findCommonSubBundles()
+              if (!ids.contains(id)) {
 
-          if (activeBundles.length > 30) {
-            if (Random.nextDouble() < 0.4) {
-              val remove = Random.shuffle(activeBundles.filter { b => !commonSubBundles.contains(b) }).slice(0, 10)
-              activeBundles = activeBundles.filterNot(remove.contains)
-              if (commonSubBundles.size > 1) {
-                commonSubBundles.toSeq.sortBy(_._2)
+                val sortedBundles = activeBundles.filter{ b => Try{b.bundleScore}.isSuccess}.sortBy { b => -1 * b.bundleScore }
+
+                // Find similar bundles to merge this with to span the maximal set of ids of similar stack depth.
+
+                val commonSubBundles = findCommonSubBundles()
+
+                if (activeBundles.length > 30) {
+                  if (Random.nextDouble() < 0.4) {
+                    val remove = Random.shuffle(activeBundles.filter { b => !commonSubBundles.contains(b) }).slice(0, 10)
+                    activeBundles = activeBundles.filterNot(remove.contains)
+                    if (commonSubBundles.size > 1) {
+                      commonSubBundles.toSeq.sortBy(_._2)
+                    }
+                  }
+                }
+
+                var newTXs = txs
+                val filtered = (activeBundles ++ commonSubBundles.keys).filter { bi =>
+                  val theseTX = bi.extractTX
+                  val timeValid = bi.bundleData.time > (bundle.bundleData.time - 25000)
+                  val res = theseTX.exists(!newTXs.contains(_)) && timeValid
+                  if (res) newTXs ++= theseTX
+                  res
+                }
+                val fIds = filtered.flatMap {
+                  _.extractIds
+                }.toSet ++ ids
+                val emitter = filtered :+ bundle
+
+                if (hasNewTransactions) {
+                  val b = Bundle(BundleData(emitter).signed())
+                  if (!bundleHashToBundle.contains(b.hash)) {
+                    processNewBundleMetadata(b)
+                    broadcast(b, skipIDs = fIds.toSeq)
+                  }
+                }
+                // bundles = bundles.sorted
               }
             }
-          }
-
-          var newTXs = txs
-          val filtered = (activeBundles ++ commonSubBundles.keys).filter { bi =>
-            val theseTX = bi.extractTX
-            val timeValid = bi.bundleData.time > (bundle.bundleData.time - 25000)
-            val res = theseTX.exists(!newTXs.contains(_)) && timeValid
-            if (res) newTXs ++= theseTX
-            res
-          }
-          val fIds = filtered.flatMap {
-            _.extractIds
-          }.toSet ++ ids
-          val emitter = filtered :+ bundle
-
-          if (hasNewTransactions) {
-            val b = Bundle(BundleData(emitter).signed())
-            if (!bundleHashToBundle.contains(b.hash)) {
-              processNewBundleMetadata(b)
-              broadcast(b, skipIDs = fIds.toSeq)
-            }
-          }
-          // bundles = bundles.sorted
-        }
-      }
+      */
 
     }
   }
@@ -375,11 +400,14 @@ trait ProbabilisticGossip extends PeerAuth {
 
     gm match {
       case g : Gossip[ProductHash] =>
-        // handleGossipRegular(g, remote)
-      case bb: BestBundle =>
-        bb.bundle.foreach{b => processNewBundleMetadata(b)}
-        Option(bb.lastBestBundle).foreach{b => processNewBundleMetadata(b)}
-        bestBundles(rid) = bb
+      // handleGossipRegular(g, remote)
+      case bb: PeerSync =>
+        bb.bundle.foreach{b => handleBundle(b)}
+        Option(bb.lastBestBundle).foreach{b => handleBundle(b)}
+        peerSync(rid) = bb
+        if (validateTXBatch(bb.memPool)) {
+          bb.memPool.foreach{updateMempool}
+        }
       case b: Bundle =>
         handleBundle(b)
       case sd: SyncData =>

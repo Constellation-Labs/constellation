@@ -112,7 +112,7 @@ class API(
             "genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
             "genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
             "selfBestBundle" -> Option(bestBundle).map{_.pretty}.getOrElse(""),
-            "peerBestBundles" -> bestBundles.toMap.map{
+            "peerBestBundles" -> peerSync.toMap.map{
               case (id, b) =>
                 s"PEER: ${id.short}, BEST: ${b.bundle.map{_.pretty}.getOrElse("")} LAST: ${b.lastBestBundle.pretty}"
             }.mkString(" ----- "),

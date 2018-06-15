@@ -47,6 +47,24 @@ trait ProductHash extends Product {
 
 }
 
+
+case class HashSignature(
+                          b58EncodedPublicKey: EncodedPublicKey,
+                          time: Long,
+                          signature: String
+                        ) {
+  def publicKey: PublicKey = b58EncodedPublicKey.toPublicKey
+  def valid(hash: String): Boolean = verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
+
+}
+
+case class SignatureBatch(
+                         hash: String,
+                         signatures: Set[HashSignature]
+                         ) {
+  def valid: Boolean = signatures.forall(_.valid(hash))
+}
+
 /*
 Option = SignableData
 None = Unsigned

@@ -104,7 +104,7 @@ class Data {
 
   @volatile var activeBundles: Seq[Bundle] = Seq[Bundle]()
   @volatile var bundleBuffer: Set[Bundle] = Set[Bundle]()
-  val bestBundles: TrieMap[Id, BestBundle] = TrieMap()
+  val peerSync: TrieMap[Id, PeerSync] = TrieMap()
 
   var genesisBundle : Bundle = _
   def genesisTXHash: String = genesisBundle.extractTX.head.hash
