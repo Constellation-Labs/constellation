@@ -67,7 +67,7 @@ class PeerToPeer(
           s"Heartbeat: ${id.short}, " +
             s"bundles: $totalNumBundleMessages, " +
             s"broadcasts: $totalNumBroadcastMessages, " +
-            s"numBundles: ${bundles.size}, " +
+            s"numBundles: ${activeBundles.size}, " +
             s"gossip: $totalNumGossipMessages, " +
             s"balance: $selfBalance, " +
             s"memPool: ${memPoolTX.size} numPeers: ${peers.size} " +

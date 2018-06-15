@@ -218,12 +218,11 @@ object Schema {
 
   final case class BundleData(bundles: Seq[Fiber]) extends ProductHash
 
-  final case class BestBundle(bundle: Option[Bundle], lastBestBundle: Bundle) extends GossipMessage
+  final case class BestBundle(bundle: Option[Bundle], lastBestBundle: Bundle, squashed: Option[Bundle] = None) extends GossipMessage
 
   final case class Bundle(
                            bundleData: Signed[BundleData]
                          ) extends ProductHash with Fiber with GossipMessage {
-
 
     def extractBundleHash: BundleHash = {
       def process(s: Signed[BundleData]): BundleHash = {

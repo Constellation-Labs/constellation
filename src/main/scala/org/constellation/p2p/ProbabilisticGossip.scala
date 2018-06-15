@@ -16,7 +16,6 @@ trait ProbabilisticGossip extends PeerAuth {
 
   import data._
 
-
   def updateGossipChains(txHash: String, g: Gossip[ProductHash]): Unit = {
     val gossipSeq = g.iter
     val chains = txToGossipChains.get(txHash)
@@ -117,8 +116,8 @@ trait ProbabilisticGossip extends PeerAuth {
     }
 
     // Temp
-    //  val g = Gossip(tx.signed())
-    // broadcast(g)
+   // val g = Gossip(tx.signed())
+   // broadcast(g)
 
     //val unspokenTX = memPoolTX.filter{!txsGossipedAbout.contains(_)}
     //  txsGossipedAbout ++= unspokenTX
@@ -129,13 +128,53 @@ trait ProbabilisticGossip extends PeerAuth {
         tx,
         lastBundleHash
       )).signed())
-      bundles :+= b
+      processNewBundleMetadata(b)
       broadcast(b)
     }
 
   }
 
+  def acceptBundle(b: Bundle): Unit = {
+    validBundles :+= b
+    b.extractTX.foreach{ t =>
+      acceptTransaction(t)
+    }
+    activeBundles = Seq()
+  }
+
   def bundleHeartbeat(): Unit = {
+
+    val bb: Option[Bundle] = if (activeBundles.isEmpty) None else {
+      Some(activeBundles.maxBy{ b => (b.extractIds.size, b.extractTX.size, b.hash)})
+    }
+
+    bb.foreach{bestBundle = _}
+
+    if (!downloadMode) {
+      broadcast(BestBundle(bb, lastBundle, lastSquashed))
+    }
+
+
+    if (
+      lastBundleHash == genesisBundle.bundleHash && // This is the first bundle creation attempt after genesis
+        genesisBundle.extractIds.head == id && // This node created the genesis bundle
+        Option(bestBundle).exists{_.extractIds.size >= 2} // Bundle is sufficient to package
+    ) {
+      // squashBundle(bestBundle)
+      acceptBundle(bestBundle)
+    }
+
+    if (lastBundleHash == genesisBundle.bundleHash && !(genesisBundle.extractIds.head == id)) {
+      bestBundles.get(genesisBundle.extractIds.head).foreach{ b =>
+        b.bundle.foreach{ ba =>
+          if (ba.extractIds.size >= 2) {
+            acceptBundle(ba)
+          }
+        }
+      }
+    }
+
+
 
     /*
 
@@ -220,7 +259,7 @@ trait ProbabilisticGossip extends PeerAuth {
 
   def findCommonSubBundles() = {
 
-    val results = bundles.combinations(2).toSeq.flatMap{
+    val results = activeBundles.combinations(2).toSeq.flatMap{
       case Seq(l,r) =>
         val sub = l.extractSubBundlesMinSize()
         val subr = r.extractSubBundlesMinSize()
@@ -246,38 +285,20 @@ trait ProbabilisticGossip extends PeerAuth {
     }
   }
 
-  def jaccard[T](t1: Set[T], t2: Set[T]): Double = {
-    t1.intersect(t2).size.toDouble / t1.union(t2).size.toDouble
-  }
-
-  implicit class BundleExtData(b: Bundle) {
-    def txBelow = bundleHashToTXBelow(b.hash)
-    def idBelow = bundleHashToIdsBelow(b.hash)
-    def idAbove = bundleHashToIdsAbove(b.hash)
-    def bundleScore: Int = {
-      txBelow.size + (idBelow.size * 5) + idAbove.size
-    }
-    def pretty: String = s"nodeId: ${id.short} hash: ${b.short} numTX: ${txBelow.size}, numId: ${idBelow.size}, " +
-      s"numIdAbove ${idAbove.size}, score: $bundleScore"
-  }
-
-
-
-  case class BundleComparison(b1: Bundle, b2: Bundle) {
-    def txJaccard: Double = jaccard(bundleHashToTXBelow(b1.hash), bundleHashToTXBelow(b2.hash))
-    def idJaccard: Double = jaccard(bundleHashToIdsBelow(b1.hash), bundleHashToIdsBelow(b2.hash))
-    def idAboveJaccard: Double = jaccard(bundleHashToIdsAbove(b1.hash), bundleHashToIdsAbove(b2.hash))
-  }
-
-  def squashBundle(b: Bundle): Unit = {
+  def squashBundle(b: Bundle): Bundle = {
     logger.debug(s"Squashing bundle - ${b.pretty}")
     val squashed = Bundle(BundleData(Seq(b.bundleHash)).signed())
+    validBundles :+= b
     bestBundleBase = b
     bestBundleCandidateHashes += b.bundleHash
-    broadcast(squashed)
+    lastSquashed = Some(squashed)
+   // broadcast(squashed)
+    squashed
   }
 
   def handleBundle(bundle: Bundle): Unit = {
+
+    totalNumBundleMessages += 1
 
     val txs = bundle.extractTX
 
@@ -302,31 +323,18 @@ trait ProbabilisticGossip extends PeerAuth {
         // This bundle doesn't contain an observation from us, (apart from any squashed in a BundleHash)
         // Hence we should process it.
 
-        if (genesisBundle.extractIds.head == id) {
-          logger.debug("GENESIS NODE ON RX2")
-        }
-
-        if (
-          lastBundleHash == genesisBundle.bundleHash && // This is the first bundle creation attempt after genesis
-            genesisBundle.extractIds.head == id && // This node created the genesis bundle
-            ids.size >= 2 // Bundle is sufficient to package
-        ) {
-          squashBundle(bundle)
-          validBundles :+= bundle
-        }
-
         if (!ids.contains(id)) {
 
-          val sortedBundles = bundles.filter{ b => Try{b.bundleScore}.isSuccess}.sortBy { b => -1 * b.bundleScore }
+          val sortedBundles = activeBundles.filter{ b => Try{b.bundleScore}.isSuccess}.sortBy { b => -1 * b.bundleScore }
 
           // Find similar bundles to merge this with to span the maximal set of ids of similar stack depth.
 
           val commonSubBundles = findCommonSubBundles()
 
-          if (bundles.length > 30) {
+          if (activeBundles.length > 30) {
             if (Random.nextDouble() < 0.4) {
-              val remove = Random.shuffle(bundles.filter { b => !commonSubBundles.contains(b) }).slice(0, 10)
-              bundles = bundles.filterNot(remove.contains)
+              val remove = Random.shuffle(activeBundles.filter { b => !commonSubBundles.contains(b) }).slice(0, 10)
+              activeBundles = activeBundles.filterNot(remove.contains)
               if (commonSubBundles.size > 1) {
                 commonSubBundles.toSeq.sortBy(_._2)
               }
@@ -334,7 +342,7 @@ trait ProbabilisticGossip extends PeerAuth {
           }
 
           var newTXs = txs
-          val filtered = (bundles ++ commonSubBundles.keys).filter { bi =>
+          val filtered = (activeBundles ++ commonSubBundles.keys).filter { bi =>
             val theseTX = bi.extractTX
             val timeValid = bi.bundleData.time > (bundle.bundleData.time - 25000)
             val res = theseTX.exists(!newTXs.contains(_)) && timeValid
@@ -345,12 +353,11 @@ trait ProbabilisticGossip extends PeerAuth {
             _.extractIds
           }.toSet ++ ids
           val emitter = filtered :+ bundle
-          if (!bundles.contains(bundle))
-            bundles :+= bundle
+
           if (hasNewTransactions) {
             val b = Bundle(BundleData(emitter).signed())
-            if (!bundles.contains(b)) {
-              bundles :+= b
+            if (!bundleHashToBundle.contains(b.hash)) {
+              processNewBundleMetadata(b)
               broadcast(b, skipIDs = fIds.toSeq)
             }
           }
@@ -368,9 +375,11 @@ trait ProbabilisticGossip extends PeerAuth {
 
     gm match {
       case g : Gossip[ProductHash] =>
-      //     handleGossipRegular(g, remote)
+        // handleGossipRegular(g, remote)
       case bb: BestBundle =>
-      //    bestBundles(rid) = bb
+        bb.bundle.foreach{b => processNewBundleMetadata(b)}
+        Option(bb.lastBestBundle).foreach{b => processNewBundleMetadata(b)}
+        bestBundles(rid) = bb
       case b: Bundle =>
         handleBundle(b)
       case sd: SyncData =>
@@ -426,9 +435,7 @@ trait ProbabilisticGossip extends PeerAuth {
     val tx = gossipSeq.head.data.asInstanceOf[TX]
     if (!txHashToTX.contains(tx.hash)) txHashToTX(tx.hash) = tx
 
-    if (tx.tx.data.isGenesis) {
-      acceptTransaction(tx)
-    } else if (!downloadMode) {
+    if (!downloadMode) {
 
       if (validTX.contains(tx)) {
         //   logger.debug(s"Ignoring gossip on already validated transaction: ${tx.short}")
@@ -443,13 +450,12 @@ trait ProbabilisticGossip extends PeerAuth {
           val conflicts = memPoolTX.toSeq.filter { m =>
             tx.tx.data.src.map {_.address}.intersect(m.tx.data.src.map {_.address}).nonEmpty
           }
+
           val chains = conflicts.map { c =>
             VoteCandidate(c, txToGossipChains.getOrElse(c.hash, Seq()))
           }
           val newTXVote = VoteCandidate(tx, txToGossipChains.getOrElse(tx.hash, Seq()))
-          val chooseOld = chains.map {
-            _.gossip.size
-          }.sum > newTXVote.gossip.size
+          val chooseOld = chains.map {_.gossip.size}.sum > newTXVote.gossip.size
           val accept = if (chooseOld) chains else Seq(newTXVote)
           val reject = if (!chooseOld) chains else Seq(newTXVote)
 

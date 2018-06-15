@@ -102,43 +102,74 @@ class Data {
     }
   }
 
-  @volatile var bundles: Seq[Bundle] = Seq[Bundle]()
+  @volatile var activeBundles: Seq[Bundle] = Seq[Bundle]()
   @volatile var bundleBuffer: Set[Bundle] = Set[Bundle]()
   val bestBundles: TrieMap[Id, BestBundle] = TrieMap()
 
   var genesisBundle : Bundle = _
   def genesisTXHash: String = genesisBundle.extractTX.head.hash
   @volatile var validBundles : Seq[Bundle] = Seq()
+  def lastBundle: Bundle = validBundles.lastOption.getOrElse(genesisBundle)
   def lastBundleHash = BundleHash(validBundles.lastOption.map{_.hash}.getOrElse(Option(genesisBundle).map{_.hash}.getOrElse("")))
+  @volatile var bestBundle: Bundle = _
   @volatile var bestBundleBase: Bundle = _
   @volatile var bestBundleCandidateHashes: Set[BundleHash] = Set()
 
+  @volatile var lastSquashed: Option[Bundle] = None
+
+  def jaccard[T](t1: Set[T], t2: Set[T]): Double = {
+    t1.intersect(t2).size.toDouble / t1.union(t2).size.toDouble
+  }
+
+  implicit class BundleExtData(b: Bundle) {
+    def txBelow = bundleHashToTXBelow(b.hash)
+    def idBelow = bundleHashToIdsBelow(b.hash)
+    def idAbove = bundleHashToIdsAbove(b.hash)
+    def bundleScore: Int = {
+      txBelow.size + (idBelow.size * 5) + idAbove.size
+    }
+    def pretty: String = s"hash: ${b.short}, numTX: ${txBelow.size}, numId: ${idBelow.size}, " +
+      s"numIdAbove ${idAbove.size}, score: $bundleScore"
+  }
+
+  def prettifyBundle(b: Bundle) = b.pretty
+
+
+
+  case class BundleComparison(b1: Bundle, b2: Bundle) {
+    def txJaccard: Double = jaccard(bundleHashToTXBelow(b1.hash), bundleHashToTXBelow(b2.hash))
+    def idJaccard: Double = jaccard(bundleHashToIdsBelow(b1.hash), bundleHashToIdsBelow(b2.hash))
+    def idAboveJaccard: Double = jaccard(bundleHashToIdsAbove(b1.hash), bundleHashToIdsAbove(b2.hash))
+  }
+
 
   def processNewBundleMetadata(bundle: Bundle, idsAbove: Set[Id] = Set()): Boolean = {
-    totalNumBundleMessages += 1
 
+    val hash = bundle.hash
     // Never before seen bundle
-    val notPresent = !bundleHashToBundle.contains(bundle.hash)
+    val notPresent = !bundleHashToBundle.contains(hash)
     if (notPresent) {
 
-      bundles :+= bundle
-      bundleHashToBundle(bundle.hash) = bundle
-      bundleHashToIdsAbove(bundle.hash) = idsAbove
+      activeBundles :+= bundle
+      bundleHashToBundle(hash) = bundle
+      bundleHashToIdsAbove(hash) = idsAbove
 
       val txs = bundle.extractTX
       val ids = bundle.extractIds
 
-      bundleHashToIdsBelow(bundle.hash) = ids
-      bundleHashToTXBelow(bundle.hash) = txs.map{_.hash}
-      bundleHashToFirstRXTime(bundle.hash) = System.currentTimeMillis()
+      bundleHashToIdsBelow(hash) = ids
+      bundleHashToTXBelow(hash) = txs.map{_.hash}
+      bundleHashToFirstRXTime(hash) = System.currentTimeMillis()
 
       val sb = bundle.extractSubBundles
       val sbh = sb.map {_.hash}
-      bundleHashToBundleHashesBelow(bundle.hash) = sbh
+      bundleHashToBundleHashesBelow(hash) = sbh
+      bundleHashToMinTime(hash) = sb.map{_.bundleData.time}.min
+
       sb.foreach{s => processNewBundleMetadata(s, idsAbove ++ Set(bundle.bundleData.id))}
       sbh.foreach{ s =>
-        if (bundleHashToBundleHashesAbove.contains(s)) bundleHashToBundleHashesAbove(s) += bundle.hash
-        else bundleHashToBundleHashesAbove(s) = Set(bundle.hash)
+        if (bundleHashToBundleHashesAbove.contains(s)) bundleHashToBundleHashesAbove(s) += hash
+        else bundleHashToBundleHashesAbove(s) = Set(hash)
       }
     }
     notPresent
@@ -167,6 +198,8 @@ class Data {
   val bundleHashToBundleHashesAbove : TrieMap[String, Set[String]] = TrieMap()
 
   val bundleHashToBundleHashesBelow : TrieMap[String, Set[String]] = TrieMap()
+
+  val bundleHashToMinTime : TrieMap[String, Long] = TrieMap()
 
   // val bundlesByStackDepth: TrieMap[Int, Set[String]] = TrieMap()
 
