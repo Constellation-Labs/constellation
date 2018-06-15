@@ -223,7 +223,11 @@ object Schema {
           case tx: TX => Set(tx)
           case _ => Set[TX]()
         }
-        depths.reduce(_ ++ _)
+        if (depths.nonEmpty) {
+          depths.reduce(_ ++ _)
+        } else {
+          Set()
+        }
       }
       process(bundleData)
     }
@@ -272,7 +276,6 @@ object Schema {
     }
 
   }
-
 
   final case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash
     with Fiber

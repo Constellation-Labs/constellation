@@ -40,7 +40,7 @@ trait Checkpoint extends PeerAuth {
         val vote = CheckpointVote(bundle)
 
         val callback = (result: ConsensusRoundResult[_ <: CC]) =>  {
-          logger.debug(s"got checkpoint heartbeat callback = $result")
+          logger.debug(s"$publicKey got checkpoint heartbeat callback = $result")
 
           if (result.bundle.bundleData.data.bundles.nonEmpty) {
             bundles = bundles + result.bundle
@@ -49,6 +49,12 @@ trait Checkpoint extends PeerAuth {
           logger.debug(s"bundles = $bundles")
 
           lastCheckpointBundle = Some(result.bundle)
+
+          // cleanup mem pool
+          lastCheckpointBundle.toIterator.foreach(f => {
+            val txs: Set[TX] = f.extractTX
+            memPoolTX --= txs.toList
+          })
 
           checkpointsInProgress.putIfAbsent(roundHash, false)
           ()

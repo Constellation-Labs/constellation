@@ -157,7 +157,7 @@ object Consensus {
 
     // take those transactions bundle and sign them
     // TODO: temp logic
-    val bundleProposal = bundles(consensusRoundState.selfId.get)
+    val bundleProposal = bundles.toSeq.sortWith(_._1.address.address < _._1.address.address).toMap.values.toIterator.next()
 
     bundleProposal match {
       case CheckpointProposal(data) =>
