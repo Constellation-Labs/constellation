@@ -18,35 +18,45 @@ trait Checkpoint extends PeerAuth {
 
   def checkpointHeartbeat(): Unit = {
 
-    if (!checkpointInProgress && !downloadMode) {
-      checkpointInProgress = true
+    if (!downloadMode && peers.nonEmpty) {
 
-      val memPoolSample = memPoolTX.toSeq
+      var roundHash: RoundHash[_ <: CC] = RoundHash(genesisTXHash)
 
-      // TODO: temporarily using all
-      val facilitators = peerIDLookup.keys.toSet + Id(publicKey)
-
-      val roundHash = getCurrentRoundHash()
-
-      val bundle = Bundle(BundleData(memPoolSample).signed())
-
-      val vote = CheckpointVote(bundle)
-
-      val callback = (bundle: ConsensusRoundResult[_ <: CC]) =>  {
-        logger.debug(s"got checkpoint heartbeat callback = $bundle")
-
-        if (bundle.bundle.bundleData.data.bundles.nonEmpty) {
-          bundles = bundles + bundle.bundle
-        }
-
-        logger.debug(s"bundles = $bundles")
-
-        previousCheckpointBundle = Some(bundle.bundle)
-
-        checkpointInProgress = false
+      if (lastCheckpointBundle.isDefined) {
+        roundHash = RoundHash(lastCheckpointBundle.get.roundHash)
       }
 
-      consensusActor ! InitializeConsensusRound(facilitators, roundHash, callback, vote)
+      if (checkpointsInProgress.get(roundHash).isEmpty) {
+
+        checkpointsInProgress.putIfAbsent(roundHash, true)
+
+        val memPoolSample = memPoolTX.toSeq
+
+        // TODO: temporarily using all
+        val facilitators = peerIDLookup.keys.toSet + Id(publicKey)
+
+        val bundle = Bundle(BundleData(memPoolSample).signed())
+
+        val vote = CheckpointVote(bundle)
+
+        val callback = (result: ConsensusRoundResult[_ <: CC]) =>  {
+          logger.debug(s"got checkpoint heartbeat callback = $result")
+
+          if (result.bundle.bundleData.data.bundles.nonEmpty) {
+            bundles = bundles + result.bundle
+          }
+
+          logger.debug(s"bundles = $bundles")
+
+          lastCheckpointBundle = Some(result.bundle)
+
+          checkpointsInProgress.putIfAbsent(roundHash, false)
+          ()
+        }
+
+        consensusActor ! InitializeConsensusRound(facilitators, roundHash, callback, vote)
+      }
+
     }
 
   }

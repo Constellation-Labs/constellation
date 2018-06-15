@@ -101,7 +101,7 @@ class PeerToPeer(
           data match {
             case CheckpointVote(d) =>
               consensusActor ! ConsensusVote(id, data, roundHash)
-              logger.debug(s"received checkpoint start consensus round message = $m")
+              logger.debug(s"received checkpoint start consensus round message roundHash= $roundHash, self = $publicKey id = $id")
             case ConflictVote(d) =>
               logger.debug(s"received conflict start consensus round message = $m")
           }
@@ -118,7 +118,6 @@ class PeerToPeer(
         case u =>
           logger.error(s"Unrecognized UDP message: $u")
       }
-
 
     // Deprecated below
 

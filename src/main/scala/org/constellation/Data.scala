@@ -69,7 +69,7 @@ class Data {
 
   @volatile var downloadMode: Boolean = true
 
-  @volatile var checkpointInProgress: Boolean = false
+  val checkpointsInProgress: TrieMap[RoundHash[_ <: CC], Boolean] = TrieMap()
 
   @volatile var nodeState: NodeState = PendingDownload
 
@@ -112,13 +112,6 @@ class Data {
 
   @volatile var bestBundleSelf: Bundle = _
 
-  def getCurrentRoundHash(): RoundHash[_ <: CC] = {
-    previousCheckpointBundle match {
-      case Some(value) =>
-        RoundHash(value.hash)
-      case None =>
-        RoundHash(genesisTXHash)
-    }
-  }
+  @volatile var lastCheckpointBundle: Option[Bundle] = None
 
 }

@@ -146,7 +146,7 @@ object Consensus {
     // TODO: update here to require a threshold, not every facilitator
     val facilitatorsMissingInfo = roundState.facilitators.filter(f => !r(roundState).contains(f))
 
-    facilitatorsMissingInfo.isEmpty
+    facilitatorsMissingInfo.isEmpty && roundState.facilitators.nonEmpty
   }
 
   // TODO: here is where we call out to bundling logic
@@ -176,6 +176,8 @@ object Consensus {
 
     val selfId = updatedState.selfId.get
 
+    println(s"handler peer vote self = $selfId, peer = $peer, roundHash = $roundHash, facilitators = ${updatedState.roundStates(roundHash).facilitators}")
+
     if (peerThresholdMet(updatedState, roundHash)(_.votes)) {
       val roundState = getCurrentRoundState[T](updatedState, roundHash)
 
@@ -191,14 +193,7 @@ object Consensus {
       val votes = roundState.votes
 
       // TODO: temp logic
-
-      try {
-        val vote = votes(updatedState.selfId.get)
-      } catch {
-        case _: Throwable => {
-          val test = false
-        }
-      }
+      val vote = votes(updatedState.selfId.get)
 
       val proposal = vote match {
         case CheckpointVote(data) =>
@@ -234,7 +229,7 @@ object Consensus {
       roundState.callback(ConsensusRoundResult(bundle, roundHash))
 
       // TODO: do we need to gossip this event also?
-   //   updatedState = cleanupRoundStateCache(updatedState, roundHash)
+      updatedState = cleanupRoundStateCache(updatedState, roundHash)
     }
 
     updatedState
@@ -251,12 +246,15 @@ class Consensus(keyPair: KeyPair, udpActor: ActorRef)(implicit timeout: Timeout)
   def consensus(consensusRoundState: ConsensusRoundState): Receive = {
 
     case InitializeConsensusRound(facilitators, roundHash, callback, vote) =>
+      log.debug(s"init consensus round message roundHash = $roundHash")
       context.become(consensus(initializeConsensusRound(consensusRoundState, facilitators, roundHash, callback, vote)))
 
     case ConsensusVote(id, vote, roundHash) =>
+      log.debug(s"consensus vote for roundHash = $roundHash, id = $id")
       context.become(consensus(handlePeerVote(consensusRoundState, id, vote, roundHash)))
 
     case ConsensusProposal(id, bundle, roundHash) =>
+      log.debug(s"consensus proposal for roundHash = $roundHash, id = $id")
       context.become(consensus(handlePeerProposedBundle(consensusRoundState, id, bundle, roundHash)))
   }
 

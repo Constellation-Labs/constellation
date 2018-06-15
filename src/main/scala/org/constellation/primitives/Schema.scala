@@ -5,11 +5,14 @@ import java.net.InetSocketAddress
 import java.security.PublicKey
 
 import constellation.pubKeyToAddress
+import org.constellation.consensus.Consensus.{CC, RoundHash}
 import org.constellation.crypto.Base58
 import org.constellation.util.EncodedPublicKey
 import org.constellation.util.{ProductHash, Signed}
 
 import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
+import scala.util.Random
 
 // This can't be a trait due to serialization issues
 object Schema {
@@ -209,6 +212,7 @@ object Schema {
                            bundleData: Signed[BundleData]
                          ) extends ProductHash with Fiber with GossipMessage {
 
+    val bundleNumber: Long = Random.nextLong()
 
     def extractTX: Set[TX] = {
       def process(s: Signed[BundleData]): Set[TX] = {
@@ -263,6 +267,10 @@ object Schema {
       process(bundleData) + 1
     }
 
+    def roundHash: String = {
+      bundleNumber.toString
+    }
+
   }
 
 
@@ -310,7 +318,10 @@ object Schema {
   sealed trait DownloadMessage
 
   case class DownloadRequest() extends DownloadMessage
-  case class DownloadResponse(validTX: Set[TX], validUTXO: Map[String, Long]) extends DownloadMessage
+
+  case class DownloadResponse(validTX: Set[TX],
+                              validUTXO: Map[String, Long],
+                              lastCheckpointBundle: Option[Bundle]) extends DownloadMessage
 
   final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage
 
