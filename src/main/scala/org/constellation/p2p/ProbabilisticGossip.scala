@@ -198,7 +198,7 @@ trait ProbabilisticGossip extends PeerAuth {
     }
 
     // || peers have no bundles / stalled.
-    val memPoolEmit = Random.nextInt() < 0.2 && (System.currentTimeMillis() < lastBundle.maxTime + 25000)
+    val memPoolEmit = Random.nextInt() < 0.3 // && (System.currentTimeMillis() < lastBundle.maxTime + 25000)
 
     if (memPoolTX.nonEmpty && (memPoolEmit || genesisAdditionCheck)) {
       // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
