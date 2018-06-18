@@ -34,6 +34,10 @@ trait ProbabilisticGossip extends PeerAuth {
   }
 
   def gossipHeartbeat(): Int = {
+
+    if (!downloadMode) {
+      bundleHeartbeat()
+    }
     0
 
     /*
@@ -178,7 +182,7 @@ trait ProbabilisticGossip extends PeerAuth {
 
     val candidates = activeDAGBundles.filter{ b =>
       b.extractBundleHash == lastBundleHash &&
-        b.maxTime < (lastBundle.maxTime + 60000) &&
+        b.maxTime < (lastBundle.maxTime + 40000) &&
         b.maxStackDepth <= 6
     }
 
@@ -189,16 +193,16 @@ trait ProbabilisticGossip extends PeerAuth {
     bb.foreach{bestBundle = _}
 
     if (!downloadMode) {
-      println(s"SENDING DATA IN MEMPOOL ${memPoolTX.size}")
+    //  println(s"SENDING DATA IN MEMPOOL ${memPoolTX.size}")
       broadcast(PeerSync(bb, lastBundle, lastSquashed, memPoolTX, validBundles.map{_.hash}))
     }
 
     // || peers have no bundles / stalled.
-    val memPoolEmit = Random.nextInt() < 0.2 && (System.currentTimeMillis() < lastBundle.maxTime + 30000)
+    val memPoolEmit = Random.nextInt() < 0.2 && (System.currentTimeMillis() < lastBundle.maxTime + 25000)
 
     if (memPoolTX.nonEmpty && (memPoolEmit || genesisAdditionCheck)) {
       // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
-      val memPoolSelSize = Random.nextInt(15)
+      val memPoolSelSize = Random.nextInt(45)
       val memPoolSelection = Random.shuffle(memPoolTX.toSeq).slice(0, memPoolSelSize + 3)
       val b = Bundle(BundleData(memPoolSelection :+ lastBundleHash).signed())
       processNewBundleMetadata(b)
@@ -216,12 +220,14 @@ trait ProbabilisticGossip extends PeerAuth {
       .groupBy(b => b.maxStackDepth).foreach {
       case (_, bundles) =>
         //val sorted = bundles.sortBy(b => (b.idBelow.size, b.txBelow.size, b.hash))
-        bundles.combinations(2).foreach {
+        val random = Random.shuffle(bundles).slice(0, 5)
+        val iterator = random.combinations(2)
+        iterator.foreach {
           case both@Seq(l, r) =>
             val hasNewTransactions = l.txBelow.diff(r.txBelow).nonEmpty
-            val minTimeClose = Math.abs(l.minTime - r.minTime) < 15000
-            val maxTimeClose = Math.abs(l.maxTime - r.maxTime) < 15000
-            if (hasNewTransactions && minTimeClose && maxTimeClose) {
+            val minTimeClose = Math.abs(l.minTime - r.minTime) < 6000
+            val maxTimeClose = Math.abs(l.maxTime - r.maxTime) < 6000
+            if (hasNewTransactions && minTimeClose && maxTimeClose && Random.nextDouble() > 0.5) {
               val b = Bundle(BundleData(both).signed())
               processNewBundleMetadata(b)
               broadcast(b)
@@ -238,7 +244,7 @@ trait ProbabilisticGossip extends PeerAuth {
       }
       val peerFraction = numPeersWithValid.toDouble / peerSync.keys.size.toDouble
 
-      if (System.currentTimeMillis() > (b.maxTime + 20000) && peerFraction >= 0.5) {
+      if (System.currentTimeMillis() > (b.minTime + 20000) && peerFraction >= 0.5) {
         acceptBundle(b)
       }
     }
@@ -459,7 +465,7 @@ trait ProbabilisticGossip extends PeerAuth {
       case g : Gossip[ProductHash] =>
       // handleGossipRegular(g, remote)
       case bb: PeerSync =>
-        println(s"RECEIVED PEER SYNC OF MEMPOOL SIZE ${bb.memPool.size}")
+    //    println(s"RECEIVED PEER SYNC OF MEMPOOL SIZE ${bb.memPool.size}")
         bb.bundle.foreach{b => handleBundle(b)}
         Option(bb.lastBestBundle).foreach{b => handleBundle(b)}
         peerSync(rid) = bb
