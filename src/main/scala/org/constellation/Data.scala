@@ -11,6 +11,7 @@ import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.util.Try
 import constellation._
+import org.constellation.consensus.Consensus.{CC, RoundHash}
 
 class Data {
 
@@ -67,6 +68,8 @@ class Data {
   def selfBalance: Option[Long] = validLedger.get(id.address.address)
 
   @volatile var downloadMode: Boolean = true
+
+  val checkpointsInProgress: TrieMap[RoundHash[_ <: CC], Boolean] = TrieMap()
 
   @volatile var nodeState: NodeState = PendingDownload
 
@@ -221,5 +224,6 @@ class Data {
   val bundleHashToDepth: TrieMap[String, Int] = TrieMap()
 
 
+  @volatile var lastCheckpointBundle: Option[Bundle] = None
 
 }

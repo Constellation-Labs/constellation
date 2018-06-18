@@ -28,7 +28,6 @@ trait PeerAuth {
   implicit val executionContext: ExecutionContextExecutor
   implicit val actorSystem: ActorSystem
 
-
   def broadcast[T <: AnyRef](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
     val dest = if (idSubset.isEmpty) peerIDLookup.keys else idSubset
     dest.foreach{ i =>
@@ -131,7 +130,8 @@ trait PeerAuth {
       val value = sh.handShakeResponse.data.response.originPeer
       val newPeers = Seq() //sh.handShakeResponse.data.response.peers
       addPeer(value, newPeers)
-      remotes += remote
+      peerLookup(remote) = value
+    //  remotes += remote
     }
   }
 
@@ -157,12 +157,9 @@ trait PeerAuth {
         code
     }
 
-
   }
 
   // TODO: Send other peers termination message on shutdown.
-
-
 
 
 }

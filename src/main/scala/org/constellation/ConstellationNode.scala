@@ -86,7 +86,6 @@ class ConstellationNode(
 
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
-
  // logger.info(s"UDP Info - hostname: $hostName interface: $udpInterface port: $udpPort")
 
   implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
