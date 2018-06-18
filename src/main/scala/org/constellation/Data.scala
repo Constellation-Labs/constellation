@@ -182,9 +182,14 @@ class Data {
   @volatile var totalNumBroadcastMessages = 0
 
   def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
-    validTX += tx
+
+    if (!validTX.contains(tx)) {
+      validTX += tx
+      tx.updateLedger(validLedger)
+    }
+
     memPoolTX -= tx
-    tx.updateLedger(validLedger)
+
     if (tx.tx.data.isGenesis) {
       tx.updateLedger(memPoolLedger)
     }

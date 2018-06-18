@@ -167,7 +167,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
 
 
-  Thread.sleep(3000000)
+  // Thread.sleep(3000000)
 
 /*
     for (node <- nodes) {

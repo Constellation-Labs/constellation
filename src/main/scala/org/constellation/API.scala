@@ -104,9 +104,11 @@ class API(
             "id" -> id.b58,
             "keyPair" -> keyPair.json,
             "shortId" -> id.short,
+            "numValidBundles" -> validBundles.size.toString,
             "numValidTransactions" -> validTX.size.toString,
             "memPoolSize" -> memPoolTX.size.toString,
-            "totalNumGossipMessages" -> totalNumGossipMessages.toString,
+            "totalNumBroadcasts" -> totalNumBroadcastMessages.toString,
+            "totalNumBundleMessages" -> totalNumBundleMessages.toString,
             "numPeers" -> peers.size.toString,
             "peers" -> peers.map{ z =>
               val addr = s"http://${z.data.apiAddress.getHostName}:${z.data.apiAddress.getPort}"
@@ -118,6 +120,7 @@ class API(
             "last10TXHash" -> sentTX.reverse.slice(0, 10).map{_.hash}.mkString(","),
             "last10ValidBundleHashes" -> validBundles.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
             "lastValidBundleHash" -> lastBundleHash.hash,
+            "lastValidBundle" -> Option(lastBundle).map{_.pretty}.getOrElse(""),
             "genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
             "genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
             "selfBestBundle" -> Option(bestBundle).map{_.pretty}.getOrElse(""),
