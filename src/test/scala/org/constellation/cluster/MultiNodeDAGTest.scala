@@ -214,20 +214,12 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
    // println(n2UTXO)
 
 */
-
-
     // println(b3)
-
-
     /*
-
-
 
   */
 
-
-
-    //Thread.sleep(1000000)
+   // Thread.sleep(1000000)
     // Thread.sleep(1000000)
 
     // Cleanup DBs

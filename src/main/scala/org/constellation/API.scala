@@ -46,7 +46,7 @@ class API(
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-  val logger = Logger(s"RPCInterface")
+  val logger = Logger(s"APIInterface")
 
   val routes: Route =
     get {
