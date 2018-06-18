@@ -144,33 +144,15 @@ trait ProbabilisticGossip extends PeerAuth {
     activeBundles = Seq()
   }
 
-  def genesisAdditionCheck: Boolean =
-    lastBundleHash == genesisBundle.bundleHash && // This is the first bundle creation attempt after genesis
-      genesisBundle.extractIds.head == id // This node created the genesis bundle
+  def genesisCheck(): Unit = {
 
-  def bundleHeartbeat(): Unit = {
 
-    val bb: Option[Bundle] = if (activeBundles.isEmpty) None else {
-      Some(activeBundles.maxBy{ b => (b.extractIds.size, b.extractTX.size, b.hash)})
-    }
+    val bbExist = Option(bestBundle).exists {_.txBelow.size >= 2}
 
-    bb.foreach{bestBundle = _}
-
-    if (!downloadMode) {
-      broadcast(PeerSync(bb, lastBundle, lastSquashed, memPoolTX))
-    }
-
-    val memPoolEmit = Random.nextInt() < 0.5
-
-    if ((memPoolTX.nonEmpty && memPoolEmit) || genesisAdditionCheck) {
-      // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
-      val b = Bundle(BundleData(memPoolTX.toSeq :+ lastBundleHash).signed())
-      processNewBundleMetadata(b)
-      broadcast(b)
-    }
+    logger.debug(s"Genesis check $genesisAdditionCheck $bbExist")
 
     if ( genesisAdditionCheck &&
-        Option(bestBundle).exists{_.extractIds.size >= 2} // Bundle has at least one new facilitator.
+      bbExist
     ) {
       // squashBundle(bestBundle)
       acceptBundle(bestBundle)
@@ -185,6 +167,60 @@ trait ProbabilisticGossip extends PeerAuth {
         }
       }
     }
+
+  }
+
+  def genesisAdditionCheck: Boolean =
+    lastBundleHash == genesisBundle.bundleHash && // This is the first bundle creation attempt after genesis
+      genesisBundle.extractIds.head == id // This node created the genesis bundle
+
+  def bundleHeartbeat(): Unit = {
+
+    val candidates = activeBundles.filter{ b =>
+      b.extractBundleHash == lastBundleHash && b.maxTime < (lastBundle.maxTime + 20000)
+    }
+
+    val bb: Option[Bundle] = if (candidates.isEmpty) None else {
+      Some(candidates.maxBy{ b => (b.maxStackDepth, b.extractIds.size, b.extractTX.size, b.hash)})
+    }
+
+    bb.foreach{bestBundle = _}
+
+    if (!downloadMode) {
+      broadcast(PeerSync(bb, lastBundle, lastSquashed, memPoolTX))
+    }
+
+    val memPoolEmit = Random.nextInt() < 0.5
+
+    if (memPoolTX.nonEmpty && (memPoolEmit || genesisAdditionCheck)) {
+      // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
+      val b = Bundle(BundleData(memPoolTX.toSeq :+ lastBundleHash).signed())
+      processNewBundleMetadata(b)
+      broadcast(b)
+    }
+
+    genesisCheck()
+
+  //  if (System.currentTimeMillis() < (lastBundle.maxTime + 10000)) {
+      activeBundles.filter { b => !b.idBelow.contains(id) &&
+        b.extractBundleHash == lastBundleHash &&
+        b.maxTime < (lastBundle.maxTime + 10000)}.groupBy(b => b.maxStackDepth).foreach {
+        case (_, bundles) =>
+          //val sorted = bundles.sortBy(b => (b.idBelow.size, b.txBelow.size, b.hash))
+          bundles.combinations(2).foreach {
+            case both@Seq(l, r) =>
+              val hasNewTransactions = l.txBelow.diff(r.txBelow).nonEmpty
+              val minTimeClose = Math.abs(l.minTime - r.minTime) < 3000
+              val maxTimeClose = Math.abs(l.maxTime - r.maxTime) < 3000
+              if (hasNewTransactions && minTimeClose && maxTimeClose) {
+                val b = Bundle(BundleData(both).signed())
+                processNewBundleMetadata(b)
+                broadcast(b)
+              }
+          }
+      }
+  //  }
+
 
 
 
@@ -310,7 +346,7 @@ trait ProbabilisticGossip extends PeerAuth {
 
   def validateTXBatch(txs: Set[TX]): Boolean =
     validateTransactionBatch(txs, memPoolLedger) &&
-    validateTransactionBatch(txs, validLedger)
+      validateTransactionBatch(txs, validLedger)
 
   def handleBundle(bundle: Bundle): Unit = {
 
@@ -318,9 +354,10 @@ trait ProbabilisticGossip extends PeerAuth {
 
     val txs = bundle.extractTX
 
+
     // Also need to verify there are not multiple occurrences of same id re-signing bundle, and reps.
-    val valid = validateTXBatch(txs)
-   // val hasCorrectBaseHash = bundle.extractBundleHash == lastBundleHash
+    val valid = validateTXBatch(txs) && txs.intersect(validTX).isEmpty
+    // val hasCorrectBaseHash = bundle.extractBundleHash == lastBundleHash
     // val hasNewTransactions = txs.exists{ t => !memPoolTX.contains(t)}
 
     if (valid) {

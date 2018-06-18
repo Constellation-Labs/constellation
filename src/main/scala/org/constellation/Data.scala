@@ -128,7 +128,9 @@ class Data {
     def bundleScore: Int = {
       txBelow.size + (idBelow.size * 5) + idAbove.size
     }
-    def pretty: String = s"hash: ${b.short}, numTX: ${txBelow.size}, numId: ${idBelow.size}, " +
+    def minTime = bundleHashToMinTime(b.hash)
+    def maxTime: Long = b.bundleData.time
+    def pretty: String = s"hash: ${b.short}, depth: ${b.maxStackDepth}, numTX: ${txBelow.size}, numId: ${idBelow.size}, " +
       s"numIdAbove ${idAbove.size}, score: $bundleScore"
   }
 
@@ -164,7 +166,7 @@ class Data {
       val sb = bundle.extractSubBundles
       val sbh = sb.map {_.hash}
       bundleHashToBundleHashesBelow(hash) = sbh
-      bundleHashToMinTime(hash) = sb.map{_.bundleData.time}.min
+      bundleHashToMinTime(hash) = if (sb.isEmpty) bundle.bundleData.time else sb.map{_.bundleData.time}.min
 
       sb.foreach{s => processNewBundleMetadata(s, idsAbove ++ Set(bundle.bundleData.id))}
       sbh.foreach{ s =>

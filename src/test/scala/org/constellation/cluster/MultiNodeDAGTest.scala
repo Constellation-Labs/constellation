@@ -80,7 +80,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       })
     }
 
-    Thread.sleep(10000)
+    Thread.sleep(2000)
 
 
     println("-"*10)
