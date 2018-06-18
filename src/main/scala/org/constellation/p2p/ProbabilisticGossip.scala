@@ -143,7 +143,7 @@ trait ProbabilisticGossip extends PeerAuth {
     b.extractTX.foreach{ t =>
       acceptTransaction(t)
     }
-    activeBundles = Seq()
+    activeDAGBundles = Seq()
   }
 
   def genesisCheck(): Unit = {
@@ -176,7 +176,7 @@ trait ProbabilisticGossip extends PeerAuth {
 
   def bundleHeartbeat(): Unit = {
 
-    val candidates = activeBundles.filter{ b =>
+    val candidates = activeDAGBundles.filter{ b =>
       b.extractBundleHash == lastBundleHash &&
         b.maxTime < (lastBundle.maxTime + 60000) &&
         b.maxStackDepth <= 6
@@ -189,6 +189,7 @@ trait ProbabilisticGossip extends PeerAuth {
     bb.foreach{bestBundle = _}
 
     if (!downloadMode) {
+      println(s"SENDING DATA IN MEMPOOL ${memPoolTX.size}")
       broadcast(PeerSync(bb, lastBundle, lastSquashed, memPoolTX, validBundles.map{_.hash}))
     }
 
@@ -326,7 +327,7 @@ trait ProbabilisticGossip extends PeerAuth {
 
   def findCommonSubBundles() = {
 
-    val results = activeBundles.combinations(2).toSeq.flatMap{
+    val results = activeDAGBundles.combinations(2).toSeq.flatMap{
       case Seq(l,r) =>
         val sub = l.extractSubBundlesMinSize()
         val subr = r.extractSubBundlesMinSize()
@@ -458,6 +459,7 @@ trait ProbabilisticGossip extends PeerAuth {
       case g : Gossip[ProductHash] =>
       // handleGossipRegular(g, remote)
       case bb: PeerSync =>
+        println(s"RECEIVED PEER SYNC OF MEMPOOL SIZE ${bb.memPool.size}")
         bb.bundle.foreach{b => handleBundle(b)}
         Option(bb.lastBestBundle).foreach{b => handleBundle(b)}
         peerSync(rid) = bb
@@ -474,6 +476,7 @@ trait ProbabilisticGossip extends PeerAuth {
   }
 
 
+/*
   def handleSyncData(d: SyncData, remote: InetSocketAddress): Unit = {
 
     val rid = peerLookup(remote)
@@ -509,6 +512,7 @@ trait ProbabilisticGossip extends PeerAuth {
     // logger.debug(s"SyncData message size: ${d.validTX.size} on ${validTX.size} ${id.short}")
 
   }
+*/
 
 
   def handleGossipRegular(g: Gossip[ProductHash], remote: InetSocketAddress): Unit = {

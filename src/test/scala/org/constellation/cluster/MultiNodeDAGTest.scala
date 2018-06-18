@@ -80,7 +80,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       })
     }
 
-    Thread.sleep(2000)
+    Thread.sleep(10000)
 
 
     println("-"*10)
@@ -121,6 +121,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       }(ec)
     }
 
+/*
 
     val numTX = 200
 
@@ -139,6 +140,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val allTX = Set(genTx) ++ initialDistrTX.toSet ++ txs
 
     var done = false
+*/
 
 /*
 
@@ -167,7 +169,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
 
 
-  // Thread.sleep(3000000)
+  Thread.sleep(3000000)
 
 /*
     for (node <- nodes) {

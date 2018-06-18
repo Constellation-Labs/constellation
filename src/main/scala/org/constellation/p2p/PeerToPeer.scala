@@ -62,7 +62,7 @@ class PeerToPeer(
 
         downloadHeartbeat()
 
-        checkpointHeartbeat()
+     //   checkpointHeartbeat()
 
         val numAccepted = gossipHeartbeat()
 
@@ -70,7 +70,7 @@ class PeerToPeer(
           s"Heartbeat: ${id.short}, " +
             s"bundles: $totalNumBundleMessages, " +
             s"broadcasts: $totalNumBroadcastMessages, " +
-            s"numBundles: ${activeBundles.size}, " +
+            s"numBundles: ${activeDAGBundles.size}, " +
             s"gossip: $totalNumGossipMessages, " +
             s"balance: $selfBalance, " +
             s"memPool: ${memPoolTX.size} numPeers: ${peers.size} " +
@@ -98,10 +98,11 @@ class PeerToPeer(
 
         case sh: HandShakeResponseMessage => handleHandShakeResponse(sh, remote)
 
-        case m @ StartConsensusRound(id, data, roundHash) => {
-          data match {
+/*
+        case m @ StartConsensusRound(id, voteData, roundHash) => {
+          voteData match {
             case CheckpointVote(d) =>
-              consensusActor ! ConsensusVote(id, data, roundHash)
+              consensusActor ! ConsensusVote(id, voteData, roundHash)
               logger.debug(s"received checkpoint start consensus round message roundHash= $roundHash, self = $publicKey id = $id")
             case ConflictVote(d) =>
               logger.debug(s"received conflict start consensus round message = $m")
@@ -109,6 +110,7 @@ class PeerToPeer(
         }
 
         case message: RemoteMessage => consensusActor ! message
+*/
 
         // case g @ Gossip(_) => handleGossip(g, remote)
         case gm : GossipMessage => handleGossip(gm, remote)

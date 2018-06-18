@@ -116,7 +116,7 @@ class API(
             }.mkString(" --- "),
             "genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
             "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
-            "numActiveBundles" -> activeBundles.size.toString,
+            "numActiveBundles" -> activeDAGBundles.size.toString,
             "last10TXHash" -> sentTX.reverse.slice(0, 10).map{_.hash}.mkString(","),
             "last10ValidBundleHashes" -> validBundles.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
             "lastValidBundleHash" -> lastBundleHash.hash,
@@ -133,7 +133,8 @@ class API(
               ).toString,
             "z_peers" -> peers.map{_.data}.json,
             "z_UTXO" -> validLedger.toMap.json,
-            "z_Bundles" -> activeBundles.map{_.pretty}.mkString("\n\n")
+            "z_Bundles" -> activeDAGBundles.map{_.pretty}.mkString("\n\n"),
+            "downloadMode" -> downloadMode.toString
           )))
         } ~
         path("validTX") {

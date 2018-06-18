@@ -47,9 +47,12 @@ class Data {
   val txHashToTX: TrieMap[String, TX] = TrieMap()
 
   @volatile var sentTX: Seq[TX] = Seq()
+
   @volatile var memPoolTX: Set[TX] = Set()
+  @volatile var linearMemPoolTX: Set[TX] = Set()
+
   @volatile var validTX: Set[TX] = Set()
-  @volatile var validSyncPendingTX: Set[TX] = Set()
+  @volatile var linearValidTX: Set[TX] = Set()
 
   val validLedger: TrieMap[String, Long] = TrieMap()
   val memPoolLedger: TrieMap[String, Long] = TrieMap()
@@ -105,8 +108,8 @@ class Data {
     }
   }
 
-  @volatile var activeBundles: Seq[Bundle] = Seq[Bundle]()
-  @volatile var bundleBuffer: Set[Bundle] = Set[Bundle]()
+  @volatile var linearCheckpointBundles: Set[Bundle] = Set[Bundle]()
+  @volatile var activeDAGBundles: Seq[Bundle] = Seq[Bundle]()
   val peerSync: TrieMap[Id, PeerSync] = TrieMap()
 
   var genesisBundle : Bundle = _
@@ -155,7 +158,7 @@ class Data {
     val notPresent = !bundleHashToBundle.contains(hash)
     if (notPresent) {
 
-      activeBundles :+= bundle
+      activeDAGBundles :+= bundle
       bundleHashToBundle(hash) = bundle
       bundleHashToIdsAbove(hash) = idsAbove
 
