@@ -24,11 +24,15 @@ trait Cell[A]
 object Cell {
   implicit val cellFunctor: Functor[Cell] {def map[A, B](fa: Cell[A])(f: A => B): Cell[B]} = new Functor[Cell] {
     override def map[A, B](fa: Cell[A])(f: (A) => B): Cell[B] = fa match {
-      case FiberBundle(sheaf) => FiberBundle(f(sheaf))
+//      case SingularHomology(sheaf) => SingularHomology(f(sheaf))
+      case SingularHomology(sheaf) => SingularHomology(sheaf)
+      case Homotopy(a, next) => Homotopy(a, f(next))
     }
+
   }
 
   def findCommonSubBundles(bundles: Seq[Bundle] = Seq[Bundle]()) = {
+    //TODO reshuffle subbindles to make the most efficient site. Could return a full
     val results: Map[Bundle, Int] = bundles.combinations(2).toSeq.flatMap{
       case Seq(l,r) =>
         val sub = l.extractSubBundlesMinSize()
@@ -56,27 +60,20 @@ object Cell {
   val coAlgebra: Sheaf => Cell[Sheaf] = {//ever transaction has to tell us the sender's state
     //  case handleSync => //return a valid sheaf of the sync data the person needed, this is the else below
     case sheaf: Sheaf =>
-      //sign stuff, call manager for most recent poset bundle
-      //InternalHeartbeat should be able to count as poset bundle
-      val germ = sheaf.germ.get
-      val txs: Set[TX] = germ.extractTX
-      val ids = germ.extractIds
-      val commonSubBundles: Map[Bundle, Int] = findCommonSubBundles()//for every bundle, how many connections to others
-
-      val valid = txs.forall(t => t.ledgerValid(validLedger) && t.valid && t.ledgerValid(memPoolLedger))//TODO make these futures and flatmap them
-      val newTX = txs.exists{t => !memPoolTX.contains(t)}
-//    todo add  if (valid && newTX)
-        FiberBundle(sheaf)//pass in commonSubBundles as well so we can make dank bundle if configured, if we need more
-    // info, send partially applied FiberBundle to algebra and recursively reduce over meta calls.
+//      val germ = sheaf.germ.get
+//      val txs: Set[TX] = germ.extractTX
+//      val newTX = txs.exists{t => !memPoolTX.contains(t)}
+//      if (newTX){
+//        val commonSubBundles: Map[Bundle, Int] = findCommonSubBundles(Seq(germ))//for every bundle, how many connections to others
+//      }
+      SingularHomology(sheaf)
   }
 
   /**
     * Teardown
     */
   val algebra: Cell[Sheaf] => Sheaf = {
-    case FiberBundle(result) =>
-      if (true){result}//TODO do we need more network info to make this guy
-    else result//Otherwise return
+    case SingularHomology(sheaf) => sheaf
   }
 
   /**
@@ -110,10 +107,10 @@ object Cell {
 
   /**
     *
-    * @param sheaf
+    * @param cell
     * @return
     */
-  def liftF(sheaf: Cell[Sheaf]): Cell[Sheaf] = meta(algebra)(coAlgebra)(sheaf)
+  def liftF(cell: Cell[Sheaf]): Cell[Sheaf] = meta(algebra)(coAlgebra)(cell)
 }
 
 /**
@@ -125,14 +122,17 @@ object Cell {
   * @param sheaf
   * @tparam A
   */
-case class FiberBundle[A](sheaf: A) extends Cell[A]
+case class SingularHomology[A](sheaf: Sheaf) extends Cell[A]
+case class Homotopy[A](sheaf: Sheaf, bundle: A) extends Cell[A]
+
 
 /**
   * Wrapper for maintaining metadata about manifold topology. Useful for combining logic contained in product operators
   */
-case class Sheaf(germ: Option[Bundle] = None, var dimension: Int = -11) extends ProductHash with Monoid[Sheaf] {//TODO turn into monad so we can flatmap collection
+case class Sheaf(germ: Option[Bundle] = None) extends ProductHash with Monoid[Sheaf] {//TODO turn into monad so we can flatmap collection
   //TODO call the method that invokes minhash/combine 'section' https://arxiv.org/pdf/0907.0995.pdf
   def empty = Sheaf()
-  def combine(x: Sheaf, y: Sheaf = this) = Sheaf(None, x.dimension - 1)
+  def combine(x: Sheaf, y: Sheaf = this) = Sheaf(None)
 }
 
+//TODO define dank bundle as the most optimal site formed given stae and new sheaf.

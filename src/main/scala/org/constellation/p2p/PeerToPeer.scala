@@ -107,7 +107,7 @@ class PeerToPeer(
 
         // Deprecated
         case t: AddTransaction => memPoolActor ! t
-        case sheaf: Sheaf => ringBuf ! sheaf
+//        case sheaf: Sheaf => ringBuf ! sheaf
         case u =>
           logger.error(s"Unrecognized UDP message: $u")
       }
@@ -124,10 +124,10 @@ class PeerToPeer(
   /**
     * Pipes messages sent to ActorRef into async buffer, will need mapAsync when returning futures (ask's to chain state manager)
     */
-  import constellation._
-  val buffer = Source.actorRef[Sheaf](100, OverflowStrategy.dropNew)
-  val liftedEvents = buffer.map(embed)
-  val ringBuf = Flow[Sheaf].to(Sink.actorRef(consensusActor, "bogus")).runWith(liftedEvents)
+//  import constellation._
+//  val buffer = Source.actorRef[Sheaf](100, OverflowStrategy.dropNew)
+//  val liftedEvents = buffer.map(embed)
+//  val ringBuf = Flow[Sheaf].to(Sink.actorRef(consensusActor, "bogus")).runWith(liftedEvents)
 
-  def embed(event: Sheaf): Sheaf = Cell.ioF(Sheaf().signed())
+//  def embed(event: Sheaf): Sheaf = Cell.ioF(Sheaf().signed())
 }
