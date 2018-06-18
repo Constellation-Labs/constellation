@@ -103,7 +103,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     }
 */
 
-    Thread.sleep(5000)
+    Thread.sleep(20000)
 
 
     def randomNode: ConstellationNode = nodes(Random.nextInt(nodes.length))
@@ -121,26 +121,26 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       }(ec)
     }
 
-/*
-    val numTX = 1000
+
+    val numTX = 200
 
     val start = System.currentTimeMillis()
 
     val txResponse = Seq.fill(numTX) {
-      Thread.sleep(2000)
+      Thread.sleep(500)
       sendRandomTransaction
     }
 
     val txResponseFut = Future.sequence(txResponse)
-    */
 
-/*
 
     val txs = txResponseFut.get(100).toSet
 
     val allTX = Set(genTx) ++ initialDistrTX.toSet ++ txs
 
     var done = false
+
+/*
 
 
     while (!done) {

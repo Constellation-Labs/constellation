@@ -223,7 +223,8 @@ object Schema {
                                bundle: Option[Bundle],
                                lastBestBundle: Bundle,
                                squashed: Option[Bundle] = None,
-                               memPool: Set[TX] = Set()
+                               memPool: Set[TX] = Set(),
+                               validBundleHashes: Seq[String]
                              ) extends GossipMessage
 
   final case class Bundle(

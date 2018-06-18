@@ -75,6 +75,15 @@ class API(
           }
         }
       } ~
+      pathPrefix("bundle") {
+        get {
+          extractUnmatchedPath { p =>
+            logger.debug(s"Unmatched path on bundle result $p")
+            val ps = p.toString().tail
+            complete(validBundles.filter{_.hash == ps}.headOption.prettyJson)
+          }
+        }
+      } ~
       path("setKeyPair") {
         parameter('keyPair) { kpp =>
           logger.debug("Set key pair " + kpp)
@@ -116,6 +125,9 @@ class API(
               case (id, b) =>
                 s"PEER: ${id.short}, BEST: ${b.bundle.map{_.pretty}.getOrElse("")} LAST: ${b.lastBestBundle.pretty}"
             }.mkString(" ----- "),
+            "allPeerSynchronized" -> (
+              (peerSync.map{_._2.validBundleHashes.last} ++ Seq(lastBundle.hash)).toSet.size == 1
+              ).toString,
             "z_peers" -> peers.map{_.data}.json,
             "z_UTXO" -> validLedger.toMap.json,
             "z_Bundles" -> activeBundles.map{_.pretty}.mkString("\n\n")
