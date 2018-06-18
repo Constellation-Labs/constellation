@@ -130,7 +130,8 @@ trait PeerAuth {
       val value = sh.handShakeResponse.data.response.originPeer
       val newPeers = Seq() //sh.handShakeResponse.data.response.peers
       addPeer(value, newPeers)
-      remotes += remote
+      peerLookup(remote) = value
+    //  remotes += remote
     }
   }
 

@@ -18,7 +18,7 @@ trait Checkpoint extends PeerAuth {
 
   def checkpointHeartbeat(): Unit = {
 
-    if (!downloadMode && peers.nonEmpty) {
+    if (!downloadMode) {
 
       var roundHash: RoundHash[_ <: CC] = RoundHash(genesisTXHash)
 
@@ -54,6 +54,7 @@ trait Checkpoint extends PeerAuth {
           lastCheckpointBundle.toIterator.foreach(f => {
             val txs: Set[TX] = f.extractTX
             memPoolTX --= txs.toList
+            validTX ++= txs
           })
 
           checkpointsInProgress.putIfAbsent(roundHash, false)

@@ -176,8 +176,6 @@ object Consensus {
 
     val selfId = updatedState.selfId.get
 
-    println(s"handler peer vote self = $selfId, peer = $peer, roundHash = $roundHash, facilitators = ${updatedState.roundStates(roundHash).facilitators}")
-
     if (peerThresholdMet(updatedState, roundHash)(_.votes)) {
       val roundState = getCurrentRoundState[T](updatedState, roundHash)
 

@@ -139,7 +139,6 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       assert(rpc.post("ip", rpc.host + ":16180").get().unmarshal.get() == "OK")
     }
 
-
     val r1 = rpcs.head
 
     // Create a genesis transaction
@@ -173,9 +172,9 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     }
 
     val initialDistrTX = rpcs.tail.map{ n =>
-      val dst = n.getBlocking[Address]("address")
+      val dst = n.getBlocking[Address]("selfAddress")
       val s = SendToAddress(dst, 1e7.toLong)
-      r1.postRead[TX]("sendToAddress", s)
+      r1.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
     }
 
     Thread.sleep(10000)
@@ -190,7 +189,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
         val src = randomNode
         val dst = randomOtherNode(src).getBlocking[Address]("selfAddress")
         val s = SendToAddress(dst, Random.nextInt(1000).toLong)
-        src.postRead[TX]("sendToAddress", s)
+        src.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
       }(ec)
     }
 

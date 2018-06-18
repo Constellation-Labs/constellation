@@ -48,61 +48,62 @@ trait ProbabilisticGossip extends PeerAuth {
   }
 
   def gossipHeartbeat(): Int = {
+    0
 
-    if (!downloadMode) {
-      //  broadcast(SyncData(validTX, memPoolTX))
+    /*
+  if (!downloadMode) {
+    //  broadcast(SyncData(validTX, memPoolTX))
 
+    val numAccepted = this.synchronized {
+      val gs = txToGossipChains.values.map { g =>
+        val tx = g.head.iter.head.data.asInstanceOf[TX]
+        tx -> g
+      }.toSeq.filter { z => !validTX.contains(z._1) }
 
-      val numAccepted = this.synchronized {
-        val gs = txToGossipChains.values.map { g =>
-          val tx = g.head.iter.head.data.asInstanceOf[TX]
-          tx -> g
-        }.toSeq.filter { z => !validTX.contains(z._1) }
-
-        val filtered = gs.filter { case (tx, g) =>
-          val lastTime = g.map {
-            _.iter.last.time
-          }.max
-          val sufficientTimePassed = lastTime < (System.currentTimeMillis() - 5000)
-          sufficientTimePassed
-        }
-
-        val acceptedTXs = filtered.map {
-          _._1
-        }
-
-        acceptedTXs.foreach { z => acceptTransaction(z) }
-
-        if (acceptedTXs.nonEmpty) {
-          // logger.debug(s"Accepted transactions on ${id.short}: ${acceptedTXs.map{_.short}}")
-        }
-
-        // TODO: Add debug information to log metrics like number of peers / messages total etc.
-        // logger.debug(s"P2P Heartbeat on ${id.short} - numPeers: ${peers.length}")
-
-        // Send heartbeat here to other peers.
-        acceptedTXs.size
+      val filtered = gs.filter { case (tx, g) =>
+        val lastTime = g.map {
+          _.iter.last.time
+        }.max
+        val sufficientTimePassed = lastTime < (System.currentTimeMillis() - 5000)
+        sufficientTimePassed
       }
-      /*
 
-          validSyncPendingTX.foreach{
-            tx =>
-              val chains = txToGossipChains.get(tx.hash)
-              chains.foreach{
-                c =>
-                  val lastTime = c.map {_.iter.last.time}.max
-                  val sufficientTimePassed = lastTime < (System.currentTimeMillis() - 5000)
-                  sufficientTimePassed
-              }
-          }
-      */
+      val acceptedTXs = filtered.map {
+        _._1
+      }
 
-      bundleHeartbeat()
+      acceptedTXs.foreach { z => acceptTransaction(z) }
 
+      if (acceptedTXs.nonEmpty) {
+        // logger.debug(s"Accepted transactions on ${id.short}: ${acceptedTXs.map{_.short}}")
+      }
 
-      numAccepted
+      // TODO: Add debug information to log metrics like number of peers / messages total etc.
+      // logger.debug(s"P2P Heartbeat on ${id.short} - numPeers: ${peers.length}")
+
+      // Send heartbeat here to other peers.
+      acceptedTXs.size
+    }
+    /*
+
+        validSyncPendingTX.foreach{
+          tx =>
+            val chains = txToGossipChains.get(tx.hash)
+            chains.foreach{
+              c =>
+                val lastTime = c.map {_.iter.last.time}.max
+                val sufficientTimePassed = lastTime < (System.currentTimeMillis() - 5000)
+                sufficientTimePassed
+            }
+        }
+    */
+
+    bundleHeartbeat()
+
+    numAccepted
 
     } else 0
+    */
   }
 
   def updateMempool(tx: TX): Boolean = {
