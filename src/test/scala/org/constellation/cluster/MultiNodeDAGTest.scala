@@ -15,9 +15,10 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
 
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
-import akka.pattern.ask
 
-class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem")) with AsyncFlatSpecLike with Matchers with BeforeAndAfterAll {
+
+class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
+  with AsyncFlatSpecLike with Matchers with BeforeAndAfterAll {
 
   override def afterAll {
     TestKit.shutdownActorSystem(system)

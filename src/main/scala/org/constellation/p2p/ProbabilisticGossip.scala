@@ -144,6 +144,7 @@ trait ProbabilisticGossip extends PeerAuth {
 
   def acceptBundle(b: Bundle): Unit = {
     validBundles :+= b
+    calculateReputationsFromScratch()
     b.extractTX.foreach{ t =>
       acceptTransaction(t)
     }
@@ -193,7 +194,7 @@ trait ProbabilisticGossip extends PeerAuth {
     bb.foreach{bestBundle = _}
 
     if (!downloadMode) {
-    //  println(s"SENDING DATA IN MEMPOOL ${memPoolTX.size}")
+      //  println(s"SENDING DATA IN MEMPOOL ${memPoolTX.size}")
       broadcast(PeerSync(bb, lastBundle, lastSquashed, memPoolTX, validBundles.map{_.hash}))
     }
 
@@ -235,8 +236,6 @@ trait ProbabilisticGossip extends PeerAuth {
             }
         }
     }
-    //  }
-
 
     bb.foreach { b =>
       val numPeersWithValid = peerSync.values.count{p =>
@@ -248,6 +247,16 @@ trait ProbabilisticGossip extends PeerAuth {
         acceptBundle(b)
       }
     }
+
+/*
+    peerSync.map{
+      case (id, ps) =>
+
+    }
+
+*/
+
+
 
 
     /*
@@ -380,6 +389,11 @@ trait ProbabilisticGossip extends PeerAuth {
 
     val txs = bundle.extractTX
 
+    val neverSeen = processNewBundleMetadata(bundle)
+
+    if (neverSeen) {
+      txs.foreach(updateMempool)
+    }
 
     // Also need to verify there are not multiple occurrences of same id re-signing bundle, and reps.
     val valid = validateTXBatch(txs) && txs.intersect(validTX).isEmpty
@@ -388,11 +402,7 @@ trait ProbabilisticGossip extends PeerAuth {
 
     if (valid) {
 
-      val neverSeen = processNewBundleMetadata(bundle)
 
-      if (neverSeen) {
-        txs.foreach(updateMempool)
-      }
 
       //
       //  if (!hasCorrectBaseHash) {
@@ -465,7 +475,7 @@ trait ProbabilisticGossip extends PeerAuth {
       case g : Gossip[ProductHash] =>
       // handleGossipRegular(g, remote)
       case bb: PeerSync =>
-    //    println(s"RECEIVED PEER SYNC OF MEMPOOL SIZE ${bb.memPool.size}")
+        //    println(s"RECEIVED PEER SYNC OF MEMPOOL SIZE ${bb.memPool.size}")
         bb.bundle.foreach{b => handleBundle(b)}
         Option(bb.lastBestBundle).foreach{b => handleBundle(b)}
         peerSync(rid) = bb
@@ -482,43 +492,43 @@ trait ProbabilisticGossip extends PeerAuth {
   }
 
 
-/*
-  def handleSyncData(d: SyncData, remote: InetSocketAddress): Unit = {
+  /*
+    def handleSyncData(d: SyncData, remote: InetSocketAddress): Unit = {
 
-    val rid = peerLookup(remote)
-    val diff = d.validTX.diff(validTX)
-    if (diff.nonEmpty) {
-      logger.debug(s"Desynchronization detected between " +
-        s"remote: ${rid.short} and self: ${id.short} - diff size : ${diff.size}")
-    }
+      val rid = peerLookup(remote)
+      val diff = d.validTX.diff(validTX)
+      if (diff.nonEmpty) {
+        logger.debug(s"Desynchronization detected between " +
+          s"remote: ${rid.short} and self: ${id.short} - diff size : ${diff.size}")
+      }
 
-    val selfMissing = d.validTX.filter{!validTX.contains(_)}
+      val selfMissing = d.validTX.filter{!validTX.contains(_)}
 
-    selfMissing.foreach{ t =>
-      if (!validSyncPendingTX.contains(t)) {
-        if (t.ledgerValid(validSyncPendingUTXO)) {
-          t.updateLedger(validSyncPendingUTXO)
-        } else {
-          // Handle double spend conflict here later, for now just drop
+      selfMissing.foreach{ t =>
+        if (!validSyncPendingTX.contains(t)) {
+          if (t.ledgerValid(validSyncPendingUTXO)) {
+            t.updateLedger(validSyncPendingUTXO)
+          } else {
+            // Handle double spend conflict here later, for now just drop
+          }
+        }
+        validSyncPendingTX += t
+        broadcast(RequestTXProof(t.hash))
+      }
+
+
+      val otherMissing = validTX.filter{!d.validTX.contains(_)}
+      otherMissing.toSeq.foreach{ t =>
+        val gossipChains = txToGossipChains.getOrElse(t.hash, Seq())
+        if (gossipChains.nonEmpty) {
+          udpActor.udpSend(MissingTXProof(t, gossipChains), remote)
         }
       }
-      validSyncPendingTX += t
-      broadcast(RequestTXProof(t.hash))
+
+      // logger.debug(s"SyncData message size: ${d.validTX.size} on ${validTX.size} ${id.short}")
+
     }
-
-
-    val otherMissing = validTX.filter{!d.validTX.contains(_)}
-    otherMissing.toSeq.foreach{ t =>
-      val gossipChains = txToGossipChains.getOrElse(t.hash, Seq())
-      if (gossipChains.nonEmpty) {
-        udpActor.udpSend(MissingTXProof(t, gossipChains), remote)
-      }
-    }
-
-    // logger.debug(s"SyncData message size: ${d.validTX.size} on ${validTX.size} ${id.short}")
-
-  }
-*/
+  */
 
 
   def handleGossipRegular(g: Gossip[ProductHash], remote: InetSocketAddress): Unit = {

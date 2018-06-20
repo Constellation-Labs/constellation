@@ -79,7 +79,8 @@ class Data {
   // @volatile var downloadResponses = Seq[DownloadResponse]()
   @volatile var secretReputation: Map[Id, Double] = Map()
   @volatile var publicReputation: Map[Id, Double] = Map()
-  @volatile var deterministicReputation: Map[Id, Double] = Map()
+  @volatile var normalizedDeterministicReputation: Map[Id, Double] = Map()
+  @volatile var deterministicReputation: Map[Id, Int] = Map()
 
 
   @volatile var externalAddress: InetSocketAddress = _
@@ -120,7 +121,6 @@ class Data {
   @volatile var bestBundle: Bundle = _
   @volatile var bestBundleBase: Bundle = _
   @volatile var bestBundleCandidateHashes: Set[BundleHash] = Set()
-
   @volatile var lastSquashed: Option[Bundle] = None
 
   def jaccard[T](t1: Set[T], t2: Set[T]): Double = {
@@ -140,9 +140,25 @@ class Data {
       s"numIdAbove ${idAbove.size}, score: $bundleScore"
   }
 
-  def prettifyBundle(b: Bundle) = b.pretty
+  def prettifyBundle(b: Bundle): String = b.pretty
 
-
+  def calculateReputationsFromScratch(): Unit = {
+    val sum = mutable.HashMap[Id, Int]()
+    validBundles.foreach{ v =>
+      v.idBelow.foreach{id =>
+        if (!sum.contains(id)) sum(id) = 1
+        else sum(id) = sum(id) + 1
+      }
+    }
+    val total = sum.values.sum
+    val map = sum.toMap
+    deterministicReputation = map
+    val normalized = map.map{
+      case (id, r) =>
+        id -> r.toDouble / total.toDouble
+    }
+    normalizedDeterministicReputation = normalized
+  }
 
   case class BundleComparison(b1: Bundle, b2: Bundle) {
     def txJaccard: Double = jaccard(bundleHashToTXBelow(b1.hash), bundleHashToTXBelow(b2.hash))
@@ -150,6 +166,12 @@ class Data {
     def idAboveJaccard: Double = jaccard(bundleHashToIdsAbove(b1.hash), bundleHashToIdsAbove(b2.hash))
   }
 
+  def peerSyncInfo() = {
+    peerSync.map{
+      case (id, ps) =>
+        ps.validBundleHashes
+    }
+  }
 
   def processNewBundleMetadata(bundle: Bundle, idsAbove: Set[Id] = Set()): Boolean = {
 

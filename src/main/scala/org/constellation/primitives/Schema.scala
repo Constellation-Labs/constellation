@@ -5,13 +5,11 @@ import java.net.InetSocketAddress
 import java.security.PublicKey
 
 import constellation.pubKeyToAddress
-import org.constellation.consensus.Consensus.{CC, RoundHash}
 import org.constellation.crypto.Base58
 import org.constellation.util.EncodedPublicKey
 import org.constellation.util.{ProductHash, Signed}
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
 import scala.util.Random
 
 // This can't be a trait due to serialization issues

@@ -115,7 +115,7 @@ class API(
               s"${z.data.id.short} API: $addr "
             }.mkString(" --- "),
             "genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
-            "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
+         //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
             "numActiveBundles" -> activeDAGBundles.size.toString,
             "last10TXHash" -> sentTX.reverse.slice(0, 10).map{_.hash}.mkString(","),
             "last10ValidBundleHashes" -> validBundles.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
@@ -124,13 +124,17 @@ class API(
             "genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
             "genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
             "selfBestBundle" -> Option(bestBundle).map{_.pretty}.getOrElse(""),
+            "reputations" -> normalizedDeterministicReputation.map{
+              case (k,v) => k.short + " " + v
+            }.mkString(" - "),
             "peerBestBundles" -> peerSync.toMap.map{
               case (id, b) =>
                 s"PEER: ${id.short}, BEST: ${b.bundle.map{_.pretty}.getOrElse("")} LAST: ${b.lastBestBundle.pretty}"
             }.mkString(" ----- "),
-            "allPeerSynchronized" -> (
+            "allPeerSynchronizedLastHash" -> (
               (peerSync.map{_._2.validBundleHashes.last} ++ Seq(lastBundle.hash)).toSet.size == 1
               ).toString,
+            "allPeerAllBundleHashSync" -> peerSync.forall{_._2.validBundleHashes == validBundles.map{_.hash}}.toString,
             "z_peers" -> peers.map{_.data}.json,
             "z_UTXO" -> validLedger.toMap.json,
             "z_Bundles" -> activeDAGBundles.map{_.pretty}.mkString("\n\n"),
