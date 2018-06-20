@@ -18,9 +18,9 @@ import org.constellation.util.Heartbeat
 import scala.concurrent.ExecutionContextExecutor
 
 class PeerToPeer(
-                  publicKey: PublicKey,
+                  val publicKey: PublicKey,
                   system: ActorSystem,
-                  consensusActor: ActorRef,
+                  val consensusActor: ActorRef,
                   val udpActor: ActorRef,
                   val data: Data = null,
                   chainStateActor : ActorRef = null,
@@ -33,6 +33,7 @@ class PeerToPeer(
   with PeerAuth
   with Heartbeat
   with ProbabilisticGossip
+  with Checkpoint
   with Download {
 
   import data._
@@ -66,13 +67,15 @@ class PeerToPeer(
 
         downloadHeartbeat()
 
+     //   checkpointHeartbeat()
+
         val numAccepted = gossipHeartbeat()
 
         logger.debug(
           s"Heartbeat: ${id.short}, " +
             s"bundles: $totalNumBundleMessages, " +
             s"broadcasts: $totalNumBroadcastMessages, " +
-            s"numBundles: ${bundles.size}, " +
+            s"numBundles: ${activeDAGBundles.size}, " +
             s"gossip: $totalNumGossipMessages, " +
             s"balance: $selfBalance, " +
             s"memPool: ${memPoolTX.size} numPeers: ${peers.size} " +
@@ -98,7 +101,19 @@ class PeerToPeer(
 
         case sh: HandShakeResponseMessage => handleHandShakeResponse(sh, remote)
 
+/*
+        case m @ StartConsensusRound(id, voteData, roundHash) => {
+          voteData match {
+            case CheckpointVote(d) =>
+              consensusActor ! ConsensusVote(id, voteData, roundHash)
+              logger.debug(s"received checkpoint start consensus round message roundHash= $roundHash, self = $publicKey id = $id")
+            case ConflictVote(d) =>
+              logger.debug(s"received conflict start consensus round message = $m")
+          }
+        }
+
         case message: RemoteMessage => consensusActor ! message
+*/
 
         // case g @ Gossip(_) => handleGossip(g, remote)
         case gm : GossipMessage => handleGossip(gm, remote)

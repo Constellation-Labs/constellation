@@ -46,7 +46,7 @@ class API(
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-  val logger = Logger(s"RPCInterface")
+  val logger = Logger(s"APIInterface")
 
   val routes: Route =
     get {
@@ -75,6 +75,15 @@ class API(
           }
         }
       } ~
+      pathPrefix("bundle") {
+        get {
+          extractUnmatchedPath { p =>
+            logger.debug(s"Unmatched path on bundle result $p")
+            val ps = p.toString().tail
+            complete(validBundles.filter{_.hash == ps}.headOption.prettyJson)
+          }
+        }
+      } ~
       path("setKeyPair") {
         parameter('keyPair) { kpp =>
           logger.debug("Set key pair " + kpp)
@@ -95,22 +104,41 @@ class API(
             "id" -> id.b58,
             "keyPair" -> keyPair.json,
             "shortId" -> id.short,
+            "numValidBundles" -> validBundles.size.toString,
             "numValidTransactions" -> validTX.size.toString,
             "memPoolSize" -> memPoolTX.size.toString,
-            "totalNumGossipMessages" -> totalNumGossipMessages.toString,
+            "totalNumBroadcasts" -> totalNumBroadcastMessages.toString,
+            "totalNumBundleMessages" -> totalNumBundleMessages.toString,
             "numPeers" -> peers.size.toString,
             "peers" -> peers.map{ z =>
               val addr = s"http://${z.data.apiAddress.getHostName}:${z.data.apiAddress.getPort}"
               s"${z.data.id.short} API: $addr "
             }.mkString(" --- "),
+            "genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
+         //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
+            "numActiveBundles" -> activeDAGBundles.size.toString,
             "last10TXHash" -> sentTX.reverse.slice(0, 10).map{_.hash}.mkString(","),
+            "last10ValidBundleHashes" -> validBundles.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
+            "lastValidBundleHash" -> lastBundleHash.hash,
+            "lastValidBundle" -> Option(lastBundle).map{_.pretty}.getOrElse(""),
+            "genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
+            "genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
+            "selfBestBundle" -> Option(bestBundle).map{_.pretty}.getOrElse(""),
+            "reputations" -> normalizedDeterministicReputation.map{
+              case (k,v) => k.short + " " + v
+            }.mkString(" - "),
+            "peerBestBundles" -> peerSync.toMap.map{
+              case (id, b) =>
+                s"PEER: ${id.short}, BEST: ${b.bundle.map{_.pretty}.getOrElse("")} LAST: ${b.lastBestBundle.pretty}"
+            }.mkString(" ----- "),
+            "allPeerSynchronizedLastHash" -> (
+              (peerSync.map{_._2.validBundleHashes.last} ++ Seq(lastBundle.hash)).toSet.size == 1
+              ).toString,
+            "allPeerAllBundleHashSync" -> peerSync.forall{_._2.validBundleHashes == validBundles.map{_.hash}}.toString,
             "z_peers" -> peers.map{_.data}.json,
-            "z_UTXO" -> validLedger.toMap.json
-            /*"z_Bundles" -> bundles.sorted.map{
-              b =>
-                s"tx:${b.extractTX.size},"
-
-            }.mkString("\n")*/
+            "z_UTXO" -> validLedger.toMap.json,
+            "z_Bundles" -> activeDAGBundles.map{_.pretty}.mkString("\n\n"),
+            "downloadMode" -> downloadMode.toString
           )))
         } ~
         path("validTX") {

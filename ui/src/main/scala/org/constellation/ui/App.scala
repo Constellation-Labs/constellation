@@ -1,6 +1,5 @@
 package org.constellation.ui
 
-
 import org.scalajs.dom
 import org.scalajs.dom.raw.{HTMLDivElement, HTMLElement, HTMLInputElement, MouseEvent}
 import rx.ops.{DomScheduler, Timer}
@@ -12,7 +11,6 @@ import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 case class Metrics(metrics: Map[String, String])
-
 
 object App extends JSApp {
 
@@ -52,7 +50,6 @@ object App extends JSApp {
     )
 
     formsSeq.foreach{ f => forms.appendChild(f.render)}
-
 
     val metricsDiv = dash.appendChild(div(id := "metrics").render).asInstanceOf[HTMLDivElement]
 
@@ -99,7 +96,6 @@ object App extends JSApp {
       }, "/metrics")
     }
     )
-
 
   }
 

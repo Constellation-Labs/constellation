@@ -15,9 +15,10 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
 
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
-import akka.pattern.ask
 
-class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem")) with AsyncFlatSpecLike with Matchers with BeforeAndAfterAll {
+
+class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
+  with AsyncFlatSpecLike with Matchers with BeforeAndAfterAll {
 
   override def afterAll {
     TestKit.shutdownActorSystem(system)
@@ -80,22 +81,29 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       })
     }
 
+    Thread.sleep(10000)
+
+    println("-"*10)
+    println("Initial distribution")
+    println("-"*10)
 
     val initialDistrTX = nodes.tail.map{ n =>
       val dst = n.data.selfAddress
-      val s = SendToAddress(dst, 1e7.toLong, doGossip=false)
+      val s = SendToAddress(dst, 1e7.toLong)
       r1.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
     }
 
+    /*
 
-    nodes.foreach{
-      n =>
-        initialDistrTX.foreach { t =>
-          n.api.postSync("setTXValid", t)
+        nodes.foreach{
+          n =>
+            initialDistrTX.foreach { t =>
+              n.api.postSync("setTXValid", t)
+            }
         }
-    }
+    */
 
-    Thread.sleep(5000)
+    Thread.sleep(15000)
 
 
     def randomNode: ConstellationNode = nodes(Random.nextInt(nodes.length))
@@ -114,23 +122,27 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     }
 
 
-    val numTX = 1
+
+    val numTX = 20000
 
     val start = System.currentTimeMillis()
 
     val txResponse = Seq.fill(numTX) {
-      Thread.sleep(2000)
+      Thread.sleep(1000)
       sendRandomTransaction
     }
 
     val txResponseFut = Future.sequence(txResponse)
+
+
+    val txs = txResponseFut.get(100).toSet
+
+    val allTX = Set(genTx) ++ initialDistrTX.toSet ++ txs
+
+    var done = false
+
+
     /*
-
-        val txs = txResponseFut.get(100).toSet
-
-        val allTX = Set(genTx) ++ initialDistrTX.toSet ++ txs
-
-        var done = false
 
 
         while (!done) {

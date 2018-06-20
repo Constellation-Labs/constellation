@@ -11,6 +11,7 @@ import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.util.Try
 import constellation._
+import org.constellation.consensus.Consensus.{CC, RoundHash}
 
 class Data {
 
@@ -46,9 +47,12 @@ class Data {
   val txHashToTX: TrieMap[String, TX] = TrieMap()
 
   @volatile var sentTX: Seq[TX] = Seq()
+
   @volatile var memPoolTX: Set[TX] = Set()
+  @volatile var linearMemPoolTX: Set[TX] = Set()
+
   @volatile var validTX: Set[TX] = Set()
-  @volatile var validSyncPendingTX: Set[TX] = Set()
+  @volatile var linearValidTX: Set[TX] = Set()
 
   val validLedger: TrieMap[String, Long] = TrieMap()
   val memPoolLedger: TrieMap[String, Long] = TrieMap()
@@ -68,17 +72,15 @@ class Data {
 
   @volatile var downloadMode: Boolean = true
 
+  val checkpointsInProgress: TrieMap[RoundHash[_ <: CC], Boolean] = TrieMap()
+
   @volatile var nodeState: NodeState = PendingDownload
 
   // @volatile var downloadResponses = Seq[DownloadResponse]()
   @volatile var secretReputation: Map[Id, Double] = Map()
   @volatile var publicReputation: Map[Id, Double] = Map()
-  @volatile var deterministicReputation: Map[Id, Double] = Map()
-
-
-  @volatile var bundles: Seq[Bundle] = Seq[Bundle]()
-  @volatile var bundleBuffer: Set[Bundle] = Set[Bundle]()
-  val bestBundles: TrieMap[Id, BestBundle] = TrieMap()
+  @volatile var normalizedDeterministicReputation: Map[Id, Double] = Map()
+  @volatile var deterministicReputation: Map[Id, Int] = Map()
 
 
   @volatile var externalAddress: InetSocketAddress = _
@@ -99,24 +101,123 @@ class Data {
 
   def peers: Seq[Signed[Peer]] = peerLookup.values.toSeq.distinct
 
-  var genesisTXHash: String = _
+  def createGenesis(tx: TX): Unit = {
+    if (tx.tx.data.isGenesis) {
+      genesisBundle = Bundle(BundleData(Seq(BundleHash(tx.hash), tx)).signed())
+      processNewBundleMetadata(genesisBundle)
+      validBundles = Seq(genesisBundle)
+    }
+  }
 
-  var lastSuperBundleHash: String = _
+  @volatile var linearCheckpointBundles: Set[Bundle] = Set[Bundle]()
+  @volatile var activeDAGBundles: Seq[Bundle] = Seq[Bundle]()
+  val peerSync: TrieMap[Id, PeerSync] = TrieMap()
+
+  var genesisBundle : Bundle = _
+  def genesisTXHash: String = genesisBundle.extractTX.head.hash
+  @volatile var validBundles : Seq[Bundle] = Seq()
+  def lastBundle: Bundle = validBundles.lastOption.getOrElse(genesisBundle)
+  def lastBundleHash = BundleHash(validBundles.lastOption.map{_.hash}.getOrElse(Option(genesisBundle).map{_.hash}.getOrElse("")))
+  @volatile var bestBundle: Bundle = _
+  @volatile var bestBundleBase: Bundle = _
+  @volatile var bestBundleCandidateHashes: Set[BundleHash] = Set()
+  @volatile var lastSquashed: Option[Bundle] = None
+
+  def jaccard[T](t1: Set[T], t2: Set[T]): Double = {
+    t1.intersect(t2).size.toDouble / t1.union(t2).size.toDouble
+  }
+
+  implicit class BundleExtData(b: Bundle) {
+    def txBelow = bundleHashToTXBelow(b.hash)
+    def idBelow = bundleHashToIdsBelow(b.hash)
+    def idAbove = bundleHashToIdsAbove(b.hash)
+    def bundleScore: Int = {
+      txBelow.size + (idBelow.size * 5) + idAbove.size
+    }
+    def minTime = bundleHashToMinTime(b.hash)
+    def maxTime: Long = b.bundleData.time
+    def pretty: String = s"hash: ${b.short}, depth: ${b.maxStackDepth}, numTX: ${txBelow.size}, numId: ${idBelow.size}, " +
+      s"numIdAbove ${idAbove.size}, score: $bundleScore"
+  }
+
+  def prettifyBundle(b: Bundle): String = b.pretty
+
+  def calculateReputationsFromScratch(): Unit = {
+    val sum = mutable.HashMap[Id, Int]()
+    validBundles.foreach{ v =>
+      v.idBelow.foreach{id =>
+        if (!sum.contains(id)) sum(id) = 1
+        else sum(id) = sum(id) + 1
+      }
+    }
+    val total = sum.values.sum
+    val map = sum.toMap
+    deterministicReputation = map
+    val normalized = map.map{
+      case (id, r) =>
+        id -> r.toDouble / total.toDouble
+    }
+    normalizedDeterministicReputation = normalized
+  }
+
+  case class BundleComparison(b1: Bundle, b2: Bundle) {
+    def txJaccard: Double = jaccard(bundleHashToTXBelow(b1.hash), bundleHashToTXBelow(b2.hash))
+    def idJaccard: Double = jaccard(bundleHashToIdsBelow(b1.hash), bundleHashToIdsBelow(b2.hash))
+    def idAboveJaccard: Double = jaccard(bundleHashToIdsAbove(b1.hash), bundleHashToIdsAbove(b2.hash))
+  }
+
+  def peerSyncInfo() = {
+    peerSync.map{
+      case (id, ps) =>
+        ps.validBundleHashes
+    }
+  }
+
+  def processNewBundleMetadata(bundle: Bundle, idsAbove: Set[Id] = Set()): Boolean = {
+
+    val hash = bundle.hash
+    // Never before seen bundle
+    val notPresent = !bundleHashToBundle.contains(hash)
+    if (notPresent) {
+
+      activeDAGBundles :+= bundle
+      bundleHashToBundle(hash) = bundle
+      bundleHashToIdsAbove(hash) = idsAbove
+
+      val txs = bundle.extractTX
+      val ids = bundle.extractIds
+
+      bundleHashToIdsBelow(hash) = ids
+      bundleHashToTXBelow(hash) = txs.map{_.hash}
+      bundleHashToFirstRXTime(hash) = System.currentTimeMillis()
+
+      val sb = bundle.extractSubBundles
+      val sbh = sb.map {_.hash}
+      bundleHashToBundleHashesBelow(hash) = sbh
+      bundleHashToMinTime(hash) = if (sb.isEmpty) bundle.bundleData.time else sb.map{_.bundleData.time}.min
+
+      sb.foreach{s => processNewBundleMetadata(s, idsAbove ++ Set(bundle.bundleData.id))}
+      sbh.foreach{ s =>
+        if (bundleHashToBundleHashesAbove.contains(s)) bundleHashToBundleHashesAbove(s) += hash
+        else bundleHashToBundleHashesAbove(s) = Set(hash)
+      }
+    }
+    notPresent
+  }
 
   @volatile var totalNumGossipMessages = 0
   @volatile var totalNumBundleMessages = 0
   @volatile var totalNumBroadcastMessages = 0
 
-  @volatile var bestBundleSelf: Bundle = _
-
   def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
-    validTX += tx
+
+    if (!validTX.contains(tx)) {
+      validTX += tx
+      tx.updateLedger(validLedger)
+    }
+
     memPoolTX -= tx
-    /*    if (updatePending) {
-          tx.updateUTXO(validSyncPendingUTXO)
-        }*/
-    validSyncPendingTX -= tx
-    tx.updateLedger(validLedger)
+
     if (tx.tx.data.isGenesis) {
       tx.updateLedger(memPoolLedger)
     }
@@ -126,6 +227,28 @@ class Data {
     //   s"new mempool size: ${memPoolTX.size} valid: ${validTX.size} isGenesis: ${tx.tx.data.isGenesis}")
   }
 
-  var genesisBundle : Bundle = _
+
+  val bundleHashToIdsAbove: TrieMap[String, Set[Id]] = TrieMap()
+
+  val bundleHashToBundleHashesAbove : TrieMap[String, Set[String]] = TrieMap()
+
+  val bundleHashToBundleHashesBelow : TrieMap[String, Set[String]] = TrieMap()
+
+  val bundleHashToMinTime : TrieMap[String, Long] = TrieMap()
+
+  // val bundlesByStackDepth: TrieMap[Int, Set[String]] = TrieMap()
+
+  val bundleHashToBundle: TrieMap[String, Bundle] = TrieMap()
+
+  val bundleHashToFirstRXTime: TrieMap[String, Long] = TrieMap()
+
+  val bundleHashToIdsBelow: TrieMap[String, Set[Id]] = TrieMap()
+
+  val bundleHashToTXBelow: TrieMap[String, Set[String]] = TrieMap()
+
+  val bundleHashToDepth: TrieMap[String, Int] = TrieMap()
+
+
+  @volatile var lastCheckpointBundle: Option[Bundle] = None
 
 }

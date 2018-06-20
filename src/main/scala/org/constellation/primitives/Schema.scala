@@ -10,6 +10,7 @@ import org.constellation.util.EncodedPublicKey
 import org.constellation.util.{ProductHash, Signed}
 
 import scala.collection.concurrent.TrieMap
+import scala.util.Random
 
 // This can't be a trait due to serialization issues
 object Schema {
@@ -135,9 +136,21 @@ object Schema {
       s"${tx.data.remainder.map{_.address}.getOrElse("empty").slice(0, 5)} " +
       s"amount ${tx.data.amount}"
 
+    def srcLedgerBalanceAll(ledger: TrieMap[String, Long]): Seq[Long] = {
+      tx.data.src.map{_.address}.map{a => ledger.getOrElse(a, 0L)}
+    }
+
+    def srcLedgerBalanceAllAccount(ledger: TrieMap[String, Long]): Seq[(String, Long)] = {
+      tx.data.src.map{_.address}.map{a => a -> ledger.getOrElse(a, 0L)}
+    }
+
+    def srcLedgerBalance(ledger: TrieMap[String, Long]): Long = {
+      tx.data.src.map {_.address}.flatMap {ledger.get}.sum
+    }
+
     def ledgerValid(ledger: TrieMap[String, Long]): Boolean = {
       if (tx.data.isGenesis) !ledger.contains(tx.data.dst.address) else {
-        val srcSum = tx.data.src.map {_.address}.flatMap {ledger.get}.sum
+        val srcSum = srcLedgerBalance(ledger)
         srcSum >= tx.data.amount && valid
       }
     }
@@ -204,15 +217,49 @@ object Schema {
 
   final case class BundleHash(hash: String) extends Fiber
 
+  // TODO: Make another bundle data with additional metadata for depth etc.
   final case class BundleData(bundles: Seq[Fiber]) extends ProductHash
 
-  final case class BestBundle(bundle: Option[Bundle], lastBestBundle: Bundle) extends GossipMessage
+  final case class PeerSync(
+                             bundle: Option[Bundle],
+                             lastBestBundle: Bundle,
+                             squashed: Option[Bundle] = None,
+                             memPool: Set[TX] = Set(),
+                             validBundleHashes: Seq[String]
+                           ) extends GossipMessage
 
   final case class Bundle(
                            bundleData: Signed[BundleData]
                          ) extends ProductHash with Fiber with GossipMessage {
 
-    def extractSubBundlesMinSize(minSize: Int = 2): Set[Bundle] = {
+    val bundleNumber: Long = Random.nextLong()
+    def extractBundleHash: BundleHash = {
+      def process(s: Signed[BundleData]): BundleHash = {
+        val bd = s.data.bundles
+        val depths = bd.collectFirst{
+          case b2: Bundle =>
+            process(b2.bundleData)
+          case bh: BundleHash => bh
+        }.get
+        depths
+      }
+      process(bundleData)
+    }
+
+    def extractBundleHashId: (BundleHash, Id) = {
+      def process(s: Signed[BundleData]): (BundleHash, Id) = {
+        val bd = s.data.bundles
+        val depths = bd.collectFirst{
+          case b2: Bundle =>
+            process(b2.bundleData)
+          case bh: BundleHash => bh -> s.id
+        }.get
+        depths
+      }
+      process(bundleData)
+    }
+
+    def extractSubBundlesMinSize(minSize: Int = 2) = {
       extractSubBundles.filter{_.maxStackDepth >= minSize}
     }
 
@@ -238,7 +285,11 @@ object Schema {
           case tx: TX => Set(tx)
           case _ => Set[TX]()
         }
-        depths.reduce(_ ++ _)
+        if (depths.nonEmpty) {
+          depths.reduce(_ ++ _)
+        } else {
+          Set()
+        }
       }
       process(bundleData)
     }
@@ -251,7 +302,7 @@ object Schema {
             b2.bundleData.publicKeys.map{Id}.toSet ++ process(b2.bundleData)
           case _ => Set[Id]()
         }
-        depths.reduce(_ ++ _)
+        depths.reduce(_ ++ _) ++ s.publicKeys.map{Id}.toSet
       }
       process(bundleData)
     }
@@ -282,8 +333,11 @@ object Schema {
       process(bundleData) + 1
     }
 
-  }
+    def roundHash: String = {
+      bundleNumber.toString
+    }
 
+  }
 
   final case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash
     with Fiber
@@ -309,6 +363,7 @@ object Schema {
       }
       process(event) + 1
     }
+
   }
 
   // TODO: Move other messages here.
@@ -328,7 +383,12 @@ object Schema {
   sealed trait DownloadMessage
 
   case class DownloadRequest() extends DownloadMessage
-  case class DownloadResponse(validTX: Set[TX], validUTXO: Map[String, Long], genesisBundle: Bundle) extends DownloadMessage
+  case class DownloadResponse(
+                               genesisBundle: Bundle,
+                               validBundles: Seq[Bundle],
+                               ledger: Map[String, Long],
+                               lastCheckpointBundle: Option[Bundle]
+                             ) extends DownloadMessage
 
   final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage
 
@@ -340,7 +400,6 @@ object Schema {
 
   final case class AddPeerFromLocal(address: InetSocketAddress) extends InternalCommand
 
-
   case class Peers(peers: Seq[InetSocketAddress])
 
   case class Id(id: PublicKey) {
@@ -349,7 +408,6 @@ object Schema {
     def address: Address = pubKeyToAddress(id)
     def b58 = Base58.encode(id.getEncoded)
   }
-
 
   case class GetId()
 
