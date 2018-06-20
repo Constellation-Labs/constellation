@@ -24,49 +24,17 @@ trait Cell[A]
 object Cell {
   implicit val cellFunctor: Functor[Cell] {def map[A, B](fa: Cell[A])(f: A => B): Cell[B]} = new Functor[Cell] {
     override def map[A, B](fa: Cell[A])(f: (A) => B): Cell[B] = fa match {
-//      case SingularHomology(sheaf) => SingularHomology(f(sheaf))
       case SingularHomology(sheaf) => SingularHomology(sheaf)
-      case Homotopy(a, next) => Homotopy(a, f(next))
+      case Homology(a, next) => Homology(a, f(next))
     }
-
   }
-
-  def findCommonSubBundles(bundles: Seq[Bundle] = Seq[Bundle]()) = {
-    //TODO reshuffle subbindles to make the most efficient site. Could return a full
-    val results: Map[Bundle, Int] = bundles.combinations(2).toSeq.flatMap{
-      case Seq(l,r) =>
-        val sub = l.extractSubBundlesMinSize()
-        val subr = r.extractSubBundlesMinSize()
-        sub.intersect(subr).toSeq.map {
-          b => b -> 1
-        }
-    }.groupBy(_._1).map{
-      case (x,y) => x -> y.size
-    }
-
-    val debug = results.map{case (x,y) => (x.short, x.extractTX.size, y)}.toSeq.sortBy{_._2}.reverse.slice(0, 10)
-    println(s"bundle common  : ${results.size} $debug")
-    results
-  }
-
-  val validLedger: TrieMap[String, Long] = TrieMap()
-  val memPoolLedger: TrieMap[String, Long] = TrieMap()
-  val validSyncPendingUTXO: TrieMap[String, Long] = TrieMap()
-  @volatile var memPoolTX: Set[TX] = Set()
 
   /**
     * Buildup
     */
-  val coAlgebra: Sheaf => Cell[Sheaf] = {//ever transaction has to tell us the sender's state
+  val coAlgebra: Sheaf => Cell[Sheaf] = {//every transaction has to tell us the sender's state
     //  case handleSync => //return a valid sheaf of the sync data the person needed, this is the else below
-    case sheaf: Sheaf =>
-//      val germ = sheaf.germ.get
-//      val txs: Set[TX] = germ.extractTX
-//      val newTX = txs.exists{t => !memPoolTX.contains(t)}
-//      if (newTX){
-//        val commonSubBundles: Map[Bundle, Int] = findCommonSubBundles(Seq(germ))//for every bundle, how many connections to others
-//      }
-      SingularHomology(sheaf)
+    case sheaf: Sheaf => if (sheaf.germ.isDefined) Homology(sheaf, Sheaf()) else SingularHomology(sheaf)
   }
 
   /**
@@ -74,6 +42,10 @@ object Cell {
     */
   val algebra: Cell[Sheaf] => Sheaf = {
     case SingularHomology(sheaf) => sheaf
+    case hom@Homology(kernal, image) =>
+//      val image = hom.reduce((x: Sheaf, y: Sheaf) => x.combine(y)) TODO make Cell reducible using liftF
+    kernal.combine(image)
+
   }
 
   /**
@@ -123,7 +95,14 @@ object Cell {
   * @tparam A
   */
 case class SingularHomology[A](sheaf: Sheaf) extends Cell[A]
-case class Homotopy[A](sheaf: Sheaf, bundle: A) extends Cell[A]
+
+/**
+  *
+  * @param sheaf
+  * @param bundle
+  * @tparam A
+  */
+case class Homology[A](sheaf: Sheaf, bundle: A) extends Cell[A]
 
 
 /**

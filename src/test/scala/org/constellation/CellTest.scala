@@ -42,7 +42,7 @@ class CellTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecLike w
   "Cell hylomorphism" should "recurse once" in {
     val test = Sheaf(Some(bbb))
     val res = Cell.ioF(test)
-    assert(res === Sheaf(Some(bbb)))
+    assert(res === Sheaf(None))
   }
 
   "Cell metamorphism" should "not recurse" in {
@@ -53,8 +53,8 @@ class CellTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecLike w
 
   "Cell metamorphism" should "recurse once" in {
     val test = Sheaf(Some(b))
-    val homotopy = Homotopy(Sheaf(None), test)
+    val homotopy = Homology(Sheaf(None), test)
     val res = Cell.liftF(homotopy)
-    assert(res === Homotopy(Sheaf(None), test))
+    assert(res === Homology(Sheaf(None), Sheaf(None)))
   }
 }

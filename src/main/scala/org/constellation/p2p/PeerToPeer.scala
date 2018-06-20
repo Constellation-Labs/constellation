@@ -82,8 +82,6 @@ class PeerToPeer(
               p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes
             }.mkString(",")}"
         )
-
-
       }
 
     // Peer messages
