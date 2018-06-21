@@ -119,7 +119,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
         val s = SendToAddress(dst.data.id.address, Random.nextInt(1000).toLong)
         src.api.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
       }(ec)
-    }
+  }
 
 
 

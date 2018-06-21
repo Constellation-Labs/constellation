@@ -9,8 +9,10 @@ import constellation.{base64, signData}
 import org.constellation.primitives.Schema._
 import org.constellation.util.{POW, POWSignHelp, ProductHash, Signed}
 import constellation._
+import org.constellation.crypto.KeyUtils
 
 import scala.collection.concurrent.TrieMap
+import scala.util.Random
 
 /**
   * Created by Wyatt on 5/19/18.
@@ -34,7 +36,9 @@ object Cell {
     */
   val coAlgebra: Sheaf => Cell[Sheaf] = {//every transaction has to tell us the sender's state
     //  case handleSync => //return a valid sheaf of the sync data the person needed, this is the else below
-    case sheaf: Sheaf => if (sheaf.germ.isDefined) Homology(sheaf, Sheaf()) else SingularHomology(sheaf)
+    case sheaf: Sheaf =>
+      sheaf.data
+      //if (sheaf.germ.isDefined) Homology(sheaf, Sheaf()) else SingularHomology(sheaf)
   }
 
   /**
@@ -44,8 +48,7 @@ object Cell {
     case SingularHomology(sheaf) => sheaf
     case hom@Homology(kernal, image) =>
 //      val image = hom.reduce((x: Sheaf, y: Sheaf) => x.combine(y)) TODO make Cell reducible using liftF
-    kernal.combine(image)
-
+//      kernal.combine(image)
   }
 
   /**
@@ -108,10 +111,10 @@ case class Homology[A](sheaf: Sheaf, bundle: A) extends Cell[A]
 /**
   * Wrapper for maintaining metadata about manifold topology. Useful for combining logic contained in product operators
   */
-case class Sheaf(germ: Option[Bundle] = None) extends ProductHash with Monoid[Sheaf] {//TODO turn into monad so we can flatmap collection
+case class Sheaf(germ: Bundle)(implicit val data: Data) extends ProductHash with Monoid[Sheaf] {//TODO turn into monad so we can flatmap collection
   //TODO call the method that invokes minhash/combine 'section' https://arxiv.org/pdf/0907.0995.pdf
-  def empty = Sheaf()
-  def combine(x: Sheaf, y: Sheaf = this) = Sheaf(None)
+  def empty = Sheaf(Bundle(BundleData(Seq()).signed()(KeyUtils.makeKeyPair())))
+  def combine(x: Sheaf, y: Sheaf = this) = germ.
 }
 
 //TODO define dank bundle as the most optimal site formed given stae and new sheaf.

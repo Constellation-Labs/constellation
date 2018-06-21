@@ -34,12 +34,18 @@ class CellTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecLike w
   val bbb = Bundle(BundleData(Seq(b, bb, tx)).signed()(tempKey2))
 
   "Cell hylomorphism" should "not recurse" in {
-    val test = Sheaf(None)
+    val test = Sheaf(Some(bbb))
     val res = Cell.ioF(test)
     assert(res === Sheaf(None))
   }
 
   "Cell hylomorphism" should "recurse once" in {
+    val test = Sheaf(Some(bbb))
+    val res = Cell.ioF(test)
+    assert(res === Sheaf(None))
+  }
+
+  "Cell hylomorphism" should "merge bundles" in {
     val test = Sheaf(Some(bbb))
     val res = Cell.ioF(test)
     assert(res === Sheaf(None))
@@ -51,7 +57,7 @@ class CellTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecLike w
     assert(res === SingularHomology(test))
   }
 
-  "Cell metamorphism" should "recurse once" in {
+  "Cell metamorphism" should "merge bundles" in {
     val test = Sheaf(Some(b))
     val homotopy = Homology(Sheaf(None), test)
     val res = Cell.liftF(homotopy)

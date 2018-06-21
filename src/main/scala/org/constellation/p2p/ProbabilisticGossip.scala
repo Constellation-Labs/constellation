@@ -2,7 +2,7 @@ package org.constellation.p2p
 
 import java.net.InetSocketAddress
 
-import org.constellation.Data
+import org.constellation.{Data, Sheaf}
 import org.constellation.primitives.Schema._
 import org.constellation.util.ProductHash
 import constellation._
@@ -181,17 +181,17 @@ trait ProbabilisticGossip extends PeerAuth {
 
   def bundleHeartbeat(): Unit = {
 
-    val candidates = activeDAGBundles.filter{ b =>
-      b.extractBundleHash == lastBundleHash &&
-        b.maxTime < (lastBundle.maxTime + 40000) &&
-        b.maxStackDepth <= 6
-    }
+//    val calculateReputationsFromScratchndidates = activeDAGBundles.filter{ b =>
+//      b.extractBundleHash == lastBundleHash &&
+//        b.maxTime < (lastBundle.maxTime + 40000) &&
+//        b.maxStackDepth <= 6
+//    }
 
     val bb: Option[Bundle] = if (candidates.isEmpty) None else {
       Some(candidates.maxBy{ b => (b.maxStackDepth, b.extractIds.size, b.extractTX.size, b.hash)})
     }
 
-    bb.foreach{bestBundle = _}
+    bb.foreach { bestBundle = _ }
 
     if (!downloadMode) {
       //  println(s"SENDING DATA IN MEMPOOL ${memPoolTX.size}")
@@ -201,41 +201,44 @@ trait ProbabilisticGossip extends PeerAuth {
     // || peers have no bundles / stalled.
     val memPoolEmit = Random.nextInt() < 0.3 // && (System.currentTimeMillis() < lastBundle.maxTime + 25000)
 
+
     if (memPoolTX.nonEmpty && (memPoolEmit || genesisAdditionCheck)) {
       // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
       val memPoolSelSize = Random.nextInt(45)
       val memPoolSelection = Random.shuffle(memPoolTX.toSeq).slice(0, memPoolSelSize + 3)
       val b = Bundle(BundleData(memPoolSelection :+ lastBundleHash).signed())
-      processNewBundleMetadata(b)
+      processNewBundleMetadata(b)//TODO
       broadcast(b)
     }
 
+    def validManifold(l: Bundle, r: Bundle): Boolean = {
+      val hasNewTransactions = l.txBelow.diff(r.txBelow).nonEmpty
+      val minTimeClose = Math.abs(l.minTime - r.minTime) < 6000
+      val maxTimeClose = Math.abs(l.maxTime - r.maxTime) < 6000
+      hasNewTransactions && minTimeClose && maxTimeClose && Random.nextDouble() > 0.5
+    }
 
     genesisCheck()
 
     //  if (System.currentTimeMillis() < (lastBundle.maxTime + 10000)) {
-    val nonSelfIdCandidates = candidates.filter { b => !b.idBelow.contains(id) }
-    logger.debug(s"Num nonSelfIdCandidates ${id.short} ${nonSelfIdCandidates.size}")
+//    val nonSelfIdCandidates: Seq[Bundle] = candidates.filter { b => !b.idBelow.contains(id) }
 
-    nonSelfIdCandidates
-      .groupBy(b => b.maxStackDepth).foreach {
-      case (_, bundles) =>
+//    val germs = nonSelfIdCandidateGroups.map
+
+    nonSelfIdCandidateGroups.foreach {//TODO bundke combiner, put this in algebra/co
+      case (_, bundles: Seq[Bundle]) =>
         //val sorted = bundles.sortBy(b => (b.idBelow.size, b.txBelow.size, b.hash))
-        val random = Random.shuffle(bundles).slice(0, 5)
+        val random: Seq[Bundle] = Random.shuffle(bundles).slice(0, 5)
+        val sheaves: Seq[Sheaf] = random.map(Sheaf(_)(data))
         val iterator = random.combinations(2)
-        iterator.foreach {
-          case both@Seq(l, r) =>
-            val hasNewTransactions = l.txBelow.diff(r.txBelow).nonEmpty
-            val minTimeClose = Math.abs(l.minTime - r.minTime) < 6000
-            val maxTimeClose = Math.abs(l.maxTime - r.maxTime) < 6000
-            if (hasNewTransactions && minTimeClose && maxTimeClose && Random.nextDouble() > 0.5) {
+        iterator.filter { case Seq(l, r) => validManifold(l, r) }.foreach {
               val b = Bundle(BundleData(both).signed())
               processNewBundleMetadata(b)
               broadcast(b)
               println(s"Created new depth bundle ${b.maxStackDepth}")
             }
         }
-    }
+
 
     bb.foreach { b =>
       val numPeersWithValid = peerSync.values.count{p =>

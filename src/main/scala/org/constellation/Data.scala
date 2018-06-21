@@ -111,6 +111,13 @@ class Data {
 
   @volatile var linearCheckpointBundles: Set[Bundle] = Set[Bundle]()
   @volatile var activeDAGBundles: Seq[Bundle] = Seq[Bundle]()
+  def candidates = activeDAGBundles.filter{ b =>
+    b.extractBundleHash == lastBundleHash &&
+      b.maxTime < (lastBundle.maxTime + 40000) &&
+      b.maxStackDepth <= 6
+  }
+  def nonSelfIdCandidates: Seq[Bundle] = candidates.filter { b => !b.idBelow.contains(id) }
+  def nonSelfIdCandidateGroups= nonSelfIdCandidates.groupBy(b => b.maxStackDepth)
   val peerSync: TrieMap[Id, PeerSync] = TrieMap()
 
   var genesisBundle : Bundle = _

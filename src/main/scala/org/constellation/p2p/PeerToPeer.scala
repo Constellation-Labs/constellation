@@ -36,7 +36,7 @@ class PeerToPeer(
   with Checkpoint
   with Download {
 
-  import data._
+  import data.
 
   implicit val timeout: Timeout = timeoutI
   implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
