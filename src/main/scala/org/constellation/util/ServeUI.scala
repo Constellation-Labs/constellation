@@ -6,11 +6,12 @@ import java.nio.file.{FileSystems, Paths}
 import java.util
 
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpResponse}
-import akka.http.scaladsl.server.Directives.{complete, extractUnmatchedPath, get, getFromFile, pathPrefix}
+import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import com.typesafe.scalalogging.Logger
 
 import scala.io.Source
+import scala.util.Try
 
 trait ServeUI {
 
@@ -22,20 +23,33 @@ trait ServeUI {
       get {
         extractUnmatchedPath { path =>
           logger.info(s"UI Request $path")
-          val file = if (jsPrefix == "./ui/ui") {
-            val src = getClass.getResource("/ui/ui" + path)
-            val string = src.toString
-            logger.info(s"String src URL : $string")
-            val array = string.split("!")
-            logger.info(s"Serve ui array ${array.toSeq}")
-            val fs = FileSystems.newFileSystem(URI.create(array(0)), new util.HashMap[String, String]())
-            val pathA = fs.getPath(array(1))
-            // Paths.get(src.toURI).toFile
-            pathA.toFile
+          if (jsPrefix == "./ui/ui") {
+                  val src = getClass.getResource("/ui/ui" + path)
+            /*            val string = src.toString
+                        logger.info(s"String src URL : $string")
+                        val array = string.split("!")
+                        logger.info(s"Serve ui array ${array.toSeq}")
+                        val fs = FileSystems.newFileSystem(URI.create(array(0)), new util.HashMap[String, String]())
+                        val pathA = fs.getPath(array(1))*/
+               val fs = FileSystems.getDefault
+               val fsPath = FileSystems.getDefault.getPath(src.toString)
+            //   fsPath.toFile
+
+            /*Try{
+              getClass.getResourceAsStream("/ui/ui" + path)
+            }
+            */
+
+            //     new File(src.getPath)
+         //   getFromResource("/ui/ui" + path)
+            //   val src = Source.fromResource("/ui/ui" + path)
+            //val pathA = Paths.get(src.toURI)
+            getFromFile(fsPath.toFile)
+
           } else {
-            new File(jsPrefix + path.toString)
+            val file = new File(jsPrefix + path.toString)
+            getFromFile(file)
           }
-          getFromFile(file)
         }
       }
     }

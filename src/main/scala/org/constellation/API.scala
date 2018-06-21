@@ -138,11 +138,8 @@ class API(
             "z_peers" -> peers.map{_.data}.json,
             "z_UTXO" -> validLedger.toMap.json,
             "z_Bundles" -> activeDAGBundles.map{_.pretty}.mkString("\n\n"),
-            "downloadMode" -> downloadMode.toString,
-            "lastBundleVisualJSON" -> Option(lastBundle).map{
-              b =>
-                b.extractTreeVisual.json
-            }.getOrElse("")
+            "downloadMode" -> downloadMode.toString //,
+            // "z_lastBundleVisualJSON" -> Option(lastBundle).map{ b => b.extractTreeVisual.json}.getOrElse("")
           )))
         } ~
         path("validTX") {

@@ -229,6 +229,15 @@ object Schema {
 
   case class RequestBundleData(hash: String) extends GossipMessage
 
+  case class BundleMetaData(
+                           depth: Int,
+                           numTX: Int,
+                           numID: Int,
+                           score: Long,
+                           totalScore: Long,
+                           parentHash: String
+                           )
+
   final case class PeerSync(
                                bundle: Option[Bundle],
                                lastBestBundle: Bundle,
@@ -244,7 +253,7 @@ object Schema {
     val bundleNumber: Long = Random.nextLong()
 
     def extractTreeVisual: TreeVisual = {
-      val parentHash = extractBundleHash.hash.slice(0, 5)
+      val parentHash = extractParentBundleHash.hash.slice(0, 5)
       def process(s: Signed[BundleData], parent: String): Seq[TreeVisual] = {
         val bd = s.data.bundles
         val depths = bd.map {
@@ -264,7 +273,7 @@ object Schema {
     }
 
 
-    def extractBundleHash: BundleHash = {
+    def extractParentBundleHash: BundleHash = {
       def process(s: Signed[BundleData]): BundleHash = {
         val bd = s.data.bundles
         val depths = bd.collectFirst{

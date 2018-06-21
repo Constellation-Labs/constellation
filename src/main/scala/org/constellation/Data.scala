@@ -104,10 +104,12 @@ class Data {
   def createGenesis(tx: TX): Unit = {
     if (tx.tx.data.isGenesis) {
       genesisBundle = Bundle(BundleData(Seq(BundleHash(tx.hash), tx)).signed())
-      processNewBundleMetadata(genesisBundle)
+      processNewBundleMetadata(genesisBundle, genesisBundle.extractTX, true)
       validBundles = Seq(genesisBundle)
     }
   }
+
+  // @volatile var allBundles: Set[Bundle] = Set[Bundle]()
 
   @volatile var linearCheckpointBundles: Set[Bundle] = Set[Bundle]()
   @volatile var activeDAGBundles: Seq[Bundle] = Seq[Bundle]()
@@ -130,14 +132,14 @@ class Data {
   implicit class BundleExtData(b: Bundle) {
     def txBelow = bundleHashToTXBelow(b.hash)
     def idBelow = bundleHashToIdsBelow(b.hash)
-    def idAbove = bundleHashToIdsAbove(b.hash)
+   // def idAbove = bundleHashToIdsAbove(b.hash)
     def bundleScore: Int = {
-      txBelow.size + (idBelow.size * 5) + idAbove.size
+      txBelow.size + (idBelow.size * 5) // + idAbove.size
     }
     def minTime = bundleHashToMinTime(b.hash)
     def maxTime: Long = b.bundleData.time
     def pretty: String = s"hash: ${b.short}, depth: ${b.maxStackDepth}, numTX: ${txBelow.size}, numId: ${idBelow.size}, " +
-      s"numIdAbove ${idAbove.size}, score: $bundleScore"
+      s"score: $bundleScore" // numIdAbove ${idAbove.size},
   }
 
   def prettifyBundle(b: Bundle): String = b.pretty
@@ -173,40 +175,59 @@ class Data {
     }
   }
 
-  def processNewBundleMetadata(bundle: Bundle, idsAbove: Set[Id] = Set()): Boolean = {
+  // Only call this if the parent chain is known and valid and this is already validated.
+  def processNewBundleMetadata(
+                                bundle: Bundle,
+                                validatedTXs: Set[TX],
+                                isGenesis: Boolean = false
+                              //  idsAbove: Set[Id] = Set()
+                              ): Unit = {
 
     val hash = bundle.hash
-    // Never before seen bundle
-    val notPresent = !bundleHashToBundle.contains(hash)
-    if (notPresent) {
 
-      activeDAGBundles :+= bundle
-      bundleHashToBundle(hash) = bundle
-      bundleHashToIdsAbove(hash) = idsAbove
+    activeDAGBundles :+= bundle
+    bundleHashToBundle(hash) = bundle
+   //  bundleHashToIdsAbove(hash) = idsAbove // Not used currently. Will be in future.
 
-      val txs = bundle.extractTX
-      val ids = bundle.extractIds
+    val txs = validatedTXs
+    val ids = bundle.extractIds
 
-      bundleHashToIdsBelow(hash) = ids
-      bundleHashToTXBelow(hash) = txs.map{_.hash}
-      bundleHashToFirstRXTime(hash) = System.currentTimeMillis()
+    bundleHashToIdsBelow(hash) = ids
+    bundleHashToTXBelow(hash) = txs.map{_.hash}
+    bundleHashToFirstRXTime(hash) = System.currentTimeMillis()
 
-      val sb = bundle.extractSubBundles
-      val sbh = sb.map {_.hash}
-      bundleHashToBundleHashesBelow(hash) = sbh
-      bundleHashToMinTime(hash) = if (sb.isEmpty) bundle.bundleData.time else sb.map{_.bundleData.time}.min
 
-      sb.foreach{s => processNewBundleMetadata(s, idsAbove ++ Set(bundle.bundleData.id))}
-      sbh.foreach{ s =>
-        if (bundleHashToBundleHashesAbove.contains(s)) bundleHashToBundleHashesAbove(s) += hash
-        else bundleHashToBundleHashesAbove(s) = Set(hash)
-      }
+    val sb = bundle.extractSubBundles
+   // val sbh = sb.map {_.hash}
+   // bundleHashToBundleHashesBelow(hash) = sbh
+    bundleHashToMinTime(hash) = if (sb.isEmpty) bundle.bundleData.time else sb.map{_.bundleData.time}.min
+
+  /*  sb.foreach{s => processNewBundleMetadata(s, idsAbove ++ Set(bundle.bundleData.id))}
+    sbh.foreach{ s =>
+      if (bundleHashToBundleHashesAbove.contains(s)) bundleHashToBundleHashesAbove(s) += hash
+      else bundleHashToBundleHashesAbove(s) = Set(hash)
     }
-    notPresent
+*/
+
+    if (!isGenesis) {
+      val parentHash = bundle.extractParentBundleHash.hash
+      val parentInfo = bundleHashToBundleMetaData(parentHash)
+
+      bundleHashToBundleMetaData(hash) = BundleMetaData(
+        parentInfo.depth + 1, txs.size, ids.size, bundle.bundleScore, bundle.bundleScore + parentInfo.totalScore, parentHash
+      )
+    } else {
+      bundleHashToBundleMetaData(hash) = BundleMetaData(
+        0, 1, 1, 1, 1, txs.head.hash
+      )
+    }
   }
 
   @volatile var totalNumGossipMessages = 0
   @volatile var totalNumBundleMessages = 0
+  @volatile var totalNumBundleHashRequests = 0
+  @volatile var totalNumInvalidBundles = 0
+  @volatile var totalNumNewBundleAdditions = 0
   @volatile var totalNumBroadcastMessages = 0
 
   def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
@@ -227,6 +248,9 @@ class Data {
     //   s"new mempool size: ${memPoolTX.size} valid: ${validTX.size} isGenesis: ${tx.tx.data.isGenesis}")
   }
 
+  val bundleHashToBundleMetaData: TrieMap[String, BundleMetaData] = TrieMap()
+
+  val bundleHashToLedger: TrieMap[String, TrieMap[String, Long]] = TrieMap()
 
   val bundleHashToIdsAbove: TrieMap[String, Set[Id]] = TrieMap()
 
