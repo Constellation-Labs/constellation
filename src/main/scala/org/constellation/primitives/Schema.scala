@@ -15,6 +15,12 @@ import scala.util.Random
 // This can't be a trait due to serialization issues
 object Schema {
 
+  case class TreeVisual(
+                       name: String,
+                       parent: String,
+                       children: Seq[TreeVisual]
+                       )
+
   case class TransactionQueryResponse(
                                        hash: String,
                                        tx: Option[TX],
@@ -98,6 +104,7 @@ object Schema {
                      // TODO: Add threshold maps
                    ) extends ProductHash {
     def inverseAmount: Long = -1*amount
+    def normalizedAmount = amount / NormalizationFactor
   }
 
   case class TX(tx: Signed[TXData]) extends ProductHash with Fiber {
@@ -220,6 +227,8 @@ object Schema {
   // TODO: Make another bundle data with additional metadata for depth etc.
   final case class BundleData(bundles: Seq[Fiber]) extends ProductHash
 
+  case class RequestBundleData(hash: String) extends GossipMessage
+
   final case class PeerSync(
                                bundle: Option[Bundle],
                                lastBestBundle: Bundle,
@@ -233,6 +242,28 @@ object Schema {
                          ) extends ProductHash with Fiber with GossipMessage {
 
     val bundleNumber: Long = Random.nextLong()
+
+    def extractTreeVisual: TreeVisual = {
+      val parentHash = extractBundleHash.hash.slice(0, 5)
+      def process(s: Signed[BundleData], parent: String): Seq[TreeVisual] = {
+        val bd = s.data.bundles
+        val depths = bd.map {
+          case tx: TX =>
+            TreeVisual(s"TX: ${tx.short} amount: ${tx.tx.data.normalizedAmount}", parent, Seq())
+          case b2: Bundle =>
+            val name = s"Bundle: ${b2.short} numTX: ${b2.extractTX.size}"
+            val children = process(b2.bundleData, name)
+            TreeVisual(name, parent, children)
+          case _ => Seq()
+        }
+        depths
+      }.asInstanceOf[Seq[TreeVisual]]
+      val parentName = s"Bundle: $short numTX: ${extractTX.size} node: ${bundleData.id.short} parent: $parentHash"
+      val children = process(bundleData, parentName)
+      TreeVisual(parentName, "null", children)
+    }
+
+
     def extractBundleHash: BundleHash = {
       def process(s: Signed[BundleData]): BundleHash = {
         val bd = s.data.bundles

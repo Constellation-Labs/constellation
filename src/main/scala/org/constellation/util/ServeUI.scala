@@ -1,11 +1,16 @@
 package org.constellation.util
 
 import java.io.File
+import java.net.URI
+import java.nio.file.{FileSystems, Paths}
+import java.util
 
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpResponse}
 import akka.http.scaladsl.server.Directives.{complete, extractUnmatchedPath, get, getFromFile, pathPrefix}
 import akka.http.scaladsl.server.Route
 import com.typesafe.scalalogging.Logger
+
+import scala.io.Source
 
 trait ServeUI {
 
@@ -17,14 +22,27 @@ trait ServeUI {
       get {
         extractUnmatchedPath { path =>
           logger.info(s"UI Request $path")
-          getFromFile(new File(jsPrefix + path.toString))
+          val file = if (jsPrefix == "./ui/ui") {
+            val src = getClass.getResource("/ui/ui" + path)
+            val string = src.toString
+            logger.info(s"String src URL : $string")
+            val array = string.split("!")
+            logger.info(s"Serve ui array ${array.toSeq}")
+            val fs = FileSystems.newFileSystem(URI.create(array(0)), new util.HashMap[String, String]())
+            val pathA = fs.getPath(array(1))
+            // Paths.get(src.toURI).toFile
+            pathA.toFile
+          } else {
+            new File(jsPrefix + path.toString)
+          }
+          getFromFile(file)
         }
       }
     }
   }
 
   def serveMainPage: Route = complete { //complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Say hello to akka-http</h1>"))
-    logger.info("Serve main page")
+    logger.info(s"Serve main page jsPrefix: $jsPrefix")
 
     // val numPeers = (peerToPeerActor ? GetPeers).mapTo[Peers].get().peers.size
     val bodyText = "" // s"Balance: $selfIdBalance numPeers: $numPeers "

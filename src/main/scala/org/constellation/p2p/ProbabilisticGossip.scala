@@ -248,13 +248,16 @@ trait ProbabilisticGossip extends PeerAuth {
       }
     }
 
-/*
-    peerSync.map{
+    val missingHashes = peerSync.flatMap{
       case (id, ps) =>
-
+        ps.validBundleHashes
+    }.toSet.filter{ z =>
+      !validBundles.map{_.hash}.contains(z)
     }
 
-*/
+    missingHashes.foreach{ z =>
+      broadcast(RequestBundleData(z))
+    }
 
 
 
@@ -486,6 +489,10 @@ trait ProbabilisticGossip extends PeerAuth {
         handleBundle(b)
       case sd: SyncData =>
       //      handleSyncData(sd, remote)
+      case RequestBundleData(hash) =>
+        bundleHashToBundle.get(hash).foreach{ b =>
+          udpActor.udpSendToId(b, rid)
+        }
       case _ =>
         logger.debug("Unrecognized gossip message")
     }

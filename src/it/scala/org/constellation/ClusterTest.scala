@@ -177,7 +177,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       r1.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
     }
 
-    Thread.sleep(10000)
+    Thread.sleep(15000)
 
     def randomNode = rpcs(Random.nextInt(rpcs.length))
     def randomOtherNode(not: APIClient) = rpcs.filter{_ != not}(Random.nextInt(rpcs.length - 1))
@@ -198,7 +198,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     val start = System.currentTimeMillis()
 
     val txResponse = Seq.fill(numTX) {
-      // Thread.sleep(100)
+      Thread.sleep(1000)
       sendRandomTransaction
     }
 

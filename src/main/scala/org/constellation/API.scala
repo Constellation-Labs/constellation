@@ -131,14 +131,18 @@ class API(
               case (id, b) =>
                 s"PEER: ${id.short}, BEST: ${b.bundle.map{_.pretty}.getOrElse("")} LAST: ${b.lastBestBundle.pretty}"
             }.mkString(" ----- "),
-            "allPeerSynchronizedLastHash" -> (
+            "allPeerSynchronizedLastHash" -> Try(
               (peerSync.map{_._2.validBundleHashes.last} ++ Seq(lastBundle.hash)).toSet.size == 1
-              ).toString,
+              ).map{_.toString}.getOrElse(""),
             "allPeerAllBundleHashSync" -> peerSync.forall{_._2.validBundleHashes == validBundles.map{_.hash}}.toString,
             "z_peers" -> peers.map{_.data}.json,
             "z_UTXO" -> validLedger.toMap.json,
             "z_Bundles" -> activeDAGBundles.map{_.pretty}.mkString("\n\n"),
-            "downloadMode" -> downloadMode.toString
+            "downloadMode" -> downloadMode.toString,
+            "lastBundleVisualJSON" -> Option(lastBundle).map{
+              b =>
+                b.extractTreeVisual.json
+            }.getOrElse("")
           )))
         } ~
         path("validTX") {
