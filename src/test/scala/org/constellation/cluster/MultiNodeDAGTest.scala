@@ -93,16 +93,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       r1.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
     }
 
-/*
-
-    nodes.foreach{
-      n =>
-        initialDistrTX.foreach { t =>
-          n.api.postSync("setTXValid", t)
-        }
-    }
-*/
-
     Thread.sleep(15000)
 
 

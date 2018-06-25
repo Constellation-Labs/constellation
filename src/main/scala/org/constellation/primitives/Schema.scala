@@ -223,25 +223,31 @@ object Schema {
                               ) extends ProductHash with Fiber
 
   final case class BundleHash(hash: String) extends Fiber
+  final case class ParentBundleHash(hash: String) extends Fiber
 
   // TODO: Make another bundle data with additional metadata for depth etc.
   final case class BundleData(bundles: Seq[Fiber]) extends ProductHash
 
   case class RequestBundleData(hash: String) extends GossipMessage
 
+  case class UnknownParentHashSyncInfo(
+                                      firstRequestTime: Long,
+                                      lastRequestTime: Long,
+                                      numRequests: Int
+                                      )
+
   case class BundleMetaData(
                            depth: Int,
                            numTX: Int,
                            numID: Int,
-                           score: Long,
-                           totalScore: Long,
-                           parentHash: String
+                           score: Double,
+                           totalScore: Double,
+                           parentHash: String,
+                           rxTime: Long
                            )
 
-  final case class PeerSync(
+  final case class PeerSyncHeartbeat(
                                bundle: Option[Bundle],
-                               lastBestBundle: Bundle,
-                               squashed: Option[Bundle] = None,
                                memPool: Set[TX] = Set(),
                                validBundleHashes: Seq[String]
                              ) extends GossipMessage
@@ -253,7 +259,7 @@ object Schema {
     val bundleNumber: Long = Random.nextLong()
 
     def extractTreeVisual: TreeVisual = {
-      val parentHash = extractParentBundleHash.hash.slice(0, 5)
+      val parentHash = extractParentBundleHash.get.hash.slice(0, 5)
       def process(s: Signed[BundleData], parent: String): Seq[TreeVisual] = {
         val bd = s.data.bundles
         val depths = bd.map {
@@ -272,16 +278,15 @@ object Schema {
       TreeVisual(parentName, "null", children)
     }
 
-
-    def extractParentBundleHash: BundleHash = {
-      def process(s: Signed[BundleData]): BundleHash = {
+    def extractParentBundleHash: ParentBundleHash = {
+      def process(s: Signed[BundleData]): ParentBundleHash = {
         val bd = s.data.bundles
         val depths = bd.collectFirst{
           case b2: Bundle =>
             process(b2.bundleData)
-          case bh: BundleHash => bh
-        }.get
-        depths
+          case bh: ParentBundleHash => bh
+        }
+        depths.get
       }
       process(bundleData)
     }

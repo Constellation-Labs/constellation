@@ -113,17 +113,21 @@ class Data {
 
   @volatile var linearCheckpointBundles: Set[Bundle] = Set[Bundle]()
   @volatile var activeDAGBundles: Seq[Bundle] = Seq[Bundle]()
-  val peerSync: TrieMap[Id, PeerSync] = TrieMap()
+  val peerSync: TrieMap[Id, PeerSyncHeartbeat] = TrieMap()
 
   var genesisBundle : Bundle = _
   def genesisTXHash: String = genesisBundle.extractTX.head.hash
   @volatile var validBundles : Seq[Bundle] = Seq()
   def lastBundle: Bundle = validBundles.lastOption.getOrElse(genesisBundle)
-  def lastBundleHash = BundleHash(validBundles.lastOption.map{_.hash}.getOrElse(Option(genesisBundle).map{_.hash}.getOrElse("")))
+  def lastBundleHash = ParentBundleHash(validBundles.lastOption.map{_.hash}.getOrElse(Option(genesisBundle).map{_.hash}.getOrElse("")))
   @volatile var bestBundle: Bundle = _
   @volatile var bestBundleBase: Bundle = _
   @volatile var bestBundleCandidateHashes: Set[BundleHash] = Set()
   @volatile var lastSquashed: Option[Bundle] = None
+
+
+  val unknownParentBundleHashes: TrieMap[String, PeerSyncHeartbeat] = TrieMap()
+
 
   def jaccard[T](t1: Set[T], t2: Set[T]): Double = {
     t1.intersect(t2).size.toDouble / t1.union(t2).size.toDouble
@@ -132,14 +136,17 @@ class Data {
   implicit class BundleExtData(b: Bundle) {
     def txBelow = bundleHashToTXBelow(b.hash)
     def idBelow = bundleHashToIdsBelow(b.hash)
-   // def idAbove = bundleHashToIdsAbove(b.hash)
-    def bundleScore: Int = {
-      txBelow.size + (idBelow.size * 5) // + idAbove.size
+    // def idAbove = bundleHashToIdsAbove(b.hash)
+    def bundleScore: Double = {
+      b.maxStackDepth * 10 +
+        txBelow.size +
+        (idBelow.map{id => deterministicReputation.getOrElse(id, 0.1)}.sum * 10)
     }
-    def minTime = bundleHashToMinTime(b.hash)
+    def minTime: Long = meta.rxTime
     def maxTime: Long = b.bundleData.time
     def pretty: String = s"hash: ${b.short}, depth: ${b.maxStackDepth}, numTX: ${txBelow.size}, numId: ${idBelow.size}, " +
       s"score: $bundleScore" // numIdAbove ${idAbove.size},
+    def meta = bundleHashToBundleMetaData(b.hash)
   }
 
   def prettifyBundle(b: Bundle): String = b.pretty
@@ -179,46 +186,38 @@ class Data {
   def processNewBundleMetadata(
                                 bundle: Bundle,
                                 validatedTXs: Set[TX],
-                                isGenesis: Boolean = false
-                              //  idsAbove: Set[Id] = Set()
+                                isGenesis: Boolean = false,
+                                setActive: Boolean = true
+                                //  idsAbove: Set[Id] = Set()
                               ): Unit = {
+
+    val rxTime = System.currentTimeMillis()
 
     val hash = bundle.hash
 
-    activeDAGBundles :+= bundle
+    if (setActive) {
+      activeDAGBundles :+= bundle
+    }
+
     bundleHashToBundle(hash) = bundle
-   //  bundleHashToIdsAbove(hash) = idsAbove // Not used currently. Will be in future.
+    //  bundleHashToIdsAbove(hash) = idsAbove // Not used currently. Will be in future.
 
     val txs = validatedTXs
     val ids = bundle.extractIds
 
     bundleHashToIdsBelow(hash) = ids
     bundleHashToTXBelow(hash) = txs.map{_.hash}
-    bundleHashToFirstRXTime(hash) = System.currentTimeMillis()
-
-
-    val sb = bundle.extractSubBundles
-   // val sbh = sb.map {_.hash}
-   // bundleHashToBundleHashesBelow(hash) = sbh
-    bundleHashToMinTime(hash) = if (sb.isEmpty) bundle.bundleData.time else sb.map{_.bundleData.time}.min
-
-  /*  sb.foreach{s => processNewBundleMetadata(s, idsAbove ++ Set(bundle.bundleData.id))}
-    sbh.foreach{ s =>
-      if (bundleHashToBundleHashesAbove.contains(s)) bundleHashToBundleHashesAbove(s) += hash
-      else bundleHashToBundleHashesAbove(s) = Set(hash)
-    }
-*/
 
     if (!isGenesis) {
       val parentHash = bundle.extractParentBundleHash.hash
       val parentInfo = bundleHashToBundleMetaData(parentHash)
 
       bundleHashToBundleMetaData(hash) = BundleMetaData(
-        parentInfo.depth + 1, txs.size, ids.size, bundle.bundleScore, bundle.bundleScore + parentInfo.totalScore, parentHash
+        parentInfo.depth + 1, txs.size, ids.size, bundle.bundleScore, bundle.bundleScore + parentInfo.totalScore, parentHash, rxTime
       )
     } else {
       bundleHashToBundleMetaData(hash) = BundleMetaData(
-        0, 1, 1, 1, 1, txs.head.hash
+        0, 1, 1, 1, 1, txs.head.hash, rxTime
       )
     }
   }
@@ -249,8 +248,6 @@ class Data {
   }
 
   val bundleHashToBundleMetaData: TrieMap[String, BundleMetaData] = TrieMap()
-
-  val bundleHashToLedger: TrieMap[String, TrieMap[String, Long]] = TrieMap()
 
   val bundleHashToIdsAbove: TrieMap[String, Set[Id]] = TrieMap()
 

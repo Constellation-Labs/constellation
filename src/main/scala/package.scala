@@ -227,6 +227,8 @@ package object constellation extends KeyUtilsExt with POWExt
    //   kryo.writeClassAndObject(out, data)
    //   val kryoBytes = out.getBuffer
 
+      data.getClass.getSimpleName
+
       if (bytes.length < groupSize) {
         Seq(SerializedUDPMessage(bytes, serializer.identifier))
       } else {

@@ -164,61 +164,56 @@ trait ProbabilisticGossip extends PeerAuth {
       // squashBundle(bestBundle)
       acceptBundle(bestBundle)
     }
-
+/*
     if (lastBundleHash == genesisBundle.bundleHash && !(genesisBundle.extractIds.head == id)) {
       peerSync.get(genesisBundle.extractIds.head).foreach{ b =>
-        if (b.lastBestBundle != genesisBundle && b.lastBestBundle.extractTX.size >= 2) {
+        if (b.validBundleHashes.last != genesisBundle.hash && b.lastBestBundle.extractTX.size >= 2) {
           acceptBundle(b.lastBestBundle)
         }
       }
     }
+    */
 
   }
 
   def genesisAdditionCheck: Boolean =
-    lastBundleHash == genesisBundle.bundleHash && // This is the first bundle creation attempt after genesis
+    lastBundleHash.hash == genesisBundle.hash && // This is the first bundle creation attempt after genesis
       genesisBundle.extractIds.head == id // This node created the genesis bundle
 
   def bundleHeartbeat(): Unit = {
 
-    val candidates = activeDAGBundles.filter{ b =>
-      b.extractParentBundleHash == lastBundleHash &&
-        b.maxTime < (lastBundle.maxTime + 40000) &&
-        b.maxStackDepth <= 6
-    }
+    activeDAGBundles = activeDAGBundles.sortBy(_.meta.totalScore)
 
-    val bb: Option[Bundle] = if (candidates.isEmpty) None else {
-      Some(candidates.maxBy{ b => (b.maxStackDepth, b.extractIds.size, b.extractTX.size, b.hash)})
-    }
+    val bb: Option[Bundle] = activeDAGBundles.headOption
 
     bb.foreach{bestBundle = _}
 
     if (!downloadMode) {
-      //  println(s"SENDING DATA IN MEMPOOL ${memPoolTX.size}")
-      broadcast(PeerSync(bb, lastBundle, lastSquashed, memPoolTX, validBundles.map{_.hash}))
+      broadcast(PeerSyncHeartbeat(bb, memPoolTX, validBundles.map{_.hash}))
+
+      // || peers have no bundles / stalled.
+      val memPoolEmit = Random.nextInt() < 0.3 // && (System.currentTimeMillis() < lastBundle.maxTime + 25000)
+
+      if (memPoolTX.nonEmpty && (memPoolEmit || genesisAdditionCheck)) {
+        // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
+        val memPoolSelSize = Random.nextInt(45)
+        val memPoolSelection = Random.shuffle(memPoolTX.toSeq).slice(0, memPoolSelSize + 3)
+        val b = Bundle(BundleData(
+          memPoolSelection :+ bb.map{z => ParentBundleHash(z.hash)}.getOrElse(lastBundleHash)
+        ).signed())
+        processNewBundleMetadata(b, memPoolSelection.toSet)
+        broadcast(b)
+      }
     }
-
-    // || peers have no bundles / stalled.
-    val memPoolEmit = Random.nextInt() < 0.3 // && (System.currentTimeMillis() < lastBundle.maxTime + 25000)
-
-    if (memPoolTX.nonEmpty && (memPoolEmit || genesisAdditionCheck)) {
-      // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
-      val memPoolSelSize = Random.nextInt(45)
-      val memPoolSelection = Random.shuffle(memPoolTX.toSeq).slice(0, memPoolSelSize + 3)
-      val b = Bundle(BundleData(memPoolSelection :+ lastBundleHash).signed())
-      processNewBundleMetadata(b, memPoolSelection.toSet)
-      broadcast(b)
-    }
-
 
     genesisCheck()
 
     //  if (System.currentTimeMillis() < (lastBundle.maxTime + 10000)) {
-    val nonSelfIdCandidates = candidates.filter { b => !b.idBelow.contains(id) }
+    val nonSelfIdCandidates = activeDAGBundles.filter { b => !b.idBelow.contains(id) }
     logger.debug(s"Num nonSelfIdCandidates ${id.short} ${nonSelfIdCandidates.size}")
 
     nonSelfIdCandidates
-      .groupBy(b => b.maxStackDepth).foreach {
+      .groupBy(b => b.maxStackDepth -> b.extractParentBundleHash).foreach {
       case (_, bundles) =>
         //val sorted = bundles.sortBy(b => (b.idBelow.size, b.txBelow.size, b.hash))
         val random = Random.shuffle(bundles).slice(0, 5)
@@ -226,9 +221,8 @@ trait ProbabilisticGossip extends PeerAuth {
         iterator.foreach {
           case both@Seq(l, r) =>
             val hasNewTransactions = l.txBelow.diff(r.txBelow).nonEmpty
-            val minTimeClose = Math.abs(l.minTime - r.minTime) < 6000
-            val maxTimeClose = Math.abs(l.maxTime - r.maxTime) < 6000
-            if (hasNewTransactions && minTimeClose && maxTimeClose && Random.nextDouble() > 0.5) {
+            val minTimeClose = Math.abs(l.minTime - r.minTime) < 25000
+            if (hasNewTransactions && minTimeClose && Random.nextDouble() > 0.5) {
               val b = Bundle(BundleData(both).signed())
               processNewBundleMetadata(b, b.extractTX)
               broadcast(b)
@@ -236,6 +230,8 @@ trait ProbabilisticGossip extends PeerAuth {
             }
         }
     }
+
+
 
     bb.foreach { b =>
       val numPeersWithValid = peerSync.values.count{p =>
@@ -294,17 +290,15 @@ trait ProbabilisticGossip extends PeerAuth {
     val notPresent = !bundleHashToBundle.contains(bundle.hash)
 
     if (notPresent) {
-
       val parentHash = bundle.extractParentBundleHash.hash
       val parentKnown = bundleHashToBundle.contains(parentHash)
       if (!parentKnown) {
         totalNumBundleHashRequests += 1
         broadcast(RequestBundleData(parentHash))
       } else {
-
-        val ledger = bundleHashToLedger(parentHash)
         val txs = bundle.extractTX
-        val validByParent = validateTransactionBatch(txs, ledger)
+        // TODO: Need to register potentially invalid bundles somewhere but not use them in case of fork download.
+        val validByParent = validateTXBatch(txs)
         if (validByParent) {
           totalNumNewBundleAdditions += 1
           txs.foreach{ t =>
@@ -330,10 +324,9 @@ trait ProbabilisticGossip extends PeerAuth {
     gm match {
       case g : Gossip[ProductHash] =>
       // handleGossipRegular(g, remote)
-      case bb: PeerSync =>
+      case bb: PeerSyncHeartbeat =>
         //    println(s"RECEIVED PEER SYNC OF MEMPOOL SIZE ${bb.memPool.size}")
         bb.bundle.foreach{b => handleBundle(b)}
-        Option(bb.lastBestBundle).foreach{b => handleBundle(b)}
         peerSync(rid) = bb
         if (validateTXBatch(bb.memPool)) {
           bb.memPool.foreach{updateMempool}
