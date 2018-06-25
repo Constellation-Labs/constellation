@@ -1,6 +1,5 @@
 package org.constellation
 
-import java.io.File
 import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
