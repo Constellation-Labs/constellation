@@ -103,7 +103,7 @@ class Data {
 
   def createGenesis(tx: TX): Unit = {
     if (tx.tx.data.isGenesis) {
-      genesisBundle = Bundle(BundleData(Seq(BundleHash(tx.hash), tx)).signed())
+      genesisBundle = Bundle(BundleData(Seq(ParentBundleHash(tx.hash), tx)).signed())
       processNewBundleMetadata(genesisBundle, genesisBundle.extractTX, true)
       validBundles = Seq(genesisBundle)
     }
@@ -126,6 +126,8 @@ class Data {
   @volatile var lastSquashed: Option[Bundle] = None
 
 
+  @volatile var bundlePendingTX : Set[TX] = Set()
+
   val unknownParentBundleHashes: TrieMap[String, PeerSyncHeartbeat] = TrieMap()
 
 
@@ -137,15 +139,16 @@ class Data {
     def txBelow = bundleHashToTXBelow(b.hash)
     def idBelow = bundleHashToIdsBelow(b.hash)
     // def idAbove = bundleHashToIdsAbove(b.hash)
+    def repScore: Double = idBelow.toSeq.map { id => normalizedDeterministicReputation.getOrElse(id, 0.1)}.sum
     def bundleScore: Double = {
-      b.maxStackDepth * 10 +
+      b.maxStackDepth * 100 +
         txBelow.size +
-        (idBelow.map{id => deterministicReputation.getOrElse(id, 0.1)}.sum * 10)
+        repScore * 10
     }
     def minTime: Long = meta.rxTime
     def maxTime: Long = b.bundleData.time
     def pretty: String = s"hash: ${b.short}, depth: ${b.maxStackDepth}, numTX: ${txBelow.size}, numId: ${idBelow.size}, " +
-      s"score: $bundleScore" // numIdAbove ${idAbove.size},
+      s"score: $bundleScore, totalScore: ${meta.totalScore}, height: ${meta.height}" // numIdAbove ${idAbove.size},
     def meta = bundleHashToBundleMetaData(b.hash)
   }
 
@@ -213,7 +216,7 @@ class Data {
       val parentInfo = bundleHashToBundleMetaData(parentHash)
 
       bundleHashToBundleMetaData(hash) = BundleMetaData(
-        parentInfo.depth + 1, txs.size, ids.size, bundle.bundleScore, bundle.bundleScore + parentInfo.totalScore, parentHash, rxTime
+        parentInfo.height + 1, txs.size, ids.size, bundle.bundleScore, bundle.bundleScore + parentInfo.totalScore, parentHash, rxTime
       )
     } else {
       bundleHashToBundleMetaData(hash) = BundleMetaData(

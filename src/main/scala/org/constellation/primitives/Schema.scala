@@ -237,18 +237,18 @@ object Schema {
                                       )
 
   case class BundleMetaData(
-                           depth: Int,
-                           numTX: Int,
-                           numID: Int,
-                           score: Double,
-                           totalScore: Double,
-                           parentHash: String,
-                           rxTime: Long
+                             height: Int,
+                             numTX: Int,
+                             numID: Int,
+                             score: Double,
+                             totalScore: Double,
+                             parentHash: String,
+                             rxTime: Long
                            )
 
   final case class PeerSyncHeartbeat(
                                bundle: Option[Bundle],
-                               memPool: Set[TX] = Set(),
+                  //             memPool: Set[TX] = Set(),
                                validBundleHashes: Seq[String]
                              ) extends GossipMessage
 
@@ -259,7 +259,7 @@ object Schema {
     val bundleNumber: Long = Random.nextLong()
 
     def extractTreeVisual: TreeVisual = {
-      val parentHash = extractParentBundleHash.get.hash.slice(0, 5)
+      val parentHash = extractParentBundleHash.hash.slice(0, 5)
       def process(s: Signed[BundleData], parent: String): Seq[TreeVisual] = {
         val bd = s.data.bundles
         val depths = bd.map {

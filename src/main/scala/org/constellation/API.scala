@@ -129,7 +129,7 @@ class API(
             }.mkString(" - "),
             "peerBestBundles" -> peerSync.toMap.map{
               case (id, b) =>
-                s"PEER: ${id.short}, BEST: ${b.bundle.map{_.pretty}.getOrElse("")} LAST: ${b.lastBestBundle.pretty}"
+                s"PEER: ${id.short}, BEST: ${b.bundle.map{_.pretty}.getOrElse("")} " // LAST: ${b.lastBestBundle.pretty}
             }.mkString(" ----- "),
             "allPeerSynchronizedLastHash" -> Try(
               (peerSync.map{_._2.validBundleHashes.last} ++ Seq(lastBundle.hash)).toSet.size == 1
@@ -137,8 +137,16 @@ class API(
             "allPeerAllBundleHashSync" -> peerSync.forall{_._2.validBundleHashes == validBundles.map{_.hash}}.toString,
             "z_peers" -> peers.map{_.data}.json,
             "z_UTXO" -> validLedger.toMap.json,
-            "z_Bundles" -> activeDAGBundles.map{_.pretty}.mkString("\n\n"),
-            "downloadMode" -> downloadMode.toString //,
+            "z_Bundles" -> activeDAGBundles.map{_.pretty}.mkString(" - - - "),
+            "downloadMode" -> downloadMode.toString,
+            "allPeersHaveKnownBestBundles" -> peerSync.forall{
+              case (_, hb) =>
+                hb.bundle.forall{b => bundleHashToBundle.contains(b.hash)}
+            }.toString,
+            "allPeersAgreeWithBestBundle" -> peerSync.forall{
+              _._2.bundle.exists{_.hash == bestBundle.hash}
+            }.toString
+            //,
             // "z_lastBundleVisualJSON" -> Option(lastBundle).map{ b => b.extractTreeVisual.json}.getOrElse("")
           )))
         } ~
