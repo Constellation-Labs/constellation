@@ -193,8 +193,8 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
             t =>
               acceptTransaction(t)
           }
-
           validBundles ++= chainToAdd
+          //calculateReputationsFromScratch()
         }
 
       }
