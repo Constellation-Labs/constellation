@@ -21,7 +21,7 @@ trait Download extends PeerAuth {
   def handleDownloadResponse(d: DownloadResponse): Unit = {
     if (d.validBundles.nonEmpty) {
       genesisBundle = d.genesisBundle
-      processNewBundleMetadata(genesisBundle, genesisBundle.extractTX, true)
+      processNewBundleMetadata(genesisBundle, genesisBundle.extractTX, true, setActive = false)
       d.validBundles.tail.foreach { b =>
         processNewBundleMetadata(b, b.extractTX)
       }

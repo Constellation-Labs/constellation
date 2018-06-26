@@ -75,6 +75,13 @@ class API(
           }
         }
       } ~
+      path("longestChain") {
+        val ancestors = extractBundleAncestorsUntilValidation(bestBundle)
+        val all = validBundles ++ ancestors.map{bundleHashToBundle} ++ Seq(bestBundle)
+        complete(
+          all.json
+        )
+      } ~
       pathPrefix("bundle") {
         get {
           extractUnmatchedPath { p =>

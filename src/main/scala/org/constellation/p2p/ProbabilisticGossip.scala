@@ -102,14 +102,14 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     lastBundleHash.hash == genesisBundle.hash && // This is the first bundle creation attempt after genesis
       genesisBundle.extractIds.head == id // This node created the genesis bundle
 
-  def extractTXUntilValidationHashReached(b: Bundle, txs: Set[TX] = Set()): Set[TX] = {
+  def extractTXHashUntilValidationHashReached(b: Bundle, txs: Set[String] = Set()): Set[String] = {
     val ph = b.extractParentBundleHash.hash
     if (validBundles.last.hash == ph) {
-      txs ++ b.extractTX
+      txs ++ b.txBelow
     } else {
-      extractTXUntilValidationHashReached(
+      extractTXHashUntilValidationHashReached(
         bundleHashToBundle(b.extractParentBundleHash.hash),
-        txs ++ b.extractTX
+        txs ++ b.txBelow
       )}
   }
 
@@ -118,6 +118,10 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     if (!downloadMode) {
 
       activeDAGBundles = activeDAGBundles.sortBy(z => (-1 * z.meta.totalScore, z.hash))
+
+      if (activeDAGBundles.size > 20) {
+        activeDAGBundles = activeDAGBundles.zipWithIndex.filter{_._2 < 20}.map{_._1}
+      }
 
       val bb: Option[Bundle] = if (genesisAdditionCheck) activeDAGBundles.headOption else {
         activeDAGBundles.find{_.maxStackDepth >= 2}
@@ -136,7 +140,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       // val txInBestBundleNewFromValidationHash = bb.map{b => extractTXUntilValidationHashReached(b)}.getOrElse(Set[TX]())
 
       // || peers have no bundles / stalled.
-      val memPoolEmit = Random.nextInt() < 0.3 // && (System.currentTimeMillis() < lastBundle.maxTime + 25000)
+      val memPoolEmit = Random.nextInt() < 0.2 // && (System.currentTimeMillis() < lastBundle.maxTime + 25000)
       //val filteredMempool =
 
       if (memPoolTX.nonEmpty && (memPoolEmit || genesisAdditionCheck)) {
@@ -146,6 +150,9 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         val b = Bundle(BundleData(
           memPoolSelection :+ bb.map{z => ParentBundleHash(z.hash)}.getOrElse(lastBundleHash)
         ).signed())
+   //     if (bb.nonEmpty) {
+   //       activeDAGBundles = activeDAGBundles.filterNot(_ == bb.get)
+   //     }
         processNewBundleMetadata(b, memPoolSelection.toSet)
         broadcast(b)
       }
@@ -175,6 +182,17 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
               }
           }
       }
+
+      bb.foreach{ b =>
+
+        val ancestors = extractBundleAncestorsUntilValidation(b)
+        if (ancestors.length > 20) {
+          val chainToAdd = ancestors.slice(0, 10).map{bundleHashToBundle}
+          val txToAdd = extractTXHashUntilValidationHashReached(chainToAdd.last).map{}
+        }
+
+      }
+
       /*
           bb.foreach { b =>
             val numPeersWithValid = peerSync.values.count{p =>
@@ -227,6 +245,11 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     validateTransactionBatch(txs, memPoolLedger) &&
       validateTransactionBatch(txs, validLedger)
 
+  def addToMempool(t: TX): Unit = {
+    txHashToTX(t.hash) = t
+    if (!t.tx.data.isGenesis && !validTX.contains(t)) memPoolTX += t
+  }
+
   def handleBundle(bundle: Bundle): Unit = {
 
     totalNumBundleMessages += 1
@@ -245,9 +268,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         val validByParent = validateTXBatch(txs)
         if (validByParent) {
           totalNumNewBundleAdditions += 1
-          txs.foreach{ t =>
-            if (!t.tx.data.isGenesis && !validTX.contains(t)) memPoolTX += t
-          }
+          txs.foreach{addToMempool}
           processNewBundleMetadata(bundle, txs)
         } else {
           totalNumInvalidBundles += 1

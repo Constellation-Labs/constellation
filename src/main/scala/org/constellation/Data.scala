@@ -104,7 +104,7 @@ class Data {
   def createGenesis(tx: TX): Unit = {
     if (tx.tx.data.isGenesis) {
       genesisBundle = Bundle(BundleData(Seq(ParentBundleHash(tx.hash), tx)).signed())
-      processNewBundleMetadata(genesisBundle, genesisBundle.extractTX, true)
+      processNewBundleMetadata(genesisBundle, genesisBundle.extractTX, true, setActive = false)
       validBundles = Seq(genesisBundle)
     }
   }
@@ -184,6 +184,18 @@ class Data {
         ps.validBundleHashes
     }
   }
+
+  // This returns in order of ancestry, first element should be oldest bundle immediately after the last valid.
+  def extractBundleAncestorsUntilValidation(b: Bundle, ancestors: Seq[String] = Seq()): Seq[String] = {
+    val ph = b.extractParentBundleHash.hash
+    if (validBundles.last.hash == ph) {
+      ancestors
+    } else {
+      extractBundleAncestorsUntilValidation(
+        bundleHashToBundle(b.extractParentBundleHash.hash),
+        ancestors :+ ph
+      )}
+  }.reverse
 
   // Only call this if the parent chain is known and valid and this is already validated.
   def processNewBundleMetadata(
