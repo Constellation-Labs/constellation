@@ -137,16 +137,16 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         )
       )
 
-      // val txInBestBundleNewFromValidationHash = bb.map{b => extractTXUntilValidationHashReached(b)}.getOrElse(Set[TX]())
+      val txInBestBundleNewFromValidationHash = bb.map{b => extractTXHashUntilValidationHashReached(b)}.getOrElse(Set[String]())
 
       // || peers have no bundles / stalled.
       val memPoolEmit = Random.nextInt() < 0.2 // && (System.currentTimeMillis() < lastBundle.maxTime + 25000)
-      //val filteredMempool =
+      val filteredMempool = memPoolTX.filterNot{ z => txInBestBundleNewFromValidationHash.contains(z.hash)}
 
-      if (memPoolTX.nonEmpty && (memPoolEmit || genesisAdditionCheck)) {
+      if (filteredMempool.nonEmpty && (memPoolEmit || genesisAdditionCheck)) {
         // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
         val memPoolSelSize = Random.nextInt(45)
-        val memPoolSelection = Random.shuffle(memPoolTX.toSeq).slice(0, memPoolSelSize + 3)
+        val memPoolSelection = Random.shuffle(filteredMempool.toSeq).slice(0, memPoolSelSize + 3)
         val b = Bundle(BundleData(
           memPoolSelection :+ bb.map{z => ParentBundleHash(z.hash)}.getOrElse(lastBundleHash)
         ).signed())
@@ -183,18 +183,22 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
           }
       }
 
+      val chainConfirmationLength = 5
+      val chainAddLength = 2
+
       bb.foreach{ b =>
 
         val ancestors = extractBundleAncestorsUntilValidation(b)
-        if (ancestors.length > 20) {
-          val chainToAdd = ancestors.slice(0, 10).map{bundleHashToBundle}
+        if (ancestors.length > chainConfirmationLength) {
+          val chainToAdd = ancestors.slice(0, chainAddLength).map{bundleHashToBundle}
           val txToAdd = extractTXHashUntilValidationHashReached(chainToAdd.last).map{txHashToTX}
           txToAdd.foreach{
             t =>
               acceptTransaction(t)
           }
+          val prvSize = validBundles.size
           validBundles ++= chainToAdd
-          //calculateReputationsFromScratch()
+          calculateReputationsFromScratch(prvSize-1)
         }
 
       }

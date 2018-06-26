@@ -154,9 +154,9 @@ class Data {
 
   def prettifyBundle(b: Bundle): String = b.pretty
 
-  def calculateReputationsFromScratch(): Unit = {
+  def calculateReputationsFromScratch(upTo: Int = validBundles.size): Unit = {
     val sum = mutable.HashMap[Id, Int]()
-    validBundles.foreach{ v =>
+    validBundles.slice(0, upTo).foreach{ v =>
       v.idBelow.foreach{id =>
         if (!sum.contains(id)) sum(id) = 1
         else sum(id) = sum(id) + 1
@@ -191,10 +191,14 @@ class Data {
     if (validBundles.last.hash == ph) {
       ancestors
     } else {
-      extractBundleAncestorsUntilValidation(
-        bundleHashToBundle(b.extractParentBundleHash.hash),
-        ancestors :+ ph
-      )}
+      val bundle = bundleHashToBundle.get(b.extractParentBundleHash.hash)
+      bundle.map { bp =>
+        extractBundleAncestorsUntilValidation(
+          bp,
+          ancestors :+ ph
+        )
+      }.getOrElse(ancestors)
+    }
   }.reverse
 
   // Only call this if the parent chain is known and valid and this is already validated.
