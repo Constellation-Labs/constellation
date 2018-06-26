@@ -188,7 +188,13 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         val ancestors = extractBundleAncestorsUntilValidation(b)
         if (ancestors.length > 20) {
           val chainToAdd = ancestors.slice(0, 10).map{bundleHashToBundle}
-          val txToAdd = extractTXHashUntilValidationHashReached(chainToAdd.last).map{}
+          val txToAdd = extractTXHashUntilValidationHashReached(chainToAdd.last).map{txHashToTX}
+          txToAdd.foreach{
+            t =>
+              acceptTransaction(t)
+          }
+
+          validBundles ++= chainToAdd
         }
 
       }
