@@ -113,23 +113,29 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       )}
   }
 
-  def randomTransaction = {
+  def randomTransaction(): Unit = {
+    val peerAddresses = peers.map{_.data.id.address}
+    val randomPeer = Random.shuffle(peerAddresses).head
     handleLocalTransactionAdd(
-      createTransaction(Random.shuffle(peers).head.data.id.address, Random.nextInt(2000).toLong)
+      createTransaction(randomPeer, Random.nextInt(1000).toLong)
     )
+  }
+
+  def simulateTransactions(): Unit = {
+    if (validBundles.size >= 5) {
+      if (memPoolTX.size < 500) {
+        Seq.fill(10){randomTransaction()}
+      } else {
+        randomTransaction()
+      }
+    }
   }
 
   def bundleHeartbeat(): Unit = {
 
     if (!downloadMode) {
 
-      if (validBundles.size > 5) {
-        if (memPoolTX.size < 500) {
-          Seq.fill(30){randomTransaction}
-        } else {
-          randomTransaction
-        }
-      }
+      simulateTransactions()
 
       activeDAGBundles = activeDAGBundles.sortBy(z => (-1 * z.meta.totalScore, z.hash))
 
@@ -159,7 +165,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
       if (filteredMempool.nonEmpty && (memPoolEmit || genesisAdditionCheck)) {
         // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
-        val memPoolSelSize = Random.nextInt(45)
+        val memPoolSelSize = Random.nextInt(80)
         val memPoolSelection = Random.shuffle(filteredMempool.toSeq).slice(0, memPoolSelSize + 3)
         val b = Bundle(BundleData(
           memPoolSelection :+ bb.map{z => ParentBundleHash(z.hash)}.getOrElse(lastBundleHash)
