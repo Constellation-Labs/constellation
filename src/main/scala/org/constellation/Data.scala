@@ -185,6 +185,21 @@ class Data {
     }
   }
 
+  def createTransaction(dstAddress: Address, normalizedAmount: Long): TX = {
+
+    val tx = TX(
+      TXData(
+        Seq(selfAddress), dstAddress, normalizedAmount * NormalizationFactor
+      ).signed()(keyPair)
+    )
+
+    txHashToTX(tx.hash) = tx
+    sentTX :+= tx
+
+    tx
+
+  }
+
   // This returns in order of ancestry, first element should be oldest bundle immediately after the last valid.
   def extractBundleAncestorsUntilValidation(b: Bundle, ancestors: Seq[String] = Seq()): Seq[String] = {
     val ph = b.extractParentBundleHash.hash

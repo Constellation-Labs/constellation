@@ -113,9 +113,23 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       )}
   }
 
+  def randomTransaction = {
+    handleLocalTransactionAdd(
+      createTransaction(Random.shuffle(peers).head.data.id.address, Random.nextInt(2000).toLong)
+    )
+  }
+
   def bundleHeartbeat(): Unit = {
 
     if (!downloadMode) {
+
+      if (validBundles.size > 5) {
+        if (memPoolTX.size < 500) {
+          Seq.fill(30){randomTransaction}
+        } else {
+          randomTransaction
+        }
+      }
 
       activeDAGBundles = activeDAGBundles.sortBy(z => (-1 * z.meta.totalScore, z.hash))
 
