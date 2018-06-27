@@ -145,7 +145,7 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
     import akka.pattern.ask
     val pgs = (listener1 ? GetPacketGroups).mapTo[scala.collection.mutable.HashMap[Long, Seq[SerializedUDPMessage]]].get()
 
-    val messages = pgs.values.flatten.toSeq.sortBy(_.packetGroupId.get)
+    val messages = pgs.values.flatten.toSeq.sortBy(_.packetGroupId)
 
     println(s"Sizes pg: ${messages.size} original: ${ser.size}")
 
@@ -153,7 +153,6 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
       case (m1, m2) =>
         assert(m1.data.sameElements(m2.data))
     }
-
 
     Thread.sleep(700)
 

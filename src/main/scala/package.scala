@@ -13,7 +13,7 @@ import akka.util.{ByteString, Timeout}
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.google.common.hash.Hashing
-import com.twitter.chill.{IKryoRegistrar, KryoBase, ScalaKryoInstantiator}
+import com.twitter.chill.{IKryoRegistrar, KryoBase, KryoPool, ScalaKryoInstantiator}
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.{Address, Id}
 import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
@@ -97,94 +97,33 @@ package object constellation extends KeyUtilsExt with POWExt
   def byteToInt(byteBarray: Array[Byte]): Int =
     ByteBuffer.wrap(byteBarray).order(ByteOrder.BIG_ENDIAN).getInt
 
-
-  /*
-
-    private val keyPairKryoSer = new Serializer[KeyPair] {
-      override def write(kryo: Kryo, output: Output, `object`: KeyPair): Unit = {
-        `object`.getPrivate.getEncoded ++ `object`.getPublic.getEncoded
-      }
-
-      override def read(kryo: Kryo, input: Input, `type`: Class[KeyPair]): KeyPair = {
-        val buf = input.getBuffer
-        val priv = bytesToPrivateKey(buf.slice(0, 144))
-        val pub = bytesToPublicKey(buf.slice(144, 144+88))
-        new KeyPair(pub, priv)
-      }
-    }
-  */
-
   case class EncodedPubKey(pubKeyEncoded: Array[Byte])
 
   class PubKeyKryoSerializer extends Serializer[PublicKey] {
     override def write(kryoI: Kryo, output: Output, `object`: PublicKey): Unit = {
       val enc = `object`.getEncoded
-      //   println("PubKeyEnc " + enc.toSeq)
-      // kryoI.writeClass(output, classOf[PublicKey])
-      println("public key writer")
       kryoI.writeClassAndObject(output, EncodedPubKey(enc))
-      //output.write(enc)
     }
 
     override def read(kryoI: Kryo, input: Input, `type`: Class[PublicKey]): PublicKey = {
       val encP = EncodedPubKey(null)
       kryoI.reference(encP)
-      //val buf = input.getBuffer
-      //println("PubKey reader: " + buf.toSeq.zipWithIndex)
-      // kryo.getReferenceResolver()
-      //bytesToPublicKey(buf.slice(64,88+64))
-      println("public key reader")
       val enc = kryoI.readClassAndObject(input).asInstanceOf[EncodedPubKey]
       bytesToPublicKey(enc.pubKeyEncoded)
     }
   }
-  /*
 
-    class PrivKeyKryoSerializer extends Serializer[PrivateKey] {
-      override def write(kryoI: Kryo, output: Output, `object`: PrivateKey): Unit = {
-      //  `object`.json.getBytes()
-        val enc = `object`.getEncoded
-     //   println("Kryo write size " + enc.size)
-    //    println("Kryo write buffer " + enc.toSeq)
-        kryoI.writeClass(output, classOf[PrivateKey])
-        output.write(enc)
-      }
-
-      override def read(kryoI: Kryo, input: Input, `type`: Class[PrivateKey]): PrivateKey = {
-    //    val clazz = kryoI.readClass(input)
-      //  kryoI.class
-    //    println("Read class " + clazz)
-        val buf = input.getBuffer
-        bytesToPrivateKey(buf.slice(65,144+65))
-        //    println("Kryo read size " + buf.size)
-        //    println("Kryo read buffer " + buf.toSeq)
-       // (new String(input.getBuffer)).x[PrivateKey]
-      }
-    }
-  */
-
-  val instantiator = new ScalaKryoInstantiator()
-  instantiator.setRegistrationRequired(false)
-
-/*
-  val kryoRegister = new IKryoRegistrar {
-    override def apply(k: Kryo): Unit = {
-      // kryo.register(classOf[KeyPair], keyPairKryoSer)
-      k.register(classOf[PublicKey], new PubKeyKryoSerializer())
-      k.addDefaultSerializer(classOf[PublicKey], new PubKeyKryoSerializer())
-      //  k.addDefaultSerializer(classOf[PrivateKey], new PrivKeyKryoSerializer())
-      //      k.register(classOf[PrivateKey], new PrivKeyKryoSerializer())
-    }
+  val kryo: KryoBase = {
+    val instantiator = new ScalaKryoInstantiator()
+    instantiator.setRegistrationRequired(true)
+    instantiator.newKryo()
   }
-  instantiator.withRegistrar(kryoRegister)
-*/
 
-  val kryo: KryoBase = instantiator.newKryo()
-  // kryo.register(classOf[PrivateKey], new PrivKeyKryoSerializer())
-  // kryo.addDefaultSerializer(classOf[PrivateKey], new PrivKeyKryoSerializer())
+  kryo.register(classOf[SerializedUDPMessage])
+
   kryo.register(classOf[PublicKey], new PubKeyKryoSerializer())
-  kryo.addDefaultSerializer(classOf[PublicKey], new PubKeyKryoSerializer())
 
+  kryo.addDefaultSerializer(classOf[PublicKey], new PubKeyKryoSerializer())
 
   implicit class KryoExt[T](a: T) {
     def kryoWrite: Array[Byte] = {
@@ -202,7 +141,6 @@ package object constellation extends KeyUtilsExt with POWExt
     }
   }
 
-
   implicit class UDPSerExt[T <: AnyRef](data: T)(implicit system: ActorSystem) {
     def udpSerialize(
                       packetGroup: Option[Long] = None,
@@ -211,11 +149,7 @@ package object constellation extends KeyUtilsExt with POWExt
       val serialization = SerializationExtension(system)
       val serializer = serialization.findSerializerFor(data)
       val bytes = serializer.toBinary(data)
-      //val bos = new ByteArrayOutputStream()
-   //   val out = new Output(500, 1024*1024*100)
-  //    kryo.writeClassAndObject(out, data)
-  //    val kryoBytes = out.getBuffer
-      val serMsg = SerializedUDPMessage(bytes, serializer.identifier)
+      val serMsg = SerializedUDPMessage(bytes, serializer.identifier, 1, 1, 1)
       serMsg
     }
 
@@ -223,22 +157,18 @@ package object constellation extends KeyUtilsExt with POWExt
       val serialization = SerializationExtension(system)
       val serializer = serialization.findSerializerFor(data)
       val bytes = serializer.toBinary(data)
-   //   val out = new Output(groupSize, 1024*1024*100)
-   //   kryo.writeClassAndObject(out, data)
-   //   val kryoBytes = out.getBuffer
 
       if (bytes.length < groupSize) {
-        Seq(SerializedUDPMessage(bytes, serializer.identifier))
+        Seq(SerializedUDPMessage(bytes, serializer.identifier, 1, 1, 1))
       } else {
         val idx = bytes.grouped(groupSize).zipWithIndex.toSeq
         val pg = Random.nextLong()
         idx.map { case (b, i) =>
           SerializedUDPMessage(b, serializer.identifier,
-            packetGroup = Some(pg), packetGroupSize = Some(idx.length), packetGroupId = Some(i))
+            packetGroup = pg, packetGroupSize = idx.length, packetGroupId = i)
         }
       }
     }
-
   }
 
   implicit class UDPActorExt(udpActor: ActorRef) {
@@ -249,8 +179,7 @@ package object constellation extends KeyUtilsExt with POWExt
 
     def udpSend[T <: AnyRef](data: T, remote: InetSocketAddress)(implicit system: ActorSystem): Unit = {
       data.udpSerializeGrouped().foreach { d =>
-        udpActor ! UDPSend(ByteString(d.json), remote)
-   //     udpActor ! UDPSend(ByteString(d.kryoWrite), remote)
+        udpActor ! UDPSend(ByteString(d.kryoWrite), remote)
       }
     }
 
@@ -287,12 +216,10 @@ package object constellation extends KeyUtilsExt with POWExt
 
   }
 
-
   implicit class ActorQuery(a: ActorRef) {
     import akka.pattern.ask
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
     def query[T: ClassTag](m: Any): T = (a ? m).mapTo[T].get()
   }
-
 
 }
