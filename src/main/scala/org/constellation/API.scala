@@ -109,7 +109,7 @@ class API(
             "shortId" -> id.short,
             "numValidBundles" -> validBundles.size.toString,
             "numValidTransactions" -> last1000ValidTX.size.toString,
-            "memPoolSize" -> memPoolTX.size.toString,
+            "memPoolSize" -> memPool.size.toString,
             "totalNumBroadcasts" -> totalNumBroadcastMessages.toString,
             "totalNumBundleMessages" -> totalNumBundleMessages.toString,
             "numPeers" -> peers.size.toString,

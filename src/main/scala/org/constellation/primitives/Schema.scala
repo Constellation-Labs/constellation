@@ -337,7 +337,8 @@ object Schema {
   case class DownloadRequest() extends DownloadMessage
   case class DownloadResponse(
                                bestBundle: Bundle,
-                               genesisBundle: Bundle
+                               genesisBundle: Bundle,
+                               genesisTXData: TXData
                              ) extends DownloadMessage
 
   final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage

@@ -219,7 +219,7 @@ package object constellation extends KeyUtilsExt with POWExt
       serMsg
     }
 
-    def udpSerializeGrouped(groupSize: Int = 5000): Seq[SerializedUDPMessage] = {
+    def udpSerializeGrouped(groupSize: Int = 500): Seq[SerializedUDPMessage] = {
       val serialization = SerializationExtension(system)
       val serializer = serialization.findSerializerFor(data)
       val bytes = serializer.toBinary(data)

@@ -53,7 +53,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     Thread.sleep(2000)
 
 
-
     val results = nodes.flatMap{ node =>
       val others = nodes.filter{_ != node}
       others.map{
@@ -83,8 +82,8 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     }
 
 
-/*
-    Thread.sleep(10000)
+
+    Thread.sleep(5000)
 
     println("-"*10)
     println("Initial distribution")
@@ -93,11 +92,11 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val initialDistrTX = nodes.tail.map{ n =>
       val dst = n.data.selfAddress
       val s = SendToAddress(dst.address, 1e7.toLong)
-      r1.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
+      r1.postRead[TXData]("sendToAddress", s)
     }
 
     Thread.sleep(15000)
-
+/*
 
     def randomNode: ConstellationNode = nodes(Random.nextInt(nodes.length))
     def randomOtherNode(not: ConstellationNode): ConstellationNode =

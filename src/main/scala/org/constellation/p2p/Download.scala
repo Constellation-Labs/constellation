@@ -12,29 +12,31 @@ trait Download extends PeerAuth {
   import data._
 
   def downloadHeartbeat(): Unit = {
-    if (downloadMode && peers.nonEmpty) {
+    if (downloadMode && peers.nonEmpty && !downloadInProgress) {
       logger.debug("Requesting data download")
       broadcast(DownloadRequest())
     }
   }
 
   def handleDownloadResponse(d: DownloadResponse): Unit = {
-
-    acceptGenesis(d.genesisBundle)
-    if (d.bestBundle.hash == d.genesisBundle.hash) {
-      downloadMode = false
-    } else {
-      handleBundle(d.bestBundle)
-    }
-
-    //   lastCheckpointBundle = d.lastCheckpointBundle
+    if (genesisBundle == null) {
+      db.put(d.genesisTXData)
+      acceptGenesis(d.genesisBundle)
+      if (d.bestBundle.hash == d.genesisBundle.hash) {
+        downloadMode = false
+      } else {
+        handleBundle(d.bestBundle)
+        downloadInProgress = true
+      }
+      //   lastCheckpointBundle = d.lastCheckpointBundle
       logger.debug("Downloaded data")
-
+    }
   }
 
   def handleDownloadRequest(d: DownloadRequest, remote: InetSocketAddress): Unit = {
     if (genesisBundle != null && validBundles.nonEmpty && !downloadMode) {
-      val downloadResponse = DownloadResponse(validBundles.last, genesisBundle)
+      logger.debug("Sending download response")
+      val downloadResponse = DownloadResponse(validBundles.last, genesisBundle, genesisBundle.extractTX.head.txData.get)
       udpActor.udpSend(downloadResponse, remote)
     }
   }

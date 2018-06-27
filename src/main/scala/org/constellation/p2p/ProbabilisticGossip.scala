@@ -118,7 +118,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
       // || peers have no bundles / stalled.
       val memPoolEmit = Random.nextInt() < 0.2 // && (System.currentTimeMillis() < lastBundle.maxTime + 25000)
-      val filteredMempool = memPoolTX.filterNot{ z => txInBestBundleNewFromValidationHash.contains(z.hash)}
+      val filteredMempool = memPool.filterNot{ z => txInBestBundleNewFromValidationHash.contains(z)}
 
       if (filteredMempool.nonEmpty && (memPoolEmit || genesisAdditionCheck)) {
         // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids

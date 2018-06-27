@@ -7,6 +7,7 @@ import java.security.KeyPair
 import akka.actor.ActorRef
 import akka.http.scaladsl.server.Directives.complete
 import akka.http.scaladsl.server.StandardRoute
+import com.typesafe.scalalogging.Logger
 import org.constellation.primitives.Schema._
 import org.constellation.util.{HashSignature, ProductHash, Signed}
 
@@ -20,16 +21,35 @@ class Data {
 
   @volatile var db : LevelDB = _
   @volatile implicit var keyPair: KeyPair = _
+  val logger = Logger(s"Data")
+
 
   def publicKeyHash: Int = keyPair.getPublic.hashCode()
   def id : Id = Id(keyPair.getPublic)
   def selfAddress: AddressMetaData = id.address
   def tmpDirId = new File("tmp", id.medium)
 
-  def updateKeyPair(kp: KeyPair): Unit = {
-    keyPair = kp
+  def restartDB(): Unit = {
     Try{db.destroy()}
     db = new LevelDB(new File(tmpDirId, "db"))
+  }
+
+  def updateKeyPair(kp: KeyPair): Unit = {
+    keyPair = kp
+    restartDB()
+  }
+
+  def restartNode(): Unit = {
+    restartDB()
+    validBundles = Seq()
+    genesisBundle = null
+    downloadMode = true
+    validLedger.clear()
+    memPoolLedger.clear()
+    last1000ValidTX = Seq()
+    syncPendingTXHashes = Set()
+    syncPendingBundleHashes = Set()
+    bestBundle = null
   }
 
   def transactionData(txHash: String): TransactionQueryResponse = {
@@ -75,6 +95,7 @@ class Data {
   def selfBalance: Option[Long] = validLedger.get(id.address.address)
 
   @volatile var downloadMode: Boolean = true
+  @volatile var downloadInProgress: Boolean = false
 
   val checkpointsInProgress: TrieMap[RoundHash[_ <: CC], Boolean] = TrieMap()
 
@@ -126,11 +147,14 @@ class Data {
     bestBundle = genesisBundle
     processNewBundleMetadata(genesisBundle, genesisBundle.extractTX, isGenesis = true, setActive = false)
     validBundles = Seq(genesisBundle)
-    acceptTransaction(b.extractTX.head)
+    val gtx = b.extractTX.head
+    gtx.txData.get.updateLedger(memPoolLedger)
+    acceptTransaction(gtx)
   }
 
   def createGenesis(tx: TX): Unit = {
     acceptGenesis(Bundle(BundleData(Seq(ParentBundleHash(tx.hashSignature.signedHash), tx)).signed()))
+    downloadMode = false
   }
 
   def handleBundle(bundle: Bundle): Unit = {
@@ -138,7 +162,7 @@ class Data {
 
     totalNumBundleMessages += 1
 
-    val notPresent = db.contains(bundle)
+    val notPresent = !db.contains(bundle)
 
     if (notPresent) {
 
@@ -389,7 +413,8 @@ class Data {
   def updateMempool(tx: TX, txData: TXData): Boolean = {
     val hash = tx.hashSignature.signedHash
     val validUpdate = !memPool.contains(hash) && tx.valid && txData.ledgerValid(memPoolLedger) &&
-      !last1000ValidTX.contains(hash)
+    !last1000ValidTX.contains(hash)
+    logger.debug(s"Update mempool $validUpdate ${tx.valid} ${txData.ledgerValid(memPoolLedger)} ${!last1000ValidTX.contains(hash)}")
     if (validUpdate) {
       txData.updateLedger(memPoolLedger)
       memPool += hash
