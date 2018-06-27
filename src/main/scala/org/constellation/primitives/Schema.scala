@@ -126,7 +126,7 @@ object Schema {
 
   case class RequestBundleData(hash: String) extends GossipMessage
   case class HashRequest(hash: String) extends GossipMessage
-  case class BatchHashRequest(hashes: Seq[String]) extends GossipMessage
+  case class BatchHashRequest(hashes: Set[String]) extends GossipMessage
 
   case class UnknownParentHashSyncInfo(
                                       firstRequestTime: Long,

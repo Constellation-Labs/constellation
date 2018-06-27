@@ -14,15 +14,8 @@ class TXTest extends FlatSpec {
   val address2 = pubKeyToAddress(tempKey2.getPublic)
   val dst = pubKeyToAddress(tempKey3.getPublic)
 
-  val tx = TX(
-    TXData(
-      Seq(address1, address2),
-      dst,
-      1L,
-      keyMap = Seq(0, 0, 1)
-    ).multiSigned()(Seq(tempKey, tempKey1, tempKey2))
-  )
-
+  val tx = randomTransactions.head._1
+  /*
   "TX validation" should "sign and validate" in {
 
     assert(tx.valid)
@@ -39,7 +32,7 @@ class TXTest extends FlatSpec {
     assert(!tx2.valid)
 
   }
-
+*/
   "TX Gossip" should "demonstrate gossip traversal to determine stack depth" in {
 
 

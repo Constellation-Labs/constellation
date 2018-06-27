@@ -4,7 +4,8 @@ import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import constellation._
 import org.constellation.crypto.Base58
-import org.constellation.primitives.Schema.{BundleHash, Id}
+import org.constellation.primitives.Schema
+import org.constellation.primitives.Schema.{BundleHash, Id, TX, TXData}
 
 object POW extends POWExt
 
@@ -125,6 +126,16 @@ trait POWSignHelp {
     Signed(
       t, startTime, keyPairs.map{_.getPublic.encoded}, signatures
     )
+  }
+
+
+  def createTransactionSafe(
+                             src: String, dst: String, amount: Long, keyPair: KeyPair, normalized: Boolean = true
+                           ): (TX, TXData) = {
+    val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
+    val txData = TXData(src, dst, amountToUse)
+    val tx = TX(hashSign(txData.hash, keyPair))
+    tx -> txData
   }
 
 }

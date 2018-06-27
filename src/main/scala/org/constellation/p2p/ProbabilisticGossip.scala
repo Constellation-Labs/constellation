@@ -121,9 +121,9 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         val b = Bundle(BundleData(
           memPoolSelection :+ bb.map{z => ParentBundleHash(z.hash)}.getOrElse(lastBundleHash)
         ).signed())
-   //     if (bb.nonEmpty) {
-   //       activeDAGBundles = activeDAGBundles.filterNot(_ == bb.get)
-   //     }
+        //     if (bb.nonEmpty) {
+        //       activeDAGBundles = activeDAGBundles.filterNot(_ == bb.get)
+        //     }
         processNewBundleMetadata(b, memPoolSelection.toSet)
         broadcast(b)
       }
@@ -243,28 +243,28 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       } else {
         val txs = bundle.extractTX
         val haveAllTXData = txs.forall(_.txData.nonEmpty)
-        if (haveAllTXData) {
-
-
-
+        if (!haveAllTXData) {
+          val hashes = txs.filter {_.txData.isEmpty}.map {_.hashSignature.signedHash}
+          broadcast(BatchHashRequest(hashes))
         } else {
-          HashRequest
-        }
-        // TODO: Need to register potentially invalid bundles somewhere but not use them in case of fork download.
-        val validByParent = validateTXBatch(txs)
-        if (validByParent) {
-          totalNumNewBundleAdditions += 1
-          txs.foreach{addToMempool}
-          processNewBundleMetadata(bundle, txs)
-        } else {
-          totalNumInvalidBundles += 1
+          val validBatch = validateTXBatch(txs)
+          if (validBatch) {
+            totalNumNewBundleAdditions += 1
+            txs.foreach {
+              updateMempool
+            }
+            processNewBundleMetadata(bundle, txs)
+          } else {
+            // TODO: Need to register potentially invalid bundles somewhere but not use them in case of fork download.
+            totalNumInvalidBundles += 1
+          }
         }
       }
+
+      // Also need to verify there are not multiple occurrences of same id re-signing bundle, and reps.
+      //  val valid = validateTXBatch(txs) && txs.intersect(validTX).isEmpty
+
     }
-
-    // Also need to verify there are not multiple occurrences of same id re-signing bundle, and reps.
-    //  val valid = validateTXBatch(txs) && txs.intersect(validTX).isEmpty
-
   }
 
   // def handleGossip(g: Gossip[ProductHash], remote: InetSocketAddress): Unit = {

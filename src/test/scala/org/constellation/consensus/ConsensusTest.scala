@@ -10,7 +10,6 @@ import akka.testkit.{TestActor, TestKit, TestProbe}
 import akka.util.Timeout
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.{RegisterNextActor, UDPMessage, UDPSendToID}
-import org.constellation.primitives.Transaction
 import org.constellation.util.TestNode
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
@@ -62,9 +61,11 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val node3 = TestNode()
     val node4 = TestNode()
 
-    val tx1 = TX(TXData(Seq(keyPair.getPublic), node2.configKeyPair.getPublic, 33L).signed())
 
-    val tx2 = TX(TXData(Seq(node2.configKeyPair.getPublic), node4.configKeyPair.getPublic, 14L).signed()(keyPair = node2.configKeyPair))
+    val (tx1, tx1Data) = createTransactionSafe(keyPair.getPublic.address, node2.configKeyPair.getPublic.address, 33L, keyPair)
+
+
+    val (tx2, tx2Data) = createTransactionSafe(node2.configKeyPair.getPublic.address, node4.configKeyPair.getPublic.address, 14L, node2.configKeyPair)
 
     val facilitators = Set(Id(keyPair.getPublic), Id(node2.configKeyPair.getPublic),
       Id(node3.configKeyPair.getPublic), Id(node4.configKeyPair.getPublic))
@@ -136,9 +137,10 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val node3 = TestNode()
     val node4 = TestNode()
 
-    val tx1 = TX(TXData(Seq(keyPair.getPublic), node2.configKeyPair.getPublic, 33L).signed())
+    val (tx1, tx1Data) = createTransactionSafe(keyPair.getPublic.address, node2.configKeyPair.getPublic.address, 33L, keyPair)
 
-    val tx2 = TX(TXData(Seq(node2.configKeyPair.getPublic), node4.configKeyPair.getPublic, 14L).signed()(keyPair = node2.configKeyPair))
+
+    val (tx2, tx2Data) = createTransactionSafe(node2.configKeyPair.getPublic.address, node4.configKeyPair.getPublic.address, 14L, node2.configKeyPair)
 
     val facilitators = Set(Id(keyPair.getPublic), Id(node2.configKeyPair.getPublic),
       Id(node3.configKeyPair.getPublic), Id(node4.configKeyPair.getPublic))

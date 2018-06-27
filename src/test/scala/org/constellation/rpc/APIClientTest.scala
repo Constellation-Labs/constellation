@@ -9,11 +9,8 @@ import scala.concurrent.ExecutionContextExecutor
 import constellation._
 import org.constellation.Fixtures
 import org.constellation.crypto.KeyUtils
-import .Chain
 import org.constellation.primitives.Schema.{Id, Peers}
-import org.constellation.primitives.Transaction
-import org.constellation.util.APIClient
-import org.constellation.util.TestNode
+import org.constellation.util.{APIClient, TestNode}
 
 class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
@@ -32,17 +29,6 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     assert(wallet.last.dataEqual(kp2))
 
    */
-
-  "GET to /blocks" should "get the current local node chain" in {
-    val appNode = TestNode()
-    val rpc = new APIClient(port=appNode.httpPort)
-
-    val response = rpc.get("blocks")
-
-    val localChain = rpc.read[Chain](response.get()).get()
-
-    assert(localChain == Chain())
-  }
 
   import Fixtures._
 
@@ -93,17 +79,6 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
     assert(Id(keyPair.getPublic) == id)
     */
-  }
-
-  "POST to /transaction" should "send a transaction and receive it back" in {
-    val appNode = TestNode()
-    val rpc = new APIClient(port=appNode.httpPort)
-
-    val transaction = Fixtures.tx
-    val response = rpc.post("transaction", transaction)
-    val transactionResponse = rpc.read[Transaction](response.get()).get()
-
-    assert(transaction == transactionResponse)
   }
 
   "POST to /peer" should "add the peer correctly" in {

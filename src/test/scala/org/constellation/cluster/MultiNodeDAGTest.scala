@@ -89,7 +89,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     val initialDistrTX = nodes.tail.map{ n =>
       val dst = n.data.selfAddress
-      val s = SendToAddress(dst, 1e7.toLong)
+      val s = SendToAddress(dst.address, 1e7.toLong)
       r1.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
     }
 
@@ -106,7 +106,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       Future {
         val src = randomNode
         val dst = randomOtherNode(src)
-        val s = SendToAddress(dst.data.id.address, Random.nextInt(1000).toLong)
+        val s = SendToAddress(dst.data.id.address.address, Random.nextInt(1000).toLong)
         src.api.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
       }(ec)
     }

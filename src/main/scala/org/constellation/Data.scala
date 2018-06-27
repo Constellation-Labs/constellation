@@ -191,10 +191,8 @@ class Data {
   }
 
   def createTransaction(dst: String, amount: Long, normalized: Boolean = true): TX = {
-    val amountToUse = if (normalized) amount * NormalizationFactor else amount
-    val txData = TXData(selfAddress.address, dst, amountToUse)
+    val (tx, txData) = createTransactionSafe(selfAddress.address, dst, amount, keyPair, normalized)
     db.put(txData)
-    val tx = TX(hashSign(txData.hash, keyPair))
     if (last100SelfSentTransactions.size > 100) {
       last100SelfSentTransactions.tail :+ tx
     }
