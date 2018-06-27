@@ -15,7 +15,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 import com.google.common.hash.Hashing
 import com.twitter.chill.{IKryoRegistrar, KryoBase, ScalaKryoInstantiator}
 import org.constellation.p2p._
-import org.constellation.primitives.Schema.{Address, Bundle, Id}
+import org.constellation.primitives.Schema.{AddressMetaData, Bundle, Id}
 import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
 import org.constellation.crypto.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
 import org.constellation.crypto.KeyUtilsExt
@@ -272,8 +272,8 @@ package object constellation extends KeyUtilsExt with POWExt
       s"hostString: ${inetSocketAddress.getHostString}, port: ${inetSocketAddress.getPort}"
   }
 
-  implicit def pubKeyToAddress(key: PublicKey): Address =  Address(publicKeyToAddressString(key))
-  implicit def pubKeysToAddress(key: Seq[PublicKey]): Address =  Address(publicKeysToAddressString(key))
+  implicit def pubKeyToAddress(key: PublicKey): AddressMetaData =  AddressMetaData(publicKeyToAddressString(key))
+  implicit def pubKeysToAddress(key: Seq[PublicKey]): AddressMetaData =  AddressMetaData(publicKeysToAddressString(key))
 
   implicit class KeyPairFix(kp: KeyPair) {
 
@@ -285,7 +285,7 @@ package object constellation extends KeyUtilsExt with POWExt
         kp.getPublic == other.getPublic
     }
 
-    def address: Address = pubKeyToAddress(kp.getPublic)
+    def address: AddressMetaData = pubKeyToAddress(kp.getPublic)
 
   }
 

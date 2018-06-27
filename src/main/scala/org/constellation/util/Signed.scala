@@ -49,12 +49,13 @@ trait ProductHash extends Product {
 
 
 case class HashSignature(
-                          b58EncodedPublicKey: EncodedPublicKey,
-                          time: Long,
-                          signature: String
+                          hash: String,
+                          signature: String,
+                          b58EncodedPublicKey: String,
+                          time: Long = System.currentTimeMillis()
                         ) {
-  def publicKey: PublicKey = b58EncodedPublicKey.toPublicKey
-  def valid(hash: String): Boolean = verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
+  def publicKey: PublicKey = EncodedPublicKey(b58EncodedPublicKey).toPublicKey
+  def valid: Boolean = verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
 
 }
 

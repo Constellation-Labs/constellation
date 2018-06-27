@@ -49,7 +49,7 @@ class API(
       path("submitTX") {
         parameter('address, 'amount) { (address, amount) =>
           logger.error(s"SubmitTX : $address $amount")
-          handleSendRequest(SendToAddress(Address(address), amount.toLong))
+          handleSendRequest(SendToAddress(AddressMetaData(address), amount.toLong))
         }
       } ~
       pathPrefix("address") {

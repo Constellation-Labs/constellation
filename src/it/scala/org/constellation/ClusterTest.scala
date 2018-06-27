@@ -13,7 +13,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import constellation._
 import org.constellation.ClusterTest.{KubeIPs, ipRegex}
-import org.constellation.primitives.Schema.{Address, SendToAddress, TX}
+import org.constellation.primitives.Schema.{AddressMetaData, SendToAddress, TX}
 import org.constellation.primitives.Transaction
 import org.constellation.primitives.Schema._
 
@@ -172,7 +172,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     }
 
     val initialDistrTX = rpcs.tail.map{ n =>
-      val dst = n.getBlocking[Address]("selfAddress")
+      val dst = n.getBlocking[AddressMetaData]("selfAddress")
       val s = SendToAddress(dst, 1e7.toLong)
       r1.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
     }
@@ -187,7 +187,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     def sendRandomTransaction = {
       Future {
         val src = randomNode
-        val dst = randomOtherNode(src).getBlocking[Address]("selfAddress")
+        val dst = randomOtherNode(src).getBlocking[AddressMetaData]("selfAddress")
         val s = SendToAddress(dst, Random.nextInt(1000).toLong)
         src.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
       }(ec)

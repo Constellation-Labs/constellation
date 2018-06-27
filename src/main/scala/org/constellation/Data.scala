@@ -20,7 +20,7 @@ class Data {
 
   def publicKeyHash: Int = keyPair.getPublic.hashCode()
   def id : Id = Id(keyPair.getPublic)
-  def selfAddress: Address = id.address
+  def selfAddress: AddressMetaData = id.address
   def tmpDirId = new File("tmp", id.medium)
 
   def updateKeyPair(kp: KeyPair): Unit = {
@@ -185,7 +185,7 @@ class Data {
     }
   }
 
-  def createTransaction(dstAddress: Address, normalizedAmount: Long): TX = {
+  def createTransaction(dstAddress: AddressMetaData, normalizedAmount: Long): TX = {
 
     val tx = TX(
       TXData(
@@ -305,5 +305,74 @@ class Data {
 
 
   @volatile var lastCheckpointBundle: Option[Bundle] = None
+
+  implicit class TXDataAccess(tx: TX) {
+
+    def valid: Boolean = tx.hashSignature.valid
+    def normalizedAmount: Double = tx.data.amount / NormalizationFactor
+    def output(outputHash: String): Option[AddressMetaData] = {
+      val d = tx.data
+      if (d.dst.address == outputHash) Some(d.dst)
+      else if (d.remainder.exists(_.address == outputHash)) d.remainder
+      else None
+    }
+    def pretty: String = s"TX: ${this.short} FROM ${tx.data.src.head.address.slice(0, 5)}" +
+      s" TO ${tx.data.dst.address.slice(0, 5)} REMAINDER " +
+      s"${tx.data.remainder.map{_.address}.getOrElse("empty").slice(0, 5)} " +
+      s"amount ${tx.data.amount}"
+
+    def srcLedgerBalanceAll(ledger: TrieMap[String, Long]): Seq[Long] = {
+      tx.data.src.map{_.address}.map{a => ledger.getOrElse(a, 0L)}
+    }
+
+    def srcLedgerBalanceAllAccount(ledger: TrieMap[String, Long]): Seq[(String, Long)] = {
+      tx.data.src.map{_.address}.map{a => a -> ledger.getOrElse(a, 0L)}
+    }
+
+    def srcLedgerBalance(ledger: TrieMap[String, Long]): Long = {
+      tx.data.src.map {_.address}.flatMap {ledger.get}.sum
+    }
+
+    def ledgerValid(ledger: TrieMap[String, Long]): Boolean = {
+      if (tx.data.isGenesis) !ledger.contains(tx.data.dst.address) else {
+        val srcSum = srcLedgerBalance(ledger)
+        srcSum >= tx.data.amount && valid
+      }
+    }
+
+    def updateLedger(ledger: TrieMap[String, Long]): Unit = {
+      val txDat = tx.data
+      if (txDat.isGenesis) {
+        // UTXO(txDat.src.head.address) = txDat.inverseAmount
+        // Move elsewhere ^ too complex.
+        ledger(txDat.dst.address) = txDat.amount
+      } else {
+
+        val total = txDat.src.flatMap{s => ledger.get(s.address)}.sum
+        val remainder = total - txDat.amount
+
+        // Empty src balance.
+        txDat.src.foreach{
+          s =>
+            ledger(s.address) = 0L
+        }
+
+        val prevDstBalance = ledger.getOrElse(txDat.dst.address, 0L)
+        ledger(txDat.dst.address) = prevDstBalance + txDat.amount
+
+        txDat.remainder.foreach{ r =>
+          val prv = ledger.getOrElse(r.address, 0L)
+          ledger(r.address) = prv + remainder
+        }
+
+        // Repopulate head src with remainder if no remainder address specified
+        if (txDat.remainder.isEmpty && remainder != 0) {
+          ledger(txDat.src.head.address) = remainder
+        }
+
+      }
+    }
+
+  }
 
 }

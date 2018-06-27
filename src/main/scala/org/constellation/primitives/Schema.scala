@@ -6,8 +6,7 @@ import java.security.PublicKey
 
 import constellation.pubKeyToAddress
 import org.constellation.crypto.Base58
-import org.constellation.util.EncodedPublicKey
-import org.constellation.util.{ProductHash, Signed}
+import org.constellation.util.{EncodedPublicKey, HashSignature, ProductHash, Signed}
 
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
@@ -54,7 +53,7 @@ object Schema {
   val NormalizationFactor: Long = 1e8.toLong
 
   case class SendToAddress(
-                            address: Address,
+                            address: AddressMetaData,
                             amount: Long,
                             account: Option[PublicKey] = None,
                             normalized: Boolean = true,
@@ -67,7 +66,7 @@ object Schema {
 
   // TODO: We also need a hash pointer to represent the post-tx counter party signing data, add later
   // TX should still be accepted even if metadata is incorrect, it just serves to help validation rounds.
-  case class Address(
+  case class AddressMetaData(
                       address: String,
                       balance: Long = 0L,
                       lastValidTransactionHash: Option[String] = None,
@@ -84,99 +83,16 @@ object Schema {
   case class TXData(
                      src: String,
                      dst: String,
-                     amount: Long
+                     amount: Long,
+                     time: Long = System.currentTimeMillis()
                    ) extends ProductHash {
     def inverseAmount: Long = -1*amount
     def normalizedAmount: Long = amount / NormalizationFactor
   }
 
-  case class TX(tx: Signed[TXData]) extends ProductHash with Fiber {
-    def valid: Boolean = {
-
-      // Last key is used for srcAccount when filled out.
-      val addressKeys = if (tx.data.srcAccount.nonEmpty) {
-        tx.encodedPublicKeys.slice(0, tx.encodedPublicKeys.size - 1)
-      } else tx.encodedPublicKeys
-
-      val km = tx.data.keyMap
-      val signatureAddresses = if (km.nonEmpty) {
-        val store = Array.fill(km.toSet.size)(Seq[PublicKey]())
-        km.zipWithIndex.foreach{ case (keyGroupIdx, keyIdx) =>
-          store(keyGroupIdx) = store(keyGroupIdx) :+ addressKeys(keyIdx).toPublicKey
-        }
-        store.map{constellation.pubKeysToAddress}.toSeq
-      } else {
-        addressKeys.map{_.toPublicKey}.map{constellation.pubKeyToAddress}
-      }
-
-      val matchingAccountValid = tx.data.srcAccount.forall(_ == tx.encodedPublicKeys.last)
-
-      val validInputAddresses = signatureAddresses.map{_.address} == tx.data.src.map{_.address}
-      validInputAddresses && tx.valid && matchingAccountValid
-    }
-    def normalizedAmount: Double = tx.data.amount / NormalizationFactor
-    def output(outputHash: String): Option[Address] = {
-      val d = tx.data
-      if (d.dst.address == outputHash) Some(d.dst)
-      else if (d.remainder.exists(_.address == outputHash)) d.remainder
-      else None
-    }
-    def pretty: String = s"TX: ${this.short} FROM ${tx.data.src.head.address.slice(0, 5)}" +
-      s" TO ${tx.data.dst.address.slice(0, 5)} REMAINDER " +
-      s"${tx.data.remainder.map{_.address}.getOrElse("empty").slice(0, 5)} " +
-      s"amount ${tx.data.amount}"
-
-    def srcLedgerBalanceAll(ledger: TrieMap[String, Long]): Seq[Long] = {
-      tx.data.src.map{_.address}.map{a => ledger.getOrElse(a, 0L)}
-    }
-
-    def srcLedgerBalanceAllAccount(ledger: TrieMap[String, Long]): Seq[(String, Long)] = {
-      tx.data.src.map{_.address}.map{a => a -> ledger.getOrElse(a, 0L)}
-    }
-
-    def srcLedgerBalance(ledger: TrieMap[String, Long]): Long = {
-      tx.data.src.map {_.address}.flatMap {ledger.get}.sum
-    }
-
-    def ledgerValid(ledger: TrieMap[String, Long]): Boolean = {
-      if (tx.data.isGenesis) !ledger.contains(tx.data.dst.address) else {
-        val srcSum = srcLedgerBalance(ledger)
-        srcSum >= tx.data.amount && valid
-      }
-    }
-
-    def updateLedger(ledger: TrieMap[String, Long]): Unit = {
-      val txDat = tx.data
-      if (txDat.isGenesis) {
-        // UTXO(txDat.src.head.address) = txDat.inverseAmount
-        // Move elsewhere ^ too complex.
-        ledger(txDat.dst.address) = txDat.amount
-      } else {
-
-        val total = txDat.src.flatMap{s => ledger.get(s.address)}.sum
-        val remainder = total - txDat.amount
-
-        // Empty src balance.
-        txDat.src.foreach{
-          s =>
-            ledger(s.address) = 0L
-        }
-
-        val prevDstBalance = ledger.getOrElse(txDat.dst.address, 0L)
-        ledger(txDat.dst.address) = prevDstBalance + txDat.amount
-
-        txDat.remainder.foreach{ r =>
-          val prv = ledger.getOrElse(r.address, 0L)
-          ledger(r.address) = prv + remainder
-        }
-
-        // Repopulate head src with remainder if no remainder address specified
-        if (txDat.remainder.isEmpty && remainder != 0) {
-          ledger(txDat.src.head.address) = remainder
-        }
-
-      }
-    }
+  case class TX(
+                 hashSignature: HashSignature
+               ) extends ProductHash with Fiber {
   }
 
   sealed trait GossipMessage
@@ -434,7 +350,7 @@ object Schema {
   case class Id(id: PublicKey) {
     def short: String = id.toString.slice(15, 20)
     def medium: String = id.toString.slice(15, 25).replaceAll(":", "")
-    def address: Address = pubKeyToAddress(id)
+    def address: AddressMetaData = pubKeyToAddress(id)
     def b58 = Base58.encode(id.getEncoded)
   }
 
@@ -474,8 +390,8 @@ object Schema {
   // Experimental
 
   case class CounterPartyTXRequest(
-                                    dst: Address,
-                                    counterParty: Address,
+                                    dst: AddressMetaData,
+                                    counterParty: AddressMetaData,
                                     counterPartyAccount: Option[EncodedPublicKey]
                                   ) extends ProductHash
 
