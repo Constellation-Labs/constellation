@@ -24,9 +24,6 @@ import org.constellation.util.ServeUI
 import org.json4s.native
 import org.json4s.native.Serialization
 
-
-
-
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
