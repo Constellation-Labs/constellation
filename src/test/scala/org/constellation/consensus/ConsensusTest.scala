@@ -10,8 +10,7 @@ import akka.testkit.{TestActor, TestKit, TestProbe}
 import akka.util.Timeout
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.{RegisterNextActor, UDPMessage, UDPSendToID}
-import org.constellation.primitives.{Block, Transaction}
-import org.constellation.state.ChainStateManager.{AddBlock, CreateBlockProposal}
+import org.constellation.primitives.Transaction
 import org.constellation.util.TestNode
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 

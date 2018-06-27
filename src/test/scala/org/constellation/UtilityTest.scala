@@ -2,7 +2,6 @@ package org.constellation
 
 import org.scalatest.FlatSpec
 import constellation._
-import org.constellation.primitives.Block
 
 class UtilityTest extends FlatSpec {
 

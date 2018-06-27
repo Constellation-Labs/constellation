@@ -17,8 +17,6 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{Schema, Transaction}
-import org.constellation.state.ChainStateManager.{CurrentChainStateUpdated, GetCurrentChainState}
-import org.constellation.state.MemPoolManager.AddTransaction
 import org.constellation.util.ServeUI
 import org.json4s.native
 import org.json4s.native.Serialization
@@ -27,9 +25,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 class API(
-           chainStateActor: ActorRef,
            val peerToPeerActor: ActorRef,
-           memPoolManagerActor: ActorRef,
            consensusActor: ActorRef,
            udpAddress: InetSocketAddress,
            val data: Data = null,
@@ -214,19 +210,6 @@ class API(
         path("health") {
           complete(StatusCodes.OK)
         } ~
-        path("blocks") {
-          val future = chainStateActor ? GetCurrentChainState
-
-          val responseFuture: Future[CurrentChainStateUpdated] = future.mapTo[CurrentChainStateUpdated]
-
-          val chainStateUpdated = Await.result(responseFuture, timeout.duration)
-
-          val chain = chainStateUpdated.chain
-
-          val blocks = chain.chain
-
-          complete(blocks)
-        } ~
         path("peers") {
           complete(Peers(peerIPs.toSeq))
         } ~
@@ -274,16 +257,6 @@ class API(
             entity(as[TX]) { tx =>
               peerToPeerActor ! tx
               complete(StatusCodes.OK)
-            }
-          } ~
-          path("transaction") {
-            entity(as[Transaction]) { transaction =>
-              //  logger.debug(s"Received request to submit a new transaction $transaction")
-
-              val tx = AddTransaction(transaction)
-              peerToPeerActor ! tx
-              memPoolManagerActor ! tx
-              complete(transaction)
             }
           } ~
           path("peer") {

@@ -6,7 +6,7 @@ import java.security.{KeyPair, PublicKey}
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.{Id, Peer}
-import org.constellation.primitives.{Block, Transaction}
+import org.constellation.primitives.Transaction
 import org.constellation.util.Signed
 
 object Fixtures2 {

@@ -79,32 +79,15 @@ object Schema {
     def normalizedBalance: Long = balance / NormalizationFactor
   }
 
-  case class CounterPartyTXRequest(
-                                    dst: Address,
-                                    counterParty: Address,
-                                    counterPartyAccount: Option[EncodedPublicKey]
-                                  ) extends ProductHash
-
   sealed trait Fiber
 
   case class TXData(
-                     src: Seq[Address],
-                     dst: Address,
-                     amount: Long,
-                     remainder: Option[Address] = None,
-                     srcAccount: Option[EncodedPublicKey] = None,
-                     dstAccount: Option[EncodedPublicKey] = None,
-                     counterPartySigningRequest: Option[Signed[CounterPartyTXRequest]] = None,
-                     // ^ this is for extra security where a receiver can confirm a transaction without
-                     // revealing it's address key -- requires receiver link dst to counterParty addresses.
-                     keyMap: Seq[Int] = Seq(), // for multi-signature transactions
-                     confirmationWindowSeconds: Int = 5,
-                     genesisTXHash: Option[String] = None,
-                     isGenesis: Boolean = false
-                     // TODO: Add threshold maps
+                     src: String,
+                     dst: String,
+                     amount: Long
                    ) extends ProductHash {
     def inverseAmount: Long = -1*amount
-    def normalizedAmount = amount / NormalizationFactor
+    def normalizedAmount: Long = amount / NormalizationFactor
   }
 
   case class TX(tx: Signed[TXData]) extends ProductHash with Fiber {
@@ -483,6 +466,18 @@ object Schema {
                    remotes: Set[InetSocketAddress] = Set(),
                    apiAddress: InetSocketAddress = null
                  ) extends ProductHash
+
+
+
+
+
+  // Experimental
+
+  case class CounterPartyTXRequest(
+                                    dst: Address,
+                                    counterParty: Address,
+                                    counterPartyAccount: Option[EncodedPublicKey]
+                                  ) extends ProductHash
 
 
 }

@@ -16,10 +16,10 @@ import constellation._
 import org.constellation.ConstellationNode
 import org.constellation.p2p.{GetUDPSocketRef, TestMessage}
 import org.constellation.primitives.Schema.{Id, Peer}
-import org.constellation.primitives.{Block, Transaction}
+import org.constellation.primitives.Transaction
 import org.constellation.util.APIClient
 import org.constellation.util.TestNode
-import org.constellation.primitives.{Block, Transaction}
+import org.constellation.primitives.Transaction
 import org.scalatest.exceptions.TestFailedException
 import sun.security.provider.NativePRNG.Blocking
 

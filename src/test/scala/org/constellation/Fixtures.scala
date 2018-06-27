@@ -4,7 +4,6 @@ import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
 import akka.actor.ActorRef
-import org.constellation.primitives.Block
 import org.constellation.primitives.Transaction
 import constellation._
 import org.constellation.crypto.KeyUtils

@@ -8,7 +8,6 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.Data
 import org.constellation.consensus.Consensus._
 import org.constellation.primitives.Schema.{TX, _}
-import org.constellation.state.MemPoolManager.AddTransaction
 import org.constellation.util.Heartbeat
 
 import scala.concurrent.ExecutionContextExecutor
@@ -19,8 +18,6 @@ class PeerToPeer(
                   val consensusActor: ActorRef,
                   val udpActor: ActorRef,
                   val data: Data = null,
-                  chainStateActor : ActorRef = null,
-                  memPoolActor : ActorRef = null,
                   var requestExternalAddressCheck: Boolean = false,
                   val heartbeatEnabled: Boolean = false
                 )
@@ -115,19 +112,9 @@ class PeerToPeer(
         // case g @ Gossip(_) => handleGossip(g, remote)
         case gm : GossipMessage => handleGossip(gm, remote)
 
-        // Deprecated
-        case t: AddTransaction => memPoolActor ! t
-
         case u =>
           logger.error(s"Unrecognized UDP message: $u")
       }
-
-
-    // Deprecated below
-
-    case a @ AddTransaction(transaction) =>
-      logger.debug(s"Broadcasting TX ${transaction.short} on ${id.short}")
-      broadcast(a)
 
   }
 

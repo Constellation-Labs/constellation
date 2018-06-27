@@ -17,7 +17,6 @@ import org.constellation.consensus.Consensus
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.{PeerToPeer, RegisterNextActor, UDPActor}
 import org.constellation.primitives.Schema.{AddPeerFromLocal, ToggleHeartbeat}
-import org.constellation.state.{ChainStateManager, MemPoolManager}
 import org.constellation.util.APIClient
 
 import scala.concurrent.ExecutionContextExecutor
@@ -108,20 +107,13 @@ class ConstellationNode(
       Props(new UDPActor(None, udpPort, udpInterface)), s"ConstellationUDPActor_$publicKeyHash"
     )
 
-  val memPoolManagerActor: ActorRef =
-    system.actorOf(Props(new MemPoolManager(db)), s"ConstellationMemPoolManagerActor_$publicKeyHash")
-
-  val chainStateActor: ActorRef =
-    system.actorOf(Props(new ChainStateManager(memPoolManagerActor: ActorRef)), s"ConstellationChainStateActor_$publicKeyHash")
-
   val consensusActor: ActorRef = system.actorOf(
     Props(new Consensus(configKeyPair, udpActor)(timeout)),
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val peerToPeerActor: ActorRef =
     system.actorOf(Props(new PeerToPeer(
-      configKeyPair.getPublic, system, consensusActor, udpActor, data,
-      chainStateActor, memPoolManagerActor, requestExternalAddressCheck, heartbeatEnabled=heartbeatEnabled)
+      configKeyPair.getPublic, system, consensusActor, udpActor, data, requestExternalAddressCheck, heartbeatEnabled=heartbeatEnabled)
     (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
   private val register = RegisterNextActor(peerToPeerActor)
@@ -137,8 +129,8 @@ class ConstellationNode(
   }
 
   // If we are exposing rpc then create routes
-  val routes: Route = new API(chainStateActor,
-    peerToPeerActor, memPoolManagerActor, consensusActor, udpAddress, data, jsPrefix = jsPrefix)(executionContext, timeout).routes
+  val routes: Route = new API(
+    peerToPeerActor, consensusActor, udpAddress, data, jsPrefix = jsPrefix)(executionContext, timeout).routes
 
   // Setup http server for rpc
   Http().bindAndHandle(routes, httpInterface, httpPort)
