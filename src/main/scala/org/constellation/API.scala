@@ -246,6 +246,16 @@ class API(
             complete(StatusCodes.OK)
           }
         } ~
+        path("dashboard") {
+          val bundleSubset = validBundles.take(20)
+
+          val transactions: Set[TX] = bundleSubset.flatMap(b => b.extractTX).sortBy(_.tx.time).toSet
+
+          complete(Map(
+            "peers" -> peers.map{_.data},
+            "transactions" -> transactions
+          ))
+        } ~
         jsRequest ~
         serveMainPage
     } ~

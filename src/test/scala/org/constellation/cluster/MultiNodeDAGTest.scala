@@ -52,7 +52,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val genTx = r1.getBlocking[TX]("genesis/" + numCoinsInitial)
     Thread.sleep(1000)
 
-
     val results = nodes.flatMap{ node =>
       val others = nodes.filter{_ != node}
       others.map{
@@ -95,7 +94,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     Thread.sleep(15000)
 
-
     def randomNode: ConstellationNode = nodes(Random.nextInt(nodes.length))
     def randomOtherNode(not: ConstellationNode): ConstellationNode =
       nodes.filter{_ != not}(Random.nextInt(nodes.length - 1))
@@ -111,8 +109,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       }(ec)
     }
 
-
-
     val numTX = 2
 
     val start = System.currentTimeMillis()
@@ -124,17 +120,13 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     val txResponseFut = Future.sequence(txResponse)
 
-
     val txs = txResponseFut.get(100).toSet
 
     val allTX = Set(genTx) ++ initialDistrTX.toSet ++ txs
 
     var done = false
 
-
 /*
-
-
     while (!done) {
       val nodeStatus = nodes.map { n =>
         Try{(n.peerToPeerActor ? GetValidTX).mapTo[Set[TX]].get()}.map { validTX =>
@@ -153,12 +145,11 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val end = System.currentTimeMillis()
 
     println(s"Completion time seconds: ${(end-start) / 1000}")
-
 */
 
-    Thread.sleep(5000)
+//    Thread.sleep(5000)
 
-//  Thread.sleep(3000000)
+  Thread.sleep(3000000)
 
 /*
     for (node <- nodes) {
