@@ -243,13 +243,11 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
           }
         }
 
-
-      case b: Bundle =>
-
-        handleBundle(b)
+      case b: Bundle => handleBundle(b)
 
       case txData: TXData =>
-
+        db.put(txData)
+        syncPendingTXHashes -= txData.hash
 
       case bb: PeerSyncHeartbeat =>
         //    println(s"RECEIVED PEER SYNC OF MEMPOOL SIZE ${bb.memPool.size}")

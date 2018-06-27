@@ -163,7 +163,7 @@ class API(
         } ~
         path("genesis" / LongNumber) { numCoins =>
           val debtAddress = walletPair
-          val tx = createTransaction(debtAddress.address.hash, numCoins)
+          val tx = createTransaction(selfAddress.address, numCoins, src=debtAddress.address.address)
           createGenesis(tx)
           complete(tx)
         } ~

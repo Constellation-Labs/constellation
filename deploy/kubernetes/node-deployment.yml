@@ -26,7 +26,7 @@ metadata:
   name: constellation-app
 spec:
   serviceName: node-service
-  replicas: 3
+  replicas: 5
   updateStrategy:
     type: RollingUpdate
   template:

@@ -135,13 +135,17 @@ class Data {
 
   def handleBundle(bundle: Bundle): Unit = {
 
+
     totalNumBundleMessages += 1
 
-    val notPresent = !bundleHashToBundle.contains(bundle.hash)
+    val notPresent = db.contains(bundle)
 
     if (notPresent) {
+
+      db.put(bundle)
+
       val parentHash = bundle.extractParentBundleHash.hash
-      val parentKnown = bundleHashToBundle.contains(parentHash)
+      val parentKnown = db.contains(parentHash)
       if (!parentKnown) {
         totalNumBundleHashRequests += 1
         syncPendingBundleHashes += parentHash
@@ -173,6 +177,8 @@ class Data {
       //  val valid = validateTXBatch(txs) && txs.intersect(validTX).isEmpty
 
     }
+
+    syncPendingBundleHashes -= bundle.hash
   }
 
   // @volatile var allBundles: Set[Bundle] = Set[Bundle]()
@@ -257,8 +263,8 @@ class Data {
     }
   }
 
-  def createTransaction(dst: String, amount: Long, normalized: Boolean = true): TX = {
-    val (tx, txData) = createTransactionSafe(selfAddress.address, dst, amount, keyPair, normalized)
+  def createTransaction(dst: String, amount: Long, normalized: Boolean = true, src: String = selfAddress.address): TX = {
+    val (tx, txData) = createTransactionSafe(src, dst, amount, keyPair, normalized)
     db.put(txData)
     if (last100SelfSentTransactions.size > 100) {
       last100SelfSentTransactions.tail :+ tx
@@ -308,7 +314,7 @@ class Data {
     val ids = bundle.extractIds
 
     bundleHashToIdsBelow(hash) = ids
-    bundleHashToTXBelow(hash) = txs.map{_.hash}
+    bundleHashToTXBelow(hash) = txs.map{_.txHash}
 
     if (!isGenesis) {
       val parentHash = bundle.extractParentBundleHash.hash
