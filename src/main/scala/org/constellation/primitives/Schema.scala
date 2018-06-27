@@ -53,13 +53,9 @@ object Schema {
   val NormalizationFactor: Long = 1e8.toLong
 
   case class SendToAddress(
-                            address: AddressMetaData,
+                            dst: String,
                             amount: Long,
-                            account: Option[PublicKey] = None,
-                            normalized: Boolean = true,
-                            oneTimeUse: Boolean = false,
-                            useNodeKey: Boolean = true,
-                            doGossip: Boolean = true
+                            normalized: Boolean = true
                           ) {
     def amountActual: Long = if (normalized) amount * NormalizationFactor else amount
   }
@@ -88,31 +84,31 @@ object Schema {
                    ) extends ProductHash {
     def inverseAmount: Long = -1*amount
     def normalizedAmount: Long = amount / NormalizationFactor
+    def pretty: String = s"TX: $short FROM: ${src.slice(0, 8)} " +
+      s"TO: ${dst.slice(0, 8)} " +
+      s"AMOUNT: $normalizedAmount"
+
+    def srcLedgerBalance(ledger: TrieMap[String, Long]): Long = {
+      ledger.getOrElse(this.src, 0)
+    }
+
+    def ledgerValid(ledger: TrieMap[String, Long]): Boolean = {
+      srcLedgerBalance(ledger) >= amount
+    }
+
+    def updateLedger(ledger: TrieMap[String, Long]): Unit = {
+      ledger(src) = ledger(src) - amount
+      ledger(dst) = ledger(dst) + amount
+    }
+
+
   }
 
   case class TX(
                  hashSignature: HashSignature
-               ) extends ProductHash with Fiber {
-  }
+               ) extends Fiber with GossipMessage with ProductHash
 
   sealed trait GossipMessage
-
-  final case class ConflictDetectedData(detectedOn: TX, conflicts: Seq[TX]) extends ProductHash
-
-  final case class ConflictDetected(conflict: Signed[ConflictDetectedData]) extends ProductHash with GossipMessage
-
-  final case class VoteData(accept: Seq[TX], reject: Seq[TX]) extends ProductHash {
-    // used to determine what voting round we are talking about
-    def voteRoundHash: String = {
-      accept.++(reject).sortBy(t => t.hashCode()).map(f => f.hash).mkString("-")
-    }
-  }
-
-  final case class VoteCandidate(tx: TX, gossip: Seq[Gossip[ProductHash]])
-
-  final case class VoteDataSimpler(accept: Seq[VoteCandidate], reject: Seq[VoteCandidate]) extends ProductHash
-
-  final case class Vote(vote: Signed[VoteData]) extends ProductHash with Fiber
 
   // Participants are notarized via signatures.
   final case class BundleBlock(
@@ -129,6 +125,8 @@ object Schema {
   final case class BundleData(bundles: Seq[Fiber]) extends ProductHash
 
   case class RequestBundleData(hash: String) extends GossipMessage
+  case class HashRequest(hash: String) extends GossipMessage
+  case class BatchHashRequest(hashes: Seq[String]) extends GossipMessage
 
   case class UnknownParentHashSyncInfo(
                                       firstRequestTime: Long,
@@ -158,6 +156,7 @@ object Schema {
 
     val bundleNumber: Long = Random.nextLong()
 
+/*
     def extractTreeVisual: TreeVisual = {
       val parentHash = extractParentBundleHash.hash.slice(0, 5)
       def process(s: Signed[BundleData], parent: String): Seq[TreeVisual] = {
@@ -177,6 +176,7 @@ object Schema {
       val children = process(bundleData, parentName)
       TreeVisual(parentName, "null", children)
     }
+*/
 
     def extractParentBundleHash: ParentBundleHash = {
       def process(s: Signed[BundleData]): ParentBundleHash = {
@@ -329,10 +329,7 @@ object Schema {
 
   case class DownloadRequest() extends DownloadMessage
   case class DownloadResponse(
-                               genesisBundle: Bundle,
-                               validBundles: Seq[Bundle],
-                               ledger: Map[String, Long],
-                               lastCheckpointBundle: Option[Bundle]
+                               lastValidBundle: Bundle
                              ) extends DownloadMessage
 
   final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage
@@ -387,7 +384,7 @@ object Schema {
 
 
 
-  // Experimental
+  // Experimental below
 
   case class CounterPartyTXRequest(
                                     dst: AddressMetaData,
@@ -395,5 +392,22 @@ object Schema {
                                     counterPartyAccount: Option[EncodedPublicKey]
                                   ) extends ProductHash
 
+
+  final case class ConflictDetectedData(detectedOn: TX, conflicts: Seq[TX]) extends ProductHash
+
+  final case class ConflictDetected(conflict: Signed[ConflictDetectedData]) extends ProductHash with GossipMessage
+
+  final case class VoteData(accept: Seq[TX], reject: Seq[TX]) extends ProductHash {
+    // used to determine what voting round we are talking about
+    def voteRoundHash: String = {
+      accept.++(reject).sortBy(t => t.hashCode()).map(f => f.hash).mkString("-")
+    }
+  }
+
+  final case class VoteCandidate(tx: TX, gossip: Seq[Gossip[ProductHash]])
+
+  final case class VoteDataSimpler(accept: Seq[VoteCandidate], reject: Seq[VoteCandidate]) extends ProductHash
+
+  final case class Vote(vote: Signed[VoteData]) extends ProductHash with Fiber
 
 }

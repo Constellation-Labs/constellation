@@ -24,53 +24,6 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     0
 
   }
-
-  def updateMempool(tx: TX): Boolean = {
-    val validUpdate = !memPoolTX.contains(tx) && !tx.tx.data.isGenesis && tx.valid && tx.ledgerValid(memPoolLedger) &&
-      !validTX.contains(tx)
-    if (validUpdate) {
-      tx.updateLedger(memPoolLedger)
-      memPoolTX += tx
-    }
-    validUpdate
-  }
-
-  def handleLocalTransactionAdd(tx: TX): Unit = {
-
-    if (!txHashToTX.contains(tx.hash)) txHashToTX(tx.hash) = tx
-
-    // TODO: Assume TX has already been validated during API request.
-    updateMempool(tx)
-
-    // TODO: Fix this
-    if (tx.tx.data.isGenesis) {
-      createGenesis(tx)
-      acceptTransaction(tx)
-      // We started genesis
-      downloadMode = false
-    }
-
-    // Temp
-    // val g = Gossip(tx.signed())
-    // broadcast(g)
-
-    //val unspokenTX = memPoolTX.filter{!txsGossipedAbout.contains(_)}
-    //  txsGossipedAbout ++= unspokenTX
-
-    /*
-        if (!tx.tx.data.isGenesis) {
-          // val unspokenTX = memPoolTX
-          val b = Bundle(BundleData(Seq(
-            tx,
-            lastBundleHash
-          )).signed())
-          processNewBundleMetadata(b)
-          broadcast(b)
-        }
-    */
-
-  }
-
   def acceptBundle(b: Bundle): Unit = {
     validBundles :+= b
     calculateReputationsFromScratch()
@@ -116,9 +69,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
   def randomTransaction(): Unit = {
     val peerAddresses = peers.map{_.data.id.address}
     val randomPeer = Random.shuffle(peerAddresses).head
-    handleLocalTransactionAdd(
-      createTransaction(randomPeer, Random.nextInt(1000).toLong)
-    )
+    createTransaction(randomPeer.address, Random.nextInt(1000).toLong)
   }
 
   def simulateTransactions(): Unit = {
@@ -252,7 +203,8 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   def validateTransactionBatch(txs: Set[TX], ledger: TrieMap[String, Long]): Boolean = {
     txs.toSeq.map{ tx =>
-      tx.tx.data.src.head.address -> tx.tx.data.amount
+      val dat = tx.txData.get
+      dat.src -> dat.amount
     }.groupBy(_._1).forall{
       case (a, seq) =>
         val bal = ledger.getOrElse(a, 0L)
@@ -275,10 +227,6 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     validateTransactionBatch(txs, memPoolLedger) &&
       validateTransactionBatch(txs, validLedger)
 
-  def addToMempool(t: TX): Unit = {
-    txHashToTX(t.hash) = t
-    if (!t.tx.data.isGenesis && !validTX.contains(t)) memPoolTX += t
-  }
 
   def handleBundle(bundle: Bundle): Unit = {
 
@@ -294,6 +242,14 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         broadcast(RequestBundleData(parentHash))
       } else {
         val txs = bundle.extractTX
+        val haveAllTXData = txs.forall(_.txData.nonEmpty)
+        if (haveAllTXData) {
+
+
+
+        } else {
+          HashRequest
+        }
         // TODO: Need to register potentially invalid bundles somewhere but not use them in case of fork download.
         val validByParent = validateTXBatch(txs)
         if (validByParent) {

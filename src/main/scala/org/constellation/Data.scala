@@ -4,8 +4,11 @@ import java.io.File
 import java.net.InetSocketAddress
 import java.security.KeyPair
 
+import akka.actor.ActorRef
+import akka.http.scaladsl.server.Directives.complete
+import akka.http.scaladsl.server.StandardRoute
 import org.constellation.primitives.Schema._
-import org.constellation.util.{ProductHash, Signed}
+import org.constellation.util.{HashSignature, ProductHash, Signed}
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -37,7 +40,7 @@ class Data {
       txOpt,
       txHashToTX.contains(txHash),
       txOpt.exists{memPoolTX.contains},
-      txOpt.exists{validTX.contains},
+      txOpt.exists{last1000ValidTX.contains},
       gossip.length,
       gossip.map{_.stackDepth},
       gossip
@@ -46,12 +49,13 @@ class Data {
 
   val txHashToTX: TrieMap[String, TX] = TrieMap()
 
-  @volatile var sentTX: Seq[TX] = Seq()
+  @volatile var last100SelfSentTransactions: Seq[TX] = Seq()
 
+  @volatile var memPool: Set[String] = Set()
   @volatile var memPoolTX: Set[TX] = Set()
   @volatile var linearMemPoolTX: Set[TX] = Set()
 
-  @volatile var validTX: Set[TX] = Set()
+  @volatile var last1000ValidTX: Seq[String] = Seq()
   @volatile var linearValidTX: Set[TX] = Set()
 
   val validLedger: TrieMap[String, Long] = TrieMap()
@@ -102,14 +106,14 @@ class Data {
   def peers: Seq[Signed[Peer]] = peerLookup.values.toSeq.distinct
 
   def createGenesis(tx: TX): Unit = {
-    if (tx.tx.data.isGenesis) {
-      genesisBundle = Bundle(BundleData(Seq(ParentBundleHash(tx.hash), tx)).signed())
-      processNewBundleMetadata(genesisBundle, genesisBundle.extractTX, true, setActive = false)
-      validBundles = Seq(genesisBundle)
-    }
+    genesisBundle = Bundle(BundleData(Seq(ParentBundleHash(tx.hashSignature.signedHash), tx)).signed())
+    processNewBundleMetadata(genesisBundle, genesisBundle.extractTX, isGenesis = true, setActive = false)
+    validBundles = Seq(genesisBundle)
   }
 
   // @volatile var allBundles: Set[Bundle] = Set[Bundle]()
+
+  @volatile var last100BundleHashes : Seq[String] = Seq()
 
   @volatile var linearCheckpointBundles: Set[Bundle] = Set[Bundle]()
   @volatile var activeDAGBundles: Seq[Bundle] = Seq[Bundle]()
@@ -130,6 +134,7 @@ class Data {
 
   val unknownParentBundleHashes: TrieMap[String, PeerSyncHeartbeat] = TrieMap()
 
+  var p2pActor : ActorRef = _
 
   def jaccard[T](t1: Set[T], t2: Set[T]): Double = {
     t1.intersect(t2).size.toDouble / t1.union(t2).size.toDouble
@@ -185,19 +190,17 @@ class Data {
     }
   }
 
-  def createTransaction(dstAddress: AddressMetaData, normalizedAmount: Long): TX = {
-
-    val tx = TX(
-      TXData(
-        Seq(selfAddress), dstAddress, normalizedAmount * NormalizationFactor
-      ).signed()(keyPair)
-    )
-
-    txHashToTX(tx.hash) = tx
-    sentTX :+= tx
-
+  def createTransaction(dst: String, amount: Long, normalized: Boolean = true): TX = {
+    val amountToUse = if (normalized) amount * NormalizationFactor else amount
+    val txData = TXData(selfAddress.address, dst, amountToUse)
+    db.put(txData)
+    val tx = TX(hashSign(txData.hash, keyPair))
+    if (last100SelfSentTransactions.size > 100) {
+      last100SelfSentTransactions.tail :+ tx
+    }
+    last100SelfSentTransactions :+= tx
+    updateMempool(tx)
     tx
-
   }
 
   // This returns in order of ancestry, first element should be oldest bundle immediately after the last valid.
@@ -263,22 +266,14 @@ class Data {
   @volatile var totalNumNewBundleAdditions = 0
   @volatile var totalNumBroadcastMessages = 0
 
+  def handleSendRequest(s: SendToAddress): StandardRoute = {
+    val tx = createTransaction(s.dst, s.amount, s.normalized)
+    complete(tx.txData.prettyJson)
+  }
+
   def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
-
-    if (!validTX.contains(tx)) {
-      validTX += tx
-      tx.updateLedger(validLedger)
-    }
-
+    tx.txData.get.updateLedger(validLedger)
     memPoolTX -= tx
-
-    if (tx.tx.data.isGenesis) {
-      tx.updateLedger(memPoolLedger)
-    }
-    //    txToGossipChains.remove(tx.hash) // TODO: Remove after a certain period of time instead. Cleanup gossip data.
-    val txSeconds = (System.currentTimeMillis() - tx.tx.time) / 1000
-    //  logger.debug(s"Accepted TX from $txSeconds seconds ago: ${tx.short} on ${id.short} " +
-    //   s"new mempool size: ${memPoolTX.size} valid: ${validTX.size} isGenesis: ${tx.tx.data.isGenesis}")
   }
 
   val bundleHashToBundleMetaData: TrieMap[String, BundleMetaData] = TrieMap()
@@ -309,70 +304,28 @@ class Data {
   implicit class TXDataAccess(tx: TX) {
 
     def valid: Boolean = tx.hashSignature.valid
-    def normalizedAmount: Double = tx.data.amount / NormalizationFactor
-    def output(outputHash: String): Option[AddressMetaData] = {
-      val d = tx.data
-      if (d.dst.address == outputHash) Some(d.dst)
-      else if (d.remainder.exists(_.address == outputHash)) d.remainder
-      else None
-    }
-    def pretty: String = s"TX: ${this.short} FROM ${tx.data.src.head.address.slice(0, 5)}" +
-      s" TO ${tx.data.dst.address.slice(0, 5)} REMAINDER " +
-      s"${tx.data.remainder.map{_.address}.getOrElse("empty").slice(0, 5)} " +
-      s"amount ${tx.data.amount}"
-
-    def srcLedgerBalanceAll(ledger: TrieMap[String, Long]): Seq[Long] = {
-      tx.data.src.map{_.address}.map{a => ledger.getOrElse(a, 0L)}
-    }
-
-    def srcLedgerBalanceAllAccount(ledger: TrieMap[String, Long]): Seq[(String, Long)] = {
-      tx.data.src.map{_.address}.map{a => a -> ledger.getOrElse(a, 0L)}
-    }
-
-    def srcLedgerBalance(ledger: TrieMap[String, Long]): Long = {
-      tx.data.src.map {_.address}.flatMap {ledger.get}.sum
-    }
-
-    def ledgerValid(ledger: TrieMap[String, Long]): Boolean = {
-      if (tx.data.isGenesis) !ledger.contains(tx.data.dst.address) else {
-        val srcSum = srcLedgerBalance(ledger)
-        srcSum >= tx.data.amount && valid
-      }
-    }
-
-    def updateLedger(ledger: TrieMap[String, Long]): Unit = {
-      val txDat = tx.data
-      if (txDat.isGenesis) {
-        // UTXO(txDat.src.head.address) = txDat.inverseAmount
-        // Move elsewhere ^ too complex.
-        ledger(txDat.dst.address) = txDat.amount
-      } else {
-
-        val total = txDat.src.flatMap{s => ledger.get(s.address)}.sum
-        val remainder = total - txDat.amount
-
-        // Empty src balance.
-        txDat.src.foreach{
-          s =>
-            ledger(s.address) = 0L
-        }
-
-        val prevDstBalance = ledger.getOrElse(txDat.dst.address, 0L)
-        ledger(txDat.dst.address) = prevDstBalance + txDat.amount
-
-        txDat.remainder.foreach{ r =>
-          val prv = ledger.getOrElse(r.address, 0L)
-          ledger(r.address) = prv + remainder
-        }
-
-        // Repopulate head src with remainder if no remainder address specified
-        if (txDat.remainder.isEmpty && remainder != 0) {
-          ledger(txDat.src.head.address) = remainder
-        }
-
-      }
-    }
+    def txData : Option[TXData] = db.getAs[TXData](tx.hash)
 
   }
+
+  def updateMempool(tx: TX): Boolean = {
+    val txData = tx.txData.get
+    val hash = tx.hashSignature.signedHash
+    val validUpdate = !memPool.contains(hash) && tx.valid && txData.ledgerValid(memPoolLedger) &&
+      !last1000ValidTX.contains(hash)
+    if (validUpdate) {
+      txData.updateLedger(memPoolLedger)
+      memPool += hash
+    }
+    validUpdate
+  }
+
+
+  /*
+    implicit class TXDataAccess(tx: TXData) {
+
+
+    }
+  */
 
 }

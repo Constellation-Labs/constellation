@@ -116,6 +116,8 @@ class ConstellationNode(
       configKeyPair.getPublic, system, consensusActor, udpActor, data, requestExternalAddressCheck, heartbeatEnabled=heartbeatEnabled)
     (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
+  data.p2pActor = peerToPeerActor
+
   private val register = RegisterNextActor(peerToPeerActor)
 
   udpActor ! register

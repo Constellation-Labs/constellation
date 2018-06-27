@@ -25,6 +25,7 @@ class LevelDB(val file: File) {
   def get(s: String) = Option(asString(db.get(bytes(s))))
 
   def getAs[T](s: String)(implicit m: Manifest[T]): Option[T] = get(s).map{_.x[T]}
+
   def getHashAs[T](s: ProductHash)(implicit m: Manifest[T]): Option[T] = get(s.hash).map{_.x[T]}
 
   def getRaw(s: String): String = asString(db.get(bytes(s)))

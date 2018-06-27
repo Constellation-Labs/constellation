@@ -30,6 +30,7 @@ trait LinearGossip extends PeerAuth {
     }
   }
 
+/*
   def handleGossipRegular(g: Gossip[ProductHash], remote: InetSocketAddress): Unit = {
 
     totalNumGossipMessages += 1
@@ -111,5 +112,6 @@ trait LinearGossip extends PeerAuth {
     }
 
   }
+*/
 
 }

@@ -16,12 +16,12 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{Schema, Transaction}
+import org.constellation.primitives.Schema
 import org.constellation.util.ServeUI
 import org.json4s.native
 import org.json4s.native.Serialization
 
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext}
 import scala.util.{Failure, Success, Try}
 
 class API(
@@ -49,7 +49,7 @@ class API(
       path("submitTX") {
         parameter('address, 'amount) { (address, amount) =>
           logger.error(s"SubmitTX : $address $amount")
-          handleSendRequest(SendToAddress(AddressMetaData(address), amount.toLong))
+          handleSendRequest(SendToAddress(address, amount.toLong))
         }
       } ~
       pathPrefix("address") {
@@ -62,7 +62,7 @@ class API(
           }
         }
       } ~
-      pathPrefix("txHash") {
+      pathPrefix("txHash") { // TODO: Rename to transaction
         get {
           extractUnmatchedPath { p =>
             logger.debug(s"Unmatched path on address result $p")
@@ -108,7 +108,7 @@ class API(
             "keyPair" -> keyPair.json,
             "shortId" -> id.short,
             "numValidBundles" -> validBundles.size.toString,
-            "numValidTransactions" -> validTX.size.toString,
+            "numValidTransactions" -> last1000ValidTX.size.toString,
             "memPoolSize" -> memPoolTX.size.toString,
             "totalNumBroadcasts" -> totalNumBroadcastMessages.toString,
             "totalNumBundleMessages" -> totalNumBundleMessages.toString,
@@ -120,7 +120,7 @@ class API(
             "genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
          //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
             "numActiveBundles" -> activeDAGBundles.size.toString,
-            "last10TXHash" -> sentTX.reverse.slice(0, 10).map{_.hash}.mkString(","),
+            "last10TXHash" -> last100SelfSentTransactions.reverse.slice(0, 10).map{_.hash}.mkString(","),
             "last10ValidBundleHashes" -> validBundles.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
             "lastValidBundleHash" -> lastBundleHash.hash,
             "lastValidBundle" -> Option(lastBundle).map{_.pretty}.getOrElse(""),
@@ -154,13 +154,7 @@ class API(
           )))
         } ~
         path("validTX") {
-          complete(validTX)
-        } ~
-        path("walletAddressInfo") {
-          complete(walletAddressInfo)
-        } ~
-        path("balances") {
-          complete(outputBalances)
+          complete(last1000ValidTX)
         } ~
         path("makeKeyPair") {
           val pair = constellation.makeKeyPair()
@@ -168,22 +162,8 @@ class API(
           complete(pair)
         } ~
         path("genesis" / LongNumber) { numCoins =>
-
           val debtAddress = walletPair
-          //   val dstAddress = walletPair
-
-          val amount = numCoins * Schema.NormalizationFactor
-          val tx = TX(
-            TXData(
-              Seq(debtAddress.address.copy(balance = -1*amount)),
-              selfAddress,
-              amount,
-              genesisTXHash = None,
-              isGenesis = true
-            ).signed()(debtAddress)
-          )
-
-          peerToPeerActor ! tx
+          val tx = createTransaction(debtAddress.address.hash, numCoins)
           complete(tx.json)
         } ~
         path("makeKeyPairs" / IntNumber) { numPairs =>
@@ -233,13 +213,6 @@ class API(
         serveMainPage
     } ~
       post {
-        path("setTXValid") {
-          entity(as[TX]) { tx =>
-            acceptTransaction(tx)
-            tx.updateLedger(memPoolLedger)
-            complete(StatusCodes.OK)
-          }
-        } ~
         path ("sendToAddress") {
           entity(as[SendToAddress]) { s =>
             handleSendRequest(s)

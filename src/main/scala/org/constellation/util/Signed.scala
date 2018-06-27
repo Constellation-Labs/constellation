@@ -41,6 +41,7 @@ trait ProductHash extends Product {
   def bundleHash = BundleHash(hash)
   def short: String = hash.slice(0, 5)
   def signKeys(privateKeys: Seq[PrivateKey]): Seq[String] = privateKeys.map { pk => base64(signData(signInput)(pk)) }
+  def signKey(privateKey: PrivateKey): String = base64(signData(signInput)(privateKey))
   def powInput(signatures: Seq[String]): String = (productSeq ++ signatures).json
   def pow(signatures: Seq[String], difficulty: Int): String = POW.proofOfWork(powInput(signatures), Some(difficulty))
   def productSeq: Seq[Any] = this.productIterator.toArray.toSeq
@@ -49,13 +50,13 @@ trait ProductHash extends Product {
 
 
 case class HashSignature(
-                          hash: String,
+                          signedHash: String,
                           signature: String,
                           b58EncodedPublicKey: String,
                           time: Long = System.currentTimeMillis()
-                        ) {
+                        ) extends ProductHash {
   def publicKey: PublicKey = EncodedPublicKey(b58EncodedPublicKey).toPublicKey
-  def valid: Boolean = verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
+  def valid: Boolean = verifySignature(signedHash.getBytes(), fromBase64(signature))(publicKey)
 
 }
 
@@ -63,7 +64,7 @@ case class SignatureBatch(
                          hash: String,
                          signatures: Set[HashSignature]
                          ) {
-  def valid: Boolean = signatures.forall(_.valid(hash))
+  def valid: Boolean = signatures.forall(_.valid)
 }
 
 /*

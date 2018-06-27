@@ -41,8 +41,6 @@ class PeerToPeer(
 
     // Local commands
 
-    case tx: TX => handleLocalTransactionAdd(tx)
-
     case AddPeerFromLocal(peerAddress) => sender() ! addPeerFromLocal(peerAddress)
 
     case UDPSendToID(dataA, remoteId) =>
@@ -71,7 +69,7 @@ class PeerToPeer(
             s"gossip: $totalNumGossipMessages, " +
             s"balance: $selfBalance, " +
             s"memPool: ${memPoolTX.size} numPeers: ${peers.size} " +
-            s"numAccepted: $numAccepted, numTotalValid: ${validTX.size} " +
+            s"numAccepted: $numAccepted, numTotalValid: ${last1000ValidTX.size} " +
             s"validUTXO: ${validLedger.map { case (k, v) => k.slice(0, 5) -> v }} " +
             s"peers: ${peers.map { p =>
               p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes
