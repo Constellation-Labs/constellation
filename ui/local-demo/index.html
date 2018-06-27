@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+
+    <title>Tree Example</title>
+
+    <style>
+
+	.node {
+		cursor: pointer;
+	}
+
+	.node circle {
+	  fill: #fff;
+	  stroke: steelblue;
+	  stroke-width: 3px;
+	}
+
+	.node text {
+	  font: 12px sans-serif;
+	}
+
+	.link {
+	  fill: none;
+	  stroke: #ccc;
+	  stroke-width: 2px;
+	}
+
+    </style>
+
+</head>
+
+<body>
+
+<!-- load the d3.js library -->
+<script src="http://d3js.org/d3.v3.min.js"></script>
+
+<script>
+
+var treeData = [
+{"name":"Bundle: b745c numTX: 33 node: 3c:61 parent: 26a17","parent":"null","children":[{"name":"Bundle: 8aa33 numTX: 30","parent":"Bundle: b745c numTX: 33 node: 3c:61 parent: 26a17","children":[{"name":"Bundle: 390ac numTX: 29","parent":"Bundle: 8aa33 numTX: 30","children":[{"name":"TX: db080 amount: 183","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 3161c amount: 701","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: d680d amount: 175","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: b5be4 amount: 687","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: acdcf amount: 456","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 326cd amount: 694","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 888b4 amount: 365","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: a0613 amount: 923","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 25587 amount: 425","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 8a53f amount: 720","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: a8187 amount: 466","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 26020 amount: 143","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 01965 amount: 869","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 1be14 amount: 952","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: a0b51 amount: 718","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 6c1ca amount: 231","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 3cd59 amount: 395","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 4a220 amount: 901","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 0f4e9 amount: 39","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 28ce3 amount: 347","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: bc5ba amount: 432","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 1dbfc amount: 916","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 60977 amount: 620","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 2a097 amount: 951","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: ba29f amount: 199","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 37c6d amount: 150","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: bd802 amount: 171","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: a4c42 amount: 517","parent":"Bundle: 390ac numTX: 29","children":[]},{"name":"TX: 16014 amount: 675","parent":"Bundle: 390ac numTX: 29","children":[]},[]]},{"name":"Bundle: 4b389 numTX: 6","parent":"Bundle: 8aa33 numTX: 30","children":[{"name":"TX: a8187 amount: 466","parent":"Bundle: 4b389 numTX: 6","children":[]},{"name":"TX: 326cd amount: 694","parent":"Bundle: 4b389 numTX: 6","children":[]},{"name":"TX: 888b4 amount: 365","parent":"Bundle: 4b389 numTX: 6","children":[]},{"name":"TX: a0b51 amount: 718","parent":"Bundle: 4b389 numTX: 6","children":[]},{"name":"TX: 01965 amount: 869","parent":"Bundle: 4b389 numTX: 6","children":[]},{"name":"TX: 58e74 amount: 362","parent":"Bundle: 4b389 numTX: 6","children":[]},[]]}]},{"name":"Bundle: c1bde numTX: 21","parent":"Bundle: b745c numTX: 33 node: 3c:61 parent: 26a17","children":[{"name":"Bundle: f2236 numTX: 8","parent":"Bundle: c1bde numTX: 21","children":[{"name":"TX: e05e1 amount: 14","parent":"Bundle: f2236 numTX: 8","children":[]},{"name":"TX: bc5ba amount: 432","parent":"Bundle: f2236 numTX: 8","children":[]},{"name":"TX: a0613 amount: 923","parent":"Bundle: f2236 numTX: 8","children":[]},{"name":"TX: 1a0cd amount: 757","parent":"Bundle: f2236 numTX: 8","children":[]},{"name":"TX: ba29f amount: 199","parent":"Bundle: f2236 numTX: 8","children":[]},{"name":"TX: 25587 amount: 425","parent":"Bundle: f2236 numTX: 8","children":[]},{"name":"TX: 3161c amount: 701","parent":"Bundle: f2236 numTX: 8","children":[]},{"name":"TX: 28ce3 amount: 347","parent":"Bundle: f2236 numTX: 8","children":[]},[]]},{"name":"Bundle: 0eae0 numTX: 16","parent":"Bundle: c1bde numTX: 21","children":[{"name":"TX: ba29f amount: 199","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: 3161c amount: 701","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: cf2c5 amount: 745","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: 888b4 amount: 365","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: 60977 amount: 620","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: a0b51 amount: 718","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: 2a097 amount: 951","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: a0613 amount: 923","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: 4a220 amount: 901","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: 16014 amount: 675","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: bd802 amount: 171","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: 326cd amount: 694","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: 0f4e9 amount: 39","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: a8187 amount: 466","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: 26020 amount: 143","parent":"Bundle: 0eae0 numTX: 16","children":[]},{"name":"TX: db080 amount: 183","parent":"Bundle: 0eae0 numTX: 16","children":[]},[]]}]}]}
+];
+
+
+// ************** Generate the tree diagram	 *****************
+var margin = {top: 20, right: 120, bottom: 20, left: 120},
+	width = 1500 - margin.right - margin.left,
+	height = 1000 - margin.top - margin.bottom;
+
+var i = 0,
+	duration = 750,
+	root;
+
+var tree = d3.layout.tree()
+	.size([height, width]);
+
+var diagonal = d3.svg.diagonal()
+	.projection(function(d) { return [d.y, d.x]; });
+
+var svg = d3.select("body").append("svg")
+	.attr("width", width + margin.right + margin.left)
+	.attr("height", height + margin.top + margin.bottom)
+  .append("g")
+	.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+root = treeData[0];
+root.x0 = height / 2;
+root.y0 = 0;
+
+update(root);
+
+d3.select(self.frameElement).style("height", "900px");
+
+function update(source) {
+
+  // Compute the new tree layout.
+  var nodes = tree.nodes(root).reverse(),
+	  links = tree.links(nodes);
+
+  // Normalize for fixed-depth.
+  nodes.forEach(function(d) { d.y = d.depth * 180; });
+
+  // Update the nodes…
+  var node = svg.selectAll("g.node")
+	  .data(nodes, function(d) { return d.id || (d.id = ++i); });
+
+  // Enter any new nodes at the parent's previous position.
+  var nodeEnter = node.enter().append("g")
+	  .attr("class", "node")
+	  .attr("transform", function(d) { return "translate(" + source.y0 + "," + source.x0 + ")"; })
+	  .on("click", click);
+
+  nodeEnter.append("circle")
+	  .attr("r", 1e-6)
+	  .style("fill", function(d) { return d._children ? "lightsteelblue" : "#fff"; });
+
+  nodeEnter.append("text")
+	  .attr("x", function(d) { return d.children || d._children ? -13 : 13; })
+	  .attr("dy", ".35em")
+	  .attr("text-anchor", function(d) { return d.children || d._children ? "end" : "start"; })
+	  .text(function(d) { return d.name; })
+	  .style("fill-opacity", 1e-6);
+
+  // Transition nodes to their new position.
+  var nodeUpdate = node.transition()
+	  .duration(duration)
+	  .attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; });
+
+  nodeUpdate.select("circle")
+	  .attr("r", 10)
+	  .style("fill", function(d) { return d._children ? "lightsteelblue" : "#fff"; });
+
+  nodeUpdate.select("text")
+	  .style("fill-opacity", 1);
+
+  // Transition exiting nodes to the parent's new position.
+  var nodeExit = node.exit().transition()
+	  .duration(duration)
+	  .attr("transform", function(d) { return "translate(" + source.y + "," + source.x + ")"; })
+	  .remove();
+
+  nodeExit.select("circle")
+	  .attr("r", 1e-6);
+
+  nodeExit.select("text")
+	  .style("fill-opacity", 1e-6);
+
+  // Update the links…
+  var link = svg.selectAll("path.link")
+	  .data(links, function(d) { return d.target.id; });
+
+  // Enter any new links at the parent's previous position.
+  link.enter().insert("path", "g")
+	  .attr("class", "link")
+	  .attr("d", function(d) {
+		var o = {x: source.x0, y: source.y0};
+		return diagonal({source: o, target: o});
+	  });
+
+  // Transition links to their new position.
+  link.transition()
+	  .duration(duration)
+	  .attr("d", diagonal);
+
+  // Transition exiting nodes to the parent's new position.
+  link.exit().transition()
+	  .duration(duration)
+	  .attr("d", function(d) {
+		var o = {x: source.x, y: source.y};
+		return diagonal({source: o, target: o});
+	  })
+	  .remove();
+
+  // Stash the old positions for transition.
+  nodes.forEach(function(d) {
+	d.x0 = d.x;
+	d.y0 = d.y;
+  });
+}
+
+// Toggle children on click.
+function click(d) {
+  if (d.children) {
+	d._children = d.children;
+	d.children = null;
+  } else {
+	d.children = d._children;
+	d._children = null;
+  }
+  update(d);
+}
+
+</script>
+
+</body>
+</html>

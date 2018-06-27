@@ -75,6 +75,22 @@ class API(
           }
         }
       } ~
+      path("longestChain") {
+        val ancestors = extractBundleAncestorsUntilValidation(bestBundle)
+        val all = validBundles ++ ancestors.map{bundleHashToBundle} ++ Seq(bestBundle)
+        complete(
+          all.json
+        )
+      } ~
+      pathPrefix("bundle") {
+        get {
+          extractUnmatchedPath { p =>
+            logger.debug(s"Unmatched path on bundle result $p")
+            val ps = p.toString().tail
+            complete(validBundles.filter{_.hash == ps}.headOption.prettyJson)
+          }
+        }
+      } ~
       path("setKeyPair") {
         parameter('keyPair) { kpp =>
           logger.debug("Set key pair " + kpp)
@@ -89,24 +105,56 @@ class API(
         }
       } ~
         path("metrics") {
-
           complete(Metrics(Map(
             "address" -> selfAddress.address,
             "balance" -> (selfIdBalance.getOrElse(0L) / Schema.NormalizationFactor).toString,
             "id" -> id.b58,
             "keyPair" -> keyPair.json,
             "shortId" -> id.short,
+            "numValidBundles" -> validBundles.size.toString,
             "numValidTransactions" -> validTX.size.toString,
             "memPoolSize" -> memPoolTX.size.toString,
-            "totalNumGossipMessages" -> totalNumGossipMessages.toString,
+            "totalNumBroadcasts" -> totalNumBroadcastMessages.toString,
+            "totalNumBundleMessages" -> totalNumBundleMessages.toString,
             "numPeers" -> peers.size.toString,
             "peers" -> peers.map{ z =>
               val addr = s"http://${z.data.apiAddress.getHostName}:${z.data.apiAddress.getPort}"
               s"${z.data.id.short} API: $addr "
             }.mkString(" --- "),
+            "genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
+         //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
+            "numActiveBundles" -> activeDAGBundles.size.toString,
             "last10TXHash" -> sentTX.reverse.slice(0, 10).map{_.hash}.mkString(","),
+            "last10ValidBundleHashes" -> validBundles.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
+            "lastValidBundleHash" -> lastBundleHash.hash,
+            "lastValidBundle" -> Option(lastBundle).map{_.pretty}.getOrElse(""),
+            "genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
+            "genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
+            "selfBestBundle" -> Option(bestBundle).map{_.pretty}.getOrElse(""),
+            "reputations" -> normalizedDeterministicReputation.map{
+              case (k,v) => k.short + " " + v
+            }.mkString(" - "),
+            "peerBestBundles" -> peerSync.toMap.map{
+              case (id, b) =>
+                s"PEER: ${id.short}, BEST: ${b.bundle.map{_.pretty}.getOrElse("")} " // LAST: ${b.lastBestBundle.pretty}
+            }.mkString(" ----- "),
+            "allPeerSynchronizedLastHash" -> Try(
+              (peerSync.map{_._2.validBundleHashes.last} ++ Seq(lastBundle.hash)).toSet.size == 1
+              ).map{_.toString}.getOrElse(""),
+            "allPeerAllBundleHashSync" -> peerSync.forall{_._2.validBundleHashes == validBundles.map{_.hash}}.toString,
             "z_peers" -> peers.map{_.data}.json,
-            "z_UTXO" -> validLedger.toMap.json
+            "z_UTXO" -> validLedger.toMap.json,
+            "z_Bundles" -> activeDAGBundles.map{_.pretty}.mkString(" - - - "),
+            "downloadMode" -> downloadMode.toString,
+            "allPeersHaveKnownBestBundles" -> peerSync.forall{
+              case (_, hb) =>
+                hb.bundle.forall{b => bundleHashToBundle.contains(b.hash)}
+            }.toString,
+            "allPeersAgreeWithBestBundle" -> peerSync.forall{
+              _._2.bundle.exists{_.hash == bestBundle.hash}
+            }.toString
+            //,
+            // "z_lastBundleVisualJSON" -> Option(lastBundle).map{ b => b.extractTreeVisual.json}.getOrElse("")
           )))
         } ~
         path("validTX") {
@@ -202,6 +250,13 @@ class API(
         serveMainPage
     } ~
       post {
+        path("setTXValid") {
+          entity(as[TX]) { tx =>
+            acceptTransaction(tx)
+            tx.updateLedger(memPoolLedger)
+            complete(StatusCodes.OK)
+          }
+        } ~
         path ("sendToAddress") {
           entity(as[SendToAddress]) { s =>
             handleSendRequest(s)

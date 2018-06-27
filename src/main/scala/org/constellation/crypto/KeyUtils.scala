@@ -267,21 +267,34 @@ trait KeyUtilsExt {
     hex.sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toChar).mkString
   }
 
+  def keyHashToAddress(hash: String): String = {
+    val end = hash.slice(hash.length - 36, hash.length)
+    val validInt = end.filter {Character.isDigit}
+    val ints = validInt.map{_.toString.toInt}
+    val sum = ints.sum
+    val par = sum % 9
+    val res2 = "0xDAG" + par + end
+//    println(s"res2 $res2 end ints $ints digits: $validInt endSum: $sum divmod9 $par ${res2.length}")
+    res2
+  }
+
   // TODO : Use a more secure address function.
   // Couldn't find a quick dependency for this, TBI
   // https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses
   def publicKeyToAddressString(
-                          key: PublicKey
-                        ): String = {
+                                key: PublicKey
+                              ): String = {
     import constellation.SHA256Ext
-    Base58.encode(base64(key.getEncoded).sha256.sha256.getBytes())
+    val res = Base58.encode(base64(key.getEncoded).sha256.sha256.getBytes())
+    keyHashToAddress(res)
   }
 
   def publicKeysToAddressString(
-                          key: Seq[PublicKey]
-                        ): String = {
+                                 key: Seq[PublicKey]
+                               ): String = {
     import constellation.SHA256Ext
-    Base58.encode(key.map{z => base64(z.getEncoded)}.mkString.sha256.sha256.getBytes())
+    val res = Base58.encode(key.map{z => base64(z.getEncoded)}.mkString.sha256.sha256.getBytes())
+    keyHashToAddress(res)
   }
 
   class PrivateKeySerializer extends CustomSerializer[PrivateKey](format => ( {

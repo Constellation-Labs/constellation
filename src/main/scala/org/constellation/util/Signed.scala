@@ -4,6 +4,7 @@ import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import constellation._
 import org.constellation.crypto.Base58
+import org.constellation.primitives.Schema.{BundleHash, Id}
 
 object POW extends POWExt
 
@@ -37,12 +38,31 @@ trait ProductHash extends Product {
 
   def signInput: Array[Byte] = hash.getBytes()
   def hash: String = productSeq.json.sha256
+  def bundleHash = BundleHash(hash)
   def short: String = hash.slice(0, 5)
   def signKeys(privateKeys: Seq[PrivateKey]): Seq[String] = privateKeys.map { pk => base64(signData(signInput)(pk)) }
   def powInput(signatures: Seq[String]): String = (productSeq ++ signatures).json
   def pow(signatures: Seq[String], difficulty: Int): String = POW.proofOfWork(powInput(signatures), Some(difficulty))
   def productSeq: Seq[Any] = this.productIterator.toArray.toSeq
 
+}
+
+
+case class HashSignature(
+                          b58EncodedPublicKey: EncodedPublicKey,
+                          time: Long,
+                          signature: String
+                        ) {
+  def publicKey: PublicKey = b58EncodedPublicKey.toPublicKey
+  def valid(hash: String): Boolean = verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
+
+}
+
+case class SignatureBatch(
+                         hash: String,
+                         signatures: Set[HashSignature]
+                         ) {
+  def valid: Boolean = signatures.forall(_.valid(hash))
 }
 
 /*
@@ -71,6 +91,7 @@ case class Signed[T <: ProductHash](
                                      signatures: Seq[String]
                                         ) extends ProductHash {
   def publicKeys: Seq[PublicKey] = encodedPublicKeys.map{_.toPublicKey}
+  def id: Id = Id(publicKeys.head)
   def validSignatures: Boolean = signatures.zip(encodedPublicKeys).forall{ case (sig, pubEncoded) =>
     val pub = pubEncoded.toPublicKey
     verifySignature(data.signInput, fromBase64(sig))(pub) && signatures.nonEmpty && encodedPublicKeys.nonEmpty

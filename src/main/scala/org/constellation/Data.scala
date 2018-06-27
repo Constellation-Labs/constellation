@@ -47,9 +47,12 @@ class Data {
   val txHashToTX: TrieMap[String, TX] = TrieMap()
 
   @volatile var sentTX: Seq[TX] = Seq()
+
   @volatile var memPoolTX: Set[TX] = Set()
+  @volatile var linearMemPoolTX: Set[TX] = Set()
+
   @volatile var validTX: Set[TX] = Set()
-  @volatile var validSyncPendingTX: Set[TX] = Set()
+  @volatile var linearValidTX: Set[TX] = Set()
 
   val validLedger: TrieMap[String, Long] = TrieMap()
   val memPoolLedger: TrieMap[String, Long] = TrieMap()
@@ -76,13 +79,9 @@ class Data {
   // @volatile var downloadResponses = Seq[DownloadResponse]()
   @volatile var secretReputation: Map[Id, Double] = Map()
   @volatile var publicReputation: Map[Id, Double] = Map()
-  @volatile var deterministicReputation: Map[Id, Double] = Map()
+  @volatile var normalizedDeterministicReputation: Map[Id, Double] = Map()
+  @volatile var deterministicReputation: Map[Id, Int] = Map()
 
-  @volatile var bundles: Set[Bundle] = Set[Bundle]()
-  @volatile var bundleBuffer: Set[Bundle] = Set[Bundle]()
-  val bestBundles: TrieMap[Id, Bundle] = TrieMap()
-
-  @volatile var previousCheckpointBundle: Option[Bundle] = None
 
   @volatile var externalAddress: InetSocketAddress = _
   @volatile var apiAddress: InetSocketAddress = _
@@ -102,15 +101,208 @@ class Data {
 
   def peers: Seq[Signed[Peer]] = peerLookup.values.toSeq.distinct
 
-  var genesisTXHash: String = _
+  def createGenesis(tx: TX): Unit = {
+    if (tx.tx.data.isGenesis) {
+      genesisBundle = Bundle(BundleData(Seq(ParentBundleHash(tx.hash), tx)).signed())
+      processNewBundleMetadata(genesisBundle, genesisBundle.extractTX, true, setActive = false)
+      validBundles = Seq(genesisBundle)
+    }
+  }
 
-  var lastSuperBundleHash: String = _
+  // @volatile var allBundles: Set[Bundle] = Set[Bundle]()
+
+  @volatile var linearCheckpointBundles: Set[Bundle] = Set[Bundle]()
+  @volatile var activeDAGBundles: Seq[Bundle] = Seq[Bundle]()
+  val peerSync: TrieMap[Id, PeerSyncHeartbeat] = TrieMap()
+
+  var genesisBundle : Bundle = _
+  def genesisTXHash: String = genesisBundle.extractTX.head.hash
+  @volatile var validBundles : Seq[Bundle] = Seq()
+  def lastBundle: Bundle = validBundles.lastOption.getOrElse(genesisBundle)
+  def lastBundleHash = ParentBundleHash(validBundles.lastOption.map{_.hash}.getOrElse(Option(genesisBundle).map{_.hash}.getOrElse("")))
+  @volatile var bestBundle: Bundle = _
+  @volatile var bestBundleBase: Bundle = _
+  @volatile var bestBundleCandidateHashes: Set[BundleHash] = Set()
+  @volatile var lastSquashed: Option[Bundle] = None
+
+
+  @volatile var bundlePendingTX : Set[TX] = Set()
+
+  val unknownParentBundleHashes: TrieMap[String, PeerSyncHeartbeat] = TrieMap()
+
+
+  def jaccard[T](t1: Set[T], t2: Set[T]): Double = {
+    t1.intersect(t2).size.toDouble / t1.union(t2).size.toDouble
+  }
+
+  implicit class BundleExtData(b: Bundle) {
+    def txBelow = bundleHashToTXBelow(b.hash)
+    def idBelow = bundleHashToIdsBelow(b.hash)
+    // def idAbove = bundleHashToIdsAbove(b.hash)
+    def repScore: Double = idBelow.toSeq.map { id => normalizedDeterministicReputation.getOrElse(id, 0.1)}.sum
+    def bundleScore: Double = {
+      b.maxStackDepth * 100 +
+        txBelow.size +
+        repScore * 10
+    }
+    def minTime: Long = meta.rxTime
+    def maxTime: Long = b.bundleData.time
+    def pretty: String = s"hash: ${b.short}, depth: ${b.maxStackDepth}, numTX: ${txBelow.size}, numId: ${idBelow.size}, " +
+      s"score: $bundleScore, totalScore: ${meta.totalScore}, height: ${meta.height}" // numIdAbove ${idAbove.size},
+    def meta = bundleHashToBundleMetaData(b.hash)
+  }
+
+  def prettifyBundle(b: Bundle): String = b.pretty
+
+  def calculateReputationsFromScratch(upTo: Int = validBundles.size): Unit = {
+    val sum = mutable.HashMap[Id, Int]()
+    validBundles.slice(0, upTo).foreach{ v =>
+      v.idBelow.foreach{id =>
+        if (!sum.contains(id)) sum(id) = 1
+        else sum(id) = sum(id) + 1
+      }
+    }
+    val total = sum.values.sum
+    val map = sum.toMap
+    deterministicReputation = map
+    val normalized = map.map{
+      case (id, r) =>
+        id -> r.toDouble / total.toDouble
+    }
+    normalizedDeterministicReputation = normalized
+  }
+
+  case class BundleComparison(b1: Bundle, b2: Bundle) {
+    def txJaccard: Double = jaccard(bundleHashToTXBelow(b1.hash), bundleHashToTXBelow(b2.hash))
+    def idJaccard: Double = jaccard(bundleHashToIdsBelow(b1.hash), bundleHashToIdsBelow(b2.hash))
+    def idAboveJaccard: Double = jaccard(bundleHashToIdsAbove(b1.hash), bundleHashToIdsAbove(b2.hash))
+  }
+
+  def peerSyncInfo() = {
+    peerSync.map{
+      case (id, ps) =>
+        ps.validBundleHashes
+    }
+  }
+
+  def createTransaction(dstAddress: Address, normalizedAmount: Long): TX = {
+
+    val tx = TX(
+      TXData(
+        Seq(selfAddress), dstAddress, normalizedAmount * NormalizationFactor
+      ).signed()(keyPair)
+    )
+
+    txHashToTX(tx.hash) = tx
+    sentTX :+= tx
+
+    tx
+
+  }
+
+  // This returns in order of ancestry, first element should be oldest bundle immediately after the last valid.
+  def extractBundleAncestorsUntilValidation(b: Bundle, ancestors: Seq[String] = Seq()): Seq[String] = {
+    val ph = b.extractParentBundleHash.hash
+    if (validBundles.last.hash == ph) {
+      ancestors
+    } else {
+      val bundle = bundleHashToBundle.get(b.extractParentBundleHash.hash)
+      bundle.map { bp =>
+        extractBundleAncestorsUntilValidation(
+          bp,
+          ancestors :+ ph
+        )
+      }.getOrElse(ancestors)
+    }
+  }.reverse
+
+  // Only call this if the parent chain is known and valid and this is already validated.
+  def processNewBundleMetadata(
+                                bundle: Bundle,
+                                validatedTXs: Set[TX],
+                                isGenesis: Boolean = false,
+                                setActive: Boolean = true
+                                //  idsAbove: Set[Id] = Set()
+                              ): Unit = {
+
+    val rxTime = System.currentTimeMillis()
+
+    val hash = bundle.hash
+
+    if (setActive) {
+      activeDAGBundles :+= bundle
+    }
+
+    bundleHashToBundle(hash) = bundle
+    //  bundleHashToIdsAbove(hash) = idsAbove // Not used currently. Will be in future.
+
+    val txs = validatedTXs
+    val ids = bundle.extractIds
+
+    bundleHashToIdsBelow(hash) = ids
+    bundleHashToTXBelow(hash) = txs.map{_.hash}
+
+    if (!isGenesis) {
+      val parentHash = bundle.extractParentBundleHash.hash
+      val parentInfo = bundleHashToBundleMetaData(parentHash)
+
+      bundleHashToBundleMetaData(hash) = BundleMetaData(
+        parentInfo.height + 1, txs.size, ids.size, bundle.bundleScore, bundle.bundleScore + parentInfo.totalScore, parentHash, rxTime
+      )
+    } else {
+      bundleHashToBundleMetaData(hash) = BundleMetaData(
+        0, 1, 1, 1, 1, txs.head.hash, rxTime
+      )
+    }
+  }
 
   @volatile var totalNumGossipMessages = 0
   @volatile var totalNumBundleMessages = 0
+  @volatile var totalNumBundleHashRequests = 0
+  @volatile var totalNumInvalidBundles = 0
+  @volatile var totalNumNewBundleAdditions = 0
   @volatile var totalNumBroadcastMessages = 0
 
-  @volatile var bestBundleSelf: Bundle = _
+  def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
+
+    if (!validTX.contains(tx)) {
+      validTX += tx
+      tx.updateLedger(validLedger)
+    }
+
+    memPoolTX -= tx
+
+    if (tx.tx.data.isGenesis) {
+      tx.updateLedger(memPoolLedger)
+    }
+    //    txToGossipChains.remove(tx.hash) // TODO: Remove after a certain period of time instead. Cleanup gossip data.
+    val txSeconds = (System.currentTimeMillis() - tx.tx.time) / 1000
+    //  logger.debug(s"Accepted TX from $txSeconds seconds ago: ${tx.short} on ${id.short} " +
+    //   s"new mempool size: ${memPoolTX.size} valid: ${validTX.size} isGenesis: ${tx.tx.data.isGenesis}")
+  }
+
+  val bundleHashToBundleMetaData: TrieMap[String, BundleMetaData] = TrieMap()
+
+  val bundleHashToIdsAbove: TrieMap[String, Set[Id]] = TrieMap()
+
+  val bundleHashToBundleHashesAbove : TrieMap[String, Set[String]] = TrieMap()
+
+  val bundleHashToBundleHashesBelow : TrieMap[String, Set[String]] = TrieMap()
+
+  val bundleHashToMinTime : TrieMap[String, Long] = TrieMap()
+
+  // val bundlesByStackDepth: TrieMap[Int, Set[String]] = TrieMap()
+
+  val bundleHashToBundle: TrieMap[String, Bundle] = TrieMap()
+
+  val bundleHashToFirstRXTime: TrieMap[String, Long] = TrieMap()
+
+  val bundleHashToIdsBelow: TrieMap[String, Set[Id]] = TrieMap()
+
+  val bundleHashToTXBelow: TrieMap[String, Set[String]] = TrieMap()
+
+  val bundleHashToDepth: TrieMap[String, Int] = TrieMap()
+
 
   @volatile var lastCheckpointBundle: Option[Bundle] = None
 
