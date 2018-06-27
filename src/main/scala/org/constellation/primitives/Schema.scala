@@ -223,6 +223,7 @@ object Schema {
                               ) extends ProductHash with Fiber
 
   final case class BundleHash(hash: String) extends Fiber
+  final case class TransactionHash(hash: String) extends Fiber
   final case class ParentBundleHash(hash: String) extends Fiber
 
   // TODO: Make another bundle data with additional metadata for depth etc.
