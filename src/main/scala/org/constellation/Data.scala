@@ -82,7 +82,6 @@ class Data {
   @volatile var normalizedDeterministicReputation: Map[Id, Double] = Map()
   @volatile var deterministicReputation: Map[Id, Int] = Map()
 
-
   @volatile var externalAddress: InetSocketAddress = _
   @volatile var apiAddress: InetSocketAddress = _
   // @volatile private var peers: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
