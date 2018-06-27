@@ -84,6 +84,12 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   def bundleHeartbeat(): Unit = {
 
+    val hashes = syncPendingBundleHashes ++ syncPendingBundleHashes
+    if (hashes.nonEmpty) {
+      broadcast(BatchHashRequest(hashes))
+    }
+
+
     if (!downloadMode) {
 
       simulateTransactions()
@@ -201,17 +207,6 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     }
   }
 
-  def validateTransactionBatch(txs: Set[TX], ledger: TrieMap[String, Long]): Boolean = {
-    txs.toSeq.map{ tx =>
-      val dat = tx.txData.get
-      dat.src -> dat.amount
-    }.groupBy(_._1).forall{
-      case (a, seq) =>
-        val bal = ledger.getOrElse(a, 0L)
-        bal >= seq.map{_._2}.sum
-    }
-  }
-
   def squashBundle(b: Bundle): Bundle = {
     logger.debug(s"Squashing bundle - ${b.pretty}")
     val squashed = Bundle(BundleData(Seq(b.bundleHash)).signed())
@@ -223,73 +218,52 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     squashed
   }
 
-  def validateTXBatch(txs: Set[TX]): Boolean =
-    validateTransactionBatch(txs, memPoolLedger) &&
-      validateTransactionBatch(txs, validLedger)
-
-
-  def handleBundle(bundle: Bundle): Unit = {
-
-    totalNumBundleMessages += 1
-
-    val notPresent = !bundleHashToBundle.contains(bundle.hash)
-
-    if (notPresent) {
-      val parentHash = bundle.extractParentBundleHash.hash
-      val parentKnown = bundleHashToBundle.contains(parentHash)
-      if (!parentKnown) {
-        totalNumBundleHashRequests += 1
-        broadcast(RequestBundleData(parentHash))
-      } else {
-        val txs = bundle.extractTX
-        val haveAllTXData = txs.forall(_.txData.nonEmpty)
-        if (!haveAllTXData) {
-          val hashes = txs.filter {_.txData.isEmpty}.map {_.hashSignature.signedHash}
-          broadcast(BatchHashRequest(hashes))
-        } else {
-          val validBatch = validateTXBatch(txs)
-          if (validBatch) {
-            totalNumNewBundleAdditions += 1
-            txs.foreach {
-              updateMempool
-            }
-            processNewBundleMetadata(bundle, txs)
-          } else {
-            // TODO: Need to register potentially invalid bundles somewhere but not use them in case of fork download.
-            totalNumInvalidBundles += 1
-          }
-        }
-      }
-
-      // Also need to verify there are not multiple occurrences of same id re-signing bundle, and reps.
-      //  val valid = validateTXBatch(txs) && txs.intersect(validTX).isEmpty
-
-    }
-  }
-
   // def handleGossip(g: Gossip[ProductHash], remote: InetSocketAddress): Unit = {
   def handleGossip(gm : GossipMessage, remote: InetSocketAddress): Unit = {
 
-    val rid = peerLookup(remote).data.id
+    val rid = peerLookup.get(remote).map{_.data.id}
 
     gm match {
-      case g : Gossip[ProductHash] =>
-      // handleGossipRegular(g, remote)
+
+      case BatchBundleHashRequest(hashes) =>
+
+        hashes.foreach{h =>
+          db.getAs[Bundle](h).foreach{
+            b =>
+              udpActor.udpSend(b, remote)
+          }
+        }
+
+      case BatchTXHashRequest(hashes) =>
+
+        hashes.foreach{h =>
+          db.getAs[TXData](h).foreach{
+            b =>
+              udpActor.udpSend(b, remote)
+          }
+        }
+
+
+      case b: Bundle =>
+
+        handleBundle(b)
+
+      case txData: TXData =>
+
+
       case bb: PeerSyncHeartbeat =>
         //    println(s"RECEIVED PEER SYNC OF MEMPOOL SIZE ${bb.memPool.size}")
         bb.bundle.foreach{b => handleBundle(b)}
-        peerSync(rid) = bb
+        rid.foreach{ r =>
+          peerSync(r) = bb
+        }
       //  if (validateTXBatch(bb.memPool)) {
       //    bb.memPool.foreach{updateMempool}
       //}
-      case b: Bundle =>
-        handleBundle(b)
-      case sd: SyncData =>
-      //      handleSyncData(sd, remote)
-      case RequestBundleData(hash) =>
-        bundleHashToBundle.get(hash).foreach{ b =>
-          udpActor.udpSendToId(b, rid)
-        }
+
+
+      case g : Gossip[ProductHash] =>
+      // handleGossipRegular(g, remote)
       case _ =>
         logger.debug("Unrecognized gossip message")
     }

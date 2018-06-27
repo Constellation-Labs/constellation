@@ -164,7 +164,8 @@ class API(
         path("genesis" / LongNumber) { numCoins =>
           val debtAddress = walletPair
           val tx = createTransaction(debtAddress.address.hash, numCoins)
-          complete(tx.json)
+          createGenesis(tx)
+          complete(tx)
         } ~
         path("makeKeyPairs" / IntNumber) { numPairs =>
           val pair = Seq.fill(numPairs){constellation.makeKeyPair()}

@@ -50,7 +50,8 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     // Create a genesis transaction
     val numCoinsInitial = 4e9.toLong
     val genTx = r1.getBlocking[TX]("genesis/" + numCoinsInitial)
-    Thread.sleep(1000)
+    Thread.sleep(2000)
+
 
 
     val results = nodes.flatMap{ node =>
@@ -80,7 +81,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
         )
       })
     }
-
+/*
     Thread.sleep(10000)
 
     println("-"*10)
@@ -130,6 +131,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val allTX = Set(genTx) ++ initialDistrTX.toSet ++ txs
 
     var done = false
+*/
 
 
 /*
@@ -156,7 +158,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
 */
 
-    Thread.sleep(5000)
+    Thread.sleep(55555000)
 
 //  Thread.sleep(3000000)
 

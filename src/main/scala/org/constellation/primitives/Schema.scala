@@ -97,8 +97,10 @@ object Schema {
     }
 
     def updateLedger(ledger: TrieMap[String, Long]): Unit = {
-      ledger(src) = ledger(src) - amount
-      ledger(dst) = ledger(dst) + amount
+      if (ledger.contains(src)) ledger(src) = ledger(src) - amount
+
+      if (ledger.contains(dst)) ledger(dst) = ledger(dst) + amount
+      else ledger(dst) = amount
     }
 
 
@@ -106,7 +108,9 @@ object Schema {
 
   case class TX(
                  hashSignature: HashSignature
-               ) extends Fiber with GossipMessage with ProductHash
+               ) extends Fiber with GossipMessage with ProductHash {
+    def txHash: String = hashSignature.signedHash
+  }
 
   sealed trait GossipMessage
 
@@ -127,6 +131,9 @@ object Schema {
   case class RequestBundleData(hash: String) extends GossipMessage
   case class HashRequest(hash: String) extends GossipMessage
   case class BatchHashRequest(hashes: Set[String]) extends GossipMessage
+
+  case class BatchBundleHashRequest(hashes: Set[String]) extends GossipMessage
+  case class BatchTXHashRequest(hashes: Set[String]) extends GossipMessage
 
   case class UnknownParentHashSyncInfo(
                                       firstRequestTime: Long,
@@ -329,7 +336,8 @@ object Schema {
 
   case class DownloadRequest() extends DownloadMessage
   case class DownloadResponse(
-                               lastValidBundle: Bundle
+                               bestBundle: Bundle,
+                               genesisBundle: Bundle
                              ) extends DownloadMessage
 
   final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage
