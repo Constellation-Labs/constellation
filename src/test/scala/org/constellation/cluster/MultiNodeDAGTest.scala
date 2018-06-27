@@ -94,6 +94,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     Thread.sleep(15000)
 
+
     def randomNode: ConstellationNode = nodes(Random.nextInt(nodes.length))
     def randomOtherNode(not: ConstellationNode): ConstellationNode =
       nodes.filter{_ != not}(Random.nextInt(nodes.length - 1))
@@ -120,11 +121,13 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     val txResponseFut = Future.sequence(txResponse)
 
+
     val txs = txResponseFut.get(100).toSet
 
     val allTX = Set(genTx) ++ initialDistrTX.toSet ++ txs
 
     var done = false
+
 
 /*
     while (!done) {
@@ -147,9 +150,9 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     println(s"Completion time seconds: ${(end-start) / 1000}")
 */
 
-//    Thread.sleep(5000)
+    Thread.sleep(5000)
 
-  Thread.sleep(3000000)
+//  Thread.sleep(3000000)
 
 /*
     for (node <- nodes) {
