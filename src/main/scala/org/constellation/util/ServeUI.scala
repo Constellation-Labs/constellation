@@ -1,11 +1,10 @@
 package org.constellation.util
 
-import java.io.File
-
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpResponse}
-import akka.http.scaladsl.server.Directives.{complete, extractUnmatchedPath, get, getFromFile, pathPrefix}
+import akka.http.scaladsl.server.Directives.{complete, extractUnmatchedPath, get, getFromResource, pathPrefix, _}
 import akka.http.scaladsl.server.Route
 import com.typesafe.scalalogging.Logger
+
 
 trait ServeUI {
 
@@ -17,14 +16,16 @@ trait ServeUI {
       get {
         extractUnmatchedPath { path =>
           logger.info(s"UI Request $path")
-          getFromFile(new File(jsPrefix + path.toString))
+            val resPath = "ui/ui" + path
+            logger.debug(s"Loading resource from $resPath")
+            getFromResource(resPath)
         }
       }
     }
   }
 
   def serveMainPage: Route = complete { //complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Say hello to akka-http</h1>"))
-    logger.info("Serve main page")
+    logger.info(s"Serve main page jsPrefix: $jsPrefix")
 
     // val numPeers = (peerToPeerActor ? GetPeers).mapTo[Peers].get().peers.size
     val bodyText = "" // s"Balance: $selfIdBalance numPeers: $numPeers "

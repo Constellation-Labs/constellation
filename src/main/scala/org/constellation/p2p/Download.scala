@@ -19,17 +19,19 @@ trait Download extends PeerAuth {
   }
 
   def handleDownloadResponse(d: DownloadResponse): Unit = {
-    if (d.validTX.nonEmpty && d.validUTXO.nonEmpty) {
-      validTX = d.validTX
-      validTX.filter{_.tx.data.isGenesis}.foreach{
-        z =>
-          genesisTXHash = z.hash
+    if (d.validBundles.nonEmpty) {
+      genesisBundle = d.genesisBundle
+      processNewBundleMetadata(genesisBundle, genesisBundle.extractTX, true, setActive = false)
+      d.validBundles.tail.foreach { b =>
+        processNewBundleMetadata(b, b.extractTX)
       }
-      d.validUTXO.foreach{ case (k,v) =>
-        validLedger(k) = v
-        memPoolLedger(k) = v
+      validBundles = d.validBundles
+      d.ledger.foreach{ case (k,v) =>
+          validLedger(k) = v
+          memPoolLedger(k) = v
       }
 
+      validTX ++= validBundles.flatMap(_.extractTX).toSet
       downloadMode = false
 
       lastCheckpointBundle = d.lastCheckpointBundle
@@ -39,8 +41,10 @@ trait Download extends PeerAuth {
   }
 
   def handleDownloadRequest(d: DownloadRequest, remote: InetSocketAddress): Unit = {
-    val downloadResponse = DownloadResponse(validTX, validLedger.toMap, lastCheckpointBundle)
-    udpActor.udpSend(downloadResponse, remote)
+    if (genesisBundle != null && validBundles.nonEmpty) {
+      val downloadResponse = DownloadResponse(genesisBundle, validBundles, validLedger.toMap, lastCheckpointBundle)
+      udpActor.udpSend(downloadResponse, remote)
+    }
   }
 
 }

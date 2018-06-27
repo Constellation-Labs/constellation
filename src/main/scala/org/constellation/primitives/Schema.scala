@@ -5,27 +5,31 @@ import java.net.InetSocketAddress
 import java.security.PublicKey
 
 import constellation.pubKeyToAddress
-import org.constellation.consensus.Consensus.{CC, RoundHash}
 import org.constellation.crypto.Base58
 import org.constellation.util.EncodedPublicKey
 import org.constellation.util.{ProductHash, Signed}
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
 import scala.util.Random
 
 // This can't be a trait due to serialization issues
 object Schema {
 
+  case class TreeVisual(
+                       name: String,
+                       parent: String,
+                       children: Seq[TreeVisual]
+                       )
+
   case class TransactionQueryResponse(
-                                     hash: String,
-                                     tx: Option[TX],
-                                     observed: Boolean,
-                                     inMemPool: Boolean,
-                                     confirmed: Boolean,
-                                     numGossipChains: Int,
-                                     gossipStackDepths: Seq[Int],
-                                     gossip: Seq[Gossip[ProductHash]]
+                                       hash: String,
+                                       tx: Option[TX],
+                                       observed: Boolean,
+                                       inMemPool: Boolean,
+                                       confirmed: Boolean,
+                                       numGossipChains: Int,
+                                       gossipStackDepths: Seq[Int],
+                                       gossip: Seq[Gossip[ProductHash]]
                                      )
 
   sealed trait NodeState
@@ -36,7 +40,9 @@ object Schema {
 
   final case object Valid extends ValidationStatus
   final case object MempoolValid extends ValidationStatus
+  final case object Unknown extends ValidationStatus
   final case object DoubleSpend extends ValidationStatus
+
 
   sealed trait ConfigUpdate
 
@@ -53,7 +59,8 @@ object Schema {
                             account: Option[PublicKey] = None,
                             normalized: Boolean = true,
                             oneTimeUse: Boolean = false,
-                            useNodeKey: Boolean = true
+                            useNodeKey: Boolean = true,
+                            doGossip: Boolean = true
                           ) {
     def amountActual: Long = if (normalized) amount * NormalizationFactor else amount
   }
@@ -97,6 +104,7 @@ object Schema {
                      // TODO: Add threshold maps
                    ) extends ProductHash {
     def inverseAmount: Long = -1*amount
+    def normalizedAmount = amount / NormalizationFactor
   }
 
   case class TX(tx: Signed[TXData]) extends ProductHash with Fiber {
@@ -135,9 +143,21 @@ object Schema {
       s"${tx.data.remainder.map{_.address}.getOrElse("empty").slice(0, 5)} " +
       s"amount ${tx.data.amount}"
 
+    def srcLedgerBalanceAll(ledger: TrieMap[String, Long]): Seq[Long] = {
+      tx.data.src.map{_.address}.map{a => ledger.getOrElse(a, 0L)}
+    }
+
+    def srcLedgerBalanceAllAccount(ledger: TrieMap[String, Long]): Seq[(String, Long)] = {
+      tx.data.src.map{_.address}.map{a => a -> ledger.getOrElse(a, 0L)}
+    }
+
+    def srcLedgerBalance(ledger: TrieMap[String, Long]): Long = {
+      tx.data.src.map {_.address}.flatMap {ledger.get}.sum
+    }
+
     def ledgerValid(ledger: TrieMap[String, Long]): Boolean = {
       if (tx.data.isGenesis) !ledger.contains(tx.data.dst.address) else {
-        val srcSum = tx.data.src.map {_.address}.flatMap {ledger.get}.sum
+        val srcSum = srcLedgerBalance(ledger)
         srcSum >= tx.data.amount && valid
       }
     }
@@ -203,16 +223,104 @@ object Schema {
                               ) extends ProductHash with Fiber
 
   final case class BundleHash(hash: String) extends Fiber
+  final case class TransactionHash(hash: String) extends Fiber
+  final case class ParentBundleHash(hash: String) extends Fiber
 
+  // TODO: Make another bundle data with additional metadata for depth etc.
   final case class BundleData(bundles: Seq[Fiber]) extends ProductHash
 
-  final case class BestBundle(bundle: Option[Bundle], lastBestBundle: Bundle) extends GossipMessage
+  case class RequestBundleData(hash: String) extends GossipMessage
+
+  case class UnknownParentHashSyncInfo(
+                                      firstRequestTime: Long,
+                                      lastRequestTime: Long,
+                                      numRequests: Int
+                                      )
+
+  case class BundleMetaData(
+                             height: Int,
+                             numTX: Int,
+                             numID: Int,
+                             score: Double,
+                             totalScore: Double,
+                             parentHash: String,
+                             rxTime: Long
+                           )
+
+  final case class PeerSyncHeartbeat(
+                               bundle: Option[Bundle],
+                  //             memPool: Set[TX] = Set(),
+                               validBundleHashes: Seq[String]
+                             ) extends GossipMessage
 
   final case class Bundle(
                            bundleData: Signed[BundleData]
                          ) extends ProductHash with Fiber with GossipMessage {
 
     val bundleNumber: Long = Random.nextLong()
+
+    def extractTreeVisual: TreeVisual = {
+      val parentHash = extractParentBundleHash.hash.slice(0, 5)
+      def process(s: Signed[BundleData], parent: String): Seq[TreeVisual] = {
+        val bd = s.data.bundles
+        val depths = bd.map {
+          case tx: TX =>
+            TreeVisual(s"TX: ${tx.short} amount: ${tx.tx.data.normalizedAmount}", parent, Seq())
+          case b2: Bundle =>
+            val name = s"Bundle: ${b2.short} numTX: ${b2.extractTX.size}"
+            val children = process(b2.bundleData, name)
+            TreeVisual(name, parent, children)
+          case _ => Seq()
+        }
+        depths
+      }.asInstanceOf[Seq[TreeVisual]]
+      val parentName = s"Bundle: $short numTX: ${extractTX.size} node: ${bundleData.id.short} parent: $parentHash"
+      val children = process(bundleData, parentName)
+      TreeVisual(parentName, "null", children)
+    }
+
+    def extractParentBundleHash: ParentBundleHash = {
+      def process(s: Signed[BundleData]): ParentBundleHash = {
+        val bd = s.data.bundles
+        val depths = bd.collectFirst{
+          case b2: Bundle =>
+            process(b2.bundleData)
+          case bh: ParentBundleHash => bh
+        }
+        depths.get
+      }
+      process(bundleData)
+    }
+
+    def extractBundleHashId: (BundleHash, Id) = {
+      def process(s: Signed[BundleData]): (BundleHash, Id) = {
+        val bd = s.data.bundles
+        val depths = bd.collectFirst{
+          case b2: Bundle =>
+            process(b2.bundleData)
+          case bh: BundleHash => bh -> s.id
+        }.get
+        depths
+      }
+      process(bundleData)
+    }
+
+    def extractSubBundlesMinSize(minSize: Int = 2) = {
+      extractSubBundles.filter{_.maxStackDepth >= minSize}
+    }
+
+    def extractSubBundles: Set[Bundle] = {
+      def process(s: Signed[BundleData]): Set[Bundle] = {
+        val bd = s.data.bundles
+        val depths = bd.map {
+          case b2: Bundle =>
+            Set(b2) ++ process(b2.bundleData)
+          case _ => Set[Bundle]()
+        }
+        depths.reduce(_ ++ _)
+      }
+      process(bundleData)
+    }
 
     def extractTX: Set[TX] = {
       def process(s: Signed[BundleData]): Set[TX] = {
@@ -240,7 +348,7 @@ object Schema {
             b2.bundleData.publicKeys.map{Id}.toSet ++ process(b2.bundleData)
           case _ => Set[Id]()
         }
-        depths.reduce(_ ++ _)
+        depths.reduce(_ ++ _) ++ s.publicKeys.map{Id}.toSet
       }
       process(bundleData)
     }
@@ -321,10 +429,12 @@ object Schema {
   sealed trait DownloadMessage
 
   case class DownloadRequest() extends DownloadMessage
-
-  case class DownloadResponse(validTX: Set[TX],
-                              validUTXO: Map[String, Long],
-                              lastCheckpointBundle: Option[Bundle]) extends DownloadMessage
+  case class DownloadResponse(
+                               genesisBundle: Bundle,
+                               validBundles: Seq[Bundle],
+                               ledger: Map[String, Long],
+                               lastCheckpointBundle: Option[Bundle]
+                             ) extends DownloadMessage
 
   final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage
 
