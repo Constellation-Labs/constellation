@@ -123,8 +123,8 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   def simulateTransactions(): Unit = {
     if (validBundles.size >= 5) {
-      if (memPoolTX.size < 500) {
-        Seq.fill(10){randomTransaction()}
+      if (memPoolTX.size < 50) {
+        Seq.fill(3){randomTransaction()}
       } else {
         randomTransaction()
       }
@@ -165,7 +165,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
       if (filteredMempool.nonEmpty && (memPoolEmit || genesisAdditionCheck)) {
         // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
-        val memPoolSelSize = Random.nextInt(80)
+        val memPoolSelSize = Random.nextInt(45)
         val memPoolSelection = Random.shuffle(filteredMempool.toSeq).slice(0, memPoolSelSize + 3)
         val b = Bundle(BundleData(
           memPoolSelection :+ bb.map{z => ParentBundleHash(z.hash)}.getOrElse(lastBundleHash)
