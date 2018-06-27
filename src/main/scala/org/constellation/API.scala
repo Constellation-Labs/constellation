@@ -9,6 +9,7 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, path, _}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
+import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
@@ -22,6 +23,9 @@ import org.constellation.state.MemPoolManager.AddTransaction
 import org.constellation.util.ServeUI
 import org.json4s.native
 import org.json4s.native.Serialization
+
+
+
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -48,7 +52,7 @@ class API(
 
   val logger = Logger(s"APIInterface")
 
-  val routes: Route =
+  val routes: Route = cors() {
     get {
       path("submitTX") {
         parameter('address, 'amount) { (address, amount) =>
@@ -354,4 +358,5 @@ class API(
             }
           }
       }
+  }
 }
