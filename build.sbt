@@ -6,7 +6,8 @@ lazy val _version = "1.0.1"
 
 lazy val versions = new {
   val akka = "2.4.18"
-  val akkaHttp = "10.0.7"
+  val akkaHttp = "10.0.10"
+  val akkaHttpCors = "0.2.2"
 }
 
 lazy val commonSettings = Seq(
@@ -46,6 +47,7 @@ lazy val coreDependencies = Seq(
   "ch.qos.logback" % "logback-classic" % "1.1.7",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
+  "ch.megard" %% "akka-http-cors" % versions.akkaHttpCors,
   "de.heikoseeberger" %% "akka-http-json4s" % "1.16.1",
   "org.json4s" %% "json4s-native" % "3.5.2",
   "net.liftweb" %% "lift-json" % "3.1.1",
