@@ -9,6 +9,7 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, path, _}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
+import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
@@ -44,7 +45,7 @@ class API(
 
   val logger = Logger(s"APIInterface")
 
-  val routes: Route =
+  val routes: Route = cors() {
     get {
       path("restart") {
         data.restartNode()
@@ -221,6 +222,16 @@ class API(
             complete(StatusCodes.OK)
           }
         } ~
+        path("dashboard") {
+          val bundleSubset = validBundles.take(20)
+
+          val transactions: Set[TX] = bundleSubset.flatMap(b => b.extractTX).sortBy(_.tx.time).toSet
+
+          complete(Map(
+            "peers" -> peers.map{_.data},
+            "transactions" -> transactions
+          ))
+        } ~
         jsRequest ~
         serveMainPage
     } ~
@@ -313,4 +324,5 @@ class API(
             }
           }
       }
+  }
 }
