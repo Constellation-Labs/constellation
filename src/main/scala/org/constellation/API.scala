@@ -46,6 +46,10 @@ class API(
 
   val routes: Route =
     get {
+      path("restart") {
+        data.restartNode()
+        complete(StatusCodes.OK)
+      } ~
       path("submitTX") {
         parameter('address, 'amount) { (address, amount) =>
           logger.error(s"SubmitTX : $address $amount")
@@ -67,7 +71,7 @@ class API(
           extractUnmatchedPath { p =>
             logger.debug(s"Unmatched path on address result $p")
             val ps = p.toString().tail
-            complete(transactionData(ps).prettyJson)
+            complete(db.getAs[TX](ps).json)
           }
         }
       } ~
@@ -114,7 +118,7 @@ class API(
             "totalNumBundleMessages" -> totalNumBundleMessages.toString,
             "numPeers" -> peers.size.toString,
             "peers" -> peers.map{ z =>
-              val addr = s"http://${z.data.apiAddress.getHostName}:${z.data.apiAddress.getPort}"
+              val addr = s"http://${z.data.apiAddress.getHostString}:${z.data.apiAddress.getPort}"
               s"${z.data.id.short} API: $addr "
             }.mkString(" --- "),
             "genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
@@ -122,7 +126,7 @@ class API(
             "numActiveBundles" -> activeDAGBundles.size.toString,
             "last10TXHash" -> last100SelfSentTransactions.reverse.slice(0, 10).map{_.hash}.mkString(","),
             "last10ValidBundleHashes" -> validBundles.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
-            "lastValidBundleHash" -> lastBundleHash.hash,
+            "lastValidBundleHash" -> lastBundleHash.pbHash,
             "lastValidBundle" -> Option(lastBundle).map{_.pretty}.getOrElse(""),
             "genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
             "genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
@@ -130,9 +134,13 @@ class API(
             "reputations" -> normalizedDeterministicReputation.map{
               case (k,v) => k.short + " " + v
             }.mkString(" - "),
+            "numProcessedBundles" -> bundleHashToBundle.size.toString,
+            "numSyncPendingBundles" -> syncPendingBundleHashes.size.toString,
+            "numSyncPendingTX" -> syncPendingTXHashes.size.toString,
             "peerBestBundles" -> peerSync.toMap.map{
               case (id, b) =>
-                s"PEER: ${id.short}, BEST: ${b.bundle.map{_.pretty}.getOrElse("")} " // LAST: ${b.lastBestBundle.pretty}
+                s"PEER: ${id.short}, BEST: ${b.bundle.map{z => z.short + " " +
+                  Try{z.pretty}.getOrElse("unknown")}.getOrElse("")} " // LAST: ${b.lastBestBundle.pretty}
             }.mkString(" ----- "),
             "allPeerSynchronizedLastHash" -> Try(
               (peerSync.map{_._2.validBundleHashes.last} ++ Seq(lastBundle.hash)).toSet.size == 1
@@ -162,10 +170,13 @@ class API(
           complete(pair)
         } ~
         path("genesis" / LongNumber) { numCoins =>
-          val debtAddress = walletPair
-          val tx = createTransaction(selfAddress.address, numCoins, src=debtAddress.address.address)
-          createGenesis(tx)
-          complete(tx)
+          val ret = if (genesisBundle == null) {
+            val debtAddress = walletPair
+            val tx = createTransaction(selfAddress.address, numCoins, src = debtAddress.address.address)
+            createGenesis(tx)
+            tx
+          } else genesisBundle.extractTX.head
+          complete(ret)
         } ~
         path("makeKeyPairs" / IntNumber) { numPairs =>
           val pair = Seq.fill(numPairs){constellation.makeKeyPair()}
@@ -284,12 +295,13 @@ class API(
               val addr = externalIp.replaceAll('"'.toString,"").split(":") match {
                 case Array(ip, port) =>
                   ipp = ip
+                  externalHostString = ip
                   new InetSocketAddress(ip, port.toInt)
                 case a@_ => { logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a"); }
               }
               logger.debug(s"Set external IP RPC request $externalIp $addr")
               data.externalAddress = addr
-              if (ipp.nonEmpty) data.apiAddress = new InetSocketAddress(ipp, addr.getPort)
+              if (ipp.nonEmpty) data.apiAddress = new InetSocketAddress(ipp, 9000)
               complete(StatusCodes.OK)
             }
           } ~

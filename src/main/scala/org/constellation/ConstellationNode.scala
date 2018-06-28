@@ -46,7 +46,7 @@ object ConstellationNode extends App {
   val keyPair = KeyUtils.makeKeyPair()
 
   // TODO: add seeds from config
-  new ConstellationNode(
+  val node = new ConstellationNode(
     keyPair,
     seeds,
     config.getString("http.interface"),
@@ -59,6 +59,8 @@ object ConstellationNode extends App {
     requestExternalAddressCheck = requestExternalAddressCheck,
     jsPrefix = "./ui/ui"
   )
+
+  node.data.minGenesisDistrSize = 5
 
 }
 

@@ -45,7 +45,7 @@ object Fixtures {
   val idSet4B = Set(id1, id2, id3, id5)
   val idSet5 = Set(id1, id2, id3, id4, id5)
 
-  val randomTransactions: Seq[(Schema.TX, Schema.TXData)] = Seq.fill(30) {
+  val randomTransactions: Seq[Schema.TX] = Seq.fill(30) {
     val kp = makeKeyPair()
     val kp2 = makeKeyPair()
     createTransactionSafe(kp.address.address, kp2.address.address, 1L, kp)

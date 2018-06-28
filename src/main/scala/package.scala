@@ -13,7 +13,7 @@ import akka.util.{ByteString, Timeout}
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.google.common.hash.Hashing
-import com.twitter.chill.{IKryoRegistrar, KryoBase, ScalaKryoInstantiator}
+import com.twitter.chill.{IKryoRegistrar, KryoBase, KryoPool, ScalaKryoInstantiator}
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.{AddressMetaData, Bundle, Id}
 import org.constellation.util.{HashSignature, POWExt, POWSignHelp, ProductHash}
@@ -182,23 +182,42 @@ package object constellation extends KeyUtilsExt with POWExt
   val kryo: KryoBase = instantiator.newKryo()
   // kryo.register(classOf[PrivateKey], new PrivKeyKryoSerializer())
   // kryo.addDefaultSerializer(classOf[PrivateKey], new PrivKeyKryoSerializer())
-  kryo.register(classOf[PublicKey], new PubKeyKryoSerializer())
-  kryo.addDefaultSerializer(classOf[PublicKey], new PubKeyKryoSerializer())
+  // kryo.register(classOf[PublicKey], new PubKeyKryoSerializer())
+  // kryo.addDefaultSerializer(classOf[PublicKey], new PubKeyKryoSerializer())
+  def guessThreads: Int = {
+    val cores = Runtime.getRuntime.availableProcessors
+    val GUESS_THREADS_PER_CORE = 4
+    GUESS_THREADS_PER_CORE * cores
+  }
 
+  val kryoPool: KryoPool = KryoPool.withBuffer(guessThreads,
+    new ScalaKryoInstantiator().setRegistrationRequired(false), 32, 1024*1024*100)
 
   implicit class KryoExt[T](a: T) {
     def kryoWrite: Array[Byte] = {
-      val out = new Output(32, 1024*1024*100)
+      /*val out = new Output(32, 1024*1024*100)
       kryo.writeClassAndObject(out, a)
-      out.getBuffer
+      out.flush()
+      val buf = out.getBuffer
+      out.close()
+      buf*/
+      kryoPool.toBytesWithClass(a)
     }
   }
 
   implicit class KryoExtByte(a: Array[Byte]) {
     def kryoRead: AnyRef = {
-      val kryoInput = new Input(a)
-      val deser = kryo.readClassAndObject(kryoInput)
+      val deser = kryoPool.fromBytes(a)
       deser
+    }
+    def kryoExtract[T]: T = {
+      //import scala.reflect.ClassTag
+      // import scala.reflect._
+      kryoPool.fromBytes(a).asInstanceOf[T] //, classTag[T].runtimeClass.asInstanceOf[Class[T]])
+/*      val kryoInput = new Input(a)
+      val deser = kryo.readClassAndObject(kryoInput)
+      kryoInput.close()
+      deser.asInstanceOf[T]*/
     }
   }
 

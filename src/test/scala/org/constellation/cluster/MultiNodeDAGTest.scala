@@ -92,11 +92,11 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val initialDistrTX = nodes.tail.map{ n =>
       val dst = n.data.selfAddress
       val s = SendToAddress(dst.address, 1e7.toLong)
-      r1.postRead[TXData]("sendToAddress", s)
+      r1.postRead[TX]("sendToAddress", s)
     }
 
     Thread.sleep(15000)
-/*
+
 
     def randomNode: ConstellationNode = nodes(Random.nextInt(nodes.length))
     def randomOtherNode(not: ConstellationNode): ConstellationNode =
@@ -109,7 +109,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
         val src = randomNode
         val dst = randomOtherNode(src)
         val s = SendToAddress(dst.data.id.address.address, Random.nextInt(1000).toLong)
-        src.api.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
+        src.api.postRead[TX]("sendToAddress", s)
       }(ec)
     }
 
@@ -132,7 +132,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val allTX = Set(genTx) ++ initialDistrTX.toSet ++ txs
 
     var done = false
-*/
+
 
 
 /*

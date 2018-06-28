@@ -50,7 +50,11 @@ class Data {
     syncPendingTXHashes = Set()
     syncPendingBundleHashes = Set()
     bestBundle = null
+    peerLookup.clear()
+    memPoolTX = Set()
+    memPool = Set()
   }
+/*
 
   def transactionData(txHash: String): TransactionQueryResponse = {
     val txOpt = txHashToTX.get(txHash)
@@ -66,6 +70,11 @@ class Data {
       gossip
     )
   }
+*/
+
+  var minGenesisDistrSize: Int = 2
+
+  @volatile var heartbeatRound = 0L
 
   val txHashToTX: TrieMap[String, TX] = TrieMap()
 
@@ -108,6 +117,7 @@ class Data {
   @volatile var deterministicReputation: Map[Id, Int] = Map()
 
 
+  var externalHostString: String = _
   @volatile var externalAddress: InetSocketAddress = _
   @volatile var apiAddress: InetSocketAddress = _
   // @volatile private var peers: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
@@ -128,7 +138,7 @@ class Data {
 
   def validateTransactionBatch(txs: Set[TX], ledger: TrieMap[String, Long]): Boolean = {
     txs.toSeq.map{ tx =>
-      val dat = tx.txData.get
+      val dat = tx.txData.data
       dat.src -> dat.amount
     }.groupBy(_._1).forall{
       case (a, seq) =>
@@ -145,17 +155,22 @@ class Data {
   def acceptGenesis(b: Bundle): Unit = {
     genesisBundle = b
     bestBundle = genesisBundle
+    db.put(genesisBundle)
     processNewBundleMetadata(genesisBundle, genesisBundle.extractTX, isGenesis = true, setActive = false)
     validBundles = Seq(genesisBundle)
     val gtx = b.extractTX.head
-    gtx.txData.get.updateLedger(memPoolLedger)
+    gtx.txData.data.updateLedger(memPoolLedger)
     acceptTransaction(gtx)
   }
 
   def createGenesis(tx: TX): Unit = {
-    acceptGenesis(Bundle(BundleData(Seq(ParentBundleHash(tx.hashSignature.signedHash), tx)).signed()))
+    db.put(tx)
+    acceptGenesis(Bundle(BundleData(Seq(ParentBundleHash("coinbase"), TransactionHash(tx.hash))).signed()))
     downloadMode = false
   }
+
+  @volatile var numSyncedBundles: Int = 0
+  @volatile var numSyncedTX: Int = 0
 
   def handleBundle(bundle: Bundle): Unit = {
 
@@ -165,44 +180,49 @@ class Data {
     val notPresent = !db.contains(bundle)
 
     if (notPresent) {
-
       db.put(bundle)
+    }
 
-      val parentHash = bundle.extractParentBundleHash.hash
-      val parentKnown = db.contains(parentHash)
-      if (!parentKnown) {
-        totalNumBundleHashRequests += 1
+    val parentHash = bundle.extractParentBundleHash.pbHash
+    val parentKnown = db.contains(parentHash)
+    val parentIndexed = bundleHashToBundle.contains(parentHash)
+
+    // ^ change to access meta data only otherwise won't connect properly.
+    if (!parentKnown || !parentIndexed) {
+      totalNumBundleHashRequests += 1
+      if (parentHash != genesisTXHash) {
         syncPendingBundleHashes += parentHash
-        // broadcast(RequestBundleData(parentHash))
-      } else {
-        val txs = bundle.extractTX
-        val haveAllTXData = txs.forall(_.txData.nonEmpty)
+      }
+      // broadcast(RequestBundleData(parentHash))
+    } else {
+
+   //   logger.debug(s"Handle bundle parentIndexed: $parentIndexed parentHash ${parentHash.slice(0, 5)}")
+        val txs = bundle.extractTXHash
+        val missingHashes = txs.filterNot(z => db.contains(z.txHash))
+        val haveAllTXData = missingHashes.isEmpty
+   //     logger.debug(s"Handle bundle txHashSize : ${txs.size}, missing hashes ${missingHashes.size} $haveAllTXData")
         if (!haveAllTXData) {
-          val hashes = txs.filter {_.txData.isEmpty}.map {_.hashSignature.signedHash}
-          syncPendingTXHashes ++= hashes
-          //          broadcast(BatchHashRequest(hashes))
+          syncPendingTXHashes ++= missingHashes.map{_.txHash}
         } else {
-          val validBatch = validateTXBatch(txs)
+          val txActual = bundle.extractTX
+          val validBatch = validateTXBatch(txActual)
           if (validBatch) {
             totalNumNewBundleAdditions += 1
-            txs.foreach { t =>
-              val txData = t.txData.get
-              updateMempool(t, txData)
-            }
-            processNewBundleMetadata(bundle, txs)
+            txActual.foreach {updateMempool}
+            processNewBundleMetadata(bundle, txActual)
+            syncPendingBundleHashes -= bundle.hash
+            numSyncedBundles += 1
           } else {
             // TODO: Need to register potentially invalid bundles somewhere but not use them in case of fork download.
             totalNumInvalidBundles += 1
           }
         }
-      }
-
-      // Also need to verify there are not multiple occurrences of same id re-signing bundle, and reps.
-      //  val valid = validateTXBatch(txs) && txs.intersect(validTX).isEmpty
-
     }
 
-    syncPendingBundleHashes -= bundle.hash
+    // Also need to verify there are not multiple occurrences of same id re-signing bundle, and reps.
+    //  val valid = validateTXBatch(txs) && txs.intersect(validTX).isEmpty
+
+   //  syncPendingBundleHashes -= bundle.hash
   }
 
   // @volatile var allBundles: Set[Bundle] = Set[Bundle]()
@@ -250,8 +270,29 @@ class Data {
     def minTime: Long = meta.rxTime
     def maxTime: Long = b.bundleData.time
     def pretty: String = s"hash: ${b.short}, depth: ${b.maxStackDepth}, numTX: ${txBelow.size}, numId: ${idBelow.size}, " +
-      s"score: $bundleScore, totalScore: ${meta.totalScore}, height: ${meta.height}" // numIdAbove ${idAbove.size},
+      s"score: $bundleScore, totalScore: ${meta.totalScore}, height: ${meta.height}, parent: ${meta.parentHash.slice(0, 5)}" // numIdAbove ${idAbove.size},
     def meta = bundleHashToBundleMetaData(b.hash)
+
+    def extractTXHash: Set[TransactionHash] = {
+      def process(s: Signed[BundleData]): Set[TransactionHash] = {
+        val bd = s.data.bundles
+        val depths = bd.map {
+          case b2: Bundle =>
+            process(b2.bundleData)
+          case h: TransactionHash => Set(h)
+          case _ => Set[TransactionHash]()
+        }
+        if (depths.nonEmpty) {
+          depths.reduce( (s1: Set[TransactionHash], s2: Set[TransactionHash]) => s1 ++ s2)
+        } else {
+          Set[TransactionHash]()
+        }
+      }
+      process(b.bundleData)
+    }
+
+    def extractTX: Set[TX] = extractTXHash.flatMap{ z => db.getAs[TX](z.txHash)}
+
   }
 
   def prettifyBundle(b: Bundle): String = b.pretty
@@ -288,23 +329,23 @@ class Data {
   }
 
   def createTransaction(dst: String, amount: Long, normalized: Boolean = true, src: String = selfAddress.address): TX = {
-    val (tx, txData) = createTransactionSafe(src, dst, amount, keyPair, normalized)
-    db.put(txData)
+    val tx = createTransactionSafe(src, dst, amount, keyPair, normalized)
+    db.put(tx)
     if (last100SelfSentTransactions.size > 100) {
       last100SelfSentTransactions.tail :+ tx
     }
     last100SelfSentTransactions :+= tx
-    updateMempool(tx, txData)
+    updateMempool(tx)
     tx
   }
 
   // This returns in order of ancestry, first element should be oldest bundle immediately after the last valid.
   def extractBundleAncestorsUntilValidation(b: Bundle, ancestors: Seq[String] = Seq()): Seq[String] = {
-    val ph = b.extractParentBundleHash.hash
+    val ph = b.extractParentBundleHash.pbHash
     if (validBundles.last.hash == ph) {
       ancestors
     } else {
-      val bundle = bundleHashToBundle.get(b.extractParentBundleHash.hash)
+      val bundle = bundleHashToBundle.get(b.extractParentBundleHash.pbHash)
       bundle.map { bp =>
         extractBundleAncestorsUntilValidation(
           bp,
@@ -338,10 +379,10 @@ class Data {
     val ids = bundle.extractIds
 
     bundleHashToIdsBelow(hash) = ids
-    bundleHashToTXBelow(hash) = txs.map{_.txHash}
+    bundleHashToTXBelow(hash) = txs.map{_.hash}
 
     if (!isGenesis) {
-      val parentHash = bundle.extractParentBundleHash.hash
+      val parentHash = bundle.extractParentBundleHash.pbHash
       val parentInfo = bundleHashToBundleMetaData(parentHash)
 
       bundleHashToBundleMetaData(hash) = BundleMetaData(
@@ -363,19 +404,19 @@ class Data {
 
   def handleSendRequest(s: SendToAddress): StandardRoute = {
     val tx = createTransaction(s.dst, s.amount, s.normalized)
-    complete(tx.txData.prettyJson)
+    complete(tx.prettyJson)
   }
 
   def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
 
     if (last1000ValidTX.size >= 1000) {
-      last1000ValidTX = last1000ValidTX.tail :+ tx.txHash
+      last1000ValidTX = last1000ValidTX.tail :+ tx.hash
     } else {
-      last1000ValidTX = last1000ValidTX :+ tx.txHash
+      last1000ValidTX = last1000ValidTX :+ tx.hash
     }
 
-    tx.txData.get.updateLedger(validLedger)
-    memPool -= tx.txHash
+    tx.txData.data.updateLedger(validLedger)
+    memPool -= tx.hash
   }
 
   val bundleHashToBundleMetaData: TrieMap[String, BundleMetaData] = TrieMap()
@@ -405,16 +446,17 @@ class Data {
 
   implicit class TXDataAccess(tx: TX) {
 
-    def valid: Boolean = tx.hashSignature.valid
-    def txData : Option[TXData] = db.getAs[TXData](tx.hashSignature.signedHash)
+  //  def valid: Boolean = tx.hashSignature.valid
+ //   def txData : Option[TXData] = db.getAs[TXData](tx.hashSignature.signedHash)
 
   }
 
-  def updateMempool(tx: TX, txData: TXData): Boolean = {
-    val hash = tx.hashSignature.signedHash
+  def updateMempool(tx: TX): Boolean = {
+    val hash = tx.hash
+    val txData = tx.txData.data
     val validUpdate = !memPool.contains(hash) && tx.valid && txData.ledgerValid(memPoolLedger) &&
-    !last1000ValidTX.contains(hash)
-    logger.debug(s"Update mempool $validUpdate ${tx.valid} ${txData.ledgerValid(memPoolLedger)} ${!last1000ValidTX.contains(hash)}")
+      !last1000ValidTX.contains(hash)
+    // logger.debug(s"Update mempool $validUpdate ${tx.valid} ${txData.ledgerValid(memPoolLedger)} ${!last1000ValidTX.contains(hash)}")
     if (validUpdate) {
       txData.updateLedger(memPoolLedger)
       memPool += hash

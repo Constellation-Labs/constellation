@@ -81,7 +81,7 @@ object Schema {
                      dst: String,
                      amount: Long,
                      time: Long = System.currentTimeMillis()
-                   ) extends ProductHash {
+                   ) extends ProductHash with GossipMessage {
     def inverseAmount: Long = -1*amount
     def normalizedAmount: Long = amount / NormalizationFactor
     def pretty: String = s"TX: $short FROM: ${src.slice(0, 8)} " +
@@ -107,9 +107,9 @@ object Schema {
   }
 
   case class TX(
-                 hashSignature: HashSignature
+                 txData: Signed[TXData]
                ) extends Fiber with GossipMessage with ProductHash {
-    def txHash: String = hashSignature.signedHash
+    def valid: Boolean = txData.valid
   }
 
   sealed trait GossipMessage
@@ -122,8 +122,8 @@ object Schema {
                               ) extends ProductHash with Fiber
 
   final case class BundleHash(hash: String) extends Fiber
-  final case class TransactionHash(hash: String) extends Fiber
-  final case class ParentBundleHash(hash: String) extends Fiber
+  final case class TransactionHash(txHash: String) extends Fiber
+  final case class ParentBundleHash(pbHash: String) extends Fiber
 
   // TODO: Make another bundle data with additional metadata for depth etc.
   final case class BundleData(bundles: Seq[Fiber]) extends ProductHash
@@ -161,7 +161,7 @@ object Schema {
                            bundleData: Signed[BundleData]
                          ) extends ProductHash with Fiber with GossipMessage {
 
-    val bundleNumber: Long = Random.nextLong()
+    val bundleNumber: Long = 0L //Random.nextLong()
 
 /*
     def extractTreeVisual: TreeVisual = {
@@ -227,7 +227,7 @@ object Schema {
       }
       process(bundleData)
     }
-
+/*
     def extractTX: Set[TX] = {
       def process(s: Signed[BundleData]): Set[TX] = {
         val bd = s.data.bundles
@@ -245,6 +245,7 @@ object Schema {
       }
       process(bundleData)
     }
+*/
 
     def extractIds: Set[Id] = {
       def process(s: Signed[BundleData]): Set[Id] = {
@@ -338,7 +339,7 @@ object Schema {
   case class DownloadResponse(
                                bestBundle: Bundle,
                                genesisBundle: Bundle,
-                               genesisTXData: TXData
+                               genesisTX: TX
                              ) extends DownloadMessage
 
   final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage

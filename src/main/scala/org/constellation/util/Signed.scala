@@ -131,11 +131,11 @@ trait POWSignHelp {
 
   def createTransactionSafe(
                              src: String, dst: String, amount: Long, keyPair: KeyPair, normalized: Boolean = true
-                           ): (TX, TXData) = {
+                           ): TX = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
-    val txData = TXData(src, dst, amountToUse)
-    val tx = TX(hashSign(txData.hash, keyPair))
-    tx -> txData
+    val txData = TXData(src, dst, amountToUse).signed()(keyPair)
+    val tx = TX(txData)
+    tx
   }
 
 }
