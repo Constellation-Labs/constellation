@@ -5,22 +5,15 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorRef}
 import akka.io.{IO, Udp}
-import akka.serialization.SerializationExtension
 import akka.util.{ByteString, Timeout}
-import com.esotericsoftware.kryo.Kryo
-import com.esotericsoftware.kryo.io.Input
-import org.constellation.primitives.Schema.Id
+import org.constellation.consensus.Consensus.RemoteMessage
 
 import scala.collection.mutable
 
 // Consider adding ID to all UDP messages? Possibly easier.
 case class UDPMessage(data: Any, remote: InetSocketAddress)
 case class GetUDPSocketRef()
-case class UDPSend(data: ByteString, remote: InetSocketAddress)
-case class UDPSendJSON(data: Any, remote: InetSocketAddress)
-case class UDPSendToIDByte(data: ByteString, remote: Id)
-case class UDPSendToID[T](data: T, remote: Id)
-case class UDPSendTyped[T](data: T, remote: InetSocketAddress)
+case class UDPSend[T <: RemoteMessage](data: T, remote: InetSocketAddress)
 case class RegisterNextActor(nextActor: ActorRef)
 case class GetSelfAddress()
 case class Ban(address: InetSocketAddress)
@@ -50,7 +43,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
   implicit val timeout: Timeout = Timeout(10, TimeUnit.SECONDS)
 
-  private val packetGroups = scala.collection.mutable.HashMap[Long, mutable.HashMap[Int, SerializedUDPMessage]]()
+  private val packetGroups = mutable.HashMap[Long, mutable.HashMap[Int, SerializedUDPMessage]]()
 
   import constellation._
 
@@ -79,7 +72,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
         val byteArray = data.toArray
 
-        val serMsg = byteArray.kryoRead.asInstanceOf[SerializedUDPMessage]
+        val serMsg = kryoPool.fromBytes(byteArray, classOf[SerializedUDPMessage])
 
         this.synchronized {
 
@@ -98,9 +91,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
                     val dat = messages.values.toList.sortBy(_.packetGroupId).flatMap{_.data}.toArray
 
-                    val kryoInput = new Input(dat)
-
-                    val deser = Some(kryo.readClassAndObject(kryoInput))
+                    val deser = Some(kryoPool.fromBytes(dat, classOf[Any]))
 
                     println(s"Received BULK UDP message from $remote -- $deser -- sending to $nextActor")
 
@@ -121,20 +112,11 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
       }
 
     case UDPSend(data, remote) =>
-      socket ! Udp.Send(data, remote)
+      val ser: Seq[SerializedUDPMessage] = udpSerializeGrouped(data)
 
-    case UDPSendTyped(dataA, remote) =>
-      import constellation.UDPSerExt
-
-      val ser = dataA.asInstanceOf[AnyRef].udpSerializeGrouped()
-
-     // ser.foreach{ s => self ! UDPSend(ByteString(s.json), remote)}
-
-      ser.foreach{ s => {
-    //    self ! UDPSend(ByteString(pool.toBytesWithClass(s)), remote)
+      ser.foreach{ s: SerializedUDPMessage => {
+        socket ! Udp.Send(ByteString(kryoPool.toBytesWithClass(s)), remote)
       }}
-
-    case u @ UDPSendToID(_, _) => nextActor.foreach{ na => na ! u}
 
     case RegisterNextActor(next) => nextActor = Some(next)
 
@@ -150,15 +132,13 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
     case Udp.Unbound => context.stop(self)
 
-    case x =>
-      println(s"UDPActor unrecognized message: $x")
-
   }
+
 }
 
 // Change packetGroup to UUID
-case class SerializedUDPMessage(data: Array[Byte],
-                                serializer: Int,
+case class SerializedUDPMessage(data: ByteString,
+                                typeClassName: String,
                                 packetGroup: Long,
                                 packetGroupSize: Long,
-                                packetGroupId: Int) extends Serializable
+                                packetGroupId: Int)

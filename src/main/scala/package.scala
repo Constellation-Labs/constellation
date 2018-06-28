@@ -1,23 +1,22 @@
 
-import java.io.ByteArrayOutputStream
 import java.net.InetSocketAddress
-import java.security.{KeyPair, PrivateKey, PublicKey}
+import java.security.{KeyPair, PublicKey}
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.model.HttpResponse
-import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers, Unmarshal}
-import akka.serialization.SerializationExtension
+import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.ActorMaterializer
 import akka.util.{ByteString, Timeout}
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
+import com.esotericsoftware.minlog.Log
 import com.google.common.hash.Hashing
-import com.twitter.chill.{IKryoRegistrar, KryoBase, KryoPool, ScalaKryoInstantiator}
+import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
+import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.{Address, Bundle, Id}
 import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
-import org.constellation.crypto.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
 import org.constellation.crypto.KeyUtilsExt
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
@@ -113,81 +112,47 @@ package object constellation extends KeyUtilsExt with POWExt
     }
   }
 
-  val kryo: KryoBase = {
-    val instantiator = new ScalaKryoInstantiator()
-    instantiator.setRegistrationRequired(true)
-    instantiator.newKryo()
-  }
+  class SerializedUDPMessageSerializer extends Serializer[SerializedUDPMessage] {
+    override def write(kryoI: Kryo, output: Output, `object`: SerializedUDPMessage): Unit = {
+      kryoI.writeClassAndObject(output, `object`)
+    }
 
-  kryo.register(classOf[SerializedUDPMessage])
-
-  kryo.register(classOf[PublicKey], new PubKeyKryoSerializer())
-
-  kryo.addDefaultSerializer(classOf[PublicKey], new PubKeyKryoSerializer())
-
-  implicit class KryoExt[T](a: T) {
-    def kryoWrite: Array[Byte] = {
-      val out = new Output(32, 1024*1024*100)
-      kryo.writeClassAndObject(out, a)
-      out.getBuffer
+    override def read(kryoI: Kryo, input: Input, `type`: Class[SerializedUDPMessage]): SerializedUDPMessage = {
+      kryoI.readClassAndObject(input).asInstanceOf[SerializedUDPMessage]
     }
   }
 
-  implicit class KryoExtByte(a: Array[Byte]) {
-    def kryoRead: AnyRef = {
-      val kryoInput = new Input(a)
-      val deser = kryo.readClassAndObject(kryoInput)
-      deser
-    }
+  def guessThreads: Int = {
+    val cores = Runtime.getRuntime.availableProcessors
+    val GUESS_THREADS_PER_CORE = 4
+    GUESS_THREADS_PER_CORE * cores
   }
 
-  implicit class UDPSerExt[T <: AnyRef](data: T)(implicit system: ActorSystem) {
-    def udpSerialize(
-                      packetGroup: Option[Long] = None,
-                      packetGroupSize: Option[Long] = None, packetGroupId: Option[Int] = None
-                    ): SerializedUDPMessage = {
-      val serialization = SerializationExtension(system)
-      val serializer = serialization.findSerializerFor(data)
-      val bytes = serializer.toBinary(data)
-      val serMsg = SerializedUDPMessage(bytes, serializer.identifier, 1, 1, 1)
-      serMsg
-    }
+  val kryoPool: KryoPool = KryoPool.withBuffer(guessThreads,
+    new ScalaKryoInstantiator(), 32, 1024*1024*100)
 
-    def udpSerializeGrouped(groupSize: Int = 500): Seq[SerializedUDPMessage] = {
-      val serialization = SerializationExtension(system)
-      val serializer = serialization.findSerializerFor(data)
-      val bytes = serializer.toBinary(data)
+  Log.TRACE()
 
-      data.getClass.getSimpleName
+  /*
+  kryoInstance.register(classOf[SerializedUDPMessage], new SerializedUDPMessageSerializer())
 
-      if (bytes.length < groupSize) {
-        Seq(SerializedUDPMessage(bytes, serializer.identifier, 1, 1, 1))
-      } else {
-        val idx = bytes.grouped(groupSize).zipWithIndex.toSeq
-        val pg = Random.nextLong()
-        idx.map { case (b, i) =>
-          SerializedUDPMessage(b, serializer.identifier,
-            packetGroup = pg, packetGroupSize = idx.length, packetGroupId = i)
-        }
-      }
-    }
-  }
+  kryoInstance.addDefaultSerializer(classOf[SerializedUDPMessage], new SerializedUDPMessageSerializer())
 
-  implicit class UDPActorExt(udpActor: ActorRef) {
+  kryoInstance.register(classOf[PublicKey], new PubKeyKryoSerializer())
 
-    def udpSendToId[T <: AnyRef](data: T, remote: Id)(implicit system: ActorSystem): Unit = {
-      udpActor ! UDPSendToID(data, remote)
-    }
+  kryoInstance.addDefaultSerializer(classOf[PublicKey], new PubKeyKryoSerializer())
+  */
 
-    def udpSend[T <: AnyRef](data: T, remote: InetSocketAddress)(implicit system: ActorSystem): Unit = {
-      data.udpSerializeGrouped().foreach { d =>
-        udpActor ! UDPSend(ByteString(d.kryoWrite), remote)
-      }
-    }
+  def udpSerializeGrouped[T <: RemoteMessage](data: T, groupSize: Int = 500): Seq[SerializedUDPMessage] = {
+    val bytes = kryoPool.toBytesWithClass(data)
 
-    def udpSign[T <: ProductHash](data: T, remote: InetSocketAddress, difficulty: Int = 0)
-                                 (implicit system: ActorSystem, keyPair: KeyPair): Unit = {
-      udpActor ! UDPSendTyped(data.signed(), remote)
+    val idx = bytes.grouped(groupSize).zipWithIndex.toSeq
+
+    val pg = Random.nextLong()
+
+    idx.map { case (b, i) =>
+      SerializedUDPMessage(ByteString(b), data.getClass.getName,
+        packetGroup = pg, packetGroupSize = idx.length, packetGroupId = i)
     }
   }
 

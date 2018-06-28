@@ -6,6 +6,7 @@ import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
 import akka.util.Timeout
 import constellation._
 import org.constellation.consensus.Consensus._
+import org.constellation.p2p.UDPSend
 import org.constellation.primitives.Schema._
 
 import scala.collection.immutable.HashMap
@@ -29,7 +30,7 @@ object Consensus {
 
   case class RoundHash[+T <: CC](hash: String)
 
-  sealed trait RemoteMessage
+  trait RemoteMessage
 
   case class ConsensusVote[+T <: CC](id: Id, data: VoteData[T], roundHash: RoundHash[T]) extends RemoteMessage
   case class ConsensusProposal[+T <: CC](id: Id, data: ProposalData[T], roundHash: RoundHash[T]) extends RemoteMessage
@@ -75,7 +76,7 @@ object Consensus {
 
     // TODO: here replace with call to gossip actor
     notifyFacilitators(facilitators, self, f => {
-      udpActor.udpSendToId(message, f)
+      udpActor ! UDPSend(message, addressToSocket(f.address.address))
     })
 
     true
