@@ -37,7 +37,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
   def genesisCheck(): Unit = {
 
     // First node who did genesis
-    val bbExist = Option(bestBundle).exists {_.txBelow.size >= minGenesisDistrSize}
+    val bbExist = Option(bestBundle).exists {_.txBelow.size >= minGenesisDistrSize - 1}
     if ( genesisAdditionCheck && bbExist) acceptBundle(bestBundle)
 
     // Other peers
@@ -61,6 +61,12 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     if (validBundles.last.hash == ph) {
       txs ++ b.txBelow
     } else {
+      if (!bundleHashToBundle.contains(ph)) {
+        syncPendingBundleHashes += ph
+        bundleHashToBundle.remove(b.hash)
+        activeDAGBundles = activeDAGBundles.filter{_ != b}
+        Set[String]()
+      } else
       extractTXHashUntilValidationHashReached(
         bundleHashToBundle(b.extractParentBundleHash.pbHash),
         txs ++ b.txBelow
@@ -78,7 +84,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       if (memPoolTX.size < 50) {
         Seq.fill(3){randomTransaction()}
       } else {
-        randomTransaction()
+        if (Random.nextDouble() < .1) randomTransaction()
       }
     }
   }
@@ -97,11 +103,15 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
       simulateTransactions()
 
-      activeDAGBundles = activeDAGBundles.sortBy(z => (-1 * z.meta.totalScore, z.hash))
-
-      if (activeDAGBundles.size > 50) {
-        activeDAGBundles = activeDAGBundles.zipWithIndex.filter{_._2 < 20}.map{_._1}
+      if (memPool.size > 500) {
+        memPool = memPool.slice(0, 250)
       }
+/*
+      if (validBundles.size > 4 && (System.currentTimeMillis() > (lastConfirmationUpdateTime + 30000))) {
+        activeDAGBundles = Seq()
+      }*/
+
+      activeDAGBundles = activeDAGBundles.sortBy(z => (-1 * z.meta.totalScore, z.hash))
 
       val bb: Option[Bundle] = if (genesisAdditionCheck) activeDAGBundles.headOption else {
         activeDAGBundles.find{_.maxStackDepth >= 2}
@@ -117,15 +127,15 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         )
       )
 
-      val txInBestBundleNewFromValidationHash = bb.map{b => extractTXHashUntilValidationHashReached(b)}.getOrElse(Set[String]())
+//      val txInBestBundleNewFromValidationHash = bb.map{b => b.extractTXHash.map{_.txHash}}.getOrElse(Set[String]())
 
       // || peers have no bundles / stalled.
       val memPoolEmit = Random.nextInt() < 0.2 // && (System.currentTimeMillis() < lastBundle.maxTime + 25000)
-      val filteredMempool = memPool.diff(txInBestBundleNewFromValidationHash)
+      val filteredMempool = memPool //.diff(txInBestBundleNewFromValidationHash)
 
-      def doMempool() = {
+      def doMempool(): Unit = {
         // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
-        val memPoolSelSize = Random.nextInt(45)
+        val memPoolSelSize = 5 + Random.nextInt(50)
         val memPoolSelection = Random.shuffle(filteredMempool.toSeq).slice(0, memPoolSelSize + minGenesisDistrSize + 1)
         val b = Bundle(
           BundleData(
@@ -141,37 +151,48 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       }
 
       if (validBundles.size < 2) {
-        if (genesisAdditionCheck) doMempool()
+        if (genesisAdditionCheck && activeDAGBundles.isEmpty && memPool.size >= minGenesisDistrSize - 1) doMempool()
       } else if (filteredMempool.nonEmpty && memPoolEmit) doMempool()
 
 
       genesisCheck()
 
-      //  if (System.currentTimeMillis() < (lastBundle.maxTime + 10000)) {
-      val nonSelfIdCandidates = activeDAGBundles.filter { b => !b.idBelow.contains(id) }
-   //   logger.debug(s"Num nonSelfIdCandidates ${id.short} ${nonSelfIdCandidates.size}")
+      var toRemove: Set[Bundle] = Set()
 
-      nonSelfIdCandidates
-        .groupBy(b => b.maxStackDepth -> b.extractParentBundleHash).foreach {
-        case (_, bundles) =>
-          //val sorted = bundles.sortBy(b => (b.idBelow.size, b.txBelow.size, b.hash))
-          val random = Random.shuffle(bundles).slice(0, 5)
-          val iterator = random.combinations(2)
-          iterator.foreach {
-            case both@Seq(l, r) =>
-              val hasNewTransactions = l.txBelow.diff(r.txBelow).nonEmpty
-              val minTimeClose = Math.abs(l.minTime - r.minTime) < 25000
-              if (hasNewTransactions && minTimeClose && Random.nextDouble() > 0.5) {
-                val b = Bundle(BundleData(both).signed())
-                processNewBundleMetadata(b, b.extractTX)
-                broadcast(b)
-          //      println(s"Created new depth bundle ${b.maxStackDepth}")
-              }
-          }
+      if (validBundles.size >= 2) {
+        //  if (System.currentTimeMillis() < (lastBundle.maxTime + 10000)) {
+        val nonSelfIdCandidates = activeDAGBundles.filter { b => !b.idBelow.contains(id) }
+        //   logger.debug(s"Num nonSelfIdCandidates ${id.short} ${nonSelfIdCandidates.size}")
+
+        val grouped = nonSelfIdCandidates
+          .groupBy(b => b.maxStackDepth -> b.extractParentBundleHash)
+
+        grouped.foreach {
+          case (_, bundles) =>
+            //val sorted = bundles.sortBy(b => (b.idBelow.size, b.txBelow.size, b.hash))
+            val random = Random.shuffle(bundles).slice(0, 5)
+            if (bundles.size > 30) {
+              toRemove = toRemove ++ Random.shuffle(bundles).slice(0, 10)
+            }
+           val iterator = random.combinations(2)
+            iterator.foreach {
+              case both@Seq(l, r) =>
+                val hasNewTransactions = l.txBelow.diff(r.txBelow).nonEmpty
+                val minTimeClose = Math.abs(l.minTime - r.minTime) < 40000
+                if (Random.nextDouble() > 0.5 &&  hasNewTransactions && minTimeClose) { //
+                  val b = Bundle(BundleData(both).signed())
+                  processNewBundleMetadata(b, b.extractTX)
+                  broadcast(b)
+                  toRemove = toRemove ++ Set(l, r)
+                  //      println(s"Created new depth bundle ${b.maxStackDepth}")
+                }
+            }
+        }
       }
 
-      val chainConfirmationLength = 5
-      val chainAddLength = 2
+
+      val chainConfirmationLength = 4
+      val chainAddLength = 1
 
       bb.foreach{ b =>
 
@@ -179,16 +200,35 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         if (ancestors.length > chainConfirmationLength) {
           val chainToAdd = ancestors.slice(0, chainAddLength).map{bundleHashToBundle}
           val txToAdd = extractTXHashUntilValidationHashReached(chainToAdd.last).map{a => db.getAs[TX](a).get}
-          txToAdd.foreach{
-            t =>
-              acceptTransaction(t)
+          if (txToAdd.nonEmpty) {
+            txToAdd.foreach {
+              t =>
+                acceptTransaction(t)
+            }
+            val prvSize = validBundles.size
+            validBundles ++= chainToAdd
+            calculateReputationsFromScratch(prvSize - 1)
+            lastConfirmationUpdateTime = System.currentTimeMillis()
           }
-          val prvSize = validBundles.size
-          validBundles ++= chainToAdd
-          calculateReputationsFromScratch(prvSize-1)
         }
 
       }
+
+
+      val maxHeight = if (activeDAGBundles.isEmpty) 0 else activeDAGBundles.maxBy(_.meta.height).meta.height
+      val minPBHash = if (validBundles.length > 5) {
+        activeDAGBundles.groupBy(_.extractParentBundleHash).minBy(_._2.size)._1.pbHash
+      } else ""
+
+      activeDAGBundles = activeDAGBundles.filter{b =>
+        !toRemove.contains(b) || b.meta.height < (maxHeight - 3) || b.extractParentBundleHash.pbHash == minPBHash
+      }
+
+
+      if (activeDAGBundles.size > 200) {
+        activeDAGBundles = activeDAGBundles.sortBy(_.meta.totalScore).zipWithIndex.filter{_._2 < 80}.map{_._1}
+      }
+
 
       /*
           bb.foreach { b =>
@@ -266,7 +306,12 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
       case bb: PeerSyncHeartbeat =>
         //    println(s"RECEIVED PEER SYNC OF MEMPOOL SIZE ${bb.memPool.size}")
-        bb.bundle.foreach{b => handleBundle(b)}
+        bb.bundle.foreach{b =>
+    //      if (bundleHashToBundle.contains(b.hash) && !activeDAGBundles.contains(b)) {
+     //       activeDAGBundles = activeDAGBundles :+ b
+      //    }
+          handleBundle(b)
+        }
         rid.foreach{ r =>
           peerSync(r) = bb
         }

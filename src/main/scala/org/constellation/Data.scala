@@ -72,7 +72,8 @@ class Data {
   }
 */
 
-  var minGenesisDistrSize: Int = 2
+  var minGenesisDistrSize: Int = 3
+  var lastConfirmationUpdateTime: Long = System.currentTimeMillis()
 
   @volatile var heartbeatRound = 0L
 
@@ -183,32 +184,38 @@ class Data {
       db.put(bundle)
     }
 
+    val indexed = bundleHashToBundle.contains(bundle.hash)
     val parentHash = bundle.extractParentBundleHash.pbHash
     val parentKnown = db.contains(parentHash)
     val parentIndexed = bundleHashToBundle.contains(parentHash)
 
-    // ^ change to access meta data only otherwise won't connect properly.
-    if (!parentKnown || !parentIndexed) {
-      totalNumBundleHashRequests += 1
-      if (parentHash != genesisTXHash) {
-        syncPendingBundleHashes += parentHash
-      }
-      // broadcast(RequestBundleData(parentHash))
-    } else {
+    if (!indexed) {
+      // ^ change to access meta data only otherwise won't connect properly.
+      if (!parentIndexed) {
+        totalNumBundleHashRequests += 1
+        if (parentHash != genesisTXHash) {
+          syncPendingBundleHashes += parentHash
+        }
+        // broadcast(RequestBundleData(parentHash))
+      } else {
 
-   //   logger.debug(s"Handle bundle parentIndexed: $parentIndexed parentHash ${parentHash.slice(0, 5)}")
+        //   logger.debug(s"Handle bundle parentIndexed: $parentIndexed parentHash ${parentHash.slice(0, 5)}")
         val txs = bundle.extractTXHash
         val missingHashes = txs.filterNot(z => db.contains(z.txHash))
         val haveAllTXData = missingHashes.isEmpty
-   //     logger.debug(s"Handle bundle txHashSize : ${txs.size}, missing hashes ${missingHashes.size} $haveAllTXData")
+        //     logger.debug(s"Handle bundle txHashSize : ${txs.size}, missing hashes ${missingHashes.size} $haveAllTXData")
         if (!haveAllTXData) {
-          syncPendingTXHashes ++= missingHashes.map{_.txHash}
+          syncPendingTXHashes ++= missingHashes.map {
+            _.txHash
+          }
         } else {
           val txActual = bundle.extractTX
           val validBatch = validateTXBatch(txActual)
           if (validBatch) {
             totalNumNewBundleAdditions += 1
-            txActual.foreach {updateMempool}
+            txActual.foreach {
+              updateMempool
+            }
             processNewBundleMetadata(bundle, txActual)
             syncPendingBundleHashes -= bundle.hash
             numSyncedBundles += 1
@@ -217,6 +224,7 @@ class Data {
             totalNumInvalidBundles += 1
           }
         }
+      }
     }
 
     // Also need to verify there are not multiple occurrences of same id re-signing bundle, and reps.
@@ -263,7 +271,7 @@ class Data {
     // def idAbove = bundleHashToIdsAbove(b.hash)
     def repScore: Double = idBelow.toSeq.map { id => normalizedDeterministicReputation.getOrElse(id, 0.1)}.sum
     def bundleScore: Double = {
-      b.maxStackDepth * 100 +
+      b.maxStackDepth * 300 +
         txBelow.size +
         repScore * 10
     }
@@ -401,6 +409,7 @@ class Data {
   @volatile var totalNumInvalidBundles = 0
   @volatile var totalNumNewBundleAdditions = 0
   @volatile var totalNumBroadcastMessages = 0
+  @volatile var totalNumValidatedTX = 0
 
   def handleSendRequest(s: SendToAddress): StandardRoute = {
     val tx = createTransaction(s.dst, s.amount, s.normalized)
@@ -409,14 +418,17 @@ class Data {
 
   def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
 
-    if (last1000ValidTX.size >= 1000) {
-      last1000ValidTX = last1000ValidTX.tail :+ tx.hash
-    } else {
-      last1000ValidTX = last1000ValidTX :+ tx.hash
-    }
+    if (!last1000ValidTX.contains(tx.hash)) {
+      if (last1000ValidTX.size >= 1000) {
+        last1000ValidTX = last1000ValidTX.tail :+ tx.hash
+      } else {
+        last1000ValidTX = last1000ValidTX :+ tx.hash
+      }
+      totalNumValidatedTX += 1
 
-    tx.txData.data.updateLedger(validLedger)
-    memPool -= tx.hash
+      tx.txData.data.updateLedger(validLedger)
+      memPool -= tx.hash
+    }
   }
 
   val bundleHashToBundleMetaData: TrieMap[String, BundleMetaData] = TrieMap()

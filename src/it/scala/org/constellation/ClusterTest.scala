@@ -162,7 +162,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     }
 
     Thread.sleep(20000)
-
+/*
     for (rpc  <- rpcs) {
       val ip = rpc.host
       println(s"Trying to add nodes to $ip")
@@ -176,7 +176,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       }
     }
 
-    Thread.sleep(20000)
+    Thread.sleep(20000)*/
 
     val peers1 = rpcs.head.get("peerids").get()
     println(s"Peers1 : $peers1")

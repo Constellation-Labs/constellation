@@ -83,7 +83,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
 
 
-    Thread.sleep(5000)
+    Thread.sleep(3000)
 
     println("-"*10)
     println("Initial distribution")
@@ -95,7 +95,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       r1.postRead[TX]("sendToAddress", s)
     }
 
-    Thread.sleep(15000)
+    Thread.sleep(5000)
 
 
     def randomNode: ConstellationNode = nodes(Random.nextInt(nodes.length))
@@ -115,12 +115,12 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
 
 
-    val numTX = 200
+    val numTX = 2000
 
     val start = System.currentTimeMillis()
 
     val txResponse = Seq.fill(numTX) {
-      Thread.sleep(1000)
+      Thread.sleep(100)
       sendRandomTransaction
     }
 

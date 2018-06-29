@@ -112,8 +112,10 @@ class API(
             "id" -> id.b58,
             "keyPair" -> keyPair.json,
             "shortId" -> id.short,
+            "numSyncedTX" -> numSyncedTX.toString,
+            "numSyncedBundles" -> numSyncedBundles.toString,
             "numValidBundles" -> validBundles.size.toString,
-            "numValidTransactions" -> last1000ValidTX.size.toString,
+            "numValidTransactions" -> totalNumValidatedTX.toString,
             "memPoolSize" -> memPool.size.toString,
             "totalNumBroadcasts" -> totalNumBroadcastMessages.toString,
             "totalNumBundleMessages" -> totalNumBundleMessages.toString,
@@ -225,7 +227,7 @@ class API(
         path("dashboard") {
           val bundleSubset = validBundles.take(20)
 
-          val transactions: Set[TX] = bundleSubset.flatMap(b => b.extractTX).sortBy(_.tx.time).toSet
+          val transactions: Set[TX] = bundleSubset.flatMap(b => b.extractTX).sortBy(_.txData.time).toSet
 
           complete(Map(
             "peers" -> peers.map{_.data},
