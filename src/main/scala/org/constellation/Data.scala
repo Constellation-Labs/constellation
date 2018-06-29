@@ -175,21 +175,40 @@ class Data {
   @volatile var numSyncedBundles: Int = 0
   @volatile var numSyncedTX: Int = 0
 
-  def handleBundle(bundle: Bundle): Unit = {
+  def ancestorWithTotalScoreExists(parentBundle: Bundle) = {
+    val bmd = db.getAs[BundleMetaData](parentBundle.hash)
+    val parent2 = bmd.map{
+      _.parentBundle
+    }
+  }
 
+  def handleBundle(bundle: Bundle): Unit = {
 
     totalNumBundleMessages += 1
 
-    val notPresent = !db.contains(bundle)
+    val parentHash = bundle.extractParentBundleHash.pbHash
+    val bmd = db.getAs[BundleMetaData](bundle.hash)
 
+    val notPresent = bmd.isEmpty
     if (notPresent) {
+
+      val parent = db.getAs[BundleMetaData](parentHash)
+      if (parent.isEmpty) {
+        val bmdZero = BundleMetaData(bundle, bundle.bundleScore, None, None, None)
+        db.put(bundle.hash, bmdZero)
+        syncPendingBundleHashes += parentHash
+      } else {
+        val par = parent.get
+        val parentHasKnownParent = par.parentBundle.nonEmpty
+        if (parentHasKnownParent) {
+          BundleMetaData(
+            bundle, bundle.bundleScore, Some(par.bundle), Some(par.height.get + 1), Some(par.totalScore.get)
+          )
+        }
+
+      }
       db.put(bundle)
     }
-
-    val indexed = bundleHashToBundle.contains(bundle.hash)
-    val parentHash = bundle.extractParentBundleHash.pbHash
-    val parentKnown = db.contains(parentHash)
-    val parentIndexed = bundleHashToBundle.contains(parentHash)
 
     if (!indexed) {
       // ^ change to access meta data only otherwise won't connect properly.

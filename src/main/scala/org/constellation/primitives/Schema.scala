@@ -143,14 +143,11 @@ object Schema {
 
   case class BundleMetaData(
                              bundle: Bundle,
-                             parentBundle: Option[Bundle],
-                             height: Option[Int],
-                             depth: Int,
-                             numTX: Int,
-                             numID: Int,
                              score: Double,
-                             totalScore: Option[Double],
-                             rxTime: Long
+                             parentBundle: Option[Bundle] = None,
+                             height: Option[Int] = None,
+                             totalScore: Option[Double] = None,
+                             rxTime: Long = System.currentTimeMillis()
                            ) {
     def parentHash: Option[String] = parentBundle.map{_.hash}
   }

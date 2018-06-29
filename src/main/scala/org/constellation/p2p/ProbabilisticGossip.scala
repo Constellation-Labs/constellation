@@ -212,10 +212,10 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         }
       }
 
-   /*   if (heartbeatRound % 10 == 0 && totalNumValidBundles > 3) {
-        runParityCheck()
-      }
-*/
+      /*   if (heartbeatRound % 10 == 0 && totalNumValidBundles > 3) {
+           runParityCheck()
+         }
+   */
 
       Option(bestBundle).filter{_ => totalNumValidBundles >= 2}.foreach{ b =>
 
@@ -233,57 +233,57 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
             activeDAGBundles = Seq()
           }
         }
-/*
+        /*
 
-        ancestors.headOption.foreach{ fa =>
+                ancestors.headOption.foreach{ fa =>
 
-          val firstCommonAncestor = last1000BundleHashes
-            .zipWithIndex.collectFirst{case (x,y) if x == fa => y}
-            .filter{ ce =>
-              last1000BundleHashes
-                .slice(ce, last1000BundleHashes.size)
-                .zip(ancestors)
-                .forall{ case (z,w) => z == w} && ancestors.contains(last1000BundleHashes.last) &&
-              ancestors.length > 6
-            }
+                  val firstCommonAncestor = last1000BundleHashes
+                    .zipWithIndex.collectFirst{case (x,y) if x == fa => y}
+                    .filter{ ce =>
+                      last1000BundleHashes
+                        .slice(ce, last1000BundleHashes.size)
+                        .zip(ancestors)
+                        .forall{ case (z,w) => z == w} && ancestors.contains(last1000BundleHashes.last) &&
+                      ancestors.length > 6
+                    }
 
-          firstCommonAncestor.foreach{ ce =>
+                  firstCommonAncestor.foreach{ ce =>
 
-            val newestToAdd = ancestors.zipWithIndex.find(_._1 == last1000BundleHashes.last).get._2 + 1
-            val newAncestors = ancestors.slice(newestToAdd, ancestors.size)
-            if (newAncestors.size > 7) {
+                    val newestToAdd = ancestors.zipWithIndex.find(_._1 == last1000BundleHashes.last).get._2 + 1
+                    val newAncestors = ancestors.slice(newestToAdd, ancestors.size)
+                    if (newAncestors.size > 7) {
 
-              val toAdd = newAncestors.slice(0, newAncestors.size - 5)
+                      val toAdd = newAncestors.slice(0, newAncestors.size - 5)
 
-              //val toAdd = ancestors.filterNot(last1000BundleHashes.contains)
-              if (toAdd.nonEmpty) {
-                activeDAGBundles = Seq()
-                println("Adding from ancestor extraction")
-                totalNumValidBundles += toAdd.size
-                if (last1000BundleHashes.size > 1000) {
-                  last1000BundleHashes = (last1000BundleHashes ++ toAdd).slice(toAdd.size, 1000)
-                } else {
-                  last1000BundleHashes ++= toAdd
+                      //val toAdd = ancestors.filterNot(last1000BundleHashes.contains)
+                      if (toAdd.nonEmpty) {
+                        activeDAGBundles = Seq()
+                        println("Adding from ancestor extraction")
+                        totalNumValidBundles += toAdd.size
+                        if (last1000BundleHashes.size > 1000) {
+                          last1000BundleHashes = (last1000BundleHashes ++ toAdd).slice(toAdd.size, 1000)
+                        } else {
+                          last1000BundleHashes ++= toAdd
+                        }
+                        val chainToAdd = toAdd.map {
+                          bundleHashToBundle
+                        }
+                        val txToAdd = chainToAdd.flatMap(_.extractTX)
+                        txToAdd.foreach {
+                          t =>
+                            acceptTransaction(t)
+                        }
+                        calculateReputationsFromScratch(totalNumValidBundles - toAdd.size - 1)
+                        lastConfirmationUpdateTime = System.currentTimeMillis()
+                      }
+                    }
+
+
+                  }
+
                 }
-                val chainToAdd = toAdd.map {
-                  bundleHashToBundle
-                }
-                val txToAdd = chainToAdd.flatMap(_.extractTX)
-                txToAdd.foreach {
-                  t =>
-                    acceptTransaction(t)
-                }
-                calculateReputationsFromScratch(totalNumValidBundles - toAdd.size - 1)
-                lastConfirmationUpdateTime = System.currentTimeMillis()
-              }
-            }
 
-
-          }
-
-        }
-
-*/
+        */
 
         //last1000BundleHashes.
 
@@ -353,9 +353,9 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       case BatchBundleHashRequest(hashes) =>
 
         hashes.foreach{h =>
-          db.getAs[Bundle](h).foreach{
+          db.getAs[BundleMetaData](h).foreach{
             b =>
-              udpActor.udpSend(b, remote)
+              udpActor.udpSend(b.bundle, remote)
           }
         }
 
@@ -372,12 +372,11 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
       case tx: TX =>
 
-
         if (!db.contains(tx)) {
+          syncPendingTXHashes -= tx.hash
+          db.put(tx)
           numSyncedTX += 1
         }
-        syncPendingTXHashes -= tx.hash
-        db.put(tx)
 
       case bb: PeerSyncHeartbeat =>
         handleBundle(bb.bestBundle)
@@ -388,7 +387,6 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       case g : Gossip[ProductHash] =>
       // handleGossipRegular(g, remote)
       case x =>
-
         logger.debug("Unrecognized gossip message " + x)
     }
   }
