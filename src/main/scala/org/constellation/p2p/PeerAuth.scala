@@ -29,11 +29,12 @@ trait PeerAuth {
   implicit val actorSystem: ActorSystem
 
   def broadcast[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
-    val dest = if (idSubset.isEmpty) peerIDLookup.keys else idSubset
+    val dest: Iterable[Id] = if (idSubset.isEmpty) peerIDLookup.keys else idSubset
+
     dest.foreach{ i =>
       if (!skipIDs.contains(i)) {
         totalNumBroadcastMessages += 1
-        self ! UDPSend(message, addressToSocket(i.address.address))
+        self ! UDPSend(message, peerIDLookup(i).data.externalAddress)
       }
     }
   }

@@ -124,11 +124,9 @@ class Data {
   @volatile var bestBundleCandidateHashes: Set[BundleHash] = Set()
   @volatile var lastSquashed: Option[Bundle] = None
 
-
   @volatile var bundlePendingTX : Set[TX] = Set()
 
   val unknownParentBundleHashes: TrieMap[String, PeerSyncHeartbeat] = TrieMap()
-
 
   def jaccard[T](t1: Set[T], t2: Set[T]): Double = {
     t1.intersect(t2).size.toDouble / t1.union(t2).size.toDouble

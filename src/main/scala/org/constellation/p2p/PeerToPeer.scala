@@ -75,7 +75,6 @@ class PeerToPeer(
             }.mkString(",")}"
         )
 
-
       }
 
     // Peer messages

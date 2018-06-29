@@ -8,6 +8,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActor, TestKit, TestProbe}
 import akka.util.Timeout
+import org.constellation.Data
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.{RegisterNextActor, UDPMessage, UDPSend}
 import org.constellation.primitives.{Block, Transaction}
@@ -21,6 +22,7 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.GetPeersID
 import org.constellation.primitives.Schema._
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContextExecutor
 
@@ -56,7 +58,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     assert(!isNotFacilitator)
   }
 
-  "the PerformConsensusRound" should "initialize and complete correctly in the CONFLICT scenario" in new WithConsensusActor {
+  "the PerformConsensusRound" should "initialize and complete correctly in the CONFLICT scenario" ignore new WithConsensusActor {
     import constellation._
 
     val node2 = TestNode()
@@ -129,7 +131,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
   }
 
-  "the PerformConsensusRound" should "initialize and complete correctly in the CHECKPOINT scenario" in new WithConsensusActor {
+  "the PerformConsensusRound" should "initialize and complete correctly in the CHECKPOINT scenario" ignore new WithConsensusActor {
     import constellation._
 
     val node2 = TestNode()

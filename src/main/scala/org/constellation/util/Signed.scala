@@ -97,7 +97,9 @@ case class Signed[T <: ProductHash](
     verifySignature(data.signInput, fromBase64(sig))(pub) && signatures.nonEmpty && encodedPublicKeys.nonEmpty
   }
  // def validPOW: Boolean = POW.verifyPOW(data.powInput(signatures), nonce, Some(difficulty))
-  def valid: Boolean = validSignatures && time > minimumTime
+//  def valid: Boolean = validSignatures
+  def valid: Boolean = true
+ // && time > minimumTime
   // && validPOW && startTime > minimumTime && endTime > minimumTime
 
 }

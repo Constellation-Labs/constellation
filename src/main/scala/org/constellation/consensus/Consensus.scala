@@ -5,9 +5,11 @@ import java.security.KeyPair
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
 import akka.util.Timeout
 import constellation._
+import org.constellation.Data
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.UDPSend
 import org.constellation.primitives.Schema._
+import org.constellation.util.Signed
 
 import scala.collection.immutable.HashMap
 
@@ -76,7 +78,7 @@ object Consensus {
 
     // TODO: here replace with call to gossip actor
     notifyFacilitators(facilitators, self, f => {
-      udpActor ! UDPSend(message, addressToSocket(f.address.address))
+    //  udpActor ! UDPSend(message, peerIdLookup(f).data.externalAddress)
     })
 
     true
@@ -102,7 +104,8 @@ object Consensus {
 
     // tell everyone to perform a vote
     // TODO: update to only run during conflict voting, for now it's ignored
-    notifyFacilitatorsOfMessage(facilitators, self, StartConsensusRound(self, vote, roundHash), udpActor)
+    notifyFacilitatorsOfMessage(facilitators, self,
+      StartConsensusRound(self, vote, roundHash), udpActor)
 
     updatedState
   }
