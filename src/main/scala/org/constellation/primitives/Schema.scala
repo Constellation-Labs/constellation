@@ -145,6 +145,7 @@ object Schema {
                              bundle: Bundle,
                              height: Option[Int] = None,
                              reputations: Map[Id, Long] = Map(),
+                             totalScore: Option[Double] = None,
                              rxTime: Long = System.currentTimeMillis()
                            ) {
     def isResolved: Boolean = reputations.nonEmpty
@@ -210,6 +211,19 @@ object Schema {
 
     def extractSubBundlesMinSize(minSize: Int = 2) = {
       extractSubBundles.filter{_.maxStackDepth >= minSize}
+    }
+
+    def extractSubBundleHashes: Set[String] = {
+      def process(s: Signed[BundleData]): Set[String] = {
+        val bd = s.data.bundles
+        val depths = bd.map {
+          case b2: Bundle =>
+            Set(b2.hash) ++ process(b2.bundleData)
+          case _ => Set[String]()
+        }
+        depths.reduce(_ ++ _)
+      }
+      process(bundleData)
     }
 
     def extractSubBundles: Set[Bundle] = {

@@ -131,8 +131,8 @@ class API(
             "numActiveBundles" -> activeDAGBundles.size.toString,
             "last10TXHash" -> last100SelfSentTransactions.reverse.slice(0, 10).map{_.hash}.mkString(","),
             "last10ValidBundleHashes" -> last100BundleHashes.reverse.slice(0, 10).reverse.mkString(","),
-            "lastValidBundleHash" -> lastBundleHash.pbHash,
-            "lastValidBundle" -> Try{Option(lastBundle).map{_.pretty}.getOrElse("")}.getOrElse(""),
+            "lastValidBundleHash" -> lastValidBundleHash.pbHash,
+            "lastValidBundle" -> Try{Option(lastValidBundle).map{_.pretty}.getOrElse("")}.getOrElse(""),
             "z_genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
             "z_genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
             "selfBestBundle" -> Option(bestBundle).map{_.pretty}.getOrElse(""),
@@ -148,7 +148,7 @@ class API(
                   Try{z.pretty}.getOrElse("unknown")}.getOrElse("")} " // LAST: ${b.lastBestBundle.pretty}
             }.mkString(" ----- "),
             "allPeerSynchronizedLastHash" -> Try(
-              (peerSync.map{_._2.validBundleHashes.last} ++ Seq(lastBundle.hash)).toSet.size == 1
+              (peerSync.map{_._2.validBundleHashes.last} ++ Seq(lastValidBundle.hash)).toSet.size == 1
               ).map{_.toString}.getOrElse(""),
             "allPeerAllBundleHashSync" -> peerSync.forall{_._2.validBundleHashes == last100BundleHashes}.toString,
             "z_peers" -> peers.map{_.data}.json,

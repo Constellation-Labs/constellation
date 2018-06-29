@@ -7,9 +7,19 @@ import org.constellation.primitives.Schema._
 import org.constellation.util.ProductHash
 import constellation._
 
+import scala.collection.concurrent.TrieMap
+
 trait LinearGossip extends PeerAuth {
 
   val data: Data
+
+
+  // TODO: Make this a graph to prevent duplicate storages.
+  val txToGossipChains: TrieMap[String, Seq[Gossip[ProductHash]]] = TrieMap()
+
+  // This should be identical to levelDB hashes but I'm putting here as a way to double check
+  // Ideally the hash workload should prioritize memory and dump to disk later but can be revisited.
+  val addressToTX: TrieMap[String, TX] = TrieMap()
 
   import data._
 

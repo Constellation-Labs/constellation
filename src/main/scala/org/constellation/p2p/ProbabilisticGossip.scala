@@ -43,7 +43,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     if ( genesisAdditionCheck && bbExist) acceptBundle(bestBundle)
 
     // Other peers
-    if (lastBundleHash.pbHash == genesisBundle.hash && !(genesisBundle.extractIds.head == id)) {
+    if (lastValidBundleHash.pbHash == genesisBundle.hash && !(genesisBundle.extractIds.head == id)) {
       peerSync.get(genesisBundle.extractIds.head).foreach { b =>
         if (b.validBundleHashes.size == 2) {
           bundleHashToBundle.get(b.validBundleHashes.last).foreach { vb =>
