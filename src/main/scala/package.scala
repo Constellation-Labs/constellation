@@ -122,14 +122,6 @@ package object constellation extends KeyUtilsExt with POWExt
     }
   }
 
-  def guessThreads: Int = {
-    val cores = Runtime.getRuntime.availableProcessors
-    val GUESS_THREADS_PER_CORE = 4
-    GUESS_THREADS_PER_CORE * cores
-  }
-
-  val kryoPool: KryoPool = KryoPool.withBuffer(guessThreads,
-    new ScalaKryoInstantiator(), 32, 1024*1024*100)
 
   Log.TRACE()
 
@@ -143,18 +135,6 @@ package object constellation extends KeyUtilsExt with POWExt
   kryoInstance.addDefaultSerializer(classOf[PublicKey], new PubKeyKryoSerializer())
   */
 
-  def udpSerializeGrouped[T <: RemoteMessage](data: T, groupSize: Int = 500): Seq[SerializedUDPMessage] = {
-    val bytes = kryoPool.toBytesWithClass(data)
-
-    val idx = bytes.grouped(groupSize).zipWithIndex.toSeq
-
-    val pg = Random.nextLong()
-
-    idx.map { case (b, i) =>
-      SerializedUDPMessage(ByteString(b), data.getClass.getName,
-        packetGroup = pg, packetGroupSize = idx.length, packetGroupId = i)
-    }
-  }
 
   implicit class HTTPHelp(httpResponse: HttpResponse)
                          (implicit val materialize: ActorMaterializer) {

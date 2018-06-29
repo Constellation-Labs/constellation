@@ -33,6 +33,34 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
     TestKit.shutdownActorSystem(system)
   }
 
+  // Kryo
+  "UDPSerialization" should "round trip serialize and deserialize SerializedUDPMessage" in {
+    val message = SerializedUDPMessage(ByteString("test".getBytes), 1, 1, 1)
+
+    val serialized = UDPSerialization.serialize(message)
+
+    val deserialized = UDPSerialization.deserialize(serialized)
+
+    assert(message == deserialized)
+
+    val testMessage = TestMessage("test", 3)
+
+    val messages = UDPSerialization.serializeGrouped(testMessage)
+
+    val messagesSerialized = messages.map(UDPSerialization.serialize(_))
+
+    val messagesDeserialized: Seq[SerializedUDPMessage] = messagesSerialized.map(UDPSerialization.deserialize(_).asInstanceOf[SerializedUDPMessage])
+
+    val sorted = messagesDeserialized.sortBy(f => f.packetGroupId).flatMap(_.data).toArray
+
+    val deserializedSorted = UDPSerialization.deserialize(sorted)
+
+    assert(testMessage == deserializedSorted)
+
+  }
+
+  // UDP Actor
+
   "UDP Test" should "send UDP packets and receive them properly" in {
 
     val rx1 = TestProbe()
@@ -45,18 +73,17 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 
     val listener2 = system.actorOf(Props(new UDPActor(Some(rx2.ref), rPort2)), s"listener2")
 
-    val data = TestMessage("a", 1)
+    val testMessage = TestMessage("a", 1)
 
-    listener1 ! UDPSend(data, new InetSocketAddress("localhost", rPort1))
+    val testMessageBytes = UDPSerialization.serialize(testMessage)
 
-    listener2 ! UDPSend(data, new InetSocketAddress("localhost", rPort2))
+    listener1 ! UDPSend(testMessage, new InetSocketAddress("localhost", rPort2))
 
-    /*
+//    rx2.expectMsg(UDPMessage(SerializedUDPMessage(ByteString(testMessageBytes), 1, 1, 1), new InetSocketAddress("localhost", rPort1)))
 
-    test.expectMsg(UDPSend(data, new InetSocketAddress("localhost", rPort1)))
+    Thread.sleep(4000)
 
-    Thread.sleep(40000)
-    */
+//    .expectMsg(UDPSend(data, new InetSocketAddress("localhost", rPort1)))
 
     /*
     import akka.pattern.ask
@@ -70,6 +97,8 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
     Thread.sleep(100)
     */
   }
+
+/*
 
 /*  "UDP Serialize" should "work with regular methods" in {
 
@@ -161,6 +190,8 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
     addr.toString shouldEqual "localhost/127.0.0.1:5000"
 */
   }
+
+  */
 
   /*
   "Kryo serialize" should "work with keys" in {

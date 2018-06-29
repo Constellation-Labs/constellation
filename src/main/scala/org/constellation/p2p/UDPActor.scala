@@ -6,9 +6,13 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{Actor, ActorRef}
 import akka.io.{IO, Udp}
 import akka.util.{ByteString, Timeout}
+import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 import org.constellation.consensus.Consensus.RemoteMessage
 
+import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
+import scala.util.Random
+import constellation._
 
 // Consider adding ID to all UDP messages? Possibly easier.
 case class UDPMessage(data: Any, remote: InetSocketAddress)
@@ -43,7 +47,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
   implicit val timeout: Timeout = Timeout(10, TimeUnit.SECONDS)
 
-  private val packetGroups = mutable.HashMap[Long, mutable.HashMap[Int, SerializedUDPMessage]]()
+  private val packetGroups = TrieMap[Long, TrieMap[Int, SerializedUDPMessage]]()
 
   import constellation._
 
@@ -72,50 +76,51 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
         val byteArray = data.toArray
 
-        val serMsg = kryoPool.fromBytes(byteArray, classOf[SerializedUDPMessage])
+        val serMsg = UDPSerialization.deserialize(byteArray).asInstanceOf[SerializedUDPMessage]
 
-        this.synchronized {
+        val pg = serMsg.packetGroup
 
-            val pg = serMsg.packetGroup
+        def updatePacketGroup(serMsg: SerializedUDPMessage, messages: TrieMap[Int, SerializedUDPMessage]): Unit = {
 
-            packetGroups.get(pg) match {
+          // make sure this is not a duplicate packet first
+          if (!messages.isDefinedAt(serMsg.packetGroupId)) {
 
-              case Some(messages) =>
+            if (messages.keySet.size + 1 == serMsg.packetGroupSize) {
 
-                // make sure this is not a duplicate packet first
-                if (!messages.isDefinedAt(serMsg.packetGroupId)) {
+              messages += (serMsg.packetGroupId -> serMsg)
 
-                  if (messages.keySet.size + 1 == serMsg.packetGroupSize) {
+              val message = UDPSerialization.deserializeGrouped(messages.values.toList)
 
-                    messages += (serMsg.packetGroupId -> serMsg)
+              println(s"Received BULK UDP message from $remote -- $message -- sending to $nextActor")
 
-                    val dat = messages.values.toList.sortBy(_.packetGroupId).flatMap{_.data}.toArray
+              processMessage(message, remote)
 
-                    val deser = Some(kryoPool.fromBytes(dat, classOf[Any]))
+              packetGroups.remove(pg)
 
-                    println(s"Received BULK UDP message from $remote -- $deser -- sending to $nextActor")
-
-                    deser.foreach {processMessage(_, remote)}
-
-                    packetGroups.remove(pg)
-
-                  } else {
-                    packetGroups(pg) = messages += (serMsg.packetGroupId -> serMsg)
-                  }
-                }
-
-              case None =>
-                packetGroups(pg) = mutable.HashMap(serMsg.packetGroupId -> serMsg)
-
+            } else {
+              packetGroups(pg) = messages += (serMsg.packetGroupId -> serMsg)
             }
+          }
+
+        }
+
+        packetGroups.get(pg) match {
+
+          case Some(messages) =>
+            updatePacketGroup(serMsg, messages)
+
+          case None =>
+            updatePacketGroup(serMsg, TrieMap())
+
         }
       }
 
     case UDPSend(data, remote) =>
-      val ser: Seq[SerializedUDPMessage] = udpSerializeGrouped(data)
+      val ser: Seq[SerializedUDPMessage] = UDPSerialization.serializeGrouped(data)
 
       ser.foreach{ s: SerializedUDPMessage => {
-        socket ! Udp.Send(ByteString(kryoPool.toBytesWithClass(s)), remote)
+        val byteString = ByteString(UDPSerialization.serialize(s))
+        socket ! Udp.Send(byteString, remote)
       }}
 
     case RegisterNextActor(next) => nextActor = Some(next)
@@ -136,9 +141,48 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
 }
 
+object UDPSerialization {
+
+  def guessThreads: Int = {
+    val cores = Runtime.getRuntime.availableProcessors
+    val GUESS_THREADS_PER_CORE = 4
+    GUESS_THREADS_PER_CORE * cores
+  }
+
+  val kryoPool: KryoPool = KryoPool.withBuffer(guessThreads,
+    new ScalaKryoInstantiator().setRegistrationRequired(false), 32, 1024*1024*100)
+
+  def serializeGrouped[T <: RemoteMessage](data: T, groupSize: Int = 500): Seq[SerializedUDPMessage] = {
+
+    val bytes: Array[Byte] = kryoPool.toBytesWithClass(data)
+
+    val idx: Seq[(Array[Byte], Int)] = bytes.grouped(groupSize).zipWithIndex.toSeq
+
+    val pg: Long = Random.nextLong()
+
+    idx.map { case (b: Array[Byte], i: Int) =>
+      SerializedUDPMessage(ByteString(b),
+      packetGroup = pg, packetGroupSize = idx.length, packetGroupId = i)
+    }
+  }
+
+  def deserializeGrouped(messages: List[SerializedUDPMessage]): AnyRef = {
+    val sortedBytes = messages.sortBy(f => f.packetGroupId).flatMap(_.data).toArray
+
+    deserialize(sortedBytes)
+  }
+
+  def serialize[T <: RemoteMessage](data: T): Array[Byte] = {
+    kryoPool.toBytesWithClass(data)
+  }
+
+  def deserialize(message: Array[Byte]): AnyRef= {
+    kryoPool.fromBytes(message)
+  }
+}
+
 // Change packetGroup to UUID
 case class SerializedUDPMessage(data: ByteString,
-                                typeClassName: String,
                                 packetGroup: Long,
                                 packetGroupSize: Long,
-                                packetGroupId: Int)
+                                packetGroupId: Int) extends RemoteMessage
