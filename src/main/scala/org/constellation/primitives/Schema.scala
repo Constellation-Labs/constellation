@@ -15,9 +15,9 @@ import scala.util.Random
 object Schema {
 
   case class TreeVisual(
-                       name: String,
-                       parent: String,
-                       children: Seq[TreeVisual]
+                         name: String,
+                         parent: String,
+                         children: Seq[TreeVisual]
                        )
 
   case class TransactionQueryResponse(
@@ -63,14 +63,14 @@ object Schema {
   // TODO: We also need a hash pointer to represent the post-tx counter party signing data, add later
   // TX should still be accepted even if metadata is incorrect, it just serves to help validation rounds.
   case class AddressMetaData(
-                      address: String,
-                      balance: Long = 0L,
-                      lastValidTransactionHash: Option[String] = None,
-                      txHashPool: Seq[String] = Seq(),
-                      txHashOverflowPointer: Option[String] = None,
-                      oneTimeUse: Boolean = false,
-                      depth: Int = 0
-                    ) extends ProductHash {
+                              address: String,
+                              balance: Long = 0L,
+                              lastValidTransactionHash: Option[String] = None,
+                              txHashPool: Seq[String] = Seq(),
+                              txHashOverflowPointer: Option[String] = None,
+                              oneTimeUse: Boolean = false,
+                              depth: Int = 0
+                            ) extends ProductHash {
     def normalizedBalance: Long = balance / NormalizationFactor
   }
 
@@ -136,26 +136,28 @@ object Schema {
   case class BatchTXHashRequest(hashes: Set[String]) extends GossipMessage
 
   case class UnknownParentHashSyncInfo(
-                                      firstRequestTime: Long,
-                                      lastRequestTime: Long,
-                                      numRequests: Int
+                                        firstRequestTime: Long,
+                                        lastRequestTime: Long,
+                                        numRequests: Int
                                       )
 
   case class BundleMetaData(
-                             height: Int,
+                             bundle: Bundle,
+                             parentBundle: Option[Bundle],
+                             height: Option[Int],
+                             depth: Int,
                              numTX: Int,
                              numID: Int,
                              score: Double,
-                             totalScore: Double,
-                             parentHash: String,
+                             totalScore: Option[Double],
                              rxTime: Long
-                           )
+                           ) {
+    def parentHash: Option[String] = parentBundle.map{_.hash}
+  }
 
   final case class PeerSyncHeartbeat(
-                               bundle: Option[Bundle],
-                  //             memPool: Set[TX] = Set(),
-                               validBundleHashes: Seq[String]
-                             ) extends GossipMessage
+                                      bestBundle: Bundle
+                                    ) extends GossipMessage
 
   final case class Bundle(
                            bundleData: Signed[BundleData]
@@ -163,27 +165,27 @@ object Schema {
 
     val bundleNumber: Long = 0L //Random.nextLong()
 
-/*
-    def extractTreeVisual: TreeVisual = {
-      val parentHash = extractParentBundleHash.hash.slice(0, 5)
-      def process(s: Signed[BundleData], parent: String): Seq[TreeVisual] = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case tx: TX =>
-            TreeVisual(s"TX: ${tx.short} amount: ${tx.tx.data.normalizedAmount}", parent, Seq())
-          case b2: Bundle =>
-            val name = s"Bundle: ${b2.short} numTX: ${b2.extractTX.size}"
-            val children = process(b2.bundleData, name)
-            TreeVisual(name, parent, children)
-          case _ => Seq()
+    /*
+        def extractTreeVisual: TreeVisual = {
+          val parentHash = extractParentBundleHash.hash.slice(0, 5)
+          def process(s: Signed[BundleData], parent: String): Seq[TreeVisual] = {
+            val bd = s.data.bundles
+            val depths = bd.map {
+              case tx: TX =>
+                TreeVisual(s"TX: ${tx.short} amount: ${tx.tx.data.normalizedAmount}", parent, Seq())
+              case b2: Bundle =>
+                val name = s"Bundle: ${b2.short} numTX: ${b2.extractTX.size}"
+                val children = process(b2.bundleData, name)
+                TreeVisual(name, parent, children)
+              case _ => Seq()
+            }
+            depths
+          }.asInstanceOf[Seq[TreeVisual]]
+          val parentName = s"Bundle: $short numTX: ${extractTX.size} node: ${bundleData.id.short} parent: $parentHash"
+          val children = process(bundleData, parentName)
+          TreeVisual(parentName, "null", children)
         }
-        depths
-      }.asInstanceOf[Seq[TreeVisual]]
-      val parentName = s"Bundle: $short numTX: ${extractTX.size} node: ${bundleData.id.short} parent: $parentHash"
-      val children = process(bundleData, parentName)
-      TreeVisual(parentName, "null", children)
-    }
-*/
+    */
 
     def extractParentBundleHash: ParentBundleHash = {
       def process(s: Signed[BundleData]): ParentBundleHash = {
@@ -227,25 +229,25 @@ object Schema {
       }
       process(bundleData)
     }
-/*
-    def extractTX: Set[TX] = {
-      def process(s: Signed[BundleData]): Set[TX] = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            process(b2.bundleData)
-          case tx: TX => Set(tx)
-          case _ => Set[TX]()
+    /*
+        def extractTX: Set[TX] = {
+          def process(s: Signed[BundleData]): Set[TX] = {
+            val bd = s.data.bundles
+            val depths = bd.map {
+              case b2: Bundle =>
+                process(b2.bundleData)
+              case tx: TX => Set(tx)
+              case _ => Set[TX]()
+            }
+            if (depths.nonEmpty) {
+              depths.reduce(_ ++ _)
+            } else {
+              Set()
+            }
+          }
+          process(bundleData)
         }
-        if (depths.nonEmpty) {
-          depths.reduce(_ ++ _)
-        } else {
-          Set()
-        }
-      }
-      process(bundleData)
-    }
-*/
+    */
 
     def extractIds: Set[Id] = {
       def process(s: Signed[BundleData]): Set[Id] = {

@@ -52,8 +52,8 @@ trait Heartbeat {
         case Success(x) => Some(x)
       }
     } else {
-      if (loggerEnabled)
-        logger.debug("Heartbeat overwhelmed, messages backing up, skipping internal heartbeat until sufficient time elapsed.")
+    //  if (loggerEnabled)
+    //    logger.debug("Heartbeat overwhelmed, messages backing up, skipping internal heartbeat until sufficient time elapsed.")
       None
     }
   }

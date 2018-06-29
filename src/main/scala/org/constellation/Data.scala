@@ -158,7 +158,9 @@ class Data {
     bestBundle = genesisBundle
     db.put(genesisBundle)
     processNewBundleMetadata(genesisBundle, genesisBundle.extractTX, isGenesis = true, setActive = false)
-    validBundles = Seq(genesisBundle)
+    //validBundles = Seq(genesisBundle)
+    last100BundleHashes = Seq(genesisBundle.hash)
+    totalNumValidBundles += 1
     val gtx = b.extractTX.head
     gtx.txData.data.updateLedger(memPoolLedger)
     acceptTransaction(gtx)
@@ -244,8 +246,8 @@ class Data {
   var genesisBundle : Bundle = _
   def genesisTXHash: String = genesisBundle.extractTX.head.hash
   @volatile var validBundles : Seq[Bundle] = Seq()
-  def lastBundle: Bundle = validBundles.lastOption.getOrElse(genesisBundle)
-  def lastBundleHash = ParentBundleHash(validBundles.lastOption.map{_.hash}.getOrElse(Option(genesisBundle).map{_.hash}.getOrElse("")))
+  def lastBundle: Bundle = last100BundleHashes.lastOption.map{bundleHashToBundle}.get //validBundles.lastOption.getOrElse(genesisBundle)
+  def lastBundleHash = ParentBundleHash(last100BundleHashes.lastOption.getOrElse(Option(genesisBundle).map{_.hash}.getOrElse("")))
   @volatile var bestBundle: Bundle = _
   @volatile var bestBundleBase: Bundle = _
   @volatile var bestBundleCandidateHashes: Set[BundleHash] = Set()
@@ -363,6 +365,22 @@ class Data {
     }
   }.reverse
 
+
+  // This returns in order of ancestry, first element should be oldest bundle immediately after the last valid.
+  def extractBundleAncestorsUpTo(b: Bundle, ancestors: Seq[String] = Seq(), upTo: Int): Seq[String] = {
+    val ph = b.extractParentBundleHash.pbHash
+    if (ph == genesisBundle.hash || ph == "coinbase") ancestors else {
+      if (!bundleHashToBundle.contains(ph)) {
+        println(s"ANCESTORS PROBLEM: ${bundleHashToBundle.size} missing $ph")
+      }
+      val bp = bundleHashToBundle(ph)
+      if (ancestors.size > upTo) ancestors
+      else extractBundleAncestorsUpTo(bp, ancestors :+ ph, upTo)
+    }
+  }.reverse
+
+  // @volatile var last1000ConfirmedBundleHashes = Seq[String]()
+
   // Only call this if the parent chain is known and valid and this is already validated.
   def processNewBundleMetadata(
                                 bundle: Bundle,
@@ -407,6 +425,7 @@ class Data {
   @volatile var totalNumBundleMessages = 0
   @volatile var totalNumBundleHashRequests = 0
   @volatile var totalNumInvalidBundles = 0
+  @volatile var totalNumValidBundles = 0
   @volatile var totalNumNewBundleAdditions = 0
   @volatile var totalNumBroadcastMessages = 0
   @volatile var totalNumValidatedTX = 0
@@ -419,7 +438,7 @@ class Data {
   def acceptTransaction(tx: TX, updatePending: Boolean = true): Unit = {
 
     if (!last1000ValidTX.contains(tx.hash)) {
-      if (last1000ValidTX.size >= 1000) {
+      if (last1000ValidTX.size >= 10000) {
         last1000ValidTX = last1000ValidTX.tail :+ tx.hash
       } else {
         last1000ValidTX = last1000ValidTX :+ tx.hash

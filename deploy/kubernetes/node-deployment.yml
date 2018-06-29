@@ -29,9 +29,9 @@ spec:
   replicas: 5
   updateStrategy:
     type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 5
-      maxUnavailable: 5
+    #rollingUpdate:
+    #maxSurge: 5
+    #maxUnavailable: 5
   template:
     metadata:
       labels:

@@ -61,21 +61,24 @@ class PeerToPeer(
 
         val numAccepted = gossipHeartbeat()
 
-        logger.debug(
-          s"Heartbeat: ${id.short}, " +
-            s"bundles: $totalNumBundleMessages, " +
-            s"broadcasts: $totalNumBroadcastMessages, " +
-            s"numBundles: ${activeDAGBundles.size}, " +
-            s"gossip: $totalNumGossipMessages, " +
-            s"balance: $selfBalance, " +
-            s"memPool: ${memPoolTX.size} numPeers: ${peers.size} " +
-            s"numAccepted: $numAccepted, numTotalValid: ${last1000ValidTX.size} " +
-            s"validUTXO: ${validLedger.map { case (k, v) => k.slice(0, 5) -> v }} " +
-            s"peers: ${peers.map { p =>
-              p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes
-            }.mkString(",")}"
-        )
-
+        if (heartbeatRound % 30 == 0) {
+          logger.debug(
+            s"Heartbeat: ${id.short}, " +
+              s"bundles: $totalNumBundleMessages, " +
+              s"broadcasts: $totalNumBroadcastMessages, " +
+              s"numBundles: ${activeDAGBundles.size}, " +
+              s"gossip: $totalNumGossipMessages, " +
+              s"balance: $selfBalance, " +
+              s"memPool: ${memPoolTX.size} numPeers: ${peers.size} " +
+              s"numAccepted: $numAccepted, numTotalValid: ${last1000ValidTX.size} " +
+              s"validUTXO: ${validLedger.map { case (k, v) => k.slice(0, 5) -> v }} " +
+              s"peers: ${
+                peers.map { p =>
+                  p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes
+                }.mkString(",")
+              }"
+          )
+        }
 
       }
 

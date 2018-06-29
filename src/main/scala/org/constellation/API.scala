@@ -110,29 +110,31 @@ class API(
             "address" -> selfAddress.address,
             "balance" -> (selfIdBalance.getOrElse(0L) / Schema.NormalizationFactor).toString,
             "id" -> id.b58,
-            "keyPair" -> keyPair.json,
+            "z_keyPair" -> keyPair.json,
             "shortId" -> id.short,
+            "last1000BundleHashSize" -> last100BundleHashes.size.toString,
             "numSyncedTX" -> numSyncedTX.toString,
             "numSyncedBundles" -> numSyncedBundles.toString,
-            "numValidBundles" -> validBundles.size.toString,
+            "numValidBundles" -> totalNumValidBundles.toString,
             "numValidTransactions" -> totalNumValidatedTX.toString,
             "memPoolSize" -> memPool.size.toString,
             "totalNumBroadcasts" -> totalNumBroadcastMessages.toString,
             "totalNumBundleMessages" -> totalNumBundleMessages.toString,
+            "lastConfirmationUpdateTime" -> lastConfirmationUpdateTime.toString,
             "numPeers" -> peers.size.toString,
             "peers" -> peers.map{ z =>
               val addr = s"http://${z.data.apiAddress.getHostString}:${z.data.apiAddress.getPort}"
               s"${z.data.id.short} API: $addr "
             }.mkString(" --- "),
-            "genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
+            "z_genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
          //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
             "numActiveBundles" -> activeDAGBundles.size.toString,
             "last10TXHash" -> last100SelfSentTransactions.reverse.slice(0, 10).map{_.hash}.mkString(","),
-            "last10ValidBundleHashes" -> validBundles.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
+            "last10ValidBundleHashes" -> last100BundleHashes.reverse.slice(0, 10).reverse.mkString(","),
             "lastValidBundleHash" -> lastBundleHash.pbHash,
-            "lastValidBundle" -> Option(lastBundle).map{_.pretty}.getOrElse(""),
-            "genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
-            "genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
+            "lastValidBundle" -> Try{Option(lastBundle).map{_.pretty}.getOrElse("")}.getOrElse(""),
+            "z_genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
+            "z_genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
             "selfBestBundle" -> Option(bestBundle).map{_.pretty}.getOrElse(""),
             "reputations" -> normalizedDeterministicReputation.map{
               case (k,v) => k.short + " " + v
@@ -142,23 +144,23 @@ class API(
             "numSyncPendingTX" -> syncPendingTXHashes.size.toString,
             "peerBestBundles" -> peerSync.toMap.map{
               case (id, b) =>
-                s"PEER: ${id.short}, BEST: ${b.bundle.map{z => z.short + " " +
+                s"PEER: ${id.short}, BEST: ${b.bestBundle.map{ z => z.short + " " +
                   Try{z.pretty}.getOrElse("unknown")}.getOrElse("")} " // LAST: ${b.lastBestBundle.pretty}
             }.mkString(" ----- "),
             "allPeerSynchronizedLastHash" -> Try(
               (peerSync.map{_._2.validBundleHashes.last} ++ Seq(lastBundle.hash)).toSet.size == 1
               ).map{_.toString}.getOrElse(""),
-            "allPeerAllBundleHashSync" -> peerSync.forall{_._2.validBundleHashes == validBundles.map{_.hash}}.toString,
+            "allPeerAllBundleHashSync" -> peerSync.forall{_._2.validBundleHashes == last100BundleHashes}.toString,
             "z_peers" -> peers.map{_.data}.json,
             "z_UTXO" -> validLedger.toMap.json,
             "z_Bundles" -> activeDAGBundles.map{_.pretty}.mkString(" - - - "),
             "downloadMode" -> downloadMode.toString,
             "allPeersHaveKnownBestBundles" -> peerSync.forall{
               case (_, hb) =>
-                hb.bundle.forall{b => bundleHashToBundle.contains(b.hash)}
+                hb.bestBundle.forall{ b => bundleHashToBundle.contains(b.hash)}
             }.toString,
             "allPeersAgreeWithBestBundle" -> peerSync.forall{
-              _._2.bundle.exists{_.hash == bestBundle.hash}
+              _._2.bestBundle.exists{_.hash == bestBundle.hash}
             }.toString
             //,
             // "z_lastBundleVisualJSON" -> Option(lastBundle).map{ b => b.extractTreeVisual.json}.getOrElse("")
