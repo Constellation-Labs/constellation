@@ -70,7 +70,7 @@ class PeerToPeer(
               s"gossip: $totalNumGossipMessages, " +
               s"balance: $selfBalance, " +
               s"memPool: ${memPoolTX.size} numPeers: ${peers.size} " +
-              s"numAccepted: $numAccepted, numTotalValid: ${last1000ValidTX.size} " +
+              s"numAccepted: $numAccepted, numTotalValid: ${lastValidTXs.size} " +
               s"validUTXO: ${validLedger.map { case (k, v) => k.slice(0, 5) -> v }} " +
               s"peers: ${
                 peers.map { p =>

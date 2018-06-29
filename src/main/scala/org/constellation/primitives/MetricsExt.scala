@@ -12,5 +12,6 @@ trait MetricsExt {
   @volatile var totalNumValidatedTX = 0
   @volatile var numSyncedBundles: Int = 0
   @volatile var numSyncedTX: Int = 0
+  @volatile var heartbeatRound = 0L
 
 }

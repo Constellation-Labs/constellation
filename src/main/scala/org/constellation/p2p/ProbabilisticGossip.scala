@@ -39,8 +39,8 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
   def genesisCheck(): Unit = {
 
     // First node who did genesis
-    val bbExist = Option(bestBundle).exists {_.txBelow.size >= minGenesisDistrSize - 1}
-    if ( genesisAdditionCheck && bbExist) acceptBundle(bestBundle)
+    val bbExist = Option(maxBundle).exists {_.txBelow.size >= minGenesisDistrSize - 1}
+    if ( genesisAdditionCheck && bbExist) acceptBundle(maxBundle)
 
     // Other peers
     if (lastValidBundleHash.pbHash == genesisBundle.hash && !(genesisBundle.extractIds.head == id)) {
@@ -124,16 +124,16 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       activeDAGBundles = activeDAGBundles.sortBy(z => (-1 * z.meta.totalScore, z.hash))
 
       val bb: Option[Bundle] = if (genesisAdditionCheck) activeDAGBundles.headOption else {
-        activeDAGBundles.find{z => z.maxStackDepth >= 2 && z.meta.totalScore > bestBundle.meta.totalScore}
+        activeDAGBundles.find{z => z.maxStackDepth >= 2 && z.meta.totalScore > maxBundle.meta.totalScore}
       }
 
-      bb.foreach{bestBundle = _}
+      bb.foreach{maxBundle = _}
 
 
-      if (bestBundle != null) {
+      if (maxBundle != null) {
         broadcast(
           PeerSyncHeartbeat(
-            Some(bestBundle),
+            Some(maxBundle),
             last100BundleHashes
           )
         )
@@ -151,7 +151,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         val memPoolSelection = Random.shuffle(filteredMempool.toSeq).slice(0, memPoolSelSize + minGenesisDistrSize + 1)
         val b = Bundle(
           BundleData(
-            memPoolSelection.map{TransactionHash} :+ ParentBundleHash(bestBundle.hash)
+            memPoolSelection.map{TransactionHash} :+ ParentBundleHash(maxBundle.hash)
           ).signed()
         )
         //     if (bb.nonEmpty) {
@@ -217,12 +217,12 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
          }
    */
 
-      Option(bestBundle).filter{_ => totalNumValidBundles >= 2}.foreach{ b =>
+      Option(maxBundle).filter{ _ => totalNumValidBundles >= 2}.foreach{ b =>
 
         val ancestors = extractBundleAncestorsUpTo(b, Seq[String](),20)
 
         if (ancestors.length > 8) {
-          totalNumValidBundles = bestBundle.meta.height - 5
+          totalNumValidBundles = maxBundle.meta.height - 5
           val toAdd2 = ancestors.slice(0, ancestors.length - 5)
           toAdd2.map(bundleHashToBundle).flatMap(_.extractTX).foreach(z => acceptTransaction(z))
           val toAdd = toAdd2.filterNot(last100BundleHashes.contains)

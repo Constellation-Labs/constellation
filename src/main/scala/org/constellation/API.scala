@@ -77,8 +77,8 @@ class API(
         }
       } ~
       path("longestChain") {
-        val ancestors = extractBundleAncestorsUntilValidation(bestBundle)
-        val all = validBundles ++ ancestors.map{bundleHashToBundle} ++ Seq(bestBundle)
+        val ancestors = extractBundleAncestorsUntilValidation(maxBundle)
+        val all = validBundles ++ ancestors.map{bundleHashToBundle} ++ Seq(maxBundle)
         complete(
           all.json
         )
@@ -135,7 +135,7 @@ class API(
             "lastValidBundle" -> Try{Option(lastValidBundle).map{_.pretty}.getOrElse("")}.getOrElse(""),
             "z_genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
             "z_genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
-            "selfBestBundle" -> Option(bestBundle).map{_.pretty}.getOrElse(""),
+            "selfBestBundle" -> Option(maxBundle).map{_.pretty}.getOrElse(""),
             "reputations" -> normalizedDeterministicReputation.map{
               case (k,v) => k.short + " " + v
             }.mkString(" - "),
@@ -160,14 +160,14 @@ class API(
                 hb.bestBundle.forall{ b => bundleHashToBundle.contains(b.hash)}
             }.toString,
             "allPeersAgreeWithBestBundle" -> peerSync.forall{
-              _._2.bestBundle.exists{_.hash == bestBundle.hash}
+              _._2.bestBundle.exists{_.hash == maxBundle.hash}
             }.toString
             //,
             // "z_lastBundleVisualJSON" -> Option(lastBundle).map{ b => b.extractTreeVisual.json}.getOrElse("")
           )))
         } ~
         path("validTX") {
-          complete(last1000ValidTX)
+          complete(lastValidTXs)
         } ~
         path("makeKeyPair") {
           val pair = constellation.makeKeyPair()
