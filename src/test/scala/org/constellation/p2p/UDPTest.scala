@@ -17,6 +17,7 @@ import scala.util.{Random, Try}
 import constellation._
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.primitives.Schema.{Id, Peer}
+import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{ProductHash, Signed}
 
 case class TestMessage(a: String, b: Int) extends ProductHash with RemoteMessage
@@ -31,32 +32,6 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 
   override def afterAll {
     TestKit.shutdownActorSystem(system)
-  }
-
-  // Kryo
-  "UDPSerialization" should "round trip serialize and deserialize SerializedUDPMessage" in {
-    val message = SerializedUDPMessage(ByteString("test".getBytes), 1, 1, 1)
-
-    val serialized = UDPSerialization.serialize(message)
-
-    val deserialized = UDPSerialization.deserialize(serialized)
-
-    assert(message == deserialized)
-
-    val testMessage = TestMessage("test", 3)
-
-    val messages = UDPSerialization.serializeGrouped(testMessage)
-
-    val messagesSerialized = messages.map(UDPSerialization.serialize(_))
-
-    val messagesDeserialized: Seq[SerializedUDPMessage] = messagesSerialized.map(UDPSerialization.deserialize(_).asInstanceOf[SerializedUDPMessage])
-
-    val sorted = messagesDeserialized.sortBy(f => f.packetGroupId).flatMap(_.data).toArray
-
-    val deserializedSorted = UDPSerialization.deserialize(sorted)
-
-    assert(testMessage == deserializedSorted)
-
   }
 
   // UDP Actor
@@ -75,7 +50,7 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 
     val testMessage = TestMessage("a", 1)
 
-    val testMessageBytes = UDPSerialization.serialize(testMessage)
+    val testMessageBytes = KryoSerializer.serialize(testMessage)
 
     listener1 ! UDPSend(testMessage, new InetSocketAddress("localhost", rPort2))
 

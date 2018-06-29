@@ -12,6 +12,7 @@ import org.constellation.consensus.Consensus.RemoteMessage
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.util.Random
+import org.constellation.serializer.KryoSerializer._
 import constellation._
 
 // Consider adding ID to all UDP messages? Possibly easier.
@@ -76,7 +77,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
         val byteArray = data.toArray
 
-        val serMsg = UDPSerialization.deserialize(byteArray).asInstanceOf[SerializedUDPMessage]
+        val serMsg = deserialize(byteArray).asInstanceOf[SerializedUDPMessage]
 
         val pg = serMsg.packetGroup
 
@@ -89,7 +90,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
               messages += (serMsg.packetGroupId -> serMsg)
 
-              val message = UDPSerialization.deserializeGrouped(messages.values.toList)
+              val message = deserializeGrouped(messages.values.toList)
 
               println(s"Received BULK UDP message from $remote -- $message -- sending to $nextActor")
 
@@ -116,10 +117,10 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
       }
 
     case UDPSend(data, remote) =>
-      val ser: Seq[SerializedUDPMessage] = UDPSerialization.serializeGrouped(data)
+      val ser: Seq[SerializedUDPMessage] = serializeGrouped(data)
 
       ser.foreach{ s: SerializedUDPMessage => {
-        val byteString = ByteString(UDPSerialization.serialize(s))
+        val byteString = ByteString(serialize(s))
         socket ! Udp.Send(byteString, remote)
       }}
 
@@ -139,46 +140,6 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
   }
 
-}
-
-object UDPSerialization {
-
-  def guessThreads: Int = {
-    val cores = Runtime.getRuntime.availableProcessors
-    val GUESS_THREADS_PER_CORE = 4
-    GUESS_THREADS_PER_CORE * cores
-  }
-
-  val kryoPool: KryoPool = KryoPool.withBuffer(guessThreads,
-    new ScalaKryoInstantiator().setRegistrationRequired(false), 32, 1024*1024*100)
-
-  def serializeGrouped[T <: RemoteMessage](data: T, groupSize: Int = 500): Seq[SerializedUDPMessage] = {
-
-    val bytes: Array[Byte] = kryoPool.toBytesWithClass(data)
-
-    val idx: Seq[(Array[Byte], Int)] = bytes.grouped(groupSize).zipWithIndex.toSeq
-
-    val pg: Long = Random.nextLong()
-
-    idx.map { case (b: Array[Byte], i: Int) =>
-      SerializedUDPMessage(ByteString(b),
-      packetGroup = pg, packetGroupSize = idx.length, packetGroupId = i)
-    }
-  }
-
-  def deserializeGrouped(messages: List[SerializedUDPMessage]): AnyRef = {
-    val sortedBytes = messages.sortBy(f => f.packetGroupId).flatMap(_.data).toArray
-
-    deserialize(sortedBytes)
-  }
-
-  def serialize[T <: RemoteMessage](data: T): Array[Byte] = {
-    kryoPool.toBytesWithClass(data)
-  }
-
-  def deserialize(message: Array[Byte]): AnyRef= {
-    kryoPool.fromBytes(message)
-  }
 }
 
 // Change packetGroup to UUID

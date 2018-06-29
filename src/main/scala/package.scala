@@ -21,7 +21,8 @@ import org.constellation.crypto.KeyUtilsExt
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
 import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, native}
-
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import scala.concurrent.{Await, Future}
 import scala.reflect.ClassTag
 import scala.util.{Random, Try}
@@ -87,8 +88,6 @@ package object constellation extends KeyUtilsExt with POWExt
     def sha256: String = Hashing.sha256().hashBytes(s.getBytes()).toString
   }
 
-  import java.nio.ByteBuffer
-  import java.nio.ByteOrder
 
   def intToByte(myInteger: Int): Array[Byte] =
     ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(myInteger).array
@@ -96,45 +95,7 @@ package object constellation extends KeyUtilsExt with POWExt
   def byteToInt(byteBarray: Array[Byte]): Int =
     ByteBuffer.wrap(byteBarray).order(ByteOrder.BIG_ENDIAN).getInt
 
-  case class EncodedPubKey(pubKeyEncoded: Array[Byte])
-
-  class PubKeyKryoSerializer extends Serializer[PublicKey] {
-    override def write(kryoI: Kryo, output: Output, `object`: PublicKey): Unit = {
-      val enc = `object`.getEncoded
-      kryoI.writeClassAndObject(output, EncodedPubKey(enc))
-    }
-
-    override def read(kryoI: Kryo, input: Input, `type`: Class[PublicKey]): PublicKey = {
-      val encP = EncodedPubKey(null)
-      kryoI.reference(encP)
-      val enc = kryoI.readClassAndObject(input).asInstanceOf[EncodedPubKey]
-      bytesToPublicKey(enc.pubKeyEncoded)
-    }
-  }
-
-  class SerializedUDPMessageSerializer extends Serializer[SerializedUDPMessage] {
-    override def write(kryoI: Kryo, output: Output, `object`: SerializedUDPMessage): Unit = {
-      kryoI.writeClassAndObject(output, `object`)
-    }
-
-    override def read(kryoI: Kryo, input: Input, `type`: Class[SerializedUDPMessage]): SerializedUDPMessage = {
-      kryoI.readClassAndObject(input).asInstanceOf[SerializedUDPMessage]
-    }
-  }
-
-
   Log.TRACE()
-
-  /*
-  kryoInstance.register(classOf[SerializedUDPMessage], new SerializedUDPMessageSerializer())
-
-  kryoInstance.addDefaultSerializer(classOf[SerializedUDPMessage], new SerializedUDPMessageSerializer())
-
-  kryoInstance.register(classOf[PublicKey], new PubKeyKryoSerializer())
-
-  kryoInstance.addDefaultSerializer(classOf[PublicKey], new PubKeyKryoSerializer())
-  */
-
 
   implicit class HTTPHelp(httpResponse: HttpResponse)
                          (implicit val materialize: ActorMaterializer) {
