@@ -143,13 +143,11 @@ object Schema {
 
   case class BundleMetaData(
                              bundle: Bundle,
-                             score: Double,
-                             parentBundle: Option[Bundle] = None,
                              height: Option[Int] = None,
-                             totalScore: Option[Double] = None,
+                             reputations: Map[Id, Long] = Map(),
                              rxTime: Long = System.currentTimeMillis()
                            ) {
-    def parentHash: Option[String] = parentBundle.map{_.hash}
+    def isResolved: Boolean = reputations.nonEmpty
   }
 
   final case class PeerSyncHeartbeat(

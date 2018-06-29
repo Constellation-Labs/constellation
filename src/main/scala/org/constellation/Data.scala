@@ -19,18 +19,23 @@ import org.constellation.consensus.Consensus.{CC, RoundHash}
 
 class Data {
 
-  @volatile var db : LevelDB = _
+  @volatile var db: LevelDB = _
   @volatile implicit var keyPair: KeyPair = _
   val logger = Logger(s"Data")
 
 
   def publicKeyHash: Int = keyPair.getPublic.hashCode()
-  def id : Id = Id(keyPair.getPublic)
+
+  def id: Id = Id(keyPair.getPublic)
+
   def selfAddress: AddressMetaData = id.address
+
   def tmpDirId = new File("tmp", id.medium)
 
   def restartDB(): Unit = {
-    Try{db.destroy()}
+    Try {
+      db.destroy()
+    }
     db = new LevelDB(new File(tmpDirId, "db"))
   }
 
@@ -54,7 +59,8 @@ class Data {
     memPoolTX = Set()
     memPool = Set()
   }
-/*
+
+  /*
 
   def transactionData(txHash: String): TransactionQueryResponse = {
     val txOpt = txHashToTX.get(txHash)
@@ -125,7 +131,7 @@ class Data {
   var remotes: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
   val peerLookup: mutable.HashMap[InetSocketAddress, Signed[Peer]] = mutable.HashMap[InetSocketAddress, Signed[Peer]]()
 
-  def peerIDLookup: Map[Id, Signed[Peer]] = peerLookup.values.map{ z => z.data.id -> z}.toMap
+  def peerIDLookup: Map[Id, Signed[Peer]] = peerLookup.values.map { z => z.data.id -> z }.toMap
 
   def selfPeer: Signed[Peer] = Peer(id, externalAddress, Set(), apiAddress).signed()
 
@@ -138,13 +144,15 @@ class Data {
   def peers: Seq[Signed[Peer]] = peerLookup.values.toSeq.distinct
 
   def validateTransactionBatch(txs: Set[TX], ledger: TrieMap[String, Long]): Boolean = {
-    txs.toSeq.map{ tx =>
+    txs.toSeq.map { tx =>
       val dat = tx.txData.data
       dat.src -> dat.amount
-    }.groupBy(_._1).forall{
+    }.groupBy(_._1).forall {
       case (a, seq) =>
         val bal = ledger.getOrElse(a, 0L)
-        bal >= seq.map{_._2}.sum
+        bal >= seq.map {
+          _._2
+        }.sum
     }
   }
 
@@ -175,40 +183,47 @@ class Data {
   @volatile var numSyncedBundles: Int = 0
   @volatile var numSyncedTX: Int = 0
 
-  def ancestorWithTotalScoreExists(parentBundle: Bundle) = {
-    val bmd = db.getAs[BundleMetaData](parentBundle.hash)
-    val parent2 = bmd.map{
-      _.parentBundle
+  def findResolvedAncestor(parentHash: String): Option[BundleMetaData] = {
+    val parent = db.getAs[BundleMetaData](parentHash)
+    if (parent.isEmpty) {
+      syncPendingBundleHashes += parentHash
+      None
+    } else {
+      if (parent.get.isResolved) Some(parent.get)
+      else findResolvedAncestor(parent.get.bundle.extractParentBundleHash.pbHash)
     }
   }
 
   def handleBundle(bundle: Bundle): Unit = {
 
     totalNumBundleMessages += 1
+    val rxTime = System.currentTimeMillis()
 
     val parentHash = bundle.extractParentBundleHash.pbHash
     val bmd = db.getAs[BundleMetaData](bundle.hash)
 
     val notPresent = bmd.isEmpty
+
     if (notPresent) {
-
-      val parent = db.getAs[BundleMetaData](parentHash)
-      if (parent.isEmpty) {
-        val bmdZero = BundleMetaData(bundle, bundle.bundleScore, None, None, None)
-        db.put(bundle.hash, bmdZero)
-        syncPendingBundleHashes += parentHash
-      } else {
-        val par = parent.get
-        val parentHasKnownParent = par.parentBundle.nonEmpty
-        if (parentHasKnownParent) {
-          BundleMetaData(
-            bundle, bundle.bundleScore, Some(par.bundle), Some(par.height.get + 1), Some(par.totalScore.get)
-          )
+      val resolvedAncestor = findResolvedAncestor(parentHash)
+      if (resolvedAncestor.nonEmpty) {
+        val ids = bundle.extractIds
+        val a = resolvedAncestor.get
+        val newReps = a.reputations.map{
+          case (id, rep) =>
+            id -> {
+              if (ids.contains(id)) rep + 1
+              else rep
+            }
         }
-
+        db.put(bundle.hash, BundleMetaData(bundle, Some(a.height.get + 1), newReps, rxTime))
+      } else {
+        val bmdZero = BundleMetaData(bundle)
+        db.put(bundle.hash, bmdZero)
       }
-      db.put(bundle)
     }
+  }
+/*
 
     if (!indexed) {
       // ^ change to access meta data only otherwise won't connect properly.
@@ -247,12 +262,12 @@ class Data {
         }
       }
     }
+*/
 
     // Also need to verify there are not multiple occurrences of same id re-signing bundle, and reps.
     //  val valid = validateTXBatch(txs) && txs.intersect(validTX).isEmpty
 
    //  syncPendingBundleHashes -= bundle.hash
-  }
 
   // @volatile var allBundles: Set[Bundle] = Set[Bundle]()
 
@@ -321,6 +336,11 @@ class Data {
     }
 
     def extractTX: Set[TX] = extractTXHash.flatMap{ z => db.getAs[TX](z.txHash)}
+
+    def reputationUpdate: Map[Id, Long] = {
+      b.extractIds.map{_ -> 1L}.toMap
+    }
+
 
   }
 
