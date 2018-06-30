@@ -146,15 +146,17 @@ object Schema {
   case class BundleMetaData(
                              bundle: Bundle,
                              height: Option[Int] = None,
-                             reputations: Map[Id, Long] = Map(),
+                             reputations: Map[String, Long] = Map(),
                              totalScore: Option[Double] = None,
-                             rxTime: Long = System.currentTimeMillis()
+                             rxTime: Long = System.currentTimeMillis(),
+                             transactionsResolved: Boolean = false
                            ) {
-    def isResolved: Boolean = reputations.nonEmpty
+    def isResolved: Boolean = reputations.nonEmpty && transactionsResolved
   }
 
   final case class PeerSyncHeartbeat(
-                                      maxBundle: Bundle
+                                      maxBundle: Bundle,
+                                      validLedger: Map[String, Long]
                                     ) extends GossipMessage
 
   final case class Bundle(

@@ -9,7 +9,7 @@ import org.constellation.Data
 import org.constellation.consensus.Consensus._
 import org.constellation.primitives.Schema.{TX, _}
 import org.constellation.util.Heartbeat
-
+import constellation._
 import scala.concurrent.ExecutionContextExecutor
 
 class PeerToPeer(
@@ -30,6 +30,8 @@ class PeerToPeer(
   with Download {
 
   import data._
+
+  makeKeyPair()
 
   implicit val timeout: Timeout = timeoutI
   implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher

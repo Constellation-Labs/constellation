@@ -21,6 +21,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     gm match {
       case BatchBundleHashRequest(hashes) =>
         hashes.foreach{h =>
+         /// println("Sending BundleMetaData to peer on request")
           db.getAs[BundleMetaData](h).foreach{
             b =>
               udpActor.udpSend(b.bundle, remote)
@@ -28,18 +29,21 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         }
       case BatchTXHashRequest(hashes) =>
         hashes.foreach{h =>
+        //  println(s"Sending tx hash response $h")
           db.getAs[TX](h).foreach{
             b =>
               udpActor.udpSend(b, remote)
           }
         }
-      case b: Bundle => handleBundle(b)
+      case b: Bundle =>
+        handleBundle(b)
       case tx: TX =>
+      //  println(s"Rx tx hash ${tx.short}")
         if (!db.contains(tx)) {
-          syncPendingTXHashes -= tx.hash
           db.put(tx)
           numSyncedTX += 1
         }
+        syncPendingTXHashes -= tx.hash
       case bb: PeerSyncHeartbeat =>
         handleBundle(bb.maxBundle)
         rid.foreach{ r =>
@@ -71,28 +75,39 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   def dataRequest(): Unit = {
     if (syncPendingBundleHashes.nonEmpty) {
+  //    println("Requesting bundle sync of " + syncPendingBundleHashes.map{_.slice(0, 5)})
       broadcast(BatchBundleHashRequest(syncPendingBundleHashes))
     }
     if (syncPendingTXHashes.nonEmpty) {
+     // println("Requesting data sync pending of " + syncPendingTXHashes)
       broadcast(BatchTXHashRequest(syncPendingTXHashes))
     }
   }
 
-  def seedBundleZero(): Unit = {
+  def poolEmit(): Unit = {
     // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
-    val memPoolEmit = Random.nextInt() < 0.1
+    val memPoolEmit = Random.nextInt() < 0.3
     val filteredPool = memPool.diff(txInMaxBundleNotInValidation)
     val memPoolSelSize = 5 + Random.nextInt(50)
     val memPoolSelection = Random.shuffle(filteredPool.toSeq)
       .slice(0, memPoolSelSize + minGenesisDistrSize + 1)
 
+
     if (memPoolEmit && filteredPool.nonEmpty) {
+     // println(s"Mempool emit on ${id.short}")
       val mb = maxBundle
+
+      def pbHash = ParentBundleHash(mb.hash)
+
+      val pbh = if (totalNumValidatedTX == 1) pbHash
+      else if (mb.maxStackDepth < 2) maxBundle.extractParentBundleHash
+      else pbHash
+
       val b = Bundle(
         BundleData(
           memPoolSelection.map {
             TransactionHash
-          } :+ ParentBundleHash(mb.hash)
+          } :+ pbh
         ).signed()
       )
       val meta = mb.meta.get
@@ -105,6 +120,18 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
     if (!downloadMode && genesisBundle != null) {
 
+
+      // Force accept initial distribution
+      if (totalNumValidatedTX == 1 && maxBundle.extractTX.size >= (minGenesisDistrSize - 1)) {
+        maxBundle.extractTX.foreach{tx =>
+          acceptTransaction(tx)
+            tx.txData.data.updateLedger(memPoolLedger)
+        }
+        totalNumValidBundles += 1
+        last100ValidBundleMetaData :+= maxBundleMetaData
+      }
+
+
       dataRequest()
       simulateTransactions()
 
@@ -112,9 +139,9 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         memPool = memPool.slice(0, 250)
       }
 
-      broadcast(PeerSyncHeartbeat(maxBundle))
+      broadcast(PeerSyncHeartbeat(maxBundle, validLedger.toMap))
 
-      seedBundleZero()
+      poolEmit()
 
       activeDAGBundles.groupBy(b => b.bundle.extractParentBundleHash -> b.bundle.maxStackDepth)
         .foreach { case (pbHash, bundles) =>

@@ -126,13 +126,17 @@ class API(
             "z_genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
          //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
             "numActiveBundles" -> activeDAGBundles.size.toString,
-            "last10TXHash" -> last100SelfSentTransactions.reverse.slice(0, 10).map{_.hash}.mkString(","),
-            "last10ValidBundleHashes" -> last10000ValidTXHash.reverse.slice(0, 10).reverse.mkString(","),
-            "lastValidBundleHash" -> lastValidBundleHash.pbHash,
+            "last10TXHash" -> last10000ValidTXHash.reverse.slice(0, 10).mkString(","),
+            "last10ValidBundleHashes" -> last100ValidBundleMetaData
+              .map{_.bundle.hash}.reverse.slice(0, 10).reverse.mkString(","),
+            "last10SelfTXHashes" -> last100SelfSentTransactions.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
+            "lastValidBundleHash" -> Try{lastValidBundleHash.pbHash}.getOrElse(""),
             "lastValidBundle" -> Try{Option(lastValidBundle).map{_.pretty}.getOrElse("")}.getOrElse(""),
             "z_genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
             "z_genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
-            "selfBestBundle" -> Option(maxBundle).map{_.pretty}.getOrElse(""),
+            "selfBestBundle" -> Try{maxBundle.pretty}.getOrElse(""),
+            "selfBestBundleHash" -> Try{maxBundle.hash}.getOrElse(""),
+            "selfBestBundleMeta" -> Try{maxBundleMetaData.toString}.getOrElse(""),
             "reputations" -> normalizedDeterministicReputation.map{
               case (k,v) => k.short + " " + v
             }.mkString(" - "),
@@ -141,15 +145,22 @@ class API(
             "numSyncPendingTX" -> syncPendingTXHashes.size.toString,
             "peerBestBundles" -> peerSync.toMap.map{
               case (id, b) =>
-                s"${id.short}: ${b.maxBundle.pretty}"
+                s"${id.short}: ${b.maxBundle.hash.slice(0, 5)} ${Try{b.maxBundle.pretty}} " +
+                  s"parent${b.maxBundle.extractParentBundleHash.pbHash.slice(0, 5)} " +
+                  s"${db.contains(b.maxBundle.hash)} ${b.maxBundle.meta.map {_.transactionsResolved}}"
             }.mkString(" --- "),
             "z_peers" -> peers.map{_.data}.json,
-            "z_UTXO" -> validLedger.toMap.json,
+            "z_validLedger" -> validLedger.toMap.json,
+            "z_mempoolLedger" -> memPoolLedger.toMap.json,
             "z_Bundles" -> activeDAGBundles.map{_.bundle.pretty}.mkString(" - - - "),
             "downloadMode" -> downloadMode.toString,
             "allPeersHaveKnownBestBundles" -> peerSync.forall{
               case (_, hb) =>
                 db.contains(hb.maxBundle.hash)
+            }.toString,
+            "allPeersAgreeOnValidLedger" -> peerSync.forall{
+              case (_, hb) =>
+                hb.validLedger == validLedger.toMap
             }.toString,
             "allPeersAgreeWithMaxBundle" -> peerSync.forall{_._2.maxBundle == maxBundle}.toString
             //,

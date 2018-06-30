@@ -10,7 +10,7 @@ trait Reputation {
   @volatile var normalizedDeterministicReputation: Map[Id, Double] = Map()
   @volatile var deterministicReputation: Map[Id, Int] = Map()
 
-  def normalizeReputations(reps: Map[Id, Long]): Map[Id, Double] = {
+  def normalizeReputations(reps: Map[String, Long]): Map[String, Double] = {
     val total = reps.values.sum
     reps.map{
       case (id, r) =>

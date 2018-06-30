@@ -17,7 +17,6 @@ import com.twitter.chill.{IKryoRegistrar, KryoBase, KryoPool, ScalaKryoInstantia
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.{AddressMetaData, Bundle, Id}
 import org.constellation.util.{HashSignature, POWExt, POWSignHelp, ProductHash}
-import org.constellation.crypto.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
 import org.constellation.crypto.KeyUtilsExt
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
