@@ -141,6 +141,8 @@ object Schema {
                                         numRequests: Int
                                       )
 
+  // TODO: Change options to ResolvedBundleMetaData
+
   case class BundleMetaData(
                              bundle: Bundle,
                              height: Option[Int] = None,
@@ -152,7 +154,7 @@ object Schema {
   }
 
   final case class PeerSyncHeartbeat(
-                                      bestBundle: Bundle
+                                      maxBundle: Bundle
                                     ) extends GossipMessage
 
   final case class Bundle(
@@ -348,7 +350,7 @@ object Schema {
 
   case class DownloadRequest() extends DownloadMessage
   case class DownloadResponse(
-                               bestBundle: Bundle,
+                               maxBundle: Bundle,
                                genesisBundle: Bundle,
                                genesisTX: TX
                              ) extends DownloadMessage

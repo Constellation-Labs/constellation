@@ -56,27 +56,26 @@ class PeerToPeer(
       processHeartbeat {
 
         downloadHeartbeat()
+        heartbeatRound += 1
 
      //   checkpointHeartbeat()
 
-        val numAccepted = gossipHeartbeat()
+        gossipHeartbeat()
 
         if (heartbeatRound % 30 == 0) {
           logger.debug(
             s"Heartbeat: ${id.short}, " +
-              s"bundles: $totalNumBundleMessages, " +
+              s"numActiveBundles: ${activeDAGBundles.size}, " +
+              s"maxHeight: ${maxBundle.meta.get.height.get}, " +
+              s"numTotalValidTX: $totalNumValidatedTX " +
+              s"numPeers: ${peers.size} " +
+              s"numBundleMessages: $totalNumBundleMessages, " +
               s"broadcasts: $totalNumBroadcastMessages, " +
-              s"numBundles: ${activeDAGBundles.size}, " +
-              s"gossip: $totalNumGossipMessages, " +
+              s"numGossipMessages: $totalNumGossipMessages, " +
               s"balance: $selfBalance, " +
-              s"memPool: ${memPoolTX.size} numPeers: ${peers.size} " +
-              s"numAccepted: $numAccepted, numTotalValid: ${lastValidTXs.size} " +
+              s"memPool: ${memPool.size} numPeers: ${peers.size} " +
               s"validUTXO: ${validLedger.map { case (k, v) => k.slice(0, 5) -> v }} " +
-              s"peers: ${
-                peers.map { p =>
-                  p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes
-                }.mkString(",")
-              }"
+              ""
           )
         }
 

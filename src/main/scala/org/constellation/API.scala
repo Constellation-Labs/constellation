@@ -77,18 +77,15 @@ class API(
         }
       } ~
       path("longestChain") {
-        val ancestors = extractBundleAncestorsUntilValidation(maxBundle)
-        val all = validBundles ++ ancestors.map{bundleHashToBundle} ++ Seq(maxBundle)
-        complete(
-          all.json
-        )
+        val ancestors = findAncestors(maxBundle.extractParentBundleHash.pbHash)
+        complete(ancestors)
       } ~
       pathPrefix("bundle") {
         get {
           extractUnmatchedPath { p =>
             logger.debug(s"Unmatched path on bundle result $p")
             val ps = p.toString().tail
-            complete(validBundles.filter{_.hash == ps}.headOption.prettyJson)
+            complete(db.getAs[BundleMetaData](ps).prettyJson)
           }
         }
       } ~
@@ -112,7 +109,7 @@ class API(
             "id" -> id.b58,
             "z_keyPair" -> keyPair.json,
             "shortId" -> id.short,
-            "last1000BundleHashSize" -> last100BundleHashes.size.toString,
+            "last1000BundleHashSize" -> last100ValidBundleMetaData.size.toString,
             "numSyncedTX" -> numSyncedTX.toString,
             "numSyncedBundles" -> numSyncedBundles.toString,
             "numValidBundles" -> totalNumValidBundles.toString,
@@ -130,7 +127,7 @@ class API(
          //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
             "numActiveBundles" -> activeDAGBundles.size.toString,
             "last10TXHash" -> last100SelfSentTransactions.reverse.slice(0, 10).map{_.hash}.mkString(","),
-            "last10ValidBundleHashes" -> last100BundleHashes.reverse.slice(0, 10).reverse.mkString(","),
+            "last10ValidBundleHashes" -> last10000ValidTXHash.reverse.slice(0, 10).reverse.mkString(","),
             "lastValidBundleHash" -> lastValidBundleHash.pbHash,
             "lastValidBundle" -> Try{Option(lastValidBundle).map{_.pretty}.getOrElse("")}.getOrElse(""),
             "z_genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
@@ -139,35 +136,28 @@ class API(
             "reputations" -> normalizedDeterministicReputation.map{
               case (k,v) => k.short + " " + v
             }.mkString(" - "),
-            "numProcessedBundles" -> bundleHashToBundle.size.toString,
+            "numProcessedBundles" -> totalNumNewBundleAdditions.toString,
             "numSyncPendingBundles" -> syncPendingBundleHashes.size.toString,
             "numSyncPendingTX" -> syncPendingTXHashes.size.toString,
             "peerBestBundles" -> peerSync.toMap.map{
               case (id, b) =>
-                s"PEER: ${id.short}, BEST: ${b.bestBundle.map{ z => z.short + " " +
-                  Try{z.pretty}.getOrElse("unknown")}.getOrElse("")} " // LAST: ${b.lastBestBundle.pretty}
-            }.mkString(" ----- "),
-            "allPeerSynchronizedLastHash" -> Try(
-              (peerSync.map{_._2.validBundleHashes.last} ++ Seq(lastValidBundle.hash)).toSet.size == 1
-              ).map{_.toString}.getOrElse(""),
-            "allPeerAllBundleHashSync" -> peerSync.forall{_._2.validBundleHashes == last100BundleHashes}.toString,
+                s"${id.short}: ${b.maxBundle.pretty}"
+            }.mkString(" --- "),
             "z_peers" -> peers.map{_.data}.json,
             "z_UTXO" -> validLedger.toMap.json,
-            "z_Bundles" -> activeDAGBundles.map{_.pretty}.mkString(" - - - "),
+            "z_Bundles" -> activeDAGBundles.map{_.bundle.pretty}.mkString(" - - - "),
             "downloadMode" -> downloadMode.toString,
             "allPeersHaveKnownBestBundles" -> peerSync.forall{
               case (_, hb) =>
-                hb.bestBundle.forall{ b => bundleHashToBundle.contains(b.hash)}
+                db.contains(hb.maxBundle.hash)
             }.toString,
-            "allPeersAgreeWithBestBundle" -> peerSync.forall{
-              _._2.bestBundle.exists{_.hash == maxBundle.hash}
-            }.toString
+            "allPeersAgreeWithMaxBundle" -> peerSync.forall{_._2.maxBundle == maxBundle}.toString
             //,
             // "z_lastBundleVisualJSON" -> Option(lastBundle).map{ b => b.extractTreeVisual.json}.getOrElse("")
           )))
         } ~
         path("validTX") {
-          complete(lastValidTXs)
+          complete(last10000ValidTXHash)
         } ~
         path("makeKeyPair") {
           val pair = constellation.makeKeyPair()
@@ -227,10 +217,8 @@ class API(
           }
         } ~
         path("dashboard") {
-          val bundleSubset = validBundles.take(20)
-
-          val transactions: Set[TX] = bundleSubset.flatMap(b => b.extractTX).sortBy(_.txData.time).toSet
-
+          val bundleSubset = last100ValidBundleMetaData.reverse.take(20)
+          val transactions: Set[TX] = bundleSubset.flatMap(b => b.bundle.extractTX).sortBy(_.txData.time).toSet
           complete(Map(
             "peers" -> peers.map{_.data},
             "transactions" -> transactions

@@ -9,9 +9,9 @@ import org.constellation.LevelDB
 import org.constellation.primitives.Schema.{Id, Metrics, SendToAddress, TX}
 import constellation._
 
-trait TransactionExt extends NodeData with Ledger with MetricsExt {
+import scala.util.Random
 
-  @volatile var db: LevelDB
+trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo {
 
   @volatile var memPool: Set[String] = Set()
   @volatile var last100SelfSentTransactions: Seq[TX] = Seq()
@@ -60,6 +60,12 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt {
       memPool += hash
     }
     validUpdate
+  }
+
+  def randomTransaction(): Unit = {
+    val peerAddresses = peers.map{_.data.id.address}
+    val randomPeer = Random.shuffle(peerAddresses).head
+    createTransaction(randomPeer.address, Random.nextInt(1000).toLong)
   }
 
 

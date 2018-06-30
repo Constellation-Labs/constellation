@@ -4,9 +4,7 @@ import org.constellation.primitives.Schema.{Id, TX}
 
 import scala.collection.concurrent.TrieMap
 
-trait Ledger {
-
-  val id: Id
+trait Ledger extends NodeData {
 
   val validLedger: TrieMap[String, Long] = TrieMap()
   val memPoolLedger: TrieMap[String, Long] = TrieMap()

@@ -7,7 +7,7 @@ import org.constellation.util.Signed
 
 import scala.collection.concurrent.TrieMap
 
-trait BundleDataExt extends Reputation {
+trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   @volatile var db: LevelDB
 
@@ -24,9 +24,10 @@ trait BundleDataExt extends Reputation {
   @volatile var syncPendingBundleHashes: Set[String] = Set()
   @volatile var syncPendingTXHashes: Set[String] = Set()
 
-  @volatile var activeDAGBundles: Seq[Bundle] = Seq[Bundle]()
+  @volatile var activeDAGBundles: Seq[BundleMetaData] = Seq()
 
   @volatile var linearCheckpointBundles: Set[Bundle] = Set[Bundle]()
+  @volatile var lastCheckpointBundle: Option[Bundle] = None
   val checkpointsInProgress: TrieMap[RoundHash[_ <: CC], Boolean] = TrieMap()
 
   implicit class BundleExtData(b: Bundle) {
@@ -131,20 +132,55 @@ trait BundleDataExt extends Reputation {
     }
   }
 
-  def acceptTransaction(tx: Schema.TX)
+  val confirmWindow = 5
+  @volatile var txInMaxBundleNotInValidation: Set[String] = Set()
 
   def updateMaxBundle(bundleMetaData: BundleMetaData): Unit = {
     if (bundleMetaData.totalScore.get > maxBundle.totalScore.get) {
-      maxBundleMetaData = bundleMetaData
-      val ancestors = findAncestorsUpTo(
-        bundleMetaData.bundle.extractParentBundleHash.pbHash,
-        upTo = 100
-      )
-      last100ValidBundleMetaData = if (ancestors.size < 6 ) Seq()
-      else ancestors.slice(0, ancestors.size - 5)
-      val newTX = last100ValidBundleMetaData.reverse.slice(0, 5).flatMap(_.bundle.extractTX)
-      newTX.foreach(t => acceptTransaction(t))
+      maxBundle.synchronized {
+        maxBundleMetaData = bundleMetaData
+        val ancestors = findAncestorsUpTo(
+          bundleMetaData.bundle.extractParentBundleHash.pbHash,
+          upTo = 100
+        )
+        totalNumValidBundles = maxBundleMetaData.height.get - confirmWindow
+        last100ValidBundleMetaData = if (ancestors.size < confirmWindow + 1) Seq()
+        else ancestors.slice(0, ancestors.size - confirmWindow)
+        val newTX = last100ValidBundleMetaData.reverse
+          .slice(0, confirmWindow).flatMap(_.bundle.extractTX).toSet
+        txInMaxBundleNotInValidation = newTX.map {_.hash}
+          .filter { h => !last10000ValidTXHash.contains(h) }
+
+        // Set this to be active for the combiners.
+        if (!activeDAGBundles.contains(bundleMetaData) &&
+          bundleMetaData.bundle.extractIds.contains(id)) {
+          activeDAGBundles :+= bundleMetaData
+        }
+        newTX.foreach(t => acceptTransaction(t))
+      }
     }
+  }
+
+  def updateBundleFrom(left: BundleMetaData, right: BundleMetaData): BundleMetaData = {
+
+    val ids = right.bundle.extractIds
+    val newReps = left.reputations.map { case (id, rep) =>
+      id -> {
+        if (ids.contains(id)) rep + 1 else rep
+      }
+    }
+
+    val updatedRight = right.copy(
+      height = Some(left.height.get + 1),
+      reputations = newReps
+    )
+
+    val updatedRightScore = updatedRight.copy(
+      totalScore = Some(left.totalScore.get + updatedRight.bundle.score.get)
+    )
+    db.put(right.bundle.hash, updatedRightScore)
+    updateMaxBundle(updatedRightScore)
+    updatedRightScore
   }
 
   def attemptResolveBundle(zero: BundleMetaData, parentHash: String): Unit = {
@@ -162,25 +198,7 @@ trait BundleDataExt extends Reputation {
           if (!left.isResolved) right
           else if (right.isResolved) right
           else {
-
-            val ids = right.bundle.extractIds
-            val newReps = left.reputations.map { case (id, rep) =>
-              id -> {
-                if (ids.contains(id)) rep + 1 else rep
-              }
-            }
-
-            val updatedRight = right.copy(
-              height = Some(left.height.get + 1),
-              reputations = newReps
-            )
-
-            val updatedRightScore = updatedRight.copy(
-              totalScore = Some(left.totalScore.get + updatedRight.bundle.score.get)
-            )
-            db.put(right.bundle.hash, updatedRightScore)
-            updateMaxBundle(updatedRightScore)
-            updatedRightScore
+            updateBundleFrom(left, right)
           }
       }
 
@@ -189,5 +207,25 @@ trait BundleDataExt extends Reputation {
     }
 
   }
+
+
+  def handleBundle(bundle: Bundle): Unit = {
+
+    totalNumBundleMessages += 1
+    val parentHash = bundle.extractParentBundleHash.pbHash
+    val bmd = db.getAs[BundleMetaData](bundle.hash)
+    val notPresent = bmd.isEmpty
+    val zero = if (notPresent) {
+      val rxTime = System.currentTimeMillis()
+      BundleMetaData(bundle, rxTime = rxTime)
+    } else bmd.get
+
+    if (zero.isResolved) {
+      updateMaxBundle(zero)
+    } else {
+      attemptResolveBundle(zero, parentHash)
+    }
+  }
+
 
 }
