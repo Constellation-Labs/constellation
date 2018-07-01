@@ -22,7 +22,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       case BatchBundleHashRequest(hashes) =>
         hashes.foreach{h =>
          /// println("Sending BundleMetaData to peer on request")
-          db.getAs[BundleMetaData](h).foreach{
+          lookupBundle(h).foreach{
             b =>
               udpActor.udpSend(b.bundle, remote)
           }
@@ -30,7 +30,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       case BatchTXHashRequest(hashes) =>
         hashes.foreach{h =>
         //  println(s"Sending tx hash response $h")
-          db.getAs[TX](h).foreach{
+          lookupTransaction(h).foreach{
             b =>
               udpActor.udpSend(b, remote)
           }
@@ -39,11 +39,13 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         handleBundle(b)
       case tx: TX =>
       //  println(s"Rx tx hash ${tx.short}")
-        if (!db.contains(tx)) {
-          db.put(tx)
+        if (lookupTransaction(tx.hash).isEmpty) {
+          storeTransaction(tx)
           numSyncedTX += 1
         }
         syncPendingTXHashes -= tx.hash
+        txSyncRequestTime.remove(tx.hash)
+
       case bb: PeerSyncHeartbeat =>
         handleBundle(bb.maxBundle)
         rid.foreach{ r =>
@@ -65,11 +67,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   def simulateTransactions(): Unit = {
     if (maxBundleMetaData.height.get >= 5) {
-      if (memPool.size < 50) {
-        Seq.fill(3){randomTransaction()}
-      } else {
-        if (Random.nextDouble() < .1) randomTransaction()
-      }
+      if (Random.nextDouble() < .2) randomTransaction()
     }
   }
 
@@ -81,6 +79,10 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     if (syncPendingTXHashes.nonEmpty) {
      // println("Requesting data sync pending of " + syncPendingTXHashes)
       broadcast(BatchTXHashRequest(syncPendingTXHashes))
+      if (syncPendingTXHashes.size > 150) {
+        val toRemove = txSyncRequestTime.toSeq.sortBy(_._2).zipWithIndex.filter{_._2 < 50}.map{_._1._1}.toSet
+        syncPendingTXHashes --= toRemove
+      }
     }
   }
 
@@ -118,7 +120,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   def bundleHeartbeat(): Unit = {
 
-    if (!downloadMode && genesisBundle != null) {
+    if (!downloadMode && genesisBundle != null && maxBundle != null) {
 
 
       // Force accept initial distribution
@@ -129,6 +131,13 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         }
         totalNumValidBundles += 1
         last100ValidBundleMetaData :+= maxBundleMetaData
+      }
+
+      peerSync.foreach{
+        case (id, hb) =>
+           if (hb.maxBundle.meta.exists(z => !z.isResolved)) {
+             attemptResolveBundle(hb.maxBundle.meta.get, hb.maxBundle.extractParentBundleHash.pbHash)
+           }
       }
 
 
@@ -158,7 +167,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
               val minTimeClose = Math.abs(l.rxTime - r.rxTime) < 40000
               if (Random.nextDouble() > 0.5 &&  hasNewTransactions && minTimeClose) { //
                 val b = Bundle(BundleData(both.map{_.bundle}).signed())
-                val pbData = db.getAs[BundleMetaData](pbHash._1.pbHash).get
+                val pbData = lookupBundle(pbHash._1.pbHash).get
                 updateBundleFrom(pbData, BundleMetaData(b))
                 broadcast(b)
               }
@@ -166,7 +175,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         }
 
       if (activeDAGBundles.size > 50) {
-        activeDAGBundles = activeDAGBundles.sortBy(_.totalScore.get).zipWithIndex.filter{_._2 < 30}.map{_._1}
+        activeDAGBundles = activeDAGBundles.sortBy(z => 1*z.totalScore.get).zipWithIndex.filter{_._2 < 30}.map{_._1}
       }
 
     }

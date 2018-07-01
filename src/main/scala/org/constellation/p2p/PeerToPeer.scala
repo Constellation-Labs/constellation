@@ -68,7 +68,7 @@ class PeerToPeer(
           logger.debug(
             s"Heartbeat: ${id.short}, " +
               s"numActiveBundles: ${activeDAGBundles.size}, " +
-              s"maxHeight: ${maxBundle.meta.get.height.get}, " +
+              s"maxHeight: ${Option(maxBundle).flatMap{_.meta.map{_.height}}}, " +
               s"numTotalValidTX: $totalNumValidatedTX " +
               s"numPeers: ${peers.size} " +
               s"numBundleMessages: $totalNumBundleMessages, " +

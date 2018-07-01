@@ -9,6 +9,7 @@ import org.constellation.LevelDB
 import org.constellation.primitives.Schema.{Id, Metrics, SendToAddress, TX}
 import constellation._
 
+import scala.collection.concurrent.TrieMap
 import scala.util.Random
 
 trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo {
@@ -17,6 +18,19 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
   @volatile var last100SelfSentTransactions: Seq[TX] = Seq()
   @volatile var last10000ValidTXHash: Seq[String] = Seq()
 
+  val txSyncRequestTime : TrieMap[String, Long] = TrieMap()
+  val txHashToTX : TrieMap[String, TX] = TrieMap()
+
+  def lookupTransaction(hash: String): Option[TX] = {
+    // LevelDB fix here later?
+    txHashToTX.get(hash)
+  }
+
+  def storeTransaction(tx: TX): Unit = {
+    txHashToTX(tx.hash) = tx
+    db.put(tx)
+  }
+
   def createTransaction(
                          dst: String,
                          amount: Long,
@@ -24,7 +38,7 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
                          src: String = id.address.address
                        ): TX = {
     val tx = createTransactionSafe(src, dst, amount, keyPair, normalized)
-    db.put(tx)
+    storeTransaction(tx)
     if (last100SelfSentTransactions.size > 100) {
       last100SelfSentTransactions.tail :+ tx
     }

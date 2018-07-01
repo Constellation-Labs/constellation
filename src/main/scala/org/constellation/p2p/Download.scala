@@ -20,7 +20,7 @@ trait Download extends PeerAuth {
 
   def handleDownloadResponse(d: DownloadResponse): Unit = {
     if (genesisBundle == null) {
-      db.put(d.genesisTX)
+      storeTransaction(d.genesisTX)
       acceptGenesis(d.genesisBundle)
       if (d.maxBundle.hash == d.genesisBundle.hash) {
         downloadMode = false

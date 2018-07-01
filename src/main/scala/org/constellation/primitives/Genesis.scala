@@ -8,13 +8,12 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
   def acceptGenesis(b: Bundle): Unit = {
     genesisBundle = b
     val md = BundleMetaData(b, Some(0), Map(id.b58 -> 1L), Some(1000), transactionsResolved = true)
-    db.put(genesisBundle.hash, md)
+    storeBundle(md)
     maxBundleMetaData = md
     genesisBundle.extractTX.foreach(acceptTransaction)
     totalNumValidBundles += 1
     val gtx = b.extractTX.head
     gtx.txData.data.updateLedger(memPoolLedger)
-    acceptTransaction(gtx)
   }
 
   def createGenesis(tx: TX): Unit = {

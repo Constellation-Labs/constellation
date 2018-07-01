@@ -72,7 +72,7 @@ class API(
           extractUnmatchedPath { p =>
             logger.debug(s"Unmatched path on address result $p")
             val ps = p.toString().tail
-            complete(db.getAs[TX](ps).json)
+            complete(lookupTransaction(ps).prettyJson)
           }
         }
       } ~
@@ -85,7 +85,7 @@ class API(
           extractUnmatchedPath { p =>
             logger.debug(s"Unmatched path on bundle result $p")
             val ps = p.toString().tail
-            complete(db.getAs[BundleMetaData](ps).prettyJson)
+            complete(lookupBundle(ps).prettyJson)
           }
         }
       } ~
@@ -147,21 +147,23 @@ class API(
               case (id, b) =>
                 s"${id.short}: ${b.maxBundle.hash.slice(0, 5)} ${Try{b.maxBundle.pretty}} " +
                   s"parent${b.maxBundle.extractParentBundleHash.pbHash.slice(0, 5)} " +
-                  s"${db.contains(b.maxBundle.hash)} ${b.maxBundle.meta.map {_.transactionsResolved}}"
+                  s"${lookupBundle(b.maxBundle.hash).nonEmpty} ${b.maxBundle.meta.map {_.transactionsResolved}}"
             }.mkString(" --- "),
             "z_peers" -> peers.map{_.data}.json,
             "z_validLedger" -> validLedger.toMap.json,
             "z_mempoolLedger" -> memPoolLedger.toMap.json,
-            "z_Bundles" -> activeDAGBundles.map{_.bundle.pretty}.mkString(" - - - "),
+            "z_Bundles" -> activeDAGBundles.sortBy{_.totalScore.getOrElse(0D)}
+              .map{_.bundle.pretty}.mkString(" --- "),
             "downloadMode" -> downloadMode.toString,
             "allPeersHaveKnownBestBundles" -> peerSync.forall{
               case (_, hb) =>
-                db.contains(hb.maxBundle.hash)
+                lookupBundle(hb.maxBundle.hash).nonEmpty
             }.toString,
             "allPeersAgreeOnValidLedger" -> peerSync.forall{
               case (_, hb) =>
                 hb.validLedger == validLedger.toMap
             }.toString,
+            "allPeersHaveResolvedMaxBundles" -> peerSync.forall{_._2.maxBundle.meta.exists(_.isResolved)}.toString,
             "allPeersAgreeWithMaxBundle" -> peerSync.forall{_._2.maxBundle == maxBundle}.toString
             //,
             // "z_lastBundleVisualJSON" -> Option(lastBundle).map{ b => b.extractTreeVisual.json}.getOrElse("")
