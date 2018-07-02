@@ -11,6 +11,9 @@ import scala.collection.mutable
 
 trait PeerInfo {
 
+
+  val peersAwaitingAuthenticationToNumAttempts: TrieMap[InetSocketAddress, Int] = TrieMap()
+
   val peerSync: TrieMap[Id, PeerSyncHeartbeat] = TrieMap()
 
   var p2pActor : ActorRef = _

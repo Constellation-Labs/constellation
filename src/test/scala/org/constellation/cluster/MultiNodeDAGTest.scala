@@ -57,18 +57,20 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       val others = nodes.filter{_ != node}
       others.map{
         n =>
-          Future {
-            node.api.postSync("peer", n.udpAddressString)
-          }
+          Thread.sleep(2000)
+          //Future {
+            node.api.post("peer", n.udpAddressString)
+          //}
       }
     }
 
     import scala.concurrent.duration._
-    Await.result(Future.sequence(results), 30.seconds)
+    Await.result(Future.sequence(results), 60.seconds)
 
     for (node <- nodes) {
       val peers = node.api.getBlocking[Seq[Peer]]("peerids")
       assert(peers.length == (nodes.length - 1))
+      println("peers length" + peers.length)
       val others = nodes.filter{_ != node}
       val havePublic = Random.nextDouble() > 0.5
       val haveSecret = Random.nextDouble() > 0.5 || havePublic

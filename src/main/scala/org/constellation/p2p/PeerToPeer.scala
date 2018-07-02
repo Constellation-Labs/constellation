@@ -3,6 +3,7 @@ package org.constellation.p2p
 import java.security.PublicKey
 
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
+import akka.http.scaladsl.model.StatusCodes
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import org.constellation.Data
@@ -10,6 +11,7 @@ import org.constellation.consensus.Consensus._
 import org.constellation.primitives.Schema.{TX, _}
 import org.constellation.util.Heartbeat
 import constellation._
+
 import scala.concurrent.ExecutionContextExecutor
 
 class PeerToPeer(
@@ -57,6 +59,22 @@ class PeerToPeer(
 
       processHeartbeat {
 
+        if (heartbeatRound % 3 == 0) {
+          peersAwaitingAuthenticationToNumAttempts.foreach {
+            case (peerAddr, attempts) =>
+              if (attempts > 10 || peerLookup.contains(peerAddr))
+                peersAwaitingAuthenticationToNumAttempts.remove(peerAddr)
+              else {
+                val res = addPeerFromLocal(peerAddr)
+                if (res == StatusCodes.OK) peersAwaitingAuthenticationToNumAttempts.remove(peerAddr)
+                else {
+                  peersAwaitingAuthenticationToNumAttempts(peerAddr) =
+                    peersAwaitingAuthenticationToNumAttempts(peerAddr) + 1
+                }
+              }
+          }
+        }
+
         downloadHeartbeat()
         heartbeatRound += 1
 
@@ -87,6 +105,8 @@ class PeerToPeer(
 
     case UDPMessage(message: Any, remote) =>
 
+
+
       message match {
 
         case d: DownloadRequest => handleDownloadRequest(d, remote)
@@ -112,7 +132,8 @@ class PeerToPeer(
 */
 
         // case g @ Gossip(_) => handleGossip(g, remote)
-        case gm : GossipMessage => handleGossip(gm, remote)
+        case gm : GossipMessage =>
+          handleGossip(gm, remote)
 
         case u =>
           logger.error(s"Unrecognized UDP message: $u")

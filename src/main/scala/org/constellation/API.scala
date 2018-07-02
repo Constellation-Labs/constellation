@@ -152,7 +152,7 @@ class API(
             "z_peers" -> peers.map{_.data}.json,
             "z_validLedger" -> validLedger.toMap.json,
             "z_mempoolLedger" -> memPoolLedger.toMap.json,
-            "z_Bundles" -> activeDAGBundles.sortBy{_.totalScore.getOrElse(0D)}
+            "z_Bundles" -> activeDAGBundles.sortBy{z => -1*z.totalScore.getOrElse(0D)}
               .map{_.bundle.pretty}.mkString(" --- "),
             "downloadMode" -> downloadMode.toString,
             "allPeersHaveKnownBestBundles" -> peerSync.forall{
@@ -265,6 +265,7 @@ class API(
 
               Try {
                 //    logger.debug(s"Received request to add a new peer $peerAddress")
+                var addr : Option[InetSocketAddress] = None
                 val result = Try {
                   peerAddress.replaceAll('"'.toString, "").split(":") match {
                     case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
@@ -274,6 +275,7 @@ class API(
                   case None =>
                     StatusCodes.BadRequest
                   case Some(v) =>
+                    addr = Some(v)
                     val fut = (peerToPeerActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
                     val res = Try {
                       Await.result(fut, timeout.duration)
@@ -294,6 +296,10 @@ class API(
                           if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
                         } else f
                     }
+                }
+
+                if (result != StatusCodes.OK) {
+                  addr.foreach(peersAwaitingAuthenticationToNumAttempts(_) = 1)
                 }
 
                 logger.debug(s"New peer request $peerAddress statusCode: $result")

@@ -8,6 +8,8 @@ import org.constellation.util.Signed
 import scala.collection.concurrent.TrieMap
 import constellation._
 
+import scala.util.Try
+
 trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   @volatile var db: LevelDB
@@ -49,7 +51,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   def storeBundle(bundleMetaData: BundleMetaData): Unit = {
     bundleToBundleMeta(bundleMetaData.bundle.hash) = bundleMetaData
-    db.put(bundleMetaData.bundle.hash, bundleMetaData)
+    Try{db.put(bundleMetaData.bundle.hash, bundleMetaData)}
   }
 
   implicit class BundleExtData(b: Bundle) {
@@ -165,7 +167,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     }
   }
 
-  val confirmWindow = 5
+  val confirmWindow = 15
   @volatile var txInMaxBundleNotInValidation: Set[String] = Set()
 
 
@@ -198,7 +200,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
     // Set this to be active for the combiners.
     if (!activeDAGBundles.contains(bundleMetaData) &&
-      !bundleMetaData.bundle.extractIds.contains(id)) {
+      !bundleMetaData.bundle.extractIds.contains(id) && bundleMetaData.bundle != genesisBundle) {
       activeDAGBundles :+= bundleMetaData
     }
   }

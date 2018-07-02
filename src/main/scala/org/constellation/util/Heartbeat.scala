@@ -25,7 +25,7 @@ trait Heartbeat {
   val heartbeatEnabled: Boolean
   val logger: Logger
   var lastHeartbeatTime: Long = System.currentTimeMillis()
-  val period = 2
+  val period = 1
   val timeUnit = TimeUnit.SECONDS
   val loggerEnabled: Boolean = true
   val heartbeatMessage: Any = InternalHeartbeat
