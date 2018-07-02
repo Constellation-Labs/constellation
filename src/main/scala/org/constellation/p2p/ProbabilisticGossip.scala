@@ -82,7 +82,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
      // println("Requesting data sync pending of " + syncPendingTXHashes)
       broadcast(BatchTXHashRequest(syncPendingTXHashes))
       if (syncPendingTXHashes.size > 150) {
-        val toRemove = txSyncRequestTime.toSeq.sortBy(_._2).zipWithIndex.filter{_._2 < 50}.map{_._1._1}.toSet
+        val toRemove = txSyncRequestTime.toSeq.sortBy(_._2).zipWithIndex.filter{_._2 > 50}.map{_._1._1}.toSet
         syncPendingTXHashes --= toRemove
       }
     }
@@ -97,12 +97,12 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     else pbHash
 
     val lastPBWasSelf = lookupBundle(pbh.pbHash).exists(_.bundle.bundleData.id == id)
-   // if (!lastPBWasSelf || totalNumValidatedTX == 1) {
+    if (!lastPBWasSelf || totalNumValidatedTX == 1) {
 
       // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
-      val memPoolEmit = Random.nextInt() < 0.2
+      val memPoolEmit = Random.nextInt() < 0.1
       val filteredPool = memPool.diff(txInMaxBundleNotInValidation).filterNot(last10000ValidTXHash.contains)
-      val memPoolSelSize = 5 + Random.nextInt(5)
+      val memPoolSelSize = Random.nextInt(5)
       val memPoolSelection = Random.shuffle(filteredPool.toSeq)
         .slice(0, memPoolSelSize + minGenesisDistrSize + 1)
 
@@ -121,7 +121,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         updateBundleFrom(meta, BundleMetaData(b))
         broadcast(b)
       }
-   // }
+    }
   }
 
   def bundleHeartbeat(): Unit = {
@@ -162,6 +162,8 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
       poolEmit()
 
+      // Maybe only emit when PBH matches our current?
+      // Need to slice this down here
       activeDAGBundles.groupBy(b => b.bundle.extractParentBundleHash -> b.bundle.maxStackDepth)
         .filter{_._2.size > 1}.toSeq //.sortBy(z => 1*z._1._2).headOption
         .foreach { case (pbHash, bundles) =>
@@ -200,7 +202,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         }
 
       if (activeDAGBundles.size > 200) {
-        activeDAGBundles = activeDAGBundles.sortBy(z => 1*z.totalScore.get).zipWithIndex.filter{_._2 < 50}.map{_._1}
+        activeDAGBundles = activeDAGBundles.sortBy(z => -1*z.totalScore.get).zipWithIndex.filter{_._2 < 50}.map{_._1}
       }
 
     }
