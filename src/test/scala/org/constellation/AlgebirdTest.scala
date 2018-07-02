@@ -1,3 +1,4 @@
+/*
 package org.constellation
 
 import org.scalatest.FlatSpec
@@ -13,12 +14,13 @@ class AlgebirdTest extends FlatSpec {
   private val randomTX = Seq.fill(30) {
     val kp = makeKeyPair()
     val kp2 = makeKeyPair()
-    TX(TXData(Seq(kp.address), kp2.address, 1L).signed()(kp))
+    createTransactionSafe(kp.address.address, kp2.address.address, 1L, kp)
   }
 
-  private val randomIds = randomTX.map{_.tx.encodedPublicKeys.head.b58Encoded}
+  private val randomIds = randomTX.map{_.hash}
 
-  private val txHash = randomTX.map{_.hash}.map {_.getBytes}
+  private val txHashStr = randomTX.map{_._1.hashSignature.signedHash}
+  private val txHash = randomTX.map{_._1.hashSignature.signedHash}.map {_.getBytes}
 
   "HLL" should "estimate hash unions" in {
 
@@ -63,7 +65,7 @@ class AlgebirdTest extends FlatSpec {
       }.map {
         _.getBytes
       }
-      tx.hash -> ids
+      tx._1.hashSignature.signedHash -> ids
     }
 
     val actualFrequencies = dataI.groupBy(_._1).map {
@@ -111,7 +113,7 @@ class AlgebirdTest extends FlatSpec {
       val txs = Seq.fill(Random.nextInt(10) + 5) {
         randomTX(Random.nextInt(randomTX.length))
       }
-      txs.map(_.hash).toSet
+      txs.map(_._1.hashSignature.signedHash).toSet
     }
 
     println(dataI.length)
@@ -151,3 +153,4 @@ class AlgebirdTest extends FlatSpec {
 
   }
 }
+*/

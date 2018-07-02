@@ -50,7 +50,8 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     // Create a genesis transaction
     val numCoinsInitial = 4e9.toLong
     val genTx = r1.getBlocking[TX]("genesis/" + numCoinsInitial)
-    Thread.sleep(1000)
+    Thread.sleep(2000)
+
 
     val results = nodes.flatMap{ node =>
       val others = nodes.filter{_ != node}
@@ -80,7 +81,9 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       })
     }
 
-    Thread.sleep(10000)
+
+
+    Thread.sleep(3000)
 
     println("-"*10)
     println("Initial distribution")
@@ -88,8 +91,8 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     val initialDistrTX = nodes.tail.map{ n =>
       val dst = n.data.selfAddress
-      val s = SendToAddress(dst, 1e7.toLong)
-      r1.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
+      val s = SendToAddress(dst.address, 1e7.toLong)
+      r1.postRead[TX]("sendToAddress", s)
     }
 
     Thread.sleep(15000)
@@ -105,12 +108,16 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       Future {
         val src = randomNode
         val dst = randomOtherNode(src)
-        val s = SendToAddress(dst.data.id.address, Random.nextInt(1000).toLong)
-        src.api.postRead[TransactionQueryResponse]("sendToAddress", s).tx.get
+        val s = SendToAddress(dst.data.id.address.address, Random.nextInt(1000).toLong)
+        src.api.postRead[TX]("sendToAddress", s)
       }(ec)
     }
 
-    val numTX = 2
+
+
+
+
+    val numTX = 200
 
     val start = System.currentTimeMillis()
 
@@ -129,96 +136,103 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     var done = false
 
 
-/*
-    while (!done) {
-      val nodeStatus = nodes.map { n =>
-        Try{(n.peerToPeerActor ? GetValidTX).mapTo[Set[TX]].get()}.map { validTX =>
-          val percentComplete = 100 - (allTX.diff(validTX).size.toDouble / allTX.size.toDouble) * 100
-          println(s"Node ${n.data.id.short} validTXSize: ${validTX.size} allTXSize: ${allTX.size} % complete: $percentComplete")
-          Thread.sleep(1000)
-          validTX == allTX
-        }.getOrElse(false)
-      }
-
-      if (nodeStatus.forall { x => x }) {
-        done = true
-      }
-    }
-
-    val end = System.currentTimeMillis()
-
-    println(s"Completion time seconds: ${(end-start) / 1000}")
-*/
-
-    Thread.sleep(5000)
-
-//  Thread.sleep(3000000)
-
-/*
-    for (node <- nodes) {
-      val lkup = node.rpc.postRead[Option[TX]]("db", tx.hash)
-      assert(lkup.get == tx)
-    }
-    val cache = r1.getBlocking[Map[String, TX]]("walletAddressInfo")
-    val genSrc = tx.tx.data.src.head
-    assert(cache(genSrc.address) == tx)
-    val genDst = tx.tx.data.dst
-    assert(cache(genDst.address) == tx)
-    assert(genSrc.normalizedBalance == (-1 * numCoinsInitial))
-    assert(genDst.normalizedBalance == numCoinsInitial)
-    val filteredCache = cache.flatMap{ case (k,v) => v.output(k)}
-    assert(filteredCache.size == 1)
-    assert(filteredCache.head.normalizedBalance == numCoinsInitial)
-*/
-
-/*
 
 
-    val b1 = r1.getBlocking[Seq[Address]]("balances")
-    import akka.pattern.ask
-
- //   println(b1)
-    def n1UTXO = (n1.chainStateActor ? GetUTXO).mapTo[Map[String, Long]].get()
-   // assert(n1UTXO == Map(tx.tx.data.dst.address -> numCoinsInitialActual, tx.tx.data.src.head.address -> 0L))
 
 
-    val n2 = nodes(1)
-    val a = n2.rpc.getBlocking[Address]("address")
-    val id = n2.rpc.getBlocking[Id]("id")
-    val amount2 = 1e6.toLong
-
-    val s = SendToAddress(a, amount2, Some(id.id))
-    r1.post("sendToAddress", s)
-
-    Thread.sleep(2000)
-
-    val b = n2.rpc.getBlocking[Seq[Address]]("balances")
-  //  println("num balances " + b.size)
-  //  println("balances n2 " + b)
-    assert(b.size == 1)
-    assert(b.head.normalizedBalance == amount2)
-
-    def n2UTXO = (n2.chainStateActor ? GetUTXO).mapTo[Map[String, Long]].get()
-  //  println(n1UTXO)
-  //  println(n2UTXO)
+    /*
 
 
-    val n3 = nodes(2)
-    val a3 = n3.rpc.getBlocking[Address]("address")
-    val id3 = n3.rpc.getBlocking[Id]("id")
-    val s3 = SendToAddress(a3, 1.toLong, Some(id3.id))
+        while (!done) {
+          val nodeStatus = nodes.map { n =>
+            Try{(n.peerToPeerActor ? GetValidTX).mapTo[Set[TX]].get()}.map { validTX =>
+              val percentComplete = 100 - (allTX.diff(validTX).size.toDouble / allTX.size.toDouble) * 100
+              println(s"Node ${n.data.id.short} validTXSize: ${validTX.size} allTXSize: ${allTX.size} % complete: $percentComplete")
+              Thread.sleep(1000)
+              validTX == allTX
+            }.getOrElse(false)
+          }
 
-    n2.rpc.post("sendToAddress", s3)
+          if (nodeStatus.forall { x => x }) {
+            done = true
+          }
+        }
 
-    Thread.sleep(2000)
+        val end = System.currentTimeMillis()
 
-    val b3 = n3.rpc.getBlocking[Seq[Address]]("balances")
-    val b22 = n2.rpc.getBlocking[Seq[Address]]("balances")
-    println(b22)
-    println(b3)
-   // println(n2UTXO)
+        println(s"Completion time seconds: ${(end-start) / 1000}")
 
-*/
+    */
+
+    Thread.sleep(55555000)
+
+    //  Thread.sleep(3000000)
+
+    /*
+        for (node <- nodes) {
+          val lkup = node.rpc.postRead[Option[TX]]("db", tx.hash)
+          assert(lkup.get == tx)
+        }
+        val cache = r1.getBlocking[Map[String, TX]]("walletAddressInfo")
+        val genSrc = tx.tx.data.src.head
+        assert(cache(genSrc.address) == tx)
+        val genDst = tx.tx.data.dst
+        assert(cache(genDst.address) == tx)
+        assert(genSrc.normalizedBalance == (-1 * numCoinsInitial))
+        assert(genDst.normalizedBalance == numCoinsInitial)
+        val filteredCache = cache.flatMap{ case (k,v) => v.output(k)}
+        assert(filteredCache.size == 1)
+        assert(filteredCache.head.normalizedBalance == numCoinsInitial)
+    */
+
+    /*
+
+
+        val b1 = r1.getBlocking[Seq[Address]]("balances")
+        import akka.pattern.ask
+
+     //   println(b1)
+        def n1UTXO = (n1.chainStateActor ? GetUTXO).mapTo[Map[String, Long]].get()
+       // assert(n1UTXO == Map(tx.tx.data.dst.address -> numCoinsInitialActual, tx.tx.data.src.head.address -> 0L))
+
+
+        val n2 = nodes(1)
+        val a = n2.rpc.getBlocking[Address]("address")
+        val id = n2.rpc.getBlocking[Id]("id")
+        val amount2 = 1e6.toLong
+
+        val s = SendToAddress(a, amount2, Some(id.id))
+        r1.post("sendToAddress", s)
+
+        Thread.sleep(2000)
+
+        val b = n2.rpc.getBlocking[Seq[Address]]("balances")
+      //  println("num balances " + b.size)
+      //  println("balances n2 " + b)
+        assert(b.size == 1)
+        assert(b.head.normalizedBalance == amount2)
+
+        def n2UTXO = (n2.chainStateActor ? GetUTXO).mapTo[Map[String, Long]].get()
+      //  println(n1UTXO)
+      //  println(n2UTXO)
+
+
+        val n3 = nodes(2)
+        val a3 = n3.rpc.getBlocking[Address]("address")
+        val id3 = n3.rpc.getBlocking[Id]("id")
+        val s3 = SendToAddress(a3, 1.toLong, Some(id3.id))
+
+        n2.rpc.post("sendToAddress", s3)
+
+        Thread.sleep(2000)
+
+        val b3 = n3.rpc.getBlocking[Seq[Address]]("balances")
+        val b22 = n2.rpc.getBlocking[Seq[Address]]("balances")
+        println(b22)
+        println(b3)
+       // println(n2UTXO)
+
+    */
 
 
     // println(b3)

@@ -14,15 +14,8 @@ class TXTest extends FlatSpec {
   val address2 = pubKeyToAddress(tempKey2.getPublic)
   val dst = pubKeyToAddress(tempKey3.getPublic)
 
-  val tx = TX(
-    TXData(
-      Seq(address1, address2),
-      dst,
-      1L,
-      keyMap = Seq(0, 0, 1)
-    ).multiSigned()(Seq(tempKey, tempKey1, tempKey2))
-  )
-
+  val tx = randomTransactions.head
+  /*
   "TX validation" should "sign and validate" in {
 
     assert(tx.valid)
@@ -39,7 +32,7 @@ class TXTest extends FlatSpec {
     assert(!tx2.valid)
 
   }
-
+*/
   "TX Gossip" should "demonstrate gossip traversal to determine stack depth" in {
 
 
@@ -87,6 +80,17 @@ class TXTest extends FlatSpec {
     assert(bbb.maxStackDepth == 3)
     assert(bbb.totalNumEvents == 8)
 
+
+    val b2 = Bundle(BundleData(Seq(
+      TransactionHash("q"),
+      ParentBundleHash("asdf")
+    )).signed()(tempKey))
+
+    assert(b2.kryoWrite.kryoExtract[Bundle] == b2)
+    assert(tx.kryoWrite.kryoExtract[TX] == tx)
+    //assert(b2.json.x[Bundle] == b2)
+    //println(b2.json)
+    //assert(bbb.json.x[Bundle] == bbb)
 
 
 

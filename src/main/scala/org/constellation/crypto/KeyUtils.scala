@@ -130,6 +130,11 @@ trait KeyUtilsExt {
     ks -> bks
   }
 
+  def insertProvider(): Int = {
+    import java.security.Security
+    Security.insertProviderAt(new org.spongycastle.jce.provider.BouncyCastleProvider(), 1)
+  }
+
   /**
     * Simple Bitcoin like wallet grabbed from some stackoverflow post
     * Mostly for testing purposes, feel free to improve.

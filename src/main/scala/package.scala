@@ -13,11 +13,10 @@ import akka.util.{ByteString, Timeout}
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.google.common.hash.Hashing
-import com.twitter.chill.{IKryoRegistrar, KryoBase, ScalaKryoInstantiator}
+import com.twitter.chill.{IKryoRegistrar, KryoBase, KryoPool, ScalaKryoInstantiator}
 import org.constellation.p2p._
-import org.constellation.primitives.Schema.{Address, Bundle, Id}
-import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
-import org.constellation.crypto.KeyUtils.{KeyPairSerializer, PrivateKeySerializer, PublicKeySerializer}
+import org.constellation.primitives.Schema.{AddressMetaData, Bundle, Id}
+import org.constellation.util.{HashSignature, POWExt, POWSignHelp, ProductHash}
 import org.constellation.crypto.KeyUtilsExt
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
@@ -182,23 +181,42 @@ package object constellation extends KeyUtilsExt with POWExt
   val kryo: KryoBase = instantiator.newKryo()
   // kryo.register(classOf[PrivateKey], new PrivKeyKryoSerializer())
   // kryo.addDefaultSerializer(classOf[PrivateKey], new PrivKeyKryoSerializer())
-  kryo.register(classOf[PublicKey], new PubKeyKryoSerializer())
-  kryo.addDefaultSerializer(classOf[PublicKey], new PubKeyKryoSerializer())
+  // kryo.register(classOf[PublicKey], new PubKeyKryoSerializer())
+  // kryo.addDefaultSerializer(classOf[PublicKey], new PubKeyKryoSerializer())
+  def guessThreads: Int = {
+    val cores = Runtime.getRuntime.availableProcessors
+    val GUESS_THREADS_PER_CORE = 4
+    GUESS_THREADS_PER_CORE * cores
+  }
 
+  val kryoPool: KryoPool = KryoPool.withBuffer(guessThreads,
+    new ScalaKryoInstantiator().setRegistrationRequired(false), 32, 1024*1024*100)
 
   implicit class KryoExt[T](a: T) {
     def kryoWrite: Array[Byte] = {
-      val out = new Output(32, 1024*1024*100)
+      /*val out = new Output(32, 1024*1024*100)
       kryo.writeClassAndObject(out, a)
-      out.getBuffer
+      out.flush()
+      val buf = out.getBuffer
+      out.close()
+      buf*/
+      kryoPool.toBytesWithClass(a)
     }
   }
 
   implicit class KryoExtByte(a: Array[Byte]) {
     def kryoRead: AnyRef = {
-      val kryoInput = new Input(a)
-      val deser = kryo.readClassAndObject(kryoInput)
+      val deser = kryoPool.fromBytes(a)
       deser
+    }
+    def kryoExtract[T]: T = {
+      //import scala.reflect.ClassTag
+      // import scala.reflect._
+      kryoPool.fromBytes(a).asInstanceOf[T] //, classTag[T].runtimeClass.asInstanceOf[Class[T]])
+/*      val kryoInput = new Input(a)
+      val deser = kryo.readClassAndObject(kryoInput)
+      kryoInput.close()
+      deser.asInstanceOf[T]*/
     }
   }
 
@@ -272,8 +290,8 @@ package object constellation extends KeyUtilsExt with POWExt
       s"hostString: ${inetSocketAddress.getHostString}, port: ${inetSocketAddress.getPort}"
   }
 
-  implicit def pubKeyToAddress(key: PublicKey): Address =  Address(publicKeyToAddressString(key))
-  implicit def pubKeysToAddress(key: Seq[PublicKey]): Address =  Address(publicKeysToAddressString(key))
+  implicit def pubKeyToAddress(key: PublicKey): AddressMetaData =  AddressMetaData(publicKeyToAddressString(key))
+  implicit def pubKeysToAddress(key: Seq[PublicKey]): AddressMetaData =  AddressMetaData(publicKeysToAddressString(key))
 
   implicit class KeyPairFix(kp: KeyPair) {
 
@@ -285,7 +303,7 @@ package object constellation extends KeyUtilsExt with POWExt
         kp.getPublic == other.getPublic
     }
 
-    def address: Address = pubKeyToAddress(kp.getPublic)
+    def address: AddressMetaData = pubKeyToAddress(kp.getPublic)
 
   }
 
@@ -295,6 +313,13 @@ package object constellation extends KeyUtilsExt with POWExt
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
     def query[T: ClassTag](m: Any): T = (a ? m).mapTo[T].get()
   }
+
+  def signHashWithKeyB64(hash: String, privateKey: PrivateKey): String = base64(signData(hash.getBytes())(privateKey))
+
+  def hashSign(hash: String, keyPair: KeyPair): HashSignature = {
+    HashSignature(hash, signHashWithKeyB64(hash, keyPair.getPrivate), keyPair.getPublic.encoded.b58Encoded)
+  }
+
 
 /*
   implicit def orderingByBundle[A <: Bundle]: Ordering[A] =

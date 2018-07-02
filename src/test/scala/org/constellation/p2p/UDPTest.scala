@@ -182,6 +182,7 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 */
   }
 
+/*
   "Kryo serialize" should "work with keys" in {
 
     val kp = makeKeyPair()
@@ -193,7 +194,8 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
    // assert(stuff.kryoRead.asInstanceOf[PrivateKey] == prv)
 
   }
-
+*/
+/*
 
   "Kryo serialize large class" should "work with keys" in {
 
@@ -225,7 +227,7 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
     val hm2 = hm.kryoWrite.kryoRead.asInstanceOf[Signed[TestMessage]]
     assert(hm2 == hm)
 
-  }
+  }*/
 
 /*
   // TODO: GET THIS TO WORK PROPERLY

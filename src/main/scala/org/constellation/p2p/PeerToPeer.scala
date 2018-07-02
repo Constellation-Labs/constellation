@@ -8,9 +8,8 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.Data
 import org.constellation.consensus.Consensus._
 import org.constellation.primitives.Schema.{TX, _}
-import org.constellation.state.MemPoolManager.AddTransaction
 import org.constellation.util.Heartbeat
-
+import constellation._
 import scala.concurrent.ExecutionContextExecutor
 
 class PeerToPeer(
@@ -19,8 +18,6 @@ class PeerToPeer(
                   val consensusActor: ActorRef,
                   val udpActor: ActorRef,
                   val data: Data = null,
-                  chainStateActor : ActorRef = null,
-                  memPoolActor : ActorRef = null,
                   var requestExternalAddressCheck: Boolean = false,
                   val heartbeatEnabled: Boolean = false
                 )
@@ -34,6 +31,8 @@ class PeerToPeer(
 
   import data._
 
+  makeKeyPair()
+
   implicit val timeout: Timeout = timeoutI
   implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
   implicit val actorSystem: ActorSystem = context.system
@@ -43,8 +42,6 @@ class PeerToPeer(
   override def receive: Receive = {
 
     // Local commands
-
-    case tx: TX => handleLocalTransactionAdd(tx)
 
     case AddPeerFromLocal(peerAddress) => sender() ! addPeerFromLocal(peerAddress)
 
@@ -61,26 +58,28 @@ class PeerToPeer(
       processHeartbeat {
 
         downloadHeartbeat()
+        heartbeatRound += 1
 
      //   checkpointHeartbeat()
 
-        val numAccepted = gossipHeartbeat()
+        gossipHeartbeat()
 
-        logger.debug(
-          s"Heartbeat: ${id.short}, " +
-            s"bundles: $totalNumBundleMessages, " +
-            s"broadcasts: $totalNumBroadcastMessages, " +
-            s"numBundles: ${activeDAGBundles.size}, " +
-            s"gossip: $totalNumGossipMessages, " +
-            s"balance: $selfBalance, " +
-            s"memPool: ${memPoolTX.size} numPeers: ${peers.size} " +
-            s"numAccepted: $numAccepted, numTotalValid: ${validTX.size} " +
-            s"validUTXO: ${validLedger.map { case (k, v) => k.slice(0, 5) -> v }} " +
-            s"peers: ${peers.map { p =>
-              p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes
-            }.mkString(",")}"
-        )
-
+        if (heartbeatRound % 30 == 0) {
+          logger.debug(
+            s"Heartbeat: ${id.short}, " +
+              s"numActiveBundles: ${activeDAGBundles.size}, " +
+              s"maxHeight: ${Option(maxBundle).flatMap{_.meta.map{_.height}}}, " +
+              s"numTotalValidTX: $totalNumValidatedTX " +
+              s"numPeers: ${peers.size} " +
+              s"numBundleMessages: $totalNumBundleMessages, " +
+              s"broadcasts: $totalNumBroadcastMessages, " +
+              s"numGossipMessages: $totalNumGossipMessages, " +
+              s"balance: $selfBalance, " +
+              s"memPool: ${memPool.size} numPeers: ${peers.size} " +
+              s"validUTXO: ${validLedger.map { case (k, v) => k.slice(0, 5) -> v }} " +
+              ""
+          )
+        }
 
       }
 
@@ -115,19 +114,9 @@ class PeerToPeer(
         // case g @ Gossip(_) => handleGossip(g, remote)
         case gm : GossipMessage => handleGossip(gm, remote)
 
-        // Deprecated
-        case t: AddTransaction => memPoolActor ! t
-
         case u =>
           logger.error(s"Unrecognized UDP message: $u")
       }
-
-
-    // Deprecated below
-
-    case a @ AddTransaction(transaction) =>
-      logger.debug(s"Broadcasting TX ${transaction.short} on ${id.short}")
-      broadcast(a)
 
   }
 

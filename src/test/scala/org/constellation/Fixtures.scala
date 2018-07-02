@@ -4,10 +4,9 @@ import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
 import akka.actor.ActorRef
-import org.constellation.primitives.Block
-import org.constellation.primitives.Transaction
 import constellation._
 import org.constellation.crypto.KeyUtils
+import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.{Id, Peer}
 import org.constellation.util.Signed
 
@@ -21,7 +20,6 @@ object Fixtures {
   val tempKey3: KeyPair = KeyUtils.makeKeyPair()
   val tempKey4: KeyPair = KeyUtils.makeKeyPair()
   val tempKey5: KeyPair = KeyUtils.makeKeyPair()
-  val tx = Transaction(0L, tempKey.getPublic, tempKey.getPublic, 1L)
   val publicKey: PublicKey = tempKey.getPublic
   val publicKey1: PublicKey = tempKey1.getPublic
   val publicKey2: PublicKey = tempKey2.getPublic
@@ -47,20 +45,9 @@ object Fixtures {
   val idSet4B = Set(id1, id2, id3, id5)
   val idSet5 = Set(id1, id2, id3, id4, id5)
 
-  val prevBlock4 = Block("sig", 0, "", idSet4, 0L, Seq())
-  val latestBlock4B = Block("sig", 0, "", idSet4B, 1L, Seq())
-
-  val transaction1 =
-    Transaction.senderSign(Transaction(0L, tempKey1.getPublic, tempKey2.getPublic, 33L), tempKey1.getPrivate)
-
-  val transaction2 =
-    Transaction.senderSign(Transaction(1L, tempKey2.getPublic, tempKey4.getPublic, 14L), tempKey2.getPrivate)
-
-  val transaction3 =
-    Transaction.senderSign(Transaction(2L, tempKey4.getPublic, tempKey4.getPublic, 2L), tempKey4.getPrivate)
-
-  val transaction4 =
-    Transaction.senderSign(Transaction(3L, tempKey3.getPublic, tempKey2.getPublic, 20L), tempKey3.getPrivate)
-
-
+  val randomTransactions: Seq[Schema.TX] = Seq.fill(30) {
+    val kp = makeKeyPair()
+    val kp2 = makeKeyPair()
+    createTransactionSafe(kp.address.address, kp2.address.address, 1L, kp)
+  }
 }

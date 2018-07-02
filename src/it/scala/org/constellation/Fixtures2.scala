@@ -6,7 +6,6 @@ import java.security.{KeyPair, PublicKey}
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.{Id, Peer}
-import org.constellation.primitives.{Block, Transaction}
 import org.constellation.util.Signed
 
 object Fixtures2 {
@@ -17,7 +16,6 @@ object Fixtures2 {
   val tempKey3: KeyPair = KeyUtils.makeKeyPair()
   val tempKey4: KeyPair = KeyUtils.makeKeyPair()
   val tempKey5: KeyPair = KeyUtils.makeKeyPair()
-  val tx = Transaction(0L, tempKey.getPublic, tempKey.getPublic, 1L)
   val publicKey: PublicKey = tempKey.getPublic
   val publicKey1: PublicKey = tempKey1.getPublic
   val publicKey2: PublicKey = tempKey2.getPublic
@@ -42,21 +40,6 @@ object Fixtures2 {
   val idSet4 = Set(id1, id2, id3, id4)
   val idSet4B = Set(id1, id2, id3, id5)
   val idSet5 = Set(id1, id2, id3, id4, id5)
-
-  val prevBlock4 = Block("sig", 0, "", idSet4, 0L, Seq())
-  val latestBlock4B = Block("sig", 0, "", idSet4B, 1L, Seq())
-
-  val transaction1: Transaction =
-    Transaction.senderSign(Transaction(0L, tempKey1.getPublic, tempKey4.getPublic, 33L), tempKey1.getPrivate)
-
-  val transaction2: Transaction =
-    Transaction.senderSign(Transaction(1L, tempKey2.getPublic, tempKey3.getPublic, 14L), tempKey2.getPrivate)
-
-  val transaction3: Transaction =
-    Transaction.senderSign(Transaction(2L, tempKey3.getPublic, tempKey2.getPublic, 2L), tempKey3.getPrivate)
-
-  val transaction4: Transaction =
-    Transaction.senderSign(Transaction(3L, tempKey4.getPublic, tempKey1.getPublic, 20L), tempKey4.getPrivate)
 
 
 }

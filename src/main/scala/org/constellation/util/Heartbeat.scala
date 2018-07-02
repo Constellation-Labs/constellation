@@ -25,7 +25,7 @@ trait Heartbeat {
   val heartbeatEnabled: Boolean
   val logger: Logger
   var lastHeartbeatTime: Long = System.currentTimeMillis()
-  val period = 3
+  val period = 2
   val timeUnit = TimeUnit.SECONDS
   val loggerEnabled: Boolean = true
   val heartbeatMessage: Any = InternalHeartbeat
@@ -52,8 +52,8 @@ trait Heartbeat {
         case Success(x) => Some(x)
       }
     } else {
-      if (loggerEnabled)
-        logger.debug("Heartbeat overwhelmed, messages backing up, skipping internal heartbeat until sufficient time elapsed.")
+    //  if (loggerEnabled)
+    //    logger.debug("Heartbeat overwhelmed, messages backing up, skipping internal heartbeat until sufficient time elapsed.")
       None
     }
   }

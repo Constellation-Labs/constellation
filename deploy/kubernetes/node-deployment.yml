@@ -26,9 +26,13 @@ metadata:
   name: constellation-app
 spec:
   serviceName: node-service
+  podManagementPolicy: "Parallel"
   replicas: 3
   updateStrategy:
     type: RollingUpdate
+    #rollingUpdate:
+    #maxSurge: 5
+    #maxUnavailable: 5
   template:
     metadata:
       labels:
