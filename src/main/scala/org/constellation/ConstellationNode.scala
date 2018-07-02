@@ -60,7 +60,7 @@ object ConstellationNode extends App {
     jsPrefix = "./ui/ui"
   )
 
-  node.data.minGenesisDistrSize = 5
+  node.data.minGenesisDistrSize = 3
 
 }
 

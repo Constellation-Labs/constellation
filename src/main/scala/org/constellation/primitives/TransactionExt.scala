@@ -10,7 +10,7 @@ import org.constellation.primitives.Schema.{Id, Metrics, SendToAddress, TX}
 import constellation._
 
 import scala.collection.concurrent.TrieMap
-import scala.util.Random
+import scala.util.{Random, Try}
 
 trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo {
 
@@ -28,7 +28,7 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
 
   def storeTransaction(tx: TX): Unit = {
     txHashToTX(tx.hash) = tx
-    db.put(tx)
+    Try{db.put(tx)}
   }
 
   def createTransaction(
