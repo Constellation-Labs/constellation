@@ -4,13 +4,15 @@ import org.constellation.p2p.SerializedUDPMessage
 import org.scalatest.FlatSpec
 import org.constellation.serializer.KryoSerializer._
 import akka.util.ByteString
+import org.constellation.TestHelpers
 import org.constellation.consensus.Consensus.RemoteMessage
-
-case class TestMessage(a: String, b: Int) extends ProductHash with RemoteMessage
+import org.constellation.crypto.KeyUtils
+import org.constellation.primitives.Schema._
 
 class KryoSerializerTest extends FlatSpec {
 
   "KryoSerializer" should "round trip serialize and deserialize SerializedUDPMessage" in {
+
     val message = SerializedUDPMessage(ByteString("test".getBytes), 1, 1, 1)
 
     val serialized = serialize(message)
@@ -19,9 +21,9 @@ class KryoSerializerTest extends FlatSpec {
 
     assert(message == deserialized)
 
-    val testMessage = TestMessage("test", 3)
+    val testBundle = Gossip(TestHelpers.createTestBundle())
 
-    val messages = serializeGrouped(testMessage)
+    val messages = serializeGrouped(testBundle)
 
     val messagesSerialized = messages.map(serialize(_))
 
@@ -31,7 +33,7 @@ class KryoSerializerTest extends FlatSpec {
 
     val deserializedSorted = deserialize(sorted)
 
-    assert(testMessage == deserializedSorted)
+    assert(testBundle == deserializedSorted)
   }
 
 }

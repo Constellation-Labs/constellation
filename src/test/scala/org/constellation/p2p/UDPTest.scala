@@ -15,12 +15,11 @@ import org.scalatest._
 
 import scala.util.{Random, Try}
 import constellation._
+import org.constellation.TestHelpers
 import org.constellation.consensus.Consensus.RemoteMessage
-import org.constellation.primitives.Schema.{Id, Peer}
+import org.constellation.primitives.Schema.{Gossip, Id, Peer}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{ProductHash, Signed}
-
-case class TestMessage(a: String, b: Int) extends ProductHash with RemoteMessage
 
 case class AnotherPublicKey(c: Id, seq: Seq[PublicKey])
 case class TestManyPublicKeys(a: PublicKey, b: Seq[PublicKey], d: AnotherPublicKey)
@@ -48,7 +47,7 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 
     val listener2 = system.actorOf(Props(new UDPActor(Some(rx2.ref), rPort2)), s"listener2")
 
-    val testMessage = TestMessage("a", 1)
+    val testMessage = Gossip(TestHelpers.createTestBundle())
 
     val testMessageBytes = KryoSerializer.serialize(testMessage)
 
