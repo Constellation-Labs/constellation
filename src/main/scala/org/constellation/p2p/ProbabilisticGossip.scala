@@ -66,7 +66,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
   }
 
   def simulateTransactions(): Unit = {
-    if (maxBundleMetaData.height.get >= 5 && memPool.size < 500) {
+    if (maxBundleMetaData.height.get >= 5 && memPool.size < 50) {
       //if (Random.nextDouble() < .2)
         randomTransaction()
         randomTransaction()
