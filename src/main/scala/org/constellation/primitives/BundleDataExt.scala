@@ -173,7 +173,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   def updateMaxBundle(bundleMetaData: BundleMetaData): Unit = {
 
-    val genCheck = totalNumValidatedTX == 1 || bundleMetaData.bundle.maxStackDepth >= 2
+    val genCheck = totalNumValidatedTX == 1 || bundleMetaData.bundle.maxStackDepth >= 2 // TODO : Possibly move this only to mempool emit
 
     if (bundleMetaData.totalScore.get > maxBundle.totalScore.get && genCheck) {
       maxBundle.synchronized {
