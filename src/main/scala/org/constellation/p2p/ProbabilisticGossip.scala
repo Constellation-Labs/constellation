@@ -164,6 +164,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
       // Maybe only emit when PBH matches our current?
       // Need to slice this down here
+      // Only emit max by new total score?
       activeDAGBundles.groupBy(b => b.bundle.extractParentBundleHash -> b.bundle.maxStackDepth)
         .filter{_._2.size > 1}.toSeq //.sortBy(z => 1*z._1._2).headOption
         .foreach { case (pbHash, bundles) =>
@@ -204,9 +205,13 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
           }*/
         }
 
+      activeDAGBundles = activeDAGBundles.filter(_.height.get > (maxBundleMetaData.height.get - 10))
+
+
       if (activeDAGBundles.size > 100) {
         activeDAGBundles = activeDAGBundles.sortBy(z => -1*z.totalScore.get).zipWithIndex.filter{_._2 < 25}.map{_._1}
       }
+
 
     }
   }
