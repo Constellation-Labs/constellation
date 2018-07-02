@@ -51,7 +51,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   def storeBundle(bundleMetaData: BundleMetaData): Unit = {
     bundleToBundleMeta(bundleMetaData.bundle.hash) = bundleMetaData
-    Try{db.put(bundleMetaData.bundle.hash, bundleMetaData)}
+   // Try{db.put(bundleMetaData.bundle.hash, bundleMetaData)}
   }
 
   implicit class BundleExtData(b: Bundle) {
@@ -167,7 +167,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     }
   }
 
-  val confirmWindow = 15
+  val confirmWindow = 20
   @volatile var txInMaxBundleNotInValidation: Set[String] = Set()
 
 

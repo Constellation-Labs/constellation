@@ -28,7 +28,7 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
 
   def storeTransaction(tx: TX): Unit = {
     txHashToTX(tx.hash) = tx
-    Try{db.put(tx)}
+   // Try{db.put(tx)}
   }
 
   def createTransaction(

@@ -167,18 +167,21 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       activeDAGBundles.groupBy(b => b.bundle.extractParentBundleHash -> b.bundle.maxStackDepth)
         .filter{_._2.size > 1}.toSeq //.sortBy(z => 1*z._1._2).headOption
         .foreach { case (pbHash, bundles) =>
+        if (Random.nextDouble() > 0.3) {
           val best3 = bundles.sortBy(z => -1 * z.totalScore.get).slice(0, 2)
-
           val allIds = best3.flatMap(_.bundle.extractIds)
-       //   if (!allIds.contains(id)) {
-            val b = Bundle(BundleData(best3.map {_.bundle}).signed())
-            val maybeData = lookupBundle(pbHash._1.pbHash)
-       //     if (maybeData.isEmpty) println(pbHash)
-            val pbData = maybeData.get
-            updateBundleFrom(pbData, BundleMetaData(b))
-            // Skip ids when depth below a certain amount, else tell everyone.
-            // TODO : Fix ^
-            broadcast(b)
+          //   if (!allIds.contains(id)) {
+          val b = Bundle(BundleData(best3.map {
+            _.bundle
+          }).signed())
+          val maybeData = lookupBundle(pbHash._1.pbHash)
+          //     if (maybeData.isEmpty) println(pbHash)
+          val pbData = maybeData.get
+          updateBundleFrom(pbData, BundleMetaData(b))
+          // Skip ids when depth below a certain amount, else tell everyone.
+          // TODO : Fix ^
+          broadcast(b)
+        }
       //    }
          // activeDAGBundles = activeDAGBundles.filterNot{best3.contains}
           /*//val sorted = bundles.sortBy(b => (b.idBelow.size, b.txBelow.size, b.hash))
@@ -201,8 +204,8 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
           }*/
         }
 
-      if (activeDAGBundles.size > 200) {
-        activeDAGBundles = activeDAGBundles.sortBy(z => -1*z.totalScore.get).zipWithIndex.filter{_._2 < 50}.map{_._1}
+      if (activeDAGBundles.size > 100) {
+        activeDAGBundles = activeDAGBundles.sortBy(z => -1*z.totalScore.get).zipWithIndex.filter{_._2 < 25}.map{_._1}
       }
 
     }
