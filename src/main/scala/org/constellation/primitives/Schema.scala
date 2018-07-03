@@ -485,4 +485,9 @@ object Schema {
                  ) extends ProductHash
 
 
+  // Dashboard Case Classes
+
+  case class TransactionSerialized(hash: String, sender: Seq[String], receiver: String, amount: Long, signers: Set[String])
+  case class Node(address: String, host: String, port: Int)
+
 }
