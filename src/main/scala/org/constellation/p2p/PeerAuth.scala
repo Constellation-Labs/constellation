@@ -8,9 +8,9 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import org.constellation.util.Signed
-
 import constellation._
 import org.constellation.Data
+import org.constellation.consensus.Consensus.RemoteMessage
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.{Failure, Try}
@@ -28,12 +28,13 @@ trait PeerAuth {
   implicit val executionContext: ExecutionContextExecutor
   implicit val actorSystem: ActorSystem
 
-  def broadcast[T <: AnyRef](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
-    val dest = if (idSubset.isEmpty) peerIDLookup.keys else idSubset
+  def broadcast[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
+    val dest: Iterable[Id] = if (idSubset.isEmpty) peerIDLookup.keys else idSubset
+
     dest.foreach{ i =>
       if (!skipIDs.contains(i)) {
         totalNumBroadcastMessages += 1
-        self ! UDPSendToID(message, i)
+        self ! UDPSend(message, peerIDLookup(i).data.externalAddress)
       }
     }
   }
@@ -57,7 +58,8 @@ trait PeerAuth {
         //Introduce ourselves
         // val message = HandShakeMessage(handShakeInner.copy(destination = Some(peerAddress)).signed())
         val message = HandShakeMessage(handShakeInner.signed())
-        udpActor.udpSend(message, peerAddress)
+
+        udpActor ! UDPSend(message, peerAddress)
         //Tell our existing peers
         //broadcast(p)
         StatusCodes.Accepted
@@ -107,7 +109,10 @@ trait PeerAuth {
         // HandShakeResponse(sh.handShake, handShakeInner.copy(destination = Some(remote)), remote).signed()
         HandShakeResponse(handShakeInner, remote).signed()
       )
-      udpActor.udpSend(response, responseAddr)
+
+      udpActor ! UDPSend(response, responseAddr)
+
+      //Tell our existing peers
       initiatePeerHandshake(responseAddr)
     }
   }

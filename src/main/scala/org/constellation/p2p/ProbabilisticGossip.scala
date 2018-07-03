@@ -332,7 +332,8 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       //      handleSyncData(sd, remote)
       case RequestBundleData(hash) =>
         bundleHashToBundle.get(hash).foreach{ b =>
-          udpActor.udpSendToId(b, rid)
+
+          udpActor ! UDPSend(b, socketToAddress(rid.address.address))
         }
       case _ =>
         logger.debug("Unrecognized gossip message")

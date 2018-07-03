@@ -5,6 +5,7 @@ import java.net.InetSocketAddress
 import java.security.PublicKey
 
 import constellation.pubKeyToAddress
+import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.Base58
 import org.constellation.util.EncodedPublicKey
 import org.constellation.util.{ProductHash, Signed}
@@ -200,7 +201,7 @@ object Schema {
 
   final case class ConflictDetectedData(detectedOn: TX, conflicts: Seq[TX]) extends ProductHash
 
-  final case class ConflictDetected(conflict: Signed[ConflictDetectedData]) extends ProductHash with GossipMessage
+  final case class ConflictDetected(conflict: Signed[ConflictDetectedData]) extends ProductHash with GossipMessage with RemoteMessage
 
   final case class VoteData(accept: Seq[TX], reject: Seq[TX]) extends ProductHash {
     // used to determine what voting round we are talking about
@@ -229,7 +230,7 @@ object Schema {
   // TODO: Make another bundle data with additional metadata for depth etc.
   final case class BundleData(bundles: Seq[Fiber]) extends ProductHash
 
-  case class RequestBundleData(hash: String) extends GossipMessage
+  case class RequestBundleData(hash: String) extends GossipMessage with RemoteMessage
 
   case class UnknownParentHashSyncInfo(
                                       firstRequestTime: Long,
@@ -251,11 +252,9 @@ object Schema {
                                bundle: Option[Bundle],
                   //             memPool: Set[TX] = Set(),
                                validBundleHashes: Seq[String]
-                             ) extends GossipMessage
+                             ) extends GossipMessage with RemoteMessage
 
-  final case class Bundle(
-                           bundleData: Signed[BundleData]
-                         ) extends ProductHash with Fiber with GossipMessage {
+  final case class Bundle(bundleData: Signed[BundleData]) extends ProductHash with Fiber with GossipMessage with RemoteMessage {
 
     val bundleNumber: Long = Random.nextLong()
 
@@ -345,10 +344,10 @@ object Schema {
         val bd = s.data.bundles
         val depths = bd.map {
           case b2: Bundle =>
-            b2.bundleData.publicKeys.map{Id}.toSet ++ process(b2.bundleData)
+            b2.bundleData.encodedPublicKeys.headOption.map{Id}.toSet ++ process(b2.bundleData)
           case _ => Set[Id]()
         }
-        depths.reduce(_ ++ _) ++ s.publicKeys.map{Id}.toSet
+        depths.reduce(_ ++ _) ++ s.encodedPublicKeys.headOption.map{Id}.toSet
       }
       process(bundleData)
     }
@@ -385,7 +384,7 @@ object Schema {
 
   }
 
-  final case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash
+  final case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash with RemoteMessage
     with Fiber
     with GossipMessage {
     def iter: Seq[Signed[_ >: T <: ProductHash]] = {
@@ -428,19 +427,19 @@ object Schema {
 
   sealed trait DownloadMessage
 
-  case class DownloadRequest() extends DownloadMessage
+  case class DownloadRequest() extends DownloadMessage with RemoteMessage
   case class DownloadResponse(
                                genesisBundle: Bundle,
                                validBundles: Seq[Bundle],
                                ledger: Map[String, Long],
                                lastCheckpointBundle: Option[Bundle]
-                             ) extends DownloadMessage
+                             ) extends DownloadMessage with RemoteMessage
 
-  final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage
+  final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage with RemoteMessage
 
-  case class MissingTXProof(tx: TX, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage
+  case class MissingTXProof(tx: TX, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage with RemoteMessage
 
-  final case class RequestTXProof(txHash: String) extends GossipMessage
+  final case class RequestTXProof(txHash: String) extends GossipMessage with RemoteMessage
 
   case class Metrics(metrics: Map[String, String])
 
@@ -448,11 +447,12 @@ object Schema {
 
   case class Peers(peers: Seq[InetSocketAddress])
 
-  case class Id(id: PublicKey) {
+  case class Id(encodedId: EncodedPublicKey) {
     def short: String = id.toString.slice(15, 20)
     def medium: String = id.toString.slice(15, 25).replaceAll(":", "")
     def address: Address = pubKeyToAddress(id)
     def b58 = Base58.encode(id.getEncoded)
+    def id = encodedId.toPublicKey
   }
 
   case class GetId()
@@ -468,14 +468,14 @@ object Schema {
 
   // These exist because type erasure messes up pattern matching on Signed[T] such that
   // you need a wrapper case class like this
-  case class HandShakeMessage(handShake: Signed[HandShake])
-  case class HandShakeResponseMessage(handShakeResponse: Signed[HandShakeResponse])
+  case class HandShakeMessage(handShake: Signed[HandShake]) extends RemoteMessage
+  case class HandShakeResponseMessage(handShakeResponse: Signed[HandShakeResponse]) extends RemoteMessage
 
   case class HandShakeResponse(
                                 //                   original: Signed[HandShake],
                                 response: HandShake,
                                 detectedRemote: InetSocketAddress
-                              ) extends ProductHash
+                              ) extends ProductHash with RemoteMessage
 
   case class Peer(
                    id: Id,

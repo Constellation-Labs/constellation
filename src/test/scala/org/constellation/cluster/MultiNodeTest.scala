@@ -14,7 +14,7 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, FlatSpecLike, Matche
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import constellation._
 import org.constellation.ConstellationNode
-import org.constellation.p2p.{GetUDPSocketRef, TestMessage}
+import org.constellation.p2p.GetUDPSocketRef
 import org.constellation.primitives.Schema.{Id, Peer}
 import org.constellation.primitives.{Block, Transaction}
 import org.constellation.util.APIClient

@@ -81,7 +81,6 @@ lazy val testDependencies = Seq(
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
 ).map(_ % "it,test" )
 
-
 lazy val root = (project in file("."))
   .configs(IntegrationTest)
   .settings(

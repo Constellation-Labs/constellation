@@ -19,8 +19,6 @@ trait Wallet {
 
   implicit val timeout: Timeout
 
-
-
   // TODO: Not this.
   @volatile var wallet : Seq[KeyPair] = Seq()
 

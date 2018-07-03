@@ -19,7 +19,7 @@ class Data {
   @volatile implicit var keyPair: KeyPair = _
 
   def publicKeyHash: Int = keyPair.getPublic.hashCode()
-  def id : Id = Id(keyPair.getPublic)
+  def id : Id = Id(keyPair.getPublic.encoded)
   def selfAddress: Address = id.address
   def tmpDirId = new File("tmp", id.medium)
 
@@ -124,11 +124,9 @@ class Data {
   @volatile var bestBundleCandidateHashes: Set[BundleHash] = Set()
   @volatile var lastSquashed: Option[Bundle] = None
 
-
   @volatile var bundlePendingTX : Set[TX] = Set()
 
   val unknownParentBundleHashes: TrieMap[String, PeerSyncHeartbeat] = TrieMap()
-
 
   def jaccard[T](t1: Set[T], t2: Set[T]): Double = {
     t1.intersect(t2).size.toDouble / t1.union(t2).size.toDouble

@@ -94,7 +94,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     Thread.sleep(15000)
 
-
     def randomNode: ConstellationNode = nodes(Random.nextInt(nodes.length))
     def randomOtherNode(not: ConstellationNode): ConstellationNode =
       nodes.filter{_ != not}(Random.nextInt(nodes.length - 1))
@@ -127,7 +126,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val allTX = Set(genTx) ++ initialDistrTX.toSet ++ txs
 
     var done = false
-
 
 /*
     while (!done) {
@@ -172,7 +170,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 */
 
 /*
-
 
     val b1 = r1.getBlocking[Seq[Address]]("balances")
     import akka.pattern.ask
@@ -220,17 +217,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
 */
 
-
     // println(b3)
-
-
-    /*
-
-
-
-  */
-
-
 
     //Thread.sleep(1000000)
     // Thread.sleep(1000000)
@@ -238,7 +225,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     // Cleanup DBs
     import scala.tools.nsc.io.{File => SFile}
     Try{SFile(tmpDir).deleteRecursively()}
-
 
     assert(true)
   }
