@@ -17,20 +17,16 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{Schema, Transaction}
-import org.constellation.state.ChainStateManager.{CurrentChainStateUpdated, GetCurrentChainState}
-import org.constellation.state.MemPoolManager.AddTransaction
+import org.constellation.primitives.Schema
 import org.constellation.util.ServeUI
 import org.json4s.native
 import org.json4s.native.Serialization
 
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext}
 import scala.util.{Failure, Success, Try}
 
 class API(
-           chainStateActor: ActorRef,
            val peerToPeerActor: ActorRef,
-           memPoolManagerActor: ActorRef,
            consensusActor: ActorRef,
            udpAddress: InetSocketAddress,
            val data: Data = null,
@@ -51,10 +47,14 @@ class API(
 
   val routes: Route = cors() {
     get {
+      path("restart") {
+        data.restartNode()
+        complete(StatusCodes.OK)
+      } ~
       path("submitTX") {
         parameter('address, 'amount) { (address, amount) =>
           logger.error(s"SubmitTX : $address $amount")
-          handleSendRequest(SendToAddress(Address(address), amount.toLong))
+          handleSendRequest(SendToAddress(address, amount.toLong))
         }
       } ~
       pathPrefix("address") {
@@ -67,28 +67,25 @@ class API(
           }
         }
       } ~
-      pathPrefix("txHash") {
+      pathPrefix("txHash") { // TODO: Rename to transaction
         get {
           extractUnmatchedPath { p =>
             logger.debug(s"Unmatched path on address result $p")
             val ps = p.toString().tail
-            complete(transactionData(ps).prettyJson)
+            complete(lookupTransaction(ps).prettyJson)
           }
         }
       } ~
       path("longestChain") {
-        val ancestors = extractBundleAncestorsUntilValidation(bestBundle)
-        val all = validBundles ++ ancestors.map{bundleHashToBundle} ++ Seq(bestBundle)
-        complete(
-          all.json
-        )
+        val ancestors = findAncestors(maxBundle.extractParentBundleHash.pbHash)
+        complete(ancestors)
       } ~
       pathPrefix("bundle") {
         get {
           extractUnmatchedPath { p =>
             logger.debug(s"Unmatched path on bundle result $p")
             val ps = p.toString().tail
-            complete(validBundles.filter{_.hash == ps}.headOption.prettyJson)
+            complete(lookupBundle(ps).prettyJson)
           }
         }
       } ~
@@ -110,62 +107,71 @@ class API(
             "address" -> selfAddress.address,
             "balance" -> (selfIdBalance.getOrElse(0L) / Schema.NormalizationFactor).toString,
             "id" -> id.b58,
-            "keyPair" -> keyPair.json,
+            "z_keyPair" -> keyPair.json,
             "shortId" -> id.short,
-            "numValidBundles" -> validBundles.size.toString,
-            "numValidTransactions" -> validTX.size.toString,
-            "memPoolSize" -> memPoolTX.size.toString,
+            "last1000BundleHashSize" -> last100ValidBundleMetaData.size.toString,
+            "numSyncedTX" -> numSyncedTX.toString,
+            "numP2PMessages" -> totalNumP2PMessages.toString,
+            "numSyncedBundles" -> numSyncedBundles.toString,
+            "numValidBundles" -> totalNumValidBundles.toString,
+            "numValidTransactions" -> totalNumValidatedTX.toString,
+            "memPoolSize" -> memPool.size.toString,
             "totalNumBroadcasts" -> totalNumBroadcastMessages.toString,
             "totalNumBundleMessages" -> totalNumBundleMessages.toString,
+            "lastConfirmationUpdateTime" -> lastConfirmationUpdateTime.toString,
             "numPeers" -> peers.size.toString,
             "peers" -> peers.map{ z =>
-              val addr = s"http://${z.data.apiAddress.getHostName}:${z.data.apiAddress.getPort}"
+              val addr = s"http://${z.data.apiAddress.getHostString}:${z.data.apiAddress.getPort}"
               s"${z.data.id.short} API: $addr "
             }.mkString(" --- "),
-            "genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
+            "z_genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
          //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
             "numActiveBundles" -> activeDAGBundles.size.toString,
-            "last10TXHash" -> sentTX.reverse.slice(0, 10).map{_.hash}.mkString(","),
-            "last10ValidBundleHashes" -> validBundles.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
-            "lastValidBundleHash" -> lastBundleHash.hash,
-            "lastValidBundle" -> Option(lastBundle).map{_.pretty}.getOrElse(""),
-            "genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
-            "genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
-            "selfBestBundle" -> Option(bestBundle).map{_.pretty}.getOrElse(""),
+            "last10TXHash" -> last10000ValidTXHash.reverse.slice(0, 10).mkString(","),
+            "last10ValidBundleHashes" -> last100ValidBundleMetaData
+              .map{_.bundle.hash}.reverse.slice(0, 10).reverse.mkString(","),
+            "last10SelfTXHashes" -> last100SelfSentTransactions.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
+            "lastValidBundleHash" -> Try{lastValidBundleHash.pbHash}.getOrElse(""),
+            "lastValidBundle" -> Try{Option(lastValidBundle).map{_.pretty}.getOrElse("")}.getOrElse(""),
+            "z_genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
+            "z_genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
+            "selfBestBundle" -> Try{maxBundle.pretty}.getOrElse(""),
+            "selfBestBundleHash" -> Try{maxBundle.hash}.getOrElse(""),
+            "selfBestBundleMeta" -> Try{maxBundleMetaData.toString}.getOrElse(""),
             "reputations" -> normalizedDeterministicReputation.map{
               case (k,v) => k.short + " " + v
             }.mkString(" - "),
+            "numProcessedBundles" -> totalNumNewBundleAdditions.toString,
+            "numSyncPendingBundles" -> syncPendingBundleHashes.size.toString,
+            "numSyncPendingTX" -> syncPendingTXHashes.size.toString,
             "peerBestBundles" -> peerSync.toMap.map{
               case (id, b) =>
-                s"PEER: ${id.short}, BEST: ${b.bundle.map{_.pretty}.getOrElse("")} " // LAST: ${b.lastBestBundle.pretty}
-            }.mkString(" ----- "),
-            "allPeerSynchronizedLastHash" -> Try(
-              (peerSync.map{_._2.validBundleHashes.last} ++ Seq(lastBundle.hash)).toSet.size == 1
-              ).map{_.toString}.getOrElse(""),
-            "allPeerAllBundleHashSync" -> peerSync.forall{_._2.validBundleHashes == validBundles.map{_.hash}}.toString,
+                s"${id.short}: ${b.maxBundle.hash.slice(0, 5)} ${Try{b.maxBundle.pretty}} " +
+                  s"parent${b.maxBundle.extractParentBundleHash.pbHash.slice(0, 5)} " +
+                  s"${lookupBundle(b.maxBundle.hash).nonEmpty} ${b.maxBundle.meta.map {_.transactionsResolved}}"
+            }.mkString(" --- "),
             "z_peers" -> peers.map{_.data}.json,
-            "z_UTXO" -> validLedger.toMap.json,
-            "z_Bundles" -> activeDAGBundles.map{_.pretty}.mkString(" - - - "),
+            "z_validLedger" -> validLedger.toMap.json,
+            "z_mempoolLedger" -> memPoolLedger.toMap.json,
+            "z_Bundles" -> activeDAGBundles.sortBy{z => -1*z.totalScore.getOrElse(0D)}
+              .map{_.bundle.pretty}.mkString(" --- "),
             "downloadMode" -> downloadMode.toString,
             "allPeersHaveKnownBestBundles" -> peerSync.forall{
               case (_, hb) =>
-                hb.bundle.forall{b => bundleHashToBundle.contains(b.hash)}
+                lookupBundle(hb.maxBundle.hash).nonEmpty
             }.toString,
-            "allPeersAgreeWithBestBundle" -> peerSync.forall{
-              _._2.bundle.exists{_.hash == bestBundle.hash}
-            }.toString
+            "allPeersAgreeOnValidLedger" -> peerSync.forall{
+              case (_, hb) =>
+                hb.validLedger == validLedger.toMap
+            }.toString,
+            "allPeersHaveResolvedMaxBundles" -> peerSync.forall{_._2.maxBundle.meta.exists(_.isResolved)}.toString,
+            "allPeersAgreeWithMaxBundle" -> peerSync.forall{_._2.maxBundle == maxBundle}.toString
             //,
             // "z_lastBundleVisualJSON" -> Option(lastBundle).map{ b => b.extractTreeVisual.json}.getOrElse("")
           )))
         } ~
         path("validTX") {
-          complete(validTX)
-        } ~
-        path("walletAddressInfo") {
-          complete(walletAddressInfo)
-        } ~
-        path("balances") {
-          complete(outputBalances)
+          complete(last10000ValidTXHash)
         } ~
         path("makeKeyPair") {
           val pair = constellation.makeKeyPair()
@@ -173,23 +179,13 @@ class API(
           complete(pair)
         } ~
         path("genesis" / LongNumber) { numCoins =>
-
-          val debtAddress = walletPair
-          //   val dstAddress = walletPair
-
-          val amount = numCoins * Schema.NormalizationFactor
-          val tx = TX(
-            TXData(
-              Seq(debtAddress.address.copy(balance = -1*amount)),
-              selfAddress,
-              amount,
-              genesisTXHash = None,
-              isGenesis = true
-            ).signed()(debtAddress)
-          )
-
-          peerToPeerActor ! tx
-          complete(tx.json)
+          val ret = if (genesisBundle == null) {
+            val debtAddress = walletPair
+            val tx = createTransaction(selfAddress.address, numCoins, src = debtAddress.address.address)
+            createGenesis(tx)
+            tx
+          } else genesisBundle.extractTX.head
+          complete(ret)
         } ~
         path("makeKeyPairs" / IntNumber) { numPairs =>
           val pair = Seq.fill(numPairs){constellation.makeKeyPair()}
@@ -215,19 +211,6 @@ class API(
         path("health") {
           complete(StatusCodes.OK)
         } ~
-        path("blocks") {
-          val future = chainStateActor ? GetCurrentChainState
-
-          val responseFuture: Future[CurrentChainStateUpdated] = future.mapTo[CurrentChainStateUpdated]
-
-          val chainStateUpdated = Await.result(responseFuture, timeout.duration)
-
-          val chain = chainStateUpdated.chain
-
-          val blocks = chain.chain
-
-          complete(blocks)
-        } ~
         path("peers") {
           complete(Peers(peerIPs.toSeq))
         } ~
@@ -249,10 +232,11 @@ class API(
         } ~
         path("dashboard") {
 
-          val transactions = validBundles.take(20).map(b => {
-            (b.extractTX.toSeq.sortBy(_.tx.time), b.extractIds.map(f => f.address.address))
+          val transactions = last100ValidBundleMetaData.reverse.take(20)
+            .flatMap{z => lookupBundle(z).map{_.bundle}}.map(b => {
+            (b.extractTX.toSeq.sortBy(_.txData.time), b.extractIds.map(f => f.address.address))
           }).flatMap(t => {
-            t._1.map(e => TransactionSerialized(e.hash, e.tx.data.src.map(t => t.address), e.tx.data.dst.address, e.tx.data.normalizedAmount, t._2))
+            t._1.map(e => TransactionSerialized(e.hash, e.txData.data.src, e.txData.data.dst, e.txData.data.normalizedAmount, t._2))
           })
 
           var peerMap: Seq[Node] = peers.map{_.data}.seq.map{ f => {
@@ -272,13 +256,6 @@ class API(
         serveMainPage
     } ~
       post {
-        path("setTXValid") {
-          entity(as[TX]) { tx =>
-            acceptTransaction(tx)
-            tx.updateLedger(memPoolLedger)
-            complete(StatusCodes.OK)
-          }
-        } ~
         path ("sendToAddress") {
           entity(as[SendToAddress]) { s =>
             handleSendRequest(s)
@@ -298,21 +275,12 @@ class API(
               complete(StatusCodes.OK)
             }
           } ~
-          path("transaction") {
-            entity(as[Transaction]) { transaction =>
-              //  logger.debug(s"Received request to submit a new transaction $transaction")
-
-              val tx = AddTransaction(transaction)
-              peerToPeerActor ! tx
-              memPoolManagerActor ! tx
-              complete(transaction)
-            }
-          } ~
           path("peer") {
             entity(as[String]) { peerAddress =>
 
               Try {
                 //    logger.debug(s"Received request to add a new peer $peerAddress")
+                var addr : Option[InetSocketAddress] = None
                 val result = Try {
                   peerAddress.replaceAll('"'.toString, "").split(":") match {
                     case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
@@ -322,6 +290,7 @@ class API(
                   case None =>
                     StatusCodes.BadRequest
                   case Some(v) =>
+                    addr = Some(v)
                     val fut = (peerToPeerActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
                     val res = Try {
                       Await.result(fut, timeout.duration)
@@ -344,6 +313,10 @@ class API(
                     }
                 }
 
+                if (result != StatusCodes.OK) {
+                  addr.foreach(peersAwaitingAuthenticationToNumAttempts(_) = 1)
+                }
+
                 logger.debug(s"New peer request $peerAddress statusCode: $result")
                 result
               } match {
@@ -359,12 +332,13 @@ class API(
               val addr = externalIp.replaceAll('"'.toString,"").split(":") match {
                 case Array(ip, port) =>
                   ipp = ip
+                  externalHostString = ip
                   new InetSocketAddress(ip, port.toInt)
                 case a@_ => { logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a"); }
               }
               logger.debug(s"Set external IP RPC request $externalIp $addr")
               data.externalAddress = addr
-              if (ipp.nonEmpty) data.apiAddress = new InetSocketAddress(ipp, addr.getPort)
+              if (ipp.nonEmpty) data.apiAddress = new InetSocketAddress(ipp, 9000)
               complete(StatusCodes.OK)
             }
           } ~

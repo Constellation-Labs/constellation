@@ -1,6 +1,6 @@
 
 import java.net.InetSocketAddress
-import java.security.{KeyPair, PublicKey}
+import java.security.{KeyPair, PrivateKey, PublicKey}
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem}
@@ -14,15 +14,17 @@ import com.esotericsoftware.minlog.Log
 import com.google.common.hash.Hashing
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 import org.constellation.consensus.Consensus.RemoteMessage
+import com.twitter.chill.{IKryoRegistrar, KryoBase, KryoPool, ScalaKryoInstantiator}
 import org.constellation.p2p._
-import org.constellation.primitives.Schema.{Address, Bundle, Id}
-import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
+import org.constellation.primitives.Schema.{AddressMetaData, Bundle, Id}
+import org.constellation.util.{HashSignature, POWExt, POWSignHelp, ProductHash}
 import org.constellation.crypto.KeyUtilsExt
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
 import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, native}
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+
 import scala.concurrent.{Await, Future}
 import scala.reflect.ClassTag
 import scala.util.{Random, Try}
@@ -95,7 +97,35 @@ package object constellation extends KeyUtilsExt with POWExt
   def byteToInt(byteBarray: Array[Byte]): Int =
     ByteBuffer.wrap(byteBarray).order(ByteOrder.BIG_ENDIAN).getInt
 
-  Log.TRACE()
+/*
+
+  def guessThreads: Int = {
+    val cores = Runtime.getRuntime.availableProcessors
+    val GUESS_THREADS_PER_CORE = 4
+    GUESS_THREADS_PER_CORE * cores
+  }
+
+  val kryoPool: KryoPool = KryoPool.withBuffer(guessThreads,
+    new ScalaKryoInstantiator().setRegistrationRequired(false), 32, 1024*1024*100)
+
+  implicit class KryoExt[T](a: T) {
+    def kryoWrite: Array[Byte] = {
+      kryoPool.toBytesWithClass(a)
+    }
+  }
+
+  implicit class KryoExtByte(a: Array[Byte]) {
+    def kryoRead: AnyRef = {
+      val deser = kryoPool.fromBytes(a)
+      deser
+    }
+    def kryoExtract[T]: T = {
+      kryoPool.fromBytes(a).asInstanceOf[T]
+    }
+  }
+*/
+
+ // Log.TRACE()
 
   implicit class HTTPHelp(httpResponse: HttpResponse)
                          (implicit val materialize: ActorMaterializer) {
@@ -107,8 +137,8 @@ package object constellation extends KeyUtilsExt with POWExt
       s"hostString: ${inetSocketAddress.getHostString}, port: ${inetSocketAddress.getPort}"
   }
 
-  implicit def pubKeyToAddress(key: PublicKey): Address =  Address(publicKeyToAddressString(key))
-  implicit def pubKeysToAddress(key: Seq[PublicKey]): Address =  Address(publicKeysToAddressString(key))
+  implicit def pubKeyToAddress(key: PublicKey): AddressMetaData =  AddressMetaData(publicKeyToAddressString(key))
+  implicit def pubKeysToAddress(key: Seq[PublicKey]): AddressMetaData =  AddressMetaData(publicKeysToAddressString(key))
 
   implicit class KeyPairFix(kp: KeyPair) {
 
@@ -120,15 +150,23 @@ package object constellation extends KeyUtilsExt with POWExt
         kp.getPublic == other.getPublic
     }
 
-    def address: Address = pubKeyToAddress(kp.getPublic)
+    def address: AddressMetaData = pubKeyToAddress(kp.getPublic)
 
   }
+
 
   implicit class ActorQuery(a: ActorRef) {
     import akka.pattern.ask
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
     def query[T: ClassTag](m: Any): T = (a ? m).mapTo[T].get()
   }
+
+  def signHashWithKeyB64(hash: String, privateKey: PrivateKey): String = base64(signData(hash.getBytes())(privateKey))
+
+  def hashSign(hash: String, keyPair: KeyPair): HashSignature = {
+    HashSignature(hash, signHashWithKeyB64(hash, keyPair.getPrivate), keyPair.getPublic.encoded.b58Encoded)
+  }
+
 
 /*
   implicit def orderingByBundle[A <: Bundle]: Ordering[A] =

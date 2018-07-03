@@ -19,9 +19,10 @@ object KryoSerializer {
 
   val kryoPool: KryoPool = KryoPool.withBuffer(guessThreads,
     new ScalaKryoInstantiator().setRegistrationRequired(true)
-      .withRegistrar(new ConstellationKryoRegistrar()), 32, 1024*1024*100)
+      .withRegistrar(new ConstellationKryoRegistrar())
+    , 32, 1024*1024*100)
 
-  def serializeGrouped[T <: RemoteMessage](data: T, groupSize: Int = 500): Seq[SerializedUDPMessage] = {
+  def serializeGrouped[T <: RemoteMessage](data: T, groupSize: Int = 45000): Seq[SerializedUDPMessage] = {
 
     val bytes: Array[Byte] = kryoPool.toBytesWithClass(data)
 

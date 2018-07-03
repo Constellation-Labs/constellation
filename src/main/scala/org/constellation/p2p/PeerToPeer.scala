@@ -3,13 +3,14 @@ package org.constellation.p2p
 import java.security.PublicKey
 
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
+import akka.http.scaladsl.model.StatusCodes
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import org.constellation.Data
 import org.constellation.consensus.Consensus._
 import org.constellation.primitives.Schema.{TX, _}
-import org.constellation.state.MemPoolManager.AddTransaction
 import org.constellation.util.Heartbeat
+import constellation._
 
 import scala.concurrent.ExecutionContextExecutor
 
@@ -19,8 +20,6 @@ class PeerToPeer(
                   val consensusActor: ActorRef,
                   val udpActor: ActorRef,
                   val data: Data = null,
-                  chainStateActor : ActorRef = null,
-                  memPoolActor : ActorRef = null,
                   var requestExternalAddressCheck: Boolean = false,
                   val heartbeatEnabled: Boolean = false
                 )
@@ -34,6 +33,8 @@ class PeerToPeer(
 
   import data._
 
+  makeKeyPair()
+
   implicit val timeout: Timeout = timeoutI
   implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
   implicit val actorSystem: ActorSystem = context.system
@@ -44,8 +45,6 @@ class PeerToPeer(
 
     // Local commands
 
-    case tx: TX => handleLocalTransactionAdd(tx)
-
     case AddPeerFromLocal(peerAddress) => sender() ! addPeerFromLocal(peerAddress)
 
     // Regular state checks
@@ -54,26 +53,45 @@ class PeerToPeer(
 
       processHeartbeat {
 
+        if (heartbeatRound % 3 == 0) {
+          peersAwaitingAuthenticationToNumAttempts.foreach {
+            case (peerAddr, attempts) =>
+              if (attempts > 10 || peerLookup.contains(peerAddr))
+                peersAwaitingAuthenticationToNumAttempts.remove(peerAddr)
+              else {
+                val res = addPeerFromLocal(peerAddr)
+                if (res == StatusCodes.OK) peersAwaitingAuthenticationToNumAttempts.remove(peerAddr)
+                else {
+                  peersAwaitingAuthenticationToNumAttempts(peerAddr) =
+                    peersAwaitingAuthenticationToNumAttempts(peerAddr) + 1
+                }
+              }
+          }
+        }
+
         downloadHeartbeat()
+        heartbeatRound += 1
 
      //   checkpointHeartbeat()
 
-        val numAccepted = gossipHeartbeat()
+        gossipHeartbeat()
 
-        logger.debug(
-          s"Heartbeat: ${id.short}, " +
-            s"bundles: $totalNumBundleMessages, " +
-            s"broadcasts: $totalNumBroadcastMessages, " +
-            s"numBundles: ${activeDAGBundles.size}, " +
-            s"gossip: $totalNumGossipMessages, " +
-            s"balance: $selfBalance, " +
-            s"memPool: ${memPoolTX.size} numPeers: ${peers.size} " +
-            s"numAccepted: $numAccepted, numTotalValid: ${validTX.size} " +
-            s"validUTXO: ${validLedger.map { case (k, v) => k.slice(0, 5) -> v }} " +
-            s"peers: ${peers.map { p =>
-              p.data.id.short + "-" + p.data.externalAddress + "-" + p.data.remotes
-            }.mkString(",")}"
-        )
+        if (heartbeatRound % 30 == 0) {
+          logger.debug(
+            s"Heartbeat: ${id.short}, " +
+              s"numActiveBundles: ${activeDAGBundles.size}, " +
+              s"maxHeight: ${maxBundleOpt.flatMap{_.meta.map{_.height}}}, " +
+              s"numTotalValidTX: $totalNumValidatedTX " +
+              s"numPeers: ${peers.size} " +
+              s"numBundleMessages: $totalNumBundleMessages, " +
+              s"broadcasts: $totalNumBroadcastMessages, " +
+              s"numGossipMessages: $totalNumGossipMessages, " +
+              s"balance: $selfBalance, " +
+              s"memPool: ${memPool.size} numPeers: ${peers.size} " +
+              s"validUTXO: ${validLedger.map { case (k, v) => k.slice(0, 5) -> v }} " +
+              ""
+          )
+        }
 
       }
 
@@ -81,9 +99,12 @@ class PeerToPeer(
 
     case UDPMessage(message: Any, remote) =>
 
+      totalNumP2PMessages += 1
+
       message match {
 
         case d: DownloadRequest => handleDownloadRequest(d, remote)
+          println("Got download request")
 
         case d: DownloadResponse => handleDownloadResponse(d)
 
@@ -106,10 +127,8 @@ class PeerToPeer(
 */
 
         // case g @ Gossip(_) => handleGossip(g, remote)
-        case gm : GossipMessage => handleGossip(gm, remote)
-
-        // Deprecated
-        case t: AddTransaction => memPoolActor ! t
+        case gm : GossipMessage =>
+          handleGossip(gm, remote)
 
         case u =>
           logger.error(s"Unrecognized UDP message: $u")

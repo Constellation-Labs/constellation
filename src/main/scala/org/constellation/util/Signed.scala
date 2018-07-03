@@ -4,7 +4,8 @@ import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import constellation._
 import org.constellation.crypto.Base58
-import org.constellation.primitives.Schema.{BundleHash, Id}
+import org.constellation.primitives.Schema
+import org.constellation.primitives.Schema.{BundleHash, Id, TX, TXData}
 
 object POW extends POWExt
 
@@ -41,6 +42,7 @@ trait ProductHash extends Product {
   def bundleHash = BundleHash(hash)
   def short: String = hash.slice(0, 5)
   def signKeys(privateKeys: Seq[PrivateKey]): Seq[String] = privateKeys.map { pk => base64(signData(signInput)(pk)) }
+  def signKey(privateKey: PrivateKey): String = base64(signData(signInput)(privateKey))
   def powInput(signatures: Seq[String]): String = (productSeq ++ signatures).json
   def pow(signatures: Seq[String], difficulty: Int): String = POW.proofOfWork(powInput(signatures), Some(difficulty))
   def productSeq: Seq[Any] = this.productIterator.toArray.toSeq
@@ -49,12 +51,13 @@ trait ProductHash extends Product {
 
 
 case class HashSignature(
-                          b58EncodedPublicKey: EncodedPublicKey,
-                          time: Long,
-                          signature: String
-                        ) {
-  def publicKey: PublicKey = b58EncodedPublicKey.toPublicKey
-  def valid(hash: String): Boolean = verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
+                          signedHash: String,
+                          signature: String,
+                          b58EncodedPublicKey: String,
+                          time: Long = System.currentTimeMillis()
+                        ) extends ProductHash {
+  def publicKey: PublicKey = EncodedPublicKey(b58EncodedPublicKey).toPublicKey
+  def valid: Boolean = verifySignature(signedHash.getBytes(), fromBase64(signature))(publicKey)
 
 }
 
@@ -62,7 +65,7 @@ case class SignatureBatch(
                          hash: String,
                          signatures: Set[HashSignature]
                          ) {
-  def valid: Boolean = signatures.forall(_.valid(hash))
+  def valid: Boolean = signatures.forall(_.valid)
 }
 
 /*
@@ -127,6 +130,16 @@ trait POWSignHelp {
     Signed(
       t, startTime, keyPairs.map{_.getPublic.encoded}, signatures
     )
+  }
+
+
+  def createTransactionSafe(
+                             src: String, dst: String, amount: Long, keyPair: KeyPair, normalized: Boolean = true
+                           ): TX = {
+    val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
+    val txData = TXData(src, dst, amountToUse).signed()(keyPair)
+    val tx = TX(txData)
+    tx
   }
 
 }

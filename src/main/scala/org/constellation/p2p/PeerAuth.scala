@@ -30,11 +30,13 @@ trait PeerAuth {
 
   def broadcast[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
     val dest: Iterable[Id] = if (idSubset.isEmpty) peerIDLookup.keys else idSubset
-
+    // println("Broadcast attempt")
     dest.foreach{ i =>
       if (!skipIDs.contains(i)) {
         totalNumBroadcastMessages += 1
-        self ! UDPSend(message, peerIDLookup(i).data.externalAddress)
+        val address = peerIDLookup(i).data.externalAddress
+      //  println(s"Broadcasting $message to $address")
+        udpActor ! UDPSend(message, address)
       }
     }
   }
