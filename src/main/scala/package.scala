@@ -125,7 +125,7 @@ package object constellation extends KeyUtilsExt with POWExt
   }
 */
 
-  Log.TRACE()
+ // Log.TRACE()
 
   implicit class HTTPHelp(httpResponse: HttpResponse)
                          (implicit val materialize: ActorMaterializer) {

@@ -83,7 +83,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
         def updatePacketGroup(serMsg: SerializedUDPMessage, messages: TrieMap[Int, SerializedUDPMessage]): Unit = {
 
-          println("Update packet group")
+      //    println("Update packet group")
           // make sure this is not a duplicate packet first
           if (!messages.isDefinedAt(serMsg.packetGroupId)) {
 
@@ -93,7 +93,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
               val message = deserializeGrouped(messages.values.toList)
 
-              println(s"Received BULK UDP message from $remote -- $message -- sending to $nextActor")
+          //    println(s"Received BULK UDP message from $remote -- $message -- sending to $nextActor")
 
               processMessage(message, remote)
 
@@ -118,6 +118,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
       }
 
     case UDPSend(data, remote) =>
+     // println("UDP SEND IN ACTOR")
       val ser: Seq[SerializedUDPMessage] = serializeGrouped(data)
 
       ser.foreach{ s: SerializedUDPMessage => {
