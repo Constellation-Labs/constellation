@@ -11,7 +11,6 @@ import akka.util.Timeout
 import org.constellation.Data
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.{RegisterNextActor, UDPMessage, UDPSend}
-import org.constellation.state.ChainStateManager.{AddBlock, CreateBlockProposal}
 import org.constellation.util.TestNode
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
@@ -99,7 +98,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     // TODO: make more robust after update to bundles
     udpActor.expectMsgPF() {
-      case UDPSend(message: ConsensusProposal[Conflict], id: Id) => {
+      case UDPSend(message: ConsensusProposal[_], id: Id) => {
         assert(id == Id(node2.configKeyPair.getPublic.encoded))
        // assert(message.data == ConflictProposal(bundle))
         assert(message.roundHash == roundHash)
@@ -107,7 +106,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     }
 
     udpActor.expectMsgPF() {
-      case UDPSend(message: ConsensusProposal[Conflict], id: Id) => {
+      case UDPSend(message: ConsensusProposal[_], id: Id) => {
         assert(id == Id(node3.configKeyPair.getPublic.encoded))
        // assert(message.data == ConflictProposal(bundle))
         assert(message.roundHash == roundHash)

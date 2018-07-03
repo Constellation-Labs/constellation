@@ -111,6 +111,7 @@ class API(
             "shortId" -> id.short,
             "last1000BundleHashSize" -> last100ValidBundleMetaData.size.toString,
             "numSyncedTX" -> numSyncedTX.toString,
+            "numP2PMessages" -> totalNumP2PMessages.toString,
             "numSyncedBundles" -> numSyncedBundles.toString,
             "numValidBundles" -> totalNumValidBundles.toString,
             "numValidTransactions" -> totalNumValidatedTX.toString,
@@ -231,10 +232,11 @@ class API(
         } ~
         path("dashboard") {
 
-          val transactions = last100ValidBundleMetaData.reverse.take(20).flatMap{lookupBundle}.map(b => {
-            (b.extractTX.toSeq.sortBy(_.tx.time), b.extractIds.map(f => f.address.address))
+          val transactions = last100ValidBundleMetaData.reverse.take(20)
+            .flatMap{z => lookupBundle(z).map{_.bundle}}.map(b => {
+            (b.extractTX.toSeq.sortBy(_.txData.time), b.extractIds.map(f => f.address.address))
           }).flatMap(t => {
-            t._1.map(e => TransactionSerialized(e.hash, e.tx.data.src.map(t => t.address), e.tx.data.dst.address, e.tx.data.normalizedAmount, t._2))
+            t._1.map(e => TransactionSerialized(e.hash, e.txData.data.src, e.txData.data.dst, e.txData.data.normalizedAmount, t._2))
           })
 
           var peerMap: Seq[Node] = peers.map{_.data}.seq.map{ f => {

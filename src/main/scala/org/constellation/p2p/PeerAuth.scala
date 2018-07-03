@@ -34,7 +34,8 @@ trait PeerAuth {
     dest.foreach{ i =>
       if (!skipIDs.contains(i)) {
         totalNumBroadcastMessages += 1
-        self ! UDPSend(message, peerIDLookup(i).data.externalAddress)
+        val address = peerIDLookup(i).data.externalAddress
+        self ! UDPSend(message, address)
       }
     }
   }

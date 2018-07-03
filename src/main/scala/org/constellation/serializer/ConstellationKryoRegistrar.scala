@@ -19,7 +19,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[EncodedPublicKey])
     kryo.register(classOf[Array[Byte]])
 
-    kryo.register(classOf[Signed[Address]])
+    kryo.register(classOf[Signed[AddressMetaData]])
     kryo.register(classOf[Signed[CounterPartyTXRequest]])
     kryo.register(classOf[Signed[TXData]])
     kryo.register(classOf[Signed[TX]])
@@ -48,7 +48,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
 
     kryo.register(classOf[TXData])
 
-    kryo.register(classOf[Gossip[Signed[Address]]])
+    kryo.register(classOf[Gossip[Signed[AddressMetaData]]])
     kryo.register(classOf[Gossip[Signed[CounterPartyTXRequest]]])
     kryo.register(classOf[Gossip[Signed[TXData]]])
     kryo.register(classOf[Gossip[Signed[TX]]])
@@ -82,7 +82,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
 
     kryo.register(classOf[SerializedUDPMessage])
 
-    kryo.register(classOf[Address])
+    kryo.register(classOf[AddressMetaData])
     kryo.register(classOf[HandShakeMessage])
 
     kryo.register(Class.forName("scala.collection.immutable.Set$EmptySet$"))

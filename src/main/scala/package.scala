@@ -1,6 +1,6 @@
 
 import java.net.InetSocketAddress
-import java.security.{KeyPair, PublicKey}
+import java.security.{KeyPair, PrivateKey, PublicKey}
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem}
@@ -16,7 +16,6 @@ import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 import org.constellation.consensus.Consensus.RemoteMessage
 import com.twitter.chill.{IKryoRegistrar, KryoBase, KryoPool, ScalaKryoInstantiator}
 import org.constellation.p2p._
-import org.constellation.primitives.Schema.{Address, Bundle, Id}
 import org.constellation.primitives.Schema.{AddressMetaData, Bundle, Id}
 import org.constellation.util.{HashSignature, POWExt, POWSignHelp, ProductHash}
 import org.constellation.crypto.KeyUtilsExt
@@ -25,6 +24,7 @@ import org.json4s.native._
 import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, native}
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+
 import scala.concurrent.{Await, Future}
 import scala.reflect.ClassTag
 import scala.util.{Random, Try}
@@ -98,9 +98,6 @@ package object constellation extends KeyUtilsExt with POWExt
     ByteBuffer.wrap(byteBarray).order(ByteOrder.BIG_ENDIAN).getInt
 
 
-  // For LevelDB -- move to kryo class
-  val kryo: KryoBase = instantiator.newKryo()
-
   def guessThreads: Int = {
     val cores = Runtime.getRuntime.availableProcessors
     val GUESS_THREADS_PER_CORE = 4
@@ -126,7 +123,7 @@ package object constellation extends KeyUtilsExt with POWExt
     }
   }
 
-  Log.TRACE()
+ // Log.TRACE()
 
   implicit class HTTPHelp(httpResponse: HttpResponse)
                          (implicit val materialize: ActorMaterializer) {

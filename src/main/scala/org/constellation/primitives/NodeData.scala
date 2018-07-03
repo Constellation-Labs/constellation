@@ -22,7 +22,7 @@ trait NodeData {
   @volatile implicit var keyPair: KeyPair = _
 
   def publicKeyHash: Int = keyPair.getPublic.hashCode()
-  def id: Id = Id(keyPair.getPublic)
+  def id: Id = Id(keyPair.getPublic.encoded)
   def selfAddress: AddressMetaData = id.address
 
   @volatile var nodeState: NodeState = PendingDownload

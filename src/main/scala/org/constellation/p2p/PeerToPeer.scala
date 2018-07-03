@@ -80,7 +80,7 @@ class PeerToPeer(
           logger.debug(
             s"Heartbeat: ${id.short}, " +
               s"numActiveBundles: ${activeDAGBundles.size}, " +
-              s"maxHeight: ${Option(maxBundle).flatMap{_.meta.map{_.height}}}, " +
+              s"maxHeight: ${maxBundleOpt.flatMap{_.meta.map{_.height}}}, " +
               s"numTotalValidTX: $totalNumValidatedTX " +
               s"numPeers: ${peers.size} " +
               s"numBundleMessages: $totalNumBundleMessages, " +
@@ -99,11 +99,12 @@ class PeerToPeer(
 
     case UDPMessage(message: Any, remote) =>
 
-
+      totalNumP2PMessages += 1
 
       message match {
 
         case d: DownloadRequest => handleDownloadRequest(d, remote)
+          println("Got download request")
 
         case d: DownloadResponse => handleDownloadResponse(d)
 
@@ -132,13 +133,6 @@ class PeerToPeer(
         case u =>
           logger.error(s"Unrecognized UDP message: $u")
       }
-
-
-    // Deprecated below
-
-    case a @ AddTransaction(transaction) =>
-      logger.debug(s"Broadcasting TX ${transaction.short} on ${id.short}")
-      broadcast(a)
 
   }
 

@@ -109,7 +109,7 @@ object Schema {
 
   case class TX(
                  txData: Signed[TXData]
-               ) extends Fiber with GossipMessage with ProductHash {
+               ) extends Fiber with GossipMessage with ProductHash with RemoteMessage {
     def valid: Boolean = txData.valid
   }
 
@@ -350,14 +350,14 @@ object Schema {
 
   final case class ValidateTransaction(tx: TX) extends InternalCommand
 
-  sealed trait DownloadMessage
+  trait DownloadMessage
 
-  case class DownloadRequest() extends DownloadMessage with RemoteMessage
+  case class DownloadRequest(time: Long = System.currentTimeMillis()) extends DownloadMessage with RemoteMessage
   case class DownloadResponse(
                                maxBundle: Bundle,
                                genesisBundle: Bundle,
                                genesisTX: TX
-                             ) extends DownloadMessage
+                             ) extends DownloadMessage with RemoteMessage
 
   final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage with RemoteMessage
 
@@ -440,7 +440,7 @@ object Schema {
 
 
 
-  case class TransactionSerialized(hash: String, sender: Seq[String], receiver: String, amount: Long, signers: Set[String])
+  case class TransactionSerialized(hash: String, sender: String, receiver: String, amount: Long, signers: Set[String])
   case class Node(address: String, host: String, port: Int)
 
 

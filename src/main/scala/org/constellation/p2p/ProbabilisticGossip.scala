@@ -24,7 +24,8 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
          /// println("Sending BundleMetaData to peer on request")
           lookupBundle(h).foreach{
             b =>
-              udpActor.udpSend(b.bundle, remote)
+              // TODO: Send all meta for sync conflict detection.
+              udpActor ! UDPSend(b.bundle, remote)
           }
         }
       case BatchTXHashRequest(hashes) =>
@@ -32,7 +33,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         //  println(s"Sending tx hash response $h")
           lookupTransaction(h).foreach{
             b =>
-              udpActor.udpSend(b, remote)
+              udpActor ! UDPSend(b, remote)
           }
         }
       case b: Bundle =>

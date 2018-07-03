@@ -13,5 +13,6 @@ trait MetricsExt {
   @volatile var numSyncedBundles: Int = 0
   @volatile var numSyncedTX: Int = 0
   @volatile var heartbeatRound = 0L
+  @volatile var totalNumP2PMessages = 0L
 
 }

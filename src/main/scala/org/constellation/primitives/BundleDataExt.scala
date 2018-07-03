@@ -23,6 +23,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   @volatile var maxBundleMetaData: BundleMetaData = _
   def maxBundle: Bundle = maxBundleMetaData.bundle
+  def maxBundleOpt: Option[Bundle] = Option(maxBundleMetaData).map{_.bundle}
 
   @volatile var syncPendingBundleHashes: Set[String] = Set()
   @volatile var syncPendingTXHashes: Set[String] = Set()
