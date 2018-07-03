@@ -8,10 +8,12 @@ import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, path, _}
 import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.server.directives.Credentials
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
-import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 import akka.pattern.ask
 import akka.util.Timeout
+import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
+import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
@@ -33,8 +35,7 @@ class API(
            memPoolManagerActor: ActorRef,
            consensusActor: ActorRef,
            udpAddress: InetSocketAddress,
-           val data: Data = null,
-           val jsPrefix: String = "./ui/target/scala-2.11/ui"
+           val data: Data = null
          )
          (implicit executionContext: ExecutionContext, val timeout: Timeout) extends Json4sSupport
   with Wallet
@@ -49,7 +50,12 @@ class API(
 
   val logger = Logger(s"APIInterface")
 
-  val routes: Route = cors() {
+  val config = ConfigFactory.load()
+
+  val authId = config.getString("auth.id")
+  val authPassword = config.getString("auth.password")
+
+  private val getEndpoints =
     get {
       path("submitTX") {
         parameter('address, 'amount) { (address, amount) =>
@@ -57,54 +63,54 @@ class API(
           handleSendRequest(SendToAddress(Address(address), amount.toLong))
         }
       } ~
-      pathPrefix("address") {
-        get {
-          extractUnmatchedPath { p =>
-            logger.debug(s"Unmatched path on address result $p")
-            val ps = p.toString().tail
-            val balance = validLedger.getOrElse(ps, 0).toString
-            complete(s"Balance: $balance")
+        pathPrefix("address") {
+          get {
+            extractUnmatchedPath { p =>
+              logger.debug(s"Unmatched path on address result $p")
+              val ps = p.toString().tail
+              val balance = validLedger.getOrElse(ps, 0).toString
+              complete(s"Balance: $balance")
+            }
           }
-        }
-      } ~
-      pathPrefix("txHash") {
-        get {
-          extractUnmatchedPath { p =>
-            logger.debug(s"Unmatched path on address result $p")
-            val ps = p.toString().tail
-            complete(transactionData(ps).prettyJson)
+        } ~
+        pathPrefix("txHash") {
+          get {
+            extractUnmatchedPath { p =>
+              logger.debug(s"Unmatched path on address result $p")
+              val ps = p.toString().tail
+              complete(transactionData(ps).prettyJson)
+            }
           }
-        }
-      } ~
-      path("longestChain") {
-        val ancestors = extractBundleAncestorsUntilValidation(bestBundle)
-        val all = validBundles ++ ancestors.map{bundleHashToBundle} ++ Seq(bestBundle)
-        complete(
-          all.json
-        )
-      } ~
-      pathPrefix("bundle") {
-        get {
-          extractUnmatchedPath { p =>
-            logger.debug(s"Unmatched path on bundle result $p")
-            val ps = p.toString().tail
-            complete(validBundles.filter{_.hash == ps}.headOption.prettyJson)
+        } ~
+        path("longestChain") {
+          val ancestors = extractBundleAncestorsUntilValidation(bestBundle)
+          val all = validBundles ++ ancestors.map{bundleHashToBundle} ++ Seq(bestBundle)
+          complete(
+            all.json
+          )
+        } ~
+        pathPrefix("bundle") {
+          get {
+            extractUnmatchedPath { p =>
+              logger.debug(s"Unmatched path on bundle result $p")
+              val ps = p.toString().tail
+              complete(validBundles.filter{_.hash == ps}.headOption.prettyJson)
+            }
           }
-        }
-      } ~
-      path("setKeyPair") {
-        parameter('keyPair) { kpp =>
-          logger.debug("Set key pair " + kpp)
-          val res = if (kpp.length > 10) {
-            val rr = Try {
-              data.updateKeyPair(kpp.x[KeyPair])
-              StatusCodes.OK
-            }.getOrElse(StatusCodes.BadRequest)
-            rr
-          } else StatusCodes.BadRequest
-          complete(res)
-        }
-      } ~
+        } ~
+        path("setKeyPair") {
+          parameter('keyPair) { kpp =>
+            logger.debug("Set key pair " + kpp)
+            val res = if (kpp.length > 10) {
+              val rr = Try {
+                data.updateKeyPair(kpp.x[KeyPair])
+                StatusCodes.OK
+              }.getOrElse(StatusCodes.BadRequest)
+              rr
+            } else StatusCodes.BadRequest
+            complete(res)
+          }
+        } ~
         path("metrics") {
           complete(Metrics(Map(
             "address" -> selfAddress.address,
@@ -123,7 +129,7 @@ class API(
               s"${z.data.id.short} API: $addr "
             }.mkString(" --- "),
             "genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
-         //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
+            //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
             "numActiveBundles" -> activeDAGBundles.size.toString,
             "last10TXHash" -> sentTX.reverse.slice(0, 10).map{_.hash}.mkString(","),
             "last10ValidBundleHashes" -> validBundles.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
@@ -141,7 +147,7 @@ class API(
             }.mkString(" ----- "),
             "allPeerSynchronizedLastHash" -> Try(
               (peerSync.map{_._2.validBundleHashes.last} ++ Seq(lastBundle.hash)).toSet.size == 1
-              ).map{_.toString}.getOrElse(""),
+            ).map{_.toString}.getOrElse(""),
             "allPeerAllBundleHashSync" -> peerSync.forall{_._2.validBundleHashes == validBundles.map{_.hash}}.toString,
             "z_peers" -> peers.map{_.data}.json,
             "z_UTXO" -> validLedger.toMap.json,
@@ -266,115 +272,132 @@ class API(
             "peers" -> peerMap,
             "transactions" -> transactions
           ))
+        }
+    }
 
-        } ~
-        jsRequest ~
-        serveMainPage
-    } ~
-      post {
-        path("setTXValid") {
-          entity(as[TX]) { tx =>
-            acceptTransaction(tx)
-            tx.updateLedger(memPoolLedger)
-            complete(StatusCodes.OK)
-          }
-        } ~
+  private val postEndpoints =
+    post {
+      path("setTXValid") {
+        entity(as[TX]) { tx =>
+          acceptTransaction(tx)
+          tx.updateLedger(memPoolLedger)
+          complete(StatusCodes.OK)
+        }
+      } ~
         path ("sendToAddress") {
           entity(as[SendToAddress]) { s =>
             handleSendRequest(s)
           }
         } ~
-          path("db") {
-            entity(as[String]){ e: String =>
-              import constellation.EasyFutureBlock
-              val cleanStr = e.replaceAll('"'.toString, "")
-              val res = db.get(cleanStr)
-              complete(res)
-            }
-          } ~
-          path ("tx") {
-            entity(as[TX]) { tx =>
-              peerToPeerActor ! tx
-              complete(StatusCodes.OK)
-            }
-          } ~
-          path("transaction") {
-            entity(as[Transaction]) { transaction =>
-              //  logger.debug(s"Received request to submit a new transaction $transaction")
+        path("db") {
+          entity(as[String]){ e: String =>
 
-              val tx = AddTransaction(transaction)
-              peerToPeerActor ! tx
-              memPoolManagerActor ! tx
-              complete(transaction)
-            }
-          } ~
-          path("peer") {
-            entity(as[String]) { peerAddress =>
+            val cleanStr = e.replaceAll('"'.toString, "")
+            val res = db.get(cleanStr)
+            complete(res)
+          }
+        } ~
+        path ("tx") {
+          entity(as[TX]) { tx =>
+            peerToPeerActor ! tx
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("transaction") {
+          entity(as[Transaction]) { transaction =>
+            //  logger.debug(s"Received request to submit a new transaction $transaction")
 
-              Try {
-                //    logger.debug(s"Received request to add a new peer $peerAddress")
-                val result = Try {
-                  peerAddress.replaceAll('"'.toString, "").split(":") match {
-                    case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
-                    case a@_ => logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a");
-                  }
-                }.toOption match {
-                  case None =>
-                    StatusCodes.BadRequest
-                  case Some(v) =>
-                    val fut = (peerToPeerActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
-                    val res = Try {
-                      Await.result(fut, timeout.duration)
-                    }.toOption
-                    res match {
-                      case None =>
-                        StatusCodes.RequestTimeout
-                      case Some(f) =>
-                        if (f == StatusCodes.Accepted) {
-                          var attempts = 0
-                          var peerAdded = false
-                          while (attempts < 5) {
-                            attempts += 1
-                            Thread.sleep(1500)
-                            //peerAdded = peers.exists(p => v == p.data.externalAddress)
-                            peerAdded = peerLookup.contains(v)
-                          }
-                          if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
-                        } else f
-                    }
+            val tx = AddTransaction(transaction)
+            peerToPeerActor ! tx
+            memPoolManagerActor ! tx
+            complete(transaction)
+          }
+        } ~
+        path("peer") {
+          entity(as[String]) { peerAddress =>
+
+            Try {
+              //    logger.debug(s"Received request to add a new peer $peerAddress")
+              val result = Try {
+                peerAddress.replaceAll('"'.toString, "").split(":") match {
+                  case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
+                  case a@_ => logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a");
                 }
+              }.toOption match {
+                case None =>
+                  StatusCodes.BadRequest
+                case Some(v) =>
+                  val fut = (peerToPeerActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
+                  val res = Try {
+                    Await.result(fut, timeout.duration)
+                  }.toOption
+                  res match {
+                    case None =>
+                      StatusCodes.RequestTimeout
+                    case Some(f) =>
+                      if (f == StatusCodes.Accepted) {
+                        var attempts = 0
+                        var peerAdded = false
+                        while (attempts < 5) {
+                          attempts += 1
+                          Thread.sleep(1500)
+                          //peerAdded = peers.exists(p => v == p.data.externalAddress)
+                          peerAdded = peerLookup.contains(v)
+                        }
+                        if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
+                      } else f
+                  }
+              }
 
-                logger.debug(s"New peer request $peerAddress statusCode: $result")
-                result
-              } match {
-                case Failure(e) => e.printStackTrace()
-                  complete(StatusCodes.InternalServerError)
-                case Success(x) => complete(x)
-              }
-            }
-          } ~
-          path("ip") {
-            entity(as[String]) { externalIp =>
-              var ipp : String = ""
-              val addr = externalIp.replaceAll('"'.toString,"").split(":") match {
-                case Array(ip, port) =>
-                  ipp = ip
-                  new InetSocketAddress(ip, port.toInt)
-                case a@_ => { logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a"); }
-              }
-              logger.debug(s"Set external IP RPC request $externalIp $addr")
-              data.externalAddress = addr
-              if (ipp.nonEmpty) data.apiAddress = new InetSocketAddress(ipp, addr.getPort)
-              complete(StatusCodes.OK)
-            }
-          } ~
-          path("reputation") {
-            entity(as[Seq[UpdateReputation]]) { ur =>
-              secretReputation = ur.flatMap{ r => r.secretReputation.map{id -> _}}.toMap
-              publicReputation = ur.flatMap{ r => r.publicReputation.map{id -> _}}.toMap
-              complete(StatusCodes.OK)
+              logger.debug(s"New peer request $peerAddress statusCode: $result")
+              result
+            } match {
+              case Failure(e) => e.printStackTrace()
+                complete(StatusCodes.InternalServerError)
+              case Success(x) => complete(x)
             }
           }
-      }
+        } ~
+        path("ip") {
+          entity(as[String]) { externalIp =>
+            var ipp : String = ""
+            val addr = externalIp.replaceAll('"'.toString,"").split(":") match {
+              case Array(ip, port) =>
+                ipp = ip
+                new InetSocketAddress(ip, port.toInt)
+              case a@_ => { logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a"); }
+            }
+            logger.debug(s"Set external IP RPC request $externalIp $addr")
+            data.externalAddress = addr
+            if (ipp.nonEmpty) data.apiAddress = new InetSocketAddress(ipp, addr.getPort)
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("reputation") {
+          entity(as[Seq[UpdateReputation]]) { ur =>
+            secretReputation = ur.flatMap{ r => r.secretReputation.map{id -> _}}.toMap
+            publicReputation = ur.flatMap{ r => r.publicReputation.map{id -> _}}.toMap
+            complete(StatusCodes.OK)
+          }
+        }
+    }
+
+  private val faviconRoute = get {
+    path("favicon.ico") {
+      getFromResource("favicon.ico")
+    }
   }
+
+  private val routes: Route = cors() {
+    getEndpoints ~ postEndpoints ~ jsRequest ~ serveMainPage
+  }
+
+  def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
+    credentials match {
+      case p@Credentials.Provided(id) if id == authId && p.verify(authPassword) => Some(id)
+      case _ => None
+    }
+  }
+
+  val authRoutes = faviconRoute ~ authenticateBasic(realm = "secure site", myUserPassAuthenticator) { user => routes }
 }
