@@ -23,6 +23,8 @@ class KryoSerializerTest extends FlatSpec {
 
     val testBundle = Gossip(TestHelpers.createTestBundle())
 
+    assert(testBundle.event.valid)
+
     val messages = serializeGrouped(testBundle)
 
     val messagesSerialized = messages.map(serialize(_))
@@ -31,9 +33,11 @@ class KryoSerializerTest extends FlatSpec {
 
     val sorted = messagesDeserialized.sortBy(f => f.packetGroupId).flatMap(_.data).toArray
 
-    val deserializedSorted = deserialize(sorted)
+    val deserializedSorted = deserialize(sorted).asInstanceOf[Gossip[Bundle]]
 
     assert(testBundle == deserializedSorted)
+
+    assert(deserializedSorted.event.valid)
   }
 
 }

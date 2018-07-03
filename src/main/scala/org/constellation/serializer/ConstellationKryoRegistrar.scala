@@ -15,12 +15,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
   }
 
   def registerClasses(kryo: Kryo): Unit = {
-    kryo.register(classOf[PublicKey], new PubKeyKryoSerializer())
-    kryo.addDefaultSerializer(classOf[PublicKey], new PubKeyKryoSerializer())
 
-    kryo.register(classOf[org.spongycastle.jcajce.provider.asymmetric.ec.BCECPublicKey])
-
-    kryo.register(classOf[EncodedPubKey])
     kryo.register(classOf[EncodedPublicKey])
     kryo.register(classOf[Array[Byte]])
 

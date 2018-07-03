@@ -29,12 +29,12 @@ object Fixtures {
   val publicKey4: PublicKey = tempKey4.getPublic
   val publicKey5: PublicKey = tempKey5.getPublic
   val address = new InetSocketAddress("127.0.0.1", 16180)
-  val id = Id(publicKey)
-  val id1 = Id(publicKey1)
-  val id2 = Id(publicKey2)
-  val id3 = Id(publicKey3)
-  val id4 = Id(publicKey4)
-  val id5 = Id(publicKey5)
+  val id = Id(publicKey.encoded)
+  val id1 = Id(publicKey1.encoded)
+  val id2 = Id(publicKey2.encoded)
+  val id3 = Id(publicKey3.encoded)
+  val id4 = Id(publicKey4.encoded)
+  val id5 = Id(publicKey5.encoded)
   val signedPeer: Signed[Peer] = Peer(id, address, Set()).signed()(tempKey)
 
   val address1: InetSocketAddress = constellation.addressToSocket("localhost:16181")

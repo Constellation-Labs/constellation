@@ -19,7 +19,7 @@ class Data {
   @volatile implicit var keyPair: KeyPair = _
 
   def publicKeyHash: Int = keyPair.getPublic.hashCode()
-  def id : Id = Id(keyPair.getPublic)
+  def id : Id = Id(keyPair.getPublic.encoded)
   def selfAddress: Address = id.address
   def tmpDirId = new File("tmp", id.medium)
 

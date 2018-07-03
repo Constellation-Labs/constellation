@@ -81,7 +81,7 @@ trait LinearGossip extends PeerAuth {
 
           // Continue gossip.
           val peer = peerLookup(remote).data.id
-          val gossipKeys = gossipSeq.tail.flatMap{_.encodedPublicKeys}.distinct.map{_.toPublicKey}.map{Id}
+          val gossipKeys = gossipSeq.tail.flatMap{_.encodedPublicKeys}.distinct.map{_.toPublicKey.encoded}.map{Id}
 
           val containsSelf = gossipKeys.contains(id)
           val underMaxDepth = g.stackDepth < 6

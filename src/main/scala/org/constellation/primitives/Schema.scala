@@ -344,10 +344,10 @@ object Schema {
         val bd = s.data.bundles
         val depths = bd.map {
           case b2: Bundle =>
-            b2.bundleData.publicKeys.map{Id}.toSet ++ process(b2.bundleData)
+            b2.bundleData.encodedPublicKeys.headOption.map{Id}.toSet ++ process(b2.bundleData)
           case _ => Set[Id]()
         }
-        depths.reduce(_ ++ _) ++ s.publicKeys.map{Id}.toSet
+        depths.reduce(_ ++ _) ++ s.encodedPublicKeys.headOption.map{Id}.toSet
       }
       process(bundleData)
     }
@@ -447,11 +447,12 @@ object Schema {
 
   case class Peers(peers: Seq[InetSocketAddress])
 
-  case class Id(id: PublicKey) {
+  case class Id(encodedId: EncodedPublicKey) {
     def short: String = id.toString.slice(15, 20)
     def medium: String = id.toString.slice(15, 25).replaceAll(":", "")
     def address: Address = pubKeyToAddress(id)
     def b58 = Base58.encode(id.getEncoded)
+    def id = encodedId.toPublicKey
   }
 
   case class GetId()

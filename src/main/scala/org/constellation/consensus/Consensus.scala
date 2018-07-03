@@ -243,7 +243,7 @@ class Consensus(keyPair: KeyPair, udpActor: ActorRef)(implicit timeout: Timeout)
   implicit val sys: ActorSystem = context.system
   implicit val kp: KeyPair = keyPair
 
-  def receive: Receive = consensus(ConsensusRoundState(selfId = Some(Id(keyPair.getPublic)), udpActor = Some(udpActor)))
+  def receive: Receive = consensus(ConsensusRoundState(selfId = Some(Id(keyPair.getPublic.encoded)), udpActor = Some(udpActor)))
 
   def consensus(consensusRoundState: ConsensusRoundState): Receive = {
 
