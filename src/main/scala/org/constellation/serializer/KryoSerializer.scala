@@ -18,7 +18,7 @@ object KryoSerializer {
   }
 
   val kryoPool: KryoPool = KryoPool.withBuffer(guessThreads,
-    new ScalaKryoInstantiator().setRegistrationRequired(false)
+    new ScalaKryoInstantiator().setRegistrationRequired(true)
       .withRegistrar(new ConstellationKryoRegistrar())
     , 32, 1024*1024*100)
 
