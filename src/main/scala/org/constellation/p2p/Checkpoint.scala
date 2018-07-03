@@ -30,7 +30,7 @@ trait Checkpoint extends PeerAuth {
 
         checkpointsInProgress.putIfAbsent(roundHash, true)
 
-        val memPoolSample = memPool.toSeq.map{db.getAs[TX](_).get}
+        val memPoolSample = memPool.toSeq.flatMap{lookupTransaction}
 
         // TODO: temporarily using all
         val facilitators = peerIDLookup.keys.toSet + Id(publicKey.encoded)

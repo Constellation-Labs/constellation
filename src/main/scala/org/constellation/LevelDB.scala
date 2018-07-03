@@ -41,12 +41,14 @@ class LevelDB(val file: File) {
   def putJson(k: String, t: AnyRef): Try[Unit] = put(k, t.json)
   def putJson[T <: ProductHash](t: T): Try[Unit] = put(t.hash, t.json)
 
+/*
   // Kryo
   def getAs[T](s: String)(implicit m: Manifest[T]): Option[T] = getBytes(s).map{_.kryoExtract[T]}
   def getHashAs[T](s: ProductHash)(implicit m: Manifest[T]): Option[T] = getBytes(s.hash).map{_.kryoExtract[T]}
   def put[T <: ProductHash, Q <: AnyRef](t: T, q: Q): Try[Unit] = putBytes(t.hash, q.kryoWrite)
   def put(k: String, t: AnyRef): Try[Unit] = putBytes(k, t.kryoWrite)
   def put[T <: ProductHash](t: T): Try[Unit] = putBytes(t.hash, t.kryoWrite)
+*/
 
 
   // Util

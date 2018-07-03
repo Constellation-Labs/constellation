@@ -66,6 +66,7 @@ class LevelDBTest extends FlatSpec {
     assert(ldb.getRaw("Tampa") == "rocks")
     ldb.delete("Tampa")
     assert(ldb.getRaw("Tampa") == null)
+/*
 
     val tx = Fixtures.randomTransactions.head
     import constellation._
@@ -81,6 +82,7 @@ class LevelDBTest extends FlatSpec {
     //println(tx)
     //println(tx2)
     assert(tx == tx2)
+*/
 
     ldb.close()
     SFile(file).deleteRecursively()

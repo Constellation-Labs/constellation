@@ -17,7 +17,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
   }
 
   def createGenesis(tx: TX): Unit = {
-    db.put(tx)
+    storeTransaction(tx)
     acceptGenesis(Bundle(BundleData(Seq(ParentBundleHash("coinbase"), TransactionHash(tx.hash))).signed()))
     downloadMode = false
   }

@@ -83,6 +83,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
         def updatePacketGroup(serMsg: SerializedUDPMessage, messages: TrieMap[Int, SerializedUDPMessage]): Unit = {
 
+          println("Update packet group")
           // make sure this is not a duplicate packet first
           if (!messages.isDefinedAt(serMsg.packetGroupId)) {
 
@@ -126,7 +127,8 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
     case RegisterNextActor(next) => nextActor = Some(next)
 
-    case Ban(remote) => bannedIPs = {bannedIPs ++ Seq(remote)}.distinct
+    case Ban(remote) =>
+      // bannedIPs = {bannedIPs ++ Seq(remote)}.distinct
 
     case GetBanList => sender() ! bannedIPs
 

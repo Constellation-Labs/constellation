@@ -97,6 +97,7 @@ package object constellation extends KeyUtilsExt with POWExt
   def byteToInt(byteBarray: Array[Byte]): Int =
     ByteBuffer.wrap(byteBarray).order(ByteOrder.BIG_ENDIAN).getInt
 
+/*
 
   def guessThreads: Int = {
     val cores = Runtime.getRuntime.availableProcessors
@@ -122,8 +123,9 @@ package object constellation extends KeyUtilsExt with POWExt
       kryoPool.fromBytes(a).asInstanceOf[T]
     }
   }
+*/
 
- // Log.TRACE()
+  Log.TRACE()
 
   implicit class HTTPHelp(httpResponse: HttpResponse)
                          (implicit val materialize: ActorMaterializer) {

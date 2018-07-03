@@ -16,6 +16,10 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
 
   def registerClasses(kryo: Kryo): Unit = {
 
+    kryo.register(classOf[DownloadRequest])
+    kryo.register(classOf[DownloadResponse])
+    kryo.register(classOf[PeerSyncHeartbeat])
+
     kryo.register(classOf[EncodedPublicKey])
     kryo.register(classOf[Array[Byte]])
 
@@ -67,6 +71,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Gossip[PeerSyncHeartbeat]])
     kryo.register(classOf[Gossip[Bundle]])
     kryo.register(classOf[Gossip[DownloadRequest]])
+
     kryo.register(classOf[Gossip[DownloadResponse]])
     kryo.register(classOf[Gossip[SyncData]])
 

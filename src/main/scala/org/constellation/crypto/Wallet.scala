@@ -32,9 +32,11 @@ trait Wallet {
 
   def addressToKeyPair: Map[String, KeyPair] = wallet.map{ w => w.address.address -> w}.toMap
 
+/*
   def walletAddressInfo: Map[String, TX] = {
-    wallet.map{_.address.address}.flatMap{k => db.getAs[TX](k).map{k -> _}}.toMap
+    wallet.map{_.address.address}.flatMap{k =>(k).map{k -> _}}.toMap
   }
+*/
 
 /*
   def outputBalances: Seq[AddressMetaData] = walletAddressInfo.flatMap{
