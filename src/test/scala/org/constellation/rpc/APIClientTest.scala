@@ -64,7 +64,7 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
     val id = rpc.read[Id](response.get()).get()
 
-    assert(Id(keyPair.getPublic) == id)
+    assert(Id(keyPair.getPublic.encoded) == id)
   }
 
   "GET to /balance" should "get the correct current balance for the provided pubKey" in {

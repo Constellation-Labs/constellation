@@ -5,8 +5,11 @@ import java.security.KeyPair
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
 import akka.util.Timeout
 import constellation._
+import org.constellation.Data
 import org.constellation.consensus.Consensus._
+import org.constellation.p2p.UDPSend
 import org.constellation.primitives.Schema._
+import org.constellation.util.Signed
 
 import scala.collection.immutable.HashMap
 
@@ -29,7 +32,7 @@ object Consensus {
 
   case class RoundHash[+T <: CC](hash: String)
 
-  sealed trait RemoteMessage
+  trait RemoteMessage
 
   case class ConsensusVote[+T <: CC](id: Id, data: VoteData[T], roundHash: RoundHash[T]) extends RemoteMessage
   case class ConsensusProposal[+T <: CC](id: Id, data: ProposalData[T], roundHash: RoundHash[T]) extends RemoteMessage
@@ -75,7 +78,7 @@ object Consensus {
 
     // TODO: here replace with call to gossip actor
     notifyFacilitators(facilitators, self, f => {
-      udpActor.udpSendToId(message, f)
+    //  udpActor ! UDPSend(message, peerIdLookup(f).data.externalAddress)
     })
 
     true
@@ -101,7 +104,8 @@ object Consensus {
 
     // tell everyone to perform a vote
     // TODO: update to only run during conflict voting, for now it's ignored
-    notifyFacilitatorsOfMessage(facilitators, self, StartConsensusRound(self, vote, roundHash), udpActor)
+    notifyFacilitatorsOfMessage(facilitators, self,
+      StartConsensusRound(self, vote, roundHash), udpActor)
 
     updatedState
   }
@@ -239,7 +243,7 @@ class Consensus(keyPair: KeyPair, udpActor: ActorRef)(implicit timeout: Timeout)
   implicit val sys: ActorSystem = context.system
   implicit val kp: KeyPair = keyPair
 
-  def receive: Receive = consensus(ConsensusRoundState(selfId = Some(Id(keyPair.getPublic)), udpActor = Some(udpActor)))
+  def receive: Receive = consensus(ConsensusRoundState(selfId = Some(Id(keyPair.getPublic.encoded)), udpActor = Some(udpActor)))
 
   def consensus(consensusRoundState: ConsensusRoundState): Receive = {
 

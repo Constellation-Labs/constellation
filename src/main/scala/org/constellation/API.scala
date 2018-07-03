@@ -230,12 +230,25 @@ class API(
           }
         } ~
         path("dashboard") {
-          val bundleSubset = last100ValidBundleMetaData.reverse.take(20)
-          val transactions: Set[TX] = bundleSubset.flatMap(b => b.bundle.extractTX).sortBy(_.txData.time).toSet
+
+          val transactions = last100ValidBundleMetaData.reverse.take(20).flatMap{lookupBundle}.map(b => {
+            (b.extractTX.toSeq.sortBy(_.tx.time), b.extractIds.map(f => f.address.address))
+          }).flatMap(t => {
+            t._1.map(e => TransactionSerialized(e.hash, e.tx.data.src.map(t => t.address), e.tx.data.dst.address, e.tx.data.normalizedAmount, t._2))
+          })
+
+          var peerMap: Seq[Node] = peers.map{_.data}.seq.map{ f => {
+            Node(f.id.address.address, f.externalAddress.getHostName, f.externalAddress.getPort)
+          }}
+
+          // Add self
+          peerMap = peerMap :+ Node(selfAddress.address, selfPeer.data.externalAddress.getHostName, selfPeer.data.externalAddress.getPort)
+
           complete(Map(
-            "peers" -> peers.map{_.data},
+            "peers" -> peerMap,
             "transactions" -> transactions
           ))
+
         } ~
         jsRequest ~
         serveMainPage

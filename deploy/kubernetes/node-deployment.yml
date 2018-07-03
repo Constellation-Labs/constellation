@@ -16,6 +16,12 @@ spec:
     targetPort: 16180
     name: udp
     protocol: UDP
+  - port: 6006
+    targetPort: 6006
+    name: jvmdebug
+  - port: 9010
+    targetPort: 9010
+    name: jmx
   clusterIP: None
   selector:
     app: constellation-app
@@ -54,6 +60,12 @@ spec:
           hostPort: 16180
           name: udp
           protocol: UDP
+        - containerPort: 6006
+          hostPort: 6006
+          name: jvmdebug
+        - containerPort: 9010
+          hostPort: 9010
+          name: jmx
         env:
         - name: AKKA_ACTOR_SYSTEM_NAME
           value: constellation

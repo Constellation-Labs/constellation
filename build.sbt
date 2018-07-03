@@ -17,7 +17,7 @@ lazy val commonSettings = Seq(
   name := "constellation",
   mainClass := Some("org.constellation.ConstellationNode"),
   parallelExecution in Test := false,
-  dockerExposedPorts := Seq(2551, 9000, 16180),
+  dockerExposedPorts := Seq(2551, 9000, 16180, 6006, 9010),
   dockerCommands := dockerCommands.value.flatMap {
     case ExecCmd("ENTRYPOINT", args @ _*) => Seq(Cmd("ENTRYPOINT", args.mkString(" ")))
     case v => Seq(v)
@@ -30,6 +30,8 @@ lazy val commonSettings = Seq(
   dockerUpdateLatest := true,
   // These values will be filled in by the k8s StatefulSet and Deployment
   dockerEntrypoint ++= Seq(
+    "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=6006",
+    "-Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false",
     """-DakkaActorSystemName="$AKKA_ACTOR_SYSTEM_NAME"""",
     """-Dakka.remote.netty.tcp.hostname="$(eval "echo $AKKA_REMOTING_BIND_HOST")"""",
     """-Dakka.remote.netty.tcp.port="$AKKA_REMOTING_BIND_PORT"""",
@@ -78,7 +80,6 @@ lazy val testDependencies = Seq(
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
 ).map(_ % "it,test" )
-
 
 lazy val root = (project in file("."))
   .configs(IntegrationTest)

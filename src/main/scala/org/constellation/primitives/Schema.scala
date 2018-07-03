@@ -5,6 +5,7 @@ import java.net.InetSocketAddress
 import java.security.PublicKey
 
 import constellation.pubKeyToAddress
+import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.Base58
 import org.constellation.util.{EncodedPublicKey, HashSignature, ProductHash, Signed}
 
@@ -132,8 +133,8 @@ object Schema {
   case class HashRequest(hash: String) extends GossipMessage
   case class BatchHashRequest(hashes: Set[String]) extends GossipMessage
 
-  case class BatchBundleHashRequest(hashes: Set[String]) extends GossipMessage
-  case class BatchTXHashRequest(hashes: Set[String]) extends GossipMessage
+  case class BatchBundleHashRequest(hashes: Set[String]) extends GossipMessage with RemoteMessage
+  case class BatchTXHashRequest(hashes: Set[String]) extends GossipMessage with RemoteMessage
 
   case class UnknownParentHashSyncInfo(
                                         firstRequestTime: Long,
@@ -157,11 +158,12 @@ object Schema {
   final case class PeerSyncHeartbeat(
                                       maxBundle: Bundle,
                                       validLedger: Map[String, Long]
-                                    ) extends GossipMessage
+                                    ) extends GossipMessage with RemoteMessage
 
   final case class Bundle(
                            bundleData: Signed[BundleData]
-                         ) extends ProductHash with Fiber with GossipMessage {
+                         ) extends ProductHash with Fiber with GossipMessage
+  with RemoteMessage {
 
     val bundleNumber: Long = 0L //Random.nextLong()
 
@@ -267,10 +269,10 @@ object Schema {
         val bd = s.data.bundles
         val depths = bd.map {
           case b2: Bundle =>
-            b2.bundleData.publicKeys.map{Id}.toSet ++ process(b2.bundleData)
+            b2.bundleData.encodedPublicKeys.headOption.map{Id}.toSet ++ process(b2.bundleData)
           case _ => Set[Id]()
         }
-        depths.reduce(_ ++ _) ++ s.publicKeys.map{Id}.toSet
+        depths.reduce(_ ++ _) ++ s.encodedPublicKeys.headOption.map{Id}.toSet
       }
       process(bundleData)
     }
@@ -307,7 +309,7 @@ object Schema {
 
   }
 
-  final case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash
+  final case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash with RemoteMessage
     with Fiber
     with GossipMessage {
     def iter: Seq[Signed[_ >: T <: ProductHash]] = {
@@ -350,18 +352,18 @@ object Schema {
 
   sealed trait DownloadMessage
 
-  case class DownloadRequest() extends DownloadMessage
+  case class DownloadRequest() extends DownloadMessage with RemoteMessage
   case class DownloadResponse(
                                maxBundle: Bundle,
                                genesisBundle: Bundle,
                                genesisTX: TX
                              ) extends DownloadMessage
 
-  final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage
+  final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage with RemoteMessage
 
-  case class MissingTXProof(tx: TX, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage
+  case class MissingTXProof(tx: TX, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage with RemoteMessage
 
-  final case class RequestTXProof(txHash: String) extends GossipMessage
+  final case class RequestTXProof(txHash: String) extends GossipMessage with RemoteMessage
 
   case class Metrics(metrics: Map[String, String])
 
@@ -369,11 +371,12 @@ object Schema {
 
   case class Peers(peers: Seq[InetSocketAddress])
 
-  case class Id(id: PublicKey) {
+  case class Id(encodedId: EncodedPublicKey) {
     def short: String = id.toString.slice(15, 20)
     def medium: String = id.toString.slice(15, 25).replaceAll(":", "")
     def address: AddressMetaData = pubKeyToAddress(id)
     def b58 = Base58.encode(id.getEncoded)
+    def id = encodedId.toPublicKey
   }
 
   case class GetId()
@@ -389,14 +392,14 @@ object Schema {
 
   // These exist because type erasure messes up pattern matching on Signed[T] such that
   // you need a wrapper case class like this
-  case class HandShakeMessage(handShake: Signed[HandShake])
-  case class HandShakeResponseMessage(handShakeResponse: Signed[HandShakeResponse])
+  case class HandShakeMessage(handShake: Signed[HandShake]) extends RemoteMessage
+  case class HandShakeResponseMessage(handShakeResponse: Signed[HandShakeResponse]) extends RemoteMessage
 
   case class HandShakeResponse(
                                 //                   original: Signed[HandShake],
                                 response: HandShake,
                                 detectedRemote: InetSocketAddress
-                              ) extends ProductHash
+                              ) extends ProductHash with RemoteMessage
 
   case class Peer(
                    id: Id,
@@ -434,5 +437,11 @@ object Schema {
   final case class VoteDataSimpler(accept: Seq[VoteCandidate], reject: Seq[VoteCandidate]) extends ProductHash
 
   final case class Vote(vote: Signed[VoteData]) extends ProductHash with Fiber
+
+
+
+  case class TransactionSerialized(hash: String, sender: Seq[String], receiver: String, amount: Long, signers: Set[String])
+  case class Node(address: String, host: String, port: Int)
+
 
 }

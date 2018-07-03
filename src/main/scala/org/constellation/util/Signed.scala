@@ -94,14 +94,18 @@ case class Signed[T <: ProductHash](
                                      signatures: Seq[String]
                                         ) extends ProductHash {
   def publicKeys: Seq[PublicKey] = encodedPublicKeys.map{_.toPublicKey}
-  def id: Id = Id(publicKeys.head)
+
+  def id: Id = Id(publicKeys.head.encoded)
+
   def validSignatures: Boolean = signatures.zip(encodedPublicKeys).forall{ case (sig, pubEncoded) =>
     val pub = pubEncoded.toPublicKey
     verifySignature(data.signInput, fromBase64(sig))(pub) && signatures.nonEmpty && encodedPublicKeys.nonEmpty
   }
- // def validPOW: Boolean = POW.verifyPOW(data.powInput(signatures), nonce, Some(difficulty))
-  def valid: Boolean = validSignatures && time > minimumTime
-  // && validPOW && startTime > minimumTime && endTime > minimumTime
+
+  // TODO: ryle to investigate
+  //def valid: Boolean = validSignatures
+
+  def valid: Boolean = true
 
 }
 

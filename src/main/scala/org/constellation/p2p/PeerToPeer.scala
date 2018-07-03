@@ -47,12 +47,6 @@ class PeerToPeer(
 
     case AddPeerFromLocal(peerAddress) => sender() ! addPeerFromLocal(peerAddress)
 
-    case UDPSendToID(dataA, remoteId) =>
-      peerIDLookup.get(remoteId).foreach{
-        r =>
-          udpActor ! UDPSendTyped(dataA, r.data.externalAddress)
-      }
-
     // Regular state checks
 
     case InternalHeartbeat =>
@@ -138,6 +132,13 @@ class PeerToPeer(
         case u =>
           logger.error(s"Unrecognized UDP message: $u")
       }
+
+
+    // Deprecated below
+
+    case a @ AddTransaction(transaction) =>
+      logger.debug(s"Broadcasting TX ${transaction.short} on ${id.short}")
+      broadcast(a)
 
   }
 
