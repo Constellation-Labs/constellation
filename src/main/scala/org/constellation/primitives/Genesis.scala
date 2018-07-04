@@ -13,6 +13,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     genesisBundle.extractTX.foreach(acceptTransaction)
     totalNumValidBundles += 1
     val gtx = b.extractTX.head
+    last100ValidBundleMetaData = Seq(md)
     gtx.txData.data.updateLedger(memPoolLedger)
   }
 

@@ -47,6 +47,9 @@ class API(
 
   val routes: Route = cors() {
     get {
+      path("bundles") {
+        complete(last100ValidBundleMetaData)
+      } ~
       path("restart") {
         data.restartNode()
         complete(StatusCodes.OK)
@@ -146,9 +149,19 @@ class API(
             "numSyncPendingTX" -> syncPendingTXHashes.size.toString,
             "peerBestBundles" -> peerSync.toMap.map{
               case (id, b) =>
-                s"${id.short}: ${b.maxBundle.hash.slice(0, 5)} ${Try{b.maxBundle.pretty}} " +
-                  s"parent${b.maxBundle.extractParentBundleHash.pbHash.slice(0, 5)} " +
-                  s"${lookupBundle(b.maxBundle.hash).nonEmpty} ${b.maxBundle.meta.map {_.transactionsResolved}}"
+                Try {
+                  s"${id.short}: ${b.maxBundle.hash.slice(0, 5)} ${
+                    Try {
+                      b.maxBundle.pretty
+                    }
+                  } " +
+                    s"parent${b.maxBundle.extractParentBundleHash.pbHash.slice(0, 5)} " +
+                    s"${lookupBundle(b.maxBundle.hash).nonEmpty} ${
+                      b.maxBundle.meta.map {
+                        _.transactionsResolved
+                      }
+                    }"
+                }.getOrElse("")
             }.mkString(" --- "),
             "z_peers" -> peers.map{_.data}.json,
             "z_validLedger" -> validLedger.toMap.json,
@@ -164,7 +177,7 @@ class API(
               case (_, hb) =>
                 hb.validLedger == validLedger.toMap
             }.toString,
-            "allPeersHaveResolvedMaxBundles" -> peerSync.forall{_._2.maxBundle.meta.exists(_.isResolved)}.toString,
+            "allPeersHaveResolvedMaxBundles" -> peerSync.forall{_._2.safeMaxBundle.exists{_.meta.exists(_.isResolved)}}.toString,
             "allPeersAgreeWithMaxBundle" -> peerSync.forall{_._2.maxBundle == maxBundle}.toString
             //,
             // "z_lastBundleVisualJSON" -> Option(lastBundle).map{ b => b.extractTreeVisual.json}.getOrElse("")

@@ -101,12 +101,22 @@ class PeerToPeer(
 
       totalNumP2PMessages += 1
 
-      message match {
+      val authenticated = peerLookup.contains(remote)
+      if (!authenticated && !peersAwaitingAuthenticationToNumAttempts.contains(remote)) {
+        peersAwaitingAuthenticationToNumAttempts(remote) = 1
+      }
+
+      if (authenticated) message match {
 
         case d: DownloadRequest => handleDownloadRequest(d, remote)
-          println("Got download request")
 
         case d: DownloadResponse => handleDownloadResponse(d)
+
+        case gm : GossipMessage => handleGossip(gm, remote)
+
+        case u => logger.error(s"Unrecognized authenticated UDP message: $u")
+
+      } else message match {
 
         case sh: HandShakeMessage => handleHandShake(sh, remote)
 
@@ -127,11 +137,9 @@ class PeerToPeer(
 */
 
         // case g @ Gossip(_) => handleGossip(g, remote)
-        case gm : GossipMessage =>
-          handleGossip(gm, remote)
 
-        case u =>
-          logger.error(s"Unrecognized UDP message: $u")
+        case u => logger.error(s"Unrecognized unauthenticated UDP message: $u")
+
       }
 
   }

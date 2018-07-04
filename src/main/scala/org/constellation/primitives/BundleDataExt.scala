@@ -62,7 +62,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     def scoreFrom(m: BundleMetaData): Double = {
       val norm = normalizeReputations(m.reputations)
       val repScore = b.extractIds.toSeq.map { id => norm.getOrElse(id.b58, 0.1)}.sum
-      b.maxStackDepth * 500 + extractTXHash.size + repScore * 10
+      b.maxStackDepth * 500 + b.extractTXHash.size + repScore * 10
     }
 
     def score: Option[Double] = meta.flatMap{ m =>
@@ -73,30 +73,13 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     def totalScore : Option[Double] = meta.flatMap{_.totalScore}
 
     def minTime: Long = meta.get.rxTime
-    def pretty: String = s"hash: ${b.short}, depth: ${b.maxStackDepth}, numTX: ${extractTXHash.size}, " +
+    def pretty: String = s"hash: ${b.short}, depth: ${b.maxStackDepth}, numTX: ${b.extractTXHash.size}, " +
       s"numId: ${b.extractIds.size}, " +
       s"score: $score, totalScore: $totalScore, height: ${meta.map{_.height}}, " +
       s"parent: ${meta.map{_.bundle.extractParentBundleHash.pbHash.slice(0, 5)}} firstId: ${b.extractIds.head.short}"
 
-    def extractTXHash: Set[TransactionHash] = {
-      def process(s: Signed[BundleData]): Set[TransactionHash] = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            process(b2.bundleData)
-          case h: TransactionHash => Set(h)
-          case _ => Set[TransactionHash]()
-        }
-        if (depths.nonEmpty) {
-          depths.reduce( (s1: Set[TransactionHash], s2: Set[TransactionHash]) => s1 ++ s2)
-        } else {
-          Set[TransactionHash]()
-        }
-      }
-      process(b.bundleData)
-    }
 
-    def extractTX: Set[TX] = extractTXHash.flatMap{ z => lookupTransaction(z.txHash)}
+    def extractTX: Set[TX] = b.extractTXHash.flatMap{ z => lookupTransaction(z.txHash)}
 
     def reputationUpdate: Map[String, Long] = {
       b.extractIds.map{_.b58 -> 1L}.toMap

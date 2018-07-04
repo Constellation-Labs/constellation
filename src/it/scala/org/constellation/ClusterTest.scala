@@ -127,7 +127,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
     val rpcs = ips.map{ ip =>
       val r = new APIClient(ip, 9000)
-     // assert(r.getBlockingStr[String]("health", timeout = 100) == "OK")
+      assert(r.getBlockingStr[String]("health", timeout = 100) == "OK")
       println(s"Health ok on $ip")
       val id = r.getBlocking[Id]("id")
       r.id = id

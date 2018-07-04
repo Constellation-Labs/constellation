@@ -156,9 +156,9 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         memPool = memPool.slice(0, 250)
       }
 */
-
-      broadcast(PeerSyncHeartbeat(maxBundle, validLedger.toMap))
-
+      if (maxBundleOpt.nonEmpty) {
+        broadcast(PeerSyncHeartbeat(maxBundle, validLedger.toMap))
+      }
 
 
       poolEmit()

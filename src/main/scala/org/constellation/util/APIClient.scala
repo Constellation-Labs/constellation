@@ -22,6 +22,7 @@ class APIClient(val host: String = "127.0.0.1", val port: Int)(
   implicit val executionContext: ExecutionContextExecutor
 ) {
 
+  var udpPort: Int = 16180
   var id: Id = null
 
   val baseURI = s"http://$host:$port"

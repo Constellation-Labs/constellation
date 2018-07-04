@@ -158,12 +158,33 @@ object Schema {
   final case class PeerSyncHeartbeat(
                                       maxBundle: Bundle,
                                       validLedger: Map[String, Long]
-                                    ) extends GossipMessage with RemoteMessage
+                                    ) extends GossipMessage with RemoteMessage {
+    def safeMaxBundle = Option(maxBundle)
+  }
 
   final case class Bundle(
                            bundleData: Signed[BundleData]
                          ) extends ProductHash with Fiber with GossipMessage
   with RemoteMessage {
+
+
+    def extractTXHash: Set[TransactionHash] = {
+      def process(s: Signed[BundleData]): Set[TransactionHash] = {
+        val bd = s.data.bundles
+        val depths = bd.map {
+          case b2: Bundle =>
+            process(b2.bundleData)
+          case h: TransactionHash => Set(h)
+          case _ => Set[TransactionHash]()
+        }
+        if (depths.nonEmpty) {
+          depths.reduce( (s1: Set[TransactionHash], s2: Set[TransactionHash]) => s1 ++ s2)
+        } else {
+          Set[TransactionHash]()
+        }
+      }
+      process(bundleData)
+    }
 
     val bundleNumber: Long = 0L //Random.nextLong()
 
