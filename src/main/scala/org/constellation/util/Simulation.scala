@@ -11,8 +11,8 @@ import scala.util.Random
 
 class Simulation(apis: Seq[APIClient]) {
 
-  implicit val ec: ExecutionContextExecutorService = ExecutionContext.fromExecutorService(new ForkJoinPool(100))
-
+  implicit val ec: ExecutionContextExecutorService =
+    ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
   def healthy(): Boolean = apis.forall{ a => a.getBlockingStr[String]("health", timeout = 100) == "OK"}
   def setIdLocal(): Unit = apis.foreach{ a =>
@@ -109,12 +109,9 @@ class Simulation(apis: Seq[APIClient]) {
     }(ec)
   }
 
-  def sendRandomTransactions(numTX: Int = 200): Set[TX] = {
-
-    val numTX = 200
+  def sendRandomTransactions(numTX: Int = 20): Set[TX] = {
 
     val txResponse = Seq.fill(numTX) {
-      Thread.sleep(1000)
       sendRandomTransaction
     }
 
@@ -127,18 +124,31 @@ class Simulation(apis: Seq[APIClient]) {
 
     var done = false
     var attempts = 0
+    val hashes = txSent.map{_.hash}
 
-    while (!done && attempts < 10) {
+    while (!done && attempts < 50) {
 
       attempts += 1
       Thread.sleep(5000)
       val validTXs = apis.map{_.getBlocking[Seq[String]]("validTX")}
-      println("Num valid TX hashes " + validTXs.map{_.size})
+      val pctComplete = validTXs.map{ v =>
+        val missingFraction = hashes.diff(v.toSet).size.toDouble / hashes.size
+        val complete = 1 - missingFraction
+        complete
+      }
+      done = pctComplete.forall(_ == 1.0D)
+//      println("Num valid TX hashes " + validTXs.map{_.size})
+      println("Pct complete " + pctComplete.map{a =>  (a*100).toString.slice(0, 4) + "%"})
+
+      // This is just used to ensure processing continues
+      if (attempts % 2 == 0) sendRandomTransaction
 
     }
 
     done
   }
+
+  def nonEmptyBalance(): Boolean = apis.forall(_.getBlockingStr("balance").toLong > 0L)
 
   def run(): Unit = {
 
@@ -153,13 +163,15 @@ class Simulation(apis: Seq[APIClient]) {
 
     assert(verifyPeersAdded())
 
-    Thread.sleep(3000)
+    Thread.sleep(2000)
 
     assert(verifyGenesisReceived())
 
     val distrTX = initialDistributionTX()
 
-    Thread.sleep(15000)
+    Thread.sleep(5000)
+
+    assert(nonEmptyBalance())
 
     val start = System.currentTimeMillis()
 

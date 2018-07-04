@@ -20,7 +20,7 @@ trait Checkpoint extends PeerAuth {
 
     if (!downloadMode) {
 
-      var roundHash: RoundHash[_ <: CC] = RoundHash(genesisTXHash)
+      var roundHash: RoundHash[_ <: CC] = RoundHash(genesisTXHash.get)
 
       if (lastCheckpointBundle.isDefined) {
         roundHash = RoundHash(lastCheckpointBundle.get.roundHash)

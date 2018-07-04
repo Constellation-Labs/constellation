@@ -19,7 +19,7 @@ trait Download extends PeerAuth {
   }
 
   def handleDownloadResponse(d: DownloadResponse): Unit = {
-    if (genesisBundle == null) {
+    if (genesisBundle.isEmpty) {
       storeTransaction(d.genesisTX)
       acceptGenesis(d.genesisBundle)
       if (d.maxBundle.hash == d.genesisBundle.hash) {
@@ -34,9 +34,9 @@ trait Download extends PeerAuth {
   }
 
   def handleDownloadRequest(d: DownloadRequest, remote: InetSocketAddress): Unit = {
-    if (genesisBundle != null && !downloadMode) {
+    if (genesisBundle.nonEmpty && !downloadMode) {
       logger.debug("Sending download response")
-      val downloadResponse = DownloadResponse(maxBundle, genesisBundle, genesisBundle.extractTX.head )
+      val downloadResponse = DownloadResponse(maxBundle, genesisBundle.get, genesisBundle.get.extractTX.head )
       udpActor ! UDPSend(downloadResponse, remote)
     }
   }

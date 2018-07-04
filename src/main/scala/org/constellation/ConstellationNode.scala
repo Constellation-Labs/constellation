@@ -75,7 +75,8 @@ class ConstellationNode(
                          timeoutSeconds: Int = 30,
                          heartbeatEnabled: Boolean = false,
                          requestExternalAddressCheck : Boolean = false,
-                         val jsPrefix: String = "./ui/target/scala-2.11/ui"
+                         val jsPrefix: String = "./ui/target/scala-2.11/ui",
+                         generateRandomTransactions: Boolean = true
              )(
                implicit val system: ActorSystem,
                implicit val materialize: ActorMaterializer,
@@ -86,6 +87,7 @@ class ConstellationNode(
   data.updateKeyPair(configKeyPair)
   import data._
 
+  generateRandomTX = generateRandomTransactions
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
  // logger.info(s"UDP Info - hostname: $hostName interface: $udpInterface port: $udpPort")

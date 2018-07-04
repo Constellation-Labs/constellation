@@ -14,8 +14,10 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   @volatile var db: LevelDB
 
-  var genesisBundle : Bundle = _
-  def genesisTXHash: String = genesisBundle.extractTX.head.hash
+  var confirmWindow : Int
+
+  var genesisBundle : Option[Bundle] = None
+  def genesisTXHash: Option[String] = genesisBundle.map{_.extractTX.head.hash}
 
   @volatile var last100ValidBundleMetaData : Seq[BundleMetaData] = Seq()
   def lastValidBundle: Bundle = last100ValidBundleMetaData.last.bundle
@@ -103,8 +105,8 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
         syncPendingBundleHashes += parentHash
       }
       ancestors
-    } else if (parentHash == genesisBundle.hash) {
-      Seq(lookupBundle(genesisBundle.hash).get) ++ ancestors
+    } else if (parentHash == genesisBundle.get.hash) {
+      Seq(lookupBundle(genesisBundle.get.hash).get) ++ ancestors
     } else {
       findAncestors(
         parent.get.bundle.extractParentBundleHash.pbHash,
@@ -151,7 +153,6 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     }
   }
 
-  val confirmWindow = 20
   @volatile var txInMaxBundleNotInValidation: Set[String] = Set()
 
 
@@ -184,7 +185,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
     // Set this to be active for the combiners.
     if (!activeDAGBundles.contains(bundleMetaData) &&
-      !bundleMetaData.bundle.extractIds.contains(id) && bundleMetaData.bundle != genesisBundle) {
+      !bundleMetaData.bundle.extractIds.contains(id) && bundleMetaData.bundle != genesisBundle.get) {
       activeDAGBundles :+= bundleMetaData
     }
   }

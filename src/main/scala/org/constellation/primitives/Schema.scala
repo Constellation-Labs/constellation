@@ -156,10 +156,11 @@ object Schema {
   }
 
   final case class PeerSyncHeartbeat(
-                                      maxBundle: Bundle,
+                                      maxBundleMeta: BundleMetaData,
                                       validLedger: Map[String, Long]
                                     ) extends GossipMessage with RemoteMessage {
     def safeMaxBundle = Option(maxBundle)
+    def maxBundle: Bundle = maxBundleMeta.bundle
   }
 
   final case class Bundle(
@@ -284,7 +285,7 @@ object Schema {
           process(bundleData)
         }
     */
-
+    // Copy this to temp val on class so as not to re-calculate
     def extractIds: Set[Id] = {
       def process(s: Signed[BundleData]): Set[Id] = {
         val bd = s.data.bundles

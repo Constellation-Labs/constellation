@@ -47,6 +47,9 @@ class API(
 
   val routes: Route = cors() {
     get {
+      path("balance") {
+        complete(validLedger.getOrElse(selfAddress.address, 0L).toString)
+      } ~
       path("bundles") {
         complete(last100ValidBundleMetaData)
       } ~
@@ -127,7 +130,7 @@ class API(
               val addr = s"http://${z.data.apiAddress.getHostString}:${z.data.apiAddress.getPort}"
               s"${z.data.id.short} API: $addr "
             }.mkString(" --- "),
-            "z_genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
+            "z_genesisBundleHash" -> genesisBundle.map{_.hash}.getOrElse("N/A"),
          //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
             "numActiveBundles" -> activeDAGBundles.size.toString,
             "last10TXHash" -> last10000ValidTXHash.reverse.slice(0, 10).mkString(","),
@@ -136,8 +139,8 @@ class API(
             "last10SelfTXHashes" -> last100SelfSentTransactions.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
             "lastValidBundleHash" -> Try{lastValidBundleHash.pbHash}.getOrElse(""),
             "lastValidBundle" -> Try{Option(lastValidBundle).map{_.pretty}.getOrElse("")}.getOrElse(""),
-            "z_genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
-            "z_genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
+            "z_genesisBundle" -> genesisBundle.map(_.json).getOrElse(""),
+            "z_genesisBundleIds" -> genesisBundle.map(_.extractIds.mkString(", ")).getOrElse(""),
             "selfBestBundle" -> Try{maxBundle.pretty}.getOrElse(""),
             "selfBestBundleHash" -> Try{maxBundle.hash}.getOrElse(""),
             "selfBestBundleMeta" -> Try{maxBundleMetaData.toString}.getOrElse(""),
@@ -192,12 +195,12 @@ class API(
           complete(pair)
         } ~
         path("genesis" / LongNumber) { numCoins =>
-          val ret = if (genesisBundle == null) {
+          val ret = if (genesisBundle.isEmpty) {
             val debtAddress = walletPair
             val tx = createTransaction(selfAddress.address, numCoins, src = debtAddress.address.address)
             createGenesis(tx)
             tx
-          } else genesisBundle.extractTX.head
+          } else genesisBundle.get.extractTX.head
           complete(ret)
         } ~
         path("makeKeyPairs" / IntNumber) { numPairs =>
@@ -236,7 +239,6 @@ class API(
         path("balance") {
           entity(as[PublicKey]) { account =>
             logger.debug(s"Received request to query account $account balance")
-
             // TODO: update balance
             // complete((chainStateActor ? GetBalance(account)).mapTo[Balance])
 

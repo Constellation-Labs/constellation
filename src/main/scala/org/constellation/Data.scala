@@ -14,9 +14,11 @@ class Data extends MetricsExt
 
   val logger = Logger(s"Data")
 
+  var confirmWindow : Int = 20
+
   def restartNode(): Unit = {
     restartDB()
-    genesisBundle = null
+    genesisBundle = None
     downloadMode = true
     validLedger.clear()
     memPoolLedger.clear()
@@ -24,6 +26,8 @@ class Data extends MetricsExt
     syncPendingBundleHashes = Set()
     peerLookup.clear()
     memPool = Set()
+    activeDAGBundles = Seq()
+    maxBundleMetaData = null
   }
 
 

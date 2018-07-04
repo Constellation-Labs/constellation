@@ -23,10 +23,12 @@ object TestNode {
 
     val randomPort = if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9000
     val randomUDPPort = if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 16180
-    new ConstellationNode(keyPair, seedHosts, "0.0.0.0", randomPort, udpPort = randomUDPPort,
-      heartbeatEnabled = heartbeatEnabled
+    val node = new ConstellationNode(keyPair, seedHosts, "0.0.0.0", randomPort, udpPort = randomUDPPort,
+      heartbeatEnabled = heartbeatEnabled, generateRandomTransactions = false
       //, udpInterface = "127.0.0.1"
     )
+    node.data.confirmWindow = 6
+    node
   }
 
 }

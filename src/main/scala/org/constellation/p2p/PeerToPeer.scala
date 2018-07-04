@@ -116,7 +116,9 @@ class PeerToPeer(
 
         case u => logger.error(s"Unrecognized authenticated UDP message: $u")
 
-      } else message match {
+      }
+
+      message match {
 
         case sh: HandShakeMessage => handleHandShake(sh, remote)
 
@@ -138,7 +140,7 @@ class PeerToPeer(
 
         // case g @ Gossip(_) => handleGossip(g, remote)
 
-        case u => logger.error(s"Unrecognized unauthenticated UDP message: $u")
+        case u => // logger.error(s"Unrecognized UDP message: $u - authenticated: $authenticated")
 
       }
 
