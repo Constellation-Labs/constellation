@@ -166,7 +166,7 @@ object Schema {
   final case class Bundle(
                            bundleData: Signed[BundleData]
                          ) extends ProductHash with Fiber with GossipMessage
-  with RemoteMessage {
+    with RemoteMessage {
 
 
     def extractTXHash: Set[TransactionHash] = {
@@ -397,8 +397,8 @@ object Schema {
     def short: String = id.toString.slice(15, 20)
     def medium: String = id.toString.slice(15, 25).replaceAll(":", "")
     def address: AddressMetaData = pubKeyToAddress(id)
-    def b58 = Base58.encode(id.getEncoded)
-    def id = encodedId.toPublicKey
+    def b58: String = Base58.encode(id.getEncoded)
+    def id: PublicKey = encodedId.toPublicKey
   }
 
   case class GetId()
@@ -407,9 +407,9 @@ object Schema {
 
   case class HandShake(
                         originPeer: Signed[Peer],
+                        destination: InetSocketAddress,
+                        peers: Set[Signed[Peer]] = Set(),
                         requestExternalAddressCheck: Boolean = false
-                        //           peers: Seq[Signed[Peer]],
-                        //          destination: Option[InetSocketAddress] = None
                       ) extends ProductHash
 
   // These exist because type erasure messes up pattern matching on Signed[T] such that
@@ -418,7 +418,7 @@ object Schema {
   case class HandShakeResponseMessage(handShakeResponse: Signed[HandShakeResponse]) extends RemoteMessage
 
   case class HandShakeResponse(
-                                //                   original: Signed[HandShake],
+                                original: Signed[HandShake],
                                 response: HandShake,
                                 detectedRemote: InetSocketAddress
                               ) extends ProductHash with RemoteMessage
@@ -426,9 +426,15 @@ object Schema {
   case class Peer(
                    id: Id,
                    externalAddress: InetSocketAddress,
-                   remotes: Set[InetSocketAddress] = Set(),
-                   apiAddress: InetSocketAddress = null
+                   apiAddress: InetSocketAddress,
+                   remotes: Set[InetSocketAddress] = Set()
                  ) extends ProductHash
+
+  case class LocalPeerObservation(
+                                   mostRecentSignedPeer: Signed[Peer],
+                                   additionalRemotes: Set[InetSocketAddress] = Set(),
+                                   lastRXTime: Long = System.currentTimeMillis()
+                                 )
 
 
 

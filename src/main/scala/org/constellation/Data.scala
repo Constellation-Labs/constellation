@@ -24,7 +24,7 @@ class Data extends MetricsExt
     memPoolLedger.clear()
     syncPendingTXHashes = Set()
     syncPendingBundleHashes = Set()
-    peerLookup.clear()
+    signedPeerLookup.clear()
     memPool = Set()
     activeDAGBundles = Seq()
     maxBundleMetaData = null

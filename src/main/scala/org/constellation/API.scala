@@ -321,7 +321,7 @@ class API(
                             attempts += 1
                             Thread.sleep(1500)
                             //peerAdded = peers.exists(p => v == p.data.externalAddress)
-                            peerAdded = peerLookup.contains(v)
+                            peerAdded = signedPeerLookup.contains(v)
                           }
                           if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
                         } else f

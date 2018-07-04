@@ -33,7 +33,7 @@ trait Checkpoint extends PeerAuth {
         val memPoolSample = memPool.toSeq.flatMap{lookupTransaction}
 
         // TODO: temporarily using all
-        val facilitators = peerIDLookup.keys.toSet + Id(publicKey.encoded)
+        val facilitators = signedPeerIDLookup.keys.toSet + Id(publicKey.encoded)
 
         val bundle = Bundle(BundleData(memPoolSample).signed())
 

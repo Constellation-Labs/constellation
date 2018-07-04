@@ -29,20 +29,20 @@ trait PeerAuth {
   implicit val actorSystem: ActorSystem
 
   def broadcast[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
-    val dest: Iterable[Id] = if (idSubset.isEmpty) peerIDLookup.keys else idSubset
+    val dest: Iterable[Id] = if (idSubset.isEmpty) signedPeerIDLookup.keys else idSubset
     // println("Broadcast attempt")
     dest.foreach{ i =>
       if (!skipIDs.contains(i)) {
         totalNumBroadcastMessages += 1
-        val address = peerIDLookup(i).data.externalAddress
+        val address = signedPeerIDLookup(i).data.externalAddress
       //  println(s"Broadcasting $message to $address")
         udpActor ! UDPSend(message, address)
       }
     }
   }
 
-  def handShakeInner: HandShake = {
-    HandShake(selfPeer, requestExternalAddressCheck) //, peers)
+  def handShakeInner(peerAddressOrRemote: InetSocketAddress): HandShake = {
+    HandShake(selfPeer, peerAddressOrRemote, peers.toSet,  requestExternalAddressCheck)
   }
 
   def initiatePeerHandshake(peerAddress: InetSocketAddress): StatusCode = {
@@ -59,7 +59,7 @@ trait PeerAuth {
         logger.debug(s"Sending handshake from $externalAddress to $peerAddress with ${peers.size} known peers")
         //Introduce ourselves
         // val message = HandShakeMessage(handShakeInner.copy(destination = Some(peerAddress)).signed())
-        val message = HandShakeMessage(handShakeInner.signed())
+        val message = HandShakeMessage(handShakeInner(peerAddress).signed())
 
         udpActor ! UDPSend(message, peerAddress)
         //Tell our existing peers
@@ -79,9 +79,9 @@ trait PeerAuth {
              ): Unit = {
 
     this.synchronized {
-      peerLookup(value.data.externalAddress) = value
-      value.data.remotes.foreach(peerLookup(_) = value)
-      logger.debug(s"Peer added, total peers: ${peerIDLookup.keys.size} on ${id.short}")
+      signedPeerLookup(value.data.externalAddress) = value
+      value.data.remotes.foreach(signedPeerLookup(_) = value)
+      logger.debug(s"Peer added, total peers: ${signedPeerIDLookup.keys.size} on ${id.short}")
       newPeers.foreach { np =>
         //    logger.debug(s"Attempting to add new peer from peer reference handshake response $np")
         //   initiatePeerHandshake(PeerRef(np.data.externalAddress))
@@ -108,8 +108,7 @@ trait PeerAuth {
         s"peers externally reported address: ${hs.originPeer.data.externalAddress} inet: " +
         s"${pprintInet(address)}")
       val response = HandShakeResponseMessage(
-        // HandShakeResponse(sh.handShake, handShakeInner.copy(destination = Some(remote)), remote).signed()
-        HandShakeResponse(handShakeInner, remote).signed()
+        HandShakeResponse(sh.handShake, handShakeInner(hs.originPeer.data.externalAddress), remote).signed()
       )
 
       udpActor ! UDPSend(response, responseAddr)
@@ -137,15 +136,15 @@ trait PeerAuth {
       val value = sh.handShakeResponse.data.response.originPeer
       val newPeers = Seq() //sh.handShakeResponse.data.response.peers
       addPeer(value, newPeers)
-      peerLookup(remote) = value
+      signedPeerLookup(remote) = value
     //  remotes += remote
     }
   }
 
-  def addPeerFromLocal(peerAddress: InetSocketAddress): StatusCode = {
+  def addPeerFromLocal(peerAddress: InetSocketAddress, knownId: Option[Id] = None): StatusCode = {
     logger.debug(s"AddPeerFromLocal inet: ${pprintInet(peerAddress)}")
 
-    peerLookup.get(peerAddress) match {
+    signedPeerLookup.get(peerAddress) match {
       case Some(peer) =>
         logger.debug(s"Disregarding request, already familiar with peer on $peerAddress - $peer")
         StatusCodes.AlreadyReported
@@ -163,7 +162,6 @@ trait PeerAuth {
         val code = attempt.getOrElse(StatusCodes.InternalServerError)
         code
     }
-
   }
 
   // TODO: Send other peers termination message on shutdown.

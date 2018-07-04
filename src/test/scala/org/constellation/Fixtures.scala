@@ -33,7 +33,7 @@ object Fixtures {
   val id3 = Id(publicKey3.encoded)
   val id4 = Id(publicKey4.encoded)
   val id5 = Id(publicKey5.encoded)
-  val signedPeer: Signed[Peer] = Peer(id, address, Set()).signed()(tempKey)
+  val signedPeer: Signed[Peer] = Peer(id, address, address, Set()).signed()(tempKey)
 
   val address1: InetSocketAddress = constellation.addressToSocket("localhost:16181")
   val address2: InetSocketAddress = constellation.addressToSocket("localhost:16182")

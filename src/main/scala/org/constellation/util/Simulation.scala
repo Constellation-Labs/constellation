@@ -154,7 +154,7 @@ class Simulation(apis: Seq[APIClient]) {
 
     assert(healthy())
     setIdLocal()
-  //  assert(setExternalIP())
+    assert(setExternalIP())
     genesis()
 
     val results = addPeers()

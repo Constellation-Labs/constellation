@@ -17,7 +17,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   def handleGossip(gm : GossipMessage, remote: InetSocketAddress): Unit = {
     totalNumGossipMessages += 1
-    val rid = peerLookup.get(remote).map{_.data.id}
+    val rid = signedPeerLookup.get(remote).map{_.data.id}
     gm match {
       case BatchBundleHashRequest(hashes) =>
         hashes.foreach{h =>

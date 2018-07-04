@@ -32,7 +32,7 @@ trait NodeData {
   @volatile var externalAddress: InetSocketAddress = _
   @volatile var apiAddress: InetSocketAddress = _
   var remotes: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
-  def selfPeer: Signed[Peer] = Peer(id, externalAddress, Set(), apiAddress).signed()
+  def selfPeer: Signed[Peer] = Peer(id, externalAddress, apiAddress, remotes).signed()
 
   @volatile var db: LevelDB = _
 

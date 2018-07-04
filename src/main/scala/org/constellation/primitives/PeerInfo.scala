@@ -18,17 +18,19 @@ trait PeerInfo {
 
   var p2pActor : ActorRef = _
 
-  val peerLookup: mutable.HashMap[InetSocketAddress, Signed[Peer]] = mutable.HashMap[InetSocketAddress, Signed[Peer]]()
+  val rawPeerLookup: TrieMap[InetSocketAddress, Peer] = TrieMap()
 
-  def peerIDLookup: Map[Id, Signed[Peer]] = peerLookup.values.map { z => z.data.id -> z }.toMap
+  val signedPeerLookup: mutable.HashMap[InetSocketAddress, Signed[Peer]] = mutable.HashMap[InetSocketAddress, Signed[Peer]]()
 
-  def peerIPs: Set[InetSocketAddress] = peerLookup.values.map(z => z.data.externalAddress).toSet
+  def signedPeerIDLookup: Map[Id, Signed[Peer]] = signedPeerLookup.values.map { z => z.data.id -> z }.toMap
+
+  def peerIPs: Set[InetSocketAddress] = signedPeerLookup.values.map(z => z.data.externalAddress).toSet
 
   def allPeerIPs: Set[InetSocketAddress] = {
-    peerLookup.keys ++ peerLookup.values.flatMap(z => z.data.remotes ++ Seq(z.data.externalAddress))
+    signedPeerLookup.keys ++ signedPeerLookup.values.flatMap(z => z.data.remotes ++ Seq(z.data.externalAddress))
   }.toSet
 
-  def peers: Seq[Signed[Peer]] = peerLookup.values.toSeq.distinct
+  def peers: Seq[Signed[Peer]] = signedPeerLookup.values.toSeq.distinct
 
 
 }

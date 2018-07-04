@@ -56,7 +56,7 @@ class PeerToPeer(
         if (heartbeatRound % 3 == 0) {
           peersAwaitingAuthenticationToNumAttempts.foreach {
             case (peerAddr, attempts) =>
-              if (attempts > 10 || peerLookup.contains(peerAddr))
+              if (attempts > 10 || signedPeerLookup.contains(peerAddr))
                 peersAwaitingAuthenticationToNumAttempts.remove(peerAddr)
               else {
                 val res = addPeerFromLocal(peerAddr)
@@ -101,7 +101,7 @@ class PeerToPeer(
 
       totalNumP2PMessages += 1
 
-      val authenticated = peerLookup.contains(remote)
+      val authenticated = signedPeerLookup.contains(remote)
       if (!authenticated && !peersAwaitingAuthenticationToNumAttempts.contains(remote)) {
         peersAwaitingAuthenticationToNumAttempts(remote) = 1
       }
