@@ -25,6 +25,10 @@ class APIClient(val host: String = "127.0.0.1", val port: Int)(
   var udpPort: Int = 16180
   var id: Id = null
 
+  def udpAddress: String = host + ":" + udpPort
+
+  def setExternalIP(): Boolean = postSync("ip", host + ":" + udpPort).status == StatusCodes.OK
+
   val baseURI = s"http://$host:$port"
 
   def base(suffix: String) = Uri(s"$baseURI/$suffix")
@@ -41,6 +45,8 @@ class APIClient(val host: String = "127.0.0.1", val port: Int)(
       HttpRequest(uri = base(suffix).withQuery(Query(queryParams)))
     ).get()
   }
+
+  def addPeer(remote: String): HttpResponse = postSync("peer", remote)
 
   def getBlocking [T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeout: Int = 5)
                                (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {

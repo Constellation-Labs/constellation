@@ -28,6 +28,17 @@ class Data extends MetricsExt
     memPool = Set()
     activeDAGBundles = Seq()
     maxBundleMetaData = null
+    txHashToTX.clear()
+    bundleToBundleMeta.clear()
+    last10000ValidTXHash = Seq()
+    last100ValidBundleMetaData = Seq()
+    resetMetrics()
+    peersAwaitingAuthenticationToNumAttempts.clear()
+    signedPeerLookup.clear()
+    txSyncRequestTime.clear()
+    txInMaxBundleNotInValidation = Set()
+    last100SelfSentTransactions = Seq()
+
   }
 
 

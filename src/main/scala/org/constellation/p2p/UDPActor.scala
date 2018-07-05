@@ -128,8 +128,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
     case RegisterNextActor(next) => nextActor = Some(next)
 
-    case Ban(remote) =>
-      // bannedIPs = {bannedIPs ++ Seq(remote)}.distinct
+    case Ban(remote) => bannedIPs = {bannedIPs ++ Seq(remote)}.distinct
 
     case GetBanList => sender() ! bannedIPs
 

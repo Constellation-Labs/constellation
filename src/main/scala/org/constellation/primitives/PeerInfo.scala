@@ -11,6 +11,7 @@ import scala.collection.mutable
 
 trait PeerInfo {
 
+  val lastPeerRX : TrieMap[Id, Long] = TrieMap()
 
   val peersAwaitingAuthenticationToNumAttempts: TrieMap[InetSocketAddress, Int] = TrieMap()
 
@@ -20,7 +21,7 @@ trait PeerInfo {
 
   val rawPeerLookup: TrieMap[InetSocketAddress, Peer] = TrieMap()
 
-  val signedPeerLookup: mutable.HashMap[InetSocketAddress, Signed[Peer]] = mutable.HashMap[InetSocketAddress, Signed[Peer]]()
+  val signedPeerLookup: TrieMap[InetSocketAddress, Signed[Peer]] = TrieMap()
 
   def signedPeerIDLookup: Map[Id, Signed[Peer]] = signedPeerLookup.values.map { z => z.data.id -> z }.toMap
 

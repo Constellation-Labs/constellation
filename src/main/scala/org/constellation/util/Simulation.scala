@@ -7,7 +7,8 @@ import org.constellation.primitives.Schema._
 import constellation._
 
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
-import scala.util.Random
+import scala.util.{Random, Try}
+
 
 class Simulation(apis: Seq[APIClient]) {
 
@@ -150,7 +151,20 @@ class Simulation(apis: Seq[APIClient]) {
 
   def nonEmptyBalance(): Boolean = apis.forall(_.getBlockingStr("balance").toLong > 0L)
 
+  var healthChecks = 0
+
   def run(): Unit = {
+
+    while (healthChecks < 10) {
+      if (Try{healthy()}.getOrElse(false)) {
+        healthChecks = Int.MaxValue
+      } else {
+        healthChecks += 1
+        println(s"Unhealthy nodes. Waiting 30s. Num attempts: $healthChecks out of 10")
+        Thread.sleep(30000)
+
+      }
+    }
 
     assert(healthy())
     setIdLocal()
@@ -167,7 +181,7 @@ class Simulation(apis: Seq[APIClient]) {
 
     assert(verifyGenesisReceived())
 
-    val distrTX = initialDistributionTX()
+    initialDistributionTX()
 
     Thread.sleep(5000)
 

@@ -62,13 +62,46 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   def gossipHeartbeat(): Unit = {
     dataRequest()
-    if (!downloadMode && genesisBundle.nonEmpty && maxBundleMetaData != null) {
+    if (!downloadMode && genesisBundle.nonEmpty && maxBundleMetaData.nonEmpty && !downloadInProgress) {
       bundleHeartbeat()
     }
   }
 
+
+  def bundleHeartbeat(): Unit = {
+
+    acceptInitialDistribution()
+
+    attemptResolvePeerBundles()
+
+    peerSync.foreach{
+      _._2.maxBundleMeta.height.foreach{
+        h =>
+          maxBundleMetaData.flatMap{_.height}.foreach{ h2 =>
+            if (h > (h2 + 50)) {
+              logger.error("FOUND PEER 50 BUNDLES AHEAD, RESTARTING")
+              System.exit(1)
+            }
+          }
+      }
+    }
+
+    if (generateRandomTX) simulateTransactions()
+
+    broadcast(PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap))
+
+    poolEmit()
+
+    combineBundles()
+
+    cleanupStrayChains()
+
+  }
+
+
+
   def simulateTransactions(): Unit = {
-    if (maxBundleMetaData.height.get >= 5 && memPool.size < 50) {
+    if (maxBundleMetaData.exists{_.height.get >= 5} && memPool.size < 50) {
       //if (Random.nextDouble() < .2)
       randomTransaction()
       randomTransaction()
@@ -92,10 +125,10 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
 
   def getParentHashEmitter(stackDepthFilter: Int = minGenesisDistrSize - 1): ParentBundleHash = {
-    val mb = maxBundle
+    val mb = maxBundle.get
     def pbHash = ParentBundleHash(mb.hash)
     val pbh = if (totalNumValidatedTX == 1) pbHash
-    else if (mb.maxStackDepth < stackDepthFilter) maxBundle.extractParentBundleHash
+    else if (mb.maxStackDepth < stackDepthFilter) mb.extractParentBundleHash
     else pbHash
     pbh
   }
@@ -131,22 +164,22 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
             } :+ pbh
           ).signed()
         )
-        val meta = mb.meta.get
+        val meta = mb.get.meta.get
         updateBundleFrom(meta, BundleMetaData(b))
         broadcast(b)
       }
     }
   }
 
-  def acceptInitialDistribution() = {
+  def acceptInitialDistribution(): Unit = {
     // Force accept initial distribution
-    if (totalNumValidatedTX == 1 && maxBundle.extractTX.size >= (minGenesisDistrSize - 1)) {
-      maxBundle.extractTX.foreach{tx =>
+    if (totalNumValidatedTX == 1 && maxBundle.get.extractTX.size >= (minGenesisDistrSize - 1)) {
+      maxBundle.get.extractTX.foreach{tx =>
         acceptTransaction(tx)
         tx.txData.data.updateLedger(memPoolLedger)
       }
       totalNumValidBundles += 1
-      last100ValidBundleMetaData :+= maxBundleMetaData
+      last100ValidBundleMetaData :+= maxBundleMetaData.get
     }
   }
 
@@ -193,33 +226,12 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   def cleanupStrayChains(): Unit = {
 
-    activeDAGBundles = activeDAGBundles.filter(_.height.get > (maxBundleMetaData.height.get - 10))
+    activeDAGBundles = activeDAGBundles.filter(_.height.get > (maxBundleMetaData.get.height.get - 5))
 
-    if (activeDAGBundles.size > 100) {
-      activeDAGBundles = activeDAGBundles.sortBy(z => -1*z.totalScore.get).zipWithIndex.filter{_._2 < 25}.map{_._1}
+    if (activeDAGBundles.size > 30) {
+      activeDAGBundles = activeDAGBundles.sortBy(z => -1*z.totalScore.get).zipWithIndex.filter{_._2 < 10}.map{_._1}
     }
 
   }
-
-  def bundleHeartbeat(): Unit = {
-
-    dataRequest()
-
-    acceptInitialDistribution()
-
-    attemptResolvePeerBundles()
-
-    if (generateRandomTX) simulateTransactions()
-
-    broadcast(PeerSyncHeartbeat(maxBundleMetaData, validLedger.toMap))
-
-    poolEmit()
-
-    combineBundles()
-
-    cleanupStrayChains()
-
-  }
-
 
 }

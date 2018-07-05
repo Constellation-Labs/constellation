@@ -83,7 +83,7 @@ class API(
         }
       } ~
       path("longestChain") {
-        val ancestors = findAncestors(maxBundle.extractParentBundleHash.pbHash)
+        val ancestors = findAncestors(maxBundle.get.extractParentBundleHash.pbHash)
         complete(ancestors)
       } ~
       pathPrefix("bundle") {
@@ -130,6 +130,9 @@ class API(
               val addr = s"http://${z.data.apiAddress.getHostString}:${z.data.apiAddress.getPort}"
               s"${z.data.id.short} API: $addr "
             }.mkString(" --- "),
+            "z_peerSync" -> peerSync.toMap.toString,
+            "z_peerLookup" -> signedPeerLookup.toMap.toString,
+            "downloadInProgress" -> downloadInProgress.toString,
             "z_genesisBundleHash" -> genesisBundle.map{_.hash}.getOrElse("N/A"),
          //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
             "numActiveBundles" -> activeDAGBundles.size.toString,
@@ -141,12 +144,13 @@ class API(
             "lastValidBundle" -> Try{Option(lastValidBundle).map{_.pretty}.getOrElse("")}.getOrElse(""),
             "z_genesisBundle" -> genesisBundle.map(_.json).getOrElse(""),
             "z_genesisBundleIds" -> genesisBundle.map(_.extractIds.mkString(", ")).getOrElse(""),
-            "selfBestBundle" -> Try{maxBundle.pretty}.getOrElse(""),
-            "selfBestBundleHash" -> Try{maxBundle.hash}.getOrElse(""),
+            "selfBestBundle" -> Try{maxBundle.map{_.pretty}.toString}.getOrElse(""),
+            "selfBestBundleHash" -> Try{maxBundle.map{_.hash}.toString}.getOrElse(""),
             "selfBestBundleMeta" -> Try{maxBundleMetaData.toString}.getOrElse(""),
             "reputations" -> normalizedDeterministicReputation.map{
               case (k,v) => k.short + " " + v
             }.mkString(" - "),
+            "peersAwaitingAuthentication" -> peersAwaitingAuthenticationToNumAttempts.toMap.toString(),
             "numProcessedBundles" -> totalNumNewBundleAdditions.toString,
             "numSyncPendingBundles" -> syncPendingBundleHashes.size.toString,
             "numSyncPendingTX" -> syncPendingTXHashes.size.toString,
@@ -172,16 +176,16 @@ class API(
             "z_Bundles" -> activeDAGBundles.sortBy{z => -1*z.totalScore.getOrElse(0D)}
               .map{_.bundle.pretty}.mkString(" --- "),
             "downloadMode" -> downloadMode.toString,
-            "allPeersHaveKnownBestBundles" -> peerSync.forall{
+            "allPeersHaveKnownBestBundles" -> Try{peerSync.forall{
               case (_, hb) =>
                 lookupBundle(hb.maxBundle.hash).nonEmpty
-            }.toString,
-            "allPeersAgreeOnValidLedger" -> peerSync.forall{
+            }.toString}.getOrElse(""),
+            "allPeersAgreeOnValidLedger" -> Try{peerSync.forall{
               case (_, hb) =>
                 hb.validLedger == validLedger.toMap
-            }.toString,
-            "allPeersHaveResolvedMaxBundles" -> peerSync.forall{_._2.safeMaxBundle.exists{_.meta.exists(_.isResolved)}}.toString,
-            "allPeersAgreeWithMaxBundle" -> peerSync.forall{_._2.maxBundle == maxBundle}.toString
+            }.toString}.getOrElse(""),
+            "allPeersHaveResolvedMaxBundles" -> Try{peerSync.forall{_._2.safeMaxBundle.exists{_.meta.exists(_.isResolved)}}.toString}.getOrElse(""),
+            "allPeersAgreeWithMaxBundle" -> Try{peerSync.forall{_._2.maxBundle == maxBundle.get}.toString}.getOrElse("")
             //,
             // "z_lastBundleVisualJSON" -> Option(lastBundle).map{ b => b.extractTreeVisual.json}.getOrElse("")
           )))

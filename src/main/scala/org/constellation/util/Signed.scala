@@ -95,11 +95,20 @@ case class Signed[T <: ProductHash](
                                         ) extends ProductHash {
   def publicKeys: Seq[PublicKey] = encodedPublicKeys.map{_.toPublicKey}
 
+//  def jsonTest: String = data.json
+
   def id: Id = Id(publicKeys.head.encoded)
 
   def validSignatures: Boolean = signatures.zip(encodedPublicKeys).forall{ case (sig, pubEncoded) =>
     val pub = pubEncoded.toPublicKey
-    verifySignature(data.signInput, fromBase64(sig))(pub) && signatures.nonEmpty && encodedPublicKeys.nonEmpty
+    val validS = verifySignature(data.signInput, fromBase64(sig))(pub) && signatures.nonEmpty && encodedPublicKeys.nonEmpty
+    println(s"validS $validS")
+    println(s"hash ${data.hash}")
+    println(s"sign input ${data.signInput.toSeq}")
+    println(s"fromb64 ${fromBase64(sig).toSeq}")
+    println(s"pub $pub")
+    println(s"json ${data.json}")
+    validS
   }
 
   // TODO: ryle to investigate

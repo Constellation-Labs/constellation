@@ -23,9 +23,8 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
   def lastValidBundle: Bundle = last100ValidBundleMetaData.last.bundle
   def lastValidBundleHash = ParentBundleHash(lastValidBundle.hash)
 
-  @volatile var maxBundleMetaData: BundleMetaData = _
-  def maxBundle: Bundle = maxBundleMetaData.bundle
-  def maxBundleOpt: Option[Bundle] = Option(maxBundleMetaData).map{_.bundle}
+  @volatile var maxBundleMetaData: Option[BundleMetaData] = None
+  def maxBundle: Option[Bundle] = maxBundleMetaData.map{_.bundle}
 
   @volatile var syncPendingBundleHashes: Set[String] = Set()
   @volatile var syncPendingTXHashes: Set[String] = Set()
@@ -36,6 +35,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
   @volatile var lastCheckpointBundle: Option[Bundle] = None
   val checkpointsInProgress: TrieMap[RoundHash[_ <: CC], Boolean] = TrieMap()
 
+  @volatile var txInMaxBundleNotInValidation: Set[String] = Set()
 
   val bundleToBundleMeta : TrieMap[String, BundleMetaData] = TrieMap()
 
@@ -153,22 +153,25 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     }
   }
 
-  @volatile var txInMaxBundleNotInValidation: Set[String] = Set()
 
 
   def updateMaxBundle(bundleMetaData: BundleMetaData): Unit = {
 
     val genCheck = totalNumValidatedTX == 1 || bundleMetaData.bundle.maxStackDepth >= 2 // TODO : Possibly move this only to mempool emit
 
-    if (bundleMetaData.totalScore.get > maxBundle.totalScore.get && genCheck) {
+    if (bundleMetaData.totalScore.get > maxBundle.get.totalScore.get && genCheck) {
       maxBundle.synchronized {
-        maxBundleMetaData = bundleMetaData
+        maxBundleMetaData = Some(bundleMetaData)
         val ancestors = findAncestorsUpTo(
           bundleMetaData.bundle.extractParentBundleHash.pbHash,
           upTo = 100
         )
-        if (maxBundleMetaData.height.get > confirmWindow) {
-          totalNumValidBundles = maxBundleMetaData.height.get - confirmWindow
+        val height = bundleMetaData.height.get
+        if (height > confirmWindow) {
+          if (downloadInProgress) {
+            downloadInProgress = false
+          }
+          totalNumValidBundles = height - confirmWindow
         }
 
         last100ValidBundleMetaData = if (ancestors.size < confirmWindow + 1) Seq()

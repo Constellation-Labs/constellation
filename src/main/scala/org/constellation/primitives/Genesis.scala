@@ -5,11 +5,12 @@ import constellation._
 
 trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataExt {
 
-  def acceptGenesis(b: Bundle): Unit = {
+  def acceptGenesis(b: Bundle, tx: TX): Unit = {
+    storeTransaction(tx)
     genesisBundle = Some(b)
     val md = BundleMetaData(b, Some(0), Map(id.b58 -> 1L), Some(1000), transactionsResolved = true)
     storeBundle(md)
-    maxBundleMetaData = md
+    maxBundleMetaData = Some(md)
     b.extractTX.foreach(acceptTransaction)
     totalNumValidBundles += 1
     val gtx = b.extractTX.head
@@ -18,8 +19,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
   }
 
   def createGenesis(tx: TX): Unit = {
-    storeTransaction(tx)
-    acceptGenesis(Bundle(BundleData(Seq(ParentBundleHash("coinbase"), TransactionHash(tx.hash))).signed()))
+    acceptGenesis(Bundle(BundleData(Seq(ParentBundleHash("coinbase"), TransactionHash(tx.hash))).signed()), tx)
     downloadMode = false
   }
 
