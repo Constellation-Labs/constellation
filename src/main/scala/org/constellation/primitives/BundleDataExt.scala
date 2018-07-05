@@ -14,16 +14,17 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   @volatile var db: LevelDB
 
-  var genesisBundle : Bundle = _
-  def genesisTXHash: String = genesisBundle.extractTX.head.hash
+  var confirmWindow : Int
+
+  var genesisBundle : Option[Bundle] = None
+  def genesisTXHash: Option[String] = genesisBundle.map{_.extractTX.head.hash}
 
   @volatile var last100ValidBundleMetaData : Seq[BundleMetaData] = Seq()
   def lastValidBundle: Bundle = last100ValidBundleMetaData.last.bundle
   def lastValidBundleHash = ParentBundleHash(lastValidBundle.hash)
 
-  @volatile var maxBundleMetaData: BundleMetaData = _
-  def maxBundle: Bundle = maxBundleMetaData.bundle
-  def maxBundleOpt: Option[Bundle] = Option(maxBundleMetaData).map{_.bundle}
+  @volatile var maxBundleMetaData: Option[BundleMetaData] = None
+  def maxBundle: Option[Bundle] = maxBundleMetaData.map{_.bundle}
 
   @volatile var syncPendingBundleHashes: Set[String] = Set()
   @volatile var syncPendingTXHashes: Set[String] = Set()
@@ -34,6 +35,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
   @volatile var lastCheckpointBundle: Option[Bundle] = None
   val checkpointsInProgress: TrieMap[RoundHash[_ <: CC], Boolean] = TrieMap()
 
+  @volatile var txInMaxBundleNotInValidation: Set[String] = Set()
 
   val bundleToBundleMeta : TrieMap[String, BundleMetaData] = TrieMap()
 
@@ -62,7 +64,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     def scoreFrom(m: BundleMetaData): Double = {
       val norm = normalizeReputations(m.reputations)
       val repScore = b.extractIds.toSeq.map { id => norm.getOrElse(id.b58, 0.1)}.sum
-      b.maxStackDepth * 500 + extractTXHash.size + repScore * 10
+      b.maxStackDepth * 500 + b.extractTXHash.size + repScore * 10
     }
 
     def score: Option[Double] = meta.flatMap{ m =>
@@ -73,30 +75,13 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     def totalScore : Option[Double] = meta.flatMap{_.totalScore}
 
     def minTime: Long = meta.get.rxTime
-    def pretty: String = s"hash: ${b.short}, depth: ${b.maxStackDepth}, numTX: ${extractTXHash.size}, " +
+    def pretty: String = s"hash: ${b.short}, depth: ${b.maxStackDepth}, numTX: ${b.extractTXHash.size}, " +
       s"numId: ${b.extractIds.size}, " +
       s"score: $score, totalScore: $totalScore, height: ${meta.map{_.height}}, " +
       s"parent: ${meta.map{_.bundle.extractParentBundleHash.pbHash.slice(0, 5)}} firstId: ${b.extractIds.head.short}"
 
-    def extractTXHash: Set[TransactionHash] = {
-      def process(s: Signed[BundleData]): Set[TransactionHash] = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            process(b2.bundleData)
-          case h: TransactionHash => Set(h)
-          case _ => Set[TransactionHash]()
-        }
-        if (depths.nonEmpty) {
-          depths.reduce( (s1: Set[TransactionHash], s2: Set[TransactionHash]) => s1 ++ s2)
-        } else {
-          Set[TransactionHash]()
-        }
-      }
-      process(b.bundleData)
-    }
 
-    def extractTX: Set[TX] = extractTXHash.flatMap{ z => lookupTransaction(z.txHash)}
+    def extractTX: Set[TX] = b.extractTXHash.flatMap{ z => lookupTransaction(z.txHash)}
 
     def reputationUpdate: Map[String, Long] = {
       b.extractIds.map{_.b58 -> 1L}.toMap
@@ -120,8 +105,8 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
         syncPendingBundleHashes += parentHash
       }
       ancestors
-    } else if (parentHash == genesisBundle.hash) {
-      Seq(lookupBundle(genesisBundle.hash).get) ++ ancestors
+    } else if (parentHash == genesisBundle.get.hash) {
+      Seq(lookupBundle(genesisBundle.get.hash).get) ++ ancestors
     } else {
       findAncestors(
         parent.get.bundle.extractParentBundleHash.pbHash,
@@ -168,23 +153,26 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     }
   }
 
-  val confirmWindow = 20
-  @volatile var txInMaxBundleNotInValidation: Set[String] = Set()
 
 
   def updateMaxBundle(bundleMetaData: BundleMetaData): Unit = {
 
     val genCheck = totalNumValidatedTX == 1 || bundleMetaData.bundle.maxStackDepth >= 2 // TODO : Possibly move this only to mempool emit
 
-    if (bundleMetaData.totalScore.get > maxBundle.totalScore.get && genCheck) {
+    if (bundleMetaData.totalScore.get > maxBundle.get.totalScore.get && genCheck) {
       maxBundle.synchronized {
-        maxBundleMetaData = bundleMetaData
+        maxBundleMetaData = Some(bundleMetaData)
         val ancestors = findAncestorsUpTo(
           bundleMetaData.bundle.extractParentBundleHash.pbHash,
           upTo = 100
         )
-        if (maxBundleMetaData.height.get > confirmWindow) {
-          totalNumValidBundles = maxBundleMetaData.height.get - confirmWindow
+        val height = bundleMetaData.height.get
+        if (height > confirmWindow) {
+          if (downloadInProgress) {
+            downloadInProgress = false
+            downloadMode = false
+          }
+          totalNumValidBundles = height - confirmWindow
         }
 
         last100ValidBundleMetaData = if (ancestors.size < confirmWindow + 1) Seq()
@@ -201,7 +189,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
     // Set this to be active for the combiners.
     if (!activeDAGBundles.contains(bundleMetaData) &&
-      !bundleMetaData.bundle.extractIds.contains(id) && bundleMetaData.bundle != genesisBundle) {
+      !bundleMetaData.bundle.extractIds.contains(id) && bundleMetaData.bundle != genesisBundle.get && !downloadMode) {
       activeDAGBundles :+= bundleMetaData
     }
   }

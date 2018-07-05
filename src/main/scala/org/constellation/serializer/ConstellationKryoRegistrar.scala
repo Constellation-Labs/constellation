@@ -35,6 +35,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Peer])
     kryo.register(classOf[Bundle])
     kryo.register(classOf[BundleData])
+    kryo.register(classOf[BundleMetaData])
     kryo.register(classOf[TX])
     kryo.register(classOf[TXData])
 

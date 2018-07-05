@@ -14,16 +14,32 @@ class Data extends MetricsExt
 
   val logger = Logger(s"Data")
 
+  var confirmWindow : Int = 20
+
   def restartNode(): Unit = {
     restartDB()
-    genesisBundle = null
+    genesisBundle = None
     downloadMode = true
     validLedger.clear()
     memPoolLedger.clear()
     syncPendingTXHashes = Set()
     syncPendingBundleHashes = Set()
-    peerLookup.clear()
+    signedPeerLookup.clear()
     memPool = Set()
+    activeDAGBundles = Seq()
+    maxBundleMetaData = null
+    txHashToTX.clear()
+    bundleToBundleMeta.clear()
+    last10000ValidTXHash = Seq()
+    last100ValidBundleMetaData = Seq()
+    resetMetrics()
+    peersAwaitingAuthenticationToNumAttempts.clear()
+    signedPeerLookup.clear()
+    txSyncRequestTime.clear()
+    txInMaxBundleNotInValidation = Set()
+    last100SelfSentTransactions = Seq()
+    peerSync.clear()
+
   }
 
 

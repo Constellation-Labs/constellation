@@ -8,13 +8,7 @@ import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.ActorMaterializer
 import akka.util.{ByteString, Timeout}
-import com.esotericsoftware.kryo.{Kryo, Serializer}
-import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.minlog.Log
 import com.google.common.hash.Hashing
-import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
-import org.constellation.consensus.Consensus.RemoteMessage
-import com.twitter.chill.{IKryoRegistrar, KryoBase, KryoPool, ScalaKryoInstantiator}
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.{AddressMetaData, Bundle, Id}
 import org.constellation.util.{HashSignature, POWExt, POWSignHelp, ProductHash}

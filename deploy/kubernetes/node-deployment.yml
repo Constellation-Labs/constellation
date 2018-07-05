@@ -33,7 +33,7 @@ metadata:
 spec:
   serviceName: node-service
   podManagementPolicy: "Parallel"
-  replicas: 3
+  replicas: 5
   updateStrategy:
     type: RollingUpdate
     #rollingUpdate:
@@ -84,10 +84,11 @@ spec:
             port: 9000
             path: /health
           initialDelaySeconds: 30
-          timeoutSeconds: 30
+          timeoutSeconds: 60
         livenessProbe:
           httpGet:
             port: 9000
             path: /health
           initialDelaySeconds: 30
-          periodSeconds: 3
+          periodSeconds: 10
+          timeoutSeconds: 60

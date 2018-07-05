@@ -10,9 +10,26 @@ trait MetricsExt {
   @volatile var totalNumNewBundleAdditions = 0
   @volatile var totalNumBroadcastMessages = 0
   @volatile var totalNumValidatedTX = 0
-  @volatile var numSyncedBundles: Int = 0
-  @volatile var numSyncedTX: Int = 0
+  @volatile var numSyncedBundles = 0
+  @volatile var numSyncedTX = 0
   @volatile var heartbeatRound = 0L
   @volatile var totalNumP2PMessages = 0L
+  
+  def resetMetrics(): Unit = {
+
+    totalNumGossipMessages = 0
+    totalNumBundleMessages = 0
+    totalNumBundleHashRequests = 0
+    totalNumInvalidBundles = 0
+    totalNumValidBundles = 0
+    totalNumNewBundleAdditions = 0
+    totalNumBroadcastMessages = 0
+    totalNumValidatedTX = 0
+    numSyncedBundles = 0
+    numSyncedTX = 0
+    heartbeatRound = 0L
+    totalNumP2PMessages = 0L
+
+  }
 
 }

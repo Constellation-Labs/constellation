@@ -14,6 +14,7 @@ import scala.util.{Random, Try}
 
 trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo {
 
+  // Need mempool ordering by RX time -- either that or put it on a TXMetaData store
   @volatile var memPool: Set[String] = Set()
   @volatile var last100SelfSentTransactions: Seq[TX] = Seq()
   @volatile var last10000ValidTXHash: Seq[String] = Seq()

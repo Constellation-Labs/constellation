@@ -60,7 +60,7 @@ object ConstellationNode extends App {
     jsPrefix = "./ui/ui"
   )
 
-  node.data.minGenesisDistrSize = 3
+  node.data.minGenesisDistrSize = 4
 
 }
 
@@ -75,7 +75,8 @@ class ConstellationNode(
                          timeoutSeconds: Int = 30,
                          heartbeatEnabled: Boolean = false,
                          requestExternalAddressCheck : Boolean = false,
-                         val jsPrefix: String = "./ui/target/scala-2.11/ui"
+                         val jsPrefix: String = "./ui/target/scala-2.11/ui",
+                         generateRandomTransactions: Boolean = true
              )(
                implicit val system: ActorSystem,
                implicit val materialize: ActorMaterializer,
@@ -86,6 +87,7 @@ class ConstellationNode(
   data.updateKeyPair(configKeyPair)
   import data._
 
+  generateRandomTX = generateRandomTransactions
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
  // logger.info(s"UDP Info - hostname: $hostName interface: $udpInterface port: $udpPort")
@@ -143,6 +145,8 @@ class ConstellationNode(
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
   val api = new APIClient(port=httpPort)
+  api.id = id
+  api.udpPort = udpPort
   def healthy: Boolean = Try{api.getSync("health").status == StatusCodes.OK}.getOrElse(false)
   def add(other: ConstellationNode): HttpResponse = api.postSync("peer", other.udpAddressString)
 

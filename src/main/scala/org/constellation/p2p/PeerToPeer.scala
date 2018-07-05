@@ -54,10 +54,16 @@ class PeerToPeer(
       processHeartbeat {
 
         if (heartbeatRound % 3 == 0) {
+          // Attempt add peers
           peersAwaitingAuthenticationToNumAttempts.foreach {
             case (peerAddr, attempts) =>
-              if (attempts > 10 || peerLookup.contains(peerAddr))
+              val added = signedPeerLookup.contains(peerAddr)
+              val giveUp = attempts > 10
+              if (giveUp || added) {
+                if (added) logger.debug("Peer awaiting authenticated has been accepted")
+                if (giveUp) logger.debug(s"Giving up on adding $peerAddr exceeded max attempts 10")
                 peersAwaitingAuthenticationToNumAttempts.remove(peerAddr)
+              }
               else {
                 val res = addPeerFromLocal(peerAddr)
                 if (res == StatusCodes.OK) peersAwaitingAuthenticationToNumAttempts.remove(peerAddr)
@@ -67,12 +73,24 @@ class PeerToPeer(
                 }
               }
           }
+          // Remove dead peers
+          lastPeerRX.foreach{ case (id, rx) =>
+            if (rx < (System.currentTimeMillis() - 60000)) {
+              signedPeerLookup.filter(_._2.data.id == id).keys.foreach { p =>
+                signedPeerLookup.remove(p)
+                peersAwaitingAuthenticationToNumAttempts.remove(p)
+                peerSync.remove(id)
+              }
+            }
+          }
+
+
         }
 
         downloadHeartbeat()
         heartbeatRound += 1
 
-     //   checkpointHeartbeat()
+        //   checkpointHeartbeat()
 
         gossipHeartbeat()
 
@@ -80,7 +98,7 @@ class PeerToPeer(
           logger.debug(
             s"Heartbeat: ${id.short}, " +
               s"numActiveBundles: ${activeDAGBundles.size}, " +
-              s"maxHeight: ${maxBundleOpt.flatMap{_.meta.map{_.height}}}, " +
+              s"maxHeight: ${maxBundle.flatMap{_.meta.map{_.height}}}, " +
               s"numTotalValidTX: $totalNumValidatedTX " +
               s"numPeers: ${peers.size} " +
               s"numBundleMessages: $totalNumBundleMessages, " +
@@ -101,37 +119,55 @@ class PeerToPeer(
 
       totalNumP2PMessages += 1
 
+      val authenticated = signedPeerLookup.contains(remote)
+      if (!authenticated && !peersAwaitingAuthenticationToNumAttempts.contains(remote)) {
+        logger.debug("Attempting to add unauthenticated peer")
+        peersAwaitingAuthenticationToNumAttempts(remote) = 1
+      }
+
+      if (authenticated) {
+
+        val id = signedPeerLookup(remote).data.id
+
+        lastPeerRX(id) = System.currentTimeMillis()
+
+        message match {
+
+          case d: DownloadRequest => handleDownloadRequest(d, remote)
+
+          case d: DownloadResponse => handleDownloadResponse(d)
+
+          case gm: GossipMessage => handleGossip(gm, remote)
+
+          case u => logger.error(s"Unrecognized authenticated UDP message: $u")
+
+        }
+      }
+
       message match {
-
-        case d: DownloadRequest => handleDownloadRequest(d, remote)
-          println("Got download request")
-
-        case d: DownloadResponse => handleDownloadResponse(d)
 
         case sh: HandShakeMessage => handleHandShake(sh, remote)
 
         case sh: HandShakeResponseMessage => handleHandShakeResponse(sh, remote)
 
-/*
-        case m @ StartConsensusRound(id, voteData, roundHash) => {
-          voteData match {
-            case CheckpointVote(d) =>
-              consensusActor ! ConsensusVote(id, voteData, roundHash)
-              logger.debug(s"received checkpoint start consensus round message roundHash= $roundHash, self = $publicKey id = $id")
-            case ConflictVote(d) =>
-              logger.debug(s"received conflict start consensus round message = $m")
-          }
-        }
+        /*
+                case m @ StartConsensusRound(id, voteData, roundHash) => {
+                  voteData match {
+                    case CheckpointVote(d) =>
+                      consensusActor ! ConsensusVote(id, voteData, roundHash)
+                      logger.debug(s"received checkpoint start consensus round message roundHash= $roundHash, self = $publicKey id = $id")
+                    case ConflictVote(d) =>
+                      logger.debug(s"received conflict start consensus round message = $m")
+                  }
+                }
 
-        case message: RemoteMessage => consensusActor ! message
-*/
+                case message: RemoteMessage => consensusActor ! message
+        */
 
         // case g @ Gossip(_) => handleGossip(g, remote)
-        case gm : GossipMessage =>
-          handleGossip(gm, remote)
 
-        case u =>
-          logger.error(s"Unrecognized UDP message: $u")
+        case u => // logger.error(s"Unrecognized UDP message: $u - authenticated: $authenticated")
+
       }
 
   }

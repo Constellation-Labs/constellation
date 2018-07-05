@@ -47,6 +47,12 @@ class API(
 
   val routes: Route = cors() {
     get {
+      path("balance") {
+        complete(validLedger.getOrElse(selfAddress.address, 0L).toString)
+      } ~
+      path("bundles") {
+        complete(last100ValidBundleMetaData)
+      } ~
       path("restart") {
         data.restartNode()
         complete(StatusCodes.OK)
@@ -77,7 +83,7 @@ class API(
         }
       } ~
       path("longestChain") {
-        val ancestors = findAncestors(maxBundle.extractParentBundleHash.pbHash)
+        val ancestors = findAncestors(maxBundle.get.extractParentBundleHash.pbHash)
         complete(ancestors)
       } ~
       pathPrefix("bundle") {
@@ -124,7 +130,10 @@ class API(
               val addr = s"http://${z.data.apiAddress.getHostString}:${z.data.apiAddress.getPort}"
               s"${z.data.id.short} API: $addr "
             }.mkString(" --- "),
-            "z_genesisBundleHash" -> Option(genesisBundle).map{_.hash}.getOrElse("N/A"),
+            "z_peerSync" -> peerSync.toMap.toString,
+            "z_peerLookup" -> signedPeerLookup.toMap.toString,
+            "downloadInProgress" -> downloadInProgress.toString,
+            "z_genesisBundleHash" -> genesisBundle.map{_.hash}.getOrElse("N/A"),
          //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
             "numActiveBundles" -> activeDAGBundles.size.toString,
             "last10TXHash" -> last10000ValidTXHash.reverse.slice(0, 10).mkString(","),
@@ -133,22 +142,33 @@ class API(
             "last10SelfTXHashes" -> last100SelfSentTransactions.map{_.hash}.reverse.slice(0, 10).reverse.mkString(","),
             "lastValidBundleHash" -> Try{lastValidBundleHash.pbHash}.getOrElse(""),
             "lastValidBundle" -> Try{Option(lastValidBundle).map{_.pretty}.getOrElse("")}.getOrElse(""),
-            "z_genesisBundle" -> Option(genesisBundle).map(_.json).getOrElse(""),
-            "z_genesisBundleIds" -> Option(genesisBundle).map(_.extractIds).mkString(", "),
-            "selfBestBundle" -> Try{maxBundle.pretty}.getOrElse(""),
-            "selfBestBundleHash" -> Try{maxBundle.hash}.getOrElse(""),
+            "z_genesisBundle" -> genesisBundle.map(_.json).getOrElse(""),
+            "z_genesisBundleIds" -> genesisBundle.map(_.extractIds.mkString(", ")).getOrElse(""),
+            "selfBestBundle" -> Try{maxBundle.map{_.pretty}.toString}.getOrElse(""),
+            "selfBestBundleHash" -> Try{maxBundle.map{_.hash}.toString}.getOrElse(""),
             "selfBestBundleMeta" -> Try{maxBundleMetaData.toString}.getOrElse(""),
             "reputations" -> normalizedDeterministicReputation.map{
               case (k,v) => k.short + " " + v
             }.mkString(" - "),
+            "peersAwaitingAuthentication" -> peersAwaitingAuthenticationToNumAttempts.toMap.toString(),
             "numProcessedBundles" -> totalNumNewBundleAdditions.toString,
             "numSyncPendingBundles" -> syncPendingBundleHashes.size.toString,
             "numSyncPendingTX" -> syncPendingTXHashes.size.toString,
             "peerBestBundles" -> peerSync.toMap.map{
               case (id, b) =>
-                s"${id.short}: ${b.maxBundle.hash.slice(0, 5)} ${Try{b.maxBundle.pretty}} " +
-                  s"parent${b.maxBundle.extractParentBundleHash.pbHash.slice(0, 5)} " +
-                  s"${lookupBundle(b.maxBundle.hash).nonEmpty} ${b.maxBundle.meta.map {_.transactionsResolved}}"
+                Try {
+                  s"${id.short}: ${b.maxBundle.hash.slice(0, 5)} ${
+                    Try {
+                      b.maxBundle.pretty
+                    }
+                  } " +
+                    s"parent${b.maxBundle.extractParentBundleHash.pbHash.slice(0, 5)} " +
+                    s"${lookupBundle(b.maxBundle.hash).nonEmpty} ${
+                      b.maxBundle.meta.map {
+                        _.transactionsResolved
+                      }
+                    }"
+                }.getOrElse("")
             }.mkString(" --- "),
             "z_peers" -> peers.map{_.data}.json,
             "z_validLedger" -> validLedger.toMap.json,
@@ -156,16 +176,16 @@ class API(
             "z_Bundles" -> activeDAGBundles.sortBy{z => -1*z.totalScore.getOrElse(0D)}
               .map{_.bundle.pretty}.mkString(" --- "),
             "downloadMode" -> downloadMode.toString,
-            "allPeersHaveKnownBestBundles" -> peerSync.forall{
+            "allPeersHaveKnownBestBundles" -> Try{peerSync.forall{
               case (_, hb) =>
                 lookupBundle(hb.maxBundle.hash).nonEmpty
-            }.toString,
-            "allPeersAgreeOnValidLedger" -> peerSync.forall{
+            }.toString}.getOrElse(""),
+            "allPeersAgreeOnValidLedger" -> Try{peerSync.forall{
               case (_, hb) =>
                 hb.validLedger == validLedger.toMap
-            }.toString,
-            "allPeersHaveResolvedMaxBundles" -> peerSync.forall{_._2.maxBundle.meta.exists(_.isResolved)}.toString,
-            "allPeersAgreeWithMaxBundle" -> peerSync.forall{_._2.maxBundle == maxBundle}.toString
+            }.toString}.getOrElse(""),
+            "allPeersHaveResolvedMaxBundles" -> Try{peerSync.forall{_._2.safeMaxBundle.exists{_.meta.exists(_.isResolved)}}.toString}.getOrElse(""),
+            "allPeersAgreeWithMaxBundle" -> Try{peerSync.forall{_._2.maxBundle == maxBundle.get}.toString}.getOrElse("")
             //,
             // "z_lastBundleVisualJSON" -> Option(lastBundle).map{ b => b.extractTreeVisual.json}.getOrElse("")
           )))
@@ -179,13 +199,17 @@ class API(
           complete(pair)
         } ~
         path("genesis" / LongNumber) { numCoins =>
-          val ret = if (genesisBundle == null) {
+          val ret = if (genesisBundle.isEmpty) {
             val debtAddress = walletPair
             val tx = createTransaction(selfAddress.address, numCoins, src = debtAddress.address.address)
             createGenesis(tx)
             tx
-          } else genesisBundle.extractTX.head
+          } else genesisBundle.get.extractTX.head
           complete(ret)
+        } ~
+        path("stackSize" / IntNumber) { num =>
+          minGenesisDistrSize = num
+          complete(StatusCodes.OK)
         } ~
         path("makeKeyPairs" / IntNumber) { numPairs =>
           val pair = Seq.fill(numPairs){constellation.makeKeyPair()}
@@ -223,7 +247,6 @@ class API(
         path("balance") {
           entity(as[PublicKey]) { account =>
             logger.debug(s"Received request to query account $account balance")
-
             // TODO: update balance
             // complete((chainStateActor ? GetBalance(account)).mapTo[Balance])
 
@@ -306,7 +329,7 @@ class API(
                             attempts += 1
                             Thread.sleep(1500)
                             //peerAdded = peers.exists(p => v == p.data.externalAddress)
-                            peerAdded = peerLookup.contains(v)
+                            peerAdded = signedPeerLookup.contains(v)
                           }
                           if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
                         } else f
