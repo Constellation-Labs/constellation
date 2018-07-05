@@ -207,6 +207,10 @@ class API(
           } else genesisBundle.get.extractTX.head
           complete(ret)
         } ~
+        path("stackSize" / IntNumber) { num =>
+          minGenesisDistrSize = num
+          complete(StatusCodes.OK)
+        } ~
         path("makeKeyPairs" / IntNumber) { numPairs =>
           val pair = Seq.fill(numPairs){constellation.makeKeyPair()}
           wallet ++= pair

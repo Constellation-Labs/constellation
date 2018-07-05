@@ -170,6 +170,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
         if (height > confirmWindow) {
           if (downloadInProgress) {
             downloadInProgress = false
+            downloadMode = false
           }
           totalNumValidBundles = height - confirmWindow
         }
@@ -188,7 +189,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
     // Set this to be active for the combiners.
     if (!activeDAGBundles.contains(bundleMetaData) &&
-      !bundleMetaData.bundle.extractIds.contains(id) && bundleMetaData.bundle != genesisBundle.get) {
+      !bundleMetaData.bundle.extractIds.contains(id) && bundleMetaData.bundle != genesisBundle.get && !downloadMode) {
       activeDAGBundles :+= bundleMetaData
     }
   }

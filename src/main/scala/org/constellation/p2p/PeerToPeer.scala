@@ -79,6 +79,7 @@ class PeerToPeer(
               signedPeerLookup.filter(_._2.data.id == id).keys.foreach { p =>
                 signedPeerLookup.remove(p)
                 peersAwaitingAuthenticationToNumAttempts.remove(p)
+                peerSync.remove(id)
               }
             }
           }

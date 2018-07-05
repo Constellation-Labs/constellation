@@ -38,6 +38,7 @@ class Data extends MetricsExt
     txSyncRequestTime.clear()
     txInMaxBundleNotInValidation = Set()
     last100SelfSentTransactions = Seq()
+    peerSync.clear()
 
   }
 

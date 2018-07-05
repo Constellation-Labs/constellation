@@ -121,7 +121,7 @@ class Simulation(apis: Seq[APIClient]) {
     txs
   }
 
-  def validateRun(txSent: Set[TX]): Boolean = {
+  def validateRun(txSent: Set[TX], validationFractionAcceptable: Double): Boolean = {
 
     var done = false
     var attempts = 0
@@ -137,7 +137,7 @@ class Simulation(apis: Seq[APIClient]) {
         val complete = 1 - missingFraction
         complete
       }
-      done = pctComplete.forall(_ == 1.0D)
+      done = pctComplete.forall(_ >= validationFractionAcceptable)
 //      println("Num valid TX hashes " + validTXs.map{_.size})
       println("Pct complete " + pctComplete.map{a =>  (a*100).toString.slice(0, 4) + "%"})
 
@@ -153,7 +153,7 @@ class Simulation(apis: Seq[APIClient]) {
 
   var healthChecks = 0
 
-  def run(): Unit = {
+  def run(validationFractionAcceptable: Double = 1.0): Unit = {
 
     while (healthChecks < 10) {
       if (Try{healthy()}.getOrElse(false)) {
@@ -191,7 +191,7 @@ class Simulation(apis: Seq[APIClient]) {
 
     val txs = sendRandomTransactions()
 
-    assert(validateRun(txs))
+    assert(validateRun(txs, validationFractionAcceptable))
 
     val end = System.currentTimeMillis()
 

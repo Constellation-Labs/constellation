@@ -78,8 +78,8 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       _._2.maxBundleMeta.height.foreach{
         h =>
           maxBundleMetaData.flatMap{_.height}.foreach{ h2 =>
-            if (h > (h2 + 50)) {
-              logger.error("FOUND PEER 50 BUNDLES AHEAD, RESTARTING")
+            if (h > (h2 + 20)) {
+              logger.error("FOUND PEER 20 BUNDLES AHEAD, RESTARTING")
               System.exit(1)
             }
           }
@@ -198,7 +198,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     activeDAGBundles.groupBy(b => b.bundle.extractParentBundleHash -> b.bundle.maxStackDepth)
       .filter{_._2.size > 1}.toSeq //.sortBy(z => 1*z._1._2).headOption
       .foreach { case (pbHash, bundles) =>
-      if (Random.nextDouble() > 0.3) {
+      if (Random.nextDouble() > 0.6) {
         val best3 = bundles.sortBy(z => -1 * z.totalScore.get).slice(0, 2)
         val allIds = best3.flatMap(_.bundle.extractIds)
         //   if (!allIds.contains(id)) {
@@ -226,10 +226,10 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   def cleanupStrayChains(): Unit = {
 
-    activeDAGBundles = activeDAGBundles.filter(_.height.get > (maxBundleMetaData.get.height.get - 5))
+    activeDAGBundles = activeDAGBundles.filter(j => j.height.get > (maxBundleMetaData.get.height.get - 4))
 
-    if (activeDAGBundles.size > 30) {
-      activeDAGBundles = activeDAGBundles.sortBy(z => -1*z.totalScore.get).zipWithIndex.filter{_._2 < 10}.map{_._1}
+    if (activeDAGBundles.size > 80) {
+      activeDAGBundles = activeDAGBundles.sortBy(z => -1*z.totalScore.get).zipWithIndex.filter{_._2 < 65}.map{_._1}
     }
 
   }

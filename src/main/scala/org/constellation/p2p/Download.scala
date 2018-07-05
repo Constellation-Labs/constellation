@@ -26,6 +26,7 @@ trait Download extends PeerAuth {
       } else {
         handleBundle(d.maxBundle)
         downloadInProgress = true
+        downloadMode = false
       }
       //   lastCheckpointBundle = d.lastCheckpointBundle
       logger.debug("Downloaded data")
@@ -33,7 +34,7 @@ trait Download extends PeerAuth {
   }
 
   def handleDownloadRequest(d: DownloadRequest, remote: InetSocketAddress): Unit = {
-    if (genesisBundle.nonEmpty && !downloadMode && maxBundle.nonEmpty) {
+    if (genesisBundle.nonEmpty && !downloadMode && !downloadInProgress && maxBundle.nonEmpty) {
       logger.debug("Sending download response")
       val downloadResponse = DownloadResponse(maxBundle.get, genesisBundle.get, genesisBundle.get.extractTX.head )
       udpActor ! UDPSend(downloadResponse, remote)
