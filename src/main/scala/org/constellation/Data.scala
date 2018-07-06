@@ -25,6 +25,4 @@ class Data extends MetricsExt
     peerLookup.clear()
     memPool = Set()
   }
-
-
 }

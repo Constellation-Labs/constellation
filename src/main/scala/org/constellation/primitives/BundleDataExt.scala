@@ -133,7 +133,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
                                      parentHash: String,
                                      ancestors: Seq[BundleMetaData] = Seq()
                                    ): Seq[BundleMetaData] = {
-    val parent = lookupBundle(parentHash)
+    val parent: Option[BundleMetaData] = lookupBundle(parentHash)
     def updatedAncestors = Seq(parent.get) ++ ancestors
     if (parent.isEmpty) {
       if (parentHash != "coinbase") {
@@ -231,14 +231,14 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   def attemptResolveBundle(zero: BundleMetaData, parentHash: String): Unit = {
 
-    val ancestors = findAncestorsUpToLastResolved(parentHash)
+    val ancestors: Seq[BundleMetaData] = findAncestorsUpToLastResolved(parentHash)
     if (lookupBundle(zero).isEmpty) storeBundle(zero)
 
     if (ancestors.nonEmpty) {
 
       val chainR = ancestors.tail ++ Seq(zero)
 
-      val chain = chainR.map{
+      val chain: Seq[BundleMetaData] = chainR.map {
         c =>
           val res = resolveTransactions(c.bundle.extractTXHash.map{_.txHash})
           // println(s"RESOLVE TRANSACTIONS: $res ${c.bundle.hash.slice(0, 5)}")
