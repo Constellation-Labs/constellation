@@ -43,7 +43,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     val apis = nodes.map{_.api}
     val sim = new Simulation(apis)
-    sim.run()
+    sim.run(attemptSetExternalIP = false)
 
     // Cleanup DBs
     import scala.tools.nsc.io.{File => SFile}

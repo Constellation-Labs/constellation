@@ -10,12 +10,12 @@ import akka.stream.ActorMaterializer
 import akka.util.{ByteString, Timeout}
 import com.google.common.hash.Hashing
 import org.constellation.p2p._
-import org.constellation.primitives.Schema.{AddressMetaData, Bundle, Id}
+import org.constellation.primitives.Schema._
 import org.constellation.util.{HashSignature, POWExt, POWSignHelp, ProductHash}
 import org.constellation.crypto.KeyUtilsExt
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
-import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, native}
+import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, ShortTypeHints, native}
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -56,7 +56,8 @@ package object constellation extends KeyUtilsExt with POWExt
   ))
 
   implicit val constellationFormats: Formats = DefaultFormats +
-    new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer + new InetSocketAddressSerializer
+    new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer + new InetSocketAddressSerializer +
+  ShortTypeHints(List(classOf[TransactionHash], classOf[ParentBundleHash], classOf[Bundle]))
 
   def caseClassToJson(message: Any): String = {
     compactRender(Extraction.decompose(message))

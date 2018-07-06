@@ -5,6 +5,7 @@ import java.security.{KeyPair, PublicKey}
 
 import akka.actor.ActorRef
 import constellation._
+import org.constellation.Fixtures2.{address, id, tempKey}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.{Id, Peer}
@@ -33,7 +34,8 @@ object Fixtures {
   val id3 = Id(publicKey3.encoded)
   val id4 = Id(publicKey4.encoded)
   val id5 = Id(publicKey5.encoded)
-  val signedPeer: Signed[Peer] = Peer(id, address, address, Set()).signed()(tempKey)
+  val signedPeer: Signed[Peer] = Peer(id, Some(address), Some(address), Seq()).signed()(tempKey)
+
 
   val address1: InetSocketAddress = constellation.addressToSocket("localhost:16181")
   val address2: InetSocketAddress = constellation.addressToSocket("localhost:16182")

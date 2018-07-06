@@ -127,7 +127,8 @@ class API(
             "lastConfirmationUpdateTime" -> lastConfirmationUpdateTime.toString,
             "numPeers" -> peers.size.toString,
             "peers" -> peers.map{ z =>
-              val addr = s"http://${z.data.apiAddress.getHostString}:${z.data.apiAddress.getPort}"
+              val addr = s"http://${z.data.apiAddress.map{_.getHostString}.getOrElse("")}:" +
+                s"${z.data.apiAddress.map{_.getPort}.getOrElse("")}"
               s"${z.data.id.short} API: $addr "
             }.mkString(" --- "),
             "z_peerSync" -> peerSync.toMap.toString,
@@ -263,11 +264,13 @@ class API(
           })
 
           var peerMap: Seq[Node] = peers.map{_.data}.seq.map{ f => {
-            Node(f.id.address.address, f.externalAddress.getHostName, f.externalAddress.getPort)
+            Node(f.id.address.address, f.externalAddress.map{_.getHostName}.getOrElse(""),
+              f.externalAddress.map{_.getPort}.getOrElse(0))
           }}
 
           // Add self
-          peerMap = peerMap :+ Node(selfAddress.address, selfPeer.data.externalAddress.getHostName, selfPeer.data.externalAddress.getPort)
+          peerMap = peerMap :+ Node(selfAddress.address, selfPeer.data.externalAddress.map{_.getHostName}.getOrElse(""),
+            selfPeer.data.externalAddress.map{_.getPort}.getOrElse(0))
 
           complete(Map(
             "peers" -> peerMap,
@@ -360,8 +363,8 @@ class API(
                 case a@_ => { logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a"); }
               }
               logger.debug(s"Set external IP RPC request $externalIp $addr")
-              data.externalAddress = addr
-              if (ipp.nonEmpty) data.apiAddress = new InetSocketAddress(ipp, 9000)
+              data.externalAddress = Some(addr)
+              if (ipp.nonEmpty) data.apiAddress = Some(new InetSocketAddress(ipp, 9000))
               complete(StatusCodes.OK)
             }
           } ~

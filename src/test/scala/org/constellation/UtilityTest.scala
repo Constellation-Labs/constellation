@@ -1,14 +1,21 @@
 package org.constellation
 
+import java.security.KeyPair
+
 import org.scalatest.FlatSpec
 import constellation._
+import org.constellation.primitives.Schema.{Bundle, BundleData, ParentBundleHash, TransactionHash}
 
 class UtilityTest extends FlatSpec {
 
   "Bundles" should "serialize and deserialize properly with json" in {
 
-    // TODO : Add test bundle
-
+    implicit val kp: KeyPair = makeKeyPair()
+    val b = Bundle(BundleData(Seq(TransactionHash("a"), ParentBundleHash("b"))).signed())
+    val b2 = Bundle(BundleData(Seq(TransactionHash("c"), ParentBundleHash("b"))).signed())
+    val b3 = Bundle(BundleData(Seq(b, b2)).signed())
+    println(b3.json)
+    assert(b3.json.x[Bundle] == b3)
   }
 
   "BigInt hash" should "XOR properly as a distance metric" in {

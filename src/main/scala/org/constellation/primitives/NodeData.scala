@@ -29,9 +29,9 @@ trait NodeData {
   @volatile var nodeState: NodeState = PendingDownload
 
   var externalHostString: String = _
-  @volatile var externalAddress: InetSocketAddress = _
-  @volatile var apiAddress: InetSocketAddress = _
-  var remotes: Set[InetSocketAddress] = Set.empty[InetSocketAddress]
+  @volatile var externalAddress: Option[InetSocketAddress] = None
+  @volatile var apiAddress: Option[InetSocketAddress] = None
+  var remotes: Seq[InetSocketAddress] = Seq()
   def selfPeer: Signed[Peer] = Peer(id, externalAddress, apiAddress, remotes).signed()
 
   @volatile var db: LevelDB = _

@@ -420,19 +420,19 @@ object Schema {
   case class HandShakeResponse(
                                 original: Signed[HandShake],
                                 response: HandShake,
-                                detectedRemote: InetSocketAddress
+                                lastObservedExternalAddress: Option[InetSocketAddress] = None
                               ) extends ProductHash with RemoteMessage
 
   case class Peer(
                    id: Id,
-                   externalAddress: InetSocketAddress,
-                   apiAddress: InetSocketAddress,
-                   remotes: Set[InetSocketAddress] = Set()
+                   externalAddress: Option[InetSocketAddress],
+                   apiAddress: Option[InetSocketAddress],
+                   remotes: Seq[InetSocketAddress] = Seq()
                  ) extends ProductHash
 
   case class LocalPeerObservation(
                                    mostRecentSignedPeer: Signed[Peer],
-                                   additionalRemotes: Set[InetSocketAddress] = Set(),
+                                   updatedPeer: Peer,
                                    lastRXTime: Long = System.currentTimeMillis()
                                  )
 

@@ -153,7 +153,7 @@ class Simulation(apis: Seq[APIClient]) {
 
   var healthChecks = 0
 
-  def run(validationFractionAcceptable: Double = 1.0): Unit = {
+  def run(validationFractionAcceptable: Double = 1.0, attemptSetExternalIP: Boolean = true): Unit = {
 
     while (healthChecks < 10) {
       if (Try{healthy()}.getOrElse(false)) {
@@ -168,7 +168,9 @@ class Simulation(apis: Seq[APIClient]) {
 
     assert(healthy())
     setIdLocal()
-    assert(setExternalIP())
+    if (attemptSetExternalIP) {
+      assert(setExternalIP())
+    }
     genesis()
 
     val results = addPeers()
