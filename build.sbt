@@ -68,6 +68,7 @@ lazy val coreDependencies = Seq(
   "org.scalaj" %% "scalaj-http" % "2.3.0" withJavadoc() withSources(),
   "com.twitter" %% "chill" % "0.9.1",
   "com.twitter" %% "algebird-core" % "0.13.4",
+  "org.typelevel" %% "cats-core" % "1.0.1",
   "net.glxn" % "qrgen" % "1.4"
   // "com.esotericsoftware" % "kryo" % "4.0.2"
 )

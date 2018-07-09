@@ -45,7 +45,7 @@ class SignTest extends FlatSpec {
 
     val tx = createTransactionSafe("a", "b", 1L, kp)
     val grp = KryoSerializer.serializeGrouped(tx)
-    val res = KryoSerializer.deserializeGrouped(grp.toList).asInstanceOf[TX]
+    val res = KryoSerializer.deserializeGrouped(grp.toList).asInstanceOf[Transaction]
     assert(res.txData.validSignatures)
 
   }

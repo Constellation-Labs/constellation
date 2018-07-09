@@ -82,6 +82,15 @@ class API(
           }
         }
       } ~
+        pathPrefix("transaction") {
+        get {
+          extractUnmatchedPath { p =>
+            logger.debug(s"Unmatched path on address result $p")
+            val ps = p.toString().tail
+            complete(lookupTransaction(ps))
+          }
+        }
+      } ~
       path("longestChain") {
         val ancestors = findAncestors(maxBundle.get.extractParentBundleHash.pbHash)
         complete(ancestors)
@@ -91,7 +100,43 @@ class API(
           extractUnmatchedPath { p =>
             logger.debug(s"Unmatched path on bundle result $p")
             val ps = p.toString().tail
-            complete(lookupBundle(ps).prettyJson)
+
+            //findAncestorsUpTo()
+            val maybeSheaf = lookupBundle(ps)
+            complete(maybeSheaf)
+          }
+        }
+      } ~
+        pathPrefix("bundleAll") {
+        get {
+          extractUnmatchedPath { p =>
+            logger.debug(s"Unmatched path on bundle result $p")
+            val ps = p.toString().tail
+
+            //findAncestorsUpTo()
+            val maybeSheaf = lookupBundle(ps)
+            complete(
+              BundleHashQueryResponse(
+                ps,
+                maybeSheaf,
+                maybeSheaf.map(_.bundle.extractTX.toSeq.sortBy{_.txData.time}).getOrElse(Seq())
+              )
+            )
+          }
+        }
+      } ~ pathPrefix("bundleAll10") {
+        get {
+          extractUnmatchedPath { p =>
+            logger.debug(s"Unmatched path on bundle result $p")
+            val ps = p.toString().tail
+
+            val ancestors = findAncestorsUpTo(ps, Seq(), upTo=10)
+            val res = ancestors.map{ a =>
+              BundleHashQueryResponse(
+                a.bundle.hash, Some(a), a.bundle.extractTX.toSeq.sortBy{_.txData.time}
+              )
+            }
+            complete(res)
           }
         }
       } ~
@@ -296,7 +341,7 @@ class API(
             }
           } ~
           path ("tx") {
-            entity(as[TX]) { tx =>
+            entity(as[Transaction]) { tx =>
               peerToPeerActor ! tx
               complete(StatusCodes.OK)
             }

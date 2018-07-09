@@ -10,6 +10,8 @@ import scala.collection.concurrent.TrieMap
 
 trait PeerInfo {
 
+  @volatile var deadPeers: Seq[InetSocketAddress] = Seq()
+
   val lastPeerRX : TrieMap[Id, Long] = TrieMap()
 
   val peersAwaitingAuthenticationToNumAttempts: TrieMap[InetSocketAddress, Int] = TrieMap()

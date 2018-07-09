@@ -38,7 +38,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         }
       case b: Bundle =>
         handleBundle(b)
-      case tx: TX =>
+      case tx: Transaction =>
         //  println(s"Rx tx hash ${tx.short}")
         if (lookupTransaction(tx.hash).isEmpty) {
           storeTransaction(tx)
@@ -165,7 +165,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
           ).signed()
         )
         val meta = mb.get.meta.get
-        updateBundleFrom(meta, BundleMetaData(b))
+        updateBundleFrom(meta, Sheaf(b))
         broadcast(b)
       }
     }
@@ -208,7 +208,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         val maybeData = lookupBundle(pbHash._1.pbHash)
         //     if (maybeData.isEmpty) println(pbHash)
         val pbData = maybeData.get
-        updateBundleFrom(pbData, BundleMetaData(b))
+        updateBundleFrom(pbData, Sheaf(b))
         // Skip ids when depth below a certain amount, else tell everyone.
         // TODO : Fix ^
         broadcast(b, skipIDs = allIds)

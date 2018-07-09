@@ -8,7 +8,7 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import org.constellation.Data
 import org.constellation.consensus.Consensus._
-import org.constellation.primitives.Schema.{TX, _}
+import org.constellation.primitives.Schema.{Transaction, _}
 import org.constellation.util.Heartbeat
 import constellation._
 
@@ -73,18 +73,23 @@ class PeerToPeer(
                 }
               }
           }
+
           // Remove dead peers
           lastPeerRX.foreach{ case (id, rx) =>
-            if (rx < (System.currentTimeMillis() - 60000)) {
-              signedPeerLookup.filter(_._2.data.id == id).keys.foreach { p =>
+            if (rx < (System.currentTimeMillis() - 120000)) {
+              signedPeerLookup.filter(_._2.data.id == id).foreach{ case (p, a) =>
                 signedPeerLookup.remove(p)
                 peersAwaitingAuthenticationToNumAttempts.remove(p)
                 peerSync.remove(id)
+                a.data.externalAddress.foreach{deadPeers :+= _}
               }
             }
           }
 
+        }
 
+        if (heartbeatRound % 120 == 0) {
+          deadPeers.foreach(addPeerFromLocal(_))
         }
 
         downloadHeartbeat()
