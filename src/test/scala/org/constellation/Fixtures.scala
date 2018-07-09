@@ -5,7 +5,6 @@ import java.security.{KeyPair, PublicKey}
 
 import akka.actor.ActorRef
 import constellation._
-import org.constellation.Fixtures2.{address, id, tempKey}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.{Id, Peer}
