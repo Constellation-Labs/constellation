@@ -19,7 +19,7 @@ trait LinearGossip extends PeerAuth {
 
   // This should be identical to levelDB hashes but I'm putting here as a way to double check
   // Ideally the hash workload should prioritize memory and dump to disk later but can be revisited.
-  val addressToTX: TrieMap[String, TX] = TrieMap()
+  val addressToTX: TrieMap[String, Transaction] = TrieMap()
 
   import data._
 

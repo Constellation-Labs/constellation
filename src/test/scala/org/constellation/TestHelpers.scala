@@ -13,9 +13,9 @@ object TestHelpers {
     val keyPair2 = KeyUtils.makeKeyPair()
     val keyPair3 = KeyUtils.makeKeyPair()
 
-    val tx1 = TX(TXData(keyPair.getPublic.address, keyPair2.getPublic.address, 33L).signed()(keyPair = keyPair))
+    val tx1 = Transaction(TransactionData(keyPair.getPublic.address, keyPair2.getPublic.address, 33L).signed()(keyPair = keyPair))
 
-    val tx2 = TX(TXData(keyPair3.getPublic.address, keyPair2.getPublic.address, 14L).signed()(keyPair = keyPair3))
+    val tx2 = Transaction(TransactionData(keyPair3.getPublic.address, keyPair2.getPublic.address, 14L).signed()(keyPair = keyPair3))
 
     val vote = Vote(VoteData(Seq(tx1), Seq(tx2)).signed()(keyPair = keyPair))
     val bundle = Bundle(BundleData(vote.vote.data.accept).signed()(keyPair = keyPair)).signed()(keyPair = keyPair)

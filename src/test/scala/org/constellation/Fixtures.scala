@@ -3,14 +3,12 @@ package org.constellation
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
-import akka.actor.ActorRef
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.{Id, Peer}
 import org.constellation.util.Signed
 
-import scala.collection.mutable
 
 object Fixtures {
 
@@ -33,7 +31,8 @@ object Fixtures {
   val id3 = Id(publicKey3.encoded)
   val id4 = Id(publicKey4.encoded)
   val id5 = Id(publicKey5.encoded)
-  val signedPeer: Signed[Peer] = Peer(id, address, address, Set()).signed()(tempKey)
+  val signedPeer: Signed[Peer] = Peer(id, Some(address), Some(address), Seq()).signed()(tempKey)
+
 
   val address1: InetSocketAddress = constellation.addressToSocket("localhost:16181")
   val address2: InetSocketAddress = constellation.addressToSocket("localhost:16182")
@@ -45,7 +44,7 @@ object Fixtures {
   val idSet4B = Set(id1, id2, id3, id5)
   val idSet5 = Set(id1, id2, id3, id4, id5)
 
-  val randomTransactions: Seq[Schema.TX] = Seq.fill(30) {
+  val randomTransactions: Seq[Schema.Transaction] = Seq.fill(30) {
     val kp = makeKeyPair()
     val kp2 = makeKeyPair()
     createTransactionSafe(kp.address.address, kp2.address.address, 1L, kp)

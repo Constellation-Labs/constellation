@@ -6,7 +6,7 @@ import akka.http.scaladsl.server.Directives.complete
 import akka.http.scaladsl.server.StandardRoute
 import constellation.createTransactionSafe
 import org.constellation.LevelDB
-import org.constellation.primitives.Schema.{Id, Metrics, SendToAddress, TX}
+import org.constellation.primitives.Schema.{Id, Metrics, SendToAddress, Transaction}
 import constellation._
 
 import scala.collection.concurrent.TrieMap
@@ -16,18 +16,18 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
 
   // Need mempool ordering by RX time -- either that or put it on a TXMetaData store
   @volatile var memPool: Set[String] = Set()
-  @volatile var last100SelfSentTransactions: Seq[TX] = Seq()
+  @volatile var last100SelfSentTransactions: Seq[Transaction] = Seq()
   @volatile var last10000ValidTXHash: Seq[String] = Seq()
 
   val txSyncRequestTime : TrieMap[String, Long] = TrieMap()
-  val txHashToTX : TrieMap[String, TX] = TrieMap()
+  val txHashToTX : TrieMap[String, Transaction] = TrieMap()
 
-  def lookupTransaction(hash: String): Option[TX] = {
+  def lookupTransaction(hash: String): Option[Transaction] = {
     // LevelDB fix here later?
     txHashToTX.get(hash)
   }
 
-  def storeTransaction(tx: TX): Unit = {
+  def storeTransaction(tx: Transaction): Unit = {
     txHashToTX(tx.hash) = tx
    // Try{db.put(tx)}
   }
@@ -37,7 +37,7 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
                          amount: Long,
                          normalized: Boolean = true,
                          src: String = id.address.address
-                       ): TX = {
+                       ): Transaction = {
     val tx = createTransactionSafe(src, dst, amount, keyPair, normalized)
     storeTransaction(tx)
     if (last100SelfSentTransactions.size > 100) {
@@ -53,7 +53,7 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
     complete(tx.prettyJson)
   }
 
-  def acceptTransaction(tx: TX): Unit = {
+  def acceptTransaction(tx: Transaction): Unit = {
     if (!last10000ValidTXHash.contains(tx.hash)) {
       val toUpdate = if (last10000ValidTXHash.size >= 10000) last10000ValidTXHash.tail
       else last10000ValidTXHash
@@ -64,7 +64,7 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
     }
   }
 
-  def updateMempool(tx: TX): Boolean = {
+  def updateMempool(tx: Transaction): Boolean = {
     val hash = tx.hash
     val txData = tx.txData.data
     val validUpdate = !memPool.contains(hash) && tx.valid && txData.ledgerValid(memPoolLedger) &&

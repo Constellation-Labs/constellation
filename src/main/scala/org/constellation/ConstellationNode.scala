@@ -76,7 +76,8 @@ class ConstellationNode(
                          heartbeatEnabled: Boolean = false,
                          requestExternalAddressCheck : Boolean = false,
                          val jsPrefix: String = "./ui/target/scala-2.11/ui",
-                         generateRandomTransactions: Boolean = true
+                         generateRandomTransactions: Boolean = true,
+                         autoSetExternalAddress: Boolean = false
              )(
                implicit val system: ActorSystem,
                implicit val materialize: ActorMaterializer,
@@ -103,8 +104,11 @@ class ConstellationNode(
 
   val udpAddressString: String = hostName + ":" + udpPort
   val udpAddress = new InetSocketAddress(hostName, udpPort)
-  data.externalAddress = udpAddress
-  data.apiAddress = new InetSocketAddress(hostName, httpPort)
+
+  if (autoSetExternalAddress) {
+    data.externalAddress = Some(udpAddress)
+    data.apiAddress = Some(new InetSocketAddress(hostName, httpPort))
+  }
 
   val udpActor: ActorRef =
     system.actorOf(
@@ -120,7 +124,7 @@ class ConstellationNode(
       configKeyPair.getPublic, system, consensusActor, udpActor, data, requestExternalAddressCheck, heartbeatEnabled=heartbeatEnabled)
     (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
-  data.p2pActor = peerToPeerActor
+  data.p2pActor = Some(peerToPeerActor)
 
   private val register = RegisterNextActor(peerToPeerActor)
 

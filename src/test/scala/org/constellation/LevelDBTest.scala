@@ -5,7 +5,7 @@ import org.iq80.leveldb._
 import org.iq80.leveldb.impl.Iq80DBFactory._
 import java.io._
 
-import org.constellation.primitives.Schema.TX
+import org.constellation.primitives.Schema.Transaction
 import org.scalatest.FlatSpec
 
 import scala.tools.nsc.io.{File => SFile}

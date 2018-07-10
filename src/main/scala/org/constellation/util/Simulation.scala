@@ -34,7 +34,7 @@ class Simulation(apis: Seq[APIClient]) {
     val r1 = apis.head
     // Create a genesis transaction
     val numCoinsInitial = 4e9.toLong
-    val genTx = r1.getBlocking[TX]("genesis/" + numCoinsInitial)
+    val genTx = r1.getBlocking[Transaction]("genesis/" + numCoinsInitial)
     Thread.sleep(2000)
     val gbmd = r1.getBlocking[Metrics]("metrics")
     assert(gbmd.metrics("numValidBundles").toInt == 1)
@@ -84,7 +84,7 @@ class Simulation(apis: Seq[APIClient]) {
     })
   }
 
-  def initialDistributionTX(): Seq[TX] = {
+  def initialDistributionTX(): Seq[Transaction] = {
 
     println("-"*10)
     println("Initial distribution")
@@ -93,7 +93,7 @@ class Simulation(apis: Seq[APIClient]) {
     apis.tail.map{ n =>
       val dst = n.id.address.address
       val s = SendToAddress(dst, 1e7.toLong)
-      apis.head.postRead[TX]("sendToAddress", s)
+      apis.head.postRead[Transaction]("sendToAddress", s)
     }
   }
 
@@ -101,16 +101,16 @@ class Simulation(apis: Seq[APIClient]) {
   def randomNode = apis(Random.nextInt(apis.length))
   def randomOtherNode(not: APIClient): APIClient = apis.filter{_ != not}(Random.nextInt(apis.length - 1))
 
-  def sendRandomTransaction: Future[TX] = {
+  def sendRandomTransaction: Future[Transaction] = {
     Future {
       val src = randomNode
       val dst = randomOtherNode(src).id.address.address
       val s = SendToAddress(dst, Random.nextInt(1000).toLong)
-      src.postRead[TX]("sendToAddress", s)
+      src.postRead[Transaction]("sendToAddress", s)
     }(ec)
   }
 
-  def sendRandomTransactions(numTX: Int = 20): Set[TX] = {
+  def sendRandomTransactions(numTX: Int = 20): Set[Transaction] = {
 
     val txResponse = Seq.fill(numTX) {
       sendRandomTransaction
@@ -121,7 +121,7 @@ class Simulation(apis: Seq[APIClient]) {
     txs
   }
 
-  def validateRun(txSent: Set[TX], validationFractionAcceptable: Double): Boolean = {
+  def validateRun(txSent: Set[Transaction], validationFractionAcceptable: Double): Boolean = {
 
     var done = false
     var attempts = 0
@@ -153,7 +153,7 @@ class Simulation(apis: Seq[APIClient]) {
 
   var healthChecks = 0
 
-  def run(validationFractionAcceptable: Double = 1.0): Unit = {
+  def run(validationFractionAcceptable: Double = 1.0, attemptSetExternalIP: Boolean = true): Unit = {
 
     while (healthChecks < 10) {
       if (Try{healthy()}.getOrElse(false)) {
@@ -168,7 +168,9 @@ class Simulation(apis: Seq[APIClient]) {
 
     assert(healthy())
     setIdLocal()
-    assert(setExternalIP())
+    if (attemptSetExternalIP) {
+      assert(setExternalIP())
+    }
     genesis()
 
     val results = addPeers()

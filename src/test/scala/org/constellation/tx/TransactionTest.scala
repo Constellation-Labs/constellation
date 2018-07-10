@@ -7,7 +7,7 @@ import org.scalatest.FlatSpec
 import constellation._
 import org.constellation.primitives.Schema._
 
-class TXTest extends FlatSpec {
+class TransactionTest extends FlatSpec {
 
   import Fixtures._
   val address1 = pubKeysToAddress(Seq(tempKey.getPublic, tempKey1.getPublic))

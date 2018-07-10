@@ -45,7 +45,7 @@ class SignTest extends FlatSpec {
 
     val tx = createTransactionSafe("a", "b", 1L, kp)
     val grp = KryoSerializer.serializeGrouped(tx)
-    val res = KryoSerializer.deserializeGrouped(grp.toList).asInstanceOf[TX]
+    val res = KryoSerializer.deserializeGrouped(grp.toList).asInstanceOf[Transaction]
     assert(res.txData.validSignatures)
 
   }
@@ -57,7 +57,7 @@ class SignTest extends FlatSpec {
     val grp = KryoSerializer.serializeGrouped(tx)
 
     val hs = HandShakeMessage(HandShake(
-      Peer(Id(kp.getPublic.encoded), Fixtures.address, Fixtures.address).signed()(kp), Fixtures.address
+      Peer(Id(kp.getPublic.encoded), Some(Fixtures.address), Some(Fixtures.address)).signed()(kp), Fixtures.address
     ).signed()(kp))
 
     val j1 = hs.json
@@ -77,7 +77,7 @@ class SignTest extends FlatSpec {
     val kp = makeKeyPair()
 
     val hs = HandShakeMessage(HandShake(
-      Peer(Id(kp.getPublic.encoded), Fixtures.address, Fixtures.address).signed()(kp), Fixtures.address
+      Peer(Id(kp.getPublic.encoded), Some(Fixtures.address), Some(Fixtures.address)).signed()(kp), Fixtures.address
     ).signed()(kp))
 
     assert(hs.handShake.validSignatures)

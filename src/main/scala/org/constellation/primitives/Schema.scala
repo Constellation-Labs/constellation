@@ -4,6 +4,7 @@ package org.constellation.primitives
 import java.net.InetSocketAddress
 import java.security.PublicKey
 
+import cats.kernel.Monoid
 import constellation.pubKeyToAddress
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.Base58
@@ -23,7 +24,7 @@ object Schema {
 
   case class TransactionQueryResponse(
                                        hash: String,
-                                       tx: Option[TX],
+                                       tx: Option[Transaction],
                                        observed: Boolean,
                                        inMemPool: Boolean,
                                        confirmed: Boolean,
@@ -53,6 +54,8 @@ object Schema {
   // I.e. equivalent to number of sat per btc
   val NormalizationFactor: Long = 1e8.toLong
 
+  case class BundleHashQueryResponse(hash: String, sheaf: Option[Sheaf], transactions: Seq[Transaction])
+
   case class SendToAddress(
                             dst: String,
                             amount: Long,
@@ -77,7 +80,7 @@ object Schema {
 
   sealed trait Fiber
 
-  case class TXData(
+  case class TransactionData(
                      src: String,
                      dst: String,
                      amount: Long,
@@ -90,7 +93,7 @@ object Schema {
       s"AMOUNT: $normalizedAmount"
 
     def srcLedgerBalance(ledger: TrieMap[String, Long]): Long = {
-      ledger.getOrElse(this.src, 0)
+      ledger.getOrElse(src, 0)
     }
 
     def ledgerValid(ledger: TrieMap[String, Long]): Boolean = {
@@ -107,8 +110,8 @@ object Schema {
 
   }
 
-  case class TX(
-                 txData: Signed[TXData]
+  case class Transaction(
+                 txData: Signed[TransactionData]
                ) extends Fiber with GossipMessage with ProductHash with RemoteMessage {
     def valid: Boolean = txData.valid
   }
@@ -144,19 +147,34 @@ object Schema {
 
   // TODO: Change options to ResolvedBundleMetaData
 
-  case class BundleMetaData(
+
+  /**
+    * Local neighborhood data about a bundle
+    * @param bundle : The raw bundle as embedded in the chain
+    * @param height : Main Chain height
+    * @param reputations : Raw heuristic score calculated from previous parent bundle
+    * @param totalScore : Total score of entire chain including this bundle
+    * @param rxTime : Local node receipt time
+    * @param transactionsResolved : Whether or not the transaction hashes have been resolved.
+    */
+  case class Sheaf(
                              bundle: Bundle,
                              height: Option[Int] = None,
                              reputations: Map[String, Long] = Map(),
                              totalScore: Option[Double] = None,
                              rxTime: Long = System.currentTimeMillis(),
-                             transactionsResolved: Boolean = false
+                             transactionsResolved: Boolean = false,
+                             parent: Option[Bundle] = None,
+                             child: Option[Bundle] = None,
+                             pendingChildren: Option[Seq[Bundle]] = None,
+                             neighbors: Option[Seq[Sheaf]] = None
                            ) {
+    def safeBundle = Option(bundle)
     def isResolved: Boolean = reputations.nonEmpty && transactionsResolved
   }
 
   final case class PeerSyncHeartbeat(
-                                      maxBundleMeta: BundleMetaData,
+                                      maxBundleMeta: Sheaf,
                                       validLedger: Map[String, Long]
                                     ) extends GossipMessage with RemoteMessage {
     def safeMaxBundle = Option(maxBundle)
@@ -370,7 +388,7 @@ object Schema {
   final case object InternalHeartbeat extends InternalCommand
   final case object InternalBundleHeartbeat extends InternalCommand
 
-  final case class ValidateTransaction(tx: TX) extends InternalCommand
+  final case class ValidateTransaction(tx: Transaction) extends InternalCommand
 
   trait DownloadMessage
 
@@ -378,12 +396,12 @@ object Schema {
   case class DownloadResponse(
                                maxBundle: Bundle,
                                genesisBundle: Bundle,
-                               genesisTX: TX
+                               genesisTX: Transaction
                              ) extends DownloadMessage with RemoteMessage
 
-  final case class SyncData(validTX: Set[TX], memPoolTX: Set[TX]) extends GossipMessage with RemoteMessage
+  final case class SyncData(validTX: Set[Transaction], memPoolTX: Set[Transaction]) extends GossipMessage with RemoteMessage
 
-  case class MissingTXProof(tx: TX, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage with RemoteMessage
+  case class MissingTXProof(tx: Transaction, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage with RemoteMessage
 
   final case class RequestTXProof(txHash: String) extends GossipMessage with RemoteMessage
 
@@ -420,19 +438,20 @@ object Schema {
   case class HandShakeResponse(
                                 original: Signed[HandShake],
                                 response: HandShake,
-                                detectedRemote: InetSocketAddress
+                                lastObservedExternalAddress: Option[InetSocketAddress] = None
                               ) extends ProductHash with RemoteMessage
 
   case class Peer(
                    id: Id,
-                   externalAddress: InetSocketAddress,
-                   apiAddress: InetSocketAddress,
-                   remotes: Set[InetSocketAddress] = Set()
+                   externalAddress: Option[InetSocketAddress],
+                   apiAddress: Option[InetSocketAddress],
+                   remotes: Seq[InetSocketAddress] = Seq()
                  ) extends ProductHash
 
   case class LocalPeerObservation(
+                                   address: String,
                                    mostRecentSignedPeer: Signed[Peer],
-                                   additionalRemotes: Set[InetSocketAddress] = Set(),
+                                   updatedPeer: Peer,
                                    lastRXTime: Long = System.currentTimeMillis()
                                  )
 
@@ -449,18 +468,18 @@ object Schema {
                                   ) extends ProductHash
 
 
-  final case class ConflictDetectedData(detectedOn: TX, conflicts: Seq[TX]) extends ProductHash
+  final case class ConflictDetectedData(detectedOn: Transaction, conflicts: Seq[Transaction]) extends ProductHash
 
   final case class ConflictDetected(conflict: Signed[ConflictDetectedData]) extends ProductHash with GossipMessage
 
-  final case class VoteData(accept: Seq[TX], reject: Seq[TX]) extends ProductHash {
+  final case class VoteData(accept: Seq[Transaction], reject: Seq[Transaction]) extends ProductHash {
     // used to determine what voting round we are talking about
     def voteRoundHash: String = {
       accept.++(reject).sortBy(t => t.hashCode()).map(f => f.hash).mkString("-")
     }
   }
 
-  final case class VoteCandidate(tx: TX, gossip: Seq[Gossip[ProductHash]])
+  final case class VoteCandidate(tx: Transaction, gossip: Seq[Gossip[ProductHash]])
 
   final case class VoteDataSimpler(accept: Seq[VoteCandidate], reject: Seq[VoteCandidate]) extends ProductHash
 

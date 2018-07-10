@@ -1,6 +1,6 @@
 package org.constellation.primitives
 
-import org.constellation.primitives.Schema.{Id, TX}
+import org.constellation.primitives.Schema.{Id, Transaction}
 
 import scala.collection.concurrent.TrieMap
 
@@ -11,7 +11,7 @@ trait Ledger extends NodeData {
 
   def selfBalance: Option[Long] = validLedger.get(id.address.address)
 
-  def validateTransactionBatch(txs: Set[TX], ledger: TrieMap[String, Long]): Boolean = {
+  def validateTransactionBatch(txs: Set[Transaction], ledger: TrieMap[String, Long]): Boolean = {
     txs.toSeq.map { tx =>
       val dat = tx.txData.data
       dat.src -> dat.amount
@@ -24,7 +24,7 @@ trait Ledger extends NodeData {
     }
   }
 
-  def validateTXBatch(txs: Set[TX]): Boolean =
+  def validateTXBatch(txs: Set[Transaction]): Boolean =
     validateTransactionBatch(txs, memPoolLedger) &&
       validateTransactionBatch(txs, validLedger)
 
