@@ -8,7 +8,7 @@ import cats.kernel.Monoid
 import constellation.pubKeyToAddress
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.Base58
-import org.constellation.util.{EncodedPublicKey, HashSignature, ProductHash, Signed}
+import org.constellation.util._
 
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
@@ -171,11 +171,18 @@ object Schema {
                            ) {
     def safeBundle = Option(bundle)
     def isResolved: Boolean = reputations.nonEmpty && transactionsResolved
+    def cellKey: CellKey = CellKey(bundle.extractParentBundleHash.pbHash, bundle.maxStackDepth)
   }
+
+  case class CellKey(hashPointer: String, depth: Int)
+
+  case class Cell(members: List[Sheaf])
+
 
   final case class PeerSyncHeartbeat(
                                       maxBundleMeta: Sheaf,
-                                      validLedger: Map[String, Long]
+                                      validLedger: Map[String, Long],
+                                      id: Id
                                     ) extends GossipMessage with RemoteMessage {
     def safeMaxBundle = Option(maxBundle)
     def maxBundle: Bundle = maxBundleMeta.bundle
@@ -448,12 +455,14 @@ object Schema {
                    remotes: Seq[InetSocketAddress] = Seq()
                  ) extends ProductHash
 
-  case class LocalPeerObservation(
-                                   address: String,
-                                   mostRecentSignedPeer: Signed[Peer],
-                                   updatedPeer: Peer,
-                                   lastRXTime: Long = System.currentTimeMillis()
-                                 )
+  case class LocalPeerData(
+                          // initialAddAddress: String
+                            //    mostRecentSignedPeer: Signed[Peer],
+                            //    updatedPeer: Peer,
+                            //    lastRXTime: Long = System.currentTimeMillis(),
+                            apiClient: APIClient
+                          )
+
 
 
 

@@ -164,6 +164,13 @@ class API(
           } ~
           path("metrics") {
             complete(Metrics(Map(
+              "numDBGets" -> numDBGets.toString,
+              "numDBPuts" -> numDBPuts.toString,
+              "numDBDeletes" -> numDBDeletes.toString,
+              "numTXRemovedFromMemory" -> numTXRemovedFromMemory.toString,
+              "numSubBundleHashesRemovedFromMemory" -> numSubBundleHashesRemovedFromMemory.toString,
+              "numSheafInMemory" -> bundleToSheaf.size.toString,
+              "udpPacketGroupSize" -> udpPacketGroupSize.toString,
               "address" -> selfAddress.address,
               "balance" -> (selfIdBalance.getOrElse(0L) / Schema.NormalizationFactor).toString,
               "id" -> id.b58,
@@ -363,7 +370,7 @@ class API(
           path("dashboard") {
 
             val transactions = last100ValidBundleMetaData.reverse.take(20)
-              .flatMap { z => lookupBundle(z).map {
+              .flatMap { z => lookupSheaf(z).map {
                 _.bundle
               }
               }.map(b => {
@@ -402,19 +409,24 @@ class API(
           serveMainPage
       } ~
         post {
+          path("peerHeartbeat") {
+            entity(as[PeerSyncHeartbeat]) { psh =>
+              complete(StatusCodes.OK)
+            }
+          } ~
           path("sendToAddress") {
             entity(as[SendToAddress]) { s =>
               handleSendRequest(s)
             }
           } ~
-            path("db") {
+ /*           path("db") {
               entity(as[String]) { e: String =>
                 import constellation.EasyFutureBlock
                 val cleanStr = e.replaceAll('"'.toString, "")
                 val res = db.get(cleanStr)
                 complete(res)
               }
-            } ~
+            } ~*/
             path("tx") {
               entity(as[Transaction]) { tx =>
                 peerToPeerActor ! tx

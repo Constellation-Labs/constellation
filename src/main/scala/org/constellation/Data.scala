@@ -17,7 +17,7 @@ class Data extends MetricsExt
   var confirmWindow : Int = 20
 
   def restartNode(): Unit = {
-    restartDB()
+ //   restartDB()
     genesisBundle = None
     downloadMode = true
     validLedger.clear()
@@ -26,10 +26,11 @@ class Data extends MetricsExt
     syncPendingBundleHashes = Set()
     signedPeerLookup.clear()
     memPool = Set()
-    activeDAGBundles = Seq()
+    activeDAGManager.activeSheafs = Seq()
+    activeDAGManager.cellKeyToCell.clear()
     maxBundleMetaData = null
     txHashToTX.clear()
-    bundleToBundleMeta.clear()
+    bundleToSheaf.clear()
     last10000ValidTXHash = Seq()
     last100ValidBundleMetaData = Seq()
     resetMetrics()

@@ -14,6 +14,7 @@ import scala.collection.mutable
 import scala.util.Random
 import org.constellation.serializer.KryoSerializer._
 import constellation._
+import org.constellation.Data
 
 // Consider adding ID to all UDP messages? Possibly easier.
 case class UDPMessage(data: Any, remote: InetSocketAddress)
@@ -29,7 +30,9 @@ case object GetPacketGroups
 // Need to catch alert messages to detect socket closure.
 class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
                port: Int = 16180,
-               bindInterface: String = "0.0.0.0") extends Actor {
+               bindInterface: String = "0.0.0.0",
+               dao: Option[Data] = None
+              ) extends Actor {
 
   import context.system
 
@@ -70,6 +73,10 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
     case GetPacketGroups => sender() ! packetGroups
 
     case Udp.Received(data, remote) =>
+
+      dao.foreach { d =>
+        d.udpPacketGroupSize = packetGroups.size
+      }
 
       if (bannedIPs.contains(remote)) {
         println(s"BANNED MESSAGE DETECTED FROM $remote")

@@ -33,6 +33,7 @@ trait NodeData {
   @volatile var apiAddress: Option[InetSocketAddress] = None
   var remotes: Seq[InetSocketAddress] = Seq()
   def selfPeer: Signed[Peer] = Peer(id, externalAddress, apiAddress, remotes).signed()
+/*
 
   @volatile var db: LevelDB = _
 
@@ -44,10 +45,11 @@ trait NodeData {
     }
     db = new LevelDB(new File(tmpDirId, "db"))
   }
+*/
 
   def updateKeyPair(kp: KeyPair): Unit = {
     keyPair = kp
-    restartDB()
+    //restartDB()
   }
 
 }

@@ -1,7 +1,10 @@
 package org.constellation
 
 import java.io.File
+import java.security.PublicKey
 
+import akka.actor.{Actor, ActorRef, ActorSystem}
+import akka.util.Timeout
 import org.constellation.util.ProductHash
 
 import scala.util.Try
@@ -9,11 +12,61 @@ import org.iq80.leveldb._
 import org.iq80.leveldb.impl.Iq80DBFactory._
 import constellation.SerExt
 import constellation.ParseExt
+import org.constellation.LevelDB.RestartDB
+import org.constellation.serializer.KryoSerializer
+
 import scala.tools.nsc.io.{File => SFile}
 
 // https://doc.akka.io/docs/akka/2.5/persistence-query-leveldb.html
 
 import constellation._
+
+object LevelDB {
+
+  case object RestartDB
+  case class DBGet(key: String)
+  case class DBPut(key: String, obj: AnyRef)
+  case class DBDelete(key: String)
+
+
+}
+
+import LevelDB._
+
+class LevelDBActor(dao: Data)(implicit timeoutI: Timeout) extends Actor {
+
+  var db: LevelDB = _
+
+  def tmpDirId = new File("tmp", dao.id.medium)
+  def mkDB = db = new LevelDB(new File(tmpDirId, "db"))
+
+  def restartDB(): Unit = {
+    Try {
+      db.destroy()
+    }
+    mkDB
+  }
+
+  mkDB
+
+  override def receive: Receive = {
+    case RestartDB =>
+      restartDB()
+    case DBGet(key) =>
+      dao.numDBGets += 1
+      val res = db.getBytes(key).map {KryoSerializer.deserialize}
+      sender() ! res
+    case DBPut(key, obj) =>
+      dao.numDBPuts += 1
+      val bytes = KryoSerializer.serializeAnyRef(obj)
+      db.putBytes(key, bytes)
+    case DBDelete(key) =>
+      dao.numDBDeletes += 1
+      sender() ! db.delete(key).isSuccess
+  }
+
+}
+// Only need to implement kryo get / put
 
 class LevelDB(val file: File) {
   val options = new Options()
