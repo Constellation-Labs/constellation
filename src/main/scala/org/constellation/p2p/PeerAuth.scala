@@ -47,7 +47,7 @@ trait PeerAuth {
     HandShake(selfPeer, peerAddressOrRemote, peers.toSet,  requestExternalAddressCheck)
   }
 
-  def initiatePeerHandshake(peerAddress: InetSocketAddress): StatusCode = {
+  def initiatePeerHandshake(peerAddress: InetSocketAddress, useRest: Boolean = false): StatusCode = {
     import akka.pattern.ask
     val banList = (udpActor ? GetBanList).mapTo[Seq[InetSocketAddress]].get()
     if (!banList.contains(peerAddress)) {
