@@ -4,6 +4,7 @@ import java.io.File
 import java.util.concurrent.{ForkJoinPool, TimeUnit}
 
 import akka.actor.ActorSystem
+import scala.concurrent.duration._
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import akka.util.Timeout
@@ -32,22 +33,48 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     val totalNumNodes = 3
 
-    // Cleanup DBs
-    import scala.tools.nsc.io.{File => SFile}
-    val tmpDir = new File("tmp")
-    Try{SFile(tmpDir).deleteRecursively()}
+    val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false)
+
+    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true))
+
+    val apis = nodes.map{_.api}
+
+    val sim = new Simulation(apis)
+
+    sim.run(1.0, false, apis)
+
+    assert(true)
+  }
+
+  "E2E Multiple Nodes" should "handle adding a node while the cluster is running" in {
+
+    val totalNumNodes = 3
 
     val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false)
 
     val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true))
 
     val apis = nodes.map{_.api}
-    val sim = new Simulation(apis)
-    sim.run(attemptSetExternalIP = false)
 
-    // Cleanup DBs
-    import scala.tools.nsc.io.{File => SFile}
-    Try{SFile(tmpDir).deleteRecursively()}
+    val sim = new Simulation(apis)
+
+    val validTxs = sim.run(1.0, false, apis)
+
+    val newNode = TestNode(heartbeatEnabled = true).api
+
+    val updatedNodes = apis :+ newNode
+
+    sim.runHealthCheck(Seq(newNode))
+
+    sim.setIdLocal(Seq(newNode))
+
+    val results = sim.addPeers(updatedNodes)
+
+    Await.result(Future.sequence(results), 60.seconds)
+
+    assert(sim.verifyPeersAdded(updatedNodes))
+
+    assert(sim.validateRun(validTxs, 1.0, updatedNodes))
 
     assert(true)
   }

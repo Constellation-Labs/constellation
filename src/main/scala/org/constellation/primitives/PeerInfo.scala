@@ -32,5 +32,4 @@ trait PeerInfo {
 
   def peers: Seq[Signed[Peer]] = signedPeerLookup.values.toSeq.distinct
 
-
 }

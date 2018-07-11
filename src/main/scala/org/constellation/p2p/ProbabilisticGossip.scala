@@ -16,64 +16,80 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
   import data._
 
   def handleGossip(gm : GossipMessage, remote: InetSocketAddress): Unit = {
+
     totalNumGossipMessages += 1
+
     val rid = signedPeerLookup.get(remote).map{_.data.id}
+
     gm match {
       case BatchBundleHashRequest(hashes) =>
+
         hashes.foreach{h =>
-          /// println("Sending BundleMetaData to peer on request")
           lookupBundle(h).foreach{
             b =>
               // TODO: Send all meta for sync conflict detection.
               udpActor ! UDPSend(b.bundle, remote)
           }
         }
+
       case BatchTXHashRequest(hashes) =>
+
         hashes.foreach{h =>
-          //  println(s"Sending tx hash response $h")
           lookupTransaction(h).foreach{
             b =>
               udpActor ! UDPSend(b, remote)
           }
         }
+
       case b: Bundle =>
         handleBundle(b)
+
       case tx: Transaction =>
-        //  println(s"Rx tx hash ${tx.short}")
+
         if (lookupTransaction(tx.hash).isEmpty) {
           storeTransaction(tx)
           numSyncedTX += 1
         }
+
         syncPendingTXHashes -= tx.hash
         txSyncRequestTime.remove(tx.hash)
 
       case bb: PeerSyncHeartbeat =>
+
         handleBundle(bb.maxBundle)
+
         rid.foreach{ r =>
           peerSync(r) = bb
         }
 
       case g : Gossip[_] =>
       // handleGossipRegular(g, remote)
+
       case x =>
         logger.debug("Unrecognized gossip message " + x)
     }
   }
 
   def gossipHeartbeat(): Unit = {
+    // Gather any missing transaction or bundle data
     dataRequest()
-    if (!downloadMode && genesisBundle.nonEmpty && maxBundleMetaData.nonEmpty && !downloadInProgress) {
+
+    // If we have enough data to participate in consensus then tell our peers about our chain state
+    if (!downloadMode && genesisBundle.nonEmpty
+      && maxBundleMetaData.nonEmpty && !downloadInProgress) {
       bundleHeartbeat()
     }
   }
 
-
   def bundleHeartbeat(): Unit = {
-
+    // Bootstrap the initial genesis tx
     acceptInitialDistribution()
 
+    // Lookup from db or ask peers for peer bundle data that is missing
     attemptResolvePeerBundles()
 
+    // TODO: should probably be less disruptive then just restarting
+    // check if we are far behind, if so re-sync
     peerSync.foreach{
       _._2.maxBundleMeta.height.foreach{
         h =>
@@ -86,43 +102,45 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       }
     }
 
-    if (generateRandomTX) simulateTransactions()
+    // TODO: remove, should only live within the test context
+    if (generateRandomTX) {
+      simulateTransactions()
+    }
 
+    // Tell peers about our latest best bundle and chain
     broadcast(PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap))
 
+    // Tell peers about our latest mempool state
     poolEmit()
 
+    // Compress down bundles
     combineBundles()
 
+    // clean up any bundles that have been compressed
     cleanupStrayChains()
-
   }
 
-
-
-  def simulateTransactions(): Unit = {
-    if (maxBundleMetaData.exists{_.height.get >= 5} && memPool.size < 50) {
-      //if (Random.nextDouble() < .2)
-      randomTransaction()
-      randomTransaction()
-    }
-  }
 
   def dataRequest(): Unit = {
+
+    // Request missing bundle data
     if (syncPendingBundleHashes.nonEmpty) {
-      //    println("Requesting bundle sync of " + syncPendingBundleHashes.map{_.slice(0, 5)})
       broadcast(BatchBundleHashRequest(syncPendingBundleHashes))
     }
+
+    // Request missing transaction data
     if (syncPendingTXHashes.nonEmpty) {
-      // println("Requesting data sync pending of " + syncPendingTXHashes)
-      broadcast(BatchTXHashRequest(syncPendingTXHashes))
+
+      // limit the number of transaction data we request at a time
       if (syncPendingTXHashes.size > 150) {
         val toRemove = txSyncRequestTime.toSeq.sortBy(_._2).zipWithIndex.filter{_._2 > 50}.map{_._1._1}.toSet
         syncPendingTXHashes --= toRemove
       }
+
+      // ask peers for this transaction data
+      broadcast(BatchTXHashRequest(syncPendingTXHashes))
     }
   }
-
 
   def getParentHashEmitter(stackDepthFilter: Int = minGenesisDistrSize - 1): ParentBundleHash = {
     val mb = maxBundle.get
@@ -152,7 +170,6 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       val memPoolSelSize = Random.nextInt(5)
       val memPoolSelection = Random.shuffle(filteredPool.toSeq)
         .slice(0, memPoolSelSize + minGenesisDistrSize + 1)
-
 
       if (memPoolEmit && filteredPool.nonEmpty) {
         // println(s"Mempool emit on ${id.short}")
@@ -232,6 +249,15 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       activeDAGBundles = activeDAGBundles.sortBy(z => -1*z.totalScore.get).zipWithIndex.filter{_._2 < 65}.map{_._1}
     }
 
+  }
+
+  // TODO: extract to test
+  def simulateTransactions(): Unit = {
+    if (maxBundleMetaData.exists{_.height.get >= 5} && memPool.size < 50) {
+      //if (Random.nextDouble() < .2)
+      randomTransaction()
+      randomTransaction()
+    }
   }
 
 }

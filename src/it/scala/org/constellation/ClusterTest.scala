@@ -123,8 +123,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
     val sim = new Simulation(apis)
 
-    sim.run(validationFractionAcceptable = 0.7D)
-
+    sim.run(0.7D, true, apis)
   }
 
 }

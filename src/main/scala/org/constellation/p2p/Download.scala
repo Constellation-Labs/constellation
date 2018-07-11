@@ -28,7 +28,6 @@ trait Download extends PeerAuth {
         downloadInProgress = true
         downloadMode = false
       }
-      //   lastCheckpointBundle = d.lastCheckpointBundle
       logger.debug("Downloaded data")
     }
   }

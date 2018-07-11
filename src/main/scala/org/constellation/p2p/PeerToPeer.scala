@@ -93,6 +93,7 @@ class PeerToPeer(
         }
 
         downloadHeartbeat()
+
         heartbeatRound += 1
 
         //   checkpointHeartbeat()
@@ -125,6 +126,7 @@ class PeerToPeer(
       totalNumP2PMessages += 1
 
       val authenticated = signedPeerLookup.contains(remote)
+
       if (!authenticated && !peersAwaitingAuthenticationToNumAttempts.contains(remote)) {
         logger.debug("Attempting to add unauthenticated peer")
         peersAwaitingAuthenticationToNumAttempts(remote) = 1
@@ -143,6 +145,10 @@ class PeerToPeer(
           case d: DownloadResponse => handleDownloadResponse(d)
 
           case gm: GossipMessage => handleGossip(gm, remote)
+
+          case sh: HandShakeMessage => handleHandShake(sh, remote)
+
+          case sh: HandShakeResponseMessage => handleHandShakeResponse(sh, remote)
 
           case u => logger.error(s"Unrecognized authenticated UDP message: $u")
 

@@ -63,7 +63,6 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val node3 = TestNode()
     val node4 = TestNode()
 
-
     val tx1 = createTransactionSafe(keyPair.getPublic.address, node2.configKeyPair.getPublic.address, 33L, keyPair)
 
 
