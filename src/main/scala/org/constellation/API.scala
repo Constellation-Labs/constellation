@@ -90,7 +90,7 @@ class API(
           pathPrefix("transaction") {
             get {
               extractUnmatchedPath { p =>
-             //   logger.debug(s"Unmatched path on address result $p")
+                //   logger.debug(s"Unmatched path on address result $p")
                 val ps = p.toString().tail
                 complete(lookupTransaction(ps))
               }
@@ -156,7 +156,9 @@ class API(
               val ps = p.toString().split("/").last
               //logger.debug(s"Looking up bundle hash $ps")
               val ancestors = findAncestorsUpTo(ps, Seq(), upTo = 101)
-              complete(ancestors.map{_.bundle.hash})
+              complete(ancestors.map {
+                _.bundle.hash
+              })
             }
           } ~
             path("setKeyPair") {
@@ -381,9 +383,10 @@ class API(
             path("dashboard") {
 
               val transactions = last100ValidBundleMetaData.reverse.take(20)
-                .flatMap { z => lookupSheaf(z).map {
-                  _.bundle
-                }
+                .flatMap { z =>
+                  lookupSheaf(z).map {
+                    _.bundle
+                  }
                 }.map(b => {
                 (b.extractTX.toSeq.sortBy(_.txData.time), b.extractIds.map(f => f.address.address))
               }).flatMap(t => {
@@ -504,7 +507,8 @@ class API(
                       externalHostString = ip
                       new InetSocketAddress(ip, port.toInt)
                     case a@_ => {
-                      logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a");
+                      logger.debug(s"Unmatched Array: $a");
+                      throw new RuntimeException(s"Bad Match: $a");
                     }
                   }
                   logger.debug(s"Set external IP RPC request $externalIp $addr")
@@ -515,13 +519,15 @@ class API(
               } ~
               path("reputation") {
                 entity(as[Seq[UpdateReputation]]) { ur =>
-                  secretReputation = ur.flatMap { r => r.secretReputation.map {
-                    id -> _
-                  }
+                  secretReputation = ur.flatMap { r =>
+                    r.secretReputation.map {
+                      id -> _
+                    }
                   }.toMap
-                  publicReputation = ur.flatMap { r => r.publicReputation.map {
-                    id -> _
-                  }
+                  publicReputation = ur.flatMap { r =>
+                    r.publicReputation.map {
+                      id -> _
+                    }
                   }.toMap
                   complete(StatusCodes.OK)
                 }
@@ -530,3 +536,4 @@ class API(
       }
     }
   }
+}
