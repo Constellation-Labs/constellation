@@ -160,7 +160,8 @@ class API(
                 _.bundle.hash
               })
             }
-          } ~
+          }
+        } ~
             path("setKeyPair") {
               parameter('keyPair) { kpp =>
                 logger.debug("Set key pair " + kpp)
@@ -536,4 +537,3 @@ class API(
       }
     }
   }
-}

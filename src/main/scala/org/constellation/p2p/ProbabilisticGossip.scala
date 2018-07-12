@@ -148,6 +148,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     val ids = maybeData.get.bundle.extractIds
     val lastPBWasSelf = maybeData.exists(_.bundle.bundleData.id == id)
     val selfIsFacilitator = (BigInt(pbh.pbHash, 16) % ids.size).toInt == 0
+    //val selfIsFacilitator = (BigInt(pbh.pbHash + stackSizeFilter, 16) % ids.size).toInt == 0
     val doEmit = !lastPBWasSelf && selfIsFacilitator
 
     if (!lastPBWasSelf || totalNumValidatedTX == 1) {

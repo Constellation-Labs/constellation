@@ -30,7 +30,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
   "E2E Multiple Nodes DAG" should "add peers and build DAG with transactions" in {
 
-    val totalNumNodes = 4
+    val totalNumNodes = 3
 
     // Cleanup DBs
     import scala.tools.nsc.io.{File => SFile}
