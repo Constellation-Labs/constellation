@@ -231,7 +231,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
   }
 
   def bundleCleanup(): Unit = {
-    if (heartbeatRound % 60 == 0 && last100ValidBundleMetaData.size > 3) {
+    if (heartbeatRound % 60 == 0 && last100ValidBundleMetaData.size > 50) {
      // println("Bundle cleanup")
       last100ValidBundleMetaData.slice(0, 30).foreach{
         s =>
@@ -243,8 +243,12 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
          // s.bundle.extractTXHash.foreach{ t =>
          //   removeTransactionFromMemory(t.txHash)
          // }
+
+          // Removes even the top level valid bundle after a certain period of time.
       }
     }
+
+    // There should also be
   }
 
   def cleanupStrayChains(): Unit = {

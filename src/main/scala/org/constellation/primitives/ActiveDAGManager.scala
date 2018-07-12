@@ -19,6 +19,8 @@ class ActiveDAGManager {
 
   def cleanup(height: Int): Unit = {
 
+
+    // Add stuff in here to cleanup from bundleToSheaf and DB including their sub-bundles.
     activeSheafs = activeSheafs.filter(j => j.height.get > (height - 4))
 
     if (activeSheafs.size > 80) {

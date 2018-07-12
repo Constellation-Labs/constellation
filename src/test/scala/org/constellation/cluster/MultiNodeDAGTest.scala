@@ -45,6 +45,8 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val sim = new Simulation(apis)
     sim.run(attemptSetExternalIP = false)
 
+   // Thread.sleep(1000*60*60)
+
     // Cleanup DBs
     import scala.tools.nsc.io.{File => SFile}
     Try{SFile(tmpDir).deleteRecursively()}

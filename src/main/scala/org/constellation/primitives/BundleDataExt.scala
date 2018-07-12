@@ -250,7 +250,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     val genCheck = totalNumValidatedTX == 1 || sheaf.bundle.maxStackDepth >= 2 // TODO : Possibly move this only to mempool emit
 
     if (sheaf.totalScore.get > maxBundle.get.totalScore.get && genCheck) {
-      maxBundle.synchronized {
+      maxBundleMetaData.synchronized {
         maxBundleMetaData = Some(sheaf)
         val ancestors = findAncestorsUpTo(
           sheaf.bundle.extractParentBundleHash.pbHash,
