@@ -10,6 +10,7 @@ lazy val versions = new {
   val akkaHttpCors = "0.2.2"
 }
 
+
 lazy val commonSettings = Seq(
   version := _version,
   scalaVersion := "2.12.2",
@@ -39,7 +40,17 @@ lazy val commonSettings = Seq(
     "-Dakka.io.dns.async-dns.resolve-srv=true",
     "-Dakka.io.dns.async-dns.resolv-conf=on"
   ),
-  resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases"
+  resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases",
+
+  javaOptions in Universal ++= Seq(
+    // -J params will be added as jvm parameters
+    "-J-Xmx12000m" //,
+  //  "-J-Xms4000m",
+
+    // you can access any build setting/task here
+    //s"-version=${version.value}"
+  )
+
 )
 
 lazy val coreDependencies = Seq(

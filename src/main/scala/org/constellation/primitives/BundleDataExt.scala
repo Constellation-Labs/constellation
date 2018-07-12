@@ -56,10 +56,10 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     dbActor.foreach{_ ! DBDelete(hash)}
   }
 
-  implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
 
   def lookupBundleDBFallbackBlocking(hash: String): Option[Sheaf] = {
+    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
     def dbQuery = {
       dbActor.flatMap{ d => (d ? DBGet(hash)).mapTo[Option[Sheaf]].getOpt(t=5).flatten }
     }

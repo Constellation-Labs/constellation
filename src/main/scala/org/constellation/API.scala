@@ -164,6 +164,7 @@ class API(
           } ~
           path("metrics") {
             complete(Metrics(Map(
+              "version" -> "1.0.1",
               "numDBGets" -> numDBGets.toString,
               "numDBPuts" -> numDBPuts.toString,
               "numDBDeletes" -> numDBDeletes.toString,
