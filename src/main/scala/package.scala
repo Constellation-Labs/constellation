@@ -36,6 +36,10 @@ package object constellation extends KeyUtilsExt with POWExt
       import scala.concurrent.duration._
       Await.result(f, t.seconds)
     }
+    def getOpt(t: Int = 30): Option[T] = {
+      import scala.concurrent.duration._
+      Try{Await.result(f, t.seconds)}.toOption
+    }
   }
 
   implicit def addressToSocket(peerAddress: String): InetSocketAddress =

@@ -37,7 +37,9 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
           }
         }
       case b: Bundle =>
+
         handleBundle(b)
+
       case tx: Transaction =>
         //  println(s"Rx tx hash ${tx.short}")
         if (lookupTransaction(tx.hash).isEmpty) {
@@ -48,10 +50,14 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         txSyncRequestTime.remove(tx.hash)
 
       case bb: PeerSyncHeartbeat =>
-        handleBundle(bb.maxBundle)
+
+/*        handleBundle(bb.maxBundle)
         rid.foreach{ r =>
           peerSync(r) = bb
         }
+        */
+        processPeerSyncHeartbeat(bb)
+
 
       case g : Gossip[_] =>
       // handleGossipRegular(g, remote)
@@ -88,7 +94,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
     if (generateRandomTX) simulateTransactions()
 
-    broadcast(PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap))
+    broadcast(PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap, id))
 
     poolEmit()
 
@@ -142,6 +148,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     val ids = maybeData.get.bundle.extractIds
     val lastPBWasSelf = maybeData.exists(_.bundle.bundleData.id == id)
     val selfIsFacilitator = (BigInt(pbh.pbHash, 16) % ids.size).toInt == 0
+    //val selfIsFacilitator = (BigInt(pbh.pbHash + stackSizeFilter, 16) % ids.size).toInt == 0
     val doEmit = !lastPBWasSelf && selfIsFacilitator
 
     if (!lastPBWasSelf || totalNumValidatedTX == 1) {
@@ -224,14 +231,30 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   }
 
-  def cleanupStrayChains(): Unit = {
+  def bundleCleanup(): Unit = {
+    if (heartbeatRound % 60 == 0 && last100ValidBundleMetaData.size > 50) {
+     // println("Bundle cleanup")
+      last100ValidBundleMetaData.slice(0, 30).foreach{
+        s =>
+          s.bundle.extractSubBundleHashes.foreach{
+            h =>
+              deleteBundle(h)
+          }
 
-    activeDAGBundles = activeDAGBundles.filter(j => j.height.get > (maxBundleMetaData.get.height.get - 4))
+         // s.bundle.extractTXHash.foreach{ t =>
+         //   removeTransactionFromMemory(t.txHash)
+         // }
 
-    if (activeDAGBundles.size > 80) {
-      activeDAGBundles = activeDAGBundles.sortBy(z => -1*z.totalScore.get).zipWithIndex.filter{_._2 < 65}.map{_._1}
+          // Removes even the top level valid bundle after a certain period of time.
+      }
     }
 
+    // There should also be
+  }
+
+  def cleanupStrayChains(): Unit = {
+    activeDAGManager.cleanup(maxBundleMetaData.get.height.get)
+    bundleCleanup()
   }
 
 }

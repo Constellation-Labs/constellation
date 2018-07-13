@@ -2,11 +2,14 @@ package org.constellation.primitives
 
 import java.net.InetSocketAddress
 
-import akka.actor.ActorRef
-import org.constellation.primitives.Schema.{Id, LocalPeerObservation, Peer, PeerSyncHeartbeat}
-import org.constellation.util.Signed
+import akka.actor.{ActorRef, ActorSystem}
+import akka.stream.ActorMaterializer
+import org.constellation.primitives.Schema.{Id, LocalPeerData, Peer, PeerSyncHeartbeat}
+import org.constellation.util.{APIClient, Signed}
 
 import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
+import scala.concurrent.ExecutionContextExecutor
 
 trait PeerInfo {
 
@@ -19,8 +22,24 @@ trait PeerInfo {
   val peerSync: TrieMap[Id, PeerSyncHeartbeat] = TrieMap()
 
   var p2pActor : Option[ActorRef] = None
+  var dbActor : Option[ActorRef] = None
 
-  val rawPeerLookup: TrieMap[InetSocketAddress, LocalPeerObservation] = TrieMap()
+  val rawPeerLookup: TrieMap[Id, LocalPeerData] = TrieMap()
+
+  def getOrElseUpdateAPIClient(id: Id)(
+    implicit system: ActorSystem, materialize: ActorMaterializer, executionContext: ExecutionContextExecutor
+  ): Option[APIClient] = {
+    rawPeerLookup.get(id).map{z => Some(z.apiClient)}.getOrElse {
+      val res = signedPeerIDLookup.get(id).flatMap{ p =>
+        p.data.apiAddress.map{ a =>
+          val client = new APIClient(a.getHostString, a.getPort)
+          rawPeerLookup(id) = LocalPeerData(client)
+          client
+        }
+      }
+      res
+    }
+  }
 
   val signedPeerLookup: TrieMap[InetSocketAddress, Signed[Peer]] = TrieMap()
 

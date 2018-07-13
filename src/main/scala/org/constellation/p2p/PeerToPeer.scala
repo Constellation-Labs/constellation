@@ -130,11 +130,12 @@ class PeerToPeer(
         peersAwaitingAuthenticationToNumAttempts(remote) = 1
       }
 
-      if (authenticated) {
 
-        val id = signedPeerLookup(remote).data.id
+      if (authenticated) { // && !downloadInProgress && !downloadMode
 
-        lastPeerRX(id) = System.currentTimeMillis()
+        val remoteId = signedPeerLookup(remote).data.id
+
+        lastPeerRX(remoteId) = System.currentTimeMillis()
 
         message match {
 
