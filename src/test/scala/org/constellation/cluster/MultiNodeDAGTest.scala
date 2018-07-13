@@ -29,23 +29,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
   implicit override val executionContext: ExecutionContextExecutor = system.dispatcher
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-  "E2E Multiple Nodes DAG" should "add peers and build DAG with transactions" in {
-
-    val totalNumNodes = 3
-
-    val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false)
-
-    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true))
-
-    val apis = nodes.map{_.api}
-
-    val sim = new Simulation(apis)
-
-    sim.run(1.0, false, apis)
-
-    assert(true)
-  }
-
   "E2E Multiple Nodes" should "handle adding a node while the cluster is running" in {
 
     val totalNumNodes = 3
@@ -75,6 +58,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     assert(sim.verifyPeersAdded(updatedNodes))
 
     assert(sim.validateRun(validTxs, 1.0, updatedNodes))
+   // Thread.sleep(1000*60*60)
 
     assert(true)
   }

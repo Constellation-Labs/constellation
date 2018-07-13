@@ -1,6 +1,8 @@
 package org.constellation.primitives
 
-import cats.kernel.Monoid
+import java.util.concurrent.TimeUnit
+
+import cats.Monoid
 import org.constellation.LevelDB
 import org.constellation.consensus.Consensus.{CC, RoundHash}
 import org.constellation.primitives.Schema._
@@ -8,12 +10,15 @@ import org.constellation.util.Signed
 
 import scala.collection.concurrent.TrieMap
 import constellation._
+import org.constellation.LevelDB.{DBDelete, DBGet, DBPut}
 
 import scala.util.Try
+import akka.pattern.ask
+import akka.util.Timeout
 
 trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
-  @volatile var db: LevelDB
+  // @volatile var db: LevelDB
 
   var confirmWindow : Int
 
@@ -31,7 +36,10 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
   @volatile var syncPendingBundleHashes: Set[String] = Set()
   @volatile var syncPendingTXHashes: Set[String] = Set()
 
-  @volatile var activeDAGBundles: Seq[Sheaf] = Seq()
+  val activeDAGManager = new ActiveDAGManager()
+
+ // @volatile var activeDAGBundles: Seq[Sheaf] = Seq()
+  def activeDAGBundles: Seq[Sheaf] = activeDAGManager.activeSheafs
 
   @volatile var linearCheckpointBundles: Set[Bundle] = Set[Bundle]()
   @volatile var lastCheckpointBundle: Option[Bundle] = None
@@ -39,24 +47,55 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   @volatile var txInMaxBundleNotInValidation: Set[String] = Set()
 
-  val bundleToBundleMeta : TrieMap[String, Sheaf] = TrieMap()
+  val bundleToSheaf : TrieMap[String, Sheaf] = TrieMap()
+
+  def deleteBundle(hash: String): Unit = {
+    if (bundleToSheaf.contains(hash)) {
+      numSubBundleHashesRemovedFromMemory += 1
+      bundleToSheaf.remove(hash)
+    }
+    dbActor.foreach{_ ! DBDelete(hash)}
+  }
+
+  def lookupBundleDBFallbackBlocking(hash: String): Option[Sheaf] = {
+    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+    def dbQuery = {
+      dbActor.flatMap{ d => (d ? DBGet(hash)).mapTo[Option[Sheaf]].getOpt(t=5).flatten }
+    }
+    val res = bundleToSheaf.get(hash)
+    if (res.isEmpty) dbQuery else res
+  }
 
   def lookupBundle(hash: String): Option[Sheaf] = {
     // leveldb fix here
-    bundleToBundleMeta.get(hash)
+   /* def dbQuery = {
+      dbActor.flatMap{ d => (d ? DBGet(hash)).mapTo[Option[Sheaf]].getOpt(t=5).flatten }
+    }*/
+    val res = bundleToSheaf.get(hash)
+    //if (res.isEmpty) dbQuery else res
+    res
   }
 
   def lookupBundle(bundle: Bundle): Option[Sheaf] = {
     lookupBundle(bundle.hash)
   }
 
-  def lookupBundle(bundle: Sheaf): Option[Sheaf] = {
-    lookupBundle(bundle.bundle)
+  def lookupSheaf(sheaf: Sheaf): Option[Sheaf] = {
+    lookupBundle(sheaf.bundle)
   }
 
-  def storeBundle(bundleMetaData: Sheaf): Unit = {
-    bundleToBundleMeta(bundleMetaData.bundle.hash) = bundleMetaData
+  def storeBundle(sheaf: Sheaf): Unit = {
+    val hash = sheaf.bundle.hash
+    bundleToSheaf(hash) = sheaf
+    dbActor.foreach{_ ! DBPut(hash, sheaf)}
     // Try{db.put(bundleMetaData.bundle.hash, bundleMetaData)}
+  }
+
+  def processPeerSyncHeartbeat(psh: PeerSyncHeartbeat): Unit = {
+    handleBundle(psh.maxBundle)
+    // TODO: Find ID from ip for REST and UDP
+//    psh.id.foreach{ r =>
+    peerSync(psh.id) = psh
   }
 
   implicit class BundleExtData(b: Bundle) {
@@ -139,6 +178,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   def prettifyBundle(b: Bundle): String = b.pretty
 
+  // UNSAFE
   def findAncestors(
                      parentHash: String,
                      ancestors: Seq[Sheaf] = Seq()
@@ -174,7 +214,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     } else if (parent.get.isResolved) {
       updatedAncestors
     } else {
-      findAncestors(
+      findAncestorsUpToLastResolved(
         parent.get.bundle.extractParentBundleHash.pbHash,
         updatedAncestors
       )
@@ -200,22 +240,20 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     }
   }
 
-  def updateMaxBundle(bundleMetaData: Sheaf): Unit = {
 
-    val genCheck = totalNumValidatedTX == 1 || bundleMetaData.bundle.maxStackDepth >= 2 // TODO : Possibly move this only to mempool emit
+  def updateMaxBundle(sheaf: Sheaf): Unit = {
 
-    if (bundleMetaData.totalScore.get > maxBundle.get.totalScore.get && genCheck) {
+    val genCheck = totalNumValidatedTX == 1 || sheaf.bundle.maxStackDepth >= 2 // TODO : Possibly move this only to mempool emit
 
-      maxBundle.synchronized {
-        maxBundleMetaData = Some(bundleMetaData)
-
+    if (sheaf.totalScore.get > maxBundle.get.totalScore.get && genCheck) {
+      maxBundleMetaData.synchronized {
+        maxBundleMetaData = Some(sheaf)
         val ancestors = findAncestorsUpTo(
-          bundleMetaData.bundle.extractParentBundleHash.pbHash,
+          sheaf.bundle.extractParentBundleHash.pbHash,
           upTo = 100
         )
 
-        val height = bundleMetaData.height.get
-
+        val height = sheaf.height.get
         if (height > confirmWindow) {
           if (downloadInProgress) {
             downloadInProgress = false
@@ -238,9 +276,10 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     }
 
     // Set this to be active for the combiners.
-    if (!activeDAGBundles.contains(bundleMetaData) &&
-        !bundleMetaData.bundle.extractIds.contains(id) && bundleMetaData.bundle != genesisBundle.get && !downloadMode) {
-      activeDAGBundles :+= bundleMetaData
+    if (!activeDAGBundles.contains(sheaf) &&
+      !sheaf.bundle.extractIds.contains(id) && sheaf.bundle != genesisBundle.get && !downloadMode && !downloadInProgress) {
+      activeDAGManager.acceptSheaf(sheaf)
+      //activeDAGBundles :+= bundleMetaData
     }
   }
 
@@ -252,7 +291,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
     val ancestors = findAncestorsUpToLastResolved(parentHash)
 
-    if (lookupBundle(sheaf).isEmpty) storeBundle(sheaf)
+    if (lookupSheaf(sheaf).isEmpty) storeBundle(sheaf)
 
     if (ancestors.nonEmpty) {
 
