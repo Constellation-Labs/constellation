@@ -8,6 +8,7 @@ import constellation.createTransactionSafe
 import org.constellation.LevelDB
 import org.constellation.primitives.Schema.{Id, Metrics, SendToAddress, Transaction}
 import constellation._
+import org.constellation.LevelDB.DBPut
 
 import scala.collection.concurrent.TrieMap
 import scala.util.{Random, Try}
@@ -22,6 +23,14 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
   val txSyncRequestTime : TrieMap[String, Long] = TrieMap()
   val txHashToTX : TrieMap[String, Transaction] = TrieMap()
 
+  def removeTransactionFromMemory(hash: String): Unit = {
+    if (txHashToTX.contains(hash)) {
+      numTXRemovedFromMemory += 1
+      txHashToTX.remove(hash)
+    }
+    txSyncRequestTime.remove(hash)
+  }
+
   def lookupTransaction(hash: String): Option[Transaction] = {
     // LevelDB fix here later?
     txHashToTX.get(hash)
@@ -29,6 +38,7 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
 
   def storeTransaction(tx: Transaction): Unit = {
     txHashToTX(tx.hash) = tx
+    dbActor.foreach{_ ! DBPut(tx.hash, tx)}
    // Try{db.put(tx)}
   }
 

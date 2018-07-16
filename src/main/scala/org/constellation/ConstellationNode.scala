@@ -110,9 +110,14 @@ class ConstellationNode(
     data.apiAddress = Some(new InetSocketAddress(hostName, httpPort))
   }
 
+  val dbActor: ActorRef =  system.actorOf(
+    Props(new LevelDBActor(data)), s"ConstellationDBActor_$publicKeyHash"
+  )
+
+
   val udpActor: ActorRef =
     system.actorOf(
-      Props(new UDPActor(None, udpPort, udpInterface)), s"ConstellationUDPActor_$publicKeyHash"
+      Props(new UDPActor(None, udpPort, udpInterface, Some(data))), s"ConstellationUDPActor_$publicKeyHash"
     )
 
   val consensusActor: ActorRef = system.actorOf(
@@ -125,6 +130,7 @@ class ConstellationNode(
     (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
   data.p2pActor = Some(peerToPeerActor)
+  data.dbActor = Some(dbActor)
 
   private val register = RegisterNextActor(peerToPeerActor)
 
