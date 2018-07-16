@@ -37,7 +37,7 @@ object ClusterDebug extends TestKit(ActorSystem("ClusterTest")){
       r
     }
 
-    val sim = new Simulation(rpcs)
+    val sim = new Simulation()
 
     sim.setIdLocal(rpcs)
 

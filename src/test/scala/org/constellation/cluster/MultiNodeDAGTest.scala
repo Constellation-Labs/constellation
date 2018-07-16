@@ -4,6 +4,7 @@ import java.io.File
 import java.util.concurrent.{ForkJoinPool, TimeUnit}
 
 import akka.actor.ActorSystem
+
 import scala.concurrent.duration._
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
@@ -12,71 +13,75 @@ import constellation._
 import org.constellation.ConstellationNode
 import org.constellation.primitives.Schema._
 import org.constellation.util.{Simulation, TestNode}
-import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
+import org.scalatest._
 
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
-
 class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
-  with AsyncFlatSpecLike with Matchers with BeforeAndAfterAll {
+  with Matchers with WordSpecLike with BeforeAndAfterEach {
 
-  override def afterAll {
+  override def afterEach() {
     TestKit.shutdownActorSystem(system)
   }
 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
-  implicit override val executionContext: ExecutionContextExecutor = system.dispatcher
+  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-  "E2E Multiple Nodes DAG" should "add peers and build DAG with transactions" in {
+  "Multiple Constellation Nodes" when {
 
-    val totalNumNodes = 3
+    "running consensus" should {
 
-    val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false)
+      val totalNumNodes = 3
 
-    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true))
+      val n1 = TestNode(heartbeatEnabled = true, randomizePorts = true)
 
-    val apis = nodes.map{_.api}
+      val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true))
 
-    val sim = new Simulation(apis)
+      val apis = nodes.map{_.api}
 
-    sim.run(1.0, false, apis)
+      val sim = new Simulation()
 
-    assert(true)
-  }
+      var validTxs = Set[Transaction]()
 
-  "E2E Multiple Nodes" should "handle adding a node while the cluster is running" in {
+      val connectedNodes = sim.connectNodes(false, true, apis)
 
-    val totalNumNodes = 3
+      "handle random transactions with a stable set of nodes" in {
 
-    val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false)
+        val start = System.currentTimeMillis()
 
-    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true))
+        validTxs = sim.sendRandomTransactions(20, apis)
 
-    val apis = nodes.map{_.api}
+        assert(sim.validateRun(validTxs, 1.0, apis))
 
-    val sim = new Simulation(apis)
+        val end = System.currentTimeMillis()
 
-    val validTxs = sim.run(1.0, false, apis)
+        println(s"Completion time seconds: ${(end-start) / 1000}")
 
-    val newNode = TestNode(heartbeatEnabled = true).api
+        assert(true)
+      }
 
-    val updatedNodes = apis :+ newNode
+      "handle adding a node to an existing cluster" in {
+        val start = System.currentTimeMillis()
 
-    sim.runHealthCheck(Seq(newNode))
+        val newNode = TestNode(heartbeatEnabled = true).api
 
-    sim.setIdLocal(Seq(newNode))
+        val updatedNodes = apis :+ newNode
 
-    val results = sim.addPeers(updatedNodes)
+        sim.connectNodes(false, false, updatedNodes)
 
-    Await.result(Future.sequence(results), 60.seconds)
+        assert(sim.validateRun(validTxs, 1.0, updatedNodes))
 
-    assert(sim.verifyPeersAdded(updatedNodes))
+        assert(true)
 
-    assert(sim.validateRun(validTxs, 1.0, updatedNodes))
+        val end = System.currentTimeMillis()
 
-    assert(true)
+        println(s"Completion time seconds: ${(end-start) / 1000}")
+      }
+
+    }
+
   }
 
 }

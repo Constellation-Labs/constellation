@@ -143,7 +143,7 @@ class ConstellationNode(
     peerToPeerActor, consensusActor, udpAddress, data, jsPrefix = jsPrefix)(executionContext, timeout).routes
 
   // Setup http server for rpc
-  Http().bindAndHandle(routes, httpInterface, httpPort)
+  val bindingFuture = Http().bindAndHandle(routes, httpInterface, httpPort)
 
   // TODO : Move to separate test class - these are within jvm only but won't hurt anything
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
@@ -151,12 +151,17 @@ class ConstellationNode(
   val api = new APIClient(port=httpPort)
   api.id = id
   api.udpPort = udpPort
+
   def healthy: Boolean = Try{api.getSync("health").status == StatusCodes.OK}.getOrElse(false)
   def add(other: ConstellationNode): HttpResponse = api.postSync("peer", other.udpAddressString)
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind
     peerToPeerActor ! ToggleHeartbeat
+
+    bindingFuture
+      .flatMap(_.unbind())
+      .onComplete(_ => system.terminate())
   }
 
 }

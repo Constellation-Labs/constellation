@@ -121,9 +121,13 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       new APIClient(ip, 9000)
     }
 
-    val sim = new Simulation(apis)
+    val sim = new Simulation()
 
-    sim.run(0.7D, true, apis)
+    sim.connectNodes(true, true, apis)
+
+    val validTxs = sim.sendRandomTransactions(20, apis)
+
+    assert(sim.validateRun(validTxs, 1.0, apis))
   }
 
 }

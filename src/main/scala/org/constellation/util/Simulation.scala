@@ -10,7 +10,7 @@ import constellation._
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
 
-class Simulation(apis: Seq[APIClient]) {
+class Simulation {
 
   implicit val ec: ExecutionContextExecutorService =
     ExecutionContext.fromExecutorService(new ForkJoinPool(100))
@@ -28,18 +28,25 @@ class Simulation(apis: Seq[APIClient]) {
   def verifyGenesisReceived(apis: Seq[APIClient]): Boolean = {
     apis.forall { a =>
       val gbmd = a.getBlocking[Metrics]("metrics")
-      gbmd.metrics("numValidBundles").toInt == 1
+      gbmd.metrics("numValidBundles").toInt >= 1
     }
   }
 
   def genesis(apis: Seq[APIClient]): Unit = {
     val r1 = apis.head
+
     // Create a genesis transaction
     val numCoinsInitial = 4e9.toLong
     val genTx = r1.getBlocking[Transaction]("genesis/" + numCoinsInitial)
+
     Thread.sleep(2000)
+
     val gbmd = r1.getBlocking[Metrics]("metrics")
-    assert(gbmd.metrics("numValidBundles").toInt == 1)
+
+    val numValidBundles = gbmd.metrics("numValidBundles").toInt
+
+    assert(numValidBundles == 1)
+
     // JSON parsing error, needs to be fixed
     /*
     val gbmd = r1.getBlocking[Seq[BundleMetaData]]("bundles")
@@ -92,7 +99,7 @@ class Simulation(apis: Seq[APIClient]) {
     println("Initial distribution")
     println("-"*10)
 
-    apis.tail.map{ n =>
+    apis.map{ n =>
       val dst = n.id.address.address
       val s = SendToAddress(dst, 1e7.toLong)
       apis.head.postRead[Transaction]("sendToAddress", s)
@@ -154,7 +161,13 @@ class Simulation(apis: Seq[APIClient]) {
     done
   }
 
-  def nonEmptyBalance(apis: Seq[APIClient]): Boolean = apis.forall(_.getBlockingStr("balance").toLong > 0L)
+  def nonEmptyBalance(apis: Seq[APIClient]): Boolean = {
+    apis.forall(f => {
+      val balance = f.getBlockingStr("balance").toLong
+
+      balance > 0L
+    })
+  }
 
   var healthChecks = 0
 
@@ -172,7 +185,9 @@ class Simulation(apis: Seq[APIClient]) {
     assert(healthy(apis))
   }
 
-  def run(validationFractionAcceptable: Double = 1.0, attemptSetExternalIP: Boolean = true, apis: Seq[APIClient]): Set[Transaction] = {
+  def connectNodes(attemptSetExternalIP: Boolean = true,
+                   initGenesis: Boolean = true,
+                   apis: Seq[APIClient]): Seq[APIClient] = {
 
     runHealthCheck(apis)
 
@@ -182,7 +197,9 @@ class Simulation(apis: Seq[APIClient]) {
       assert(setExternalIP(apis))
     }
 
-    genesis(apis)
+    if (initGenesis) {
+      genesis(apis)
+    }
 
     val results = addPeers(apis)
 
@@ -194,12 +211,13 @@ class Simulation(apis: Seq[APIClient]) {
 
     assert(verifyGenesisReceived(apis))
 
-    initialDistributionTX(apis)
+    val txs = initialDistributionTX(apis)
 
-    Thread.sleep(5000)
+    Thread.sleep(10000)
 
     assert(nonEmptyBalance(apis))
 
+    /*
     val start = System.currentTimeMillis()
 
     val txs: Set[Transaction] = sendRandomTransactions(20, apis)
@@ -211,6 +229,9 @@ class Simulation(apis: Seq[APIClient]) {
     println(s"Completion time seconds: ${(end-start) / 1000}")
 
     txs
+    */
+
+    apis
   }
 
 }
