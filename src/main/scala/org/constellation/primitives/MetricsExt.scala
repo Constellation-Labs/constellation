@@ -15,11 +15,13 @@ trait MetricsExt {
   @volatile var heartbeatRound = 0L
   @volatile var totalNumP2PMessages = 0L
   @volatile var udpPacketGroupSize = 0L
-  @volatile var numSubBundleHashesRemovedFromMemory = 0L
+  @volatile var numDeletedBundles = 0L
   @volatile var numTXRemovedFromMemory = 0L
   @volatile var numDBPuts = 0L
   @volatile var numDBGets = 0L
   @volatile var numDBDeletes = 0L
+  @volatile var numMempoolEmits = 0L
+  @volatile var numValidBundleHashesRemovedFromMemory = 0L
 
   def resetMetrics(): Unit = {
 
@@ -36,11 +38,13 @@ trait MetricsExt {
     heartbeatRound = 0L
     totalNumP2PMessages = 0L
     udpPacketGroupSize = 0L
-    numSubBundleHashesRemovedFromMemory = 0L
+    numDeletedBundles = 0L
     numTXRemovedFromMemory = 0L
     numDBPuts = 0L
     numDBGets = 0L
     numDBDeletes = 0L
+    numMempoolEmits = 0L
+    numValidBundleHashesRemovedFromMemory = 0L
 
   }
 

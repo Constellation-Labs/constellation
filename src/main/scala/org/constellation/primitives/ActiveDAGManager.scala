@@ -23,9 +23,13 @@ class ActiveDAGManager {
     // Add stuff in here to cleanup from bundleToSheaf and DB including their sub-bundles.
     activeSheafs = activeSheafs.filter(j => j.height.get > (height - 4))
 
+    //activeSheafs.groupBy(z => z.bundle.ex z.bundle.maxStackDepth)
+/*
+
     if (activeSheafs.size > 80) {
       activeSheafs = activeSheafs.sortBy(z => -1*z.totalScore.get).zipWithIndex.filter{_._2 < 65}.map{_._1}
     }
+*/
 
   }
 

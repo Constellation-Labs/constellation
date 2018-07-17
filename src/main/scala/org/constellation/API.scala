@@ -178,12 +178,15 @@ class API(
             path("metrics") {
               complete(Metrics(Map(
                 "version" -> "1.0.1",
+                "numMempoolEmits" -> numMempoolEmits.toString,
                 "numDBGets" -> numDBGets.toString,
                 "numDBPuts" -> numDBPuts.toString,
                 "numDBDeletes" -> numDBDeletes.toString,
                 "numTXRemovedFromMemory" -> numTXRemovedFromMemory.toString,
-                "numSubBundleHashesRemovedFromMemory" -> numSubBundleHashesRemovedFromMemory.toString,
+                "numDeletedBundles" -> numDeletedBundles.toString,
                 "numSheafInMemory" -> bundleToSheaf.size.toString,
+                "numTXInMemory" -> txHashToTX.size.toString,
+                "numValidBundleHashesRemovedFromMemory" -> numValidBundleHashesRemovedFromMemory.toString,
                 "udpPacketGroupSize" -> udpPacketGroupSize.toString,
                 "address" -> selfAddress.address,
                 "balance" -> (selfIdBalance.getOrElse(0L) / Schema.NormalizationFactor).toString,
