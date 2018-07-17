@@ -37,13 +37,17 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val tmpDir = new File("tmp")
     Try{SFile(tmpDir).deleteRecursively()}
 
-    val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false)
+    val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false
+      , generateRandomTransactions = true
+    )
 
-    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true))
+    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true
+      , generateRandomTransactions = true
+    ))
 
     val apis = nodes.map{_.api}
     val sim = new Simulation(apis)
-    sim.run(attemptSetExternalIP = false)
+    sim.run(attemptSetExternalIP = false, validationFractionAcceptable = 0.3)
 
    // Thread.sleep(1000*60*60)
 

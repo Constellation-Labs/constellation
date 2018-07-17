@@ -83,7 +83,7 @@ class API(
               extractUnmatchedPath { p =>
                 logger.debug(s"Unmatched path on txHash result $p")
                 val ps = p.toString().tail
-                complete(lookupTransaction(ps).prettyJson)
+                complete(lookupTransactionDB(ps).prettyJson)
               }
             }
           } ~
@@ -92,7 +92,7 @@ class API(
               extractUnmatchedPath { p =>
                 //   logger.debug(s"Unmatched path on address result $p")
                 val ps = p.toString().tail
-                complete(lookupTransaction(ps))
+                complete(lookupTransactionDB(ps))
               }
             }
           } ~
@@ -103,7 +103,7 @@ class API(
                 val ps = p.toString().tail
 
                 //findAncestorsUpTo()
-                val maybeSheaf = lookupBundle(ps)
+                val maybeSheaf = lookupBundleDBFallbackBlocking(ps)
                 complete(maybeSheaf)
               }
             }
@@ -178,12 +178,15 @@ class API(
             path("metrics") {
               complete(Metrics(Map(
                 "version" -> "1.0.1",
+                "numMempoolEmits" -> numMempoolEmits.toString,
                 "numDBGets" -> numDBGets.toString,
                 "numDBPuts" -> numDBPuts.toString,
                 "numDBDeletes" -> numDBDeletes.toString,
                 "numTXRemovedFromMemory" -> numTXRemovedFromMemory.toString,
-                "numSubBundleHashesRemovedFromMemory" -> numSubBundleHashesRemovedFromMemory.toString,
+                "numDeletedBundles" -> numDeletedBundles.toString,
                 "numSheafInMemory" -> bundleToSheaf.size.toString,
+                "numTXInMemory" -> txHashToTX.size.toString,
+                "numValidBundleHashesRemovedFromMemory" -> numValidBundleHashesRemovedFromMemory.toString,
                 "udpPacketGroupSize" -> udpPacketGroupSize.toString,
                 "address" -> selfAddress.address,
                 "balance" -> (selfIdBalance.getOrElse(0L) / Schema.NormalizationFactor).toString,
