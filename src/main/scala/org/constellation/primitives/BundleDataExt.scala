@@ -62,6 +62,10 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   @volatile var lastCleanupHeight = 0
 
+  def lookupBundleDB(hash: String) : Option[Sheaf] = {
+    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+    dbActor.flatMap{ d => (d ? DBGet(hash)).mapTo[Option[Sheaf]].getOpt(t=5).flatten }
+  }
 
   def lookupBundleDBFallbackBlocking(hash: String): Option[Sheaf] = {
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)

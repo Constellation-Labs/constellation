@@ -246,9 +246,9 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
   }
 
   def bundleCleanup(): Unit = {
-    if (heartbeatRound % 30 == 0 && maxBundleMetaData.exists {
+    if (heartbeatRound % 20 == 0 && maxBundleMetaData.exists {
       _.height.exists {
-        _ > 230
+        _ > 20
       }
     }) {
 
@@ -297,23 +297,23 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
       bundleToSheaf.foreach { case (h, s) =>
 
-        val heightOld = s.height.exists(h => h < (currentHeight - 10))
+        val heightOld = s.height.exists(h => h < (currentHeight - 15))
         val partOfValidation = last100ValidBundleMetaData.contains(s) //|| ancestorsMinus100.contains(s)
-        val isOld = s.rxTime < (System.currentTimeMillis() - 60 * 1000)
+        val isOld = s.rxTime < (System.currentTimeMillis() - 120 * 1000)
         val unresolved = s.height.isEmpty && isOld
 
         def removeTX(): Unit = s.bundle.extractTXHash.foreach { txH =>
           removeTransactionFromMemory(txH.txHash)
-          if (!last10000ValidTXHash.contains(txH.txHash)) {
-            dbActor.foreach {
-              _ ! DBDelete(txH.txHash)
-            }
-          }
+        //  if (!last10000ValidTXHash.contains(txH.txHash)) {
+        //    dbActor.foreach {
+        //      _ ! DBDelete(txH.txHash)
+        //    }
+        //  }
         }
 
         if (unresolved) {
           numDeleted += 1
-          deleteBundle(h)
+          deleteBundle(h, dbDelete = false)
           removeTX()
         }
 
@@ -322,7 +322,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
           if (partOfValidation) {
             deleteBundle(h, dbDelete = false)
           } else {
-            deleteBundle(h)
+            deleteBundle(h, dbDelete = false)
           }
 
           removeTX()
@@ -352,7 +352,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   def cleanupStrayChains(): Unit = {
     activeDAGManager.cleanup(maxBundleMetaData.get.height.get)
-    // bundleCleanup()
+    bundleCleanup()
   }
 
 }

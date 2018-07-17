@@ -83,7 +83,7 @@ class API(
               extractUnmatchedPath { p =>
                 logger.debug(s"Unmatched path on txHash result $p")
                 val ps = p.toString().tail
-                complete(lookupTransaction(ps).prettyJson)
+                complete(lookupTransactionDB(ps).prettyJson)
               }
             }
           } ~
@@ -92,7 +92,7 @@ class API(
               extractUnmatchedPath { p =>
                 //   logger.debug(s"Unmatched path on address result $p")
                 val ps = p.toString().tail
-                complete(lookupTransaction(ps))
+                complete(lookupTransactionDB(ps))
               }
             }
           } ~
@@ -103,7 +103,7 @@ class API(
                 val ps = p.toString().tail
 
                 //findAncestorsUpTo()
-                val maybeSheaf = lookupBundle(ps)
+                val maybeSheaf = lookupBundleDBFallbackBlocking(ps)
                 complete(maybeSheaf)
               }
             }

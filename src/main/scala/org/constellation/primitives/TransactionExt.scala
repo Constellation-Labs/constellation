@@ -34,6 +34,16 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
   }
 
 
+  def lookupTransactionDB(hash: String): Option[Transaction] = {
+    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+    import akka.pattern.ask
+    def dbQuery = {
+      dbActor.flatMap{ d => (d ? DBGet(hash)).mapTo[Option[Transaction]].getOpt(t=5).flatten }
+    }
+    dbQuery
+  }
+
+
   def lookupTransactionDBFallbackBlocking(hash: String): Option[Transaction] = {
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
     import akka.pattern.ask
