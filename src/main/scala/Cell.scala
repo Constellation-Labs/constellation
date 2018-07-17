@@ -36,41 +36,14 @@ object Cell {
     */
   val coAlgebra: Sheaf => Cell[Sheaf] = {
     case sheaf: Sheaf =>
-//      implicit val dao: Data = sheaf.data
-//      implicit val keyPair: java.security.KeyPair = sheaf.keyPair
-//      import dao._
-//      val ancestors: Seq[BundleMetaData] = findAncestorsUpToLastResolved(sheaf.germ.bundle.extractParentBundleHash.pbHash)//TODO add optional arg in cell for parentHash
-//
+//      val ancestors = findAncestorsUpToLastResolved(sheaf.germ.bundle.extractParentBundleHash.pbHash)//TODO add optional arg in cell for parentHash
+
 //      if (lookupBundle(sheaf.germ).isEmpty) storeBundle(sheaf.germ)
 //
 //      if (ancestors.nonEmpty) {
-//
-//        val chainR = ancestors.tail ++ Seq(sheaf.germ)
-//
-//        val chain: Seq[BundleMetaData] = chainR.map {
-//          c =>
-//            val res = resolveTransactions(c.bundle.extractTXHash.map {
-//              _.txHash
-//            })
-//            // println(s"RESOLVE TRANSACTIONS: $res ${c.bundle.hash.slice(0, 5)}")
-//            c.copy(transactionsResolved = res)
-//          //if (c.transactionsResolved != res) {
-//          //            db.put(c.bundle.hash, c.copy(transactionsResolved = res))
-//          //        }
+////      TODO this is where we wordpressuld want to do Homology(sheaf, liftF(Sheaf(res))) for bundles of greater depth
+//              SingularHomology(sheaf)
 //        }
-//        val res: BundleMetaData = chain.fold(ancestors.head) {
-//          case (left, right) =>
-//
-//            if (!left.isResolved){
-//              right
-//            }
-//            else if (right.isResolved) right
-//            else {
-//              updateBundleFrom(left, right)
-//            }
-//        }
-        //TODO this is where we would want to do Homology(sheaf, liftF(Sheaf(res))) for bundles of greater depth
-//        SingularHomology(sheaf)
 //      }
       SingularHomology(sheaf)
   }
@@ -139,15 +112,3 @@ case class SingularHomology[A](sheaf: Sheaf) extends Cell[A]
   * @tparam A
   */
 case class Homology[A](sheaf: Sheaf, bundle: A) extends Cell[A]
-
-
-/**
-  * Wrapper for maintaining metadata about manifold topology. Useful for combining logic contained in product operators
-  */
-//case class Sheaf(germ: Bundle, implicit val keyPair: java.security.KeyPair = KeyUtils.makeKeyPair())
-//                (implicit val data: Data) extends Monoid[Sheaf] {//TODO call the method that invokes minhash/combine 'section' https://arxiv.org/pdf/0907.0995.pdf
-//  import data.BundleExtData
-//  def empty = Sheaf(germ)
-//  def combine(x: Sheaf, y: Sheaf = this): Sheaf = Sheaf(Bundle(BundleData(Seq(germ, x.germ)).signed()))
-//  def validManifold(l: BundleMetaData, r: BundleMetaData = this.germ): Boolean = false
-//}
