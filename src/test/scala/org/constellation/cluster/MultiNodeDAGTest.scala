@@ -49,7 +49,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val sim = new Simulation(apis)
     sim.run(attemptSetExternalIP = false, validationFractionAcceptable = 0.3)
 
-    Thread.sleep(1000*60*60)
+   // Thread.sleep(1000*60*60)
 
     // Cleanup DBs
     import scala.tools.nsc.io.{File => SFile}
