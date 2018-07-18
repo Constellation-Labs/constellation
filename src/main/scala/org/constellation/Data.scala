@@ -28,7 +28,7 @@ class Data extends MetricsExt
     memPool = Set()
     activeDAGManager.activeSheafs = Seq()
     activeDAGManager.cellKeyToCell.clear()
-    maxBundleMetaData = null
+    maxBundleMetaData = None
     txHashToTX.clear()
     bundleToSheaf.clear()
     last10000ValidTXHash = Seq()
@@ -40,6 +40,7 @@ class Data extends MetricsExt
     txInMaxBundleNotInValidation = Set()
     last100SelfSentTransactions = Seq()
     peerSync.clear()
+    deadPeers = Seq()
   }
 
 }

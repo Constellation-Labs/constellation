@@ -49,12 +49,23 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   val bundleToSheaf : TrieMap[String, Sheaf] = TrieMap()
 
-  def deleteBundle(hash: String): Unit = {
+  def deleteBundle(hash: String, dbDelete: Boolean = true): Unit = {
     if (bundleToSheaf.contains(hash)) {
-      numSubBundleHashesRemovedFromMemory += 1
+      numDeletedBundles += 1
       bundleToSheaf.remove(hash)
     }
-    dbActor.foreach{_ ! DBDelete(hash)}
+    if (dbDelete) {
+      dbActor.foreach {
+        _ ! DBDelete(hash)
+      }
+    }
+  }
+
+  @volatile var lastCleanupHeight = 0
+
+  def lookupBundleDB(hash: String) : Option[Sheaf] = {
+    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+    dbActor.flatMap{ d => (d ? DBGet(hash)).mapTo[Option[Sheaf]].getOpt(t=5).flatten }
   }
 
   def lookupBundleDBFallbackBlocking(hash: String): Option[Sheaf] = {
@@ -226,7 +237,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
                          ancestors: Seq[Sheaf] = Seq(),
                          upTo: Int = 1
                        ): Seq[Sheaf] = {
-    val parent = lookupBundle(parentHash)
+    val parent = lookupBundleDBFallbackBlocking(parentHash)
     def updatedAncestors: Seq[Sheaf] = Seq(parent.get) ++ ancestors
     if (parent.isEmpty || updatedAncestors.size >= upTo) {
       ancestors
@@ -266,12 +277,13 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
         else ancestors.slice(0, ancestors.size - confirmWindow)
 
         val newTX = last100ValidBundleMetaData.reverse
-          .slice(0, confirmWindow).flatMap(_.bundle.extractTX).toSet
-
-        txInMaxBundleNotInValidation = newTX.map{_.hash}
+          .slice(0, confirmWindow).flatMap(_.bundle.extractTXHash).toSet
+        txInMaxBundleNotInValidation = newTX.map{_.txHash}
           .filter { h => !last10000ValidTXHash.contains(h) }
 
-        newTX.foreach(t => acceptTransaction(t))
+
+        newTX.foreach(t => lookupTransactionDBFallbackBlocking(t.txHash).foreach{acceptTransaction})
+
       }
     }
 

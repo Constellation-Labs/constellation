@@ -114,7 +114,6 @@ class ConstellationNode(
     Props(new LevelDBActor(data)), s"ConstellationDBActor_$publicKeyHash"
   )
 
-
   val udpActor: ActorRef =
     system.actorOf(
       Props(new UDPActor(None, udpPort, udpInterface, Some(data))), s"ConstellationUDPActor_$publicKeyHash"

@@ -71,7 +71,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
         sim.connectNodes(false, false, updatedNodes)
 
-        assert(sim.validateRun(validTxs, 1.0, updatedNodes))
+        assert(sim.validateRun(validTxs, 0.3, updatedNodes))
 
         assert(true)
 

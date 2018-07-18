@@ -1,14 +1,16 @@
 package org.constellation.primitives
 
 import java.security.KeyPair
+import java.util.concurrent.TimeUnit
 
 import akka.http.scaladsl.server.Directives.complete
 import akka.http.scaladsl.server.StandardRoute
+import akka.util.Timeout
 import constellation.createTransactionSafe
 import org.constellation.LevelDB
-import org.constellation.primitives.Schema.{Id, Metrics, SendToAddress, Transaction}
+import org.constellation.primitives.Schema._
 import constellation._
-import org.constellation.LevelDB.DBPut
+import org.constellation.LevelDB.{DBGet, DBPut}
 
 import scala.collection.concurrent.TrieMap
 import scala.util.{Random, Try}
@@ -30,6 +32,28 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
     }
     txSyncRequestTime.remove(hash)
   }
+
+
+  def lookupTransactionDB(hash: String): Option[Transaction] = {
+    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+    import akka.pattern.ask
+    def dbQuery = {
+      dbActor.flatMap{ d => (d ? DBGet(hash)).mapTo[Option[Transaction]].getOpt(t=5).flatten }
+    }
+    dbQuery
+  }
+
+
+  def lookupTransactionDBFallbackBlocking(hash: String): Option[Transaction] = {
+    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+    import akka.pattern.ask
+    def dbQuery = {
+      dbActor.flatMap{ d => (d ? DBGet(hash)).mapTo[Option[Transaction]].getOpt(t=5).flatten }
+    }
+    val res = txHashToTX.get(hash)
+    if (res.isEmpty) dbQuery else res
+  }
+
 
   def lookupTransaction(hash: String): Option[Transaction] = {
     // LevelDB fix here later?

@@ -37,9 +37,26 @@ object ClusterDebug extends TestKit(ActorSystem("ClusterTest")){
       r
     }
 
-    val sim = new Simulation()
+/*
+    val sim = new Simulation(rpcs)
+    sim.setIdLocal()
+*/
 
-    sim.setIdLocal(rpcs)
+    rpcs.foreach {
+      _.get("restart")
+    }
+
+    rpcs.foreach {
+      _.get("restart")
+    }
+
+    rpcs.foreach {
+      _.get("restart")
+    }
+
+/*
+
+//http://35.238.29.152:9000/
 
     val n = rpcs.filter{_.host == "35.238.29.152"}.head //35.193.103.124"
 
@@ -50,6 +67,7 @@ object ClusterDebug extends TestKit(ActorSystem("ClusterTest")){
     others.foreach{ o =>
       println(n.addPeer(o.udpAddress))
     }
+*/
 
   }
 }

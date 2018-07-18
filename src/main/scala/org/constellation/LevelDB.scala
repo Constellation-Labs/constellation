@@ -54,15 +54,17 @@ class LevelDBActor(dao: Data)(implicit timeoutI: Timeout) extends Actor {
       restartDB()
     case DBGet(key) =>
       dao.numDBGets += 1
-      val res = db.getBytes(key).map {KryoSerializer.deserialize}
+      val res = Try{db.getBytes(key).map {KryoSerializer.deserialize}}.toOption.flatten
       sender() ! res
     case DBPut(key, obj) =>
       dao.numDBPuts += 1
       val bytes = KryoSerializer.serializeAnyRef(obj)
       db.putBytes(key, bytes)
     case DBDelete(key) =>
-      dao.numDBDeletes += 1
-      sender() ! db.delete(key).isSuccess
+      if (db.contains(key)) {
+        dao.numDBDeletes += 1
+        sender() ! db.delete(key).isSuccess
+      } else sender() ! true
   }
 
 }
