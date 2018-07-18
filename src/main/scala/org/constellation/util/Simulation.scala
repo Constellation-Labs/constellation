@@ -152,7 +152,8 @@ class Simulation {
       println("Pct complete " + pctComplete.map{a =>  (a*100).toString.slice(0, 4) + "%"})
 
       // This is just used to ensure processing continues
-     // if (attempts % 2 == 0) sendRandomTransaction(apis)
+      // TODO: remove this temporary requirement
+      if (attempts % 2 == 0) sendRandomTransaction(apis)
     }
 
     done

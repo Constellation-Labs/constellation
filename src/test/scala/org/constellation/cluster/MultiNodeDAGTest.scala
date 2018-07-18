@@ -68,7 +68,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
         val updatedNodes = cluster.apis :+ newNode
 
         // add the new node to the cluster
-        cluster.sim.connectNodes(false, false, updatedNodes)
+        cluster.sim.connectNodes(false, true, updatedNodes)
 
         // validate that the new node catches up and comes to consensus
         assert(cluster.sim.validateRun(validTxs, 1.0, updatedNodes))
@@ -78,7 +78,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
         // validate consensus on all of the transactions and nodes
         // TODO: investigate why this one is getting stuck
-        assert(cluster.sim.validateRun(validTxs, .5, updatedNodes))
+        assert(cluster.sim.validateRun(validTxs, .9, updatedNodes))
 
         assert(true)
       }
