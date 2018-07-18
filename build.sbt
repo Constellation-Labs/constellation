@@ -1,6 +1,7 @@
 import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 
 enablePlugins(JavaAppPackaging)
+addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 
 lazy val _version = "1.0.1"
 
@@ -80,7 +81,8 @@ lazy val coreDependencies = Seq(
   "com.twitter" %% "chill" % "0.9.1",
   "com.twitter" %% "algebird-core" % "0.13.4",
   "org.typelevel" %% "cats-core" % "1.0.1",
-  "net.glxn" % "qrgen" % "1.4"
+  "net.glxn" % "qrgen" % "1.4",
+  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources()
   // "com.esotericsoftware" % "kryo" % "4.0.2"
 )
 
@@ -92,6 +94,8 @@ lazy val testDependencies = Seq(
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
 ).map(_ % "it,test" )
+
+testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
 
 lazy val root = (project in file("."))
   .configs(IntegrationTest)
