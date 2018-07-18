@@ -106,9 +106,11 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
   }
 
 
+ // val startTime: Long = System.currentTimeMillis()
 
   def simulateTransactions(): Unit = {
-    if (maxBundleMetaData.exists{_.height.get >= 5} && memPool.size < 1500) {
+    val shouldEmit = maxBundleMetaData.exists {_.height.get >= 5} // || (System.currentTimeMillis() > startTime + 30000)
+    if (shouldEmit && memPool.size < 150) {
       //if (Random.nextDouble() < .2)
       randomTransaction()
       randomTransaction()
@@ -123,7 +125,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     if (syncPendingTXHashes.nonEmpty) {
       // println("Requesting data sync pending of " + syncPendingTXHashes)
       broadcast(BatchTXHashRequest(syncPendingTXHashes))
-      if (syncPendingTXHashes.size > 1500) {
+      if (syncPendingTXHashes.size > 300) {
         val toRemove = txSyncRequestTime.toSeq.sortBy(_._2).zipWithIndex.filter{_._2 > 50}.map{_._1._1}.toSet
         syncPendingTXHashes --= toRemove
       }

@@ -387,12 +387,9 @@ class API(
             path("dashboard") {
 
               val transactions = last100ValidBundleMetaData.reverse.take(20)
-                .flatMap { z =>
-                  lookupSheaf(z).map {
-                    _.bundle
-                  }
-                }.map(b => {
-                (b.extractTX.toSeq.sortBy(_.txData.time), b.extractIds.map(f => f.address.address))
+                .map{_.bundle}
+                .map(b => {
+                (b.extractTXDB.toSeq.sortBy(_.txData.time), b.extractIds.map(f => f.address.address))
               }).flatMap(t => {
                 t._1.map(e => TransactionSerialized(e.hash, e.txData.data.src, e.txData.data.dst, e.txData.data.normalizedAmount, t._2))
               })

@@ -133,6 +133,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
 
     def extractTX: Set[Transaction] = b.extractTXHash.flatMap{ z => lookupTransaction(z.txHash)}
+    def extractTXDB: Set[Transaction] = b.extractTXHash.flatMap{ z => lookupTransactionDBFallbackBlocking(z.txHash)}
 
     def reputationUpdate: Map[String, Long] = {
       b.extractIds.map{_.b58 -> 1L}.toMap
