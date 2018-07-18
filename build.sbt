@@ -19,11 +19,13 @@ lazy val commonSettings = Seq(
   name := "constellation",
   mainClass := Some("org.constellation.ConstellationNode"),
   parallelExecution in Test := false,
-  dockerExposedPorts := Seq(2551, 9000, 16180, 6006, 9010),
+  dockerExposedPorts := Seq(2551, 9000, 6006, 9010),
+  dockerExposedUdpPorts := Seq(16180),
   dockerCommands := dockerCommands.value.flatMap {
     case ExecCmd("ENTRYPOINT", args @ _*) => Seq(Cmd("ENTRYPOINT", args.mkString(" ")))
     case v => Seq(v)
   },
+  dockerCommands += Cmd("HEALTHCHECK", "--interval=30s", "--timeout=3s", "CMD", "curl -f http://localhost:9000/health || exit 1"),
   dockerUsername := Some("constellationlabs"),
   dockerAlias := DockerAlias(None, Some("constellationlabs"), "constellation",
     Some(sys.env.getOrElse("CIRCLE_SHA1", _version))
