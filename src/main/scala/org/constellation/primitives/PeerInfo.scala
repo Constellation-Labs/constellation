@@ -15,6 +15,8 @@ trait PeerInfo {
 
   @volatile var deadPeers: Seq[InetSocketAddress] = Seq()
 
+  @volatile var bannedIPs: Seq[InetSocketAddress] = Seq.empty[InetSocketAddress]
+
   val lastPeerRX : TrieMap[Id, Long] = TrieMap()
 
   val peersAwaitingAuthenticationToNumAttempts: TrieMap[InetSocketAddress, Int] = TrieMap()

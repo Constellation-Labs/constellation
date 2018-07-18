@@ -61,7 +61,6 @@ object ConstellationNode extends App {
   )
 
   node.data.minGenesisDistrSize = 4
-
 }
 
 class ConstellationNode(
@@ -86,21 +85,14 @@ class ConstellationNode(
 
   val data = new Data()
   data.updateKeyPair(configKeyPair)
+
   import data._
 
   generateRandomTX = generateRandomTransactions
+
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
- // logger.info(s"UDP Info - hostname: $hostName interface: $udpInterface port: $udpPort")
-
   implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
-
-  // TODO: add root actor for routing
-
-  // TODO: in our p2p connection we need a blacklist of connections,
-  // and need to make sure someone can't access internal actors
-
-  // Setup actors
 
   val udpAddressString: String = hostName + ":" + udpPort
   val udpAddress = new InetSocketAddress(hostName, udpPort)
@@ -110,13 +102,14 @@ class ConstellationNode(
     data.apiAddress = Some(new InetSocketAddress(hostName, httpPort))
   }
 
+  // Setup actors
   val dbActor: ActorRef =  system.actorOf(
     Props(new LevelDBActor(data)), s"ConstellationDBActor_$publicKeyHash"
   )
 
   val udpActor: ActorRef =
     system.actorOf(
-      Props(new UDPActor(None, udpPort, udpInterface, Some(data))), s"ConstellationUDPActor_$publicKeyHash"
+      Props(new UDPActor(None, udpPort, udpInterface, data)), s"ConstellationUDPActor_$publicKeyHash"
     )
 
   val consensusActor: ActorRef = system.actorOf(
@@ -166,6 +159,7 @@ class ConstellationNode(
 
     bindingFuture
       .flatMap(_.unbind())
+      // TODO: we should add this back but it currently causes issues in the integration test
       //.onComplete(_ => system.terminate())
   }
 

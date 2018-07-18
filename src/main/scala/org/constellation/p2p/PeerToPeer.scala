@@ -33,8 +33,6 @@ class PeerToPeer(
 
   import data._
 
-  makeKeyPair()
-
   implicit val timeout: Timeout = timeoutI
   implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
   implicit val actorSystem: ActorSystem = context.system
@@ -44,11 +42,9 @@ class PeerToPeer(
   override def receive: Receive = {
 
     // Local commands
-
     case AddPeerFromLocal(peerAddress) => sender() ! addPeerFromLocal(peerAddress)
 
     // Regular state checks
-
     case InternalHeartbeat =>
 
       processHeartbeat {
@@ -57,15 +53,18 @@ class PeerToPeer(
           // Attempt add peers
           peersAwaitingAuthenticationToNumAttempts.foreach {
             case (peerAddr, attempts) =>
+
               val added = signedPeerLookup.contains(peerAddr)
               val giveUp = attempts > 10
+
               if (giveUp || added) {
                 if (added) logger.debug("Peer awaiting authenticated has been accepted")
                 if (giveUp) logger.debug(s"Giving up on adding $peerAddr exceeded max attempts 10")
+
                 peersAwaitingAuthenticationToNumAttempts.remove(peerAddr)
-              }
-              else {
+              } else {
                 val res = addPeerFromLocal(peerAddr)
+
                 if (res == StatusCodes.OK) peersAwaitingAuthenticationToNumAttempts.remove(peerAddr)
                 else {
                   peersAwaitingAuthenticationToNumAttempts(peerAddr) =
@@ -85,7 +84,6 @@ class PeerToPeer(
               }
             }
           }
-
         }
 
         if (heartbeatRound % 120 == 0) {
@@ -96,7 +94,7 @@ class PeerToPeer(
 
         heartbeatRound += 1
 
-        //   checkpointHeartbeat()
+        // checkpointHeartbeat()
 
         gossipHeartbeat()
 
@@ -116,11 +114,9 @@ class PeerToPeer(
               ""
           )
         }
-
       }
 
     // Peer messages
-
     case UDPMessage(message: Any, remote) =>
 
       totalNumP2PMessages += 1
@@ -132,15 +128,12 @@ class PeerToPeer(
         peersAwaitingAuthenticationToNumAttempts(remote) = 1
       }
 
-
-      if (authenticated) { // && !downloadInProgress && !downloadMode
-
+      if (authenticated) {
         val remoteId = signedPeerLookup(remote).data.id
 
         lastPeerRX(remoteId) = System.currentTimeMillis()
 
         message match {
-
           case d: DownloadRequest => handleDownloadRequest(d, remote)
 
           case d: DownloadResponse => handleDownloadResponse(d)
@@ -152,37 +145,32 @@ class PeerToPeer(
           case sh: HandShakeResponseMessage => handleHandShakeResponse(sh, remote)
 
           case u => logger.error(s"Unrecognized authenticated UDP message: $u")
+        }
+      } else {
+
+        message match {
+          case sh: HandShakeMessage => handleHandShake(sh, remote)
+
+          case sh: HandShakeResponseMessage => handleHandShakeResponse(sh, remote)
+
+          /*
+                  case m @ StartConsensusRound(id, voteData, roundHash) => {
+                    voteData match {
+                      case CheckpointVote(d) =>
+                        consensusActor ! ConsensusVote(id, voteData, roundHash)
+                        logger.debug(s"received checkpoint start consensus round message roundHash= $roundHash, self = $publicKey id = $id")
+                      case ConflictVote(d) =>
+                        logger.debug(s"received conflict start consensus round message = $m")
+                    }
+                  }
+
+                  case message: RemoteMessage => consensusActor ! message
+          */
+
+          case u =>  logger.error(s"Unrecognized UDP message: $u - authenticated: $authenticated")
 
         }
       }
-
-      message match {
-
-        case sh: HandShakeMessage => handleHandShake(sh, remote)
-
-        case sh: HandShakeResponseMessage => handleHandShakeResponse(sh, remote)
-
-        /*
-                case m @ StartConsensusRound(id, voteData, roundHash) => {
-                  voteData match {
-                    case CheckpointVote(d) =>
-                      consensusActor ! ConsensusVote(id, voteData, roundHash)
-                      logger.debug(s"received checkpoint start consensus round message roundHash= $roundHash, self = $publicKey id = $id")
-                    case ConflictVote(d) =>
-                      logger.debug(s"received conflict start consensus round message = $m")
-                  }
-                }
-
-                case message: RemoteMessage => consensusActor ! message
-        */
-
-        // case g @ Gossip(_) => handleGossip(g, remote)
-
-        case u => // logger.error(s"Unrecognized UDP message: $u - authenticated: $authenticated")
-
-      }
-
   }
-
 }
 

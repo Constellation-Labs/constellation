@@ -7,7 +7,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import akka.util.Timeout
-import org.constellation.Fixtures
+import org.constellation.{Data, Fixtures}
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerToPeer._
 import org.scalatest._
@@ -33,7 +33,7 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
 
     val udpActor: ActorRef =
       system.actorOf(
-        Props(new UDPActor(None)), s"ConstellationUDPActor" + Random.nextInt()
+        Props(new UDPActor(dao = new Data())), s"ConstellationUDPActor" + Random.nextInt()
       )
 
     val peerToPeerActor: ActorRef =

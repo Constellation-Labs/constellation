@@ -15,7 +15,7 @@ import org.scalatest._
 
 import scala.util.{Random, Try}
 import constellation._
-import org.constellation.TestHelpers
+import org.constellation.{Data, TestHelpers}
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.primitives.Schema.{Gossip, Id, Peer}
 import org.constellation.serializer.KryoSerializer
@@ -43,9 +43,9 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
     val rPort1 = scala.util.Random.nextInt(50000) + 5000
     val rPort2 = scala.util.Random.nextInt(50000) + 5000
 
-    val listener1 = system.actorOf(Props(new UDPActor(Some(rx1.ref), rPort1)), s"listener1")
+    val listener1 = system.actorOf(Props(new UDPActor(Some(rx1.ref), rPort1, dao = new Data())), s"listener1")
 
-    val listener2 = system.actorOf(Props(new UDPActor(Some(rx2.ref), rPort2)), s"listener2")
+    val listener2 = system.actorOf(Props(new UDPActor(Some(rx2.ref), rPort2, dao = new Data())), s"listener2")
 
     val testMessage = Gossip(TestHelpers.createTestBundle())
 
