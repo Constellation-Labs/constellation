@@ -111,7 +111,7 @@ class Simulation {
     Future {
       val src = randomNode(apis)
       val dst = randomOtherNode(src, apis).id.address.address
-      val s = SendToAddress(dst, Random.nextInt(1000).toLong)
+      val s = SendToAddress(dst, Random.nextInt(100000).toLong)
       src.postRead[Transaction]("sendToAddress", s)
     }(ec)
   }
@@ -152,7 +152,7 @@ class Simulation {
       println("Pct complete " + pctComplete.map{a =>  (a*100).toString.slice(0, 4) + "%"})
 
       // This is just used to ensure processing continues
-      if (attempts % 2 == 0) sendRandomTransaction(apis)
+     // if (attempts % 2 == 0) sendRandomTransaction(apis)
     }
 
     done
@@ -213,20 +213,6 @@ class Simulation {
     Thread.sleep(15000)
 
 //    assert(nonEmptyBalance())
-
-    /*
-    val start = System.currentTimeMillis()
-
-    val txs: Set[Transaction] = sendRandomTransactions(20, apis)
-
-    assert(validateRun(txs, validationFractionAcceptable, apis))
-
-    val end = System.currentTimeMillis()
-
-    println(s"Completion time seconds: ${(end-start) / 1000}")
-
-    txs
-    */
 
     apis
   }

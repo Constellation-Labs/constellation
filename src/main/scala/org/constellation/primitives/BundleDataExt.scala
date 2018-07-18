@@ -54,6 +54,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
       numDeletedBundles += 1
       bundleToSheaf.remove(hash)
     }
+
     if (dbDelete) {
       dbActor.foreach {
         _ ! DBDelete(hash)
@@ -251,25 +252,28 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     }
   }
 
-
   def updateMaxBundle(sheaf: Sheaf): Unit = {
 
     val genCheck = totalNumValidatedTX == 1 || sheaf.bundle.maxStackDepth >= 2 // TODO : Possibly move this only to mempool emit
 
     if (sheaf.totalScore.get > maxBundle.get.totalScore.get && genCheck) {
       maxBundleMetaData.synchronized {
+
         maxBundleMetaData = Some(sheaf)
+
         val ancestors = findAncestorsUpTo(
           sheaf.bundle.extractParentBundleHash.pbHash,
           upTo = 100
         )
 
         val height = sheaf.height.get
+
         if (height > confirmWindow) {
           if (downloadInProgress) {
             downloadInProgress = false
             downloadMode = false
           }
+
           totalNumValidBundles = height - confirmWindow
         }
 
@@ -278,12 +282,11 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
         val newTX = last100ValidBundleMetaData.reverse
           .slice(0, confirmWindow).flatMap(_.bundle.extractTXHash).toSet
+
         txInMaxBundleNotInValidation = newTX.map{_.txHash}
           .filter { h => !last10000ValidTXHash.contains(h) }
 
-
         newTX.foreach(t => lookupTransactionDBFallbackBlocking(t.txHash).foreach{acceptTransaction})
-
       }
     }
 

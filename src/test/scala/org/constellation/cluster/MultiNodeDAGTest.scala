@@ -12,16 +12,26 @@ import akka.util.Timeout
 import constellation._
 import org.constellation.ConstellationNode
 import org.constellation.primitives.Schema._
-import org.constellation.util.{Simulation, TestNode}
+import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.scalatest._
 
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Random, Try}
 
 class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
-  with Matchers with WordSpecLike with BeforeAndAfterEach {
+  with Matchers with WordSpecLike with BeforeAndAfterEach with BeforeAndAfterAll {
+
+  var cluster: TestCluster = _
+
+  override def beforeEach(): Unit = {
+    cluster = createInitialCluster()
+  }
 
   override def afterEach() {
+    cluster.nodes.foreach(n => n.shutdown())
+
+  }
+
+  override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
   }
 
@@ -33,55 +43,65 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     "running consensus" should {
 
-      val totalNumNodes = 3
-
-      val n1 = TestNode(heartbeatEnabled = true, randomizePorts = true)
-
-      val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true))
-
-      val apis = nodes.map{_.api}
-
-      val sim = new Simulation()
-
-      var validTxs = Set[Transaction]()
-
-      val connectedNodes = sim.connectNodes(false, true, apis)
-
       "handle random transactions with a stable set of nodes" in {
 
-        val start = System.currentTimeMillis()
+        // send random transactions
+        val validTxs = cluster.sim.sendRandomTransactions(20, cluster.apis)
 
-        validTxs = sim.sendRandomTransactions(20, apis)
-
-        assert(sim.validateRun(validTxs, 1.0, apis))
-
-        val end = System.currentTimeMillis()
-
-        println(s"Completion time seconds: ${(end-start) / 1000}")
+        // validate consensus on transactions
+        assert(cluster.sim.validateRun(validTxs, 1.0, cluster.apis))
 
         assert(true)
       }
 
       "handle adding a node to an existing cluster" in {
-        val start = System.currentTimeMillis()
 
+        // send random transactions
+        var validTxs = cluster.sim.sendRandomTransactions(20, cluster.apis)
+
+        // validate consensus on transactions for the initial nodes
+        assert(cluster.sim.validateRun(validTxs, 1.0, cluster.apis))
+
+        // create a new node
         val newNode = TestNode(heartbeatEnabled = true).api
 
-        val updatedNodes = apis :+ newNode
+        val updatedNodes = cluster.apis :+ newNode
 
-        sim.connectNodes(false, false, updatedNodes)
+        // add the new node to the cluster
+        cluster.sim.connectNodes(false, false, updatedNodes)
 
-        assert(sim.validateRun(validTxs, 0.3, updatedNodes))
+        // validate that the new node catches up and comes to consensus
+        assert(cluster.sim.validateRun(validTxs, 1.0, updatedNodes))
+
+        // add some more transactions
+        validTxs = validTxs.++(cluster.sim.sendRandomTransactions(5, updatedNodes))
+
+        // validate consensus on all of the transactions and nodes
+        // TODO: investigate why this one is getting stuck
+        assert(cluster.sim.validateRun(validTxs, .5, updatedNodes))
 
         assert(true)
-
-        val end = System.currentTimeMillis()
-
-        println(s"Completion time seconds: ${(end-start) / 1000}")
       }
 
     }
 
+  }
+
+  case class TestCluster(apis: Seq[APIClient], nodes: Seq[ConstellationNode], sim: Simulation)
+
+  def createInitialCluster(numberOfNodes: Int = 3): TestCluster = {
+
+    val n1 = TestNode(heartbeatEnabled = true)
+
+    val nodes = Seq(n1) ++ Seq.fill(numberOfNodes-1)(TestNode(heartbeatEnabled = true))
+
+    val apis: Seq[APIClient] = nodes.map{_.api}
+
+    val sim = new Simulation()
+
+    sim.connectNodes(false, true, apis)
+
+    TestCluster(apis, nodes, sim)
   }
 
 }

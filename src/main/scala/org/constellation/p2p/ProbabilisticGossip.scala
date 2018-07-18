@@ -187,10 +187,13 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
             } :+ pbh
           ).signed()
         )
+
         val meta = mb.get.meta.get
+
         updateBundleFrom(meta, Sheaf(b))
 
         numMempoolEmits += 1
+
         broadcast(b)
       }
     }
@@ -221,27 +224,37 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     // Need to slice this down here
     // Only emit max by new total score?
     val groupedBundles = activeDAGBundles.groupBy(b => b.bundle.extractParentBundleHash -> b.bundle.maxStackDepth)
+
     var toRemove = Set[Sheaf]()
 
     groupedBundles.filter{_._2.size > 1}.toSeq //.sortBy(z => 1*z._1._2).headOption
       .foreach { case (pbHash, bundles) =>
+
       if (Random.nextDouble() > 0.6) {
         val best3 = bundles.sortBy(z => -1 * z.totalScore.get).slice(0, 2)
         val allIds = best3.flatMap(_.bundle.extractIds)
+
         //   if (!allIds.contains(id)) {
         val b = Bundle(BundleData(best3.map {
           _.bundle
         }).signed())
+
         val maybeData = lookupBundle(pbHash._1.pbHash)
+
         //     if (maybeData.isEmpty) println(pbHash)
         val pbData = maybeData.get
+
         updateBundleFrom(pbData, Sheaf(b))
+
         // Skip ids when depth below a certain amount, else tell everyone.
         // TODO : Fix ^
         broadcast(b, skipIDs = allIds)
       }
+
       if (bundles.size > 30) {
-        val toRemoveHere = bundles.sortBy(z => z.totalScore.get).zipWithIndex.filter{_._2 < 15}.map{_._1}.toSet
+        val toRemoveHere = bundles.sortBy(z => z.totalScore.get)
+          .zipWithIndex.filter{_._2 < 15}.map{_._1}.toSet
+
         toRemove ++= toRemoveHere
       }
 

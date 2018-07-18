@@ -75,10 +75,7 @@ trait PeerAuth {
     }
   }
 
-  def addAuthenticatedPeer(
-               value: Signed[Peer],
-               newPeers: Seq[Signed[Peer]] = Seq()
-             ): Unit = {
+  def addAuthenticatedPeer(value: Signed[Peer], newPeers: Seq[Signed[Peer]] = Seq()): Unit = {
 
     value.data.externalAddress.foreach{
       a =>
@@ -89,6 +86,7 @@ trait PeerAuth {
       }
 
       logger.debug(s"Peer added, total peers: ${signedPeerIDLookup.keys.size} on ${id.short}")
+
       newPeers.foreach { np =>
         //    logger.debug(s"Attempting to add new peer from peer reference handshake response $np")
         //   initiatePeerHandshake(PeerRef(np.data.externalAddress))
@@ -109,7 +107,9 @@ trait PeerAuth {
     val responseAddr = if (hs.requestExternalAddressCheck) remote else address.getOrElse(remote)
 
     logger.debug(s"Got handshake from $remote on $externalAddress, sending response to $responseAddr")
+
     banOn(sh.handShake.valid, remote) {
+
       logger.debug(s"Got handshake inner from $remote on $externalAddress, " +
         s"sending response to $remote inet: ${pprintInet(remote)} " +
         s"peers externally reported address: ${hs.originPeer.data.externalAddress} inet: " +
@@ -136,6 +136,7 @@ trait PeerAuth {
 
     val hsr = sh.handShakeResponse.data
     val address = hsr.response.originPeer.data.externalAddress
+
     if (requestExternalAddressCheck) {
       externalAddress = Some(hsr.response.destination)
       requestExternalAddressCheck = false

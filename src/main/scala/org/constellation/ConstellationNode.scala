@@ -166,7 +166,7 @@ class ConstellationNode(
 
     bindingFuture
       .flatMap(_.unbind())
-      .onComplete(_ => system.terminate())
+      //.onComplete(_ => system.terminate())
   }
 
 }
