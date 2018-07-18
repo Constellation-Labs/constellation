@@ -8,7 +8,7 @@ import org.constellation.util.ProductHash
 import constellation._
 import org.constellation.LevelDB.{DBDelete, DBPut}
 
-import scala.util.Random
+import scala.util.{Failure, Random, Success, Try}
 
 trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
@@ -43,7 +43,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
       case tx: Transaction =>
         //  println(s"Rx tx hash ${tx.short}")
-        if (lookupTransaction(tx.hash).isEmpty) {
+        if (lookupTransactionDBFallbackBlocking(tx.hash).isEmpty) {
           storeTransaction(tx)
           numSyncedTX += 1
         }
@@ -67,10 +67,21 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     }
   }
 
+  @volatile var heartBeatInProgress = false
+
   def gossipHeartbeat(): Unit = {
     dataRequest()
     if (!downloadMode && genesisBundle.nonEmpty && maxBundleMetaData.nonEmpty && !downloadInProgress) {
-      bundleHeartbeat()
+      if (!heartBeatInProgress) {
+        heartBeatInProgress = true
+        Try {
+          bundleHeartbeat()
+        } match {
+          case Success(x) =>
+          case Failure(e) => e.printStackTrace()
+        }
+        heartBeatInProgress = false
+      }
     }
   }
 
@@ -254,7 +265,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       }
     }) {
 
-      println("Bundle cleanup")
+      // println("Bundle cleanup")
 
 /*
       val oldestAncestor = last100ValidBundleMetaData.head
@@ -346,7 +357,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       }*/
       }
 
-      println("Bundle to sheaf cleanup done removed: " + numDeleted)
+     // println("Bundle to sheaf cleanup done removed: " + numDeleted)
 
       // There should also be
     }
