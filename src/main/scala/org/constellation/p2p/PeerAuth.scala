@@ -4,15 +4,16 @@ import java.net.InetSocketAddress
 import java.security.KeyPair
 
 import akka.actor.{ActorRef, ActorSystem}
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.http.scaladsl.model.{HttpResponse, StatusCode, StatusCodes}
+import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
-import org.constellation.util.Signed
+import org.constellation.util.{APIClient, Signed}
 import constellation._
 import org.constellation.Data
 import org.constellation.consensus.Consensus.RemoteMessage
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Try}
 import org.constellation.primitives.Schema._
 
@@ -26,22 +27,38 @@ trait PeerAuth {
   val logger: Logger
   implicit val timeout: Timeout
   implicit val executionContext: ExecutionContextExecutor
+  implicit val actorMaterializer: ActorMaterializer
   implicit val actorSystem: ActorSystem
 
-  def broadcast[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
-    val dest: Iterable[Id] = if (idSubset.isEmpty) signedPeerIDLookup.keys else idSubset
+  def getBroadcastTCP(skipIDs: Seq[Id] = Seq(),
+                      idSubset: Seq[Id] = Seq(),
+                      route: String): Seq[Future[HttpResponse]] = {
+    val addresses = getBroadcastAddresses(skipIDs, idSubset)
 
-    dest.foreach{ i =>
-      if (!skipIDs.contains(i)) {
-        totalNumBroadcastMessages += 1
+    addresses.map(a => {
+      val address = a.get
+      val hostName = address.getHostName
+      val port = address.getPort
 
-        val address = signedPeerIDLookup(i).data.externalAddress
+      val client = new APIClient(hostName, port)
 
-        address.foreach{ a =>
-          udpActor ! UDPSend(message, a)
-        }
-      }
-    }
+      client.get(route)
+    })
+  }
+
+  def broadcastUDP[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
+    getBroadcastAddresses(skipIDs, idSubset).foreach(a => {
+      val address = a.get
+      udpActor ! UDPSend(message, address)
+    })
+  }
+
+  def getBroadcastAddresses(skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Seq[Option[InetSocketAddress]] = {
+    val peers: Iterable[Id] = if (idSubset.isEmpty) signedPeerIDLookup.keys else idSubset
+
+    peers.filter(!skipIDs.contains(_)).map(p => {
+      signedPeerIDLookup(p).data.externalAddress
+    }).toSeq
   }
 
   def handShakeInner(peerAddressOrRemote: InetSocketAddress): HandShake = {

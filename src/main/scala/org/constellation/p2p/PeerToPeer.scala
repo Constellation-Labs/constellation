@@ -4,6 +4,7 @@ import java.security.PublicKey
 
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
 import akka.http.scaladsl.model.StatusCodes
+import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import org.constellation.Data
@@ -23,7 +24,7 @@ class PeerToPeer(
                   var requestExternalAddressCheck: Boolean = false,
                   val heartbeatEnabled: Boolean = false
                 )
-                (implicit timeoutI: Timeout) extends Actor
+                (implicit timeoutI: Timeout, materialize: ActorMaterializer) extends Actor
   with ActorLogging
   with PeerAuth
   with Heartbeat
@@ -35,6 +36,7 @@ class PeerToPeer(
 
   implicit val timeout: Timeout = timeoutI
   implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
+  implicit val actorMaterializer: ActorMaterializer = materialize
   implicit val actorSystem: ActorSystem = context.system
 
   val logger = Logger(s"PeerToPeer")
@@ -134,10 +136,6 @@ class PeerToPeer(
         lastPeerRX(remoteId) = System.currentTimeMillis()
 
         message match {
-          case d: DownloadRequest => handleDownloadRequest(d, remote)
-
-          case d: DownloadResponse => handleDownloadResponse(d)
-
           case gm: GossipMessage => handleGossip(gm, remote)
 
           case sh: HandShakeMessage => handleHandShake(sh, remote)

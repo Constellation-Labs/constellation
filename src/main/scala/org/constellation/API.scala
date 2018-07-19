@@ -19,6 +19,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema._
+import org.constellation.serializer.KryoSerializer
 import org.constellation.util.ServeUI
 import org.json4s.native
 import org.json4s.native.Serialization
@@ -195,7 +196,7 @@ class API(
 //    memoizeSync[Try, Metrics](Some(2.seconds))(2)
 //  }
 
-  val routes: Route = cors() {
+  val routes: Route = {
     extractClientIP { clientIP =>
       /*      logger.debug(s"Client IP " +
               s"$clientIP ${clientIP.getAddress()} " +
@@ -284,14 +285,14 @@ class API(
                 //logger.debug(s"Looking up bundle hash $ps")
                 val ancestors = findAncestorsUpTo(ps, Seq(), upTo = 10)
                 //logger.debug(s"Found ${ancestors.size} ancestors : $ancestors")
-                val res = ancestors.map { a =>
+                val res: Seq[BundleHashQueryResponse] = ancestors.map { a =>
                   BundleHashQueryResponse(
                     a.bundle.hash, Some(a), a.bundle.extractTX.toSeq.sortBy {
                       _.txData.time
                     }
                   )
                 }
-                complete(res)
+                complete(KryoSerializer.serializeAnyRef(res))
               } match {
                 case Success(x) => x
                 case Failure(e) => e.printStackTrace()

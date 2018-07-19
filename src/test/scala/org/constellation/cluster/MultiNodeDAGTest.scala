@@ -28,7 +28,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
   override def afterEach() {
     cluster.nodes.foreach(n => n.shutdown())
-
   }
 
   override def afterAll(): Unit = {

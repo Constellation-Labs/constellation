@@ -5,11 +5,11 @@ import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.stream.ActorMaterializer
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import akka.util.Timeout
 import org.constellation.{Data, Fixtures}
 import org.constellation.crypto.KeyUtils
-import org.constellation.p2p.PeerToPeer._
 import org.scalatest._
 
 import scala.util.Random
@@ -28,6 +28,7 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
     val keyPair: KeyPair = KeyUtils.makeKeyPair()
 
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+    implicit val materialize: ActorMaterializer = ActorMaterializer()
 
     val consensusActor = TestProbe()
 
@@ -38,11 +39,10 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
 
     val peerToPeerActor: ActorRef =
       system.actorOf(Props(
-        new PeerToPeer(keyPair.getPublic, system, consensusActor.ref, udpActor, null)(timeout)
+        new PeerToPeer(keyPair.getPublic, system, consensusActor.ref, udpActor, null)(timeout, materialize)
       ))
 
     udpActor ! RegisterNextActor(peerToPeerActor)
-
 
   }
 

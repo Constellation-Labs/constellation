@@ -98,7 +98,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     }
 
     // Tell peers about our latest best bundle and chain
-    broadcast(PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap, id))
+    broadcastUDP(PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap, id))
 
     // Tell peers about our latest mempool state
     poolEmit()
@@ -114,13 +114,13 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
     // Request missing bundle data
     if (syncPendingBundleHashes.nonEmpty) {
-      broadcast(BatchBundleHashRequest(syncPendingBundleHashes))
+      broadcastUDP(BatchBundleHashRequest(syncPendingBundleHashes))
     }
 
     // Request missing transaction data
     if (syncPendingTXHashes.nonEmpty) {
 
-      broadcast(BatchTXHashRequest(syncPendingTXHashes))
+      broadcastUDP(BatchTXHashRequest(syncPendingTXHashes))
 
       if (syncPendingTXHashes.size > 300) {
         val toRemove = txSyncRequestTime.toSeq.sortBy(_._2).zipWithIndex.filter{_._2 > 50}.map{_._1._1}.toSet
@@ -128,7 +128,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       }
 
       // ask peers for this transaction data
-      broadcast(BatchTXHashRequest(syncPendingTXHashes))
+      broadcastUDP(BatchTXHashRequest(syncPendingTXHashes))
     }
   }
 
@@ -178,7 +178,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
         numMempoolEmits += 1
 
-        broadcast(b)
+        broadcastUDP(b)
       }
     }
   }
@@ -233,7 +233,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
         // Skip ids when depth below a certain amount, else tell everyone.
         // TODO : Fix ^
-        broadcast(b, skipIDs = allIds)
+        broadcastUDP(b, skipIDs = allIds)
       }
 
       if (bundles.size > 30) {
