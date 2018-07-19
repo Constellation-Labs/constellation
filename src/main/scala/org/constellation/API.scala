@@ -286,7 +286,7 @@ class API(
                 //logger.debug(s"Found ${ancestors.size} ancestors : $ancestors")
                 val res = ancestors.map { a =>
                   BundleHashQueryResponse(
-                    a.bundle.hash, Some(a), a.bundle.extractTX.toSeq.sortBy {
+                    a.bundle.hash, Some(a), a.bundle.extractTXDB.toSeq.sortBy {
                       _.txData.time
                     }
                   )

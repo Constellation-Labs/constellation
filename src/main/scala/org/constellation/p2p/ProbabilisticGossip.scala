@@ -125,6 +125,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       //if (Random.nextDouble() < .2)
       randomTransaction()
       randomTransaction()
+      if (memPool.size < 500) Seq.fill(50)(randomTransaction())
     }
   }
 
