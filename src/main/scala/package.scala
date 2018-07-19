@@ -1,27 +1,25 @@
 
 import java.net.InetSocketAddress
+import java.nio.{ByteBuffer, ByteOrder}
 import java.security.{KeyPair, PrivateKey, PublicKey}
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorRef
 import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.ActorMaterializer
-import akka.util.{ByteString, Timeout}
+import akka.util.Timeout
 import com.google.common.hash.Hashing
-import org.constellation.p2p._
-import org.constellation.primitives.Schema._
-import org.constellation.util.{HashSignature, POWExt, POWSignHelp, ProductHash}
 import org.constellation.crypto.KeyUtilsExt
+import org.constellation.primitives.Schema._
+import org.constellation.util.{HashSignature, POWExt, POWSignHelp}
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
-import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, ShortTypeHints, native}
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, ShortTypeHints}
 
 import scala.concurrent.{Await, Future}
 import scala.reflect.ClassTag
-import scala.util.{Random, Try}
+import scala.util.Try
 
 /**
   * Project wide convenience functions.
@@ -87,6 +85,12 @@ package object constellation extends KeyUtilsExt with POWExt
 
   implicit class SHA256Ext(s: String) {
     def sha256: String = Hashing.sha256().hashBytes(s.getBytes()).toString
+  }
+
+  implicit class SHA256ExtB(b: Array[Byte]) {
+    def sha256: String = Hashing.sha256().hashBytes(b).toString
+    def sha256AsByteArray: Array[Byte] = Hashing.sha256().hashBytes(b).asBytes()
+//    def sha256AsByteArray2: Array[Byte] = Hashing.sha256().hashObject(b)
   }
 
 

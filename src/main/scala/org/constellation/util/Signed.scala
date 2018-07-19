@@ -1,5 +1,6 @@
 package org.constellation.util
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import constellation._
@@ -8,6 +9,24 @@ import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.{BundleHash, Id, Transaction, TransactionData}
 
 object POW extends POWExt
+
+object SerializationB {
+
+  def serialize(value: Any): Array[Byte] = {
+    val stream: ByteArrayOutputStream = new ByteArrayOutputStream()
+    val oos = new ObjectOutputStream(stream)
+    oos.writeObject(value)
+    oos.close()
+    stream.toByteArray
+  }
+
+  def deserialize(bytes: Array[Byte]): Any = {
+    val ois = new ObjectInputStream(new ByteArrayInputStream(bytes))
+    val value = ois.readObject
+    ois.close()
+    value
+  }
+}
 
 trait POWExt {
 
@@ -37,8 +56,9 @@ trait POWExt {
 
 trait ProductHash extends Product {
 
-  def signInput: Array[Byte] = hash.getBytes()
-  def hash: String = productSeq.json.sha256
+  def signInput: Array[Byte] = SerializationB.serialize(productSeq).sha256AsByteArray
+  // TODO: Find more efficient way to get hash for object.
+  def hash: String = SerializationB.serialize(productSeq).sha256
   def bundleHash = BundleHash(hash)
   def short: String = hash.slice(0, 5)
   def signKeys(privateKeys: Seq[PrivateKey]): Seq[String] = privateKeys.map { pk => base64(signData(signInput)(pk)) }

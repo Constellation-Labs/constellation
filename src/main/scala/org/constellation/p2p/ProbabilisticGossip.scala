@@ -2,11 +2,9 @@ package org.constellation.p2p
 
 import java.net.InetSocketAddress
 
+import constellation._
 import org.constellation.Data
 import org.constellation.primitives.Schema._
-import org.constellation.util.ProductHash
-import constellation._
-import org.constellation.LevelDB.{DBDelete, DBPut}
 
 import scala.util.{Failure, Random, Success, Try}
 
@@ -170,7 +168,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
       val memPoolEmit = Random.nextInt() < 0.3
       val filteredPool = memPool.diff(txInMaxBundleNotInValidation).filterNot(last10000ValidTXHash.contains)
-      val memPoolSelSize = Random.nextInt(5)
+      val memPoolSelSize = Random.nextInt(5) + 100
       val memPoolSelection = Random.shuffle(filteredPool.toSeq)
         .slice(0, memPoolSelSize + minGenesisDistrSize + 1)
 
