@@ -6,7 +6,6 @@ import scala.collection.concurrent.TrieMap
 
 class ActiveDAGManager {
 
-
   @volatile var activeSheafs: Seq[Sheaf] = Seq()
 
   val cellKeyToCell : TrieMap[CellKey, Cell] = TrieMap()
@@ -19,7 +18,6 @@ class ActiveDAGManager {
 
   def cleanup(height: Int): Unit = {
 
-
     // Add stuff in here to cleanup from bundleToSheaf and DB including their sub-bundles.
     activeSheafs = activeSheafs.filter(j => j.height.get > (height - 4))
 
@@ -30,7 +28,6 @@ class ActiveDAGManager {
       activeSheafs = activeSheafs.sortBy(z => -1*z.totalScore.get).zipWithIndex.filter{_._2 < 65}.map{_._1}
     }
 */
-
   }
 
 }

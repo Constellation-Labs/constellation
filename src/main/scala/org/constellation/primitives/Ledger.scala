@@ -28,5 +28,4 @@ trait Ledger extends NodeData {
     validateTransactionBatch(txs, memPoolLedger) &&
       validateTransactionBatch(txs, validLedger)
 
-
 }

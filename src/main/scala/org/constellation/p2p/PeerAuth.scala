@@ -30,15 +30,16 @@ trait PeerAuth {
 
   def broadcast[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
     val dest: Iterable[Id] = if (idSubset.isEmpty) signedPeerIDLookup.keys else idSubset
-    // println("Broadcast attempt")
+
     dest.foreach{ i =>
       if (!skipIDs.contains(i)) {
         totalNumBroadcastMessages += 1
+
         val address = signedPeerIDLookup(i).data.externalAddress
+
         address.foreach{ a =>
           udpActor ! UDPSend(message, a)
         }
-      //  println(s"Broadcasting $message to $address")
       }
     }
   }
@@ -48,26 +49,32 @@ trait PeerAuth {
   }
 
   def initiatePeerHandshake(peerAddress: InetSocketAddress, useRest: Boolean = false): StatusCode = {
-    import akka.pattern.ask
-    val banList = (udpActor ? GetBanList).mapTo[Seq[InetSocketAddress]].get()
+    val banList = data.bannedIPs
+
     if (!banList.contains(peerAddress)) {
+
       val res = if (peerIPs.contains(peerAddress)) {
         logger.debug(s"We already know $peerAddress, discarding")
+
         StatusCodes.AlreadyReported
       } else if (externalAddress.contains(peerAddress) || remotes.contains(peerAddress)) {
         logger.debug(s"Peer is same as self $peerAddress, discarding")
+
         StatusCodes.BadRequest
       } else {
         logger.debug(s"Sending handshake from $externalAddress to $peerAddress with ${peers.size} known peers")
+
         //Introduce ourselves
-        // val message = HandShakeMessage(handShakeInner.copy(destination = Some(peerAddress)).signed())
         val message = HandShakeMessage(handShakeInner(peerAddress).signed())
 
         udpActor ! UDPSend(message, peerAddress)
+
         //Tell our existing peers
         //broadcast(p)
+
         StatusCodes.Accepted
       }
+
       res
     } else {
       logger.debug(s"Attempted to add peer but peer was previously banned! $peerAddress")
@@ -75,24 +82,19 @@ trait PeerAuth {
     }
   }
 
-  def addAuthenticatedPeer(
-               value: Signed[Peer],
-               newPeers: Seq[Signed[Peer]] = Seq()
-             ): Unit = {
+  def addAuthenticatedPeer(value: Signed[Peer], newPeers: Seq[Signed[Peer]] = Seq()): Unit = {
 
     value.data.externalAddress.foreach{
       a =>
+
       signedPeerLookup(a) = value
+
       value.data.remotes.foreach{ r =>
         signedPeerLookup(r) = value
         addressToLastObservedExternalAddress(r) = a
       }
 
       logger.debug(s"Peer added, total peers: ${signedPeerIDLookup.keys.size} on ${id.short}")
-      newPeers.foreach { np =>
-        //    logger.debug(s"Attempting to add new peer from peer reference handshake response $np")
-        //   initiatePeerHandshake(PeerRef(np.data.externalAddress))
-      }
     }
   }
 
@@ -109,7 +111,9 @@ trait PeerAuth {
     val responseAddr = if (hs.requestExternalAddressCheck) remote else address.getOrElse(remote)
 
     logger.debug(s"Got handshake from $remote on $externalAddress, sending response to $responseAddr")
+
     banOn(sh.handShake.valid, remote) {
+
       logger.debug(s"Got handshake inner from $remote on $externalAddress, " +
         s"sending response to $remote inet: ${pprintInet(remote)} " +
         s"peers externally reported address: ${hs.originPeer.data.externalAddress} inet: " +
@@ -129,13 +133,9 @@ trait PeerAuth {
   }
 
   def handleHandShakeResponse(sh: HandShakeResponseMessage, remote: InetSocketAddress): Unit = {
-    //    logger.debug(s"HandShakeResponseMessage from $remote on $externalAddress second remote: $remote")
-    //  val o = sh.handShakeResponse.data.original
-    //   val fromUs = o.valid && o.publicKeys.head == id.id
-    // val valid = fromUs && sh.handShakeResponse.valid
-
     val hsr = sh.handShakeResponse.data
     val address = hsr.response.originPeer.data.externalAddress
+
     if (requestExternalAddressCheck) {
       externalAddress = Some(hsr.response.destination)
       requestExternalAddressCheck = false
@@ -154,11 +154,13 @@ trait PeerAuth {
     // ^ TODO : Fix validation
     banOn(sh.handShakeResponse.valid, remote) {
       logger.debug(s"Got valid HandShakeResponse from $remote / $address on $externalAddress")
+
       val value = hsr.response.originPeer
-      val newPeers = Seq() //sh.handShakeResponse.data.response.peers
+      val newPeers = Seq()
+
       addAuthenticatedPeer(value, newPeers)
+
       signedPeerLookup(remote) = value
-    //  remotes += remote
     }
   }
 
@@ -186,6 +188,5 @@ trait PeerAuth {
   }
 
   // TODO: Send other peers termination message on shutdown.
-
 
 }

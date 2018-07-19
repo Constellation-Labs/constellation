@@ -42,7 +42,6 @@ object ClusterDebug extends TestKit(ActorSystem("ClusterTest")){
     sim.setIdLocal()
 */
 
-
     rpcs.foreach {
       _.get("restart")
     }
@@ -69,8 +68,6 @@ object ClusterDebug extends TestKit(ActorSystem("ClusterTest")){
       println(n.addPeer(o.udpAddress))
     }
 */
-
-
 
   }
 }

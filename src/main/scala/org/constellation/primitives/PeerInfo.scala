@@ -15,6 +15,8 @@ trait PeerInfo {
 
   @volatile var deadPeers: Seq[InetSocketAddress] = Seq()
 
+  @volatile var bannedIPs: Seq[InetSocketAddress] = Seq.empty[InetSocketAddress]
+
   val lastPeerRX : TrieMap[Id, Long] = TrieMap()
 
   val peersAwaitingAuthenticationToNumAttempts: TrieMap[InetSocketAddress, Int] = TrieMap()
@@ -50,6 +52,5 @@ trait PeerInfo {
   def peerIPs: Set[InetSocketAddress] = signedPeerLookup.values.flatMap(z => z.data.externalAddress).toSet
 
   def peers: Seq[Signed[Peer]] = signedPeerLookup.values.toSeq.distinct
-
 
 }

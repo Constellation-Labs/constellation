@@ -41,8 +41,6 @@ class Data extends MetricsExt
     last100SelfSentTransactions = Seq()
     peerSync.clear()
     deadPeers = Seq()
-
   }
-
 
 }

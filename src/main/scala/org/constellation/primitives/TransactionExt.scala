@@ -33,7 +33,6 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
     txSyncRequestTime.remove(hash)
   }
 
-
   def lookupTransactionDB(hash: String): Option[Transaction] = {
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
     import akka.pattern.ask
@@ -42,7 +41,6 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
     }
     dbQuery
   }
-
 
   def lookupTransactionDBFallbackBlocking(hash: String): Option[Transaction] = {
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
@@ -53,7 +51,6 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
     val res = txHashToTX.get(hash)
     if (res.isEmpty) dbQuery else res
   }
-
 
   def lookupTransaction(hash: String): Option[Transaction] = {
     // LevelDB fix here later?
@@ -111,11 +108,11 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
     validUpdate
   }
 
+  // TODO: move into test context
   def randomTransaction(): Unit = {
     val peerAddresses = peers.map{_.data.id.address}
     val randomPeer = Random.shuffle(peerAddresses).head
     createTransaction(randomPeer.address, Random.nextInt(1000).toLong)
   }
-
 
 }

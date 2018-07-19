@@ -61,7 +61,6 @@ object ConstellationNode extends App {
   )
 
   node.data.minGenesisDistrSize = 4
-
 }
 
 class ConstellationNode(
@@ -86,21 +85,14 @@ class ConstellationNode(
 
   val data = new Data()
   data.updateKeyPair(configKeyPair)
+
   import data._
 
   generateRandomTX = generateRandomTransactions
+
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
- // logger.info(s"UDP Info - hostname: $hostName interface: $udpInterface port: $udpPort")
-
   implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
-
-  // TODO: add root actor for routing
-
-  // TODO: in our p2p connection we need a blacklist of connections,
-  // and need to make sure someone can't access internal actors
-
-  // Setup actors
 
   val udpAddressString: String = hostName + ":" + udpPort
   val udpAddress = new InetSocketAddress(hostName, udpPort)
@@ -110,14 +102,14 @@ class ConstellationNode(
     data.apiAddress = Some(new InetSocketAddress(hostName, httpPort))
   }
 
+  // Setup actors
   val dbActor: ActorRef =  system.actorOf(
     Props(new LevelDBActor(data)), s"ConstellationDBActor_$publicKeyHash"
   )
 
-
   val udpActor: ActorRef =
     system.actorOf(
-      Props(new UDPActor(None, udpPort, udpInterface, Some(data))), s"ConstellationUDPActor_$publicKeyHash"
+      Props(new UDPActor(None, udpPort, udpInterface, data)), s"ConstellationUDPActor_$publicKeyHash"
     )
 
   val consensusActor: ActorRef = system.actorOf(
@@ -149,7 +141,7 @@ class ConstellationNode(
     peerToPeerActor, consensusActor, udpAddress, data, jsPrefix = jsPrefix)(executionContext, timeout).routes
 
   // Setup http server for rpc
-  Http().bindAndHandle(routes, httpInterface, httpPort)
+  val bindingFuture = Http().bindAndHandle(routes, httpInterface, httpPort)
 
   // TODO : Move to separate test class - these are within jvm only but won't hurt anything
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
@@ -157,12 +149,18 @@ class ConstellationNode(
   val api = new APIClient(port=httpPort)
   api.id = id
   api.udpPort = udpPort
+
   def healthy: Boolean = Try{api.getSync("health").status == StatusCodes.OK}.getOrElse(false)
   def add(other: ConstellationNode): HttpResponse = api.postSync("peer", other.udpAddressString)
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind
     peerToPeerActor ! ToggleHeartbeat
+
+    bindingFuture
+      .flatMap(_.unbind())
+      // TODO: we should add this back but it currently causes issues in the integration test
+      //.onComplete(_ => system.terminate())
   }
 
 }

@@ -31,8 +31,7 @@ case object GetPacketGroups
 class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
                port: Int = 16180,
                bindInterface: String = "0.0.0.0",
-               dao: Option[Data] = None
-              ) extends Actor {
+               dao: Data) extends Actor {
 
   import context.system
 
@@ -45,9 +44,6 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
   )
 
   @volatile var udpSocket: ActorRef = _
-
-  // TODO: save to disk
-  @volatile var bannedIPs: Seq[InetSocketAddress] = Seq.empty[InetSocketAddress]
 
   implicit val timeout: Timeout = Timeout(10, TimeUnit.SECONDS)
 
@@ -74,11 +70,9 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
     case Udp.Received(data, remote) =>
 
-      dao.foreach { d =>
-        d.udpPacketGroupSize = packetGroups.size
-      }
+      dao.udpPacketGroupSize = packetGroups.size
 
-      if (bannedIPs.contains(remote)) {
+      if (dao.bannedIPs.contains(remote)) {
         println(s"BANNED MESSAGE DETECTED FROM $remote")
       } else {
 
@@ -90,7 +84,6 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
         def updatePacketGroup(serMsg: SerializedUDPMessage, messages: TrieMap[Int, SerializedUDPMessage]): Unit = {
 
-      //    println("Update packet group")
           // make sure this is not a duplicate packet first
           if (!messages.isDefinedAt(serMsg.packetGroupId)) {
 
@@ -99,8 +92,6 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
               messages += (serMsg.packetGroupId -> serMsg)
 
               val message = deserializeGrouped(messages.values.toList)
-
-          //    println(s"Received BULK UDP message from $remote -- $message -- sending to $nextActor")
 
               processMessage(message, remote)
 
@@ -125,7 +116,6 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
       }
 
     case UDPSend(data, remote) =>
-     // println("UDP SEND IN ACTOR")
       val ser: Seq[SerializedUDPMessage] = serializeGrouped(data)
 
       ser.foreach{ s: SerializedUDPMessage => {
@@ -135,9 +125,9 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
     case RegisterNextActor(next) => nextActor = Some(next)
 
-    case Ban(remote) => bannedIPs = {bannedIPs ++ Seq(remote)}.distinct
-
-    case GetBanList => sender() ! bannedIPs
+    case Ban(remote) => {
+      dao.bannedIPs = {dao.bannedIPs ++ Seq(remote)}.distinct
+    }
 
     case GetUDPSocketRef => sender() ! udpSocket
 
@@ -148,7 +138,6 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
     case Udp.Unbound => context.stop(self)
 
   }
-
 }
 
 // Change packetGroup to UUID

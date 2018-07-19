@@ -11,7 +11,6 @@ import scala.concurrent.ExecutionContextExecutor
 
 object DownloadChainSingle {
 
-
   def main(args: Array[String]): Unit = {
 
     implicit val materialize: ActorMaterializer = ActorMaterializer()
