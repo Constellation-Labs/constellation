@@ -185,7 +185,7 @@ class Simulation(apis: Seq[APIClient]) {
 
     initialDistributionTX()
 
-    Thread.sleep(15000)
+    Thread.sleep(25000)
 
 //    assert(nonEmptyBalance())
 
