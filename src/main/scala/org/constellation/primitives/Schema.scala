@@ -290,6 +290,7 @@ object Schema {
       }
       process(bundleData)
     }
+
     /*
         def extractTX: Set[TX] = {
           def process(s: Signed[BundleData]): Set[TX] = {
@@ -309,6 +310,7 @@ object Schema {
           process(bundleData)
         }
     */
+
     // Copy this to temp val on class so as not to re-calculate
     def extractIds: Set[Id] = {
       def process(s: Signed[BundleData]): Set[Id] = {

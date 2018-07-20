@@ -33,12 +33,13 @@ trait PeerAuth {
   def getBroadcastTCP(skipIDs: Seq[Id] = Seq(),
                       idSubset: Seq[Id] = Seq(),
                       route: String): Seq[Future[HttpResponse]] = {
-    val addresses = getBroadcastAddresses(skipIDs, idSubset)
+    val addresses = getBroadcastPeers(skipIDs, idSubset).map(_.apiAddress)
 
     addresses.map(a => {
       val address = a.get
       val hostName = address.getHostName
       val port = address.getPort
+      data.apiAddress
 
       val client = new APIClient(hostName, port)
 
@@ -47,17 +48,17 @@ trait PeerAuth {
   }
 
   def broadcastUDP[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
-    getBroadcastAddresses(skipIDs, idSubset).foreach(a => {
+    getBroadcastPeers(skipIDs, idSubset).map(_.externalAddress).foreach(a => {
       val address = a.get
       udpActor ! UDPSend(message, address)
     })
   }
 
-  def getBroadcastAddresses(skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Seq[Option[InetSocketAddress]] = {
+  def getBroadcastPeers(skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Seq[Peer] = {
     val peers: Iterable[Id] = if (idSubset.isEmpty) signedPeerIDLookup.keys else idSubset
 
     peers.filter(!skipIDs.contains(_)).map(p => {
-      signedPeerIDLookup(p).data.externalAddress
+      signedPeerIDLookup(p).data
     }).toSeq
   }
 

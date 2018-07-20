@@ -198,10 +198,6 @@ class API(
 
   val routes: Route = {
     extractClientIP { clientIP =>
-      /*      logger.debug(s"Client IP " +
-              s"$clientIP ${clientIP.getAddress()} " +
-              s"${clientIP.toIP} ${clientIP.toOption.map{_.getCanonicalHostName}} ${clientIP.getPort()}"
-            )*/
       get {
         path("balance") {
           complete(validLedger.getOrElse(selfAddress.address, 0L).toString)
@@ -219,42 +215,45 @@ class API(
               handleSendRequest(SendToAddress(address, amount.toLong))
             }
           } ~
-          pathPrefix("address") {
-            get {
-              extractUnmatchedPath { p =>
-                logger.debug(s"Unmatched path on address result $p")
-                val ps = p.toString().tail
-                val balance = validLedger.getOrElse(ps, 0).toString
-                complete(s"Balance: $balance")
-              }
-            }
+          pathPrefix("address" / Remaining) { hash =>
+            val balance = validLedger.getOrElse(hash, 0).toString
+
+            complete(s"Balance: $balance")
           } ~
           pathPrefix("txHash") { // TODO: Rename to transaction
             get {
               extractUnmatchedPath { p =>
-                logger.debug(s"Unmatched path on txHash result $p")
-                val ps = p.toString().tail
-                complete(lookupTransactionDB(ps).prettyJson)
+                val hash = p.toString().tail
+
+                complete(lookupTransactionDB(hash).prettyJson)
               }
             }
           } ~
           pathPrefix("transaction") {
             get {
               extractUnmatchedPath { p =>
-                //   logger.debug(s"Unmatched path on address result $p")
-                val ps = p.toString().tail
-                complete(lookupTransactionDB(ps))
+                val hash = p.toString().tail
+
+                complete(lookupTransactionDB(hash))
               }
+            }
+          } ~
+          pathPrefix("maxBundle") {
+            if (maxBundle.isDefined) {
+              val maybeSheaf = lookupBundleDBFallbackBlocking(maxBundle.get.hash)
+
+              complete(maybeSheaf)
+            } else {
+              complete(None)
             }
           } ~
           pathPrefix("bundle") {
             get {
               extractUnmatchedPath { p =>
-                logger.debug(s"Unmatched path on bundle direct result $p")
-                val ps = p.toString().tail
+                val hash = p.toString().tail
 
-                //findAncestorsUpTo()
-                val maybeSheaf = lookupBundleDBFallbackBlocking(ps)
+                val maybeSheaf = lookupBundleDBFallbackBlocking(hash)
+
                 complete(maybeSheaf)
               }
             }
@@ -262,12 +261,13 @@ class API(
           pathPrefix("fullBundle") {
             get {
               extractUnmatchedPath { p =>
-                logger.debug(s"Unmatched path on fullBundle result $p")
-                val ps = p.toString().split("/").last
-                val maybeSheaf = lookupBundle(ps)
+                val hash = p.toString().split("/").last
+
+                val maybeSheaf = lookupBundle(hash)
+
                 complete(
                   BundleHashQueryResponse(
-                    ps,
+                    hash,
                     maybeSheaf,
                     maybeSheaf.map(_.bundle.extractTX.toSeq.sortBy {
                       _.txData.time
@@ -280,11 +280,10 @@ class API(
           get {
             extractUnmatchedPath { p =>
               Try {
-                logger.debug(s"Unmatched path on download result $p")
-                val ps = p.toString().split("/").last
-                //logger.debug(s"Looking up bundle hash $ps")
-                val ancestors = findAncestorsUpTo(ps, Seq(), upTo = 10)
-                //logger.debug(s"Found ${ancestors.size} ancestors : $ancestors")
+                val hash = p.toString().split("/").last
+
+                val ancestors = findAncestorsUpTo(hash, Seq(), upTo = 10)
+
                 val res: Seq[BundleHashQueryResponse] = ancestors.map { a =>
                   BundleHashQueryResponse(
                     a.bundle.hash, Some(a), a.bundle.extractTX.toSeq.sortBy {
@@ -292,6 +291,7 @@ class API(
                     }
                   )
                 }
+
                 complete(KryoSerializer.serializeAnyRef(res))
               } match {
                 case Success(x) => x
@@ -303,10 +303,10 @@ class API(
         } ~ pathPrefix("ancestors") {
           get {
             extractUnmatchedPath { p =>
-              logger.debug(s"Unmatched path on download result $p")
-              val ps = p.toString().split("/").last
-              //logger.debug(s"Looking up bundle hash $ps")
-              val ancestors = findAncestorsUpTo(ps, Seq(), upTo = 101)
+              val hash = p.toString().split("/").last
+
+              val ancestors = findAncestorsUpTo(hash, Seq(), upTo = 101)
+
               complete(ancestors.map {
                 _.bundle.hash
               })

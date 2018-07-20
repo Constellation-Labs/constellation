@@ -4,10 +4,11 @@ import java.net.InetSocketAddress
 
 import akka.http.scaladsl.model.{HttpResponse, StatusCode}
 import org.constellation.Data
-import org.constellation.primitives.Schema.{BundleHashQueryResponse, DownloadRequest, DownloadResponse}
+import org.constellation.primitives.Schema._
 import constellation._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.APIClient
+import scala.concurrent.duration._
 
 import scala.concurrent.{Await, Future}
 
@@ -20,33 +21,75 @@ trait Download extends PeerAuth {
     if (downloadMode && peers.nonEmpty && !downloadInProgress) {
       logger.debug("Requesting data download")
 
-      // ask each peer for download
-      // once we have more than a threshold
-      // take chain
+      val maxBundles: Seq[Future[HttpResponse]] = getBroadcastTCP(route = "maxBundle")
 
-      // acceptGenesis(d.genesisBundle, d.genesisTX)
-      // handleBundle(d.maxBundle)
-      // downloadInProgress = true
-      // downloadMode = false
-      // DownloadResponse
-      // DownloadRequest
+      val future = Future.sequence(maxBundles)
 
-      val download: Seq[Future[HttpResponse]] = getBroadcastTCP(route = "download")
+      future.onComplete(f => {
+        val responses = f.get.seq.map(f => {
+          val hash = new APIClient("localhost", 8080).read[Option[Sheaf]](f).get()
+          hash
+        }).filter(_.isDefined).sortBy(_.get.height.get)
 
-      val downloadResponse = Future.sequence(download)
+        if (responses.nonEmpty) {
+          var hash = responses.head.get.bundle.hash
 
-      downloadResponse.onComplete(r => {
-        val responses = r.get
+          var validSheafs = Seq[Sheaf]()
+          var validTransactions = Seq[Transaction]()
 
-        val chains = responses.map(r => {
-          r.entity.getDataBytes().map(f => {
-            val chain = KryoSerializer.deserialize(f.toArray).asInstanceOf[Seq[BundleHashQueryResponse]]
-            chain
-          })
-        })
+          while (hash != "coinbase") {
+            val sheaf: Seq[Future[HttpResponse]] = getBroadcastTCP(route = "bundle/" + hash)
 
-        logger.debug(s"download complete chains = $chains")
-        // TODO: temp
+            val downloadResponse = Future.sequence(sheaf)
+
+            Await.ready(downloadResponse, 30 seconds).onComplete(r => {
+              val responses = r.get
+
+              val sheafs = responses.map(r => {
+                val sheaf = new APIClient("localhost", 8080).read[Option[Sheaf]](r).get()
+                sheaf
+              }).toSeq
+
+              if (sheafs.nonEmpty) {
+                val sheaf = sheafs.head.get
+
+                handleBundle(sheaf.bundle)
+
+                hash = sheaf.bundle.extractParentBundleHash.pbHash
+
+                validSheafs = validSheafs :+ sheaf
+
+                sheaf.bundle.extractTXHash.foreach{ h =>
+                  val hActual = h.txHash
+                  val transactions: Seq[Future[HttpResponse]] = getBroadcastTCP(route = "transaction/" + hActual)
+
+                  val downloadResponse = Future.sequence(transactions)
+
+                  Await.ready(downloadResponse, 30 seconds).onComplete(f => {
+
+                    if (f.get.nonEmpty) {
+                      val sheaf = new APIClient("localhost", 8080).read[Option[Transaction]](f.get.head).get()
+
+                      if (sheaf.isDefined) {
+                        validTransactions = validTransactions :+ sheaf.get
+                      }
+                    }
+                  })
+                }
+              }
+
+              sheafs
+            })
+          }
+
+          if (hash == "coinbase") {
+            acceptGenesis(validSheafs.last.bundle, validSheafs.last.bundle.extractTX.head)
+          }
+
+          // turn off download mode
+          downloadMode = false
+          downloadInProgress = false
+        }
       })
 
     }
