@@ -9,7 +9,6 @@ import com.typesafe.scalalogging.Logger
 trait ServeUI {
 
   val logger: Logger
-  val jsPrefix : String
 
   def jsRequest: Route = {
     pathPrefix("ui") {
@@ -25,7 +24,7 @@ trait ServeUI {
   }
 
   def serveMainPage: Route = complete { //complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Say hello to akka-http</h1>"))
-    logger.info(s"Serve main page jsPrefix: $jsPrefix")
+    logger.debug(s"Serve main page")
 
     // val numPeers = (peerToPeerActor ? GetPeers).mapTo[Peers].get().peers.size
     val bodyText = "" // s"Balance: $selfIdBalance numPeers: $numPeers "
