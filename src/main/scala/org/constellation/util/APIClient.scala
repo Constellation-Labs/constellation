@@ -4,8 +4,10 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.Uri.Query
 import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.headers.BasicHttpCredentials
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers, Unmarshal}
 import akka.stream.ActorMaterializer
+import com.typesafe.config.ConfigFactory
 import org.constellation.primitives.Schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.json4s.JsonAST.JArray
@@ -34,16 +36,23 @@ class APIClient(val host: String = "127.0.0.1", val port: Int)(
 
   def base(suffix: String) = Uri(s"$baseURI/$suffix")
 
+  val config = ConfigFactory.load()
+
+  val authId = config.getString("auth.id")
+  val authPassword = config.getString("auth.password")
+
+  val authorization = headers.Authorization(BasicHttpCredentials(authId, authPassword))
+
   def get(suffix: String, queryParams: Map[String,String] = Map()): Future[HttpResponse] = {
     Http().singleRequest(
-      HttpRequest(uri = base(suffix).withQuery(Query(queryParams)))
+      HttpRequest(headers = List(authorization), uri = base(suffix).withQuery(Query(queryParams)))
     )
   }
 
   def getSync(suffix: String, queryParams: Map[String,String] = Map()): HttpResponse = {
     import constellation._
     Http().singleRequest(
-      HttpRequest(uri = base(suffix).withQuery(Query(queryParams)))
+      HttpRequest(headers = List(authorization), uri = base(suffix).withQuery(Query(queryParams)))
     ).get()
   }
 
@@ -53,7 +62,7 @@ class APIClient(val host: String = "127.0.0.1", val port: Int)(
                                (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
     import constellation.EasyFutureBlock
     val httpResponse = Http().singleRequest(
-      HttpRequest(uri = base(suffix).withQuery(Query(queryParams)))
+      HttpRequest(headers = List(authorization), uri = base(suffix).withQuery(Query(queryParams)))
     ).get(timeout)
     Unmarshal(httpResponse.entity).to[String].map { r => Serialization.read[T](r) }.get()
   }
@@ -62,7 +71,7 @@ class APIClient(val host: String = "127.0.0.1", val port: Int)(
                                  (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): String = {
     import constellation.EasyFutureBlock
     val httpResponse = Http().singleRequest(
-      HttpRequest(uri = base(suffix).withQuery(Query(queryParams)))
+      HttpRequest(headers = List(authorization), uri = base(suffix).withQuery(Query(queryParams)))
     ).get(timeout)
     Unmarshal(httpResponse.entity).to[String].get()
   }
@@ -71,7 +80,7 @@ class APIClient(val host: String = "127.0.0.1", val port: Int)(
 
     val ser = Serialization.write(t)
     Http().singleRequest(
-      HttpRequest(uri = base(suffix), method = HttpMethods.POST, entity = HttpEntity(
+      HttpRequest(headers = List(authorization), uri = base(suffix), method = HttpMethods.POST, entity = HttpEntity(
         ContentTypes.`application/json`, ser)
       ))
   }

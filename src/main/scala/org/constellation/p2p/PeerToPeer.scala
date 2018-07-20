@@ -52,6 +52,7 @@ class PeerToPeer(
       processHeartbeat {
 
         if (heartbeatRound % 3 == 0) {
+/*
           // Attempt add peers
           peersAwaitingAuthenticationToNumAttempts.foreach {
             case (peerAddr, attempts) =>
@@ -74,6 +75,7 @@ class PeerToPeer(
                 }
               }
           }
+*/
 
           // Remove dead peers
           lastPeerRX.foreach{ case (id, rx) =>
@@ -88,9 +90,11 @@ class PeerToPeer(
           }
         }
 
+/*
         if (heartbeatRound % 120 == 0) {
           deadPeers.foreach(addPeerFromLocal(_))
         }
+*/
 
         downloadHeartbeat()
 
@@ -124,11 +128,12 @@ class PeerToPeer(
       totalNumP2PMessages += 1
 
       val authenticated = signedPeerLookup.contains(remote)
-
+/*
       if (!authenticated && !peersAwaitingAuthenticationToNumAttempts.contains(remote)) {
         logger.debug("Attempting to add unauthenticated peer")
         peersAwaitingAuthenticationToNumAttempts(remote) = 1
       }
+*/
 
       if (authenticated) {
         val remoteId = signedPeerLookup(remote).data.id

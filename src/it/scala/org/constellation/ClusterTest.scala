@@ -61,7 +61,7 @@ object ClusterTest {
             (x \ "address").extract[String]
         }.get
         val internalIP = (i \ "status" \ "addresses").extract[JArray].arr.collectFirst{
-          case x if (x \ "type").extract[String] == "InternalIP" =>
+          case x if (x \ "type").extract[String] == "Hostname" =>
             (x \ "address").extract[String]
         }.get
         Some(NodeIPs(internalIP, externalIP))
@@ -83,7 +83,8 @@ object ClusterTest {
         name.split("-").dropRight(1).mkString("-") == namePrefix
       }.getOrElse(false)
     }.map { p =>
-      val hostIPInternal = (p \ "status" \ "hostIP").extract[String]
+     //  val hostIPInternal = (p \ "status" \ "hostIP").extract[String]
+      val hostIPInternal = (p \ "spec" \ "nodeName").extract[String]
       val externalIP = nodes.collectFirst{case x if x.internalIP == hostIPInternal => x.externalIP}.get
       PodIPName((p \ "metadata" \ "name").extract[String], hostIPInternal, externalIP)
     }

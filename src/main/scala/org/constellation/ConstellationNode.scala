@@ -56,8 +56,7 @@ object ConstellationNode extends App {
     timeoutSeconds = rpcTimeout,
     heartbeatEnabled = true,
     hostName = hostName,
-    requestExternalAddressCheck = requestExternalAddressCheck,
-    jsPrefix = "./ui/ui"
+    requestExternalAddressCheck = requestExternalAddressCheck
   )
 
   node.data.minGenesisDistrSize = 4
@@ -74,7 +73,6 @@ class ConstellationNode(
                          timeoutSeconds: Int = 30,
                          heartbeatEnabled: Boolean = false,
                          requestExternalAddressCheck : Boolean = false,
-                         val jsPrefix: String = "./ui/target/scala-2.11/ui",
                          generateRandomTransactions: Boolean = true,
                          autoSetExternalAddress: Boolean = false
              )(
@@ -138,7 +136,7 @@ class ConstellationNode(
 
   // If we are exposing rpc then create routes
   val routes: Route = new API(
-    peerToPeerActor, consensusActor, udpAddress, data, jsPrefix = jsPrefix)(executionContext, timeout).routes
+    peerToPeerActor, consensusActor, udpAddress, data)(executionContext, timeout).authRoutes
 
   // Setup http server for rpc
   val bindingFuture = Http().bindAndHandle(routes, httpInterface, httpPort)

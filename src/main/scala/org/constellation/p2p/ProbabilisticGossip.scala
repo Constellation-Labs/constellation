@@ -45,8 +45,8 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         handleBundle(b)
 
       case tx: Transaction =>
-
-        if (lookupTransactionDBFallbackBlocking(tx.hash).isEmpty) {
+        //  println(s"Rx tx hash ${tx.short}")
+        if (lookupTransaction(tx.hash).isEmpty) {
           storeTransaction(tx)
           numSyncedTX += 1
         }
@@ -62,26 +62,23 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     }
   }
 
-  @volatile var heartBeatInProgress = false
+//  @volatile var heartBeatInProgress = false
 
   def gossipHeartbeat(): Unit = {
     // Gather any missing transaction or bundle data
     dataRequest()
 
     if (!downloadMode && genesisBundle.nonEmpty && maxBundleMetaData.nonEmpty && !downloadInProgress) {
-      if (!heartBeatInProgress) {
-
-        heartBeatInProgress = true
-
-        Try {
+    //  if (!heartBeatInProgress) {
+      //  heartBeatInProgress = true
+      ///  Try {
           bundleHeartbeat()
-        } match {
-          case Success(x) =>
-          case Failure(e) => e.printStackTrace()
-        }
-
-        heartBeatInProgress = false
-      }
+       // } match {
+       //   case Success(x) =>
+       //   case Failure(e) => e.printStackTrace()
+       // }
+       // heartBeatInProgress = false
+     // }
     }
   }
 
@@ -108,6 +105,20 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
     // clean up any bundles that have been compressed
     cleanupStrayChains()
+
+  }
+
+
+ // val startTime: Long = System.currentTimeMillis()
+
+  def simulateTransactions(): Unit = {
+    val shouldEmit = maxBundleMetaData.exists {_.height.get >= 5} // || (System.currentTimeMillis() > startTime + 30000)
+    if (shouldEmit && memPool.size < 1500) {
+      //if (Random.nextDouble() < .2)
+      randomTransaction()
+      randomTransaction()
+      if (memPool.size < 500) Seq.fill(50)(randomTransaction())
+    }
   }
 
   def dataRequest(): Unit = {
@@ -119,10 +130,9 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
     // Request missing transaction data
     if (syncPendingTXHashes.nonEmpty) {
-
+      // println("Requesting data sync pending of " + syncPendingTXHashes)
       broadcastUDP(BatchTXHashRequest(syncPendingTXHashes))
-
-      if (syncPendingTXHashes.size > 300) {
+      if (syncPendingTXHashes.size > 1500) {
         val toRemove = txSyncRequestTime.toSeq.sortBy(_._2).zipWithIndex.filter{_._2 > 50}.map{_._1._1}.toSet
         syncPendingTXHashes --= toRemove
       }
@@ -257,7 +267,44 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       }
     }) {
 
-      val currentHeight = maxBundleMetaData.get.height.get
+/*
+      val oldestAncestor = last100ValidBundleMetaData.head
+
+      val ancestorsMinus100 = findAncestorsUpTo(oldestAncestor.bundle.hash, upTo = 100)
+
+      val lastValidHashes = (last100ValidBundleMetaData.map {
+        _.bundle.hash
+      }.toSet ++ ancestorsMinus100.map {
+        _.bundle.hash
+      }).toSet
+*/
+
+      /*
+      ancestorsMinus100.slice(0, 50).foreach{
+        s =>
+          s.bundle.extractSubBundleHashes.foreach{
+            h =>
+              if (!lastValidHashes.contains(h)) deleteBundle(h)
+          }
+          if (bundleToSheaf.contains(s.bundle.hash)) {
+            bundleToSheaf.remove(s.bundle.hash)
+            numValidBundleHashesRemovedFromMemory += 1
+            //dbActor.foreach{ db =>
+            // db ! DBPut(s.bundle.hash, s) ? Maybe necessary? to ensure it was stored the first time?
+            // }
+          }
+
+          s.bundle.extractTXHash.foreach{ t =>
+            removeTransactionFromMemory(t.txHash)
+          }
+      }
+*/
+      val currentHeight = maxBundleMetaData.get.height.get // last100ValidBundleMetaData.head.height.get
+
+      /*
+      val lastHeight = last100ValidBundleMetaData.last.height.get - 5
+      val firstHeight = oldestAncestor.height.get + 5
+*/
 
       var numDeleted = 0
 
@@ -295,6 +342,9 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
         }
       }
+      println("Bundle to sheaf cleanup done removed: " + numDeleted)
+
+      // There should also be
     }
   }
 

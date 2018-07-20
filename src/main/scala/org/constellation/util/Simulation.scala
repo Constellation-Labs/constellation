@@ -211,7 +211,7 @@ class Simulation {
 
     val txs = initialDistributionTX(apis)
 
-    Thread.sleep(15000)
+    Thread.sleep(25000)
 
 //    assert(nonEmptyBalance())
 
