@@ -8,7 +8,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
   def acceptGenesis(b: Bundle, tx: Transaction): Unit = {
     storeTransaction(tx)
     genesisBundle = Some(b)
-    val md = Sheaf(b, Some(0), Map(id.b58 -> 1L), Some(1000), transactionsResolved = true)
+    val md = Sheaf(b, Some(0), Map(b.extractIds.head.b58 -> 1L), Some(1000), transactionsResolved = true)
     storeBundle(md)
     maxBundleMetaData = Some(md)
     b.extractTX.foreach(acceptTransaction)

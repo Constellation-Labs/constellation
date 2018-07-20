@@ -8,6 +8,7 @@ import org.constellation.util.APIClient
 import constellation._
 
 import scala.concurrent.ExecutionContextExecutor
+import scala.util.Try
 
 object DownloadChainBatch {
 
@@ -38,10 +39,13 @@ object DownloadChainBatch {
     val a1 = apis.filter{_.host == nodeIp}.head
 
     val chainFile = scala.tools.nsc.io.File("chain.jsonl")
-    var hash = "9ead11ba079bf2f789c9207bdfab7779fd807ba4c2a2571326fc9bb6ce39365e"
+    Try{chainFile.delete()}
 
-    while (hash != "coinbase") {
-      val ancestors = a1.getBlocking[Seq[BundleHashQueryResponse]]("bundleAll10/" + hash)
+    val genesisBundleHash = "0376d95b00b738f8400e5ca6b7e860cf20bb254aaf9607d8a1b6c207a674c945"
+    var hash = "cab09861629d2fc574aa3a669e5d98a10eb617a917628c3c926511e8dad1b20d"
+
+    while (hash != genesisBundleHash) {
+      val ancestors = a1.getBlocking[Seq[BundleHashQueryResponse]]("download/" + hash)
       val nonEmpty = ancestors.forall(_.sheaf.nonEmpty)
       val oldestHash = ancestors.head.hash
       val secondHasFirstAsParent = ancestors.tail.headOption.forall(_.sheaf.get.bundle.extractParentBundleHash.pbHash == oldestHash)
