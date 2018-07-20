@@ -235,25 +235,20 @@ class API(
             }
           } ~
           pathPrefix("txHash") { // TODO: Rename to transaction
-            get {
               extractUnmatchedPath { p =>
                 logger.debug(s"Unmatched path on txHash result $p")
                 val ps = p.toString().tail
                 complete(lookupTransactionDB(ps).prettyJson)
               }
-            }
           } ~
           pathPrefix("transaction") {
-            get {
               extractUnmatchedPath { p =>
                 //   logger.debug(s"Unmatched path on address result $p")
                 val ps = p.toString().tail
                 complete(lookupTransactionDB(ps))
               }
-            }
           } ~
           pathPrefix("bundle") {
-            get {
               extractUnmatchedPath { p =>
                 logger.debug(s"Unmatched path on bundle direct result $p")
                 val ps = p.toString().tail
@@ -262,10 +257,8 @@ class API(
                 val maybeSheaf = lookupBundleDBFallbackBlocking(ps)
                 complete(maybeSheaf)
               }
-            }
           } ~
           pathPrefix("fullBundle") {
-            get {
               extractUnmatchedPath { p =>
                 logger.debug(s"Unmatched path on fullBundle result $p")
                 val ps = p.toString().split("/").last
@@ -280,9 +273,7 @@ class API(
                   )
                 )
               }
-            }
           } ~ pathPrefix("download") {
-          get {
             extractUnmatchedPath { p =>
               Try {
                 logger.debug(s"Unmatched path on download result $p")
@@ -304,9 +295,7 @@ class API(
                   complete(StatusCodes.InternalServerError)
               }
             }
-          }
         } ~ pathPrefix("ancestors") {
-          get {
             extractUnmatchedPath { p =>
               logger.debug(s"Unmatched path on download result $p")
               val ps = p.toString().split("/").last
@@ -316,7 +305,6 @@ class API(
                 _.bundle.hash
               })
             }
-          }
         } ~
           path("setKeyPair") {
             parameter('keyPair) { kpp =>
