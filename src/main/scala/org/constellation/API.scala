@@ -299,7 +299,8 @@ class API(
               }
             }
           }
-        } ~ pathPrefix("ancestors") {
+        } ~
+        pathPrefix("ancestors") {
           get {
             extractUnmatchedPath { p =>
               logger.debug(s"Unmatched path on download result $p")
@@ -435,6 +436,32 @@ class API(
             serveMainPage
         } ~
           post {
+            path("completeUpload") {
+              entity(as[BundleHashQueryResponse]) { b =>
+                val s = b.sheaf.get
+                maxBundleMetaData = Some(s)
+                downloadInProgress = false
+                downloadMode = false
+                complete(StatusCodes.OK)
+              }
+            } ~
+            path("upload") {
+              entity(as[Seq[BundleHashQueryResponse]]) {
+                bhqr =>
+                  bhqr.foreach{ b =>
+                    val s = b.sheaf.get
+                    if (s.height.get == 0) {
+                      acceptGenesis(s.bundle, b.transactions.head)
+                    } else {
+                      storeBundle(s)
+                      totalNumValidBundles += 1
+                      b.transactions.foreach{acceptTransaction}
+                      b.transactions.foreach{t => t.txData.data.updateLedger(memPoolLedger)}
+                    }
+                  }
+                  complete(StatusCodes.OK)
+              }
+            } ~
             path("peerHeartbeat") {
               entity(as[PeerSyncHeartbeat]) { psh =>
                 complete(StatusCodes.OK)
