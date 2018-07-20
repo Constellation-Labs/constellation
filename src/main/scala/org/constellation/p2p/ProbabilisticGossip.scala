@@ -43,7 +43,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
       case tx: Transaction =>
         //  println(s"Rx tx hash ${tx.short}")
-        if (lookupTransactionDBFallbackBlocking(tx.hash).isEmpty) {
+        if (lookupTransaction(tx.hash).isEmpty) {
           storeTransaction(tx)
           numSyncedTX += 1
         }
@@ -67,21 +67,21 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     }
   }
 
-  @volatile var heartBeatInProgress = false
+//  @volatile var heartBeatInProgress = false
 
   def gossipHeartbeat(): Unit = {
     dataRequest()
     if (!downloadMode && genesisBundle.nonEmpty && maxBundleMetaData.nonEmpty && !downloadInProgress) {
-      if (!heartBeatInProgress) {
-        heartBeatInProgress = true
-        Try {
+    //  if (!heartBeatInProgress) {
+      //  heartBeatInProgress = true
+      ///  Try {
           bundleHeartbeat()
-        } match {
-          case Success(x) =>
-          case Failure(e) => e.printStackTrace()
-        }
-        heartBeatInProgress = false
-      }
+       // } match {
+       //   case Success(x) =>
+       //   case Failure(e) => e.printStackTrace()
+       // }
+       // heartBeatInProgress = false
+     // }
     }
   }
 
@@ -121,10 +121,11 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   def simulateTransactions(): Unit = {
     val shouldEmit = maxBundleMetaData.exists {_.height.get >= 5} // || (System.currentTimeMillis() > startTime + 30000)
-    if (shouldEmit && memPool.size < 150) {
+    if (shouldEmit && memPool.size < 1500) {
       //if (Random.nextDouble() < .2)
       randomTransaction()
       randomTransaction()
+      if (memPool.size < 500) Seq.fill(50)(randomTransaction())
     }
   }
 
@@ -136,7 +137,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     if (syncPendingTXHashes.nonEmpty) {
       // println("Requesting data sync pending of " + syncPendingTXHashes)
       broadcast(BatchTXHashRequest(syncPendingTXHashes))
-      if (syncPendingTXHashes.size > 300) {
+      if (syncPendingTXHashes.size > 1500) {
         val toRemove = txSyncRequestTime.toSeq.sortBy(_._2).zipWithIndex.filter{_._2 > 50}.map{_._1._1}.toSet
         syncPendingTXHashes --= toRemove
       }
@@ -265,7 +266,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       }
     }) {
 
-      // println("Bundle cleanup")
+       println("Bundle cleanup")
 
 /*
       val oldestAncestor = last100ValidBundleMetaData.head
@@ -357,7 +358,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       }*/
       }
 
-     // println("Bundle to sheaf cleanup done removed: " + numDeleted)
+      println("Bundle to sheaf cleanup done removed: " + numDeleted)
 
       // There should also be
     }
