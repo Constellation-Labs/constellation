@@ -111,16 +111,6 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
  // val startTime: Long = System.currentTimeMillis()
 
-  def simulateTransactions(): Unit = {
-    val shouldEmit = maxBundleMetaData.exists {_.height.get >= 5} // || (System.currentTimeMillis() > startTime + 30000)
-    if (shouldEmit && memPool.size < 1500) {
-      //if (Random.nextDouble() < .2)
-      randomTransaction()
-      randomTransaction()
-      if (memPool.size < 500) Seq.fill(50)(randomTransaction())
-    }
-  }
-
   def dataRequest(): Unit = {
 
     // Request missing bundle data
@@ -355,12 +345,12 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   // TODO: extract to test
   def simulateTransactions(): Unit = {
-
-    val shouldEmit = maxBundleMetaData.exists {_.height.get >= 5}
-
-    if (shouldEmit && memPool.size < 150) {
+    val shouldEmit = maxBundleMetaData.exists {_.height.get >= 5} // || (System.currentTimeMillis() > startTime + 30000)
+    if (shouldEmit && memPool.size < 1500) {
+      //if (Random.nextDouble() < .2)
       randomTransaction()
       randomTransaction()
+      if (memPool.size < 500) Seq.fill(50)(randomTransaction())
     }
   }
 
