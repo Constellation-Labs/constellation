@@ -5,6 +5,7 @@ import java.util.concurrent.ForkJoinPool
 import akka.http.scaladsl.model.StatusCodes
 import org.constellation.primitives.Schema._
 import constellation._
+import org.constellation.AddPeerRequest
 
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
@@ -28,6 +29,11 @@ class Simulation(apis: Seq[APIClient]) {
       val gbmd = a.getBlocking[Metrics]("metrics")
       gbmd.metrics("numValidBundles").toInt >= 1
     }
+  }
+
+  def genesisOE: GenesisObservation = {
+    val ids = apis.map{_.id}
+    apis.head.postRead[GenesisObservation]("genesisObservation", ids.tail.toSet)
   }
 
   def genesis(): Unit = {
@@ -58,6 +64,21 @@ class Simulation(apis: Seq[APIClient]) {
         n =>
           Future {
             val res = a.postSync("peer", n)
+            println(s"Tried to add peer $n to $ip res: $res")
+          }
+      }
+    }
+    results
+  }
+  def addPeersV2(): Seq[Future[Unit]] = {
+    val results = apis.flatMap { a =>
+      val ip = a.host
+      println(s"Trying to add nodes to $ip")
+      val others = apis.filter {_.id != a.id}.map { z => AddPeerRequest(z.host, z.udpPort, z.id)}
+      others.map {
+        n =>
+          Future {
+            val res = a.postSync("addPeerV2", n)
             println(s"Tried to add peer $n to $ip res: $res")
           }
       }
@@ -152,6 +173,36 @@ class Simulation(apis: Seq[APIClient]) {
   def nonEmptyBalance(): Boolean = apis.forall(_.getBlockingStr("balance").toLong > 0L)
 
   var healthChecks = 0
+
+  def awaitHealthy(): Unit = {
+    while (healthChecks < 10) {
+      if (Try{healthy()}.getOrElse(false)) {
+        healthChecks = Int.MaxValue
+      } else {
+        healthChecks += 1
+        println(s"Unhealthy nodes. Waiting 30s. Num attempts: $healthChecks out of 10")
+        Thread.sleep(30000)
+
+      }
+    }
+    assert(healthy())
+  }
+
+  def runV2(attemptSetExternalIP: Boolean = false): Unit = {
+
+    awaitHealthy()
+    setIdLocal()
+    if (attemptSetExternalIP) {
+      assert(setExternalIP())
+    }
+    apis.foreach(_.postEmpty("disableDownload"))
+    val results = addPeersV2()
+    import scala.concurrent.duration._
+    Await.result(Future.sequence(results), 60.seconds)
+
+    // assert(verifyPeersAdded())
+
+  }
 
   def run(validationFractionAcceptable: Double = 1.0, attemptSetExternalIP: Boolean = true): Unit = {
 

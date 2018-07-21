@@ -22,6 +22,9 @@ trait MetricsExt {
   @volatile var numDBDeletes = 0L
   @volatile var numMempoolEmits = 0L
   @volatile var numValidBundleHashesRemovedFromMemory = 0L
+  @volatile var numAPICalls = 0L
+  @volatile var allPeersHealthy = true
+
 
   def resetMetrics(): Unit = {
 

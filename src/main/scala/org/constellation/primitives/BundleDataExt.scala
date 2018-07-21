@@ -94,6 +94,11 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     lookupBundle(sheaf.bundle)
   }
 
+  def putBundleDB(sheaf: Sheaf): Unit = {
+    val hash = sheaf.bundle.hash
+    dbActor.foreach{_ ! DBPut(hash, sheaf)}
+  }
+
   def storeBundle(sheaf: Sheaf): Unit = {
     val hash = sheaf.bundle.hash
     bundleToSheaf(hash) = sheaf

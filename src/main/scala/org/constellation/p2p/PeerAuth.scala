@@ -5,9 +5,10 @@ import java.security.KeyPair
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
-import org.constellation.util.Signed
+import org.constellation.util.{APIClient, Signed}
 import constellation._
 import org.constellation.Data
 import org.constellation.consensus.Consensus.RemoteMessage
@@ -26,7 +27,21 @@ trait PeerAuth {
   val logger: Logger
   implicit val timeout: Timeout
   implicit val executionContext: ExecutionContextExecutor
+  implicit val materializer: ActorMaterializer = data.actorMaterializer
   implicit val actorSystem: ActorSystem
+
+
+  def apiBroadcast[T](f: APIClient => T, skipIDs: Seq[Id] = Seq()): Iterable[T]  = {
+    signedPeerIDLookup.keys.filterNot{skipIDs.contains}.flatMap{
+      i =>
+      getOrElseUpdateAPIClient(i).map{
+        a =>
+      //    println("API broadcast")
+          f(a)
+      }
+    }
+  }
+
 
   def broadcast[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
     val dest: Iterable[Id] = if (idSubset.isEmpty) signedPeerIDLookup.keys else idSubset
@@ -89,6 +104,8 @@ trait PeerAuth {
       }
 
       logger.debug(s"Peer added, total peers: ${signedPeerIDLookup.keys.size} on ${id.short}")
+
+   //   getOrElseUpdateAPIClient(value.id)
       newPeers.foreach { np =>
         //    logger.debug(s"Attempting to add new peer from peer reference handshake response $np")
         //   initiatePeerHandshake(PeerRef(np.data.externalAddress))

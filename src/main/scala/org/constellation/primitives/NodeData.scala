@@ -25,12 +25,15 @@ trait NodeData {
   def publicKeyHash: Int = keyPair.getPublic.hashCode()
   def id: Id = Id(keyPair.getPublic.encoded)
   def selfAddress: AddressMetaData = id.address
+  def selfAddressStr: String = selfAddress.address
 
   @volatile var nodeState: NodeState = PendingDownload
 
   var externalHostString: String = _
   @volatile var externalAddress: Option[InetSocketAddress] = None
   @volatile var apiAddress: Option[InetSocketAddress] = None
+  @volatile var tcpAddress: Option[InetSocketAddress] = None
+
   var remotes: Seq[InetSocketAddress] = Seq()
   def selfPeer: Signed[Peer] = Peer(id, externalAddress, apiAddress, remotes).signed()
 /*

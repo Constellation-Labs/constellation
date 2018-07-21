@@ -4,8 +4,10 @@ package org.constellation.primitives
 import java.net.InetSocketAddress
 import java.security.PublicKey
 
+import akka.actor.ActorRef
 import cats.kernel.Monoid
 import constellation.pubKeyToAddress
+import org.constellation.LevelDB.DBPut
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.Base58
 import org.constellation.util._
@@ -84,8 +86,9 @@ object Schema {
                      src: String,
                      dst: String,
                      amount: Long,
-                     time: Long = System.currentTimeMillis()
-                   ) extends ProductHash with GossipMessage {
+                     salt: Long = Random.nextLong() // To ensure hash uniqueness.
+                   ) extends TypedProductHash with GossipMessage {
+    def hashType = "TransactionData"
     def inverseAmount: Long = -1*amount
     def normalizedAmount: Long = amount / NormalizationFactor
     def pretty: String = s"TX: $short FROM: ${src.slice(0, 8)} " +
@@ -109,7 +112,6 @@ object Schema {
 
 
   }
-
   case class Transaction(
                  txData: Signed[TransactionData]
                ) extends Fiber with GossipMessage with ProductHash with RemoteMessage {
@@ -144,6 +146,65 @@ object Schema {
                                         lastRequestTime: Long,
                                         numRequests: Int
                                       )
+
+  trait TypedProductHash extends ProductHash {
+    def hashType: String
+    def typedEdgeHash = TypedEdgeHash(hash, hashType)
+    def put(db: ActorRef): Unit = db ! DBPut(hash, this)
+  }
+
+  // Order is like: TransactionData -> TX -> CheckpointBlock -> ObservationEdge -> SignedObservationEdge
+
+  case class TX(signatureBatch: SignatureBatch) extends TypedProductHash {
+    def hashType = "TX"
+  }
+
+  case class CheckpointBlock(transactions: Set[String]) extends TypedProductHash {
+    def hashType = "CheckpointBlock"
+  }
+
+  case class TypedEdgeHash(hash: String, hashType: String)
+
+  case class ObservationEdge(left: TypedEdgeHash, right: TypedEdgeHash) extends TypedProductHash {
+    def hashType = "ObservationEdge"
+  }
+
+  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends TypedProductHash {
+    def hashType: String = "SignedObservationEdge"
+  }
+
+  case class ResolvedTX(tx: TX, transactionData: TransactionData)
+
+  case class AddressCache(balance: Long, reputation: Option[Double] = None)
+
+
+  case class ResolvedTipObservation(
+                                     resolvedTX: Set[ResolvedTX],
+                                     checkpointBlock: CheckpointBlock,
+                                     observationEdge: ObservationEdge,
+                                     signedObservationEdge: SignedObservationEdge
+                               ) {
+    def store(db: ActorRef): Unit = {
+        resolvedTX.foreach { rt =>
+          rt.tx.put(db)
+          rt.transactionData.put(db)
+        }
+        checkpointBlock.put(db)
+        observationEdge.put(db)
+        signedObservationEdge.put(db)
+      }
+  }
+
+  case class PeerIPData(canonicalHostName: String, port: Option[Int])
+
+  case class GenesisObservation(
+                               genesis: ResolvedTipObservation,
+                               initialDistribution: ResolvedTipObservation
+                               )
+
+
+
+ // case class UnresolvedEdge(edge: )
 
   // TODO: Change options to ResolvedBundleMetaData
 

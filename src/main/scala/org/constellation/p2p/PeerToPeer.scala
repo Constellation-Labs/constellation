@@ -4,6 +4,7 @@ import java.security.PublicKey
 
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
 import akka.http.scaladsl.model.StatusCodes
+import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import org.constellation.Data

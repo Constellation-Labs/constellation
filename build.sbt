@@ -19,7 +19,7 @@ lazy val commonSettings = Seq(
   name := "constellation",
   mainClass := Some("org.constellation.ConstellationNode"),
   parallelExecution in Test := false,
-  dockerExposedPorts := Seq(2551, 9000, 6006, 9010),
+  dockerExposedPorts := Seq(2551, 9000, 6006, 9010, 9001, 9002),
   dockerExposedUdpPorts := Seq(16180),
   dockerCommands := dockerCommands.value.flatMap {
     case ExecCmd("ENTRYPOINT", args @ _*) => Seq(Cmd("ENTRYPOINT", args.mkString(" ")))
@@ -44,6 +44,7 @@ lazy val commonSettings = Seq(
     "-Dakka.io.dns.async-dns.resolv-conf=on"
   ),
   resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases",
+  resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
 
   javaOptions in Universal ++= Seq(
     // -J params will be added as jvm parameters
@@ -84,7 +85,10 @@ lazy val coreDependencies = Seq(
   "com.twitter" %% "algebird-core" % "0.13.4",
   "org.typelevel" %% "cats-core" % "1.0.1",
   "net.glxn" % "qrgen" % "1.4",
-  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources()
+  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
+  "com.typesafe.slick" %% "slick" % "3.2.3",
+  "org.slf4j" % "slf4j-nop" % "1.6.4",
+  "com.h2database" % "h2" % "1.4.197"
   // "com.esotericsoftware" % "kryo" % "4.0.2"
 )
 

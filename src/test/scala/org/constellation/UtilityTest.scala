@@ -4,7 +4,9 @@ import java.security.KeyPair
 
 import org.scalatest.FlatSpec
 import constellation._
-import org.constellation.primitives.Schema.{Bundle, BundleData, ParentBundleHash, TransactionHash}
+import org.constellation.primitives.Schema._
+
+//case class Test(a: EdgeHashType, b: EdgeHashType)
 
 class UtilityTest extends FlatSpec {
 
@@ -39,6 +41,17 @@ class UtilityTest extends FlatSpec {
     println(xor > xor2)
 */
 
+  }
+
+  "Case object serialization" should "work" in {
+
+    import org.constellation.primitives.Schema._
+
+    /*val t = Test(TXHash, AsdfHash)
+    println(t.j)
+    println(t.j.x[Test])
+    assert(t.j.x[Test] == t)
+*/
   }
 
 }

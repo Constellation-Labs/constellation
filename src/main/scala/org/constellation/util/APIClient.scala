@@ -19,8 +19,8 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class APIClient(val host: String = "127.0.0.1", val port: Int)(
   implicit val system: ActorSystem,
-  implicit val materialize: ActorMaterializer,
-  implicit val executionContext: ExecutionContextExecutor
+  implicit val executionContext: ExecutionContextExecutor,
+implicit val materialize: ActorMaterializer
 ) {
 
   var udpPort: Int = 16180
@@ -80,6 +80,12 @@ class APIClient(val host: String = "127.0.0.1", val port: Int)(
     Http().singleRequest(
       HttpRequest(headers = List(authorization), uri = base(suffix), method = HttpMethods.POST, entity = HttpEntity(
         ContentTypes.`application/json`, ser)
+      ))
+  }
+
+  def postEmpty(suffix: String)(implicit f : Formats = constellation.constellationFormats): Future[HttpResponse] = {
+    Http().singleRequest(
+      HttpRequest(headers = List(authorization), uri = base(suffix), method = HttpMethods.POST
       ))
   }
 

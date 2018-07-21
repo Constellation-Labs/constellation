@@ -2,6 +2,7 @@ package org.constellation.p2p
 
 import java.net.InetSocketAddress
 
+import akka.http.scaladsl.model.StatusCodes
 import org.constellation.Data
 import org.constellation.primitives.Schema._
 import org.constellation.util.ProductHash
@@ -103,6 +104,9 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
           }
       }
     }
+
+    //allPeersHealthy = apiBroadcast(_.getSync("health").status == StatusCodes.OK).forall(x => x)
+
 
     if (generateRandomTX) simulateTransactions()
 

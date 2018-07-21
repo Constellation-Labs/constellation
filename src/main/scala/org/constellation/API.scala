@@ -9,10 +9,7 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, path, _}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.directives.Credentials
-import akka.http.scaladsl.unmarshalling.{
-  FromEntityUnmarshaller,
-  PredefinedFromEntityUnmarshallers
-}
+import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.ask
 import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
@@ -21,22 +18,27 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema._
-import org.constellation.util.ServeUI
+import org.constellation.util.{HashSignature, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 import scala.util.{Failure, Success, Try}
+import org.constellation.primitives.APIBroadcast
+
+case class AddPeerRequest(host: String, port: Int, id: Id)
 
 class API(
     val peerToPeerActor: ActorRef,
     consensusActor: ActorRef,
     udpAddress: InetSocketAddress,
-    val data: Data = null
+    val data: Data = null,
+    peerManager: ActorRef
 )(implicit executionContext: ExecutionContext, val timeout: Timeout)
     extends Json4sSupport
     with Wallet
@@ -60,7 +62,9 @@ class API(
   def calculateMetrics(): Metrics = {
     Metrics(
       Map(
-        "version" -> "1.0.1",
+        "version" -> "1.0.2",
+        "allPeersHealthy" -> allPeersHealthy.toString,
+     //   "numAPICalls" -> numAPICalls.toString,
         "numMempoolEmits" -> numMempoolEmits.toString,
         "numDBGets" -> numDBGets.toString,
         "numDBPuts" -> numDBPuts.toString,
@@ -232,6 +236,7 @@ class API(
 
   val getEndpoints: Route = cors() {
     extractClientIP { clientIP =>
+    //  numAPICalls += 1
       /*      logger.debug(s"Client IP " +
               s"$clientIP ${clientIP.getAddress()} " +
               s"${clientIP.toIP} ${clientIP.toOption.map{_.getCanonicalHostName}} ${clientIP.getPort()}"
@@ -497,6 +502,47 @@ class API(
 
   private val postEndpoints =
     post {
+  //    numAPICalls += 1
+      path("peerHealthCheckV2") {
+        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse]]]
+        val res = response.getOpt().map{
+          idMap =>
+            idMap.map{
+              case (id, fut) =>
+                val f2: Future[HttpResponse] = fut.asInstanceOf[Future[HttpResponse]]
+
+            }
+
+        }.getOrElse(StatusCodes.InternalServerError)
+        complete(StatusCodes.OK)
+      } ~
+      path("acceptGenesisOE") {
+        entity(as[GenesisObservation]) { go =>
+
+          dbActor.foreach { db =>
+            go.genesis.store(db)
+            go.initialDistribution.store(db)
+            val gtx = go.genesis.resolvedTX.head.transactionData
+            val distrTX = go.genesis.resolvedTX.toSeq.map{_.transactionData}
+            db ! DBPut(gtx.dst, AddressCache(gtx.amount - distrTX.map{_.amount}.sum, Some(1000D)))
+            distrTX.foreach{ t =>
+              db ! DBPut(t.dst, AddressCache(t.amount, Some(1000D)))
+            }
+          }
+
+          complete(StatusCodes.OK)
+        }
+      } ~
+      path("genesisObservation") {
+        entity(as[Set[Id]]) { ids =>
+          complete(createGenesisAndInitialDistributionOE(ids))
+        }
+      } ~
+      path("disableDownload") {
+        downloadMode = false
+        downloadInProgress = false
+        complete(StatusCodes.OK)
+      } ~
       path("completeUpload") {
               entity(as[BundleHashQueryResponse]) { b =>
                 val s = b.sheaf.get
@@ -514,78 +560,114 @@ class API(
                     if (s.height.get == 0) {
                       acceptGenesis(s.bundle, b.transactions.head)
                     } else {
-                      storeBundle(s)
+                      putBundleDB(s)
                       totalNumValidBundles += 1
-                      b.transactions.foreach{acceptTransaction}
-                      b.transactions.foreach{t => t.txData.data.updateLedger(memPoolLedger)}
+                      b.transactions.foreach{t =>
+                        putTXDB(t)
+                        b.transactions.foreach{acceptTransaction}
+                        t.txData.data.updateLedger(memPoolLedger)
+                      }
                     }
                   }
                   complete(StatusCodes.OK)
               }
-            } ~path("peerHeartbeat") {
-        entity(as[PeerSyncHeartbeat]) { psh =>
+            } ~
+            path("rxBundle") {
+              entity(as[Bundle]) { b =>
+                //println("api handle bundle")
+                handleBundle(b)
+                complete(StatusCodes.OK)
+              }
+            } ~
+            path("handleTransaction") {
+              entity(as[Transaction]) { tx =>
+                if (lookupTransaction(tx.hash).isEmpty) {
+                  storeTransaction(tx)
+                  numSyncedTX += 1
+                }
+                syncPendingTXHashes -= tx.hash
+                txSyncRequestTime.remove(tx.hash)
+                complete(StatusCodes.OK)
+              }
+            } ~
+            path("batchBundleRequest") {
+              entity(as[BatchBundleHashRequest]) { bhr =>
+                val sheafResponses = bhr.hashes.flatMap {
+                  lookupBundleDBFallbackBlocking
+                }
+                complete(sheafResponses)
+              }
+            } ~
+              path("batchTXRequest") {
+              entity(as[BatchTXHashRequest]) { bhr =>
+           //     println("API batch tx request.")
+                complete(bhr.hashes.flatMap{lookupTransactionDBFallbackBlocking})
+              }
+            } ~
+            path("peerSyncHeartbeat") {
+              entity(as[PeerSyncHeartbeat]) { psh =>
+                processPeerSyncHeartbeat(psh)
+                complete(StatusCodes.OK)
+              }
+            } ~
+              path("sendToAddress") {
+                entity(as[SendToAddress]) { s =>
+                  handleSendRequest(s)
+                }
+              } ~
+              path("tx") {
+                entity(as[Transaction]) { tx =>
+                  peerToPeerActor ! tx
+                  complete(StatusCodes.OK)
+                }
+              } ~
+      path("addPeerV2"){
+        entity(as[AddPeerRequest]) { e =>
+
+          val askRes = peerManager ? AddPeerRequest
+          /*askRes.mapTo[HashSignature].getOpt().map{
+            complete(_)
+          }.getOrElse(complete(StatusCodes.InternalServerError))*/
           complete(StatusCodes.OK)
         }
       } ~
-        path("sendToAddress") {
-          entity(as[SendToAddress]) { s =>
-            handleSendRequest(s)
-          }
-        } ~
-        /*           path("db") {
-                   entity(as[String]) { e: String =>
-                     import constellation.EasyFutureBlock
-                     val cleanStr = e.replaceAll('"'.toString, "")
-                     val res = db.get(cleanStr)
-                     complete(res)
-                   }
-                 } ~*/
-        path("tx") {
-          entity(as[Transaction]) { tx =>
-            peerToPeerActor ! tx
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("peer") {
-          entity(as[String]) { peerAddress =>
-            Try {
-              //    logger.debug(s"Received request to add a new peer $peerAddress")
-              var addr: Option[InetSocketAddress] = None
-              val result = Try {
-                peerAddress.replaceAll('"'.toString, "").split(":") match {
-                  case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
-                  case a @ _ =>
-                    logger.debug(s"Unmatched Array: $a");
-                    throw new RuntimeException(s"Bad Match: $a");
-                }
-              }.toOption match {
-                case None =>
-                  StatusCodes.BadRequest
-                case Some(v) =>
-                  addr = Some(v)
-                  val fut =
-                    (peerToPeerActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
-                  val res = Try {
-                    Await.result(fut, timeout.duration)
-                  }.toOption
-                  res match {
-                    case None =>
-                      StatusCodes.RequestTimeout
-                    case Some(f) =>
-                      if (f == StatusCodes.Accepted) {
-                        var attempts = 0
-                        var peerAdded = false
-                        while (attempts < 5) {
-                          attempts += 1
-                          Thread.sleep(1500)
-                          //peerAdded = peers.exists(p => v == p.data.externalAddress)
-                          peerAdded = signedPeerLookup.contains(v)
+              path("peer") {
+                entity(as[String]) { peerAddress =>
+
+                  Try {
+                    //    logger.debug(s"Received request to add a new peer $peerAddress")
+                    var addr: Option[InetSocketAddress] = None
+                    val result = Try {
+                      peerAddress.replaceAll('"'.toString, "").split(":") match {
+                        case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
+                        case a@_ => logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a");
+                      }
+                    }.toOption match {
+                      case None =>
+                        StatusCodes.BadRequest
+                      case Some(v) =>
+                        addr = Some(v)
+                        val fut = (peerToPeerActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
+                        val res = Try {
+                          Await.result(fut, timeout.duration)
+                        }.toOption
+                        res match {
+                          case None =>
+                            StatusCodes.RequestTimeout
+                          case Some(f) =>
+                            if (f == StatusCodes.Accepted) {
+                              var attempts = 0
+                              var peerAdded = false
+                              while (attempts < 5) {
+                                attempts += 1
+                                Thread.sleep(1500)
+                                //peerAdded = peers.exists(p => v == p.data.externalAddress)
+                                peerAdded = signedPeerLookup.contains(v)
+                              }
+                              if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
+                            } else f
                         }
-                        if (peerAdded) StatusCodes.OK
-                        else StatusCodes.NetworkConnectTimeout
-                      } else f
-                  }
-              }
+                    }
 
               if (result != StatusCodes.OK) {
                 addr.foreach(peersAwaitingAuthenticationToNumAttempts(_) = 1)
@@ -618,7 +700,7 @@ class API(
             logger.debug(s"Set external IP RPC request $externalIp $addr")
             data.externalAddress = Some(addr)
             if (ipp.nonEmpty)
-              data.apiAddress = Some(new InetSocketAddress(ipp, 9000))
+              data.apiAddress = Some(new InetSocketAddress(ipp, data.apiAddress.get.getPort))
             complete(StatusCodes.OK)
           }
         } ~
@@ -658,10 +740,10 @@ class API(
     }
   }
 
-  val authRoutes = faviconRoute ~ authenticateBasic(realm = "secure site",
+  val authRoutes = faviconRoute ~ routes /* authenticateBasic(realm = "secure site",
                                                     myUserPassAuthenticator) {
     user =>
       routes
-  }
+  }*/
 
 }
