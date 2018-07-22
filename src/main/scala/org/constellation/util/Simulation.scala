@@ -2,7 +2,7 @@ package org.constellation.util
 
 import java.util.concurrent.ForkJoinPool
 
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import org.constellation.primitives.Schema._
 import constellation._
 import org.constellation.AddPeerRequest
@@ -31,7 +31,7 @@ class Simulation(apis: Seq[APIClient]) {
     }
   }
 
-  def genesisOE: GenesisObservation = {
+  def genesisOE(): GenesisObservation = {
     val ids = apis.map{_.id}
     apis.head.postRead[GenesisObservation]("genesisObservation", ids.tail.toSet)
   }
@@ -74,7 +74,7 @@ class Simulation(apis: Seq[APIClient]) {
     val results = apis.flatMap { a =>
       val ip = a.host
       println(s"Trying to add nodes to $ip")
-      val others = apis.filter {_.id != a.id}.map { z => AddPeerRequest(z.host, z.udpPort, z.id)}
+      val others = apis.filter {_.id != a.id}.map { z => AddPeerRequest(z.host, z.udpPort, z.peerHttpPort, z.id)}
       others.map {
         n =>
           Future {
@@ -129,6 +129,13 @@ class Simulation(apis: Seq[APIClient]) {
       val s = SendToAddress(dst, Random.nextInt(1000).toLong)
       src.postRead[Transaction]("sendToAddress", s)
     }(ec)
+  }
+
+  def sendRandomTransactionV2: Future[HttpResponse] = {
+    val src = randomNode
+    val dst = randomOtherNode(src).id.address.address
+    val s = SendToAddress(dst, Random.nextInt(1000).toLong)
+    src.post("sendV2", s)
   }
 
   def sendRandomTransactions(numTX: Int = 20): Set[Transaction] = {
@@ -197,8 +204,24 @@ class Simulation(apis: Seq[APIClient]) {
     }
     apis.foreach(_.postEmpty("disableDownload"))
     val results = addPeersV2()
-    import scala.concurrent.duration._
-    Await.result(Future.sequence(results), 60.seconds)
+    //import scala.concurrent.duration._
+    //Await.result(Future.sequence(results), 60.seconds)
+    Thread.sleep(5000)
+    assert(
+      apis.forall{a =>
+        val res = a.postEmptyRead[Seq[(Id, Boolean)]]("peerHealthCheckV2")
+        res.forall(_._2) && res.size == apis.size - 1
+      }
+    )
+
+    val goe = genesisOE()
+
+    apis.foreach{_.post("acceptGenesisOE", goe)}
+
+    Thread.sleep(5000)
+
+    apis.foreach{_.post("startRandomTX", goe).onComplete(println)}
+
 
     // assert(verifyPeersAdded())
 

@@ -50,9 +50,6 @@ class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSyst
     sim.runV2()
 
 
-
-    val goe = sim.genesisOE
-
     Thread.sleep(1000*60*60)
 
     // Cleanup DBs

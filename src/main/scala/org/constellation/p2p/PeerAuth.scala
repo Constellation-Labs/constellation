@@ -13,7 +13,7 @@ import constellation._
 import org.constellation.Data
 import org.constellation.consensus.Consensus.RemoteMessage
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Try}
 import org.constellation.primitives.Schema._
 
@@ -36,7 +36,7 @@ trait PeerAuth {
       i =>
       getOrElseUpdateAPIClient(i).map{
         a =>
-      //    println("API broadcast")
+         // println("API broadcast to " + a.host + " " + a.port)
           f(a)
       }
     }
@@ -105,7 +105,7 @@ trait PeerAuth {
 
       logger.debug(s"Peer added, total peers: ${signedPeerIDLookup.keys.size} on ${id.short}")
 
-   //   getOrElseUpdateAPIClient(value.id)
+      Future { getOrElseUpdateAPIClient(value.id)}
       newPeers.foreach { np =>
         //    logger.debug(s"Attempting to add new peer from peer reference handshake response $np")
         //   initiatePeerHandshake(PeerRef(np.data.externalAddress))

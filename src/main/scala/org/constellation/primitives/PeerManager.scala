@@ -15,14 +15,16 @@ case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set())
 case class PeerHealthCheck(status: Map[Id, Boolean])
 import scala.concurrent.duration._
 
+case object GetPeerInfo
+
 class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
 
   private val peerInfo = mutable.HashMap[Id, PeerData]()
 
   override def receive: Receive = {
 
-    case a @ AddPeerRequest(host, port, id) =>
-
+    case a @ AddPeerRequest(host, udpPort, port, id) =>
+      // println(s"Added peer $a")
       val client = new APIClient(host, port)(context.system, context.dispatcher, materialize)
       client.id = id
       peerInfo(id) = PeerData(a, client)
@@ -34,6 +36,8 @@ class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
           id -> func(data.client)
       }
       sender() ! result
+
+    case GetPeerInfo => sender() ! peerInfo.toMap
 
   }
 }

@@ -13,6 +13,8 @@ import scala.util.Try
 
 trait NodeData {
 
+  var sendRandomTXV2: Boolean = false
+
   var minGenesisDistrSize: Int = 3
   @volatile var downloadMode: Boolean = true
   @volatile var downloadInProgress: Boolean = false
@@ -29,13 +31,13 @@ trait NodeData {
 
   @volatile var nodeState: NodeState = PendingDownload
 
-  var externalHostString: String = _
+  var externalHostString: String = "127.0.0.1"
   @volatile var externalAddress: Option[InetSocketAddress] = None
   @volatile var apiAddress: Option[InetSocketAddress] = None
   @volatile var tcpAddress: Option[InetSocketAddress] = None
 
   var remotes: Seq[InetSocketAddress] = Seq()
-  def selfPeer: Signed[Peer] = Peer(id, externalAddress, apiAddress, remotes).signed()
+  def selfPeer: Signed[Peer] = Peer(id, externalAddress, apiAddress, remotes, externalHostString).signed()
 /*
 
   @volatile var db: LevelDB = _

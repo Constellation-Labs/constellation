@@ -179,11 +179,13 @@ trait POWSignHelp {
 
   def createTransactionSafeBatchOE(
                                     src: String, dst: String, amount: Long, keyPair: KeyPair, normalized: Boolean = true
-                                  ): (TX, TransactionData) = {
+                                  ): ResolvedTX = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
     val txData = TransactionData(src, dst, amountToUse)
     val sig = hashSignBatchZeroTyped(txData, keyPair)
-    TX(sig) -> txData
+    ResolvedTX(TX(sig), txData)
   }
+
+
 
 }

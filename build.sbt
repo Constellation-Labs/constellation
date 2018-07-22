@@ -36,16 +36,18 @@ lazy val commonSettings = Seq(
   dockerEntrypoint ++= Seq(
     "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=6006",
     "-Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false",
-    """-DakkaActorSystemName="$AKKA_ACTOR_SYSTEM_NAME"""",
+    """-DakkaActorSystemName="$AKKA_ACTOR_SYSTEM_NAME""""
+  ),
+  resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases",
+  resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
+/*
+,
     """-Dakka.remote.netty.tcp.hostname="$(eval "echo $AKKA_REMOTING_BIND_HOST")"""",
     """-Dakka.remote.netty.tcp.port="$AKKA_REMOTING_BIND_PORT"""",
     "-Dakka.io.dns.resolver=async-dns",
     "-Dakka.io.dns.async-dns.resolve-srv=true",
     "-Dakka.io.dns.async-dns.resolv-conf=on"
-  ),
-  resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases",
-  resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
-
+ */
   javaOptions in Universal ++= Seq(
     // -J params will be added as jvm parameters
     "-J-Xmx12000m" //,

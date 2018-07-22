@@ -22,7 +22,9 @@ class PeerToPeer(
                   val udpActor: ActorRef,
                   val data: Data = null,
                   var requestExternalAddressCheck: Boolean = false,
-                  val heartbeatEnabled: Boolean = false
+                  val heartbeatEnabled: Boolean = false,
+                  randomTransactionManager: ActorRef,
+                  cellManager: ActorRef
                 )
                 (implicit timeoutI: Timeout) extends Actor
   with ActorLogging
@@ -52,6 +54,11 @@ class PeerToPeer(
 
     case InternalHeartbeat =>
 
+      if (sendRandomTXV2) {
+        randomTransactionManager ! InternalHeartbeat
+        cellManager ! InternalHeartbeat
+      }
+
       processHeartbeat {
 
         if (heartbeatRound % 3 == 0) {
@@ -77,6 +84,7 @@ class PeerToPeer(
           }
 */
 
+/*
           // Remove dead peers
           lastPeerRX.foreach{ case (id, rx) =>
             if (rx < (System.currentTimeMillis() - 120000)) {
@@ -88,6 +96,7 @@ class PeerToPeer(
               }
             }
           }
+*/
 
         }
 
@@ -124,6 +133,9 @@ class PeerToPeer(
       }
 
     // Peer messages
+
+    case g: GossipMessage =>
+      handleGossip(g, null)
 
     case UDPMessage(message: Any, remote) =>
 

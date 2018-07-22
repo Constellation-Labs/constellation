@@ -40,17 +40,18 @@ object RestartCluster extends TestKit(ActorSystem("ClusterTest")){
     rpcs.foreach {
       _.get("restart")
     }
+    Thread.sleep(5000)
+
+    rpcs.foreach {
+      _.get("restart")
+    }
+    Thread.sleep(5000)
 
     rpcs.foreach {
       _.get("restart")
     }
 
-    rpcs.foreach {
-      _.get("restart")
-    }
-
-
-    Thread.sleep(6000)
+    Thread.sleep(5000)
 /*
 
 //http://35.238.29.152:9000/

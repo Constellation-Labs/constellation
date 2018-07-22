@@ -173,7 +173,12 @@ object Schema {
     def hashType: String = "SignedObservationEdge"
   }
 
+  case class EdgeCell(members: Seq[SignedObservationEdge])
+
   case class ResolvedTX(tx: TX, transactionData: TransactionData)
+
+  case class ResolvedEdge(edge: ObservationEdge, signed: SignedObservationEdge)
+
 
   case class AddressCache(balance: Long, reputation: Option[Double] = None)
 
@@ -513,7 +518,8 @@ object Schema {
                    id: Id,
                    externalAddress: Option[InetSocketAddress],
                    apiAddress: Option[InetSocketAddress],
-                   remotes: Seq[InetSocketAddress] = Seq()
+                   remotes: Seq[InetSocketAddress] = Seq(),
+                   externalHostString: String
                  ) extends ProductHash
 
   case class LocalPeerData(

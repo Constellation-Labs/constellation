@@ -5,13 +5,14 @@ import java.net.InetSocketAddress
 import akka.http.scaladsl.model.StatusCodes
 import org.constellation.Data
 import org.constellation.primitives.Schema._
-import org.constellation.util.ProductHash
+import org.constellation.util.{APIClient, ProductHash}
 import constellation._
 import org.constellation.LevelDB.{DBDelete, DBPut}
 
+import scala.concurrent.Future
 import scala.util.{Failure, Random, Success, Try}
 
-trait ProbabilisticGossip extends PeerAuth with LinearGossip {
+trait ProbabilisticGossip extends PeerAuth {
 
   val data: Data
 
@@ -19,7 +20,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
   def handleGossip(gm : GossipMessage, remote: InetSocketAddress): Unit = {
     totalNumGossipMessages += 1
-    val rid = signedPeerLookup.get(remote).map{_.data.id}
+    //val rid = signedPeerLookup.get(remote).map{_.data.id}
     gm match {
       case BatchBundleHashRequest(hashes) =>
         hashes.foreach{h =>
@@ -44,12 +45,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
       case tx: Transaction =>
         //  println(s"Rx tx hash ${tx.short}")
-        if (lookupTransaction(tx.hash).isEmpty) {
-          storeTransaction(tx)
-          numSyncedTX += 1
-        }
-        syncPendingTXHashes -= tx.hash
-        txSyncRequestTime.remove(tx.hash)
+        handleTransaction(tx)
 
       case bb: PeerSyncHeartbeat =>
 
@@ -69,6 +65,15 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
   }
 
 //  @volatile var heartBeatInProgress = false
+
+  def handleTransaction(tx: Transaction): Unit = {
+    if (lookupTransaction(tx.hash).isEmpty) {
+      storeTransaction(tx)
+      numSyncedTX += 1
+    }
+    syncPendingTXHashes -= tx.hash
+    txSyncRequestTime.remove(tx.hash)
+  }
 
   def gossipHeartbeat(): Unit = {
     dataRequest()
@@ -110,7 +115,8 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
     if (generateRandomTX) simulateTransactions()
 
-    broadcast(PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap, id))
+  //  broadcast(PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap, id))
+    apiBroadcast(_.post("peerSyncHeartbeat", PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap, id)))
 
     poolEmit()
 
@@ -136,11 +142,27 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
   def dataRequest(): Unit = {
     if (syncPendingBundleHashes.nonEmpty) {
       //    println("Requesting bundle sync of " + syncPendingBundleHashes.map{_.slice(0, 5)})
-      broadcast(BatchBundleHashRequest(syncPendingBundleHashes))
+     // broadcast(BatchBundleHashRequest(syncPendingBundleHashes))
+       apiBroadcast({a: APIClient =>
+       Future {
+         a.postRead[Seq[Sheaf]]("batchBundleRequest", BatchBundleHashRequest(syncPendingBundleHashes))
+           .foreach { z => self ! z.bundle} //  handleBundle(z.bundle) }
+       }
+     })
     }
     if (syncPendingTXHashes.nonEmpty) {
       // println("Requesting data sync pending of " + syncPendingTXHashes)
-      broadcast(BatchTXHashRequest(syncPendingTXHashes))
+    //  broadcast(BatchTXHashRequest(syncPendingTXHashes))
+
+      apiBroadcast({a: APIClient =>
+        Future{
+        a.postRead[Seq[Transaction]]("batchTXRequest", BatchTXHashRequest(syncPendingTXHashes)).foreach{
+          self ! _
+        } //.foreach{handleTransaction}
+        }
+      })
+
+
       if (syncPendingTXHashes.size > 1500) {
         val toRemove = txSyncRequestTime.toSeq.sortBy(_._2).zipWithIndex.filter{_._2 > 50}.map{_._1._1}.toSet
         syncPendingTXHashes --= toRemove
@@ -194,7 +216,15 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         updateBundleFrom(meta, Sheaf(b))
 
         numMempoolEmits += 1
-        broadcast(b)
+        //broadcast(b)
+        //val res =
+        apiBroadcast(_.post("rxBundle", b)) // .foreach{println}
+
+        //val resAll = Future.sequence(res)
+
+        //resAll.onComplete(z => println("mempool emit attempt result " + z.map{_.toSeq}))
+
+
       }
     }
   }
@@ -241,7 +271,9 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         updateBundleFrom(pbData, Sheaf(b))
         // Skip ids when depth below a certain amount, else tell everyone.
         // TODO : Fix ^
-        broadcast(b, skipIDs = allIds)
+       // broadcast(b, skipIDs = allIds)
+        apiBroadcast(_.post("rxBundle", b) , skipIDs = allIds) // .foreach{println}
+
       }
       if (bundles.size > 30) {
         val toRemoveHere = bundles.sortBy(z => z.totalScore.get).zipWithIndex.filter{_._2 < 15}.map{_._1}.toSet
