@@ -15,7 +15,7 @@ trait NodeData {
 
   var sendRandomTXV2: Boolean = false
 
-  var minGenesisDistrSize: Int = 4
+  var minGenesisDistrSize: Int = 3
   @volatile var downloadMode: Boolean = true
   @volatile var downloadInProgress: Boolean = false
   var generateRandomTX: Boolean = true
