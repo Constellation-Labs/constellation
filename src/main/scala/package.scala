@@ -11,7 +11,7 @@ import akka.util.{ByteString, Timeout}
 import com.google.common.hash.Hashing
 import org.constellation.p2p._
 import org.constellation.primitives.Schema._
-import org.constellation.util.{HashSignature, POWExt, POWSignHelp, ProductHash}
+import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
 import org.constellation.crypto.KeyUtilsExt
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
@@ -96,35 +96,6 @@ package object constellation extends KeyUtilsExt with POWExt
   def byteToInt(byteBarray: Array[Byte]): Int =
     ByteBuffer.wrap(byteBarray).order(ByteOrder.BIG_ENDIAN).getInt
 
-/*
-
-  def guessThreads: Int = {
-    val cores = Runtime.getRuntime.availableProcessors
-    val GUESS_THREADS_PER_CORE = 4
-    GUESS_THREADS_PER_CORE * cores
-  }
-
-  val kryoPool: KryoPool = KryoPool.withBuffer(guessThreads,
-    new ScalaKryoInstantiator().setRegistrationRequired(false), 32, 1024*1024*100)
-
-  implicit class KryoExt[T](a: T) {
-    def kryoWrite: Array[Byte] = {
-      kryoPool.toBytesWithClass(a)
-    }
-  }
-
-  implicit class KryoExtByte(a: Array[Byte]) {
-    def kryoRead: AnyRef = {
-      val deser = kryoPool.fromBytes(a)
-      deser
-    }
-    def kryoExtract[T]: T = {
-      kryoPool.fromBytes(a).asInstanceOf[T]
-    }
-  }
-*/
-
- // Log.TRACE()
 
   implicit class HTTPHelp(httpResponse: HttpResponse)
                          (implicit val materialize: ActorMaterializer) {
@@ -161,18 +132,5 @@ package object constellation extends KeyUtilsExt with POWExt
   }
 
   def signHashWithKeyB64(hash: String, privateKey: PrivateKey): String = base64(signData(hash.getBytes())(privateKey))
-
-  def hashSign(hash: String, keyPair: KeyPair): HashSignature = {
-    HashSignature(hash, signHashWithKeyB64(hash, keyPair.getPrivate), keyPair.getPublic.encoded.b58Encoded)
-  }
-
-
-/*
-  implicit def orderingByBundle[A <: Bundle]: Ordering[A] =
-    Ordering.by(e =>
-      (e.extractTX.size, e.extractIds.size, e.totalNumEvents, e.maxStackDepth, e.hash)
-    )
-
-*/
 
 }

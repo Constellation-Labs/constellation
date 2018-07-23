@@ -15,7 +15,8 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.Consensus
 import org.constellation.crypto.KeyUtils
-import org.constellation.p2p.{PeerToPeer, RegisterNextActor, UDPActor}
+import org.constellation.p2p.{PeerAPI, PeerToPeer, RegisterNextActor, UDPActor}
+import org.constellation.primitives._
 import org.constellation.primitives.Schema.{AddPeerFromLocal, ToggleHeartbeat}
 import org.constellation.util.APIClient
 
@@ -59,7 +60,7 @@ object ConstellationNode extends App {
     requestExternalAddressCheck = requestExternalAddressCheck
   )
 
-  node.data.minGenesisDistrSize = 4
+  node.data.minGenesisDistrSize = 3
 
 }
 
@@ -75,7 +76,9 @@ class ConstellationNode(
                          heartbeatEnabled: Boolean = false,
                          requestExternalAddressCheck : Boolean = false,
                          generateRandomTransactions: Boolean = true,
-                         autoSetExternalAddress: Boolean = false
+                         autoSetExternalAddress: Boolean = false,
+                         val peerHttpPort: Int = 9001,
+                         val peerTCPPort: Int = 9002
              )(
                implicit val system: ActorSystem,
                implicit val materialize: ActorMaterializer,
@@ -85,6 +88,7 @@ class ConstellationNode(
   val data = new Data()
   data.updateKeyPair(configKeyPair)
   import data._
+  data.actorMaterializer = materialize
 
   generateRandomTX = generateRandomTransactions
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
@@ -106,7 +110,36 @@ class ConstellationNode(
   if (autoSetExternalAddress) {
     data.externalAddress = Some(udpAddress)
     data.apiAddress = Some(new InetSocketAddress(hostName, httpPort))
+    data.tcpAddress = Some(new InetSocketAddress(hostName, peerTCPPort))
   }
+
+  val metricsManager: ActorRef = system.actorOf(
+    Props(new MetricsManager()), s"MetricsManager_$publicKeyHash"
+  )
+
+  val memPoolManager: ActorRef = system.actorOf(
+    Props(new MemPoolManager(metricsManager)), s"MemPoolManager_$publicKeyHash"
+  )
+
+  val keyManager: ActorRef = system.actorOf(
+    Props(new KeyManager(data.keyPair, memPoolManager, metricsManager)), s"KeyManager_$publicKeyHash"
+  )
+
+  val peerManager: ActorRef = system.actorOf(
+    Props(new PeerManager()), s"PeerManager_$publicKeyHash"
+  )
+
+  val cellManager: ActorRef = system.actorOf(
+    Props(new CellManager(memPoolManager, metricsManager, peerManager)), s"CellManager_$publicKeyHash"
+  )
+
+  val nodeManager: ActorRef = system.actorOf(
+    Props(new NodeManager(keyManager, metricsManager)), s"NodeManager_$publicKeyHash"
+  )
+
+  val randomTransactionManager: ActorRef = system.actorOf(
+    Props(new RandomTransactionManager(nodeManager, peerManager, metricsManager)), s"RandomTransactionManager_$publicKeyHash"
+  )
 
   val dbActor: ActorRef =  system.actorOf(
     Props(new LevelDBActor(data)), s"ConstellationDBActor_$publicKeyHash"
@@ -124,7 +157,8 @@ class ConstellationNode(
 
   val peerToPeerActor: ActorRef =
     system.actorOf(Props(new PeerToPeer(
-      configKeyPair.getPublic, system, consensusActor, udpActor, data, requestExternalAddressCheck, heartbeatEnabled=heartbeatEnabled)
+      configKeyPair.getPublic, system,
+      consensusActor, udpActor, data, requestExternalAddressCheck, heartbeatEnabled=heartbeatEnabled, randomTransactionManager, cellManager)
     (timeout)), s"ConstellationP2PActor_$publicKeyHash")
 
   data.p2pActor = Some(peerToPeerActor)
@@ -144,10 +178,17 @@ class ConstellationNode(
 
   // If we are exposing rpc then create routes
   val routes: Route = new API(
-    peerToPeerActor, consensusActor, udpAddress, data)(executionContext, timeout).authRoutes
+    peerToPeerActor, consensusActor, udpAddress, data, peerManager,
+    metricsManager, nodeManager, cellManager)(executionContext, timeout).authRoutes
 
-  // Setup http server for rpc
+  // Setup http server for internal API
   Http().bindAndHandle(routes, httpInterface, httpPort)
+
+  val peerRoutes : Route = new PeerAPI(dbActor, nodeManager, keyManager).routes
+
+  // Setup http server for peer API
+  Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)
+
 
   // TODO : Move to separate test class - these are within jvm only but won't hurt anything
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
@@ -155,6 +196,7 @@ class ConstellationNode(
   val api = new APIClient(port=httpPort)
   api.id = id
   api.udpPort = udpPort
+  api.peerHttpPort = peerHttpPort
   def healthy: Boolean = Try{api.getSync("health").status == StatusCodes.OK}.getOrElse(false)
   def add(other: ConstellationNode): HttpResponse = api.postSync("peer", other.udpAddressString)
 

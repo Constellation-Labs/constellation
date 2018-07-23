@@ -19,7 +19,7 @@ lazy val commonSettings = Seq(
   name := "constellation",
   mainClass := Some("org.constellation.ConstellationNode"),
   parallelExecution in Test := false,
-  dockerExposedPorts := Seq(2551, 9000, 6006, 9010),
+  dockerExposedPorts := Seq(2551, 9000, 6006, 9010, 9001, 9002),
   dockerExposedUdpPorts := Seq(16180),
   dockerCommands := dockerCommands.value.flatMap {
     case ExecCmd("ENTRYPOINT", args @ _*) => Seq(Cmd("ENTRYPOINT", args.mkString(" ")))
@@ -36,15 +36,18 @@ lazy val commonSettings = Seq(
   dockerEntrypoint ++= Seq(
     "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=6006",
     "-Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false",
-    """-DakkaActorSystemName="$AKKA_ACTOR_SYSTEM_NAME"""",
+    """-DakkaActorSystemName="$AKKA_ACTOR_SYSTEM_NAME""""
+  ),
+  resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases",
+  resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
+/*
+,
     """-Dakka.remote.netty.tcp.hostname="$(eval "echo $AKKA_REMOTING_BIND_HOST")"""",
     """-Dakka.remote.netty.tcp.port="$AKKA_REMOTING_BIND_PORT"""",
     "-Dakka.io.dns.resolver=async-dns",
     "-Dakka.io.dns.async-dns.resolve-srv=true",
     "-Dakka.io.dns.async-dns.resolv-conf=on"
-  ),
-  resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases",
-
+ */
   javaOptions in Universal ++= Seq(
     // -J params will be added as jvm parameters
     "-J-Xmx12000m" //,
@@ -84,7 +87,11 @@ lazy val coreDependencies = Seq(
   "com.twitter" %% "algebird-core" % "0.13.4",
   "org.typelevel" %% "cats-core" % "1.0.1",
   "net.glxn" % "qrgen" % "1.4",
-  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources()
+  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
+  "com.typesafe.slick" %% "slick" % "3.2.3",
+  "org.slf4j" % "slf4j-nop" % "1.6.4",
+  "com.h2database" % "h2" % "1.4.197",
+  "com.twitter" %% "storehaus-cache" % "0.15.0"
   // "com.esotericsoftware" % "kryo" % "4.0.2"
 )
 

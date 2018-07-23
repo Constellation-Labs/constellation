@@ -7,7 +7,7 @@ import com.twitter.chill.IKryoRegistrar
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey
 import org.constellation.p2p.SerializedUDPMessage
 import org.constellation.primitives.Schema._
-import org.constellation.util.{EncodedPublicKey, Signed}
+import org.constellation.util.{EncodedPublicKey, HashSignature, SignatureBatch, Signed}
 
 class ConstellationKryoRegistrar extends IKryoRegistrar {
   override def apply(kryo: Kryo): Unit = {
@@ -15,6 +15,14 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
   }
 
   def registerClasses(kryo: Kryo): Unit = {
+
+    kryo.register(classOf[AddressCache])
+    kryo.register(classOf[SignatureBatch])
+    kryo.register(classOf[HashSignature])
+    kryo.register(classOf[TX])
+    kryo.register(classOf[SignedObservationEdge])
+    kryo.register(classOf[ObservationEdge])
+    kryo.register(classOf[CheckpointBlock])
 
     kryo.register(classOf[DownloadRequest])
     kryo.register(classOf[ParentBundleHash])

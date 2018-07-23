@@ -112,6 +112,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
   // TODO: disabling until we port over to our new consensus mechanism
   "Cluster integration" should "ping a cluster, check health, go through genesis flow" in {
 
+    println("Grabbing cluster STS : " + clusterId)
     val mappings = getPodMappings(clusterId)
 
     mappings.foreach{println}

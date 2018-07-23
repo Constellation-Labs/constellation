@@ -19,12 +19,13 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class APIClient(val host: String = "127.0.0.1", val port: Int)(
   implicit val system: ActorSystem,
-  implicit val materialize: ActorMaterializer,
-  implicit val executionContext: ExecutionContextExecutor
+  implicit val executionContext: ExecutionContextExecutor,
+implicit val materialize: ActorMaterializer
 ) {
 
   var udpPort: Int = 16180
-  var id: Id = null
+  var id: Id = _
+  var peerHttpPort: Int = _
 
   def udpAddress: String = host + ":" + udpPort
 
@@ -34,23 +35,25 @@ class APIClient(val host: String = "127.0.0.1", val port: Int)(
 
   def base(suffix: String) = Uri(s"$baseURI/$suffix")
 
-  val config = ConfigFactory.load()
+  // val config = ConfigFactory.load()
 
-  val authId = config.getString("auth.id")
-  val authPassword = config.getString("auth.password")
+  val authId = "dev"  // config.getString("auth.id")
+  val authPassword = "p4ssw0rd" //config.getString("auth.password")
 
   val authorization = headers.Authorization(BasicHttpCredentials(authId, authPassword))
 
+  private val authHeaders = List() //authorization)
+
   def get(suffix: String, queryParams: Map[String,String] = Map()): Future[HttpResponse] = {
     Http().singleRequest(
-      HttpRequest(headers = List(authorization), uri = base(suffix).withQuery(Query(queryParams)))
+      HttpRequest(headers = authHeaders, uri = base(suffix).withQuery(Query(queryParams)))
     )
   }
 
   def getSync(suffix: String, queryParams: Map[String,String] = Map()): HttpResponse = {
     import constellation._
     Http().singleRequest(
-      HttpRequest(headers = List(authorization), uri = base(suffix).withQuery(Query(queryParams)))
+      HttpRequest(headers = authHeaders, uri = base(suffix).withQuery(Query(queryParams)))
     ).get()
   }
 
@@ -60,7 +63,7 @@ class APIClient(val host: String = "127.0.0.1", val port: Int)(
                                (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
     import constellation.EasyFutureBlock
     val httpResponse = Http().singleRequest(
-      HttpRequest(headers = List(authorization), uri = base(suffix).withQuery(Query(queryParams)))
+      HttpRequest(headers = authHeaders, uri = base(suffix).withQuery(Query(queryParams)))
     ).get(timeout)
     Unmarshal(httpResponse.entity).to[String].map { r => Serialization.read[T](r) }.get()
   }
@@ -69,7 +72,7 @@ class APIClient(val host: String = "127.0.0.1", val port: Int)(
                                  (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): String = {
     import constellation.EasyFutureBlock
     val httpResponse = Http().singleRequest(
-      HttpRequest(headers = List(authorization), uri = base(suffix).withQuery(Query(queryParams)))
+      HttpRequest(headers = authHeaders, uri = base(suffix).withQuery(Query(queryParams)))
     ).get(timeout)
     Unmarshal(httpResponse.entity).to[String].get()
   }
@@ -78,8 +81,14 @@ class APIClient(val host: String = "127.0.0.1", val port: Int)(
 
     val ser = Serialization.write(t)
     Http().singleRequest(
-      HttpRequest(headers = List(authorization), uri = base(suffix), method = HttpMethods.POST, entity = HttpEntity(
+      HttpRequest(headers = authHeaders, uri = base(suffix), method = HttpMethods.POST, entity = HttpEntity(
         ContentTypes.`application/json`, ser)
+      ))
+  }
+
+  def postEmpty(suffix: String)(implicit f : Formats = constellation.constellationFormats): Future[HttpResponse] = {
+    Http().singleRequest(
+      HttpRequest(headers = authHeaders, uri = base(suffix), method = HttpMethods.POST
       ))
   }
 
@@ -104,6 +113,14 @@ class APIClient(val host: String = "127.0.0.1", val port: Int)(
     import constellation.EasyFutureBlock
 
     read[Q](post(suffix, t).get(timeout)).get()
+  }
+
+  def postEmptyRead[Q <: AnyRef](suffix: String, timeout: Int = 5)(
+    implicit m : Manifest[Q], f : Formats = constellation.constellationFormats
+  ): Q = {
+    import constellation.EasyFutureBlock
+
+    read[Q](postEmpty(suffix).get(timeout)).get()
   }
 
 }
