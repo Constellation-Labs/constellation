@@ -207,7 +207,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     }
   }
 
-  def attemptResolvePeerBundles(): Unit = peerSync.foreach{
+  def attemptResolvePeerBundles(): Unit = peerSync.foreach {
     case (id, hb) =>
       if (hb.maxBundle.meta.exists(z => !z.isResolved)) {
         attemptResolveBundle(hb.maxBundle.meta.get, hb.maxBundle.extractParentBundleHash.pbHash)

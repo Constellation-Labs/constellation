@@ -12,6 +12,8 @@ import org.constellation.util._
 
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
+import constellation._
+import org.constellation.crypto.KeyUtils
 
 // This can't be a trait due to serialization issues
 object Schema {
@@ -168,10 +170,23 @@ object Schema {
                              child: Option[Bundle] = None,
                              pendingChildren: Option[Seq[Bundle]] = None,
                              neighbors: Option[Seq[Sheaf]] = None
-                           ) {
+                           )(implicit val keyPair: java.security.KeyPair = KeyUtils.makeKeyPair()) extends Monoid[Sheaf] {
     def safeBundle = Option(bundle)
     def isResolved: Boolean = reputations.nonEmpty && transactionsResolved
     def cellKey: CellKey = CellKey(bundle.extractParentBundleHash.pbHash, bundle.maxStackDepth)
+
+    def empty = Sheaf(safeBundle.get)
+    def combine(x: Sheaf, y: Sheaf = this): Sheaf = Sheaf(Bundle(BundleData(Seq(x.bundle, x.bundle)).signed()))
+
+    def resolve(left: Sheaf, right: Sheaf): Sheaf = {
+      if (!left.isResolved){
+        right
+      }
+      else if (right.isResolved) right
+      else {
+        resolve(left, right)
+      }
+    }
   }
 
   case class CellKey(hashPointer: String, depth: Int)
