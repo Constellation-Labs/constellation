@@ -21,17 +21,21 @@ trait Download extends PeerAuth {
     if (downloadMode && peers.nonEmpty && !downloadInProgress) {
       logger.debug("Requesting data download")
 
+      val apiClient = new APIClient("localhost", 8080)
+
+      // Get max bundles from all peers
       val maxBundles: Seq[Future[HttpResponse]] = getBroadcastTCP(route = "maxBundle")
 
       val future = Future.sequence(maxBundles)
 
       future.onComplete(f => {
         val responses = f.get.seq.map(f => {
-          val hash = new APIClient("localhost", 8080).read[Option[Sheaf]](f).get()
+          val hash = apiClient.read[Option[Sheaf]](f).get()
           hash
-        }).filter(_.isDefined).sortBy(_.get.height.get)
+        }).filter(_.isDefined).sortBy(_.get.totalScore.get)
 
         if (responses.nonEmpty) {
+          // Get the highest scoring max bundle hash
           var hash = responses.head.get.bundle.hash
 
           var validSheafs = Seq[Sheaf]()
@@ -46,12 +50,12 @@ trait Download extends PeerAuth {
               val responses = r.get
 
               val sheafs = responses.map(r => {
-                val sheaf = new APIClient("localhost", 8080).read[Option[Sheaf]](r).get()
+                val sheaf = apiClient.read[Option[Sheaf]](r).get()
                 sheaf
               }).toSeq
 
               if (sheafs.nonEmpty) {
-                val sheaf = sheafs.head.get
+                val sheaf = sheafs.filter(_.isDefined).minBy(_.get.totalScore).get
 
                 handleBundle(sheaf.bundle)
 
@@ -59,23 +63,40 @@ trait Download extends PeerAuth {
 
                 validSheafs = validSheafs :+ sheaf
 
-                sheaf.bundle.extractTXHash.foreach{ h =>
-                  val hActual = h.txHash
-                  val transactions: Seq[Future[HttpResponse]] = getBroadcastTCP(route = "transaction/" + hActual)
+                val peers = getBroadcastPeers()
 
-                  val downloadResponse = Future.sequence(transactions)
+                val transactions = sheaf.bundle.extractTXHash
 
-                  Await.ready(downloadResponse, 30 seconds).onComplete(f => {
-
-                    if (f.get.nonEmpty) {
-                      val sheaf = new APIClient("localhost", 8080).read[Option[Transaction]](f.get.head).get()
-
-                      if (sheaf.isDefined) {
-                        validTransactions = validTransactions :+ sheaf.get
-                      }
-                    }
-                  })
+                val groupedTransactions = if (transactions.size > peers.size) {
+                  transactions.grouped(transactions.size / peers.size)
+                } else {
+                  transactions.grouped(peers.size)
                 }
+
+                val peerSelection = Iterator.continually(peers).flatten
+
+                val transactionResponses = groupedTransactions.flatMap(group => {
+                  val peer = peerSelection.next().apiAddress.get
+
+                  val client = new APIClient(peer.getHostName, peer.getPort)
+
+                  group.map(tx => {
+                    client.get("transaction/" + tx.txHash)
+                  })
+                }).toSeq
+
+                val downloadResponse = Future.sequence(transactionResponses)
+
+                Await.ready(downloadResponse, 30 seconds).onComplete(f => {
+
+                  if (f.get.nonEmpty) {
+                    val sheaf = apiClient.read[Option[Transaction]](f.get.head).get()
+
+                    if (sheaf.isDefined) {
+                      validTransactions = validTransactions :+ sheaf.get
+                    }
+                  }
+                })
               }
 
               sheafs

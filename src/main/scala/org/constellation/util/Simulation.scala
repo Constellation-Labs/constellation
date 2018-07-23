@@ -205,7 +205,7 @@ class Simulation {
 
     assert(verifyPeersAdded(apis))
 
-    Thread.sleep(2000)
+    Thread.sleep(20000)
 
     assert(verifyGenesisReceived(apis))
 

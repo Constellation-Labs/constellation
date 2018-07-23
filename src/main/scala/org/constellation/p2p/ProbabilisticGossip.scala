@@ -105,9 +105,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
     // clean up any bundles that have been compressed
     cleanupStrayChains()
-
   }
-
 
  // val startTime: Long = System.currentTimeMillis()
 
