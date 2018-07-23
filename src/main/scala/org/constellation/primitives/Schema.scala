@@ -4,12 +4,15 @@ package org.constellation.primitives
 import java.net.InetSocketAddress
 import java.security.PublicKey
 
+import akka.actor.ActorRef
 import cats.kernel.Monoid
 import constellation.pubKeyToAddress
+import org.constellation.LevelDB.DBPut
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.Base58
 import org.constellation.util._
 
+import scala.collection.SortedSet
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
 
@@ -83,8 +86,9 @@ object Schema {
                      src: String,
                      dst: String,
                      amount: Long,
-                     time: Long = System.currentTimeMillis()
+                     salt: Long = Random.nextLong() // To ensure hash uniqueness.
                    ) extends ProductHash with GossipMessage {
+    def hashType = "TransactionData"
     def inverseAmount: Long = -1*amount
     def normalizedAmount: Long = amount / NormalizationFactor
     def pretty: String = s"TX: $short FROM: ${src.slice(0, 8)} " +
@@ -108,7 +112,6 @@ object Schema {
 
 
   }
-
   case class Transaction(
                  txData: Signed[TransactionData]
                ) extends Fiber with GossipMessage with ProductHash with RemoteMessage {
@@ -144,6 +147,61 @@ object Schema {
                                         numRequests: Int
                                       )
 
+  // Order is like: TransactionData -> TX -> CheckpointBlock -> ObservationEdge -> SignedObservationEdge
+
+  case class TX(signatureBatch: SignatureBatch) extends ProductHash
+
+  case class CheckpointBlock(transactions: Set[String]) extends ProductHash
+
+  case class ObservationEdge(left: String, right: String) extends ProductHash
+
+  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash
+
+  case class EdgeCell(members: Seq[EdgeSheaf])
+
+  case class ResolvedTX(tx: TX, transactionData: TransactionData)
+
+  case class ResolvedEdge(edge: ObservationEdge, signed: SignedObservationEdge)
+
+  case class EdgeSheaf(
+                        signedObservationEdge: SignedObservationEdge,
+                        parent: String,
+                        height: Long,
+                        depth: Int,
+                        score: Double
+                      )
+
+  case class AddressCache(balance: Long, reputation: Option[Double] = None)
+
+
+  case class ResolvedTipObservation(
+                                     resolvedTX: Set[ResolvedTX],
+                                     checkpointBlock: CheckpointBlock,
+                                     observationEdge: ObservationEdge,
+                                     signedObservationEdge: SignedObservationEdge
+                               ) {
+    def store(db: ActorRef): Unit = {
+        resolvedTX.foreach { rt =>
+          rt.tx.put(db)
+          rt.transactionData.put(db)
+        }
+        checkpointBlock.put(db)
+        observationEdge.put(db)
+        signedObservationEdge.put(db)
+      }
+  }
+
+  case class PeerIPData(canonicalHostName: String, port: Option[Int])
+
+  case class GenesisObservation(
+                               genesis: ResolvedTipObservation,
+                               initialDistribution: ResolvedTipObservation
+                               )
+
+
+
+ // case class UnresolvedEdge(edge: )
+
   // TODO: Change options to ResolvedBundleMetaData
 
 
@@ -170,12 +228,12 @@ object Schema {
                            ) {
     def safeBundle = Option(bundle)
     def isResolved: Boolean = reputations.nonEmpty && transactionsResolved
-    def cellKey: CellKey = CellKey(bundle.extractParentBundleHash.pbHash, bundle.maxStackDepth)
+    def cellKey: CellKey = CellKey(bundle.extractParentBundleHash.pbHash, bundle.maxStackDepth, height.getOrElse(0))
   }
 
-  case class CellKey(hashPointer: String, depth: Int)
+  case class CellKey(hashPointer: String, depth: Int, height: Int)
 
-  case class Cell(members: List[Sheaf])
+  case class Cell(members: SortedSet[Sheaf])
 
 
   final case class PeerSyncHeartbeat(
@@ -453,7 +511,8 @@ object Schema {
                    id: Id,
                    externalAddress: Option[InetSocketAddress],
                    apiAddress: Option[InetSocketAddress],
-                   remotes: Seq[InetSocketAddress] = Seq()
+                   remotes: Seq[InetSocketAddress] = Seq(),
+                   externalHostString: String
                  ) extends ProductHash
 
   case class LocalPeerData(

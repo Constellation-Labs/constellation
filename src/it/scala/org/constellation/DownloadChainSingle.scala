@@ -2,7 +2,7 @@ package org.constellation
 
 import akka.stream.ActorMaterializer
 import constellation._
-import org.constellation.ClusterDebug.system
+import org.constellation.RestartCluster.system
 import org.constellation.ClusterTest.getPodMappings
 import org.constellation.primitives.Schema.{BundleHashQueryResponse, Sheaf, Transaction}
 import org.constellation.util.APIClient

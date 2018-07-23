@@ -9,10 +9,7 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, path, _}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.directives.Credentials
-import akka.http.scaladsl.unmarshalling.{
-  FromEntityUnmarshaller,
-  PredefinedFromEntityUnmarshallers
-}
+import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.ask
 import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
@@ -21,25 +18,33 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Wallet
-import org.constellation.primitives.Schema
+import org.constellation.primitives.{APIBroadcast, MetricsManager, Schema, UpdateMetric}
 import org.constellation.primitives.Schema._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.ServeUI
+
 import org.json4s.native
 import org.json4s.native.Serialization
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
+case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id)
+
 class API(
-    val peerToPeerActor: ActorRef,
-    consensusActor: ActorRef,
-    udpAddress: InetSocketAddress,
-    val data: Data = null
-)(implicit executionContext: ExecutionContext, val timeout: Timeout)
-    extends Json4sSupport
+           val peerToPeerActor: ActorRef,
+           consensusActor: ActorRef,
+           udpAddress: InetSocketAddress,
+           val data: Data = null,
+           peerManager: ActorRef,
+           metricsManager: ActorRef,
+           nodeManager: ActorRef,
+           cellManager: ActorRef
+         )(implicit executionContext: ExecutionContext, val timeout: Timeout)
+  extends Json4sSupport
     with Wallet
     with ServeUI {
 
@@ -61,7 +66,9 @@ class API(
   def calculateMetrics(): Metrics = {
     Metrics(
       Map(
-        "version" -> "1.0.1",
+        "version" -> "1.0.2",
+        "allPeersHealthy" -> allPeersHealthy.toString,
+        //   "numAPICalls" -> numAPICalls.toString,
         "numMempoolEmits" -> numMempoolEmits.toString,
         "numDBGets" -> numDBGets.toString,
         "numDBPuts" -> numDBPuts.toString,
@@ -320,17 +327,17 @@ class API(
             }
           }
         } ~
-        pathPrefix("ancestors") {
-          extractUnmatchedPath { p =>
-            logger.debug(s"Unmatched path on download result $p")
-            val ps = p.toString().split("/").last
-            //logger.debug(s"Looking up bundle hash $ps")
-            val ancestors = findAncestorsUpTo(ps, Seq(), upTo = 101)
-            complete(ancestors.map {
-              _.bundle.hash
-            })
-          }
-        } ~
+          pathPrefix("ancestors") {
+            extractUnmatchedPath { p =>
+              logger.debug(s"Unmatched path on download result $p")
+              val ps = p.toString().split("/").last
+              //logger.debug(s"Looking up bundle hash $ps")
+              val ancestors = findAncestorsUpTo(ps, Seq(), upTo = 101)
+              complete(ancestors.map {
+                _.bundle.hash
+              })
+            }
+          } ~
           path("setKeyPair") {
             parameter('keyPair) { kpp =>
               logger.debug("Set key pair " + kpp)
@@ -359,8 +366,8 @@ class API(
             val ret = if (genesisBundle.isEmpty) {
               val debtAddress = walletPair
               val tx = createTransaction(selfAddress.address,
-                                         numCoins,
-                                         src = debtAddress.address.address)
+                numCoins,
+                src = debtAddress.address.address)
               createGenesis(tx)
               tx
             } else genesisBundle.get.extractTX.head
@@ -426,16 +433,16 @@ class API(
               }
               .map(b => {
                 (b.extractTXDB.toSeq.sortBy(_.txData.time),
-                 b.extractIds.map(f => f.address.address))
+                  b.extractIds.map(f => f.address.address))
               })
               .flatMap(t => {
                 t._1.map(
                   e =>
                     TransactionSerialized(e.hash,
-                                          e.txData.data.src,
-                                          e.txData.data.dst,
-                                          e.txData.data.normalizedAmount,
-                                          t._2))
+                      e.txData.data.src,
+                      e.txData.data.dst,
+                      e.txData.data.normalizedAmount,
+                      t._2))
               })
 
             var peerMap: Seq[Node] = peers
@@ -444,33 +451,33 @@ class API(
               }
               .seq
               .map { f =>
-                {
-                  Node(f.id.address.address,
-                       f.externalAddress
-                         .map {
-                           _.getHostName
-                         }
-                         .getOrElse(""),
-                       f.externalAddress
-                         .map {
-                           _.getPort
-                         }
-                         .getOrElse(0))
-                }
+              {
+                Node(f.id.address.address,
+                  f.externalAddress
+                    .map {
+                      _.getHostName
+                    }
+                    .getOrElse(""),
+                  f.externalAddress
+                    .map {
+                      _.getPort
+                    }
+                    .getOrElse(0))
+              }
               }
 
             // Add self
             peerMap = peerMap :+ Node(selfAddress.address,
-                                      selfPeer.data.externalAddress
-                                        .map {
-                                          _.getHostName
-                                        }
-                                        .getOrElse(""),
-                                      selfPeer.data.externalAddress
-                                        .map {
-                                          _.getPort
-                                        }
-                                        .getOrElse(0))
+              selfPeer.data.externalAddress
+                .map {
+                  _.getHostName
+                }
+                .getOrElse(""),
+              selfPeer.data.externalAddress
+                .map {
+                  _.getPort
+                }
+                .getOrElse(0))
 
             complete(
               Map(
@@ -487,74 +494,171 @@ class API(
 
   private val postEndpoints =
     post {
-      path("completeUpload") {
-              entity(as[BundleHashQueryResponse]) { b =>
-                val s = b.sheaf.get
-                maxBundleMetaData = Some(s)
-                downloadInProgress = false
-                downloadMode = false
-                complete(StatusCodes.OK)
-              }
-            } ~
-            path("upload") {
-              entity(as[Seq[BundleHashQueryResponse]]) {
-                bhqr =>
-                  bhqr.foreach{ b =>
-                    val s = b.sheaf.get
-                    if (s.height.get == 0) {
-                      acceptGenesis(s.bundle, b.transactions.head)
-                    } else {
-                      storeBundle(s)
-                      totalNumValidBundles += 1
-                      b.transactions.foreach{acceptTransaction}
-                      b.transactions.foreach{t => t.txData.data.updateLedger(memPoolLedger)}
-                    }
-                  }
-                  complete(StatusCodes.OK)
-              }
-            } ~path("peerHeartbeat") {
-        entity(as[PeerSyncHeartbeat]) { psh =>
+      //    numAPICalls += 1 // <- This breaks literally everything.
+      path("startRandomTX") {
+        sendRandomTXV2 = !sendRandomTXV2
+        complete(sendRandomTXV2.toString)
+      } ~
+      path("sendV2") {
+        entity(as[SendToAddress]) { e =>
+          nodeManager ! e
           complete(StatusCodes.OK)
         }
       } ~
+      path("peerHealthCheckV2") {
+        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse]]]
+        val res = response.getOpt().map{
+          idMap =>
+            val res = idMap.map{
+              case (id, fut) =>
+                val maybeResponse = fut.getOpt()
+             //   println(s"Maybe response $maybeResponse")
+                id -> maybeResponse.exists{_.status == StatusCodes.OK}
+            }.toSeq
+            complete(res)
+        }.getOrElse(complete(StatusCodes.InternalServerError))
+        res
+      } ~
+        path("acceptGenesisOE") {
+          entity(as[GenesisObservation]) { go =>
+
+            dbActor.foreach { db =>
+              go.genesis.store(db)
+              go.initialDistribution.store(db)
+              val gtx = go.genesis.resolvedTX.head.transactionData
+              val distributionTX = go.genesis.resolvedTX.toSeq.map{_.transactionData}
+              db ! DBPut(gtx.dst, AddressCache(gtx.amount - distributionTX.map{_.amount}.sum, Some(1000D)))
+              distributionTX.foreach{ t =>
+                db ! DBPut(t.dst, AddressCache(t.amount, Some(1000D)))
+              }
+              metricsManager ! UpdateMetric("validTransactions", (1 + distributionTX.size).toString)
+              metricsManager ! UpdateMetric("uniqueAddressesInLedger", (1 + distributionTX.size).toString)
+              cellManager ! go
+
+            }
+
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("genesisObservation") {
+          entity(as[Set[Id]]) { ids =>
+            complete(createGenesisAndInitialDistributionOE(ids))
+          }
+        } ~
+        path("disableDownload") {
+          downloadMode = false
+          downloadInProgress = false
+          complete(StatusCodes.OK)
+        } ~
+        path("completeUpload") {
+          entity(as[BundleHashQueryResponse]) { b =>
+            val s = b.sheaf.get
+            maxBundleMetaData = Some(s)
+            downloadInProgress = false
+            downloadMode = false
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("upload") {
+          entity(as[Seq[BundleHashQueryResponse]]) {
+            bhqr =>
+              bhqr.foreach{ b =>
+                val s = b.sheaf.get
+                if (s.height.get == 0) {
+                  acceptGenesis(s.bundle, b.transactions.head)
+                } else {
+                  putBundleDB(s)
+                  totalNumValidBundles += 1
+                  b.transactions.foreach{t =>
+                    putTXDB(t)
+                    b.transactions.foreach{acceptTransaction}
+                    t.txData.data.updateLedger(memPoolLedger)
+                  }
+                }
+              }
+              complete(StatusCodes.OK)
+          }
+        } ~
+        path("rxBundle") {
+          entity(as[Bundle]) { b =>
+    //        println("api handle bundle")
+            //handleBundle(b)
+           peerToPeerActor ! b
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("handleTransaction") {
+          entity(as[Transaction]) { tx =>
+            peerToPeerActor ! Transaction
+            /*
+            if (lookupTransaction(tx.hash).isEmpty) {
+              storeTransaction(tx)
+              numSyncedTX += 1
+            }
+            syncPendingTXHashes -= tx.hash
+            txSyncRequestTime.remove(tx.hash)*/
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("batchBundleRequest") {
+          entity(as[BatchBundleHashRequest]) { bhr =>
+            val sheafResponses = bhr.hashes.flatMap {
+              lookupBundleDBFallbackBlocking
+            }
+            complete(sheafResponses)
+          }
+        } ~
+        path("batchTXRequest") {
+          entity(as[BatchTXHashRequest]) { bhr =>
+            //     println("API batch tx request.")
+            complete(bhr.hashes.flatMap{lookupTransactionDBFallbackBlocking})
+          }
+        } ~
+        path("peerSyncHeartbeat") {
+          entity(as[PeerSyncHeartbeat]) { psh =>
+            processPeerSyncHeartbeat(psh)
+            complete(StatusCodes.OK)
+          }
+        } ~
         path("sendToAddress") {
           entity(as[SendToAddress]) { s =>
             handleSendRequest(s)
           }
         } ~
-        /*           path("db") {
-                   entity(as[String]) { e: String =>
-                     import constellation.EasyFutureBlock
-                     val cleanStr = e.replaceAll('"'.toString, "")
-                     val res = db.get(cleanStr)
-                     complete(res)
-                   }
-                 } ~*/
         path("tx") {
           entity(as[Transaction]) { tx =>
             peerToPeerActor ! tx
             complete(StatusCodes.OK)
           }
         } ~
+        path("addPeerV2"){
+          entity(as[AddPeerRequest]) { e =>
+
+         //   println("addpeerv2")
+            peerManager ! e
+            /*askRes.mapTo[HashSignature].getOpt().map{
+              complete(_)
+            }.getOrElse(complete(StatusCodes.InternalServerError))*/
+            complete(StatusCodes.OK)
+          }
+        } ~
         path("peer") {
           entity(as[String]) { peerAddress =>
+
             Try {
               //    logger.debug(s"Received request to add a new peer $peerAddress")
               var addr: Option[InetSocketAddress] = None
               val result = Try {
                 peerAddress.replaceAll('"'.toString, "").split(":") match {
                   case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
-                  case a @ _ =>
-                    logger.debug(s"Unmatched Array: $a");
-                    throw new RuntimeException(s"Bad Match: $a");
+                  case a@_ => logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a");
                 }
               }.toOption match {
                 case None =>
                   StatusCodes.BadRequest
                 case Some(v) =>
                   addr = Some(v)
-                  val fut =
-                    (peerToPeerActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
+                  val fut = (peerToPeerActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
                   val res = Try {
                     Await.result(fut, timeout.duration)
                   }.toOption
@@ -571,8 +675,7 @@ class API(
                           //peerAdded = peers.exists(p => v == p.data.externalAddress)
                           peerAdded = signedPeerLookup.contains(v)
                         }
-                        if (peerAdded) StatusCodes.OK
-                        else StatusCodes.NetworkConnectTimeout
+                        if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
                       } else f
                   }
               }
@@ -601,8 +704,8 @@ class API(
                   externalHostString = ip
                   new InetSocketAddress(ip, port.toInt)
                 case a @ _ => {
-                  logger.debug(s"Unmatched Array: $a");
-                  throw new RuntimeException(s"Bad Match: $a");
+                  logger.debug(s"Unmatched Array: $a")
+                  throw new RuntimeException(s"Bad Match: $a")
                 }
               }
             logger.debug(s"Set external IP RPC request $externalIp $addr")
@@ -642,16 +745,16 @@ class API(
   def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
     credentials match {
       case p @ Credentials.Provided(id)
-          if id == authId && p.verify(authPassword) =>
+        if id == authId && p.verify(authPassword) =>
         Some(id)
       case _ => None
     }
   }
 
-  val authRoutes = faviconRoute ~ authenticateBasic(realm = "secure site",
+  val authRoutes = faviconRoute ~ routes /* authenticateBasic(realm = "secure site",
                                                     myUserPassAuthenticator) {
     user =>
       routes
-  }
+  }*/
 
 }

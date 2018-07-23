@@ -2,15 +2,17 @@ package org.constellation.p2p
 
 import java.net.InetSocketAddress
 
+import akka.http.scaladsl.model.StatusCodes
 import org.constellation.Data
 import org.constellation.primitives.Schema._
-import org.constellation.util.ProductHash
+import org.constellation.util.{APIClient, ProductHash}
 import constellation._
 import org.constellation.LevelDB.{DBDelete, DBPut}
 
+import scala.concurrent.Future
 import scala.util.{Failure, Random, Success, Try}
 
-trait ProbabilisticGossip extends PeerAuth with LinearGossip {
+trait ProbabilisticGossip extends PeerAuth {
 
   val data: Data
 
@@ -19,6 +21,8 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
   def handleGossip(gm : GossipMessage, remote: InetSocketAddress): Unit = {
 
     totalNumGossipMessages += 1
+
+    //val rid = signedPeerLookup.get(remote).map{_.data.id}
 
     gm match {
       case BatchBundleHashRequest(hashes) =>
@@ -46,13 +50,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
       case tx: Transaction =>
         //  println(s"Rx tx hash ${tx.short}")
-        if (lookupTransaction(tx.hash).isEmpty) {
-          storeTransaction(tx)
-          numSyncedTX += 1
-        }
-
-        syncPendingTXHashes -= tx.hash
-        txSyncRequestTime.remove(tx.hash)
+        handleTransaction(tx)
 
       case bb: PeerSyncHeartbeat =>
         processPeerSyncHeartbeat(bb)
@@ -63,6 +61,15 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
   }
 
 //  @volatile var heartBeatInProgress = false
+
+  def handleTransaction(tx: Transaction): Unit = {
+    if (lookupTransaction(tx.hash).isEmpty) {
+      storeTransaction(tx)
+      numSyncedTX += 1
+    }
+    syncPendingTXHashes -= tx.hash
+    txSyncRequestTime.remove(tx.hash)
+  }
 
   def gossipHeartbeat(): Unit = {
     // Gather any missing transaction or bundle data
@@ -94,8 +101,15 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
       simulateTransactions()
     }
 
-    // Tell peers about our latest best bundle and chain
+
+    //allPeersHealthy = apiBroadcast(_.getSync("health").status == StatusCodes.OK).forall(x => x)
+
+
+    if (generateRandomTX) simulateTransactions()
+
     broadcastUDP(PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap, id))
+
+//    apiBroadcast(_.post("peerSyncHeartbeat", PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap, id)))
 
     // Tell peers about our latest mempool state
     poolEmit()
@@ -109,6 +123,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
  // val startTime: Long = System.currentTimeMillis()
 
+
   def dataRequest(): Unit = {
 
     // Request missing bundle data
@@ -120,6 +135,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     if (syncPendingTXHashes.nonEmpty) {
       // println("Requesting data sync pending of " + syncPendingTXHashes)
       broadcastUDP(BatchTXHashRequest(syncPendingTXHashes))
+
       if (syncPendingTXHashes.size > 1500) {
         val toRemove = txSyncRequestTime.toSeq.sortBy(_._2).zipWithIndex.filter{_._2 > 50}.map{_._1._1}.toSet
         syncPendingTXHashes --= toRemove
@@ -152,7 +168,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     if (!lastPBWasSelf || totalNumValidatedTX == 1) {
 
       // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
-      val memPoolEmit = Random.nextInt() < 0.3
+      val memPoolEmit = Random.nextInt() < 0.1
       val filteredPool = memPool.diff(txInMaxBundleNotInValidation).filterNot(last10000ValidTXHash.contains)
 
       val memPoolSelSize = Random.nextInt(5)
@@ -177,6 +193,7 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
         numMempoolEmits += 1
 
         broadcastUDP(b)
+
       }
     }
   }
@@ -207,39 +224,32 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
     // Maybe only emit when PBH matches our current?
     // Need to slice this down here
     // Only emit max by new total score?
-    val groupedBundles = activeDAGBundles.groupBy(b => b.bundle.extractParentBundleHash -> b.bundle.maxStackDepth)
-
+    // val groupedBundles = activeDAGBundles.groupBy(b => b.bundle.extractParentBundleHash -> b.bundle.maxStackDepth)
     var toRemove = Set[Sheaf]()
 
-    groupedBundles.filter{_._2.size > 1}.toSeq //.sortBy(z => 1*z._1._2).headOption
-      .foreach { case (pbHash, bundles) =>
+    activeDAGManager.cellKeyToCell.filter{_._2.members.size > 1}.foreach{
+      case (ck, cell) =>
+        val best = cell.members.slice(0, 2)
+        val allIds = best.flatMap{_.bundle.extractIds}.toSeq
+        if (!allIds.contains(id)) {
+          val b = Bundle(BundleData(best.map {
+            _.bundle
+          }.toSeq).signed())
+          val maybeData = lookupBundle(ck.hashPointer)
+          val pbData = maybeData.get
+          updateBundleFrom(pbData, Sheaf(b))
+          // Skip ids when depth below a certain amount, else tell everyone.
+          // TODO : Fix ^
+          // broadcast(b, skipIDs = allIds)
+          apiBroadcast(_.post("rxBundle", b), skipIDs = allIds) // .foreach{println}
+        } else {
+          toRemove ++= best.toSet
+        }
 
-      if (Random.nextDouble() > 0.6) {
-        val best3 = bundles.sortBy(z => -1 * z.totalScore.get).slice(0, 2)
-        val allIds = best3.flatMap(_.bundle.extractIds)
-
-        //   if (!allIds.contains(id)) {
-        val b = Bundle(BundleData(best3.map {
-          _.bundle
-        }).signed())
-
-        val maybeData = lookupBundle(pbHash._1.pbHash)
-
-        val pbData = maybeData.get
-
-        updateBundleFrom(pbData, Sheaf(b))
-
-        // Skip ids when depth below a certain amount, else tell everyone.
-        // TODO : Fix ^
-        broadcastUDP(b, skipIDs = allIds)
-      }
-
-      if (bundles.size > 30) {
-        val toRemoveHere = bundles.sortBy(z => z.totalScore.get)
-          .zipWithIndex.filter{_._2 < 15}.map{_._1}.toSet
-
-        toRemove ++= toRemoveHere
-      }
+        if (cell.members.size > 10) {
+          val toRemoveHere = cell.members.toSeq.sortBy(z => z.totalScore.get).zipWithIndex.filter{_._2 < 5}.map{_._1}.toSet
+          toRemove ++= toRemoveHere
+        }
     }
 
     if (toRemove.nonEmpty) {
@@ -249,9 +259,9 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
   }
 
   def bundleCleanup(): Unit = {
-    if (heartbeatRound % 20 == 0 && maxBundleMetaData.exists {
+    if (heartbeatRound % 30 == 0 && maxBundleMetaData.exists {
       _.height.exists {
-        _ > 20
+        _ > 50
       }
     }) {
 
@@ -298,9 +308,8 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
       bundleToSheaf.foreach { case (h, s) =>
 
-        val heightOld = s.height.exists(h => h < (currentHeight - 15))
-
-        val partOfValidation = last100ValidBundleMetaData.contains(s)
+        val heightOld = s.height.exists(h => h < (currentHeight - 35))
+        val partOfValidation = last100ValidBundleMetaData.contains(s) //|| ancestorsMinus100.contains(s)
 
         val isOld = s.rxTime < (System.currentTimeMillis() - 120 * 1000)
 
@@ -330,7 +339,8 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
 
         }
       }
-      println("Bundle to sheaf cleanup done removed: " + numDeleted)
+
+    //  println("Bundle to sheaf cleanup done removed: " + numDeleted)
 
       // There should also be
     }
@@ -342,13 +352,14 @@ trait ProbabilisticGossip extends PeerAuth with LinearGossip {
   }
 
   // TODO: extract to test
+
   def simulateTransactions(): Unit = {
     val shouldEmit = maxBundleMetaData.exists {_.height.get >= 5} // || (System.currentTimeMillis() > startTime + 30000)
-    if (shouldEmit && memPool.size < 1500) {
+    if (shouldEmit && memPool.size < 500) {
       //if (Random.nextDouble() < .2)
       randomTransaction()
       randomTransaction()
-      if (memPool.size < 500) Seq.fill(50)(randomTransaction())
+      if (memPool.size < 50) Seq.fill(50)(randomTransaction())
     }
   }
 

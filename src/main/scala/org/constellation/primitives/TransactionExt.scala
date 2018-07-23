@@ -57,6 +57,10 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
     txHashToTX.get(hash)
   }
 
+  def putTXDB(tx: Transaction): Unit = {
+    dbActor.foreach{_ ! DBPut(tx.hash, tx)}
+  }
+
   def storeTransaction(tx: Transaction): Unit = {
     txHashToTX(tx.hash) = tx
     dbActor.foreach{_ ! DBPut(tx.hash, tx)}

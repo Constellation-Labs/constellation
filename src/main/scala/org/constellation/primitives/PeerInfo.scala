@@ -31,15 +31,15 @@ trait PeerInfo {
   def getOrElseUpdateAPIClient(id: Id)(
     implicit system: ActorSystem, materialize: ActorMaterializer, executionContext: ExecutionContextExecutor
   ): Option[APIClient] = {
-    rawPeerLookup.get(id).map{z => Some(z.apiClient)}.getOrElse {
-      val res = signedPeerIDLookup.get(id).flatMap{ p =>
-        p.data.apiAddress.map{ a =>
-          val client = new APIClient(a.getHostString, a.getPort)
-          rawPeerLookup(id) = LocalPeerData(client)
-          client
-        }
+    rawPeerLookup.get(id).map { z => Some(z.apiClient) }.getOrElse {
+      signedPeerIDLookup.get(id).map { p =>
+        val a = p.data.externalHostString
+   //     println("Updating api client send to hostname : " + a)
+        val client = new APIClient(a, p.data.apiAddress.map{_.getPort}.getOrElse(9000))
+        rawPeerLookup(id) = LocalPeerData(client)
+        client
+
       }
-      res
     }
   }
 

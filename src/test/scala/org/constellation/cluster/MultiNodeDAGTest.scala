@@ -94,8 +94,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     val nodes = Seq(n1) ++ Seq.fill(numberOfNodes-1)(TestNode(heartbeatEnabled = true))
 
-    val apis: Seq[APIClient] = nodes.map{_.api}
-
+    val apis = nodes.map{_.api}
     val sim = new Simulation()
 
     sim.connectNodes(false, true, apis)

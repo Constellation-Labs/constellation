@@ -62,6 +62,32 @@ trait PeerAuth {
     }).toSeq
   }
 
+  def apiBroadcast[T](f: APIClient => T, skipIDs: Seq[Id] = Seq()): Iterable[T]  = {
+    signedPeerIDLookup.keys.filterNot{skipIDs.contains}.flatMap{
+      i =>
+      getOrElseUpdateAPIClient(i).map{
+        a =>
+         // println("API broadcast to " + a.host + " " + a.port)
+          f(a)
+      }
+    }
+  }
+
+  def broadcast[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
+    val dest: Iterable[Id] = if (idSubset.isEmpty) signedPeerIDLookup.keys else idSubset
+    // println("Broadcast attempt")
+    dest.foreach{ i =>
+      if (!skipIDs.contains(i)) {
+        totalNumBroadcastMessages += 1
+        val address = signedPeerIDLookup(i).data.externalAddress
+        address.foreach{ a =>
+          udpActor ! UDPSend(message, a)
+        }
+      //  println(s"Broadcasting $message to $address")
+      }
+    }
+  }
+
   def handShakeInner(peerAddressOrRemote: InetSocketAddress): HandShake = {
     HandShake(selfPeer, peerAddressOrRemote, peers.toSet,  requestExternalAddressCheck)
   }
@@ -113,6 +139,12 @@ trait PeerAuth {
       }
 
       logger.debug(s"Peer added, total peers: ${signedPeerIDLookup.keys.size} on ${id.short}")
+
+      Future { getOrElseUpdateAPIClient(value.id)}
+      newPeers.foreach { np =>
+        //    logger.debug(s"Attempting to add new peer from peer reference handshake response $np")
+        //   initiatePeerHandshake(PeerRef(np.data.externalAddress))
+      }
     }
   }
 

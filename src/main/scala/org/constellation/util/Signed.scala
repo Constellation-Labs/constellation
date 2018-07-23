@@ -2,10 +2,12 @@ package org.constellation.util
 
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
-import constellation._
+import akka.actor.ActorRef
+import constellation.{hashSignBatchZeroTyped, _}
+import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema
-import org.constellation.primitives.Schema.{BundleHash, Id, Transaction, TransactionData}
+import org.constellation.primitives.Schema._
 
 object POW extends POWExt
 
@@ -46,18 +48,17 @@ trait ProductHash extends Product {
   def powInput(signatures: Seq[String]): String = (productSeq ++ signatures).json
   def pow(signatures: Seq[String], difficulty: Int): String = POW.proofOfWork(powInput(signatures), Some(difficulty))
   def productSeq: Seq[Any] = this.productIterator.toArray.toSeq
+  def put(db: ActorRef): Unit = db ! DBPut(hash, this)
 
 }
 
-
 case class HashSignature(
-                          signedHash: String,
-                          signature: String,
-                          b58EncodedPublicKey: String,
-                          time: Long = System.currentTimeMillis()
-                        ) extends ProductHash {
+                             signature: String,
+                             b58EncodedPublicKey: String,
+                             time: Long = System.currentTimeMillis()
+                           ) {
   def publicKey: PublicKey = EncodedPublicKey(b58EncodedPublicKey).toPublicKey
-  def valid: Boolean = verifySignature(signedHash.getBytes(), fromBase64(signature))(publicKey)
+  def valid(hash: String): Boolean = verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
 
 }
 
@@ -65,7 +66,19 @@ case class SignatureBatch(
                          hash: String,
                          signatures: Set[HashSignature]
                          ) {
-  def valid: Boolean = signatures.forall(_.valid)
+  def valid: Boolean = {
+    signatures.forall(_.valid(hash))
+  }
+  def plus(other: SignatureBatch): SignatureBatch = {
+    this.copy(
+      signatures = signatures ++ other.signatures
+    )
+  }
+  def plus(other: KeyPair): SignatureBatch = {
+    this.copy(
+      signatures = signatures + hashSign(hash, other)
+    )
+  }
 }
 
 /*
@@ -92,10 +105,10 @@ case class Signed[T <: ProductHash](
                                      //        difficulty: Int,
                                      encodedPublicKeys: Seq[EncodedPublicKey],
                                      signatures: Seq[String]
-                                        ) extends ProductHash {
+                                   ) extends ProductHash {
   def publicKeys: Seq[PublicKey] = encodedPublicKeys.map{_.toPublicKey}
 
-//  def jsonTest: String = data.json
+  //  def jsonTest: String = data.json
 
   def id: Id = Id(publicKeys.head.encoded)
 
@@ -128,14 +141,14 @@ trait POWSignHelp {
   }
 
   def signPairs[T <: ProductHash](
-                                     t: T,
-                                     keyPairs: Seq[KeyPair],
-                                     difficulty: Int = 0
-                                   ): Signed[T] = {
+                                   t: T,
+                                   keyPairs: Seq[KeyPair],
+                                   difficulty: Int = 0
+                                 ): Signed[T] = {
     val startTime = System.currentTimeMillis()
     val signatures = t.signKeys(keyPairs.map{_.getPrivate})
-  //  val nonce = t.pow(signatures, difficulty)
-  //  val endTime = System.currentTimeMillis()
+    //  val nonce = t.pow(signatures, difficulty)
+    //  val endTime = System.currentTimeMillis()
     Signed(
       t, startTime, keyPairs.map{_.getPublic.encoded}, signatures
     )
@@ -150,5 +163,31 @@ trait POWSignHelp {
     val tx = Transaction(txData)
     tx
   }
+
+  def hashSign(hash: String, keyPair: KeyPair): HashSignature = {
+    HashSignature(
+      signHashWithKeyB64(hash, keyPair.getPrivate),
+      keyPair.getPublic.encoded.b58Encoded
+    )
+  }
+
+  def hashSignBatchZeroTyped(hash: ProductHash, keyPair: KeyPair): SignatureBatch = {
+    SignatureBatch(hash.hash, Set(hashSign(hash.hash, keyPair)))
+  }
+
+  def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge = {
+    SignedObservationEdge(hashSignBatchZeroTyped(oe, kp))
+  }
+
+  def createTransactionSafeBatchOE(
+                                    src: String, dst: String, amount: Long, keyPair: KeyPair, normalized: Boolean = true
+                                  ): ResolvedTX = {
+    val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
+    val txData = TransactionData(src, dst, amountToUse)
+    val sig = hashSignBatchZeroTyped(txData, keyPair)
+    ResolvedTX(TX(sig), txData)
+  }
+
+
 
 }

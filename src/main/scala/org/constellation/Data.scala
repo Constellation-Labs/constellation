@@ -1,5 +1,6 @@
 package org.constellation
 
+import akka.stream.ActorMaterializer
 import com.typesafe.scalalogging.Logger
 import org.constellation.primitives._
 
@@ -14,7 +15,9 @@ class Data extends MetricsExt
 
   val logger = Logger(s"Data")
 
-  var confirmWindow : Int = 20
+  var actorMaterializer: ActorMaterializer = _
+
+  var confirmWindow : Int = 30
 
   def restartNode(): Unit = {
  //   restartDB()
