@@ -96,17 +96,10 @@ class API(
         "numPeers" -> peers.size.toString,
         "peers" -> peers
           .map { z =>
-            val addr = s"http://${z.data.apiAddress
-              .map {
-                _.getHostString
-              }
-              .getOrElse("")}:" +
-              s"${z.data.apiAddress
-                .map {
-                  _.getPort
-                }
-                .getOrElse("")}"
-            s"${z.data.id.short} API: $addr "
+            val addr = z.data.apiAddress.map {
+              a => s"http://${a.getHostString}:${a.getPort}"
+            }.getOrElse("")
+            s"${z.data.id.short} API: $addr"
           }
           .mkString(" --- "),
         "z_peerSync" -> peerSync.toMap.toString,
