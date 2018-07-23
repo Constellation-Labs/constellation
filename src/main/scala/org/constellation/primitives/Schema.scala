@@ -177,6 +177,16 @@ object Schema {
 
     def empty = Sheaf(safeBundle.get)
     def combine(x: Sheaf, y: Sheaf = this): Sheaf = Sheaf(Bundle(BundleData(Seq(x.bundle, x.bundle)).signed()))
+
+    def resolve(left: Sheaf, right: Sheaf): Sheaf = {
+      if (!left.isResolved){
+        right
+      }
+      else if (right.isResolved) right
+      else {
+        resolve(left, right)
+      }
+    }
   }
 
   case class CellKey(hashPointer: String, depth: Int)

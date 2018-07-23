@@ -36,7 +36,7 @@ object Cell {
     */
   val coAlgebra: Sheaf => Cell[Sheaf] = {
     case sheaf: Sheaf =>
-//      val ancestors = findAncestorsUpToLastResolved(sheaf.germ.bundle.extractParentBundleHash.pbHash)//TODO add optional arg in cell for parentHash
+      val ancestors = findAncestorsUpToLastResolved(sheaf.germ.bundle.extractParentBundleHash.pbHash)//TODO add optional arg in cell for parentHash
 
 //      if (lookupBundle(sheaf.germ).isEmpty) storeBundle(sheaf.germ)
 //
