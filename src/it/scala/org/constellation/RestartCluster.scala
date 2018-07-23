@@ -18,7 +18,7 @@ object RestartCluster extends TestKit(ActorSystem("ClusterTest")){
 
     constellation.makeKeyPair()
 
-    val clusterId = sys.env.getOrElse("CLUSTER_ID", "constellation-app")
+    val clusterId = sys.env.getOrElse("CLUSTER_ID", "constellation-app-ryle")
 
     val mappings = getPodMappings(clusterId)
 

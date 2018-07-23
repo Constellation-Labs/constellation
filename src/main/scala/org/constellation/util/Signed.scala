@@ -2,7 +2,9 @@ package org.constellation.util
 
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
+import akka.actor.ActorRef
 import constellation.{hashSignBatchZeroTyped, _}
+import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema._
@@ -46,6 +48,7 @@ trait ProductHash extends Product {
   def powInput(signatures: Seq[String]): String = (productSeq ++ signatures).json
   def pow(signatures: Seq[String], difficulty: Int): String = POW.proofOfWork(powInput(signatures), Some(difficulty))
   def productSeq: Seq[Any] = this.productIterator.toArray.toSeq
+  def put(db: ActorRef): Unit = db ! DBPut(hash, this)
 
 }
 
@@ -61,7 +64,6 @@ case class HashSignature(
 
 case class SignatureBatch(
                          hash: String,
-                         hashType: String,
                          signatures: Set[HashSignature]
                          ) {
   def valid: Boolean = {
@@ -169,8 +171,8 @@ trait POWSignHelp {
     )
   }
 
-  def hashSignBatchZeroTyped(hash: TypedProductHash, keyPair: KeyPair): SignatureBatch = {
-    SignatureBatch(hash.hash, hash.hashType, Set(hashSign(hash.hash, keyPair)))
+  def hashSignBatchZeroTyped(hash: ProductHash, keyPair: KeyPair): SignatureBatch = {
+    SignatureBatch(hash.hash, Set(hashSign(hash.hash, keyPair)))
   }
 
   def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge = {

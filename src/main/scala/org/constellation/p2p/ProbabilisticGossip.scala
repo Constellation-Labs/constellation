@@ -115,8 +115,8 @@ trait ProbabilisticGossip extends PeerAuth {
 
     if (generateRandomTX) simulateTransactions()
 
-  //  broadcast(PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap, id))
-    apiBroadcast(_.post("peerSyncHeartbeat", PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap, id)))
+    broadcast(PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap, id))
+//    apiBroadcast(_.post("peerSyncHeartbeat", PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap, id)))
 
     poolEmit()
 
@@ -131,28 +131,31 @@ trait ProbabilisticGossip extends PeerAuth {
 
   def simulateTransactions(): Unit = {
     val shouldEmit = maxBundleMetaData.exists {_.height.get >= 5} // || (System.currentTimeMillis() > startTime + 30000)
-    if (shouldEmit && memPool.size < 1500) {
+    if (shouldEmit && memPool.size < 500) {
       //if (Random.nextDouble() < .2)
       randomTransaction()
       randomTransaction()
-      if (memPool.size < 500) Seq.fill(50)(randomTransaction())
+      if (memPool.size < 50) Seq.fill(50)(randomTransaction())
     }
   }
 
   def dataRequest(): Unit = {
     if (syncPendingBundleHashes.nonEmpty) {
       //    println("Requesting bundle sync of " + syncPendingBundleHashes.map{_.slice(0, 5)})
-     // broadcast(BatchBundleHashRequest(syncPendingBundleHashes))
+      broadcast(BatchBundleHashRequest(syncPendingBundleHashes))
+      /*
        apiBroadcast({a: APIClient =>
        Future {
          a.postRead[Seq[Sheaf]]("batchBundleRequest", BatchBundleHashRequest(syncPendingBundleHashes))
            .foreach { z => self ! z.bundle} //  handleBundle(z.bundle) }
        }
      })
+      */
     }
     if (syncPendingTXHashes.nonEmpty) {
       // println("Requesting data sync pending of " + syncPendingTXHashes)
-    //  broadcast(BatchTXHashRequest(syncPendingTXHashes))
+      broadcast(BatchTXHashRequest(syncPendingTXHashes))
+/*
 
       apiBroadcast({a: APIClient =>
         Future{
@@ -161,6 +164,7 @@ trait ProbabilisticGossip extends PeerAuth {
         } //.foreach{handleTransaction}
         }
       })
+*/
 
 
       if (syncPendingTXHashes.size > 1500) {
@@ -195,9 +199,9 @@ trait ProbabilisticGossip extends PeerAuth {
     if (!lastPBWasSelf || totalNumValidatedTX == 1) {
 
       // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
-      val memPoolEmit = Random.nextInt() < 0.2
+      val memPoolEmit = Random.nextInt() < 0.1
       val filteredPool = memPool.diff(txInMaxBundleNotInValidation).filterNot(last10000ValidTXHash.contains)
-      val memPoolSelSize = Random.nextInt(5) + 5
+      val memPoolSelSize = Random.nextInt(5)
       val memPoolSelection = Random.shuffle(filteredPool.toSeq)
         .slice(0, memPoolSelSize + minGenesisDistrSize + 1)
 
@@ -216,9 +220,9 @@ trait ProbabilisticGossip extends PeerAuth {
         updateBundleFrom(meta, Sheaf(b))
 
         numMempoolEmits += 1
-        //broadcast(b)
+        broadcast(b)
         //val res =
-        apiBroadcast(_.post("rxBundle", b)) // .foreach{println}
+        //apiBroadcast(_.post("rxBundle", b)) // .foreach{println}
 
         //val resAll = Future.sequence(res)
 

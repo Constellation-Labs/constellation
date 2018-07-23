@@ -125,12 +125,12 @@ class ConstellationNode(
     Props(new KeyManager(data.keyPair, memPoolManager, metricsManager)), s"KeyManager_$publicKeyHash"
   )
 
-  val cellManager: ActorRef = system.actorOf(
-    Props(new CellManager(memPoolManager, metricsManager)), s"CellManager_$publicKeyHash"
-  )
-
   val peerManager: ActorRef = system.actorOf(
     Props(new PeerManager()), s"PeerManager_$publicKeyHash"
+  )
+
+  val cellManager: ActorRef = system.actorOf(
+    Props(new CellManager(memPoolManager, metricsManager, peerManager)), s"CellManager_$publicKeyHash"
   )
 
   val nodeManager: ActorRef = system.actorOf(

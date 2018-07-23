@@ -50,7 +50,7 @@ class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSyst
     sim.runV2()
 
 
-    Thread.sleep(1000*60*60)
+    // Thread.sleep(1000*60*60)
 
     // Cleanup DBs
     import scala.tools.nsc.io.{File => SFile}

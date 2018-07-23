@@ -7,7 +7,7 @@ import scala.collection.mutable
 
 //case class AddToCell(signedObservationEdge: SignedObservationEdge)
 
-class CellManager(memPoolManager: ActorRef, metricsManager: ActorRef) extends Actor {
+class CellManager(memPoolManager: ActorRef, metricsManager: ActorRef, peerManager: ActorRef) extends Actor {
 
   private val cells = mutable.HashMap[CellKey, EdgeCell]()
 
@@ -16,6 +16,7 @@ class CellManager(memPoolManager: ActorRef, metricsManager: ActorRef) extends Ac
   override def receive: Receive = {
 
     case InternalHeartbeat =>
+
 
 
     case g: GenesisObservation =>

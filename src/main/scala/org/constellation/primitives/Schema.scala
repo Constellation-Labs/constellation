@@ -88,7 +88,7 @@ object Schema {
                      dst: String,
                      amount: Long,
                      salt: Long = Random.nextLong() // To ensure hash uniqueness.
-                   ) extends TypedProductHash with GossipMessage {
+                   ) extends ProductHash with GossipMessage {
     def hashType = "TransactionData"
     def inverseAmount: Long = -1*amount
     def normalizedAmount: Long = amount / NormalizationFactor
@@ -148,31 +148,15 @@ object Schema {
                                         numRequests: Int
                                       )
 
-  trait TypedProductHash extends ProductHash {
-    def hashType: String
-    def typedEdgeHash = TypedEdgeHash(hash, hashType)
-    def put(db: ActorRef): Unit = db ! DBPut(hash, this)
-  }
-
   // Order is like: TransactionData -> TX -> CheckpointBlock -> ObservationEdge -> SignedObservationEdge
 
-  case class TX(signatureBatch: SignatureBatch) extends TypedProductHash {
-    def hashType = "TX"
-  }
+  case class TX(signatureBatch: SignatureBatch) extends ProductHash
 
-  case class CheckpointBlock(transactions: Set[String]) extends TypedProductHash {
-    def hashType = "CheckpointBlock"
-  }
+  case class CheckpointBlock(transactions: Set[String]) extends ProductHash
 
-  case class TypedEdgeHash(hash: String, hashType: String)
+  case class ObservationEdge(left: String, right: String) extends ProductHash
 
-  case class ObservationEdge(left: TypedEdgeHash, right: TypedEdgeHash) extends TypedProductHash {
-    def hashType = "ObservationEdge"
-  }
-
-  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends TypedProductHash {
-    def hashType: String = "SignedObservationEdge"
-  }
+  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash
 
   case class EdgeCell(members: Seq[EdgeSheaf])
 

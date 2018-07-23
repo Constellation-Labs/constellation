@@ -28,7 +28,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     val debtAddress = makeKeyPair().address.address
     val ResolvedTX(tx, txData) = createTransactionSafeBatchOE(debtAddress, selfAddressStr, 4e9.toLong, keyPair)
     val cb = CheckpointBlock(Set(tx.hash))
-    val oe = ObservationEdge(TypedEdgeHash("coinbase", "coinbase"), cb.typedEdgeHash)
+    val oe = ObservationEdge("coinbase", "coinbase")
     val soe = signedObservationEdge(oe)
 
     val genesisTip = ResolvedTipObservation(Set(ResolvedTX(tx, txData)), cb, oe, soe)
@@ -38,7 +38,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     }
 
     val distrCB = CheckpointBlock(distr.map{_.tx.hash})
-    val distrOE = ObservationEdge(soe.typedEdgeHash, distrCB.typedEdgeHash)
+    val distrOE = ObservationEdge(soe.hash, distrCB.hash)
     val distrSOE = signedObservationEdge(distrOE)
 
     val distrTip = ResolvedTipObservation(

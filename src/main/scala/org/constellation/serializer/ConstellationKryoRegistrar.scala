@@ -22,7 +22,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[TX])
     kryo.register(classOf[SignedObservationEdge])
     kryo.register(classOf[ObservationEdge])
-    kryo.register(classOf[TypedEdgeHash])
     kryo.register(classOf[CheckpointBlock])
 
     kryo.register(classOf[DownloadRequest])

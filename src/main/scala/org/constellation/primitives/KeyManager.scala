@@ -4,12 +4,12 @@ import java.security.KeyPair
 
 import akka.actor.{Actor, ActorRef}
 import org.constellation.primitives.Schema._
-import org.constellation.util.SignatureBatch
+import org.constellation.util.{ProductHash, SignatureBatch}
 
 case class SetNodeKeyPair(keyPair: KeyPair)
 case class SignRequest(data: String)
 case class BatchSignRequest(data: SignatureBatch)
-case class BatchSignRequestZero(data: TypedProductHash)
+case class BatchSignRequestZero(data: ProductHash)
 
 import constellation._
 

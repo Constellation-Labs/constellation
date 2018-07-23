@@ -293,9 +293,9 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
         txInMaxBundleNotInValidation = newTX.map{_.txHash}
           // .filter { h => !last10000ValidTXHash.contains(h) }
 
-        if (height % 10 == 0) {
+     //   if (height % 10 == 0) {
           newTX.foreach(t => lookupTransactionDBFallbackBlocking(t.txHash).foreach {acceptTransaction})
-        }
+       // }
 
       }
     }

@@ -11,7 +11,7 @@ import scala.concurrent.Await
 import scala.util.Try
 
 case class PeerData(addRequest: AddPeerRequest, client: APIClient)
-case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set())
+case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
 case class PeerHealthCheck(status: Map[Id, Boolean])
 import scala.concurrent.duration._
 
@@ -29,9 +29,13 @@ class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
       client.id = id
       peerInfo(id) = PeerData(a, client)
 
-    case APIBroadcast(func, skipIds) =>
+    case APIBroadcast(func, skipIds, subset) =>
 
-      val result = peerInfo.filterKeys(id => !skipIds.contains(id)).map {
+      val keys = if (subset.nonEmpty) peerInfo.filterKeys(subset.contains) else {
+        peerInfo.filterKeys(id => !skipIds.contains(id))
+      }
+
+      val result = keys.map {
         case (id, data) =>
           id -> func(data.client)
       }

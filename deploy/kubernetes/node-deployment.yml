@@ -36,7 +36,7 @@ metadata:
 spec:
   serviceName: node-service
   podManagementPolicy: "Parallel"
-  replicas: 7
+  replicas: 5
   updateStrategy:
     type: RollingUpdate
     #rollingUpdate:
