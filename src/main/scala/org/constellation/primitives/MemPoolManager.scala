@@ -11,6 +11,10 @@ import constellation._
 
 class MemPoolManager(metricsManager: ActorRef) extends Actor {
 
+  // import com.twitter.storehaus.cache._
+  //
+  //    // First, we instantiate an LRU cache with capacity 3:
+  //    scala> val cache = LRUCache[Int, String](3)
   private val memPool = mutable.Seq[ResolvedTX]()
 
   override def receive: Receive = {

@@ -15,6 +15,10 @@ import org.constellation.LevelDB.{DBDelete, DBGet, DBPut}
 import scala.util.Try
 import akka.pattern.ask
 import akka.util.Timeout
+import com.softwaremill.macmemo.memoize
+
+import scala.concurrent.duration._
+
 
 trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
@@ -219,6 +223,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     }
   }
 
+  @memoize(1000, 600.seconds)
   def findAncestorsUpToLastResolved(
                                      parentHash: String,
                                      ancestors: Seq[Sheaf] = Seq()
@@ -239,6 +244,8 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     }
   }
 
+
+  @memoize(1000, 600.seconds)
   def findAncestorsUpTo(
                          parentHash: String,
                          ancestors: Seq[Sheaf] = Seq(),
@@ -281,16 +288,14 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
         }
 
         last100ValidBundleMetaData = if (ancestors.size < confirmWindow + 1) Seq()
-        else ancestors.slice(0, ancestors.size - confirmWindow)
-        val newTX = last100ValidBundleMetaData.reverse
-          .slice(0, confirmWindow).flatMap(_.bundle.extractTXHash).toSet
+        else ancestors.take(ancestors.size - confirmWindow)
+        val newTX = last100ValidBundleMetaData.takeRight(confirmWindow).flatMap(_.bundle.extractTXHash).toSet
         txInMaxBundleNotInValidation = newTX.map{_.txHash}
-          .filter { h => !last10000ValidTXHash.contains(h) }
+          // .filter { h => !last10000ValidTXHash.contains(h) }
 
-
-        newTX.foreach(t => lookupTransactionDBFallbackBlocking(t.txHash).foreach{acceptTransaction})
-
-
+        if (height % 10 == 0) {
+          newTX.foreach(t => lookupTransactionDBFallbackBlocking(t.txHash).foreach {acceptTransaction})
+        }
 
       }
     }

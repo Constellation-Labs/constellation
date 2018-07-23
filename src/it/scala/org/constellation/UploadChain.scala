@@ -25,6 +25,7 @@ object UploadChain {
   }
 
   def main(args: Array[String]): Unit = {
+/*
 
     val mappings = getPodMappings("constellation-app-ryle")
 
@@ -46,6 +47,7 @@ object UploadChain {
     }.foreach {
       println
     }
+*/
 
 
     val mappings2 = getPodMappings("constellation-app")
@@ -54,7 +56,8 @@ object UploadChain {
     val mp = apisProd.map {
       _.getBlocking[Metrics]("metrics").metrics
     }
-    val m = a1.getBlocking[Metrics]("metrics").metrics
+
+   // val m = a1.getBlocking[Metrics]("metrics").metrics
 
     mp.map {
       _ ("z_validLedger")
@@ -63,7 +66,7 @@ object UploadChain {
     }
     //mp.foreach{println}
     //println(m)
-    println(m("z_validLedger"))
+   // println(m("z_validLedger"))
 
     //  a1.get("restart")
 
@@ -71,14 +74,25 @@ object UploadChain {
 
     val ledger = TrieMap[String, Long]()
 
+    var numTX = 0
+
+    var hashes = Set[String]()
+
+
     chainLines.foreach{ l =>
       l.x[BundleHashQueryResponse].transactions.foreach{
         t =>
-          t.txData.data.updateLedger(ledger)
+          if (!hashes.contains(t.hash)) {
+            t.txData.data.updateLedger(ledger)
+            numTX += 1
+            hashes += t.hash
+          }
       }
     }
 
     println(ledger.toMap.json)
+    println(numTX)
+    println(chainLines.size)
 
     /*
 
@@ -107,8 +121,10 @@ object UploadChain {
       println(a1.postSync("peer", z))
     }
 
+  }*/
+
+
     println("Done")
     system.terminate()
-  }*/
   }
 }

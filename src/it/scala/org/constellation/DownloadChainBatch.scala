@@ -34,7 +34,7 @@ object DownloadChainBatch {
       r
     }
 
-    val nodeIp = "35.238.105.67"
+    val nodeIp = "35.225.201.13"
 
     val a1 = apis.filter{_.host == nodeIp}.head
 

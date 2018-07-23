@@ -17,7 +17,7 @@ class Data extends MetricsExt
 
   var actorMaterializer: ActorMaterializer = _
 
-  var confirmWindow : Int = 20
+  var confirmWindow : Int = 30
 
   def restartNode(): Unit = {
  //   restartDB()

@@ -90,7 +90,8 @@ lazy val coreDependencies = Seq(
   "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.typesafe.slick" %% "slick" % "3.2.3",
   "org.slf4j" % "slf4j-nop" % "1.6.4",
-  "com.h2database" % "h2" % "1.4.197"
+  "com.h2database" % "h2" % "1.4.197",
+  "com.twitter" %% "storehaus-cache" % "0.15.0"
   // "com.esotericsoftware" % "kryo" % "4.0.2"
 )
 

@@ -12,6 +12,7 @@ import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.Base58
 import org.constellation.util._
 
+import scala.collection.SortedSet
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
 
@@ -173,12 +174,19 @@ object Schema {
     def hashType: String = "SignedObservationEdge"
   }
 
-  case class EdgeCell(members: Seq[SignedObservationEdge])
+  case class EdgeCell(members: Seq[EdgeSheaf])
 
   case class ResolvedTX(tx: TX, transactionData: TransactionData)
 
   case class ResolvedEdge(edge: ObservationEdge, signed: SignedObservationEdge)
 
+  case class EdgeSheaf(
+                        signedObservationEdge: SignedObservationEdge,
+                        parent: String,
+                        height: Long,
+                        depth: Int,
+                        score: Double
+                      )
 
   case class AddressCache(balance: Long, reputation: Option[Double] = None)
 
@@ -237,12 +245,12 @@ object Schema {
                            ) {
     def safeBundle = Option(bundle)
     def isResolved: Boolean = reputations.nonEmpty && transactionsResolved
-    def cellKey: CellKey = CellKey(bundle.extractParentBundleHash.pbHash, bundle.maxStackDepth)
+    def cellKey: CellKey = CellKey(bundle.extractParentBundleHash.pbHash, bundle.maxStackDepth, height.getOrElse(0))
   }
 
-  case class CellKey(hashPointer: String, depth: Int)
+  case class CellKey(hashPointer: String, depth: Int, height: Int)
 
-  case class Cell(members: List[Sheaf])
+  case class Cell(members: SortedSet[Sheaf])
 
 
   final case class PeerSyncHeartbeat(

@@ -119,24 +119,20 @@ class API(
           .getOrElse("N/A"),
         //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
         "numActiveBundles" -> activeDAGBundles.size.toString,
-        "last10TXHash" -> last10000ValidTXHash.reverse
-          .slice(0, 10)
+        "last10TXHash" -> last10000ValidTXHash.
+          takeRight(10)
           .mkString(","),
         "last10ValidBundleHashes" -> last100ValidBundleMetaData
           .map {
             _.bundle.hash
           }
-          .reverse
-          .slice(0, 10)
-          .reverse
+          .takeRight(10)
           .mkString(","),
         "last10SelfTXHashes" -> last100SelfSentTransactions
           .map {
             _.hash
           }
-          .reverse
-          .slice(0, 10)
-          .reverse
+          .takeRight(10)
           .mkString(","),
         "lastValidBundleHash" -> Try {
           lastValidBundleHash.pbHash
@@ -179,10 +175,10 @@ class API(
           .map {
             case (id, b) =>
               Try {
-                s"${id.short}: ${b.maxBundle.hash.slice(0, 5)} ${Try {
+                s"${id.short}: ${b.maxBundle.hash.take(5)} ${Try {
                   b.maxBundle.pretty
                 }} " +
-                  s"parent${b.maxBundle.extractParentBundleHash.pbHash.slice(0, 5)} " +
+                  s"parent${b.maxBundle.extractParentBundleHash.pbHash.take(5)} " +
                   s"${lookupBundle(b.maxBundle.hash).nonEmpty} ${b.maxBundle.meta.map {
                     _.transactionsResolved
                   }}"
