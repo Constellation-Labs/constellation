@@ -9,7 +9,6 @@ import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import akka.util.Timeout
 import org.constellation.Fixtures
 import org.constellation.crypto.KeyUtils
-import org.constellation.p2p.PeerToPeer._
 import org.scalatest._
 
 import scala.util.Random

@@ -398,10 +398,6 @@ class API(
           path("nodeKeyPair") {
             complete(keyPair)
           } ~
-          // TODO: revisit
-          path("health") {
-            complete(StatusCodes.OK)
-          } ~
           path("peers") {
             complete(Peers(peerIPs.toSeq))
           } ~
@@ -731,11 +727,16 @@ class API(
         }
     }
 
-  private val faviconRoute = get {
-    path("favicon.ico") {
-      getFromResource("favicon.ico")
+  private val noAuthRoutes =
+    get {
+      // TODO: revisit
+      path("health") {
+        complete(StatusCodes.OK)
+      } ~
+      path("favicon.ico") {
+        getFromResource("favicon.ico")
+      }
     }
-  }
 
   private val routes: Route = cors() {
     getEndpoints ~ postEndpoints ~ jsRequest ~ serveMainPage
@@ -750,10 +751,10 @@ class API(
     }
   }
 
-  val authRoutes = faviconRoute ~ routes /* authenticateBasic(realm = "secure site",
+  val authRoutes = noAuthRoutes ~ authenticateBasic(realm = "secure site",
                                                     myUserPassAuthenticator) {
     user =>
       routes
-  }*/
+  }
 
 }

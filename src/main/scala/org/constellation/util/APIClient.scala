@@ -20,7 +20,7 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 class APIClient(val host: String = "127.0.0.1", val port: Int)(
   implicit val system: ActorSystem,
   implicit val executionContext: ExecutionContextExecutor,
-implicit val materialize: ActorMaterializer
+  implicit val materialize: ActorMaterializer
 ) {
 
   var udpPort: Int = 16180
@@ -35,14 +35,14 @@ implicit val materialize: ActorMaterializer
 
   def base(suffix: String) = Uri(s"$baseURI/$suffix")
 
-  // val config = ConfigFactory.load()
+  val config = ConfigFactory.load()
 
-  val authId = "dev"  // config.getString("auth.id")
-  val authPassword = "p4ssw0rd" //config.getString("auth.password")
+  val authId = config.getString("auth.id")
+  val authPassword = config.getString("auth.password")
 
   val authorization = headers.Authorization(BasicHttpCredentials(authId, authPassword))
 
-  private val authHeaders = List() //authorization)
+  private val authHeaders = List(authorization)
 
   def get(suffix: String, queryParams: Map[String,String] = Map()): Future[HttpResponse] = {
     Http().singleRequest(
