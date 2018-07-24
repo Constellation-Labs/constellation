@@ -1,25 +1,20 @@
 package org.constellation
 
-import java.io.File
-import java.security.PublicKey
-
-import akka.actor.{Actor, ActorRef, ActorSystem}
+import akka.actor.Actor
 import akka.util.Timeout
-import org.constellation.util.ProductHash
-
-import scala.util.Try
-import org.iq80.leveldb._
-import org.iq80.leveldb.impl.Iq80DBFactory._
-import constellation.SerExt
-import constellation.ParseExt
+import better.files._
+import com.typesafe.scalalogging.Logger
+import constellation.{ParseExt, SerExt}
 import org.constellation.LevelDB.RestartDB
 import org.constellation.serializer.KryoSerializer
+import org.constellation.util.ProductHash
+import org.iq80.leveldb._
+import org.iq80.leveldb.impl.Iq80DBFactory._
 
-import scala.tools.nsc.io.{File => SFile}
+import scala.util.Try
+
 
 // https://doc.akka.io/docs/akka/2.5/persistence-query-leveldb.html
-
-import constellation._
 
 object LevelDB {
 
@@ -28,30 +23,27 @@ object LevelDB {
   case class DBPut(key: String, obj: AnyRef)
   case class DBDelete(key: String)
 
+  def apply(file: File) = {
+    new LevelDB(file)
+  }
 
 }
 
-import LevelDB._
+import org.constellation.LevelDB._
 
 class LevelDBActor(dao: Data)(implicit timeoutI: Timeout) extends Actor {
 
-  var db: LevelDB = _
+  val logger = Logger("LevelDB")
 
-  def tmpDirId = new File("tmp", dao.id.medium)
-  def mkDB = db = new LevelDB(new File(tmpDirId, "db"))
+  def tmpDirId = file"tmp/${dao.id.medium}/db"
+  def mkDB: LevelDB = LevelDB(tmpDirId)
 
-  def restartDB(): Unit = {
-    Try {
-      db.destroy()
-    }
-    mkDB
-  }
+  override def receive: Receive = active(mkDB)
 
-  mkDB
-
-  override def receive: Receive = {
+  def active(db: LevelDB): Receive = {
     case RestartDB =>
-      restartDB()
+      Try { db.destroy() }.foreach(e => logger.warn("Exception while destroying LevelDB db", e))
+      context become active(mkDB)
     case DBGet(key) =>
       dao.numDBGets += 1
       val res = Try{db.getBytes(key).map {KryoSerializer.deserialize}}.toOption.flatten
@@ -70,11 +62,11 @@ class LevelDBActor(dao: Data)(implicit timeoutI: Timeout) extends Actor {
 }
 // Only need to implement kryo get / put
 
-class LevelDB(val file: File) {
+class LevelDB private (val file: File) {
   val options = new Options()
   options.createIfMissing(true)
-  Try{file.mkdirs}
-  val db: DB = factory.open(file, options)
+  Try{file.createIfNotExists(true, true)}
+  val db: DB = factory.open(file.toJava, options)
 
   // Either
   def get(s: String) = Option(asString(db.get(bytes(s))))
@@ -112,7 +104,7 @@ class LevelDB(val file: File) {
   def close(): Unit = db.close()
   def destroy(): Unit = {
     close()
-    SFile(file).deleteRecursively()
+    file.delete(true)
   }
 
 }

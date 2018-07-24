@@ -1,14 +1,14 @@
 package org.constellation
 
 import akka.stream.ActorMaterializer
+import better.files.File
+import constellation._
 import org.constellation.ClusterDebug.system
 import org.constellation.ClusterTest.getPodMappings
 import org.constellation.primitives.Schema._
 import org.constellation.util.APIClient
-import constellation._
 
 import scala.concurrent.ExecutionContextExecutor
-import scala.util.Try
 
 object DownloadChainBatch {
 
@@ -38,8 +38,8 @@ object DownloadChainBatch {
 
     val a1 = apis.filter{_.host == nodeIp}.head
 
-    val chainFile = scala.tools.nsc.io.File("chain.jsonl")
-    Try{chainFile.delete()}
+    val chainFile = File("chain.jsonl")
+    chainFile.delete(true)
 
     val m = a1.getBlocking[Metrics]("metrics").metrics
 
@@ -57,7 +57,7 @@ object DownloadChainBatch {
       hash = oldestHash
       ancestors.foreach{
         s =>
-          chainFile.appendAll(s.json + "\n")
+          chainFile.appendLine(s.json)
       }
     }
 

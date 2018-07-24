@@ -1,27 +1,26 @@
 
 import java.net.InetSocketAddress
+import java.nio.{ByteBuffer, ByteOrder}
 import java.security.{KeyPair, PrivateKey, PublicKey}
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorRef
 import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.ActorMaterializer
-import akka.util.{ByteString, Timeout}
+import akka.util.Timeout
+import better.files._
 import com.google.common.hash.Hashing
-import org.constellation.p2p._
-import org.constellation.primitives.Schema._
-import org.constellation.util.{POWExt, POWSignHelp, ProductHash}
 import org.constellation.crypto.KeyUtilsExt
+import org.constellation.primitives.Schema._
+import org.constellation.util.{POWExt, POWSignHelp}
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.native._
-import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, ShortTypeHints, native}
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, ShortTypeHints}
 
 import scala.concurrent.{Await, Future}
 import scala.reflect.ClassTag
-import scala.util.{Random, Try}
+import scala.util.Try
 
 /**
   * Project wide convenience functions.
@@ -76,7 +75,7 @@ package object constellation extends KeyUtilsExt with POWExt
     def prettyJson: String = Serialization.writePretty(Extraction.decompose(jsonSerializable))
     def tryJson: Try[String] = Try{caseClassToJson(jsonSerializable)}
     def j: String = json
-    def jsonSave(f: String): Unit = scala.tools.nsc.io.File(f).writeAll(json)
+    def jsonSave(f: String): Unit = File(f).writeText(json)
   }
 
   implicit class ParseExt(input: String) {
