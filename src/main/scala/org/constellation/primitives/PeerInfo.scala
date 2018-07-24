@@ -35,7 +35,7 @@ trait PeerInfo {
       signedPeerIDLookup.get(id).map { p =>
         val a = p.data.externalHostString
    //     println("Updating api client send to hostname : " + a)
-        val client = new APIClient(a, p.data.apiAddress.map{_.getPort}.getOrElse(9000))
+        val client = new APIClient().setConnection(a, p.data.apiAddress.map{_.getPort}.getOrElse(9000))
         rawPeerLookup(id) = LocalPeerData(client)
         client
 

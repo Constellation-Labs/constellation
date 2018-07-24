@@ -442,7 +442,9 @@ class API(
                       e.txData.data.src,
                       e.txData.data.dst,
                       e.txData.data.normalizedAmount,
-                      t._2))
+                      t._2,
+                      e.txData.time
+                    ))
               })
 
             var peerMap: Seq[Node] = peers

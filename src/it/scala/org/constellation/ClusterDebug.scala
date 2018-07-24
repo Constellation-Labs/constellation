@@ -33,7 +33,7 @@ object ClusterDebug extends TestKit(ActorSystem("ClusterTest")){
     val ips = mappings.map{_.externalIP}
 
     val rpcs = ips.map{ ip =>
-      val r = new APIClient(ip, 9000)
+      val r = new APIClient().setConnection(ip, 9000)
       r
     }
 

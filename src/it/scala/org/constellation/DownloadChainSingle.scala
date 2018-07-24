@@ -28,13 +28,13 @@ object DownloadChainSingle {
     val ips = mappings.map{_.externalIP}
 
     val apis = ips.map{ ip =>
-      val r = new APIClient(ip, 9000)
+      val r = new APIClient().setConnection(ip, 9000)
       r
     }
 
     val nodeIp = "35.238.105.67"
 
-    val a1 = apis.filter{_.host == nodeIp}.head
+    val a1 = apis.filter{_.hostName == nodeIp}.head
 
     val chainFile = scala.tools.nsc.io.File("single-chain.jsonl")
     chainFile.delete()

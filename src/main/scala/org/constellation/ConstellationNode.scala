@@ -184,10 +184,9 @@ class ConstellationNode(
   // TODO : Move to separate test class - these are within jvm only but won't hurt anything
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
-  val api = new APIClient(port=httpPort)
+  val api = new APIClient().setConnection(port = httpPort)
   api.id = id
   api.udpPort = udpPort
-  api.peerHttpPort = peerHttpPort
 
   def healthy: Boolean = Try{api.getSync("health").status == StatusCodes.OK}.getOrElse(false)
   def add(other: ConstellationNode): HttpResponse = api.postSync("peer", other.udpAddressString)

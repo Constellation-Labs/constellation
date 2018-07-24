@@ -26,7 +26,7 @@ class Simulation {
   }
 
   def setExternalIP(apis: Seq[APIClient]): Boolean =
-    apis.forall{a => a.postSync("ip", a.host + ":" + a.udpPort).status == StatusCodes.OK}
+    apis.forall{a => a.postSync("ip", a.hostName + ":" + a.udpPort).status == StatusCodes.OK}
 
   def verifyGenesisReceived(apis: Seq[APIClient]): Boolean = {
     apis.forall { a =>
@@ -65,9 +65,9 @@ class Simulation {
 
   def addPeers(apis: Seq[APIClient]): Seq[Future[Unit]] = {
     val results = apis.flatMap { a =>
-      val ip = a.host
+      val ip = a.hostName
       println(s"Trying to add nodes to $ip")
-      val others = apis.filter {_.id != a.id}.map { z => z.host + ":" + z.udpPort}
+      val others = apis.filter {_.id != a.id}.map { z => z.hostName + ":" + z.udpPort}
       others.map {
         n =>
           Future {
@@ -81,9 +81,9 @@ class Simulation {
 
   def addPeersV2(apis: Seq[APIClient]): Seq[Future[Unit]] = {
     val results = apis.flatMap { a =>
-      val ip = a.host
+      val ip = a.hostName
       println(s"Trying to add nodes to $ip")
-      val others = apis.filter {_.id != a.id}.map { z => AddPeerRequest(z.host, z.udpPort, z.peerHttpPort, z.id)}
+      val others = apis.filter {_.id != a.id}.map { z => AddPeerRequest(z.hostName, z.udpPort, z.apiPort, z.id)}
       others.map {
         n =>
           Future {

@@ -549,7 +549,7 @@ object Schema {
 
   final case class Vote(vote: Signed[VoteData]) extends ProductHash with Fiber
 
-  case class TransactionSerialized(hash: String, sender: String, receiver: String, amount: Long, signers: Set[String])
+  case class TransactionSerialized(hash: String, sender: String, receiver: String, amount: Long, signers: Set[String], time: Long)
   case class Node(address: String, host: String, port: Int)
 
 }

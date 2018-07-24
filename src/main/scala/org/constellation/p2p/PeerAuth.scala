@@ -41,7 +41,7 @@ trait PeerAuth {
       val port = address.getPort
       data.apiAddress
 
-      val client = new APIClient(hostName, port)
+      val client = new APIClient().setConnection(hostName, port)
 
       client.get(route)
     })
