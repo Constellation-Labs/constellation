@@ -22,7 +22,9 @@ import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Wallet
 import org.constellation.primitives.{APIBroadcast, MetricsManager, Schema, UpdateMetric}
 import org.constellation.primitives.Schema._
-import org.constellation.util.{HashSignature, ServeUI}
+import org.constellation.serializer.KryoSerializer
+import org.constellation.util.ServeUI
+
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -227,11 +229,6 @@ class API(
 
   val getEndpoints: Route = cors() {
     extractClientIP { clientIP =>
-      //  numAPICalls += 1
-      /*      logger.debug(s"Client IP " +
-              s"$clientIP ${clientIP.getAddress()} " +
-              s"${clientIP.toIP} ${clientIP.toOption.map{_.getCanonicalHostName}} ${clientIP.getPort()}"
-            )*/
       get {
         path("balance") {
           complete(validLedger.getOrElse(selfAddress.address, 0L).toString)
@@ -249,15 +246,10 @@ class API(
               handleSendRequest(SendToAddress(address, amount.toLong))
             }
           } ~
-          pathPrefix("address") {
-            get {
-              extractUnmatchedPath { p =>
-                logger.debug(s"Unmatched path on address result $p")
-                val ps = p.toString().tail
-                val balance = validLedger.getOrElse(ps, 0).toString
-                complete(s"Balance: $balance")
-              }
-            }
+          pathPrefix("address" / Remaining) { hash =>
+            val balance = validLedger.getOrElse(hash, 0).toString
+
+            complete(s"Balance: $balance")
           } ~
           pathPrefix("txHash") { // TODO: Rename to transaction
             extractUnmatchedPath { p =>
@@ -271,6 +263,15 @@ class API(
               //   logger.debug(s"Unmatched path on address result $p")
               val ps = p.toString().tail
               complete(lookupTransactionDB(ps))
+            }
+          } ~
+          pathPrefix("maxBundle") {
+            if (maxBundle.isDefined) {
+              val maybeSheaf = lookupBundleDBFallbackBlocking(maxBundle.get.hash)
+
+              complete(maybeSheaf)
+            } else {
+              complete(None)
             }
           } ~
           pathPrefix("bundle") {
@@ -441,7 +442,9 @@ class API(
                       e.txData.data.src,
                       e.txData.data.dst,
                       e.txData.data.normalizedAmount,
-                      t._2))
+                      t._2,
+                      e.txData.time
+                    ))
               })
 
             var peerMap: Seq[Node] = peers

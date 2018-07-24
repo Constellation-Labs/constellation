@@ -42,7 +42,7 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
     val node2 = TestNode(expectedPeers)
 
-    val rpc = new APIClient(port=node2.httpPort)
+    val rpc = new APIClient().setConnection(port = node2.httpPort)
 
     Thread.sleep(2000)
 
@@ -58,7 +58,7 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   "GET to /id" should "get the current nodes public key id" in {
     val keyPair = KeyUtils.makeKeyPair()
     val appNode = TestNode(Seq(), keyPair)
-    val rpc = new APIClient(port=appNode.httpPort)
+    val rpc = new APIClient().setConnection(port=appNode.httpPort)
 
     val response = rpc.get("id")
 
@@ -88,8 +88,8 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val node1Path = node1.udpAddressString
     val node2Path = node2.udpAddressString
 
-    val rpc1 = new APIClient(port=node1.httpPort)
-    val rpc2 = new APIClient(port=node2.httpPort)
+    val rpc1 = new APIClient().setConnection(port=node1.httpPort)
+    val rpc2 = new APIClient().setConnection(port=node2.httpPort)
 
     val addPeerResponse = rpc2.post("peer", node1Path)
 

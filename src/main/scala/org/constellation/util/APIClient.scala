@@ -9,6 +9,8 @@ import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromE
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.constellation.primitives.Schema.Id
+import org.constellation.serializer.KryoSerializer
+import org.json4s.JsonAST.JArray
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 
@@ -17,21 +19,30 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 // TODO : Implement all methods from RPCInterface here for a client SDK
 // This should also probably use scalaj http because it's bettermore standard.
 
-class APIClient(val host: String = "127.0.0.1", val port: Int)(
+class APIClient (
   implicit val system: ActorSystem,
   implicit val executionContext: ExecutionContextExecutor,
-implicit val materialize: ActorMaterializer
-) {
+  implicit val materialize: ActorMaterializer) {
+
+  var hostName: String = "127.0.0.1"
+  var id: Id = _
 
   var udpPort: Int = 16180
-  var id: Id = _
-  var peerHttpPort: Int = _
+  var apiPort: Int = _
 
-  def udpAddress: String = host + ":" + udpPort
+  def setConnection(host: String = "127.0.0.1", port: Int): APIClient = {
+    hostName = host
+    apiPort = port
+    this
+  }
 
-  def setExternalIP(): Boolean = postSync("ip", host + ":" + udpPort).status == StatusCodes.OK
+  def udpAddress: String = hostName + ":" + udpPort
 
-  val baseURI = s"http://$host:$port"
+  def setExternalIP(): Boolean = postSync("ip", hostName + ":" + udpPort).status == StatusCodes.OK
+
+  def baseURI = {
+    s"http://$hostName:$apiPort"
+  }
 
   def base(suffix: String) = Uri(s"$baseURI/$suffix")
 

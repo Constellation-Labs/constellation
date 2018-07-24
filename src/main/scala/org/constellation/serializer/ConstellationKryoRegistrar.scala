@@ -87,9 +87,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Gossip[HandShakeResponseMessage]])
     kryo.register(classOf[Gossip[Peer]])
 
-
     kryo.register(classOf[AddressMetaData])
-
 
     kryo.register(Class.forName("scala.collection.immutable.HashSet$HashSet1"))
     kryo.register(Class.forName("scala.collection.immutable.Set$EmptySet$"))

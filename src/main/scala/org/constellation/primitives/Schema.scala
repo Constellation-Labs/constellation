@@ -47,7 +47,6 @@ object Schema {
   final case object Unknown extends ValidationStatus
   final case object DoubleSpend extends ValidationStatus
 
-
   sealed trait ConfigUpdate
 
   final case class ReputationUpdates(updates: Seq[UpdateReputation]) extends ConfigUpdate
@@ -349,6 +348,7 @@ object Schema {
       }
       process(bundleData)
     }
+
     /*
         def extractTX: Set[TX] = {
           def process(s: Signed[BundleData]): Set[TX] = {
@@ -368,6 +368,7 @@ object Schema {
           process(bundleData)
         }
     */
+
     // Copy this to temp val on class so as not to re-calculate
     def extractIds: Set[Id] = {
       def process(s: Signed[BundleData]): Set[Id] = {
@@ -522,11 +523,6 @@ object Schema {
                             apiClient: APIClient
                           )
 
-
-
-
-
-
   // Experimental below
 
   case class CounterPartyTXRequest(
@@ -553,10 +549,7 @@ object Schema {
 
   final case class Vote(vote: Signed[VoteData]) extends ProductHash with Fiber
 
-
-
-  case class TransactionSerialized(hash: String, sender: String, receiver: String, amount: Long, signers: Set[String])
+  case class TransactionSerialized(hash: String, sender: String, receiver: String, amount: Long, signers: Set[String], time: Long)
   case class Node(address: String, host: String, port: Int)
-
 
 }

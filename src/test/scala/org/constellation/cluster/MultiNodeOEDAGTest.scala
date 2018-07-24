@@ -43,12 +43,11 @@ class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSyst
     ))
 
     val apis = nodes.map{_.api}
-    val sim = new Simulation(apis)
+    val sim = new Simulation()
     //sim.run(attemptSetExternalIP = false
     //  , validationFractionAcceptable = 0.3
     //)
-    sim.runV2()
-
+    sim.runV2(apis = apis)
 
     // Thread.sleep(1000*60*60)
 
