@@ -245,7 +245,6 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     }
   }
 
-
   @memoize(1000, 600.seconds)
   def findAncestorsUpTo(
                          parentHash: String,

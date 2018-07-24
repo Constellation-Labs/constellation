@@ -32,18 +32,17 @@ trait PeerAuth {
 
   def getBroadcastTCP(skipIDs: Seq[Id] = Seq(),
                       idSubset: Seq[Id] = Seq(),
-                      route: String): Seq[Future[HttpResponse]] = {
+                      route: String): Seq[(InetSocketAddress, Future[HttpResponse])] = {
     val addresses = getBroadcastPeers(skipIDs, idSubset).map(_.apiAddress)
 
     addresses.map(a => {
       val address = a.get
       val hostName = address.getHostName
       val port = address.getPort
-      data.apiAddress
 
       val client = new APIClient().setConnection(hostName, port)
 
-      client.get(route)
+      address -> client.get(route)
     })
   }
 

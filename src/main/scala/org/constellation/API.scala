@@ -333,6 +333,7 @@ class API(
               val ps = p.toString().split("/").last
               //logger.debug(s"Looking up bundle hash $ps")
               val ancestors = findAncestorsUpTo(ps, Seq(), upTo = 101)
+
               complete(ancestors.map {
                 _.bundle.hash
               })

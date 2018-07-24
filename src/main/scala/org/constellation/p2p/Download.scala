@@ -21,22 +21,49 @@ trait Download extends PeerAuth {
     if (downloadMode && peers.nonEmpty && !downloadInProgress) {
       logger.debug("Requesting data download")
 
-      // grab max bundle
-      /////////// *
+      downloadInProgress = true
+
       val apiClient = new APIClient()
 
-      getMaxBundleHash(apiClient).onComplete(bundleHash => {
-        var hash = bundleHash.get
+      // call to get ancestors from each peer
+      // grab the one with the highest score?
+      // take the list of ancestors, split out work to grab bundle and transaction data from each ancestor bundle,
+      // once we get to the end, hit another endpoint to get the same list but from the new bundle hash
+      // once we get to coinbase return
 
-        //////// *
+      // grab max bundle hash
+
+      getMaxBundleHash(apiClient).onComplete(bundleHash => {
 
         // TODO: use disk backing
         var validSheafs = Seq[Sheaf]()
         var validTransactions = Seq[Transaction]()
 
+        var hash = bundleHash.get
+
+        var chain = Seq[String]()
+
+        while (hash != "coinbase") {
+          val peer = getBroadcastPeers().head
+          val apiAddress = peer.apiAddress.get
+
+          apiClient.setConnection(apiAddress.getHostName, apiAddress.getPort)
+
+          val ancestors = apiClient.get("ancestors")
+
+          ancestors.onComplete(a => {
+            val thing = apiClient.read[Seq[String]](a.get).get()
+            hash = thing.last
+            chain = chain.++(thing)
+          })
+        }
+
+        assert(true)
+    /*
         while (hash != "coinbase") {
 
           // get bundle data
+
           ///// **
           val sheaf: Seq[Future[HttpResponse]] = getBroadcastTCP(route = "bundle/" + hash)
 
@@ -105,6 +132,8 @@ trait Download extends PeerAuth {
           })
         }
 
+        */
+
         if (hash == "coinbase") {
           acceptGenesis(validSheafs.last.bundle, validSheafs.last.bundle.extractTX.head)
         }
@@ -118,9 +147,9 @@ trait Download extends PeerAuth {
   }
 
   def getMaxBundleHash(apiClient: APIClient): Future[String] = {
-    val maxBundles: Seq[Future[HttpResponse]] = getBroadcastTCP(route = "maxBundle")
+    val maxBundles: Seq[(InetSocketAddress, Future[HttpResponse])] = getBroadcastTCP(route = "maxBundle")
 
-    val reduced = Future.reduce(maxBundles.toIterable)((left, right) => {
+    val reduced = Future.reduce(maxBundles)((left, right) => {
       val leftHash = apiClient.read[Option[Sheaf]](left).get()
       val rightHash = apiClient.read[Option[Sheaf]](right).get()
 
