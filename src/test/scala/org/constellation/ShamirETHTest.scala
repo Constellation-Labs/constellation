@@ -1,8 +1,6 @@
 package org.constellation
 
-import java.io.File
-import java.nio.file.{Files, Paths}
-
+import better.files.File
 import org.scalatest.FlatSpec
 import com.codahale.shamir.Scheme
 import constellation._
@@ -13,8 +11,8 @@ case class ShamirOutput(fileName: String, part: Int, hex: String)
 
 class ShamirETHTest extends FlatSpec {
 
-  val encodedStore = new File(System.getenv("HOME"), "yourfile.txt")
-  val ethKeyStore = new File(System.getenv("HOME"), "Library/Ethereum/keystore")
+  val encodedStore = File(System.getenv("HOME"), "yourfile.txt")
+  val ethKeyStore = File(System.getenv("HOME"), "Library/Ethereum/keystore")
 
 
   "Shamir java" should "work" in {
@@ -31,25 +29,25 @@ class ShamirETHTest extends FlatSpec {
 
   "Shamir" should "work" ignore {
 
-    val files = ethKeyStore.listFiles().filter {
-      _.getName != ".DS_Store"
+    val files = ethKeyStore.list.filter {
+      _.name != ".DS_Store"
     }.flatMap{
         f =>
           val scheme = Scheme.of(3, 2)
-          val secret = Files.readAllBytes(f.toPath)
+          val secret = f.byteArray
           val parts = scheme.split(secret)
           val done = parts.asScala.map{ case (index, bytes) =>
-            ShamirOutput(f.getName, index, bytes2hex(bytes))
+            ShamirOutput(f.name, index, bytes2hex(bytes))
           }.toSeq
           done.foreach{z => println(z.json)}
           done
       }
-    scala.tools.nsc.io.File(encodedStore).writeAll(files.map{_.json}.mkString("\n"))
+    encodedStore.writeText(files.map{_.json}.mkString("\n"))
   }
 
   "Shamir read in" should "work" ignore {
 
-    val data = scala.io.Source.fromFile(encodedStore).getLines().toSeq.map{_.x[ShamirOutput]}
+    val data = encodedStore.lines.map{_.x[ShamirOutput]}
 
     val scheme = Scheme.of(3, 2)
 
@@ -62,8 +60,8 @@ class ShamirETHTest extends FlatSpec {
         val recovered = scheme.join(partsOut)
         val output = new String(recovered)
         println(output)
-        val file = new File(ethKeyStore, fileName)
-        scala.tools.nsc.io.File(file).writeAll(output)
+        val file = File(ethKeyStore, fileName)
+        file.writeText(output)
     }
 
 
