@@ -2,21 +2,16 @@ package org.constellation.primitives
 
 import java.util.concurrent.TimeUnit
 
-import cats.Monoid
-import org.constellation.LevelDB
-import org.constellation.consensus.Consensus.{CC, RoundHash}
-import org.constellation.primitives.Schema._
-import org.constellation.util.Signed
-
-import scala.collection.concurrent.TrieMap
-import constellation._
-import org.constellation.LevelDB.{DBDelete, DBGet, DBPut}
-
-import scala.util.Try
 import akka.pattern.ask
 import akka.util.Timeout
+import cats.Monoid
 import com.softwaremill.macmemo.memoize
+import constellation._
+import org.constellation.LevelDB.{DBDelete, DBGet, DBPut}
+import org.constellation.consensus.Consensus.{CC, RoundHash}
+import org.constellation.primitives.Schema._
 
+import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
 
 
@@ -224,26 +219,26 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
   }
 
   @memoize(1000, 600.seconds)
-  def findAncestorsUpToLastResolved(
-                                     parentHash: String,
-                                     ancestors: Seq[Sheaf] = Seq()
-                                   ): Seq[Sheaf] = {
-    val parent = lookupBundle(parentHash)
-    def updatedAncestors = Seq(parent.get) ++ ancestors
-    if (parent.isEmpty) {
-      if (parentHash != "coinbase") {
-        syncPendingBundleHashes += parentHash
+  private def findAncestorsUpToLastResolved(parentHash: String,
+                                            maxDepth: Int = 100): Seq[Sheaf] = {
+    var currentSheaf = lookupBundle(parentHash)
+    var ancestors: List[Sheaf] = List()
+    var depth = 0
+    while(depth < maxDepth && currentSheaf.exists(p => !p.isResolved)) {
+      val parent = currentSheaf.get
+      ancestors = parent +: ancestors
+      val parentHash = parent.bundle.extractParentBundleHash.pbHash
+      currentSheaf = lookupBundle(parentHash)
+      if (currentSheaf.isEmpty) {
+        if (parentHash != "coinbase") {
+          syncPendingBundleHashes += parentHash
+        }
       }
-      ancestors
-    } else if (parent.get.isResolved) updatedAncestors
-    else {
-      findAncestorsUpToLastResolved(
-        parent.get.bundle.extractParentBundleHash.pbHash,
-        updatedAncestors
-      )
+      depth += 1
     }
-  }
 
+    currentSheaf.toList ++ ancestors
+  }
 
   @memoize(1000, 600.seconds)
   def findAncestorsUpTo(
