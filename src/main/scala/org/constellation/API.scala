@@ -20,9 +20,9 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Wallet
-import org.constellation.primitives.{APIBroadcast, MetricsManager, Schema, UpdateMetric}
 import org.constellation.primitives.Schema._
-import org.constellation.util.{HashSignature, ServeUI}
+import org.constellation.primitives.{APIBroadcast, Schema, UpdateMetric}
+import org.constellation.util.ServeUI
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -225,7 +225,7 @@ class API(
   //    memoizeSync[Try, Metrics](Some(2.seconds))(2)
   //  }
 
-  val getEndpoints: Route = cors() {
+  val getEndpoints: Route =
     extractClientIP { clientIP =>
       //  numAPICalls += 1
       /*      logger.debug(s"Client IP " +
@@ -489,7 +489,6 @@ class API(
           serveMainPage
       }
     }
-  }
 
   private val postEndpoints =
     post {
