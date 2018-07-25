@@ -12,7 +12,7 @@ import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.Base58
 import org.constellation.util._
 
-import scala.collection.SortedSet
+import scala.collection.{SortedSet, mutable}
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
 
@@ -158,7 +158,7 @@ object Schema {
 
   case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash
 
-  case class EdgeCell(members: Seq[EdgeSheaf])
+  case class EdgeCell(members: mutable.SortedSet[EdgeSheaf])
 
   case class ResolvedTX(tx: TX, transactionData: TransactionData)
 

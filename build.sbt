@@ -50,7 +50,7 @@ lazy val commonSettings = Seq(
  */
   javaOptions in Universal ++= Seq(
     // -J params will be added as jvm parameters
- //  "-J-Xmx12000m" //,
+   "-J-Xmx12000m" //,
   //  "-J-Xms4000m",
 
     // you can access any build setting/task here
