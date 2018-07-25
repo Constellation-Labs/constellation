@@ -1,14 +1,10 @@
 package org.constellation
 
 
+import better.files.File
 import org.iq80.leveldb._
 import org.iq80.leveldb.impl.Iq80DBFactory._
-import java.io._
-
-import org.constellation.primitives.Schema.Transaction
 import org.scalatest.FlatSpec
-
-import scala.tools.nsc.io.{File => SFile}
 
 class LevelDBTest extends FlatSpec {
 
@@ -16,10 +12,10 @@ class LevelDBTest extends FlatSpec {
   "LevelDB" should "create a database and run some queries and delete it" in {
     val options = new Options()
     options.createIfMissing(true)
-    val file = new File("tmp" , "example")
-    file.mkdir
+    val file = File("tmp" , "example")
+    file.createIfNotExists(true, true)
 
-    val db = factory.open(file, options)
+    val db = factory.open(file.toJava, options)
     try {
       db.put(bytes("Tampa"), bytes("rocks"))
       val value = asString(db.get(bytes("Tampa")))
@@ -33,16 +29,16 @@ class LevelDBTest extends FlatSpec {
       db.close()
     }
 
-    SFile(file).deleteRecursively()
+    file.delete(true)
 
   }
 
   "LevelDB wrapper" should "do same but in a convenient fashion" in {
 
-    val file = new File("tmp" , "example")
-    file.mkdir
+    val file = File("tmp" , "example")
+    file.createIfNotExists(true, true)
 
-    val ldb = new LevelDB(file)
+    val ldb = LevelDB(file)
 
     ldb.put("Tampa", "rocks")
     assert(ldb.getRaw("Tampa") == "rocks")
@@ -50,17 +46,17 @@ class LevelDBTest extends FlatSpec {
     assert(ldb.getRaw("Tampa") == null)
 
     ldb.close()
-    SFile(file).deleteRecursively()
+    file.delete(true)
 
   }
 
   "Type serialization" should "test tx and bundle storage" in {
 
 
-    val file = new File("tmp" , "example")
-    file.mkdir
+    val file = File("tmp" , "example")
+    file.createIfNotExists(true, true)
 
-    val ldb = new LevelDB(file)
+    val ldb = LevelDB(file)
 
     ldb.put("Tampa", "rocks")
     assert(ldb.getRaw("Tampa") == "rocks")
@@ -85,7 +81,7 @@ class LevelDBTest extends FlatSpec {
 */
 
     ldb.close()
-    SFile(file).deleteRecursively()
+    file.delete(true)
 
   }
 

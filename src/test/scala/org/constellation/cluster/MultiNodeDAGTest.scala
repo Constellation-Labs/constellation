@@ -1,20 +1,17 @@
 package org.constellation.cluster
 
-import java.io.File
-import java.util.concurrent.{ForkJoinPool, TimeUnit}
+import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import akka.util.Timeout
-import constellation._
-import org.constellation.ConstellationNode
-import org.constellation.primitives.Schema._
+import better.files._
 import org.constellation.util.{Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
 
-import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Random, Try}
+import scala.concurrent.ExecutionContextExecutor
+
 
 
 class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
@@ -33,9 +30,8 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val totalNumNodes = 3
 
     // Cleanup DBs
-    import scala.tools.nsc.io.{File => SFile}
-    val tmpDir = new File("tmp")
-    Try{SFile(tmpDir).deleteRecursively()}
+    val tmpDir = "tmp"
+    File(tmpDir).delete(true)
 
     val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false
     //  , generateRandomTransactions = true
@@ -54,9 +50,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
    // Thread.sleep(1000*60*60)
 
     // Cleanup DBs
-    import scala.tools.nsc.io.{File => SFile}
-    Try{SFile(tmpDir).deleteRecursively()}
-
+    File(tmpDir).delete(true)
     assert(true)
   }
 
