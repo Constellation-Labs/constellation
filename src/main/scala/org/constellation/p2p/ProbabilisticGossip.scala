@@ -269,12 +269,13 @@ trait ProbabilisticGossip extends PeerAuth {
             _.bundle
           }.toSeq).signed())
           val maybeData = lookupBundle(ck.hashPointer)
-          val pbData = maybeData.get
-          updateBundleFrom(pbData, Sheaf(b))
-          // Skip ids when depth below a certain amount, else tell everyone.
-          // TODO : Fix ^
-          // broadcast(b, skipIDs = allIds)
-          apiBroadcast(_.post("rxBundle", b), skipIDs = allIds) // .foreach{println}
+          maybeData.foreach{ pbData =>
+            updateBundleFrom(pbData, Sheaf(b))
+            // Skip ids when depth below a certain amount, else tell everyone.
+            // TODO : Fix ^
+            // broadcast(b, skipIDs = allIds)
+            apiBroadcast(_.post("rxBundle", b), skipIDs = allIds) // .foreach{println}
+          }
         } else {
           toRemove ++= best.toSet
         }
