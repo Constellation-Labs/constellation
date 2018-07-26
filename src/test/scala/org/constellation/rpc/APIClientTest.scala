@@ -1,16 +1,14 @@
 package org.constellation.rpc
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
-
-import scala.concurrent.ExecutionContextExecutor
 import constellation._
-import org.constellation.Fixtures
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.{Id, Peers}
 import org.constellation.util.{APIClient, TestNode}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+
+import scala.concurrent.ExecutionContextExecutor
 
 class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
@@ -30,8 +28,6 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
    */
 
-  import Fixtures._
-
   "GET to /peers" should "get the correct connected peers" in {
 
     val node1 = TestNode()
@@ -46,9 +42,7 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
     Thread.sleep(2000)
 
-    val response = rpc.get("peers")
-
-    val actualPeers = rpc.read[Peers](response.get()).get()
+    val actualPeers = rpc.getBlocking[Peers]("peers")
 
     println(actualPeers)
 
@@ -60,9 +54,7 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val appNode = TestNode(Seq(), keyPair)
     val rpc = new APIClient(port=appNode.httpPort)
 
-    val response = rpc.get("id")
-
-    val id = rpc.read[Id](response.get()).get()
+    val id = rpc.getBlocking[Id]("id")
 
     assert(Id(keyPair.getPublic.encoded) == id)
   }
@@ -91,17 +83,14 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val rpc1 = new APIClient(port=node1.httpPort)
     val rpc2 = new APIClient(port=node2.httpPort)
 
-    val addPeerResponse = rpc2.post("peer", node1Path)
+    val addPeerResponse = rpc2.postSync("peer", node1Path)
 
-    assert(addPeerResponse.get().status == StatusCodes.OK)
+    assert(addPeerResponse.isSuccess)
 
     // TODO: bug here with lookup of peer, execution context issue, timing?
 
-    val peersResponse1 = rpc1.get("peers")
-    val peersResponse2 = rpc2.get("peers")
-
-    val peers1 = rpc1.read[Peers](peersResponse1.get()).get()
-    val peers2 = rpc1.read[Peers](peersResponse2.get()).get()
+    val peers1 = rpc1.getBlocking[Peers]("peers")
+    val peers2 = rpc2.getBlocking[Peers]("peers")
 
     // Re-enable after we allow peer adding from authenticated peer.
    // assert(peers1 == Peers(Seq(node2Path)))

@@ -82,14 +82,13 @@ lazy val coreDependencies = Seq(
   "org.fusesource.leveldbjni"   % "leveldbjni-all"   % "1.8" withSources() withJavadoc(),
   "com.codahale" % "shamir" % "0.6.0" withSources() withJavadoc(),
   "org.json4s" %% "json4s-ext" % "3.5.2",
-  "org.scalaj" %% "scalaj-http" % "2.3.0" withJavadoc() withSources(),
+  "org.scalaj" %% "scalaj-http" % "2.4.0" withJavadoc() withSources(),
   "com.twitter" %% "chill" % "0.9.1",
   "com.twitter" %% "algebird-core" % "0.13.4",
   "org.typelevel" %% "cats-core" % "1.0.1",
   "net.glxn" % "qrgen" % "1.4",
   "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.typesafe.slick" %% "slick" % "3.2.3",
-  "org.slf4j" % "slf4j-nop" % "1.6.4",
   "com.h2database" % "h2" % "1.4.197",
   "com.twitter" %% "storehaus-cache" % "0.15.0"
   // "com.esotericsoftware" % "kryo" % "4.0.2"

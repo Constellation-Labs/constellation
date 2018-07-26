@@ -1,19 +1,16 @@
 package org.constellation.primitives
 
-import akka.actor.{Actor, ActorRef}
+import akka.actor.Actor
 import akka.stream.ActorMaterializer
 import org.constellation.AddPeerRequest
-import org.constellation.primitives.Schema.{Id, LocalPeerData}
+import org.constellation.primitives.Schema.Id
 import org.constellation.util.APIClient
 
 import scala.collection.mutable
-import scala.concurrent.Await
-import scala.util.Try
 
 case class PeerData(addRequest: AddPeerRequest, client: APIClient)
 case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
 case class PeerHealthCheck(status: Map[Id, Boolean])
-import scala.concurrent.duration._
 
 case object GetPeerInfo
 
@@ -25,7 +22,7 @@ class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
 
     case a @ AddPeerRequest(host, udpPort, port, id) =>
       // println(s"Added peer $a")
-      val client = new APIClient(host, port)(context.system, context.dispatcher, materialize)
+      val client = new APIClient(host, port)
       client.id = id
       peerInfo(id) = PeerData(a, client)
 

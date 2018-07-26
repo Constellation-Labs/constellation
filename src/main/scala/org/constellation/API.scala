@@ -20,11 +20,12 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Wallet
-import org.constellation.primitives.{APIBroadcast, MetricsManager, Schema, UpdateMetric}
 import org.constellation.primitives.Schema._
-import org.constellation.util.{HashSignature, ServeUI}
+import org.constellation.primitives.{APIBroadcast, Schema, UpdateMetric}
+import org.constellation.util.ServeUI
 import org.json4s.native
 import org.json4s.native.Serialization
+import scalaj.http.HttpResponse
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -505,14 +506,14 @@ class API(
         }
       } ~
       path("peerHealthCheckV2") {
-        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse]]]
+        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse[String]]]]
         val res = response.getOpt().map{
           idMap =>
             val res = idMap.map{
               case (id, fut) =>
                 val maybeResponse = fut.getOpt()
              //   println(s"Maybe response $maybeResponse")
-                id -> maybeResponse.exists{_.status == StatusCodes.OK}
+                id -> maybeResponse.exists{_.isSuccess}
             }.toSeq
             complete(res)
         }.getOrElse(complete(StatusCodes.InternalServerError))
