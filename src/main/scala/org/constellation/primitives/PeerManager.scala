@@ -16,15 +16,15 @@ case object GetPeerInfo
 
 class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
 
-  private val peerInfo = mutable.HashMap[Id, PeerData]()
+  override def receive = active(Map.empty)
 
-  override def receive: Receive = {
+  def active(peerInfo: Map[Id, PeerData]): Receive = {
 
     case a @ AddPeerRequest(host, udpPort, port, id) =>
       // println(s"Added peer $a")
       val client = new APIClient(host, port)
       client.id = id
-      peerInfo(id) = PeerData(a, client)
+      context become active(peerInfo + (id -> PeerData(a, client)))
 
     case APIBroadcast(func, skipIds, subset) =>
 
@@ -38,7 +38,7 @@ class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
       }
       sender() ! result
 
-    case GetPeerInfo => sender() ! peerInfo.toMap
+    case GetPeerInfo => sender() ! peerInfo
 
   }
 }

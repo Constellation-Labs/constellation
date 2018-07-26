@@ -9,26 +9,32 @@ import scala.collection.mutable
 
 class CellManager(memPoolManager: ActorRef, metricsManager: ActorRef, peerManager: ActorRef) extends Actor {
 
-  private val cells = mutable.HashMap[CellKey, EdgeCell]()
+  implicit val sheafOrdering: Ordering[EdgeSheaf] = Ordering.by{s: EdgeSheaf => s.score}
 
-  def setCellSize(): Unit = metricsManager ! UpdateMetric("cellsActive", cells.size.toString)
+  implicit val cellOrdering: Ordering[CellKey] = Ordering.by{c => c.height -> c.depth}
 
-  override def receive: Receive = {
+  private val cells = mutable.SortedMap[CellKey, EdgeCell]()
+
+  private val sheafs = mutable.SortedSet[EdgeSheaf]()
+
+  def setCellSize(cellSize: Int): Unit = metricsManager ! UpdateMetric("cellsActive", cellSize.toString)
+
+  override def receive = active(Map.empty)
+
+  def active(cells: Map[CellKey, EdgeCell]): Receive = {
 
     case InternalHeartbeat =>
-
-
 
     case g: GenesisObservation =>
 
       val soe = g.initialDistribution.signedObservationEdge
       val genesisHash = g.genesis.signedObservationEdge.hash
       val ck = CellKey(genesisHash, 1, 1)
-      cells(ck) = EdgeCell(Seq(EdgeSheaf(soe, genesisHash, 1, 1, 10000D)))
+      val updatedCells = cells + (ck -> EdgeCell(mutable.SortedSet(EdgeSheaf(soe, genesisHash, 1, 1, 10000D))))
       metricsManager ! IncrementMetric("cellsCreated")
       metricsManager ! UpdateMetric("genesisOEHash", genesisHash)
-      setCellSize()
-
+      setCellSize(updatedCells.size)
+      context become active(updatedCells)
   }
 }
 

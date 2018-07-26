@@ -59,7 +59,7 @@ object ConstellationNode extends App {
     requestExternalAddressCheck = requestExternalAddressCheck
   )
 
-  node.data.minGenesisDistrSize = 3
+  node.data.minGenesisDistrSize = 4
 
 }
 

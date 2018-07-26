@@ -219,7 +219,34 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
   }
 
   @memoize(1000, 600.seconds)
-  private def findAncestorsUpToLastResolved(parentHash: String,
+  private def findAncestorsUpToLastResolved(
+                                             parentHash: String,
+                                             ancestors: Seq[Sheaf] = Seq(),
+                                             upTo: Int = 150
+                                           ): Seq[Sheaf] = {
+    val parent = lookupBundleDBFallbackBlocking(parentHash)
+    def updatedAncestors: Seq[Sheaf] = parent.get +: ancestors
+    if (parent.isEmpty) {
+      if (parentHash != "coinbase") {
+        syncPendingBundleHashes += parentHash
+      }
+      ancestors
+    }
+    else if (parent.get.isResolved) {
+      updatedAncestors
+    }
+    else if (ancestors.size >= upTo) updatedAncestors
+    else {
+      findAncestorsUpToLastResolved(
+        parent.get.bundle.extractParentBundleHash.pbHash,
+        updatedAncestors,
+        upTo
+      )
+    }
+  }
+
+  @memoize(1000, 600.seconds)
+  private def findAncestorsUpToLastResolvedIterative(parentHash: String,
                                             maxDepth: Int = 100): Seq[Sheaf] = {
     var currentSheaf = lookupBundle(parentHash)
     var ancestors: List[Sheaf] = List()

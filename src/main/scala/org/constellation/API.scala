@@ -65,6 +65,7 @@ class API(
   def calculateMetrics(): Metrics = {
     Metrics(
       Map(
+        "transactionsPerSecond" -> transactionsPerSecond.toString,
         "version" -> "1.0.2",
         "allPeersHealthy" -> allPeersHealthy.toString,
         //   "numAPICalls" -> numAPICalls.toString,
