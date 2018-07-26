@@ -15,7 +15,7 @@ import org.constellation.LevelDB.{DBGet, DBPut}
 import scala.collection.concurrent.TrieMap
 import scala.util.{Random, Try}
 
-trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo {
+trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo with BundleDataExt {
 
   // Need mempool ordering by RX time -- either that or put it on a TXMetaData store
   @volatile var memPool: Set[String] = Set()
@@ -96,6 +96,15 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
       tx.txData.data.updateLedger(validLedger)
       memPool -= tx.hash
     }
+  }
+
+  def handleTransaction(tx: Transaction): Unit = {
+    if (lookupTransaction(tx.hash).isEmpty) {
+      storeTransaction(tx)
+      numSyncedTX += 1
+    }
+    syncPendingTXHashes -= tx.hash
+    txSyncRequestTime.remove(tx.hash)
   }
 
   def updateMempool(tx: Transaction): Boolean = {

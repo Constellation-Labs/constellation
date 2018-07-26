@@ -65,10 +65,16 @@ trait Download extends PeerAuth {
 
     val peerSelection = Iterator.continually(peers).flatten
 
-    val bundleResponses = groupedChain.flatMap(group => {
+    def getRandomPeerClientConnection: APIClient = {
       val peer = peerSelection.next().data.apiAddress.get
 
       val client = new APIClient().setConnection(peer.getHostName, peer.getPort)
+
+      client
+    }
+
+    val bundleResponses = groupedChain.flatMap(group => {
+      val client = getRandomPeerClientConnection
 
       group.map(bundle => {
         client.get("fullBundle/" + bundle._1)
@@ -80,23 +86,27 @@ trait Download extends PeerAuth {
         if (r.isSuccess) {
           val response = apiClient.read[BundleHashQueryResponse](r.get).get()
 
+          if (response.sheaf.isEmpty) {
+            // add to queue again
+            return assert(true)
+          }
+
           val sheaf: Sheaf = response.sheaf.get
 
           val transactions: Seq[Transaction] = response.transactions
 
           // store the bundle
-          storeBundle(sheaf)
+
+          handleBundle(sheaf.bundle)
 
           // store the transactions
-          transactions.foreach(storeTransaction)
+
+          transactions.foreach(handleTransaction)
 
           // if this is the genesis bundle handle it separately
           if (sheaf.bundle.hash == genesisHash) {
             acceptGenesis(sheaf.bundle, sheaf.bundle.extractTX.head)
-          }
-
-          // if this is the max bundle update our internal max bundle
-          if (sheaf.bundle.hash == maxBundleSheaf.bundle.hash) {
+          } else if (sheaf.bundle.hash == maxBundleSheaf.bundle.hash) {
             updateMaxBundle(maxBundleSheaf)
           }
 

@@ -49,7 +49,7 @@ trait ProbabilisticGossip extends PeerAuth {
         handleBundle(b)
 
       case tx: Transaction =>
-        //  println(s"Rx tx hash ${tx.short}")
+
         handleTransaction(tx)
 
       case bb: PeerSyncHeartbeat =>
@@ -62,14 +62,6 @@ trait ProbabilisticGossip extends PeerAuth {
 
 //  @volatile var heartBeatInProgress = false
 
-  def handleTransaction(tx: Transaction): Unit = {
-    if (lookupTransaction(tx.hash).isEmpty) {
-      storeTransaction(tx)
-      numSyncedTX += 1
-    }
-    syncPendingTXHashes -= tx.hash
-    txSyncRequestTime.remove(tx.hash)
-  }
 
   def gossipHeartbeat(): Unit = {
     // Gather any missing transaction or bundle data

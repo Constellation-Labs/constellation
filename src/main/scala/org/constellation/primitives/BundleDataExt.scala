@@ -269,8 +269,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
     val genCheck = totalNumValidatedTX == 1 || sheaf.bundle.maxStackDepth >= 2 // TODO : Possibly move this only to mempool emit
 
-    if (sheaf.totalScore.get > maxBundle.get.totalScore.get && genCheck) {
-      maxBundleMetaData.synchronized {
+    if (sheaf.totalScore.isDefined && maxBundle.isEmpty || sheaf.totalScore.get > maxBundle.get.totalScore.get && genCheck) {
 
         maxBundleMetaData = Some(sheaf)
 
@@ -299,7 +298,6 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
      //   if (height % 10 == 0) {
           newTX.foreach(t => lookupTransactionDBFallbackBlocking(t.txHash).foreach {acceptTransaction})
        // }
-      }
     }
 
     // Set this to be active for the combiners.
