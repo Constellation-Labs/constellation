@@ -9,12 +9,12 @@ lazy val versions = new {
   val akka = "2.4.18"
   val akkaHttp = "10.0.10"
   val akkaHttpCors = "0.2.2"
+  val spongyCastle = "1.58.0.0"
 }
-
 
 lazy val commonSettings = Seq(
   version := _version,
-  scalaVersion := "2.12.2",
+  scalaVersion := "2.12.6",
   organization := "org.constellation",
   name := "constellation",
   mainClass := Some("org.constellation.ConstellationNode"),
@@ -60,26 +60,23 @@ lazy val commonSettings = Seq(
 )
 
 lazy val coreDependencies = Seq(
+  "com.github.pathikrit" %% "better-files" % "3.5.0",
   "com.roundeights" %% "hasher" % "1.2.0",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0",
-  "org.scalactic" %% "scalactic" % "3.0.1",
   "ch.qos.logback" % "logback-classic" % "1.1.7",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
   "ch.megard" %% "akka-http-cors" % versions.akkaHttpCors,
   "de.heikoseeberger" %% "akka-http-json4s" % "1.16.1",
   "org.json4s" %% "json4s-native" % "3.5.2",
-  "net.liftweb" %% "lift-json" % "3.1.1",
-  "com.madgag.spongycastle" % "core" % "1.58.0.0",
-  "com.madgag.spongycastle" % "prov" % "1.58.0.0",
-  "com.madgag.spongycastle" % "bcpkix-jdk15on" % "1.58.0.0",
-  "com.madgag.spongycastle" % "bcpg-jdk15on" % "1.58.0.0",
-  "com.madgag.spongycastle" % "bctls-jdk15on" % "1.58.0.0",
-  "net.liftweb" %% "lift-json" % "3.1.1",
+  "com.madgag.spongycastle" % "core" % versions.spongyCastle,
+  "com.madgag.spongycastle" % "prov" % versions.spongyCastle,
+  "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
+  "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
+  "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
   "com.google.guava" % "guava" % "21.0",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.51",
   "org.iq80.leveldb"            % "leveldb"          % "0.10" withSources() withJavadoc(),
-  "org.fusesource.leveldbjni"   % "leveldbjni-all"   % "1.8" withSources() withJavadoc(),
   "com.codahale" % "shamir" % "0.6.0" withSources() withJavadoc(),
   "org.json4s" %% "json4s-ext" % "3.5.2",
   "org.scalaj" %% "scalaj-http" % "2.4.0" withJavadoc() withSources(),
@@ -98,6 +95,7 @@ lazy val coreDependencies = Seq(
 lazy val testDependencies = Seq(
   "org.scalacheck" %% "scalacheck" % "1.13.4",
   "org.scalatest" %% "scalatest" % "3.0.1",
+  "org.scalactic" %% "scalactic" % "3.0.1",
   "org.scalamock" %% "scalamock-scalatest-support" % "3.6.0",
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka

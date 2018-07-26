@@ -226,7 +226,7 @@ class API(
   //    memoizeSync[Try, Metrics](Some(2.seconds))(2)
   //  }
 
-  val getEndpoints: Route = cors() {
+  val getEndpoints: Route =
     extractClientIP { clientIP =>
       //  numAPICalls += 1
       /*      logger.debug(s"Client IP " +
@@ -490,7 +490,6 @@ class API(
           serveMainPage
       }
     }
-  }
 
   private val postEndpoints =
     post {
