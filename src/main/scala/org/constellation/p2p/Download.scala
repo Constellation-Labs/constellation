@@ -9,6 +9,7 @@ import constellation._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.APIClient
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
@@ -29,16 +30,18 @@ trait Download extends PeerAuth {
     val apiClient = new APIClient()
 
     // get max bundle and genesis hash
-    val maxBundle = getMaxBundleHash(apiClient)
+    val maxBundleResponse = getMaxBundleHash(apiClient)
 
-    val apiAddress = maxBundle._1.get
+    val apiAddress = maxBundleResponse._1.get
 
     apiClient.setConnection(apiAddress.getHostName, apiAddress.getPort)
 
-    var hash = maxBundle._2.get.sheaf.get.bundle.hash
-    val genesisHash = maxBundle._2.get.genesisHash
+    val maxBundleSheaf = maxBundleResponse._2.get.sheaf.get
 
-    var pendingChainHashes = Set[String](hash)
+    var hash = maxBundleSheaf.bundle.hash
+    val genesisHash = maxBundleResponse._2.get.genesisHash
+
+    val pendingChainHashes = mutable.LinkedHashMap[String, Boolean](hash -> false)
 
     // grab all of the chain hashes
     while (hash != genesisHash) {
@@ -46,10 +49,11 @@ trait Download extends PeerAuth {
 
       val response = Await.ready(ancestors, 90 seconds)
 
-      val thing = apiClient.read[Seq[String]](response.get()).get()
+      val ancestorHashes = apiClient.read[Seq[String]](response.get()).get()
 
-      hash = thing.head
-      pendingChainHashes = pendingChainHashes.++(thing)
+      hash = ancestorHashes.head
+
+      ancestorHashes.foreach(pendingChainHashes.+(_))
     }
 
     // split out work and request bundles and transactions for all of the chain hashes
@@ -67,7 +71,7 @@ trait Download extends PeerAuth {
       val client = new APIClient().setConnection(peer.getHostName, peer.getPort)
 
       group.map(bundle => {
-        client.get("fullBundle/" + bundle)
+        client.get("fullBundle/" + bundle._1)
       })
     }).toSeq
 
@@ -78,17 +82,34 @@ trait Download extends PeerAuth {
 
           val sheaf: Sheaf = response.sheaf.get
 
-          handleBundle(sheaf.bundle)
+          val transactions: Seq[Transaction] = response.transactions
 
-          // If this is the genesis bundle handle it separately
+          // store the bundle
+          storeBundle(sheaf)
+
+          // store the transactions
+          transactions.foreach(storeTransaction)
+
+          // if this is the genesis bundle handle it separately
           if (sheaf.bundle.hash == genesisHash) {
             acceptGenesis(sheaf.bundle, sheaf.bundle.extractTX.head)
           }
 
-          pendingChainHashes -= sheaf.bundle.hash
+          // if this is the max bundle update our internal max bundle
+          if (sheaf.bundle.hash == maxBundleSheaf.bundle.hash) {
+            updateMaxBundle(maxBundleSheaf)
+          }
+
+          // set the bundle to be non pending
+          pendingChainHashes(sheaf.bundle.hash) = true
+
+          val chainFullyResolved = !pendingChainHashes.values
+            .fold(false)((a: Boolean, b: Boolean) => {
+              a || b
+            })
 
           // check if we are finished downloading
-          if (pendingChainHashes.isEmpty) {
+          if (chainFullyResolved) {
             // turn off download mode
             downloadMode = false
             downloadInProgress = false

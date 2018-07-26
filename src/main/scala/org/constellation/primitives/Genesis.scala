@@ -23,7 +23,6 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     downloadMode = false
   }
 
-
   def createGenesisAndInitialDistributionOE(ids: Set[Id]): GenesisObservation = {
     val debtAddress = makeKeyPair().address.address
     val ResolvedTX(tx, txData) = createTransactionSafeBatchOE(debtAddress, selfAddressStr, 4e9.toLong, keyPair)

@@ -108,7 +108,6 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     val hash = sheaf.bundle.hash
     bundleToSheaf(hash) = sheaf
     dbActor.foreach{_ ! DBPut(hash, sheaf)}
-    // Try{db.put(bundleMetaData.bundle.hash, bundleMetaData)}
   }
 
   def processPeerSyncHeartbeat(psh: PeerSyncHeartbeat): Unit = {
