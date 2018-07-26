@@ -112,14 +112,31 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     peerSync(psh.id) = psh
   }
 
+  val depthScoreMap = Map(
+    0 -> 1,
+    1 -> 10,
+    2 -> 100,
+    3 -> 500,
+    4 -> 2000
+  )
+
   implicit class BundleExtData(b: Bundle) {
 
     def meta: Option[Sheaf] = lookupBundle(b.hash) //db.getAs[BundleMetaData](b.hash)
 
+    def depthScore = {
+      val depth = b.maxStackDepth
+      depthScoreMap.get(depth) match {
+        case Some(x) => x
+        case None if depth < 0 => 1
+        case None if depth > 4 => 5000
+      }
+    }
+
     def scoreFrom(m: Sheaf): Double = {
       val norm = normalizeReputations(m.reputations)
       val repScore = b.extractIds.toSeq.map { id => norm.getOrElse(id.b58, 0.1)}.sum
-      b.maxStackDepth * 500 + b.extractTXHash.size + repScore * 10
+      depthScore + b.extractTXHash.size + repScore * 10
     }
 
     def score: Option[Double] = meta.flatMap{ m =>

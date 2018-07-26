@@ -273,8 +273,8 @@ trait ProbabilisticGossip extends PeerAuth {
             updateBundleFrom(pbData, Sheaf(b))
             // Skip ids when depth below a certain amount, else tell everyone.
             // TODO : Fix ^
-            // broadcast(b, skipIDs = allIds)
-            apiBroadcast(_.post("rxBundle", b), skipIDs = allIds) // .foreach{println}
+             broadcast(b, skipIDs = allIds)
+            //apiBroadcast(_.post("rxBundle", b), skipIDs = allIds) // .foreach{println}
           }
         } else {
           toRemove ++= best.toSet
