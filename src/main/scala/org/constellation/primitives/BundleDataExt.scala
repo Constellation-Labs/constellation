@@ -252,6 +252,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
                          upTo: Int = 1
                        ): Seq[Sheaf] = {
     val parent = lookupBundleDBFallbackBlocking(parentHash)
+
     def updatedAncestors: Seq[Sheaf] = Seq(parent.get) ++ ancestors
     if (parent.isEmpty || updatedAncestors.size >= upTo) {
       ancestors

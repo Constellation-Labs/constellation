@@ -18,159 +18,123 @@ trait Download extends PeerAuth {
   import data._
 
   def downloadHeartbeat(): Unit = {
-    if (downloadMode && peers.nonEmpty && !downloadInProgress) {
-      logger.debug("Requesting data download")
-
-      downloadInProgress = true
-
-      val apiClient = new APIClient()
-
-      // call to get ancestors from each peer
-      // grab the one with the highest score?
-      // take the list of ancestors, split out work to grab bundle and transaction data from each ancestor bundle,
-      // once we get to the end, hit another endpoint to get the same list but from the new bundle hash
-      // once we get to coinbase return
-
-      // grab max bundle hash
-
-      getMaxBundleHash(apiClient).onComplete(bundleHash => {
-
-        // TODO: use disk backing
-        var validSheafs = Seq[Sheaf]()
-        var validTransactions = Seq[Transaction]()
-
-        var hash = bundleHash.get
-
-        var chain = Seq[String]()
-
-        while (hash != "coinbase") {
-          val peer = getBroadcastPeers().head
-          val apiAddress = peer.apiAddress.get
-
-          apiClient.setConnection(apiAddress.getHostName, apiAddress.getPort)
-
-          val ancestors = apiClient.get("ancestors")
-
-          ancestors.onComplete(a => {
-            val thing = apiClient.read[Seq[String]](a.get).get()
-            hash = thing.last
-            chain = chain.++(thing)
-          })
-        }
-
-        assert(true)
-    /*
-        while (hash != "coinbase") {
-
-          // get bundle data
-
-          ///// **
-          val sheaf: Seq[Future[HttpResponse]] = getBroadcastTCP(route = "bundle/" + hash)
-
-          val downloadResponse = Future.sequence(sheaf)
-
-          Await.ready(downloadResponse, 30 seconds).onComplete(r => {
-            val responses = r.get
-
-            val sheafs = responses.map(r => {
-              val sheaf = apiClient.read[Option[Sheaf]](r).get()
-              sheaf
-            }).toSeq
-
-            if (sheafs.nonEmpty) {
-              val sheaf = sheafs.filter(_.isDefined).minBy(_.get.totalScore).get
-
-              handleBundle(sheaf.bundle)
-
-              hash = sheaf.bundle.extractParentBundleHash.pbHash
-
-              validSheafs = validSheafs :+ sheaf
-
-              ////// **
-
-              /// get transaction data
-              ////// ***
-              val peers = getBroadcastPeers()
-
-              val transactions = sheaf.bundle.extractTXHash
-
-              val groupedTransactions = if (transactions.size > peers.size) {
-                transactions.grouped(transactions.size / peers.size)
-              } else {
-                transactions.grouped(peers.size)
-              }
-
-              val peerSelection = Iterator.continually(peers).flatten
-
-              val transactionResponses = groupedTransactions.flatMap(group => {
-                val peer = peerSelection.next().apiAddress.get
-
-                val client = new APIClient().setConnection(peer.getHostName, peer.getPort)
-
-                group.map(tx => {
-                  client.get("transaction/" + tx.txHash)
-                })
-              }).toSeq
-
-              val downloadResponse = Future.sequence(transactionResponses)
-
-              Await.ready(downloadResponse, 30 seconds).onComplete(f => {
-
-                if (f.get.nonEmpty) {
-                  val sheaf = apiClient.read[Option[Transaction]](f.get.head).get()
-
-                  if (sheaf.isDefined) {
-                    validTransactions = validTransactions :+ sheaf.get
-                  }
-                }
-              })
-            }
-
-            ///// ***
-
-            sheafs
-          })
-        }
-
-        */
-
-        if (hash == "coinbase") {
-          acceptGenesis(validSheafs.last.bundle, validSheafs.last.bundle.extractTX.head)
-        }
-
-        // turn off download mode
-        downloadMode = false
-        downloadInProgress = false
-      })
-
+    if (downloadInProgress || !downloadMode || peers.isEmpty) {
+      return ()
     }
+
+    logger.debug("Requesting data download")
+
+    downloadInProgress = true
+
+    val apiClient = new APIClient()
+
+    // get max bundle and genesis hash
+    val maxBundle = getMaxBundleHash(apiClient)
+
+    val apiAddress = maxBundle._1.get
+
+    apiClient.setConnection(apiAddress.getHostName, apiAddress.getPort)
+
+    var hash = maxBundle._2.get.sheaf.get.bundle.hash
+    val genesisHash = maxBundle._2.get.genesisHash
+
+    var pendingChainHashes = Set[String](hash)
+
+    // grab all of the chain hashes
+    while (hash != genesisHash) {
+      val ancestors = apiClient.get("ancestors/" + hash)
+
+      val response = Await.ready(ancestors, 90 seconds)
+
+      val thing = apiClient.read[Seq[String]](response.get()).get()
+
+      hash = thing.head
+      pendingChainHashes = pendingChainHashes.++(thing)
+    }
+
+    // split out work and request bundles and transactions for all of the chain hashes
+    val groupedChain = if (pendingChainHashes.size > peers.size) {
+      pendingChainHashes.grouped(pendingChainHashes.size / peers.size)
+    } else {
+      pendingChainHashes.grouped(peers.size)
+    }
+
+    val peerSelection = Iterator.continually(peers).flatten
+
+    val bundleResponses = groupedChain.flatMap(group => {
+      val peer = peerSelection.next().data.apiAddress.get
+
+      val client = new APIClient().setConnection(peer.getHostName, peer.getPort)
+
+      group.map(bundle => {
+        client.get("fullBundle/" + bundle)
+      })
+    }).toSeq
+
+    bundleResponses.foreach(f => {
+      f.onComplete(r => {
+        if (r.isSuccess) {
+          val response = apiClient.read[BundleHashQueryResponse](r.get).get()
+
+          val sheaf: Sheaf = response.sheaf.get
+
+          handleBundle(sheaf.bundle)
+
+          // If this is the genesis bundle handle it separately
+          if (sheaf.bundle.hash == genesisHash) {
+            acceptGenesis(sheaf.bundle, sheaf.bundle.extractTX.head)
+          }
+
+          pendingChainHashes -= sheaf.bundle.hash
+
+          // check if we are finished downloading
+          if (pendingChainHashes.isEmpty) {
+            // turn off download mode
+            downloadMode = false
+            downloadInProgress = false
+          }
+
+        } else {
+          logger.debug(s"fetch bundle failure ")
+        }
+      })
+    })
+
   }
 
-  def getMaxBundleHash(apiClient: APIClient): Future[String] = {
+  def getMaxBundleHash(apiClient: APIClient): (Option[InetSocketAddress], Option[MaxBundleGenesisHashQueryResponse]) = {
     val maxBundles: Seq[(InetSocketAddress, Future[HttpResponse])] = getBroadcastTCP(route = "maxBundle")
 
-    val reduced = Future.reduce(maxBundles)((left, right) => {
-      val leftHash = apiClient.read[Option[Sheaf]](left).get()
-      val rightHash = apiClient.read[Option[Sheaf]](right).get()
+    val futures = Future.sequence(maxBundles.map(b => b._2))
 
-      if (leftHash.isDefined && rightHash.isDefined) {
+    Await.ready(futures, 90 seconds)
+
+    val maxBundle = maxBundles.foldLeft[(Option[InetSocketAddress],
+      Option[MaxBundleGenesisHashQueryResponse])]((None, None))((acc, f) => {
+
+      val right = f._2.get()
+
+      val leftHash: Option[Sheaf] = if (acc._2.isDefined) acc._2.get.sheaf else None
+      val rightHash = apiClient.read[Option[MaxBundleGenesisHashQueryResponse]](right).get()
+
+      if (leftHash.isDefined && rightHash.isDefined && rightHash.get.sheaf.isDefined) {
         val leftHashScore = leftHash.get.totalScore.get
 
-        val rightHashScore = rightHash.get.totalScore.get
+        val rightHashScore = rightHash.get.sheaf.get.totalScore.get
 
-        if (leftHashScore > rightHashScore) left else right
+        if (leftHashScore > rightHashScore) {
+          acc
+        } else {
+          (Some(f._1), rightHash)
+        }
       } else if (leftHash.isDefined) {
-        left
+        acc
       } else {
-        right
+        (Some(f._1), rightHash)
       }
     })
 
-    reduced.collect {
-      case response: HttpResponse => {
-        apiClient.read[Option[Sheaf]](response).get().get.bundle.hash
-      }
-    }
+    maxBundle
   }
 
 }

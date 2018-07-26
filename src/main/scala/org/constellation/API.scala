@@ -269,7 +269,9 @@ class API(
             if (maxBundle.isDefined) {
               val maybeSheaf = lookupBundleDBFallbackBlocking(maxBundle.get.hash)
 
-              complete(maybeSheaf)
+              val genesisBundleHash = genesisBundle.get.hash
+
+              complete(Some(MaxBundleGenesisHashQueryResponse(genesisBundleHash, maybeSheaf)))
             } else {
               complete(None)
             }
@@ -331,7 +333,7 @@ class API(
             extractUnmatchedPath { p =>
               logger.debug(s"Unmatched path on download result $p")
               val ps = p.toString().split("/").last
-              //logger.debug(s"Looking up bundle hash $ps")
+
               val ancestors = findAncestorsUpTo(ps, Seq(), upTo = 101)
 
               complete(ancestors.map {

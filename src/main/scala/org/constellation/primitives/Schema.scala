@@ -58,6 +58,8 @@ object Schema {
 
   case class BundleHashQueryResponse(hash: String, sheaf: Option[Sheaf], transactions: Seq[Transaction])
 
+  case class MaxBundleGenesisHashQueryResponse(genesisHash: String, sheaf: Option[Sheaf])
+
   case class SendToAddress(
                             dst: String,
                             amount: Long,
