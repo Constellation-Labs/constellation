@@ -48,67 +48,48 @@ class APIClient(val host: String = "127.0.0.1", val port: Int) {
 
   implicit val serialization: Serialization.type = native.Serialization
 
-  /*
-    def getBlocking [T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeout: Int = 5)
-                               (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
-    import constellation.EasyFutureBlock
-    val httpResponse = Http().singleRequest(
-      HttpRequest(headers = authHeaders, uri = base(suffix).withQuery(Query(queryParams)))
-    ).get(timeout)
-    Unmarshal(httpResponse.entity).to[String].map { r => Serialization.read[T](r) }.get()
-  }
-   */
-
-  /*
-    def getSync(suffix: String, queryParams: Map[String,String] = Map()): HttpResponse = {
-    import constellation._
-    Http().singleRequest(
-      HttpRequest(headers = authHeaders, uri = base(suffix).withQuery(Query(queryParams)))
-    ).get()
-  }
-   */
-
-  def post(suffix: String, b: AnyRef)(implicit f : Formats = constellation.constellationFormats): Future[HttpResponse[String]] = {
+  def post(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit f : Formats = constellation.constellationFormats): Future[HttpResponse[String]] = {
     Future(postSync(suffix, b))
   }
 
-  def postEmpty(suffix: String)(implicit f : Formats = constellation.constellationFormats): HttpResponse[String] = {
+  def postEmpty(suffix: String, timeoutSeconds: Int = 5)(implicit f : Formats = constellation.constellationFormats)
+  : HttpResponse[String] = {
     httpWithAuth(suffix).method("POST") .asString
   }
 
-  def postSync(suffix: String, b: AnyRef)(
+  def postSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
     implicit f : Formats = constellation.constellationFormats
   ): HttpResponse[String] = {
     val ser = Serialization.write(b)
     httpWithAuth(suffix).postData(ser).header("content-type", "application/json").asString
   }
 
-  def postBlocking[T <: AnyRef](suffix: String, b: AnyRef)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
+  def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
     val res = postSync(suffix, b)
     Serialization.read[T](res.body)
   }
 
-  def postBlockingEmpty[T <: AnyRef](suffix: String)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
+  def postBlockingEmpty[T <: AnyRef](suffix: String, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
     val res = postEmpty(suffix)
     Serialization.read[T](res.body)
   }
 
-  def get(suffix: String, queryParams: Map[String,String] = Map()): Future[HttpResponse[String]] = {
+  def get(suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5): Future[HttpResponse[String]] = {
     Future(getSync(suffix, queryParams))
   }
 
-  def getSync(suffix: String, queryParams: Map[String,String] = Map()): HttpResponse[String] = {
+  def getSync(suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5): HttpResponse[String] = {
     val req = httpWithAuth(suffix).params(queryParams)
     req.asString
   }
 
   def getBlocking[T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5)
                               (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
-    Serialization.read[T](getBlockingStr(suffix, queryParams))
+    Serialization.read[T](getBlockingStr(suffix, queryParams, timeoutSeconds))
   }
 
   def getBlockingStr(suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5): String = {
-    val resp = httpWithAuth(suffix).params(queryParams).asString
+    val resp = httpWithAuth(suffix, timeoutSeconds).params(queryParams).asString
     resp.body
   }
 
