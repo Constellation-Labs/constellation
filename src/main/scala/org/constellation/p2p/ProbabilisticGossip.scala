@@ -103,6 +103,7 @@ trait ProbabilisticGossip extends PeerAuth {
         h =>
           maxBundleMetaData.flatMap{_.height}.foreach{ h2 =>
             if (h > (h2 + 20)) {
+              downloadInProgress = true
               // logger.error("FOUND PEER 20 BUNDLES AHEAD, RESTARTING")
               // System.exit(1)
             }
@@ -199,7 +200,7 @@ trait ProbabilisticGossip extends PeerAuth {
     if (!lastPBWasSelf || totalNumValidatedTX == 1) {
 
       // Emit an origin bundle. This needs to be managed by prob facil check on hash of previous + ids
-      val memPoolEmit = Random.nextInt() < 0.07
+      val memPoolEmit = Random.nextInt() < 0.04
       val filteredPool = memPool.diff(txInMaxBundleNotInValidation).filterNot(last10000ValidTXHash.contains)
       val memPoolConstantOffset = if (totalNumValidatedTX == 1) minGenesisDistrSize + 1 else 0
       val memPoolSelSize = Random.nextInt(4) + 1
@@ -263,7 +264,7 @@ trait ProbabilisticGossip extends PeerAuth {
 
     activeDAGManager.cellKeyToCell.filter{_._2.members.size > 1}.foreach{
       case (ck, cell) =>
-        if (Random.nextDouble() > 0.3) {
+        if (Random.nextDouble() > 0.1) {
           val best = cell.members.slice(0, 2)
           val allIds = best.flatMap{_.bundle.extractIds}.toSeq
           if (!allIds.contains(id)) {
