@@ -40,7 +40,7 @@ class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSyst
     //  , generateRandomTransactions = true
     ))
 
-    val apis = nodes.map{_.api}
+    val apis = nodes.map{_.getAPIClient()}
     val sim = new Simulation(apis)
     //sim.run(attemptSetExternalIP = false
     //  , validationFractionAcceptable = 0.3

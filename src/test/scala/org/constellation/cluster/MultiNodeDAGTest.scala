@@ -13,7 +13,6 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
 import scala.concurrent.ExecutionContextExecutor
 
 
-
 class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
   with AsyncFlatSpecLike with Matchers with BeforeAndAfterAll {
 
@@ -41,7 +40,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     //  , generateRandomTransactions = true
     ))
 
-    val apis = nodes.map{_.api}
+    val apis = nodes.map{_.getAPIClient()}
     val sim = new Simulation(apis)
     sim.run(attemptSetExternalIP = false
       , validationFractionAcceptable = 0.3
