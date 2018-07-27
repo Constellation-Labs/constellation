@@ -6,6 +6,8 @@ import org.constellation.AddPeerRequest
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.APIClient
 
+import scala.collection.mutable
+
 case class PeerData(addRequest: AddPeerRequest, client: APIClient)
 case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
 case class PeerHealthCheck(status: Map[Id, Boolean])
@@ -20,7 +22,7 @@ class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
 
     case a @ AddPeerRequest(host, udpPort, port, id) =>
       // println(s"Added peer $a")
-      val client = new APIClient(host, port)(context.system, context.dispatcher, materialize)
+      val client = new APIClient(host, port)
       client.id = id
       context become active(peerInfo + (id -> PeerData(a, client)))
 

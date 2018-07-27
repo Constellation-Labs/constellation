@@ -79,7 +79,7 @@ lazy val coreDependencies = Seq(
   "org.iq80.leveldb"            % "leveldb"          % "0.10" withSources() withJavadoc(),
   "com.codahale" % "shamir" % "0.6.0" withSources() withJavadoc(),
   "org.json4s" %% "json4s-ext" % "3.5.2",
-  "org.scalaj" %% "scalaj-http" % "2.3.0" withJavadoc() withSources(),
+  "org.scalaj" %% "scalaj-http" % "2.4.0" withJavadoc() withSources(),
   "com.twitter" %% "chill" % "0.9.1",
   "com.twitter" %% "algebird-core" % "0.13.4",
   "org.typelevel" %% "cats-core" % "1.0.1",
