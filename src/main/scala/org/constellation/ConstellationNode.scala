@@ -6,7 +6,6 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server.Route
 import akka.io.Udp
 import akka.stream.ActorMaterializer
@@ -16,8 +15,8 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.Consensus
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.{PeerAPI, PeerToPeer, RegisterNextActor, UDPActor}
-import org.constellation.primitives._
 import org.constellation.primitives.Schema.{AddPeerFromLocal, ToggleHeartbeat}
+import org.constellation.primitives._
 import org.constellation.util.APIClient
 
 import scala.concurrent.ExecutionContextExecutor
@@ -193,12 +192,18 @@ class ConstellationNode(
   // TODO : Move to separate test class - these are within jvm only but won't hurt anything
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
-  val api = new APIClient(port=httpPort)
-  api.id = id
-  api.udpPort = udpPort
-  api.peerHttpPort = peerHttpPort
-  def healthy: Boolean = Try{api.getSync("health").status == StatusCodes.OK}.getOrElse(false)
-  def add(other: ConstellationNode): HttpResponse = api.postSync("peer", other.udpAddressString)
+
+
+  def getAPIClient(): APIClient = {
+    val api = new APIClient(port=httpPort)
+    api.id = id
+    api.udpPort = udpPort
+    api.peerHttpPort = peerHttpPort
+    api
+  }
+
+  def healthy: Boolean = Try{getAPIClient().getSync("health").isSuccess}.getOrElse(false)
+  def add(other: ConstellationNode) = getAPIClient().postSync("peer", other.udpAddressString)
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind
