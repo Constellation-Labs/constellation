@@ -78,7 +78,7 @@ class PeerToPeer(
       processHeartbeat {
 
         if (heartbeatRound % 3 == 0) {
-/*
+
           // Attempt add peers
           peersAwaitingAuthenticationToNumAttempts.foreach {
             case (peerAddr, attempts) =>
@@ -98,9 +98,9 @@ class PeerToPeer(
                 }
               }
           }
-*/
 
-/*
+
+
           // Remove dead peers
           lastPeerRX.foreach{ case (id, rx) =>
             if (rx < (System.currentTimeMillis() - 120000)) {
@@ -112,15 +112,15 @@ class PeerToPeer(
               }
             }
           }
-*/
+
 
         }
 
-/*
+
         if (heartbeatRound % 120 == 0) {
           deadPeers.foreach(addPeerFromLocal(_))
         }
-*/
+
 
         downloadHeartbeat()
         heartbeatRound += 1

@@ -13,13 +13,13 @@ sbt docker:publishLocal
 docker tag constellationlabs/constellation:latest $IMAGE
 gcloud docker -- push $IMAGE
 
-USER_STR="$USER"
+USER_STR="$USER-tune"
 APP_USER="constellation-app-$USER_STR"
 echo $APP_USER
 
 STRING=$(kubectl get sts $APP_USER 2>&1)
 echo "kubectl response to get sts on $APP_USER: $STRING"
-
+# TODO: Add check for Unable to connect to the server: dial tcp -- happens during cluster updates.
 if [[ $STRING = *"Error"* ]]; then
     echo "No cluster found for $APP_USER - deploying new STS"
     cp ./deploy/kubernetes/node-deployment.yml ./deploy/kubernetes/node-deployment-impl.yml
