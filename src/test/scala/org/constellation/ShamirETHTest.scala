@@ -1,9 +1,9 @@
 package org.constellation
 
 import better.files.File
-import org.scalatest.FlatSpec
 import com.codahale.shamir.Scheme
 import constellation._
+import org.scalatest.FlatSpec
 
 import scala.collection.JavaConverters._
 
