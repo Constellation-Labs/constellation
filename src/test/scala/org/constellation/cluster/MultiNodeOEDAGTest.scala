@@ -1,6 +1,5 @@
 package org.constellation.cluster
 
-import java.io.File
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
@@ -11,7 +10,7 @@ import org.constellation.util.{Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
-import scala.util.Try
+import scala.reflect.io.File
 
 
 class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
@@ -30,9 +29,8 @@ class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSyst
     val totalNumNodes = 3
 
     // Cleanup DBs
-    import scala.tools.nsc.io.{File => SFile}
-    val tmpDir = new File("tmp")
-    Try{SFile(tmpDir).deleteRecursively()}
+    val tmpDir = "tmp"
+    File(tmpDir).delete()
 
     val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false
     //  , generateRandomTransactions = true
@@ -42,18 +40,19 @@ class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSyst
     //  , generateRandomTransactions = true
     ))
 
-    val apis = nodes.map{_.api}
+    val apis = nodes.map{_.getAPIClient()}
     val sim = new Simulation()
+
     //sim.run(attemptSetExternalIP = false
     //  , validationFractionAcceptable = 0.3
     //)
+
     sim.runV2(apis = apis)
 
     // Thread.sleep(1000*60*60)
 
     // Cleanup DBs
-    import scala.tools.nsc.io.{File => SFile}
-    Try{SFile(tmpDir).deleteRecursively()}
+    File(tmpDir).delete()
 
     assert(true)
   }

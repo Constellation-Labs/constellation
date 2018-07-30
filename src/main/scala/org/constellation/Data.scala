@@ -2,6 +2,7 @@ package org.constellation
 
 import akka.stream.ActorMaterializer
 import com.typesafe.scalalogging.Logger
+import org.constellation.primitives.Schema.Transaction
 import org.constellation.primitives._
 
 class Data extends MetricsExt
@@ -22,7 +23,7 @@ class Data extends MetricsExt
   def restartNode(): Unit = {
  //   restartDB()
     genesisBundle = None
-    downloadMode = true
+    downloadMode = false
     validLedger.clear()
     memPoolLedger.clear()
     syncPendingTXHashes = Set()
@@ -45,5 +46,15 @@ class Data extends MetricsExt
     peerSync.clear()
     deadPeers = Seq()
   }
+
+  def handleTransaction(tx: Transaction): Unit = {
+    if (lookupTransaction(tx.hash).isEmpty) {
+      storeTransaction(tx)
+      numSyncedTX += 1
+    }
+    syncPendingTXHashes -= tx.hash
+    txSyncRequestTime.remove(tx.hash)
+  }
+
 
 }

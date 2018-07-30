@@ -6,7 +6,6 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server.Route
 import akka.io.Udp
 import akka.stream.ActorMaterializer
@@ -16,11 +15,11 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.Consensus
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.{PeerAPI, PeerToPeer, RegisterNextActor, UDPActor}
-import org.constellation.primitives._
 import org.constellation.primitives.Schema.{AddPeerFromLocal, ToggleHeartbeat}
+import org.constellation.primitives._
 import org.constellation.util.APIClient
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.Try
 
 object ConstellationNode extends App {
@@ -46,7 +45,6 @@ object ConstellationNode extends App {
   // TODO: update to take from config
   val keyPair = KeyUtils.makeKeyPair()
 
-  // TODO: add seeds from config
   val node = new ConstellationNode(
     keyPair,
     seeds,
@@ -60,7 +58,8 @@ object ConstellationNode extends App {
     requestExternalAddressCheck = requestExternalAddressCheck
   )
 
-  node.data.minGenesisDistrSize = 3
+  node.data.minGenesisDistrSize = 4
+
 }
 
 class ConstellationNode(
@@ -71,11 +70,11 @@ class ConstellationNode(
                          val udpInterface: String = "0.0.0.0",
                          val udpPort: Int = 16180,
                          val hostName: String = "127.0.0.1",
-                         timeoutSeconds: Int = 30,
-                         heartbeatEnabled: Boolean = false,
-                         requestExternalAddressCheck : Boolean = false,
-                         generateRandomTransactions: Boolean = true,
-                         autoSetExternalAddress: Boolean = false,
+                         val timeoutSeconds: Int = 30,
+                         val heartbeatEnabled: Boolean = false,
+                         val requestExternalAddressCheck : Boolean = false,
+                         val generateRandomTransactions: Boolean = true,
+                         val autoSetExternalAddress: Boolean = false,
                          val peerHttpPort: Int = 9001,
                          val peerTCPPort: Int = 9002
              )(
@@ -174,22 +173,12 @@ class ConstellationNode(
     metricsManager, nodeManager, cellManager)(executionContext, timeout).authRoutes
 
   // Setup http server for internal API
-  val bindingFuture = Http().bindAndHandle(routes, httpInterface, httpPort)
+  val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
 
   val peerRoutes : Route = new PeerAPI(dbActor, nodeManager, keyManager).routes
 
   // Setup http server for peer API
   Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)
-
-  // TODO : Move to separate test class - these are within jvm only but won't hurt anything
-  // We could also consider creating a 'Remote Proxy class' that represents a foreign
-  // ConstellationNode (i.e. the current Peer class) and have them under a common interface
-  val api = new APIClient().setConnection(port = httpPort)
-  api.id = id
-  api.udpPort = udpPort
-
-  def healthy: Boolean = Try{api.getSync("health").status == StatusCodes.OK}.getOrElse(false)
-  def add(other: ConstellationNode): HttpResponse = api.postSync("peer", other.udpAddressString)
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind
@@ -197,8 +186,20 @@ class ConstellationNode(
 
     bindingFuture
       .flatMap(_.unbind())
-      // TODO: we should add this back but it currently causes issues in the integration test
-      //.onComplete(_ => system.terminate())
+    // TODO: we should add this back but it currently causes issues in the integration test
+    //.onComplete(_ => system.terminate())
+  }
+
+  //////////////
+
+  // TODO : Move to separate test class - these are within jvm only but won't hurt anything
+  // We could also consider creating a 'Remote Proxy class' that represents a foreign
+  // ConstellationNode (i.e. the current Peer class) and have them under a common interface
+  def getAPIClient(): APIClient = {
+    val api = new APIClient().setConnection(host = hostName, port = httpPort)
+    api.id = id
+    api.udpPort = udpPort
+    api
   }
 
 }

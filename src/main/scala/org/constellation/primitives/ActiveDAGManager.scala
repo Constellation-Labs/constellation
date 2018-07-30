@@ -48,15 +48,15 @@ class ActiveDAGManager {
       case (ck, c) =>
         if (ck.height < (height - 2)) {
           cellKeyToCell.remove(ck)
+          c.members.foreach{removeSheaf}
         }
-        if (c.members.size > 10) cellKeyToCell(ck) = c.copy(members =
-          SortedSet(c.members.toSeq.zipWithIndex.sorted.filter{_._2 < 5}.map{_._1} : _*))
+        if (c.members.size > 10) cellKeyToCell(ck) = c.copy(members = c.members.take(5))
     }
 
 
     //activeSheafs.groupBy(z => z.bundle.ex z.bundle.maxStackDepth)
     
-    if (activeSheafs.size > 150) {
+    if (activeSheafs.size > 200) {
       activeSheafs.sortBy(z => -1*z.totalScore.get).zipWithIndex.filter{_._2 > 65}.map{_._1}.foreach{
         removeSheaf
       }

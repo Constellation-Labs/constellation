@@ -14,19 +14,18 @@ import akka.pattern.ask
 import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 import com.softwaremill.macmemo.memoize
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Wallet
-import org.constellation.primitives.{APIBroadcast, MetricsManager, Schema, UpdateMetric}
 import org.constellation.primitives.Schema._
-import org.constellation.serializer.KryoSerializer
+import org.constellation.primitives.{APIBroadcast, Schema, UpdateMetric}
 import org.constellation.util.ServeUI
-
 import org.json4s.native
 import org.json4s.native.Serialization
+import scalaj.http.HttpResponse
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -57,15 +56,522 @@ class API(
 
   val logger = Logger(s"APIInterface")
 
-  val config = ConfigFactory.load()
+  val config: Config = ConfigFactory.load()
+  val authId: String = config.getString("auth.id")
+  val authPassword: String = config.getString("auth.password")
 
-  val authId = config.getString("auth.id")
-  val authPassword = config.getString("auth.password")
+  val getEndpoints: Route =
+    extractClientIP { clientIP =>
+      get {
+        path("balance") {
+          complete(validLedger.getOrElse(selfAddress.address, 0L).toString)
+        } ~
+          path("bundles") {
+            complete(last100ValidBundleMetaData)
+          } ~
+          path("restart") {
+            data.restartNode()
+            complete(StatusCodes.OK)
+          } ~
+          path("submitTX") {
+            parameter('address, 'amount) { (address, amount) =>
+              logger.error(s"SubmitTX : $address $amount")
+              handleSendRequest(SendToAddress(address, amount.toLong))
+            }
+          } ~
+          pathPrefix("address" / Remaining) { hash =>
+            val balance = validLedger.getOrElse(hash, 0).toString
+
+            complete(s"Balance: $balance")
+          } ~
+          pathPrefix("transaction") {
+            extractUnmatchedPath { p =>
+              val transactionHash = p.toString().tail
+
+              complete(lookupTransactionDB(transactionHash))
+            }
+          } ~
+          pathPrefix("maxBundle") {
+            if (maxBundle.isDefined) {
+              val maybeSheaf = lookupBundleDBFallbackBlocking(maxBundle.get.hash)
+
+              val genesisBundleHash = genesisBundle.get.hash
+
+              complete(Some(MaxBundleGenesisHashQueryResponse(genesisBundleHash, maybeSheaf)))
+            } else {
+              complete(None)
+            }
+          } ~
+          pathPrefix("bundle") {
+            extractUnmatchedPath { p =>
+              logger.debug(s"Unmatched path on bundle direct result $p")
+              val bundleHash = p.toString().tail
+
+              val maybeSheaf = lookupBundleDBFallbackBlocking(bundleHash)
+
+              complete(maybeSheaf)
+            }
+          } ~
+          pathPrefix("fullBundle") {
+            extractUnmatchedPath { p =>
+              logger.debug(s"Unmatched path on fullBundle result $p")
+              val bundleHash = p.toString().split("/").last
+              val maybeSheaf = lookupBundle(bundleHash)
+              complete(
+                BundleHashQueryResponse(
+                  bundleHash,
+                  maybeSheaf,
+                  maybeSheaf
+                    .map(_.bundle.extractTX.toSeq.sortBy {
+                      _.txData.time
+                    })
+                    .getOrElse(Seq())
+                )
+              )
+            }
+          } ~ pathPrefix("download") {
+          extractUnmatchedPath { p =>
+            Try {
+              val bundleHash = p.toString().split("/").last
+
+              val ancestors = findAncestorsUpTo(bundleHash, Seq(), upTo = 10)
+
+              val res = ancestors.map { a =>
+                BundleHashQueryResponse(
+                  a.bundle.hash,
+                  Some(a),
+                  a.bundle.extractTXDB.toSeq.sortBy {
+                    _.txData.time
+                  }
+                )
+              }
+
+              complete(res)
+            } match {
+              case Success(x) => x
+              case Failure(e) =>
+                e.printStackTrace()
+                complete(StatusCodes.InternalServerError)
+            }
+          }
+        } ~
+          pathPrefix("ancestors") {
+            extractUnmatchedPath { p =>
+              logger.debug(s"Unmatched path on download result $p")
+              val ps = p.toString().split("/").last
+
+              val ancestors = findAncestorsUpTo(ps, Seq(), upTo = 101)
+
+              complete(ancestors.map {
+                _.bundle.hash
+              })
+            }
+          } ~
+          path("setKeyPair") {
+            parameter('keyPair) { kpp =>
+              logger.debug("Set key pair " + kpp)
+              val res = if (kpp.length > 10) {
+                val rr = Try {
+                  data.updateKeyPair(kpp.x[KeyPair])
+                  StatusCodes.OK
+                }.getOrElse(StatusCodes.BadRequest)
+                rr
+              } else StatusCodes.BadRequest
+              complete(res)
+            }
+          } ~
+          path("metrics") {
+            complete(calculateMetrics())
+          } ~
+          path("validTX") {
+            complete(last10000ValidTXHash)
+          } ~
+          path("makeKeyPair") {
+            val pair = constellation.makeKeyPair()
+            wallet :+= pair
+            complete(pair)
+          } ~
+          path("genesis" / LongNumber) { numCoins =>
+            val ret = if (genesisBundle.isEmpty) {
+              val debtAddress = walletPair
+              val tx = createTransaction(selfAddress.address,
+                numCoins,
+                src = debtAddress.address.address)
+              createGenesis(tx)
+              tx
+            } else genesisBundle.get.extractTX.head
+            complete(ret)
+          } ~
+          path("stackSize" / IntNumber) { num =>
+            minGenesisDistrSize = num
+            complete(StatusCodes.OK)
+          } ~
+          path("makeKeyPairs" / IntNumber) { numPairs =>
+            val pair = Seq.fill(numPairs) {
+              constellation.makeKeyPair()
+            }
+            wallet ++= pair
+            complete(pair)
+          } ~
+          path("wallet") {
+            complete(wallet)
+          } ~
+          path("selfAddress") {
+            complete(id.address)
+          } ~
+          path("id") {
+            complete(id)
+          } ~
+          path("nodeKeyPair") {
+            complete(keyPair)
+          } ~
+          // TODO: revisit
+          path("health") {
+            complete(StatusCodes.OK)
+          } ~
+          path("peers") {
+            complete(Peers(peerIPs.toSeq))
+          } ~
+          path("peerids") {
+            complete(peers.map {
+              _.data
+            })
+          } ~
+          path("actorPath") {
+            complete(peerToPeerActor.path.toSerializationFormat)
+          } ~
+          path("dashboard") {
+
+            val transactions = last100ValidBundleMetaData.reverse
+              .take(20)
+              .map {
+                _.bundle
+              }
+              .map(b => {
+                (b.extractTXDB.toSeq.sortBy(_.txData.time),
+                  b.extractIds.map(f => f.address.address))
+              })
+              .flatMap(t => {
+                t._1.map(
+                  e =>
+                    TransactionSerialized(e.hash,
+                      e.txData.data.src,
+                      e.txData.data.dst,
+                      e.txData.data.normalizedAmount,
+                      t._2,
+                      e.txData.time
+                    ))
+              })
+
+            var peerMap: Seq[Node] = peers
+              .map {
+                _.data
+              }
+              .seq
+              .map { f =>
+              {
+                Node(f.id.address.address,
+                  f.externalAddress
+                    .map {
+                      _.getHostName
+                    }
+                    .getOrElse(""),
+                  f.externalAddress
+                    .map {
+                      _.getPort
+                    }
+                    .getOrElse(0))
+              }
+              }
+
+            // Add self
+            peerMap = peerMap :+ Node(selfAddress.address,
+              selfPeer.data.externalAddress
+                .map {
+                  _.getHostName
+                }
+                .getOrElse(""),
+              selfPeer.data.externalAddress
+                .map {
+                  _.getPort
+                }
+                .getOrElse(0))
+
+            complete(
+              Map(
+                "peers" -> peerMap,
+                "transactions" -> transactions
+              ))
+
+          } ~
+          jsRequest ~
+          serveMainPage
+      }
+    }
+
+  private val postEndpoints =
+    post {
+      path("startRandomTX") {
+        sendRandomTXV2 = !sendRandomTXV2
+        complete(sendRandomTXV2.toString)
+      } ~
+      path("sendV2") {
+        entity(as[SendToAddress]) { e =>
+          nodeManager ! e
+          complete(StatusCodes.OK)
+        }
+      } ~
+      path("peerHealthCheckV2") {
+        val response =
+          (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse[String]]]]
+
+        val res = response.getOpt().map{
+          idMap =>
+
+            val res = idMap.map{
+              case (id, fut) =>
+                val maybeResponse = fut.getOpt()
+                id -> maybeResponse.exists{_.isSuccess}
+            }.toSeq
+
+            complete(res)
+
+        }.getOrElse(complete(StatusCodes.InternalServerError))
+
+        res
+      } ~
+        path("acceptGenesisOE") {
+          entity(as[GenesisObservation]) { go =>
+
+            dbActor.foreach { db =>
+              go.genesis.store(db)
+              go.initialDistribution.store(db)
+              val gtx = go.genesis.resolvedTX.head.transactionData
+              val distributionTX = go.genesis.resolvedTX.toSeq.map{_.transactionData}
+              db ! DBPut(gtx.dst, AddressCache(gtx.amount - distributionTX.map{_.amount}.sum, Some(1000D)))
+              distributionTX.foreach{ t =>
+                db ! DBPut(t.dst, AddressCache(t.amount, Some(1000D)))
+              }
+              metricsManager ! UpdateMetric("validTransactions", (1 + distributionTX.size).toString)
+              metricsManager ! UpdateMetric("uniqueAddressesInLedger", (1 + distributionTX.size).toString)
+              cellManager ! go
+
+            }
+
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("genesisObservation") {
+          entity(as[Set[Id]]) { ids =>
+            complete(createGenesisAndInitialDistributionOE(ids))
+          }
+        } ~
+        path("initializeDownload") {
+          downloadMode = true
+          complete(StatusCodes.OK)
+        } ~
+        path("disableDownload") {
+          downloadMode = false
+          downloadInProgress = false
+          complete(StatusCodes.OK)
+        } ~
+        path("completeUpload") {
+          entity(as[BundleHashQueryResponse]) { b =>
+            val s = b.sheaf.get
+            maxBundleMetaData = Some(s)
+            downloadInProgress = false
+            downloadMode = false
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("upload") {
+          entity(as[Seq[BundleHashQueryResponse]]) {
+            bhqr =>
+              bhqr.foreach{ b =>
+                val s = b.sheaf.get
+                if (s.height.get == 0) {
+                  acceptGenesis(s.bundle, b.transactions.head)
+                } else {
+                  putBundleDB(s)
+                  totalNumValidBundles += 1
+                  b.transactions.foreach{t =>
+                    putTXDB(t)
+                    b.transactions.foreach{acceptTransaction}
+                    t.txData.data.updateLedger(memPoolLedger)
+                  }
+                }
+              }
+              complete(StatusCodes.OK)
+          }
+        } ~
+        path("rxBundle") {
+          entity(as[Bundle]) { bundle =>
+           peerToPeerActor ! bundle
+
+           complete(StatusCodes.OK)
+          }
+        } ~
+        path("handleTransaction") {
+          entity(as[Transaction]) { tx =>
+            peerToPeerActor ! Transaction
+
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("batchBundleRequest") {
+          entity(as[BatchBundleHashRequest]) { bhr =>
+            val sheafResponses = bhr.hashes.flatMap {
+              lookupBundleDBFallbackBlocking
+            }
+            complete(sheafResponses)
+          }
+        } ~
+        path("batchTXRequest") {
+          entity(as[BatchTXHashRequest]) { bhr =>
+            complete(bhr.hashes.flatMap{lookupTransactionDBFallbackBlocking})
+          }
+        } ~
+        path("peerSyncHeartbeat") {
+          entity(as[PeerSyncHeartbeat]) { psh =>
+            processPeerSyncHeartbeat(psh)
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("sendToAddress") {
+          entity(as[SendToAddress]) { s =>
+            handleSendRequest(s)
+          }
+        } ~
+        path("tx") {
+          entity(as[Transaction]) { tx =>
+            peerToPeerActor ! tx
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("addPeerV2"){
+          entity(as[AddPeerRequest]) { e =>
+
+            peerManager ! e
+
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("peer") {
+          entity(as[String]) { peerAddress =>
+
+            Try {
+              //    logger.debug(s"Received request to add a new peer $peerAddress")
+              var addr: Option[InetSocketAddress] = None
+              val result = Try {
+                peerAddress.replaceAll('"'.toString, "").split(":") match {
+                  case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
+                  case a@_ => logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a");
+                }
+              }.toOption match {
+                case None =>
+                  StatusCodes.BadRequest
+                case Some(v) =>
+                  addr = Some(v)
+                  val fut = (peerToPeerActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
+                  val res = Try {
+                    Await.result(fut, timeout.duration)
+                  }.toOption
+                  res match {
+                    case None =>
+                      StatusCodes.RequestTimeout
+                    case Some(f) =>
+                      if (f == StatusCodes.Accepted) {
+                        var attempts = 0
+                        var peerAdded = false
+                        while (attempts < 5) {
+                          attempts += 1
+                          Thread.sleep(1500)
+                          //peerAdded = peers.exists(p => v == p.data.externalAddress)
+                          peerAdded = signedPeerLookup.contains(v)
+                        }
+                        if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
+                      } else f
+                  }
+              }
+
+              if (result != StatusCodes.OK) {
+                addr.foreach(peersAwaitingAuthenticationToNumAttempts(_) = 1)
+              }
+
+              logger.debug(s"New peer request $peerAddress statusCode: $result")
+              result
+            } match {
+              case Failure(e) =>
+                e.printStackTrace()
+                complete(StatusCodes.InternalServerError)
+              case Success(x) => complete(x)
+            }
+          }
+        } ~
+        path("ip") {
+          entity(as[String]) { externalIp =>
+            var ipp: String = ""
+            val addr =
+              externalIp.replaceAll('"'.toString, "").split(":") match {
+                case Array(ip, port) =>
+                  ipp = ip
+                  externalHostString = ip
+                  new InetSocketAddress(ip, port.toInt)
+                case a @ _ => {
+                  logger.debug(s"Unmatched Array: $a")
+                  throw new RuntimeException(s"Bad Match: $a")
+                }
+              }
+            logger.debug(s"Set external IP RPC request $externalIp $addr")
+            data.externalAddress = Some(addr)
+            if (ipp.nonEmpty)
+              data.apiAddress = Some(new InetSocketAddress(ipp, 9000))
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("reputation") {
+          entity(as[Seq[UpdateReputation]]) { ur =>
+            secretReputation = ur.flatMap { r =>
+              r.secretReputation.map {
+                id -> _
+              }
+            }.toMap
+            publicReputation = ur.flatMap { r =>
+              r.publicReputation.map {
+                id -> _
+              }
+            }.toMap
+            complete(StatusCodes.OK)
+          }
+        }
+    }
+
+  private val faviconRoute = get {
+    path("favicon.ico") {
+      getFromResource("favicon.ico")
+    }
+  }
+
+  private val routes: Route = cors() {
+    getEndpoints ~ postEndpoints ~ jsRequest ~ serveMainPage
+  }
+
+  def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
+    credentials match {
+      case p @ Credentials.Provided(id)
+        if id == authId && p.verify(authPassword) =>
+        Some(id)
+      case _ => None
+    }
+  }
+
+  val authRoutes = faviconRoute ~ routes
 
   @memoize(maxSize = 1, expiresAfter = 2.seconds)
   def calculateMetrics(): Metrics = {
     Metrics(
       Map(
+        "transactionsPerSecond" -> transactionsPerSecond.toString,
         "version" -> "1.0.2",
         "allPeersHealthy" -> allPeersHealthy.toString,
         //   "numAPICalls" -> numAPICalls.toString,
@@ -222,544 +728,5 @@ class API(
         // "z_lastBundleVisualJSON" -> Option(lastBundle).map{ b => b.extractTreeVisual.json}.getOrElse("")
       ))
   }
-
-  //  def getMetrics() = {
-  //    memoizeSync[Try, Metrics](Some(2.seconds))(2)
-  //  }
-
-  val getEndpoints: Route = cors() {
-    extractClientIP { clientIP =>
-      get {
-        path("balance") {
-          complete(validLedger.getOrElse(selfAddress.address, 0L).toString)
-        } ~
-          path("bundles") {
-            complete(last100ValidBundleMetaData)
-          } ~
-          path("restart") {
-            data.restartNode()
-            complete(StatusCodes.OK)
-          } ~
-          path("submitTX") {
-            parameter('address, 'amount) { (address, amount) =>
-              logger.error(s"SubmitTX : $address $amount")
-              handleSendRequest(SendToAddress(address, amount.toLong))
-            }
-          } ~
-          pathPrefix("address" / Remaining) { hash =>
-            val balance = validLedger.getOrElse(hash, 0).toString
-
-            complete(s"Balance: $balance")
-          } ~
-          pathPrefix("txHash") { // TODO: Rename to transaction
-            extractUnmatchedPath { p =>
-              logger.debug(s"Unmatched path on txHash result $p")
-              val ps = p.toString().tail
-              complete(lookupTransactionDB(ps).prettyJson)
-            }
-          } ~
-          pathPrefix("transaction") {
-            extractUnmatchedPath { p =>
-              //   logger.debug(s"Unmatched path on address result $p")
-              val ps = p.toString().tail
-              complete(lookupTransactionDB(ps))
-            }
-          } ~
-          pathPrefix("maxBundle") {
-            if (maxBundle.isDefined) {
-              val maybeSheaf = lookupBundleDBFallbackBlocking(maxBundle.get.hash)
-
-              val genesisBundleHash = genesisBundle.get.hash
-
-              complete(Some(MaxBundleGenesisHashQueryResponse(genesisBundleHash, maybeSheaf)))
-            } else {
-              complete(None)
-            }
-          } ~
-          pathPrefix("bundle") {
-            extractUnmatchedPath { p =>
-              logger.debug(s"Unmatched path on bundle direct result $p")
-              val ps = p.toString().tail
-
-              //findAncestorsUpTo()
-              val maybeSheaf = lookupBundleDBFallbackBlocking(ps)
-              complete(maybeSheaf)
-            }
-          } ~
-          pathPrefix("fullBundle") {
-            extractUnmatchedPath { p =>
-              logger.debug(s"Unmatched path on fullBundle result $p")
-              val ps = p.toString().split("/").last
-              val maybeSheaf = lookupBundle(ps)
-              complete(
-                BundleHashQueryResponse(
-                  ps,
-                  maybeSheaf,
-                  maybeSheaf
-                    .map(_.bundle.extractTX.toSeq.sortBy {
-                      _.txData.time
-                    })
-                    .getOrElse(Seq())
-                )
-              )
-            }
-          } ~ pathPrefix("download") {
-          extractUnmatchedPath { p =>
-            Try {
-              logger.debug(s"Unmatched path on download result $p")
-              val ps = p.toString().split("/").last
-              //logger.debug(s"Looking up bundle hash $ps")
-              val ancestors = findAncestorsUpTo(ps, Seq(), upTo = 10)
-              //logger.debug(s"Found ${ancestors.size} ancestors : $ancestors")
-              val res = ancestors.map { a =>
-                BundleHashQueryResponse(
-                  a.bundle.hash,
-                  Some(a),
-                  a.bundle.extractTXDB.toSeq.sortBy {
-                    _.txData.time
-                  }
-                )
-              }
-              complete(res)
-            } match {
-              case Success(x) => x
-              case Failure(e) =>
-                e.printStackTrace()
-                complete(StatusCodes.InternalServerError)
-            }
-          }
-        } ~
-          pathPrefix("ancestors") {
-            extractUnmatchedPath { p =>
-              logger.debug(s"Unmatched path on download result $p")
-              val ps = p.toString().split("/").last
-
-              val ancestors = findAncestorsUpTo(ps, Seq(), upTo = 101)
-
-              complete(ancestors.map {
-                _.bundle.hash
-              })
-            }
-          } ~
-          path("setKeyPair") {
-            parameter('keyPair) { kpp =>
-              logger.debug("Set key pair " + kpp)
-              val res = if (kpp.length > 10) {
-                val rr = Try {
-                  data.updateKeyPair(kpp.x[KeyPair])
-                  StatusCodes.OK
-                }.getOrElse(StatusCodes.BadRequest)
-                rr
-              } else StatusCodes.BadRequest
-              complete(res)
-            }
-          } ~
-          path("metrics") {
-            complete(calculateMetrics())
-          } ~
-          path("validTX") {
-            complete(last10000ValidTXHash)
-          } ~
-          path("makeKeyPair") {
-            val pair = constellation.makeKeyPair()
-            wallet :+= pair
-            complete(pair)
-          } ~
-          path("genesis" / LongNumber) { numCoins =>
-            val ret = if (genesisBundle.isEmpty) {
-              val debtAddress = walletPair
-              val tx = createTransaction(selfAddress.address,
-                numCoins,
-                src = debtAddress.address.address)
-              createGenesis(tx)
-              tx
-            } else genesisBundle.get.extractTX.head
-            complete(ret)
-          } ~
-          path("stackSize" / IntNumber) { num =>
-            minGenesisDistrSize = num
-            complete(StatusCodes.OK)
-          } ~
-          path("makeKeyPairs" / IntNumber) { numPairs =>
-            val pair = Seq.fill(numPairs) {
-              constellation.makeKeyPair()
-            }
-            wallet ++= pair
-            complete(pair)
-          } ~
-          path("wallet") {
-            complete(wallet)
-          } ~
-          path("selfAddress") {
-            //  val pair = constellation.makeKeyPair()
-            //  wallet :+= pair
-            //  complete(constellation.pubKeyToAddress(pair.getPublic))
-            complete(id.address)
-          } ~
-          path("id") {
-            complete(id)
-          } ~
-          path("nodeKeyPair") {
-            complete(keyPair)
-          } ~
-          // TODO: revisit
-          path("health") {
-            complete(StatusCodes.OK)
-          } ~
-          path("peers") {
-            complete(Peers(peerIPs.toSeq))
-          } ~
-          path("peerids") {
-            complete(peers.map {
-              _.data
-            })
-          } ~
-          path("actorPath") {
-            complete(peerToPeerActor.path.toSerializationFormat)
-          } ~
-          path("balance") {
-            entity(as[PublicKey]) { account =>
-              logger.debug(
-                s"Received request to query account $account balance")
-              // TODO: update balance
-              // complete((chainStateActor ? GetBalance(account)).mapTo[Balance])
-
-              complete(StatusCodes.OK)
-            }
-          } ~
-          path("dashboard") {
-
-            val transactions = last100ValidBundleMetaData.reverse
-              .take(20)
-              .map {
-                _.bundle
-              }
-              .map(b => {
-                (b.extractTXDB.toSeq.sortBy(_.txData.time),
-                  b.extractIds.map(f => f.address.address))
-              })
-              .flatMap(t => {
-                t._1.map(
-                  e =>
-                    TransactionSerialized(e.hash,
-                      e.txData.data.src,
-                      e.txData.data.dst,
-                      e.txData.data.normalizedAmount,
-                      t._2,
-                      e.txData.time
-                    ))
-              })
-
-            var peerMap: Seq[Node] = peers
-              .map {
-                _.data
-              }
-              .seq
-              .map { f =>
-              {
-                Node(f.id.address.address,
-                  f.externalAddress
-                    .map {
-                      _.getHostName
-                    }
-                    .getOrElse(""),
-                  f.externalAddress
-                    .map {
-                      _.getPort
-                    }
-                    .getOrElse(0))
-              }
-              }
-
-            // Add self
-            peerMap = peerMap :+ Node(selfAddress.address,
-              selfPeer.data.externalAddress
-                .map {
-                  _.getHostName
-                }
-                .getOrElse(""),
-              selfPeer.data.externalAddress
-                .map {
-                  _.getPort
-                }
-                .getOrElse(0))
-
-            complete(
-              Map(
-                "peers" -> peerMap,
-                "transactions" -> transactions
-              ))
-
-          } ~
-          jsRequest ~
-          serveMainPage
-      }
-    }
-  }
-
-  private val postEndpoints =
-    post {
-      //    numAPICalls += 1 // <- This breaks literally everything.
-      path("startRandomTX") {
-        sendRandomTXV2 = !sendRandomTXV2
-        complete(sendRandomTXV2.toString)
-      } ~
-      path("sendV2") {
-        entity(as[SendToAddress]) { e =>
-          nodeManager ! e
-          complete(StatusCodes.OK)
-        }
-      } ~
-      path("peerHealthCheckV2") {
-        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse]]]
-        val res = response.getOpt().map{
-          idMap =>
-            val res = idMap.map{
-              case (id, fut) =>
-                val maybeResponse = fut.getOpt()
-             //   println(s"Maybe response $maybeResponse")
-                id -> maybeResponse.exists{_.status == StatusCodes.OK}
-            }.toSeq
-            complete(res)
-        }.getOrElse(complete(StatusCodes.InternalServerError))
-        res
-      } ~
-        path("acceptGenesisOE") {
-          entity(as[GenesisObservation]) { go =>
-
-            dbActor.foreach { db =>
-              go.genesis.store(db)
-              go.initialDistribution.store(db)
-              val gtx = go.genesis.resolvedTX.head.transactionData
-              val distributionTX = go.genesis.resolvedTX.toSeq.map{_.transactionData}
-              db ! DBPut(gtx.dst, AddressCache(gtx.amount - distributionTX.map{_.amount}.sum, Some(1000D)))
-              distributionTX.foreach{ t =>
-                db ! DBPut(t.dst, AddressCache(t.amount, Some(1000D)))
-              }
-              metricsManager ! UpdateMetric("validTransactions", (1 + distributionTX.size).toString)
-              metricsManager ! UpdateMetric("uniqueAddressesInLedger", (1 + distributionTX.size).toString)
-              cellManager ! go
-
-            }
-
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("genesisObservation") {
-          entity(as[Set[Id]]) { ids =>
-            complete(createGenesisAndInitialDistributionOE(ids))
-          }
-        } ~
-        path("disableDownload") {
-          downloadMode = false
-          downloadInProgress = false
-          complete(StatusCodes.OK)
-        } ~
-        path("completeUpload") {
-          entity(as[BundleHashQueryResponse]) { b =>
-            val s = b.sheaf.get
-            maxBundleMetaData = Some(s)
-            downloadInProgress = false
-            downloadMode = false
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("upload") {
-          entity(as[Seq[BundleHashQueryResponse]]) {
-            bhqr =>
-              bhqr.foreach{ b =>
-                val s = b.sheaf.get
-                if (s.height.get == 0) {
-                  acceptGenesis(s.bundle, b.transactions.head)
-                } else {
-                  putBundleDB(s)
-                  totalNumValidBundles += 1
-                  b.transactions.foreach{t =>
-                    putTXDB(t)
-                    b.transactions.foreach{acceptTransaction}
-                    t.txData.data.updateLedger(memPoolLedger)
-                  }
-                }
-              }
-              complete(StatusCodes.OK)
-          }
-        } ~
-        path("rxBundle") {
-          entity(as[Bundle]) { b =>
-    //        println("api handle bundle")
-            //handleBundle(b)
-           peerToPeerActor ! b
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("handleTransaction") {
-          entity(as[Transaction]) { tx =>
-            peerToPeerActor ! Transaction
-            /*
-            if (lookupTransaction(tx.hash).isEmpty) {
-              storeTransaction(tx)
-              numSyncedTX += 1
-            }
-            syncPendingTXHashes -= tx.hash
-            txSyncRequestTime.remove(tx.hash)*/
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("batchBundleRequest") {
-          entity(as[BatchBundleHashRequest]) { bhr =>
-            val sheafResponses = bhr.hashes.flatMap {
-              lookupBundleDBFallbackBlocking
-            }
-            complete(sheafResponses)
-          }
-        } ~
-        path("batchTXRequest") {
-          entity(as[BatchTXHashRequest]) { bhr =>
-            //     println("API batch tx request.")
-            complete(bhr.hashes.flatMap{lookupTransactionDBFallbackBlocking})
-          }
-        } ~
-        path("peerSyncHeartbeat") {
-          entity(as[PeerSyncHeartbeat]) { psh =>
-            processPeerSyncHeartbeat(psh)
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("sendToAddress") {
-          entity(as[SendToAddress]) { s =>
-            handleSendRequest(s)
-          }
-        } ~
-        path("tx") {
-          entity(as[Transaction]) { tx =>
-            peerToPeerActor ! tx
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("addPeerV2"){
-          entity(as[AddPeerRequest]) { e =>
-
-         //   println("addpeerv2")
-            peerManager ! e
-            /*askRes.mapTo[HashSignature].getOpt().map{
-              complete(_)
-            }.getOrElse(complete(StatusCodes.InternalServerError))*/
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("peer") {
-          entity(as[String]) { peerAddress =>
-
-            Try {
-              //    logger.debug(s"Received request to add a new peer $peerAddress")
-              var addr: Option[InetSocketAddress] = None
-              val result = Try {
-                peerAddress.replaceAll('"'.toString, "").split(":") match {
-                  case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
-                  case a@_ => logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a");
-                }
-              }.toOption match {
-                case None =>
-                  StatusCodes.BadRequest
-                case Some(v) =>
-                  addr = Some(v)
-                  val fut = (peerToPeerActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
-                  val res = Try {
-                    Await.result(fut, timeout.duration)
-                  }.toOption
-                  res match {
-                    case None =>
-                      StatusCodes.RequestTimeout
-                    case Some(f) =>
-                      if (f == StatusCodes.Accepted) {
-                        var attempts = 0
-                        var peerAdded = false
-                        while (attempts < 5) {
-                          attempts += 1
-                          Thread.sleep(1500)
-                          //peerAdded = peers.exists(p => v == p.data.externalAddress)
-                          peerAdded = signedPeerLookup.contains(v)
-                        }
-                        if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
-                      } else f
-                  }
-              }
-
-              if (result != StatusCodes.OK) {
-                addr.foreach(peersAwaitingAuthenticationToNumAttempts(_) = 1)
-              }
-
-              logger.debug(s"New peer request $peerAddress statusCode: $result")
-              result
-            } match {
-              case Failure(e) =>
-                e.printStackTrace()
-                complete(StatusCodes.InternalServerError)
-              case Success(x) => complete(x)
-            }
-          }
-        } ~
-        path("ip") {
-          entity(as[String]) { externalIp =>
-            var ipp: String = ""
-            val addr =
-              externalIp.replaceAll('"'.toString, "").split(":") match {
-                case Array(ip, port) =>
-                  ipp = ip
-                  externalHostString = ip
-                  new InetSocketAddress(ip, port.toInt)
-                case a @ _ => {
-                  logger.debug(s"Unmatched Array: $a")
-                  throw new RuntimeException(s"Bad Match: $a")
-                }
-              }
-            logger.debug(s"Set external IP RPC request $externalIp $addr")
-            data.externalAddress = Some(addr)
-            if (ipp.nonEmpty)
-              data.apiAddress = Some(new InetSocketAddress(ipp, 9000))
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("reputation") {
-          entity(as[Seq[UpdateReputation]]) { ur =>
-            secretReputation = ur.flatMap { r =>
-              r.secretReputation.map {
-                id -> _
-              }
-            }.toMap
-            publicReputation = ur.flatMap { r =>
-              r.publicReputation.map {
-                id -> _
-              }
-            }.toMap
-            complete(StatusCodes.OK)
-          }
-        }
-    }
-
-  private val faviconRoute = get {
-    path("favicon.ico") {
-      getFromResource("favicon.ico")
-    }
-  }
-
-  private val routes: Route = cors() {
-    getEndpoints ~ postEndpoints ~ jsRequest ~ serveMainPage
-  }
-
-  def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
-    credentials match {
-      case p @ Credentials.Provided(id)
-        if id == authId && p.verify(authPassword) =>
-        Some(id)
-      case _ => None
-    }
-  }
-
-  val authRoutes = faviconRoute ~ routes /* authenticateBasic(realm = "secure site",
-                                                    myUserPassAuthenticator) {
-    user =>
-      routes
-  }*/
 
 }

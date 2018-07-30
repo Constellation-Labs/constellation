@@ -3,11 +3,10 @@ package org.constellation.util
 import java.util.concurrent.ForkJoinPool
 
 import scala.concurrent.duration._
-import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import org.constellation.primitives.Schema._
 import constellation._
 import org.constellation.AddPeerRequest
+import scalaj.http.HttpResponse
 
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
@@ -17,8 +16,12 @@ class Simulation {
   implicit val ec: ExecutionContextExecutorService =
     ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
-  def healthy(apis: Seq[APIClient]): Boolean =
-    apis.forall{ a => a.getBlockingStr[String]("health", timeout = 100) == "OK"}
+  def healthy(apis: Seq[APIClient]): Boolean = {
+    apis.forall(a => {
+      val res = a.getSync("health", timeoutSeconds = 100).isSuccess
+      res
+    })
+  }
 
   def setIdLocal(apis: Seq[APIClient]): Unit = apis.foreach{ a =>
     val id = a.getBlocking[Id]("id")
@@ -26,7 +29,7 @@ class Simulation {
   }
 
   def setExternalIP(apis: Seq[APIClient]): Boolean =
-    apis.forall{a => a.postSync("ip", a.hostName + ":" + a.udpPort).status == StatusCodes.OK}
+    apis.forall{a => a.postSync("ip", a.hostName + ":" + a.udpPort).isSuccess}
 
   def verifyGenesisReceived(apis: Seq[APIClient]): Boolean = {
     apis.forall { a =>
@@ -37,7 +40,7 @@ class Simulation {
 
   def genesisOE(apis: Seq[APIClient]): GenesisObservation = {
     val ids = apis.map{_.id}
-    apis.head.postRead[GenesisObservation]("genesisObservation", ids.tail.toSet)
+    apis.head.postBlocking[GenesisObservation]("genesisObservation", ids.tail.toSet)
   }
 
   def genesis(apis: Seq[APIClient]): Unit = {
@@ -52,6 +55,7 @@ class Simulation {
     val gbmd = r1.getBlocking[Metrics]("metrics")
 
     assert(gbmd.metrics("numValidBundles").toInt >= 1)
+
     // JSON parsing error, needs to be fixed
     /*
     val gbmd = r1.getBlocking[Seq[BundleMetaData]]("bundles")
@@ -123,7 +127,7 @@ class Simulation {
     apis.map{ n =>
       val dst = n.id.address.address
       val s = SendToAddress(dst, 1e7.toLong)
-      apis.head.postRead[Transaction]("sendToAddress", s)
+      apis.head.postBlocking[Transaction]("sendToAddress", s)
     }
   }
 
@@ -135,12 +139,12 @@ class Simulation {
     Future {
       val src = randomNode(apis)
       val dst = randomOtherNode(src, apis).id.address.address
-      val s = SendToAddress(dst, Random.nextInt(100000).toLong)
-      src.postRead[Transaction]("sendToAddress", s)
+      val s = SendToAddress(dst, Random.nextInt(1000).toLong)
+      src.postBlocking[Transaction]("sendToAddress", s)
     }(ec)
   }
 
-  def sendRandomTransactionV2(numTX: Int = 20, apis: Seq[APIClient]): Future[HttpResponse] = {
+  def sendRandomTransactionV2(apis: Seq[APIClient]): Future[HttpResponse[String]] = {
     val src = randomNode(apis)
     val dst = randomOtherNode(src, apis).id.address.address
     val s = SendToAddress(dst, Random.nextInt(1000).toLong)
@@ -229,7 +233,8 @@ class Simulation {
     Thread.sleep(5000)
     assert(
       apis.forall{a =>
-        val res = a.postEmptyRead[Seq[(Id, Boolean)]]("peerHealthCheckV2")
+//        a.postEmpty()
+        val res = a.postBlockingEmpty[Seq[(Id, Boolean)]]("peerHealthCheckV2")
         res.forall(_._2) && res.size == apis.size - 1
       }
     )
@@ -280,6 +285,12 @@ class Simulation {
     Await.result(Future.sequence(results), 60.seconds)
 
     assert(verifyPeersAdded(apis))
+
+    apis.foreach(a => {
+      if (a.id != apis.head.id) {
+        a.postEmpty("initializeDownload")
+      }
+    })
 
     Thread.sleep(20000)
 

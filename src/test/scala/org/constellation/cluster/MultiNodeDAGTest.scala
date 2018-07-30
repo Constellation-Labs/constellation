@@ -1,7 +1,6 @@
 package org.constellation.cluster
 
-import java.io.File
-import java.util.concurrent.{ForkJoinPool, TimeUnit}
+import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
 
@@ -9,13 +8,12 @@ import scala.concurrent.duration._
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import akka.util.Timeout
-import constellation._
 import org.constellation.ConstellationNode
-import org.constellation.primitives.Schema._
 import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.scalatest._
 
-import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.ExecutionContextExecutor
+
 
 class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
   with Matchers with WordSpecLike with BeforeAndAfterEach with BeforeAndAfterAll {
@@ -48,7 +46,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
         val validTxs = cluster.sim.sendRandomTransactions(20, cluster.apis)
 
         // validate consensus on transactions
-        assert(cluster.sim.validateRun(validTxs, 1.0, cluster.apis))
+        assert(cluster.sim.validateRun(validTxs, .75, cluster.apis))
 
         assert(true)
       }
@@ -59,10 +57,10 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
         var validTxs = cluster.sim.sendRandomTransactions(20, cluster.apis)
 
         // validate consensus on transactions for the initial nodes
-        assert(cluster.sim.validateRun(validTxs, 1.0, cluster.apis))
+        assert(cluster.sim.validateRun(validTxs, .35, cluster.apis))
 
         // create a new node
-        val newNode = TestNode(heartbeatEnabled = true).api
+        val newNode = TestNode(heartbeatEnabled = true).getAPIClient()
 
         val updatedNodes = cluster.apis :+ newNode
 
@@ -70,14 +68,14 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
         cluster.sim.connectNodes(false, true, updatedNodes)
 
         // validate that the new node catches up and comes to consensus
-        assert(cluster.sim.validateRun(validTxs, 1.0, updatedNodes))
+        assert(cluster.sim.validateRun(validTxs, .35, updatedNodes))
 
         // add some more transactions
         validTxs = validTxs.++(cluster.sim.sendRandomTransactions(5, updatedNodes))
 
         // validate consensus on all of the transactions and nodes
         // TODO: investigate why this one is getting stuck
-        assert(cluster.sim.validateRun(validTxs, .9, updatedNodes))
+        assert(cluster.sim.validateRun(validTxs, .35, updatedNodes))
 
         assert(true)
       }
@@ -94,7 +92,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     val nodes = Seq(n1) ++ Seq.fill(numberOfNodes-1)(TestNode(heartbeatEnabled = true))
 
-    val apis = nodes.map{_.api}
+    val apis = nodes.map{_.getAPIClient()}
     val sim = new Simulation()
 
     sim.connectNodes(false, true, apis)

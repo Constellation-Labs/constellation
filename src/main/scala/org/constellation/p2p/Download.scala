@@ -2,12 +2,11 @@ package org.constellation.p2p
 
 import java.net.InetSocketAddress
 
-import akka.http.scaladsl.model.{HttpResponse, ResponseEntity, StatusCode}
 import org.constellation.Data
 import org.constellation.primitives.Schema._
 import constellation._
-import org.constellation.serializer.KryoSerializer
 import org.constellation.util.APIClient
+import scalaj.http.HttpResponse
 
 import scala.collection.mutable
 import scala.concurrent.duration._
@@ -49,7 +48,7 @@ trait Download extends PeerAuth {
 
       val response = Await.ready(ancestors, 90 seconds)
 
-      val ancestorHashes = apiClient.read[Seq[String]](response.get()).get()
+      val ancestorHashes = apiClient.read[Seq[String]](response.get())
 
       hash = ancestorHashes.head
 
@@ -84,10 +83,10 @@ trait Download extends PeerAuth {
     bundleResponses.foreach(f => {
       f.onComplete(r => {
         if (r.isSuccess) {
-          val response = apiClient.read[BundleHashQueryResponse](r.get).get()
+          val response = apiClient.readHttpResponseEntity[BundleHashQueryResponse](r.get.body)
 
           if (response.sheaf.isEmpty) {
-            // add to queue again
+            // TODO: add to queue again
             return assert(true)
           }
 
@@ -106,17 +105,12 @@ trait Download extends PeerAuth {
           // if this is the genesis bundle handle it separately
           if (sheaf.bundle.hash == genesisHash) {
             acceptGenesis(sheaf.bundle, sheaf.bundle.extractTX.head)
-          } else if (sheaf.bundle.hash == maxBundleSheaf.bundle.hash) {
-            updateMaxBundle(maxBundleSheaf)
           }
 
           // set the bundle to be non pending
           pendingChainHashes(sheaf.bundle.hash) = true
 
-          val chainFullyResolved = !pendingChainHashes.values
-            .fold(false)((a: Boolean, b: Boolean) => {
-              a || b
-            })
+          val chainFullyResolved = !pendingChainHashes.values.toSet(false)
 
           // check if we are finished downloading
           if (chainFullyResolved) {
@@ -134,7 +128,7 @@ trait Download extends PeerAuth {
   }
 
   def getMaxBundleHash(apiClient: APIClient): (Option[InetSocketAddress], Option[MaxBundleGenesisHashQueryResponse]) = {
-    val maxBundles: Seq[(InetSocketAddress, Future[HttpResponse])] = getBroadcastTCP(route = "maxBundle")
+    val maxBundles: Seq[(InetSocketAddress, Future[HttpResponse[String]])] = getBroadcastTCP(route = "maxBundle")
 
     val futures = Future.sequence(maxBundles.map(b => b._2))
 
@@ -146,7 +140,7 @@ trait Download extends PeerAuth {
       val right = f._2.get()
 
       val leftHash: Option[Sheaf] = if (acc._2.isDefined) acc._2.get.sheaf else None
-      val rightHash = apiClient.read[Option[MaxBundleGenesisHashQueryResponse]](right).get()
+      val rightHash = apiClient.read[Option[MaxBundleGenesisHashQueryResponse]](right)
 
       if (leftHash.isDefined && rightHash.isDefined && rightHash.get.sheaf.isDefined) {
         val leftHashScore = leftHash.get.totalScore.get

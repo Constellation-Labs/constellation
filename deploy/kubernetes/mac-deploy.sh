@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 GOOGLE_PROJECT_ID="esoteric-helix-197319"
-GOOGLE_CLUSTER_NAME="constellation-test"
+#GOOGLE_CLUSTER_NAME="constellation-test"
 DATE=$(date +%s)
 
 # This is required because unless the YAML changes a value it won't trigger a redeploy to a new docker image..
@@ -13,8 +13,8 @@ sbt docker:publishLocal
 docker tag constellationlabs/constellation:latest $IMAGE
 gcloud docker -- push $IMAGE
 
-
-APP_USER="constellation-app-$USER"
+USER_STR="$USER"
+APP_USER="constellation-app-$USER_STR"
 echo $APP_USER
 
 STRING=$(kubectl get sts $APP_USER 2>&1)
@@ -23,14 +23,14 @@ echo "kubectl response to get sts on $APP_USER: $STRING"
 if [[ $STRING = *"Error"* ]]; then
     echo "No cluster found for $APP_USER - deploying new STS"
     cp ./deploy/kubernetes/node-deployment.yml ./deploy/kubernetes/node-deployment-impl.yml
-    sed -i'.bak' "s/constellation-app/constellation-app-$USER/g" ./deploy/kubernetes/node-deployment-impl.yml
-    sed -i'.bak' "s/node-service/node-service-$USER/g" ./deploy/kubernetes/node-deployment-impl.yml
+    sed -i'.bak' "s/constellation-app/$APP_USER/g" ./deploy/kubernetes/node-deployment-impl.yml
+    sed -i'.bak' "s/node-service/node-service-$USER_STR/g" ./deploy/kubernetes/node-deployment-impl.yml
     sed -i'.bak' "s/constellation:latest/constellation:$IMAGE_TAG/g" ./deploy/kubernetes/node-deployment-impl.yml
     kubectl apply -f ./deploy/kubernetes/node-deployment-impl.yml
     # Re-enable rm later -- leave file around for debugging for now.
     # rm ./deploy/kubernetes/node-deployment-impl.yml
 else
-    echo "Pre-existing cluster found for $USER, patching STS"
+    echo "Pre-existing cluster found for $USER_STR, patching STS"
     kubectl patch statefulset $APP_USER --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/image", "value":"'$IMAGE'"}]'
 fi
 

@@ -24,7 +24,7 @@ trait MetricsExt {
   @volatile var numValidBundleHashesRemovedFromMemory = 0L
   @volatile var numAPICalls = 0L
   @volatile var allPeersHealthy = true
-
+  @volatile var transactionsPerSecond = 1D
 
   def resetMetrics(): Unit = {
 
@@ -48,6 +48,7 @@ trait MetricsExt {
     numDBDeletes = 0L
     numMempoolEmits = 0L
     numValidBundleHashesRemovedFromMemory = 0L
+    transactionsPerSecond = 1D
 
   }
 

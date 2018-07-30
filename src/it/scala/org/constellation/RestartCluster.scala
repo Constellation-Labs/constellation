@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import org.constellation.ClusterTest.getPodMappings
+import org.constellation.crypto.KeyUtils
 import org.constellation.util.APIClient
 
 import scala.concurrent.ExecutionContextExecutor
@@ -16,9 +17,9 @@ object RestartCluster extends TestKit(ActorSystem("ClusterTest")){
 
     implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-    constellation.makeKeyPair()
+    KeyUtils.makeKeyPair()
 
-    val clusterId = sys.env.getOrElse("CLUSTER_ID", "constellation-app-ryle")
+    val clusterId = sys.env.getOrElse("CLUSTER_ID", "constellation-app")
 
     val mappings = getPodMappings(clusterId)
 

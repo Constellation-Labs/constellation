@@ -1,32 +1,30 @@
 package org.constellation.primitives
 
-import akka.actor.{Actor, ActorRef}
+import akka.actor.Actor
 import akka.stream.ActorMaterializer
 import org.constellation.AddPeerRequest
-import org.constellation.primitives.Schema.{Id, LocalPeerData}
+import org.constellation.primitives.Schema.Id
 import org.constellation.util.APIClient
 
 import scala.collection.mutable
-import scala.concurrent.Await
-import scala.util.Try
 
 case class PeerData(addRequest: AddPeerRequest, client: APIClient)
 case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
 case class PeerHealthCheck(status: Map[Id, Boolean])
-import scala.concurrent.duration._
 
 case object GetPeerInfo
 
 class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
 
-  private val peerInfo = mutable.HashMap[Id, PeerData]()
+  override def receive = active(Map.empty)
 
-  override def receive: Receive = {
+  def active(peerInfo: Map[Id, PeerData]): Receive = {
 
     case a @ AddPeerRequest(host, udpPort, port, id) =>
       val client = new APIClient()(context.system, context.dispatcher, materialize).setConnection(host, port)
+
       client.id = id
-      peerInfo(id) = PeerData(a, client)
+      context become active(peerInfo + (id -> PeerData(a, client)))
 
     case APIBroadcast(func, skipIds, subset) =>
 
@@ -40,7 +38,7 @@ class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
       }
       sender() ! result
 
-    case GetPeerInfo => sender() ! peerInfo.toMap
+    case GetPeerInfo => sender() ! peerInfo
 
   }
 }

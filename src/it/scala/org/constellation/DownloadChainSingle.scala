@@ -1,10 +1,11 @@
 package org.constellation
 
 import akka.stream.ActorMaterializer
+import better.files.File
 import constellation._
-import org.constellation.RestartCluster.system
 import org.constellation.ClusterTest.getPodMappings
-import org.constellation.primitives.Schema.{BundleHashQueryResponse, Sheaf, Transaction}
+import org.constellation.RestartCluster.system
+import org.constellation.primitives.Schema.{Sheaf, Transaction}
 import org.constellation.util.APIClient
 
 import scala.concurrent.ExecutionContextExecutor
@@ -36,9 +37,9 @@ object DownloadChainSingle {
 
     val a1 = apis.filter{_.hostName == nodeIp}.head
 
-    val chainFile = scala.tools.nsc.io.File("single-chain.jsonl")
+    val chainFile = File("single-chain.jsonl")
     chainFile.delete()
-    val txFile = scala.tools.nsc.io.File("transactions.jsonl")
+    val txFile = File("transactions.jsonl")
     txFile.delete()
     var hash = "9ead11ba079bf2f789c9207bdfab7779fd807ba4c2a2571326fc9bb6ce39365e"
 
@@ -50,9 +51,9 @@ object DownloadChainSingle {
         val hActual = h.txHash
         val tx = a1.getBlocking[Option[Transaction]]("transaction/" + hActual)
         if (tx.isEmpty) println(s"Missing TX Hash: $hActual")
-        txFile.appendAll(tx.get.json + "\n")
+        txFile.appendLine(tx.get.json)
       }
-      chainFile.appendAll(sheaf.json + "\n")
+      chainFile.appendLine(sheaf.json)
     }
 
     println("Done")

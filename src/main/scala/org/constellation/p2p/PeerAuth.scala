@@ -1,10 +1,9 @@
 package org.constellation.p2p
 
 import java.net.InetSocketAddress
-import java.security.KeyPair
 
 import akka.actor.{ActorRef, ActorSystem}
-import akka.http.scaladsl.model.{HttpResponse, StatusCode, StatusCodes}
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
@@ -16,6 +15,7 @@ import org.constellation.consensus.Consensus.RemoteMessage
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Try}
 import org.constellation.primitives.Schema._
+import scalaj.http.HttpResponse
 
 trait PeerAuth {
 
@@ -32,7 +32,7 @@ trait PeerAuth {
 
   def getBroadcastTCP(skipIDs: Seq[Id] = Seq(),
                       idSubset: Seq[Id] = Seq(),
-                      route: String): Seq[(InetSocketAddress, Future[HttpResponse])] = {
+                      route: String): Seq[(InetSocketAddress, Future[HttpResponse[String]])] = {
     val addresses = getBroadcastPeers(skipIDs, idSubset).map(_.apiAddress)
 
     addresses.map(a => {
@@ -74,15 +74,16 @@ trait PeerAuth {
 
   def broadcast[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
     val dest: Iterable[Id] = if (idSubset.isEmpty) signedPeerIDLookup.keys else idSubset
-    // println("Broadcast attempt")
+
     dest.foreach{ i =>
       if (!skipIDs.contains(i)) {
         totalNumBroadcastMessages += 1
+
         val address = signedPeerIDLookup(i).data.externalAddress
+
         address.foreach{ a =>
           udpActor ! UDPSend(message, a)
         }
-      //  println(s"Broadcasting $message to $address")
       }
     }
   }
@@ -112,9 +113,6 @@ trait PeerAuth {
 
         udpActor ! UDPSend(message, peerAddress)
 
-        //Tell our existing peers
-        //broadcast(p)
-
         StatusCodes.Accepted
       }
 
@@ -140,10 +138,6 @@ trait PeerAuth {
       logger.debug(s"Peer added, total peers: ${signedPeerIDLookup.keys.size} on ${id.short}")
 
       Future { getOrElseUpdateAPIClient(value.id)}
-      newPeers.foreach { np =>
-        //    logger.debug(s"Attempting to add new peer from peer reference handshake response $np")
-        //   initiatePeerHandshake(PeerRef(np.data.externalAddress))
-      }
     }
   }
 
