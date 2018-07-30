@@ -95,16 +95,14 @@ trait Download extends PeerAuth {
           val transactions: Seq[Transaction] = response.transactions
 
           // store the bundle
-
           handleBundle(sheaf.bundle)
 
           // store the transactions
-
           transactions.foreach(handleTransaction)
 
           // if this is the genesis bundle handle it separately
           if (sheaf.bundle.hash == genesisHash) {
-            acceptGenesis(sheaf.bundle, sheaf.bundle.extractTX.head)
+            acceptGenesis(sheaf.bundle, transactions.head)
           }
 
           // set the bundle to be non pending

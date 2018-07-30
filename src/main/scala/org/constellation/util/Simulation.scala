@@ -147,6 +147,7 @@ class Simulation {
   def sendRandomTransactionV2(apis: Seq[APIClient]): Future[HttpResponse[String]] = {
     val src = randomNode(apis)
     val dst = randomOtherNode(src, apis).id.address.address
+
     val s = SendToAddress(dst, Random.nextInt(1000).toLong)
     src.post("sendV2", s)
   }

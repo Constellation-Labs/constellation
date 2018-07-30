@@ -117,6 +117,7 @@ class APIClient (
 
   def getBlockingStr(suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5): String = {
     val resp: HttpResponse[String] = httpWithAuth(suffix, timeoutSeconds).params(queryParams).asString
+
     resp.body
   }
 

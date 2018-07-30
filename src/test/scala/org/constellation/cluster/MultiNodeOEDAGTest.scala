@@ -6,12 +6,11 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import akka.util.Timeout
+import better.files.File
 import org.constellation.util.{Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
-import scala.reflect.io.File
-
 
 class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
   with AsyncFlatSpecLike with Matchers with BeforeAndAfterAll {

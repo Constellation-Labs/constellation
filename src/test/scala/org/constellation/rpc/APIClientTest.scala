@@ -53,7 +53,6 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val keyPair = KeyUtils.makeKeyPair()
     val appNode = TestNode(Seq(), keyPair)
     val rpc = new APIClient().setConnection(port=appNode.httpPort)
-
     val id = rpc.getBlocking[Id]("id")
 
     assert(Id(keyPair.getPublic.encoded) == id)

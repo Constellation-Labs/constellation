@@ -229,7 +229,7 @@ object Schema {
                              neighbors: Option[Seq[Sheaf]] = None
                            ) {
     def safeBundle = Option(bundle)
-    def isResolved: Boolean = reputations.nonEmpty && transactionsResolved
+    def isResolved: Boolean = reputations.nonEmpty && transactionsResolved && height.nonEmpty && totalScore.nonEmpty
     def cellKey: CellKey = CellKey(bundle.extractParentBundleHash.pbHash, bundle.maxStackDepth, height.getOrElse(0))
   }
 

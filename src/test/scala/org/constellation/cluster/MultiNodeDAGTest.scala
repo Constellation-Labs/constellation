@@ -11,9 +11,11 @@ import akka.util.Timeout
 import org.constellation.ConstellationNode
 import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.scalatest._
+import better.files._
+import org.constellation.util.{Simulation, TestNode}
+import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
-
 
 class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
   with Matchers with WordSpecLike with BeforeAndAfterEach with BeforeAndAfterAll {
@@ -46,7 +48,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
         val validTxs = cluster.sim.sendRandomTransactions(20, cluster.apis)
 
         // validate consensus on transactions
-        assert(cluster.sim.validateRun(validTxs, .75, cluster.apis))
+        assert(cluster.sim.validateRun(validTxs, .35, cluster.apis))
 
         assert(true)
       }
@@ -91,13 +93,13 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val n1 = TestNode(heartbeatEnabled = true)
 
     val nodes = Seq(n1) ++ Seq.fill(numberOfNodes-1)(TestNode(heartbeatEnabled = true))
-
     val apis = nodes.map{_.getAPIClient()}
     val sim = new Simulation()
 
     sim.connectNodes(false, true, apis)
 
     TestCluster(apis, nodes, sim)
+
   }
 
 }
