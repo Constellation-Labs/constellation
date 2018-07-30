@@ -13,7 +13,7 @@ sbt docker:publishLocal
 docker tag constellationlabs/constellation:latest $IMAGE
 gcloud docker -- push $IMAGE
 
-USER_STR="$USER-tune"
+USER_STR="$USER"
 APP_USER="constellation-app-$USER_STR"
 echo $APP_USER
 
