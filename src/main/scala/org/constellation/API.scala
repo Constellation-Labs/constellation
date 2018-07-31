@@ -266,12 +266,12 @@ class API(
             }
           } ~
           pathPrefix("maxBundle") {
-            if (maxBundle.isDefined) {
+            val genesisTx = genesisBundle.map(b => b.extractTXDB.head)
+
+            if (genesisTx.isDefined && maxBundle.isDefined) {
               val maybeSheaf = lookupBundleDBFallbackBlocking(maxBundle.get.hash)
 
-              val genesisBundleHash = genesisBundle.get.hash
-
-              complete(Some(MaxBundleGenesisHashQueryResponse(genesisBundleHash, maybeSheaf)))
+              complete(Some(MaxBundleGenesisHashQueryResponse(genesisBundle, genesisTx, maybeSheaf)))
             } else {
               complete(None)
             }
