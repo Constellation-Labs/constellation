@@ -1,0 +1,9 @@
+steps:
+- name: 'gcr.io/$PROJECT_ID/scala-sbt'
+  args: ['clean', 'test']
+- name: 'gcr.io/$PROJECT_ID/scala-sbt'
+  args: ['docker:publishLocal']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['tag', 'constellationlabs/constellation:latest', 'gcr.io/$PROJECT_ID/constellationlabs/constellation:cloudbuild']
+images:
+- 'gcr.io/$PROJECT_ID/constellationlabs/constellation:cloudbuild'
