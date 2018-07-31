@@ -2,8 +2,8 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: node-service
-  name: node-service
+    app: node-service-prestonparris
+  name: node-service-prestonparris
 spec:
   ports:
   - port: 9000
@@ -27,14 +27,14 @@ spec:
     name: jmx
   clusterIP: None
   selector:
-    app: constellation-app
+    app: constellation-app-prestonparris
 ---
 apiVersion: apps/v1beta1
 kind: StatefulSet
 metadata:
-  name: constellation-app
+  name: constellation-app-prestonparris
 spec:
-  serviceName: node-service
+  serviceName: node-service-prestonparris
   podManagementPolicy: "Parallel"
   replicas: 5
   updateStrategy:
@@ -45,10 +45,10 @@ spec:
   template:
     metadata:
       labels:
-        app: constellation-app
+        app: constellation-app-prestonparris
     spec:
       containers:
-      - name: constellation-app
+      - name: constellation-app-prestonparris
         image: gcr.io/esoteric-helix-197319/constellationlabs/constellation:latest
         imagePullPolicy: Always
         ports:

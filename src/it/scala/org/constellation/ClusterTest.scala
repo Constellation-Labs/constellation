@@ -109,10 +109,10 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
   private val clusterId = sys.env.getOrElse("CLUSTER_ID", "constellation-app")
 
-  // TODO: disabling until we port over to our new consensus mechanism
   "Cluster integration" should "ping a cluster, check health, go through genesis flow" in {
 
     println("Grabbing cluster STS : " + clusterId)
+
     val mappings = getPodMappings(clusterId)
 
     mappings.foreach{println}
@@ -123,13 +123,40 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       new APIClient().setConnection(ip, 9000)
     }
 
+    val splitApis = apis.splitAt(1)
+
+    val initialApis = splitApis._2
+
+    val newApi = splitApis._1(0)
+
+    println("initialApis = ", initialApis)
+
+    println("newApi = ", newApi)
+
     val sim = new Simulation()
 
-    sim.connectNodes(true, true, apis)
+    sim.connectNodes(true, true, initialApis)
 
-    val validTxs = sim.sendRandomTransactions(20, apis)
+    var validTxs = sim.sendRandomTransactions(20, initialApis)
 
-    assert(sim.validateRun(validTxs, 1.0, apis))
+    assert(sim.validateRun(validTxs, .35, initialApis))
+
+    val someExistingNode = initialApis.head
+
+    val addNode = someExistingNode.postSync("peer", newApi.hostName + ":" + newApi.udpPort)
+
+    Thread.sleep(45000)
+
+    // validate that the new node catches up and comes to consensus
+    assert(sim.validateRun(validTxs, .35, apis))
+
+    // add some more transactions
+    validTxs = validTxs.++(sim.sendRandomTransactions(5, apis))
+
+    // validate consensus on all of the transactions and nodes
+    assert(sim.validateRun(validTxs, .35, apis))
+
+    assert(true)
   }
 
 }
