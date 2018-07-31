@@ -58,7 +58,7 @@ object Schema {
 
   case class BundleHashQueryResponse(hash: String, sheaf: Option[Sheaf], transactions: Seq[Transaction])
 
-  case class MaxBundleGenesisHashQueryResponse(genesisHash: String, sheaf: Option[Sheaf])
+  case class MaxBundleGenesisHashQueryResponse(genesisBundle: Option[Bundle], genesisTX: Option[Transaction], sheaf: Option[Sheaf])
 
   case class SendToAddress(
                             dst: String,
@@ -251,7 +251,6 @@ object Schema {
                            bundleData: Signed[BundleData]
                          ) extends ProductHash with Fiber with GossipMessage
     with RemoteMessage {
-
 
     def extractTXHash: Set[TransactionHash] = {
       def process(s: Signed[BundleData]): Set[TransactionHash] = {

@@ -70,7 +70,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
         val addNode = someExistingNode.postSync("peer", newNode.hostName + ":" + newNode.udpPort)
 
-        Thread.sleep(20000)
+        Thread.sleep(45000)
 
         // validate that the new node catches up and comes to consensus
         assert(cluster.sim.validateRun(validTxs, .35, updatedNodes))
@@ -79,7 +79,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
         validTxs = validTxs.++(cluster.sim.sendRandomTransactions(5, updatedNodes))
 
         // validate consensus on all of the transactions and nodes
-        // TODO: investigate why this one is getting stuck
         assert(cluster.sim.validateRun(validTxs, .35, updatedNodes))
 
         assert(true)
