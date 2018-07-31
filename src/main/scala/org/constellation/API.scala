@@ -251,11 +251,18 @@ class API(
 
             complete(s"Balance: $balance")
           } ~
+          pathPrefix("txHash") { // TODO: remove reference in ui and use the /transaction route instead
+            extractUnmatchedPath { p =>
+              val transactionHash = p.toString().tail
+
+              complete(lookupTransactionDB(transactionHash).prettyJson)
+            }
+          } ~
           pathPrefix("transaction") {
             extractUnmatchedPath { p =>
               val transactionHash = p.toString().tail
 
-              complete(lookupTransactionDB(transactionHash))
+              complete(lookupTransactionDB(transactionHash).prettyJson)
             }
           } ~
           pathPrefix("maxBundle") {
