@@ -23,7 +23,7 @@ class Data extends MetricsExt
   def restartNode(): Unit = {
  //   restartDB()
     genesisBundle = None
-    downloadMode = false
+    downloadMode = true
     validLedger.clear()
     memPoolLedger.clear()
     syncPendingTXHashes = Set()

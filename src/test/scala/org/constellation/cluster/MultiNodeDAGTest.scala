@@ -66,8 +66,11 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
         val updatedNodes = cluster.apis :+ newNode
 
-        // add the new node to the cluster
-        cluster.sim.connectNodes(false, true, updatedNodes)
+        val someExistingNode = cluster.apis.head
+
+        val addNode = someExistingNode.postSync("peer", newNode.hostName + ":" + newNode.udpPort)
+
+        Thread.sleep(20000)
 
         // validate that the new node catches up and comes to consensus
         assert(cluster.sim.validateRun(validTxs, .35, updatedNodes))

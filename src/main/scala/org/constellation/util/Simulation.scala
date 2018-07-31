@@ -287,13 +287,15 @@ class Simulation {
 
     assert(verifyPeersAdded(apis))
 
+    /*
     apis.foreach(a => {
       if (a.id != apis.head.id) {
         a.postEmpty("initializeDownload")
       }
     })
+    */
 
-    Thread.sleep(20000)
+    Thread.sleep(45000)
 
     assert(verifyGenesisReceived(apis))
 

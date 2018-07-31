@@ -283,13 +283,13 @@ class API(
             extractUnmatchedPath { p =>
               logger.debug(s"Unmatched path on fullBundle result $p")
               val bundleHash = p.toString().split("/").last
-              val maybeSheaf = lookupBundle(bundleHash)
+              val maybeSheaf = lookupBundleDBFallbackBlocking(bundleHash)
               complete(
                 BundleHashQueryResponse(
                   bundleHash,
                   maybeSheaf,
                   maybeSheaf
-                    .map(_.bundle.extractTX.toSeq.sortBy {
+                    .map(_.bundle.extractTXDB.toSeq.sortBy {
                       _.txData.time
                     })
                     .getOrElse(Seq())
