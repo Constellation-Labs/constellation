@@ -6,7 +6,7 @@ A blockchain microservice operating system
 2. run ```vagrant up```
 
 # Push to docker
-1. run ```./docker-local-publish.sh``` 
+1. run ```./scripts/docker-local-publish.sh``` 
 
 # Running Constellation Node
 1. run ```./build.sh``` from the project directory.
