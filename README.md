@@ -7,3 +7,6 @@ A blockchain microservice operating system
 
 # Push to docker
 1. run ```./docker-local-publish.sh``` 
+
+# Running Constellation Node
+1. run ```./build.sh``` from the project directory.

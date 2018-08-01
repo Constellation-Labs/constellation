@@ -5,3 +5,4 @@ target/
 tmp/
 .vagrant/
 tmp2/
+src/main/resources/ui/ui*

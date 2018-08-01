@@ -39,7 +39,7 @@ trait ServeUI {
                   |</head>
                   |<body>
                   |$bodyText
-                  |<script src="ui-fastopt.js" type="text/javascript"></script>
+                  |<script src="ui-opt.js" type="text/javascript"></script>
                   |<script type="text/javascript">
                   |org.constellation.ui.App().main()
                   |</script>
