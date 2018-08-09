@@ -1,5 +1,7 @@
+#!/usr/bin/env bash
 pushd ui
-sbt fullOptJS
+sbt clean fullOptJS
 popd
+mkdir -p src/main/resources/ui/
 cp ui/target/scala-2.11/*js* src/main/resources/ui/
-sbt run
+sbt "run $1"
