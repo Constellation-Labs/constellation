@@ -8,9 +8,9 @@ protocol, writting in the
 programming language.
 
 ## Building for development
-#### Instructions tested on Mac and Linux (may work elsewhere)
+#### Instructions tested on Mac and Linux
 1. Check out repository 
-```
+```shell
 git clone git@github.com:Constellation-Labs/constellation.git
 ```
 2. From root directory ``constellation, run 
@@ -58,17 +58,17 @@ vagrant up
 from project directory.
 
 ## API Docs
-#### WIP 
+### WIP 
 We intend to use **Swagger** or similar to publish comprehensive API docs.
 
-### Troubleshooting :rotating_light:
+### :rotating_light: Troubleshooting
 If you run into issues during the installation, best make a thread on the [community portal Orion](https://orion.constellationlabs.io/accounts/login/?next=/) or ask a quick question on the Constellation [Discord server](http://Discordapp.com/).
 
 If you discover a bug, please open a ticket using the github issue function. If you don't know the resolution, follow standar github reporting guidelines, stating your system, what you did and tried. 
 
  Note: For software support, please ask on discord first.
 
-#### Community write-ups :two_hearts: 
+#### :two_hearts: Community write-ups
 1. [Vagrant setup for windows](https://drive.google.com/file/d/1xobpv4Ew1iCN9j-M-ItU6PsfnybHUryy/view)
 2. [Vagrant setup for ubuntu](https://docs.google.com/document/u/1/d/e/2PACX-1vST7vBIMxom99hKr5XyVFpM6TAs_pw-iqq403AktMWnqr3dxUFX5c0g9BWD5gU5TDPZVXKcW3HTWbVl/pub)
 
