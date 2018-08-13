@@ -39,15 +39,15 @@ or optionally (to connect to other host)
 3. Interact with app via the API 
 By default this is 
 http://localhost:9000. 
-Look at API.scala for endpoints.
+Look at the file _API.scala_ for endpoints.
 
 ### Docker execution 
 This is assuming you have docker already set up.
 
 #### Install docker locally
-We make use of the [Docker](https://www.docker.com/) toolset.
+We make use of the [docker](https://www.docker.com/) toolset.
 
-*For now this installation is not covered here in detai*
+Note: *For now this installation is not covered here in detai*
 
 **We will publish docker images to dockerhub soon(ish).**
 
@@ -77,14 +77,14 @@ from project directory.
 We intend to use **Swagger** or similar to publish comprehensive API docs.
 
 ## :rotating_light: Troubleshooting
-If you run into issues during the installation, best make a thread on the [community portal Orion](https://orion.constellationlabs.io/accounts/login/?next=/) or ask a quick question on the Constellation [Discord server](http://Discordapp.com/).
+If you run into issues during the installation, best make a thread on the [community portal **Orion**](https://orion.constellationlabs.io/accounts/login/?next=/) or ask a quick question on the Constellation [discord server](http://Discordapp.com/).
 
 If you discover a bug, please open a ticket using the github issue function. If you don't know the resolution, follow standar github reporting guidelines, stating your system, what you did and tried. 
 
- Note: For software support, please ask on discord first.
+For software support, please first ask on discord.
 
 ## :two_hearts: Community write-ups
 1. [Vagrant setup for windows](https://drive.google.com/file/d/1xobpv4Ew1iCN9j-M-ItU6PsfnybHUryy/view)
 2. [Vagrant setup for ubuntu](https://docs.google.com/document/u/1/d/e/2PACX-1vST7vBIMxom99hKr5XyVFpM6TAs_pw-iqq403AktMWnqr3dxUFX5c0g9BWD5gU5TDPZVXKcW3HTWbVl/pub)
 
-We welcome community documentation and tutorials. You can share them on the [community portal Orion](https://orion.constellationlabs.io/accounts/login/?next=/) and on the Constellation [Discord server].
+We welcome community documentation and tutorials. You can share them on the [community portal Orion](https://orion.constellationlabs.io/accounts/login/?next=/) and on the Constellation [discord server].
