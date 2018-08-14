@@ -1,4 +1,7 @@
 # constellation
+
+[![Join the chat at https://gitter.im/constellation_protocol/Lobby](https://badges.gitter.im/constellation_protocol/Lobby.svg)](https://gitter.im/constellation_protocol/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 A blockchain microservice operating system
 
 # Building for development
