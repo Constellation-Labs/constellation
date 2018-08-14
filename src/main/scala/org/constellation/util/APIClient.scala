@@ -2,23 +2,41 @@ package org.constellation.util
 
 import java.util.concurrent.TimeUnit
 
+import akka.actor.ActorSystem
+import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.constellation.primitives.Schema.Id
 import org.json4s.{Formats, native}
 import org.json4s.native.Serialization
 import scalaj.http.{Http, HttpRequest, HttpResponse}
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
-class APIClient(val host: String = "127.0.0.1", val port: Int) {
+class APIClient (
+  implicit val system: ActorSystem,
+  implicit val executionContext: ExecutionContextExecutor,
+  implicit val materialize: ActorMaterializer) {
 
-  import scala.concurrent.ExecutionContext.Implicits.global
+  var hostName: String = "127.0.0.1"
+  var id: Id = _
 
   var udpPort: Int = 16180
-  var id: Id = _
-  var peerHttpPort: Int = _
+  var apiPort: Int = _
 
-  private val baseURI = s"http://$host:$port"
+  def setConnection(host: String = "127.0.0.1", port: Int): APIClient = {
+    hostName = host
+    apiPort = port
+    this
+  }
+
+  def udpAddress: String = hostName + ":" + udpPort
+
+  def setExternalIP(): Boolean = postSync("ip", hostName + ":" + udpPort).isSuccess
+
+  private def baseURI: String = {
+    val uri = s"http://$hostName:$apiPort"
+    uri
+  }
 
   def base(suffix: String) = s"$baseURI/$suffix"
 
@@ -65,7 +83,11 @@ class APIClient(val host: String = "127.0.0.1", val port: Int) {
   }
 
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
-    val res = postSync(suffix, b)
+    val res: HttpResponse[String] = postSync(suffix, b)
+    Serialization.read[T](res.body)
+  }
+
+  def read[T <: AnyRef](res: HttpResponse[String])(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): T = {
     Serialization.read[T](res.body)
   }
 
@@ -88,8 +110,14 @@ class APIClient(val host: String = "127.0.0.1", val port: Int) {
     Serialization.read[T](getBlockingStr(suffix, queryParams, timeoutSeconds))
   }
 
+  def readHttpResponseEntity[T <: AnyRef](response: String)
+                              (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
+    Serialization.read[T](response)
+  }
+
   def getBlockingStr(suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5): String = {
-    val resp = httpWithAuth(suffix, timeoutSeconds).params(queryParams).asString
+    val resp: HttpResponse[String] = httpWithAuth(suffix, timeoutSeconds).params(queryParams).asString
+
     resp.body
   }
 

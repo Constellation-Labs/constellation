@@ -14,7 +14,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 import com.softwaremill.macmemo.memoize
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
@@ -56,7 +56,7 @@ class API(
 
   val logger = Logger(s"APIInterface")
 
-  val config = ConfigFactory.load()
+  val config: Config = ConfigFactory.load()
 
   val authId = config.getString("auth.id")
   val authPassword = config.getString("auth.password")
@@ -229,11 +229,6 @@ class API(
 
   val getEndpoints: Route =
     extractClientIP { clientIP =>
-      //  numAPICalls += 1
-      /*      logger.debug(s"Client IP " +
-              s"$clientIP ${clientIP.getAddress()} " +
-              s"${clientIP.toIP} ${clientIP.toOption.map{_.getCanonicalHostName}} ${clientIP.getPort()}"
-            )*/
       get {
         path("balance") {
           complete(validLedger.getOrElse(selfAddress.address, 0L).toString)
@@ -251,51 +246,57 @@ class API(
               handleSendRequest(SendToAddress(address, amount.toLong))
             }
           } ~
-          pathPrefix("address") {
-            get {
-              extractUnmatchedPath { p =>
-                logger.debug(s"Unmatched path on address result $p")
-                val ps = p.toString().tail
-                val balance = validLedger.getOrElse(ps, 0).toString
-                complete(s"Balance: $balance")
-              }
-            }
+          pathPrefix("address" / Remaining) { hash =>
+            val balance = validLedger.getOrElse(hash, 0).toString
+
+            complete(s"Balance: $balance")
           } ~
-          pathPrefix("txHash") { // TODO: Rename to transaction
+          pathPrefix("txHash") { // TODO: remove reference in ui and use the /transaction route instead
             extractUnmatchedPath { p =>
-              logger.debug(s"Unmatched path on txHash result $p")
-              val ps = p.toString().tail
-              complete(lookupTransactionDB(ps).prettyJson)
+              val transactionHash = p.toString().tail
+
+              complete(lookupTransactionDB(transactionHash).prettyJson)
             }
           } ~
           pathPrefix("transaction") {
             extractUnmatchedPath { p =>
-              //   logger.debug(s"Unmatched path on address result $p")
-              val ps = p.toString().tail
-              complete(lookupTransactionDB(ps))
+              val transactionHash = p.toString().tail
+
+              complete(lookupTransactionDB(transactionHash).prettyJson)
+            }
+          } ~
+          pathPrefix("maxBundle") {
+            val genesisTx = genesisBundle.map(b => b.extractTXDB.head)
+
+            if (genesisTx.isDefined && maxBundle.isDefined) {
+              val maybeSheaf = lookupBundleDBFallbackBlocking(maxBundle.get.hash)
+
+              complete(Some(MaxBundleGenesisHashQueryResponse(genesisBundle, genesisTx, maybeSheaf)))
+            } else {
+              complete(None)
             }
           } ~
           pathPrefix("bundle") {
             extractUnmatchedPath { p =>
               logger.debug(s"Unmatched path on bundle direct result $p")
-              val ps = p.toString().tail
+              val bundleHash = p.toString().tail
 
-              //findAncestorsUpTo()
-              val maybeSheaf = lookupBundleDBFallbackBlocking(ps)
+              val maybeSheaf = lookupBundleDBFallbackBlocking(bundleHash)
+
               complete(maybeSheaf)
             }
           } ~
           pathPrefix("fullBundle") {
             extractUnmatchedPath { p =>
               logger.debug(s"Unmatched path on fullBundle result $p")
-              val ps = p.toString().split("/").last
-              val maybeSheaf = lookupBundle(ps)
+              val bundleHash = p.toString().split("/").last
+              val maybeSheaf = lookupBundleDBFallbackBlocking(bundleHash)
               complete(
                 BundleHashQueryResponse(
-                  ps,
+                  bundleHash,
                   maybeSheaf,
                   maybeSheaf
-                    .map(_.bundle.extractTX.toSeq.sortBy {
+                    .map(_.bundle.extractTXDB.toSeq.sortBy {
                       _.txData.time
                     })
                     .getOrElse(Seq())
@@ -305,11 +306,10 @@ class API(
           } ~ pathPrefix("download") {
           extractUnmatchedPath { p =>
             Try {
-              logger.debug(s"Unmatched path on download result $p")
-              val ps = p.toString().split("/").last
-              //logger.debug(s"Looking up bundle hash $ps")
-              val ancestors = findAncestorsUpTo(ps, Seq(), upTo = 10)
-              //logger.debug(s"Found ${ancestors.size} ancestors : $ancestors")
+              val bundleHash = p.toString().split("/").last
+
+              val ancestors = findAncestorsUpTo(bundleHash, Seq(), upTo = 10)
+
               val res = ancestors.map { a =>
                 BundleHashQueryResponse(
                   a.bundle.hash,
@@ -319,6 +319,7 @@ class API(
                   }
                 )
               }
+
               complete(res)
             } match {
               case Success(x) => x
@@ -332,8 +333,9 @@ class API(
             extractUnmatchedPath { p =>
               logger.debug(s"Unmatched path on download result $p")
               val ps = p.toString().split("/").last
-              //logger.debug(s"Looking up bundle hash $ps")
+
               val ancestors = findAncestorsUpTo(ps, Seq(), upTo = 101)
+
               complete(ancestors.map {
                 _.bundle.hash
               })
@@ -389,9 +391,6 @@ class API(
             complete(wallet)
           } ~
           path("selfAddress") {
-            //  val pair = constellation.makeKeyPair()
-            //  wallet :+= pair
-            //  complete(constellation.pubKeyToAddress(pair.getPublic))
             complete(id.address)
           } ~
           path("id") {
@@ -415,16 +414,6 @@ class API(
           path("actorPath") {
             complete(peerToPeerActor.path.toSerializationFormat)
           } ~
-          path("balance") {
-            entity(as[PublicKey]) { account =>
-              logger.debug(
-                s"Received request to query account $account balance")
-              // TODO: update balance
-              // complete((chainStateActor ? GetBalance(account)).mapTo[Balance])
-
-              complete(StatusCodes.OK)
-            }
-          } ~
           path("dashboard") {
 
             val transactions = last100ValidBundleMetaData.reverse
@@ -443,7 +432,9 @@ class API(
                       e.txData.data.src,
                       e.txData.data.dst,
                       e.txData.data.normalizedAmount,
-                      t._2))
+                      t._2,
+                      e.txData.time
+                    ))
               })
 
             var peerMap: Seq[Node] = peers
@@ -494,7 +485,6 @@ class API(
 
   private val postEndpoints =
     post {
-      //    numAPICalls += 1 // <- This breaks literally everything.
       path("startRandomTX") {
         sendRandomTXV2 = !sendRandomTXV2
         complete(sendRandomTXV2.toString)
@@ -509,14 +499,18 @@ class API(
         val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse[String]]]]
         val res = response.getOpt().map{
           idMap =>
+
             val res = idMap.map{
               case (id, fut) =>
                 val maybeResponse = fut.getOpt()
              //   println(s"Maybe response $maybeResponse")
                 id -> maybeResponse.exists{_.isSuccess}
             }.toSeq
+
             complete(res)
+
         }.getOrElse(complete(StatusCodes.InternalServerError))
+
         res
       } ~
         path("acceptGenesisOE") {
@@ -544,6 +538,10 @@ class API(
           entity(as[Set[Id]]) { ids =>
             complete(createGenesisAndInitialDistributionOE(ids))
           }
+        } ~
+        path("initializeDownload") {
+          downloadMode = true
+          complete(StatusCodes.OK)
         } ~
         path("disableDownload") {
           downloadMode = false
@@ -580,23 +578,16 @@ class API(
           }
         } ~
         path("rxBundle") {
-          entity(as[Bundle]) { b =>
-    //        println("api handle bundle")
-            //handleBundle(b)
-           peerToPeerActor ! b
-            complete(StatusCodes.OK)
+          entity(as[Bundle]) { bundle =>
+           peerToPeerActor ! bundle
+
+           complete(StatusCodes.OK)
           }
         } ~
         path("handleTransaction") {
           entity(as[Transaction]) { tx =>
             peerToPeerActor ! Transaction
-            /*
-            if (lookupTransaction(tx.hash).isEmpty) {
-              storeTransaction(tx)
-              numSyncedTX += 1
-            }
-            syncPendingTXHashes -= tx.hash
-            txSyncRequestTime.remove(tx.hash)*/
+
             complete(StatusCodes.OK)
           }
         } ~
@@ -610,7 +601,6 @@ class API(
         } ~
         path("batchTXRequest") {
           entity(as[BatchTXHashRequest]) { bhr =>
-            //     println("API batch tx request.")
             complete(bhr.hashes.flatMap{lookupTransactionDBFallbackBlocking})
           }
         } ~
@@ -634,11 +624,8 @@ class API(
         path("addPeerV2"){
           entity(as[AddPeerRequest]) { e =>
 
-         //   println("addpeerv2")
             peerManager ! e
-            /*askRes.mapTo[HashSignature].getOpt().map{
-              complete(_)
-            }.getOrElse(complete(StatusCodes.InternalServerError))*/
+
             complete(StatusCodes.OK)
           }
         } ~
@@ -751,10 +738,6 @@ class API(
     }
   }
 
-  val authRoutes = faviconRoute ~ routes /* authenticateBasic(realm = "secure site",
-                                                    myUserPassAuthenticator) {
-    user =>
-      routes
-  }*/
+  val authRoutes = faviconRoute ~ routes
 
 }

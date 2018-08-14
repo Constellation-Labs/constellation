@@ -51,7 +51,7 @@ object UploadChain {
 
 
     val mappings2 = getPodMappings("constellation-app")
-    val apisProd = mappings2.map { z => new APIClient(z.externalIP, 9000) }
+    val apisProd = mappings2.map { z => new APIClient().setConnection(z.externalIP, 9000) }
 
     val mp = apisProd.map {
       _.getBlocking[Metrics]("metrics").metrics

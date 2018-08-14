@@ -7,7 +7,6 @@ import scala.collection.concurrent.TrieMap
 
 class ActiveDAGManager {
 
-
   @volatile var activeSheafs: Seq[Sheaf] = Seq()
 
   implicit val ordering: Ordering[Sheaf] = Ordering.by{ s: Sheaf => -1 * s.totalScore.getOrElse(0D)}
@@ -39,8 +38,6 @@ class ActiveDAGManager {
 
   def cleanup(height: Int): Unit = {
 
-
-
     // Add stuff in here to cleanup from bundleToSheaf and DB including their sub-bundles.
     val lowHeightSheafs = activeSheafs.filter(j => j.height.get < (height - 2))
     lowHeightSheafs.foreach(removeSheaf)
@@ -56,6 +53,7 @@ class ActiveDAGManager {
         if (c.members.size > 10) cellKeyToCell(ck) = c.copy(members = c.members.take(5))
     }
 
+
     //activeSheafs.groupBy(z => z.bundle.ex z.bundle.maxStackDepth)
     
     if (activeSheafs.size > 200) {
@@ -63,7 +61,6 @@ class ActiveDAGManager {
         removeSheaf
       }
     }
-
 
   }
 

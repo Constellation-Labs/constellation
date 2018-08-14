@@ -15,6 +15,8 @@ trait PeerInfo {
 
   @volatile var deadPeers: Seq[InetSocketAddress] = Seq()
 
+  @volatile var bannedIPs: Seq[InetSocketAddress] = Seq.empty[InetSocketAddress]
+
   val lastPeerRX : TrieMap[Id, Long] = TrieMap()
 
   val peersAwaitingAuthenticationToNumAttempts: TrieMap[InetSocketAddress, Int] = TrieMap()
@@ -33,7 +35,7 @@ trait PeerInfo {
       signedPeerIDLookup.get(id).map { p =>
         val a = p.data.externalHostString
    //     println("Updating api client send to hostname : " + a)
-        val client = new APIClient(a, p.data.apiAddress.map{_.getPort}.getOrElse(9000))
+        val client = new APIClient().setConnection(a, p.data.apiAddress.map{_.getPort}.getOrElse(9000))
         rawPeerLookup(id) = LocalPeerData(client)
         client
 
@@ -50,6 +52,5 @@ trait PeerInfo {
   def peerIPs: Set[InetSocketAddress] = signedPeerLookup.values.flatMap(z => z.data.externalAddress).toSet
 
   def peers: Seq[Signed[Peer]] = signedPeerLookup.values.toSeq.distinct
-
 
 }
