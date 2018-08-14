@@ -13,7 +13,7 @@ constellation
 └── src
     ├── it                                 <─── continuous integration
     ├── main/scala/org/constellation
-        ├── consensus
+        ├── consensus                      <─── consensus algorithm implementation
         ├── crypto
         ├── API.scala
         └── LevelDB.scala
