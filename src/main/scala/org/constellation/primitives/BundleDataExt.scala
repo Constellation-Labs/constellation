@@ -14,7 +14,6 @@ import org.constellation.primitives.Schema._
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
 
-
 trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   // @volatile var db: LevelDB
@@ -22,6 +21,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
   var confirmWindow : Int
 
   var genesisBundle : Option[Bundle] = None
+
   def genesisTXHash: Option[String] = genesisBundle.map{_.extractTX.head.hash}
 
   @volatile var last100ValidBundleMetaData : Seq[Sheaf] = Seq()
@@ -52,6 +52,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
       numDeletedBundles += 1
       bundleToSheaf.remove(hash)
     }
+
     if (dbDelete) {
       dbActor.foreach {
         _ ! DBDelete(hash)
@@ -102,7 +103,6 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     val hash = sheaf.bundle.hash
     bundleToSheaf(hash) = sheaf
     dbActor.foreach{_ ! DBPut(hash, sheaf)}
-    // Try{db.put(bundleMetaData.bundle.hash, bundleMetaData)}
   }
 
   def processPeerSyncHeartbeat(psh: PeerSyncHeartbeat): Unit = {
@@ -152,14 +152,12 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
       s"score: $score, totalScore: $totalScore, height: ${meta.map{_.height}}, " +
       s"parent: ${meta.map{_.bundle.extractParentBundleHash.pbHash.slice(0, 5)}} firstId: ${b.extractIds.head.short}"
 
-
     def extractTX: Set[Transaction] = b.extractTXHash.flatMap{ z => lookupTransaction(z.txHash)}
     def extractTXDB: Set[Transaction] = b.extractTXHash.flatMap{ z => lookupTransactionDBFallbackBlocking(z.txHash)}
 
     def reputationUpdate: Map[String, Long] = {
       b.extractIds.map{_.b58 -> 1L}.toMap
     }
-
   }
 
   implicit class SheafExt(s: Sheaf) {
@@ -204,9 +202,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
       updateMaxBundle(updatedRightScore)
       updatedRightScore
     }
-
   }
-
 
   def jaccard[T](t1: Set[T], t2: Set[T]): Double = {
     t1.intersect(t2).size.toDouble / t1.union(t2).size.toDouble
@@ -220,6 +216,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
                      ancestors: Seq[Sheaf] = Seq()
                    ): Seq[Sheaf] = {
     val parent = lookupBundle(parentHash)
+
     if (parent.isEmpty) {
       if (parentHash != "coinbase") {
         syncPendingBundleHashes += parentHash
@@ -248,6 +245,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
         syncPendingBundleHashes += parentHash
       }
       ancestors
+
     }
     else if (parent.get.isResolved) {
       updatedAncestors
@@ -264,6 +262,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   @memoize(1000, 600.seconds)
   private def findAncestorsUpToLastResolvedIterative(parentHash: String,
+
                                             maxDepth: Int = 2000): Seq[Sheaf] = {
     var currentSheaf = lookupBundleDBFallbackBlocking(parentHash)
     var ancestors: List[Sheaf] = List()
@@ -272,6 +271,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
       val parent = currentSheaf.get
       ancestors = parent +: ancestors
       val parentHash = parent.bundle.extractParentBundleHash.pbHash
+
       currentSheaf = lookupBundleDBFallbackBlocking(parentHash)
       if (currentSheaf.isEmpty) {
         if (parentHash != "coinbase") {
@@ -291,6 +291,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
                          upTo: Int = 1
                        ): Seq[Sheaf] = {
     val parent = lookupBundleDBFallbackBlocking(parentHash)
+
     def updatedAncestors: Seq[Sheaf] = Seq(parent.get) ++ ancestors
     if (parent.isEmpty || updatedAncestors.size >= upTo) {
       ancestors
@@ -304,25 +305,27 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     }
   }
 
-
-
   def updateMaxBundle(sheaf: Sheaf): Unit = {
 
     val genCheck = totalNumValidatedTX == 1 || sheaf.bundle.maxStackDepth >= 2 // TODO : Possibly move this only to mempool emit
 
-    if (sheaf.totalScore.get > maxBundle.get.totalScore.get && genCheck) {
-      maxBundleMetaData.synchronized {
+    if (sheaf.totalScore.isDefined && maxBundle.isEmpty || sheaf.totalScore.get >= maxBundle.get.totalScore.get && genCheck) {
+
         maxBundleMetaData = Some(sheaf)
+
         val ancestors = findAncestorsUpTo(
           sheaf.bundle.extractParentBundleHash.pbHash,
           upTo = 100
         )
+
         val height = sheaf.height.get
+
         if (height > confirmWindow) {
           if (downloadInProgress) {
             downloadInProgress = false
             downloadMode = false
           }
+
           totalNumValidBundles = height - confirmWindow
         }
 
@@ -335,15 +338,12 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
      //   if (height % 10 == 0) {
           newTX.foreach(t => lookupTransactionDBFallbackBlocking(t.txHash).foreach {acceptTransaction})
        // }
-
-      }
     }
 
     // Set this to be active for the combiners.
     if (!activeDAGBundles.contains(sheaf) &&
-      !sheaf.bundle.extractIds.contains(id) && sheaf.bundle != genesisBundle.get && !downloadMode && !downloadInProgress) {
+      !sheaf.bundle.extractIds.contains(id) && sheaf.bundle != genesisBundle.get) {
       activeDAGManager.acceptSheaf(sheaf)
-      //activeDAGBundles :+= bundleMetaData
     }
   }
 
@@ -363,7 +363,6 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
       val chain = chainR.map{
         c =>
           val res = resolveTransactions(c.bundle.extractTXHash.map{_.txHash})
-          // println(s"RESOLVE TRANSACTIONS: $res ${c.bundle.hash.slice(0, 5)}")
           c.copy(transactionsResolved = res)
         //if (c.transactionsResolved != res) {
         //            db.put(c.bundle.hash, c.copy(transactionsResolved = res))
@@ -376,8 +375,6 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
       // TODO: Change to recursion to implement abort-early fold
 
       chain.fold(ancestors.head) { sheafResolveAdditionMonoid.combine}
-
-
     }
 
     /* println(s"RX on ${id.short} BUNDLE ${zero.bundle.hash.slice(0, 5)} " +
@@ -386,7 +383,6 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
        a => a.bundle.hash.slice(0, 5) + "_txResolved:" + a.transactionsResolved + "_" + a.totalScore}
        }" )
  */
-
   }
 
   def resolveTransactions(txs: Set[String]): Boolean = {
@@ -396,9 +392,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     missing.isEmpty
   }
 
-
   def handleBundle(bundle: Bundle): Unit = {
-
 
     if (syncPendingBundleHashes.contains(bundle.hash)) {
       numSyncedBundles += 1
@@ -406,15 +400,15 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     }
 
     totalNumBundleMessages += 1
+
     val parentHash = bundle.extractParentBundleHash.pbHash
     val bmd = lookupBundle(bundle.hash)
     val notPresent = bmd.isEmpty
 
     val txs = bundle.extractTXHash.map{_.txHash}
+
     if (txs.nonEmpty) {
-
       val txResolved = resolveTransactions(txs)
-
 
       val zero = if (notPresent) {
         totalNumNewBundleAdditions += 1

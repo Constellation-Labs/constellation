@@ -19,10 +19,9 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
   }
 
   def createGenesis(tx: Transaction): Unit = {
-    acceptGenesis(Bundle(BundleData(Seq(ParentBundleHash("coinbase"), TransactionHash(tx.hash))).signed()), tx)
     downloadMode = false
+    acceptGenesis(Bundle(BundleData(Seq(ParentBundleHash("coinbase"), TransactionHash(tx.hash))).signed()), tx)
   }
-
 
   def createGenesisAndInitialDistributionOE(ids: Set[Id]): GenesisObservation = {
     val debtAddress = makeKeyPair().address.address

@@ -12,7 +12,6 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
 
-
 class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
   with AsyncFlatSpecLike with Matchers with BeforeAndAfterAll {
 
@@ -30,7 +29,7 @@ class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSyst
 
     // Cleanup DBs
     val tmpDir = "tmp"
-    File(tmpDir).delete(true)
+    File(tmpDir).delete()
 
     val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false
     //  , generateRandomTransactions = true
@@ -41,17 +40,18 @@ class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSyst
     ))
 
     val apis = nodes.map{_.getAPIClient()}
-    val sim = new Simulation(apis)
+    val sim = new Simulation()
+
     //sim.run(attemptSetExternalIP = false
     //  , validationFractionAcceptable = 0.3
     //)
-    sim.runV2()
 
+    sim.runV2(apis = apis)
 
     // Thread.sleep(1000*60*60)
 
     // Cleanup DBs
-    File(tmpDir).delete(true)
+    File(tmpDir).delete()
 
     assert(true)
   }

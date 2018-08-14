@@ -26,7 +26,6 @@ trait MetricsExt {
   @volatile var allPeersHealthy = true
   @volatile var transactionsPerSecond = 1D
 
-
   def resetMetrics(): Unit = {
 
     totalNumGossipMessages = 0
@@ -50,7 +49,6 @@ trait MetricsExt {
     numMempoolEmits = 0L
     numValidBundleHashesRemovedFromMemory = 0L
     transactionsPerSecond = 1D
-
 
   }
 

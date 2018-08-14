@@ -21,8 +21,8 @@ class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
   def active(peerInfo: Map[Id, PeerData]): Receive = {
 
     case a @ AddPeerRequest(host, udpPort, port, id) =>
-      // println(s"Added peer $a")
-      val client = new APIClient(host, port)
+      val client = new APIClient()(context.system, context.dispatcher, materialize).setConnection(host, port)
+
       client.id = id
       context become active(peerInfo + (id -> PeerData(a, client)))
 
