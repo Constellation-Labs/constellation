@@ -517,18 +517,29 @@ class API(
           entity(as[GenesisObservation]) { go =>
 
             dbActor.foreach { db =>
+
+              // Store hashes for the edges
               go.genesis.store(db)
               go.initialDistribution.store(db)
-              val gtx = go.genesis.resolvedTX.head.transactionData
-              val distributionTX = go.genesis.resolvedTX.toSeq.map{_.transactionData}
-              db ! DBPut(gtx.dst, AddressCache(gtx.amount - distributionTX.map{_.amount}.sum, Some(1000D)))
-              distributionTX.foreach{ t =>
-                db ! DBPut(t.dst, AddressCache(t.amount, Some(1000D)))
-              }
-              metricsManager ! UpdateMetric("validTransactions", (1 + distributionTX.size).toString)
-              metricsManager ! UpdateMetric("uniqueAddressesInLedger", (1 + distributionTX.size).toString)
-              cellManager ! go
 
+              // Store the balance for the genesis TX minus the distribution along with starting rep score.
+              go.genesis.resolvedTX.foreach{
+                rtx =>
+                  db ! DBPut(
+                    rtx.dst.hash,
+                    AddressCacheData(rtx.amount - go.initialDistribution.resolvedTX.map{_.amount}.sum, Some(1000D))
+                  )
+              }
+
+              // Store the balance for the initial distribution addresses along with starting rep score.
+              go.initialDistribution.resolvedTX.foreach{ t =>
+                db ! DBPut(t.dst.hash, AddressCacheData(t.amount, Some(1000D)))
+              }
+
+              val numTX = (1 + go.initialDistribution.resolvedTX.size).toString
+              metricsManager ! UpdateMetric("validTransactions", numTX)
+              metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
+              cellManager ! go
             }
 
             complete(StatusCodes.OK)

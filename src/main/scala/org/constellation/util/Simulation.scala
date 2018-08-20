@@ -2,6 +2,8 @@ package org.constellation.util
 
 import java.util.concurrent.ForkJoinPool
 
+import com.typesafe.scalalogging.Logger
+
 import scala.concurrent.duration._
 import org.constellation.primitives.Schema._
 import constellation._
@@ -12,6 +14,8 @@ import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorServic
 import scala.util.{Random, Try}
 
 class Simulation {
+
+  val logger = Logger(s"Simulation")
 
   implicit val ec: ExecutionContextExecutorService =
     ExecutionContext.fromExecutorService(new ForkJoinPool(100))
@@ -86,13 +90,13 @@ class Simulation {
   def addPeersV2(apis: Seq[APIClient]): Seq[Future[Unit]] = {
     val results = apis.flatMap { a =>
       val ip = a.hostName
-      println(s"Trying to add nodes to $ip")
+      logger.info(s"Trying to add nodes to $ip")
       val others = apis.filter {_.id != a.id}.map { z => AddPeerRequest(z.hostName, z.udpPort, z.apiPort, z.id)}
       others.map {
         n =>
           Future {
             val res = a.postSync("addPeerV2", n)
-            println(s"Tried to add peer $n to $ip res: $res")
+            logger.info(s"Tried to add peer $n to $ip res: $res")
           }
       }
     }
@@ -101,7 +105,7 @@ class Simulation {
 
   def verifyPeersAdded(apis: Seq[APIClient]): Boolean = apis.forall { api =>
     val peers = api.getBlocking[Seq[Peer]]("peerids")
-    println("Peers length: " + peers.length)
+    logger.info("Peers length: " + peers.length)
     peers.length == (apis.length - 1)
   }
 
@@ -211,7 +215,7 @@ class Simulation {
         healthChecks = Int.MaxValue
       } else {
         healthChecks += 1
-        println(s"Unhealthy nodes. Waiting 30s. Num attempts: $healthChecks out of 10")
+        logger.error(s"Unhealthy nodes. Waiting 30s. Num attempts: $healthChecks out of 10")
         Thread.sleep(30000)
 
       }
@@ -220,6 +224,7 @@ class Simulation {
   }
 
   def runV2(attemptSetExternalIP: Boolean = false, apis: Seq[APIClient]): Unit = {
+
     awaitHealthy(apis)
 
     setIdLocal(apis)
@@ -227,8 +232,12 @@ class Simulation {
     if (attemptSetExternalIP) {
       assert(setExternalIP(apis))
     }
+
+    // Temporary for disabling V1 trigger
     apis.foreach(_.postEmpty("disableDownload"))
-    val results = addPeersV2(apis)
+
+    //val results =
+    addPeersV2(apis)
     //import scala.concurrent.duration._
     //Await.result(Future.sequence(results), 60.seconds)
     Thread.sleep(5000)

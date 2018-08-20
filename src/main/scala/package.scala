@@ -15,6 +15,7 @@ import org.constellation.crypto.KeyUtilsExt
 import org.constellation.primitives.Schema._
 import org.constellation.util.{POWExt, POWSignHelp}
 import org.json4s.JsonAST.{JInt, JString}
+import org.json4s.ext.EnumNameSerializer
 import org.json4s.native._
 import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, ShortTypeHints}
 
@@ -60,7 +61,7 @@ package object constellation extends KeyUtilsExt with POWExt
 
   implicit val constellationFormats: Formats = DefaultFormats +
     new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer + new InetSocketAddressSerializer +
-  ShortTypeHints(List(classOf[TransactionHash], classOf[ParentBundleHash], classOf[Bundle]))
+  ShortTypeHints(List(classOf[TransactionHash], classOf[ParentBundleHash], classOf[Bundle])) + new EnumNameSerializer(EdgeHashType)
 
   def caseClassToJson(message: Any): String = {
     compactRender(Extraction.decompose(message))
