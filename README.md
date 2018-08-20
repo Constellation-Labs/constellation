@@ -1,5 +1,5 @@
 # Constellation
-A blockchain microservice operating system.
+Decentralized Application Integration Platform.
 
 This is the reference implementation supporting our 
 [DAG](https://en.wikipedia.org/wiki/Directed_acyclic_graph) 
