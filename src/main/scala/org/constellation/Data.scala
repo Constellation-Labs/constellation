@@ -12,7 +12,8 @@ class Data extends MetricsExt
   with NodeData
   with Ledger
   with TransactionExt
-  with Genesis {
+  with Genesis
+  with EdgeDAO {
 
   val logger = Logger(s"Data")
 

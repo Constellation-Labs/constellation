@@ -152,7 +152,7 @@ object Schema {
 
   object EdgeHashType extends Enumeration {
     type EdgeHashType = Value
-    val AddressHash, CheckpointHash, TransactionDataHash, ValidationHash, TransactionHash = Value
+    val AddressHash, CheckpointDataHash, CheckpointHash, TransactionDataHash, ValidationHash, TransactionHash = Value
   }
 
   case class TransactionEdgeData(amount: Long, salt: Long = Random.nextLong()) extends ProductHash
@@ -184,7 +184,7 @@ object Schema {
 
   }
 
-  case class ResolvedCB(edge: ResolvedEdgeData[SignedObservationEdge, CheckpointEdgeData, Nothing])
+  case class ResolvedCB(edge: ResolvedEdgeData[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData])
 
   case class ResolvedEdgeData[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
   (

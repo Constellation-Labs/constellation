@@ -8,6 +8,7 @@ class NodeManager(keyManager: ActorRef, metricsManager: ActorRef) extends Actor 
   override def receive: Receive = {
 
     case s: SendToAddress =>
+
       metricsManager ! IncrementMetric("sentTransactions")
       keyManager ! s
 
