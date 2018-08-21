@@ -23,12 +23,12 @@ constellation
 ```
 
 ## :computer: Building for development
-### On Mac and Linux
-1. Check out repository 
+### On Linux and Mac
+1. Check out the repository 
 ```haskell
 git clone git@github.com:Constellation-Labs/constellation.git
 ```
-2. From root directory ``constellation, run 
+2. From root directory `constellation`, run 
 ```haskell
 ./build.sh
 ```
@@ -42,14 +42,15 @@ http://localhost:9000.
 Look at the file _API.scala_ for endpoints.
 
 ### Docker execution 
-This is assuming you have docker already set up.
+
+Note: *For now this installation is not covered here in detail.*
 
 #### Install docker locally
 We make use of the [docker](https://www.docker.com/) toolset.
 
-Note: *For now this installation is not covered here in detai*
+**We will publish docker images to dockerhub soon.**
 
-**We will publish docker images to dockerhub soon(ish).**
+The following is assuming you have docker set up:
 
 1. Follow directions for building for development (other than step 4).
 2. Run
@@ -61,7 +62,7 @@ sbt docker:publishLocal
 ./run-local-docker.sh
 ```
 
-For windows, just grab the docker ```cmd``` from the file and run directly.
+For Windows, just grab the docker ```cmd``` from the file and run directly.
 
 ### Vagrant execution
 This is **deprecated** but may be useful for people running Windows, etc.:
@@ -79,9 +80,11 @@ from project directory. See also
 We intend to use **Swagger** or similar to publish comprehensive API docs.
 
 ## :rotating_light: Troubleshooting
-If you run into issues during the installation, best make a thread on the [community portal **Orion**](https://orion.constellationlabs.io/accounts/login/?next=/) or ask a quick question on the Constellation [discord server](http://Discordapp.com/).
-
 Should you discover a bug, please open a ticket using the github issue function. If you don't know the resolution, follow standar github reporting guidelines, stating your system, what you did and tried. 
 
-For software support and contributions :two_hearts:, you can find links to the community outlets as well as more documentation and developer tools in the 
+If you run into issues during the installation and for general software support, best make a thread on the [community portal **Orion**](https://orion.constellationlabs.io/accounts/login/?next=/) or ask a quick question on the Constellation [discord server](http://Discordapp.com/). 
+
+---
+
+For more documentation and developer tools, as well a community constributions :two_hearts:, contribution guidelines and so on, you can find links to the community outlets in the 
 [**resource list**](https://github.com/Constellation-Labs/awesome-constellation). 
