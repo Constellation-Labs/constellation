@@ -40,7 +40,7 @@ class KeyManager(var keyPair: KeyPair = null, memPoolManager: ActorRef, metricsM
     case s: SendToAddress =>
       val txData = TransactionData(address, s.dst, s.amountActual)
       val sig = hashSignBatchZeroTyped(txData, keyPair)
-      memPoolManager ! ResolvedTX(TX(sig), txData)
+      // memPoolManager ! ResolvedTX(TX(sig), txData)
       updateSignedMetrics()
 
   }

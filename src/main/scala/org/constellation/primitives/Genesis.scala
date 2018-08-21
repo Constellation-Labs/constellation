@@ -5,6 +5,8 @@ import constellation._
 
 trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataExt {
 
+  val CoinBaseHash = "coinbase"
+
   def acceptGenesis(b: Bundle, tx: Transaction): Unit = {
     storeTransaction(tx)
     genesisBundle = Some(b)
@@ -24,27 +26,45 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
   }
 
   def createGenesisAndInitialDistributionOE(ids: Set[Id]): GenesisObservation = {
+
     val debtAddress = makeKeyPair().address.address
-    val ResolvedTX(tx, txData) = createTransactionSafeBatchOE(debtAddress, selfAddressStr, 4e9.toLong, keyPair)
-    val cb = CheckpointBlock(Set(tx.hash))
-    val oe = ObservationEdge("coinbase", cb.hash)
+
+    val redTXGenesis = createTransactionSafeBatchOE(debtAddress, selfAddressStr, 4e9.toLong, keyPair)
+
+    val cb = CheckpointEdgeData(Seq(redTXGenesis.signedObservationEdge.signatureBatch.hash))
+
+    val oe = ObservationEdge(
+      TypedEdgeHash(CoinBaseHash, EdgeHashType.ValidationHash), TypedEdgeHash(cb.hash, EdgeHashType.CheckpointHash)
+    )
+
     val soe = signedObservationEdge(oe)
 
-    val genesisTip = ResolvedTipObservation(Set(ResolvedTX(tx, txData)), cb, oe, soe)
+    val roe = ResolvedObservationEdge(null.asInstanceOf[SignedObservationEdge], cb)
 
-    val distr = ids.map{ id =>
+    val redGenesis = ResolvedEdgeData(oe, soe, roe)
+
+    val genesisCBO = ResolvedCBObservation(Seq(ResolvedTX(redTXGenesis)), ResolvedCB(redGenesis))
+
+    val distr = ids.toSeq.map{ id =>
       createTransactionSafeBatchOE(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
     }
 
-    val distrCB = CheckpointBlock(distr.map{_.tx.hash})
-    val distrOE = ObservationEdge(soe.hash, distrCB.hash)
-    val distrSOE = signedObservationEdge(distrOE)
+    val distrCB = CheckpointEdgeData(distr.map{_.signedObservationEdge.signatureBatch.hash})
 
-    val distrTip = ResolvedTipObservation(
-      distr, distrCB, distrOE, distrSOE
+    val distrOE = ObservationEdge(
+      TypedEdgeHash(soe.signatureBatch.hash, EdgeHashType.ValidationHash),
+      TypedEdgeHash(distrCB.hash, EdgeHashType.CheckpointHash)
     )
 
-    GenesisObservation(genesisTip, distrTip)
+    val distrSOE = signedObservationEdge(distrOE)
+
+    val distrROE = ResolvedObservationEdge(soe, distrCB)
+
+    val distrRED = ResolvedEdgeData(distrOE, distrSOE, distrROE)
+
+    val distrCBO = ResolvedCBObservation(distr.map{ResolvedTX}, ResolvedCB(distrRED))
+
+    GenesisObservation(genesisCBO, distrCBO)
 
   }
 

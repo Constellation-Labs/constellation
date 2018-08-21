@@ -27,6 +27,11 @@ class CellManager(memPoolManager: ActorRef, metricsManager: ActorRef, peerManage
 
     case g: GenesisObservation =>
 
+      g.initialDistribution.resolvedCB.edge
+
+
+
+/*
       val soe = g.initialDistribution.signedObservationEdge
       val genesisHash = g.genesis.signedObservationEdge.hash
       val ck = CellKey(genesisHash, 1, 1)
@@ -34,7 +39,7 @@ class CellManager(memPoolManager: ActorRef, metricsManager: ActorRef, peerManage
       metricsManager ! IncrementMetric("cellsCreated")
       metricsManager ! UpdateMetric("genesisOEHash", genesisHash)
       setCellSize(updatedCells.size)
-      context become active(updatedCells)
+      context become active(updatedCells)*/
   }
 }
 

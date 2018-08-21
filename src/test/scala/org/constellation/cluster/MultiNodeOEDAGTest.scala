@@ -11,6 +11,7 @@ import org.constellation.util.{Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
+import scala.util.Try
 
 class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
   with AsyncFlatSpecLike with Matchers with BeforeAndAfterAll {
@@ -29,7 +30,7 @@ class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSyst
 
     // Cleanup DBs
     val tmpDir = "tmp"
-    File(tmpDir).delete()
+    Try{File(tmpDir).delete()}
 
     val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false
     //  , generateRandomTransactions = true

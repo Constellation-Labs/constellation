@@ -6,6 +6,7 @@ import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey
 import org.constellation.p2p.SerializedUDPMessage
+import org.constellation.primitives.Schema.EdgeHashType
 import org.constellation.primitives.Schema._
 import org.constellation.util.{EncodedPublicKey, HashSignature, SignatureBatch, Signed}
 
@@ -16,13 +17,18 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
 
   def registerClasses(kryo: Kryo): Unit = {
 
-    kryo.register(classOf[AddressCache])
+    kryo.register(classOf[AddressCacheData])
     kryo.register(classOf[SignatureBatch])
     kryo.register(classOf[HashSignature])
     kryo.register(classOf[TX])
     kryo.register(classOf[SignedObservationEdge])
     kryo.register(classOf[ObservationEdge])
     kryo.register(classOf[CheckpointBlock])
+    kryo.register(classOf[TypedEdgeHash])
+  //  kryo.register(classOf[EdgeHashType])
+    kryo.register(classOf[Enumeration#Value])
+    kryo.register(classOf[TransactionEdgeData])
+    kryo.register(classOf[CheckpointEdgeData])
 
     kryo.register(classOf[DownloadRequest])
     kryo.register(classOf[ParentBundleHash])
@@ -89,6 +95,8 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
 
     kryo.register(classOf[AddressMetaData])
 
+    kryo.register(Class.forName("org.constellation.primitives.Schema$EdgeHashType$"))
+    kryo.register(Class.forName("scala.Enumeration$Val"))
     kryo.register(Class.forName("scala.collection.immutable.HashSet$HashSet1"))
     kryo.register(Class.forName("scala.collection.immutable.Set$EmptySet$"))
     kryo.register(Class.forName("scala.collection.immutable.$colon$colon"))

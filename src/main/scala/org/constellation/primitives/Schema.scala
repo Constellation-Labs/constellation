@@ -10,6 +10,7 @@ import constellation.pubKeyToAddress
 import org.constellation.LevelDB.DBPut
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.Base58
+import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 
 import scala.collection.{SortedSet, mutable}
@@ -85,11 +86,11 @@ object Schema {
   sealed trait Fiber
 
   case class TransactionData(
-                     src: String,
-                     dst: String,
-                     amount: Long,
-                     salt: Long = Random.nextLong() // To ensure hash uniqueness.
-                   ) extends ProductHash with GossipMessage {
+                              src: String,
+                              dst: String,
+                              amount: Long,
+                              salt: Long = Random.nextLong() // To ensure hash uniqueness.
+                            ) extends ProductHash with GossipMessage {
     def hashType = "TransactionData"
     def inverseAmount: Long = -1*amount
     def normalizedAmount: Long = amount / NormalizationFactor
@@ -115,8 +116,8 @@ object Schema {
 
   }
   case class Transaction(
-                 txData: Signed[TransactionData]
-               ) extends Fiber with GossipMessage with ProductHash with RemoteMessage {
+                          txData: Signed[TransactionData]
+                        ) extends Fiber with GossipMessage with ProductHash with RemoteMessage {
     def valid: Boolean = txData.valid
   }
 
@@ -149,21 +150,63 @@ object Schema {
                                         numRequests: Int
                                       )
 
+  object EdgeHashType extends Enumeration {
+    type EdgeHashType = Value
+    val AddressHash, CheckpointHash, TransactionDataHash, ValidationHash, TransactionHash = Value
+  }
+
+  case class TransactionEdgeData(amount: Long, salt: Long = Random.nextLong()) extends ProductHash
+  case class CheckpointEdgeData(hashes: Seq[String]) extends ProductHash
+  case class TypedEdgeHash(hash: String, hashType: EdgeHashType)
+  case class ObservationEdge(left: TypedEdgeHash, right: TypedEdgeHash, data: Option[TypedEdgeHash] = None) extends ProductHash
+
+
+  case class ResolvedObservationEdge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
+  (left: L, right: R, data: Option[D] = None)
+
   // Order is like: TransactionData -> TX -> CheckpointBlock -> ObservationEdge -> SignedObservationEdge
 
   case class TX(signatureBatch: SignatureBatch) extends ProductHash
 
   case class CheckpointBlock(transactions: Set[String]) extends ProductHash
 
-  case class ObservationEdge(left: String, right: String) extends ProductHash
-
   case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash
 
   case class EdgeCell(members: mutable.SortedSet[EdgeSheaf])
 
-  case class ResolvedTX(tx: TX, transactionData: TransactionData)
+  case class ResolvedTX(edge: ResolvedEdgeData[Address, Address, TransactionEdgeData]) {
 
-  case class ResolvedEdge(edge: ObservationEdge, signed: SignedObservationEdge)
+    def src: Address = edge.resolvedObservationEdge.left
+    def dst: Address = edge.resolvedObservationEdge.right
+
+    // TODO: Add proper exception on empty option
+    def amount : Long = edge.resolvedObservationEdge.data.get.amount
+
+  }
+
+  case class ResolvedCB(edge: ResolvedEdgeData[SignedObservationEdge, CheckpointEdgeData, Nothing])
+
+  case class ResolvedEdgeData[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
+  (
+    observationEdge: ObservationEdge,
+    signedObservationEdge: SignedObservationEdge,
+    resolvedObservationEdge: ResolvedObservationEdge[L,R,D]
+  ) {
+
+    def store(db: ActorRef): Unit = {
+      db ! DBPut(signedObservationEdge.signatureBatch.hash, observationEdge)
+      db ! DBPut(signedObservationEdge.hash, signedObservationEdge)
+      resolvedObservationEdge.data.foreach {
+        ted =>
+          db ! DBPut(ted.hash, ted)
+      }
+    }
+
+  }
+
+  case class Address(address: String) extends ProductHash {
+    override def hash: String = address
+  }
 
   case class EdgeSheaf(
                         signedObservationEdge: SignedObservationEdge,
@@ -173,36 +216,31 @@ object Schema {
                         score: Double
                       )
 
-  case class AddressCache(balance: Long, reputation: Option[Double] = None)
+  case class AddressCacheData(balance: Long, reputation: Option[Double] = None)
 
 
-  case class ResolvedTipObservation(
-                                     resolvedTX: Set[ResolvedTX],
-                                     checkpointBlock: CheckpointBlock,
-                                     observationEdge: ObservationEdge,
-                                     signedObservationEdge: SignedObservationEdge
-                               ) {
+  case class ResolvedCBObservation(
+                                    resolvedTX: Seq[ResolvedTX],
+                                    resolvedCB: ResolvedCB
+                                  ) {
     def store(db: ActorRef): Unit = {
-        resolvedTX.foreach { rt =>
-          rt.tx.put(db)
-          rt.transactionData.put(db)
-        }
-        checkpointBlock.put(db)
-        observationEdge.put(db)
-        signedObservationEdge.put(db)
+      resolvedTX.foreach { rt =>
+        rt.edge.store(db)
       }
+      resolvedCB.edge.store(db)
+    }
   }
 
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
 
   case class GenesisObservation(
-                               genesis: ResolvedTipObservation,
-                               initialDistribution: ResolvedTipObservation
+                                 genesis: ResolvedCBObservation,
+                                 initialDistribution: ResolvedCBObservation
                                )
 
 
 
- // case class UnresolvedEdge(edge: )
+  // case class UnresolvedEdge(edge: )
 
   // TODO: Change options to ResolvedBundleMetaData
 
@@ -217,17 +255,17 @@ object Schema {
     * @param transactionsResolved : Whether or not the transaction hashes have been resolved.
     */
   case class Sheaf(
-                             bundle: Bundle,
-                             height: Option[Int] = None,
-                             reputations: Map[String, Long] = Map(),
-                             totalScore: Option[Double] = None,
-                             rxTime: Long = System.currentTimeMillis(),
-                             transactionsResolved: Boolean = false,
-                             parent: Option[Bundle] = None,
-                             child: Option[Bundle] = None,
-                             pendingChildren: Option[Seq[Bundle]] = None,
-                             neighbors: Option[Seq[Sheaf]] = None
-                           ) {
+                    bundle: Bundle,
+                    height: Option[Int] = None,
+                    reputations: Map[String, Long] = Map(),
+                    totalScore: Option[Double] = None,
+                    rxTime: Long = System.currentTimeMillis(),
+                    transactionsResolved: Boolean = false,
+                    parent: Option[Bundle] = None,
+                    child: Option[Bundle] = None,
+                    pendingChildren: Option[Seq[Bundle]] = None,
+                    neighbors: Option[Seq[Sheaf]] = None
+                  ) {
     def safeBundle = Option(bundle)
     def isResolved: Boolean = reputations.nonEmpty && transactionsResolved && height.nonEmpty && totalScore.nonEmpty
     def cellKey: CellKey = CellKey(bundle.extractParentBundleHash.pbHash, bundle.maxStackDepth, height.getOrElse(0))
@@ -517,7 +555,7 @@ object Schema {
                  ) extends ProductHash
 
   case class LocalPeerData(
-                          // initialAddAddress: String
+                            // initialAddAddress: String
                             //    mostRecentSignedPeer: Signed[Peer],
                             //    updatedPeer: Peer,
                             //    lastRXTime: Long = System.currentTimeMillis(),

@@ -7,6 +7,7 @@ import constellation.{hashSignBatchZeroTyped, _}
 import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema
+import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.primitives.Schema._
 
 object POW extends POWExt
@@ -180,12 +181,22 @@ trait POWSignHelp {
   }
 
   def createTransactionSafeBatchOE(
-                                    src: String, dst: String, amount: Long, keyPair: KeyPair, normalized: Boolean = true
-                                  ): ResolvedTX = {
+                                    src: String,
+                                    dst: String,
+                                    amount: Long,
+                                    keyPair: KeyPair,
+                                    normalized: Boolean = true
+                                  ): ResolvedEdgeData[Address, Address, TransactionEdgeData] = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
-    val txData = TransactionData(src, dst, amountToUse)
-    val sig = hashSignBatchZeroTyped(txData, keyPair)
-    ResolvedTX(TX(sig), txData)
+    val txData = TransactionEdgeData(amountToUse)
+    val dataHash = Some(TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash))
+    val oe = ObservationEdge(
+      TypedEdgeHash(src, EdgeHashType.AddressHash),
+      TypedEdgeHash(dst, EdgeHashType.AddressHash),
+      data = dataHash
+    )
+    val soe = signedObservationEdge(oe)(keyPair)
+    ResolvedEdgeData(oe, soe, ResolvedObservationEdge(Address(src), Address(dst), Some(txData)))
   }
 
 
