@@ -539,9 +539,18 @@ class API(
               val numTX = (1 + go.initialDistribution.resolvedTX.size).toString
               metricsManager ! UpdateMetric("validTransactions", numTX)
               metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
-              cellManager ! go
+
+              genesisObservation = Some(go)
+              activeTips = Seq(
+                TypedEdgeHash(go.genesis.resolvedCB.edge.signedObservationEdge.hash, EdgeHashType.CheckpointHash),
+                TypedEdgeHash(go.initialDistribution.resolvedCB.edge.signedObservationEdge.hash, EdgeHashType.CheckpointHash)
+              )
+
+              metricsManager ! UpdateMetric("activeTips", "2")
+
             }
 
+            // TODO: Report errors and add validity check
             complete(StatusCodes.OK)
           }
         } ~

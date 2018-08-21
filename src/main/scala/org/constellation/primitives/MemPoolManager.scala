@@ -10,7 +10,7 @@ class MemPoolManager(metricsManager: ActorRef) extends Actor {
   //    // First, we instantiate an LRU cache with capacity 3:
   //    scala> val cache = LRUCache[Int, String](3)
 
-  override def receive = active(Seq.empty)
+  override def receive: Receive = active(Seq.empty)
 
   def active(memPool: Seq[ResolvedTX]): Receive = {
     case rtx: ResolvedTX =>

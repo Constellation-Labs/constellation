@@ -186,7 +186,7 @@ trait POWSignHelp {
                                     amount: Long,
                                     keyPair: KeyPair,
                                     normalized: Boolean = true
-                                  ): ResolvedEdgeData[Address, Address, TransactionEdgeData] = {
+                                  ): ResolvedTX = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
     val txData = TransactionEdgeData(amountToUse)
     val dataHash = Some(TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash))
@@ -196,7 +196,7 @@ trait POWSignHelp {
       data = dataHash
     )
     val soe = signedObservationEdge(oe)(keyPair)
-    ResolvedEdgeData(oe, soe, ResolvedObservationEdge(Address(src), Address(dst), Some(txData)))
+    ResolvedTX(ResolvedEdgeData(oe, soe, ResolvedObservationEdge(Address(src), Address(dst), Some(txData))))
   }
 
 
