@@ -1,9 +1,9 @@
 # Constellation
 Decentralized Application Integration Platform.
 
-This is the reference implementation supporting our 
+This repository is the reference implementation of our 
 [DAG](https://en.wikipedia.org/wiki/Directed_acyclic_graph) 
-protocol, writting in the 
+protocol using the 
 [Scala](https://www.scala-lang.org/) 
 programming language.
 
@@ -70,7 +70,9 @@ This is **deprecated** but may be useful for people running Windows, etc.:
 ```haskell
 vagrant up
 ``` 
-from project directory.
+from project directory. See also
+* [Vagrant setup for windows](https://drive.google.com/file/d/1xobpv4Ew1iCN9j-M-ItU6PsfnybHUryy/view)
+* [Vagrant setup for ubuntu](https://docs.google.com/document/u/1/d/e/2PACX-1vST7vBIMxom99hKr5XyVFpM6TAs_pw-iqq403AktMWnqr3dxUFX5c0g9BWD5gU5TDPZVXKcW3HTWbVl/pub)
 
 ## :green_book: API Docs
 ### WIP 
@@ -79,12 +81,7 @@ We intend to use **Swagger** or similar to publish comprehensive API docs.
 ## :rotating_light: Troubleshooting
 If you run into issues during the installation, best make a thread on the [community portal **Orion**](https://orion.constellationlabs.io/accounts/login/?next=/) or ask a quick question on the Constellation [discord server](http://Discordapp.com/).
 
-If you discover a bug, please open a ticket using the github issue function. If you don't know the resolution, follow standar github reporting guidelines, stating your system, what you did and tried. 
+Should you discover a bug, please open a ticket using the github issue function. If you don't know the resolution, follow standar github reporting guidelines, stating your system, what you did and tried. 
 
-For software support, please first ask on discord.
-
-## :two_hearts: Community write-ups
-1. [Vagrant setup for windows](https://drive.google.com/file/d/1xobpv4Ew1iCN9j-M-ItU6PsfnybHUryy/view)
-2. [Vagrant setup for ubuntu](https://docs.google.com/document/u/1/d/e/2PACX-1vST7vBIMxom99hKr5XyVFpM6TAs_pw-iqq403AktMWnqr3dxUFX5c0g9BWD5gU5TDPZVXKcW3HTWbVl/pub)
-
-We welcome community documentation and tutorials. You can share them on the [community portal Orion](https://orion.constellationlabs.io/accounts/login/?next=/) and on the Constellation [discord server].
+For software support and contributions :two_hearts:, you can find links to the community outlets as well as more documentation and developer tools in the 
+[**resource list**](https://github.com/Constellation-Labs/awesome-constellation). 
