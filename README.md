@@ -46,21 +46,18 @@ Look at the file _API.scala_ for endpoints.
 Note: *For now this installation is not covered here in detail.*
 
 #### Install docker locally
-We make use of the [docker](https://www.docker.com/) toolset.
-
-**We will publish docker images to dockerhub soon.**
-
-The following is assuming you have docker set up:
-
-1. Follow directions for building for development (other than step 4).
-2. Run
+1. Set up [docker](https://www.docker.com/).
+2. Follow directions for building for development.
+3. Run
 ```haskell
 sbt docker:publishLocal
 ```
-3. Run
+4. Run
 ```haskell
 ./run-local-docker.sh
 ```
+
+We will publish the corresponding images to dockerhub soon.
 
 For Windows, just grab the docker ```cmd``` from the file and run directly.
 
@@ -72,8 +69,8 @@ This is **deprecated** but may be useful for people running Windows, etc.:
 vagrant up
 ``` 
 from project directory. See also
-* [Vagrant setup for windows](https://drive.google.com/file/d/1xobpv4Ew1iCN9j-M-ItU6PsfnybHUryy/view)
-* [Vagrant setup for ubuntu](https://docs.google.com/document/u/1/d/e/2PACX-1vST7vBIMxom99hKr5XyVFpM6TAs_pw-iqq403AktMWnqr3dxUFX5c0g9BWD5gU5TDPZVXKcW3HTWbVl/pub)
+* [Vagrant setup for Windows](https://drive.google.com/file/d/1xobpv4Ew1iCN9j-M-ItU6PsfnybHUryy/view)
+* [Vagrant setup for Ubuntu](https://docs.google.com/document/u/1/d/e/2PACX-1vST7vBIMxom99hKr5XyVFpM6TAs_pw-iqq403AktMWnqr3dxUFX5c0g9BWD5gU5TDPZVXKcW3HTWbVl/pub)
 
 ## :green_book: API Docs
 ### WIP 
