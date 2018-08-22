@@ -90,7 +90,7 @@ trait Download extends PeerAuth {
           if (response.sheaf.isDefined) {
             val sheaf: Sheaf = response.sheaf.get
 
-            val transactions: Seq[Transaction] = response.transactions
+            val transactions: Seq[TransactionV1] = response.transactions
 
             // store the bundle
             handleBundle(sheaf.bundle)

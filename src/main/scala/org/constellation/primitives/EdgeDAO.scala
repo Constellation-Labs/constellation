@@ -1,6 +1,8 @@
 package org.constellation.primitives
 
-import org.constellation.primitives.Schema.{GenesisObservation, ResolvedTX, TypedEdgeHash}
+import org.constellation.primitives.Schema.{GenesisObservation, Transaction, TypedEdgeHash}
+
+import scala.collection.concurrent.TrieMap
 
 trait EdgeDAO {
 
@@ -9,6 +11,6 @@ trait EdgeDAO {
 
   @volatile var activeTips : Seq[TypedEdgeHash] = Seq()
 
-  @volatile var memPoolOE : Seq[ResolvedTX] = Seq()
+  val memPoolOE : TrieMap[String, Transaction] = TrieMap()
 
 }

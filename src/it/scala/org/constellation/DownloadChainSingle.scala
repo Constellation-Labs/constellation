@@ -5,7 +5,7 @@ import better.files.File
 import constellation._
 import org.constellation.ClusterTest.getPodMappings
 import org.constellation.RestartCluster.system
-import org.constellation.primitives.Schema.{Sheaf, Transaction}
+import org.constellation.primitives.Schema.{Sheaf, TransactionV1}
 import org.constellation.util.APIClient
 
 import scala.concurrent.ExecutionContextExecutor
@@ -49,7 +49,7 @@ object DownloadChainSingle {
       println(s"Height: ${sheaf.height.get} hash: $hash")
       sheaf.bundle.extractTXHash.foreach{ h =>
         val hActual = h.txHash
-        val tx = a1.getBlocking[Option[Transaction]]("transaction/" + hActual)
+        val tx = a1.getBlocking[Option[TransactionV1]]("transaction/" + hActual)
         if (tx.isEmpty) println(s"Missing TX Hash: $hActual")
         txFile.appendLine(tx.get.json)
       }

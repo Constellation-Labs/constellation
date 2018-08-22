@@ -9,7 +9,7 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import org.constellation.Data
 import org.constellation.consensus.Consensus._
-import org.constellation.primitives.Schema.{Transaction, _}
+import org.constellation.primitives.Schema.{TransactionV1, _}
 import org.constellation.util.Heartbeat
 import constellation._
 

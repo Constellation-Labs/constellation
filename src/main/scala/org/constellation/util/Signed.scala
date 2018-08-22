@@ -161,10 +161,10 @@ trait POWSignHelp {
 
   def createTransactionSafe(
                              src: String, dst: String, amount: Long, keyPair: KeyPair, normalized: Boolean = true
-                           ): Transaction = {
+                           ): TransactionV1 = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
     val txData = TransactionData(src, dst, amountToUse).signed()(keyPair)
-    val tx = Transaction(txData)
+    val tx = TransactionV1(txData)
     tx
   }
 
@@ -198,7 +198,7 @@ trait POWSignHelp {
                                     amount: Long,
                                     keyPair: KeyPair,
                                     normalized: Boolean = true
-                                  ): ResolvedTX = {
+                                  ): Transaction = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
     val txData = TransactionEdgeData(amountToUse)
     val dataHash = Some(TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash))
@@ -208,7 +208,7 @@ trait POWSignHelp {
       data = dataHash
     )
     val soe = signedObservationEdge(oe)(keyPair)
-    ResolvedTX(ResolvedEdgeData(oe, soe, ResolvedObservationEdge(Address(src), Address(dst), Some(txData))))
+    Transaction(Edge(oe, soe, ResolvedObservationEdge(Address(src), Address(dst), Some(txData))))
   }
 
 

@@ -29,6 +29,8 @@ class RandomTransactionManager(nodeManager: ActorRef, peerManager: ActorRef, met
       metricsManager ! IncrementMetric("signaturesPerformed")
       metricsManager ! IncrementMetric("randomTransactionsGenerated")
       metricsManager ! IncrementMetric("sentTransactions")
+
+      // TODO: Change to transport layer call
       peerManager ! APIBroadcast(_.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx))
 
   }

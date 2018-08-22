@@ -52,7 +52,7 @@ class Simulation {
 
     // Create a genesis transaction
     val numCoinsInitial = 4e9.toLong
-    val genTx = r1.getBlocking[Transaction]("genesis/" + numCoinsInitial)
+    val genTx = r1.getBlocking[TransactionV1]("genesis/" + numCoinsInitial)
 
     Thread.sleep(2000)
 
@@ -122,7 +122,7 @@ class Simulation {
     })
   }
 
-  def initialDistributionTX(apis: Seq[APIClient]): Seq[Transaction] = {
+  def initialDistributionTX(apis: Seq[APIClient]): Seq[TransactionV1] = {
 
     println("-"*10)
     println("Initial distribution")
@@ -131,7 +131,7 @@ class Simulation {
     apis.map{ n =>
       val dst = n.id.address.address
       val s = SendToAddress(dst, 1e7.toLong)
-      apis.head.postBlocking[Transaction]("sendToAddress", s)
+      apis.head.postBlocking[TransactionV1]("sendToAddress", s)
     }
   }
 
@@ -139,12 +139,12 @@ class Simulation {
 
   def randomOtherNode(not: APIClient, apis: Seq[APIClient]): APIClient = apis.filter{_ != not}(Random.nextInt(apis.length - 1))
 
-  def sendRandomTransaction(apis: Seq[APIClient]): Future[Transaction] = {
+  def sendRandomTransaction(apis: Seq[APIClient]): Future[TransactionV1] = {
     Future {
       val src = randomNode(apis)
       val dst = randomOtherNode(src, apis).id.address.address
       val s = SendToAddress(dst, Random.nextInt(1000).toLong)
-      src.postBlocking[Transaction]("sendToAddress", s)
+      src.postBlocking[TransactionV1]("sendToAddress", s)
     }(ec)
   }
 
@@ -156,7 +156,7 @@ class Simulation {
     src.post("sendV2", s)
   }
 
-  def sendRandomTransactions(numTX: Int = 20, apis: Seq[APIClient]): Set[Transaction] = {
+  def sendRandomTransactions(numTX: Int = 20, apis: Seq[APIClient]): Set[TransactionV1] = {
 
     val txResponse = Seq.fill(numTX) {
       sendRandomTransaction(apis)
@@ -167,7 +167,7 @@ class Simulation {
     txs
   }
 
-  def validateRun(txSent: Set[Transaction], validationFractionAcceptable: Double, apis: Seq[APIClient]): Boolean = {
+  def validateRun(txSent: Set[TransactionV1], validationFractionAcceptable: Double, apis: Seq[APIClient]): Boolean = {
 
     var done = false
     var attempts = 0

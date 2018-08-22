@@ -1,7 +1,7 @@
 package org.constellation.primitives
 
 import akka.actor.{Actor, ActorRef}
-import org.constellation.primitives.Schema.{ResolvedTX, SendToAddress, TX, TransactionData}
+import org.constellation.primitives.Schema.{Transaction, SendToAddress, TX, TransactionData}
 
 class NodeManager(keyManager: ActorRef, metricsManager: ActorRef) extends Actor {
 
