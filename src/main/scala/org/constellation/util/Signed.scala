@@ -55,11 +55,11 @@ trait ProductHash extends Product {
 
 case class HashSignature(
                              signature: String,
-                             b58EncodedPublicKey: String,
-                             time: Long = System.currentTimeMillis()
+                             b58EncodedPublicKey: String
                            ) {
   def publicKey: PublicKey = EncodedPublicKey(b58EncodedPublicKey).toPublicKey
-  def valid(hash: String): Boolean = verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
+  def valid(hash: String): Boolean =
+    verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
 
 }
 
@@ -70,6 +70,7 @@ case class SignatureBatch(
   def valid: Boolean = {
     signatures.forall(_.valid(hash))
   }
+
   def plus(other: SignatureBatch): SignatureBatch = {
     this.copy(
       signatures = signatures ++ other.signatures
@@ -81,6 +82,8 @@ case class SignatureBatch(
     )
   }
 }
+
+
 
 /*
 Option = SignableData
@@ -180,6 +183,15 @@ trait POWSignHelp {
     SignedObservationEdge(hashSignBatchZeroTyped(oe, kp))
   }
 
+  /**
+    * Transaction builder (for local use)
+    * @param src : Source address
+    * @param dst : Destination address
+    * @param amount : Quantity
+    * @param keyPair : Signing pair matching source
+    * @param normalized : Whether quantity is normalized by NormalizationFactor (1e-8)
+    * @return : Resolved transaction in edge format
+    */
   def createTransactionSafeBatchOE(
                                     src: String,
                                     dst: String,

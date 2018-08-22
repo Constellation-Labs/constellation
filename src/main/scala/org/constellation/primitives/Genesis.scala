@@ -25,6 +25,11 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     acceptGenesis(Bundle(BundleData(Seq(ParentBundleHash("coinbase"), TransactionHash(tx.hash))).signed()), tx)
   }
 
+  /**
+    * Build genesis tips and example distribution among initial nodes
+    * @param ids: Initial node public keys
+    * @return : Resolved edges for state update
+    */
   def createGenesisAndInitialDistributionOE(ids: Set[Id]): GenesisObservation = {
 
     val debtAddress = makeKeyPair().address.address
@@ -43,7 +48,11 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
 
     val soe = signedObservationEdge(oe)
 
-    val roe = ResolvedObservationEdge(null.asInstanceOf[SignedObservationEdge], null.asInstanceOf[SignedObservationEdge], Some(cb))
+    val roe = ResolvedObservationEdge(
+      null.asInstanceOf[SignedObservationEdge],
+      null.asInstanceOf[SignedObservationEdge],
+      Some(cb)
+    )
 
     val redGenesis = ResolvedEdgeData(oe, soe, roe)
 

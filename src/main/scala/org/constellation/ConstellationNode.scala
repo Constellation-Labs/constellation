@@ -130,7 +130,7 @@ class ConstellationNode(
   )
 
   val randomTransactionManager: ActorRef = system.actorOf(
-    Props(new RandomTransactionManager(nodeManager, peerManager, metricsManager)), s"RandomTransactionManager_$publicKeyHash"
+    Props(new RandomTransactionManager(nodeManager, peerManager, metricsManager, data)), s"RandomTransactionManager_$publicKeyHash"
   )
 
   val dbActor: ActorRef =  system.actorOf(

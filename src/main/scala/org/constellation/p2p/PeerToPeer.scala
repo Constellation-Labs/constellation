@@ -15,6 +15,8 @@ import constellation._
 
 import scala.concurrent.ExecutionContextExecutor
 
+case class PeerBroadcast()
+
 class PeerToPeer(
                   val publicKey: PublicKey,
                   system: ActorSystem,
@@ -61,6 +63,10 @@ class PeerToPeer(
 
     // Local commands
     case AddPeerFromLocal(peerAddress) => sender() ! addPeerFromLocal(peerAddress)
+
+    case PeerBroadcast() =>
+
+
 
     // Regular state checks
     case InternalHeartbeat =>

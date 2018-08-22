@@ -150,15 +150,66 @@ object Schema {
                                         numRequests: Int
                                       )
 
+
+  /**
+    * Our basic set of allowed edge hash types
+    */
   object EdgeHashType extends Enumeration {
     type EdgeHashType = Value
-    val AddressHash, CheckpointDataHash, CheckpointHash, TransactionDataHash, ValidationHash, TransactionHash = Value
+    val AddressHash,
+    CheckpointDataHash, CheckpointHash,
+    TransactionDataHash, TransactionHash,
+    ValidationHash = Value
   }
 
-  case class TransactionEdgeData(amount: Long, salt: Long = Random.nextLong()) extends ProductHash
-  case class CheckpointEdgeData(hashes: Seq[String]) extends ProductHash
+  /**
+    * Wrapper for encapsulating a typed hash reference
+    * @param hash : String of hashed value
+    * @param hashType : Strictly typed from set of allowed edge formats
+    */
   case class TypedEdgeHash(hash: String, hashType: EdgeHashType)
-  case class ObservationEdge(left: TypedEdgeHash, right: TypedEdgeHash, data: Option[TypedEdgeHash] = None) extends ProductHash
+
+  /**
+    * Basic edge format for linking two hashes with an optional piece of data attached. Similar to GraphX format.
+    * Left is topologically ordered before right
+    * @param left : First parent reference in order
+    * @param right : Second parent reference
+    * @param data : Optional hash reference to attached information
+    */
+  case class ObservationEdge(
+                              left: TypedEdgeHash,
+                              right: TypedEdgeHash,
+                              data: Option[TypedEdgeHash] = None
+                            ) extends ProductHash
+
+
+  /**
+    * Encapsulation for all witness information about a given observation edge.
+    * @param signatureBatch : Collection of validation signatures about the edge.
+    */
+  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash
+
+
+  /**
+    * Holder for ledger update information about a transaction
+    * @param amount : Quantity to be transferred
+    * @param salt : Ensure hash uniqueness
+    */
+  case class TransactionEdgeData(amount: Long, salt: Long = Random.nextLong()) extends ProductHash
+
+  /**
+    * Collection of references to transaction hashes
+    * @param hashes : TX edge hashes
+    */
+  case class CheckpointEdgeData(hashes: Seq[String]) extends ProductHash
+
+
+  case class TransactionMetaData(
+                                rxTime: Long = System.currentTimeMillis(),
+                                resolvedTX: Option[ResolvedTX] = None,
+                                checkpointHash: Option[String] = None
+                                )
+
 
 
   case class ResolvedObservationEdge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
@@ -170,7 +221,6 @@ object Schema {
 
   case class CheckpointBlock(transactions: Set[String]) extends ProductHash
 
-  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash
 
   case class EdgeCell(members: mutable.SortedSet[EdgeSheaf])
 
@@ -208,14 +258,6 @@ object Schema {
     override def hash: String = address
   }
 
-  case class EdgeSheaf(
-                        signedObservationEdge: SignedObservationEdge,
-                        parent: String,
-                        height: Long,
-                        depth: Int,
-                        score: Double
-                      )
-
   case class AddressCacheData(balance: Long, reputation: Option[Double] = None)
 
 
@@ -230,6 +272,14 @@ object Schema {
       resolvedCB.edge.store(db)
     }
   }
+  case class EdgeSheaf(
+                        signedObservationEdge: SignedObservationEdge,
+                        parent: String,
+                        height: Long,
+                        depth: Int,
+                        score: Double
+                      )
+
 
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
 

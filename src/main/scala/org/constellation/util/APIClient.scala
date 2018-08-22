@@ -66,8 +66,14 @@ class APIClient (
 
   implicit val serialization: Serialization.type = native.Serialization
 
-  def post(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit f : Formats = constellation.constellationFormats): Future[HttpResponse[String]] = {
+  def post(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)
+          (implicit f : Formats = constellation.constellationFormats): Future[HttpResponse[String]] = {
     Future(postSync(suffix, b))
+  }
+
+  def put(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)
+          (implicit f : Formats = constellation.constellationFormats): Future[HttpResponse[String]] = {
+    Future(putSync(suffix, b))
   }
 
   def postEmpty(suffix: String, timeoutSeconds: Int = 5)(implicit f : Formats = constellation.constellationFormats)
@@ -80,6 +86,13 @@ class APIClient (
   ): HttpResponse[String] = {
     val ser = Serialization.write(b)
     httpWithAuth(suffix).postData(ser).header("content-type", "application/json").asString
+  }
+
+  def putSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
+    implicit f : Formats = constellation.constellationFormats
+  ): HttpResponse[String] = {
+    val ser = Serialization.write(b)
+    httpWithAuth(suffix).put(ser).header("content-type", "application/json").asString
   }
 
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {

@@ -11,14 +11,14 @@ import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.primitives.Schema.PeerIPData
-import org.constellation.primitives.SignRequest
+import org.constellation.primitives.Schema.{PeerIPData, ResolvedTX}
+import org.constellation.primitives.{SignRequest, TransactionValidation}
 import org.constellation.util.HashSignature
 import org.json4s.native
 import org.json4s.native.Serialization
 import akka.pattern.ask
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
 
@@ -69,8 +69,26 @@ class PeerAPI(
       }
     }
 
+  private val mixedEndpoints = {
+    path("transaction" / Segment) { s =>
+      put {
+        entity(as[ResolvedTX]) {
+          tx =>
+            Future{
+              // Validate transaction
+              TransactionValidation.validateTransaction(dbActor, tx)
+            }
+            complete(StatusCodes.OK)
+        }
+      } ~
+      get {
+        complete("Transaction goes here")
+      } ~ complete (StatusCodes.BadRequest)
+    }
+  }
+
   val routes: Route = {
-    getEndpoints ~ postEndpoints
+    getEndpoints ~ postEndpoints ~ mixedEndpoints
   }
 
 }
