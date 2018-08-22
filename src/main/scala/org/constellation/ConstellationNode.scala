@@ -59,7 +59,6 @@ object ConstellationNode extends App {
   )
 
   node.data.minGenesisDistrSize = 4
-
 }
 
 class ConstellationNode(

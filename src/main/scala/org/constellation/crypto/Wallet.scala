@@ -13,11 +13,8 @@ import org.constellation.Data
 
 trait Wallet {
 
-  val peerToPeerActor : ActorRef
   val data: Data
   import data._
-
-  implicit val timeout: Timeout
 
   // TODO: Not this.
   @volatile var wallet : Seq[KeyPair] = Seq()
@@ -50,7 +47,5 @@ trait Wallet {
   def utxoBalance: Map[String, Long] = {
     validLedger.filter{case (x,y) => addresses.contains(x)}
   }.toMap
-
-
 
 }

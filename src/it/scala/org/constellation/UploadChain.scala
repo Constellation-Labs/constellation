@@ -4,7 +4,7 @@ import akka.stream.ActorMaterializer
 import constellation._
 import org.constellation.RestartCluster.system
 import org.constellation.ClusterTest.getPodMappings
-import org.constellation.primitives.Schema.{BundleHashQueryResponse, Metrics}
+import org.constellation.primitives.Schema.{BundleHashQueryResponse, MetricsResult}
 import org.constellation.util.{APIClient, Simulation}
 
 import scala.collection.concurrent.TrieMap
@@ -54,7 +54,7 @@ object UploadChain {
     val apisProd = mappings2.map { z => new APIClient().setConnection(z.externalIP, 9000) }
 
     val mp = apisProd.map {
-      _.getBlocking[Metrics]("metrics").metrics
+      _.getBlocking[MetricsResult]("metrics").metrics
     }
 
    // val m = a1.getBlocking[Metrics]("metrics").metrics

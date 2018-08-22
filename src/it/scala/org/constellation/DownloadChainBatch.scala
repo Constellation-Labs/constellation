@@ -41,7 +41,7 @@ object DownloadChainBatch {
     val chainFile = File("chain.jsonl")
     chainFile.delete(true)
 
-    val m = a1.getBlocking[Metrics]("metrics").metrics
+    val m = a1.getBlocking[MetricsResult]("metrics").metrics
 
     val genesisBundleHash = m("z_genesisBundleHash")
     var hash = m("lastValidBundleHash")

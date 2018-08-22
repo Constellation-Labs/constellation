@@ -13,7 +13,6 @@ import org.iq80.leveldb.impl.Iq80DBFactory._
 
 import scala.util.Try
 
-
 // https://doc.akka.io/docs/akka/2.5/persistence-query-leveldb.html
 
 object LevelDB {
@@ -96,7 +95,6 @@ class LevelDB private (val file: File) {
   def put(k: String, t: AnyRef): Try[Unit] = putBytes(k, t.kryoWrite)
   def put[T <: ProductHash](t: T): Try[Unit] = putBytes(t.hash, t.kryoWrite)
 */
-
 
   // Util
 
