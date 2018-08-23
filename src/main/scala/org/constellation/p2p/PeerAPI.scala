@@ -90,7 +90,7 @@ class PeerAPI(
                     // We haven't yet signed this TX
                     val tx2 = tx.plus(dao.keyPair)
                     // Send peers new signature
-                    peerManager ! APIBroadcast()
+                    peerManager ! APIBroadcast(_.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx))
                     tx2
                   } else {
                     // We have already signed this transaction,
