@@ -1,14 +1,20 @@
 package org.constellation.primitives
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.ActorRef
 import org.constellation.primitives.Schema.{AddressCacheData, Transaction, TransactionCacheData}
 import akka.pattern.ask
+import akka.util.Timeout
 import org.constellation.LevelDB.DBGet
+import scala.concurrent.ExecutionContext.Implicits.global
 
 import scala.concurrent.Future
 
 
 object TransactionValidation {
+
+  implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
 
   // TODO : Add an LRU cache for looking up TransactionCacheData instead of pure LDB calls.
