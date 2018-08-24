@@ -52,7 +52,7 @@ trait Checkpoint extends PeerAuth {
 
           // cleanup mem pool
           lastCheckpointBundle.toIterator.foreach(f => {
-            val txs: Set[Transaction] = f.extractTX
+            val txs: Set[TransactionV1] = f.extractTX
             memPool --= txs.toList.map{_.hash}
          //   linearValidTX ++= txs
           })

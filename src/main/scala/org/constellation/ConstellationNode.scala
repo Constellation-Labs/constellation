@@ -130,7 +130,7 @@ class ConstellationNode(
   )
 
   val randomTransactionManager: ActorRef = system.actorOf(
-    Props(new RandomTransactionManager(nodeManager, peerManager, metricsManager)), s"RandomTransactionManager_$publicKeyHash"
+    Props(new RandomTransactionManager(nodeManager, peerManager, metricsManager, data)), s"RandomTransactionManager_$publicKeyHash"
   )
 
   val dbActor: ActorRef =  system.actorOf(
@@ -175,7 +175,7 @@ class ConstellationNode(
   // Setup http server for internal API
   val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
 
-  val peerRoutes : Route = new PeerAPI(dbActor, nodeManager, keyManager).routes
+  val peerRoutes : Route = new PeerAPI(dbActor, nodeManager, keyManager, metricsManager, peerManager, data).routes
 
   // Setup http server for peer API
   Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)

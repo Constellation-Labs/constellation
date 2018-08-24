@@ -152,8 +152,8 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
       s"score: $score, totalScore: $totalScore, height: ${meta.map{_.height}}, " +
       s"parent: ${meta.map{_.bundle.extractParentBundleHash.pbHash.slice(0, 5)}} firstId: ${b.extractIds.head.short}"
 
-    def extractTX: Set[Transaction] = b.extractTXHash.flatMap{ z => lookupTransaction(z.txHash)}
-    def extractTXDB: Set[Transaction] = b.extractTXHash.flatMap{ z => lookupTransactionDBFallbackBlocking(z.txHash)}
+    def extractTX: Set[TransactionV1] = b.extractTXHash.flatMap{ z => lookupTransaction(z.txHash)}
+    def extractTXDB: Set[TransactionV1] = b.extractTXHash.flatMap{ z => lookupTransactionDBFallbackBlocking(z.txHash)}
 
     def reputationUpdate: Map[String, Long] = {
       b.extractIds.map{_.b58 -> 1L}.toMap

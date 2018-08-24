@@ -55,11 +55,11 @@ trait ProductHash extends Product {
 
 case class HashSignature(
                              signature: String,
-                             b58EncodedPublicKey: String,
-                             time: Long = System.currentTimeMillis()
+                             b58EncodedPublicKey: String
                            ) {
   def publicKey: PublicKey = EncodedPublicKey(b58EncodedPublicKey).toPublicKey
-  def valid(hash: String): Boolean = verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
+  def valid(hash: String): Boolean =
+    verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
 
 }
 
@@ -70,6 +70,7 @@ case class SignatureBatch(
   def valid: Boolean = {
     signatures.forall(_.valid(hash))
   }
+
   def plus(other: SignatureBatch): SignatureBatch = {
     this.copy(
       signatures = signatures ++ other.signatures
@@ -81,6 +82,8 @@ case class SignatureBatch(
     )
   }
 }
+
+
 
 /*
 Option = SignableData
@@ -158,10 +161,10 @@ trait POWSignHelp {
 
   def createTransactionSafe(
                              src: String, dst: String, amount: Long, keyPair: KeyPair, normalized: Boolean = true
-                           ): Transaction = {
+                           ): TransactionV1 = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
     val txData = TransactionData(src, dst, amountToUse).signed()(keyPair)
-    val tx = Transaction(txData)
+    val tx = TransactionV1(txData)
     tx
   }
 
@@ -180,13 +183,22 @@ trait POWSignHelp {
     SignedObservationEdge(hashSignBatchZeroTyped(oe, kp))
   }
 
+  /**
+    * Transaction builder (for local use)
+    * @param src : Source address
+    * @param dst : Destination address
+    * @param amount : Quantity
+    * @param keyPair : Signing pair matching source
+    * @param normalized : Whether quantity is normalized by NormalizationFactor (1e-8)
+    * @return : Resolved transaction in edge format
+    */
   def createTransactionSafeBatchOE(
                                     src: String,
                                     dst: String,
                                     amount: Long,
                                     keyPair: KeyPair,
                                     normalized: Boolean = true
-                                  ): ResolvedTX = {
+                                  ): Transaction = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
     val txData = TransactionEdgeData(amountToUse)
     val dataHash = Some(TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash))
@@ -196,7 +208,7 @@ trait POWSignHelp {
       data = dataHash
     )
     val soe = signedObservationEdge(oe)(keyPair)
-    ResolvedTX(ResolvedEdgeData(oe, soe, ResolvedObservationEdge(Address(src), Address(dst), Some(txData))))
+    Transaction(Edge(oe, soe, ResolvedObservationEdge(Address(src), Address(dst), Some(txData))))
   }
 
 

@@ -2,7 +2,7 @@ package org.constellation
 
 import akka.stream.ActorMaterializer
 import com.typesafe.scalalogging.Logger
-import org.constellation.primitives.Schema.Transaction
+import org.constellation.primitives.Schema.TransactionV1
 import org.constellation.primitives._
 
 class Data extends MetricsExt
@@ -48,7 +48,7 @@ class Data extends MetricsExt
     deadPeers = Seq()
   }
 
-  def handleTransaction(tx: Transaction): Unit = {
+  def handleTransaction(tx: TransactionV1): Unit = {
     if (lookupTransaction(tx.hash).isEmpty) {
       storeTransaction(tx)
       numSyncedTX += 1

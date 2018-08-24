@@ -9,11 +9,13 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import org.constellation.Data
 import org.constellation.consensus.Consensus._
-import org.constellation.primitives.Schema.{Transaction, _}
+import org.constellation.primitives.Schema.{TransactionV1, _}
 import org.constellation.util.Heartbeat
 import constellation._
 
 import scala.concurrent.ExecutionContextExecutor
+
+case class PeerBroadcast()
 
 class PeerToPeer(
                   val publicKey: PublicKey,
@@ -61,6 +63,10 @@ class PeerToPeer(
 
     // Local commands
     case AddPeerFromLocal(peerAddress) => sender() ! addPeerFromLocal(peerAddress)
+
+    case PeerBroadcast() =>
+
+
 
     // Regular state checks
     case InternalHeartbeat =>

@@ -2,7 +2,7 @@ package org.constellation.primitives
 
 
 import java.net.InetSocketAddress
-import java.security.PublicKey
+import java.security.{KeyPair, PublicKey}
 
 import akka.actor.ActorRef
 import cats.kernel.Monoid
@@ -28,7 +28,7 @@ object Schema {
 
   case class TransactionQueryResponse(
                                        hash: String,
-                                       tx: Option[Transaction],
+                                       tx: Option[TransactionV1],
                                        observed: Boolean,
                                        inMemPool: Boolean,
                                        confirmed: Boolean,
@@ -57,9 +57,9 @@ object Schema {
   // I.e. equivalent to number of sat per btc
   val NormalizationFactor: Long = 1e8.toLong
 
-  case class BundleHashQueryResponse(hash: String, sheaf: Option[Sheaf], transactions: Seq[Transaction])
+  case class BundleHashQueryResponse(hash: String, sheaf: Option[Sheaf], transactions: Seq[TransactionV1])
 
-  case class MaxBundleGenesisHashQueryResponse(genesisBundle: Option[Bundle], genesisTX: Option[Transaction], sheaf: Option[Sheaf])
+  case class MaxBundleGenesisHashQueryResponse(genesisBundle: Option[Bundle], genesisTX: Option[TransactionV1], sheaf: Option[Sheaf])
 
   case class SendToAddress(
                             dst: String,
@@ -115,7 +115,7 @@ object Schema {
 
 
   }
-  case class Transaction(
+  case class TransactionV1(
                           txData: Signed[TransactionData]
                         ) extends Fiber with GossipMessage with ProductHash with RemoteMessage {
     def valid: Boolean = txData.valid
@@ -150,15 +150,66 @@ object Schema {
                                         numRequests: Int
                                       )
 
+
+  /**
+    * Our basic set of allowed edge hash types
+    */
   object EdgeHashType extends Enumeration {
     type EdgeHashType = Value
-    val AddressHash, CheckpointDataHash, CheckpointHash, TransactionDataHash, ValidationHash, TransactionHash = Value
+    val AddressHash,
+    CheckpointDataHash, CheckpointHash,
+    TransactionDataHash, TransactionHash,
+    ValidationHash = Value
   }
 
-  case class TransactionEdgeData(amount: Long, salt: Long = Random.nextLong()) extends ProductHash
-  case class CheckpointEdgeData(hashes: Seq[String]) extends ProductHash
+  /**
+    * Wrapper for encapsulating a typed hash reference
+    * @param hash : String of hashed value
+    * @param hashType : Strictly typed from set of allowed edge formats
+    */
   case class TypedEdgeHash(hash: String, hashType: EdgeHashType)
-  case class ObservationEdge(left: TypedEdgeHash, right: TypedEdgeHash, data: Option[TypedEdgeHash] = None) extends ProductHash
+
+  /**
+    * Basic edge format for linking two hashes with an optional piece of data attached. Similar to GraphX format.
+    * Left is topologically ordered before right
+    * @param left : First parent reference in order
+    * @param right : Second parent reference
+    * @param data : Optional hash reference to attached information
+    */
+  case class ObservationEdge(
+                              left: TypedEdgeHash,
+                              right: TypedEdgeHash,
+                              data: Option[TypedEdgeHash] = None
+                            ) extends ProductHash
+
+
+  /**
+    * Encapsulation for all witness information about a given observation edge.
+    * @param signatureBatch : Collection of validation signatures about the edge.
+    */
+  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash
+
+
+  /**
+    * Holder for ledger update information about a transaction
+    * @param amount : Quantity to be transferred
+    * @param salt : Ensure hash uniqueness
+    */
+  case class TransactionEdgeData(amount: Long, salt: Long = Random.nextLong()) extends ProductHash
+
+  /**
+    * Collection of references to transaction hashes
+    * @param hashes : TX edge hashes
+    */
+  case class CheckpointEdgeData(hashes: Seq[String]) extends ProductHash
+
+
+  case class TransactionMetaData(
+                                  rxTime: Long = System.currentTimeMillis(),
+                                  resolvedTX: Option[Transaction] = None,
+                                  checkpointHash: Option[String] = None
+                                )
+
 
 
   case class ResolvedObservationEdge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
@@ -170,23 +221,40 @@ object Schema {
 
   case class CheckpointBlock(transactions: Set[String]) extends ProductHash
 
-  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash
 
   case class EdgeCell(members: mutable.SortedSet[EdgeSheaf])
 
-  case class ResolvedTX(edge: ResolvedEdgeData[Address, Address, TransactionEdgeData]) {
+  case class Transaction(edge: Edge[Address, Address, TransactionEdgeData]) {
 
     def src: Address = edge.resolvedObservationEdge.left
     def dst: Address = edge.resolvedObservationEdge.right
 
+    def signatures: Set[HashSignature] = edge.signedObservationEdge.signatureBatch.signatures
+
     // TODO: Add proper exception on empty option
     def amount : Long = edge.resolvedObservationEdge.data.get.amount
-
+    def hash: String = edge.signedObservationEdge.signatureBatch.hash
+    def plus(other: Transaction): Transaction = this.copy(
+      edge = edge.copy(
+        signedObservationEdge = edge.signedObservationEdge.copy(
+          signatureBatch =
+            edge.signedObservationEdge.signatureBatch.plus(other.edge.signedObservationEdge.signatureBatch)
+        )
+      )
+    )
+    def plus(keyPair: KeyPair): Transaction = this.copy(
+      edge = edge.copy(
+        signedObservationEdge = edge.signedObservationEdge.copy(
+          signatureBatch =
+            edge.signedObservationEdge.signatureBatch.plus(keyPair)
+        )
+      )
+    )
   }
 
-  case class ResolvedCB(edge: ResolvedEdgeData[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData])
+  case class ResolvedCB(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData])
 
-  case class ResolvedEdgeData[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
+  case class Edge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
   (
     observationEdge: ObservationEdge,
     signedObservationEdge: SignedObservationEdge,
@@ -208,6 +276,22 @@ object Schema {
     override def hash: String = address
   }
 
+  case class AddressCacheData(balance: Long, reputation: Option[Double] = None)
+  case class TransactionCacheData(resolvedTX: Transaction, inDAG: Boolean = false)
+
+
+  case class ResolvedCBObservation(
+                                    resolvedTX: Seq[Transaction],
+                                    resolvedCB: ResolvedCB
+                                  ) {
+    def store(db: ActorRef, inDAG: Boolean = false): Unit = {
+      resolvedTX.foreach { rt =>
+        TransactionCacheData(rt, inDAG = true)
+        rt.edge.store(db)
+      }
+      resolvedCB.edge.store(db)
+    }
+  }
   case class EdgeSheaf(
                         signedObservationEdge: SignedObservationEdge,
                         parent: String,
@@ -216,20 +300,6 @@ object Schema {
                         score: Double
                       )
 
-  case class AddressCacheData(balance: Long, reputation: Option[Double] = None)
-
-
-  case class ResolvedCBObservation(
-                                    resolvedTX: Seq[ResolvedTX],
-                                    resolvedCB: ResolvedCB
-                                  ) {
-    def store(db: ActorRef): Unit = {
-      resolvedTX.foreach { rt =>
-        rt.edge.store(db)
-      }
-      resolvedCB.edge.store(db)
-    }
-  }
 
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
 
@@ -493,7 +563,7 @@ object Schema {
   final case object InternalHeartbeat extends InternalCommand
   final case object InternalBundleHeartbeat extends InternalCommand
 
-  final case class ValidateTransaction(tx: Transaction) extends InternalCommand
+  final case class ValidateTransaction(tx: TransactionV1) extends InternalCommand
 
   trait DownloadMessage
 
@@ -501,12 +571,12 @@ object Schema {
   case class DownloadResponse(
                                maxBundle: Bundle,
                                genesisBundle: Bundle,
-                               genesisTX: Transaction
+                               genesisTX: TransactionV1
                              ) extends DownloadMessage with RemoteMessage
 
-  final case class SyncData(validTX: Set[Transaction], memPoolTX: Set[Transaction]) extends GossipMessage with RemoteMessage
+  final case class SyncData(validTX: Set[TransactionV1], memPoolTX: Set[TransactionV1]) extends GossipMessage with RemoteMessage
 
-  case class MissingTXProof(tx: Transaction, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage with RemoteMessage
+  case class MissingTXProof(tx: TransactionV1, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage with RemoteMessage
 
   final case class RequestTXProof(txHash: String) extends GossipMessage with RemoteMessage
 
@@ -571,18 +641,18 @@ object Schema {
                                   ) extends ProductHash
 
 
-  final case class ConflictDetectedData(detectedOn: Transaction, conflicts: Seq[Transaction]) extends ProductHash
+  final case class ConflictDetectedData(detectedOn: TransactionV1, conflicts: Seq[TransactionV1]) extends ProductHash
 
   final case class ConflictDetected(conflict: Signed[ConflictDetectedData]) extends ProductHash with GossipMessage
 
-  final case class VoteData(accept: Seq[Transaction], reject: Seq[Transaction]) extends ProductHash {
+  final case class VoteData(accept: Seq[TransactionV1], reject: Seq[TransactionV1]) extends ProductHash {
     // used to determine what voting round we are talking about
     def voteRoundHash: String = {
       accept.++(reject).sortBy(t => t.hashCode()).map(f => f.hash).mkString("-")
     }
   }
 
-  final case class VoteCandidate(tx: Transaction, gossip: Seq[Gossip[ProductHash]])
+  final case class VoteCandidate(tx: TransactionV1, gossip: Seq[Gossip[ProductHash]])
 
   final case class VoteDataSimpler(accept: Seq[VoteCandidate], reject: Seq[VoteCandidate]) extends ProductHash
 

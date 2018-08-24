@@ -12,8 +12,8 @@ class MemPoolManager(metricsManager: ActorRef) extends Actor {
 
   override def receive: Receive = active(Seq.empty)
 
-  def active(memPool: Seq[ResolvedTX]): Receive = {
-    case rtx: ResolvedTX =>
+  def active(memPool: Seq[Transaction]): Receive = {
+    case rtx: Transaction =>
       if (memPool.contains(rtx)) {
         metricsManager ! IncrementMetric("memPoolDuplicateAdditionAttempts")
       } else {

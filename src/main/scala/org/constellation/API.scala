@@ -605,8 +605,8 @@ class API(
           }
         } ~
         path("handleTransaction") {
-          entity(as[Transaction]) { tx =>
-            peerToPeerActor ! Transaction
+          entity(as[TransactionV1]) { tx =>
+            peerToPeerActor ! TransactionV1
 
             complete(StatusCodes.OK)
           }
@@ -636,7 +636,7 @@ class API(
           }
         } ~
         path("tx") {
-          entity(as[Transaction]) { tx =>
+          entity(as[TransactionV1]) { tx =>
             peerToPeerActor ! tx
             complete(StatusCodes.OK)
           }

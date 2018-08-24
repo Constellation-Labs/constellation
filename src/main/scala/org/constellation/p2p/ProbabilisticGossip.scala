@@ -48,7 +48,7 @@ trait ProbabilisticGossip extends PeerAuth {
 
         handleBundle(b)
 
-      case tx: Transaction =>
+      case tx: TransactionV1 =>
 
         handleTransaction(tx)
 

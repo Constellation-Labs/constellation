@@ -7,7 +7,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
 
   val CoinBaseHash = "coinbase"
 
-  def acceptGenesis(b: Bundle, tx: Transaction): Unit = {
+  def acceptGenesis(b: Bundle, tx: TransactionV1): Unit = {
     storeTransaction(tx)
     genesisBundle = Some(b)
     val md = Sheaf(b, Some(0), Map(b.extractIds.head.b58 -> 1L), Some(1000), transactionsResolved = true)
@@ -20,11 +20,16 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     gtx.txData.data.updateLedger(memPoolLedger)
   }
 
-  def createGenesis(tx: Transaction): Unit = {
+  def createGenesis(tx: TransactionV1): Unit = {
     downloadMode = false
     acceptGenesis(Bundle(BundleData(Seq(ParentBundleHash("coinbase"), TransactionHash(tx.hash))).signed()), tx)
   }
 
+  /**
+    * Build genesis tips and example distribution among initial nodes
+    * @param ids: Initial node public keys
+    * @return : Resolved edges for state update
+    */
   def createGenesisAndInitialDistributionOE(ids: Set[Id]): GenesisObservation = {
 
     val debtAddress = makeKeyPair().address.address
@@ -43,9 +48,13 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
 
     val soe = signedObservationEdge(oe)
 
-    val roe = ResolvedObservationEdge(null.asInstanceOf[SignedObservationEdge], null.asInstanceOf[SignedObservationEdge], Some(cb))
+    val roe = ResolvedObservationEdge(
+      null.asInstanceOf[SignedObservationEdge],
+      null.asInstanceOf[SignedObservationEdge],
+      Some(cb)
+    )
 
-    val redGenesis = ResolvedEdgeData(oe, soe, roe)
+    val redGenesis = Edge(oe, soe, roe)
 
     val genesisCBO = ResolvedCBObservation(Seq(redTXGenesisResolved), ResolvedCB(redGenesis))
 
@@ -65,7 +74,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
 
     val distrROE = ResolvedObservationEdge(soe, soe, Some(distrCB))
 
-    val distrRED = ResolvedEdgeData(distrOE, distrSOE, distrROE)
+    val distrRED = Edge(distrOE, distrSOE, distrROE)
 
     val distrCBO = ResolvedCBObservation(distr, ResolvedCB(distrRED))
 
