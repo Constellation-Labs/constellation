@@ -104,6 +104,8 @@ class PeerAPI(
                     dao.memPoolOE(tx.hash) = txPrime
                   }
 
+                  // Trigger check if we should emit a CB
+
                 case false =>
                   metricsManager ! IncrementMetric("invalidTransactions")
 

@@ -284,8 +284,9 @@ object Schema {
                                     resolvedTX: Seq[Transaction],
                                     resolvedCB: ResolvedCB
                                   ) {
-    def store(db: ActorRef): Unit = {
+    def store(db: ActorRef, inDAG: Boolean = false): Unit = {
       resolvedTX.foreach { rt =>
+        TransactionCacheData(rt, inDAG = true)
         rt.edge.store(db)
       }
       resolvedCB.edge.store(db)
