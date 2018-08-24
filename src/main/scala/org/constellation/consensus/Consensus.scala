@@ -8,6 +8,7 @@ import constellation._
 import org.constellation.Data
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.UDPSend
+import org.constellation.primitives.EdgeService
 import org.constellation.primitives.Schema._
 import org.constellation.util.Signed
 
@@ -24,10 +25,10 @@ object Consensus {
   sealed trait VoteData[+T <: CC] extends CachedData[T]
   sealed trait ProposalData[+T <: CC] extends CachedData[T]
 
-  case class CheckpointVote(data: Bundle) extends VoteData[Checkpoint]
+  case class CheckpointVote(data: ResolvedCB) extends VoteData[Checkpoint]
   case class ConflictVote(data: Vote) extends VoteData[Conflict]
 
-  case class CheckpointProposal(data: Bundle) extends ProposalData[Checkpoint]
+  case class CheckpointProposal(data: ResolvedCB) extends ProposalData[Checkpoint]
   case class ConflictProposal(data: Bundle) extends ProposalData[Conflict]
 
   case class RoundHash[+T <: CC](hash: String)
@@ -43,7 +44,7 @@ object Consensus {
                                                 callback: ConsensusRoundResult[_ <: CC] => Unit,
                                                 vote: VoteData[T])
 
-  case class ConsensusRoundResult[+T <: CC](bundle: Bundle, roundHash: RoundHash[T])
+  case class ConsensusRoundResult[+T <: CC](bundle: ResolvedCB, roundHash: RoundHash[T])
 
   case class RoundState(facilitators: Set[Id] = Set(),
                         votes: HashMap[Id, _ <: VoteData[_ <: CC]] = HashMap(),
@@ -51,6 +52,7 @@ object Consensus {
                         callback: ConsensusRoundResult[_ <: CC] => Unit = (result: ConsensusRoundResult[_ <: CC]) => {})
 
   case class ConsensusRoundState(selfId: Option[Id] = None,
+                                 dao: Data,
                                  udpActor: Option[ActorRef] = None,
                                  roundStates: HashMap[RoundHash[_ <: CC], RoundState] = HashMap())
 
@@ -154,21 +156,21 @@ object Consensus {
   }
 
   // TODO: here is where we call out to bundling logic
-  def getConsensusBundle[T <: CC](consensusRoundState: ConsensusRoundState, roundHash: RoundHash[T]): Bundle = {
+  def getConsensusBundle[T <: CC](consensusRoundState: ConsensusRoundState, roundHash: RoundHash[T])(implicit keyPair: KeyPair): ResolvedCB = {
     val roundState = getCurrentRoundState(consensusRoundState, roundHash)
     // figure out what the majority of bundles agreed upon
     val bundles = roundState.proposals
 
-    // take those transactions bundle and sign them
-    // TODO: temp logic
-    val bundleProposal = bundles.toSeq.sortWith(_._1.address.address < _._1.address.address).toMap.values.toIterator.next()
+    EdgeService.createCheckpointEdge(consensusRoundState.dao.activeTips, consensusRoundState.dao.memPool.toSeq)
 
+    /*
     bundleProposal match {
       case CheckpointProposal(data) =>
         data
       case ConflictProposal(data) =>
         data
     }
+    */
   }
 
   def handlePeerVote[T <: CC](consensusRoundState: ConsensusRoundState,
@@ -197,9 +199,11 @@ object Consensus {
       // TODO: temp logic
       val vote = votes(updatedState.selfId.get)
 
+
       val proposal = vote match {
         case CheckpointVote(data) =>
-          CheckpointProposal(Bundle(BundleData(data.bundleData.data.bundles).signed()(keyPair = keyPair)))
+          // TODO: sign
+          CheckpointProposal(data)
         case ConflictVote(data) =>
           ConflictProposal(Bundle(BundleData(data.vote.data.accept).signed()(keyPair = keyPair)))
       }
@@ -217,7 +221,7 @@ object Consensus {
   def handlePeerProposedBundle[T <: CC](consensusRoundState: ConsensusRoundState,
                                peer: Id,
                                bundle: ProposalData[T],
-                               roundHash: RoundHash[T]): ConsensusRoundState = {
+                               roundHash: RoundHash[T])(implicit keyPair: KeyPair): ConsensusRoundState = {
 
     var updatedState = updateRoundCache(consensusRoundState, peer, roundHash, bundle)
 
@@ -238,12 +242,12 @@ object Consensus {
   }
 }
 
-class Consensus(keyPair: KeyPair, udpActor: ActorRef)(implicit timeout: Timeout) extends Actor with ActorLogging {
+class Consensus(keyPair: KeyPair, dao: Data, udpActor: ActorRef)(implicit timeout: Timeout) extends Actor with ActorLogging {
 
   implicit val sys: ActorSystem = context.system
   implicit val kp: KeyPair = keyPair
 
-  def receive: Receive = consensus(ConsensusRoundState(selfId = Some(Id(keyPair.getPublic.encoded)), udpActor = Some(udpActor)))
+  def receive: Receive = consensus(ConsensusRoundState(dao = dao, selfId = Some(Id(keyPair.getPublic.encoded)), udpActor = Some(udpActor)))
 
   def consensus(consensusRoundState: ConsensusRoundState): Receive = {
 

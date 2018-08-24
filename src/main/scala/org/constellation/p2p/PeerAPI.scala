@@ -1,5 +1,7 @@
 package org.constellation.p2p
 
+import java.security.KeyPair
+
 import akka.actor.ActorRef
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
@@ -11,16 +13,17 @@ import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.primitives.Schema.{PeerIPData, Transaction}
-import org.constellation.primitives.{APIBroadcast, IncrementMetric, SignRequest, TransactionValidation}
+import org.constellation.primitives.Schema.{Id, PeerIPData, Transaction}
+import org.constellation.primitives._
 import org.constellation.util.HashSignature
 import org.json4s.native
 import org.json4s.native.Serialization
 import akka.pattern.ask
 import org.constellation.Data
+import org.constellation.consensus.Consensus.{CheckpointVote, InitializeConsensusRound, RoundHash}
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Random
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.{Random, Try}
 
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
@@ -31,8 +34,9 @@ class PeerAPI(
                keyManager: ActorRef,
                metricsManager: ActorRef,
                peerManager: ActorRef,
+               consensus: ActorRef,
                dao: Data
-             )(implicit executionContext: ExecutionContext, val timeout: Timeout)
+             )(implicit executionContext: ExecutionContext, val timeout: Timeout, val keyPair: KeyPair)
   extends Json4sSupport {
 
   implicit val serialization: Serialization.type = native.Serialization
@@ -105,6 +109,15 @@ class PeerAPI(
                   }
 
                   // Trigger check if we should emit a CB
+
+                  val fut = (peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]]
+                  val peers = Try {
+                    Await.result(fut, timeout.duration)
+                  }.toOption
+
+                  consensus ! InitializeConsensusRound(peers.get.keySet, RoundHash("test"), (result) => {
+                    assert(true)
+                  }, CheckpointVote(EdgeService.createCheckpointEdge(dao.activeTips, dao.memPool.toSeq)) )
 
                 case false =>
                   metricsManager ! IncrementMetric("invalidTransactions")

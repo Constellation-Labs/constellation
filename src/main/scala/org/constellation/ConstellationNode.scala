@@ -142,7 +142,7 @@ class ConstellationNode(
     )
 
   val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(configKeyPair, udpActor)(timeout)),
+    Props(new Consensus(configKeyPair, data, udpActor)(timeout)),
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val peerToPeerActor: ActorRef =
@@ -174,7 +174,7 @@ class ConstellationNode(
   // Setup http server for internal API
   val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
 
-  val peerRoutes : Route = new PeerAPI(dbActor, nodeManager, keyManager, metricsManager, peerManager, data).routes
+  val peerRoutes : Route = new PeerAPI(dbActor, nodeManager, keyManager, metricsManager, peerManager, consensusActor, data).routes
 
   // Setup http server for peer API
   Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)
