@@ -37,7 +37,7 @@ class Simulation {
 
   def verifyGenesisReceived(apis: Seq[APIClient]): Boolean = {
     apis.forall { a =>
-      val gbmd = a.getBlocking[Metrics]("metrics")
+      val gbmd = a.getBlocking[MetricsResult]("metrics")
       gbmd.metrics("numValidBundles").toInt >= 1
     }
   }
@@ -56,7 +56,7 @@ class Simulation {
 
     Thread.sleep(2000)
 
-    val gbmd = r1.getBlocking[Metrics]("metrics")
+    val gbmd = r1.getBlocking[MetricsResult]("metrics")
 
     assert(gbmd.metrics("numValidBundles").toInt >= 1)
 

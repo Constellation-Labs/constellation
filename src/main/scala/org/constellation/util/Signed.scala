@@ -158,7 +158,6 @@ trait POWSignHelp {
     )
   }
 
-
   def createTransactionSafe(
                              src: String, dst: String, amount: Long, keyPair: KeyPair, normalized: Boolean = true
                            ): TransactionV1 = {
@@ -210,7 +209,5 @@ trait POWSignHelp {
     val soe = signedObservationEdge(oe)(keyPair)
     Transaction(Edge(oe, soe, ResolvedObservationEdge(Address(src), Address(dst), Some(txData))))
   }
-
-
 
 }

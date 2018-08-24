@@ -580,7 +580,7 @@ object Schema {
 
   final case class RequestTXProof(txHash: String) extends GossipMessage with RemoteMessage
 
-  case class Metrics(metrics: Map[String, String])
+  case class MetricsResult(metrics: Map[String, String])
 
   final case class AddPeerFromLocal(address: InetSocketAddress) extends InternalCommand
 
