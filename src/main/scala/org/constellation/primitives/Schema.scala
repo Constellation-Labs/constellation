@@ -261,12 +261,12 @@ object Schema {
     resolvedObservationEdge: ResolvedObservationEdge[L,R,D]
   ) {
 
-    def store(db: ActorRef): Unit = {
-      db ! DBPut(signedObservationEdge.signatureBatch.hash, observationEdge)
+    def store[T <: AnyRef](db: ActorRef, t: Option[T] = None): Unit = {
+      db ! DBPut(signedObservationEdge.signatureBatch.hash, t.getOrElse(observationEdge))
       db ! DBPut(signedObservationEdge.hash, signedObservationEdge)
       resolvedObservationEdge.data.foreach {
-        ted =>
-          db ! DBPut(ted.hash, ted)
+        data =>
+          db ! DBPut(data.hash, data)
       }
     }
 
@@ -278,6 +278,7 @@ object Schema {
 
   case class AddressCacheData(balance: Long, reputation: Option[Double] = None)
   case class TransactionCacheData(resolvedTX: Transaction, inDAG: Boolean = false)
+  case class CheckpointCacheData(resolvedCB: ResolvedCB, inDAG: Boolean = false)
 
 
   case class ResolvedCBObservation(
@@ -286,12 +287,12 @@ object Schema {
                                   ) {
     def store(db: ActorRef, inDAG: Boolean = false): Unit = {
       resolvedTX.foreach { rt =>
-        TransactionCacheData(rt, inDAG = true)
-        rt.edge.store(db)
+        rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG)))
       }
-      resolvedCB.edge.store(db)
+      resolvedCB.edge.store(db, Some(CheckpointCacheData(resolvedCB, inDAG = inDAG)))
     }
   }
+
   case class EdgeSheaf(
                         signedObservationEdge: SignedObservationEdge,
                         parent: String,

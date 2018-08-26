@@ -353,8 +353,8 @@ class API(
             dbActor.foreach { db =>
 
               // Store hashes for the edges
-              go.genesis.store(db)
-              go.initialDistribution.store(db)
+              go.genesis.store(db, inDAG = true)
+              go.initialDistribution.store(db, inDAG = true)
 
               // Store the balance for the genesis TX minus the distribution along with starting rep score.
               go.genesis.resolvedTX.foreach{

@@ -11,6 +11,8 @@ trait EdgeDAO {
 
   @volatile var activeTips : Seq[TypedEdgeHash] = Seq()
 
-  val memPoolOE : TrieMap[String, Transaction] = TrieMap()
+  val txMemPoolOE : TrieMap[String, Transaction] = TrieMap()
+
+  @volatile var txMemPoolOEThresholdMet: Set[String] = Set()
 
 }
