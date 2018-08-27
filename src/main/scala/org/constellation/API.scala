@@ -40,7 +40,6 @@ class API(
            val data: Data = null,
            peerManager: ActorRef,
            metricsManager: ActorRef,
-           nodeManager: ActorRef,
            cellManager: ActorRef
          )(implicit executionContext: ExecutionContext, val timeout: Timeout)
   extends Json4sSupport
@@ -227,7 +226,8 @@ class API(
           path("selfAddress") {
             complete(id.address)
           } ~
-          path("id") {
+          path("id") { // TODO : This should be served both on internal / external API
+            // ^ Create shared routes for common functionality like this.
             complete(id)
           } ~
           path("nodeKeyPair") {
@@ -319,13 +319,42 @@ class API(
 
   private val postEndpoints =
     post {
-
-      path("sendV2") {
-        entity(as[SendToAddress]) { e =>
-          nodeManager ! e
-          complete(StatusCodes.OK)
-        }
+      path("startRandomTX") {
+        sendRandomTXV2 = !sendRandomTXV2
+        complete(sendRandomTXV2.toString)
       } ~
+      path("peerHealthCheckV2") {
+        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse[String]]]]
+        val res = response.getOpt().map{
+          idMap =>
+
+            val res = idMap.map{
+              case (id, fut) =>
+                val maybeResponse = fut.getOpt()
+             //   println(s"Maybe response $maybeResponse")
+                id -> maybeResponse.exists{_.isSuccess}
+            }.toSeq
+
+            complete(res)
+
+        }.getOrElse(complete(StatusCodes.InternalServerError))
+
+        res
+      } ~
+        pathPrefix("genesis") {
+          path("create") {
+            entity(as[Set[Id]]) { ids =>
+              complete(createGenesisAndInitialDistributionOE(ids))
+            }
+          } ~
+          path("accept") {
+            entity(as[GenesisObservation]) { go =>
+              acceptGenesisOE(go)
+              // TODO: Report errors and add validity check
+              complete(StatusCodes.OK)
+            }
+          }
+        } ~
         path("initializeDownload") {
           downloadMode = true
           complete(StatusCodes.OK)
@@ -405,6 +434,14 @@ class API(
         path("tx") {
           entity(as[TransactionV1]) { tx =>
             peerToPeerActor ! tx
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("addPeerV2"){
+          entity(as[AddPeerRequest]) { e =>
+
+            peerManager ! e
+
             complete(StatusCodes.OK)
           }
         } ~

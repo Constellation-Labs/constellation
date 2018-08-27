@@ -112,10 +112,6 @@ class ConstellationNode(
     Props(new MemPoolManager(metricsManager)), s"MemPoolManager_$publicKeyHash"
   )
 
-  val keyManager: ActorRef = system.actorOf(
-    Props(new KeyManager(data.keyPair, memPoolManager, metricsManager)), s"KeyManager_$publicKeyHash"
-  )
-
   val peerManager: ActorRef = system.actorOf(
     Props(new PeerManager()), s"PeerManager_$publicKeyHash"
   )
@@ -124,12 +120,8 @@ class ConstellationNode(
     Props(new CellManager(memPoolManager, metricsManager, peerManager)), s"CellManager_$publicKeyHash"
   )
 
-  val nodeManager: ActorRef = system.actorOf(
-    Props(new NodeManager(keyManager, metricsManager)), s"NodeManager_$publicKeyHash"
-  )
-
   val randomTransactionManager: ActorRef = system.actorOf(
-    Props(new RandomTransactionManager(nodeManager, peerManager, metricsManager, data)), s"RandomTransactionManager_$publicKeyHash"
+    Props(new RandomTransactionManager(peerManager, metricsManager, data)), s"RandomTransactionManager_$publicKeyHash"
   )
 
   val dbActor: ActorRef =  system.actorOf(
@@ -151,8 +143,10 @@ class ConstellationNode(
       consensusActor, udpActor, data, requestExternalAddressCheck, heartbeatEnabled=heartbeatEnabled, randomTransactionManager, cellManager)
     (timeout, materialize)), s"ConstellationP2PActor_$publicKeyHash")
 
-  data.p2pActor = Some(peerToPeerActor)
-  data.dbActor = Some(dbActor)
+  data.p2pActor = peerToPeerActor
+  data.dbActor = dbActor
+  data.peerManager = peerManager
+  data.metricsManager = metricsManager
 
   private val register = RegisterNextActor(peerToPeerActor)
 
@@ -169,12 +163,12 @@ class ConstellationNode(
   // If we are exposing rpc then create routes
   val routes: Route = new API(
     peerToPeerActor, consensusActor, udpAddress, data, peerManager,
-    metricsManager, nodeManager, cellManager)(executionContext, timeout).authRoutes
+    metricsManager, cellManager)(executionContext, timeout).authRoutes
 
   // Setup http server for internal API
   val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
 
-  val peerRoutes : Route = new PeerAPI(dbActor, nodeManager, keyManager, metricsManager, peerManager, consensusActor, data).routes
+  val peerRoutes : Route = new PeerAPI(data).routes
 
   // Setup http server for peer API
   Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)

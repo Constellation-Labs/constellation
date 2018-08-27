@@ -161,7 +161,7 @@ object Consensus {
     // figure out what the majority of bundles agreed upon
     val bundles = roundState.proposals
 
-    EdgeService.createCheckpointEdge(consensusRoundState.dao.activeTips, consensusRoundState.dao.memPool.toSeq)
+    EdgeService.createCheckpointEdge(consensusRoundState.dao.validationTips, consensusRoundState.dao.memPool.toSeq)
 
     /*
     bundleProposal match {

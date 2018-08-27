@@ -26,6 +26,9 @@ object TransactionValidation {
     * @return Future of whether or not the transaction should be considered valid
     */
   def validateTransaction(dbActor: ActorRef, tx: Transaction): Future[Boolean] = {
+
+    // A transaction should only be considered in the DAG once it has been committed to a checkpoint block.
+    // Before that, it exists only in the memPool and is not stored in the database.
     val isDuplicate = (dbActor ? DBGet(tx.hash)).mapTo[Option[TransactionCacheData]].map{_.exists{_.inDAG}}
     val sufficientBalance = (dbActor ? DBGet(tx.src.hash)).mapTo[Option[AddressCacheData]].map(_.exists(_.balance >= tx.amount))
     Future.sequence(Seq(isDuplicate, sufficientBalance)).map{ case Seq(dupe, balance) => !dupe && balance}

@@ -211,3 +211,5 @@ trait POWSignHelp {
   }
 
 }
+
+object SignHelp extends POWSignHelp

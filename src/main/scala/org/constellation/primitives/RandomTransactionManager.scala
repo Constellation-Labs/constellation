@@ -9,7 +9,7 @@ import org.constellation.Data
 
 import scala.util.Random
 
-class RandomTransactionManager(nodeManager: ActorRef, peerManager: ActorRef, metricsManager: ActorRef, dao: Data)(
+class RandomTransactionManager(peerManager: ActorRef, metricsManager: ActorRef, dao: Data)(
                               implicit val timeout: Timeout
 ) extends Actor {
 
