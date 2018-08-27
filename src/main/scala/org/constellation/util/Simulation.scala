@@ -95,7 +95,7 @@ class Simulation {
       others.map {
         n =>
           Future {
-            val res = a.postSync("addPeerV2", n)
+            val res = a.postSync("addPeer", n)
             logger.info(s"Tried to add peer $n to $ip res: $res")
           }
       }
@@ -223,39 +223,38 @@ class Simulation {
     assert(healthy(apis))
   }
 
-  def runV2(attemptSetExternalIP: Boolean = false, apis: Seq[APIClient]): Unit = {
+  def runV2(attemptSetExternalIP: Boolean = false, apis: Seq[APIClient], peerApis: Seq[APIClient]): Unit = {
 
-    awaitHealthy(apis)
+    awaitHealthy(peerApis)
 
-    setIdLocal(apis)
+    setIdLocal(peerApis)
 
     if (attemptSetExternalIP) {
-      assert(setExternalIP(apis))
+      assert(setExternalIP(peerApis))
     }
 
     // Temporary for disabling V1 trigger
     apis.foreach(_.postEmpty("disableDownload"))
 
     //val results =
-    addPeersV2(apis)
-    //import scala.concurrent.duration._
-    //Await.result(Future.sequence(results), 60.seconds)
+    addPeersV2(peerApis)
+
     Thread.sleep(5000)
+
     assert(
-      apis.forall{a =>
-//        a.postEmpty()
-        val res = a.postBlockingEmpty[Seq[(Id, Boolean)]]("peerHealthCheckV2")
+      peerApis.forall{a =>
+        val res = a.getBlocking[Seq[(Id, Boolean)]]("peerHealthCheck")
         res.forall(_._2) && res.size == apis.size - 1
       }
     )
 
-    val goe = genesisOE(apis)
+    val goe = genesisOE(peerApis)
 
-    apis.foreach{_.post("acceptGenesisOE", goe)}
+    peerApis.foreach{_.post("acceptGenesis", goe)}
 
     Thread.sleep(5000)
 
-    apis.foreach{_.post("startRandomTX", goe).onComplete(println)}
+    peerApis.foreach{_.post("startRandomTX", goe).onComplete(println)}
 
     // assert(verifyPeersAdded())
   }

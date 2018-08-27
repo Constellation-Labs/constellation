@@ -319,80 +319,13 @@ class API(
 
   private val postEndpoints =
     post {
-      path("startRandomTX") {
-        sendRandomTXV2 = !sendRandomTXV2
-        complete(sendRandomTXV2.toString)
-      } ~
+
       path("sendV2") {
         entity(as[SendToAddress]) { e =>
           nodeManager ! e
           complete(StatusCodes.OK)
         }
       } ~
-      path("peerHealthCheckV2") {
-        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse[String]]]]
-        val res = response.getOpt().map{
-          idMap =>
-
-            val res = idMap.map{
-              case (id, fut) =>
-                val maybeResponse = fut.getOpt()
-             //   println(s"Maybe response $maybeResponse")
-                id -> maybeResponse.exists{_.isSuccess}
-            }.toSeq
-
-            complete(res)
-
-        }.getOrElse(complete(StatusCodes.InternalServerError))
-
-        res
-      } ~
-        path("acceptGenesisOE") {
-          entity(as[GenesisObservation]) { go =>
-
-            dbActor.foreach { db =>
-
-              // Store hashes for the edges
-              go.genesis.store(db)
-              go.initialDistribution.store(db)
-
-              // Store the balance for the genesis TX minus the distribution along with starting rep score.
-              go.genesis.resolvedTX.foreach{
-                rtx =>
-                  db ! DBPut(
-                    rtx.dst.hash,
-                    AddressCacheData(rtx.amount - go.initialDistribution.resolvedTX.map{_.amount}.sum, Some(1000D))
-                  )
-              }
-
-              // Store the balance for the initial distribution addresses along with starting rep score.
-              go.initialDistribution.resolvedTX.foreach{ t =>
-                db ! DBPut(t.dst.hash, AddressCacheData(t.amount, Some(1000D)))
-              }
-
-              val numTX = (1 + go.initialDistribution.resolvedTX.size).toString
-              metricsManager ! UpdateMetric("validTransactions", numTX)
-              metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
-
-              genesisObservation = Some(go)
-              activeTips = Seq(
-                TypedEdgeHash(go.genesis.resolvedCB.edge.signedObservationEdge.hash, EdgeHashType.CheckpointHash),
-                TypedEdgeHash(go.initialDistribution.resolvedCB.edge.signedObservationEdge.hash, EdgeHashType.CheckpointHash)
-              )
-
-              metricsManager ! UpdateMetric("activeTips", "2")
-
-            }
-
-            // TODO: Report errors and add validity check
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("genesisObservation") {
-          entity(as[Set[Id]]) { ids =>
-            complete(createGenesisAndInitialDistributionOE(ids))
-          }
-        } ~
         path("initializeDownload") {
           downloadMode = true
           complete(StatusCodes.OK)
@@ -472,14 +405,6 @@ class API(
         path("tx") {
           entity(as[TransactionV1]) { tx =>
             peerToPeerActor ! tx
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("addPeerV2"){
-          entity(as[AddPeerRequest]) { e =>
-
-            peerManager ! e
-
             complete(StatusCodes.OK)
           }
         } ~
