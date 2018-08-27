@@ -226,7 +226,8 @@ class API(
           path("selfAddress") {
             complete(id.address)
           } ~
-          path("id") {
+          path("id") { // TODO : This should be served both on internal / external API
+            // ^ Create shared routes for common functionality like this.
             complete(id)
           } ~
           path("nodeKeyPair") {

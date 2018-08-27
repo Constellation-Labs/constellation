@@ -30,7 +30,6 @@ class RandomTransactionManager(peerManager: ActorRef, metricsManager: ActorRef, 
       metricsManager ! IncrementMetric("randomTransactionsGenerated")
       metricsManager ! IncrementMetric("sentTransactions")
 
-      println("Sending random tx")
       // TODO: Change to transport layer call
       peerManager ! APIBroadcast(_.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx))
 

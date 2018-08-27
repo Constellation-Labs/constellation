@@ -87,11 +87,13 @@ class Simulation {
     results
   }
 
-  def addPeersV2(apis: Seq[APIClient]): Seq[Future[Unit]] = {
-    val results = apis.flatMap { a =>
+  def addPeersV2(apis: Seq[APIClient], peerAPIs: Seq[APIClient]): Seq[Future[Unit]] = {
+    val joinedAPIs = apis.zip(peerAPIs)
+    val results = joinedAPIs.flatMap { case (a, peerAPI) =>
       val ip = a.hostName
       logger.info(s"Trying to add nodes to $ip")
-      val others = apis.filter {_.id != a.id}.map { z => AddPeerRequest(z.hostName, z.udpPort, z.apiPort, z.id)}
+      val others = joinedAPIs.filter { case (b, _) => b.id != a.id}
+        .map { case (z, bPeer) => AddPeerRequest(z.hostName, z.udpPort, bPeer.apiPort, z.id)}
       others.map {
         n =>
           Future {
@@ -237,7 +239,7 @@ class Simulation {
     apis.foreach(_.postEmpty("disableDownload"))
 
     //val results =
-    addPeersV2(apis)
+    addPeersV2(apis, peerApis)
     //import scala.concurrent.duration._
     //Await.result(Future.sequence(results), 60.seconds)
     Thread.sleep(5000)
