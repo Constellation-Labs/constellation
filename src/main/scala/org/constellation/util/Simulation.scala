@@ -44,7 +44,7 @@ class Simulation {
 
   def genesisOE(apis: Seq[APIClient]): GenesisObservation = {
     val ids = apis.map{_.id}
-    apis.head.postBlocking[GenesisObservation]("genesisObservation", ids.tail.toSet)
+    apis.head.postBlocking[GenesisObservation]("genesis/create", ids.tail.toSet)
   }
 
   def genesis(apis: Seq[APIClient]): Unit = {
@@ -251,7 +251,7 @@ class Simulation {
 
     val goe = genesisOE(apis)
 
-    apis.foreach{_.post("acceptGenesisOE", goe)}
+    apis.foreach{_.post("genesis/accept", goe)}
 
     Thread.sleep(5000)
 

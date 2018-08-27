@@ -40,7 +40,6 @@ class API(
            val data: Data = null,
            peerManager: ActorRef,
            metricsManager: ActorRef,
-           nodeManager: ActorRef,
            cellManager: ActorRef
          )(implicit executionContext: ExecutionContext, val timeout: Timeout)
   extends Json4sSupport
@@ -323,12 +322,6 @@ class API(
         sendRandomTXV2 = !sendRandomTXV2
         complete(sendRandomTXV2.toString)
       } ~
-      path("sendV2") {
-        entity(as[SendToAddress]) { e =>
-          nodeManager ! e
-          complete(StatusCodes.OK)
-        }
-      } ~
       path("peerHealthCheckV2") {
         val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse[String]]]]
         val res = response.getOpt().map{
@@ -347,50 +340,18 @@ class API(
 
         res
       } ~
-        path("acceptGenesisOE") {
-          entity(as[GenesisObservation]) { go =>
-
-            dbActor.foreach { db =>
-
-              // Store hashes for the edges
-              go.genesis.store(db, inDAG = true)
-              go.initialDistribution.store(db, inDAG = true)
-
-              // Store the balance for the genesis TX minus the distribution along with starting rep score.
-              go.genesis.resolvedTX.foreach{
-                rtx =>
-                  db ! DBPut(
-                    rtx.dst.hash,
-                    AddressCacheData(rtx.amount - go.initialDistribution.resolvedTX.map{_.amount}.sum, Some(1000D))
-                  )
-              }
-
-              // Store the balance for the initial distribution addresses along with starting rep score.
-              go.initialDistribution.resolvedTX.foreach{ t =>
-                db ! DBPut(t.dst.hash, AddressCacheData(t.amount, Some(1000D)))
-              }
-
-              val numTX = (1 + go.initialDistribution.resolvedTX.size).toString
-              metricsManager ! UpdateMetric("validTransactions", numTX)
-              metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
-
-              genesisObservation = Some(go)
-              activeTips = Seq(
-                TypedEdgeHash(go.genesis.resolvedCB.edge.signedObservationEdge.hash, EdgeHashType.CheckpointHash),
-                TypedEdgeHash(go.initialDistribution.resolvedCB.edge.signedObservationEdge.hash, EdgeHashType.CheckpointHash)
-              )
-
-              metricsManager ! UpdateMetric("activeTips", "2")
-
+        pathPrefix("genesis") {
+          path("create") {
+            entity(as[Set[Id]]) { ids =>
+              complete(createGenesisAndInitialDistributionOE(ids))
             }
-
-            // TODO: Report errors and add validity check
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("genesisObservation") {
-          entity(as[Set[Id]]) { ids =>
-            complete(createGenesisAndInitialDistributionOE(ids))
+          } ~
+          path("accept") {
+            entity(as[GenesisObservation]) { go =>
+              acceptGenesisOE(go)
+              // TODO: Report errors and add validity check
+              complete(StatusCodes.OK)
+            }
           }
         } ~
         path("initializeDownload") {

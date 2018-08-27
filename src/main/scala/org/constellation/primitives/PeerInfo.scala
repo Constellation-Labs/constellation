@@ -23,8 +23,6 @@ trait PeerInfo {
 
   val peerSync: TrieMap[Id, PeerSyncHeartbeat] = TrieMap()
 
-  var p2pActor : Option[ActorRef] = None
-  var dbActor : Option[ActorRef] = None
 
   val rawPeerLookup: TrieMap[Id, LocalPeerData] = TrieMap()
 

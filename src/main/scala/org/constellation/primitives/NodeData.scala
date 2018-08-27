@@ -4,6 +4,7 @@ import java.io.File
 import java.net.InetSocketAddress
 import java.security.KeyPair
 
+import akka.actor.ActorRef
 import org.constellation.primitives.Schema._
 import org.constellation.util.Signed
 import constellation._
@@ -12,6 +13,13 @@ import org.constellation.LevelDB
 import scala.util.Try
 
 trait NodeData {
+
+
+  var p2pActor : ActorRef = _
+  var dbActor : ActorRef = _
+  var peerManager: ActorRef = _
+  var metricsManager: ActorRef = _
+
 
   var sendRandomTXV2: Boolean = false
 

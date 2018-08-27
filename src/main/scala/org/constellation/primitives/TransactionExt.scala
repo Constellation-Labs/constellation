@@ -37,7 +37,7 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
     import akka.pattern.ask
     def dbQuery = {
-      dbActor.flatMap{ d => (d ? DBGet(hash)).mapTo[Option[TransactionV1]].getOpt(t=5).flatten }
+      (dbActor ? DBGet(hash)).mapTo[Option[TransactionV1]].getOpt(t=5).flatten
     }
     dbQuery
   }
@@ -46,7 +46,7 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
     import akka.pattern.ask
     def dbQuery = {
-      dbActor.flatMap{ d => (d ? DBGet(hash)).mapTo[Option[TransactionV1]].getOpt(t=5).flatten }
+      (dbActor ? DBGet(hash)).mapTo[Option[TransactionV1]].getOpt(t=5).flatten
     }
     val res = txHashToTX.get(hash)
     if (res.isEmpty) dbQuery else res
@@ -58,12 +58,12 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
   }
 
   def putTXDB(tx: TransactionV1): Unit = {
-    dbActor.foreach{_ ! DBPut(tx.hash, tx)}
+    dbActor  ! DBPut(tx.hash, tx)
   }
 
   def storeTransaction(tx: TransactionV1): Unit = {
     txHashToTX(tx.hash) = tx
-    dbActor.foreach{_ ! DBPut(tx.hash, tx)}
+    dbActor ! DBPut(tx.hash, tx)
   }
 
   def createTransaction(

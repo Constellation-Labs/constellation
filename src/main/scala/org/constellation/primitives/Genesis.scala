@@ -2,8 +2,9 @@ package org.constellation.primitives
 
 import org.constellation.primitives.Schema._
 import constellation._
+import org.constellation.LevelDB.DBPut
 
-trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataExt {
+trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataExt with EdgeDAO {
 
   val CoinBaseHash = "coinbase"
 
@@ -79,6 +80,39 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     val distrCBO = ResolvedCBObservation(distr, ResolvedCB(distrRED))
 
     GenesisObservation(genesisCBO, distrCBO)
+
+  }
+
+  def acceptGenesisOE(go: GenesisObservation): Unit = {
+    // Store hashes for the edges
+    go.genesis.store(dbActor, inDAG = true)
+    go.initialDistribution.store(dbActor, inDAG = true)
+
+    // Store the balance for the genesis TX minus the distribution along with starting rep score.
+    go.genesis.resolvedTX.foreach{
+      rtx =>
+        dbActor ! DBPut(
+          rtx.dst.hash,
+          AddressCacheData(rtx.amount - go.initialDistribution.resolvedTX.map{_.amount}.sum, Some(1000D))
+        )
+    }
+
+    // Store the balance for the initial distribution addresses along with starting rep score.
+    go.initialDistribution.resolvedTX.foreach{ t =>
+      dbActor ! DBPut(t.dst.hash, AddressCacheData(t.amount, Some(1000D)))
+    }
+
+    val numTX = (1 + go.initialDistribution.resolvedTX.size).toString
+    metricsManager ! UpdateMetric("validTransactions", numTX)
+    metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
+
+    genesisObservation = Some(go)
+    validationTips = Seq(
+      TypedEdgeHash(go.genesis.resolvedCB.edge.signedObservationEdge.hash, EdgeHashType.ValidationHash),
+      TypedEdgeHash(go.initialDistribution.resolvedCB.edge.signedObservationEdge.hash, EdgeHashType.ValidationHash)
+    )
+
+    metricsManager ! UpdateMetric("activeTips", "2")
 
   }
 

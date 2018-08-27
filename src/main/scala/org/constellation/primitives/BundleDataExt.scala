@@ -54,9 +54,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     }
 
     if (dbDelete) {
-      dbActor.foreach {
-        _ ! DBDelete(hash)
-      }
+      dbActor ! DBDelete(hash)
     }
   }
 
@@ -64,13 +62,13 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   def lookupBundleDB(hash: String) : Option[Sheaf] = {
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
-    dbActor.flatMap{ d => (d ? DBGet(hash)).mapTo[Option[Sheaf]].getOpt(t=5).flatten }
+    (dbActor ? DBGet(hash)).mapTo[Option[Sheaf]].getOpt(t=5).flatten
   }
 
   def lookupBundleDBFallbackBlocking(hash: String): Option[Sheaf] = {
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
     def dbQuery = {
-      dbActor.flatMap{ d => (d ? DBGet(hash)).mapTo[Option[Sheaf]].getOpt(t=5).flatten }
+      (dbActor ? DBGet(hash)).mapTo[Option[Sheaf]].getOpt(t=5).flatten
     }
     val res = bundleToSheaf.get(hash)
     if (res.isEmpty) dbQuery else res
@@ -96,13 +94,13 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   def putBundleDB(sheaf: Sheaf): Unit = {
     val hash = sheaf.bundle.hash
-    dbActor.foreach{_ ! DBPut(hash, sheaf)}
+    dbActor ! DBPut(hash, sheaf)
   }
 
   def storeBundle(sheaf: Sheaf): Unit = {
     val hash = sheaf.bundle.hash
     bundleToSheaf(hash) = sheaf
-    dbActor.foreach{_ ! DBPut(hash, sheaf)}
+    dbActor ! DBPut(hash, sheaf)
   }
 
   def processPeerSyncHeartbeat(psh: PeerSyncHeartbeat): Unit = {
