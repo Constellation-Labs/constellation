@@ -221,7 +221,6 @@ object Schema {
 
   case class CheckpointBlock(transactions: Set[String]) extends ProductHash
 
-
   case class EdgeCell(members: mutable.SortedSet[EdgeSheaf])
 
   case class Transaction(edge: Edge[Address, Address, TransactionEdgeData]) {

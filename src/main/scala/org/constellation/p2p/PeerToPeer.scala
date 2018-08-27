@@ -66,8 +66,6 @@ class PeerToPeer(
 
     case PeerBroadcast() =>
 
-
-
     // Regular state checks
     case InternalHeartbeat =>
 
@@ -105,8 +103,6 @@ class PeerToPeer(
               }
           }
 
-
-
           // Remove dead peers
           lastPeerRX.foreach{ case (id, rx) =>
             if (rx < (System.currentTimeMillis() - 120000)) {
@@ -119,14 +115,11 @@ class PeerToPeer(
             }
           }
 
-
         }
-
 
         if (heartbeatRound % 120 == 0) {
           deadPeers.foreach(addPeerFromLocal(_))
         }
-
 
         downloadHeartbeat()
 

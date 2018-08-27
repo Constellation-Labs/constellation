@@ -16,7 +16,6 @@ object TransactionValidation {
 
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-
   // TODO : Add an LRU cache for looking up TransactionCacheData instead of pure LDB calls.
 
   /**
