@@ -41,15 +41,22 @@ class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSyst
     ))
 
     val apis = nodes.map{_.getAPIClient()}
+
+    val peerApis = nodes.map{ node => {
+      val n = node.getAPIClient()
+      n.apiPort = node.peerHttpPort
+      n
+    }}
+
     val sim = new Simulation()
 
     //sim.run(attemptSetExternalIP = false
     //  , validationFractionAcceptable = 0.3
     //)
 
-    sim.runV2(apis = apis)
+    sim.runV2(apis = apis, peerApis = peerApis)
 
-   // Thread.sleep(1000*60*60)
+    //Thread.sleep(1000*60*60)
 
     // Cleanup DBs
     File(tmpDir).delete()

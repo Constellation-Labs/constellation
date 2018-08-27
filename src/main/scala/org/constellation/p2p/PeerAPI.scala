@@ -1,5 +1,8 @@
 package org.constellation.p2p
 
+import java.net.InetSocketAddress
+import java.security.KeyPair
+
 import akka.actor.ActorRef
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
@@ -45,13 +48,29 @@ class PeerAPI(dao: Data)(implicit executionContext: ExecutionContext, val timeou
         path("health") {
           complete(StatusCodes.OK)
         } ~
-          path("ip") {
-            complete(clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)})
-          } /*~
-        path("info") {
-          complete()
+        path("ip") {
+          complete(clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)})
+        } ~
+        path("peerHealthCheck") {
+          val response = (dao.peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[scalaj.http.HttpResponse[String]]]]
+          val res = response.getOpt().map{
+            idMap =>
+
+              val res = idMap.map{
+                case (id, fut) =>
+                  val maybeResponse = fut.getOpt()
+                  id -> maybeResponse.exists(f => f.isSuccess)
+              }.toSeq
+
+              complete(res)
+
+          }.getOrElse(complete(StatusCodes.InternalServerError))
+
+          res
+        } ~
+        path("id") {
+          complete(dao.id)
         }
-      }*/
       }
     }
   }

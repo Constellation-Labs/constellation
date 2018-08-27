@@ -18,6 +18,8 @@ trait Checkpoint extends PeerAuth {
 
   def checkpointHeartbeat(): Unit = {
 
+    /*
+
     if (!downloadMode) {
 
       var roundHash: RoundHash[_ <: CC] = RoundHash(genesisTXHash.get)
@@ -65,6 +67,7 @@ trait Checkpoint extends PeerAuth {
       }
 
     }
+    */
 
   }
 

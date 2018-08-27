@@ -134,7 +134,7 @@ class ConstellationNode(
     )
 
   val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(configKeyPair, udpActor)(timeout)),
+    Props(new Consensus(configKeyPair, data, udpActor)(timeout)),
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val peerToPeerActor: ActorRef =

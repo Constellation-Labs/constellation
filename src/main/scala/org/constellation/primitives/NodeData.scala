@@ -47,7 +47,6 @@ trait NodeData {
   var remotes: Seq[InetSocketAddress] = Seq()
   def selfPeer: Signed[Peer] = Peer(id, externalAddress, apiAddress, remotes, externalHostString).signed()
 
-
   def updateKeyPair(kp: KeyPair): Unit = {
     keyPair = kp
   }

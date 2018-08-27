@@ -223,7 +223,7 @@ class Simulation {
     assert(healthy(apis))
   }
 
-  def runV2(attemptSetExternalIP: Boolean = false, apis: Seq[APIClient]): Unit = {
+  def runV2(attemptSetExternalIP: Boolean = false, apis: Seq[APIClient], peerApis: Seq[APIClient]): Unit = {
 
     awaitHealthy(apis)
 

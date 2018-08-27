@@ -8,11 +8,6 @@ import scala.collection.concurrent.TrieMap
 trait EdgeDAO {
 
 
-  //var peerManager: ActorRef = _
-  //var dbActor: ActorRef = _
-  //var metricsManager: ActorRef = _
-
-
   var genesisObservation: Option[GenesisObservation] = None
 
   @volatile var checkpointTips : Seq[TypedEdgeHash] = Seq()
