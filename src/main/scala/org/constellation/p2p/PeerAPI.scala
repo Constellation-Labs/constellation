@@ -16,7 +16,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, IncrementMetric, TransactionValidation}
-import org.constellation.util.HashSignature
+import org.constellation.util.{CommonEndpoints, HashSignature}
 import org.json4s.native
 import org.json4s.native.Serialization
 import akka.pattern.ask
@@ -30,8 +30,8 @@ import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
 
-class PeerAPI(dao: Data)(implicit executionContext: ExecutionContext, val timeout: Timeout)
-  extends Json4sSupport {
+class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val timeout: Timeout)
+  extends Json4sSupport with CommonEndpoints {
 
   implicit val serialization: Serialization.type = native.Serialization
 
@@ -45,31 +45,8 @@ class PeerAPI(dao: Data)(implicit executionContext: ExecutionContext, val timeou
   private val getEndpoints = {
     extractClientIP { clientIP =>
       get {
-        path("health") {
-          complete(StatusCodes.OK)
-        } ~
         path("ip") {
           complete(clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)})
-        } ~
-        path("peerHealthCheck") {
-          val response = (dao.peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[scalaj.http.HttpResponse[String]]]]
-          val res = response.getOpt().map{
-            idMap =>
-
-              val res = idMap.map{
-                case (id, fut) =>
-                  val maybeResponse = fut.getOpt()
-                  id -> maybeResponse.exists(f => f.isSuccess)
-              }.toSeq
-
-              complete(res)
-
-          }.getOrElse(complete(StatusCodes.InternalServerError))
-
-          res
-        } ~
-        path("id") {
-          complete(dao.id)
         }
       }
     }
@@ -102,7 +79,7 @@ class PeerAPI(dao: Data)(implicit executionContext: ExecutionContext, val timeou
   }
 
   val routes: Route = {
-    getEndpoints ~ postEndpoints ~ mixedEndpoints
+    getEndpoints ~ postEndpoints ~ mixedEndpoints ~ commonEndpoints
   }
 
 }
