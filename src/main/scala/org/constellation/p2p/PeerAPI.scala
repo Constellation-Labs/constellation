@@ -23,10 +23,8 @@ import akka.pattern.ask
 import org.constellation.Data
 import org.constellation.LevelDB.DBPut
 import org.constellation.consensus.TransactionProcessor
-
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
-
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
 
@@ -90,7 +88,7 @@ class PeerAPI(dao: Data)(implicit executionContext: ExecutionContext, val timeou
         entity(as[Transaction]) {
           tx =>
             Future{
-              TransactionProcessor.handleTransaction(tx, dao)
+              TransactionProcessor.handleTransaction(tx, dao)(executionContext = executionContext, keyPair = dao.keyPair)
             }
             complete(StatusCodes.OK)
         }

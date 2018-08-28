@@ -4,34 +4,37 @@ import java.security.KeyPair
 
 import org.constellation.primitives.Schema._
 import constellation._
+import org.constellation.util.SignHelp
+
+import scala.collection.concurrent.TrieMap
 
 object EdgeService {
 
-  def createCheckpointEdge(activeTips: Seq[TypedEdgeHash], memPool: Seq[String])(implicit keyPair: KeyPair): ResolvedCB = {
-    // take those transactions bundle and sign them
-    // TODO: temp logic
-    val tip1 = activeTips.head
-    val tip2 = activeTips.last
+  case class CreateCheckpointEdgeResponse(checkpointEdge: SignedObservationEdge,
+                                          transactionsUsed: Set[String],
+                                          filteredValidationTips: Seq[TypedEdgeHash],
+                                          updatedTransactionMemPoolThresholdMet: Set[String])
 
-    val cb = CheckpointEdgeData(memPool)
+  def createCheckpointEdgeProposal(transactionMemPoolThresholdMet: Set[String],
+                           minCheckpointFormationThreshold: Int,
+                           validationTips: Seq[TypedEdgeHash])(implicit keyPair: KeyPair): CreateCheckpointEdgeResponse = {
+    val transactionsUsed = transactionMemPoolThresholdMet.take(minCheckpointFormationThreshold)
+    val updatedTransactionMemPoolThresholdMet = transactionMemPoolThresholdMet -- transactionsUsed
+
+    val checkpointEdge = CheckpointEdgeData(transactionsUsed.toSeq.sorted)
+
+    val tips = validationTips.take(2)
+    val filteredValidationTips = validationTips.filterNot(tips.contains)
 
     val oe = ObservationEdge(
-      TypedEdgeHash(tip1.hash, EdgeHashType.ValidationHash),
-      TypedEdgeHash(tip2.hash, EdgeHashType.TransactionHash),
-      data = Some(TypedEdgeHash(tip1.hash, EdgeHashType.CheckpointDataHash))
+      tips.head,
+      tips(1),
+      data = Some(TypedEdgeHash(checkpointEdge.hash, EdgeHashType.CheckpointDataHash))
     )
 
-    val soe = signedObservationEdge(oe)
+    val signedCheckpointEdge = SignHelp.signedObservationEdge(oe)(keyPair)
 
-    val roe = ResolvedObservationEdge(
-      null.asInstanceOf[SignedObservationEdge],
-      null.asInstanceOf[SignedObservationEdge],
-      Some(cb)
-    )
-
-    val edge = Edge(oe, soe, roe)
-
-    ResolvedCB(edge)
+    CreateCheckpointEdgeResponse(signedCheckpointEdge, transactionsUsed, filteredValidationTips, updatedTransactionMemPoolThresholdMet)
   }
 
 }

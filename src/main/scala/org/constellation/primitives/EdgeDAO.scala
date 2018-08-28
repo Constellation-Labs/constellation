@@ -7,14 +7,14 @@ import scala.collection.concurrent.TrieMap
 
 trait EdgeDAO {
 
-
   var genesisObservation: Option[GenesisObservation] = None
+  val minCheckpointFormationThreshold = 3
 
   @volatile var checkpointTips : Seq[TypedEdgeHash] = Seq()
   @volatile var validationTips : Seq[TypedEdgeHash] = Seq()
 
-  val txMemPoolOE : TrieMap[String, Transaction] = TrieMap()
+  val transactionMemPool : TrieMap[String, Transaction] = TrieMap()
 
-  @volatile var txMemPoolOEThresholdMet: Set[String] = Set()
+  @volatile var transactionMemPoolThresholdMet: Set[String] = Set()
 
 }
