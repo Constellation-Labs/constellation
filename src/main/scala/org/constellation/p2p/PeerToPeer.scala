@@ -74,6 +74,7 @@ class PeerToPeer(
       if (sendRandomTXV2) {
         randomTransactionManager ! InternalHeartbeat
         cellManager ! InternalHeartbeat
+        data.metricsManager ! InternalHeartbeat
       }
 
       processHeartbeat {
@@ -129,22 +130,6 @@ class PeerToPeer(
 
         gossipHeartbeat()
 
-        if (heartbeatRound % 30 == 0) {
-          logger.debug(
-            s"Heartbeat: ${id.short}, " +
-              s"numActiveBundles: ${activeDAGBundles.size}, " +
-              s"maxHeight: ${maxBundle.flatMap{_.meta.map{_.height}}}, " +
-              s"numTotalValidTX: $totalNumValidatedTX " +
-              s"numPeers: ${peers.size} " +
-              s"numBundleMessages: $totalNumBundleMessages, " +
-              s"broadcasts: $totalNumBroadcastMessages, " +
-              s"numGossipMessages: $totalNumGossipMessages, " +
-              s"balance: $selfBalance, " +
-              s"memPool: ${memPool.size} numPeers: ${peers.size} " +
-              s"validUTXO: ${validLedger.map { case (k, v) => k.slice(0, 5) -> v }} " +
-              ""
-          )
-        }
       }
 
     // Peer messages

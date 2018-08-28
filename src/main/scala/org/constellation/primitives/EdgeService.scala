@@ -7,7 +7,7 @@ import constellation._
 
 object EdgeService {
 
-  def createCheckpointEdge(activeTips: Seq[TypedEdgeHash], memPool: Seq[String])(implicit keyPair: KeyPair): ResolvedCB = {
+  def createCheckpointEdge(activeTips: Seq[TypedEdgeHash], memPool: Seq[String])(implicit keyPair: KeyPair): CheckpointEdge = {
     // take those transactions bundle and sign them
     // TODO: temp logic
     val tip1 = activeTips.head
@@ -31,7 +31,7 @@ object EdgeService {
 
     val edge = Edge(oe, soe, roe)
 
-    ResolvedCB(edge)
+    CheckpointEdge(edge)
   }
 
 }

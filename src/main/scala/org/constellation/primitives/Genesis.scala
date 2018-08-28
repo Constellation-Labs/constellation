@@ -57,7 +57,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
 
     val redGenesis = Edge(oe, soe, roe)
 
-    val genesisCBO = ResolvedCBObservation(Seq(redTXGenesisResolved), ResolvedCB(redGenesis))
+    val genesisCBO = CheckpointBlock(Seq(redTXGenesisResolved), CheckpointEdge(redGenesis))
 
     val distr = ids.toSeq.map{ id =>
       createTransactionSafeBatchOE(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
@@ -77,7 +77,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
 
     val distrRED = Edge(distrOE, distrSOE, distrROE)
 
-    val distrCBO = ResolvedCBObservation(distr, ResolvedCB(distrRED))
+    val distrCBO = CheckpointBlock(distr, CheckpointEdge(distrRED))
 
     GenesisObservation(genesisCBO, distrCBO)
 
@@ -89,27 +89,29 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     go.initialDistribution.store(dbActor, inDAG = true)
 
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
-    go.genesis.resolvedTX.foreach{
+    go.genesis.transactions.foreach{
       rtx =>
         dbActor ! DBPut(
           rtx.dst.hash,
-          AddressCacheData(rtx.amount - go.initialDistribution.resolvedTX.map{_.amount}.sum, Some(1000D))
+          AddressCacheData(rtx.amount - go.initialDistribution.transactions.map{_.amount}.sum, Some(1000D))
         )
     }
 
     // Store the balance for the initial distribution addresses along with starting rep score.
-    go.initialDistribution.resolvedTX.foreach{ t =>
+    go.initialDistribution.transactions.foreach{ t =>
       dbActor ! DBPut(t.dst.hash, AddressCacheData(t.amount, Some(1000D)))
     }
 
-    val numTX = (1 + go.initialDistribution.resolvedTX.size).toString
+    val numTX = (1 + go.initialDistribution.transactions.size).toString
     metricsManager ! UpdateMetric("validTransactions", numTX)
     metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
 
     genesisObservation = Some(go)
     validationTips = Seq(
-      TypedEdgeHash(go.genesis.resolvedCB.edge.signedObservationEdge.hash, EdgeHashType.ValidationHash),
-      TypedEdgeHash(go.initialDistribution.resolvedCB.edge.signedObservationEdge.hash, EdgeHashType.ValidationHash)
+      go.genesis.checkpoint.edge.signedObservationEdge,
+      go.initialDistribution.checkpoint.edge.signedObservationEdge
+    //  TypedEdgeHash(go.genesis.resolvedCB.edge.signedObservationEdge.hash, EdgeHashType.ValidationHash),
+    //  TypedEdgeHash(go.initialDistribution.resolvedCB.edge.signedObservationEdge.hash, EdgeHashType.ValidationHash)
     )
 
     metricsManager ! UpdateMetric("activeTips", "2")

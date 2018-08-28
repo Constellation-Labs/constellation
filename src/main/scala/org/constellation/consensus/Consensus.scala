@@ -25,10 +25,10 @@ object Consensus {
   sealed trait VoteData[+T <: CC] extends CachedData[T]
   sealed trait ProposalData[+T <: CC] extends CachedData[T]
 
-  case class CheckpointVote(data: ResolvedCB) extends VoteData[Checkpoint]
+  case class CheckpointVote(data: CheckpointEdge) extends VoteData[Checkpoint]
   case class ConflictVote(data: Vote) extends VoteData[Conflict]
 
-  case class CheckpointProposal(data: ResolvedCB) extends ProposalData[Checkpoint]
+  case class CheckpointProposal(data: CheckpointEdge) extends ProposalData[Checkpoint]
   case class ConflictProposal(data: Bundle) extends ProposalData[Conflict]
 
   case class RoundHash[+T <: CC](hash: String)
@@ -44,7 +44,7 @@ object Consensus {
                                                 callback: ConsensusRoundResult[_ <: CC] => Unit,
                                                 vote: VoteData[T])
 
-  case class ConsensusRoundResult[+T <: CC](bundle: ResolvedCB, roundHash: RoundHash[T])
+  case class ConsensusRoundResult[+T <: CC](bundle: CheckpointEdge, roundHash: RoundHash[T])
 
   case class RoundState(facilitators: Set[Id] = Set(),
                         votes: HashMap[Id, _ <: VoteData[_ <: CC]] = HashMap(),
@@ -156,7 +156,7 @@ object Consensus {
   }
 
   // TODO: here is where we call out to bundling logic
-  def getConsensusBundle[T <: CC](consensusRoundState: ConsensusRoundState, roundHash: RoundHash[T])(implicit keyPair: KeyPair): ResolvedCB = {
+  def getConsensusBundle[T <: CC](consensusRoundState: ConsensusRoundState, roundHash: RoundHash[T])(implicit keyPair: KeyPair): CheckpointEdge = {
     val roundState = getCurrentRoundState(consensusRoundState, roundHash)
     // figure out what the majority of bundles agreed upon
     val bundles = roundState.proposals

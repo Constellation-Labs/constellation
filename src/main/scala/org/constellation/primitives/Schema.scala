@@ -219,8 +219,6 @@ object Schema {
 
   case class TX(signatureBatch: SignatureBatch) extends ProductHash
 
-  case class CheckpointBlock(transactions: Set[String]) extends ProductHash
-
   case class EdgeCell(members: mutable.SortedSet[EdgeSheaf])
 
   case class Transaction(edge: Edge[Address, Address, TransactionEdgeData]) {
@@ -251,7 +249,7 @@ object Schema {
     )
   }
 
-  case class ResolvedCB(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData])
+  case class CheckpointEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData])
 
   case class Edge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
   (
@@ -276,19 +274,23 @@ object Schema {
   }
 
   case class AddressCacheData(balance: Long, reputation: Option[Double] = None)
-  case class TransactionCacheData(resolvedTX: Transaction, inDAG: Boolean = false)
-  case class CheckpointCacheData(resolvedCB: ResolvedCB, inDAG: Boolean = false)
+  case class TransactionCacheData(
+                                   transaction: Transaction,
+                                   inDAG: Boolean = false,
+                                   cbEdgeHash: Option[String] = None
+                                 )
+  case class CheckpointCacheData(resolvedCB: CheckpointEdge, inDAG: Boolean = false)
 
 
-  case class ResolvedCBObservation(
-                                    resolvedTX: Seq[Transaction],
-                                    resolvedCB: ResolvedCB
+  case class CheckpointBlock(
+                              transactions: Seq[Transaction],
+                              checkpoint: CheckpointEdge
                                   ) {
     def store(db: ActorRef, inDAG: Boolean = false): Unit = {
-      resolvedTX.foreach { rt =>
+      transactions.foreach { rt =>
         rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG)))
       }
-      resolvedCB.edge.store(db, Some(CheckpointCacheData(resolvedCB, inDAG = inDAG)))
+      checkpoint.edge.store(db, Some(CheckpointCacheData(checkpoint, inDAG = inDAG)))
     }
   }
 
@@ -304,8 +306,8 @@ object Schema {
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
 
   case class GenesisObservation(
-                                 genesis: ResolvedCBObservation,
-                                 initialDistribution: ResolvedCBObservation
+                                 genesis: CheckpointBlock,
+                                 initialDistribution: CheckpointBlock
                                )
 
 
