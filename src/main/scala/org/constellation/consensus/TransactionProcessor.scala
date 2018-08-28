@@ -1,29 +1,33 @@
 package org.constellation.consensus
 
+import java.security.KeyPair
+
 import akka.actor.ActorRef
+import com.typesafe.scalalogging.Logger
 import org.constellation.Data
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, IncrementMetric, TransactionValidation}
+import org.constellation.primitives.{APIBroadcast, EdgeService, IncrementMetric, TransactionValidation}
 import org.constellation.util.SignHelp
 
 import scala.concurrent.ExecutionContext
 
-
 object TransactionProcessor {
-
+  val logger = Logger(s"TransactionProcessor")
 
   val minTXSignatureThreshold = 3
-  val minCheckpointFormationThreshold = 3
   // TODO : Add checks on max number in mempool and max num signatures.
   val maxUniqueTXSize = 500
   val maxNumSignaturesPerTX = 20
 
-  def handleTransaction(
-                         tx: Transaction, dao: Data
-                       )(implicit executionContext: ExecutionContext): Unit = {
+  def handleTransaction(tx: Transaction,
+                        dao: Data)(implicit executionContext: ExecutionContext, keyPair: KeyPair): Unit = {
+
     // Validate transaction TODO : This can be more efficient, calls get repeated several times
     // in event where a new signature is being made by another peer it's most likely still valid, should
     // cache the results of this somewhere.
+
+    logger.debug(s"handle transaction = $tx")
+
     TransactionValidation.validateTransaction(dao.dbActor, tx).foreach{
       // TODO : Increment metrics here for each case
       case true =>
@@ -41,52 +45,59 @@ object TransactionProcessor {
         }
 
         // Add to memPool or update an existing hash with new signatures
-        if (dao.txMemPoolOE.contains(tx.hash)) {
+        if (dao.transactionMemPool.contains(tx.hash)) {
 
           // Merge signatures together
-          val updated = dao.txMemPoolOE(tx.hash).plus(txPrime)
+          val updated = dao.transactionMemPool(tx.hash).plus(txPrime)
 
-          // Check to see if we have enough signatures to include in CB
-          if (updated.signatures.size >= minTXSignatureThreshold) {
+            // Check to see if we have enough signatures to include in CB
+            if (updated.signatures.size >= minTXSignatureThreshold) {
 
             // Set threshold as met
-            dao.txMemPoolOEThresholdMet += tx.hash
+            dao.transactionMemPoolThresholdMet += tx.hash
 
-            if (dao.txMemPoolOEThresholdMet.size >= minCheckpointFormationThreshold && dao.validationTips.size >= 2) {
+            if (dao.transactionMemPoolThresholdMet.size >= dao.minCheckpointFormationThreshold && dao.validationTips.size >= 2) {
 
               // Form new checkpoint block.
 
               // TODO : Validate this batch doesn't have a double spend, if it does,
               // just drop all conflicting.
 
-              val taken = dao.txMemPoolOEThresholdMet.take(minCheckpointFormationThreshold)
-              dao.txMemPoolOEThresholdMet --= taken
-              taken.foreach{dao.txMemPoolOE.remove}
+              // *****************//
+              // TODO: wip
+              // Checkpoint block proposal
 
-              val ced = CheckpointEdgeData(taken.toSeq.sorted)
+              // initialize checkpointing consensus state
+              // send checkpoint block proposal to everyone
+              // as new proposals come in route them to the consensus actor
+              // once a threshold is met take majority checkpoint edge
+              // store it
+              // tell people about it
 
-              val tips = dao.validationTips.take(2)
-              dao.validationTips = dao.validationTips.filterNot(tips.contains)
+              // below is a single local formation of a checkpoint edge proposal
+              // need to wait on majority of other people before accepting it
 
-              val oe = ObservationEdge(
-                tips.head,
-                tips(1),
-                data = Some(TypedEdgeHash(ced.hash, EdgeHashType.CheckpointDataHash))
-              )
+              val checkpointEdgeProposal =
+                EdgeService.createCheckpointEdgeProposal(dao.transactionMemPoolThresholdMet, dao.minCheckpointFormationThreshold, dao.validationTips)
 
-              val soe = SignHelp.signedObservationEdge(oe)(dao.keyPair)
+              // TODO: move to mem pool service
+              checkpointEdgeProposal.transactionsUsed.foreach{dao.transactionMemPool.remove}
 
-              // TODO: Broadcast CB edge
+              dao.transactionMemPoolThresholdMet = checkpointEdgeProposal.updatedTransactionMemPoolThresholdMet
+
+              // TODO: move to tips service
+              dao.validationTips = checkpointEdgeProposal.filteredValidationTips
+
+              /******************/
 
             }
           }
-          dao.txMemPoolOE(tx.hash) = updated
+          dao.transactionMemPool(tx.hash) = updated
         } else {
-          dao.txMemPoolOE(tx.hash) = txPrime
+          dao.transactionMemPool(tx.hash) = txPrime
         }
 
       // Trigger check if we should emit a CB
-
 
       case false =>
         dao.metricsManager ! IncrementMetric("invalidTransactions")
