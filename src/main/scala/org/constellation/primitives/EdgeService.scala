@@ -18,6 +18,7 @@ object EdgeService {
   def createCheckpointEdgeProposal(transactionMemPoolThresholdMet: Set[String],
                            minCheckpointFormationThreshold: Int,
                            validationTips: Seq[TypedEdgeHash])(implicit keyPair: KeyPair): CreateCheckpointEdgeResponse = {
+
     val transactionsUsed = transactionMemPoolThresholdMet.take(minCheckpointFormationThreshold)
     val updatedTransactionMemPoolThresholdMet = transactionMemPoolThresholdMet -- transactionsUsed
 
@@ -35,6 +36,7 @@ object EdgeService {
     val signedCheckpointEdge = SignHelp.signedObservationEdge(oe)(keyPair)
 
     CreateCheckpointEdgeResponse(signedCheckpointEdge, transactionsUsed, filteredValidationTips, updatedTransactionMemPoolThresholdMet)
+
   }
 
 }

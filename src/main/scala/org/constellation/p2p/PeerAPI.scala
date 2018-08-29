@@ -22,8 +22,9 @@ import org.json4s.native.Serialization
 import akka.pattern.ask
 import org.constellation.Data
 import org.constellation.LevelDB.DBPut
-import org.constellation.consensus.Consensus.StartConsensusRound
+import org.constellation.consensus.Consensus._
 import org.constellation.consensus.{Consensus, TransactionProcessor}
+import org.constellation.serializer.KryoSerializer
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
@@ -82,10 +83,20 @@ class PeerAPI(dao: Data, consensus: ActorRef, peerManager: ActorRef)(implicit ex
           complete(hashSign(e.salt.toString, dao.keyPair))
         }
       } ~
-      path("checkpointVote") {
-        entity(as[StartConsensusRound[Consensus.Checkpoint]]) { e =>
+      path("startConsensusRound") {
+        entity(as[Array[Byte]]) { e =>
+          val message = KryoSerializer.deserialize(e).asInstanceOf[StartConsensusRound[Consensus.Checkpoint]]
 
-        //  consensus ! ConsensusVote(id, voteData, roundHash)
+          consensus ! ConsensusVote(message.id, message.data, message.roundHash)
+
+          complete(StatusCodes.OK)
+        }
+      } ~
+      path("checkpointEdgeProposal") {
+        entity(as[Array[Byte]]) { e =>
+          val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusProposal[Consensus.Checkpoint]]
+
+          consensus ! ConsensusProposal(message.id, message.data, message.roundHash)
 
           complete(StatusCodes.OK)
         }

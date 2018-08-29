@@ -11,6 +11,7 @@ import org.constellation.p2p.UDPSend
 import org.constellation.primitives.{APIBroadcast, EdgeService, PeerManager}
 import org.constellation.primitives.EdgeService.CreateCheckpointEdgeResponse
 import org.constellation.primitives.Schema._
+import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Signed
 
 import scala.collection.immutable.HashMap
@@ -79,12 +80,13 @@ object Consensus {
                                   self: Id,
                                   dao: Data,
                                   message: RemoteMessage,
-                                  peerManager: ActorRef)(implicit system: ActorSystem): Boolean = {
+                                  peerManager: ActorRef,
+                                  path: String)(implicit system: ActorSystem): Boolean = {
 
     // TODO: here replace with call to gossip actor
     notifyFacilitators(facilitators, self, f => {
       // TODO: Change to transport layer call
-      peerManager ! APIBroadcast(_.post(s"checkpointVote", message))
+      peerManager ! APIBroadcast(_.post(path, KryoSerializer.serialize(message)))
     })
 
     true
@@ -110,7 +112,7 @@ object Consensus {
     // tell everyone to perform a vote
     // TODO: update to only run during conflict voting, for now it's ignored
     notifyFacilitatorsOfMessage(facilitators, self, consensusRoundState.dao,
-      StartConsensusRound(self, vote, roundHash), consensusRoundState.peerManager)
+      StartConsensusRound(self, vote, roundHash), consensusRoundState.peerManager, "startConsensusRound")
 
     updatedState
   }
@@ -167,7 +169,8 @@ object Consensus {
 
     val dao = consensusRoundState.dao
 
-    EdgeService.createCheckpointEdgeProposal(dao.transactionMemPoolThresholdMet, dao.minCheckpointFormationThreshold, dao.validationTips)
+    EdgeService.createCheckpointEdgeProposal(dao.transactionMemPoolThresholdMet,
+      dao.minCheckpointFormationThreshold, dao.validationTips)
 
     /*
     bundleProposal match {
@@ -204,7 +207,6 @@ object Consensus {
       // TODO: temp logic
       val vote = votes(updatedState.selfId.get)
 
-
       val proposal = vote match {
         case CheckpointVote(data) =>
           // TODO: sign
@@ -216,8 +218,12 @@ object Consensus {
       updatedState =
           handlePeerProposedBundle(updatedState, selfId, proposal, roundHash)
 
+      // TODO
+
+      println(s"notify everyone of a consensus proposal")
+
       notifyFacilitatorsOfMessage(facilitators,
-        self, consensusRoundState.dao, ConsensusProposal(self, proposal, roundHash), consensusRoundState.peerManager)
+        self, consensusRoundState.dao, ConsensusProposal(self, proposal, roundHash), consensusRoundState.peerManager, "checkpointEdgeProposal")
     }
 
     updatedState
@@ -247,12 +253,14 @@ object Consensus {
   }
 }
 
-class Consensus(keyPair: KeyPair, dao: Data, peerManager: ActorRef)(implicit timeout: Timeout) extends Actor with ActorLogging {
+class Consensus(keyPair: KeyPair, dao: Data, peerManager: ActorRef)
+               (implicit timeout: Timeout) extends Actor with ActorLogging {
 
   implicit val sys: ActorSystem = context.system
   implicit val kp: KeyPair = keyPair
 
-  def receive: Receive = consensus(ConsensusRoundState(dao = dao, selfId = Some(Id(keyPair.getPublic.encoded)), peerManager = peerManager))
+  def receive: Receive = consensus(ConsensusRoundState(dao = dao,
+    selfId = Some(Id(keyPair.getPublic.encoded)), peerManager = peerManager))
 
   def consensus(consensusRoundState: ConsensusRoundState): Receive = {
 

@@ -5,6 +5,8 @@ import java.security.PublicKey
 import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey
+import org.constellation.consensus.Consensus
+import org.constellation.consensus.Consensus.{VoteData => _, _}
 import org.constellation.p2p.SerializedUDPMessage
 import org.constellation.primitives.Schema.EdgeHashType
 import org.constellation.primitives.Schema._
@@ -79,6 +81,11 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Signed[BundleBlock]])
     kryo.register(classOf[Signed[BundleData]])
 
+    kryo.register(classOf[StartConsensusRound[Consensus.Checkpoint]])
+    kryo.register(classOf[CheckpointVote])
+    kryo.register(classOf[RoundHash[Consensus.Checkpoint]])
+    kryo.register(classOf[ConsensusProposal[Consensus.Checkpoint]])
+    kryo.register(classOf[CheckpointProposal])
 
     // These may not be necessary
     kryo.register(classOf[Gossip[Signed[AddressMetaData]]])
