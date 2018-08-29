@@ -21,12 +21,13 @@ import org.json4s.native
 import org.json4s.native.Serialization
 import akka.pattern.ask
 import org.constellation.Data
+import org.constellation.LevelDB.DBPut
+import org.constellation.consensus.TransactionProcessor
 import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.consensus.EdgeProcessor
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
-
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
 
@@ -67,7 +68,7 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
         entity(as[Transaction]) {
           tx =>
             Future{
-              EdgeProcessor.handleTransaction(tx, dao)
+              EdgeProcessor.handleTransaction(tx, dao)(executionContext = executionContext, keyPair = dao.keyPair)
             }
             complete(StatusCodes.OK)
         }

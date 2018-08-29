@@ -9,6 +9,7 @@ import org.constellation.Data
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.UDPSend
 import org.constellation.primitives.EdgeService
+import org.constellation.primitives.EdgeService.CreateCheckpointEdgeResponse
 import org.constellation.primitives.Schema._
 import org.constellation.util.Signed
 
@@ -44,7 +45,7 @@ object Consensus {
                                                 callback: ConsensusRoundResult[_ <: CC] => Unit,
                                                 vote: VoteData[T])
 
-  case class ConsensusRoundResult[+T <: CC](bundle: CheckpointEdge, roundHash: RoundHash[T])
+  case class ConsensusRoundResult[+T <: CC](checkpointEdge: CreateCheckpointEdgeResponse, roundHash: RoundHash[T])
 
   case class RoundState(facilitators: Set[Id] = Set(),
                         votes: HashMap[Id, _ <: VoteData[_ <: CC]] = HashMap(),
@@ -156,12 +157,15 @@ object Consensus {
   }
 
   // TODO: here is where we call out to bundling logic
-  def getConsensusBundle[T <: CC](consensusRoundState: ConsensusRoundState, roundHash: RoundHash[T])(implicit keyPair: KeyPair): CheckpointEdge = {
+  def getConsensusBundle[T <: CC](consensusRoundState: ConsensusRoundState,
+                                  roundHash: RoundHash[T])(implicit keyPair: KeyPair): CreateCheckpointEdgeResponse = {
     val roundState = getCurrentRoundState(consensusRoundState, roundHash)
     // figure out what the majority of bundles agreed upon
     val bundles = roundState.proposals
 
-    EdgeService.createCheckpointEdge(consensusRoundState.dao.validationTips, consensusRoundState.dao.memPool.toSeq)
+    val dao = consensusRoundState.dao
+
+    EdgeService.createCheckpointEdgeProposal(dao.transactionMemPoolThresholdMet, dao.minCheckpointFormationThreshold, dao.validationTips)
 
     /*
     bundleProposal match {
