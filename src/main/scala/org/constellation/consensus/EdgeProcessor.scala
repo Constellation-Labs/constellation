@@ -4,8 +4,8 @@ import akka.actor.ActorRef
 import org.constellation.Data
 import org.constellation.LevelDB.DBPut
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.Validation.TransactionValidationStatus
-import org.constellation.primitives.{APIBroadcast, IncrementMetric, Validation, UpdateMetric}
+import Validation.TransactionValidationStatus
+import org.constellation.primitives.{APIBroadcast, IncrementMetric, UpdateMetric}
 import org.constellation.util.SignHelp
 
 import scala.concurrent.ExecutionContext
@@ -15,13 +15,15 @@ object EdgeProcessor {
 
 
 
-  def handleCheckpoint(cb: CheckpointBlock, dao: Data)(implicit executionContext: ExecutionContext): Unit = {
-    // Validate transaction TODO : This can be more efficient, calls get repeated several times
-    // in event where a new signature is being made by another peer it's most likely still valid, should
-    // cache the results of this somewhere.
-    Validation.validateCheckpoint(dao.dbActor, cb).foreach{
+  def handleCheckpoint(cb: CheckpointBlock, dao: Data, internalMessage: Boolean = false)(implicit executionContext: ExecutionContext): Unit = {
 
+    if (!internalMessage) {
+      dao.metricsManager ! IncrementMetric("checkpointMessagesReceived")
+    } else {
+      dao.metricsManager ! IncrementMetric("internalCheckpointMessagesReceived")
     }
+
+    Resolve.resolveCheckpoint(dao, cb)
 
   }
 
@@ -34,6 +36,11 @@ object EdgeProcessor {
   def handleTransaction(
                          tx: Transaction, dao: Data
                        )(implicit executionContext: ExecutionContext): Unit = {
+
+    // TODO: Store TX in DB and during signing updates delete the old SOE ? Or clean it up later?
+    // SOE will appear multiple times as signatures are added together.
+
+    dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
     // Validate transaction TODO : This can be more efficient, calls get repeated several times
     // in event where a new signature is being made by another peer it's most likely still valid, should
     // cache the results of this somewhere.
@@ -78,6 +85,8 @@ object EdgeProcessor {
 
         // Attempt CB formation
 
+        var takenIncludesThisTX : Boolean = false
+
         if (dao.txMemPoolOEThresholdMet.size >= minCheckpointFormationThreshold && dao.validationTips.size >= 2) {
 
           // Form new checkpoint block.
@@ -88,6 +97,10 @@ object EdgeProcessor {
           val taken = dao.txMemPoolOEThresholdMet.take(minCheckpointFormationThreshold)
           dao.txMemPoolOEThresholdMet --= taken
           val takenTX = taken.map{dao.txMemPoolOE}
+
+          if (taken.contains(tx.hash)) {
+            takenIncludesThisTX = true
+          }
 
           taken.foreach{dao.txMemPoolOE.remove}
 
@@ -106,7 +119,7 @@ object EdgeProcessor {
           val soe = SignHelp.signedObservationEdge(oe)(dao.keyPair)
 
           takenTX.foreach{ t =>
-            dao.dbActor ! DBPut(t.hash, TransactionCacheData(t, inDAG = true, cbEdgeHash = Some(soe.signatureBatch.hash)))
+            t.store(dao.dbActor, cbEdgeHash = Some(soe.signatureBatch.hash))
           }
 
           dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
@@ -115,7 +128,7 @@ object EdgeProcessor {
 
           val rco = CheckpointBlock(takenTX.toSeq, resolvedCB)
 
-          dao.cpMemPoolOE(soe.signatureBatch.hash) = resolvedCB
+          dao.checkpointMemPool(soe.signatureBatch.hash) = resolvedCB
 
           dao.peerManager ! APIBroadcast(_.put(s"checkpoint/${soe.signatureBatch.hash}", rco))
         }
@@ -123,7 +136,8 @@ object EdgeProcessor {
         dao.metricsManager ! UpdateMetric("txMemPoolOESize", dao.txMemPoolOE.size.toString)
         dao.metricsManager ! UpdateMetric("txMemPoolOEThresholdMet", dao.txMemPoolOEThresholdMet.size.toString)
 
-      // Trigger check if we should emit a CB
+        if (!takenIncludesThisTX) {
+        }
 
 
       case t : TransactionValidationStatus =>

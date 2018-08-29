@@ -15,13 +15,13 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, IncrementMetric, Validation}
+import org.constellation.primitives.{APIBroadcast, IncrementMetric}
 import org.constellation.util.{CommonEndpoints, HashSignature}
 import org.json4s.native
 import org.json4s.native.Serialization
 import akka.pattern.ask
 import org.constellation.Data
-import org.constellation.LevelDB.DBPut
+import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.consensus.EdgeProcessor
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -73,7 +73,19 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
         }
       } ~
       get {
-        complete("Transaction goes here")
+        val memPoolPresence = dao.txMemPoolOE.get(s)
+        val response = memPoolPresence.map { t =>
+          TransactionQueryResponse(s, Some(t), inMemPool = true, inDAG = false, None)
+        }.getOrElse{
+          (dao.dbActor ? DBGet(s)).mapTo[Option[TransactionCacheData]].get().map{
+            cd =>
+              TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence.nonEmpty, cd.inDAG, cd.cbEdgeHash)
+          }.getOrElse{
+            TransactionQueryResponse(s, None, inMemPool = false, inDAG = false, None)
+          }
+        }
+
+        complete(response)
       } ~ complete (StatusCodes.BadRequest)
     } ~
     path("checkpoint" / Segment) { s =>

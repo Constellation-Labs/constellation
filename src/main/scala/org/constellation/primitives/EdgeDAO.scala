@@ -14,9 +14,14 @@ trait EdgeDAO {
   @volatile var validationTips : Seq[SignedObservationEdge] = Seq()
 
   val txMemPoolOE : TrieMap[String, Transaction] = TrieMap()
-  val cpMemPoolOE : TrieMap[String, CheckpointEdge] = TrieMap()
+  val checkpointMemPool : TrieMap[String, CheckpointEdge] = TrieMap()
+  val validationMemPool : TrieMap[String, ValidationEdge] = TrieMap()
 
   @volatile var txMemPoolOEThresholdMet: Set[String] = Set()
   @volatile var cpMemPoolOEThresholdMet: Set[String] = Set()
+  @volatile var validationThresholdMet: Set[String] = Set()
+
+
+  val resolveNotifierCallbacks: TrieMap[String, TrieMap[String, () => Unit]] = TrieMap()
 
 }

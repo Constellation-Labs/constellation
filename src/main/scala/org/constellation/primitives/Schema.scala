@@ -28,13 +28,10 @@ object Schema {
 
   case class TransactionQueryResponse(
                                        hash: String,
-                                       tx: Option[TransactionV1],
-                                       observed: Boolean,
+                                       transaction: Option[Transaction],
                                        inMemPool: Boolean,
-                                       confirmed: Boolean,
-                                       numGossipChains: Int,
-                                       gossipStackDepths: Seq[Int],
-                                       gossip: Seq[Gossip[ProductHash]]
+                                       inDAG: Boolean,
+                                       cbEdgeHash: Option[String]
                                      )
 
   sealed trait NodeState
@@ -203,25 +200,17 @@ object Schema {
     */
   case class CheckpointEdgeData(hashes: Seq[String]) extends ProductHash
 
-
-  case class TransactionMetaData(
-                                  rxTime: Long = System.currentTimeMillis(),
-                                  resolvedTX: Option[Transaction] = None,
-                                  checkpointHash: Option[String] = None
-                                )
-
-
-
   case class ResolvedObservationEdge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
   (left: L, right: R, data: Option[D] = None)
 
-  // Order is like: TransactionData -> TX -> CheckpointBlock -> ObservationEdge -> SignedObservationEdge
-
-  case class TX(signatureBatch: SignatureBatch) extends ProductHash
 
   case class EdgeCell(members: mutable.SortedSet[EdgeSheaf])
 
   case class Transaction(edge: Edge[Address, Address, TransactionEdgeData]) {
+
+    def store(dbActor: ActorRef, cbEdgeHash: Option[String] = None, inDAG: Boolean = true): Unit = {
+      edge.store(dbActor, Some(TransactionCacheData(this, inDAG = inDAG, cbEdgeHash = cbEdgeHash)))
+    }
 
     def src: Address = edge.resolvedObservationEdge.left
     def dst: Address = edge.resolvedObservationEdge.right
@@ -250,6 +239,7 @@ object Schema {
   }
 
   case class CheckpointEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData])
+  case class ValidationEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, Nothing])
 
   case class Edge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
   (
@@ -258,9 +248,12 @@ object Schema {
     resolvedObservationEdge: ResolvedObservationEdge[L,R,D]
   ) {
 
-    def store[T <: AnyRef](db: ActorRef, t: Option[T] = None): Unit = {
+    def parentHashes = Seq(observationEdge.left.hash, observationEdge.right.hash)
+    def parents = Seq(observationEdge.left, observationEdge.right)
+
+    def store[T <: AnyRef](db: ActorRef, t: Option[T] = None, resolved: Boolean = false): Unit = {
       db ! DBPut(signedObservationEdge.signatureBatch.hash, t.getOrElse(observationEdge))
-      db ! DBPut(signedObservationEdge.hash, signedObservationEdge)
+      db ! DBPut(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
       resolvedObservationEdge.data.foreach {
         data =>
           db ! DBPut(data.hash, data)
@@ -277,15 +270,21 @@ object Schema {
   case class TransactionCacheData(
                                    transaction: Transaction,
                                    inDAG: Boolean = false,
-                                   cbEdgeHash: Option[String] = None
+                                   cbEdgeHash: Option[String] = None,
+                                   rxTime: Long = System.currentTimeMillis()
                                  )
-  case class CheckpointCacheData(resolvedCB: CheckpointEdge, inDAG: Boolean = false)
+
+  case class CheckpointCacheData(resolvedCB: CheckpointEdge, inDAG: Boolean = false, resolved: Boolean = false)
+
+  case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
 
 
   case class CheckpointBlock(
                               transactions: Seq[Transaction],
                               checkpoint: CheckpointEdge
                                   ) {
+    def hash: String = checkpoint.edge.signedObservationEdge.signatureBatch.hash
+
     def store(db: ActorRef, inDAG: Boolean = false): Unit = {
       transactions.foreach { rt =>
         rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG)))
