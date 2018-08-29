@@ -36,9 +36,12 @@ class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
         case (id, data) =>
           id -> func(data.client)
       }
+
       sender() ! result
 
-    case GetPeerInfo => sender() ! peerInfo
+    case GetPeerInfo => {
+      sender() ! peerInfo
+    }
 
   }
 }

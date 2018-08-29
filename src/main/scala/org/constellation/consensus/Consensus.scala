@@ -8,7 +8,7 @@ import constellation._
 import org.constellation.Data
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.UDPSend
-import org.constellation.primitives.EdgeService
+import org.constellation.primitives.{APIBroadcast, EdgeService, PeerManager}
 import org.constellation.primitives.EdgeService.CreateCheckpointEdgeResponse
 import org.constellation.primitives.Schema._
 import org.constellation.util.Signed
@@ -26,10 +26,10 @@ object Consensus {
   sealed trait VoteData[+T <: CC] extends CachedData[T]
   sealed trait ProposalData[+T <: CC] extends CachedData[T]
 
-  case class CheckpointVote(data: ResolvedCB) extends VoteData[Checkpoint]
+  case class CheckpointVote(data: SignedObservationEdge) extends VoteData[Checkpoint]
   case class ConflictVote(data: Vote) extends VoteData[Conflict]
 
-  case class CheckpointProposal(data: ResolvedCB) extends ProposalData[Checkpoint]
+  case class CheckpointProposal(data: SignedObservationEdge) extends ProposalData[Checkpoint]
   case class ConflictProposal(data: Bundle) extends ProposalData[Conflict]
 
   case class RoundHash[+T <: CC](hash: String)
@@ -54,7 +54,7 @@ object Consensus {
 
   case class ConsensusRoundState(selfId: Option[Id] = None,
                                  dao: Data,
-                                 udpActor: Option[ActorRef] = None,
+                                 peerManager: ActorRef,
                                  roundStates: HashMap[RoundHash[_ <: CC], RoundState] = HashMap())
 
   // Methods
@@ -66,7 +66,8 @@ object Consensus {
 
     // make sure that we are a facilitator
     if (!isFacilitator(facilitators, self)) {
-      return false
+      // TODO: add back
+ //     return false
     }
 
     facilitators.filter(p => p != self).foreach(fx)
@@ -76,12 +77,14 @@ object Consensus {
 
   def notifyFacilitatorsOfMessage(facilitators: Set[Id],
                                   self: Id,
+                                  dao: Data,
                                   message: RemoteMessage,
-                                  udpActor: ActorRef)(implicit system: ActorSystem): Boolean = {
+                                  peerManager: ActorRef)(implicit system: ActorSystem): Boolean = {
 
     // TODO: here replace with call to gossip actor
     notifyFacilitators(facilitators, self, f => {
-    //  udpActor ! UDPSend(message, peerIdLookup(f).data.externalAddress)
+      // TODO: Change to transport layer call
+      peerManager ! APIBroadcast(_.post(s"checkpointVote", message))
     })
 
     true
@@ -95,7 +98,6 @@ object Consensus {
                                        (implicit system: ActorSystem, keyPair: KeyPair): ConsensusRoundState = {
 
     val self = consensusRoundState.selfId.get
-    val udpActor = consensusRoundState.udpActor.get
 
     val updatedRoundStates = consensusRoundState.roundStates +
       (roundHash -> getCurrentRoundState(consensusRoundState, roundHash)
@@ -107,8 +109,8 @@ object Consensus {
 
     // tell everyone to perform a vote
     // TODO: update to only run during conflict voting, for now it's ignored
-    notifyFacilitatorsOfMessage(facilitators, self,
-      StartConsensusRound(self, vote, roundHash), udpActor)
+    notifyFacilitatorsOfMessage(facilitators, self, consensusRoundState.dao,
+      StartConsensusRound(self, vote, roundHash), consensusRoundState.peerManager)
 
     updatedState
   }
@@ -194,7 +196,6 @@ object Consensus {
 
       // TODO: here is where we take votes and create a bundle proposal
       val self = updatedState.selfId.get
-      val udpActor = updatedState.udpActor.get
 
       // create a bundle proposal
       // figure out what the majority of votes agreed upon
@@ -216,7 +217,7 @@ object Consensus {
           handlePeerProposedBundle(updatedState, selfId, proposal, roundHash)
 
       notifyFacilitatorsOfMessage(facilitators,
-        self, ConsensusProposal(self, proposal, roundHash), udpActor)
+        self, consensusRoundState.dao, ConsensusProposal(self, proposal, roundHash), consensusRoundState.peerManager)
     }
 
     updatedState
@@ -246,12 +247,12 @@ object Consensus {
   }
 }
 
-class Consensus(keyPair: KeyPair, dao: Data, udpActor: ActorRef)(implicit timeout: Timeout) extends Actor with ActorLogging {
+class Consensus(keyPair: KeyPair, dao: Data, peerManager: ActorRef)(implicit timeout: Timeout) extends Actor with ActorLogging {
 
   implicit val sys: ActorSystem = context.system
   implicit val kp: KeyPair = keyPair
 
-  def receive: Receive = consensus(ConsensusRoundState(dao = dao, selfId = Some(Id(keyPair.getPublic.encoded)), udpActor = Some(udpActor)))
+  def receive: Receive = consensus(ConsensusRoundState(dao = dao, selfId = Some(Id(keyPair.getPublic.encoded)), peerManager = peerManager))
 
   def consensus(consensusRoundState: ConsensusRoundState): Receive = {
 

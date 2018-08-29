@@ -168,7 +168,7 @@ class ConstellationNode(
   // Setup http server for internal API
   val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
 
-  val peerRoutes : Route = new PeerAPI(data).routes
+  val peerRoutes : Route = new PeerAPI(data, consensusActor, peerManager).routes
 
   // Setup http server for peer API
   Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)

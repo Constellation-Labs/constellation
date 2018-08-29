@@ -15,20 +15,22 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, IncrementMetric, TransactionValidation}
+import org.constellation.primitives.{APIBroadcast, IncrementMetric, PeerManager, TransactionValidation}
 import org.constellation.util.HashSignature
 import org.json4s.native
 import org.json4s.native.Serialization
 import akka.pattern.ask
 import org.constellation.Data
 import org.constellation.LevelDB.DBPut
-import org.constellation.consensus.TransactionProcessor
+import org.constellation.consensus.Consensus.StartConsensusRound
+import org.constellation.consensus.{Consensus, TransactionProcessor}
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
 
-class PeerAPI(dao: Data)(implicit executionContext: ExecutionContext, val timeout: Timeout)
+class PeerAPI(dao: Data, consensus: ActorRef, peerManager: ActorRef)(implicit executionContext: ExecutionContext, val timeout: Timeout)
   extends Json4sSupport {
 
   implicit val serialization: Serialization.type = native.Serialization
@@ -79,6 +81,14 @@ class PeerAPI(dao: Data)(implicit executionContext: ExecutionContext, val timeou
         entity(as[PeerAuthSignRequest]) { e =>
           complete(hashSign(e.salt.toString, dao.keyPair))
         }
+      } ~
+      path("checkpointVote") {
+        entity(as[StartConsensusRound[Consensus.Checkpoint]]) { e =>
+
+        //  consensus ! ConsensusVote(id, voteData, roundHash)
+
+          complete(StatusCodes.OK)
+        }
       }
     }
 
@@ -88,7 +98,7 @@ class PeerAPI(dao: Data)(implicit executionContext: ExecutionContext, val timeou
         entity(as[Transaction]) {
           tx =>
             Future{
-              TransactionProcessor.handleTransaction(tx, dao)(executionContext = executionContext, keyPair = dao.keyPair)
+              TransactionProcessor.handleTransaction(tx, consensus, peerManager, dao)(executionContext = executionContext, keyPair = dao.keyPair, timeout = timeout)
             }
             complete(StatusCodes.OK)
         }

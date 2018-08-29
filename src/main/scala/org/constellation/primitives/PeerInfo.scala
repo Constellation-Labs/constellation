@@ -23,7 +23,6 @@ trait PeerInfo {
 
   val peerSync: TrieMap[Id, PeerSyncHeartbeat] = TrieMap()
 
-
   val rawPeerLookup: TrieMap[Id, LocalPeerData] = TrieMap()
 
   def getOrElseUpdateAPIClient(id: Id)(

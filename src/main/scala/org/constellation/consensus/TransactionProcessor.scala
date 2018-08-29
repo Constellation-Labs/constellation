@@ -5,11 +5,17 @@ import java.security.KeyPair
 import akka.actor.ActorRef
 import com.typesafe.scalalogging.Logger
 import org.constellation.Data
+import org.constellation.consensus.Consensus.{CheckpointVote, InitializeConsensusRound, RoundHash}
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, EdgeService, IncrementMetric, TransactionValidation}
+import org.constellation.primitives._
 import org.constellation.util.SignHelp
+import akka.pattern.ask
+import akka.util.Timeout
+import constellation._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext}
+import scala.util.Try
 
 object TransactionProcessor {
   val logger = Logger(s"TransactionProcessor")
@@ -20,7 +26,11 @@ object TransactionProcessor {
   val maxNumSignaturesPerTX = 20
 
   def handleTransaction(tx: Transaction,
-                        dao: Data)(implicit executionContext: ExecutionContext, keyPair: KeyPair): Unit = {
+                        consensus: ActorRef,
+                        peerManager: ActorRef,
+                        dao: Data)(implicit executionContext: ExecutionContext, keyPair: KeyPair, timeout: Timeout): Unit = {
+
+    this.synchronized {
 
     // Validate transaction TODO : This can be more efficient, calls get repeated several times
     // in event where a new signature is being made by another peer it's most likely still valid, should
@@ -56,7 +66,8 @@ object TransactionProcessor {
             // Set threshold as met
             dao.transactionMemPoolThresholdMet += tx.hash
 
-            if (dao.transactionMemPoolThresholdMet.size >= dao.minCheckpointFormationThreshold && dao.validationTips.size >= 2) {
+            if (dao.transactionMemPoolThresholdMet.size >= dao.minCheckpointFormationThreshold
+              && dao.validationTips.size >= 2) {
 
               // Form new checkpoint block.
 
@@ -77,8 +88,10 @@ object TransactionProcessor {
               // below is a single local formation of a checkpoint edge proposal
               // need to wait on majority of other people before accepting it
 
+
               val checkpointEdgeProposal =
-                EdgeService.createCheckpointEdgeProposal(dao.transactionMemPoolThresholdMet, dao.minCheckpointFormationThreshold, dao.validationTips)
+                EdgeService.createCheckpointEdgeProposal(dao.transactionMemPoolThresholdMet,
+                  dao.minCheckpointFormationThreshold, dao.validationTips)
 
               // TODO: move to mem pool service
               checkpointEdgeProposal.transactionsUsed.foreach{dao.transactionMemPool.remove}
@@ -87,6 +100,13 @@ object TransactionProcessor {
 
               // TODO: move to tips service
               dao.validationTips = checkpointEdgeProposal.filteredValidationTips
+
+              val peerIds = (peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().keySet
+
+              // Start checkpointing consensus round
+              consensus ! InitializeConsensusRound(peerIds, RoundHash("test"), (result) => {
+                assert(true)
+              }, CheckpointVote(checkpointEdgeProposal.checkpointEdge))
 
               /******************/
 
@@ -101,6 +121,8 @@ object TransactionProcessor {
 
       case false =>
         dao.metricsManager ! IncrementMetric("invalidTransactions")
+
+    }
 
     }
 

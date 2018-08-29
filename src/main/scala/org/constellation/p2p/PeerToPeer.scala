@@ -157,12 +157,6 @@ class PeerToPeer(
       totalNumP2PMessages += 1
 
       val authenticated = signedPeerLookup.contains(remote)
-/*
-      if (!authenticated && !peersAwaitingAuthenticationToNumAttempts.contains(remote)) {
-        logger.debug("Attempting to add unauthenticated peer")
-        peersAwaitingAuthenticationToNumAttempts(remote) = 1
-      }
-*/
 
       if (authenticated) {
         val remoteId = signedPeerLookup(remote).data.id
@@ -185,22 +179,7 @@ class PeerToPeer(
 
           case sh: HandShakeResponseMessage => handleHandShakeResponse(sh, remote)
 
-          /*
-                  case m @ StartConsensusRound(id, voteData, roundHash) => {
-                    voteData match {
-                      case CheckpointVote(d) =>
-                        consensusActor ! ConsensusVote(id, voteData, roundHash)
-                        logger.debug(s"received checkpoint start consensus round message roundHash= $roundHash, self = $publicKey id = $id")
-                      case ConflictVote(d) =>
-                        logger.debug(s"received conflict start consensus round message = $m")
-                    }
-                  }
-
-                  case message: RemoteMessage => consensusActor ! message
-          */
-
           case u =>  logger.error(s"Unrecognized UDP message: $u - authenticated: $authenticated")
-
         }
       }
   }

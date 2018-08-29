@@ -32,13 +32,9 @@ class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSyst
     val tmpDir = "tmp"
     Try{File(tmpDir).delete()}
 
-    val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false
-    //  , generateRandomTransactions = true
-    )
+    val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false)
 
-    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true
-    //  , generateRandomTransactions = true
-    ))
+    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true))
 
     val apis = nodes.map{_.getAPIClient()}
 
@@ -50,13 +46,9 @@ class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSyst
 
     val sim = new Simulation()
 
-    //sim.run(attemptSetExternalIP = false
-    //  , validationFractionAcceptable = 0.3
-    //)
-
     sim.runV2(apis = apis, peerApis = peerApis)
 
-  //  Thread.sleep(1000*60*60)
+    Thread.sleep(1000*60*60)
 
     // Cleanup DBs
     File(tmpDir).delete()
