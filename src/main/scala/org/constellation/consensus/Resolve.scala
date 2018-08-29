@@ -1,6 +1,9 @@
 package org.constellation.consensus
 
+import java.util.concurrent.TimeUnit
+
 import akka.pattern.ask
+import akka.util.Timeout
 import org.constellation.Data
 import org.constellation.LevelDB.DBGet
 import org.constellation.primitives.Schema.{CheckpointBlock, CheckpointCacheData, SignedObservationEdgeCache}
@@ -8,6 +11,9 @@ import constellation.EasyFutureBlock
 
 object Resolve {
 
+  implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+
+  // WIP
   def resolveCheckpoint(dao: Data, cb: CheckpointBlock) = {
 
 

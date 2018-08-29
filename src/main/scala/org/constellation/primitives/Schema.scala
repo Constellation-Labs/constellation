@@ -248,6 +248,7 @@ object Schema {
     resolvedObservationEdge: ResolvedObservationEdge[L,R,D]
   ) {
 
+    def baseHash: String = signedObservationEdge.signatureBatch.hash
     def parentHashes = Seq(observationEdge.left.hash, observationEdge.right.hash)
     def parents = Seq(observationEdge.left, observationEdge.right)
 
@@ -283,7 +284,7 @@ object Schema {
                               transactions: Seq[Transaction],
                               checkpoint: CheckpointEdge
                                   ) {
-    def hash: String = checkpoint.edge.signedObservationEdge.signatureBatch.hash
+    def hash: String = checkpoint.edge.baseHash
 
     def store(db: ActorRef, inDAG: Boolean = false): Unit = {
       transactions.foreach { rt =>

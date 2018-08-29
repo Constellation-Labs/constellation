@@ -10,31 +10,38 @@ import scala.collection.concurrent.TrieMap
 
 object EdgeService {
 
-  case class CreateCheckpointEdgeResponse(checkpointEdge: SignedObservationEdge,
-                                          transactionsUsed: Set[String],
-                                          filteredValidationTips: Seq[TypedEdgeHash],
-                                          updatedTransactionMemPoolThresholdMet: Set[String])
+  case class CreateCheckpointEdgeResponse(
+                                           checkpointEdge: CheckpointEdge,
+                                           transactionsUsed: Set[String],
+                                           filteredValidationTips: Seq[SignedObservationEdge],
+                                           updatedTransactionMemPoolThresholdMet: Set[String]
+                                         )
 
-  def createCheckpointEdgeProposal(transactionMemPoolThresholdMet: Set[String],
-                           minCheckpointFormationThreshold: Int,
-                           validationTips: Seq[TypedEdgeHash])(implicit keyPair: KeyPair): CreateCheckpointEdgeResponse = {
+  def createCheckpointEdgeProposal(
+                                    transactionMemPoolThresholdMet: Set[String],
+                                    minCheckpointFormationThreshold: Int,
+                                    validationTips: Seq[SignedObservationEdge],
+                                  )(implicit keyPair: KeyPair): CreateCheckpointEdgeResponse = {
+
     val transactionsUsed = transactionMemPoolThresholdMet.take(minCheckpointFormationThreshold)
     val updatedTransactionMemPoolThresholdMet = transactionMemPoolThresholdMet -- transactionsUsed
 
-    val checkpointEdge = CheckpointEdgeData(transactionsUsed.toSeq.sorted)
+    val checkpointEdgeData = CheckpointEdgeData(transactionsUsed.toSeq.sorted)
 
     val tips = validationTips.take(2)
     val filteredValidationTips = validationTips.filterNot(tips.contains)
 
-    val oe = ObservationEdge(
-      tips.head,
-      tips(1),
-      data = Some(TypedEdgeHash(checkpointEdge.hash, EdgeHashType.CheckpointDataHash))
+    val observationEdge = ObservationEdge(
+      TypedEdgeHash(tips.head.hash, EdgeHashType.ValidationHash),
+      TypedEdgeHash(tips(1).hash, EdgeHashType.ValidationHash),
+      data = Some(TypedEdgeHash(checkpointEdgeData.hash, EdgeHashType.CheckpointDataHash))
     )
 
-    val signedCheckpointEdge = SignHelp.signedObservationEdge(oe)(keyPair)
+    val signedObservationEdge = SignHelp.signedObservationEdge(observationEdge)(keyPair)
 
-    CreateCheckpointEdgeResponse(signedCheckpointEdge, transactionsUsed, filteredValidationTips, updatedTransactionMemPoolThresholdMet)
+    val checkpointEdge = CheckpointEdge(Edge(observationEdge, signedObservationEdge, ResolvedObservationEdge(tips.head, tips(1), Some(checkpointEdgeData))))
+
+    CreateCheckpointEdgeResponse(checkpointEdge, transactionsUsed, filteredValidationTips, updatedTransactionMemPoolThresholdMet)
   }
 
 }

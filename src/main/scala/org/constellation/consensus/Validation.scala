@@ -17,7 +17,7 @@ object Validation {
 
 
   def validateCheckpoint(dbActor: ActorRef, cb: Schema.CheckpointBlock): Future[CheckpointValidationStatus] = {
-
+    Future{CheckpointValidationStatus()}
   }
 
 
@@ -26,8 +26,6 @@ object Validation {
   // TODO : Add an LRU cache for looking up TransactionCacheData instead of pure LDB calls.
 
   case class CheckpointValidationStatus(
-                                          containsDuplicateTX: Boolean,
-                                          sufficientBalance: Boolean
                                         )
 
   case class TransactionValidationStatus(

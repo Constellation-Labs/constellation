@@ -22,7 +22,6 @@ import org.json4s.native.Serialization
 import akka.pattern.ask
 import org.constellation.Data
 import org.constellation.LevelDB.DBPut
-import org.constellation.consensus.TransactionProcessor
 import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.consensus.EdgeProcessor
 
@@ -68,13 +67,13 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
         entity(as[Transaction]) {
           tx =>
             Future{
-              EdgeProcessor.handleTransaction(tx, dao)(executionContext = executionContext, keyPair = dao.keyPair)
+              EdgeProcessor.handleTransaction(tx, dao)(executionContext = dao.transactionExecutionContext)
             }
             complete(StatusCodes.OK)
         }
       } ~
       get {
-        val memPoolPresence = dao.txMemPoolOE.get(s)
+        val memPoolPresence = dao.transactionMemPool.get(s)
         val response = memPoolPresence.map { t =>
           TransactionQueryResponse(s, Some(t), inMemPool = true, inDAG = false, None)
         }.getOrElse{
