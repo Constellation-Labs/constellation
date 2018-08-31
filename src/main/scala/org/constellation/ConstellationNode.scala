@@ -30,7 +30,7 @@ object ConstellationNode extends App {
 
   val config = ConfigFactory.load()
 
-  val rpcTimeout = config.getInt("blockchain.defaultRPCTimeoutSeconds")
+  val rpcTimeout = config.getInt("rpc.timeout")
 
   val seeds = args.headOption.map(_.split(",").map{constellation.addressToSocket}.toSeq).getOrElse(Seq())
 
@@ -58,25 +58,24 @@ object ConstellationNode extends App {
     requestExternalAddressCheck = requestExternalAddressCheck
   )
 
+  // TODO: move to config
   node.data.minGenesisDistrSize = 4
 }
 
-class ConstellationNode(
-                         val configKeyPair: KeyPair,
-                         val seedPeers: Seq[InetSocketAddress],
-                         val httpInterface: String,
-                         val httpPort: Int,
-                         val udpInterface: String = "0.0.0.0",
-                         val udpPort: Int = 16180,
-                         val hostName: String = "127.0.0.1",
-                         val timeoutSeconds: Int = 30,
-                         val heartbeatEnabled: Boolean = false,
-                         val requestExternalAddressCheck : Boolean = false,
-                         val generateRandomTransactions: Boolean = true,
-                         val autoSetExternalAddress: Boolean = false,
-                         val peerHttpPort: Int = 9001,
-                         val peerTCPPort: Int = 9002
-             )(
+class ConstellationNode(val configKeyPair: KeyPair,
+                        val seedPeers: Seq[InetSocketAddress],
+                        val httpInterface: String,
+                        val httpPort: Int,
+                        val udpInterface: String = "0.0.0.0",
+                        val udpPort: Int = 16180,
+                        val hostName: String = "127.0.0.1",
+                        val timeoutSeconds: Int = 480,
+                        val heartbeatEnabled: Boolean = false,
+                        val requestExternalAddressCheck : Boolean = false,
+                        val generateRandomTransactions: Boolean = true,
+                        val autoSetExternalAddress: Boolean = false,
+                        val peerHttpPort: Int = 9001,
+                        val peerTCPPort: Int = 9002)(
                implicit val system: ActorSystem,
                implicit val materialize: ActorMaterializer,
                implicit val executionContext: ExecutionContextExecutor
@@ -145,6 +144,7 @@ class ConstellationNode(
 
   data.p2pActor = peerToPeerActor
   data.dbActor = dbActor
+  data.consensus = consensusActor
   data.peerManager = peerManager
   data.metricsManager = metricsManager
 
@@ -161,14 +161,12 @@ class ConstellationNode(
   }
 
   // If we are exposing rpc then create routes
-  val routes: Route = new API(
-    peerToPeerActor, consensusActor, udpAddress, data, peerManager,
-    metricsManager, cellManager)(executionContext, timeout).authRoutes
+  val routes: Route = new API(udpAddress, data, cellManager).authRoutes
 
   // Setup http server for internal API
   val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
 
-  val peerRoutes : Route = new PeerAPI(data, consensusActor, peerManager).routes
+  val peerRoutes : Route = new PeerAPI(data).routes
 
   // Setup http server for peer API
   Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)

@@ -33,15 +33,9 @@ import scala.util.{Failure, Success, Try}
 
 case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id)
 
-class API(
-           val peerToPeerActor: ActorRef,
-           consensusActor: ActorRef,
-           udpAddress: InetSocketAddress,
-           val data: Data = null,
-           peerManager: ActorRef,
-           metricsManager: ActorRef,
-           cellManager: ActorRef
-         )(implicit executionContext: ExecutionContext, val timeout: Timeout)
+class API(udpAddress: InetSocketAddress,
+          val data: Data = null,
+          cellManager: ActorRef)(implicit executionContext: ExecutionContext, val timeout: Timeout)
   extends Json4sSupport
     with Wallet
     with ServeUI {
@@ -246,7 +240,7 @@ class API(
             })
           } ~
           path("actorPath") {
-            complete(peerToPeerActor.path.toSerializationFormat)
+            complete(data.p2pActor.path.toSerializationFormat)
           } ~
           path("dashboard") {
 
@@ -395,14 +389,14 @@ class API(
         } ~
         path("rxBundle") {
           entity(as[Bundle]) { bundle =>
-           peerToPeerActor ! bundle
+           data.p2pActor ! bundle
 
            complete(StatusCodes.OK)
           }
         } ~
         path("handleTransaction") {
           entity(as[TransactionV1]) { tx =>
-            peerToPeerActor ! TransactionV1
+            data.p2pActor ! TransactionV1
 
             complete(StatusCodes.OK)
           }
@@ -433,7 +427,7 @@ class API(
         } ~
         path("tx") {
           entity(as[TransactionV1]) { tx =>
-            peerToPeerActor ! tx
+            data.p2pActor ! tx
             complete(StatusCodes.OK)
           }
         } ~
@@ -461,7 +455,7 @@ class API(
                   StatusCodes.BadRequest
                 case Some(v) =>
                   addr = Some(v)
-                  val fut = (peerToPeerActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
+                  val fut = (data.p2pActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
                   val res = Try {
                     Await.result(fut, timeout.duration)
                   }.toOption

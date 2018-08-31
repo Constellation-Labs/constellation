@@ -48,7 +48,7 @@ class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSyst
 
     sim.runV2(apis = apis, peerApis = peerApis)
 
-    Thread.sleep(1000*60*60)
+  //  Thread.sleep(1000*60*60)
 
     // Cleanup DBs
     File(tmpDir).delete()

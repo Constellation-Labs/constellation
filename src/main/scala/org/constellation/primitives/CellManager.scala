@@ -27,7 +27,7 @@ class CellManager(memPoolManager: ActorRef, metricsManager: ActorRef, peerManage
 
     case g: GenesisObservation =>
 
-      g.initialDistribution.resolvedCB.edge
+      g.initialDistribution.checkpoint.edge
 
 
 

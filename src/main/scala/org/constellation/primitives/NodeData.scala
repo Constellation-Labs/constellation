@@ -14,12 +14,11 @@ import scala.util.Try
 
 trait NodeData {
 
-
   var p2pActor : ActorRef = _
   var dbActor : ActorRef = _
   var peerManager: ActorRef = _
+  var consensus: ActorRef = _
   var metricsManager: ActorRef = _
-
 
   var sendRandomTXV2: Boolean = false
 

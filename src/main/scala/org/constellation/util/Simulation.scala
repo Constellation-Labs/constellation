@@ -18,7 +18,7 @@ class Simulation {
   val logger = Logger(s"Simulation")
 
   implicit val ec: ExecutionContextExecutorService =
-    ExecutionContext.fromExecutorService(new ForkJoinPool(100))
+    ExecutionContext.fromExecutorService(new ForkJoinPool(1024))
 
   def healthy(apis: Seq[APIClient]): Boolean = {
     apis.forall(a => {
