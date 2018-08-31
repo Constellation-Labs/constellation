@@ -18,10 +18,11 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
   def registerClasses(kryo: Kryo): Unit = {
 
     kryo.register(classOf[Address])
-    kryo.register(classOf[ResolvedCB])
+    kryo.register(classOf[CheckpointEdge])
     kryo.register(classOf[AddressCacheData])
     kryo.register(classOf[TransactionCacheData])
     kryo.register(classOf[CheckpointCacheData])
+    kryo.register(classOf[SignedObservationEdgeCache])
     kryo.register(classOf[Transaction])
     kryo.register(classOf[Edge[Address, Address, TransactionEdgeData]])
     kryo.register(classOf[ResolvedObservationEdge[Address, Address, TransactionEdgeData]])
@@ -31,7 +32,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[ResolvedObservationEdge[SignedObservationEdge, SignedObservationEdge, Nothing]])
     kryo.register(classOf[SignatureBatch])
     kryo.register(classOf[HashSignature])
-    kryo.register(classOf[TX])
     kryo.register(classOf[SignedObservationEdge])
     kryo.register(classOf[ObservationEdge])
     kryo.register(classOf[CheckpointBlock])
