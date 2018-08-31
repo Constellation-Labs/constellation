@@ -2,22 +2,26 @@ package org.constellation.consensus
 
 import java.security.KeyPair
 
-import akka.actor.ActorRef
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
 import org.constellation.Data
 import org.constellation.LevelDB.DBPut
 import org.constellation.primitives.Schema._
 import akka.pattern.ask
-import constellation._
 import Validation.TransactionValidationStatus
 import akka.util.Timeout
+import EdgeProcessor._
 import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.Consensus.{CheckpointVote, InitializeConsensusRound, RoundHash}
+import org.constellation.consensus.EdgeProcessor.HandleTransaction
 import org.constellation.primitives._
 import org.constellation.util.SignHelp
+import constellation._
 
 import scala.concurrent.ExecutionContext
 
 object EdgeProcessor {
+
+  case class HandleTransaction(tx: Transaction)
 
   val logger = Logger(s"EdgeProcessor")
 
@@ -97,7 +101,7 @@ object EdgeProcessor {
 
     val takenTX = checkpointEdgeProposal.transactionsUsed.map{dao.transactionMemPool}
 
-    // TODO: move to mem pool service
+    // TODO: move to mem pool servictransactionMemPoole
     // Remove used transactions from memPool
     checkpointEdgeProposal.transactionsUsed.foreach{dao.transactionMemPool.remove}
 
@@ -129,7 +133,7 @@ object EdgeProcessor {
     *                         from other pools for processing different operations.
     */
   def handleTransaction(tx: Transaction,
-                        dao: Data)(implicit executionContext: ExecutionContext, timeout: Timeout): Unit = {
+                        dao: Data)(implicit executionContext: ExecutionContext, timeout: Timeout) = {
 
     // TODO: Store TX in DB and during signing updates delete the old SOE ? Or clean it up later?
     // SOE will appear multiple times as signatures are added together.
@@ -150,7 +154,7 @@ object EdgeProcessor {
         // Add to memPool or update an existing hash with new signatures and check for signature threshold
         updateMergeMemPool(txPrime, dao)
 
-        triggerCheckpointBlocking(dao, tx)
+        triggerCheckpointBlocking(dao, txPrime)
 
         dao.metricsManager ! UpdateMetric("transactionMemPool", dao.transactionMemPool.size.toString)
         dao.metricsManager ! UpdateMetric("transactionMemPoolThreshold", dao.transactionMemPoolThresholdMet.size.toString)
@@ -228,5 +232,21 @@ object EdgeProcessor {
     CreateCheckpointEdgeResponse(checkpointEdge, transactionsUsed,
       filteredValidationTips, updatedTransactionMemPoolThresholdMet)
   }
+
+}
+
+class EdgeProcessor(keyPair: KeyPair, dao: Data)
+               (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
+
+  implicit val sys: ActorSystem = context.system
+  implicit val kp: KeyPair = keyPair
+
+  def receive: Receive = {
+
+    case HandleTransaction(transaction) =>
+      log.debug(s"handle transaction = $transaction")
+
+      handleTransaction(transaction, dao)
+    }
 
 }

@@ -12,7 +12,7 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
-import org.constellation.consensus.Consensus
+import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.{PeerAPI, PeerToPeer, RegisterNextActor, UDPActor}
 import org.constellation.primitives.Schema.{AddPeerFromLocal, ToggleHeartbeat}
@@ -142,11 +142,16 @@ class ConstellationNode(val configKeyPair: KeyPair,
       consensusActor, udpActor, data, requestExternalAddressCheck, heartbeatEnabled=heartbeatEnabled, randomTransactionManager, cellManager)
     (timeout, materialize)), s"ConstellationP2PActor_$publicKeyHash")
 
+  val edgeProcessorActor: ActorRef = system.actorOf(
+    Props(new EdgeProcessor(configKeyPair, data)(timeout, executionContext)),
+    s"ConstellationEdgeProcessorActor_$publicKeyHash")
+
   data.p2pActor = peerToPeerActor
   data.dbActor = dbActor
   data.consensus = consensusActor
   data.peerManager = peerManager
   data.metricsManager = metricsManager
+  data.edgeProcessor = edgeProcessorActor
 
   private val register = RegisterNextActor(peerToPeerActor)
 

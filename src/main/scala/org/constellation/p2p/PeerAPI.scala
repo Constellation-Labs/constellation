@@ -24,6 +24,7 @@ import org.constellation.Data
 import org.constellation.LevelDB.DBPut
 import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote, StartConsensusRound}
+import org.constellation.consensus.EdgeProcessor.HandleTransaction
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.serializer.KryoSerializer
 
@@ -65,6 +66,8 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
         entity(as[Array[Byte]]) { e =>
           val message = KryoSerializer.deserialize(e).asInstanceOf[StartConsensusRound[Consensus.Checkpoint]]
 
+          logger.debug(s"start consensus round endpoint, $message")
+
           dao.consensus ! ConsensusVote(message.id, message.data, message.roundHash)
 
           complete(StatusCodes.OK)
@@ -73,6 +76,8 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
       path("checkpointEdgeProposal") {
         entity(as[Array[Byte]]) { e =>
           val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusProposal[Consensus.Checkpoint]]
+
+          logger.debug(s"checkpoint edge proposal endpoint, $message")
 
           dao.consensus ! ConsensusProposal(message.id, message.data, message.roundHash)
 
@@ -87,7 +92,8 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
         entity(as[Transaction]) {
           tx =>
             Future{
-              EdgeProcessor.handleTransaction(tx, dao)(dao.transactionExecutionContext, timeout)
+              logger.debug(s"transaction endpoint, $tx")
+              dao.edgeProcessor ! HandleTransaction(tx)
             }
             complete(StatusCodes.OK)
         }

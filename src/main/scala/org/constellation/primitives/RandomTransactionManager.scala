@@ -14,6 +14,7 @@ class RandomTransactionManager(peerManager: ActorRef, metricsManager: ActorRef, 
 ) extends Actor {
 
   val random = new Random()
+  var peerIds: Seq[(Id, PeerData)] = _
 
   override def receive: Receive = {
 
@@ -22,7 +23,10 @@ class RandomTransactionManager(peerManager: ActorRef, metricsManager: ActorRef, 
       */
     case InternalHeartbeat =>
 
-      val peerIds = (peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
+      if (peerIds == null) {
+        peerIds = (peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
+      }
+
       def getRandomPeer = peerIds(random.nextInt(peerIds.size))
       val sendRequest = SendToAddress(getRandomPeer._1.address.address, random.nextInt(10000).toLong)
       val tx = createTransactionSafeBatchOE(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair)

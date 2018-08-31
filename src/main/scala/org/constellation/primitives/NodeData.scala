@@ -19,6 +19,7 @@ trait NodeData {
   var peerManager: ActorRef = _
   var consensus: ActorRef = _
   var metricsManager: ActorRef = _
+  var edgeProcessor: ActorRef = _
 
   var sendRandomTXV2: Boolean = false
 

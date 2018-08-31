@@ -25,9 +25,11 @@ class MetricsManager extends Actor {
     case UpdateMetric(key, value) => context become active(metrics + (key -> value))
 
     case IncrementMetric(key) =>
+      /*
       // Why are the values strings if we're just going to convert back and forth from longs?
       val updatedMap = metrics + (key -> metrics.get(key).map{z => (z.toLong + 1).toString}.getOrElse("1"))
       context become active(updatedMap)
+      */
 
     case InternalHeartbeat =>
 

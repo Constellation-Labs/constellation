@@ -29,9 +29,6 @@ trait EdgeDAO {
 
   val resolveNotifierCallbacks: TrieMap[String, TrieMap[String, () => Unit]] = TrieMap()
 
-  val transactionExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(200))
-
   def canCreateCheckpoint: Boolean = {
     transactionMemPoolThresholdMet.size >= minCheckpointFormationThreshold && validationTips.size >= 2
   }

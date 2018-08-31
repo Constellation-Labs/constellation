@@ -12,7 +12,6 @@ import org.constellation.primitives.Schema.{AddressCacheData, Transaction, Trans
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
-
 object Validation {
 
   def validateCheckpoint(dbActor: ActorRef, cb: Schema.CheckpointBlock): Future[CheckpointValidationStatus] = {
