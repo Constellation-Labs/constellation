@@ -87,7 +87,7 @@ class Simulation {
     results
   }
 
-  def addPeersV2(apis: Seq[APIClient], peerAPIs: Seq[APIClient]): Seq[Future[Unit]] = {
+  def addPeersV2(apis: Seq[APIClient], peerAPIs: Seq[APIClient]): Seq[Future[Unit]] = {// Todo this is peer addoing logic
     val joinedAPIs = apis.zip(peerAPIs)
     val results = joinedAPIs.flatMap { case (a, peerAPI) =>
       val ip = a.hostName

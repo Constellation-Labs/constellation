@@ -15,7 +15,7 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, IncrementMetric}
+import org.constellation.primitives.{APIBroadcast, IncrementMetric, TransactionValidation}
 import org.constellation.util.{CommonEndpoints, HashSignature}
 import org.json4s.native
 import org.json4s.native.Serialization
@@ -23,7 +23,7 @@ import akka.pattern.ask
 import org.constellation.Data
 import org.constellation.LevelDB.DBPut
 import org.constellation.LevelDB.{DBGet, DBPut}
-import org.constellation.consensus.EdgeProcessor
+import org.constellation.consensus.{EdgeProcessor, TransactionProcessor, Validation}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
@@ -66,8 +66,10 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
       put {
         entity(as[Transaction]) {
           tx =>
-            Future{
-              EdgeProcessor.handleTransaction(tx, dao)(executionContext = dao.transactionExecutionContext)
+            Future {
+              dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
+              Validation.validateTransaction(dao.dbActor, tx)
+                .foreach{EdgeProcessor.handleTransaction(_, tx, dao)}
             }
             complete(StatusCodes.OK)
         }

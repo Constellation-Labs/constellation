@@ -38,7 +38,7 @@ object EdgeProcessor {
     * @return Maybe updated transaction
     */
   def updateWithSelfSignatureEmit(tx: Transaction, dao: Data): Transaction = {
-    val txPrime = if (!tx.signatures.exists(_.publicKey == dao.keyPair.getPublic)) {
+    if (!tx.signatures.exists(_.publicKey == dao.keyPair.getPublic)) {
       // We haven't yet signed this TX
       val tx2 = tx.plus(dao.keyPair)
       // Send peers new signature
@@ -48,7 +48,6 @@ object EdgeProcessor {
       // We have already signed this transaction,
       tx
     }
-    txPrime
   }
 
   /**
@@ -128,6 +127,7 @@ object EdgeProcessor {
     checkpointBlock
   }
 
+
   /**
     * Main transaction processing cell
     * This is triggered upon external receipt of a transaction. Assume that the transaction being processed
@@ -137,68 +137,43 @@ object EdgeProcessor {
     * @param executionContext : Threadpool to execute transaction processing against. Should be separate
     *                         from other pools for processing different operations.
     */
-  def handleTransaction(
-                         tx: Transaction, dao: Data
-                       )(implicit executionContext: ExecutionContext): Unit = {
+  def handleTransaction(t: TransactionValidationStatus,
+                        tx: Transaction, dao: Data
+                       )(implicit executionContext: ExecutionContext): Unit = t match {
+    case t: TransactionValidationStatus if t.valid =>
+      // Check to see if we should add our signature to the transaction
+      val txPrime = updateWithSelfSignatureEmit(tx, dao)
+      // Add to memPool or update an existing hash with new signatures and check for signature threshold
+      updateMergeMemPool(txPrime, dao)
+      if (dao.canCreateCheckpoint) handleCheckpoint(dao, tx, t)
 
-    // TODO: Store TX in DB and during signing updates delete the old SOE ? Or clean it up later?
-    // SOE will appear multiple times as signatures are added together.
-
-    dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
-    // Validate transaction TODO : This can be more efficient, calls get repeated several times
-    // in event where a new signature is being made by another peer it's most likely still valid, should
-    // cache the results of this somewhere.
-    Validation.validateTransaction(dao.dbActor, tx).foreach{
-      // TODO : Increment metrics here for each case
-      case t : TransactionValidationStatus if t.valid =>
-
-        // Check to see if we should add our signature to the transaction
-        val txPrime = updateWithSelfSignatureEmit(tx, dao)
-
-        // Add to memPool or update an existing hash with new signatures and check for signature threshold
-        updateMergeMemPool(txPrime, dao)
-
-        var txStatusUpdatedInDB : Boolean = false
-
-        if (dao.canCreateCheckpoint) {
-
-          val checkpointBlock = formCheckpointUpdateState(dao, tx)
-          dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
-
-          val cbBaseHash = checkpointBlock.hash
-          dao.checkpointMemPool(cbBaseHash) = checkpointBlock.checkpoint
-
-          // Temporary bypass to consensus for mock
-          // Send all data (even if this is redundant.)
-          dao.peerManager ! APIBroadcast(_.put(s"checkpoint/$cbBaseHash", checkpointBlock))
-
-          if (checkpointBlock.transactions.contains(t)) {
-            txStatusUpdatedInDB = true
-          }
-        }
-
-        if (!txStatusUpdatedInDB) {
-          // TODO : Add info to DB about transaction status for async reporting info ? Potentially ?
-          // Or deal with elsewhere? Either way need to update something so node can figure out what's happening with TX
-        }
-
-        dao.metricsManager ! UpdateMetric("transactionMemPool", dao.transactionMemPool.size.toString)
-        dao.metricsManager ! UpdateMetric("transactionMemPoolThreshold", dao.transactionMemPoolThresholdMet.size.toString)
-
-      case t : TransactionValidationStatus =>
-
-        // TODO : Add info somewhere so node can find out transaction was invalid on a callback
-
-        dao.metricsManager ! IncrementMetric("invalidTransactions")
-        if (t.isDuplicateHash) {
-          dao.metricsManager ! IncrementMetric("hashDuplicateTransactions")
-        }
-        if (!t.sufficientBalance) {
-          dao.metricsManager ! IncrementMetric("insufficientBalanceTransactions")
-        }
-
-    }
-
+    case t: TransactionValidationStatus => reportInvalidTransaction(dao: Data, t: TransactionValidationStatus)
+      // TODO : Add info somewhere so node can find out transaction was invalid on a callback
   }
 
+  def reportInvalidTransaction(dao: Data, t: TransactionValidationStatus) = {
+    dao.metricsManager ! IncrementMetric("invalidTransactions")
+    if (t.isDuplicateHash) {
+      dao.metricsManager ! IncrementMetric("hashDuplicateTransactions")
+    }
+    if (!t.sufficientBalance) {
+      dao.metricsManager ! IncrementMetric("insufficientBalanceTransactions")
+    }
+  }
+
+  def handleCheckpoint(dao: Data, tx: Transaction, t: TransactionValidationStatus): Unit = {
+    val checkpointBlock = formCheckpointUpdateState(dao, tx)
+    dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
+    val cbBaseHash = checkpointBlock.hash
+    dao.checkpointMemPool(cbBaseHash) = checkpointBlock.checkpoint
+    // Temporary bypass to consensus for mock
+    // Send all data (even if this is redundant.)
+    dao.peerManager ! APIBroadcast(_.put(s"checkpoint/$cbBaseHash", checkpointBlock))
+    if (checkpointBlock.transactions.contains(t.transaction)) {
+      // TODO : Add info to DB about transaction status for async reporting info ? Potentially ?
+      // Or deal with elsewhere? Either way need to update something so node can figure out what's happening with TX
+    }
+    dao.metricsManager ! UpdateMetric("transactionMemPool", dao.transactionMemPool.size.toString)
+    dao.metricsManager ! UpdateMetric("transactionMemPoolThreshold", dao.transactionMemPoolThresholdMet.size.toString)
+  }
 }

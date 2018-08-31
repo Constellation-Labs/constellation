@@ -17,7 +17,7 @@ import scala.concurrent.ExecutionContextExecutor
 
 case class PeerBroadcast()
 
-class PeerToPeer(
+class PeerToPeer (
                   val publicKey: PublicKey,
                   system: ActorSystem,
                   val consensusActor: ActorRef,
