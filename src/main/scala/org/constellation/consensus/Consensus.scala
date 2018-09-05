@@ -209,7 +209,8 @@ object Consensus {
         case CheckpointVote(data) =>
           CheckpointProposal(data)
         case ConflictVote(data) =>
-          ConflictProposal(Bundle(BundleData(data.vote.data.accept).signed()(keyPair = keyPair)))
+          // TODO
+          ConflictProposal(Bundle(BundleData(Seq()).signed()(keyPair = keyPair)))
       }
 
       updatedState =

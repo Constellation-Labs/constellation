@@ -4,7 +4,7 @@ import org.constellation.primitives.Schema._
 import constellation._
 import org.constellation.LevelDB.DBPut
 
-trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataExt with EdgeDAO {
+trait Genesis extends NodeData with EdgeDAO {
 
   val CoinBaseHash = "coinbase"
 
@@ -17,7 +17,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
 
     val debtAddress = makeKeyPair().address.address
 
-    val redTXGenesisResolved = createTransactionSafeBatchOE(debtAddress, selfAddressStr, 4e9.toLong, keyPair)
+    val redTXGenesisResolved = createTransactionSafeBatch(debtAddress, selfAddressStr, 4e9.toLong, keyPair)
 
     val genTXHash = redTXGenesisResolved.edge.signedObservationEdge.signatureBatch.hash
 
@@ -42,7 +42,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     val genesisCBO = CheckpointBlock(Seq(redTXGenesisResolved), CheckpointEdge(redGenesis))
 
     val distr = ids.toSeq.map{ id =>
-      createTransactionSafeBatchOE(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
+      createTransactionSafeBatch(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
     }
 
     val distrCB = CheckpointEdgeData(distr.map{_.edge.signedObservationEdge.signatureBatch.hash})
@@ -62,7 +62,6 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     val distrCBO = CheckpointBlock(distr, CheckpointEdge(distrRED))
 
     GenesisObservation(genesisCBO, distrCBO)
-
   }
 
   def acceptGenesis(go: GenesisObservation): Unit = {
@@ -97,6 +96,8 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     )
 
     metricsManager ! UpdateMetric("activeTips", "2")
+
+    println(s"accept genesis = ", go)
   }
 
   // TODO: wrap in actor?, keeps blocking on multiple calls within test context

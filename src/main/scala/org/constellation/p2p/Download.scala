@@ -91,13 +91,14 @@ trait Download extends PeerAuth {
           if (response.sheaf.isDefined) {
             val sheaf: Sheaf = response.sheaf.get
 
-            val transactions: Seq[TransactionV1] = response.transactions
+            val transactions: Seq[Transaction] = response.transactions
 
             // store the bundle
             handleBundle(sheaf.bundle)
 
             // store the transactions
-            transactions.foreach(handleTransaction)
+            // TODO: update for latest
+          //  transactions.foreach(handleTransaction)
 
             // set the bundle to be non pending
             pendingChainHashes(sheaf.bundle.hash) = true

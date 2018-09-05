@@ -58,6 +58,8 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     assert(!isNotFacilitator)
   }
 
+  /*
+
   "the PerformConsensusRound" should "initialize and complete correctly in the CONFLICT scenario" ignore new WithConsensusActor {
     import constellation._
 
@@ -66,7 +68,6 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     val node4 = TestNode()
 
     val tx1 = createTransactionSafe(keyPair.getPublic.address, node2.configKeyPair.getPublic.address, 33L, keyPair)
-
 
     val tx2 = createTransactionSafe(node2.configKeyPair.getPublic.address, node4.configKeyPair.getPublic.address, 14L, node2.configKeyPair)
 
@@ -203,6 +204,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
     consensusActor ! ConsensusProposal(Id(node4.configKeyPair.getPublic.encoded), CheckpointProposal(bundle), roundHash)
 
   }
+  */
   */
 
 }

@@ -194,6 +194,8 @@ object EdgeProcessor {
       // Start check pointing consensus round
       dao.consensus ! InitializeConsensusRound(peerIds, RoundHash("test"), (result) => {
 
+        println(s"consensus round complete result = $result")
+
         EdgeProcessor.handleCheckpoint(result.checkpointBlock, dao)
 
       }, CheckpointVote(checkpointBlock))

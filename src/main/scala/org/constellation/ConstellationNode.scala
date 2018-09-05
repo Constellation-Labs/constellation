@@ -119,10 +119,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
     Props(new CellManager(memPoolManager, metricsManager, peerManager)), s"CellManager_$publicKeyHash"
   )
 
-  val randomTransactionManager: ActorRef = system.actorOf(
-    Props(new RandomTransactionManager(peerManager, metricsManager, data)), s"RandomTransactionManager_$publicKeyHash"
-  )
-
   val dbActor: ActorRef =  system.actorOf(
     Props(new LevelDBActor(data)), s"ConstellationDBActor_$publicKeyHash"
   )

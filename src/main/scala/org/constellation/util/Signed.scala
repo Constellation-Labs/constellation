@@ -158,15 +158,6 @@ trait POWSignHelp {
     )
   }
 
-  def createTransactionSafe(
-                             src: String, dst: String, amount: Long, keyPair: KeyPair, normalized: Boolean = true
-                           ): TransactionV1 = {
-    val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
-    val txData = TransactionData(src, dst, amountToUse).signed()(keyPair)
-    val tx = TransactionV1(txData)
-    tx
-  }
-
   def hashSign(hash: String, keyPair: KeyPair): HashSignature = {
     HashSignature(
       signHashWithKeyB64(hash, keyPair.getPrivate),
@@ -191,7 +182,7 @@ trait POWSignHelp {
     * @param normalized : Whether quantity is normalized by NormalizationFactor (1e-8)
     * @return : Resolved transaction in edge format
     */
-  def createTransactionSafeBatchOE(
+  def createTransactionSafeBatch(
                                     src: String,
                                     dst: String,
                                     amount: Long,

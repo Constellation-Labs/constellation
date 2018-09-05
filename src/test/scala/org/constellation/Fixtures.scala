@@ -33,7 +33,6 @@ object Fixtures {
   val id5 = Id(publicKey5.encoded)
   val signedPeer: Signed[Peer] = Peer(id, Some(address), Some(address), Seq(), "").signed()(tempKey)
 
-
   val address1: InetSocketAddress = constellation.addressToSocket("localhost:16181")
   val address2: InetSocketAddress = constellation.addressToSocket("localhost:16182")
   val address3: InetSocketAddress = constellation.addressToSocket("localhost:16183")
@@ -43,10 +42,4 @@ object Fixtures {
   val idSet4 = Set(id1, id2, id3, id4)
   val idSet4B = Set(id1, id2, id3, id5)
   val idSet5 = Set(id1, id2, id3, id4, id5)
-
-  val randomTransactions: Seq[Schema.TransactionV1] = Seq.fill(30) {
-    val kp = makeKeyPair()
-    val kp2 = makeKeyPair()
-    createTransactionSafe(kp.address.address, kp2.address.address, 1L, kp)
-  }
 }
