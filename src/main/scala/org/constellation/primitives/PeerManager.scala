@@ -3,14 +3,14 @@ package org.constellation.primitives
 import akka.actor.Actor
 import akka.stream.ActorMaterializer
 import org.constellation.AddPeerRequest
+import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.APIClient
-
-import scala.collection.mutable
 
 case class PeerData(addRequest: AddPeerRequest, client: APIClient)
 case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
 case class PeerHealthCheck(status: Map[Id, Boolean])
+case class PendingRegistration(ip: String, request: PeerRegistrationRequest)
 
 case object GetPeerInfo
 
@@ -39,6 +39,9 @@ class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
       sender() ! result
 
     case GetPeerInfo => sender() ! peerInfo
+
+    case PendingRegistration(ip, request) =>
+      // TODO: Make request to sign endpoint.
 
   }
 }

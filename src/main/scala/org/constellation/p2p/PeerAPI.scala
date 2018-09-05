@@ -7,7 +7,7 @@ import akka.actor.ActorRef
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.server.{Directive1, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
@@ -20,6 +20,7 @@ import org.constellation.util.{CommonEndpoints, HashSignature}
 import org.json4s.native
 import org.json4s.native.Serialization
 import akka.pattern.ask
+import org.constellation.CustomDirectives.BannedIPEnforcer
 import org.constellation.Data
 import org.constellation.LevelDB.DBPut
 import org.constellation.LevelDB.{DBGet, DBPut}
@@ -29,9 +30,10 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
+case class PeerRegistrationRequest(host: String, port: Int, key: String)
 
 class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val timeout: Timeout)
-  extends Json4sSupport with CommonEndpoints {
+  extends Json4sSupport with CommonEndpoints with BannedIPEnforcer {
 
   implicit val serialization: Serialization.type = native.Serialization
 
@@ -42,9 +44,15 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
 
   val config: Config = ConfigFactory.load()
 
+  private var pendingRegistrations = Map[String, PeerRegistrationRequest]()
+
+  private def getHostAndPortFromRemoteAddress(clientIP: RemoteAddress) = {
+    clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)}
+  }
+
   private val getEndpoints = {
-    extractClientIP { clientIP =>
-      get {
+    get {
+      extractClientIP { clientIP =>
         path("ip") {
           complete(clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)})
         }
@@ -52,14 +60,38 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
     }
   }
 
-  private val postEndpoints =
+  private val signEndpoints =
     post {
       path ("sign") {
         entity(as[PeerAuthSignRequest]) { e =>
           complete(hashSign(e.salt.toString, dao.keyPair))
         }
+      } ~
+      path("register") {
+        extractClientIP { clientIP =>
+          entity(as[PeerRegistrationRequest]) { request =>
+            val maybeData = getHostAndPortFromRemoteAddress(clientIP)
+            maybeData match {
+              case Some(PeerIPData(host, portOption)) =>
+                pendingRegistrations = pendingRegistrations.updated(host, request)
+                complete(StatusCodes.OK)
+              case None =>
+                complete(StatusCodes.BadRequest)
+            }
+          }
+        }
       }
     }
+
+  private val postEndpoints = {
+    post {
+      path ("deregister") {
+        entity(as[PeerAuthSignRequest]) { e =>
+          complete(hashSign(e.salt.toString, dao.keyPair))
+        }
+      }
+    }
+  }
 
   private val mixedEndpoints = {
     path("transaction" / Segment) { s =>
@@ -105,7 +137,11 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
   }
 
   val routes: Route = {
-    getEndpoints ~ postEndpoints ~ mixedEndpoints ~ commonEndpoints
+    signEndpoints ~ rejectBannedIP {
+      enforceKnownIP {
+        getEndpoints ~ postEndpoints ~ mixedEndpoints ~ commonEndpoints
+      }
+    }
   }
 
 }
