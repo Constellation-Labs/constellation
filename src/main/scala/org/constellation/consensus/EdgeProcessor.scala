@@ -25,7 +25,11 @@ object EdgeProcessor {
       dao.metricsManager ! IncrementMetric("internalCheckpointMessagesReceived")
     }
 
-    Resolve.resolveCheckpoint(dao, cb)
+    if (Resolve.resolveCheckpoint(dao, cb)) {
+
+    } else {
+
+    }
 
   }
 
