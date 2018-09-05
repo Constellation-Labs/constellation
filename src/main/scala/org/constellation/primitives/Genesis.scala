@@ -8,30 +8,12 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
 
   val CoinBaseHash = "coinbase"
 
-  def acceptGenesis(b: Bundle, tx: TransactionV1): Unit = {
-    storeTransaction(tx)
-    genesisBundle = Some(b)
-    val md = Sheaf(b, Some(0), Map(b.extractIds.head.b58 -> 1L), Some(1000), transactionsResolved = true)
-    storeBundle(md)
-    maxBundleMetaData = Some(md)
-    b.extractTX.foreach(acceptTransaction)
-    totalNumValidBundles += 1
-    val gtx = b.extractTX.head
-    last100ValidBundleMetaData = Seq(md)
-    gtx.txData.data.updateLedger(memPoolLedger)
-  }
-
-  def createGenesis(tx: TransactionV1): Unit = {
-    downloadMode = false
-    acceptGenesis(Bundle(BundleData(Seq(ParentBundleHash("coinbase"), TransactionHash(tx.hash))).signed()), tx)
-  }
-
   /**
     * Build genesis tips and example distribution among initial nodes
     * @param ids: Initial node public keys
     * @return : Resolved edges for state update
     */
-  def createGenesisAndInitialDistributionOE(ids: Set[Id]): GenesisObservation = {
+  def createGenesisAndInitialDistribution(ids: Set[Id]): GenesisObservation = {
 
     val debtAddress = makeKeyPair().address.address
 
@@ -83,7 +65,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
 
   }
 
-  def acceptGenesisOE(go: GenesisObservation): Unit = {
+  def acceptGenesis(go: GenesisObservation): Unit = {
     // Store hashes for the edges
     go.genesis.store(dbActor, inDAG = true)
     go.initialDistribution.store(dbActor, inDAG = true)
@@ -115,7 +97,8 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     )
 
     metricsManager ! UpdateMetric("activeTips", "2")
-
   }
+
+  // TODO: wrap in actor?, keeps blocking on multiple calls within test context
 
 }

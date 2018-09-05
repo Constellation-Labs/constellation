@@ -192,17 +192,6 @@ class API(udpAddress: InetSocketAddress,
             wallet :+= pair
             complete(pair)
           } ~
-          path("genesis" / LongNumber) { numCoins =>
-            val ret = if (genesisBundle.isEmpty) {
-              val debtAddress = walletPair
-              val tx = createTransaction(selfAddress.address,
-                numCoins,
-                src = debtAddress.address.address)
-              createGenesis(tx)
-              tx
-            } else genesisBundle.get.extractTX.head
-            complete(ret)
-          } ~
           path("stackSize" / IntNumber) { num =>
             minGenesisDistrSize = num
             complete(StatusCodes.OK)
@@ -238,9 +227,6 @@ class API(udpAddress: InetSocketAddress,
             complete(peers.map {
               _.data
             })
-          } ~
-          path("actorPath") {
-            complete(data.p2pActor.path.toSerializationFormat)
           } ~
           path("dashboard") {
 
@@ -313,11 +299,7 @@ class API(udpAddress: InetSocketAddress,
 
   private val postEndpoints =
     post {
-      path("startRandomTX") {
-        sendRandomTXV2 = !sendRandomTXV2
-        complete(sendRandomTXV2.toString)
-      } ~
-      path("peerHealthCheckV2") {
+      path("peerHealthCheck") {
         val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse[String]]]]
         val res = response.getOpt().map{
           idMap =>
@@ -325,7 +307,6 @@ class API(udpAddress: InetSocketAddress,
             val res = idMap.map{
               case (id, fut) =>
                 val maybeResponse = fut.getOpt()
-             //   println(s"Maybe response $maybeResponse")
                 id -> maybeResponse.exists{_.isSuccess}
             }.toSeq
 
@@ -338,67 +319,17 @@ class API(udpAddress: InetSocketAddress,
         pathPrefix("genesis") {
           path("create") {
             entity(as[Set[Id]]) { ids =>
-              complete(createGenesisAndInitialDistributionOE(ids))
+              complete(createGenesisAndInitialDistribution(ids))
             }
           } ~
           path("accept") {
             entity(as[GenesisObservation]) { go =>
-              acceptGenesisOE(go)
-              // TODO: Report errors and add validity check
-              complete(StatusCodes.OK)
-            }
-          }
-        } ~
-        path("initializeDownload") {
-          downloadMode = true
-          complete(StatusCodes.OK)
-        } ~
-        path("disableDownload") {
-          downloadMode = false
-          downloadInProgress = false
-          complete(StatusCodes.OK)
-        } ~
-        path("completeUpload") {
-          entity(as[BundleHashQueryResponse]) { b =>
-            val s = b.sheaf.get
-            maxBundleMetaData = Some(s)
-            downloadInProgress = false
-            downloadMode = false
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("upload") {
-          entity(as[Seq[BundleHashQueryResponse]]) {
-            bhqr =>
-              bhqr.foreach{ b =>
-                val s = b.sheaf.get
-                if (s.height.get == 0) {
-                  acceptGenesis(s.bundle, b.transactions.head)
-                } else {
-                  putBundleDB(s)
-                  totalNumValidBundles += 1
-                  b.transactions.foreach{t =>
-                    putTXDB(t)
-                    b.transactions.foreach{acceptTransaction}
-                    t.txData.data.updateLedger(memPoolLedger)
-                  }
-                }
+              Future {
+                acceptGenesis(go)
+                // TODO: Report errors and add validity check
               }
               complete(StatusCodes.OK)
-          }
-        } ~
-        path("rxBundle") {
-          entity(as[Bundle]) { bundle =>
-           data.p2pActor ! bundle
-
-           complete(StatusCodes.OK)
-          }
-        } ~
-        path("handleTransaction") {
-          entity(as[TransactionV1]) { tx =>
-            data.p2pActor ! TransactionV1
-
-            complete(StatusCodes.OK)
+            }
           }
         } ~
         path("batchBundleRequest") {
@@ -425,13 +356,7 @@ class API(udpAddress: InetSocketAddress,
             handleSendRequest(s)
           }
         } ~
-        path("tx") {
-          entity(as[TransactionV1]) { tx =>
-            data.p2pActor ! tx
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("addPeerV2"){
+        path("addPeer"){
           entity(as[AddPeerRequest]) { e =>
 
             peerManager ! e
@@ -441,54 +366,57 @@ class API(udpAddress: InetSocketAddress,
         } ~
         path("peer") {
           entity(as[String]) { peerAddress =>
-
-            Try {
-              //    logger.debug(s"Received request to add a new peer $peerAddress")
-              var addr: Option[InetSocketAddress] = None
-              val result = Try {
-                peerAddress.replaceAll('"'.toString, "").split(":") match {
-                  case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
-                  case a@_ => logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a");
+            // TODO: deprecated
+            /*
+          Try {
+            var addr: Option[InetSocketAddress] = None
+            val result = Try {
+              peerAddress.replaceAll('"'.toString, "").split(":") match {
+                case Array(ip, port) => new InetSocketAddress(ip, port.toInt)
+                case a@_ => logger.debug(s"Unmatched Array: $a"); throw new RuntimeException(s"Bad Match: $a");
+              }
+            }.toOption match {
+              case None =>
+                StatusCodes.BadRequest
+              case Some(v) =>
+                addr = Some(v)
+                val fut = (data.p2pActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
+                val res = Try {
+                  Await.result(fut, timeout.duration)
+                }.toOption
+                res match {
+                  case None =>
+                    StatusCodes.RequestTimeout
+                  case Some(f) =>
+                    if (f == StatusCodes.Accepted) {
+                      var attempts = 0
+                      var peerAdded = false
+                      while (attempts < 5) {
+                        attempts += 1
+                        Thread.sleep(1500)
+                        //peerAdded = peers.exists(p => v == p.data.externalAddress)
+                        peerAdded = signedPeerLookup.contains(v)
+                      }
+                      if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
+                    } else f
                 }
-              }.toOption match {
-                case None =>
-                  StatusCodes.BadRequest
-                case Some(v) =>
-                  addr = Some(v)
-                  val fut = (data.p2pActor ? AddPeerFromLocal(v)).mapTo[StatusCode]
-                  val res = Try {
-                    Await.result(fut, timeout.duration)
-                  }.toOption
-                  res match {
-                    case None =>
-                      StatusCodes.RequestTimeout
-                    case Some(f) =>
-                      if (f == StatusCodes.Accepted) {
-                        var attempts = 0
-                        var peerAdded = false
-                        while (attempts < 5) {
-                          attempts += 1
-                          Thread.sleep(1500)
-                          //peerAdded = peers.exists(p => v == p.data.externalAddress)
-                          peerAdded = signedPeerLookup.contains(v)
-                        }
-                        if (peerAdded) StatusCodes.OK else StatusCodes.NetworkConnectTimeout
-                      } else f
-                  }
-              }
-
-              if (result != StatusCodes.OK) {
-                addr.foreach(peersAwaitingAuthenticationToNumAttempts(_) = 1)
-              }
-
-              logger.debug(s"New peer request $peerAddress statusCode: $result")
-              result
-            } match {
-              case Failure(e) =>
-                e.printStackTrace()
-                complete(StatusCodes.InternalServerError)
-              case Success(x) => complete(x)
             }
+
+            if (result != StatusCodes.OK) {
+              addr.foreach(peersAwaitingAuthenticationToNumAttempts(_) = 1)
+            }
+
+            logger.debug(s"New peer request $peerAddress statusCode: $result")
+            result
+          } match {
+            case Failure(e) =>
+              e.printStackTrace()
+              complete(StatusCodes.InternalServerError)
+            case Success(x) => complete(x)
+          }
+          */
+
+            complete(StatusCodes.InternalServerError)
           }
         } ~
         path("ip") {

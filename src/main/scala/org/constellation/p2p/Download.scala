@@ -17,6 +17,7 @@ trait Download extends PeerAuth {
   val data: Data
   import data._
 
+  // TODO: update since heartbeat is gone
   def downloadHeartbeat(): Unit = {
     if (downloadInProgress || !downloadMode || peers.isEmpty) return
 
@@ -40,7 +41,7 @@ trait Download extends PeerAuth {
     val genesisTx = maxBundleResponse._2.get.genesisTX.get
 
     // update our genesis bundle
-    acceptGenesis(genesisBundle, genesisTx)
+  //  acceptGenesis(genesisBundle, genesisTx)
 
     val pendingChainHashes = getPendingChainHashes(maxBundleHash, genesisBundle.hash, apiClient)
 

@@ -14,7 +14,7 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
-import org.constellation.p2p.{PeerAPI, PeerToPeer, RegisterNextActor, UDPActor}
+import org.constellation.p2p.{PeerAPI, RegisterNextActor, UDPActor}
 import org.constellation.primitives.Schema.{AddPeerFromLocal, ToggleHeartbeat}
 import org.constellation.primitives._
 import org.constellation.util.APIClient
@@ -136,34 +136,15 @@ class ConstellationNode(val configKeyPair: KeyPair,
     Props(new Consensus(configKeyPair, data, peerManager)(timeout)),
     s"ConstellationConsensusActor_$publicKeyHash")
 
-  val peerToPeerActor: ActorRef =
-    system.actorOf(Props(new PeerToPeer(
-      configKeyPair.getPublic, system,
-      consensusActor, udpActor, data, requestExternalAddressCheck, heartbeatEnabled=heartbeatEnabled, randomTransactionManager, cellManager)
-    (timeout, materialize)), s"ConstellationP2PActor_$publicKeyHash")
-
   val edgeProcessorActor: ActorRef = system.actorOf(
     Props(new EdgeProcessor(configKeyPair, data)(timeout, executionContext)),
     s"ConstellationEdgeProcessorActor_$publicKeyHash")
 
-  data.p2pActor = peerToPeerActor
   data.dbActor = dbActor
   data.consensus = consensusActor
   data.peerManager = peerManager
   data.metricsManager = metricsManager
   data.edgeProcessor = edgeProcessorActor
-
-  private val register = RegisterNextActor(peerToPeerActor)
-
-  udpActor ! register
-
-  // Seed peers
-  if (seedPeers.nonEmpty) {
-    seedPeers.foreach(peer => {
-      logger.info(s"Attempting to connect to seed-host $peer")
-      peerToPeerActor ! AddPeerFromLocal(peer)
-    })
-  }
 
   // If we are exposing rpc then create routes
   val routes: Route = new API(udpAddress, data, cellManager).authRoutes
@@ -178,7 +159,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind
-    peerToPeerActor ! ToggleHeartbeat
 
     bindingFuture
       .flatMap(_.unbind())

@@ -64,22 +64,26 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
       } ~
       path("startConsensusRound") {
         entity(as[Array[Byte]]) { e =>
-          val message = KryoSerializer.deserialize(e).asInstanceOf[StartConsensusRound[Consensus.Checkpoint]]
+          Future {
+            val message = KryoSerializer.deserialize(e).asInstanceOf[StartConsensusRound[Consensus.Checkpoint]]
 
-          logger.debug(s"start consensus round endpoint, $message")
+            logger.debug(s"start consensus round endpoint, $message")
 
-          dao.consensus ! ConsensusVote(message.id, message.data, message.roundHash)
+            dao.consensus ! ConsensusVote(message.id, message.data, message.roundHash)
+          }
 
           complete(StatusCodes.OK)
         }
       } ~
       path("checkpointEdgeProposal") {
         entity(as[Array[Byte]]) { e =>
-          val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusProposal[Consensus.Checkpoint]]
+          Future {
+            val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusProposal[Consensus.Checkpoint]]
 
-          logger.debug(s"checkpoint edge proposal endpoint, $message")
+            logger.debug(s"checkpoint edge proposal endpoint, $message")
 
-          dao.consensus ! ConsensusProposal(message.id, message.data, message.roundHash)
+            dao.consensus ! ConsensusProposal(message.id, message.data, message.roundHash)
+          }
 
           complete(StatusCodes.OK)
         }

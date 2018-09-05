@@ -3,105 +3,72 @@ package org.constellation.cluster
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
+import akka.stream.ActorMaterializer
+import akka.testkit.{TestKit, TestProbe}
+import akka.util.Timeout
+import better.files.File
+import org.constellation.util.{Simulation, TestNode}
 
 import scala.concurrent.duration._
-import akka.stream.ActorMaterializer
-import akka.testkit.TestKit
-import akka.util.Timeout
-import org.constellation.ConstellationNode
-import org.constellation.util.{APIClient, Simulation, TestNode}
-import org.scalatest._
-import better.files._
-import org.constellation.util.{Simulation, TestNode}
-import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
+import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
+import scala.util.Try
 
 class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
-  with Matchers with WordSpecLike with BeforeAndAfterEach with BeforeAndAfterAll {
+  with AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
-  var cluster: TestCluster = _
-
-  override def beforeEach(): Unit = {
-    cluster = createInitialCluster()
-  }
-
-  override def afterEach() {
-    cluster.nodes.foreach(n => n.shutdown())
-  }
-
-  override def afterAll(): Unit = {
+  override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
 
-  implicit val materialize: ActorMaterializer = ActorMaterializer()
-  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
-  implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+  val tmpDir = "tmp"
 
-  "Multiple Constellation Nodes" when {
-
-    "running consensus" should {
-
-      "handle random transactions with a stable set of nodes" in {
-
-        // send random transactions
-        val validTxs = cluster.sim.sendRandomTransactions(20, cluster.apis)
-
-        // validate consensus on transactions
-        assert(cluster.sim.validateRun(validTxs, .35, cluster.apis))
-
-        assert(true)
-      }
-
-      "handle adding a node to an existing cluster" in {
-
-        // send random transactions
-        var validTxs = cluster.sim.sendRandomTransactions(20, cluster.apis)
-
-        // validate consensus on transactions for the initial nodes
-        assert(cluster.sim.validateRun(validTxs, .35, cluster.apis))
-
-        // create a new node
-        val newNode = TestNode(heartbeatEnabled = true).getAPIClient()
-
-        val updatedNodes = cluster.apis :+ newNode
-
-        val someExistingNode = cluster.apis.head
-
-        val addNode = someExistingNode.postSync("peer", newNode.hostName + ":" + newNode.udpPort)
-
-        Thread.sleep(45000)
-
-        // validate that the new node catches up and comes to consensus
-        assert(cluster.sim.validateRun(validTxs, .35, updatedNodes))
-
-        // add some more transactions
-        validTxs = validTxs.++(cluster.sim.sendRandomTransactions(5, updatedNodes))
-
-        // validate consensus on all of the transactions and nodes
-        assert(cluster.sim.validateRun(validTxs, .35, updatedNodes))
-
-        assert(true)
-      }
-
-    }
-
+  override def beforeEach(): Unit = {
+    // Cleanup DBs
+    Try{File(tmpDir).delete()}
   }
 
-  case class TestCluster(apis: Seq[APIClient], nodes: Seq[ConstellationNode], sim: Simulation)
+  override def afterEach() {
+    // Cleanup DBs
+    File(tmpDir).delete()
+  }
 
-  def createInitialCluster(numberOfNodes: Int = 3): TestCluster = {
+  implicit val materialize: ActorMaterializer = ActorMaterializer()
+  implicit override val executionContext: ExecutionContextExecutor = system.dispatcher
+  implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
 
-    val n1 = TestNode(heartbeatEnabled = true)
+  "E2E Multiple Nodes DAG" should "add peers and build DAG with transactions" in {
 
-    val nodes = Seq(n1) ++ Seq.fill(numberOfNodes-1)(TestNode(heartbeatEnabled = true))
+    val totalNumNodes = 3
+
+    val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false)
+
+    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true))
+
     val apis = nodes.map{_.getAPIClient()}
+
+    val peerApis = nodes.map{ node => {
+      val n = node.getAPIClient()
+      n.apiPort = node.peerHttpPort
+      n
+    }}
+
     val sim = new Simulation()
 
-    sim.connectNodes(false, true, apis)
+    sim.run(apis = apis, peerApis = peerApis)
 
-    TestCluster(apis, nodes, sim)
+    /*
+    val probe = TestProbe()
 
+    within(1 hour) {
+      probe.expectMsg(1 hour, "a message")
+    }
+    */
+
+    // TODO: add random transactions and verifications
+
+    assert(true)
   }
 
 }
