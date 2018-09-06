@@ -15,7 +15,7 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, IncrementMetric}
+import org.constellation.primitives.{APIBroadcast, IncrementMetric, PendingRegistration}
 import org.constellation.util.{CommonEndpoints, HashSignature}
 import org.json4s.native
 import org.json4s.native.Serialization
@@ -73,6 +73,7 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
             val maybeData = getHostAndPortFromRemoteAddress(clientIP)
             maybeData match {
               case Some(PeerIPData(host, portOption)) =>
+                dao.peerManager ! PendingRegistration(host, request)
                 pendingRegistrations = pendingRegistrations.updated(host, request)
                 complete(StatusCodes.OK)
               case None =>
