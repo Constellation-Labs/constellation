@@ -17,7 +17,7 @@ trait Genesis extends NodeData with EdgeDAO {
 
     val debtAddress = makeKeyPair().address.address
 
-    val redTXGenesisResolved = createTransactionSafeBatch(debtAddress, selfAddressStr, 4e9.toLong, keyPair)
+    val redTXGenesisResolved = createTransaction(debtAddress, selfAddressStr, 4e9.toLong, keyPair)
 
     val genTXHash = redTXGenesisResolved.edge.signedObservationEdge.signatureBatch.hash
 
@@ -42,7 +42,7 @@ trait Genesis extends NodeData with EdgeDAO {
     val genesisCBO = CheckpointBlock(Seq(redTXGenesisResolved), CheckpointEdge(redGenesis))
 
     val distr = ids.toSeq.map{ id =>
-      createTransactionSafeBatch(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
+      createTransaction(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
     }
 
     val distrCB = CheckpointEdgeData(distr.map{_.edge.signedObservationEdge.signatureBatch.hash})
@@ -99,7 +99,5 @@ trait Genesis extends NodeData with EdgeDAO {
 
     println(s"accept genesis = ", go)
   }
-
-  // TODO: wrap in actor?, keeps blocking on multiple calls within test context
 
 }

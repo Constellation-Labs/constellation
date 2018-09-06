@@ -17,13 +17,23 @@ class Simulation {
 
   val logger = Logger(s"Simulation")
 
-  implicit val ec: ExecutionContextExecutorService =
-    ExecutionContext.fromExecutorService(new ForkJoinPool(1024))
-
   def healthy(apis: Seq[APIClient]): Boolean = {
     apis.forall(a => {
       val res = a.getSync("health", timeoutSeconds = 100).isSuccess
       res
+    })
+  }
+
+  def hasGenesis(apis: Seq[APIClient]): Boolean = {
+    apis.forall(a => {
+      val res = a.getSync(s"hasGenesis" , timeoutSeconds = 100).isSuccess
+      res
+    })
+  }
+
+  def getCheckpointTips(apis: Seq[APIClient]): Seq[Seq[SignedObservationEdge]] = {
+    apis.map(a => {
+      a.getBlocking[Seq[SignedObservationEdge]](s"checkpointTips" , timeoutSeconds = 100)
     })
   }
 
@@ -47,7 +57,7 @@ class Simulation {
     apis.head.postBlocking[GenesisObservation]("genesis/create", ids.tail.toSet)
   }
 
-  def addPeers(apis: Seq[APIClient], peerAPIs: Seq[APIClient]): Seq[Future[Unit]] = {
+  def addPeers(apis: Seq[APIClient], peerAPIs: Seq[APIClient])(implicit executionContext: ExecutionContext) = {
     val joinedAPIs = apis.zip(peerAPIs)
     val results = joinedAPIs.flatMap { case (a, peerAPI) =>
       val ip = a.hostName
@@ -104,6 +114,22 @@ class Simulation {
     assert(healthy(apis))
   }
 
+  var genChecks = 0
+
+  def awaitGenesisStored(apis: Seq[APIClient]): Unit = {
+    while (genChecks < 10) {
+      if (Try{hasGenesis(apis)}.getOrElse(false)) {
+        genChecks = Int.MaxValue
+      } else {
+        genChecks += 1
+        logger.error(s"Unhealthy nodes. Waiting 30s. Num attempts: $genChecks out of 10")
+        Thread.sleep(30000)
+      }
+    }
+
+    assert(hasGenesis(apis))
+  }
+
   def sendRandomTransaction(apis: Seq[APIClient]): Future[HttpResponse[String]] = {
     val src = randomNode(apis)
     val dst = randomOtherNode(src, apis).id.address.address
@@ -112,7 +138,7 @@ class Simulation {
     src.post("sendTransactionToAddress", s)
   }
 
-  def run(attemptSetExternalIP: Boolean = false, apis: Seq[APIClient], peerApis: Seq[APIClient]): Unit = {
+  def run(attemptSetExternalIP: Boolean = false, apis: Seq[APIClient], peerApis: Seq[APIClient])(implicit executionContext: ExecutionContext): Unit = {
 
     awaitHealthy(apis)
 
@@ -136,6 +162,8 @@ class Simulation {
     val goe = genesis(apis)
 
     apis.foreach{_.post("genesis/accept", goe)}
+
+    awaitGenesisStored(apis)
   }
 
 }

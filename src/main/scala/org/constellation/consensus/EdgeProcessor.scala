@@ -35,6 +35,10 @@ object EdgeProcessor {
       dao.metricsManager ! IncrementMetric("internalCheckpointMessagesReceived")
     }
 
+    // TODO temp store
+
+    dao.checkpointTips.+:(cb.checkpoint)
+
     Resolve.resolveCheckpoint(dao, cb)
   }
 
@@ -148,6 +152,8 @@ object EdgeProcessor {
       // TODO : Increment metrics here for each case
       case t : TransactionValidationStatus if t.valid =>
 
+        println(s"validated, doing other things $tx")
+
         // Check to see if we should add our signature to the transaction
         val txPrime = updateWithSelfSignatureEmit(tx, dao)
 
@@ -180,6 +186,8 @@ object EdgeProcessor {
                                 tx: Transaction)(implicit timeout: Timeout, executionContext: ExecutionContext): Unit = {
     if (dao.canCreateCheckpoint) {
 
+      println(s"starting checkpoint blocking")
+
       val checkpointBlock = formCheckpointUpdateState(dao, tx)
 
       dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
@@ -188,16 +196,20 @@ object EdgeProcessor {
 
       dao.checkpointMemPool(cbBaseHash) = checkpointBlock.checkpoint
 
-      // TODO: move peer lookup into consensus?
-      val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().keySet
+      // TODO: should be subset
+      val facilitators = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().keySet
+
+      println(s"finally got facilitators")
+
+      // TODO: what is the round hash based on?
+      // what are thresholds and checkpoint selection
+
+      val roundHash = RoundHash("temp")
 
       // Start check pointing consensus round
-      dao.consensus ! InitializeConsensusRound(peerIds, RoundHash("test"), (result) => {
-
-        println(s"consensus round complete result = $result")
-
+      dao.consensus ! InitializeConsensusRound(facilitators, roundHash, (result) => {
+        println(s"consensus round complete result roundHash = $roundHash, result = $result")
         EdgeProcessor.handleCheckpoint(result.checkpointBlock, dao)
-
       }, CheckpointVote(checkpointBlock))
 
     }

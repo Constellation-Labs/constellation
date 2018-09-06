@@ -5,6 +5,7 @@ import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.dispatch.ExecutionContexts
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Route
 import akka.io.Udp
@@ -19,14 +20,14 @@ import org.constellation.primitives.Schema.{AddPeerFromLocal, ToggleHeartbeat}
 import org.constellation.primitives._
 import org.constellation.util.APIClient
 
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Try
 
 object ConstellationNode extends App {
 
   implicit val system: ActorSystem = ActorSystem("Constellation")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
-  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+  implicit val executionContext: ExecutionContextExecutor = ExecutionContext.global
 
   val config = ConfigFactory.load()
 

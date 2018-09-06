@@ -47,17 +47,6 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
       )
   }
 
-  "isFacilitator" should "return correctly if the actor is a facilitator" in {
-
-    val isFacilitator = Consensus.isFacilitator(idSet4, id1)
-
-    assert(isFacilitator)
-
-    val isNotFacilitator = Consensus.isFacilitator(idSet4, id5)
-
-    assert(!isNotFacilitator)
-  }
-
   /*
 
   "the PerformConsensusRound" should "initialize and complete correctly in the CONFLICT scenario" ignore new WithConsensusActor {

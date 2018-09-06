@@ -62,10 +62,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     sim.sendRandomTransaction(apis)
     sim.sendRandomTransaction(apis)
     sim.sendRandomTransaction(apis)
-
-    Thread.sleep(20000)
-
-    sim.sendRandomTransaction(apis)
     sim.sendRandomTransaction(apis)
     sim.sendRandomTransaction(apis)
     sim.sendRandomTransaction(apis)
@@ -79,6 +75,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     */
 
     // TODO: add random transactions and verifications
+ //   val checkpointTips = sim.getCheckpointTips(apis)
 
     assert(true)
   }

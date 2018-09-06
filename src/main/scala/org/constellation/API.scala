@@ -18,11 +18,11 @@ import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.LevelDB.DBPut
+import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, Schema, UpdateMetric}
-import org.constellation.util.{ServeUI, Metrics}
+import org.constellation.util.{Metrics, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
 import scalaj.http.HttpResponse
@@ -118,6 +118,16 @@ class API(udpAddress: InetSocketAddress,
               _.data
             })
           } ~
+          path("hasGenesis") {
+            if (data.genesisObservation.isDefined) {
+              complete(StatusCodes.OK)
+            } else {
+              complete(StatusCodes.NotFound)
+            }
+          } ~
+          path("checkpointTips") {
+            complete(data.checkpointTips)
+          } ~
           jsRequest ~
           serveMainPage
       }
@@ -160,6 +170,8 @@ class API(udpAddress: InetSocketAddress,
       } ~
       path("sendTransactionToAddress"){
         entity(as[SendToAddress]) { e =>
+
+          println(s"send transaction to address $e")
 
           Future {
             transactions.TransactionManager.handleSendToAddress(e, data)

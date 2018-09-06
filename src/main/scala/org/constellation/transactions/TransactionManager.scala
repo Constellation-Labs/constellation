@@ -12,7 +12,7 @@ import scala.concurrent.Future
 object TransactionManager {
 
   def handleSendToAddress(sendRequest: SendToAddress, dao: Data): Unit = {
-    val tx = createTransactionSafeBatch(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair)
+    val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair)
 
     dao.edgeProcessor ! HandleTransaction(tx)
 
