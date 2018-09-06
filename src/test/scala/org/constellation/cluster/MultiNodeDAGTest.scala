@@ -61,17 +61,19 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     sim.sendRandomTransaction(apis)
     sim.sendRandomTransaction(apis)
     sim.sendRandomTransaction(apis)
+
+    /*
     sim.sendRandomTransaction(apis)
     sim.sendRandomTransaction(apis)
     sim.sendRandomTransaction(apis)
     sim.sendRandomTransaction(apis)
 
-    /*
     val probe = TestProbe()
 
     within(1 hour) {
       probe.expectMsg(1 hour, "a message")
     }
+
     */
 
     // TODO: add random transactions and verifications

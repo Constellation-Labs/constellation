@@ -177,8 +177,10 @@ object Consensus {
     if (firstTimeObservingVote) {
       println(s"first time observing vote for person = $peer")
 
+      /*
       notifyFacilitatorsOfMessage(facilitators, selfId, consensusRoundState.dao,
         StartConsensusRound(selfId, vote, roundHash), consensusRoundState.peerManager, "startConsensusRound")
+      */
     }
 
     if (peerThresholdMet(updatedState, roundHash)(_.votes)) {
@@ -231,8 +233,10 @@ object Consensus {
     if (firstTimeObservingProposal) {
       println(s"first time observing vote for proposal = $peer")
 
+      /*
       notifyFacilitatorsOfMessage(facilitators,
         selfId, consensusRoundState.dao, ConsensusProposal(selfId, proposal, roundHash), consensusRoundState.peerManager, "checkpointEdgeProposal")
+      */
     }
 
     if (peerThresholdMet(updatedState, roundHash)(_.proposals)) {

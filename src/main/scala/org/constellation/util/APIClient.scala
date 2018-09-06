@@ -16,7 +16,7 @@ class APIClient (
   implicit val system: ActorSystem,
   implicit val materialize: ActorMaterializer) {
 
-  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("blocking-io-dispatcher")
+  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
 
   var hostName: String = "127.0.0.1"
   var id: Id = _
