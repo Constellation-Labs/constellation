@@ -3,7 +3,7 @@ package org.constellation
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
-import akka.actor.ActorRef
+import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, path, _}
@@ -35,7 +35,7 @@ case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id)
 
 class API(udpAddress: InetSocketAddress,
           val data: Data = null,
-          cellManager: ActorRef)(implicit executionContext: ExecutionContext, val timeout: Timeout)
+          cellManager: ActorRef)(implicit system: ActorSystem, val timeout: Timeout)
   extends Json4sSupport
     with Wallet
     with ServeUI {
@@ -46,6 +46,8 @@ class API(udpAddress: InetSocketAddress,
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
+
+  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-dispatcher")
 
   val logger = Logger(s"APIInterface")
 

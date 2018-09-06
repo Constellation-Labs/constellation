@@ -17,6 +17,9 @@ class Simulation {
 
   val logger = Logger(s"Simulation")
 
+  implicit val ec: ExecutionContextExecutorService =
+    ExecutionContext.fromExecutorService(new ForkJoinPool(100))
+
   def healthy(apis: Seq[APIClient]): Boolean = {
     apis.forall(a => {
       val res = a.getSync("health", timeoutSeconds = 100).isSuccess

@@ -27,7 +27,7 @@ object ConstellationNode extends App {
 
   implicit val system: ActorSystem = ActorSystem("Constellation")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
-  implicit val executionContext: ExecutionContextExecutor = ExecutionContext.global
+  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   val config = ConfigFactory.load()
 

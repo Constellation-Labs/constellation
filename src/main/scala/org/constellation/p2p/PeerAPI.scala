@@ -3,7 +3,7 @@ package org.constellation.p2p
 import java.net.InetSocketAddress
 import java.security.KeyPair
 
-import akka.actor.ActorRef
+import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
@@ -33,10 +33,12 @@ import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
 
-class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val timeout: Timeout)
+class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
   extends Json4sSupport with CommonEndpoints {
 
   implicit val serialization: Serialization.type = native.Serialization
+
+  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-dispatcher")
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
