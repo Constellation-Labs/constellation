@@ -8,10 +8,8 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import org.constellation.Data
-import org.constellation.consensus.Consensus._
-import org.constellation.primitives.Schema.{TransactionV1, _}
+import org.constellation.primitives.Schema._
 import org.constellation.util.Heartbeat
-import constellation._
 
 import scala.concurrent.ExecutionContextExecutor
 

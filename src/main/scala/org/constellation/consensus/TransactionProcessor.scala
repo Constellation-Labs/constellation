@@ -1,13 +1,5 @@
 package org.constellation.consensus
 
-import akka.actor.ActorRef
-import org.constellation.Data
-import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, IncrementMetric, TransactionValidation}
-import org.constellation.util.SignHelp
-
-import scala.concurrent.ExecutionContext
-
 
 object TransactionProcessor {
 

@@ -1,38 +1,34 @@
 package org.constellation.p2p
 
-import java.net.InetSocketAddress
-import java.security.KeyPair
-
-import akka.actor.ActorRef
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
-import akka.http.scaladsl.server.{Directive1, Route}
+import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
+import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, IncrementMetric}
-import org.constellation.util.{CommonEndpoints, HashSignature}
-import org.json4s.native
-import org.json4s.native.Serialization
-import akka.pattern.ask
 import org.constellation.CustomDirectives.BannedIPEnforcer
 import org.constellation.Data
-import org.constellation.LevelDB.DBPut
-import org.constellation.LevelDB.{DBGet, DBPut}
-import org.constellation.consensus.{EdgeProcessor, TransactionProcessor, Validation}
+import org.constellation.LevelDB.DBGet
+import org.constellation.consensus.{EdgeProcessor, Validation}
+import org.constellation.primitives.Schema._
+import org.constellation.primitives.{IncrementMetric, PendingRegistration}
+import org.constellation.util.CommonEndpoints
+import org.json4s.native
+import org.json4s.native.Serialization
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
 case class PeerRegistrationRequest(host: String, port: Int, key: String)
 
-class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val timeout: Timeout)
+class PeerAPI(val dao: Data)(implicit val timeout: Timeout)
   extends Json4sSupport with CommonEndpoints with BannedIPEnforcer {
 
   implicit val serialization: Serialization.type = native.Serialization
@@ -40,9 +36,9 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-  val logger = Logger(s"PeerAPI")
+  private val logger = Logger(s"PeerAPI")
 
-  val config: Config = ConfigFactory.load()
+  private val config: Config = ConfigFactory.load()
 
   private var pendingRegistrations = Map[String, PeerRegistrationRequest]()
 
@@ -140,8 +136,8 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
   }
 
   val routes: Route = {
-    signEndpoints ~ rejectBannedIP {
-      enforceKnownIP {
+    rejectBannedIP {
+      signEndpoints ~ enforceKnownIP {
         getEndpoints ~ postEndpoints ~ mixedEndpoints ~ commonEndpoints
       }
     }

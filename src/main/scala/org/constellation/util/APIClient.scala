@@ -6,15 +6,15 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.constellation.primitives.Schema.Id
-import org.json4s.{Formats, native}
 import org.json4s.native.Serialization
+import org.json4s.{Formats, native}
 import scalaj.http.{Http, HttpRequest, HttpResponse}
 
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 class APIClient (
   implicit val system: ActorSystem,
-  implicit val executionContext: ExecutionContextExecutor,
   implicit val materialize: ActorMaterializer) {
 
   var hostName: String = "127.0.0.1"

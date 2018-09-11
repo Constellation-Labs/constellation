@@ -1,11 +1,11 @@
 package org.constellation.primitives
 
 import akka.actor.{Actor, ActorRef}
-import org.constellation.primitives.Schema.{Id, InternalHeartbeat, SendToAddress}
 import akka.pattern.ask
 import akka.util.Timeout
 import constellation._
 import org.constellation.Data
+import org.constellation.primitives.Schema.{Id, InternalHeartbeat, SendToAddress}
 
 import scala.util.Random
 

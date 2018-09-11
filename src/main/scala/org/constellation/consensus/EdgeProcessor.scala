@@ -1,13 +1,10 @@
 package org.constellation.consensus
 
-import akka.actor.ActorRef
-import org.constellation.Data
-import org.constellation.LevelDB.DBPut
-import org.constellation.primitives.Schema._
-import Validation.TransactionValidationStatus
 import com.typesafe.scalalogging.Logger
+import org.constellation.Data
+import org.constellation.consensus.Validation.TransactionValidationStatus
+import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, EdgeService, IncrementMetric, UpdateMetric}
-import org.constellation.util.SignHelp
 
 import scala.concurrent.ExecutionContext
 

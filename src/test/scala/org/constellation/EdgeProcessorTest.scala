@@ -1,6 +1,6 @@
 package org.constellation
 
-import java.security.{KeyPair, SecureRandom}
+import java.security.KeyPair
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.stream.ActorMaterializer
@@ -8,15 +8,14 @@ import akka.testkit.{TestProbe, _}
 import org.constellation.Fixtures.{addPeerRequest, dummyTx, id}
 import org.constellation.LevelDB.DBGet
 import org.constellation.consensus.Validation.TransactionValidationStatus
-import org.constellation.consensus.{EdgeProcessor, TransactionProcessor, Validation}
+import org.constellation.consensus.{EdgeProcessor, Validation}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.APIClient
 import org.scalatest.FlatSpec
-import scalaj.http.HttpResponse
 
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.ExecutionContextExecutor
 
 class EdgeProcessorTest extends FlatSpec {
   implicit val system: ActorSystem = ActorSystem("TransactionProcessorTest")
