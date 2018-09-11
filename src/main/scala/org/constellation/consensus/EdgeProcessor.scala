@@ -20,20 +20,123 @@ object EdgeProcessor {
   def handleCheckpoint(cb: CheckpointBlock, dao: Data, internalMessage: Boolean = false)(implicit executionContext: ExecutionContext): Unit = {
 
     if (!internalMessage) {
-      dao.metricsManager ! IncrementMetric("checkpointMessagesReceived")
+      dao.metricsManager ! IncrementMetric("checkpointMessages")
     } else {
-      dao.metricsManager ! IncrementMetric("internalCheckpointMessagesReceived")
+      dao.metricsManager ! IncrementMetric("internalCheckpointMessages")
     }
 
+    // TODO: Validate the checkpoint to see if any there are any duplicate transactions
+    // Also need to register it with ldb ? To prevent duplicate processing ? Or after
+    // If there are duplicate transactions, do a score calculation relative to the other one to determine which to preserve.
+    // Potentially rolling back the other one.
+
     if (Resolve.resolveCheckpoint(dao, cb)) {
+      dao.metricsManager ! IncrementMetric("resolvedCheckpointMessages")
+
+      // Mock
+
+      // Check to see if we should add our signature to the CB
+      val cbPrime = updateCheckpointWithSelfSignatureEmit(cb, dao)
+
+      // Add to memPool or update an existing hash with new signatures and check for signature threshold
+      updateCheckpointMergeMemPool(cbPrime, dao)
+
+      var cbStatusUpdatedInDB : Boolean = false
+
+      if (dao.canCreateValidation) {
+
+        val cbUsed = dao.checkpointMemPoolThresholdMet.take(2)
+        val updatedTransactionMemPoolThresholdMet = dao.checkpointMemPoolThresholdMet -- cbUsed
+
+        val checkpointEdgeData = CheckpointEdgeData(transactionsUsed.toSeq.sorted)
+
+        val tips = validationTips.take(2)
+        val filteredValidationTips = validationTips.filterNot(tips.contains)
+
+        val observationEdge = ObservationEdge(
+          TypedEdgeHash(tips.head.hash, EdgeHashType.ValidationHash),
+          TypedEdgeHash(tips(1).hash, EdgeHashType.ValidationHash),
+          data = Some(TypedEdgeHash(checkpointEdgeData.hash, EdgeHashType.CheckpointDataHash))
+        )
+
+        val signedObservationEdge = SignHelp.signedObservationEdge(observationEdge)(keyPair)
+
+        val checkpointEdge = CheckpointEdge(Edge(observationEdge, signedObservationEdge, ResolvedObservationEdge(tips.head, tips(1), Some(checkpointEdgeData))))
+
+
+      }
+      /*
+
+
+
+          val checkpointBlock = formCheckpointUpdateState(dao, tx)
+          dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
+
+          val cbBaseHash = checkpointBlock.hash
+          dao.checkpointMemPool(cbBaseHash) = checkpointBlock.checkpoint
+
+          // Temporary bypass to consensus for mock
+          // Send all data (even if this is redundant.)
+          dao.peerManager ! APIBroadcast(_.put(s"checkpoint/$cbBaseHash", checkpointBlock))
+
+          if (checkpointBlock.transactions.contains(tx)) {
+            txStatusUpdatedInDB = true
+          }
+        }
+
+        if (!txStatusUpdatedInDB && t.transactionCacheData.isEmpty) {
+          tx.store(dao.dbActor, None, inDAG = false)
+        }
+
+        dao.metricsManager ! UpdateMetric("transactionMemPool", dao.transactionMemPool.size.toString)
+        dao.metricsManager ! UpdateMetric("transactionMemPoolThreshold", dao.transactionMemPoolThresholdMet.size.toString)
+
+       */
 
     } else {
+      dao.metricsManager ! IncrementMetric("unresolvedCheckpointMessages")
 
     }
 
   }
 
   // TODO : Add checks on max number in mempool and max num signatures.
+
+  // TEMPORARY mock-up for pre-consensus integration mimics transactions
+  def updateCheckpointWithSelfSignatureEmit(cb: CheckpointBlock, dao: Data): CheckpointBlock = {
+    val cbPrime = if (!cb.signatures.exists(_.publicKey == dao.keyPair.getPublic)) {
+      // We haven't yet signed this CB
+      val cb2 = cb.plus(dao.keyPair)
+      // Send peers new signature
+      dao.peerManager ! APIBroadcast(_.put(s"checkpoint/${cb.hash}", cb2))
+      cb2
+    } else {
+      // We have already signed this CB,
+      cb
+    }
+    cbPrime
+  }
+
+  // TEMPORARY mock-up for pre-consensus integration mimics transactions
+  def updateCheckpointMergeMemPool(cb: CheckpointBlock, dao: Data) : Unit = {
+    val cbPostUpdate = if (dao.checkpointMemPool.contains(cb.hash)) {
+      // Merge signatures together
+      val updated = dao.checkpointMemPool(cb.hash).plus(cb)
+      // Update memPool with new signatures.
+      dao.checkpointMemPool(cb.hash) = updated
+      updated
+    }
+    else {
+      dao.checkpointMemPool(cb.hash) = cb
+      cb
+    }
+
+    // Check to see if we have enough signatures to include in CB
+    if (cbPostUpdate.signatures.size >= dao.minCBSignatureThreshold) {
+      // Set threshold as met
+      dao.checkpointMemPoolThresholdMet += cb.hash
+    }
+  }
 
   /**
     * Potentially add our signature to a transaction and if we haven't yet signed it emit to peers
@@ -170,20 +273,19 @@ object EdgeProcessor {
           dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
 
           val cbBaseHash = checkpointBlock.hash
-          dao.checkpointMemPool(cbBaseHash) = checkpointBlock.checkpoint
+          dao.checkpointMemPool(cbBaseHash) = checkpointBlock
 
           // Temporary bypass to consensus for mock
           // Send all data (even if this is redundant.)
           dao.peerManager ! APIBroadcast(_.put(s"checkpoint/$cbBaseHash", checkpointBlock))
 
-          if (checkpointBlock.transactions.contains(t)) {
+          if (checkpointBlock.transactions.contains(tx)) {
             txStatusUpdatedInDB = true
           }
         }
 
-        if (!txStatusUpdatedInDB) {
-          // TODO : Add info to DB about transaction status for async reporting info ? Potentially ?
-          // Or deal with elsewhere? Either way need to update something so node can figure out what's happening with TX
+        if (!txStatusUpdatedInDB && t.transactionCacheData.isEmpty) {
+          tx.store(dao.dbActor, None, inDAG = false)
         }
 
         dao.metricsManager ! UpdateMetric("transactionMemPool", dao.transactionMemPool.size.toString)

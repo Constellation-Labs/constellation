@@ -184,11 +184,16 @@ object Schema {
     * Encapsulation for all witness information about a given observation edge.
     * @param signatureBatch : Collection of validation signatures about the edge.
     */
-  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash
+  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash {
+    def plus(keyPair: KeyPair): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(keyPair))
+    def plus(other: SignatureBatch): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other))
+    def plus(other: SignedObservationEdge): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
+  }
 
 
   /**
     * Holder for ledger update information about a transaction
+    *
     * @param amount : Quantity to be transferred
     * @param salt : Ensure hash uniqueness
     */
@@ -238,7 +243,9 @@ object Schema {
     )
   }
 
-  case class CheckpointEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData])
+  case class CheckpointEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData]) {
+    def plus(other: CheckpointEdge) = this.copy(edge = edge.plus(other.edge))
+  }
   case class ValidationEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, Nothing])
 
   case class Edge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
@@ -259,6 +266,14 @@ object Schema {
         data =>
           db ! DBPut(data.hash, data)
       }
+    }
+
+    def plus(keyPair: KeyPair): Edge[L, R, D] = {
+      this.copy(signedObservationEdge = signedObservationEdge.plus(keyPair))
+    }
+
+    def plus(other: Edge[_,_,_]): Edge[L, R, D] = {
+      this.copy(signedObservationEdge = signedObservationEdge.plus(other.signedObservationEdge))
     }
 
   }
@@ -284,14 +299,26 @@ object Schema {
                               transactions: Seq[Transaction],
                               checkpoint: CheckpointEdge
                                   ) {
+
+    def signatures: Set[HashSignature] = checkpoint.edge.signedObservationEdge.signatureBatch.signatures
+
     def hash: String = checkpoint.edge.baseHash
 
-    def store(db: ActorRef, inDAG: Boolean = false): Unit = {
+    def store(db: ActorRef, inDAG: Boolean = false, resolved: Boolean = false): Unit = {
       transactions.foreach { rt =>
         rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG)))
       }
-      checkpoint.edge.store(db, Some(CheckpointCacheData(checkpoint, inDAG = inDAG)))
+      checkpoint.edge.store(db, Some(CheckpointCacheData(checkpoint, inDAG = inDAG)), resolved)
     }
+
+    def plus(keyPair: KeyPair): CheckpointBlock = {
+      this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.plus(keyPair)))
+    }
+
+    def plus(other: CheckpointBlock): CheckpointBlock = {
+      this.copy(checkpoint = checkpoint.plus(other.checkpoint))
+    }
+
   }
 
   case class EdgeSheaf(

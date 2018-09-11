@@ -85,8 +85,8 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
 
   def acceptGenesisOE(go: GenesisObservation): Unit = {
     // Store hashes for the edges
-    go.genesis.store(dbActor, inDAG = true)
-    go.initialDistribution.store(dbActor, inDAG = true)
+    go.genesis.store(dbActor, inDAG = true, resolved = true)
+    go.initialDistribution.store(dbActor, inDAG = true, resolved = true)
 
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
     go.genesis.transactions.foreach{

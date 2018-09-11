@@ -13,6 +13,7 @@ trait EdgeDAO {
   var genesisObservation: Option[GenesisObservation] = None
   val minCheckpointFormationThreshold = 3
   val minTXSignatureThreshold = 3
+  val minCBSignatureThreshold = 3
   val maxUniqueTXSize = 500
   val maxNumSignaturesPerTX = 20
 
@@ -20,7 +21,7 @@ trait EdgeDAO {
   @volatile var validationTips : Seq[SignedObservationEdge] = Seq()
 
   val transactionMemPool : TrieMap[String, Transaction] = TrieMap()
-  val checkpointMemPool : TrieMap[String, CheckpointEdge] = TrieMap()
+  val checkpointMemPool : TrieMap[String, CheckpointBlock] = TrieMap()
   val validationMemPool : TrieMap[String, ValidationEdge] = TrieMap()
 
   @volatile var transactionMemPoolThresholdMet: Set[String] = Set()
@@ -36,5 +37,11 @@ trait EdgeDAO {
   def canCreateCheckpoint: Boolean = {
     transactionMemPoolThresholdMet.size >= minCheckpointFormationThreshold && validationTips.size >= 2
   }
+
+  def canCreateValidation: Boolean = {
+    checkpointMemPoolThresholdMet.size >= 2
+  }
+
+
 
 }
