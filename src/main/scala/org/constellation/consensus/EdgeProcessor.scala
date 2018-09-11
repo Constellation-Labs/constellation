@@ -51,7 +51,7 @@ object EdgeProcessor {
     * @return Maybe updated transaction
     */
   def updateWithSelfSignatureEmit(tx: Transaction, dao: Data): Transaction = {
-    val txPrime = if (!tx.signatures.exists(_.publicKey == dao.keyPair.getPublic)) {
+    if (!tx.signatures.exists(_.publicKey == dao.keyPair.getPublic)) {
       // We haven't yet signed this TX
       val tx2 = tx.plus(dao.keyPair)
       // Send peers new signature
@@ -61,7 +61,6 @@ object EdgeProcessor {
       // We have already signed this transaction,
       tx
     }
-    txPrime
   }
 
   /**
@@ -127,6 +126,7 @@ object EdgeProcessor {
     checkpointBlock
   }
 
+
   /**
     * Main transaction processing cell
     * This is triggered upon external receipt of a transaction. Assume that the transaction being processed
@@ -148,9 +148,9 @@ object EdgeProcessor {
     // in event where a new signature is being made by another peer it's most likely still valid, should
     // cache the results of this somewhere.
 
-    Validation.validateTransaction(dao.dbActor, tx).foreach{
+    Validation.validateTransaction(dao.dbActor, tx).foreach {
       // TODO : Increment metrics here for each case
-      case t : TransactionValidationStatus if t.valid =>
+      case t: TransactionValidationStatus if t.valid =>
 
         println(s"validated, doing other things $tx")
 
@@ -165,7 +165,7 @@ object EdgeProcessor {
         dao.metricsManager ! UpdateMetric("transactionMemPool", dao.transactionMemPool.size.toString)
         dao.metricsManager ! UpdateMetric("transactionMemPoolThreshold", dao.transactionMemPoolThresholdMet.size.toString)
 
-      case t : TransactionValidationStatus =>
+      case t: TransactionValidationStatus =>
         // TODO : Add info somewhere so node can find out transaction was invalid on a callback
 
         dao.metricsManager ! IncrementMetric("invalidTransactions")
@@ -179,7 +179,16 @@ object EdgeProcessor {
         }
 
     }
+  }
 
+  def reportInvalidTransaction(dao: Data, t: TransactionValidationStatus) = {
+    dao.metricsManager ! IncrementMetric("invalidTransactions")
+    if (t.isDuplicateHash) {
+      dao.metricsManager ! IncrementMetric("hashDuplicateTransactions")
+    }
+    if (!t.sufficientBalance) {
+      dao.metricsManager ! IncrementMetric("insufficientBalanceTransactions")
+    }
   }
 
   def triggerCheckpointBlocking(dao: Data,

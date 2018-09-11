@@ -61,6 +61,7 @@ class Simulation {
   }
 
   def addPeers(apis: Seq[APIClient], peerAPIs: Seq[APIClient])(implicit executionContext: ExecutionContext) = {
+
     val joinedAPIs = apis.zip(peerAPIs)
     val results = joinedAPIs.flatMap { case (a, peerAPI) =>
       val ip = a.hostName

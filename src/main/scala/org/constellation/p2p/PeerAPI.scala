@@ -15,7 +15,7 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, IncrementMetric}
+import org.constellation.primitives.{APIBroadcast, IncrementMetric, TransactionValidation}
 import org.constellation.util.{CommonEndpoints, HashSignature}
 import org.json4s.native
 import org.json4s.native.Serialization
@@ -27,6 +27,7 @@ import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote, 
 import org.constellation.consensus.EdgeProcessor.HandleTransaction
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.serializer.KryoSerializer
+import org.constellation.consensus.{EdgeProcessor, TransactionProcessor, Validation}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
@@ -97,9 +98,38 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
       put {
         entity(as[Transaction]) {
           tx =>
-            Future{
+            Future {
+              dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
+
               logger.debug(s"transaction endpoint, $tx")
               dao.edgeProcessor ! HandleTransaction(tx)
+
+            }
+            complete(StatusCodes.OK)
+        }
+      } ~
+      get {
+        val memPoolPresence = dao.transactionMemPool.get(s)
+        val response = memPoolPresence.map { t =>
+          TransactionQueryResponse(s, Some(t), inMemPool = true, inDAG = false, None)
+        }.getOrElse{
+          (dao.dbActor ? DBGet(s)).mapTo[Option[TransactionCacheData]].get().map{
+            cd =>
+              TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence.nonEmpty, cd.inDAG, cd.cbEdgeHash)
+          }.getOrElse{
+            TransactionQueryResponse(s, None, inMemPool = false, inDAG = false, None)
+          }
+        }
+
+        complete(response)
+      } ~ complete (StatusCodes.BadRequest)
+    } ~
+    path("checkpoint" / Segment) { s =>
+      put {
+        entity(as[CheckpointBlock]) {
+          cb =>
+            Future{
+              EdgeProcessor.handleCheckpoint(cb, dao)
             }
             complete(StatusCodes.OK)
         }
