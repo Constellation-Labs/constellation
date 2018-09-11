@@ -5,12 +5,14 @@ import java.security.{KeyPair, PublicKey}
 
 import constellation._
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.Schema
-import org.constellation.primitives.Schema.{Id, Peer}
-import org.constellation.util.Signed
+import org.constellation.primitives.{PeerData, Schema}
+import org.constellation.primitives.Schema.{Id, Peer, SendToAddress}
+import org.constellation.util.{APIClient, Signed, TestNode}
 
 
 object Fixtures {
+
+//  lazy val testNode =  TestNode(heartbeatEnabled = true, randomizePorts = false)
 
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()
@@ -33,20 +35,27 @@ object Fixtures {
   val id5 = Id(publicKey5.encoded)
   val signedPeer: Signed[Peer] = Peer(id, Some(address), Some(address), Seq(), "").signed()(tempKey)
 
-
   val address1: InetSocketAddress = constellation.addressToSocket("localhost:16181")
   val address2: InetSocketAddress = constellation.addressToSocket("localhost:16182")
   val address3: InetSocketAddress = constellation.addressToSocket("localhost:16183")
   val address4: InetSocketAddress = constellation.addressToSocket("localhost:16184")
   val address5: InetSocketAddress = constellation.addressToSocket("localhost:16185")
 
+  val addPeerRequest = AddPeerRequest("host:", 1, 1, id: Id)
+
   val idSet4 = Set(id1, id2, id3, id4)
   val idSet4B = Set(id1, id2, id3, id5)
   val idSet5 = Set(id1, id2, id3, id4, id5)
 
-  val randomTransactions: Seq[Schema.TransactionV1] = Seq.fill(30) {
+  val randomTransactions: Seq[Schema.TransactionV1] = Seq.fill(30) {//TODO make one for Transaction
     val kp = makeKeyPair()
     val kp2 = makeKeyPair()
     createTransactionSafe(kp.address.address, kp2.address.address, 1L, kp)
   }
+
+  def dummyTx(data: Data, amt: Long = 1L) = {
+    val sendRequest = SendToAddress(id.address.address, amt)
+    createTransactionSafeBatchOE(data.selfAddressStr, sendRequest.dst, sendRequest.amountActual, data.keyPair)
+  }
+
 }

@@ -3,7 +3,7 @@ A blockchain microservice operating system.
 
 This is the reference implementation supporting our 
 [DAG](https://en.wikipedia.org/wiki/Directed_acyclic_graph) 
-protocol, writting in the 
+protocol, written in the 
 [Scala](https://www.scala-lang.org/) 
 programming language.
 
