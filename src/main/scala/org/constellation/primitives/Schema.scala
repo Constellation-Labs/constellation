@@ -188,6 +188,7 @@ object Schema {
     def plus(keyPair: KeyPair): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(keyPair))
     def plus(other: SignatureBatch): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other))
     def plus(other: SignedObservationEdge): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
+    def baseHash: String = signatureBatch.hash
   }
 
 
@@ -224,7 +225,8 @@ object Schema {
 
     // TODO: Add proper exception on empty option
     def amount : Long = edge.resolvedObservationEdge.data.get.amount
-    def hash: String = edge.signedObservationEdge.signatureBatch.hash
+    def baseHash: String = edge.signedObservationEdge.baseHash
+    def hash: String = edge.signedObservationEdge.hash
     def plus(other: Transaction): Transaction = this.copy(
       edge = edge.copy(
         signedObservationEdge = edge.signedObservationEdge.copy(
@@ -262,6 +264,10 @@ object Schema {
     def store[T <: AnyRef](db: ActorRef, t: Option[T] = None, resolved: Boolean = false): Unit = {
       db ! DBPut(signedObservationEdge.signatureBatch.hash, t.getOrElse(observationEdge))
       db ! DBPut(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
+      storeData(db: ActorRef)
+    }
+
+    def storeData(db: ActorRef): Unit = {
       resolvedObservationEdge.data.foreach {
         data =>
           db ! DBPut(data.hash, data)
@@ -282,11 +288,23 @@ object Schema {
     override def hash: String = address
   }
 
-  case class AddressCacheData(balance: Long, reputation: Option[Double] = None)
+  case class AddressCacheData(
+                               balance: Long,
+                               reputation: Option[Double] = None,
+                               ancestorBalances: Map[String, Long],
+                               ancestorReputations: Map[String, Long]
+                             )
+  // Instead of one balance we need a Map from soe hash to balance and reputation
+  // These values should be removed automatically by eviction
+  // We can maintain some kind of automatic LRU cache for keeping track of what we want to remove
+  // override evict method, and clean up data.
+  // We should also mark a given balance / rep as the 'primary' one.
+
   case class TransactionCacheData(
                                    transaction: Transaction,
                                    inDAG: Boolean = false,
                                    cbEdgeHash: Option[String] = None,
+                                   cbForkEdgeHashes: Seq[String] = Seq(),
                                    rxTime: Long = System.currentTimeMillis()
                                  )
 
@@ -334,7 +352,8 @@ object Schema {
 
   case class GenesisObservation(
                                  genesis: CheckpointBlock,
-                                 initialDistribution: CheckpointBlock
+                                 initialDistribution: CheckpointBlock,
+                                 initialDistribution2: CheckpointBlock
                                )
 
 

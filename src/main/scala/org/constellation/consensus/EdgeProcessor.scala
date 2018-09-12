@@ -2,7 +2,7 @@ package org.constellation.consensus
 
 import akka.actor.ActorRef
 import org.constellation.Data
-import org.constellation.LevelDB.DBPut
+import org.constellation.LevelDB.{DBPut, DBUpdate}
 import org.constellation.primitives.Schema._
 import Validation.TransactionValidationStatus
 import com.typesafe.scalalogging.Logger
@@ -10,6 +10,7 @@ import org.constellation.primitives.{APIBroadcast, EdgeService, IncrementMetric,
 import org.constellation.util.SignHelp
 
 import scala.concurrent.ExecutionContext
+import scala.util.Random
 
 
 object EdgeProcessor {
@@ -35,7 +36,7 @@ object EdgeProcessor {
 
       // Mock
 
-      // Check to see if we should add our signature to the CB
+/*      // Check to see if we should add our signature to the CB
       val cbPrime = updateCheckpointWithSelfSignatureEmit(cb, dao)
 
       // Add to memPool or update an existing hash with new signatures and check for signature threshold
@@ -46,9 +47,9 @@ object EdgeProcessor {
       if (dao.canCreateValidation) {
 
         val cbUsed = dao.checkpointMemPoolThresholdMet.take(2)
-        val updatedTransactionMemPoolThresholdMet = dao.checkpointMemPoolThresholdMet -- cbUsed
+        val updatedTransactionMemPoolThresholdMet = dao.checkpointMemPoolThresholdMet -- cbUsed*/
 
-        val checkpointEdgeData = CheckpointEdgeData(transactionsUsed.toSeq.sorted)
+  /*      val checkpointEdgeData = CheckpointEdgeData(transactionsUsed.toSeq.sorted)
 
         val tips = validationTips.take(2)
         val filteredValidationTips = validationTips.filterNot(tips.contains)
@@ -62,9 +63,11 @@ object EdgeProcessor {
         val signedObservationEdge = SignHelp.signedObservationEdge(observationEdge)(keyPair)
 
         val checkpointEdge = CheckpointEdge(Edge(observationEdge, signedObservationEdge, ResolvedObservationEdge(tips.head, tips(1), Some(checkpointEdgeData))))
+*/
+
+    //  }
 
 
-      }
       /*
 
 
@@ -166,22 +169,22 @@ object EdgeProcessor {
     * @return : Potentially updated transaction.
     */
   def updateMergeMemPool(tx: Transaction, dao: Data) : Unit = {
-    val txPostUpdate = if (dao.transactionMemPool.contains(tx.hash)) {
+    val txPostUpdate = if (dao.transactionMemPool.contains(tx.baseHash)) {
       // Merge signatures together
-      val updated = dao.transactionMemPool(tx.hash).plus(tx)
+      val updated = dao.transactionMemPool(tx.baseHash).plus(tx)
       // Update memPool with new signatures.
-      dao.transactionMemPool(tx.hash) = updated
+      dao.transactionMemPool(tx.baseHash) = updated
       updated
     }
     else {
-      dao.transactionMemPool(tx.hash) = tx
+      dao.transactionMemPool(tx.baseHash) = tx
       tx
     }
 
     // Check to see if we have enough signatures to include in CB
     if (txPostUpdate.signatures.size >= dao.minTXSignatureThreshold) {
       // Set threshold as met
-      dao.transactionMemPoolThresholdMet += tx.hash
+      dao.transactionMemPoolThresholdMet += tx.baseHash
     }
   }
 
@@ -206,11 +209,16 @@ object EdgeProcessor {
     // below is a single local formation of a checkpoint edge proposal
     // need to wait on majority of other people before accepting it
 
+    val tips = Random.shuffle(dao.checkpointMemPoolThresholdMet.toSeq).take(2)
+
+    val tipSOE = tips.map{_._1}.map{dao.checkpointMemPool}.map{_.checkpoint.edge.signedObservationEdge}
+
     val checkpointEdgeProposal = EdgeService.createCheckpointEdgeProposal(
       dao.transactionMemPoolThresholdMet,
       dao.minCheckpointFormationThreshold,
-      dao.validationTips
+      tipSOE
     )(dao.keyPair)
+
 
     val takenTX = checkpointEdgeProposal.transactionsUsed.map{dao.transactionMemPool}
 
@@ -222,7 +230,24 @@ object EdgeProcessor {
 
     // TODO: move to tips service
     // Update tips
-    dao.validationTips = checkpointEdgeProposal.filteredValidationTips
+    //dao.validationTips = checkpointEdgeProposal.filteredValidationTips
+    tips.foreach{ case (tipHash, numUses) =>
+
+      def doRemove(): Unit = {
+        dao.checkpointMemPoolThresholdMet.remove(tipHash)
+        dao.checkpointMemPool.remove(tipHash)
+      }
+
+      if (dao.reuseTips) {
+        if (numUses >= 2) {
+          doRemove()
+        } else {
+          dao.checkpointMemPoolThresholdMet(tipHash) += 1
+        }
+      } else {
+        doRemove()
+      }
+    }
 
     val checkpointBlock = CheckpointBlock(takenTX.toSeq, checkpointEdgeProposal.checkpointEdge)
 
@@ -285,7 +310,8 @@ object EdgeProcessor {
         }
 
         if (!txStatusUpdatedInDB && t.transactionCacheData.isEmpty) {
-          tx.store(dao.dbActor, None, inDAG = false)
+          tx.edge.storeData(dao.dbActor) // This call can always overwrite no big deal
+          dao.dbActor ! DBUpdate(tx.baseHash)
         }
 
         dao.metricsManager ! UpdateMetric("transactionMemPool", dao.transactionMemPool.size.toString)

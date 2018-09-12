@@ -11,36 +11,32 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 trait EdgeDAO {
 
   var genesisObservation: Option[GenesisObservation] = None
+  val maxWidth = 20
   val minCheckpointFormationThreshold = 3
   val minTXSignatureThreshold = 3
   val minCBSignatureThreshold = 3
   val maxUniqueTXSize = 500
   val maxNumSignaturesPerTX = 20
 
-  @volatile var checkpointTips : Seq[SignedObservationEdge] = Seq()
-  @volatile var validationTips : Seq[SignedObservationEdge] = Seq()
 
   val transactionMemPool : TrieMap[String, Transaction] = TrieMap()
   val checkpointMemPool : TrieMap[String, CheckpointBlock] = TrieMap()
-  val validationMemPool : TrieMap[String, ValidationEdge] = TrieMap()
 
   @volatile var transactionMemPoolThresholdMet: Set[String] = Set()
-  @volatile var checkpointMemPoolThresholdMet: Set[String] = Set()
-  @volatile var validationThresholdMet: Set[String] = Set()
 
+  // Map from checkpoint hash to number of times used as a tip (number of children)
+  @volatile val checkpointMemPoolThresholdMet: TrieMap[String, Int] = TrieMap()
 
-  val resolveNotifierCallbacks: TrieMap[String, TrieMap[String, () => Unit]] = TrieMap()
+  val resolveNotifierCallbacks: TrieMap[String, Seq[String]] = TrieMap()
 
   val transactionExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newFixedThreadPool(200))
 
   def canCreateCheckpoint: Boolean = {
-    transactionMemPoolThresholdMet.size >= minCheckpointFormationThreshold && validationTips.size >= 2
+    transactionMemPoolThresholdMet.size >= minCheckpointFormationThreshold && checkpointMemPoolThresholdMet.size >= 2
   }
 
-  def canCreateValidation: Boolean = {
-    checkpointMemPoolThresholdMet.size >= 2
-  }
+  def reuseTips: Boolean = checkpointMemPoolThresholdMet.size < maxWidth
 
 
 
