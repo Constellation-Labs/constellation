@@ -18,7 +18,6 @@ trait EdgeDAO {
   val maxUniqueTXSize = 500
   val maxNumSignaturesPerTX = 20
 
-
   val transactionMemPool : TrieMap[String, Transaction] = TrieMap()
   val checkpointMemPool : TrieMap[String, CheckpointBlock] = TrieMap()
 
@@ -26,20 +25,12 @@ trait EdgeDAO {
 
   // Map from checkpoint hash to number of times used as a tip (number of children)
   val checkpointMemPoolThresholdMet: TrieMap[String, Int] = TrieMap()
-
-
-
   val resolveNotifierCallbacks: TrieMap[String, Seq[String]] = TrieMap()
-
-  val transactionExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(200))
 
   def canCreateCheckpoint: Boolean = {
     transactionMemPoolThresholdMet.size >= minCheckpointFormationThreshold && checkpointMemPoolThresholdMet.size >= 2
   }
 
   def reuseTips: Boolean = checkpointMemPoolThresholdMet.size < maxWidth
-
-
 
 }

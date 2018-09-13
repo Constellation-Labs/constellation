@@ -30,7 +30,6 @@ class Metrics(val data: Data = null) extends Wallet {
         "numTXRemovedFromMemory" -> numTXRemovedFromMemory.toString,
         "numDeletedBundles" -> numDeletedBundles.toString,
         "numSheafInMemory" -> bundleToSheaf.size.toString,
-        "numTXInMemory" -> txHashToTX.size.toString,
         "numValidBundleHashesRemovedFromMemory" -> numValidBundleHashesRemovedFromMemory.toString,
         "udpPacketGroupSize" -> udpPacketGroupSize.toString,
         "address" -> selfAddress.address,
@@ -45,7 +44,6 @@ class Metrics(val data: Data = null) extends Wallet {
         "numSyncedBundles" -> numSyncedBundles.toString,
         "numValidBundles" -> totalNumValidBundles.toString,
         "numValidTransactions" -> totalNumValidatedTX.toString,
-        "memPoolSize" -> memPool.size.toString,
         "totalNumBroadcasts" -> totalNumBroadcastMessages.toString,
         "totalNumBundleMessages" -> totalNumBundleMessages.toString,
         "lastConfirmationUpdateTime" -> lastConfirmationUpdateTime.toString,
@@ -68,18 +66,9 @@ class Metrics(val data: Data = null) extends Wallet {
           .getOrElse("N/A"),
         //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
         "numActiveBundles" -> activeDAGBundles.size.toString,
-        "last10TXHash" -> last10000ValidTXHash.
-          takeRight(10)
-          .mkString(","),
         "last10ValidBundleHashes" -> last100ValidBundleMetaData
           .map {
             _.bundle.hash
-          }
-          .takeRight(10)
-          .mkString(","),
-        "last10SelfTXHashes" -> last100SelfSentTransactions
-          .map {
-            _.hash
           }
           .takeRight(10)
           .mkString(","),

@@ -1,6 +1,5 @@
 package org.constellation.primitives
 
-
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
@@ -54,9 +53,9 @@ object Schema {
   // I.e. equivalent to number of sat per btc
   val NormalizationFactor: Long = 1e8.toLong
 
-  case class BundleHashQueryResponse(hash: String, sheaf: Option[Sheaf], transactions: Seq[TransactionV1])
+  case class BundleHashQueryResponse(hash: String, sheaf: Option[Sheaf], transactions: Seq[Transaction])
 
-  case class MaxBundleGenesisHashQueryResponse(genesisBundle: Option[Bundle], genesisTX: Option[TransactionV1], sheaf: Option[Sheaf])
+  case class MaxBundleGenesisHashQueryResponse(genesisBundle: Option[Bundle], genesisTX: Option[Transaction], sheaf: Option[Sheaf])
 
   case class SendToAddress(
                             dst: String,
@@ -110,12 +109,6 @@ object Schema {
       else ledger(dst) = amount
     }
 
-
-  }
-  case class TransactionV1(
-                          txData: Signed[TransactionData]
-                        ) extends Fiber with GossipMessage with ProductHash with RemoteMessage {
-    def valid: Boolean = txData.valid
   }
 
   sealed trait GossipMessage
@@ -179,7 +172,6 @@ object Schema {
                               data: Option[TypedEdgeHash] = None
                             ) extends ProductHash
 
-
   /**
     * Encapsulation for all witness information about a given observation edge.
     * @param signatureBatch : Collection of validation signatures about the edge.
@@ -190,7 +182,6 @@ object Schema {
     def plus(other: SignedObservationEdge): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
     def baseHash: String = signatureBatch.hash
   }
-
 
   /**
     * Holder for ledger update information about a transaction
@@ -208,7 +199,6 @@ object Schema {
 
   case class ResolvedObservationEdge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
   (left: L, right: R, data: Option[D] = None)
-
 
   case class EdgeCell(members: mutable.SortedSet[EdgeSheaf])
 
@@ -400,7 +390,6 @@ object Schema {
   case class CellKey(hashPointer: String, depth: Int, height: Int)
 
   case class Cell(members: SortedSet[Sheaf])
-
 
   final case class PeerSyncHeartbeat(
                                       maxBundleMeta: Sheaf,
@@ -619,7 +608,7 @@ object Schema {
   final case object InternalHeartbeat extends InternalCommand
   final case object InternalBundleHeartbeat extends InternalCommand
 
-  final case class ValidateTransaction(tx: TransactionV1) extends InternalCommand
+  final case class ValidateTransaction(tx: Transaction) extends InternalCommand
 
   trait DownloadMessage
 
@@ -627,12 +616,12 @@ object Schema {
   case class DownloadResponse(
                                maxBundle: Bundle,
                                genesisBundle: Bundle,
-                               genesisTX: TransactionV1
+                               genesisTX: Transaction
                              ) extends DownloadMessage with RemoteMessage
 
-  final case class SyncData(validTX: Set[TransactionV1], memPoolTX: Set[TransactionV1]) extends GossipMessage with RemoteMessage
+  final case class SyncData(validTX: Set[Transaction], memPoolTX: Set[Transaction]) extends GossipMessage with RemoteMessage
 
-  case class MissingTXProof(tx: TransactionV1, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage with RemoteMessage
+  case class MissingTXProof(tx: Transaction, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage with RemoteMessage
 
   final case class RequestTXProof(txHash: String) extends GossipMessage with RemoteMessage
 
@@ -697,18 +686,18 @@ object Schema {
                                   ) extends ProductHash
 
 
-  final case class ConflictDetectedData(detectedOn: TransactionV1, conflicts: Seq[TransactionV1]) extends ProductHash
+  final case class ConflictDetectedData(detectedOn: Transaction, conflicts: Seq[Transaction]) extends ProductHash
 
   final case class ConflictDetected(conflict: Signed[ConflictDetectedData]) extends ProductHash with GossipMessage
 
-  final case class VoteData(accept: Seq[TransactionV1], reject: Seq[TransactionV1]) extends ProductHash {
+  final case class VoteData(accept: Seq[Transaction], reject: Seq[Transaction]) extends ProductHash {
     // used to determine what voting round we are talking about
     def voteRoundHash: String = {
       accept.++(reject).sortBy(t => t.hashCode()).map(f => f.hash).mkString("-")
     }
   }
 
-  final case class VoteCandidate(tx: TransactionV1, gossip: Seq[Gossip[ProductHash]])
+  final case class VoteCandidate(tx: Transaction, gossip: Seq[Gossip[ProductHash]])
 
   final case class VoteDataSimpler(accept: Seq[VoteCandidate], reject: Seq[VoteCandidate]) extends ProductHash
 

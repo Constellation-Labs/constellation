@@ -12,9 +12,7 @@ import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import constellation._
 
-
 trait CommonEndpoints extends Json4sSupport {
-
 
   implicit val serialization: Serialization.type
 

@@ -12,116 +12,14 @@ import org.constellation.LevelDB.{DBDelete, DBPut}
 import scala.concurrent.Future
 import scala.util.{Failure, Random, Success, Try}
 
+// TODO: deprecated, temporary for reference only
 trait ProbabilisticGossip extends PeerAuth {
 
   val data: Data
 
   import data._
 
-  def handleGossip(gm : GossipMessage, remote: InetSocketAddress): Unit = {
-
-    totalNumGossipMessages += 1
-
-    //val rid = signedPeerLookup.get(remote).map{_.data.id}
-
-    gm match {
-      case BatchBundleHashRequest(hashes) =>
-
-        hashes.foreach{ h =>
-          lookupBundleDBFallbackBlocking(h).foreach{
-            b =>
-              // TODO: Send all meta for sync conflict detection.
-              udpActor ! UDPSend(b.bundle, remote)
-          }
-        }
-
-      case BatchTXHashRequest(hashes) =>
-
-        hashes.foreach{h =>
-          lookupTransactionDBFallbackBlocking(h).foreach{
-            b =>
-              udpActor ! UDPSend(b, remote)
-          }
-        }
-
-      case b: Bundle =>
-
-        handleBundle(b)
-
-      case tx: TransactionV1 =>
-
-        handleTransaction(tx)
-
-      case bb: PeerSyncHeartbeat =>
-        processPeerSyncHeartbeat(bb)
-
-      case x =>
-        logger.debug("Unrecognized gossip message " + x)
-    }
-  }
-
-  //  @volatile var heartBeatInProgress = false
-
-
-  def gossipHeartbeat(): Unit = {
-    // Gather any missing transaction or bundle data
-    dataRequest()
-
-    if (!downloadMode && genesisBundle.nonEmpty && maxBundleMetaData.nonEmpty && !downloadInProgress) {
-      //  if (!heartBeatInProgress) {
-      //  heartBeatInProgress = true
-      ///  Try {
-      bundleHeartbeat()
-      // } match {
-      //   case Success(x) =>
-      //   case Failure(e) => e.printStackTrace()
-      // }
-      // heartBeatInProgress = false
-      // }
-    }
-  }
-
-  def bundleHeartbeat(): Unit = {
-    // Bootstrap the initial genesis tx
-    acceptInitialDistribution()
-
-    // Lookup from db or ask peers for peer bundle data that is missing
-    attemptResolvePeerBundles()
-
-    peerSync.foreach{
-      _._2.maxBundleMeta.height.foreach{
-        h =>
-          maxBundleMetaData.flatMap{_.height}.foreach{ h2 =>
-            if (h > (h2 + 20)) {
-              downloadInProgress = true
-              // logger.error("FOUND PEER 20 BUNDLES AHEAD, RESTARTING")
-              // System.exit(1)
-            }
-          }
-      }
-    }
-
-
-    //allPeersHealthy = apiBroadcast(_.getSync("health").status == StatusCodes.OK).forall(x => x)
-
-
-    if (generateRandomTX) simulateTransactions()
-
-
-    broadcast(PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap, id))
-    //    apiBroadcast(_.post("peerSyncHeartbeat", PeerSyncHeartbeat(maxBundleMetaData.get, validLedger.toMap, id)))
-
-    // Tell peers about our latest mempool state
-    poolEmit()
-
-    // Compress down bundles
-    combineBundles()
-
-    // clean up any bundles that have been compressed
-    cleanupStrayChains()
-  }
-
-
+  /*
   def dataRequest(): Unit = {
 
     // Request missing bundle data
@@ -133,16 +31,7 @@ trait ProbabilisticGossip extends PeerAuth {
     if (syncPendingTXHashes.nonEmpty) {
       // println("Requesting data sync pending of " + syncPendingTXHashes)
       broadcast(BatchTXHashRequest(syncPendingTXHashes))
-      /*
 
-            apiBroadcast({a: APIClient =>
-              Future{
-              a.postRead[Seq[Transaction]]("batchTXRequest", BatchTXHashRequest(syncPendingTXHashes)).foreach{
-                self ! _
-              } //.foreach{handleTransaction}
-              }
-            })
-      */
 
       if (syncPendingTXHashes.size > 1500) {
         val toRemove = txSyncRequestTime.toSeq.sortBy(_._2).zipWithIndex.filter{_._2 > 50}.map{_._1._1}.toSet
@@ -277,46 +166,8 @@ trait ProbabilisticGossip extends PeerAuth {
         _ > 50
       }
     }) {
-      //    println("Bundle cleanup")
 
-      /*
-            val oldestAncestor = last100ValidBundleMetaData.head
-
-            val ancestorsMinus100 = findAncestorsUpTo(oldestAncestor.bundle.hash, upTo = 100)
-
-            val lastValidHashes = (last100ValidBundleMetaData.map {
-              _.bundle.hash
-            }.toSet ++ ancestorsMinus100.map {
-              _.bundle.hash
-            }).toSet
-      */
-
-      /*
-      ancestorsMinus100.slice(0, 50).foreach{
-        s =>
-          s.bundle.extractSubBundleHashes.foreach{
-            h =>
-              if (!lastValidHashes.contains(h)) deleteBundle(h)
-          }
-          if (bundleToSheaf.contains(s.bundle.hash)) {
-            bundleToSheaf.remove(s.bundle.hash)
-            numValidBundleHashesRemovedFromMemory += 1
-            //dbActor.foreach{ db =>
-            // db ! DBPut(s.bundle.hash, s) ? Maybe necessary? to ensure it was stored the first time?
-            // }
-          }
-
-          s.bundle.extractTXHash.foreach{ t =>
-            removeTransactionFromMemory(t.txHash)
-          }
-      }
-*/
       val currentHeight = maxBundleMetaData.get.height.get // last100ValidBundleMetaData.head.height.get
-
-      /*
-      val lastHeight = last100ValidBundleMetaData.last.height.get - 5
-      val firstHeight = oldestAncestor.height.get + 5
-*/
 
       var numDeleted = 0
 
@@ -331,11 +182,6 @@ trait ProbabilisticGossip extends PeerAuth {
 
         def removeTX(): Unit = s.bundle.extractTXHash.foreach { txH =>
           removeTransactionFromMemory(txH.txHash)
-          //  if (!last10000ValidTXHash.contains(txH.txHash)) {
-          //    dbActor.foreach {
-          //      _ ! DBDelete(txH.txHash)
-          //    }
-          //  }
         }
 
         if (unresolved) {
@@ -359,9 +205,6 @@ trait ProbabilisticGossip extends PeerAuth {
         }
       }
 
-      //  println("Bundle to sheaf cleanup done removed: " + numDeleted)
-
-      // There should also be
     }
   }
 
@@ -369,17 +212,6 @@ trait ProbabilisticGossip extends PeerAuth {
     activeDAGManager.cleanup(maxBundleMetaData.get.height.get)
     bundleCleanup()
   }
-
-  // TODO: extract to test
-
-  def simulateTransactions(): Unit = {
-    val shouldEmit = maxBundleMetaData.exists {_.height.get >= 5} // || (System.currentTimeMillis() > startTime + 30000)
-    if (shouldEmit && memPool.size < 500) {
-      //if (Random.nextDouble() < .2)
-      randomTransaction()
-      randomTransaction()
-      if (memPool.size < 50) Seq.fill(50)(randomTransaction())
-    }
-  }
+  */
 
 }

@@ -16,9 +16,7 @@ object Resolve {
   // WIP
   def resolveCheckpoint(dao: Data, cb: CheckpointBlock): Boolean = {
 
-
     // Step 1 - Find out if both parents are resolved.
-
 
     // TODO: Change to Future.sequence
     val parentCache = cb.checkpoint.edge.parentHashes.map{ h =>

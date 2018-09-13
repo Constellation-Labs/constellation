@@ -14,7 +14,7 @@ import org.constellation.primitives.Schema._
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
 
-trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
+trait BundleDataExt extends Reputation with MetricsExt with NodeData  {
 
   // @volatile var db: LevelDB
 
@@ -22,7 +22,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
 
   var genesisBundle : Option[Bundle] = None
 
-  def genesisTXHash: Option[String] = genesisBundle.map{_.extractTX.head.hash}
+ // def genesisTXHash: Option[String] = genesisBundle.map{_.extractTX.head.hash}
 
   @volatile var last100ValidBundleMetaData : Seq[Sheaf] = Seq()
   def lastValidBundle: Bundle = last100ValidBundleMetaData.last.bundle
@@ -103,13 +103,6 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
     dbActor ! DBPut(hash, sheaf)
   }
 
-  def processPeerSyncHeartbeat(psh: PeerSyncHeartbeat): Unit = {
-    handleBundle(psh.maxBundle)
-    // TODO: Find ID from ip for REST and UDP
-//    psh.id.foreach{ r =>
-    peerSync(psh.id) = psh
-  }
-
   val depthScoreMap = Map(
     0 -> 1,
     1 -> 10,
@@ -150,8 +143,10 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
       s"score: $score, totalScore: $totalScore, height: ${meta.map{_.height}}, " +
       s"parent: ${meta.map{_.bundle.extractParentBundleHash.pbHash.slice(0, 5)}} firstId: ${b.extractIds.head.short}"
 
+    /*
     def extractTX: Set[TransactionV1] = b.extractTXHash.flatMap{ z => lookupTransaction(z.txHash)}
     def extractTXDB: Set[TransactionV1] = b.extractTXHash.flatMap{ z => lookupTransactionDBFallbackBlocking(z.txHash)}
+    */
 
     def reputationUpdate: Map[String, Long] = {
       b.extractIds.map{_.b58 -> 1L}.toMap
@@ -319,10 +314,6 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
         val height = sheaf.height.get
 
         if (height > confirmWindow) {
-          if (downloadInProgress) {
-            downloadInProgress = false
-            downloadMode = false
-          }
 
           totalNumValidBundles = height - confirmWindow
         }
@@ -334,7 +325,7 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
           // .filter { h => !last10000ValidTXHash.contains(h) }
 
      //   if (height % 10 == 0) {
-          newTX.foreach(t => lookupTransactionDBFallbackBlocking(t.txHash).foreach {acceptTransaction})
+         // newTX.foreach(t => lookupTransactionDBFallbackBlocking(t.txHash).foreach {acceptTransaction})
        // }
     }
 
@@ -384,10 +375,13 @@ trait BundleDataExt extends Reputation with MetricsExt with TransactionExt {
   }
 
   def resolveTransactions(txs: Set[String]): Boolean = {
+    /*
     val missing = txs.filter(z => lookupTransaction(z).isEmpty)
     syncPendingTXHashes ++= missing
     missing.foreach(m => txSyncRequestTime(m) = System.currentTimeMillis())
     missing.isEmpty
+    */
+    false
   }
 
   def handleBundle(bundle: Bundle): Unit = {
