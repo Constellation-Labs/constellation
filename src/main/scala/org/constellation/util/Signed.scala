@@ -3,6 +3,7 @@ package org.constellation.util
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import akka.actor.ActorRef
+import cats.kernel.Monoid
 import constellation.{hashSignBatchZeroTyped, _}
 import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Base58
@@ -66,7 +67,7 @@ case class HashSignature(
 case class SignatureBatch(
                          hash: String,
                          signatures: Set[HashSignature]
-                         ) {
+                         ) extends Monoid[SignatureBatch] {
   def valid: Boolean = {
     signatures.forall(_.valid(hash))
   }
@@ -81,6 +82,12 @@ case class SignatureBatch(
       signatures = signatures + hashSign(hash, other)
     )
   }
+
+  override def empty: SignatureBatch = SignatureBatch(hash, Set())
+
+  override def combine(x: SignatureBatch, y: SignatureBatch): SignatureBatch =
+    x.copy(signatures = x.signatures ++ y.signatures)
+
 }
 
 

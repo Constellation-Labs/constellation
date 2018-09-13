@@ -184,11 +184,17 @@ object Schema {
     * Encapsulation for all witness information about a given observation edge.
     * @param signatureBatch : Collection of validation signatures about the edge.
     */
-  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash
+  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash {
+    def plus(keyPair: KeyPair): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(keyPair))
+    def plus(other: SignatureBatch): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other))
+    def plus(other: SignedObservationEdge): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
+    def baseHash: String = signatureBatch.hash
+  }
 
 
   /**
     * Holder for ledger update information about a transaction
+    *
     * @param amount : Quantity to be transferred
     * @param salt : Ensure hash uniqueness
     */
@@ -219,7 +225,8 @@ object Schema {
 
     // TODO: Add proper exception on empty option
     def amount : Long = edge.resolvedObservationEdge.data.get.amount
-    def hash: String = edge.signedObservationEdge.signatureBatch.hash
+    def baseHash: String = edge.signedObservationEdge.baseHash
+    def hash: String = edge.signedObservationEdge.hash
     def plus(other: Transaction): Transaction = this.copy(
       edge = edge.copy(
         signedObservationEdge = edge.signedObservationEdge.copy(
@@ -238,7 +245,9 @@ object Schema {
     )
   }
 
-  case class CheckpointEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData])
+  case class CheckpointEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData]) {
+    def plus(other: CheckpointEdge) = this.copy(edge = edge.plus(other.edge))
+  }
   case class ValidationEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, Nothing])
 
   case class Edge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
@@ -255,10 +264,22 @@ object Schema {
     def store[T <: AnyRef](db: ActorRef, t: Option[T] = None, resolved: Boolean = false): Unit = {
       db ! DBPut(signedObservationEdge.signatureBatch.hash, t.getOrElse(observationEdge))
       db ! DBPut(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
+      storeData(db: ActorRef)
+    }
+
+    def storeData(db: ActorRef): Unit = {
       resolvedObservationEdge.data.foreach {
         data =>
           db ! DBPut(data.hash, data)
       }
+    }
+
+    def plus(keyPair: KeyPair): Edge[L, R, D] = {
+      this.copy(signedObservationEdge = signedObservationEdge.plus(keyPair))
+    }
+
+    def plus(other: Edge[_,_,_]): Edge[L, R, D] = {
+      this.copy(signedObservationEdge = signedObservationEdge.plus(other.signedObservationEdge))
     }
 
   }
@@ -267,15 +288,35 @@ object Schema {
     override def hash: String = address
   }
 
-  case class AddressCacheData(balance: Long, reputation: Option[Double] = None)
+  case class AddressCacheData(
+                               balance: Long,
+                               reputation: Option[Double] = None,
+                               ancestorBalances: Map[String, Long] = Map(),
+                               ancestorReputations: Map[String, Long] = Map()
+                             )
+  // Instead of one balance we need a Map from soe hash to balance and reputation
+  // These values should be removed automatically by eviction
+  // We can maintain some kind of automatic LRU cache for keeping track of what we want to remove
+  // override evict method, and clean up data.
+  // We should also mark a given balance / rep as the 'primary' one.
+
   case class TransactionCacheData(
                                    transaction: Transaction,
                                    inDAG: Boolean = false,
                                    cbEdgeHash: Option[String] = None,
+                                   cbForkEdgeHashes: Seq[String] = Seq(),
                                    rxTime: Long = System.currentTimeMillis()
                                  )
 
-  case class CheckpointCacheData(resolvedCB: CheckpointEdge, inDAG: Boolean = false, resolved: Boolean = false)
+  case class CheckpointCacheData(
+                                  checkpointBlock: CheckpointBlock,
+                                  inDAG: Boolean = false,
+                                  resolved: Boolean = false,
+                                  resolutionInProgress: Boolean = false,
+                                  inMemPool: Boolean = false,
+                                  lastResolveAttempt: Long = System.currentTimeMillis(),
+                                  rxTime: Long = System.currentTimeMillis() // TODO: Unify common metadata like this
+                                )
 
   case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
 
@@ -284,14 +325,26 @@ object Schema {
                               transactions: Seq[Transaction],
                               checkpoint: CheckpointEdge
                                   ) {
-    def hash: String = checkpoint.edge.baseHash
 
-    def store(db: ActorRef, inDAG: Boolean = false): Unit = {
+    def signatures: Set[HashSignature] = checkpoint.edge.signedObservationEdge.signatureBatch.signatures
+
+    def baseHash: String = checkpoint.edge.baseHash
+
+    def store(db: ActorRef, inDAG: Boolean = false, resolved: Boolean = false): Unit = {
       transactions.foreach { rt =>
         rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG)))
       }
-      checkpoint.edge.store(db, Some(CheckpointCacheData(checkpoint, inDAG = inDAG)))
+      checkpoint.edge.store(db, Some(CheckpointCacheData(this, inDAG = inDAG)), resolved)
     }
+
+    def plus(keyPair: KeyPair): CheckpointBlock = {
+      this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.plus(keyPair)))
+    }
+
+    def plus(other: CheckpointBlock): CheckpointBlock = {
+      this.copy(checkpoint = checkpoint.plus(other.checkpoint))
+    }
+
   }
 
   case class EdgeSheaf(
@@ -307,7 +360,8 @@ object Schema {
 
   case class GenesisObservation(
                                  genesis: CheckpointBlock,
-                                 initialDistribution: CheckpointBlock
+                                 initialDistribution: CheckpointBlock,
+                                 initialDistribution2: CheckpointBlock
                                )
 
 

@@ -4,6 +4,8 @@ import org.constellation.primitives.Schema._
 import constellation._
 import org.constellation.LevelDB.DBPut
 
+import scala.collection.concurrent.TrieMap
+
 trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataExt with EdgeDAO {
 
   val CoinBaseHash = "coinbase"
@@ -26,6 +28,33 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     acceptGenesis(Bundle(BundleData(Seq(ParentBundleHash("coinbase"), TransactionHash(tx.hash))).signed()), tx)
   }
 
+
+  def createDistribution(ids: Seq[Id], genesisSOE: SignedObservationEdge) = {
+
+    val distr = ids.map{ id =>
+      createTransactionSafeBatchOE(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
+    }
+
+    val distrCB = CheckpointEdgeData(distr.map{_.edge.signedObservationEdge.signatureBatch.hash})
+
+    val distrOE = ObservationEdge(
+      TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash),
+      TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash),
+      data = Some(TypedEdgeHash(distrCB.hash, EdgeHashType.CheckpointDataHash))
+    )
+
+    val distrSOE = signedObservationEdge(distrOE)
+
+    val distrROE = ResolvedObservationEdge(genesisSOE, genesisSOE, Some(distrCB))
+
+    val distrRED = Edge(distrOE, distrSOE, distrROE)
+
+    val distrCBO = CheckpointBlock(distr, CheckpointEdge(distrRED))
+
+    distrCBO
+
+  }
+
   /**
     * Build genesis tips and example distribution among initial nodes
     * @param ids: Initial node public keys
@@ -42,8 +71,8 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     val cb = CheckpointEdgeData(Seq(genTXHash))
 
     val oe = ObservationEdge(
-      TypedEdgeHash(CoinBaseHash, EdgeHashType.ValidationHash),
-      TypedEdgeHash(genTXHash, EdgeHashType.TransactionHash),
+      TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
+      TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
       data = Some(TypedEdgeHash(cb.hash, EdgeHashType.CheckpointDataHash))
     )
 
@@ -59,41 +88,24 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
 
     val genesisCBO = CheckpointBlock(Seq(redTXGenesisResolved), CheckpointEdge(redGenesis))
 
-    val distr = ids.toSeq.map{ id =>
-      createTransactionSafeBatchOE(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
-    }
+    val distr1CBO = createDistribution(ids.toSeq, soe)
+    val distr2CBO = createDistribution(ids.toSeq, soe)
 
-    val distrCB = CheckpointEdgeData(distr.map{_.edge.signedObservationEdge.signatureBatch.hash})
-
-    val distrOE = ObservationEdge(
-      TypedEdgeHash(genTXHash, EdgeHashType.TransactionHash),
-      TypedEdgeHash(soe.signatureBatch.hash, EdgeHashType.CheckpointHash),
-      data = Some(TypedEdgeHash(distrCB.hash, EdgeHashType.CheckpointDataHash))
-    )
-
-    val distrSOE = signedObservationEdge(distrOE)
-
-    val distrROE = ResolvedObservationEdge(soe, soe, Some(distrCB))
-
-    val distrRED = Edge(distrOE, distrSOE, distrROE)
-
-    val distrCBO = CheckpointBlock(distr, CheckpointEdge(distrRED))
-
-    GenesisObservation(genesisCBO, distrCBO)
+    GenesisObservation(genesisCBO, distr1CBO, distr2CBO)
 
   }
 
   def acceptGenesisOE(go: GenesisObservation): Unit = {
     // Store hashes for the edges
-    go.genesis.store(dbActor, inDAG = true)
-    go.initialDistribution.store(dbActor, inDAG = true)
+    go.genesis.store(dbActor, inDAG = true, resolved = true)
+    go.initialDistribution.store(dbActor, inDAG = true, resolved = true)
 
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
     go.genesis.transactions.foreach{
       rtx =>
         dbActor ! DBPut(
           rtx.dst.hash,
-          AddressCacheData(rtx.amount - go.initialDistribution.transactions.map{_.amount}.sum, Some(1000D))
+          AddressCacheData(rtx.amount - (go.initialDistribution.transactions.map{_.amount}.sum*2), Some(1000D))
         )
     }
 
@@ -107,12 +119,12 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
 
     genesisObservation = Some(go)
-    validationTips = Seq(
-      go.genesis.checkpoint.edge.signedObservationEdge,
-      go.initialDistribution.checkpoint.edge.signedObservationEdge
-    //  TypedEdgeHash(go.genesis.resolvedCB.edge.signedObservationEdge.hash, EdgeHashType.ValidationHash),
-    //  TypedEdgeHash(go.initialDistribution.resolvedCB.edge.signedObservationEdge.hash, EdgeHashType.ValidationHash)
-    )
+
+    // Dumb way to set these as active tips, won't pass a double validation but no big deal.
+    checkpointMemPool(go.initialDistribution.baseHash) = go.initialDistribution
+    checkpointMemPool(go.initialDistribution2.baseHash) = go.initialDistribution2
+    checkpointMemPoolThresholdMet(go.initialDistribution.baseHash) = 0
+    checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = 0
 
     metricsManager ! UpdateMetric("activeTips", "2")
 

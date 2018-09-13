@@ -13,14 +13,14 @@ object EdgeService {
   case class CreateCheckpointEdgeResponse(
                                            checkpointEdge: CheckpointEdge,
                                            transactionsUsed: Set[String],
-                                           filteredValidationTips: Seq[SignedObservationEdge],
+                                          // filteredValidationTips: Seq[SignedObservationEdge],
                                            updatedTransactionMemPoolThresholdMet: Set[String]
                                          )
 
   def createCheckpointEdgeProposal(
                                     transactionMemPoolThresholdMet: Set[String],
                                     minCheckpointFormationThreshold: Int,
-                                    validationTips: Seq[SignedObservationEdge],
+                                    tips: Seq[SignedObservationEdge],
                                   )(implicit keyPair: KeyPair): CreateCheckpointEdgeResponse = {
 
     val transactionsUsed = transactionMemPoolThresholdMet.take(minCheckpointFormationThreshold)
@@ -28,12 +28,12 @@ object EdgeService {
 
     val checkpointEdgeData = CheckpointEdgeData(transactionsUsed.toSeq.sorted)
 
-    val tips = validationTips.take(2)
-    val filteredValidationTips = validationTips.filterNot(tips.contains)
+    //val tips = validationTips.take(2)
+    //val filteredValidationTips = validationTips.filterNot(tips.contains)
 
     val observationEdge = ObservationEdge(
-      TypedEdgeHash(tips.head.hash, EdgeHashType.ValidationHash),
-      TypedEdgeHash(tips(1).hash, EdgeHashType.ValidationHash),
+      TypedEdgeHash(tips.head.hash, EdgeHashType.CheckpointHash),
+      TypedEdgeHash(tips(1).hash, EdgeHashType.CheckpointHash),
       data = Some(TypedEdgeHash(checkpointEdgeData.hash, EdgeHashType.CheckpointDataHash))
     )
 
@@ -41,7 +41,9 @@ object EdgeService {
 
     val checkpointEdge = CheckpointEdge(Edge(observationEdge, signedObservationEdge, ResolvedObservationEdge(tips.head, tips(1), Some(checkpointEdgeData))))
 
-    CreateCheckpointEdgeResponse(checkpointEdge, transactionsUsed, filteredValidationTips, updatedTransactionMemPoolThresholdMet)
+    CreateCheckpointEdgeResponse(checkpointEdge, transactionsUsed,
+      //filteredValidationTips,
+    updatedTransactionMemPoolThresholdMet)
   }
 
 }

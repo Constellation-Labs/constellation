@@ -165,7 +165,10 @@ object Consensus {
 
     val dao = consensusRoundState.dao
 
-    EdgeService.createCheckpointEdgeProposal(dao.transactionMemPoolThresholdMet, dao.minCheckpointFormationThreshold, dao.validationTips)
+    // Remove this just for getting to compile
+    val mock = Seq(dao.genesisObservation.get.genesis.checkpoint.edge.signedObservationEdge)
+
+    EdgeService.createCheckpointEdgeProposal(dao.transactionMemPoolThresholdMet, dao.minCheckpointFormationThreshold, mock)
 
     /*
     bundleProposal match {

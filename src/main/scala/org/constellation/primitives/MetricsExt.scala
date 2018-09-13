@@ -19,6 +19,7 @@ trait MetricsExt {
   @volatile var numTXRemovedFromMemory = 0L
   @volatile var numDBPuts = 0L
   @volatile var numDBGets = 0L
+  @volatile var numDBUpdates = 0L
   @volatile var numDBDeletes = 0L
   @volatile var numMempoolEmits = 0L
   @volatile var numValidBundleHashesRemovedFromMemory = 0L
@@ -45,6 +46,7 @@ trait MetricsExt {
     numTXRemovedFromMemory = 0L
     numDBPuts = 0L
     numDBGets = 0L
+    numDBUpdates = 0L
     numDBDeletes = 0L
     numMempoolEmits = 0L
     numValidBundleHashesRemovedFromMemory = 0L
