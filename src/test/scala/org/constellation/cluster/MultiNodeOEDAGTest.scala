@@ -7,7 +7,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import akka.util.Timeout
 import better.files.File
-import org.constellation.util.{Simulation, TestNode}
+import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
@@ -40,9 +40,9 @@ class MultiNodeOEDAGTest extends TestKit(ActorSystem("TestConstellationActorSyst
     //  , generateRandomTransactions = true
     ))
 
-    val apis = nodes.map{_.getAPIClient()}
+    val apis: Seq[APIClient] = nodes.map{_.getAPIClient()}
 
-    val peerApis = nodes.map{ node => {
+    val peerApis: Seq[APIClient] = nodes.map{ node => {
       val n = node.getAPIClient()
       n.apiPort = node.peerHttpPort
       n
