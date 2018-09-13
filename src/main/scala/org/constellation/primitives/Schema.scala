@@ -291,8 +291,8 @@ object Schema {
   case class AddressCacheData(
                                balance: Long,
                                reputation: Option[Double] = None,
-                               ancestorBalances: Map[String, Long],
-                               ancestorReputations: Map[String, Long]
+                               ancestorBalances: Map[String, Long] = Map(),
+                               ancestorReputations: Map[String, Long] = Map()
                              )
   // Instead of one balance we need a Map from soe hash to balance and reputation
   // These values should be removed automatically by eviction
@@ -334,7 +334,7 @@ object Schema {
       transactions.foreach { rt =>
         rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG)))
       }
-      checkpoint.edge.store(db, Some(CheckpointCacheData(checkpoint, inDAG = inDAG)), resolved)
+      checkpoint.edge.store(db, Some(CheckpointCacheData(this, inDAG = inDAG)), resolved)
     }
 
     def plus(keyPair: KeyPair): CheckpointBlock = {

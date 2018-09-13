@@ -1,5 +1,7 @@
 package org.constellation.consensus
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.ActorRef
 import org.constellation.Data
 import org.constellation.LevelDB.{DBGet, DBPut, DBUpdate}
@@ -12,12 +14,14 @@ import org.constellation.util.SignHelp
 import scala.concurrent.ExecutionContext
 import scala.util.Random
 import akka.pattern.ask
+import akka.util.Timeout
 
 
 object EdgeProcessor {
 
 
   val logger = Logger(s"EdgeProcessor")
+  implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
   def handleCheckpoint(cb: CheckpointBlock, dao: Data, internalMessage: Boolean = false)(implicit executionContext: ExecutionContext): Unit = {
 
@@ -331,7 +335,7 @@ object EdgeProcessor {
 
         if (!txStatusUpdatedInDB && t.transactionCacheData.isEmpty) {
           tx.edge.storeData(dao.dbActor) // This call can always overwrite no big deal
-          dao.dbActor ! DBUpdate(tx.baseHash)
+          dao.dbActor ! DBUpdate//(tx.baseHash)
         }
 
         dao.metricsManager ! UpdateMetric("transactionMemPool", dao.transactionMemPool.size.toString)

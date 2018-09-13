@@ -25,7 +25,7 @@ trait EdgeDAO {
   @volatile var transactionMemPoolThresholdMet: Set[String] = Set()
 
   // Map from checkpoint hash to number of times used as a tip (number of children)
-  @volatile val checkpointMemPoolThresholdMet: TrieMap[String, Int] = TrieMap()
+  val checkpointMemPoolThresholdMet: TrieMap[String, Int] = TrieMap()
 
 
 
