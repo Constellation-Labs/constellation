@@ -6,9 +6,9 @@ addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.fu
 lazy val _version = "1.0.1"
 
 lazy val versions = new {
-  val akka = "2.4.18"
-  val akkaHttp = "10.0.10"
-  val akkaHttpCors = "0.2.2"
+  val akka = "2.5.16"
+  val akkaHttp = "10.1.5"
+  val akkaHttpCors = "0.3.0"
   val spongyCastle = "1.58.0.0"
 }
 
@@ -60,29 +60,28 @@ lazy val commonSettings = Seq(
 )
 
 lazy val coreDependencies = Seq(
-  "com.github.pathikrit" %% "better-files" % "3.5.0",
+  "com.github.pathikrit" %% "better-files" % "3.6.0",
   "com.roundeights" %% "hasher" % "1.2.0",
-  "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0",
-  "ch.qos.logback" % "logback-classic" % "1.1.7",
+  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0",
+  "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
   "ch.megard" %% "akka-http-cors" % versions.akkaHttpCors,
   "de.heikoseeberger" %% "akka-http-json4s" % "1.16.1",
-  "org.json4s" %% "json4s-native" % "3.5.2",
+  "org.json4s" %% "json4s-native" % "3.6.1",
   "com.madgag.spongycastle" % "core" % versions.spongyCastle,
   "com.madgag.spongycastle" % "prov" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
-  "com.google.guava" % "guava" % "21.0",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.51",
   "org.iq80.leveldb"            % "leveldb"          % "0.10" withSources() withJavadoc(),
   "com.codahale" % "shamir" % "0.6.0" withSources() withJavadoc(),
   "org.json4s" %% "json4s-ext" % "3.5.2",
-  "org.scalaj" %% "scalaj-http" % "2.4.0" withJavadoc() withSources(),
-  "com.twitter" %% "chill" % "0.9.1",
+  "org.scalaj" %% "scalaj-http" % "2.4.1" withJavadoc() withSources(),
+  "com.twitter" %% "chill" % "0.9.3",
   "com.twitter" %% "algebird-core" % "0.13.4",
-  "org.typelevel" %% "cats-core" % "1.0.1",
+  "org.typelevel" %% "cats-core" % "1.3.1",
   "net.glxn" % "qrgen" % "1.4",
   "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.typesafe.slick" %% "slick" % "3.2.3",
@@ -93,9 +92,9 @@ lazy val coreDependencies = Seq(
 
 //Test dependencies
 lazy val testDependencies = Seq(
-  "org.scalacheck" %% "scalacheck" % "1.13.4",
-  "org.scalatest" %% "scalatest" % "3.0.1",
-  "org.scalactic" %% "scalactic" % "3.0.1",
+  "org.scalacheck" %% "scalacheck" % "1.14.0",
+  "org.scalatest" %% "scalatest" % "3.0.5",
+  "org.scalactic" %% "scalactic" % "3.0.5",
   "org.scalamock" %% "scalamock-scalatest-support" % "3.6.0",
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
