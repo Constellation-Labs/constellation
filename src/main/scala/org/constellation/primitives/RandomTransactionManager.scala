@@ -22,16 +22,20 @@ class RandomTransactionManager(peerManager: ActorRef, metricsManager: ActorRef, 
       */
     case InternalHeartbeat =>
 
-      val peerIds = (peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
-      def getRandomPeer: (Id, PeerData) = peerIds(random.nextInt(peerIds.size))
-      val sendRequest = SendToAddress(getRandomPeer._1.address.address, random.nextInt(10000).toLong)
-      val tx = createTransactionSafeBatchOE(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair)
-      metricsManager ! IncrementMetric("signaturesPerformed")
-      metricsManager ! IncrementMetric("randomTransactionsGenerated")
-      metricsManager ! IncrementMetric("sentTransactions")
+      if (dao.transactionMemPool.size < 100) {
+        val peerIds = (peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
 
-      // TODO: Change to transport layer call
-      peerManager ! APIBroadcast(_.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx))
+        def getRandomPeer: (Id, PeerData) = peerIds(random.nextInt(peerIds.size))
+
+        val sendRequest = SendToAddress(getRandomPeer._1.address.address, random.nextInt(10000).toLong)
+        val tx = createTransactionSafeBatchOE(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair)
+        metricsManager ! IncrementMetric("signaturesPerformed")
+        metricsManager ! IncrementMetric("randomTransactionsGenerated")
+        metricsManager ! IncrementMetric("sentTransactions")
+
+        // TODO: Change to transport layer call
+        peerManager ! APIBroadcast(_.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx))
+      }
 
   }
 }

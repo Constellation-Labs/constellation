@@ -302,9 +302,13 @@ object Schema {
 
   case class TransactionCacheData(
                                    transaction: Transaction,
+                                   valid: Boolean = false,
+                                   inMemPool: Boolean = false,
                                    inDAG: Boolean = false,
+                                   resolved: Boolean = false,
                                    cbEdgeHash: Option[String] = None,
                                    cbForkEdgeHashes: Seq[String] = Seq(),
+                                   signatureForks : Seq[Transaction] = Seq(),
                                    rxTime: Long = System.currentTimeMillis()
                                  )
 
@@ -332,9 +336,9 @@ object Schema {
 
     def store(db: ActorRef, inDAG: Boolean = false, resolved: Boolean = false): Unit = {
       transactions.foreach { rt =>
-        rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG)))
+        rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))
       }
-      checkpoint.edge.store(db, Some(CheckpointCacheData(this, inDAG = inDAG)), resolved)
+      checkpoint.edge.store(db, Some(CheckpointCacheData(this, inDAG = inDAG, resolved = resolved)), resolved)
     }
 
     def plus(keyPair: KeyPair): CheckpointBlock = {

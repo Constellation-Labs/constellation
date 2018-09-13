@@ -99,6 +99,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     // Store hashes for the edges
     go.genesis.store(dbActor, inDAG = true, resolved = true)
     go.initialDistribution.store(dbActor, inDAG = true, resolved = true)
+    go.initialDistribution2.store(dbActor, inDAG = true, resolved = true)
 
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
     go.genesis.transactions.foreach{
@@ -111,10 +112,10 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
 
     // Store the balance for the initial distribution addresses along with starting rep score.
     go.initialDistribution.transactions.foreach{ t =>
-      dbActor ! DBPut(t.dst.hash, AddressCacheData(t.amount, Some(1000D)))
+      dbActor ! DBPut(t.dst.hash, AddressCacheData(t.amount * 2, Some(1000D)))
     }
 
-    val numTX = (1 + go.initialDistribution.transactions.size).toString
+    val numTX = (1 + go.initialDistribution.transactions.size * 2).toString
     metricsManager ! UpdateMetric("validTransactions", numTX)
     metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
 

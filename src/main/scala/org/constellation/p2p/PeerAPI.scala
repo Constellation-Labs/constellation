@@ -68,9 +68,8 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
           tx =>
             Future {
               dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
-              Validation.validateTransaction(dao.dbActor, tx)
-                .foreach{EdgeProcessor.handleTransaction(_, tx, dao)}
-            }
+              EdgeProcessor.handleTransaction(tx, dao)(dao.edgeExecutionContext)
+            }(dao.edgeExecutionContext)
             complete(StatusCodes.OK)
         }
       } ~
@@ -95,8 +94,8 @@ class PeerAPI(val dao: Data)(implicit executionContext: ExecutionContext, val ti
         entity(as[CheckpointBlock]) {
           cb =>
             Future{
-              EdgeProcessor.handleCheckpoint(cb, dao)
-            }
+              EdgeProcessor.handleCheckpoint(cb, dao)(dao.edgeExecutionContext)
+            }(dao.edgeExecutionContext)
             complete(StatusCodes.OK)
         }
       } ~

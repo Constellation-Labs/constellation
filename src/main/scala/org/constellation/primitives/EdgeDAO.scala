@@ -31,7 +31,7 @@ trait EdgeDAO {
 
   val resolveNotifierCallbacks: TrieMap[String, Seq[String]] = TrieMap()
 
-  val transactionExecutionContext: ExecutionContextExecutor =
+  val edgeExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newFixedThreadPool(200))
 
   def canCreateCheckpoint: Boolean = {
