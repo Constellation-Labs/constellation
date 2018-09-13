@@ -121,10 +121,10 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     genesisObservation = Some(go)
 
     // Dumb way to set these as active tips, won't pass a double validation but no big deal.
-    checkpointMemPool(go.initialDistribution.hash) = go.initialDistribution
-    checkpointMemPool(go.initialDistribution2.hash) = go.initialDistribution2
-    checkpointMemPoolThresholdMet(go.initialDistribution.hash) = 0
-    checkpointMemPoolThresholdMet(go.initialDistribution2.hash) = 0
+    checkpointMemPool(go.initialDistribution.baseHash) = go.initialDistribution
+    checkpointMemPool(go.initialDistribution2.baseHash) = go.initialDistribution2
+    checkpointMemPoolThresholdMet(go.initialDistribution.baseHash) = 0
+    checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = 0
 
     metricsManager ! UpdateMetric("activeTips", "2")
 

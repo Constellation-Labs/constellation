@@ -308,7 +308,15 @@ object Schema {
                                    rxTime: Long = System.currentTimeMillis()
                                  )
 
-  case class CheckpointCacheData(resolvedCB: CheckpointEdge, inDAG: Boolean = false, resolved: Boolean = false)
+  case class CheckpointCacheData(
+                                  checkpointBlock: CheckpointBlock,
+                                  inDAG: Boolean = false,
+                                  resolved: Boolean = false,
+                                  resolutionInProgress: Boolean = false,
+                                  inMemPool: Boolean = false,
+                                  lastResolveAttempt: Long = System.currentTimeMillis(),
+                                  rxTime: Long = System.currentTimeMillis() // TODO: Unify common metadata like this
+                                )
 
   case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
 
@@ -320,7 +328,7 @@ object Schema {
 
     def signatures: Set[HashSignature] = checkpoint.edge.signedObservationEdge.signatureBatch.signatures
 
-    def hash: String = checkpoint.edge.baseHash
+    def baseHash: String = checkpoint.edge.baseHash
 
     def store(db: ActorRef, inDAG: Boolean = false, resolved: Boolean = false): Unit = {
       transactions.foreach { rt =>

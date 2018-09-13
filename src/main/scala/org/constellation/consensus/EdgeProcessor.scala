@@ -2,7 +2,7 @@ package org.constellation.consensus
 
 import akka.actor.ActorRef
 import org.constellation.Data
-import org.constellation.LevelDB.{DBPut, DBUpdate}
+import org.constellation.LevelDB.{DBGet, DBPut, DBUpdate}
 import org.constellation.primitives.Schema._
 import Validation.TransactionValidationStatus
 import com.typesafe.scalalogging.Logger
@@ -11,6 +11,7 @@ import org.constellation.util.SignHelp
 
 import scala.concurrent.ExecutionContext
 import scala.util.Random
+import akka.pattern.ask
 
 
 object EdgeProcessor {
@@ -24,6 +25,25 @@ object EdgeProcessor {
       dao.metricsManager ! IncrementMetric("checkpointMessages")
     } else {
       dao.metricsManager ! IncrementMetric("internalCheckpointMessages")
+    }
+
+    val cache = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]]
+
+    cache.foreach{ c =>
+
+      if (c.isEmpty) {
+        dao.metricsManager ! IncrementMetric("unknownCheckpointMessages")
+
+        val resolved = Resolve.resolveCheckpoint(dao, cb)
+
+      }
+
+      c.foreach{ ca =>
+
+
+
+      }
+
     }
 
     // TODO: Validate the checkpoint to see if any there are any duplicate transactions
@@ -111,7 +131,7 @@ object EdgeProcessor {
       // We haven't yet signed this CB
       val cb2 = cb.plus(dao.keyPair)
       // Send peers new signature
-      dao.peerManager ! APIBroadcast(_.put(s"checkpoint/${cb.hash}", cb2))
+      dao.peerManager ! APIBroadcast(_.put(s"checkpoint/${cb.baseHash}", cb2))
       cb2
     } else {
       // We have already signed this CB,
@@ -122,22 +142,22 @@ object EdgeProcessor {
 
   // TEMPORARY mock-up for pre-consensus integration mimics transactions
   def updateCheckpointMergeMemPool(cb: CheckpointBlock, dao: Data) : Unit = {
-    val cbPostUpdate = if (dao.checkpointMemPool.contains(cb.hash)) {
+    val cbPostUpdate = if (dao.checkpointMemPool.contains(cb.baseHash)) {
       // Merge signatures together
-      val updated = dao.checkpointMemPool(cb.hash).plus(cb)
+      val updated = dao.checkpointMemPool(cb.baseHash).plus(cb)
       // Update memPool with new signatures.
-      dao.checkpointMemPool(cb.hash) = updated
+      dao.checkpointMemPool(cb.baseHash) = updated
       updated
     }
     else {
-      dao.checkpointMemPool(cb.hash) = cb
+      dao.checkpointMemPool(cb.baseHash) = cb
       cb
     }
 
     // Check to see if we have enough signatures to include in CB
     if (cbPostUpdate.signatures.size >= dao.minCBSignatureThreshold) {
       // Set threshold as met
-      dao.checkpointMemPoolThresholdMet += cb.hash
+      dao.checkpointMemPoolThresholdMet(cb.baseHash) = 0
     }
   }
 
@@ -297,7 +317,7 @@ object EdgeProcessor {
           val checkpointBlock = formCheckpointUpdateState(dao, tx)
           dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
 
-          val cbBaseHash = checkpointBlock.hash
+          val cbBaseHash = checkpointBlock.baseHash
           dao.checkpointMemPool(cbBaseHash) = checkpointBlock
 
           // Temporary bypass to consensus for mock

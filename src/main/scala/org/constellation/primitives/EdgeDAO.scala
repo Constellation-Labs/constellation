@@ -11,7 +11,7 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 trait EdgeDAO {
 
   var genesisObservation: Option[GenesisObservation] = None
-  val maxWidth = 20
+  val maxWidth = 50
   val minCheckpointFormationThreshold = 3
   val minTXSignatureThreshold = 3
   val minCBSignatureThreshold = 3
@@ -26,6 +26,8 @@ trait EdgeDAO {
 
   // Map from checkpoint hash to number of times used as a tip (number of children)
   @volatile val checkpointMemPoolThresholdMet: TrieMap[String, Int] = TrieMap()
+
+
 
   val resolveNotifierCallbacks: TrieMap[String, Seq[String]] = TrieMap()
 

@@ -165,7 +165,7 @@ object Consensus {
 
     val dao = consensusRoundState.dao
 
-    EdgeService.createCheckpointEdgeProposal(dao.transactionMemPoolThresholdMet, dao.minCheckpointFormationThreshold, dao.validationTips)
+    //EdgeService.createCheckpointEdgeProposal(dao.transactionMemPoolThresholdMet, dao.minCheckpointFormationThreshold, dao.validationTips)
 
     /*
     bundleProposal match {
