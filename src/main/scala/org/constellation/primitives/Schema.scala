@@ -172,13 +172,11 @@ object Schema {
                               data: Option[TypedEdgeHash] = None
                             ) extends ProductHash
 
-
   /**
     * Encapsulation for all witness information about a given observation edge.
     * @param signatureBatch : Collection of validation signatures about the edge.
     */
   case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash
-
 
   /**
     * Holder for ledger update information about a transaction
@@ -195,7 +193,6 @@ object Schema {
 
   case class ResolvedObservationEdge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
   (left: L, right: R, data: Option[D] = None)
-
 
   case class EdgeCell(members: mutable.SortedSet[EdgeSheaf])
 
@@ -336,7 +333,6 @@ object Schema {
   case class CellKey(hashPointer: String, depth: Int, height: Int)
 
   case class Cell(members: SortedSet[Sheaf])
-
 
   final case class PeerSyncHeartbeat(
                                       maxBundleMeta: Sheaf,

@@ -126,7 +126,6 @@ object EdgeProcessor {
     checkpointBlock
   }
 
-
   /**
     * Main transaction processing cell
     * This is triggered upon external receipt of a transaction. Assume that the transaction being processed
@@ -151,8 +150,6 @@ object EdgeProcessor {
     Validation.validateTransaction(dao.dbActor, tx).foreach {
       // TODO : Increment metrics here for each case
       case t: TransactionValidationStatus if t.valid =>
-
-        println(s"validated, doing other things $tx")
 
         // Check to see if we should add our signature to the transaction
         val txPrime = updateWithSelfSignatureEmit(tx, dao)
@@ -181,7 +178,7 @@ object EdgeProcessor {
     }
   }
 
-  def reportInvalidTransaction(dao: Data, t: TransactionValidationStatus) = {
+  def reportInvalidTransaction(dao: Data, t: TransactionValidationStatus): Unit = {
     dao.metricsManager ! IncrementMetric("invalidTransactions")
     if (t.isDuplicateHash) {
       dao.metricsManager ! IncrementMetric("hashDuplicateTransactions")
@@ -208,12 +205,12 @@ object EdgeProcessor {
       // TODO: should be subset
       val facilitators = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().keySet
 
-      println(s"finally got facilitators")
-
       // TODO: what is the round hash based on?
       // what are thresholds and checkpoint selection
 
-      val roundHash = RoundHash("temp")
+      val obe = checkpointBlock.checkpoint.edge.observationEdge
+
+      val roundHash = RoundHash(obe.left.hash + obe.right.hash)
 
       // Start check pointing consensus round
       dao.consensus ! InitializeConsensusRound(facilitators, roundHash, (result) => {

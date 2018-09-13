@@ -163,9 +163,6 @@ object Consensus {
                      vote: VoteData[T],
                      roundHash: RoundHash[T])(implicit system: ActorSystem, keyPair: KeyPair): ConsensusRoundState = {
 
-    // TODO: make based on signature instead
-    val firstTimeObservingVote = !consensusRoundState.roundStates.contains(roundHash) || !consensusRoundState.roundStates(roundHash).votes.contains(peer)
-
     var updatedState = updateRoundCache(consensusRoundState, peer, roundHash, vote)
 
     val roundState = getCurrentRoundState[T](updatedState, roundHash)
@@ -174,14 +171,18 @@ object Consensus {
 
     val facilitators = roundState.facilitators
 
+    // TODO
+    // check signature to see if we have already signed this before or some max depth,
+    // if not then broadcast
+
+    /*
     if (firstTimeObservingVote) {
       println(s"first time observing vote for person = $peer")
 
-      /*
       notifyFacilitatorsOfMessage(facilitators, selfId, consensusRoundState.dao,
         StartConsensusRound(selfId, vote, roundHash), consensusRoundState.peerManager, "startConsensusRound")
-      */
     }
+    */
 
     if (peerThresholdMet(updatedState, roundHash)(_.votes)) {
       // take those transactions bundle and sign them
@@ -245,6 +246,7 @@ object Consensus {
       // get the consensus bundle
       val bundle = getConsensusBundle(updatedState, roundHash)
 
+      // TODO: replace callback with message sent to edge processor
       // call callback with accepted bundle
       roundState.callback(ConsensusRoundResult(bundle.data, roundHash))
 
@@ -267,6 +269,7 @@ class Consensus(keyPair: KeyPair, dao: Data, peerManager: ActorRef)
 
   def consensus(consensusRoundState: ConsensusRoundState): Receive = {
 
+    // TODO: remove
     case InitializeConsensusRound(facilitators, roundHash, callback, vote) =>
       log.debug(s"init consensus round message roundHash = $roundHash")
       context.become(consensus(initializeConsensusRound(consensusRoundState, facilitators, roundHash, callback, vote)))
