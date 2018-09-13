@@ -22,6 +22,7 @@ object LevelDB {
   case class DBGet(key: String)
   case class DBPut(key: String, obj: AnyRef)
   case class DBDelete(key: String)
+  case class DBUpdate(key: String, f: AnyRef => AnyRef, empty: AnyRef)
 
   def apply(file: File) = {
     new LevelDB(file)
@@ -43,17 +44,30 @@ class LevelDBActor(dao: Data)(implicit timeoutI: Timeout, system: ActorSystem) e
   override def receive: Receive = active(mkDB)
 
   def active(db: LevelDB): Receive = {
+
     case RestartDB =>
       Try { db.destroy() }.foreach(e => logger.warn("Exception while destroying LevelDB db", e))
       context become active(mkDB)
+
     case DBGet(key) =>
       dao.numDBGets += 1
       val res = Try{db.getBytes(key).map {KryoSerializer.deserialize}}.toOption.flatten
       sender() ! res
+
     case DBPut(key, obj) =>
       dao.numDBPuts += 1
       val bytes = KryoSerializer.serializeAnyRef(obj)
       db.putBytes(key, bytes)
+
+    case DBUpdate(key, func, empty) =>
+      dao.numDBUpdates += 1
+      val res = Try{db.getBytes(key).map {KryoSerializer.deserialize}}.toOption.flatten
+      val option = res.map(func)
+      val obj = option.getOrElse(empty)
+      val bytes = KryoSerializer.serializeAnyRef(obj)
+      db.putBytes(key, bytes)
+      sender() ! obj
+
     case DBDelete(key) =>
       if (db.contains(key)) {
         dao.numDBDeletes += 1

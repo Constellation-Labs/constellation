@@ -3,7 +3,8 @@ package org.constellation.util
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import akka.actor.ActorRef
-import constellation.{hashSignBatchZeroTyped, _}
+import cats.kernel.Monoid
+import constellation._
 import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema
@@ -61,7 +62,10 @@ case class HashSignature(signature: String,
     verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
 }
 
-case class SignatureBatch(hash: String, signatures: Set[HashSignature]) {
+case class SignatureBatch(
+                         hash: String,
+                         signatures: Set[HashSignature]
+                         ) extends Monoid[SignatureBatch] {
   def valid: Boolean = {
     signatures.forall(_.valid(hash))
   }
@@ -76,6 +80,12 @@ case class SignatureBatch(hash: String, signatures: Set[HashSignature]) {
       signatures = signatures + hashSign(hash, other)
     )
   }
+
+  override def empty: SignatureBatch = SignatureBatch(hash, Set())
+
+  override def combine(x: SignatureBatch, y: SignatureBatch): SignatureBatch =
+    x.copy(signatures = x.signatures ++ y.signatures)
+
 }
 
 case class EncodedPublicKey(b58Encoded: String) {

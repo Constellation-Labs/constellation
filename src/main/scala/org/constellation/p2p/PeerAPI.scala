@@ -2,6 +2,7 @@ package org.constellation.p2p
 
 import java.net.InetSocketAddress
 import java.security.KeyPair
+import java.util.concurrent.{Executors, ScheduledThreadPoolExecutor}
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.marshalling.Marshaller._
@@ -29,7 +30,7 @@ import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.consensus.{EdgeProcessor, TransactionProcessor, Validation}
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
@@ -103,8 +104,8 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
 
               logger.debug(s"transaction endpoint, $tx")
               dao.edgeProcessor ! HandleTransaction(tx)
-
             }
+
             complete(StatusCodes.OK)
         }
       } ~
@@ -131,6 +132,7 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
             Future{
               EdgeProcessor.handleCheckpoint(cb, dao)
             }
+
             complete(StatusCodes.OK)
         }
       } ~

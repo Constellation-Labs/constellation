@@ -12,7 +12,6 @@ import org.constellation.p2p.UDPSend
 import org.constellation.primitives.{APIBroadcast, PeerManager}
 import org.constellation.primitives.Schema._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.Signed
 
 import scala.collection.immutable.HashMap
 

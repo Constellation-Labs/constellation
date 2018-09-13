@@ -46,7 +46,7 @@ object Validation {
 
     // A transaction should only be considered in the DAG once it has been committed to a checkpoint block.
     // Before that, it exists only in the memPool and is not stored in the database.
-    val txCache = (dbActor ? DBGet(tx.hash)).mapTo[Option[TransactionCacheData]] //.map{_.exists{_.inDAG}}
+    val txCache = (dbActor ? DBGet(tx.baseHash)).mapTo[Option[TransactionCacheData]] //.map{_.exists{_.inDAG}}
     val addressCache = (dbActor ? DBGet(tx.src.hash)).mapTo[Option[AddressCacheData]] //.map(_.exists(_.balance >= tx.amount))
     txCache.flatMap{ txc =>
       addressCache.map{ ac =>

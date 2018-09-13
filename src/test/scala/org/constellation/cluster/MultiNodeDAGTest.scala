@@ -71,7 +71,6 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     within(1 hour) {
       probe.expectMsg(1 hour, "a message")
     }
-
     */
 
     // TODO: add random transactions and verifications
