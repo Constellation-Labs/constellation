@@ -344,17 +344,20 @@ object EdgeProcessor {
       case t : TransactionValidationStatus =>
 
         // TODO : Add info somewhere so node can find out transaction was invalid on a callback
-
-        dao.metricsManager ! IncrementMetric("invalidTransactions")
-        if (t.isDuplicateHash) {
-          dao.metricsManager ! IncrementMetric("hashDuplicateTransactions")
-        }
-        if (!t.sufficientBalance) {
-          dao.metricsManager ! IncrementMetric("insufficientBalanceTransactions")
-        }
-
+        reportInvalidTransaction(dao: Data, t: TransactionValidationStatus)
     }
 
   }
+
+  def reportInvalidTransaction(dao: Data, t: TransactionValidationStatus) = {
+    dao.metricsManager ! IncrementMetric("invalidTransactions")
+    if (t.isDuplicateHash) {
+      dao.metricsManager ! IncrementMetric("hashDuplicateTransactions")
+    }
+    if (!t.sufficientBalance) {
+      dao.metricsManager ! IncrementMetric("insufficientBalanceTransactions")
+    }
+  }
+
 
 }
