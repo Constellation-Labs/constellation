@@ -16,17 +16,6 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-  /*
-
-    val kp1 = r1.getBlocking[KeyPair]("makeKeyPair")
-    val kp2 = r1.getBlocking[KeyPair]("makeKeyPair")
-    val wallet = r1.getBlocking[Seq[KeyPair]]("wallet")
-
-    assert(!kp1.dataEqual(kp2))
-    assert(wallet.head.dataEqual(kp1))
-    assert(wallet.last.dataEqual(kp2))
-
-   */
 
   "GET to /peers" should "get the correct connected peers" in {
 
@@ -58,19 +47,6 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     assert(Id(keyPair.getPublic.encoded) == id)
   }
 
-  "GET to /balance" should "get the correct current balance for the provided pubKey" in {
-    /* TODO
-    val keyPair = KeyUtils.makeKeyPair()
-    val appNode = TestNode(None, keyPair)
-    val rpc = new RPCClient(port=appNode.httpPort)
-
-    val response = rpc.get("id")
-
-    val id = rpc.read[Id](response.get()).get()
-
-    assert(Id(keyPair.getPublic) == id)
-    */
-  }
 
   "POST to /peer" should "add the peer correctly" in {
     val node1 = TestNode()

@@ -11,14 +11,11 @@ import org.constellation.primitives.Schema.{AddressCacheData, Transaction, Trans
 
 import scala.concurrent.{ExecutionContext, Future}
 
-
 object Validation {
 
-
-  def validateCheckpoint(dbActor: ActorRef, cb: Schema.CheckpointBlock)(implicit ec: ExecutionContext): Future[CheckpointValidationStatus] = {
+  def validateCheckpoint(dbActor: ActorRef, cb: Schema.CheckpointBlock): Future[CheckpointValidationStatus] = {
     Future{CheckpointValidationStatus()}
   }
-
 
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 

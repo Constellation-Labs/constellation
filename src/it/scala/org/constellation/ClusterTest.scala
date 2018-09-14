@@ -135,28 +135,6 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
     val sim = new Simulation()
 
-    sim.connectNodes(true, true, initialApis)
-
-    var validTxs = sim.sendRandomTransactions(20, initialApis)
-
-    assert(sim.validateRun(validTxs, .35, initialApis))
-
-    val someExistingNode = initialApis.head
-
-    val addNode = someExistingNode.postSync("peer", newApi.hostName + ":" + newApi.udpPort)
-
-    Thread.sleep(45000)
-
-    // validate that the new node catches up and comes to consensus
-    assert(sim.validateRun(validTxs, .35, apis))
-
-    // add some more transactions
-    validTxs = validTxs.++(sim.sendRandomTransactions(5, apis))
-
-    // validate consensus on all of the transactions and nodes
-    assert(sim.validateRun(validTxs, .35, apis))
-
-    assert(true)
   }
 
 }

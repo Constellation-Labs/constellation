@@ -1,28 +1,38 @@
 package org.constellation.consensus
 
+import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
 import org.constellation.Data
 import org.constellation.LevelDB.{DBGet, DBPut, DBUpdate}
 import org.constellation.primitives.Schema._
+import akka.pattern.ask
 import Validation.TransactionValidationStatus
+import akka.util.Timeout
+import EdgeProcessor._
 import com.typesafe.scalalogging.Logger
-import org.constellation.primitives.{APIBroadcast, EdgeService, IncrementMetric, UpdateMetric}
-import org.constellation.util.SignHelp
+import org.constellation.consensus.Consensus.{CheckpointVote, InitializeConsensusRound, RoundHash}
+import org.constellation.consensus.EdgeProcessor.HandleTransaction
+import org.constellation.primitives._
+import constellation._
+import scala.concurrent.duration._
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext}
 import scala.util.Random
 import akka.pattern.ask
 import akka.util.Timeout
 
-
 object EdgeProcessor {
 
+  case class HandleTransaction(tx: Transaction)
 
   val logger = Logger(s"EdgeProcessor")
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-  def handleCheckpoint(cb: CheckpointBlock, dao: Data, internalMessage: Boolean = false)(implicit executionContext: ExecutionContext): Unit = {
+  def handleCheckpoint(cb: CheckpointBlock,
+                       dao: Data,
+                       internalMessage: Boolean = false)(implicit executionContext: ExecutionContext): Unit = {
 
     if (!internalMessage) {
       dao.metricsManager ! IncrementMetric("checkpointMessages")
@@ -78,6 +88,8 @@ object EdgeProcessor {
       dao.metricsManager ! IncrementMetric("unresolvedCheckpointMessages")
 
     }
+
+    Resolve.resolveCheckpoint(dao, cb)
   }
 
   // TODO : Add checks on max number in mempool and max num signatures.
@@ -174,42 +186,26 @@ object EdgeProcessor {
       // TODO : Validate this batch doesn't have a double spend, if it does,
       // just drop all conflicting.
 
-      // *****************//
-      // TODO: wip
-      // Checkpoint block proposal
-
-      // initialize checkpointing consensus state
-      // send checkpoint block proposal to everyone
-      // as new proposals come in route them to the consensus actor
-      // once a threshold is met take majority checkpoint edge
-      // store it
-      // tell people about it
-
-      // below is a single local formation of a checkpoint edge proposal
-      // need to wait on majority of other people before accepting it
-
-      val tips = Random.shuffle(dao.checkpointMemPoolThresholdMet.toSeq).take(2)
+    val tips = Random.shuffle(dao.checkpointMemPoolThresholdMet.toSeq).take(2)
 
       val tipSOE = tips.map {_._1}.map {dao.checkpointMemPool}.map {
         _.checkpoint.edge.signedObservationEdge
       }
 
-      val checkpointEdgeProposal = EdgeService.createCheckpointEdgeProposal(
-        dao.transactionMemPoolThresholdMet,
-        dao.minCheckpointFormationThreshold,
-        tipSOE
-      )(dao.keyPair)
+    val checkpointEdgeProposal = EdgeService.createCheckpointEdgeProposal(
+      dao.transactionMemPoolThresholdMet,
+      dao.minCheckpointFormationThreshold,
+      tipSOE
+    )(dao.keyPair)
 
+    val takenTX = checkpointEdgeProposal.transactionsUsed.map{dao.transactionMemPool}
 
-      val takenTX = checkpointEdgeProposal.transactionsUsed.map {dao.transactionMemPool}
+    // TODO: move to mem pool servictransactionMemPoole
+    // Remove used transactions from memPool
+    checkpointEdgeProposal.transactionsUsed.foreach{dao.transactionMemPool.remove}
 
-      // TODO: move to mem pool service
-      // Remove used transactions from memPool
-      checkpointEdgeProposal.transactionsUsed.foreach {
-        dao.transactionMemPool.remove
-      }
-      // Remove threshold transaction hashes
-      dao.transactionMemPoolThresholdMet = checkpointEdgeProposal.updatedTransactionMemPoolThresholdMet
+    // Remove threshold transaction hashes
+    dao.transactionMemPoolThresholdMet = checkpointEdgeProposal.updatedTransactionMemPoolThresholdMet
 
       // TODO: move to tips service
       // Update tips
@@ -273,7 +269,12 @@ object EdgeProcessor {
     // Validate transaction TODO : This can be more efficient, calls get repeated several times
     // in event where a new signature is being made by another peer it's most likely still valid, should
     // cache the results of this somewhere.
-    Validation.validateTransaction(dao.dbActor, tx).foreach{
+
+    val validationResult = Validation.validateTransaction(dao.dbActor, tx)
+
+    Await.result(validationResult, 90 seconds)
+
+    validationResult.getOpt().foreach{
       // TODO : Increment metrics here for each case
       case t : TransactionValidationStatus if t.validByCurrentState =>
 
@@ -283,6 +284,7 @@ object EdgeProcessor {
         // Add to memPool or update an existing hash with new signatures and check for signature threshold
         updateMergeMemPool(txPrime, dao)
 
+        //        triggerCheckpointBlocking(dao, txPrime)
         var txStatusUpdatedInDB : Boolean = false
         val checkpointBlock = attemptFormCheckpointUpdateState(dao)
 
@@ -317,5 +319,88 @@ object EdgeProcessor {
     }
   }
 
+  def triggerCheckpointBlocking(dao: Data,
+                                tx: Transaction)(implicit timeout: Timeout, executionContext: ExecutionContext): Unit = {
+    if (dao.canCreateCheckpoint) {
+
+      println(s"starting checkpoint blocking")
+
+      val checkpointBlock = formCheckpointUpdateState(dao, tx)
+
+      dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
+
+      val cbBaseHash = checkpointBlock.baseHash
+      dao.checkpointMemPool(cbBaseHash) = checkpointBlock
+
+      // TODO: should be subset
+      val facilitators = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().keySet
+
+      // TODO: what is the round hash based on?
+      // what are thresholds and checkpoint selection
+
+      val obe = checkpointBlock.checkpoint.edge.observationEdge
+
+      val roundHash = RoundHash(obe.left.hash + obe.right.hash)
+
+      // Start check pointing consensus round
+      dao.consensus ! InitializeConsensusRound(facilitators, roundHash, (result) => {
+        println(s"consensus round complete result roundHash = $roundHash, result = $result")
+        EdgeProcessor.handleCheckpoint(result.checkpointBlock, dao)
+      }, CheckpointVote(checkpointBlock))
+
+    }
+  }
+
+  case class CreateCheckpointEdgeResponse(
+                                           checkpointEdge: CheckpointEdge,
+                                           transactionsUsed: Set[String],
+                                           // filteredValidationTips: Seq[SignedObservationEdge],
+                                           updatedTransactionMemPoolThresholdMet: Set[String]
+                                         )
+
+  def createCheckpointEdgeProposal(
+                                    transactionMemPoolThresholdMet: Set[String],
+                                    minCheckpointFormationThreshold: Int,
+                                    tips: Seq[SignedObservationEdge],
+                                  )(implicit keyPair: KeyPair): CreateCheckpointEdgeResponse = {
+
+    val transactionsUsed = transactionMemPoolThresholdMet.take(minCheckpointFormationThreshold)
+    val updatedTransactionMemPoolThresholdMet = transactionMemPoolThresholdMet -- transactionsUsed
+
+    val checkpointEdgeData = CheckpointEdgeData(transactionsUsed.toSeq.sorted)
+
+    //val tips = validationTips.take(2)
+    //val filteredValidationTips = validationTips.filterNot(tips.contains)
+
+    val observationEdge = ObservationEdge(
+      TypedEdgeHash(tips.head.hash, EdgeHashType.CheckpointHash),
+      TypedEdgeHash(tips(1).hash, EdgeHashType.CheckpointHash),
+      data = Some(TypedEdgeHash(checkpointEdgeData.hash, EdgeHashType.CheckpointDataHash))
+    )
+
+    val soe = signedObservationEdge(observationEdge)(keyPair)
+
+    val checkpointEdge = CheckpointEdge(Edge(observationEdge, soe, ResolvedObservationEdge(tips.head, tips(1), Some(checkpointEdgeData))))
+
+    CreateCheckpointEdgeResponse(checkpointEdge, transactionsUsed,
+      //filteredValidationTips,
+      updatedTransactionMemPoolThresholdMet)
+  }
+
+}
+
+class EdgeProcessor(keyPair: KeyPair, dao: Data)
+               (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
+
+  implicit val sys: ActorSystem = context.system
+  implicit val kp: KeyPair = keyPair
+
+  def receive: Receive = {
+
+    case HandleTransaction(transaction) =>
+      log.debug(s"handle transaction = $transaction")
+
+      handleTransaction(transaction, dao)
+    }
 
 }

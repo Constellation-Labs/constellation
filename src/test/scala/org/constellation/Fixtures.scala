@@ -47,15 +47,9 @@ object Fixtures {
   val idSet4B = Set(id1, id2, id3, id5)
   val idSet5 = Set(id1, id2, id3, id4, id5)
 
-  val randomTransactions: Seq[Schema.TransactionV1] = Seq.fill(30) {//TODO make one for Transaction
-    val kp = makeKeyPair()
-    val kp2 = makeKeyPair()
-    createTransactionSafe(kp.address.address, kp2.address.address, 1L, kp)
-  }
-
   def dummyTx(data: Data, amt: Long = 1L) = {
     val sendRequest = SendToAddress(id.address.address, amt)
-    createTransactionSafeBatchOE(data.selfAddressStr, sendRequest.dst, sendRequest.amountActual, data.keyPair)
+    createTransaction(data.selfAddressStr, sendRequest.dst, sendRequest.amountActual, data.keyPair)
   }
 
 }

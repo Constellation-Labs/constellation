@@ -10,12 +10,13 @@ import org.json4s.{Formats, native}
 import org.json4s.native.Serialization
 import scalaj.http.{Http, HttpRequest, HttpResponse}
 
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 
 class APIClient (
   implicit val system: ActorSystem,
-  implicit val executionContext: ExecutionContextExecutor,
   implicit val materialize: ActorMaterializer) {
+
+  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
 
   var hostName: String = "127.0.0.1"
   var id: Id = _

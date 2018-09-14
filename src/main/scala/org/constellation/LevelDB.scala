@@ -1,6 +1,6 @@
 package org.constellation
 
-import akka.actor.Actor
+import akka.actor.{Actor, ActorSystem}
 import akka.util.Timeout
 import better.files._
 import com.typesafe.scalalogging.Logger
@@ -11,6 +11,7 @@ import org.constellation.util.ProductHash
 import org.iq80.leveldb._
 import org.iq80.leveldb.impl.Iq80DBFactory._
 
+import scala.concurrent.ExecutionContext
 import scala.util.Try
 
 // https://doc.akka.io/docs/akka/2.5/persistence-query-leveldb.html
@@ -31,7 +32,9 @@ object LevelDB {
 
 import org.constellation.LevelDB._
 
-class LevelDBActor(dao: Data)(implicit timeoutI: Timeout) extends Actor {
+class LevelDBActor(dao: Data)(implicit timeoutI: Timeout, system: ActorSystem) extends Actor {
+
+  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("db-io-dispatcher")
 
   val logger = Logger("LevelDB")
 

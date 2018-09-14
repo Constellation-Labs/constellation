@@ -5,6 +5,8 @@ import java.security.PublicKey
 import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey
+import org.constellation.consensus.Consensus
+import org.constellation.consensus.Consensus.{VoteData => _, _}
 import org.constellation.p2p.SerializedUDPMessage
 import org.constellation.primitives.Schema.EdgeHashType
 import org.constellation.primitives.Schema._
@@ -61,7 +63,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Bundle])
     kryo.register(classOf[BundleData])
     kryo.register(classOf[Sheaf])
-    kryo.register(classOf[TransactionV1])
+    kryo.register(classOf[Transaction])
     kryo.register(classOf[TransactionData])
 
     kryo.register(classOf[EncodedPublicKey])
@@ -70,7 +72,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Signed[AddressMetaData]])
     kryo.register(classOf[Signed[CounterPartyTXRequest]])
     kryo.register(classOf[Signed[TransactionData]])
-    kryo.register(classOf[Signed[TransactionV1]])
+    kryo.register(classOf[Signed[Transaction]])
     kryo.register(classOf[Signed[ConflictDetectedData]])
     kryo.register(classOf[Signed[ConflictDetected]])
     kryo.register(classOf[Signed[VoteData]])
@@ -79,12 +81,17 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Signed[BundleBlock]])
     kryo.register(classOf[Signed[BundleData]])
 
+    kryo.register(classOf[StartConsensusRound[Consensus.Checkpoint]])
+    kryo.register(classOf[CheckpointVote])
+    kryo.register(classOf[RoundHash[Consensus.Checkpoint]])
+    kryo.register(classOf[ConsensusProposal[Consensus.Checkpoint]])
+    kryo.register(classOf[CheckpointProposal])
 
     // These may not be necessary
     kryo.register(classOf[Gossip[Signed[AddressMetaData]]])
     kryo.register(classOf[Gossip[Signed[CounterPartyTXRequest]]])
     kryo.register(classOf[Gossip[Signed[TransactionData]]])
-    kryo.register(classOf[Gossip[Signed[TransactionV1]]])
+    kryo.register(classOf[Gossip[Signed[Transaction]]])
     kryo.register(classOf[Gossip[Signed[ConflictDetectedData]]])
     kryo.register(classOf[Gossip[Signed[ConflictDetected]]])
     kryo.register(classOf[Gossip[Signed[VoteData]]])
