@@ -21,7 +21,7 @@ object LevelDB {
   case class DBGet(key: String)
   case class DBPut(key: String, obj: AnyRef)
   case class DBDelete(key: String)
-  case class DBUpdate(key: String, f: AnyRef => AnyRef, empty: AnyRef)
+  case class DBUpdate[T <: AnyRef](key: String, f: T => T, empty: T)
 
   def apply(file: File) = {
     new LevelDB(file)

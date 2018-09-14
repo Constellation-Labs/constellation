@@ -29,7 +29,7 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
   }
 
 
-  def createDistribution(ids: Seq[Id], genesisSOE: SignedObservationEdge) = {
+  def createDistribution(ids: Seq[Id], genesisSOE: SignedObservationEdge): CheckpointBlock = {
 
     val distr = ids.map{ id =>
       createTransactionSafeBatchOE(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
@@ -104,15 +104,17 @@ trait Genesis extends NodeData with Ledger with TransactionExt with BundleDataEx
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
     go.genesis.transactions.foreach{
       rtx =>
+        val bal = rtx.amount - (go.initialDistribution.transactions.map {_.amount}.sum * 2)
         dbActor ! DBPut(
           rtx.dst.hash,
-          AddressCacheData(rtx.amount - (go.initialDistribution.transactions.map{_.amount}.sum*2), Some(1000D))
+          AddressCacheData(bal, bal, Some(1000D))
         )
     }
 
     // Store the balance for the initial distribution addresses along with starting rep score.
     go.initialDistribution.transactions.foreach{ t =>
-      dbActor ! DBPut(t.dst.hash, AddressCacheData(t.amount * 2, Some(1000D)))
+      val bal = t.amount * 2
+      dbActor ! DBPut(t.dst.hash, AddressCacheData(bal, bal, Some(1000D)))
     }
 
     val numTX = (1 + go.initialDistribution.transactions.size * 2).toString

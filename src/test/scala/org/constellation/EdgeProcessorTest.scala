@@ -31,7 +31,7 @@ class EdgeProcessorTest extends FlatSpec {
   dbActor.setAutoPilot(new TestActor.AutoPilot {
     def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
       case DBGet(`srcHash`) =>
-        sender ! Some(AddressCacheData(100000000000000000L, None))
+        sender ! Some(AddressCacheData(100000000000000000L, 100000000000000000L, None))
         TestActor.KeepRunning
 
       case DBGet(`txHash`) =>

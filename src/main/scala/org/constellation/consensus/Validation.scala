@@ -33,8 +33,13 @@ object Validation {
                                         addressCacheData: Option[AddressCacheData]
                                         ) {
     def isDuplicateHash: Boolean = transactionCacheData.exists{_.inDAG}
-    def sufficientBalance: Boolean = addressCacheData.exists(_.balance >= transaction.amount)
-    def valid: Boolean = !isDuplicateHash && sufficientBalance
+    def sufficientBalance: Boolean = addressCacheData.exists{c =>
+      c.balance >= transaction.amount && c.memPoolBalance >= transaction.amount
+    }
+    def validByCurrentState: Boolean = !isDuplicateHash && sufficientBalance
+    // Need separate validator here for CB validation vs. mempool addition
+    // I.e. don't check mempool balance when validating a CB because it takes precedence over
+    // a new TX which is being added to mempool and conflicts with current mempool values.
   }
 
   /**

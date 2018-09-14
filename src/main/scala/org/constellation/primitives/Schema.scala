@@ -7,7 +7,7 @@ import java.security.{KeyPair, PublicKey}
 import akka.actor.ActorRef
 import cats.kernel.Monoid
 import constellation.pubKeyToAddress
-import org.constellation.LevelDB.DBPut
+import org.constellation.LevelDB.{DBPut, DBUpdate}
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
@@ -218,6 +218,32 @@ object Schema {
       edge.store(dbActor, Some(TransactionCacheData(this, inDAG = inDAG, cbEdgeHash = cbEdgeHash)))
     }
 
+    def ledgerApplyMemPool(dbActor: ActorRef): Unit = {
+      dbActor ! DBUpdate(
+        src.hash,
+        { a: AddressCacheData => a.copy(memPoolBalance = a.memPoolBalance - amount)},
+        AddressCacheData(0L, 0L) // unused since this address should already exist here
+      )
+      dbActor ! DBUpdate(
+        dst.hash,
+        { a: AddressCacheData => a.copy(memPoolBalance = a.memPoolBalance + amount)},
+        AddressCacheData(0L, 0L) // unused since this address should already exist here
+      )
+    }
+
+    def ledgerApply(dbActor: ActorRef): Unit = {
+      dbActor ! DBUpdate(
+        src.hash,
+        { a: AddressCacheData => a.copy(balance = a.balance - amount)},
+        AddressCacheData(0L, 0L) // unused since this address should already exist here
+      )
+      dbActor ! DBUpdate(
+        dst.hash,
+        { a: AddressCacheData => a.copy(balance = a.balance + amount)},
+        AddressCacheData(0L, 0L) // unused since this address should already exist here
+      )
+    }
+
     def src: Address = edge.resolvedObservationEdge.left
     def dst: Address = edge.resolvedObservationEdge.right
 
@@ -290,6 +316,7 @@ object Schema {
 
   case class AddressCacheData(
                                balance: Long,
+                               memPoolBalance: Long,
                                reputation: Option[Double] = None,
                                ancestorBalances: Map[String, Long] = Map(),
                                ancestorReputations: Map[String, Long] = Map()
