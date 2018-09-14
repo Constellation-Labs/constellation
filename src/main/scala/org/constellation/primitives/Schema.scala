@@ -332,6 +332,7 @@ object Schema {
                                    valid: Boolean = false,
                                    inMemPool: Boolean = false,
                                    inDAG: Boolean = false,
+                                   inDAGByAncestor: Map[String, Boolean] = Map(),
                                    resolved: Boolean = false,
                                    cbEdgeHash: Option[String] = None,
                                    cbForkEdgeHashes: Seq[String] = Seq(),
