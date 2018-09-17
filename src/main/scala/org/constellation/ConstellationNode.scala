@@ -12,15 +12,13 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
-import org.constellation.consensus.Consensus
+import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
-import org.constellation.p2p.{PeerAPI, PeerToPeer, RegisterNextActor, UDPActor}
-import org.constellation.primitives.Schema.{AddPeerFromLocal, ToggleHeartbeat}
+import org.constellation.p2p.{PeerAPI, UDPActor}
 import org.constellation.primitives._
 import org.constellation.util.APIClient
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
-import scala.util.Try
 
 object ConstellationNode extends App {
 
@@ -30,7 +28,7 @@ object ConstellationNode extends App {
 
   val config = ConfigFactory.load()
 
-  val rpcTimeout = config.getInt("blockchain.defaultRPCTimeoutSeconds")
+  val rpcTimeout = config.getInt("rpc.timeout")
 
   val seeds = args.headOption.map(_.split(",").map{constellation.addressToSocket}.toSeq).getOrElse(Seq())
 
@@ -58,25 +56,24 @@ object ConstellationNode extends App {
     requestExternalAddressCheck = requestExternalAddressCheck
   )
 
+  // TODO: move to config
   node.data.minGenesisDistrSize = 4
 }
 
-class ConstellationNode(
-                         val configKeyPair: KeyPair,
-                         val seedPeers: Seq[InetSocketAddress],
-                         val httpInterface: String,
-                         val httpPort: Int,
-                         val udpInterface: String = "0.0.0.0",
-                         val udpPort: Int = 16180,
-                         val hostName: String = "127.0.0.1",
-                         val timeoutSeconds: Int = 30,
-                         val heartbeatEnabled: Boolean = false,
-                         val requestExternalAddressCheck : Boolean = false,
-                         val generateRandomTransactions: Boolean = true,
-                         val autoSetExternalAddress: Boolean = false,
-                         val peerHttpPort: Int = 9001,
-                         val peerTCPPort: Int = 9002
-             )(
+class ConstellationNode(val configKeyPair: KeyPair,
+                        val seedPeers: Seq[InetSocketAddress],
+                        val httpInterface: String,
+                        val httpPort: Int,
+                        val udpInterface: String = "0.0.0.0",
+                        val udpPort: Int = 16180,
+                        val hostName: String = "127.0.0.1",
+                        val timeoutSeconds: Int = 480,
+                        val heartbeatEnabled: Boolean = false,
+                        val requestExternalAddressCheck : Boolean = false,
+                        val generateRandomTransactions: Boolean = true,
+                        val autoSetExternalAddress: Boolean = false,
+                        val peerHttpPort: Int = 9001,
+                        val peerTCPPort: Int = 9002)(
                implicit val system: ActorSystem,
                implicit val materialize: ActorMaterializer,
                implicit val executionContext: ExecutionContextExecutor
@@ -120,10 +117,6 @@ class ConstellationNode(
     Props(new CellManager(memPoolManager, metricsManager, peerManager)), s"CellManager_$publicKeyHash"
   )
 
-  val randomTransactionManager: ActorRef = system.actorOf(
-    Props(new RandomTransactionManager(peerManager, metricsManager, data)), s"RandomTransactionManager_$publicKeyHash"
-  )
-
   val dbActor: ActorRef =  system.actorOf(
     Props(new LevelDBActor(data)), s"ConstellationDBActor_$publicKeyHash"
   )
@@ -134,36 +127,21 @@ class ConstellationNode(
     )
 
   val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(configKeyPair, data, udpActor)(timeout)),
+    Props(new Consensus(configKeyPair, data, peerManager)(timeout)),
     s"ConstellationConsensusActor_$publicKeyHash")
 
-  val peerToPeerActor: ActorRef =
-    system.actorOf(Props(new PeerToPeer(
-      configKeyPair.getPublic, system,
-      consensusActor, udpActor, data, requestExternalAddressCheck, heartbeatEnabled=heartbeatEnabled, randomTransactionManager, cellManager)
-    (timeout, materialize)), s"ConstellationP2PActor_$publicKeyHash")
+  val edgeProcessorActor: ActorRef = system.actorOf(
+    Props(new EdgeProcessor(configKeyPair, data)(timeout, executionContext)),
+    s"ConstellationEdgeProcessorActor_$publicKeyHash")
 
-  data.p2pActor = peerToPeerActor
   data.dbActor = dbActor
+  data.consensus = consensusActor
   data.peerManager = peerManager
   data.metricsManager = metricsManager
-
-  private val register = RegisterNextActor(peerToPeerActor)
-
-  udpActor ! register
-
-  // Seed peers
-  if (seedPeers.nonEmpty) {
-    seedPeers.foreach(peer => {
-      logger.info(s"Attempting to connect to seed-host $peer")
-      peerToPeerActor ! AddPeerFromLocal(peer)
-    })
-  }
+  data.edgeProcessor = edgeProcessorActor
 
   // If we are exposing rpc then create routes
-  val routes: Route = new API(
-    peerToPeerActor, consensusActor, udpAddress, data, peerManager,
-    metricsManager, cellManager)(executionContext, timeout).authRoutes
+  val routes: Route = new API(udpAddress, data, cellManager).authRoutes
 
   // Setup http server for internal API
   val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
@@ -175,7 +153,6 @@ class ConstellationNode(
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind
-    peerToPeerActor ! ToggleHeartbeat
 
     bindingFuture
       .flatMap(_.unbind())

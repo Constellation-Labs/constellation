@@ -1,14 +1,13 @@
 package org.constellation.util
 
 import com.softwaremill.macmemo.memoize
+import constellation._
 import org.constellation.Data
+import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.MetricsResult
 
 import scala.concurrent.duration._
-import org.constellation.crypto.Wallet
-import constellation._
-
 import scala.util.Try
 
 class Metrics(val data: Data = null) extends Wallet {
@@ -30,7 +29,6 @@ class Metrics(val data: Data = null) extends Wallet {
         "numTXRemovedFromMemory" -> numTXRemovedFromMemory.toString,
         "numDeletedBundles" -> numDeletedBundles.toString,
         "numSheafInMemory" -> bundleToSheaf.size.toString,
-        "numTXInMemory" -> txHashToTX.size.toString,
         "numValidBundleHashesRemovedFromMemory" -> numValidBundleHashesRemovedFromMemory.toString,
         "udpPacketGroupSize" -> udpPacketGroupSize.toString,
         "address" -> selfAddress.address,
@@ -45,7 +43,6 @@ class Metrics(val data: Data = null) extends Wallet {
         "numSyncedBundles" -> numSyncedBundles.toString,
         "numValidBundles" -> totalNumValidBundles.toString,
         "numValidTransactions" -> totalNumValidatedTX.toString,
-        "memPoolSize" -> memPool.size.toString,
         "totalNumBroadcasts" -> totalNumBroadcastMessages.toString,
         "totalNumBundleMessages" -> totalNumBundleMessages.toString,
         "lastConfirmationUpdateTime" -> lastConfirmationUpdateTime.toString,
@@ -68,18 +65,9 @@ class Metrics(val data: Data = null) extends Wallet {
           .getOrElse("N/A"),
         //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
         "numActiveBundles" -> activeDAGBundles.size.toString,
-        "last10TXHash" -> last10000ValidTXHash.
-          takeRight(10)
-          .mkString(","),
         "last10ValidBundleHashes" -> last100ValidBundleMetaData
           .map {
             _.bundle.hash
-          }
-          .takeRight(10)
-          .mkString(","),
-        "last10SelfTXHashes" -> last100SelfSentTransactions
-          .map {
-            _.hash
           }
           .takeRight(10)
           .mkString(","),

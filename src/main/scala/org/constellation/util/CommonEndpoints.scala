@@ -1,20 +1,16 @@
 package org.constellation.util
 
+import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
+import akka.http.scaladsl.unmarshalling.FromEntityUnmarshaller
+import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.Data
-import org.json4s.native
 import org.json4s.native.Serialization
-import akka.http.scaladsl.marshalling.Marshaller._
-import akka.http.scaladsl.model._
-import constellation._
-
 
 trait CommonEndpoints extends Json4sSupport {
-
 
   implicit val serialization: Serialization.type
 

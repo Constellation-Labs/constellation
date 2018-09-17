@@ -14,8 +14,31 @@ object Resolve {
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
   // WIP
-  def resolveCheckpoint(dao: Data, cb: CheckpointBlock) = {
+  def resolveCheckpoint(dao: Data, cb: CheckpointBlock): Boolean = {
 
+    // Step 1 - Find out if both parents are resolved.
+
+    // TODO: Change to Future.sequence
+    val parentCache = cb.checkpoint.edge.parentHashes.map{ h =>
+      h -> (dao.dbActor ? DBGet(h)).mapTo[Option[SignedObservationEdgeCache]].get()
+    }
+
+    val parentsResolved = parentCache.forall(_._2.exists(_.resolved))
+
+    // Later on need to add transaction resolving, they're all already here though (sent with the request)
+    // which adds redundancy but simplifies this step.
+
+    // Break out if we're done here.
+    if (parentsResolved) {
+      return true
+    }
+
+    false
+
+    /*
+    val missingParents = parentCache.filter(_._2.isEmpty)
+
+    missingParents
 
     // (dao.dbActor ? DBGet(cb.hash)).mapTo[Option[CheckpointCacheData]]
 
@@ -36,7 +59,7 @@ object Resolve {
         //  .nonEmpty
         }
     }
-
+*/
     // Skipping TX resolution for now as they're included in here. Fix later.
 /*
 

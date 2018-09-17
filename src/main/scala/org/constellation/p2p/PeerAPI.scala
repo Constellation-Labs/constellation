@@ -1,5 +1,6 @@
 package org.constellation.p2p
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
@@ -14,24 +15,28 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.BannedIPEnforcer
 import org.constellation.Data
 import org.constellation.LevelDB.DBGet
-import org.constellation.consensus.{EdgeProcessor, Validation}
+import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote, StartConsensusRound}
+import org.constellation.consensus.{Consensus, EdgeProcessor}
+import org.constellation.consensus.EdgeProcessor.HandleTransaction
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{IncrementMetric, PendingRegistration}
+import org.constellation.serializer.KryoSerializer
 import org.constellation.util.CommonEndpoints
 import org.json4s.native
 import org.json4s.native.Serialization
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
 case class PeerRegistrationRequest(host: String, port: Int, key: String)
 
-class PeerAPI(val dao: Data)(implicit val timeout: Timeout)
+class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
   extends Json4sSupport with CommonEndpoints with BannedIPEnforcer {
 
   implicit val serialization: Serialization.type = native.Serialization
+
+  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-dispatcher")
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
@@ -87,7 +92,33 @@ class PeerAPI(val dao: Data)(implicit val timeout: Timeout)
           complete(hashSign(e.salt.toString, dao.keyPair))
         }
       }
-    }
+    } ~
+      path("startConsensusRound") {
+        entity(as[Array[Byte]]) { e =>
+          Future {
+            val message = KryoSerializer.deserialize(e).asInstanceOf[StartConsensusRound[Consensus.Checkpoint]]
+
+            logger.debug(s"start consensus round endpoint, $message")
+
+            dao.consensus ! ConsensusVote(message.id, message.data, message.roundHash)
+          }
+
+          complete(StatusCodes.OK)
+        }
+      } ~
+      path("checkpointEdgeProposal") {
+        entity(as[Array[Byte]]) { e =>
+          Future {
+            val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusProposal[Consensus.Checkpoint]]
+
+            logger.debug(s"checkpoint edge proposal endpoint, $message")
+
+            dao.consensus ! ConsensusProposal(message.id, message.data, message.roundHash)
+          }
+
+          complete(StatusCodes.OK)
+        }
+      }
   }
 
   private val mixedEndpoints = {
@@ -97,9 +128,11 @@ class PeerAPI(val dao: Data)(implicit val timeout: Timeout)
           tx =>
             Future {
               dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
-              Validation.validateTransaction(dao.dbActor, tx)
-                .foreach{EdgeProcessor.handleTransaction(_, tx, dao)}
+
+              logger.debug(s"transaction endpoint, $tx")
+              dao.edgeProcessor ! HandleTransaction(tx)
             }
+
             complete(StatusCodes.OK)
         }
       } ~
@@ -126,11 +159,12 @@ class PeerAPI(val dao: Data)(implicit val timeout: Timeout)
             Future{
               EdgeProcessor.handleCheckpoint(cb, dao)
             }
+
             complete(StatusCodes.OK)
         }
       } ~
       get {
-        complete("CB goes here")
+        complete("Transaction goes here")
       } ~ complete (StatusCodes.BadRequest)
     }
   }

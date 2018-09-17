@@ -2,13 +2,12 @@ package org.constellation.primitives
 
 import java.net.InetSocketAddress
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import org.constellation.primitives.Schema.{Id, LocalPeerData, Peer, PeerSyncHeartbeat}
 import org.constellation.util.{APIClient, Signed}
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
 import scala.concurrent.ExecutionContextExecutor
 
 trait PeerInfo {
@@ -22,7 +21,6 @@ trait PeerInfo {
   val peersAwaitingAuthenticationToNumAttempts: TrieMap[InetSocketAddress, Int] = TrieMap()
 
   val peerSync: TrieMap[Id, PeerSyncHeartbeat] = TrieMap()
-
 
   val rawPeerLookup: TrieMap[Id, LocalPeerData] = TrieMap()
 

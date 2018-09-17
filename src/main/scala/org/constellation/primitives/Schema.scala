@@ -1,11 +1,9 @@
 package org.constellation.primitives
 
-
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
 import akka.actor.ActorRef
-import cats.kernel.Monoid
 import constellation.pubKeyToAddress
 import org.constellation.LevelDB.DBPut
 import org.constellation.consensus.Consensus.RemoteMessage
@@ -13,8 +11,8 @@ import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 
-import scala.collection.{SortedSet, mutable}
 import scala.collection.concurrent.TrieMap
+import scala.collection.{SortedSet, mutable}
 import scala.util.Random
 
 // This can't be a trait due to serialization issues
@@ -54,9 +52,9 @@ object Schema {
   // I.e. equivalent to number of sat per btc
   val NormalizationFactor: Long = 1e8.toLong
 
-  case class BundleHashQueryResponse(hash: String, sheaf: Option[Sheaf], transactions: Seq[TransactionV1])
+  case class BundleHashQueryResponse(hash: String, sheaf: Option[Sheaf], transactions: Seq[Transaction])
 
-  case class MaxBundleGenesisHashQueryResponse(genesisBundle: Option[Bundle], genesisTX: Option[TransactionV1], sheaf: Option[Sheaf])
+  case class MaxBundleGenesisHashQueryResponse(genesisBundle: Option[Bundle], genesisTX: Option[Transaction], sheaf: Option[Sheaf])
 
   case class SendToAddress(
                             dst: String,
@@ -110,12 +108,6 @@ object Schema {
       else ledger(dst) = amount
     }
 
-
-  }
-  case class TransactionV1(
-                          txData: Signed[TransactionData]
-                        ) extends Fiber with GossipMessage with ProductHash with RemoteMessage {
-    def valid: Boolean = txData.valid
   }
 
   sealed trait GossipMessage
@@ -179,16 +171,20 @@ object Schema {
                               data: Option[TypedEdgeHash] = None
                             ) extends ProductHash
 
-
   /**
     * Encapsulation for all witness information about a given observation edge.
     * @param signatureBatch : Collection of validation signatures about the edge.
     */
-  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash
-
+  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash {
+    def plus(keyPair: KeyPair): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(keyPair))
+    def plus(other: SignatureBatch): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other))
+    def plus(other: SignedObservationEdge): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
+    def baseHash: String = signatureBatch.hash
+  }
 
   /**
     * Holder for ledger update information about a transaction
+    *
     * @param amount : Quantity to be transferred
     * @param salt : Ensure hash uniqueness
     */
@@ -202,7 +198,6 @@ object Schema {
 
   case class ResolvedObservationEdge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
   (left: L, right: R, data: Option[D] = None)
-
 
   case class EdgeCell(members: mutable.SortedSet[EdgeSheaf])
 
@@ -219,7 +214,8 @@ object Schema {
 
     // TODO: Add proper exception on empty option
     def amount : Long = edge.resolvedObservationEdge.data.get.amount
-    def hash: String = edge.signedObservationEdge.signatureBatch.hash
+    def baseHash: String = edge.signedObservationEdge.baseHash
+    def hash: String = edge.signedObservationEdge.hash
     def plus(other: Transaction): Transaction = this.copy(
       edge = edge.copy(
         signedObservationEdge = edge.signedObservationEdge.copy(
@@ -238,7 +234,9 @@ object Schema {
     )
   }
 
-  case class CheckpointEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData])
+  case class CheckpointEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData]) {
+    def plus(other: CheckpointEdge) = this.copy(edge = edge.plus(other.edge))
+  }
   case class ValidationEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, Nothing])
 
   case class Edge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
@@ -255,10 +253,22 @@ object Schema {
     def store[T <: AnyRef](db: ActorRef, t: Option[T] = None, resolved: Boolean = false): Unit = {
       db ! DBPut(signedObservationEdge.signatureBatch.hash, t.getOrElse(observationEdge))
       db ! DBPut(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
+      storeData(db: ActorRef)
+    }
+
+    def storeData(db: ActorRef): Unit = {
       resolvedObservationEdge.data.foreach {
         data =>
           db ! DBPut(data.hash, data)
       }
+    }
+
+    def plus(keyPair: KeyPair): Edge[L, R, D] = {
+      this.copy(signedObservationEdge = signedObservationEdge.plus(keyPair))
+    }
+
+    def plus(other: Edge[_,_,_]): Edge[L, R, D] = {
+      this.copy(signedObservationEdge = signedObservationEdge.plus(other.signedObservationEdge))
     }
 
   }
@@ -267,15 +277,35 @@ object Schema {
     override def hash: String = address
   }
 
-  case class AddressCacheData(balance: Long, reputation: Option[Double] = None)
+  case class AddressCacheData(
+                               balance: Long,
+                               reputation: Option[Double] = None,
+                               ancestorBalances: Map[String, Long] = Map(),
+                               ancestorReputations: Map[String, Long] = Map()
+                             )
+  // Instead of one balance we need a Map from soe hash to balance and reputation
+  // These values should be removed automatically by eviction
+  // We can maintain some kind of automatic LRU cache for keeping track of what we want to remove
+  // override evict method, and clean up data.
+  // We should also mark a given balance / rep as the 'primary' one.
+
   case class TransactionCacheData(
                                    transaction: Transaction,
                                    inDAG: Boolean = false,
                                    cbEdgeHash: Option[String] = None,
+                                   cbForkEdgeHashes: Seq[String] = Seq(),
                                    rxTime: Long = System.currentTimeMillis()
                                  )
 
-  case class CheckpointCacheData(resolvedCB: CheckpointEdge, inDAG: Boolean = false, resolved: Boolean = false)
+  case class CheckpointCacheData(
+                                  checkpointBlock: CheckpointBlock,
+                                  inDAG: Boolean = false,
+                                  resolved: Boolean = false,
+                                  resolutionInProgress: Boolean = false,
+                                  inMemPool: Boolean = false,
+                                  lastResolveAttempt: Long = System.currentTimeMillis(),
+                                  rxTime: Long = System.currentTimeMillis() // TODO: Unify common metadata like this
+                                )
 
   case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
 
@@ -284,14 +314,26 @@ object Schema {
                               transactions: Seq[Transaction],
                               checkpoint: CheckpointEdge
                                   ) {
-    def hash: String = checkpoint.edge.baseHash
 
-    def store(db: ActorRef, inDAG: Boolean = false): Unit = {
+    def signatures: Set[HashSignature] = checkpoint.edge.signedObservationEdge.signatureBatch.signatures
+
+    def baseHash: String = checkpoint.edge.baseHash
+
+    def store(db: ActorRef, inDAG: Boolean = false, resolved: Boolean = false): Unit = {
       transactions.foreach { rt =>
         rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG)))
       }
-      checkpoint.edge.store(db, Some(CheckpointCacheData(checkpoint, inDAG = inDAG)))
+      checkpoint.edge.store(db, Some(CheckpointCacheData(this, inDAG = inDAG)), resolved)
     }
+
+    def plus(keyPair: KeyPair): CheckpointBlock = {
+      this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.plus(keyPair)))
+    }
+
+    def plus(other: CheckpointBlock): CheckpointBlock = {
+      this.copy(checkpoint = checkpoint.plus(other.checkpoint))
+    }
+
   }
 
   case class EdgeSheaf(
@@ -307,7 +349,8 @@ object Schema {
 
   case class GenesisObservation(
                                  genesis: CheckpointBlock,
-                                 initialDistribution: CheckpointBlock
+                                 initialDistribution: CheckpointBlock,
+                                 initialDistribution2: CheckpointBlock
                                )
 
 
@@ -346,7 +389,6 @@ object Schema {
   case class CellKey(hashPointer: String, depth: Int, height: Int)
 
   case class Cell(members: SortedSet[Sheaf])
-
 
   final case class PeerSyncHeartbeat(
                                       maxBundleMeta: Sheaf,
@@ -565,7 +607,7 @@ object Schema {
   final case object InternalHeartbeat extends InternalCommand
   final case object InternalBundleHeartbeat extends InternalCommand
 
-  final case class ValidateTransaction(tx: TransactionV1) extends InternalCommand
+  final case class ValidateTransaction(tx: Transaction) extends InternalCommand
 
   trait DownloadMessage
 
@@ -573,12 +615,12 @@ object Schema {
   case class DownloadResponse(
                                maxBundle: Bundle,
                                genesisBundle: Bundle,
-                               genesisTX: TransactionV1
+                               genesisTX: Transaction
                              ) extends DownloadMessage with RemoteMessage
 
-  final case class SyncData(validTX: Set[TransactionV1], memPoolTX: Set[TransactionV1]) extends GossipMessage with RemoteMessage
+  final case class SyncData(validTX: Set[Transaction], memPoolTX: Set[Transaction]) extends GossipMessage with RemoteMessage
 
-  case class MissingTXProof(tx: TransactionV1, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage with RemoteMessage
+  case class MissingTXProof(tx: Transaction, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage with RemoteMessage
 
   final case class RequestTXProof(txHash: String) extends GossipMessage with RemoteMessage
 
@@ -643,18 +685,18 @@ object Schema {
                                   ) extends ProductHash
 
 
-  final case class ConflictDetectedData(detectedOn: TransactionV1, conflicts: Seq[TransactionV1]) extends ProductHash
+  final case class ConflictDetectedData(detectedOn: Transaction, conflicts: Seq[Transaction]) extends ProductHash
 
   final case class ConflictDetected(conflict: Signed[ConflictDetectedData]) extends ProductHash with GossipMessage
 
-  final case class VoteData(accept: Seq[TransactionV1], reject: Seq[TransactionV1]) extends ProductHash {
+  final case class VoteData(accept: Seq[Transaction], reject: Seq[Transaction]) extends ProductHash {
     // used to determine what voting round we are talking about
     def voteRoundHash: String = {
       accept.++(reject).sortBy(t => t.hashCode()).map(f => f.hash).mkString("-")
     }
   }
 
-  final case class VoteCandidate(tx: TransactionV1, gossip: Seq[Gossip[ProductHash]])
+  final case class VoteCandidate(tx: Transaction, gossip: Seq[Gossip[ProductHash]])
 
   final case class VoteDataSimpler(accept: Seq[VoteCandidate], reject: Seq[VoteCandidate]) extends ProductHash
 

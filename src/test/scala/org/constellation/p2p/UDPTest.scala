@@ -34,7 +34,7 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
   }
 
   // UDP Actor
-
+  /*
   "UDP Test" should "send UDP packets and receive them properly" in {
 
     val rx1 = TestProbe()
@@ -71,6 +71,7 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
     Thread.sleep(100)
     */
   }
+  */
 
 /*
 
