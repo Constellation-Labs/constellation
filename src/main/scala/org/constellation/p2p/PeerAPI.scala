@@ -100,8 +100,6 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
         entity(as[Transaction]) {
           tx =>
             Future {
-              dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
-
               /*
                 Future {
               dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
@@ -122,7 +120,7 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
         }.getOrElse{
           (dao.dbActor ? DBGet(s)).mapTo[Option[TransactionCacheData]].get().map{
             cd =>
-              TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence.nonEmpty, cd.inDAG, cd.cbEdgeHash)
+              TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence.nonEmpty, cd.inDAG, cd.cbBaseHash)
           }.getOrElse{
             TransactionQueryResponse(s, None, inMemPool = false, inDAG = false, None)
           }

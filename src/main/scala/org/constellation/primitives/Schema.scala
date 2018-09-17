@@ -204,8 +204,8 @@ object Schema {
 
   case class Transaction(edge: Edge[Address, Address, TransactionEdgeData]) {
 
-    def store(dbActor: ActorRef, cbEdgeHash: Option[String] = None, inDAG: Boolean = true): Unit = {
-      edge.store(dbActor, Some(TransactionCacheData(this, inDAG = inDAG, cbEdgeHash = cbEdgeHash)))
+    def store(dbActor: ActorRef, cache: TransactionCacheData): Unit = {
+      edge.store(dbActor, {originalCache: TransactionCacheData => cache.plus(originalCache)}, cache)
     }
 
     def ledgerApplyMemPool(dbActor: ActorRef): Unit = {
@@ -277,8 +277,8 @@ object Schema {
     def parentHashes = Seq(observationEdge.left.hash, observationEdge.right.hash)
     def parents = Seq(observationEdge.left, observationEdge.right)
 
-    def store[T <: AnyRef](db: ActorRef, t: Option[T] = None, resolved: Boolean = false): Unit = {
-      db ! DBPut(signedObservationEdge.signatureBatch.hash, t.getOrElse(observationEdge))
+    def store[T <: AnyRef](db: ActorRef, update: T => T, empty: T, resolved: Boolean = false): Unit = {
+      db ! DBUpdate(signedObservationEdge.baseHash, update, empty)
       db ! DBPut(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
       storeData(db: ActorRef)
     }
@@ -309,8 +309,22 @@ object Schema {
                                memPoolBalance: Long,
                                reputation: Option[Double] = None,
                                ancestorBalances: Map[String, Long] = Map(),
-                               ancestorReputations: Map[String, Long] = Map()
-                             )
+                               ancestorReputations: Map[String, Long] = Map(),
+                               recentTransactions: Seq[String] = Seq()
+                             ) {
+
+    def plus(previous: AddressCacheData): AddressCacheData = {
+      this.copy(
+        ancestorBalances =
+          ancestorBalances ++ previous.ancestorBalances.filterKeys(k => !ancestorBalances.contains(k)),
+        ancestorReputations =
+          ancestorReputations ++ previous.ancestorReputations.filterKeys(k => !ancestorReputations.contains(k)),
+        recentTransactions =
+          recentTransactions ++ previous.recentTransactions.filter(k => !recentTransactions.contains(k))
+      )
+    }
+
+  }
   // Instead of one balance we need a Map from soe hash to balance and reputation
   // These values should be removed automatically by eviction
   // We can maintain some kind of automatic LRU cache for keeping track of what we want to remove
@@ -324,11 +338,20 @@ object Schema {
                                    inDAG: Boolean = false,
                                    inDAGByAncestor: Map[String, Boolean] = Map(),
                                    resolved: Boolean = false,
-                                   cbEdgeHash: Option[String] = None,
-                                   cbForkEdgeHashes: Seq[String] = Seq(),
-                                   signatureForks : Seq[Transaction] = Seq(),
+                                   cbBaseHash: Option[String] = None,
+                                   cbForkBaseHashes: Set[String] = Set(),
+                                   signatureForks : Set[Transaction] = Set(),
                                    rxTime: Long = System.currentTimeMillis()
-                                 )
+                                 ) {
+    def plus(previous: TransactionCacheData): TransactionCacheData = {
+      this.copy(
+        inDAGByAncestor = inDAGByAncestor ++ previous.inDAGByAncestor.filterKeys(k => !inDAGByAncestor.contains(k)),
+        cbForkBaseHashes = (cbForkBaseHashes ++ previous.cbForkBaseHashes) -- cbBaseHash.map{ s => Set(s)}.getOrElse(Set()),
+        signatureForks = (signatureForks ++ previous.signatureForks) - transaction,
+        rxTime = previous.rxTime
+      )
+    }
+  }
 
   case class CheckpointCacheData(
                                   checkpointBlock: CheckpointBlock,
@@ -336,9 +359,18 @@ object Schema {
                                   resolved: Boolean = false,
                                   resolutionInProgress: Boolean = false,
                                   inMemPool: Boolean = false,
-                                  lastResolveAttempt: Long = System.currentTimeMillis(),
+                                  lastResolveAttempt: Option[Long] = None,
                                   rxTime: Long = System.currentTimeMillis() // TODO: Unify common metadata like this
-                                )
+                                ) {
+
+    def plus(previous: CheckpointCacheData): CheckpointCacheData = {
+      this.copy(
+        lastResolveAttempt = lastResolveAttempt.map{t => Some(t)}.getOrElse(previous.lastResolveAttempt),
+        rxTime = previous.rxTime
+      )
+    }
+
+  }
 
   case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
 
@@ -352,11 +384,13 @@ object Schema {
 
     def baseHash: String = checkpoint.edge.baseHash
 
-    def store(db: ActorRef, inDAG: Boolean = false, resolved: Boolean = false): Unit = {
+    def store(db: ActorRef, cache: CheckpointCacheData, resolved: Boolean): Unit = {
+/*
       transactions.foreach { rt =>
         rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))
       }
-      checkpoint.edge.store(db, Some(CheckpointCacheData(this, inDAG = inDAG, resolved = resolved)), resolved)
+*/
+      checkpoint.edge.store(db, {_: CheckpointCacheData => cache}, cache, resolved)
     }
 
     def plus(keyPair: KeyPair): CheckpointBlock = {

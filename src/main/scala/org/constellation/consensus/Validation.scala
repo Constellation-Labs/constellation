@@ -13,7 +13,10 @@ import scala.concurrent.{ExecutionContext, Future}
 
 object Validation {
 
-  def validateCheckpoint(dbActor: ActorRef, cb: Schema.CheckpointBlock): Future[CheckpointValidationStatus] = {
+  def validateCheckpoint(
+                          dbActor: ActorRef,
+                          cb: Schema.CheckpointBlock
+                        )(implicit ec: ExecutionContext): Future[CheckpointValidationStatus] = {
     Future{CheckpointValidationStatus()}
   }
 
@@ -31,9 +34,14 @@ object Validation {
                                         ) {
     def isDuplicateHash: Boolean = transactionCacheData.exists{_.inDAG}
     def sufficientBalance: Boolean = addressCacheData.exists{c =>
-      c.balance >= transaction.amount && c.memPoolBalance >= transaction.amount
+      c.balance >= transaction.amount
     }
+    def sufficientMemPoolBalance: Boolean = addressCacheData.exists{c =>
+      c.memPoolBalance >= transaction.amount
+    }
+
     def validByCurrentState: Boolean = !isDuplicateHash && sufficientBalance
+    def validByCurrentStateMemPool: Boolean = !isDuplicateHash && sufficientBalance && sufficientMemPoolBalance
     // Need separate validator here for CB validation vs. mempool addition
     // I.e. don't check mempool balance when validating a CB because it takes precedence over
     // a new TX which is being added to mempool and conflicts with current mempool values.
