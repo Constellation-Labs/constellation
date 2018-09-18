@@ -128,7 +128,7 @@ class API(udpAddress: InetSocketAddress,
             }
           } ~
           path("checkpointTips") {
-            complete(data.checkpointMemPool)
+            complete(data.confirmedCheckpoints)
           } ~
           jsRequest ~
           serveMainPage

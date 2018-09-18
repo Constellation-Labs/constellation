@@ -81,7 +81,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Signed[BundleBlock]])
     kryo.register(classOf[Signed[BundleData]])
 
-    kryo.register(classOf[StartConsensusRound[Consensus.Checkpoint]])
+    kryo.register(classOf[ConsensusVote[Consensus.Checkpoint]])
     kryo.register(classOf[CheckpointVote])
     kryo.register(classOf[RoundHash[Consensus.Checkpoint]])
     kryo.register(classOf[ConsensusProposal[Consensus.Checkpoint]])

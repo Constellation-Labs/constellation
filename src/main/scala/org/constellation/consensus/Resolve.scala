@@ -33,6 +33,9 @@ object Resolve {
       return true
     }
 
+    // TODO: temp
+    dao.confirmedCheckpoints(cb.baseHash) = cb
+
     false
 
     /*
