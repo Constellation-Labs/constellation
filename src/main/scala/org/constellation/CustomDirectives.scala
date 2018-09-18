@@ -33,16 +33,15 @@ object CustomDirectives {
       }
   }
 
-  object BannedIPEnforcer  {
-    val bannedIPs: concurrent.Map[RemoteAddress, String] = concurrent.TrieMap[RemoteAddress, String]()
-    val knownIPs: concurrent.Map[RemoteAddress, String] = concurrent.TrieMap[RemoteAddress, String]()
-
-  }
-
   trait BannedIPEnforcer {
+    val bannedIPs: concurrent.Map[RemoteAddress, String] =
+      concurrent.TrieMap[RemoteAddress, String]()
+    val knownIPs: concurrent.Map[RemoteAddress, String] =
+      concurrent.TrieMap[RemoteAddress, String]()
+
     def rejectBannedIP: Directive0 = {
       extractClientIP flatMap { ip =>
-        if (BannedIPEnforcer.bannedIPs.contains(ip)) {
+        if (bannedIPs.contains(ip)) {
           complete(StatusCodes.Forbidden)
         } else {
           pass
@@ -52,7 +51,7 @@ object CustomDirectives {
 
     def enforceKnownIP: Directive0 = {
       extractClientIP flatMap { ip =>
-        if (BannedIPEnforcer.knownIPs.contains(ip)) {
+        if (knownIPs.contains(ip)) {
           pass
         } else {
           // Initiate signing flow

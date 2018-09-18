@@ -7,6 +7,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import akka.util.Timeout
 import better.files.File
+import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.util.{Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
@@ -43,6 +44,15 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false)
 
     val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true))
+
+    val node = nodes.head
+
+    nodes.foreach { node => println(node.getIPData) }
+
+    nodes.drop(1).foreach { n =>
+      val peerRegistrationRequest = PeerRegistrationRequest(n1.getIPData.canonicalHostName, n1.getIPData.port, n1.configKeyPair.getPublic.toString)
+      n1.getAPIClientForNode(n).postSync("register", peerRegistrationRequest)
+    }
 
     val apis = nodes.map{_.getAPIClient()}
 

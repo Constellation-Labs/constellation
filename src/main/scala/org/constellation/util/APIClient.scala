@@ -79,7 +79,7 @@ class APIClient (
 
   def postEmpty(suffix: String, timeoutSeconds: Int = 5)(implicit f : Formats = constellation.constellationFormats)
   : HttpResponse[String] = {
-    httpWithAuth(suffix).method("POST") .asString
+    httpWithAuth(suffix).method("POST").asString
   }
 
   def postSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(

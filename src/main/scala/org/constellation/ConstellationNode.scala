@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.RemoteAddress
 import akka.http.scaladsl.server.Route
 import akka.io.Udp
 import akka.stream.ActorMaterializer
@@ -15,6 +16,7 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.{PeerAPI, UDPActor}
+import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.APIClient
 
@@ -146,7 +148,18 @@ class ConstellationNode(val configKeyPair: KeyPair,
   // Setup http server for internal API
   val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
 
-  val peerRoutes : Route = new PeerAPI(data).routes
+  val peerAPI = new PeerAPI(data)
+
+  val peerRoutes : Route = peerAPI.routes
+
+  def addAddressToKnownIPs(addr: ValidPeerIPData, s: String): Unit = {
+    val remoteAddr = RemoteAddress(new InetSocketAddress(addr.canonicalHostName, addr.port))
+    peerAPI.knownIPs.put(remoteAddr, s)
+  }
+
+  def getIPData: ValidPeerIPData = {
+    ValidPeerIPData(this.hostName, this.peerHttpPort)
+  }
 
   // Setup http server for peer API
   Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)
@@ -169,6 +182,13 @@ class ConstellationNode(val configKeyPair: KeyPair,
     val api = new APIClient().setConnection(host = hostName, port = httpPort)
     api.id = id
     api.udpPort = udpPort
+    api
+  }
+
+  def getAPIClientForNode(node: ConstellationNode): APIClient = {
+    val ipData = node.getIPData
+    val api = new APIClient().setConnection(host = ipData.canonicalHostName, port = ipData.port)
+    api.id = id
     api
   }
 

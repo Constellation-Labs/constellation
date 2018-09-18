@@ -346,6 +346,7 @@ object Schema {
 
 
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
+  case class ValidPeerIPData(canonicalHostName: String, port: Int)
 
   case class GenesisObservation(
                                  genesis: CheckpointBlock,
