@@ -93,6 +93,8 @@ object Consensus {
 
     val updatedRoundStates = consensusRoundState.roundStates + (roundHash -> updatedRoundState)
 
+    println(s"peer = ${peer.b58}, self = ${consensusRoundState.dao.id.b58}, roundHash = $roundHash")
+
     consensusRoundState.copy(roundStates = updatedRoundStates)
   }
 
@@ -105,10 +107,14 @@ object Consensus {
   def peerThresholdMet[T <: CC](consensusRoundState: ConsensusRoundState, roundHash: RoundHash[T], facilitators: Set[Id])
                       (r: RoundState => HashMap[Id, _]): Boolean = {
 
+    val selfId = consensusRoundState.dao.id.b58
+
     val roundState = getCurrentRoundState(consensusRoundState, roundHash)
 
     // TODO: update here to require a threshold, not every facilitator
     val facilitatorsMissingInfo = facilitators.filter(f => !r(roundState).contains(f))
+
+    val roundStates = r(roundState).keySet
 
     facilitatorsMissingInfo.isEmpty && facilitators.nonEmpty
   }
@@ -155,10 +161,8 @@ object Consensus {
     // if not then broadcast
 
     if (firstTimeObservingVote) {
-      println(s"first time observing vote for person = $peer")
-
       notifyFacilitatorsOfMessage(facilitators, selfId, consensusRoundState.dao,
-        ConsensusVote(selfId, vote, roundHash), "checkpointEdgeVote")
+        ConsensusVote(peer, vote, roundHash), "checkpointEdgeVote")
     }
 
     if (peerThresholdMet(updatedState, roundHash, facilitators.+(selfId))(_.votes)) {
@@ -214,7 +218,7 @@ object Consensus {
       println(s"first time observing vote for proposal = $peer")
 
       notifyFacilitatorsOfMessage(facilitators,
-        selfId, consensusRoundState.dao, ConsensusProposal(selfId, proposal, roundHash), "checkpointEdgeProposal")
+        selfId, consensusRoundState.dao, ConsensusProposal(peer, proposal, roundHash), "checkpointEdgeProposal")
     }
 
     if (peerThresholdMet(updatedState, roundHash, facilitators.+(selfId))(_.proposals)) {
@@ -227,7 +231,9 @@ object Consensus {
       consensusRoundState.dao.edgeProcessor ! ConsensusRoundResult(bundle.data, roundHash)
 
       // TODO: do we need to gossip this event also?
-      updatedState = cleanupRoundStateCache(updatedState, roundHash)
+    //  updatedState = cleanupRoundStateCache(updatedState, roundHash)
+    } else {
+      val thing = false
     }
 
     updatedState

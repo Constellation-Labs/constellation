@@ -71,10 +71,8 @@ class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
     }
 
     // wip
-    /*
     while (!verifyCheckpointTips(sim, apis)) {
     }
-    */
 
     val checkpointTips = sim.getCheckpointTips(apis)
 

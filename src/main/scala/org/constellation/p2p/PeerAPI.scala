@@ -70,8 +70,6 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
         entity(as[Array[Byte]]) { e =>
             val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusVote[Consensus.Checkpoint]]
 
-            logger.debug(s"checkpoint edge vote endpoint, $message")
-
             dao.consensus ! message
 
           complete(StatusCodes.OK)
@@ -80,8 +78,6 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
       path("checkpointEdgeProposal") {
         entity(as[Array[Byte]]) { e =>
             val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusProposal[Consensus.Checkpoint]]
-
-            logger.debug(s"checkpoint edge proposal endpoint, $message")
 
             dao.consensus ! message
 
