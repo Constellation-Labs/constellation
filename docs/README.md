@@ -3,11 +3,11 @@ The docs provide technical information to understand, build and run the code bas
 developed in this repository. The following are covered:
 
 * Annotated project folder tree
-* Archetecture diagrams
+* Architecture diagrams
 * Build instructions
-* Code base archetecture documentation
+* Code base architecture documentation
 * Development process
-* Discussion of desgin choices
+* Discussion of design choices
 * Recommended tools and frameworks
 * Software dependencies
 
