@@ -2,14 +2,14 @@
 The docs provide technical information to understand, build and run the code base
 developed in this repository. The following are covered:
 
-* annotated project folder tree
-* archetecture diagrams
-* build instructions
-* code base archetecture documentation
-* project dependencies
-* recommended tools
-* discussion of desgin choices
-* development process
+* Annotated project folder tree
+* Archetecture diagrams
+* Build instructions
+* Code base archetecture documentation
+* Development process
+* Discussion of desgin choices
+* Recommended tools and frameworks
+* Software dependencies
 
 ## Wait, there's more...
 ### Wiki
