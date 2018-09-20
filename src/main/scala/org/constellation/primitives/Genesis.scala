@@ -76,9 +76,9 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
 
   def acceptGenesis(go: GenesisObservation): Unit = {
     // Store hashes for the edges
-    go.genesis.store(dbActor, inDAG = true, resolved = true)
-    go.initialDistribution.store(dbActor, inDAG = true, resolved = true)
-    go.initialDistribution2.store(dbActor, inDAG = true, resolved = true)
+    go.genesis.store(dbActor, CheckpointCacheData(go.genesis, inDAG = true, resolved = true), resolved = true)
+    go.initialDistribution.store(dbActor, CheckpointCacheData(go.initialDistribution, inDAG = true, resolved = true), resolved = true)
+    go.initialDistribution2.store(dbActor, CheckpointCacheData(go.initialDistribution2, inDAG = true, resolved = true), resolved = true)
 
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
     go.genesis.transactions.foreach{

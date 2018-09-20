@@ -86,11 +86,25 @@ object EdgeProcessor {
         resolutionFlow()
       } else {
 
-        // TODO:
-
-        // TODO: Check for signature conflict
         val ca = c.get
-        if (ca.inDAG)
+
+        if (ca.resolved) {
+          if (ca.inDAG) {
+            if (ca.checkpointBlock != cb) {
+              // Data mismatch on base hash lookup, i.e. signature conflict
+              // TODO: Conflict resolution
+              //resolveConflict(cb, ca)
+            }
+          } else {
+            // warn or store information about potential conflict
+            // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
+          }
+        } else {
+
+          // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
+          // Otherwise do nothing as the resolution is already in progress.
+
+        }
 
        // if (ca.checkpointBlock
 
