@@ -25,7 +25,7 @@ constellation/src
         ├── primitives
             TransactionValidation.scala
         ├── serializer
-        ├── util
+        └── util
             API.scala
             ConstellationNode.scala
             LevelDB.scala
@@ -33,12 +33,14 @@ constellation/src
         ├── consensus
         ├── p2p
         ├── rpc
-        └── UtilityTest.scala
+        └── .
+			UtilityTest.scala
 ```
 
 ### Build instructions
 For details on the build process, as well as pointers for docker, vagrant and deployment, see
-	* [/docs/build-instructions](https://github.com/Constellation-Labs/constellation/docs/build-instructions)
+
+* [/docs/build-instructions](https://github.com/Constellation-Labs/constellation/docs/build-instructions)
 
 ### :green_book: API Docs
 We intend to use **Swagger** or similar to publish comprehensive API docs.

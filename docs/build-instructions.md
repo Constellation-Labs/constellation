@@ -23,12 +23,14 @@ Look at the file _API.scala_ for endpoints.
 Note: *For now this installation is not covered here in detail.*
 
 **Install docker locally**
+
 1. Set up [docker](https://www.docker.com/).
 2. Follow directions for building for development.
 3. Run
 ```haskell
 sbt docker:publishLocal
 ```
+
 4. Run
 ```haskell
 ./run-local-docker.sh
@@ -40,6 +42,7 @@ For Windows, just grab the docker ```cmd``` from the file and run directly.
 
 #### Vagrant execution
 This is **deprecated** but may be useful for people running Windows, etc.:
+
 1. Download [vagrant](https://www.vagrantup.com).
 2. Run 
 ```haskell
