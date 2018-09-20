@@ -2,7 +2,7 @@
 
 You'll get a good impression of the used external Scala tools by taking a look at the `coreDependencies` in:
 
-* [/constellation/build.sbt](https://github.com/Constellation-Labs/constellation/build.sbt)
+* [/constellation/build.sbt](https://github.com/Constellation-Labs/constellation/blob/dev/build.sbt)
 
 (to be annotated links):
 
@@ -16,4 +16,4 @@ You'll get a good impression of the used external Scala tools by taking a look a
 
 For a discussion, see:
 
-* [/docs/design-choices.md](https://github.com/Constellation-Labs/constellation/docs/design-choices.md)
+* [/docs/design-choices.md]()https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/desgin-choices.md)

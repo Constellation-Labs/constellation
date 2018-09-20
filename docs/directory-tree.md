@@ -3,9 +3,10 @@
 The table below provides a snapshot of the directory tree of this repository.
 
 Note that many files are absent from here, such as:
-	 * project files generated once you run or test the code
-	 * shell- and sbt-scripts for building, dockerization, deploying, etc.
-	 * configuration and setup files for build specifications and dependencies, plugins, virtual environments, deployment, unit tests, continuous integration, etc.
+
+* project files generated once you run or test the code
+* shell- and sbt-scripts for building, dockerization, deploying, etc.
+* configuration and setup files for build specifications and dependencies, plugins, virtual environments, deployment, unit tests, continuous integration, etc.
 
 ```scala
 constellation (root)
@@ -101,4 +102,8 @@ constellation (root)
         	UtilityTest.scala
 └── ui
 ```
+	 
+(todo: those \tabs in the markup files are super annoying to get right)
+	 
+(todo: add explainers to all folders and to the most critical files)
 

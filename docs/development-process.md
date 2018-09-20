@@ -1,8 +1,10 @@
+(todo: move this file to the wiki)
+
 ### Development process
 
 Please make PR's to the **dev** branch, which is routinely merged into master. 
 
-### Issue scheme
+### GitHub issue scheme
 
 ```
 #### Current behavior
