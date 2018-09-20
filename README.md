@@ -12,29 +12,29 @@ Visit the [/constellation/docs](https://github.com/Constellation-Labs/constellat
 
 ```scala
 constellation/src
-    ├── it                                   <─── continuous integration
-        ClusterDebug.scala
-    ├── main/scala/org/constellation         <─── protocol implementation
-        ├── consensus
-            Consensus.scala
-            EdgeProcessor.scala
-        ├── crypto
-            KeyUtils.scala
-            Wallet.scala
-        ├── p2p
-        ├── primitives
-            TransactionValidation.scala
-        ├── serializer
-        └── util
-            API.scala
-            ConstellationNode.scala
-            LevelDB.scala
-    └── test/scala/org/constellation          <─── unit tests
-        ├── consensus
-        ├── p2p
-        ├── rpc
-        └── .
-			UtilityTest.scala
+├── it                                   <─── continuous integration
+    ClusterDebug.scala
+├── main/scala/org/constellation         <─── protocol implementation
+    ├── consensus
+        Consensus.scala
+        EdgeProcessor.scala
+    ├── crypto
+        KeyUtils.scala
+        Wallet.scala
+    ├── p2p
+    ├── primitives
+        TransactionValidation.scala
+    ├── serializer
+    └── util
+        API.scala
+        ConstellationNode.scala
+        LevelDB.scala
+└── test/scala/org/constellation          <─── unit tests
+    ├── consensus
+    ├── p2p
+    ├── rpc
+    └── .
+	UtilityTest.scala
 ```
 
 ### Build instructions
