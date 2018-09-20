@@ -29,11 +29,21 @@ import org.constellation.consensus.EdgeProcessor.HandleTransaction
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.consensus.{EdgeProcessor, TransactionProcessor, Validation}
+import org.constellation.p2p.PeerAPI.EdgeResponse
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.Random
+import scala.util.{Random, Try}
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
+
+object PeerAPI {
+
+  case class EdgeResponse(
+                         soe: Option[SignedObservationEdgeCache] = None,
+                         cb: Option[CheckpointBlock] = None
+                         )
+
+}
 
 class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
   extends Json4sSupport with CommonEndpoints {
@@ -54,6 +64,22 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
       get {
         path("ip") {
           complete(clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)})
+        } ~
+        path("edge" / Segment) { soeHash =>
+          val result = Try{
+            (dao.dbActor ? DBGet(soeHash)).mapTo[Option[SignedObservationEdgeCache]].get(t=5)
+          }.toOption
+
+          val resWithCBOpt = result.map{
+            cacheOpt =>
+              val cbOpt = cacheOpt.flatMap{ c =>
+                (dao.dbActor ? DBGet(c.signedObservationEdge.baseHash)).mapTo[Option[CheckpointBlock]].get(t=5)
+                  .filter{_.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
+              }
+              EdgeResponse(cacheOpt, cbOpt)
+          }
+
+          complete(resWithCBOpt.getOrElse(EdgeResponse()))
         }
       }
     }

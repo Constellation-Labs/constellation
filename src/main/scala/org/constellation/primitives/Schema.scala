@@ -384,6 +384,9 @@ object Schema {
 
     def baseHash: String = checkpoint.edge.baseHash
 
+    // TODO: Optimize call, should store this value instead of recalculating every time.
+    def soeHash: String = checkpoint.edge.signedObservationEdge.hash
+
     def store(db: ActorRef, cache: CheckpointCacheData, resolved: Boolean): Unit = {
 /*
       transactions.foreach { rt =>

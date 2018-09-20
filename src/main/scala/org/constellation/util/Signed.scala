@@ -57,7 +57,7 @@ trait ProductHash extends Product {
 case class HashSignature(signature: String,
                          b58EncodedPublicKey: String) {
   def publicKey: PublicKey = EncodedPublicKey(b58EncodedPublicKey).toPublicKey
-
+  def toId: Id = Id(EncodedPublicKey(b58EncodedPublicKey))
   def valid(hash: String): Boolean =
     verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
 }

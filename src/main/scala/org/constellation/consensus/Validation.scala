@@ -42,6 +42,10 @@ object Validation {
 
     def validByCurrentState: Boolean = !isDuplicateHash && sufficientBalance
     def validByCurrentStateMemPool: Boolean = !isDuplicateHash && sufficientBalance && sufficientMemPoolBalance
+    def validByAncestor(ancestorHash: String): Boolean = {
+      transactionCacheData.exists{t => !t.inDAGByAncestor.contains(ancestorHash)} &&
+      addressCacheData.exists(_.ancestorBalances.get(ancestorHash).exists(_ >= transaction.amount))
+    }
     // Need separate validator here for CB validation vs. mempool addition
     // I.e. don't check mempool balance when validating a CB because it takes precedence over
     // a new TX which is being added to mempool and conflicts with current mempool values.

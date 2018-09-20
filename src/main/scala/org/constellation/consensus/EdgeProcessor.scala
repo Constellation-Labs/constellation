@@ -41,9 +41,23 @@ object EdgeProcessor {
     }
 
 
+    // TODO : Handle resolution issues.
+    dao.resolveNotifierCallbacks.get(cb.soeHash)
+
     val cache = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]]
 
-    def resolutionFlow() = {
+    def signFlow(): Unit = {
+      // Mock
+      // Check to see if we should add our signature to the CB
+      val cbPrime = updateCheckpointWithSelfSignatureEmit(cb, dao)
+
+      // Add to memPool or update an existing hash with new signatures and check for signature threshold
+      updateCheckpointMergeMemPool(cbPrime, dao)
+
+      attemptFormCheckpointUpdateState(dao)
+    }
+
+    def resolutionFlow(): Unit = {
 
       val resolved = Resolve.resolveCheckpoint(dao, cb)
 
@@ -52,77 +66,105 @@ object EdgeProcessor {
       // If there are duplicate transactions, do a score calculation relative to the other one to determine which to preserve.
       // Potentially rolling back the other one.
 
-      if (resolved) {
-        dao.metricsManager ! IncrementMetric("resolvedCheckpointMessages")
+      resolved.foreach { r =>
 
-        val validAccordingToCurrentState = Future.sequence(
-          cb.transactions.map{Validation.validateTransaction(dao.dbActor, _)}
-        ).map{_.forall(_.validByCurrentState)}
+        if (r) {
+          dao.metricsManager ! IncrementMetric("resolvedCheckpointMessages")
+
+          val validAccordingToCurrentState = Future.sequence(
+            cb.transactions.map {
+              Validation.validateTransaction(dao.dbActor, _)
+            }
+          ).map {
+            _.forall(_.validByCurrentState)
+          }
+
+          validAccordingToCurrentState.foreach { v =>
+            if (v) {
+              signFlow()
+            }
+            else {
+              val validByAncestors = Future.sequence(
+                cb.transactions.map {
+                  Validation.validateTransaction(dao.dbActor, _)
+                }
+              ).map {
+                _.forall { s =>
+                  cb.checkpoint.edge.parentHashes.forall { ancestorHash =>
+                    s.validByAncestor(ancestorHash)
+                  }
+                }
+              }
+
+              validByAncestors.foreach { v =>
+                if (v) {
+                  // resolveAncestryConflict(cb)
+                }
+              }
+            }
+
+          }
 
 
+          // Need something to check if valid by ancestors
 
-        // Need something to check if valid by ancestors
+        } else {
+          dao.metricsManager ! IncrementMetric("unresolvedCheckpointMessages")
 
-        // Mock
-        // Check to see if we should add our signature to the CB
-        val cbPrime = updateCheckpointWithSelfSignatureEmit(cb, dao)
-
-        // Add to memPool or update an existing hash with new signatures and check for signature threshold
-        updateCheckpointMergeMemPool(cbPrime, dao)
-
-        attemptFormCheckpointUpdateState(dao)
-
-      } else {
-        dao.metricsManager ! IncrementMetric("unresolvedCheckpointMessages")
-
+        }
       }
 
     }
 
+    def mainFlow() = {
 
-    cache.foreach{ c =>
 
-      // Base hash not stored in DB, no possible signature conflict
-      if (c.isEmpty) {
-        dao.metricsManager ! IncrementMetric("unknownCheckpointMessages")
-        resolutionFlow()
-      } else {
+      cache.foreach { c =>
 
-        val ca = c.get
-
-        if (ca.resolved) {
-          if (ca.inDAG) {
-            if (ca.checkpointBlock != cb) {
-              // Data mismatch on base hash lookup, i.e. signature conflict
-              // TODO: Conflict resolution
-              //resolveConflict(cb, ca)
-            } else {
-              // Duplicate checkpoint message, no action required.
-            }
-          } else {
-            // warn or store information about potential conflict
-            // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
-          }
+        // Base hash not stored in DB, no possible signature conflict
+        if (c.isEmpty) {
+          dao.metricsManager ! IncrementMetric("unknownCheckpointMessages")
+          resolutionFlow()
         } else {
 
-          // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
-          // Otherwise do nothing as the resolution is already in progress.
+          val ca = c.get
+
+          if (ca.resolved) {
+            if (ca.inDAG) {
+              if (ca.checkpointBlock != cb) {
+                // Data mismatch on base hash lookup, i.e. signature conflict
+                // TODO: Conflict resolution
+                //resolveConflict(cb, ca)
+              } else {
+                // Duplicate checkpoint message, no action required.
+              }
+            } else {
+              // warn or store information about potential conflict
+              // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
+            }
+          } else {
+
+            // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
+            // Otherwise do nothing as the resolution is already in progress.
+
+          }
+
+          // if (ca.checkpointBlock
 
         }
 
-       // if (ca.checkpointBlock
+        c.foreach { ca =>
+
+
+        }
 
       }
-
-      c.foreach{ ca =>
-
-
-
-      }
-
     }
 
-    Resolve.resolveCheckpoint(dao, cb)
+    mainFlow()
+    // Post resolution. onComplete
+
+  //  Resolve.resolveCheckpoint(dao, cb)
   }
 
   // TODO : Add checks on max number in mempool and max num signatures.
