@@ -59,6 +59,8 @@ object EdgeProcessor {
           cb.transactions.map{Validation.validateTransaction(dao.dbActor, _)}
         ).map{_.forall(_.validByCurrentState)}
 
+
+
         // Need something to check if valid by ancestors
 
         // Mock
@@ -94,6 +96,8 @@ object EdgeProcessor {
               // Data mismatch on base hash lookup, i.e. signature conflict
               // TODO: Conflict resolution
               //resolveConflict(cb, ca)
+            } else {
+              // Duplicate checkpoint message, no action required.
             }
           } else {
             // warn or store information about potential conflict

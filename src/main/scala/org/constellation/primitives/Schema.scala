@@ -390,7 +390,7 @@ object Schema {
         rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))
       }
 */
-      checkpoint.edge.store(db, {_: CheckpointCacheData => cache}, cache, resolved)
+      checkpoint.edge.store(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
     }
 
     def plus(keyPair: KeyPair): CheckpointBlock = {
