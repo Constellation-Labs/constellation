@@ -106,6 +106,15 @@ object EdgeProcessor {
           }
 
 
+          // TODO: Process children
+          // Also need to store child references in parent.
+          potentialChildren.foreach{
+            _.foreach{ c =>
+              Future(handleCheckpoint(c, dao, true))
+            }
+          }
+          // Post resolution. onComplete
+
           // Need something to check if valid by ancestors
 
         } else {
@@ -162,13 +171,6 @@ object EdgeProcessor {
     }
 
     mainFlow()
-
-    potentialChildren.foreach{
-      _.foreach{ c =>
-        Future(handleCheckpoint(c, dao, true))
-      }
-    }
-    // Post resolution. onComplete
 
   //  Resolve.resolveCheckpoint(dao, cb)
   }
