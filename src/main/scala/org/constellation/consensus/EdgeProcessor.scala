@@ -42,7 +42,7 @@ object EdgeProcessor {
 
 
     // TODO : Handle resolution issues.
-    dao.resolveNotifierCallbacks.get(cb.soeHash)
+    val potentialChildren = dao.resolveNotifierCallbacks.get(cb.soeHash)
 
     val cache = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]]
 
@@ -162,6 +162,12 @@ object EdgeProcessor {
     }
 
     mainFlow()
+
+    potentialChildren.foreach{
+      _.foreach{ c =>
+        Future(handleCheckpoint(c, dao, true))
+      }
+    }
     // Post resolution. onComplete
 
   //  Resolve.resolveCheckpoint(dao, cb)
