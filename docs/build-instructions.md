@@ -1,6 +1,5 @@
 ## Build instructions
-###:computer: Building for development
-#### On Linux and Mac
+### :computer: On Linux and Mac
 1. Check out the repository
 
 ```haskell
@@ -24,7 +23,7 @@ By default this is
 http://localhost:9000. 
 Look at the file _API.scala_ for endpoints.
 
-#### Docker execution 
+### :whale2: Docker execution 
 
 Note: *For now this installation is not covered here in detail.*
 
@@ -46,9 +45,9 @@ sbt docker:publishLocal
 
 We will publish the corresponding images to dockerhub soon.
 
-For Windows, just grab the docker `cmd` from the file and run directly.
+For **Windows**, just grab the docker `cmd` from the file and run directly.
 
-#### Vagrant execution
+### :package: Vagrant execution
 This is **deprecated** but may be useful for people running Windows, etc.:
 
 1. Download [vagrant](https://www.vagrantup.com).
