@@ -1,4 +1,4 @@
-## Contents
+### Contents
 The docs provide technical information to understand, build and run the code base
 developed in this repository. The following are covered:
 
@@ -11,8 +11,10 @@ developed in this repository. The following are covered:
 * Recommended tools and frameworks
 * Software dependencies
 
-## Wait, there's more...
-### Wiki
+[comment]: <TODO: The above bullet points should all become links.>
+
+### Wait, there's more...
+####:books: Wiki
 Note that there is the github Wiki of this repository, which itself holds
 information that puts the Constellation approach in context to other distributed
 consensus protocols:
@@ -26,7 +28,7 @@ against other projects,
 [recommended reading](https://github.com/Constellation-Labs/constellation/wiki/Recommended-Reading), 
 etc.
 
-### Resource list
+####:computer: Resource list
 A comprehensive resource list which also holds material for developing on top of
 the protcol can be found in the awesome-constellatio repository:
 

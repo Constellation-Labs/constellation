@@ -14,7 +14,7 @@ For a cursory glipse into the core teams perspectives, you may check out the fol
 * [youtube.com/constellation-labs/talk-at-Tech-Crunch](https://youtu.be/SsYZF4msXuQ) (Aug. 2018, 40 mins)
 * [youtube.com/constellation-labs/testnet-overview](https://youtu.be/xjn6Te7Twg4) (Sept. 2018, 22 mins)
 
-#### on archetecture
+#### on architecture
 
 (tbd)
 

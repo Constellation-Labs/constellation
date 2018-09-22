@@ -16,4 +16,4 @@ You'll get a good impression of the used external Scala tools by taking a look a
 
 For a discussion, see:
 
-* [/docs/design-choices.md]()https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/desgin-choices.md)
+* [/docs/design-choices.md]()https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/design-choices.md)

@@ -8,7 +8,7 @@ protocol using the
 programming language.
 
 Visit the [/constellation/docs](https://github.com/Constellation-Labs/constellation/docs/) for an explainer of the protocol archetecture or an extended overview of the 
-[project structure](https://github.com/Constellation-Labs/constellation/docs/directory-tree/). Note that the developer branch might be behind the master branch by a few weeks.
+[project structure](https://github.com/Constellation-Labs/constellation/docs/directory-tree/). Note that the `master` branch might be behind the `dev` branch by a few weeks.
 
 ```scala
 constellation/src
@@ -37,7 +37,7 @@ constellation/src
 	UtilityTest.scala
 ```
 
-### Build instructions
+###:computer: Build instructions
 For details on the build process, as well as pointers for docker, vagrant and deployment, see
 [/docs/build-instructions](https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/build-instructions.md)
 
