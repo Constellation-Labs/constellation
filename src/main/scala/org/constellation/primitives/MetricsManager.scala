@@ -16,6 +16,9 @@ class MetricsManager extends Actor {
 
   val logger = Logger("Metrics")
 
+  var lastCheckTime: Long = System.currentTimeMillis()
+  var lastTXCount: Long = 0
+
   override def receive = active(Map.empty)
 
   def active(metrics: Map[String, String]): Receive = {
@@ -34,6 +37,13 @@ class MetricsManager extends Actor {
       round += 1
       if (round % 10 == 0) {
         logger.info("Metrics: " + metrics)
+        val count = metrics.getOrElse("transactionAccepted", "0").toLong
+        val delta = System.currentTimeMillis() - lastCheckTime
+        val deltaTX = count - lastTXCount
+        val tps = deltaTX.toDouble * 1000 / delta
+        lastTXCount = count
+        lastCheckTime = System.currentTimeMillis()
+        context become active(metrics + ("TPS" -> tps.toString))
       }
 
   }

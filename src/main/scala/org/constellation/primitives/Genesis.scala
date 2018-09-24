@@ -109,6 +109,8 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
     checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = 0
 
     metricsManager ! UpdateMetric("activeTips", "2")
+    metricsManager ! UpdateMetric("genesisAccepted", "true")
+    metricsManager ! UpdateMetric("z_genesisBlock", go.json)
 
     println(s"accept genesis = ", go)
   }

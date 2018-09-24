@@ -244,21 +244,12 @@ object Schema {
     def baseHash: String = edge.signedObservationEdge.baseHash
     def hash: String = edge.signedObservationEdge.hash
     def plus(other: Transaction): Transaction = this.copy(
-      edge = edge.copy(
-        signedObservationEdge = edge.signedObservationEdge.copy(
-          signatureBatch =
-            edge.signedObservationEdge.signatureBatch.plus(other.edge.signedObservationEdge.signatureBatch)
-        )
-      )
+      edge = edge.plus(other.edge)
     )
     def plus(keyPair: KeyPair): Transaction = this.copy(
-      edge = edge.copy(
-        signedObservationEdge = edge.signedObservationEdge.copy(
-          signatureBatch =
-            edge.signedObservationEdge.signatureBatch.plus(keyPair)
-        )
-      )
+      edge = edge.plus(keyPair)
     )
+
     def validSrcSignature: Boolean = {
       edge.signedObservationEdge.signatureBatch.signatures.exists{ hs =>
         hs.publicKey.address == src.address && hs.valid(edge.signedObservationEdge.signatureBatch.hash)
@@ -366,7 +357,9 @@ object Schema {
                                   resolutionInProgress: Boolean = false,
                                   inMemPool: Boolean = false,
                                   lastResolveAttempt: Option[Long] = None,
-                                  rxTime: Long = System.currentTimeMillis() // TODO: Unify common metadata like this
+                                  rxTime: Long = System.currentTimeMillis(), // TODO: Unify common metadata like this
+                                  children: Set[String] = Set(),
+                                  forkChildren: Set[String] = Set()
                                 ) {
 
     def plus(previous: CheckpointCacheData): CheckpointCacheData = {

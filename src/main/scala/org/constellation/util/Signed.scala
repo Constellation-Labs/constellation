@@ -65,7 +65,7 @@ case class HashSignature(signature: String,
 
 case class SignatureBatch(
                          hash: String,
-                         signatures: Set[HashSignature]
+                         signatures: Seq[HashSignature]
                          ) extends Monoid[SignatureBatch] {
   def valid: Boolean = {
     signatures.forall(_.valid(hash))
@@ -73,19 +73,19 @@ case class SignatureBatch(
 
   def plus(other: SignatureBatch): SignatureBatch = {
     this.copy(
-      signatures = signatures ++ other.signatures
+      signatures = (signatures ++ other.signatures).distinct.sorted
     )
   }
   def plus(other: KeyPair): SignatureBatch = {
     this.copy(
-      signatures = signatures + hashSign(hash, other)
+      signatures = (signatures :+ hashSign(hash, other)).distinct.sorted
     )
   }
 
-  override def empty: SignatureBatch = SignatureBatch(hash, Set())
+  override def empty: SignatureBatch = SignatureBatch(hash, Seq())
 
   override def combine(x: SignatureBatch, y: SignatureBatch): SignatureBatch =
-    x.copy(signatures = x.signatures ++ y.signatures)
+    x.copy(signatures = (x.signatures ++ y.signatures).distinct.sorted)
 
 }
 
@@ -153,7 +153,7 @@ trait POWSignHelp {
   }
 
   def hashSignBatchZeroTyped(hash: ProductHash, keyPair: KeyPair): SignatureBatch = {
-    SignatureBatch(hash.hash, Set(hashSign(hash.hash, keyPair)))
+    SignatureBatch(hash.hash, Seq(hashSign(hash.hash, keyPair)))
   }
 
   def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge = {
