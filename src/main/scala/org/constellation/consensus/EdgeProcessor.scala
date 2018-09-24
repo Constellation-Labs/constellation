@@ -170,7 +170,7 @@ object EdgeProcessor {
       }
     }
 
-    mainFlow()
+  //  mainFlow()
 
   //  Resolve.resolveCheckpoint(dao, cb)
   }

@@ -58,12 +58,16 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     sim.run(apis = apis, peerApis = peerApis)
 
+    Thread.sleep(5000*60*60)
+/*
+
     var txs = 3
 
     while (txs > 0) {
       sim.sendRandomTransaction(apis)
       txs = txs - 1
     }
+*/
 
     /*
     val probe = TestProbe()

@@ -259,6 +259,12 @@ object Schema {
         )
       )
     )
+    def validSrcSignature: Boolean = {
+      edge.signedObservationEdge.signatureBatch.signatures.exists{ hs =>
+        hs.publicKey.address == src.address && hs.valid(edge.signedObservationEdge.signatureBatch.hash)
+      }
+    }
+
   }
 
   case class CheckpointEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData]) {

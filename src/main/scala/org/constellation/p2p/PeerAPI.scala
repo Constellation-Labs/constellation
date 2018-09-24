@@ -40,7 +40,7 @@ object PeerAPI {
 
   case class EdgeResponse(
                          soe: Option[SignedObservationEdgeCache] = None,
-                         cb: Option[CheckpointBlock] = None
+                         cb: Option[CheckpointCacheData] = None
                          )
 
 }
@@ -73,8 +73,8 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
           val resWithCBOpt = result.map{
             cacheOpt =>
               val cbOpt = cacheOpt.flatMap{ c =>
-                (dao.dbActor ? DBGet(c.signedObservationEdge.baseHash)).mapTo[Option[CheckpointBlock]].get(t=5)
-                  .filter{_.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
+                (dao.dbActor ? DBGet(c.signedObservationEdge.baseHash)).mapTo[Option[CheckpointCacheData]].get(t=5)
+                  .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
               }
               EdgeResponse(cacheOpt, cbOpt)
           }
@@ -132,7 +132,7 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
               EdgeProcessor.handleTransaction(tx, dao)(dao.edgeExecutionContext)
             }(dao.edgeExecutionContext)
                */
-              logger.debug(s"transaction endpoint, $tx")
+          //    logger.debug(s"transaction endpoint, $tx")
               dao.edgeProcessor ! HandleTransaction(tx)
             }
 

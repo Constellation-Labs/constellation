@@ -21,7 +21,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, Schema, UpdateMetric}
+import org.constellation.primitives.{APIBroadcast, GetMetrics, Schema, UpdateMetric}
 import org.constellation.util.{Metrics, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
@@ -53,8 +53,8 @@ class API(udpAddress: InetSocketAddress,
 
   val config: Config = ConfigFactory.load()
 
-  val authId = config.getString("auth.id")
-  val authPassword = config.getString("auth.password")
+  val authId: String = config.getString("auth.id")
+  val authPassword: String = config.getString("auth.password")
 
   val getEndpoints: Route =
     extractClientIP { clientIP =>
@@ -77,7 +77,10 @@ class API(udpAddress: InetSocketAddress,
             }
           } ~
           path("metrics") {
-            complete(new util.Metrics(data).calculateMetrics())
+            val response = MetricsResult(
+              (data.metricsManager ? GetMetrics).mapTo[Map[String, String]].getOpt().getOrElse(Map())
+            )
+            complete(response)
           } ~
           path("makeKeyPair") {
             val pair = constellation.makeKeyPair()
@@ -137,6 +140,10 @@ class API(udpAddress: InetSocketAddress,
 
   private val postEndpoints =
     post {
+      path("random") { // Temporary
+        data.generateRandomTX = true
+        complete(StatusCodes.OK)
+      } ~
       path("peerHealthCheck") {
         val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse[String]]]]
         val res = response.getOpt().map{

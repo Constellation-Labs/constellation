@@ -29,5 +29,12 @@ class MetricsManager extends Actor {
       val updatedMap = metrics + (key -> metrics.get(key).map{z => (z.toLong + 1).toString}.getOrElse("1"))
       context become active(updatedMap)
 
+    case InternalHeartbeat =>
+
+      round += 1
+      if (round % 10 == 0) {
+        logger.info("Metrics: " + metrics)
+      }
+
   }
 }

@@ -154,7 +154,7 @@ class Simulation {
 
     addPeers(apis, peerApis)
 
-    Thread.sleep(15000)
+    Thread.sleep(5000)
 
     assert(
       apis.forall{a =>
@@ -168,6 +168,8 @@ class Simulation {
     apis.foreach{_.post("genesis/accept", goe)}
 
     awaitGenesisStored(apis)
+
+    apis.foreach(_.postEmpty("random"))
   }
 
 }
