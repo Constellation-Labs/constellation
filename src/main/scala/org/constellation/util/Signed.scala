@@ -55,18 +55,23 @@ trait ProductHash extends Product {
 }
 
 case class HashSignature(signature: String,
-                         b58EncodedPublicKey: String) {
+                         b58EncodedPublicKey: String) extends Ordered[HashSignature] {
   def publicKey: PublicKey = EncodedPublicKey(b58EncodedPublicKey).toPublicKey
   def address: String = publicKey.address
   def toId: Id = Id(EncodedPublicKey(b58EncodedPublicKey))
   def valid(hash: String): Boolean =
     verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
+
+  override def compare(that: HashSignature): Int = {
+    signature compare that.signature
+  }
 }
 
 case class SignatureBatch(
                          hash: String,
                          signatures: Seq[HashSignature]
                          ) extends Monoid[SignatureBatch] {
+
   def valid: Boolean = {
     signatures.forall(_.valid(hash))
   }

@@ -237,7 +237,7 @@ object Schema {
     def src: Address = edge.resolvedObservationEdge.left
     def dst: Address = edge.resolvedObservationEdge.right
 
-    def signatures: Set[HashSignature] = edge.signedObservationEdge.signatureBatch.signatures
+    def signatures: Seq[HashSignature] = edge.signedObservationEdge.signatureBatch.signatures
 
     // TODO: Add proper exception on empty option
     def amount : Long = edge.resolvedObservationEdge.data.get.amount
@@ -379,7 +379,7 @@ object Schema {
                               checkpoint: CheckpointEdge
                                   ) {
 
-    def signatures: Set[HashSignature] = checkpoint.edge.signedObservationEdge.signatureBatch.signatures
+    def signatures: Seq[HashSignature] = checkpoint.edge.signedObservationEdge.signatureBatch.signatures
 
     def baseHash: String = checkpoint.edge.baseHash
 
