@@ -38,7 +38,7 @@ class RandomTransactionManager(dao: Data)(
       */
     case InternalHeartbeat =>
 
-      if (dao.transactionMemPool.size < 100) {
+      if (dao.transactionMemPoolMultiWitness.size < 100) {
         val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
 
         def getRandomPeer: (Id, PeerData) = peerIds(random.nextInt(peerIds.size))

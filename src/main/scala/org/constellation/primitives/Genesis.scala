@@ -105,10 +105,10 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
     // Dumb way to set these as active tips, won't pass a double validation but no big deal.
     checkpointMemPool(go.initialDistribution.baseHash) = go.initialDistribution
     checkpointMemPool(go.initialDistribution2.baseHash) = go.initialDistribution2
-    checkpointMemPoolThresholdMet(go.initialDistribution.baseHash) = 0
-    checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = 0
+    checkpointMemPoolThresholdMet(go.initialDistribution.baseHash) = go.initialDistribution -> 0
+    checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = go.initialDistribution2 -> 0
 
-    metricsManager ! UpdateMetric("activeTips", "2")
+   // metricsManager ! UpdateMetric("activeTips", "2")
     metricsManager ! UpdateMetric("genesisAccepted", "true")
     metricsManager ! UpdateMetric("z_genesisBlock", go.json)
 

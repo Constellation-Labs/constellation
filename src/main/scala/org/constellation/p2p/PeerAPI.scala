@@ -140,7 +140,7 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
         }
       } ~
       get {
-        val memPoolPresence = dao.transactionMemPool.get(s)
+        val memPoolPresence = dao.transactionMemPoolMultiWitness.get(s)
         val response = memPoolPresence.map { t =>
           TransactionQueryResponse(s, Some(t), inMemPool = true, inDAG = false, None)
         }.getOrElse{

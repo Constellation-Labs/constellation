@@ -11,7 +11,7 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 trait EdgeDAO {
 
   var genesisObservation: Option[GenesisObservation] = None
-  val maxWidth = 50
+  val maxWidth = 30
   val minCheckpointFormationThreshold = 3
   val minTXSignatureThreshold = 3
   val minCBSignatureThreshold = 3
@@ -19,13 +19,15 @@ trait EdgeDAO {
   val maxNumSignaturesPerTX = 20
 
 
-  val transactionMemPool : TrieMap[String, Transaction] = TrieMap()
+  @volatile var transactionMemPool: Seq[Transaction] = Seq()
+
+  val transactionMemPoolMultiWitness : TrieMap[String, Transaction] = TrieMap()
   val checkpointMemPool : TrieMap[String, CheckpointBlock] = TrieMap()
 
   @volatile var transactionMemPoolThresholdMet: Set[String] = Set()
 
   // Map from checkpoint hash to number of times used as a tip (number of children)
-  val checkpointMemPoolThresholdMet: TrieMap[String, Int] = TrieMap()
+  val checkpointMemPoolThresholdMet: TrieMap[String, (CheckpointBlock, Int)] = TrieMap()
 
 
 
@@ -35,7 +37,7 @@ trait EdgeDAO {
     ExecutionContext.fromExecutor(Executors.newFixedThreadPool(200))
 
   def canCreateCheckpoint: Boolean = {
-    transactionMemPoolThresholdMet.size >= minCheckpointFormationThreshold && checkpointMemPoolThresholdMet.size >= 2
+    transactionMemPool.size >= minCheckpointFormationThreshold && checkpointMemPoolThresholdMet.size >= 2
   }
 
   def reuseTips: Boolean = checkpointMemPoolThresholdMet.size < maxWidth

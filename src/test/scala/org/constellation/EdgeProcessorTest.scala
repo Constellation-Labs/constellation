@@ -106,14 +106,14 @@ class EdgeProcessorTest extends FlatSpec {
 
   "New valid incoming transactions" should "be added to the mempool" in {
     EdgeProcessor.updateMergeMemPool(tx, data)
-    assert(data.transactionMemPool.contains(tx.hash))
+    assert(data.transactionMemPoolMultiWitness.contains(tx.hash))
   }
 
 
   "Observed valid incoming transactions" should "be merged into observation edges" in {
-    val updated = data.transactionMemPool(tx.hash).plus(tx)
-    data.transactionMemPool(tx.hash) = tx
-    assert(data.transactionMemPool(tx.hash) == updated)
+    val updated = data.transactionMemPoolMultiWitness(tx.hash).plus(tx)
+    data.transactionMemPoolMultiWitness(tx.hash) = tx
+    assert(data.transactionMemPoolMultiWitness(tx.hash) == updated)
   }
 }
 

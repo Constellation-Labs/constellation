@@ -403,6 +403,13 @@ object Schema {
       this.copy(checkpoint = checkpoint.plus(other.checkpoint))
     }
 
+    def resolvedOE: ResolvedObservationEdge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData] =
+      checkpoint.edge.resolvedObservationEdge
+
+    def parentSOE = Seq(resolvedOE.left, resolvedOE.right)
+
+    def parentSOEBaseHashes: Seq[String] = parentSOE.map{_.baseHash}
+
   }
 
   case class EdgeSheaf(
