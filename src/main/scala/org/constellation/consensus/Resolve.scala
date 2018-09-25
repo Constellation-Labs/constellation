@@ -13,56 +13,51 @@ import org.constellation.primitives.APIBroadcast
 import scala.concurrent.{ExecutionContext, Future}
 
 object Resolve {
-
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-  // TODO: Need to include signatories ABOVE this checkpoint block later in the case
-  // of signature decay.
-  def attemptResolveIndividual(dao: Data, cb: CheckpointBlock, h: String) = {
-    cb.signatures.map{_.toId}
-
-    dao.peerManager ? APIBroadcast({
-      apiClient =>
-        apiClient.get("edge/" + h)
-    })
-  }
-
-  // WIP
-  def resolveCheckpoint(dao: Data, cb: CheckpointBlock)(implicit ec: ExecutionContext): Future[Boolean] = {
-
-    // Step 1 - Find out if both parents are resolved.
-
-    val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes.map{ h =>
-      (dao.dbActor ? DBGet(h)).mapTo[Option[SignedObservationEdgeCache]].map{h -> _}
-    })
-
-    val resolved = parentCache.map{ cache =>
-
-      val parentsResolved = cache.forall(_._2.exists(_.resolved))
-
-      val missingParents = cache.filter{case (h, c) => c.isEmpty && !dao.resolveNotifierCallbacks.contains(h)}
-
-      missingParents.foreach{
-        case (h, c) =>
-          dao.resolveNotifierCallbacks.get(h) match {
-            case Some(cbs) =>
-              if (!cbs.contains(cb)) {
-                dao.resolveNotifierCallbacks(h) :+= cb
-              }
-            case None =>
-              attemptResolveIndividual(dao, cb, h)
-              dao.resolveNotifierCallbacks(h) = Seq(cb)
-          }
-      }
-
-      // TODO: Right now not storing CB in DB until it's been resolved, when that changes
-      // (due to status info requirements) may ? need to have a check here to reflect that.
-
-      parentsResolved
+  /**
+    * Find out if both parents are resolved. If not, mark parents unresolved.
+    *
+    * @param dao
+    * @param cb
+    * @param executionContext
+    * @return
+    */
+  def resolveCheckpoint(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): Future[Boolean] = {
+    val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes
+      .map { h => dao.hashToSignedObservationEdgeCache(h).map{h -> _} }
+    )
+    parentCache.map { cache: Seq[(String, Option[SignedObservationEdgeCache])] =>
+        cache.map { case (parentHash, oECache: Option[SignedObservationEdgeCache]) =>
+          val isMissing = parentHash.isEmpty && !dao.resolveNotifierCallbacks.contains(parentHash)
+          val isResolved = oECache.exists(_.resolved)
+          if (isMissing) dao.markParentsUnresolved(parentHash, cb)
+          isResolved
+        }.forall(_ == true)
     }
-
-    resolved
-
   }
-
 }
+
+//
+//  // WIP
+//  def resolveCheckpoint(dao: Data, cb: CheckpointBlock)(implicit ec: ExecutionContext): Future[Boolean] = {
+//
+//    // Step 1 - Find out if both parents are resolved.
+//
+//    val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes
+//      .map { h => dao.hashToSignedObservationEdgeCache(h).map{h -> _} }
+//    )
+//
+//    val isResolved = parentCache.map{ cache =>
+//      val parentsResolved = cache.forall(_._2.exists(_.resolved))
+//      val missingParents = cache.filter{case (h, c) => c.isEmpty && !dao.resolveNotifierCallbacks.contains(h)}
+//
+//      missingParents.foreach { case (hash, oECache) =>
+//        oECache.foreach(dao.markParentsUnresolved(hash, cb))
+//      }
+//      // TODO: Right now not storing CB in DB until it's been resolved, when that changes
+//      // (due to status info requirements) may ? need to have a check here to reflect that.
+//      parentsResolved
+//    }
+//    isResolved
+//  }

@@ -8,6 +8,7 @@ class Data extends MetricsExt
   with NodeData
   with BundleDataExt
   with Reputation
+  with EdgeExt
   with PeerInfo
   with Ledger
   with Genesis
