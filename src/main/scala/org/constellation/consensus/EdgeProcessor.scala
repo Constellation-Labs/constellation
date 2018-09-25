@@ -53,6 +53,7 @@ object EdgeProcessor {
 
     val isValidated = allTransactions.map { transactions =>
       val validatedByTransactions = transactions.forall(_.validByCurrentState)//TODO: Validate the checkpoint to see if any there are any duplicate transactions
+      //Todo we also need a batch transaction validator, i.e. take cpb, take all tx, group by source address, sum ammts per address (reducebykey) then query balance
       if (validatedByTransactions) {
         signFlow(dao, cb)
         validatedByTransactions
@@ -81,7 +82,7 @@ object EdgeProcessor {
     )
     cache.foreach { checkpointCacheData: Option[CheckpointCacheData] =>
       if (checkpointCacheData.isDefined) {
-        //        checkpointCacheData.foreach(handleBocusCb)
+        checkpointCacheData.foreach(handleDupTx(_, cb, dao))
       }
       else {
         Resolve.resolveCheckpoint(dao, cb).map { r =>
@@ -104,9 +105,10 @@ object EdgeProcessor {
           }
         }
       }
-    }
+    }//
   }
-    def handleDupTx(ca: CheckpointCacheData, cb: CheckpointBlock) = {
+    def handleDupTx(ca: CheckpointCacheData, cb: CheckpointBlock, dao: Data) = {
+      dao.metricsManager ! IncrementMetric("dupCheckpointReceived")
       if (ca.resolved) {
         if (ca.inDAG) {
           if (ca.checkpointBlock != cb) {

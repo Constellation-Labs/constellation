@@ -3,11 +3,15 @@ package org.constellation
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
+import akka.actor.ActorSystem
 import constellation._
+import org.constellation.consensus.EdgeProcessor.createCheckpointEdgeProposal
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.{PeerData, Schema}
-import org.constellation.primitives.Schema.{Id, Peer, SendToAddress}
+import org.constellation.primitives.Schema.{CheckpointBlock, Id, Peer, SendToAddress}
 import org.constellation.util.{APIClient, Signed, TestNode}
+
+import scala.util.Random
 
 
 object Fixtures {
@@ -52,4 +56,17 @@ object Fixtures {
     createTransaction(data.selfAddressStr, sendRequest.dst, sendRequest.amountActual, data.keyPair)
   }
 
+  def dummyCheckpointBlock(dao: Data) = {
+    val tips = Random.shuffle(dao.checkpointMemPoolThresholdMet.toSeq).take(2)
+    val tipSOE = tips.map {_._1}.map {dao.checkpointMemPool}.map {
+      _.checkpoint.edge.signedObservationEdge
+    }
+    val checkpointEdgeProposal = createCheckpointEdgeProposal(
+      dao.transactionMemPoolThresholdMet,
+      dao.minCheckpointFormationThreshold,
+      tipSOE
+    )(dao.keyPair)
+    val takenTX = checkpointEdgeProposal.transactionsUsed.map{dao.transactionMemPool}
+    CheckpointBlock(takenTX.toSeq, checkpointEdgeProposal.checkpointEdge)
+  }
 }

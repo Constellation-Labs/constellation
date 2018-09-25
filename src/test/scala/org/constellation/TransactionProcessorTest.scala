@@ -18,7 +18,7 @@ import scalaj.http.HttpResponse
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
-class EdgeProcessorTest extends FlatSpec {
+class TransactionProcessorTest extends FlatSpec {
   implicit val system: ActorSystem = ActorSystem("TransactionProcessorTest")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
@@ -100,8 +100,8 @@ class EdgeProcessorTest extends FlatSpec {
     val bogusTransactionValidationStatus = TransactionValidationStatus(tx, Some(TransactionCacheData(tx, true)), None)
     EdgeProcessor.reportInvalidTransaction(data, bogusTransactionValidationStatus)
     metricsManager.expectMsg(IncrementMetric("invalidTransactions"))
-    metricsManager.expectMsg(IncrementMetric("hashDuplicateTransactions"))
     metricsManager.expectMsg(IncrementMetric("insufficientBalanceTransactions"))
+    metricsManager.expectMsg(IncrementMetric("hashDuplicateTransactions"))
   }
 
   "New valid incoming transactions" should "be added to the mempool" in {
