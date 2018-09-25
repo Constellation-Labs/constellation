@@ -37,26 +37,21 @@ constellation/src
     └── rpc
 ```
 
-### :computer: Build instructions
+### Development
+#### :computer: Build instructions
 For details on the build process, as well as pointers for docker, vagrant and deployment, see
 
 * [/docs/build-instructions](https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/build-instructions.md)
 
-### :rotating_light: Troubleshooting
-Should you discover a bug, please open a ticket using the github issue function. If you don't know the resolution, follow standard github reporting guidelines, stating your system, what you did and tried. See also
-[/docs/development-process.md](https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/development-process.md).
+#### :rotating_light: Troubleshooting
+For issues and bug reports, see
 
-If you run into issues during the installation and for general software support, best make a thread on the 
-[community portal **Orion**](https://orion.constellationlabs.io/accounts/login/?next=/) 
-or ask a quick question on the Constellation 
-[discord](https://discordapp.com/invite/KMSmXbV) 
-server. 
+* [/wiki/Contribution-guidelines](https://github.com/Constellation-Labs/constellation/wiki/Contribution-guidelines)
 
-### :green_book: API Docs
+#### :green_book: API Docs
 We intend to use **Swagger** or similar to publish comprehensive API docs.
 
----
-
+#### :books: Resources
 For developer tools and documentation beyond the 
 [/docs](https://github.com/Constellation-Labs/constellation/tree/developer/nikolaj/add-docs/docs)
 and the 

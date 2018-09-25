@@ -11,14 +11,14 @@ Note that many files are absent from here, such as:
 ```scala
 root
 └── src
-    ├── it/scala/org/constellation			<─── continuous integration
+    ├── it/scala/org/constellation			<---------- continuous integration
     		ClusterDebug.scala
     		ClusterTest.scala
 		DownloadChainBatch.scala
 		DownloadChainSingle.scala
 		Fixtures2.scala
 		RestartCluster.scala
-    ├── main/scala/org/constellation			<─── protocol implementation
+    ├── main/scala/org/constellation			<---------- protocol implementation
         ├── consensus					<─── (tbd)
 		Consensus.scala
 		EdgeProcessor.scala
@@ -66,12 +66,12 @@ root
 		Signed.scala
 		LevelDB.scala
 		Simulation.scala
-	└── .
+	└── .     							     		<─── core classes
 		API.scala
 		ConstellationNode.scala
 		Data.scala
 		LevelDB.scala
-    └── test/scala/org/constellation          		<─── unit tests
+    └── test/scala/org/constellation          		<---------- unit tests
         ├── app
 		SingleAppTest.scala
        	├── cluster
