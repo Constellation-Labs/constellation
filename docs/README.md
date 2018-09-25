@@ -1,7 +1,7 @@
-## Contents
 These docs provide technical information to understand, build and run the code base
-developed in this repository. The following are covered:
+developed in this repository.
 
+## Table of contents
 * Annotated project folder tree
 * Architecture diagrams
 * Build instructions
@@ -25,6 +25,8 @@ There you find content such as
 * [FAQ](https://github.com/Constellation-Labs/constellation/wiki/FAQ)
 * [comparisons against other projects](https://github.com/Constellation-Labs/constellation/wiki/Comparisons-to-other-protocols)
 * [recomended literature list](https://github.com/Constellation-Labs/constellation/wiki/Recommended-Reading)
+
+Next to the links to external literature, the wiki also leads you to our research notes as well as less technical whitepapers, which further motivate our approach.
 
 ### :computer: Resource list
 A comprehensive resource list which also holds material for developing on top of
