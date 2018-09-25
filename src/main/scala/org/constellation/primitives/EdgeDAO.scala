@@ -12,7 +12,7 @@ trait EdgeDAO {
 
   var genesisObservation: Option[GenesisObservation] = None
   val maxWidth = 30
-  val minCheckpointFormationThreshold = 3
+  val minCheckpointFormationThreshold = 100
   val minTXSignatureThreshold = 3
   val minCBSignatureThreshold = 3
   val maxUniqueTXSize = 500
@@ -34,7 +34,7 @@ trait EdgeDAO {
   val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
 
   val edgeExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(200))
+    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(20))
 
   def canCreateCheckpoint: Boolean = {
     transactionMemPool.size >= minCheckpointFormationThreshold && checkpointMemPoolThresholdMet.size >= 2
