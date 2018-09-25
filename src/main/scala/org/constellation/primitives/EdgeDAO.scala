@@ -12,7 +12,7 @@ trait EdgeDAO {
 
   var genesisObservation: Option[GenesisObservation] = None
   val maxWidth = 30
-  val minCheckpointFormationThreshold = 100
+  val minCheckpointFormationThreshold = 30
   val minTXSignatureThreshold = 3
   val minCBSignatureThreshold = 3
   val maxUniqueTXSize = 500
@@ -42,6 +42,9 @@ trait EdgeDAO {
 
   def reuseTips: Boolean = checkpointMemPoolThresholdMet.size < maxWidth
 
+
+  // Temporary to get peer data for tx hash partitioning
+  @volatile var peerInfo: Map[Id, PeerData] = Map()
 
 
 }

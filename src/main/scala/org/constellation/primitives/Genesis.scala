@@ -10,7 +10,7 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
 
   val CoinBaseHash = "coinbase"
 
-  def createDistribution(ids: Seq[Id], genesisSOE: SignedObservationEdge) = {
+  def createDistribution(ids: Seq[Id], genesisSOE: SignedObservationEdge): CheckpointBlock = {
 
     val distr = ids.map{ id =>
       createTransaction(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
@@ -97,8 +97,8 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
     }
 
     val numTX = (1 + go.initialDistribution.transactions.size * 2).toString
-    metricsManager ! UpdateMetric("validTransactions", numTX)
-    metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
+  //  metricsManager ! UpdateMetric("validTransactions", numTX)
+  //  metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
 
     genesisObservation = Some(go)
 
@@ -110,7 +110,7 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
 
    // metricsManager ! UpdateMetric("activeTips", "2")
     metricsManager ! UpdateMetric("genesisAccepted", "true")
-    metricsManager ! UpdateMetric("z_genesisBlock", go.json)
+ //   metricsManager ! UpdateMetric("z_genesisBlock", go.json)
 
     println(s"accept genesis = ", go)
   }

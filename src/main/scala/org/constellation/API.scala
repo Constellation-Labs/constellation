@@ -237,11 +237,6 @@ class API(udpAddress: InetSocketAddress,
       }
     }
 
-  private val faviconRoute = get {
-    path("favicon.ico") {
-      getFromResource("favicon.ico")
-    }
-  }
 
   private val routes: Route = cors() {
     getEndpoints ~ postEndpoints ~ jsRequest ~ serveMainPage
@@ -256,6 +251,6 @@ class API(udpAddress: InetSocketAddress,
     }
   }
 
-  val authRoutes = faviconRoute ~ routes
+  val authRoutes: Route = faviconRoute ~ routes
 
 }

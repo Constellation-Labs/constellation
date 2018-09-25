@@ -19,7 +19,7 @@ class MetricsManager extends Actor {
   var lastCheckTime: Long = System.currentTimeMillis()
   var lastTXCount: Long = 0
 
-  override def receive = active(Map.empty)
+  override def receive: Receive = active(Map.empty)
 
   def active(metrics: Map[String, String]): Receive = {
 

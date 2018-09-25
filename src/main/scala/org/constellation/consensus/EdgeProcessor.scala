@@ -50,9 +50,10 @@ object EdgeProcessor {
       // Mock
       // Check to see if we should add our signature to the CB
 
+      // Note it's already met the threshold and we just haven't heard about it yet don't add signature
+      // Not issue yet due to constraints of test.
 
       if (!dao.checkpointMemPoolThresholdMet.contains(cb.baseHash)) { // sanity check but shouldn't be required
-
 
         val cbPrime = updateCheckpointWithSelfSignatureEmit(cb, dao)
 
@@ -279,7 +280,7 @@ object EdgeProcessor {
 
   def attemptFormCheckpointUpdateState(dao: Data): Option[CheckpointBlock] = {
 
-    // TODO: Send a DBUpdate to modify tip data to include newly formed CB as a 'child'
+    // TODO: Send a DBUpdate to modify tip data to include newly formed CB as a 'child', but only after acceptance
     if (dao.canCreateCheckpoint) {
       // Form new checkpoint block.
 
@@ -340,12 +341,28 @@ object EdgeProcessor {
       case t : TransactionValidationStatus if t.validByCurrentStateMemPool =>
 
         if (!dao.transactionMemPool.contains(tx)) {
+
+
+          // TODO:  Use XOR for random partition assignment later.
+          /*
+                    val idFraction = (dao.peerInfo.keys.toSeq :+ dao.id).map{ id =>
+                      val bi = BigInt(id.id.getEncoded)
+                      val bi2 = BigInt(tx.hash, 16)
+                      val xor = bi ^ bi2
+                      id -> xor
+                    }.maxBy(_._2)._1
+          */
+
+          // We should process this transaction hash
+          //  if (idFraction == dao.id) {
+
           dao.transactionMemPool :+= tx
           attemptFormCheckpointUpdateState(dao)
 
           dao.metricsManager ! IncrementMetric("transactionValidMessages")
           dao.metricsManager ! UpdateMetric("transactionMemPool", dao.transactionMemPool.size.toString)
           //dao.metricsManager ! UpdateMetric("transactionMemPoolThresholdMet", dao.transactionMemPoolThresholdMet.size.toString)
+          //   }
 
         } else {
           dao.metricsManager ! IncrementMetric("transactionValidMemPoolDuplicateMessages")

@@ -17,7 +17,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, IncrementMetric, TransactionValidation}
-import org.constellation.util.{CommonEndpoints, HashSignature}
+import org.constellation.util.{CommonEndpoints, HashSignature, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
 import akka.pattern.ask
@@ -46,7 +46,7 @@ object PeerAPI {
 }
 
 class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
-  extends Json4sSupport with CommonEndpoints {
+  extends Json4sSupport with CommonEndpoints with ServeUI {
 
   implicit val serialization: Serialization.type = native.Serialization
 
@@ -172,7 +172,8 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
   }
 
   val routes: Route = {
-    getEndpoints ~ postEndpoints ~ mixedEndpoints ~ commonEndpoints
+    getEndpoints ~ postEndpoints ~ mixedEndpoints ~ commonEndpoints // ~
+    //  faviconRoute ~ jsRequest ~ serveMainPage // <-- Temporary for debugging, control routes disabled.
   }
 
 }
