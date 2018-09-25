@@ -294,6 +294,7 @@ object EdgeProcessor {
 
   def attemptFormCheckpointUpdateState(dao: Data): Option[CheckpointBlock] = {
 
+    // TODO: Send a DBUpdate to modify tip data to include newly formed CB as a 'child'
     if (dao.canCreateCheckpoint) {
       // Form new checkpoint block.
 
@@ -413,8 +414,9 @@ object EdgeProcessor {
           // dao.dbActor ! DBUpdate//(tx.baseHash)
         }
 
+        dao.metricsManager ! IncrementMetric("transactionValidMessages")
         dao.metricsManager ! UpdateMetric("transactionMemPool", dao.transactionMemPool.size.toString)
-        dao.metricsManager ! UpdateMetric("transactionMemPoolThreshold", dao.transactionMemPoolThresholdMet.size.toString)
+        dao.metricsManager ! UpdateMetric("transactionMemPoolThresholdMet", dao.transactionMemPoolThresholdMet.size.toString)
 
       case t : TransactionValidationStatus =>
 

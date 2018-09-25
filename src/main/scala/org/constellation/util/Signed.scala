@@ -8,7 +8,6 @@ import constellation._
 import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema
-import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.primitives.Schema._
 
 object POW extends POWExt
