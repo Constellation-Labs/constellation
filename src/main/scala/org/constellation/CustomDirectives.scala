@@ -1,13 +1,9 @@
 package org.constellation
 
-import akka.http.javadsl.model.RemoteAddress
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directive0
-import akka.http.scaladsl.server.Directives.{path, _}
+import akka.http.scaladsl.server.Directives._
 import com.google.common.util.concurrent.RateLimiter
-
-import scala.collection._
-import scala.collection.concurrent.TrieMap
 
 object CustomDirectives {
 
@@ -34,14 +30,13 @@ object CustomDirectives {
   }
 
   trait BannedIPEnforcer {
-    val bannedIPs: concurrent.Map[RemoteAddress, String] =
-      concurrent.TrieMap[RemoteAddress, String]()
-    val knownIPs: concurrent.Map[RemoteAddress, String] =
-      concurrent.TrieMap[RemoteAddress, String]()
+
+    val parentNode: ConstellationNode
+
 
     def rejectBannedIP: Directive0 = {
       extractClientIP flatMap { ip =>
-        if (bannedIPs.contains(ip)) {
+        if (parentNode.IPManager.knownIP(ip)) {
           complete(StatusCodes.Forbidden)
         } else {
           pass
@@ -51,7 +46,7 @@ object CustomDirectives {
 
     def enforceKnownIP: Directive0 = {
       extractClientIP flatMap { ip =>
-        if (knownIPs.contains(ip)) {
+        if (parentNode.IPManager.knownIP(ip)) {
           pass
         } else {
           // Initiate signing flow

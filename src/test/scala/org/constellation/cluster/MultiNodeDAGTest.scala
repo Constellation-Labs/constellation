@@ -43,7 +43,9 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false)
 
-    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true))
+    val addr = n1.getInetSocketAddress
+
+    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(seedHosts = Seq(addr), heartbeatEnabled = true))
 
     val node = nodes.head
 

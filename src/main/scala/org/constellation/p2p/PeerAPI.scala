@@ -13,15 +13,15 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.BannedIPEnforcer
-import org.constellation.Data
 import org.constellation.LevelDB.DBGet
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote, StartConsensusRound}
-import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.consensus.EdgeProcessor.HandleTransaction
+import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{IncrementMetric, PendingRegistration}
+import org.constellation.primitives.{Deregistration, IncrementMetric, PendingRegistration}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.CommonEndpoints
+import org.constellation.{ConstellationNode, Data}
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -30,9 +30,12 @@ import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
 case class PeerRegistrationRequest(host: String, port: Int, key: String)
+case class PeerUnregister(host: String, port: Int, key: String)
 
-class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
+class PeerAPI(node: ConstellationNode, val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
   extends Json4sSupport with CommonEndpoints with BannedIPEnforcer {
+
+  override val parentNode = node
 
   implicit val serialization: Serialization.type = native.Serialization
 
@@ -85,12 +88,20 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
       }
     }
 
-  private val postEndpoints = {
+  private val postEndpoints =
     post {
       path ("deregister") {
-        entity(as[PeerAuthSignRequest]) { e =>
-          complete(hashSign(e.salt.toString, dao.keyPair))
-        }
+        extractClientIP { clientIP =>
+          entity(as[PeerUnregister]) { request =>
+            val maybeData = getHostAndPortFromRemoteAddress(clientIP)
+            maybeData match {
+              case Some(PeerIPData(host, portOption)) =>
+                dao.peerManager ! Deregistration(request.host, request.port, request.key)
+                complete(StatusCodes.OK)
+              case None =>
+                complete(StatusCodes.BadRequest)
+            }
+          }
       }
     } ~
       path("startConsensusRound") {

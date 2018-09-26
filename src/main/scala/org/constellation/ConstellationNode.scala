@@ -20,6 +20,7 @@ import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.APIClient
 
+import scala.collection.{Set, concurrent}
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
 object ConstellationNode extends App {
@@ -84,6 +85,30 @@ class ConstellationNode(val configKeyPair: KeyPair,
   val data = new Data()
   data.updateKeyPair(configKeyPair)
 
+  object IPManager {
+    private var bannedIPs: concurrent.Map[RemoteAddress, String] =
+      concurrent.TrieMap[RemoteAddress, String]()
+    //    val knownIPs: concurrent.Map[RemoteAddress, String] =
+    //      concurrent.TrieMap[RemoteAddress, String]()
+    private var knownIPs: Set[RemoteAddress] = Set()
+
+    def knownIP(addr: RemoteAddress): Boolean = {
+      knownIPs.contains(addr)
+    }
+
+    def bannedIP(addr: RemoteAddress): Boolean = {
+      bannedIPs.contains(addr)
+    }
+
+    def addKnownIp(addr: RemoteAddress) = {
+      knownIPs = knownIPs + addr
+    }
+
+    def removeKnownIp(addr: RemoteAddress) = {
+      knownIPs = knownIPs - addr
+    }
+  }
+
   import data._
   data.actorMaterializer = materialize
 
@@ -112,7 +137,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   )
 
   val peerManager: ActorRef = system.actorOf(
-    Props(new PeerManager()), s"PeerManager_$publicKeyHash"
+    Props(new PeerManager(this)), s"PeerManager_$publicKeyHash"
   )
 
   val cellManager: ActorRef = system.actorOf(
@@ -148,17 +173,26 @@ class ConstellationNode(val configKeyPair: KeyPair,
   // Setup http server for internal API
   val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
 
-  val peerAPI = new PeerAPI(data)
+  val peerAPI = new PeerAPI(this, data)
 
   val peerRoutes : Route = peerAPI.routes
 
-  def addAddressToKnownIPs(addr: ValidPeerIPData, s: String): Unit = {
+
+  seedPeers.foreach {
+    peer => IPManager.addKnownIp(RemoteAddress(peer))
+  }
+
+  def addAddressToKnownIPs(addr: ValidPeerIPData): Unit = {
     val remoteAddr = RemoteAddress(new InetSocketAddress(addr.canonicalHostName, addr.port))
-    peerAPI.knownIPs.put(remoteAddr, s)
+    IPManager.addKnownIp(remoteAddr)
   }
 
   def getIPData: ValidPeerIPData = {
     ValidPeerIPData(this.hostName, this.peerHttpPort)
+  }
+
+  def getInetSocketAddress: InetSocketAddress = {
+    new InetSocketAddress(this.hostName, this.peerHttpPort)
   }
 
   // Setup http server for peer API

@@ -12,6 +12,12 @@ import scalaj.http.{Http, HttpRequest, HttpResponse}
 
 import scala.concurrent.{ExecutionContext, Future}
 
+object APIClient {
+  def apply(host: String, port: Int)(implicit system: ActorSystem, materialize: ActorMaterializer) = {
+    new APIClient().setConnection(host, port)
+  }
+}
+
 class APIClient (
   implicit val system: ActorSystem,
   implicit val materialize: ActorMaterializer) {
@@ -99,6 +105,12 @@ class APIClient (
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
     val res: HttpResponse[String] = postSync(suffix, b)
     Serialization.read[T](res.body)
+  }
+
+  def postNonBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): Future[T] = {
+    post(suffix, b).map { res =>
+      Serialization.read[T](res.body)
+    }
   }
 
   def read[T <: AnyRef](res: HttpResponse[String])(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): T = {
