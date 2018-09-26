@@ -59,8 +59,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     val apis = nodes.map{_.getAPIClient()}
 
     val peerApis = nodes.map{ node => {
-      val n = node.getAPIClient()
-      n.apiPort = node.peerHttpPort
+      val n = node.getAPIClient(port = node.peerHttpPort)
       n
     }}
 

@@ -12,16 +12,16 @@ import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.CustomDirectives.BannedIPEnforcer
+import org.constellation.CustomDirectives.IPEnforcer
+import org.constellation.Data
 import org.constellation.LevelDB.DBGet
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote, StartConsensusRound}
 import org.constellation.consensus.EdgeProcessor.HandleTransaction
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{Deregistration, IncrementMetric, PendingRegistration}
+import org.constellation.primitives.{Deregistration, IPManager, IncrementMetric, PendingRegistration}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.CommonEndpoints
-import org.constellation.{ConstellationNode, Data}
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -32,10 +32,8 @@ case class PeerAuthSignRequest(salt: Long = Random.nextLong())
 case class PeerRegistrationRequest(host: String, port: Int, key: String)
 case class PeerUnregister(host: String, port: Int, key: String)
 
-class PeerAPI(node: ConstellationNode, val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
-  extends Json4sSupport with CommonEndpoints with BannedIPEnforcer {
-
-  override val parentNode = node
+class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
+  extends Json4sSupport with CommonEndpoints with IPEnforcer {
 
   implicit val serialization: Serialization.type = native.Serialization
 

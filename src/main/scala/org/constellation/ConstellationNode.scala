@@ -20,7 +20,6 @@ import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.APIClient
 
-import scala.collection.{Set, concurrent}
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
 object ConstellationNode extends App {
@@ -85,29 +84,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   val data = new Data()
   data.updateKeyPair(configKeyPair)
 
-  object IPManager {
-    private var bannedIPs: concurrent.Map[RemoteAddress, String] =
-      concurrent.TrieMap[RemoteAddress, String]()
-    //    val knownIPs: concurrent.Map[RemoteAddress, String] =
-    //      concurrent.TrieMap[RemoteAddress, String]()
-    private var knownIPs: Set[RemoteAddress] = Set()
-
-    def knownIP(addr: RemoteAddress): Boolean = {
-      knownIPs.contains(addr)
-    }
-
-    def bannedIP(addr: RemoteAddress): Boolean = {
-      bannedIPs.contains(addr)
-    }
-
-    def addKnownIp(addr: RemoteAddress) = {
-      knownIPs = knownIPs + addr
-    }
-
-    def removeKnownIp(addr: RemoteAddress) = {
-      knownIPs = knownIPs - addr
-    }
-  }
+  val ipManager = IPManager()
 
   import data._
   data.actorMaterializer = materialize
@@ -137,7 +114,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   )
 
   val peerManager: ActorRef = system.actorOf(
-    Props(new PeerManager(this)), s"PeerManager_$publicKeyHash"
+    Props(new PeerManager(ipManager)), s"PeerManager_$publicKeyHash"
   )
 
   val cellManager: ActorRef = system.actorOf(
@@ -173,18 +150,18 @@ class ConstellationNode(val configKeyPair: KeyPair,
   // Setup http server for internal API
   val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
 
-  val peerAPI = new PeerAPI(this, data)
+  val peerAPI = new PeerAPI(ipManager, data)
 
   val peerRoutes : Route = peerAPI.routes
 
 
   seedPeers.foreach {
-    peer => IPManager.addKnownIp(RemoteAddress(peer))
+    peer => ipManager.addKnownIp(RemoteAddress(peer))
   }
 
   def addAddressToKnownIPs(addr: ValidPeerIPData): Unit = {
     val remoteAddr = RemoteAddress(new InetSocketAddress(addr.canonicalHostName, addr.port))
-    IPManager.addKnownIp(remoteAddr)
+    ipManager.addKnownIp(remoteAddr)
   }
 
   def getIPData: ValidPeerIPData = {
@@ -212,16 +189,15 @@ class ConstellationNode(val configKeyPair: KeyPair,
   // TODO : Move to separate test class - these are within jvm only but won't hurt anything
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
-  def getAPIClient(): APIClient = {
-    val api = new APIClient().setConnection(host = hostName, port = httpPort)
+  def getAPIClient(host: String = hostName, port: Int = httpPort, udpPort: Int = udpPort): APIClient = {
+    val api = APIClient(host, port, udpPort)
     api.id = id
-    api.udpPort = udpPort
     api
   }
 
   def getAPIClientForNode(node: ConstellationNode): APIClient = {
     val ipData = node.getIPData
-    val api = new APIClient().setConnection(host = ipData.canonicalHostName, port = ipData.port)
+    val api = APIClient(host = ipData.canonicalHostName, port = ipData.port)
     api.id = id
     api
   }

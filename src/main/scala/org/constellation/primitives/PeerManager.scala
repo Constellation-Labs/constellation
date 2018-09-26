@@ -6,10 +6,10 @@ import akka.actor.{Actor, ActorSystem}
 import akka.http.scaladsl.model.RemoteAddress
 import akka.stream.ActorMaterializer
 import com.typesafe.scalalogging.Logger
+import org.constellation.AddPeerRequest
 import org.constellation.p2p.{PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.{APIClient, HashSignature}
-import org.constellation.{AddPeerRequest, ConstellationNode}
 
 import scala.collection.Set
 import scala.concurrent.ExecutionContext
@@ -22,7 +22,7 @@ case class Deregistration(ip: String, port: Int, key: String)
 
 case object GetPeerInfo
 
-class PeerManager(parentNode: ConstellationNode)(implicit val materialize: ActorMaterializer) extends Actor {
+class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMaterializer) extends Actor {
 
   val logger = Logger(s"PeerManager")
 
@@ -77,7 +77,7 @@ class PeerManager(parentNode: ConstellationNode)(implicit val materialize: Actor
         // For now -- let's assume successful response
 
         val remoteAddr = RemoteAddress(new InetSocketAddress(request.host, request.port))
-        parentNode.IPManager.addKnownIp(remoteAddr)
+        ipManager.addKnownIp(remoteAddr)
       }
 
 

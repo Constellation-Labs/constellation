@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directive0
 import akka.http.scaladsl.server.Directives._
 import com.google.common.util.concurrent.RateLimiter
+import org.constellation.primitives.IPManager
 
 object CustomDirectives {
 
@@ -29,14 +30,14 @@ object CustomDirectives {
       }
   }
 
-  trait BannedIPEnforcer {
+  trait IPEnforcer {
 
-    val parentNode: ConstellationNode
+    val ipManager: IPManager
 
 
     def rejectBannedIP: Directive0 = {
       extractClientIP flatMap { ip =>
-        if (parentNode.IPManager.knownIP(ip)) {
+        if (ipManager.bannedIP(ip)) {
           complete(StatusCodes.Forbidden)
         } else {
           pass
@@ -46,12 +47,10 @@ object CustomDirectives {
 
     def enforceKnownIP: Directive0 = {
       extractClientIP flatMap { ip =>
-        if (parentNode.IPManager.knownIP(ip)) {
+        if (ipManager.knownIP(ip)) {
           pass
         } else {
-          // Initiate signing flow
-
-          complete(StatusCodes.Forbidden)
+          complete(StatusCodes.custom(403, "ip unknown. Need to register using the /register endpoint."))
         }
       }
     }

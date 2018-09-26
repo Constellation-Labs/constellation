@@ -13,28 +13,24 @@ import scalaj.http.{Http, HttpRequest, HttpResponse}
 import scala.concurrent.{ExecutionContext, Future}
 
 object APIClient {
-  def apply(host: String, port: Int)(implicit system: ActorSystem, materialize: ActorMaterializer) = {
-    new APIClient().setConnection(host, port)
+  def apply(host: String = "127.0.0.1", port: Int, udpPort: Int = 16180)
+           (implicit system: ActorSystem, materialize: ActorMaterializer
+  ): APIClient = {
+    new APIClient(host, port)
   }
 }
 
-class APIClient (
+class APIClient(host: String = "127.0.0.1", port: Int)(
   implicit val system: ActorSystem,
   implicit val materialize: ActorMaterializer) {
 
   implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
 
-  var hostName: String = "127.0.0.1"
+  val hostName: String = host
   var id: Id = _
 
-  var udpPort: Int = 16180
-  var apiPort: Int = _
-
-  def setConnection(host: String = "127.0.0.1", port: Int): APIClient = {
-    hostName = host
-    apiPort = port
-    this
-  }
+  val udpPort: Int = 16180
+  val apiPort: Int = port
 
   def udpAddress: String = hostName + ":" + udpPort
 
