@@ -1,5 +1,6 @@
 package org.constellation.cluster
 
+import java.util.Timer
 import java.util.concurrent.{Executors, TimeUnit}
 
 import akka.actor.ActorSystem
@@ -7,6 +8,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import better.files.File
+import com.google.common.base.Stopwatch
 import org.constellation.ConstellationNode
 import org.constellation.util.{APIClient, Simulation, TestNode}
 
@@ -71,7 +73,12 @@ class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
     }
 
     // wip
-    while (!verifyCheckpointTips(sim, apis)) {
+
+    val stopWatch = Stopwatch.createStarted()
+    val elapsed = stopWatch.elapsed()
+
+    while (!verifyCheckpointTips(sim, apis) && elapsed.getSeconds <= 30) {
+
     }
 
     val checkpointTips = sim.getCheckpointTips(apis)
