@@ -12,12 +12,12 @@ import Validation.TransactionValidationStatus
 import akka.util.Timeout
 import EdgeProcessor._
 import com.typesafe.scalalogging.Logger
-import org.constellation.consensus.Consensus.{CheckpointVote, InitializeConsensusRound, RoundHash}
+import org.constellation.consensus.Consensus._
 import org.constellation.consensus.EdgeProcessor.HandleTransaction
 import org.constellation.primitives._
 import constellation._
-import scala.concurrent.duration._
 
+import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 import scala.util.Random
 import akka.pattern.ask
@@ -26,6 +26,7 @@ import akka.util.Timeout
 object EdgeProcessor {
 
   case class HandleTransaction(tx: Transaction)
+  case class HandleCheckpoint(checkpointBlock: CheckpointBlock)
 
   val logger = Logger(s"EdgeProcessor")
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
@@ -51,11 +52,6 @@ object EdgeProcessor {
 
       }
     }
-
-    // TODO: Validate the checkpoint to see if any there are any duplicate transactions
-    // Also need to register it with ldb ? To prevent duplicate processing ? Or after
-    // If there are duplicate transactions, do a score calculation relative to the other one to determine which to preserve.
-    // Potentially rolling back the other one.
 
     if (Resolve.resolveCheckpoint(dao, cb)) {
       dao.metricsManager ! IncrementMetric("resolvedCheckpointMessages")
@@ -363,10 +359,7 @@ object EdgeProcessor {
       val roundHash = RoundHash(obe.left.hash + obe.right.hash)
 
       // Start check pointing consensus round
-      dao.consensus ! InitializeConsensusRound(facilitators, roundHash, (result) => {
-        println(s"consensus round complete result roundHash = $roundHash, result = $result")
-        EdgeProcessor.handleCheckpoint(result.checkpointBlock, dao)
-      }, CheckpointVote(checkpointBlock))
+      dao.consensus ! ConsensusVote(dao.id, CheckpointVote(checkpointBlock), roundHash)
 
     }
   }
@@ -409,8 +402,7 @@ object EdgeProcessor {
 
 }
 
-class EdgeProcessor(keyPair: KeyPair, dao: Data)
-               (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
+class EdgeProcessor(dao: Data)(implicit timeout: Timeout, executionContext: ExecutionContext, keyPair: KeyPair) extends Actor with ActorLogging {
 
   implicit val sys: ActorSystem = context.system
   implicit val kp: KeyPair = keyPair
@@ -421,6 +413,11 @@ class EdgeProcessor(keyPair: KeyPair, dao: Data)
       log.debug(s"handle transaction = $transaction")
 
       handleTransaction(transaction, dao)
+
+    case ConsensusRoundResult(checkpointBlock: CheckpointBlock, roundHash: RoundHash[Checkpoint]) =>
+      log.debug(s"handle checkpointBlock = $checkpointBlock")
+
+      handleCheckpoint(checkpointBlock, dao)
     }
 
 }

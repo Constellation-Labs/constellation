@@ -8,7 +8,7 @@ import akka.testkit.{TestProbe, _}
 import org.constellation.Fixtures.{addPeerRequest, dummyTx, id}
 import org.constellation.LevelDB.DBGet
 import org.constellation.consensus.Validation.TransactionValidationStatus
-import org.constellation.consensus.{EdgeProcessor, TransactionProcessor, Validation}
+import org.constellation.consensus.{EdgeProcessor, Validation}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -28,6 +28,7 @@ class EdgeProcessorTest extends FlatSpec {
   val peerManager = TestProbe()
   val metricsManager = TestProbe()
   val dbActor = TestProbe()
+
   dbActor.setAutoPilot(new TestActor.AutoPilot {
     def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
       case DBGet(`srcHash`) =>
@@ -55,6 +56,7 @@ class EdgeProcessorTest extends FlatSpec {
     mockData.peerManager = peerManager.testActor
     mockData
   }
+
   val data = makeDao(mockData)
   val tx: Transaction = dummyTx(data)
   val invalidTx = dummyTx(data, -1L)
@@ -62,7 +64,6 @@ class EdgeProcessorTest extends FlatSpec {
   val txHash = tx.hash
   val invalidSpendHash = invalidTx.hash
   val randomPeer: (Id, PeerData) = (id, peerData)
-
 
   def getAPIClient(hostName: String, httpPort: Int) = {
     val api = new APIClient().setConnection(host = hostName, port = httpPort)
@@ -108,7 +109,6 @@ class EdgeProcessorTest extends FlatSpec {
     EdgeProcessor.updateMergeMemPool(tx, data)
     assert(data.transactionMemPool.contains(tx.hash))
   }
-
 
   "Observed valid incoming transactions" should "be merged into observation edges" in {
     val updated = data.transactionMemPool(tx.hash).plus(tx)

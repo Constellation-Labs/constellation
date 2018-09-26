@@ -1,28 +1,30 @@
 package org.constellation.cluster
 
-import java.util.concurrent.TimeUnit
+import java.util.Timer
+import java.util.concurrent.{Executors, TimeUnit}
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import better.files.File
-import org.constellation.util.{Simulation, TestNode}
+import com.google.common.base.Stopwatch
+import org.constellation.ConstellationNode
+import org.constellation.util.{APIClient, Simulation, TestNode}
 
 import scala.concurrent.duration._
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.forkjoin.ForkJoinPool
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, ExecutionContextExecutorService}
 import scala.util.Try
 
-class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem"))
-  with AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
-
-  override def afterAll {
-    TestKit.shutdownActorSystem(system)
-  }
+class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
   val tmpDir = "tmp"
+
+  implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
 
   override def beforeEach(): Unit = {
     // Cleanup DBs
@@ -34,17 +36,22 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
     File(tmpDir).delete()
   }
 
-  implicit val materialize: ActorMaterializer = ActorMaterializer()
-  implicit override val executionContext: ExecutionContextExecutor = system.dispatcher
+  def createNode(): ConstellationNode = {
+    implicit val executionContext: ExecutionContextExecutorService =
+      ExecutionContext.fromExecutorService(new ForkJoinPool(100))
+
+    TestNode()(materialize = materializer, system = system, executionContext = executionContext)
+  }
+
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
 
   "E2E Multiple Nodes DAG" should "add peers and build DAG with transactions" in {
 
     val totalNumNodes = 3
 
-    val n1 = TestNode(heartbeatEnabled = true, randomizePorts = false)
+    val n1 = createNode()
 
-    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(TestNode(heartbeatEnabled = true))
+    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(createNode())
 
     val apis = nodes.map{_.getAPIClient()}
 
@@ -65,18 +72,36 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
       txs = txs - 1
     }
 
-    /*
-    val probe = TestProbe()
+    // wip
 
-    within(1 hour) {
-      probe.expectMsg(1 hour, "a message")
+    val stopWatch = Stopwatch.createStarted()
+    val elapsed = stopWatch.elapsed()
+
+    while (!verifyCheckpointTips(sim, apis) && elapsed.getSeconds <= 30) {
+
     }
-    */
 
-    // TODO: add random transactions and verifications
- //   val checkpointTips = sim.getCheckpointTips(apis)
+    val checkpointTips = sim.getCheckpointTips(apis)
 
     assert(true)
+  }
+
+  def verifyCheckpointTips(sim: Simulation, apis: Seq[APIClient]): Boolean = {
+
+    val checkpointTips = sim.getCheckpointTips(apis)
+
+    val head = checkpointTips.head
+
+    if (head.size >= 1) {
+      val allEqual = checkpointTips.forall(f => {
+        val equal = f.keySet.diff(head.keySet).isEmpty
+        equal
+      })
+
+      allEqual
+    } else {
+      false
+    }
   }
 
 }

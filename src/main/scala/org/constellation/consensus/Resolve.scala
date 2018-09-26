@@ -33,6 +33,11 @@ object Resolve {
       return true
     }
 
+    println(s"checkpoint complete = $cb.baseHash")
+
+    // TODO: temp
+    dao.confirmedCheckpoints(cb.baseHash) = cb
+
     false
 
     /*

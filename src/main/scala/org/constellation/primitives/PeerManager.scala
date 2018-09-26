@@ -27,6 +27,7 @@ class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
       context become active(peerInfo + (id -> PeerData(a, client)))
 
     case APIBroadcast(func, skipIds, subset) =>
+      val replyTo = sender()
 
       val keys = if (subset.nonEmpty) peerInfo.filterKeys(subset.contains) else {
         peerInfo.filterKeys(id => !skipIds.contains(id))
@@ -37,10 +38,11 @@ class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
           id -> func(data.client)
       }
 
-      sender() ! result
+      replyTo ! result
 
     case GetPeerInfo => {
-      sender() ! peerInfo
+      val replyTo = sender()
+      replyTo ! peerInfo
     }
 
   }
