@@ -12,7 +12,7 @@ trait EdgeDAO {
 
   var genesisObservation: Option[GenesisObservation] = None
   val maxWidth = 30
-  val minCheckpointFormationThreshold = 30
+  val minCheckpointFormationThreshold = 100
   val minTXSignatureThreshold = 3
   val minCBSignatureThreshold = 3
   val maxUniqueTXSize = 500

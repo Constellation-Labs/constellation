@@ -41,7 +41,7 @@ class RandomTransactionManager(dao: Data)(
       if (dao.transactionMemPool.size < 1000) {
         val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
 
-        Seq.fill(10)(0).foreach { _ =>
+        Seq.fill(200)(0).par.foreach { _ =>
 
           // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
           // this is super easy, just combine the hashes with ID hashes and take the max with BigInt

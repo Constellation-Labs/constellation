@@ -58,7 +58,7 @@ class MultiNodeDAGTest extends TestKit(ActorSystem("TestConstellationActorSystem
 
     sim.run(apis = apis, peerApis = peerApis)
 
-    Thread.sleep(5000*60*60)
+   // Thread.sleep(5000*60*60)
 /*
 
     var txs = 3

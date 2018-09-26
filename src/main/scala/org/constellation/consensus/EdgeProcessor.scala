@@ -108,6 +108,7 @@ object EdgeProcessor {
                   // resolveAncestryConflict(cb)
                 }
               }
+              // Check if parent tips are valid to merge.
             }
 
           }
