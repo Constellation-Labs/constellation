@@ -21,7 +21,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, GetMetrics, Schema, UpdateMetric}
+import org.constellation.primitives._
 import org.constellation.util.{Metrics, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
@@ -116,7 +116,8 @@ class API(udpAddress: InetSocketAddress,
             complete(StatusCodes.OK)
           } ~
           path("peers") {
-            complete(Peers(peerIPs.toSeq))
+            val res = (data.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].getOpt().getOrElse(Map())
+            complete(res)
           } ~
           path("peerids") {
             complete(peers.map {
