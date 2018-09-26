@@ -29,7 +29,7 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
     val rpc = new APIClient().setConnection(port = node2.httpPort)
 
-    Thread.sleep(2000)
+    Thread.sleep(20000)
 
     val actualPeers = rpc.getBlocking[Peers]("peers")
 

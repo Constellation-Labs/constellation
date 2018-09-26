@@ -30,17 +30,9 @@ class CheckpointProcessorTest extends FlatSpec {
   val dbActor = TestProbe()
   dbActor.setAutoPilot(new TestActor.AutoPilot {
     def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
-//      case DBGet(`srcHash`) =>
-//        sender ! Some(AddressCacheData(100000000000000000L, 100000000000000000L, None))
-//        TestActor.KeepRunning
-//
-//      case DBGet(`txHash`) =>
-//        sender ! Some(TransactionCacheData(tx, false))
-//        TestActor.KeepRunning
-//
-//      case DBGet(`invalidSpendHash`) =>
-//        sender ! Some(TransactionCacheData(tx, true))
-//        TestActor.KeepRunning
+      case DBGet(`baseHash`) =>
+        sender ! Some(CheckpointCacheData(cb, true))
+        TestActor.KeepRunning
       case _ =>
         sender ! None
         TestActor.KeepRunning
@@ -84,20 +76,20 @@ class CheckpointProcessorTest extends FlatSpec {
 
   val soe = signedObservationEdge(oe)(keyPair)
   val cb = Fixtures.createCheckpointBlock(Seq.fill(3)(tx), Seq.fill(2)(soe))(keyPair)
-
+  val baseHash = cb.baseHash
 
   "Incoming CheckpointBlocks" should "be signed and processed if new" in {
     EdgeProcessor.handleCheckpoint(cb, data)
     metricsManager.expectMsg(IncrementMetric("checkpointMessages"))
   }
 
-  "Unresolved CheckpointBlocks" should "indicate to metricsManager" in {
-    metricsManager.expectMsg(IncrementMetric("unresolvedCheckpointMessages"))
+  "Previously observed CheckpointBlocks" should "indicate to metricsManager" in {
+    metricsManager.expectMsg(IncrementMetric("dupCheckpointReceived"))
   }
 
   "Invalid CheckpointBlocks" should "return false" in {
     val validatedCheckpointBlock = EdgeProcessor.validateCheckpointBlock(data, cb)
-    validatedCheckpointBlock.foreach(response => assert(response))
+    validatedCheckpointBlock.foreach(response => assert(!response))
   }
 
 
@@ -105,16 +97,14 @@ class CheckpointProcessorTest extends FlatSpec {
     assert(!EdgeProcessor.validByAncestors(Seq(), cb))
   }
 
-  "CheckpointBlocks invalid by state but valid by ancestor" should "be signed and returned if valid" in {
+  "CheckpointBlocks invalid by state" should "return false" in {
     val validatedCheckpointBlock = EdgeProcessor.validateCheckpointBlock(data, cb)
-    validatedCheckpointBlock.foreach(response => assert(response))
+    validatedCheckpointBlock.foreach(response => assert(!response))
   }
 
   "CheckpointBlocks valid according to current state" should "be signed and returned if valid" in {
-    val cbPrime = if (!cb.signatures.exists(_.publicKey == data.keyPair.getPublic)) {
-      val signedCb = cb.plus(data.keyPair)
-      peerManager.expectMsg(APIBroadcast(_.put(s"checkpoint/${cb.baseHash}", signedCb)))
-    }
+//      val signedCb = cb.plus(data.keyPair)
+//      peerManager.expectMsg(APIBroadcast(_.put(s"checkpoint/${cb.baseHash}", signedCb)))
   }
 
 

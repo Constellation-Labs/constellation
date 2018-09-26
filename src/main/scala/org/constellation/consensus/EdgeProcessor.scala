@@ -263,7 +263,7 @@ object EdgeProcessor {
 
       val takenTX = checkpointEdgeProposal.transactionsUsed.map{dao.transactionMemPool}
 
-      // TODO: move to mem pool servictransactionMemPoole
+      // TODO: move to mem pool servictransactionMemPool
       // Remove used transactions from memPool
       checkpointEdgeProposal.transactionsUsed.foreach{dao.transactionMemPool.remove}
 
