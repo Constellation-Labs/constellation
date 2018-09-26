@@ -40,7 +40,7 @@ object EdgeProcessor {
   }
 
   def validByAncestors(transactions: Seq[TransactionValidationStatus], cb: CheckpointBlock): Boolean =
-    transactions.forall { s: TransactionValidationStatus =>
+    transactions.nonEmpty && transactions.forall { s: TransactionValidationStatus =>
       cb.checkpoint.edge.parentHashes.forall { ancestorHash =>
         s.validByAncestor(ancestorHash)
     }
@@ -80,7 +80,8 @@ object EdgeProcessor {
     val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes
       .map { h => dao.hashToSignedObservationEdgeCache(h).map{h -> _} }
     )
-    cache.foreach { checkpointCacheData: Option[CheckpointCacheData] =>
+    cache.foreach {
+      checkpointCacheData: Option[CheckpointCacheData] =>
       if (checkpointCacheData.isDefined) {
         checkpointCacheData.foreach(handleDupTx(_, cb, dao))
       }
@@ -421,7 +422,7 @@ object EdgeProcessor {
                                     tips: Seq[SignedObservationEdge],
                                   )(implicit keyPair: KeyPair): CreateCheckpointEdgeResponse = {
 
-    val transactionsUsed = transactionMemPoolThresholdMet.take(minCheckpointFormationThreshold)
+    val transactionsUsed: Set[String] = transactionMemPoolThresholdMet.take(minCheckpointFormationThreshold)
     val updatedTransactionMemPoolThresholdMet = transactionMemPoolThresholdMet -- transactionsUsed
 
     val checkpointEdgeData = CheckpointEdgeData(transactionsUsed.toSeq.sorted)

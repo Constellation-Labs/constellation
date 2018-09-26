@@ -5,13 +5,14 @@ import java.security.KeyPair
 import akka.actor.{ActorRef, ActorSystem}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActor, TestProbe}
+import constellation.signedObservationEdge
 import org.constellation.Fixtures.{addPeerRequest, dummyTx, id}
 import org.constellation.LevelDB.DBGet
 import org.constellation.consensus.EdgeProcessor
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.{APIBroadcast, IncrementMetric, PeerData}
-import org.constellation.primitives.Schema.{AddressCacheData, Id, Transaction, TransactionCacheData}
+import org.constellation.primitives.Schema._
 import org.constellation.util.APIClient
 import org.scalatest.FlatSpec
 
@@ -29,16 +30,19 @@ class CheckpointProcessorTest extends FlatSpec {
   val dbActor = TestProbe()
   dbActor.setAutoPilot(new TestActor.AutoPilot {
     def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
-      case DBGet(`srcHash`) =>
-        sender ! Some(AddressCacheData(100000000000000000L, 100000000000000000L, None))
-        TestActor.KeepRunning
-
-      case DBGet(`txHash`) =>
-        sender ! Some(TransactionCacheData(tx, false))
-        TestActor.KeepRunning
-
-      case DBGet(`invalidSpendHash`) =>
-        sender ! Some(TransactionCacheData(tx, true))
+//      case DBGet(`srcHash`) =>
+//        sender ! Some(AddressCacheData(100000000000000000L, 100000000000000000L, None))
+//        TestActor.KeepRunning
+//
+//      case DBGet(`txHash`) =>
+//        sender ! Some(TransactionCacheData(tx, false))
+//        TestActor.KeepRunning
+//
+//      case DBGet(`invalidSpendHash`) =>
+//        sender ! Some(TransactionCacheData(tx, true))
+//        TestActor.KeepRunning
+      case _ =>
+        sender ! None
         TestActor.KeepRunning
     }
   })
@@ -70,24 +74,36 @@ class CheckpointProcessorTest extends FlatSpec {
   }
 
   val bogusTxValidStatus = TransactionValidationStatus(tx, None, None)
-  val cb = Fixtures.dummyCheckpointBlock(data)
+  val ced = CheckpointEdgeData(Seq(tx.edge.signedObservationEdge.signatureBatch.hash))
+
+  val oe = ObservationEdge(
+    TypedEdgeHash(tx.baseHash, EdgeHashType.CheckpointHash),
+    TypedEdgeHash(tx.baseHash, EdgeHashType.CheckpointHash),
+    data = Some(TypedEdgeHash(ced.hash, EdgeHashType.CheckpointDataHash))
+  )
+
+  val soe = signedObservationEdge(oe)(keyPair)
+  val cb = Fixtures.createCheckpointBlock(Seq.fill(3)(tx), Seq.fill(2)(soe))(keyPair)
+
 
   "Incoming CheckpointBlocks" should "be signed and processed if new" in {
     EdgeProcessor.handleCheckpoint(cb, data)
+    metricsManager.expectMsg(IncrementMetric("checkpointMessages"))
   }
 
-  "Previously observed incoming CheckpointBlocks" should "be handled internally" in {
-    metricsManager.expectMsg(IncrementMetric("dupCheckpointReceived"))
+  "Unresolved CheckpointBlocks" should "indicate to metricsManager" in {
+    metricsManager.expectMsg(IncrementMetric("unresolvedCheckpointMessages"))
   }
 
-  "CheckpointBlocks valid by state" should "return true" in {
+  "Invalid CheckpointBlocks" should "return false" in {
     val validatedCheckpointBlock = EdgeProcessor.validateCheckpointBlock(data, cb)
-    validatedCheckpointBlock.foreach(response => assert(response))  }
-
-  "CheckpointBlocks valid by ancestry" should "return true" in {
-    EdgeProcessor.validByAncestors(Seq(), cb)
+    validatedCheckpointBlock.foreach(response => assert(response))
   }
 
+
+  "CheckpointBlocks invalid by ancestry" should "return false" in {
+    assert(!EdgeProcessor.validByAncestors(Seq(), cb))
+  }
 
   "CheckpointBlocks invalid by state but valid by ancestor" should "be signed and returned if valid" in {
     val validatedCheckpointBlock = EdgeProcessor.validateCheckpointBlock(data, cb)

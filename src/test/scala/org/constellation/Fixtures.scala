@@ -8,7 +8,7 @@ import constellation._
 import org.constellation.consensus.EdgeProcessor.createCheckpointEdgeProposal
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.{PeerData, Schema}
-import org.constellation.primitives.Schema.{CheckpointBlock, Id, Peer, SendToAddress}
+import org.constellation.primitives.Schema._
 import org.constellation.util.{APIClient, Signed, TestNode}
 
 import scala.util.Random
@@ -57,7 +57,7 @@ object Fixtures {
   }
 
   def dummyCheckpointBlock(dao: Data) = {
-    val tips = Random.shuffle(dao.checkpointMemPoolThresholdMet.toSeq).take(2)
+    val tips: Seq[(String, Int)] = Random.shuffle(dao.checkpointMemPoolThresholdMet.toSeq).take(2)
     val tipSOE = tips.map {_._1}.map {dao.checkpointMemPool}.map {
       _.checkpoint.edge.signedObservationEdge
     }
@@ -68,5 +68,25 @@ object Fixtures {
     )(dao.keyPair)
     val takenTX = checkpointEdgeProposal.transactionsUsed.map{dao.transactionMemPool}
     CheckpointBlock(takenTX.toSeq, checkpointEdgeProposal.checkpointEdge)
+  }
+
+  def createCheckpointBlock(transactions: Seq[Transaction], tips: Seq[SignedObservationEdge])
+                           (implicit keyPair: KeyPair): CheckpointBlock = {
+
+    val checkpointEdgeData = CheckpointEdgeData(transactions.map{_.hash}.sorted)
+
+    val observationEdge = ObservationEdge(
+      TypedEdgeHash(tips.head.hash, EdgeHashType.CheckpointHash),
+      TypedEdgeHash(tips(1).hash, EdgeHashType.CheckpointHash),
+      data = Some(TypedEdgeHash(checkpointEdgeData.hash, EdgeHashType.CheckpointDataHash))
+    )
+
+    val soe = signedObservationEdge(observationEdge)(keyPair)
+
+    val checkpointEdge = CheckpointEdge(
+      Edge(observationEdge, soe, ResolvedObservationEdge(tips.head, tips(1), Some(checkpointEdgeData)))
+    )
+
+    CheckpointBlock(transactions, checkpointEdge)
   }
 }
