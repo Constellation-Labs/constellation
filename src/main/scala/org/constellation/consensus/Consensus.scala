@@ -15,6 +15,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Signed
 
+import scala.collection.concurrent.TrieMap
 import scala.collection.immutable.HashMap
 import scala.concurrent.ExecutionContext
 
@@ -38,6 +39,9 @@ object Consensus {
   case class RoundHash[+T <: CC](hash: String)
 
   trait RemoteMessage
+
+  val gossipedVotes: TrieMap[String, Set[Id]] = TrieMap()
+  val gossipedProposals: TrieMap[String, Set[Id]] = TrieMap()
 
   case class ConsensusVote[+T <: CC](id: Id, data: VoteData[T], roundHash: RoundHash[T]) extends RemoteMessage
   case class ConsensusProposal[+T <: CC](id: Id, data: ProposalData[T], roundHash: RoundHash[T]) extends RemoteMessage
@@ -92,8 +96,6 @@ object Consensus {
     }
 
     val updatedRoundStates = consensusRoundState.roundStates + (roundHash -> updatedRoundState)
-
-    println(s"peer = ${peer.b58}, self = ${consensusRoundState.dao.id.b58}, roundHash = $roundHash")
 
     consensusRoundState.copy(roundStates = updatedRoundStates)
   }
@@ -154,13 +156,13 @@ object Consensus {
     // TODO: update to use proper facilitator filtering
     val facilitators = getFacilitators(consensusRoundState.dao)
 
-    val firstTimeObservingVote = !consensusRoundState.roundStates.contains(roundHash) || !consensusRoundState.roundStates(roundHash).votes.contains(peer)
-
     // TODO
     // check signature to see if we have already signed this before or some max depth,
     // if not then broadcast
+    if (!gossipedVotes.contains(roundHash.hash) || !gossipedVotes.get(roundHash.hash).contains(peer)) {
+      val votes = gossipedVotes.getOrElseUpdate(roundHash.hash, Set())
+      gossipedVotes(roundHash.hash) = votes.+(peer)
 
-    if (firstTimeObservingVote) {
       notifyFacilitatorsOfMessage(facilitators, selfId, consensusRoundState.dao,
         ConsensusVote(peer, vote, roundHash), "checkpointEdgeVote")
     }
@@ -204,9 +206,6 @@ object Consensus {
                                proposal: ProposalData[T],
                                roundHash: RoundHash[T])(implicit keyPair: KeyPair, system: ActorSystem, timeout: Timeout): ConsensusRoundState = {
 
-    // TODO: make based on signature instead
-    val firstTimeObservingProposal = !consensusRoundState.roundStates.contains(roundHash) || !consensusRoundState.roundStates(roundHash).proposals.contains(peer)
-
     var updatedState = updateRoundCache(consensusRoundState, peer, roundHash, proposal)
 
     // TODO: update to use proper facilitator filtering
@@ -214,16 +213,16 @@ object Consensus {
 
     val selfId = updatedState.selfId.get
 
-    if (firstTimeObservingProposal) {
-      println(s"first time observing vote for proposal = $peer")
+    if (!gossipedProposals.contains(roundHash.hash) || !gossipedProposals.get(roundHash.hash).contains(peer)) {
+      val proposals = gossipedProposals.getOrElseUpdate(roundHash.hash, Set())
+
+      gossipedVotes(roundHash.hash) = proposals.+(peer)
 
       notifyFacilitatorsOfMessage(facilitators,
         selfId, consensusRoundState.dao, ConsensusProposal(peer, proposal, roundHash), "checkpointEdgeProposal")
     }
 
     if (peerThresholdMet(updatedState, roundHash, facilitators.+(selfId))(_.proposals)) {
-      val roundState = getCurrentRoundState(updatedState, roundHash)
-
       // get the consensus bundle
       val bundle = getConsensusBundle(updatedState, roundHash)
 
