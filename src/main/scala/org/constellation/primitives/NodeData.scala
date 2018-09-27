@@ -24,7 +24,7 @@ trait NodeData {
   var minGenesisDistrSize: Int = 3
   @volatile var downloadMode: Boolean = true
   @volatile var downloadInProgress: Boolean = false
-  var generateRandomTX: Boolean = true
+  var generateRandomTX: Boolean = false
 
   var lastConfirmationUpdateTime: Long = System.currentTimeMillis()
 

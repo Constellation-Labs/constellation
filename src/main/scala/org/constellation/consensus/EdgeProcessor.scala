@@ -12,7 +12,7 @@ import Validation.TransactionValidationStatus
 import akka.util.Timeout
 import EdgeProcessor._
 import com.typesafe.scalalogging.Logger
-import org.constellation.consensus.Consensus.{CheckpointVote, InitializeConsensusRound, RoundHash}
+import org.constellation.consensus.Consensus._
 import org.constellation.consensus.EdgeProcessor.HandleTransaction
 import org.constellation.primitives._
 import constellation._
@@ -26,6 +26,7 @@ import akka.util.Timeout
 object EdgeProcessor {
 
   case class HandleTransaction(tx: Transaction)
+  case class HandleCheckpoint(checkpointBlock: CheckpointBlock)
 
   val logger = Logger(s"EdgeProcessor")
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
@@ -428,10 +429,11 @@ object EdgeProcessor {
       val roundHash = RoundHash(obe.left.hash + obe.right.hash)
 
       // Start check pointing consensus round
-      dao.consensus ! InitializeConsensusRound(facilitators, roundHash, (result) => {
+/*      dao.consensus ! InitializeConsensusRound(facilitators, roundHash, (result) => {
         println(s"consensus round complete result roundHash = $roundHash, result = $result")
         EdgeProcessor.handleCheckpoint(result.checkpointBlock, dao)
-      }, CheckpointVote(checkpointBlock))
+      }, CheckpointVote(checkpointBlock))*/
+      dao.consensus ! ConsensusVote(dao.id, CheckpointVote(checkpointBlock), roundHash)
 
     }
   }
@@ -549,11 +551,11 @@ object EdgeProcessor {
 
 }
 
-class EdgeProcessor(keyPair: KeyPair, dao: Data)
+class EdgeProcessor(dao: Data)
                    (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
 
   implicit val sys: ActorSystem = context.system
-  implicit val kp: KeyPair = keyPair
+  implicit val kp: KeyPair = dao.keyPair
 
   def receive: Receive = {
 
@@ -561,6 +563,11 @@ class EdgeProcessor(keyPair: KeyPair, dao: Data)
       log.debug(s"handle transaction = $transaction")
 
       handleTransaction(transaction, dao)
+
+    case ConsensusRoundResult(checkpointBlock: CheckpointBlock, roundHash: RoundHash[Checkpoint]) =>
+      log.debug(s"handle checkpointBlock = $checkpointBlock")
+
+      handleCheckpoint(checkpointBlock, dao)
   }
 
 }

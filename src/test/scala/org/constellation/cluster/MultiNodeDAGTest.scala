@@ -36,11 +36,11 @@ class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
     File(tmpDir).delete()
   }
 
-  def createNode(): ConstellationNode = {
+  def createNode(randomizePorts: Boolean = true): ConstellationNode = {
     implicit val executionContext: ExecutionContextExecutorService =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
-    TestNode()(materialize = materializer, system = system, executionContext = executionContext)
+    TestNode(randomizePorts = randomizePorts)(materialize = materializer, system = system, executionContext = executionContext)
   }
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
@@ -49,7 +49,7 @@ class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
 
     val totalNumNodes = 3
 
-    val n1 = createNode()
+    val n1 = createNode(randomizePorts = false)
 
     val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(createNode())
 
@@ -65,7 +65,7 @@ class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
 
     sim.run(apis = apis, peerApis = peerApis)
 
-    Thread.sleep(5000*60*60)
+    // Thread.sleep(5000*60*60)
 /*
 
     var txs = 3
@@ -77,7 +77,7 @@ class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
 */
 
     // wip
-
+/*
     val stopWatch = Stopwatch.createStarted()
     val elapsed = stopWatch.elapsed()
 
@@ -85,7 +85,7 @@ class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
 
     }
 
-    val checkpointTips = sim.getCheckpointTips(apis)
+    val checkpointTips = sim.getCheckpointTips(apis)*/
 
     assert(true)
   }

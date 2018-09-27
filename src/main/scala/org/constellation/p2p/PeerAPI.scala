@@ -28,7 +28,7 @@ import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote, 
 import org.constellation.consensus.EdgeProcessor.HandleTransaction
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.serializer.KryoSerializer
-import org.constellation.consensus.{EdgeProcessor, TransactionProcessor, Validation}
+import org.constellation.consensus.{EdgeProcessor, Validation}
 import org.constellation.p2p.PeerAPI.EdgeResponse
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -92,28 +92,20 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
           complete(hashSign(e.salt.toString, dao.keyPair))
         }
       } ~
-      path("startConsensusRound") {
+      path("checkpointEdgeVote") {
         entity(as[Array[Byte]]) { e =>
-          Future {
-            val message = KryoSerializer.deserialize(e).asInstanceOf[StartConsensusRound[Consensus.Checkpoint]]
+            val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusVote[Consensus.Checkpoint]]
 
-            logger.debug(s"start consensus round endpoint, $message")
-
-            dao.consensus ! ConsensusVote(message.id, message.data, message.roundHash)
-          }
+            dao.consensus ! message
 
           complete(StatusCodes.OK)
         }
       } ~
       path("checkpointEdgeProposal") {
         entity(as[Array[Byte]]) { e =>
-          Future {
             val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusProposal[Consensus.Checkpoint]]
 
-            logger.debug(s"checkpoint edge proposal endpoint, $message")
-
-            dao.consensus ! ConsensusProposal(message.id, message.data, message.roundHash)
-          }
+            dao.consensus ! message
 
           complete(StatusCodes.OK)
         }
@@ -140,13 +132,13 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
         }
       } ~
       get {
-        val memPoolPresence = dao.transactionMemPoolMultiWitness.get(s)
-        val response = memPoolPresence.map { t =>
-          TransactionQueryResponse(s, Some(t), inMemPool = true, inDAG = false, None)
-        }.getOrElse{
+        val memPoolPresence = dao.transactionMemPool.exists(_.hash == s)
+        val response = if (memPoolPresence) {
+          TransactionQueryResponse(s, dao.transactionMemPool.collectFirst{case x if x.hash == s => x}, inMemPool = true, inDAG = false, None)
+        } else {
           (dao.dbActor ? DBGet(s)).mapTo[Option[TransactionCacheData]].get().map{
             cd =>
-              TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence.nonEmpty, cd.inDAG, cd.cbBaseHash)
+              TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence, cd.inDAG, cd.cbBaseHash)
           }.getOrElse{
             TransactionQueryResponse(s, None, inMemPool = false, inDAG = false, None)
           }
