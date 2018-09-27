@@ -1,16 +1,21 @@
 package org.constellation.primitives
 
+import java.security.KeyPair
+
 import org.constellation.primitives.Schema._
 import constellation._
 import org.constellation.LevelDB.DBPut
 
 import scala.collection.concurrent.TrieMap
 
-trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
+
+object Genesis {
 
   val CoinBaseHash = "coinbase"
 
-  def createDistribution(ids: Seq[Id], genesisSOE: SignedObservationEdge): CheckpointBlock = {
+  def createDistribution(
+                          selfAddressStr: String, ids: Seq[Id], genesisSOE: SignedObservationEdge, keyPair: KeyPair
+                        ): CheckpointBlock = {
 
     val distr = ids.map{ id =>
       createTransaction(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
@@ -24,7 +29,7 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
       data = Some(TypedEdgeHash(distrCB.hash, EdgeHashType.CheckpointDataHash))
     )
 
-    val distrSOE = signedObservationEdge(distrOE)
+    val distrSOE = signedObservationEdge(distrOE)(keyPair)
 
     val distrROE = ResolvedObservationEdge(genesisSOE, genesisSOE, Some(distrCB))
 
@@ -40,7 +45,7 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
     * @param ids: Initial node public keys
     * @return : Resolved edges for state update
     */
-  def createGenesisAndInitialDistribution(ids: Set[Id]): GenesisObservation = {
+  def createGenesisAndInitialDistributionDirect(selfAddressStr: String, ids: Set[Id], keyPair: KeyPair): GenesisObservation = {
 
     val debtAddress = makeKeyPair().address.address
 
@@ -56,7 +61,7 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
       data = Some(TypedEdgeHash(cb.hash, EdgeHashType.CheckpointDataHash))
     )
 
-    val soe = signedObservationEdge(oe)
+    val soe = signedObservationEdge(oe)(keyPair)
 
     val roe = ResolvedObservationEdge(
       null.asInstanceOf[SignedObservationEdge],
@@ -68,10 +73,20 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
 
     val genesisCBO = CheckpointBlock(Seq(redTXGenesisResolved), CheckpointEdge(redGenesis))
 
-    val distr1CBO = createDistribution(ids.toSeq, soe)
-    val distr2CBO = createDistribution(ids.toSeq, soe)
+    val distr1CBO = createDistribution(selfAddressStr, ids.toSeq, soe, keyPair)
+    val distr2CBO = createDistribution(selfAddressStr, ids.toSeq, soe, keyPair)
 
     GenesisObservation(genesisCBO, distr1CBO, distr2CBO)
+  }
+
+}
+
+import Genesis._
+
+trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
+
+  def createGenesisAndInitialDistribution(ids: Set[Id]): GenesisObservation = {
+    createGenesisAndInitialDistributionDirect(selfAddressStr, ids, keyPair)
   }
 
   def acceptGenesis(go: GenesisObservation): Unit = {

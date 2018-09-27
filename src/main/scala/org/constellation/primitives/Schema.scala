@@ -351,7 +351,7 @@ object Schema {
   }
 
   case class CheckpointCacheData(
-                                  checkpointBlock: CheckpointBlock,
+                                  checkpointBlock: CheckpointBlock, // this is the primary tip hash of current state
                                   inDAG: Boolean = false,
                                   resolved: Boolean = false,
                                   resolutionInProgress: Boolean = false,
@@ -359,7 +359,8 @@ object Schema {
                                   lastResolveAttempt: Option[Long] = None,
                                   rxTime: Long = System.currentTimeMillis(), // TODO: Unify common metadata like this
                                   children: Set[String] = Set(),
-                                  forkChildren: Set[String] = Set()
+                                  forkChildren: Set[String] = Set(),
+                                  forkTipHashes: Set[String] = Set(),
                                 ) {
 
     def plus(previous: CheckpointCacheData): CheckpointCacheData = {
@@ -408,6 +409,8 @@ object Schema {
     def parentSOE = Seq(resolvedOE.left, resolvedOE.right)
 
     def parentSOEBaseHashes: Seq[String] = parentSOE.map{_.baseHash}
+
+    def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
   }
 

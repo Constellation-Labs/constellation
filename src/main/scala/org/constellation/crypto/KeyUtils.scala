@@ -7,6 +7,7 @@ import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedK
 import java.security.{SecureRandom, _}
 import java.util.{Base64, Date}
 
+import org.constellation.primitives.Schema.Id
 import org.constellation.util.EncodedPublicKey
 import org.json4s.JsonAST.JString
 import org.json4s.{CustomSerializer, Formats, JObject}
@@ -343,6 +344,7 @@ trait KeyUtilsExt {
     // Conflict with old schema, add later
     //  def address: Address = pubKeyToAddress(publicKey)
     def encoded: EncodedPublicKey = EncodedPublicKey(Base58.encode(publicKey.getEncoded))
+    def toId: Id = encoded.toId
   }
 
 

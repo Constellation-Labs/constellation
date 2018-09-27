@@ -95,6 +95,7 @@ case class SignatureBatch(
 
 case class EncodedPublicKey(b58Encoded: String) {
   def toPublicKey: PublicKey = bytesToPublicKey(Base58.decode(b58Encoded))
+  def toId = Id(this)
 }
 
 // TODO: Move POW to separate class for rate liming.
