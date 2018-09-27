@@ -28,7 +28,7 @@ import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote, 
 import org.constellation.consensus.EdgeProcessor.HandleTransaction
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.serializer.KryoSerializer
-import org.constellation.consensus.{EdgeProcessor, TransactionProcessor, Validation}
+import org.constellation.consensus.{EdgeProcessor, Validation}
 import org.constellation.p2p.PeerAPI.EdgeResponse
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -92,28 +92,20 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
           complete(hashSign(e.salt.toString, dao.keyPair))
         }
       } ~
-      path("startConsensusRound") {
+      path("checkpointEdgeVote") {
         entity(as[Array[Byte]]) { e =>
-          Future {
-            val message = KryoSerializer.deserialize(e).asInstanceOf[StartConsensusRound[Consensus.Checkpoint]]
+            val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusVote[Consensus.Checkpoint]]
 
-            logger.debug(s"start consensus round endpoint, $message")
-
-            dao.consensus ! ConsensusVote(message.id, message.data, message.roundHash)
-          }
+            dao.consensus ! message
 
           complete(StatusCodes.OK)
         }
       } ~
       path("checkpointEdgeProposal") {
         entity(as[Array[Byte]]) { e =>
-          Future {
             val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusProposal[Consensus.Checkpoint]]
 
-            logger.debug(s"checkpoint edge proposal endpoint, $message")
-
-            dao.consensus ! ConsensusProposal(message.id, message.data, message.roundHash)
-          }
+            dao.consensus ! message
 
           complete(StatusCodes.OK)
         }
@@ -125,16 +117,11 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
       put {
         entity(as[Transaction]) {
           tx =>
-            Future {
-              /*
-                Future {
-              dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
-              EdgeProcessor.handleTransaction(tx, dao)(dao.edgeExecutionContext)
-            }(dao.edgeExecutionContext)
-               */
-              logger.debug(s"transaction endpoint, $tx")
-              dao.edgeProcessor ! HandleTransaction(tx)
-            }
+            dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
+
+            logger.debug(s"transaction endpoint, $tx")
+
+            dao.edgeProcessor ! HandleTransaction(tx)
 
             complete(StatusCodes.OK)
         }
@@ -159,9 +146,7 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
       put {
         entity(as[CheckpointBlock]) {
           cb =>
-            Future{
-              EdgeProcessor.handleCheckpoint(cb, dao)(dao.edgeExecutionContext)
-            }(dao.edgeExecutionContext)
+            EdgeProcessor.handleCheckpoint(cb, dao)
             complete(StatusCodes.OK)
         }
       } ~

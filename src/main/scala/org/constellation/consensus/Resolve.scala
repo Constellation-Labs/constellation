@@ -24,9 +24,14 @@ object Resolve {
     * @return
     */
   def resolveCheckpoint(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): Future[Boolean] = {
+
+    // TODO: temp
+    dao.confirmedCheckpoints(cb.baseHash) = cb
+
     val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes
       .map { h => dao.hashToSignedObservationEdgeCache(h).map{h -> _} }
     )
+
     parentCache.map { cache: Seq[(String, Option[SignedObservationEdgeCache])] =>
         cache.map { case (parentHash, oECache: Option[SignedObservationEdgeCache]) =>
           val isMissing = parentHash.isEmpty && !dao.resolveNotifierCallbacks.contains(parentHash)

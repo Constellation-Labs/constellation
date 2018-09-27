@@ -374,7 +374,6 @@ object Schema {
 
   case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
 
-
   case class CheckpointBlock(
                               transactions: Seq[Transaction],
                               checkpoint: CheckpointEdge
