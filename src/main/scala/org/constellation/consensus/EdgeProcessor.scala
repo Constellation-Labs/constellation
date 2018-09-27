@@ -85,7 +85,7 @@ object EdgeProcessor {
     cache.foreach {
       checkpointCacheData: Option[CheckpointCacheData] =>
       if (checkpointCacheData.isDefined) {
-        checkpointCacheData.foreach(handleDupTx(_, cb, dao))
+        checkpointCacheData.foreach(handleDuplicateTransactions(_, cb, dao))
       }
       else {
         Resolve.resolveCheckpoint(dao, cb).map { r =>
@@ -110,30 +110,31 @@ object EdgeProcessor {
       }
     }
   }
-    def handleDupTx(ca: CheckpointCacheData, cb: CheckpointBlock, dao: Data) = {
-      dao.metricsManager ! IncrementMetric("dupCheckpointReceived")
-      if (ca.resolved) {
-        if (ca.inDAG) {
-          if (ca.checkpointBlock != cb) {
-            // Data mismatch on base hash lookup, i.e. signature conflict
-            // TODO: Conflict resolution
-            //resolveConflict(cb, ca)
-          } else {
-            // Duplicate checkpoint message, no action required.
-          }
+
+  def handleDuplicateTransactions(ca: CheckpointCacheData, cb: CheckpointBlock, dao: Data) = {
+
+    dao.metricsManager ! IncrementMetric("dupCheckpointReceived")
+
+    if (ca.resolved) {
+      if (ca.inDAG) {
+        if (ca.checkpointBlock != cb) {
+          // Data mismatch on base hash lookup, i.e. signature conflict
+          // TODO: Conflict resolution
+          //resolveConflict(cb, ca)
         } else {
-          // warn or store information about potential conflict
-          // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
+          // Duplicate checkpoint message, no action required.
         }
       } else {
-
-        // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
-        // Otherwise do nothing as the resolution is already in progress.
-
+        // warn or store information about potential conflict
+        // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
       }
+    } else {
+      // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
+      // Otherwise do nothing as the resolution is already in progress.
+    }
 
-
-    //  Resolve.resolveCheckpoint(dao, cb)
+    // TODO
+    cb
   }
 
   // TODO : Add checks on max number in mempool and max num signatures.
@@ -266,7 +267,6 @@ object EdgeProcessor {
       Some(checkpointBlock)
     } else None
   }
-
 
   /**
     * Main transaction processing cell
