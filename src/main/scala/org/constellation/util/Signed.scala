@@ -8,7 +8,6 @@ import constellation._
 import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema
-import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.primitives.Schema._
 
 object POW extends POWExt
@@ -55,36 +54,42 @@ trait ProductHash extends Product {
 }
 
 case class HashSignature(signature: String,
-                         b58EncodedPublicKey: String) {
+                         b58EncodedPublicKey: String) extends Ordered[HashSignature] {
   def publicKey: PublicKey = EncodedPublicKey(b58EncodedPublicKey).toPublicKey
+  def address: String = publicKey.address
   def toId: Id = Id(EncodedPublicKey(b58EncodedPublicKey))
   def valid(hash: String): Boolean =
     verifySignature(hash.getBytes(), fromBase64(signature))(publicKey)
+
+  override def compare(that: HashSignature): Int = {
+    signature compare that.signature
+  }
 }
 
 case class SignatureBatch(
                          hash: String,
-                         signatures: Set[HashSignature]
+                         signatures: Seq[HashSignature]
                          ) extends Monoid[SignatureBatch] {
+
   def valid: Boolean = {
     signatures.forall(_.valid(hash))
   }
 
   def plus(other: SignatureBatch): SignatureBatch = {
     this.copy(
-      signatures = signatures ++ other.signatures
+      signatures = (signatures ++ other.signatures).distinct.sorted
     )
   }
   def plus(other: KeyPair): SignatureBatch = {
     this.copy(
-      signatures = signatures + hashSign(hash, other)
+      signatures = (signatures :+ hashSign(hash, other)).distinct.sorted
     )
   }
 
-  override def empty: SignatureBatch = SignatureBatch(hash, Set())
+  override def empty: SignatureBatch = SignatureBatch(hash, Seq())
 
   override def combine(x: SignatureBatch, y: SignatureBatch): SignatureBatch =
-    x.copy(signatures = x.signatures ++ y.signatures)
+    x.copy(signatures = (x.signatures ++ y.signatures).distinct.sorted)
 
 }
 
@@ -152,7 +157,7 @@ trait POWSignHelp {
   }
 
   def hashSignBatchZeroTyped(hash: ProductHash, keyPair: KeyPair): SignatureBatch = {
-    SignatureBatch(hash.hash, Set(hashSign(hash.hash, keyPair)))
+    SignatureBatch(hash.hash, Seq(hashSign(hash.hash, keyPair)))
   }
 
   def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge = {

@@ -57,7 +57,7 @@ object Fixtures {
   }
 
   def dummyCheckpointBlock(dao: Data) = {
-    val tips: Seq[(String, Int)] = Random.shuffle(dao.checkpointMemPoolThresholdMet.toSeq).take(2)
+    val tips = Random.shuffle(dao.checkpointMemPoolThresholdMet.toSeq).take(2)
     val tipSOE = tips.map {_._1}.map {dao.checkpointMemPool}.map {
       _.checkpoint.edge.signedObservationEdge
     }
@@ -66,7 +66,7 @@ object Fixtures {
       dao.minCheckpointFormationThreshold,
       tipSOE
     )(dao.keyPair)
-    val takenTX = checkpointEdgeProposal.transactionsUsed.map{dao.transactionMemPool}
+    val takenTX = checkpointEdgeProposal.transactionsUsed.map{dao.transactionMemPoolMultiWitness}
     CheckpointBlock(takenTX.toSeq, checkpointEdgeProposal.checkpointEdge)
   }
 

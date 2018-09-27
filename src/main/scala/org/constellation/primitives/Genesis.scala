@@ -10,7 +10,7 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
 
   val CoinBaseHash = "coinbase"
 
-  def createDistribution(ids: Seq[Id], genesisSOE: SignedObservationEdge) = {
+  def createDistribution(ids: Seq[Id], genesisSOE: SignedObservationEdge): CheckpointBlock = {
 
     val distr = ids.map{ id =>
       createTransaction(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
@@ -97,18 +97,20 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
     }
 
     val numTX = (1 + go.initialDistribution.transactions.size * 2).toString
-    metricsManager ! UpdateMetric("validTransactions", numTX)
-    metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
+  //  metricsManager ! UpdateMetric("validTransactions", numTX)
+  //  metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
 
     genesisObservation = Some(go)
 
     // Dumb way to set these as active tips, won't pass a double validation but no big deal.
     checkpointMemPool(go.initialDistribution.baseHash) = go.initialDistribution
     checkpointMemPool(go.initialDistribution2.baseHash) = go.initialDistribution2
-    checkpointMemPoolThresholdMet(go.initialDistribution.baseHash) = 0
-    checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = 0
+    checkpointMemPoolThresholdMet(go.initialDistribution.baseHash) = go.initialDistribution -> 0
+    checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = go.initialDistribution2 -> 0
 
-    metricsManager ! UpdateMetric("activeTips", "2")
+   // metricsManager ! UpdateMetric("activeTips", "2")
+    metricsManager ! UpdateMetric("genesisAccepted", "true")
+ //   metricsManager ! UpdateMetric("z_genesisBlock", go.json)
 
     println(s"accept genesis = ", go)
   }

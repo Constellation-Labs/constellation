@@ -17,7 +17,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, IncrementMetric, TransactionValidation}
-import org.constellation.util.{CommonEndpoints, HashSignature}
+import org.constellation.util.{CommonEndpoints, HashSignature, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
 import akka.pattern.ask
@@ -40,13 +40,13 @@ object PeerAPI {
 
   case class EdgeResponse(
                          soe: Option[SignedObservationEdgeCache] = None,
-                         cb: Option[CheckpointBlock] = None
+                         cb: Option[CheckpointCacheData] = None
                          )
 
 }
 
 class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
-  extends Json4sSupport with CommonEndpoints {
+  extends Json4sSupport with CommonEndpoints with ServeUI {
 
   implicit val serialization: Serialization.type = native.Serialization
 
@@ -73,8 +73,8 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
           val resWithCBOpt = result.map{
             cacheOpt =>
               val cbOpt = cacheOpt.flatMap{ c =>
-                (dao.dbActor ? DBGet(c.signedObservationEdge.baseHash)).mapTo[Option[CheckpointBlock]].get(t=5)
-                  .filter{_.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
+                (dao.dbActor ? DBGet(c.signedObservationEdge.baseHash)).mapTo[Option[CheckpointCacheData]].get(t=5)
+                  .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
               }
               EdgeResponse(cacheOpt, cbOpt)
           }
@@ -117,23 +117,27 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
       put {
         entity(as[Transaction]) {
           tx =>
-            dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
-
-            logger.debug(s"transaction endpoint, $tx")
-
-            dao.edgeProcessor ! HandleTransaction(tx)
-
+            Future {
+              /*
+                Future {
+              dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
+              EdgeProcessor.handleTransaction(tx, dao)(dao.edgeExecutionContext)
+            }(dao.edgeExecutionContext)
+               */
+          //    logger.debug(s"transaction endpoint, $tx")
+              dao.edgeProcessor ! HandleTransaction(tx)
+            }
             complete(StatusCodes.OK)
         }
       } ~
       get {
-        val memPoolPresence = dao.transactionMemPool.get(s)
-        val response = memPoolPresence.map { t =>
-          TransactionQueryResponse(s, Some(t), inMemPool = true, inDAG = false, None)
-        }.getOrElse{
+        val memPoolPresence = dao.transactionMemPool.exists(_.hash == s)
+        val response = if (memPoolPresence) {
+          TransactionQueryResponse(s, dao.transactionMemPool.collectFirst{case x if x.hash == s => x}, inMemPool = true, inDAG = false, None)
+        } else {
           (dao.dbActor ? DBGet(s)).mapTo[Option[TransactionCacheData]].get().map{
             cd =>
-              TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence.nonEmpty, cd.inDAG, cd.cbBaseHash)
+              TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence, cd.inDAG, cd.cbBaseHash)
           }.getOrElse{
             TransactionQueryResponse(s, None, inMemPool = false, inDAG = false, None)
           }
@@ -147,6 +151,9 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
         entity(as[CheckpointBlock]) {
           cb =>
             EdgeProcessor.handleCheckpoint(cb, dao)
+            Future{
+              EdgeProcessor.handleCheckpoint(cb, dao)(dao.edgeExecutionContext)
+            }(dao.edgeExecutionContext)
             complete(StatusCodes.OK)
         }
       } ~
@@ -157,7 +164,8 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
   }
 
   val routes: Route = {
-    getEndpoints ~ postEndpoints ~ mixedEndpoints ~ commonEndpoints
+    getEndpoints ~ postEndpoints ~ mixedEndpoints ~ commonEndpoints // ~
+    //  faviconRoute ~ jsRequest ~ serveMainPage // <-- Temporary for debugging, control routes disabled.
   }
 
 }

@@ -105,18 +105,17 @@ class TransactionProcessorTest extends FlatSpec {
     EdgeProcessor.reportInvalidTransaction(data, bogusTransactionValidationStatus)
     metricsManager.expectMsg(IncrementMetric("invalidTransactions"))
     metricsManager.expectMsg(IncrementMetric("insufficientBalanceTransactions"))
-//    metricsManager.expectMsg(IncrementMetric("hashDuplicateTransactions")) Todo weird timeout bug here
+    //    metricsManager.expectMsg(IncrementMetric("hashDuplicateTransactions")) Todo weird timeout bug here
   }
 
   "New valid incoming transactions" should "be added to the mempool" in {
     EdgeProcessor.updateMergeMemPool(tx, data)
-    assert(data.transactionMemPool.contains(tx.baseHash))
+    assert(data.transactionMemPoolMultiWitness(tx.baseHash) == tx)
   }
 
   "Observed valid incoming transactions" should "be merged into observation edges" in {
-    val updated = data.transactionMemPool(tx.baseHash).plus(tx)
-    data.transactionMemPool(tx.baseHash) = tx
-    assert(data.transactionMemPool(tx.baseHash) == updated)
+    val updated = data.transactionMemPoolMultiWitness(tx.baseHash).plus(tx)
+    data.transactionMemPoolMultiWitness(tx.baseHash) = tx
+    assert(data.transactionMemPoolMultiWitness(tx.baseHash) == updated)
   }
 }
-

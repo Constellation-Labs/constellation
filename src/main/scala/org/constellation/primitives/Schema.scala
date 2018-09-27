@@ -237,28 +237,25 @@ object Schema {
     def src: Address = edge.resolvedObservationEdge.left
     def dst: Address = edge.resolvedObservationEdge.right
 
-    def signatures: Set[HashSignature] = edge.signedObservationEdge.signatureBatch.signatures
+    def signatures: Seq[HashSignature] = edge.signedObservationEdge.signatureBatch.signatures
 
     // TODO: Add proper exception on empty option
     def amount : Long = edge.resolvedObservationEdge.data.get.amount
     def baseHash: String = edge.signedObservationEdge.baseHash
     def hash: String = edge.signedObservationEdge.hash
     def plus(other: Transaction): Transaction = this.copy(
-      edge = edge.copy(
-        signedObservationEdge = edge.signedObservationEdge.copy(
-          signatureBatch =
-            edge.signedObservationEdge.signatureBatch.plus(other.edge.signedObservationEdge.signatureBatch)
-        )
-      )
+      edge = edge.plus(other.edge)
     )
     def plus(keyPair: KeyPair): Transaction = this.copy(
-      edge = edge.copy(
-        signedObservationEdge = edge.signedObservationEdge.copy(
-          signatureBatch =
-            edge.signedObservationEdge.signatureBatch.plus(keyPair)
-        )
-      )
+      edge = edge.plus(keyPair)
     )
+
+    def validSrcSignature: Boolean = {
+      edge.signedObservationEdge.signatureBatch.signatures.exists{ hs =>
+        hs.publicKey.address == src.address && hs.valid(edge.signedObservationEdge.signatureBatch.hash)
+      }
+    }
+
   }
 
   case class CheckpointEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData]) {
@@ -360,7 +357,9 @@ object Schema {
                                   resolutionInProgress: Boolean = false,
                                   inMemPool: Boolean = false,
                                   lastResolveAttempt: Option[Long] = None,
-                                  rxTime: Long = System.currentTimeMillis() // TODO: Unify common metadata like this
+                                  rxTime: Long = System.currentTimeMillis(), // TODO: Unify common metadata like this
+                                  children: Set[String] = Set(),
+                                  forkChildren: Set[String] = Set()
                                 ) {
 
     def plus(previous: CheckpointCacheData): CheckpointCacheData = {
@@ -379,7 +378,7 @@ object Schema {
                               checkpoint: CheckpointEdge
                                   ) {
 
-    def signatures: Set[HashSignature] = checkpoint.edge.signedObservationEdge.signatureBatch.signatures
+    def signatures: Seq[HashSignature] = checkpoint.edge.signedObservationEdge.signatureBatch.signatures
 
     def baseHash: String = checkpoint.edge.baseHash
 
@@ -402,6 +401,13 @@ object Schema {
     def plus(other: CheckpointBlock): CheckpointBlock = {
       this.copy(checkpoint = checkpoint.plus(other.checkpoint))
     }
+
+    def resolvedOE: ResolvedObservationEdge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData] =
+      checkpoint.edge.resolvedObservationEdge
+
+    def parentSOE = Seq(resolvedOE.left, resolvedOE.right)
+
+    def parentSOEBaseHashes: Seq[String] = parentSOE.map{_.baseHash}
 
   }
 

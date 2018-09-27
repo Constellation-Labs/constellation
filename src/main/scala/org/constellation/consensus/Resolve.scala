@@ -12,8 +12,20 @@ import org.constellation.primitives.APIBroadcast
 
 import scala.concurrent.{ExecutionContext, Future}
 
+import scala.concurrent.{ExecutionContext, Future}
+
 object Resolve {
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+  // TODO: Need to include signatories ABOVE this checkpoint block later in the case
+  // of signature decay.
+  def attemptResolveIndividual(dao: Data, cb: CheckpointBlock, h: String) = {
+    cb.signatures.map{_.toId}
+
+    dao.peerManager ? APIBroadcast({
+      apiClient =>
+        apiClient.get("edge/" + h)
+    })
+  }
 
   /**
     * Find out if both parents are resolved. If not, mark parents unresolved.
@@ -24,10 +36,6 @@ object Resolve {
     * @return
     */
   def resolveCheckpoint(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): Future[Boolean] = {
-
-    // TODO: temp
-    dao.confirmedCheckpoints(cb.baseHash) = cb
-
     val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes
       .map { h => dao.hashToSignedObservationEdgeCache(h).map{h -> _} }
     )
@@ -42,27 +50,3 @@ object Resolve {
     }
   }
 }
-
-//
-//  // WIP
-//  def resolveCheckpoint(dao: Data, cb: CheckpointBlock)(implicit ec: ExecutionContext): Future[Boolean] = {
-//
-//    // Step 1 - Find out if both parents are resolved.
-//
-//    val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes
-//      .map { h => dao.hashToSignedObservationEdgeCache(h).map{h -> _} }
-//    )
-//
-//    val isResolved = parentCache.map{ cache =>
-//      val parentsResolved = cache.forall(_._2.exists(_.resolved))
-//      val missingParents = cache.filter{case (h, c) => c.isEmpty && !dao.resolveNotifierCallbacks.contains(h)}
-//
-//      missingParents.foreach { case (hash, oECache) =>
-//        oECache.foreach(dao.markParentsUnresolved(hash, cb))
-//      }
-//      // TODO: Right now not storing CB in DB until it's been resolved, when that changes
-//      // (due to status info requirements) may ? need to have a check here to reflect that.
-//      parentsResolved
-//    }
-//    isResolved
-//  }
