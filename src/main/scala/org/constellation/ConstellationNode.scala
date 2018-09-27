@@ -20,13 +20,13 @@ import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.APIClient
 
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContext, Future}
 
 object ConstellationNode extends App {
 
   implicit val system: ActorSystem = ActorSystem("Constellation")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
-  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("main-dispatcher")
 
   val config = ConfigFactory.load()
 
@@ -53,13 +53,9 @@ object ConstellationNode extends App {
     config.getString("udp.interface"),
     config.getInt("udp.port"),
     timeoutSeconds = rpcTimeout,
-    heartbeatEnabled = true,
     hostName = hostName,
     requestExternalAddressCheck = requestExternalAddressCheck
   )
-
-  // TODO: move to config
-  node.data.minGenesisDistrSize = 4
 }
 
 class ConstellationNode(val configKeyPair: KeyPair,
@@ -70,15 +66,13 @@ class ConstellationNode(val configKeyPair: KeyPair,
                         val udpPort: Int = 16180,
                         val hostName: String = "127.0.0.1",
                         val timeoutSeconds: Int = 480,
-                        val heartbeatEnabled: Boolean = false,
                         val requestExternalAddressCheck : Boolean = false,
-                        val generateRandomTransactions: Boolean = true,
                         val autoSetExternalAddress: Boolean = false,
                         val peerHttpPort: Int = 9001,
                         val peerTCPPort: Int = 9002)(
                implicit val system: ActorSystem,
                implicit val materialize: ActorMaterializer,
-               implicit val executionContext: ExecutionContextExecutor
+               implicit val executionContext: ExecutionContext
              ){
 
   val data = new Data()
@@ -88,8 +82,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   import data._
   data.actorMaterializer = materialize
-
-  generateRandomTX = generateRandomTransactions
 
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
@@ -104,6 +96,10 @@ class ConstellationNode(val configKeyPair: KeyPair,
     data.tcpAddress = Some(new InetSocketAddress(hostName, peerTCPPort))
   }
 
+  val randomTX : ActorRef = system.actorOf(
+    Props(new RandomTransactionManager(data)), s"RandomTXManager_$publicKeyHash"
+  )
+
   // Setup actors
   val metricsManager: ActorRef = system.actorOf(
     Props(new MetricsManager()), s"MetricsManager_$publicKeyHash"
@@ -114,7 +110,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   )
 
   val peerManager: ActorRef = system.actorOf(
-    Props(new PeerManager(ipManager)), s"PeerManager_$publicKeyHash"
+    Props(new PeerManager(ipManager, data)), s"PeerManager_$publicKeyHash"
   )
 
   val cellManager: ActorRef = system.actorOf(
@@ -131,11 +127,11 @@ class ConstellationNode(val configKeyPair: KeyPair,
     )
 
   val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(configKeyPair, data, peerManager)(timeout)),
+    Props(new Consensus(data)),
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val edgeProcessorActor: ActorRef = system.actorOf(
-    Props(new EdgeProcessor(configKeyPair, data)(timeout, executionContext)),
+    Props(new EdgeProcessor(data)),
     s"ConstellationEdgeProcessorActor_$publicKeyHash")
 
   data.dbActor = dbActor

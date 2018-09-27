@@ -6,10 +6,10 @@ import akka.actor.{Actor, ActorSystem}
 import akka.http.scaladsl.model.RemoteAddress
 import akka.stream.ActorMaterializer
 import com.typesafe.scalalogging.Logger
-import org.constellation.AddPeerRequest
 import org.constellation.p2p.{PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.{APIClient, HashSignature}
+import org.constellation.{AddPeerRequest, Data}
 
 import scala.collection.Set
 import scala.concurrent.ExecutionContext
@@ -22,11 +22,11 @@ case class Deregistration(ip: String, port: Int, key: String)
 
 case object GetPeerInfo
 
-class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMaterializer) extends Actor {
+class PeerManager(ipManager: IPManager, dao: Data)(implicit val materialize: ActorMaterializer) extends Actor {
 
   val logger = Logger(s"PeerManager")
 
-  override def receive = active(Map.empty)
+  override def receive: Receive = active(Map.empty)
 
   implicit val system: ActorSystem = context.system
 
@@ -38,9 +38,20 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
       val client = APIClient(host, port)
 
       client.id = id
-      context become active(peerInfo + (id -> PeerData(a, client)))
+      val updatedPeerInfo = peerInfo + (id -> PeerData(a, client))
+
+      dao.metricsManager ! UpdateMetric(
+        "peers",
+        updatedPeerInfo.map { case (idI, clientI) =>
+          val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort}"
+          s"${idI.short} API: $addr"
+        }.mkString(" --- ")
+      )
+      // dao.peerInfo = updatedPeerInfo
+      context become active(updatedPeerInfo)
 
     case APIBroadcast(func, skipIds, subset) =>
+      val replyTo = sender()
 
       val keys = if (subset.nonEmpty) peerInfo.filterKeys(subset.contains) else {
         peerInfo.filterKeys(id => !skipIds.contains(id))
@@ -51,10 +62,11 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
           id -> func(data.client)
       }
 
-      sender() ! result
+      replyTo ! result
 
     case GetPeerInfo => {
-      sender() ! peerInfo
+      val replyTo = sender()
+      replyTo ! peerInfo
     }
 
     case PendingRegistration(ip, request) =>

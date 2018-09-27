@@ -15,22 +15,33 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.Data
 import org.constellation.LevelDB.DBGet
-import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote, StartConsensusRound}
-import org.constellation.consensus.EdgeProcessor.HandleTransaction
+import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
 import org.constellation.consensus.{Consensus, EdgeProcessor}
+import org.constellation.consensus.EdgeProcessor.HandleTransaction
+import org.constellation.p2p.PeerAPI.EdgeResponse
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{Deregistration, IPManager, IncrementMetric, PendingRegistration}
+import org.constellation.primitives.{Deregistration, IPManager, PendingRegistration}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.CommonEndpoints
 import org.json4s.native
 import org.json4s.native.Serialization
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Random
+import scala.util.{Random, Try}
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
 case class PeerRegistrationRequest(host: String, port: Int, key: String)
 case class PeerUnregister(host: String, port: Int, key: String)
+
+
+object PeerAPI {
+
+  case class EdgeResponse(
+                         soe: Option[SignedObservationEdgeCache] = None,
+                         cb: Option[CheckpointCacheData] = None
+                         )
+
+}
 
 class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
   extends Json4sSupport with CommonEndpoints with IPEnforcer {
@@ -57,6 +68,22 @@ class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system:
       extractClientIP { clientIP =>
         path("ip") {
           complete(clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)})
+        } ~
+        path("edge" / Segment) { soeHash =>
+          val result = Try{
+            (dao.dbActor ? DBGet(soeHash)).mapTo[Option[SignedObservationEdgeCache]].get(t=5)
+          }.toOption
+
+          val resWithCBOpt = result.map{
+            cacheOpt =>
+              val cbOpt = cacheOpt.flatMap{ c =>
+                (dao.dbActor ? DBGet(c.signedObservationEdge.baseHash)).mapTo[Option[CheckpointCacheData]].get(t=5)
+                  .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
+              }
+              EdgeResponse(cacheOpt, cbOpt)
+          }
+
+          complete(resWithCBOpt.getOrElse(EdgeResponse()))
         }
       }
     }
@@ -102,28 +129,20 @@ class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system:
           }
       }
     } ~
-      path("startConsensusRound") {
+      path("checkpointEdgeVote") {
         entity(as[Array[Byte]]) { e =>
-          Future {
-            val message = KryoSerializer.deserialize(e).asInstanceOf[StartConsensusRound[Consensus.Checkpoint]]
+            val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusVote[Consensus.Checkpoint]]
 
-            logger.debug(s"start consensus round endpoint, $message")
-
-            dao.consensus ! ConsensusVote(message.id, message.data, message.roundHash)
-          }
+            dao.consensus ! message
 
           complete(StatusCodes.OK)
         }
       } ~
       path("checkpointEdgeProposal") {
         entity(as[Array[Byte]]) { e =>
-          Future {
             val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusProposal[Consensus.Checkpoint]]
 
-            logger.debug(s"checkpoint edge proposal endpoint, $message")
-
-            dao.consensus ! ConsensusProposal(message.id, message.data, message.roundHash)
-          }
+            dao.consensus ! message
 
           complete(StatusCodes.OK)
         }
@@ -136,9 +155,13 @@ class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system:
         entity(as[Transaction]) {
           tx =>
             Future {
+              /*
+                Future {
               dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
-
-              logger.debug(s"transaction endpoint, $tx")
+              EdgeProcessor.handleTransaction(tx, dao)(dao.edgeExecutionContext)
+            }(dao.edgeExecutionContext)
+               */
+          //    logger.debug(s"transaction endpoint, $tx")
               dao.edgeProcessor ! HandleTransaction(tx)
             }
 
@@ -146,13 +169,13 @@ class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system:
         }
       } ~
       get {
-        val memPoolPresence = dao.transactionMemPool.get(s)
-        val response = memPoolPresence.map { t =>
-          TransactionQueryResponse(s, Some(t), inMemPool = true, inDAG = false, None)
-        }.getOrElse{
+        val memPoolPresence = dao.transactionMemPool.exists(_.hash == s)
+        val response = if (memPoolPresence) {
+          TransactionQueryResponse(s, dao.transactionMemPool.collectFirst{case x if x.hash == s => x}, inMemPool = true, inDAG = false, None)
+        } else {
           (dao.dbActor ? DBGet(s)).mapTo[Option[TransactionCacheData]].get().map{
             cd =>
-              TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence.nonEmpty, cd.inDAG, cd.cbEdgeHash)
+              TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence, cd.inDAG, cd.cbBaseHash)
           }.getOrElse{
             TransactionQueryResponse(s, None, inMemPool = false, inDAG = false, None)
           }
@@ -166,14 +189,13 @@ class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system:
         entity(as[CheckpointBlock]) {
           cb =>
             Future{
-              EdgeProcessor.handleCheckpoint(cb, dao)
-            }
-
+              EdgeProcessor.handleCheckpoint(cb, dao)(dao.edgeExecutionContext)
+            }(dao.edgeExecutionContext)
             complete(StatusCodes.OK)
         }
       } ~
       get {
-        complete("Transaction goes here")
+        complete("CB goes here")
       } ~ complete (StatusCodes.BadRequest)
     }
   }
@@ -183,7 +205,9 @@ class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system:
       signEndpoints ~ enforceKnownIP {
         getEndpoints ~ postEndpoints ~ mixedEndpoints ~ commonEndpoints
       }
-    }
+    } // ~
+    //  faviconRoute ~ jsRequest ~ serveMainPage // <-- Temporary for debugging, control routes disabled.
+
   }
 
 }

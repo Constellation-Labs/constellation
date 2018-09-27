@@ -8,7 +8,7 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
 
   val CoinBaseHash = "coinbase"
 
-  def createDistribution(ids: Seq[Id], genesisSOE: SignedObservationEdge) = {
+  def createDistribution(ids: Seq[Id], genesisSOE: SignedObservationEdge): CheckpointBlock = {
 
     val distr = ids.map{ id =>
       createTransaction(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
@@ -74,36 +74,41 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
 
   def acceptGenesis(go: GenesisObservation): Unit = {
     // Store hashes for the edges
-    go.genesis.store(dbActor, inDAG = true, resolved = true)
-    go.initialDistribution.store(dbActor, inDAG = true, resolved = true)
+    go.genesis.store(dbActor, CheckpointCacheData(go.genesis, inDAG = true, resolved = true), resolved = true)
+    go.initialDistribution.store(dbActor, CheckpointCacheData(go.initialDistribution, inDAG = true, resolved = true), resolved = true)
+    go.initialDistribution2.store(dbActor, CheckpointCacheData(go.initialDistribution2, inDAG = true, resolved = true), resolved = true)
 
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
     go.genesis.transactions.foreach{
       rtx =>
+        val bal = rtx.amount - (go.initialDistribution.transactions.map {_.amount}.sum * 2)
         dbActor ! DBPut(
           rtx.dst.hash,
-          AddressCacheData(rtx.amount - (go.initialDistribution.transactions.map{_.amount}.sum*2), Some(1000D))
+          AddressCacheData(bal, bal, Some(1000D))
         )
     }
 
     // Store the balance for the initial distribution addresses along with starting rep score.
     go.initialDistribution.transactions.foreach{ t =>
-      dbActor ! DBPut(t.dst.hash, AddressCacheData(t.amount, Some(1000D)))
+      val bal = t.amount * 2
+      dbActor ! DBPut(t.dst.hash, AddressCacheData(bal, bal, Some(1000D)))
     }
 
-    val numTX = (1 + go.initialDistribution.transactions.size).toString
-    metricsManager ! UpdateMetric("validTransactions", numTX)
-    metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
+    val numTX = (1 + go.initialDistribution.transactions.size * 2).toString
+  //  metricsManager ! UpdateMetric("validTransactions", numTX)
+  //  metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
 
     genesisObservation = Some(go)
 
     // Dumb way to set these as active tips, won't pass a double validation but no big deal.
     checkpointMemPool(go.initialDistribution.baseHash) = go.initialDistribution
     checkpointMemPool(go.initialDistribution2.baseHash) = go.initialDistribution2
-    checkpointMemPoolThresholdMet(go.initialDistribution.baseHash) = 0
-    checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = 0
+    checkpointMemPoolThresholdMet(go.initialDistribution.baseHash) = go.initialDistribution -> 0
+    checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = go.initialDistribution2 -> 0
 
-    metricsManager ! UpdateMetric("activeTips", "2")
+   // metricsManager ! UpdateMetric("activeTips", "2")
+    metricsManager ! UpdateMetric("genesisAccepted", "true")
+ //   metricsManager ! UpdateMetric("z_genesisBlock", go.json)
 
     println(s"accept genesis = ", go)
   }
