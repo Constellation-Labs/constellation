@@ -1,13 +1,11 @@
 ### Architecture documentation
 
-[[https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/images/architecture-diagrams/ledger-architecture.png|alt=ledger-architecture]]
+https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/images/architecture-diagrams/ledger-architecture.png
 
-(todo: explainer for the diagram above)
+https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/images/architecture-diagrams/node-architecture.png
 
-[[https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/images/architecture-diagrams/node-architecture.png|alt=node-architecture]]
+https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/images/architecture-diagrams/protocol-data-flow-sketch.png
 
-(todo: explainer for the diagram above)
+(todo: turn all images to proper links with alt text and add explainer for all the diagrams)
 
-[[https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/images/architecture-diagrams/protocol-data-flow-sketch.png|alt=protocol-data-flow-sketch]]
-
-(todo: explainer for the diagram above)
+(trial: [[link-to-image.png|alt=protocol-data-flow-sketch]])
