@@ -14,26 +14,26 @@ class RandomDataTest extends FlatSpec {
 
   private val keyPairs = Seq.fill(10)(makeKeyPair())
 
+  private val go = Genesis.createGenesisAndInitialDistributionDirect(
+    keyPairs.head.address.address,
+    keyPairs.tail.map{_.getPublic.toId}.toSet,
+    keyPairs.head
+  )
+
+  private val startingTips = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
+
+  def randomTransaction: Schema.Transaction = {
+    val src = Random.shuffle(keyPairs).head
+    createTransaction(
+      src.address.address,
+      Random.shuffle(keyPairs).head.address.address,
+      Random.nextInt(500).toLong,
+      src
+    )
+  }
 
   "Generate random CBs" should "build a graph" in {
 
-    val go = Genesis.createGenesisAndInitialDistributionDirect(
-      keyPairs.head.address.address,
-      keyPairs.tail.map{_.getPublic.toId}.toSet,
-      keyPairs.head
-    )
-
-    val startingTips = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
-
-    def randomTransaction: Schema.Transaction = {
-      val src = Random.shuffle(keyPairs).head
-      createTransaction(
-        src.address.address,
-        Random.shuffle(keyPairs).head.address.address,
-        Random.nextInt(500).toLong,
-        src
-      )
-    }
 
     var width = 2
     val maxWidth = 30
@@ -59,9 +59,22 @@ class RandomDataTest extends FlatSpec {
 
       tips.foreach{ case (tip, numUses) =>
 
+        def doRemove(): Unit = activeBlocks.remove(tip)
+
+        if (width < maxWidth) {
+          if (numUses >= 2) {
+            doRemove()
+          } else {
+            activeBlocks(tip) += 1
+          }
+        } else {
+          doRemove()
+        }
 
       }
 
+      val block = randomBlock(tips.map{_._1}.toSeq)
+      activeBlocks(block.soe) = 0
 
     }
 
