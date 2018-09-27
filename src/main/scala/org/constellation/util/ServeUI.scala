@@ -46,4 +46,10 @@ trait ServeUI {
     HttpResponse(entity = entity)
   }
 
+  val faviconRoute: Route = get {
+    path("favicon.ico") {
+      getFromResource("favicon.ico")
+    }
+  }
+
 }

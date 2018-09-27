@@ -9,12 +9,14 @@ import org.constellation.LevelDB.DBGet
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.{AddressCacheData, Transaction, TransactionCacheData}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 object Validation {
 
-  def validateCheckpoint(dbActor: ActorRef, cb: Schema.CheckpointBlock): Future[CheckpointValidationStatus] = {
+  def validateCheckpoint(
+                          dbActor: ActorRef,
+                          cb: Schema.CheckpointBlock
+                        )(implicit ec: ExecutionContext): Future[CheckpointValidationStatus] = {
     Future{CheckpointValidationStatus()}
   }
 
@@ -31,8 +33,22 @@ object Validation {
                                         addressCacheData: Option[AddressCacheData]
                                         ) {
     def isDuplicateHash: Boolean = transactionCacheData.exists{_.inDAG}
-    def sufficientBalance: Boolean = addressCacheData.exists(_.balance >= transaction.amount)
-    def valid: Boolean = !isDuplicateHash && sufficientBalance
+    def sufficientBalance: Boolean = addressCacheData.exists{c =>
+      c.balance >= transaction.amount
+    }
+    def sufficientMemPoolBalance: Boolean = addressCacheData.exists{c =>
+      c.memPoolBalance >= transaction.amount
+    }
+
+    def validByCurrentState: Boolean = !isDuplicateHash && sufficientBalance
+    def validByCurrentStateMemPool: Boolean = !isDuplicateHash && sufficientBalance && sufficientMemPoolBalance
+    def validByAncestor(ancestorHash: String): Boolean = {
+      transactionCacheData.exists{t => !t.inDAGByAncestor.contains(ancestorHash)} &&
+      addressCacheData.exists(_.ancestorBalances.get(ancestorHash).exists(_ >= transaction.amount))
+    }
+    // Need separate validator here for CB validation vs. mempool addition
+    // I.e. don't check mempool balance when validating a CB because it takes precedence over
+    // a new TX which is being added to mempool and conflicts with current mempool values.
   }
 
   /**
@@ -42,7 +58,7 @@ object Validation {
     * @param tx : Resolved transaction
     * @return Future of whether or not the transaction should be considered valid
     * **/
-  def validateTransaction(dbActor: ActorRef, tx: Transaction): Future[TransactionValidationStatus] = {
+  def validateTransaction(dbActor: ActorRef, tx: Transaction)(implicit ec: ExecutionContext): Future[TransactionValidationStatus] = {
 
     // A transaction should only be considered in the DAG once it has been committed to a checkpoint block.
     // Before that, it exists only in the memPool and is not stored in the database.

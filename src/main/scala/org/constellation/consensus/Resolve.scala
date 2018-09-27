@@ -8,72 +8,60 @@ import org.constellation.Data
 import org.constellation.LevelDB.DBGet
 import org.constellation.primitives.Schema.{CheckpointBlock, CheckpointCacheData, SignedObservationEdgeCache}
 import constellation.EasyFutureBlock
+import org.constellation.primitives.APIBroadcast
+
+import scala.concurrent.{ExecutionContext, Future}
 
 object Resolve {
 
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
+  // TODO: Need to include signatories ABOVE this checkpoint block later in the case
+  // of signature decay.
+  def attemptResolveIndividual(dao: Data, cb: CheckpointBlock, h: String) = {
+    cb.signatures.map{_.toId}
+
+    dao.peerManager ? APIBroadcast({
+      apiClient =>
+        apiClient.get("edge/" + h)
+    })
+  }
+
   // WIP
-  def resolveCheckpoint(dao: Data, cb: CheckpointBlock): Boolean = {
+  def resolveCheckpoint(dao: Data, cb: CheckpointBlock)(implicit ec: ExecutionContext): Future[Boolean] = {
 
     // Step 1 - Find out if both parents are resolved.
 
-    // TODO: Change to Future.sequence
-    val parentCache = cb.checkpoint.edge.parentHashes.map{ h =>
-      h -> (dao.dbActor ? DBGet(h)).mapTo[Option[SignedObservationEdgeCache]].get()
-    }
+    val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes.map{ h =>
+      (dao.dbActor ? DBGet(h)).mapTo[Option[SignedObservationEdgeCache]].map{h -> _}
+    })
 
-    val parentsResolved = parentCache.forall(_._2.exists(_.resolved))
+    val resolved = parentCache.map{ cache =>
 
-    // Later on need to add transaction resolving, they're all already here though (sent with the request)
-    // which adds redundancy but simplifies this step.
+      val parentsResolved = cache.forall(_._2.exists(_.resolved))
 
-    // Break out if we're done here.
-    if (parentsResolved) {
-      return true
-    }
+      val missingParents = cache.filter{case (h, c) => c.isEmpty && !dao.resolveNotifierCallbacks.contains(h)}
 
-    println(s"checkpoint complete = $cb.baseHash")
-
-    // TODO: temp
-    dao.confirmedCheckpoints(cb.baseHash) = cb
-
-    false
-
-    /*
-    val missingParents = parentCache.filter(_._2.isEmpty)
-
-    missingParents
-
-    // (dao.dbActor ? DBGet(cb.hash)).mapTo[Option[CheckpointCacheData]]
-
-    val unresolvedParents = cb.checkpoint.edge.parents.foreach{
-      h =>
-        if (dao.validationMemPool.contains(h.hash)) {
-          true
-        } else {
-          val cache = (dao.dbActor ? DBGet(h.hash)).mapTo[Option[SignedObservationEdgeCache]].get()
-          if (cache.isEmpty) {
-            if (dao.resolveNotifierCallbacks.contains(h.hash)) {
-              val notifiers = dao.resolveNotifierCallbacks(h.hash)
-              if (!notifiers.contains(cb.hash)) {
-                notifiers
+      missingParents.foreach{
+        case (h, c) =>
+          dao.resolveNotifierCallbacks.get(h) match {
+            case Some(cbs) =>
+              if (!cbs.contains(cb)) {
+                dao.resolveNotifierCallbacks(h) :+= cb
               }
-            }
+            case None =>
+              attemptResolveIndividual(dao, cb, h)
+              dao.resolveNotifierCallbacks(h) = Seq(cb)
           }
-        //  .nonEmpty
-        }
-    }
-*/
-    // Skipping TX resolution for now as they're included in here. Fix later.
-/*
+      }
 
-    if (unresolvedParents.isEmpty) {
-      true
-    } else {
+      // TODO: Right now not storing CB in DB until it's been resolved, when that changes
+      // (due to status info requirements) may ? need to have a check here to reflect that.
 
+      parentsResolved
     }
-*/
+
+    resolved
 
   }
 

@@ -95,6 +95,10 @@ class ConstellationNode(val configKeyPair: KeyPair,
     data.tcpAddress = Some(new InetSocketAddress(hostName, peerTCPPort))
   }
 
+  val randomTX : ActorRef = system.actorOf(
+    Props(new RandomTransactionManager(data)), s"RandomTXManager_$publicKeyHash"
+  )
+
   // Setup actors
   val metricsManager: ActorRef = system.actorOf(
     Props(new MetricsManager()), s"MetricsManager_$publicKeyHash"
@@ -105,7 +109,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   )
 
   val peerManager: ActorRef = system.actorOf(
-    Props(new PeerManager()), s"PeerManager_$publicKeyHash"
+    Props(new PeerManager(data)), s"PeerManager_$publicKeyHash"
   )
 
   val cellManager: ActorRef = system.actorOf(
