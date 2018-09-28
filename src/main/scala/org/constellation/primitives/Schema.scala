@@ -407,6 +407,7 @@ object Schema {
       checkpoint.edge.resolvedObservationEdge
 
     def parentSOE = Seq(resolvedOE.left, resolvedOE.right)
+    def parentSOEHashes = Seq(resolvedOE.left.hash, resolvedOE.right.hash)
 
     def parentSOEBaseHashes: Seq[String] = parentSOE.map{_.baseHash}
 

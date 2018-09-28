@@ -2,7 +2,7 @@ package org.constellation.consensus
 
 import org.scalatest.FlatSpec
 import constellation._
-import org.constellation.primitives.Schema.SignedObservationEdge
+import org.constellation.primitives.Schema.{CheckpointBlock, SignedObservationEdge}
 import org.constellation.primitives.{Genesis, Schema}
 
 import scala.collection.concurrent.TrieMap
@@ -36,7 +36,7 @@ class RandomDataTest extends FlatSpec {
 
 
     var width = 2
-    val maxWidth = 30
+    val maxWidth = 6
 
     def randomBlock(tips: Seq[SignedObservationEdge]): Schema.CheckpointBlock = {
       val txs = Seq.fill(5)(randomTransaction)
@@ -46,11 +46,18 @@ class RandomDataTest extends FlatSpec {
     val activeBlocks = TrieMap[SignedObservationEdge, Int]()
 
 
-    val maxNumBlocks = 1000
+    val maxNumBlocks = 40
     var blockNum = 0
 
     activeBlocks(startingTips.head) = 0
     activeBlocks(startingTips.last) = 0
+
+    val cbIndex = TrieMap[SignedObservationEdge, CheckpointBlock]()
+    //cbIndex(go.initialDistribution.soe) = go.initialDistribution
+    //cbIndex(go.initialDistribution2.soe) = go.initialDistribution2
+    var blockId = 3
+
+    val convMap = TrieMap[String, Int]()
 
     while (blockNum < maxNumBlocks) {
 
@@ -74,11 +81,39 @@ class RandomDataTest extends FlatSpec {
       }
 
       val block = randomBlock(tips.map{_._1}.toSeq)
+      cbIndex(block.soe) = block
       activeBlocks(block.soe) = 0
+
+      convMap(block.soe.hash) = blockId
+      blockId += 1
+      width = activeBlocks.size
+
+      block
+
 
     }
 
+    println(cbIndex.size)
 
+    val genIdMap = Map(
+      go.genesis.soe.hash -> 0,
+      go.initialDistribution.soe.hash -> 1,
+      go.initialDistribution2.soe.hash -> 2
+    )
+
+    val conv = convMap.toMap ++ genIdMap  /*cbIndex.toSeq.zipWithIndex.map{
+      case ((soe, cb), id) =>
+        soe.hash -> (id + 3)
+    }.toMap*/
+
+    println((cbIndex.toSeq.map{
+      case (soe, cb) =>
+        Map("id" -> conv(soe.hash), "parentIds" -> cb.parentSOEHashes.map{conv})
+    } ++ Seq(
+      Map("id" -> conv(go.initialDistribution.soe.hash), "parentIds" -> Seq(conv(go.genesis.soe.hash))),
+      Map("id" -> conv(go.initialDistribution2.soe.hash), "parentIds" -> Seq(conv(go.genesis.soe.hash))),
+      Map("id" -> conv(go.genesis.soe.hash), "parentIds" -> Seq[String]())
+    )).json)
 
 
     //createTransaction()
