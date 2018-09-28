@@ -94,7 +94,7 @@ class CheckpointProcessorTest extends FlatSpec {
 
 
   "CheckpointBlocks invalid by ancestry" should "return false" in {
-    assert(!EdgeProcessor.validByAncestors(Seq(), cb))
+    assert(!EdgeProcessor.validByTransactionAncestors(Seq(), cb))
   }
 
   "CheckpointBlocks invalid by state" should "return false" in {
