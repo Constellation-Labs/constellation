@@ -10,7 +10,7 @@ import org.constellation.primitives.Schema._
 import akka.pattern.ask
 import Validation.TransactionValidationStatus
 import akka.util.Timeout
-import EdgeProcessor.{HandleTransaction, signFlow, validByAncestors, _}
+import EdgeProcessor.{HandleTransaction, signFlow, validByTransactionAncestors, _}
 import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.Consensus._
 import org.constellation.consensus.EdgeProcessor.HandleTransaction
@@ -41,7 +41,13 @@ object EdgeProcessor {
     attemptFormCheckpointUpdateState(dao)
   }
 
-  def validByAncestors(transactions: Seq[TransactionValidationStatus], cb: CheckpointBlock): Boolean =
+  def resolveTxAncestryConflict = {}
+  //Todo recurse down ancestors until snapshot. As we iterate, we choose ancestors that have the
+  // the most optimal transaction overlap.
+
+  def validateByAncestorTips = {}//Todo recurse through same tree used in conflict resolution. Check the SOE's are valid. Recurse till Snapshot.
+
+  def validByTransactionAncestors(transactions: Seq[TransactionValidationStatus], cb: CheckpointBlock): Boolean =
     transactions.nonEmpty && transactions.forall { s: TransactionValidationStatus =>
       cb.checkpoint.edge.parentHashes.forall { ancestorHash =>
         s.validByAncestor(ancestorHash)
@@ -52,19 +58,16 @@ object EdgeProcessor {
     val allTransactions: Future[Seq[TransactionValidationStatus]] = Future.sequence(cb.transactions.map { tx =>
       Validation.validateTransaction(dao.dbActor, tx)
       })
-
     val isValidated = allTransactions.map { transactions =>
-      val validatedByTransactions = transactions.forall(_.validByCurrentState)//TODO: Validate the checkpoint to see if any there are any duplicate transactions
+      val validatedByTransactions = transactions.forall(_.validByCurrentState)
+      val validByAncestors = validByTransactionAncestors(transactions, cb)
+      val validByAncestorTips = validateByAncestorTips
+      val isValid = validatedByTransactions && validByAncestors
+      //TODO: Validate the checkpoint to see if any there are any duplicate transactions
       //Todo we also need a batch transaction validator, i.e. take cpb, take all tx, group by source address, sum ammts per address (reducebykey) then query balance
-      if (validatedByTransactions) {
+      if (isValid)
         signFlow(dao, cb)
-        validatedByTransactions
-      }
-      else {
-        val validatedByAncestors = validByAncestors(transactions, cb)
-        if (validatedByAncestors) {}//todo resolveAncestryConflict(cb)
-        validatedByAncestors
-      }
+        isValid
     }
     isValidated
   }
@@ -83,59 +86,49 @@ object EdgeProcessor {
       .map { h => dao.hashToSignedObservationEdgeCache(h).map{h -> _} }
     )
     cache.foreach {
-      checkpointCacheData: Option[CheckpointCacheData] =>
-      if (checkpointCacheData.isDefined) {
-        checkpointCacheData.foreach(handleDuplicateTransactions(_, cb, dao))
-      }
-      else {
+      case Some(checkpointCacheData) => handleConflictingCheckpoint(checkpointCacheData, cb, dao)
+      case None =>
         Resolve.resolveCheckpoint(dao, cb).map { r =>
           if (r) {
             dao.metricsManager ! IncrementMetric("resolvedCheckpointMessages")
-            validateCheckpointBlock(dao, cb)
-            //          .onComplete {
-            //            potentialChildren.foreach {//todo process children
-            //              _.foreach { c =>
-            //                Future(handleCheckpoint(c, dao, true))
-            //              }
-            //            }
-            //          }
-            // Also need to register it with ldb ? To prevent duplicate processing ? Or after
-            // If there are duplicate transactions, do a score calculation relative to the other one to determine which to preserve.
-            // Potentially rolling back the other one.
+            validateCheckpointBlock(dao, cb).foreach(if(_)signFlow(dao, cb))
           }
           else {
             dao.metricsManager ! IncrementMetric("unresolvedCheckpointMessages")
           }
         }
-      }
     }
+    //          .onComplete {
+    //            potentialChildren.foreach {//todo process children
+    //              _.foreach { c =>
+    //                Future(handleCheckpoint(c, dao, true))
+    //              }
+    //            }
+    //          }
+    // Also need to register it with ldb ? To prevent duplicate processing ? Or after
+    // If there are duplicate transactions, do a score calculation relative to the other one to determine which to preserve.
+    // Potentially rolling back the other one.
   }
 
-  def handleDuplicateTransactions(ca: CheckpointCacheData, cb: CheckpointBlock, dao: Data) = {
+  def rollBackGraph(cb: CheckpointBlock) = {}//Todo recurse to greatest common ancestor and recursively change pointers. Can use @tailrec
 
-    dao.metricsManager ! IncrementMetric("dupCheckpointReceived")
-
-    if (ca.resolved) {
-      if (ca.inDAG) {
-        if (ca.checkpointBlock != cb) {
-          // Data mismatch on base hash lookup, i.e. signature conflict
-          // TODO: Conflict resolution
-          //resolveConflict(cb, ca)
-        } else {
-          // Duplicate checkpoint message, no action required.
-        }
-      } else {
+  def handleConflictingCheckpoint(ca: CheckpointCacheData, cb: CheckpointBlock, dao: Data) = {
+      dao.metricsManager ! IncrementMetric("dupCheckpointReceived")
+      if (ca.resolved) {
+        // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
+        // Otherwise do nothing as the resolution is already in progress.
+      }
+      val isDup = ca.checkpointBlock != cb
+      if (ca.inDAG && isDup) {// Data mismatch on base hash lookup, i.e. signature conflict
+        val mostSignatures = ca.checkpointBlock :: cb :: Nil maxBy(_.signatures.length)
+        if (mostSignatures == cb) rollBackGraph(mostSignatures)
+      }
+      val potentialConflict = {
         // warn or store information about potential conflict
         // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
+        //Todo figure out where to store and store it method
       }
-    } else {
-      // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
-      // Otherwise do nothing as the resolution is already in progress.
     }
-
-    // TODO
-    cb
-  }
 
   // TODO : Add checks on max number in mempool and max num signatures.
   // TEMPORARY mock-up for pre-consensus integration mimics transactions
@@ -233,7 +226,6 @@ object EdgeProcessor {
       )
     }
   }
-
 
   def attemptFormCheckpointUpdateState(dao: Data): Option[CheckpointBlock] = {
 

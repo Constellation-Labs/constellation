@@ -14,7 +14,7 @@ import org.constellation.util.SignHelp._
 
 class EdgeProcessorTest extends TestKit(ActorSystem("EdgeProcessorTest")) with FlatSpecLike {
 
-  "The handleDuplicateTransactions method" should "handle conflicting checkpointBlocks" in {
+  "The handleConflictingCheckpoint method" should "handle conflicting checkpointBlocks" in {
 
     val metricsManager = TestProbe()
 
@@ -57,7 +57,7 @@ class EdgeProcessorTest extends TestKit(ActorSystem("EdgeProcessorTest")) with F
 
     val cpcd = CheckpointCacheData(existingCheckpointBlock)
 
-    val mostValidCheckpointBlock = EdgeProcessor.handleDuplicateTransactions(cpcd, conflictingCheckpointBlock, dao)
+    val mostValidCheckpointBlock = EdgeProcessor.handleConflictingCheckpoint(cpcd, conflictingCheckpointBlock, dao)
 
     assert(mostValidCheckpointBlock == conflictingCheckpointBlock)
   }
