@@ -38,7 +38,6 @@ trait EdgeExt extends NodeData with Ledger with MetricsExt with PeerInfo with Ed
   def hashToSignedObservationEdgeCache(hash: String): Future[Option[SignedObservationEdgeCache]] = {
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
     (dbActor ? DBGet(hash)).mapTo[Option[SignedObservationEdgeCache]]
-
   }
 
   def hashToCheckpointCacheData(hash: String) = {

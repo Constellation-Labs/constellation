@@ -6,11 +6,13 @@ import java.security.{KeyPair, PublicKey}
 import akka.actor.ActorRef
 import cats.kernel.Monoid
 import constellation.pubKeyToAddress
-import org.constellation.LevelDB.{DBPut, DBUpdate}
+import org.constellation.LevelDB.{DBGet, DBPut, DBUpdate}
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
+import akka.pattern.ask
+import akka.util.Timeout
 
 import scala.collection.{SortedSet, mutable}
 import scala.collection.concurrent.TrieMap

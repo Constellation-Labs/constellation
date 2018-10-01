@@ -118,15 +118,10 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
         entity(as[Transaction]) {
           tx =>
             Future {
-              /*
-                Future {
               dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
               EdgeProcessor.handleTransaction(tx, dao)(dao.edgeExecutionContext)
             }(dao.edgeExecutionContext)
-               */
-          //    logger.debug(s"transaction endpoint, $tx")
-              dao.edgeProcessor ! HandleTransaction(tx)
-            }
+
             complete(StatusCodes.OK)
         }
       } ~
@@ -150,7 +145,6 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
       put {
         entity(as[CheckpointBlock]) {
           cb =>
-            EdgeProcessor.handleCheckpoint(cb, dao)
             Future{
               EdgeProcessor.handleCheckpoint(cb, dao)(dao.edgeExecutionContext)
             }(dao.edgeExecutionContext)

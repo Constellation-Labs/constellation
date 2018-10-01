@@ -80,11 +80,15 @@ object EdgeProcessor {
     } else {
       dao.metricsManager ! IncrementMetric("internalCheckpointMessages")
     }
+
     val potentialChildren: Option[Seq[CheckpointBlock]] = dao.resolveNotifierCallbacks.get(cb.soeHash)
+
     val cache: Future[Option[CheckpointCacheData]] = dao.hashToCheckpointCacheData(cb.baseHash)
+
     val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes
       .map { h => dao.hashToSignedObservationEdgeCache(h).map{h -> _} }
     )
+
     cache.foreach {
       case Some(checkpointCacheData) => handleConflictingCheckpoint(checkpointCacheData, cb, dao)
       case None =>
@@ -98,6 +102,7 @@ object EdgeProcessor {
           }
         }
     }
+
     //          .onComplete {
     //            potentialChildren.foreach {//todo process children
     //              _.foreach { c =>
@@ -112,23 +117,43 @@ object EdgeProcessor {
 
   def rollBackGraph(cb: CheckpointBlock) = {}//Todo recurse to greatest common ancestor and recursively change pointers. Can use @tailrec
 
-  def handleConflictingCheckpoint(ca: CheckpointCacheData, cb: CheckpointBlock, dao: Data) = {
-      dao.metricsManager ! IncrementMetric("dupCheckpointReceived")
-      if (ca.resolved) {
-        // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
-        // Otherwise do nothing as the resolution is already in progress.
-      }
-      val isDup = ca.checkpointBlock != cb
-      if (ca.inDAG && isDup) {// Data mismatch on base hash lookup, i.e. signature conflict
-        val mostSignatures = ca.checkpointBlock :: cb :: Nil maxBy(_.signatures.length)
-        if (mostSignatures == cb) rollBackGraph(mostSignatures)
-      }
-      val potentialConflict = {
-        // warn or store information about potential conflict
-        // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
-        //Todo figure out where to store and store it method
-      }
+  def handleConflictingCheckpoint(ca: CheckpointCacheData, cb: CheckpointBlock, dao: Data): CheckpointBlock= {
+    dao.metricsManager ! IncrementMetric("dupCheckpointReceived")
+
+    if (ca.resolved) {
+      // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
+      // Otherwise do nothing as the resolution is already in progress.
     }
+
+    hasSignatureConflict(ca, cb) { handleSignatureConflict(ca, cb) }
+
+    val potentialConflict = {
+      // warn or store information about potential conflict
+      // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
+      //Todo figure out where to store and store it method
+    }
+  }
+
+  def hasSignatureConflict(ca: CheckpointCacheData, cb: CheckpointBlock): Boolean = {
+    ca.checkpointBlock.baseHash == cb.baseHash && ca.checkpointBlock.soeHash != cb.soeHash
+  }
+
+  def handleSignatureConflict(ca: CheckpointCacheData, cb: CheckpointBlock): CheckpointBlock = {
+    val mostSignatures = ca.checkpointBlock :: cb :: Nil maxBy(_.signatures.length)
+
+    // TODO
+    // when storing a new checkpoint block, check to see if ancestors exist, if so update them to have reference to children
+    // if not add a dummy cache that is not resolved to store a reference to child, make sure to update children not replace
+    // when looking up checkpoint block, ask for its stored cache, lookup each of its children recursively and grab their signatures
+    // compare length of signatures, pick one checkpoint block or the other, replace ref to soe hash of the one that is selected
+
+    if (mostSignatures == cb) {
+      rollBackGraph(mostSignatures)
+      cb
+    } else {
+      ca.checkpointBlock
+    }
+  }
 
   // TODO : Add checks on max number in mempool and max num signatures.
   // TEMPORARY mock-up for pre-consensus integration mimics transactions
@@ -194,8 +219,8 @@ object EdgeProcessor {
               }
           }
 
-
       }
+
       dao.metricsManager ! UpdateMetric("checkpointMemPoolThresholdMet", dao.checkpointMemPoolThresholdMet.size.toString)
 
       // Accept transactions
@@ -214,7 +239,9 @@ object EdgeProcessor {
           ))
         t.ledgerApply(dao.dbActor)
       }
+
       dao.metricsManager ! IncrementMetric("checkpointAccepted")
+
       cb.store(
         dao.dbActor,
         CheckpointCacheData(
