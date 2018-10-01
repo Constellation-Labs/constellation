@@ -344,20 +344,6 @@ object EdgeProcessor {
 
         if (!dao.transactionMemPool.contains(tx)) {
 
-
-          // TODO:  Use XOR for random partition assignment later.
-          /*
-                    val idFraction = (dao.peerInfo.keys.toSeq :+ dao.id).map{ id =>
-                      val bi = BigInt(id.id.getEncoded)
-                      val bi2 = BigInt(tx.hash, 16)
-                      val xor = bi ^ bi2
-                      id -> xor
-                    }.maxBy(_._2)._1
-          */
-
-          // We should process this transaction hash
-          //  if (idFraction == dao.id) {
-
           dao.transactionMemPool :+= tx
           attemptFormCheckpointUpdateState(dao)
 

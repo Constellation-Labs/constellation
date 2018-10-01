@@ -65,6 +65,12 @@ class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
 
     sim.run(apis = apis, peerApis = peerApis)
 
+
+    //Thread.sleep(20000)
+    // sim.triggerRandom(apis)
+
+
+
     Thread.sleep(5000*60*60)
 /*
 

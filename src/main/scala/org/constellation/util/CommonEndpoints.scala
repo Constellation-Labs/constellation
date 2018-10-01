@@ -26,6 +26,9 @@ trait CommonEndpoints extends Json4sSupport {
     } ~
       path("id") {
         complete(dao.id)
-      }
+      } ~
+    path("tips") {
+      complete(dao.checkpointMemPoolThresholdMet.map{_._2._1}.toSeq)
+    }
   }
 }

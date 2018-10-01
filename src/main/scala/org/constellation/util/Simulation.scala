@@ -144,6 +144,10 @@ class Simulation {
     src.post("sendTransactionToAddress", s)
   }
 
+  def triggerRandom(apis: Seq[APIClient]): Unit = {
+    apis.foreach(_.postEmpty("random"))
+  }
+
   def run(attemptSetExternalIP: Boolean = false, apis: Seq[APIClient], peerApis: Seq[APIClient])(implicit executionContext: ExecutionContext): Unit = {
 
     awaitHealthy(apis)
@@ -171,7 +175,7 @@ class Simulation {
 
     awaitGenesisStored(apis)
 
-    apis.foreach(_.postEmpty("random"))
+    triggerRandom(apis)
   }
 
 }
