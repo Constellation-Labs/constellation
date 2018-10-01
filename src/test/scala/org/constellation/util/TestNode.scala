@@ -9,8 +9,11 @@ import org.constellation.ConstellationNode
 import org.constellation.crypto.KeyUtils
 
 import scala.concurrent.ExecutionContext
+import scala.util.Try
 
 object TestNode {
+
+  private var nodes = Seq[ConstellationNode]()
 
   def apply(seedHosts: Seq[InetSocketAddress] = Seq(),
             keyPair: KeyPair = KeyUtils.makeKeyPair(),
@@ -40,7 +43,16 @@ object TestNode {
       peerTCPPort = randomPeerTCPPort,
     )
 
+    nodes = nodes :+ node
+
     node
+  }
+
+  def clearNodes(): Unit = {
+    Try {
+      nodes.foreach { node => node.shutdown() }
+      nodes = Seq()
+    }
   }
 
 }

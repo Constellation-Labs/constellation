@@ -6,15 +6,19 @@ import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.{APIClient, TestNode}
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
 
-class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
+class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with BeforeAndAfterAll {
 
   implicit val system: ActorSystem = ActorSystem("BlockChain")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+
+  override def afterEach(): Unit = {
+    TestNode.clearNodes()
+  }
 
 
   "GET to /peers" should "get the correct connected peers" in {

@@ -30,6 +30,7 @@ class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
   override def afterEach() {
     // Cleanup DBs
     File(tmpDir).delete()
+    TestNode.clearNodes()
   }
 
   def createNode(randomizePorts: Boolean = true, seedHosts: Seq[InetSocketAddress] = Seq()): ConstellationNode = {

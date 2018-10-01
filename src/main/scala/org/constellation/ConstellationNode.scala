@@ -144,7 +144,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   val routes: Route = new API(udpAddress, data, cellManager).authRoutes
 
   // Setup http server for internal API
-  val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
+  private val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
 
   val peerAPI = new PeerAPI(ipManager, data)
 
@@ -169,13 +169,16 @@ class ConstellationNode(val configKeyPair: KeyPair,
   }
 
   // Setup http server for peer API
-  Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)
+  private val peerBindingFuture = Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind
 
     bindingFuture
-      .flatMap(_.unbind())
+      .foreach(_.unbind())
+
+    peerBindingFuture
+      .foreach(_.unbind())
     // TODO: we should add this back but it currently causes issues in the integration test
     //.onComplete(_ => system.terminate())
   }
