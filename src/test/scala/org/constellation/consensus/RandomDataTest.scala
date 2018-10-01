@@ -36,7 +36,7 @@ class RandomDataTest extends FlatSpec {
 
 
     var width = 2
-    val maxWidth = 6
+    val maxWidth = 7
 
     def randomBlock(tips: Seq[SignedObservationEdge]): Schema.CheckpointBlock = {
       val txs = Seq.fill(5)(randomTransaction)
@@ -46,7 +46,7 @@ class RandomDataTest extends FlatSpec {
     val activeBlocks = TrieMap[SignedObservationEdge, Int]()
 
 
-    val maxNumBlocks = 40
+    val maxNumBlocks = 200
     var blockNum = 0
 
     activeBlocks(startingTips.head) = 0
@@ -58,6 +58,9 @@ class RandomDataTest extends FlatSpec {
     var blockId = 3
 
     val convMap = TrieMap[String, Int]()
+
+
+    val snapshotInterval = 10
 
     while (blockNum < maxNumBlocks) {
 
@@ -106,14 +109,22 @@ class RandomDataTest extends FlatSpec {
         soe.hash -> (id + 3)
     }.toMap*/
 
-    println((cbIndex.toSeq.map{
+    val json = (cbIndex.toSeq.map {
       case (soe, cb) =>
-        Map("id" -> conv(soe.hash), "parentIds" -> cb.parentSOEHashes.map{conv})
+        Map("id" -> conv(soe.hash), "parentIds" -> cb.parentSOEHashes.map {
+          conv
+        })
     } ++ Seq(
       Map("id" -> conv(go.initialDistribution.soe.hash), "parentIds" -> Seq(conv(go.genesis.soe.hash))),
       Map("id" -> conv(go.initialDistribution2.soe.hash), "parentIds" -> Seq(conv(go.genesis.soe.hash))),
       Map("id" -> conv(go.genesis.soe.hash), "parentIds" -> Seq[String]())
-    )).json)
+    )).json
+    println(json)
+
+    import better.files._
+
+  //  file"../d3-dag/test/data/dag.json".write(json)
+
 
 
     //createTransaction()
