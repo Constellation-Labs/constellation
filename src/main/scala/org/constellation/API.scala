@@ -149,8 +149,10 @@ class API(udpAddress: InetSocketAddress,
 
             val res = idMap.map{
               case (id, fut) =>
-                val maybeResponse = fut.getOpt()
-                id -> maybeResponse.exists{_.isSuccess}
+                val resp = fut.get()
+                id -> resp.isSuccess
+//                val maybeResponse = fut.getOpt()
+//                id -> maybeResponse.exists{_.isSuccess}
             }.toSeq
 
             complete(res)

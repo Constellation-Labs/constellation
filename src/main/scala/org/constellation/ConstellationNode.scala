@@ -152,12 +152,12 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
 
   seedPeers.foreach {
-    peer => ipManager.addKnownIp(RemoteAddress(peer))
+    peer => ipManager.addKnownIP(RemoteAddress(peer))
   }
 
   def addAddressToKnownIPs(addr: ValidPeerIPData): Unit = {
     val remoteAddr = RemoteAddress(new InetSocketAddress(addr.canonicalHostName, addr.port))
-    ipManager.addKnownIp(remoteAddr)
+    ipManager.addKnownIP(remoteAddr)
   }
 
   def getIPData: ValidPeerIPData = {

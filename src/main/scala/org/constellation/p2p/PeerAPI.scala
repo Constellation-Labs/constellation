@@ -16,8 +16,8 @@ import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.Data
 import org.constellation.LevelDB.DBGet
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
-import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.consensus.EdgeProcessor.HandleTransaction
+import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.p2p.PeerAPI.EdgeResponse
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{Deregistration, IPManager, PendingRegistration}
@@ -202,8 +202,8 @@ class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system:
 
   val routes: Route = {
     rejectBannedIP {
-      signEndpoints ~ enforceKnownIP {
-        getEndpoints ~ postEndpoints ~ mixedEndpoints ~ commonEndpoints
+      signEndpoints ~ commonEndpoints ~ enforceKnownIP {
+        getEndpoints ~ postEndpoints ~ mixedEndpoints
       }
     } // ~
     //  faviconRoute ~ jsRequest ~ serveMainPage // <-- Temporary for debugging, control routes disabled.

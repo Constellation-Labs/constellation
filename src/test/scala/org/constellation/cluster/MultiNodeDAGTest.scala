@@ -8,7 +8,6 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import org.constellation.ConstellationNode
-import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
@@ -37,7 +36,7 @@ class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
     implicit val executionContext: ExecutionContextExecutorService =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
-    TestNode(randomizePorts = randomizePorts)(materialize = materializer, system = system, executionContext = executionContext)
+    TestNode(randomizePorts = randomizePorts)
   }
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
@@ -50,17 +49,7 @@ class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
 
     val addr = n1.getInetSocketAddress
 
-    // val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(createNode())
     val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(createNode(seedHosts = Seq(addr)))
-
-    val node = nodes.head
-
-    nodes.foreach { node => println(node.getIPData) }
-
-    nodes.drop(1).foreach { n =>
-      val peerRegistrationRequest = PeerRegistrationRequest(n1.getIPData.canonicalHostName, n1.getIPData.port, n1.configKeyPair.getPublic.toString)
-      n1.getAPIClientForNode(n).postSync("register", peerRegistrationRequest)
-    }
 
     val apis = nodes.map{_.getAPIClient()}
 

@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.RemoteAddress
 import scala.collection.{Set, concurrent}
 
 class IPManager {
+  // Keep these private to allow for change of implementation later.
   private var bannedIPs: concurrent.Map[RemoteAddress, String] =
     concurrent.TrieMap[RemoteAddress, String]()
   //    val knownIPs: concurrent.Map[RemoteAddress, String] =
@@ -18,13 +19,18 @@ class IPManager {
     bannedIPs.contains(addr)
   }
 
-  def addKnownIp(addr: RemoteAddress) = {
+  def listBannedIPs = bannedIPs
+
+  def addKnownIP(addr: RemoteAddress) = {
     knownIPs = knownIPs + addr
   }
 
-  def removeKnownIp(addr: RemoteAddress) = {
+  def removeKnownIP(addr: RemoteAddress) = {
     knownIPs = knownIPs - addr
   }
+
+  def listKnownIPs = knownIPs
+
 }
 
 object IPManager {

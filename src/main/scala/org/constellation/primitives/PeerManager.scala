@@ -78,7 +78,7 @@ class PeerManager(ipManager: IPManager, dao: Data)(implicit val materialize: Act
       // TODO: Either need to move this somewhere else, or do non-blocking
       // Definitely don't want to be blocking the entire actor while we wait...
 
-      client.postNonBlocking[HashSignature]("/sign", req).foreach { sig =>
+      val sig = client.postBlocking[HashSignature]("sign", req)
         if (sig.b58EncodedPublicKey != request.key) {
           logger.warn(s"keys should be the same: ${sig.b58EncodedPublicKey} != ${request.key}")
         }
@@ -89,8 +89,7 @@ class PeerManager(ipManager: IPManager, dao: Data)(implicit val materialize: Act
         // For now -- let's assume successful response
 
         val remoteAddr = RemoteAddress(new InetSocketAddress(request.host, request.port))
-        ipManager.addKnownIp(remoteAddr)
-      }
+        ipManager.addKnownIP(remoteAddr)
 
 
 
