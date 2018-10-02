@@ -13,12 +13,12 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
-import org.constellation.consensus.{Consensus, EdgeProcessor}
+import org.constellation.consensus.{CheckpointMemPoolVerifier, Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.{PeerAPI, RegisterNextActor, UDPActor}
 import org.constellation.primitives.Schema.{AddPeerFromLocal, ToggleHeartbeat}
 import org.constellation.primitives._
-import org.constellation.util.APIClient
+import org.constellation.util.{APIClient, Heartbeat}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Try
@@ -95,13 +95,19 @@ class ConstellationNode(val configKeyPair: KeyPair,
     data.tcpAddress = Some(new InetSocketAddress(hostName, peerTCPPort))
   }
 
+  val heartBeat: ActorRef = system.actorOf(
+    Props(new Heartbeat(data)), s"Heartbeat_$publicKeyHash"
+  )
+  data.heartbeatActor = heartBeat
+
+
   val randomTX : ActorRef = system.actorOf(
     Props(new RandomTransactionManager(data)), s"RandomTXManager_$publicKeyHash"
   )
 
   // Setup actors
   val metricsManager: ActorRef = system.actorOf(
-    Props(new MetricsManager()), s"MetricsManager_$publicKeyHash"
+    Props(new MetricsManager(data)), s"MetricsManager_$publicKeyHash"
   )
 
   val memPoolManager: ActorRef = system.actorOf(
@@ -132,6 +138,10 @@ class ConstellationNode(val configKeyPair: KeyPair,
   val edgeProcessorActor: ActorRef = system.actorOf(
     Props(new EdgeProcessor(data)),
     s"ConstellationEdgeProcessorActor_$publicKeyHash")
+
+  val cpMemPoolVerify: ActorRef = system.actorOf(
+    Props(new CheckpointMemPoolVerifier(data)),
+    s"CheckpointMemPoolVerifier_$publicKeyHash")
 
   data.dbActor = dbActor
   data.consensus = consensusActor
@@ -170,5 +180,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
     api.udpPort = udpPort
     api
   }
+
+  logger.info("Node started")
 
 }

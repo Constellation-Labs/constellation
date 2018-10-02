@@ -20,11 +20,13 @@ trait NodeData {
   var metricsManager: ActorRef = _
   var edgeProcessor: ActorRef = _
   var memPoolManager: ActorRef = _
+  var heartbeatActor: ActorRef = _
 
   var minGenesisDistrSize: Int = 3
   @volatile var downloadMode: Boolean = true
   @volatile var downloadInProgress: Boolean = false
   var generateRandomTX: Boolean = false
+  var heartbeatEnabled: Boolean = true
 
   var lastConfirmationUpdateTime: Long = System.currentTimeMillis()
 

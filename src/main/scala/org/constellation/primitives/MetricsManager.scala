@@ -2,7 +2,9 @@ package org.constellation.primitives
 
 import akka.actor.Actor
 import com.typesafe.scalalogging.Logger
+import org.constellation.Data
 import org.constellation.primitives.Schema.InternalHeartbeat
+import org.constellation.util.HeartbeatSubscribe
 
 case object GetMetrics
 
@@ -10,7 +12,7 @@ case class UpdateMetric(key: String, value: String)
 
 case class IncrementMetric(key: String)
 
-class MetricsManager extends Actor {
+class MetricsManager(dao: Data) extends Actor {
 
   var round = 0L
 
@@ -18,6 +20,8 @@ class MetricsManager extends Actor {
 
   var lastCheckTime: Long = System.currentTimeMillis()
   var lastTXCount: Long = 0
+
+  dao.heartbeatActor ! HeartbeatSubscribe
 
   override def receive: Receive = active(Map.empty)
 

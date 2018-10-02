@@ -22,6 +22,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.Random
 import akka.pattern.ask
 import akka.util.Timeout
+import org.constellation.util.HeartbeatSubscribe
 
 object EdgeProcessor {
 
@@ -543,6 +544,8 @@ class EdgeProcessor(dao: Data)
   implicit val sys: ActorSystem = context.system
   implicit val kp: KeyPair = dao.keyPair
 
+  dao.heartbeatActor ! HeartbeatSubscribe
+
   def receive: Receive = {
 
     case HandleTransaction(transaction) =>
@@ -554,6 +557,32 @@ class EdgeProcessor(dao: Data)
       log.debug(s"handle checkpointBlock = $checkpointBlock")
 
       handleCheckpoint(checkpointBlock, dao)
+  }
+
+}
+
+
+class CheckpointMemPoolVerifier(dao: Data)
+                   (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
+
+  dao.heartbeatActor ! HeartbeatSubscribe
+
+  private var lastTime = System.currentTimeMillis()
+
+  def receive: Receive = {
+
+    case InternalHeartbeat =>
+
+      if (System.currentTimeMillis() > (lastTime + 5000)) {
+
+        dao.checkpointMemPool.take(10).foreach{
+          case (cbBaseHash, checkpointBlock) =>
+            dao.peerManager ! APIBroadcast(_.put(s"checkpoint/$cbBaseHash", checkpointBlock))
+        }
+
+        lastTime = System.currentTimeMillis()
+      }
+
   }
 
 }
