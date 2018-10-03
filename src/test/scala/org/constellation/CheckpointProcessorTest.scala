@@ -102,12 +102,6 @@ class CheckpointProcessorTest extends FlatSpec {
     validatedCheckpointBlock.foreach(response => assert(!response))
   }
 
-  "CheckpointBlocks valid according to current state" should "be signed and returned if valid" in {
-//      val signedCb = cb.plus(data.keyPair)
-//      peerManager.expectMsg(APIBroadcast(_.put(s"checkpoint/${cb.baseHash}", signedCb)))
-  }
-
-
   "hashToSignedObservationEdgeCache" should "return SignedObservationEdgeCache" in {
     val res = data.hashToSignedObservationEdgeCache(cb.baseHash)
     res.foreach(response => assert(response.isDefined))

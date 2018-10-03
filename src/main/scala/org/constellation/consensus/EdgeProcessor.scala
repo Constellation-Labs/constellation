@@ -54,7 +54,7 @@ object EdgeProcessor {
     }
   }
 
-  def validateCheckpointBlock(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): Future[Boolean] = {
+  def validateCheckpointBlock(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): Future[Boolean] = { // Future[Option[CheckpointBlock]]
     val allTransactions: Future[Seq[TransactionValidationStatus]] = Future.sequence(cb.transactions.map { tx =>
       Validation.validateTransaction(dao.dbActor, tx)
       })
@@ -82,35 +82,18 @@ object EdgeProcessor {
     }
     val potentialChildren: Option[Seq[CheckpointBlock]] = dao.resolveNotifierCallbacks.get(cb.soeHash)
     val cache: Future[Option[CheckpointCacheData]] = dao.hashToCheckpointCacheData(cb.baseHash)
-    val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes
-      .map { h => dao.hashToSignedObservationEdgeCache(h).map{h -> _} }
-    )
-    cache.foreach {
-      case Some(checkpointCacheData) => handleConflictingCheckpoint(checkpointCacheData, cb, dao)
-      case None =>
-        Resolve.resolveCheckpoint(dao, cb).map { r =>
-          if (r) {
-            dao.metricsManager ! IncrementMetric("resolvedCheckpointMessages")
-            validateCheckpointBlock(dao, cb).foreach(if(_)signFlow(dao, cb))
-          }
-          else {
-            dao.metricsManager ! IncrementMetric("unresolvedCheckpointMessages")
-          }
-        }
-    }
-    //          .onComplete {
-    //            potentialChildren.foreach {//todo process children
-    //              _.foreach { c =>
-    //                Future(handleCheckpoint(c, dao, true))
-    //              }
-    //            }
-    //          }
-    // Also need to register it with ldb ? To prevent duplicate processing ? Or after
-    // If there are duplicate transactions, do a score calculation relative to the other one to determine which to preserve.
-    // Potentially rolling back the other one.
+//    val resolution = Resolver.resolveCheckpoint(dao, cb).map { r =>
+//      if (r) {
+//        dao.metricsManager ! IncrementMetric("resolvedCheckpointMessages")
+//        validateCheckpointBlock(dao, cb).foreach(if(_)signFlow(dao, cb))
+//      }
+//      else {
+//        dao.metricsManager ! IncrementMetric("unresolvedCheckpointMessages")
+//      }
+//    }
   }
 
-  def rollBackGraph(cb: CheckpointBlock) = {}//Todo recurse to greatest common ancestor and recursively change pointers. Can use @tailrec
+  def rollBackGraph(cb: CheckpointBlock) = {}//Todo decide cb to keep. taverse down tree. Can use @tailrec
 
   def handleConflictingCheckpoint(ca: CheckpointCacheData, cb: CheckpointBlock, dao: Data) = {
       dao.metricsManager ! IncrementMetric("dupCheckpointReceived")
@@ -121,6 +104,7 @@ object EdgeProcessor {
       val isDup = ca.checkpointBlock != cb
       if (ca.inDAG && isDup) {// Data mismatch on base hash lookup, i.e. signature conflict
         val mostSignatures = ca.checkpointBlock :: cb :: Nil maxBy(_.signatures.length)
+//        val maxByChildren =
         if (mostSignatures == cb) rollBackGraph(mostSignatures)
       }
       val potentialConflict = {
