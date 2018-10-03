@@ -147,6 +147,9 @@ class Simulation {
   def triggerRandom(apis: Seq[APIClient]): Unit = {
     apis.foreach(_.postEmpty("random"))
   }
+  def setReady(apis: Seq[APIClient]): Unit = {
+    apis.foreach(_.postEmpty("ready"))
+  }
 
   def run(attemptSetExternalIP: Boolean = false, apis: Seq[APIClient], peerApis: Seq[APIClient])(implicit executionContext: ExecutionContext): Unit = {
 
@@ -160,7 +163,7 @@ class Simulation {
 
     addPeers(apis, peerApis)
 
-    Thread.sleep(5000)
+    Thread.sleep(10000)
 
     assert(
       apis.forall{a =>
@@ -176,6 +179,9 @@ class Simulation {
     awaitGenesisStored(apis)
 
     triggerRandom(apis)
+
+    setReady(apis)
+
   }
 
 }

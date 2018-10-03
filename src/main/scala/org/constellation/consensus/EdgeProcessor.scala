@@ -573,11 +573,37 @@ class CheckpointMemPoolVerifier(dao: Data)
 
     case InternalHeartbeat =>
 
-      if (System.currentTimeMillis() > (lastTime + 5000)) {
+      if (System.currentTimeMillis() > (lastTime + 10000) && dao.nodeState == Ready) {
 
-        dao.checkpointMemPool.take(10).foreach{
-          case (cbBaseHash, checkpointBlock) =>
-            dao.peerManager ! APIBroadcast(_.put(s"checkpoint/$cbBaseHash", checkpointBlock))
+        val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq.map{_._1}
+
+        dao.checkpointMemPool.take(20).foreach{
+          case (_, checkpointBlock) =>
+
+            if (!checkpointBlock.witnessIds.contains(dao.id)) {
+              Future {
+                val cbPrime = updateCheckpointWithSelfSignatureEmit(checkpointBlock, dao)
+
+                // Add to memPool or update an existing hash with new signatures and check for signature threshold
+                updateCheckpointMergeMemPool(cbPrime, dao)
+
+                attemptFormCheckpointUpdateState(dao)
+              }(dao.edgeExecutionContext)
+            } else {
+              val missing = peerIds.filterNot(checkpointBlock.witnessIds.contains)
+              dao.peerManager ! APIBroadcast(_.post(s"request/signature", checkpointBlock).foreach{
+                z =>
+                val cbP = z.body.x[CheckpointBlock]
+                val cbPrime = updateCheckpointWithSelfSignatureEmit(cbP, dao)
+
+                // Add to memPool or update an existing hash with new signatures and check for signature threshold
+                updateCheckpointMergeMemPool(cbPrime, dao)
+
+                attemptFormCheckpointUpdateState(dao)
+              }(dao.edgeExecutionContext), peerSubset = missing.toSet)
+            }
+
+
         }
 
         lastTime = System.currentTimeMillis()

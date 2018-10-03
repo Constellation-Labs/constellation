@@ -11,9 +11,9 @@ import constellation._
 
 import scala.util.Try
 
-class Metrics(val data: Data = null) extends Wallet {
+class Metrics(val dao: Data = null) extends Wallet {
 
-  import data._
+  import dao._
 
   @memoize(maxSize = 1, expiresAfter = 2.seconds)
   def calculateMetrics(): MetricsResult = {

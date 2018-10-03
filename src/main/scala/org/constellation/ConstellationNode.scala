@@ -143,6 +143,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
     Props(new CheckpointMemPoolVerifier(data)),
     s"CheckpointMemPoolVerifier_$publicKeyHash")
 
+
   data.dbActor = dbActor
   data.consensus = consensusActor
   data.peerManager = peerManager

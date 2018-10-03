@@ -102,6 +102,8 @@ lazy val testDependencies = Seq(
 
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
 
+test in assembly := {}
+
 lazy val root = (project in file("."))
   .configs(IntegrationTest)
   .settings(

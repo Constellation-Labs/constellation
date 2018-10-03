@@ -13,7 +13,6 @@ import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromE
 import akka.pattern.ask
 import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
-import com.softwaremill.macmemo.memoize
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
@@ -22,25 +21,31 @@ import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.{Metrics, ServeUI}
+import org.constellation.util.{CommonEndpoints, Metrics, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
 import scalaj.http.HttpResponse
 
-import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id)
 
+case class ConfigurationUpdate(
+                                maxWidth: Int = 100,
+                                minCheckpointFormationThreshold: Int = 30,
+                                minCBSignatureThreshold: Int = 5
+                              )
+
 class API(udpAddress: InetSocketAddress,
-          val data: Data = null,
+          val dao: Data = null,
           cellManager: ActorRef)(implicit system: ActorSystem, val timeout: Timeout)
   extends Json4sSupport
     with Wallet
-    with ServeUI {
+    with ServeUI
+    with CommonEndpoints {
 
-  import data._
+  import dao._
 
   implicit val serialization: Serialization.type = native.Serialization
 
@@ -59,8 +64,12 @@ class API(udpAddress: InetSocketAddress,
   val getEndpoints: Route =
     extractClientIP { clientIP =>
       get {
+        path("checkpoint" / Segment) { s =>
+          val res = (dao.dbActor ? DBGet(s)).mapTo[Option[CheckpointBlock]].get()
+          complete(res)
+        } ~
           path("restart") {
-            data.restartNode()
+            dao.restartNode()
             complete(StatusCodes.OK)
           } ~
           path("setKeyPair") {
@@ -68,7 +77,7 @@ class API(udpAddress: InetSocketAddress,
               logger.debug("Set key pair " + kpp)
               val res = if (kpp.length > 10) {
                 val rr = Try {
-                  data.updateKeyPair(kpp.x[KeyPair])
+                  dao.updateKeyPair(kpp.x[KeyPair])
                   StatusCodes.OK
                 }.getOrElse(StatusCodes.BadRequest)
                 rr
@@ -78,7 +87,7 @@ class API(udpAddress: InetSocketAddress,
           } ~
           path("metrics") {
             val response = MetricsResult(
-              (data.metricsManager ? GetMetrics).mapTo[Map[String, String]].getOpt().getOrElse(Map())
+              (dao.metricsManager ? GetMetrics).mapTo[Map[String, String]].getOpt().getOrElse(Map())
             )
             complete(response)
           } ~
@@ -104,19 +113,11 @@ class API(udpAddress: InetSocketAddress,
           path("selfAddress") {
             complete(id.address)
           } ~
-          path("id") { // TODO : This should be served both on internal / external API
-            // ^ Create shared routes for common functionality like this.
-            complete(id)
-          } ~
           path("nodeKeyPair") {
             complete(keyPair)
           } ~
-          // TODO: revisit
-          path("health") {
-            complete(StatusCodes.OK)
-          } ~
           path("peers") {
-            val res = (data.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].getOpt().getOrElse(Map())
+            val res = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].getOpt().getOrElse(Map())
             complete(res)
           } ~
           path("peerids") {
@@ -125,24 +126,40 @@ class API(udpAddress: InetSocketAddress,
             })
           } ~
           path("hasGenesis") {
-            if (data.genesisObservation.isDefined) {
+            if (dao.genesisObservation.isDefined) {
               complete(StatusCodes.OK)
             } else {
               complete(StatusCodes.NotFound)
             }
           } ~
           path("checkpointTips") {
-            complete(data.confirmedCheckpoints)
-          } ~
-          jsRequest ~
-          serveMainPage
+            complete(dao.confirmedCheckpoints)
+          }
       }
     }
 
   private val postEndpoints =
     post {
+      pathPrefix("config") {
+        path("update") {
+          entity(as[ConfigurationUpdate]) { cu =>
+            dao.maxWidth = cu.maxWidth
+            dao.minCBSignatureThreshold = cu.minCBSignatureThreshold
+            dao.minCheckpointFormationThreshold = cu.minCheckpointFormationThreshold
+            complete(StatusCodes.OK)
+          }
+        }
+      } ~
+      path("ready") { // Temp
+        if (dao.nodeState != Ready) {
+          dao.nodeState = Ready
+        } else {
+          dao.nodeState = PendingDownload
+        }
+        complete(StatusCodes.OK)
+      } ~
       path("random") { // Temporary
-        data.generateRandomTX = true
+        dao.generateRandomTX = true
         complete(StatusCodes.OK)
       } ~
       path("peerHealthCheck") {
@@ -184,7 +201,7 @@ class API(udpAddress: InetSocketAddress,
           println(s"send transaction to address $e")
 
           Future {
-            transactions.TransactionManager.handleSendToAddress(e, data)
+            transactions.TransactionManager.handleSendToAddress(e, dao)
           }
 
           complete(StatusCodes.OK)
@@ -215,9 +232,9 @@ class API(udpAddress: InetSocketAddress,
               }
             }
           logger.debug(s"Set external IP RPC request $externalIp $addr")
-          data.externalAddress = Some(addr)
+          dao.externalAddress = Some(addr)
           if (ipp.nonEmpty)
-            data.apiAddress = Some(new InetSocketAddress(ipp, 9000))
+            dao.apiAddress = Some(new InetSocketAddress(ipp, 9000))
           complete(StatusCodes.OK)
         }
       } ~
@@ -240,7 +257,7 @@ class API(udpAddress: InetSocketAddress,
 
 
   private val routes: Route = cors() {
-    getEndpoints ~ postEndpoints ~ jsRequest ~ serveMainPage
+    getEndpoints ~ postEndpoints ~ jsRequest ~ commonEndpoints ~ serveMainPage
   }
 
   def myUserPassAuthenticator(credentials: Credentials): Option[String] = {

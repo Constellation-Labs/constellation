@@ -379,6 +379,8 @@ object Schema {
                               checkpoint: CheckpointEdge
                                   ) {
 
+    def witnessIds: Seq[Id] = signatures.map{_.toId}
+
     def signatures: Seq[HashSignature] = checkpoint.edge.signedObservationEdge.signatureBatch.signatures
 
     def baseHash: String = checkpoint.edge.baseHash

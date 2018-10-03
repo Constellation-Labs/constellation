@@ -109,6 +109,20 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
 
           complete(StatusCodes.OK)
         }
+      } ~
+      pathPrefix("request") {
+        path("signature") {
+          entity(as[CheckpointBlock]) { cb =>
+            // Temporary, need to go thru flow
+            val blockWithSigAdded = cb.plus(dao.keyPair)
+            if (dao.nodeState == Ready) {
+              Future {
+                EdgeProcessor.handleCheckpoint(cb, dao)(dao.edgeExecutionContext)
+              }(dao.edgeExecutionContext)
+            }
+            complete(blockWithSigAdded)
+          }
+        }
       }
     }
 
@@ -117,15 +131,18 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
       put {
         entity(as[Transaction]) {
           tx =>
-            Future {
-              /*
+
+            if (dao.nodeState == Ready) {
+              Future {
+                /*
                 Future {
               dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
               EdgeProcessor.handleTransaction(tx, dao)(dao.edgeExecutionContext)
             }(dao.edgeExecutionContext)
                */
-          //    logger.debug(s"transaction endpoint, $tx")
-              dao.edgeProcessor ! HandleTransaction(tx)
+                //    logger.debug(s"transaction endpoint, $tx")
+                dao.edgeProcessor ! HandleTransaction(tx)
+              }
             }
 
             complete(StatusCodes.OK)
@@ -151,14 +168,17 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
       put {
         entity(as[CheckpointBlock]) {
           cb =>
-            Future{
-              EdgeProcessor.handleCheckpoint(cb, dao)(dao.edgeExecutionContext)
-            }(dao.edgeExecutionContext)
+            if (dao.nodeState == Ready) {
+              Future {
+                EdgeProcessor.handleCheckpoint(cb, dao)(dao.edgeExecutionContext)
+              }(dao.edgeExecutionContext)
+            }
             complete(StatusCodes.OK)
         }
       } ~
       get {
-        complete("CB goes here")
+        val res = (dao.dbActor ? DBGet(s)).mapTo[Option[CheckpointBlock]].get()
+        complete(res)
       } ~ complete (StatusCodes.BadRequest)
     }
   }

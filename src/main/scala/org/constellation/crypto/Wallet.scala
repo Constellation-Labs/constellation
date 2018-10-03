@@ -13,8 +13,8 @@ import org.constellation.Data
 
 trait Wallet {
 
-  val data: Data
-  import data._
+  val dao: Data
+  import dao._
 
   // TODO: Not this.
   @volatile var wallet : Seq[KeyPair] = Seq()

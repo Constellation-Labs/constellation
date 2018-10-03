@@ -4,6 +4,9 @@ GOOGLE_PROJECT_ID="esoteric-helix-197319"
 #GOOGLE_CLUSTER_NAME="constellation-test"
 DATE=$(date +%s)
 
+# gcloud container clusters get-credentials constellation-test --zone us-central1-a --project esoteric-helix-197319
+gcloud container clusters get-credentials dev-cluster --zone us-central1-a --project esoteric-helix-197319
+
 # This is required because unless the YAML changes a value it won't trigger a redeploy to a new docker image..
 IMAGE_TAG=$USER-$DATE
 IMAGE=gcr.io/$GOOGLE_PROJECT_ID/constellationlabs/constellation:$IMAGE_TAG
