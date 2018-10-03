@@ -10,6 +10,8 @@ import constellation._
 import org.constellation.AddPeerRequest
 import scalaj.http.HttpResponse
 
+import scala.collection.concurrent.TrieMap
+import scala.collection.immutable.HashMap
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
 
@@ -34,9 +36,9 @@ class Simulation {
     })
   }
 
-  def getCheckpointTips(apis: Seq[APIClient]): Seq[Seq[SignedObservationEdge]] = {
+  def getCheckpointTips(apis: Seq[APIClient]): Seq[Map[String, CheckpointBlock]] = {
     apis.map(a => {
-      a.getBlocking[Seq[SignedObservationEdge]](s"checkpointTips" , timeoutSeconds = 100)
+      a.getBlocking[Map[String, CheckpointBlock]](s"checkpointTips" , timeoutSeconds = 100)
     })
   }
 
@@ -154,7 +156,7 @@ class Simulation {
 
     addPeers(apis, peerApis)
 
-    Thread.sleep(15000)
+    Thread.sleep(5000)
 
     assert(
       apis.forall{a =>
@@ -168,6 +170,8 @@ class Simulation {
     apis.foreach{_.post("genesis/accept", goe)}
 
     awaitGenesisStored(apis)
+
+    apis.foreach(_.postEmpty("random"))
   }
 
 }

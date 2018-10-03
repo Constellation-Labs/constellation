@@ -19,11 +19,12 @@ trait NodeData {
   var consensus: ActorRef = _
   var metricsManager: ActorRef = _
   var edgeProcessor: ActorRef = _
+  var memPoolManager: ActorRef = _
 
   var minGenesisDistrSize: Int = 3
   @volatile var downloadMode: Boolean = true
   @volatile var downloadInProgress: Boolean = false
-  var generateRandomTX: Boolean = true
+  var generateRandomTX: Boolean = false
 
   var lastConfirmationUpdateTime: Long = System.currentTimeMillis()
 

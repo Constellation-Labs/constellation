@@ -43,7 +43,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     val consensusActor: ActorRef =
       system.actorOf(Props(
-        new Consensus(keyPair, data, udpActor.ref)(timeout))
+        new Consensus(data))
       )
   }
 

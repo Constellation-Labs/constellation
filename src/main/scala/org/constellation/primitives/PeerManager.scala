@@ -2,11 +2,10 @@ package org.constellation.primitives
 
 import akka.actor.Actor
 import akka.stream.ActorMaterializer
-import org.constellation.AddPeerRequest
+import org.constellation.{AddPeerRequest, Data}
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.APIClient
 
-import scala.collection.mutable
 
 case class PeerData(addRequest: AddPeerRequest, client: APIClient)
 case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
@@ -14,9 +13,9 @@ case class PeerHealthCheck(status: Map[Id, Boolean])
 
 case object GetPeerInfo
 
-class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
+class PeerManager(dao: Data)(implicit val materialize: ActorMaterializer) extends Actor {
 
-  override def receive = active(Map.empty)
+  override def receive: Receive = active(Map.empty)
 
   def active(peerInfo: Map[Id, PeerData]): Receive = {
 
@@ -24,9 +23,20 @@ class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
       val client = new APIClient()(context.system, materialize).setConnection(host, port)
 
       client.id = id
-      context become active(peerInfo + (id -> PeerData(a, client)))
+      val updatedPeerInfo = peerInfo + (id -> PeerData(a, client))
+
+      dao.metricsManager ! UpdateMetric(
+        "peers",
+        updatedPeerInfo.map { case (idI, clientI) =>
+          val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort}"
+          s"${idI.short} API: $addr"
+        }.mkString(" --- ")
+      )
+      // dao.peerInfo = updatedPeerInfo
+      context become active(updatedPeerInfo)
 
     case APIBroadcast(func, skipIds, subset) =>
+      val replyTo = sender()
 
       val keys = if (subset.nonEmpty) peerInfo.filterKeys(subset.contains) else {
         peerInfo.filterKeys(id => !skipIds.contains(id))
@@ -37,10 +47,11 @@ class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
           id -> func(data.client)
       }
 
-      sender() ! result
+      replyTo ! result
 
     case GetPeerInfo => {
-      sender() ! peerInfo
+      val replyTo = sender()
+      replyTo ! peerInfo
     }
 
   }
