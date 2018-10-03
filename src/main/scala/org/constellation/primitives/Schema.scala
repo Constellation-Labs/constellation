@@ -13,10 +13,13 @@ import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 import akka.pattern.ask
 import akka.util.Timeout
+import org.constellation.consensus.EdgeProcessor
+import org.constellation.consensus.EdgeProcessor.{EdgeResponse, LookupEdge}
 
 import scala.collection.{SortedSet, mutable}
 import scala.collection.concurrent.TrieMap
-import scala.util.Random
+import scala.concurrent.Future
+import scala.util.{Random, Try}
 
 // This can't be a trait due to serialization issues
 object Schema {
@@ -360,8 +363,7 @@ object Schema {
                                   inMemPool: Boolean = false,
                                   lastResolveAttempt: Option[Long] = None,
                                   rxTime: Long = System.currentTimeMillis(), // TODO: Unify common metadata like this
-                                  children: Set[String] = Set(),
-                                  forkChildren: Set[String] = Set()
+                                  children: Set[String] = Set()
                                 ) {
 
     def plus(previous: CheckpointCacheData): CheckpointCacheData = {
@@ -369,6 +371,27 @@ object Schema {
         lastResolveAttempt = lastResolveAttempt.map{t => Some(t)}.getOrElse(previous.lastResolveAttempt),
         rxTime = previous.rxTime
       )
+    }
+
+    def updateParentsChildRefs(edgeProcessor: ActorRef, dbActor: ActorRef)(implicit timeout: Timeout): Seq[CheckpointCacheData] = {
+
+      val parentEdges: Seq[Option[EdgeResponse]] = checkpointBlock.parentSOE.map(p => {
+        val edge = (edgeProcessor ? LookupEdge(p.hash)).mapTo[EdgeResponse]
+        edge.value.get.toOption
+      })
+
+      val updates = parentEdges.map(f => {
+        val checkpointBlockCache = f.get.cb.get
+
+        val updatedCheckpointBlockCache =
+          checkpointBlockCache.copy(children = checkpointBlockCache.children.+(checkpointBlock.soeHash))
+
+        updatedCheckpointBlockCache
+      })
+
+      updates.foreach(u => u.checkpointBlock.store(dbActor, u, u.resolved))
+
+      updates
     }
 
   }

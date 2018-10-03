@@ -19,7 +19,7 @@ import constellation._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.Random
+import scala.util.{Random, Try}
 import akka.pattern.ask
 import akka.util.Timeout
 
@@ -27,19 +27,13 @@ object EdgeProcessor {
 
   case class HandleTransaction(tx: Transaction)
   case class HandleCheckpoint(checkpointBlock: CheckpointBlock)
+  case class LookupEdge(soeHash: String)
+
+  case class EdgeResponse(soe: Option[SignedObservationEdgeCache] = None,
+                          cb: Option[CheckpointCacheData] = None)
 
   val logger = Logger(s"EdgeProcessor")
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
-
-  def signFlow(dao: Data, cb: CheckpointBlock): Unit = {
-    // Mock
-    // Check to see if we should add our signature to the CB
-    val cbPrime = updateCheckpointWithSelfSignatureEmit(cb, dao)
-    // Add to memPool or update an existing hash with new signatures and check for signature threshold
-    updateCheckpointMergeMemPool(cbPrime, dao)
-
-    attemptFormCheckpointUpdateState(dao)
-  }
 
   def resolveTxAncestryConflict = {}
   //Todo recurse down ancestors until snapshot. As we iterate, we choose ancestors that have the
@@ -72,6 +66,16 @@ object EdgeProcessor {
     isValidated
   }
 
+  def signFlow(dao: Data, cb: CheckpointBlock): Unit = {
+    // Mock
+    // Check to see if we should add our signature to the CB
+    val cbPrime = updateCheckpointWithSelfSignatureEmit(cb, dao)
+    // Add to memPool or update an existing hash with new signatures and check for signature threshold
+    updateCheckpointMergeMemPool(cbPrime, dao)
+
+    attemptFormCheckpointUpdateState(dao)
+  }
+
   def handleCheckpoint(cb: CheckpointBlock,
                        dao: Data,
                        internalMessage: Boolean = false)(implicit executionContext: ExecutionContext): Unit = {
@@ -89,13 +93,21 @@ object EdgeProcessor {
       .map { h => dao.hashToSignedObservationEdgeCache(h).map{h -> _} }
     )
 
+    //
+
     cache.foreach {
       case Some(checkpointCacheData) => handleConflictingCheckpoint(checkpointCacheData, cb, dao)
       case None =>
         Resolve.resolveCheckpoint(dao, cb).map { r =>
           if (r) {
+
             dao.metricsManager ! IncrementMetric("resolvedCheckpointMessages")
-            validateCheckpointBlock(dao, cb).foreach(if(_)signFlow(dao, cb))
+
+            validateCheckpointBlock(dao, cb).foreach( {
+              if (_) {
+                signFlow(dao, cb)
+              }
+            })
           }
           else {
             dao.metricsManager ! IncrementMetric("unresolvedCheckpointMessages")
@@ -125,13 +137,19 @@ object EdgeProcessor {
       // Otherwise do nothing as the resolution is already in progress.
     }
 
-    hasSignatureConflict(ca, cb) { handleSignatureConflict(ca, cb) }
+    val checkpointBlock = if (hasSignatureConflict(ca, cb)) {
+      handleSignatureConflict(ca, cb)
+    } else {
+      cb
+    }
 
     val potentialConflict = {
       // warn or store information about potential conflict
       // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
       //Todo figure out where to store and store it method
     }
+
+    checkpointBlock
   }
 
   def hasSignatureConflict(ca: CheckpointCacheData, cb: CheckpointBlock): Boolean = {
@@ -172,6 +190,7 @@ object EdgeProcessor {
     }
     cbPrime
   }
+
   // TEMPORARY mock-up for pre-consensus integration mimics transactions
   def updateCheckpointMergeMemPool(cb: CheckpointBlock, dao: Data) : Unit = {
     val cbPostUpdate = if (dao.checkpointMemPool.contains(cb.baseHash)) {
@@ -242,15 +261,16 @@ object EdgeProcessor {
 
       dao.metricsManager ! IncrementMetric("checkpointAccepted")
 
+      val checkpointCacheData = CheckpointCacheData(cb, inDAG = true, resolved = true)
+
       cb.store(
         dao.dbActor,
-        CheckpointCacheData(
-          cb,
-          inDAG = true,
-          resolved = true
-        ),
+        checkpointCacheData,
         resolved = true
       )
+
+      // make sure we link the parents for easy lookups
+      checkpointCacheData.updateParentsChildRefs(dao.edgeProcessor, dao.dbActor)
     }
   }
 
@@ -402,11 +422,6 @@ object EdgeProcessor {
 
       val roundHash = RoundHash(obe.left.hash + obe.right.hash)
 
-      // Start check pointing consensus round
-      /*      dao.consensus ! InitializeConsensusRound(facilitators, roundHash, (result) => {
-              println(s"consensus round complete result roundHash = $roundHash, result = $result")
-              EdgeProcessor.handleCheckpoint(result.checkpointBlock, dao)
-            }, CheckpointVote(checkpointBlock))*/
       dao.consensus ! ConsensusVote(dao.id, CheckpointVote(checkpointBlock), roundHash)
 
     }
@@ -415,7 +430,6 @@ object EdgeProcessor {
   case class CreateCheckpointEdgeResponse(
                                            checkpointEdge: CheckpointEdge,
                                            transactionsUsed: Set[String],
-                                           // filteredValidationTips: Seq[SignedObservationEdge],
                                            updatedTransactionMemPoolThresholdMet: Set[String]
                                          )
 
@@ -451,9 +465,6 @@ object EdgeProcessor {
 
     val checkpointEdgeData = CheckpointEdgeData(transactionsUsed.toSeq.sorted)
 
-    //val tips = validationTips.take(2)
-    //val filteredValidationTips = validationTips.filterNot(tips.contains)
-
     val observationEdge = ObservationEdge(
       TypedEdgeHash(tips.head.hash, EdgeHashType.CheckpointHash),
       TypedEdgeHash(tips(1).hash, EdgeHashType.CheckpointHash),
@@ -464,9 +475,7 @@ object EdgeProcessor {
 
     val checkpointEdge = CheckpointEdge(Edge(observationEdge, soe, ResolvedObservationEdge(tips.head, tips(1), Some(checkpointEdgeData))))
 
-    CreateCheckpointEdgeResponse(checkpointEdge, transactionsUsed,
-      //filteredValidationTips,
-      updatedTransactionMemPoolThresholdMet)
+    CreateCheckpointEdgeResponse(checkpointEdge, transactionsUsed, updatedTransactionMemPoolThresholdMet)
   }
 
   // TODO: Re-enable this section later, turning off for now for simplicity
@@ -523,6 +532,25 @@ object EdgeProcessor {
     }
   }
 
+  def lookupEdge(dao: Data, soeHash: String): EdgeResponse = {
+
+   val result = Try{
+     (dao.dbActor ? DBGet(soeHash)).mapTo[Option[SignedObservationEdgeCache]].get(t=5)
+   }.toOption
+
+   val resWithCBOpt = result.map{
+     cacheOpt =>
+      val cbOpt = cacheOpt.flatMap{ c =>
+        (dao.dbActor ? DBGet(c.signedObservationEdge.baseHash)).mapTo[Option[CheckpointCacheData]].get(t=5)
+          .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
+      }
+
+      EdgeResponse(cacheOpt, cbOpt)
+    }
+
+    resWithCBOpt.getOrElse(EdgeResponse())
+  }
+
 }
 
 class EdgeProcessor(dao: Data)
@@ -538,10 +566,15 @@ class EdgeProcessor(dao: Data)
 
       handleTransaction(transaction, dao)
 
-    case ConsensusRoundResult(checkpointBlock: CheckpointBlock, roundHash: RoundHash[Checkpoint]) =>
+    case HandleCheckpoint(checkpointBlock: CheckpointBlock) =>
       log.debug(s"handle checkpointBlock = $checkpointBlock")
 
       handleCheckpoint(checkpointBlock, dao)
+
+    case LookupEdge(soeHash: String) =>
+      log.debug(s"lookup edge = $soeHash")
+
+      lookupEdge(dao, soeHash)
   }
 
 }

@@ -29,7 +29,6 @@ import org.constellation.consensus.EdgeProcessor.HandleTransaction
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.consensus.{EdgeProcessor, Validation}
-import org.constellation.p2p.PeerAPI.EdgeResponse
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
@@ -37,11 +36,6 @@ import scala.util.{Random, Try}
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
 
 object PeerAPI {
-
-  case class EdgeResponse(
-                         soe: Option[SignedObservationEdgeCache] = None,
-                         cb: Option[CheckpointCacheData] = None
-                         )
 
 }
 
@@ -66,20 +60,9 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
           complete(clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)})
         } ~
         path("edge" / Segment) { soeHash =>
-          val result = Try{
-            (dao.dbActor ? DBGet(soeHash)).mapTo[Option[SignedObservationEdgeCache]].get(t=5)
-          }.toOption
+          val edge = EdgeProcessor.lookupEdge(dao, soeHash)
 
-          val resWithCBOpt = result.map{
-            cacheOpt =>
-              val cbOpt = cacheOpt.flatMap{ c =>
-                (dao.dbActor ? DBGet(c.signedObservationEdge.baseHash)).mapTo[Option[CheckpointCacheData]].get(t=5)
-                  .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
-              }
-              EdgeResponse(cacheOpt, cbOpt)
-          }
-
-          complete(resWithCBOpt.getOrElse(EdgeResponse()))
+          complete(edge)
         }
       }
     }
@@ -146,6 +129,7 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
         entity(as[CheckpointBlock]) {
           cb =>
             Future{
+              dao.edgeProcessor !
               EdgeProcessor.handleCheckpoint(cb, dao)(dao.edgeExecutionContext)
             }(dao.edgeExecutionContext)
             complete(StatusCodes.OK)
