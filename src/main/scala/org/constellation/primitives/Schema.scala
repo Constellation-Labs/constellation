@@ -16,6 +16,7 @@ import akka.util.Timeout
 import org.constellation.consensus.EdgeProcessor
 import org.constellation.consensus.EdgeProcessor.{EdgeResponse, LookupEdge}
 
+import scala.annotation.tailrec
 import scala.collection.{SortedSet, mutable}
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.Future
@@ -392,6 +393,28 @@ object Schema {
       updates.foreach(u => u.checkpointBlock.store(dbActor, u, u.resolved))
 
       updates
+    }
+
+    @tailrec final def getChildrenSignatures(dbActor: ActorRef,
+                              edgeProcessor: ActorRef,
+                              signatures: Set[HashSignature] = Set(),
+                              children: Set[String] = children)(implicit timeout: Timeout): Set[HashSignature] = {
+      if (children.isEmpty) {
+        signatures
+      } else {
+
+        val childrenEdges = children.map(f => {
+          val edge = (edgeProcessor ? LookupEdge(f)).mapTo[EdgeResponse]
+          edge.value.get.toOption
+        })
+
+        val childrenCheckpointCache: Set[CheckpointCacheData] = childrenEdges.map(f => f.get.cb.get)
+
+        val updatedChildren = childrenCheckpointCache.flatMap(f => f.children)
+        val signatures = childrenCheckpointCache.flatMap(f => f.checkpointBlock.signatures)
+
+        getChildrenSignatures(dbActor, edgeProcessor, signatures, updatedChildren)
+      }
     }
 
   }

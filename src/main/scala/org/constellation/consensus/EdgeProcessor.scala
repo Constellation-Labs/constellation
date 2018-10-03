@@ -22,6 +22,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Random, Try}
 import akka.pattern.ask
 import akka.util.Timeout
+import org.constellation.util.HashSignature
 
 object EdgeProcessor {
 
@@ -93,8 +94,6 @@ object EdgeProcessor {
       .map { h => dao.hashToSignedObservationEdgeCache(h).map{h -> _} }
     )
 
-    //
-
     cache.foreach {
       case Some(checkpointCacheData) => handleConflictingCheckpoint(checkpointCacheData, cb, dao)
       case None =>
@@ -114,39 +113,19 @@ object EdgeProcessor {
           }
         }
     }
-
-    //          .onComplete {
-    //            potentialChildren.foreach {//todo process children
-    //              _.foreach { c =>
-    //                Future(handleCheckpoint(c, dao, true))
-    //              }
-    //            }
-    //          }
-    // Also need to register it with ldb ? To prevent duplicate processing ? Or after
-    // If there are duplicate transactions, do a score calculation relative to the other one to determine which to preserve.
-    // Potentially rolling back the other one.
   }
 
-  def rollBackGraph(cb: CheckpointBlock) = {}//Todo recurse to greatest common ancestor and recursively change pointers. Can use @tailrec
+  def updateActiveCheckpointBlock(cb: CheckpointCacheData) = {
+    // TODO: mutate checkpointBlockBaseHash -> cb.soeHash pointer
+  }
 
-  def handleConflictingCheckpoint(ca: CheckpointCacheData, cb: CheckpointBlock, dao: Data): CheckpointBlock= {
-    dao.metricsManager ! IncrementMetric("dupCheckpointReceived")
-
-    if (ca.resolved) {
-      // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
-      // Otherwise do nothing as the resolution is already in progress.
-    }
+  def handleConflictingCheckpoint(ca: CheckpointCacheData, cb: CheckpointBlock, dao: Data): CheckpointCacheData= {
+    val mostRecentCheckpointCacheData: CheckpointCacheData = lookupEdge(dao, cb.soeHash).cb.get
 
     val checkpointBlock = if (hasSignatureConflict(ca, cb)) {
-      handleSignatureConflict(ca, cb)
+      handleSignatureConflict(ca, mostRecentCheckpointCacheData, dao)
     } else {
-      cb
-    }
-
-    val potentialConflict = {
-      // warn or store information about potential conflict
-      // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
-      //Todo figure out where to store and store it method
+      mostRecentCheckpointCacheData
     }
 
     checkpointBlock
@@ -156,20 +135,18 @@ object EdgeProcessor {
     ca.checkpointBlock.baseHash == cb.baseHash && ca.checkpointBlock.soeHash != cb.soeHash
   }
 
-  def handleSignatureConflict(ca: CheckpointCacheData, cb: CheckpointBlock): CheckpointBlock = {
-    val mostSignatures = ca.checkpointBlock :: cb :: Nil maxBy(_.signatures.length)
+  def handleSignatureConflict(ca: CheckpointCacheData, mostRecentCheckpointCacheData: CheckpointCacheData, dao: Data): CheckpointCacheData = {
+    val previousSignatures: Set[HashSignature] =
+      ca.getChildrenSignatures(dao.dbActor, dao.edgeProcessor)
 
-    // TODO
-    // when storing a new checkpoint block, check to see if ancestors exist, if so update them to have reference to children
-    // if not add a dummy cache that is not resolved to store a reference to child, make sure to update children not replace
-    // when looking up checkpoint block, ask for its stored cache, lookup each of its children recursively and grab their signatures
-    // compare length of signatures, pick one checkpoint block or the other, replace ref to soe hash of the one that is selected
+    val mostRecentSignatures: Set[HashSignature] =
+      mostRecentCheckpointCacheData.getChildrenSignatures(dao.dbActor, dao.edgeProcessor)
 
-    if (mostSignatures == cb) {
-      rollBackGraph(mostSignatures)
-      cb
+    if (mostRecentSignatures.size > previousSignatures.size) {
+      updateActiveCheckpointBlock(mostRecentCheckpointCacheData)
+      mostRecentCheckpointCacheData
     } else {
-      ca.checkpointBlock
+      ca
     }
   }
 
@@ -541,7 +518,7 @@ object EdgeProcessor {
    val resWithCBOpt = result.map{
      cacheOpt =>
       val cbOpt = cacheOpt.flatMap{ c =>
-        (dao.dbActor ? DBGet(c.signedObservationEdge.baseHash)).mapTo[Option[CheckpointCacheData]].get(t=5)
+        (dao.dbActor ? DBGet(c.signedObservationEdge.hash)).mapTo[Option[CheckpointCacheData]].get(t=5)
           .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
       }
 
