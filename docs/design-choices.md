@@ -14,15 +14,21 @@ For a cursory glipse into the core teams perspectives, you may check out the fol
 * [youtube.com/constellation-labs/talk-at-Tech-Crunch](https://youtu.be/SsYZF4msXuQ) (Aug. 2018, 40 mins)
 * [youtube.com/constellation-labs/testnet-overview](https://youtu.be/xjn6Te7Twg4) (Sept. 2018, 22 mins)
 
+#### Why scala?
+There are some general notes on Scala and also on other functional programming languages actively used for crypto projects in the
+[/wiki/Comparisons-to-other-protocols](https://github.com/Constellation-Labs/constellation/wiki/Comparisons-to-other-protocols#fast_forward-projects-using-a-functional-language-approach).
+
+One motivating factor as language of choice for the reference implementation of the protocol was of course the core teams experience with it, as well as the useful packages like akka actors and apache spark on the Java virtual machine (JVM). The constellation code base also makes extensive use of the type hierarchy features. In fact, the para-protocol approach to dApp integration builds on it.
+
+##### on dependencies
+
+(tbd)
+
 #### on architecture
 
 (tbd)
 
 #### on recommended-frameworks
-
-(tbd)
-
-#### on dependencies
 
 (tbd)
 
