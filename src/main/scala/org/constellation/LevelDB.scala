@@ -6,6 +6,7 @@ import better.files._
 import com.typesafe.scalalogging.Logger
 import constellation.{ParseExt, SerExt}
 import org.constellation.LevelDB.RestartDB
+import org.constellation.primitives.Schema.{CheckpointCacheData, TransactionCacheData}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.ProductHash
 import org.iq80.leveldb._
@@ -28,6 +29,83 @@ object LevelDB {
     new LevelDB(file)
   }
 
+}
+
+trait LvlDB {
+
+  def restart(): Unit
+  def putCheckpointCacheData(key: String, c: CheckpointCacheData): Unit
+  def updateCheckpointCacheData(key: String, f: CheckpointCacheData => CheckpointCacheData, empty: CheckpointCacheData): CheckpointCacheData
+  def getCheckpointCacheData(key: String): Option[CheckpointCacheData]
+  def putTransactionCacheData(key: String, t: TransactionCacheData): Unit
+  def updateTransactionCacheData(key: String, f: TransactionCacheData => TransactionCacheData, empty: TransactionCacheData): TransactionCacheData
+  def getTransactionCacheData(key: String): Option[TransactionCacheData]
+  def delete(key: String): Boolean
+}
+
+class LvlDBImpl(dao: Data) extends LvlDB {
+  private val logger = Logger("LvlDB")
+
+  private def tmpDirId = file"tmp/${dao.id.medium}/db"
+  private def mkDB: LevelDB = LevelDB(tmpDirId)
+
+  private var db = mkDB
+
+  private def put(key: String, obj: Any) = {
+    dao.numDBPuts += 1
+    val bytes = KryoSerializer.serializeAnyRef(obj)
+    db.putBytes(key, bytes)
+  }
+
+  private def get[T](key: String, cls: Class[T]): Option[T] = {
+    dao.numDBGets += 1
+    db.getBytes(key).map(bytes => KryoSerializer.deserialize(bytes, cls))
+  }
+
+  private def update[T](key: String, cls: Class[T], updateF: T => T, empty: T): T = {
+    dao.numDBUpdates += 1
+    val o = get(key, cls).map(updateF).getOrElse(empty)
+    put(key, o)
+    o
+  }
+
+
+  override def putCheckpointCacheData(
+    s: String,
+    c: CheckpointCacheData
+  ): Unit = put(s, c)
+  override def getCheckpointCacheData(
+    s: String
+  ): Option[CheckpointCacheData] = get(s, classOf[CheckpointCacheData])
+  override def putTransactionCacheData(
+    s: String,
+    t: TransactionCacheData
+  ): Unit = put(s, t)
+  override def getTransactionCacheData(
+    s: String
+  ): Option[TransactionCacheData] = get(s, classOf[TransactionCacheData])
+
+  override def restart(): Unit = {
+    Try { db.destroy() }.foreach(e => logger.warn("Exception while destroying LevelDB db", e))
+    db = mkDB
+  }
+  override def updateCheckpointCacheData(
+    key: String,
+    f: CheckpointCacheData => CheckpointCacheData,
+    empty: CheckpointCacheData
+  ): CheckpointCacheData = update(key, classOf[CheckpointCacheData], f, empty)
+
+  override def updateTransactionCacheData(
+    key: String,
+    f: TransactionCacheData => TransactionCacheData,
+    empty: TransactionCacheData
+  ): TransactionCacheData = update(key, classOf[TransactionCacheData], f, empty)
+
+  override def delete(key: String): Boolean =
+    if (db.contains(key)) {
+      dao.numDBDeletes += 1
+      db.delete(key).isSuccess
+    } else true
 }
 
 import org.constellation.LevelDB._

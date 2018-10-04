@@ -4,7 +4,7 @@ import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem, Props, TypedActor, TypedProps}
 import akka.dispatch.ExecutionContexts
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Route
@@ -119,6 +119,10 @@ class ConstellationNode(val configKeyPair: KeyPair,
   val dbActor: ActorRef =  system.actorOf(
     Props(new LevelDBActor(data)), s"ConstellationDBActor_$publicKeyHash"
   )
+
+  val dbActor2: LvlDB = TypedActor(system).typedActorOf(TypedProps(
+    classOf[LvlDB],
+    new LvlDBImpl(data)), "LevelDB")
 
   val udpActor: ActorRef =
     system.actorOf(
