@@ -151,7 +151,11 @@ class Simulation {
     apis.foreach(_.postEmpty("ready"))
   }
 
-  def run(attemptSetExternalIP: Boolean = false, apis: Seq[APIClient], peerApis: Seq[APIClient])(implicit executionContext: ExecutionContext): Unit = {
+  def run(
+           attemptSetExternalIP: Boolean = false,
+           apis: Seq[APIClient],
+           peerApis: Seq[APIClient]
+         )(implicit executionContext: ExecutionContext): Unit = {
 
     awaitHealthy(apis)
 

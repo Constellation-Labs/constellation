@@ -11,8 +11,8 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 trait EdgeDAO {
 
   var genesisObservation: Option[GenesisObservation] = None
-  var maxWidth = 100
-  var minCheckpointFormationThreshold = 30
+  var maxWidth = 30
+  var minCheckpointFormationThreshold = 10
   val minTXSignatureThreshold = 5
   var minCBSignatureThreshold = 5
   val maxUniqueTXSize = 500

@@ -114,6 +114,7 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
         path("signature") {
           entity(as[CheckpointBlock]) { cb =>
             // Temporary, need to go thru flow
+
             val blockWithSigAdded = cb.plus(dao.keyPair)
             if (dao.nodeState == Ready) {
               Future {

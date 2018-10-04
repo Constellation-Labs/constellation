@@ -22,7 +22,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.Random
 import akka.pattern.ask
 import akka.util.Timeout
-import org.constellation.util.HeartbeatSubscribe
+import org.constellation.util.{HashSignature, HeartbeatSubscribe}
 
 object EdgeProcessor {
 
@@ -213,6 +213,9 @@ object EdgeProcessor {
       dao.checkpointMemPool(cb.baseHash) = cb
       cb
     }
+
+    dao.metricsManager ! IncrementMetric("checkpointNumSignatures_" + cbPostUpdate.signatures.size)
+    dao.metricsManager ! UpdateMetric("checkpointSignatureThreshold", dao.minCBSignatureThreshold.toString)
 
     // TODO: Verify this is still valid before accepting. And/or
     // consider removing from memPool if there's a conflict on something else being accepted.
@@ -557,6 +560,45 @@ class EdgeProcessor(dao: Data)
       log.debug(s"handle checkpointBlock = $checkpointBlock")
 
       handleCheckpoint(checkpointBlock, dao)
+  }
+
+}
+
+class CheckpointUniqueSigner(dao: Data)
+                   (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
+
+  private val id: Id = dao.id
+  private val kp: KeyPair = dao.keyPair
+
+
+  import com.twitter.storehaus.cache._
+  val cache: LRUCache[String, HashSignature] = LRUCache[String, HashSignature](10000)
+
+  def receive: Receive = {
+    case cb: CheckpointBlock =>
+
+      val sigOpt = cache.get(cb.baseHash)
+
+      if (cb.signedBy(id)) {
+
+        val signatures = cb.hashSignaturesOf(id)
+        if (signatures.size > 1) {
+          dao.metricsManager ! IncrementMetric("checkpointDuplicateSignatureDetectedERROR")
+        }
+
+        if (sigOpt.exists(hs => !signatures.contains(hs))) {
+          dao.metricsManager ! IncrementMetric("checkpointDuplicateCacheSignatureDetectedERROR")
+        }
+
+      }
+/*
+
+        sender() ! {
+          cb
+        } else {
+          cb.plus(kp)
+        }
+      }*/
   }
 
 }

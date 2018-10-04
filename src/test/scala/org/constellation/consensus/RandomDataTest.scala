@@ -1,5 +1,7 @@
 package org.constellation.consensus
 
+import java.security.KeyPair
+
 import org.scalatest.FlatSpec
 import constellation._
 import org.constellation.primitives.Schema.{CheckpointBlock, SignedObservationEdge}
@@ -32,16 +34,38 @@ class RandomDataTest extends FlatSpec {
     )
   }
 
+  def randomBlock(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): Schema.CheckpointBlock = {
+    val txs = Seq.fill(5)(randomTransaction)
+    EdgeProcessor.createCheckpointBlock(txs, tips)(startingKeyPair)
+  }
+
+  "Signatures combiners" should "be unique" in {
+
+    val cb = randomBlock(startingTips, keyPairs.head)
+    val cb2SameSignature = randomBlock(startingTips, keyPairs.head)
+
+   // val bogus = cb.plus(keyPairs.head).signatures
+  //  bogus.foreach{println}
+
+    println(hashSign("asdf", keyPairs.head))
+    println(hashSign("asdf", keyPairs.head))
+    println(hashSign("asdf", keyPairs.head))
+    println(hashSign("asdf", keyPairs.head))
+    println(hashSign("asdf", keyPairs.head))
+
+//    assert(bogus.size == 1)
+
+    //val cb = randomBlock(startingTips, keyPairs.last)
+
+
+  }
+
   "Generate random CBs" should "build a graph" in {
 
 
     var width = 2
     val maxWidth = 7
 
-    def randomBlock(tips: Seq[SignedObservationEdge]): Schema.CheckpointBlock = {
-      val txs = Seq.fill(5)(randomTransaction)
-      EdgeProcessor.createCheckpointBlock(txs, tips)(keyPairs.head)
-    }
 
     val activeBlocks = TrieMap[SignedObservationEdge, Int]()
 

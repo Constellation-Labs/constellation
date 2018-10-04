@@ -379,6 +379,9 @@ object Schema {
                               checkpoint: CheckpointEdge
                                   ) {
 
+    def signedBy(id: Id) : Boolean = witnessIds.contains(id)
+    def hashSignaturesOf(id: Id) : Seq[HashSignature] = signatures.filter(_.toId == id)
+
     def witnessIds: Seq[Id] = signatures.map{_.toId}
 
     def signatures: Seq[HashSignature] = checkpoint.edge.signedObservationEdge.signatureBatch.signatures

@@ -13,7 +13,7 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
-import org.constellation.consensus.{CheckpointMemPoolVerifier, Consensus, EdgeProcessor}
+import org.constellation.consensus.{CheckpointMemPoolVerifier, CheckpointUniqueSigner, Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.{PeerAPI, RegisterNextActor, UDPActor}
 import org.constellation.primitives.Schema.{AddPeerFromLocal, ToggleHeartbeat}
@@ -21,42 +21,67 @@ import org.constellation.primitives._
 import org.constellation.util.{APIClient, Heartbeat}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
-object ConstellationNode extends App {
+object ConstellationNode {
 
-  implicit val system: ActorSystem = ActorSystem("Constellation")
-  implicit val materializer: ActorMaterializer = ActorMaterializer()
-  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("main-dispatcher")
+  def main(args: Array[String]): Unit = {
+    val logger = Logger(s"Main")
+    logger.info("Main init")
 
-  val config = ConfigFactory.load()
+    Try {
 
-  val rpcTimeout = config.getInt("rpc.timeout")
 
-  val seeds = args.headOption.map(_.split(",").map{constellation.addressToSocket}.toSeq).getOrElse(Seq())
+      implicit val system: ActorSystem = ActorSystem("Constellation")
+      implicit val materializer: ActorMaterializer = ActorMaterializer()
+      implicit val executionContext: ExecutionContext = system.dispatchers.lookup("main-dispatcher")
 
-  private val hostName = if (args.length > 1) {
-    args(1)
-  } else "127.0.0.1"
+      logger.info("Config load")
+      val config = ConfigFactory.load()
 
-  private val requestExternalAddressCheck = if (args.length > 2) {
-    args(2).toBoolean
-  } else false
+      val rpcTimeout = config.getInt("rpc.timeout")
 
-  // TODO: update to take from config
-  val keyPair = KeyUtils.makeKeyPair()
 
-  val node = new ConstellationNode(
-    keyPair,
-    seeds,
-    config.getString("http.interface"),
-    config.getInt("http.port"),
-    config.getString("udp.interface"),
-    config.getInt("udp.port"),
-    timeoutSeconds = rpcTimeout,
-    hostName = hostName,
-    requestExternalAddressCheck = requestExternalAddressCheck
-  )
+      val seeds = Seq()
+      val hostName = "127.0.0.1"
+      val requestExternalAddressCheck = false
+      /*
+          val seeds = args.headOption.map(_.split(",").map{constellation.addressToSocket}.toSeq).getOrElse(Seq())
+
+          val hostName = if (args.length > 1) {
+            args(1)
+          } else "127.0.0.1"
+
+          val requestExternalAddressCheck = if (args.length > 2) {
+            args(2).toBoolean
+          } else false
+      */
+
+      // TODO: update to take from config
+      logger.info("pre Key pair")
+      val keyPair = KeyUtils.makeKeyPair()
+      logger.info("post key pair")
+
+      val node = new ConstellationNode(
+        keyPair,
+        seeds,
+        config.getString("http.interface"),
+        config.getInt("http.port"),
+        config.getString("udp.interface"),
+        config.getInt("udp.port"),
+        timeoutSeconds = rpcTimeout,
+        hostName = hostName,
+        requestExternalAddressCheck = requestExternalAddressCheck
+      )
+    } match {
+      case Failure(e) => e.printStackTrace()
+      case Success(x) => logger.info("success")
+    }
+
+  }
+
+
+
 }
 
 class ConstellationNode(val configKeyPair: KeyPair,
@@ -71,10 +96,10 @@ class ConstellationNode(val configKeyPair: KeyPair,
                         val autoSetExternalAddress: Boolean = false,
                         val peerHttpPort: Int = 9001,
                         val peerTCPPort: Int = 9002)(
-               implicit val system: ActorSystem,
-               implicit val materialize: ActorMaterializer,
-               implicit val executionContext: ExecutionContext
-             ){
+                         implicit val system: ActorSystem,
+                         implicit val materialize: ActorMaterializer,
+                         implicit val executionContext: ExecutionContext
+                       ){
 
   val data = new Data()
   data.updateKeyPair(configKeyPair)
@@ -83,6 +108,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
   data.actorMaterializer = materialize
 
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
+
+  logger.info("Node init")
 
   implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
 
@@ -103,6 +130,10 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   val randomTX : ActorRef = system.actorOf(
     Props(new RandomTransactionManager(data)), s"RandomTXManager_$publicKeyHash"
+  )
+
+  val cpUniqueSigner : ActorRef = system.actorOf(
+    Props(new CheckpointUniqueSigner(data)), s"CheckpointUniqueSigner_$publicKeyHash"
   )
 
   // Setup actors
@@ -149,9 +180,13 @@ class ConstellationNode(val configKeyPair: KeyPair,
   data.peerManager = peerManager
   data.metricsManager = metricsManager
   data.edgeProcessor = edgeProcessorActor
+  data.cpSigner = cpUniqueSigner
 
   // If we are exposing rpc then create routes
   val routes: Route = new API(udpAddress, data, cellManager).authRoutes
+
+  logger.info("API Binding")
+
 
   // Setup http server for internal API
   val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)

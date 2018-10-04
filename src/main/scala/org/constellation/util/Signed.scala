@@ -157,8 +157,9 @@ trait POWSignHelp {
     )
   }
 
-  def hashSignBatchZeroTyped(hash: ProductHash, keyPair: KeyPair): SignatureBatch = {
-    SignatureBatch(hash.hash, Seq(hashSign(hash.hash, keyPair)))
+  def hashSignBatchZeroTyped(productHash: ProductHash, keyPair: KeyPair): SignatureBatch = {
+    val hash = productHash.hash
+    SignatureBatch(hash, Seq(hashSign(hash, keyPair)))
   }
 
   def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge = {

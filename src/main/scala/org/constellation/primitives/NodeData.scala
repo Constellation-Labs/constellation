@@ -21,6 +21,7 @@ trait NodeData {
   var edgeProcessor: ActorRef = _
   var memPoolManager: ActorRef = _
   var heartbeatActor: ActorRef = _
+  var cpSigner: ActorRef = _
 
   var minGenesisDistrSize: Int = 3
   @volatile var downloadMode: Boolean = true
