@@ -34,8 +34,8 @@ import scala.util.{Failure, Success, Try}
 case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id)
 
 class API(udpAddress: InetSocketAddress,
-          val data: Data = null,
-          cellManager: ActorRef)(implicit system: ActorSystem, val timeout: Timeout)
+          val data: Data = null)
+         (implicit system: ActorSystem, val timeout: Timeout)
   extends Json4sSupport
     with Wallet
     with ServeUI {

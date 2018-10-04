@@ -6,7 +6,7 @@ import better.files._
 import com.typesafe.scalalogging.Logger
 import constellation.{ParseExt, SerExt}
 import org.constellation.LevelDB.RestartDB
-import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCacheData, TransactionCacheData}
+import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCacheData, SignedObservationEdgeCache, TransactionCacheData}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.ProductHash
 import org.iq80.leveldb._
@@ -34,6 +34,7 @@ object LevelDB {
 trait LvlDB {
 
   def restart(): Unit
+  def delete(key: String): Boolean
   def putCheckpointCacheData(key: String, c: CheckpointCacheData): Unit
   def updateCheckpointCacheData(key: String, f: CheckpointCacheData => CheckpointCacheData, empty: CheckpointCacheData): CheckpointCacheData
   def getCheckpointCacheData(key: String): Option[CheckpointCacheData]
@@ -43,7 +44,10 @@ trait LvlDB {
   def putAddressCacheData(key: String, t: AddressCacheData): Unit
   def updateAddressCacheData(key: String, f: AddressCacheData => AddressCacheData, empty: AddressCacheData): AddressCacheData
   def getAddressCacheData(key: String): Option[AddressCacheData]
-  def delete(key: String): Boolean
+  def putSignedObservationEdgeCache(key: String, t: SignedObservationEdgeCache): Unit
+  def updateSignedObservationEdgeCache(key: String, f: SignedObservationEdgeCache => SignedObservationEdgeCache, empty: SignedObservationEdgeCache): SignedObservationEdgeCache
+  def getSignedObservationEdgeCache(key: String): Option[SignedObservationEdgeCache]
+
 }
 
 class LvlDBImpl(dao: Data) extends LvlDB {
@@ -122,6 +126,17 @@ class LvlDBImpl(dao: Data) extends LvlDB {
     key: String
   ): Option[
     AddressCacheData] = get(key, classOf[AddressCacheData])
+
+  override def putSignedObservationEdgeCache(key: String, t: SignedObservationEdgeCache): Unit =
+    put(key, classOf[SignedObservationEdgeCache])
+
+  override def updateSignedObservationEdgeCache(key: String,
+                                                f: SignedObservationEdgeCache => SignedObservationEdgeCache,
+                                                empty: SignedObservationEdgeCache): SignedObservationEdgeCache =
+    update(key, classOf[SignedObservationEdgeCache], f, empty)
+
+  override def getSignedObservationEdgeCache(key: String): Option[SignedObservationEdgeCache] =
+    get(key, classOf[SignedObservationEdgeCache])
 }
 
 import org.constellation.LevelDB._

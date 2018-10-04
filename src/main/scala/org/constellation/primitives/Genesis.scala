@@ -6,7 +6,7 @@ import org.constellation.LevelDB.DBPut
 
 import scala.collection.concurrent.TrieMap
 
-trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
+trait Genesis extends NodeData with Ledger with EdgeDAO {
 
   val CoinBaseHash = "coinbase"
 
@@ -84,16 +84,13 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
     go.genesis.transactions.foreach{
       rtx =>
         val bal = rtx.amount - (go.initialDistribution.transactions.map {_.amount}.sum * 2)
-        dbActor ! DBPut(
-          rtx.dst.hash,
-          AddressCacheData(bal, bal, Some(1000D))
-        )
+        dbActor.putAddressCacheData(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000D)))
     }
 
     // Store the balance for the initial distribution addresses along with starting rep score.
     go.initialDistribution.transactions.foreach{ t =>
       val bal = t.amount * 2
-      dbActor ! DBPut(t.dst.hash, AddressCacheData(bal, bal, Some(1000D)))
+      dbActor.putAddressCacheData(t.dst.hash, AddressCacheData(bal, bal, Some(1000D)))
     }
 
     val numTX = (1 + go.initialDistribution.transactions.size * 2).toString

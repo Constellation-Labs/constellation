@@ -48,10 +48,40 @@ class EdgeProcessorTest extends FlatSpec {
   val mockData = new Data
   mockData.updateKeyPair(keyPair)
 
+  val mockLvlDB = new LvlDB {
+    override def restart(): Unit = ???
+
+    override def delete(key: String): Boolean = ???
+
+    override def putCheckpointCacheData(key: String, c: CheckpointCacheData): Unit = ???
+
+    override def updateCheckpointCacheData(key: String, f: CheckpointCacheData => CheckpointCacheData, empty: CheckpointCacheData): CheckpointCacheData = ???
+
+    override def getCheckpointCacheData(key: String): Option[CheckpointCacheData] = ???
+
+    override def putTransactionCacheData(key: String, t: TransactionCacheData): Unit = ???
+
+    override def updateTransactionCacheData(key: String, f: TransactionCacheData => TransactionCacheData, empty: TransactionCacheData): TransactionCacheData = ???
+
+    override def getTransactionCacheData(key: String): Option[TransactionCacheData] = ???
+
+    override def putAddressCacheData(key: String, t: AddressCacheData): Unit = ???
+
+    override def updateAddressCacheData(key: String, f: AddressCacheData => AddressCacheData, empty: AddressCacheData): AddressCacheData = ???
+
+    override def getAddressCacheData(key: String): Option[AddressCacheData] = ???
+
+    override def putSignedObservationEdgeCache(key: String, t: SignedObservationEdgeCache): Unit = ???
+
+    override def updateSignedObservationEdgeCache(key: String, f: SignedObservationEdgeCache => SignedObservationEdgeCache, empty: SignedObservationEdgeCache): SignedObservationEdgeCache = ???
+
+    override def getSignedObservationEdgeCache(key: String): Option[SignedObservationEdgeCache] = ???
+  }
+
   def makeDao(mockData: Data, peerManager: TestProbe = peerManager, metricsManager: TestProbe = metricsManager,
               dbActor: TestProbe = dbActor) = {
     mockData.actorMaterializer = materialize
-    mockData.dbActor = dbActor.testActor
+    mockData.dbActor = testActor
     mockData.metricsManager = metricsManager.testActor
     mockData.peerManager = peerManager.testActor
     mockData
@@ -74,9 +104,7 @@ class EdgeProcessorTest extends FlatSpec {
 
   "Incoming transactions" should "be signed and returned if valid" in {
     val validatorResponse = Validation.validateTransaction(data.dbActor,tx)
-    validatorResponse foreach { tx2 =>
-      assert(tx2.transaction == tx)
-    }
+    assert(validatorResponse.transaction === tx)
   }
 
   "Incoming transactions" should " be signed if already signed by this keyPair" in {
@@ -85,11 +113,9 @@ class EdgeProcessorTest extends FlatSpec {
     val thing = new Data
     thing.updateKeyPair(keyPair)
     val dummyDao = makeDao(thing)
-    validatorResponse.foreach { tx2 =>
-      peerManager.expectMsg(APIBroadcast(_.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx2)))
-      val signedTransaction = EdgeProcessor.updateWithSelfSignatureEmit(tx, dummyDao)
-      assert(signedTransaction.signatures.exists(_.publicKey == dummyDao.keyPair.getPublic))
-    }
+    peerManager.expectMsg(APIBroadcast(_.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", validatorResponse)))
+    val signedTransaction = EdgeProcessor.updateWithSelfSignatureEmit(tx, dummyDao)
+    assert(signedTransaction.signatures.exists(_.publicKey == dummyDao.keyPair.getPublic))
   }
 
   "Incoming transactions" should "not be signed if already signed by this keyPair" in {

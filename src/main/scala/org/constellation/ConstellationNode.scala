@@ -112,13 +112,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
     Props(new PeerManager(data)), s"PeerManager_$publicKeyHash"
   )
 
-  val cellManager: ActorRef = system.actorOf(
-    Props(new CellManager(memPoolManager, metricsManager, peerManager)), s"CellManager_$publicKeyHash"
-  )
-
   val dbActor: LvlDB = TypedActor(system).typedActorOf(TypedProps(
     classOf[LvlDB],
-    new LvlDBImpl(data)), "LevelDB")
+    new LvlDBImpl(data)), s"LvlDB_$publicKeyHash")
 
   val udpActor: ActorRef =
     system.actorOf(
@@ -140,7 +136,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   data.edgeProcessor = edgeProcessorActor
 
   // If we are exposing rpc then create routes
-  val routes: Route = new API(udpAddress, data, cellManager).authRoutes
+  val routes: Route = new API(udpAddress, data).authRoutes
 
   // Setup http server for internal API
   val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)

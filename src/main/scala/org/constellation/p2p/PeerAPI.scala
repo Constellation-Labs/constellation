@@ -66,20 +66,16 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
           complete(clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)})
         } ~
         path("edge" / Segment) { soeHash =>
-          val result = Try{
-            (dao.dbActor ? DBGet(soeHash)).mapTo[Option[SignedObservationEdgeCache]].get(t=5)
-          }.toOption
+          val cacheOpt = dao.dbActor.getSignedObservationEdgeCache(soeHash)
 
-          val resWithCBOpt = result.map{
-            cacheOpt =>
-              val cbOpt = cacheOpt.flatMap{ c =>
-                (dao.dbActor ? DBGet(c.signedObservationEdge.baseHash)).mapTo[Option[CheckpointCacheData]].get(t=5)
-                  .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
-              }
-              EdgeResponse(cacheOpt, cbOpt)
+          val cbOpt = cacheOpt.flatMap { c =>
+            dao.dbActor.getCheckpointCacheData(c.signedObservationEdge.baseHash)
+              .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
           }
 
-          complete(resWithCBOpt.getOrElse(EdgeResponse()))
+          val resWithCBOpt = EdgeResponse(cacheOpt, cbOpt)
+
+          complete(resWithCBOpt)
         }
       }
     }
@@ -136,7 +132,7 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
         val response = if (memPoolPresence) {
           TransactionQueryResponse(s, dao.transactionMemPool.collectFirst{case x if x.hash == s => x}, inMemPool = true, inDAG = false, None)
         } else {
-          (dao.dbActor ? DBGet(s)).mapTo[Option[TransactionCacheData]].get().map{
+          dao.dbActor.getTransactionCacheData(s).map {
             cd =>
               TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence, cd.inDAG, cd.cbBaseHash)
           }.getOrElse{
