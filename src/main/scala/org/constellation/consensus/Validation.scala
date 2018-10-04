@@ -6,6 +6,7 @@ import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
 import org.constellation.LevelDB.DBGet
+import org.constellation.LvlDB
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.{AddressCacheData, Transaction, TransactionCacheData}
 
@@ -58,16 +59,12 @@ object Validation {
     * @param tx : Resolved transaction
     * @return Future of whether or not the transaction should be considered valid
     * **/
-  def validateTransaction(dbActor: ActorRef, tx: Transaction)(implicit ec: ExecutionContext): Future[TransactionValidationStatus] = {
+  def validateTransaction(dbActor: LvlDB, tx: Transaction)(implicit ec: ExecutionContext): Future[TransactionValidationStatus] = {
 
     // A transaction should only be considered in the DAG once it has been committed to a checkpoint block.
     // Before that, it exists only in the memPool and is not stored in the database.
-    val txCache = (dbActor ? DBGet(tx.baseHash)).mapTo[Option[TransactionCacheData]] //.map{_.exists{_.inDAG}}
-    val addressCache = (dbActor ? DBGet(tx.src.hash)).mapTo[Option[AddressCacheData]] //.map(_.exists(_.balance >= tx.amount))
-    txCache.flatMap{ txc =>
-      addressCache.map{ ac =>
-        TransactionValidationStatus(tx, txc, ac)
-      }
-    }
+    val txCache = dbActor.getTransactionCacheData(tx.baseHash)
+    val addressCache = dbActor.getAddressCacheData(tx.src.hash)
+    TransactionValidationStatus(tx, txCache, addressCache)
   }
 }

@@ -8,13 +8,13 @@ import akka.actor.ActorRef
 import org.constellation.primitives.Schema._
 import org.constellation.util.Signed
 import constellation._
-import org.constellation.LevelDB
+import org.constellation.{LevelDB, LvlDB}
 
 import scala.util.Try
 
 trait NodeData {
 
-  var dbActor : ActorRef = _
+  var dbActor : LvlDB = _
   var peerManager: ActorRef = _
   var consensus: ActorRef = _
   var metricsManager: ActorRef = _

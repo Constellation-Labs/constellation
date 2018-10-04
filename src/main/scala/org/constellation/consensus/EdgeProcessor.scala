@@ -45,7 +45,7 @@ object EdgeProcessor {
     // TODO : Handle resolution issues.
     val potentialChildren = dao.resolveNotifierCallbacks.get(cb.soeHash)
 
-    val cache = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]]
+    val cache = dao.dbActor.getCheckpointCacheData(cb.baseHash)
 
     def signFlow(): Unit = {
       // Mock

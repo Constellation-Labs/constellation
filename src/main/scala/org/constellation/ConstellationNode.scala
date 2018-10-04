@@ -116,11 +116,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
     Props(new CellManager(memPoolManager, metricsManager, peerManager)), s"CellManager_$publicKeyHash"
   )
 
-  val dbActor: ActorRef =  system.actorOf(
-    Props(new LevelDBActor(data)), s"ConstellationDBActor_$publicKeyHash"
-  )
-
-  val dbActor2: LvlDB = TypedActor(system).typedActorOf(TypedProps(
+  val dbActor: LvlDB = TypedActor(system).typedActorOf(TypedProps(
     classOf[LvlDB],
     new LvlDBImpl(data)), "LevelDB")
 

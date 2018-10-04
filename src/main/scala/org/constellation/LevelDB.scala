@@ -6,7 +6,7 @@ import better.files._
 import com.typesafe.scalalogging.Logger
 import constellation.{ParseExt, SerExt}
 import org.constellation.LevelDB.RestartDB
-import org.constellation.primitives.Schema.{CheckpointCacheData, TransactionCacheData}
+import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCacheData, TransactionCacheData}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.ProductHash
 import org.iq80.leveldb._
@@ -40,6 +40,9 @@ trait LvlDB {
   def putTransactionCacheData(key: String, t: TransactionCacheData): Unit
   def updateTransactionCacheData(key: String, f: TransactionCacheData => TransactionCacheData, empty: TransactionCacheData): TransactionCacheData
   def getTransactionCacheData(key: String): Option[TransactionCacheData]
+  def putAddressCacheData(key: String, t: AddressCacheData): Unit
+  def updateAddressCacheData(key: String, f: AddressCacheData => AddressCacheData, empty: AddressCacheData): AddressCacheData
+  def getAddressCacheData(key: String): Option[AddressCacheData]
   def delete(key: String): Boolean
 }
 
@@ -51,18 +54,18 @@ class LvlDBImpl(dao: Data) extends LvlDB {
 
   private var db = mkDB
 
-  private def put(key: String, obj: Any) = {
+  private def put(key: String, obj: AnyRef) = {
     dao.numDBPuts += 1
     val bytes = KryoSerializer.serializeAnyRef(obj)
     db.putBytes(key, bytes)
   }
 
-  private def get[T](key: String, cls: Class[T]): Option[T] = {
+  private def get[T <: AnyRef](key: String, cls: Class[T]): Option[T] = {
     dao.numDBGets += 1
     db.getBytes(key).map(bytes => KryoSerializer.deserialize(bytes, cls))
   }
 
-  private def update[T](key: String, cls: Class[T], updateF: T => T, empty: T): T = {
+  private def update[T <: AnyRef](key: String, cls: Class[T], updateF: T => T, empty: T): T = {
     dao.numDBUpdates += 1
     val o = get(key, cls).map(updateF).getOrElse(empty)
     put(key, o)
@@ -106,6 +109,19 @@ class LvlDBImpl(dao: Data) extends LvlDB {
       dao.numDBDeletes += 1
       db.delete(key).isSuccess
     } else true
+  override def putAddressCacheData(
+    key: String,
+    t: AddressCacheData
+  ): Unit = put(key, classOf[AddressCacheData])
+  override def updateAddressCacheData(
+    key: String,
+    f: AddressCacheData => AddressCacheData,
+    empty: AddressCacheData
+  ): AddressCacheData = update(key, classOf[AddressCacheData], f, empty)
+  override def getAddressCacheData(
+    key: String
+  ): Option[
+    AddressCacheData] = get(key, classOf[AddressCacheData])
 }
 
 import org.constellation.LevelDB._
