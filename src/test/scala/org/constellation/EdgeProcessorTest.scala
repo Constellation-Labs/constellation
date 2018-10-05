@@ -15,10 +15,11 @@ import org.constellation.primitives._
 import org.constellation.util.APIClient
 import org.scalatest.FlatSpec
 import scalaj.http.HttpResponse
+import org.scalamock.scalatest.MockFactory
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
-class EdgeProcessorTest extends FlatSpec {
+class EdgeProcessorTest extends FlatSpec with MockFactory {
   implicit val system: ActorSystem = ActorSystem("TransactionProcessorTest")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
@@ -27,7 +28,7 @@ class EdgeProcessorTest extends FlatSpec {
   val peerData = PeerData(addPeerRequest, getAPIClient("", 1))
   val peerManager = TestProbe()
   val metricsManager = TestProbe()
-  val dbActor = TestProbe()
+/*  val dbActor = TestProbe()
 
   dbActor.setAutoPilot(new TestActor.AutoPilot {
     def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
@@ -43,45 +44,13 @@ class EdgeProcessorTest extends FlatSpec {
         sender ! Some(TransactionCacheData(tx, true))
         TestActor.KeepRunning
     }
-  })
+  })*/
 
   val mockData = new Data
   mockData.updateKeyPair(keyPair)
 
-  val mockLvlDB = new LvlDB {
-    override def restart(): Unit = ???
-
-    override def delete(key: String): Boolean = ???
-
-    override def putCheckpointCacheData(key: String, c: CheckpointCacheData): Unit = ???
-
-    override def updateCheckpointCacheData(key: String, f: CheckpointCacheData => CheckpointCacheData, empty: CheckpointCacheData): CheckpointCacheData = ???
-
-    override def getCheckpointCacheData(key: String): Option[CheckpointCacheData] = ???
-
-    override def putTransactionCacheData(key: String, t: TransactionCacheData): Unit = ???
-
-    override def updateTransactionCacheData(key: String, f: TransactionCacheData => TransactionCacheData, empty: TransactionCacheData): TransactionCacheData = ???
-
-    override def getTransactionCacheData(key: String): Option[TransactionCacheData] = ???
-
-    override def putAddressCacheData(key: String, t: AddressCacheData): Unit = ???
-
-    override def updateAddressCacheData(key: String, f: AddressCacheData => AddressCacheData, empty: AddressCacheData): AddressCacheData = ???
-
-    override def getAddressCacheData(key: String): Option[AddressCacheData] = ???
-
-    override def putSignedObservationEdgeCache(key: String, t: SignedObservationEdgeCache): Unit = ???
-
-    override def updateSignedObservationEdgeCache(key: String, f: SignedObservationEdgeCache => SignedObservationEdgeCache, empty: SignedObservationEdgeCache): SignedObservationEdgeCache = ???
-
-    override def getSignedObservationEdgeCache(key: String): Option[SignedObservationEdgeCache] = ???
-  }
-
-  def makeDao(mockData: Data, peerManager: TestProbe = peerManager, metricsManager: TestProbe = metricsManager,
-              dbActor: TestProbe = dbActor) = {
+  def makeDao(mockData: Data, peerManager: TestProbe = peerManager, metricsManager: TestProbe = metricsManager) = {
     mockData.actorMaterializer = materialize
-    mockData.dbActor = testActor
     mockData.metricsManager = metricsManager.testActor
     mockData.peerManager = peerManager.testActor
     mockData
@@ -94,6 +63,13 @@ class EdgeProcessorTest extends FlatSpec {
   val txHash = tx.hash
   val invalidSpendHash = invalidTx.hash
   val randomPeer: (Id, PeerData) = (id, peerData)
+
+  val mocko = stub[LvlDB]
+
+  (mocko.getAddressCacheData _).when(srcHash).returns(Some(AddressCacheData(100000000000000000L, 100000000000000000L, None)))
+  (mocko.getTransactionCacheData _).when(txHash).returns(Some(TransactionCacheData(tx, false)))
+  (mocko.getTransactionCacheData _).when(invalidSpendHash).returns(Some(TransactionCacheData(tx, true)))
+  data.dbActor = mocko
 
   def getAPIClient(hostName: String, httpPort: Int) = {
     val api = new APIClient().setConnection(host = hostName, port = httpPort)
