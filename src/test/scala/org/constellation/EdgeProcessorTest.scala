@@ -16,7 +16,8 @@ import org.constellation.util.APIClient
 import org.scalatest.FlatSpec
 import scalaj.http.HttpResponse
 
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 
 class EdgeProcessorTest extends FlatSpec {
   implicit val system: ActorSystem = ActorSystem("TransactionProcessorTest")
@@ -61,7 +62,7 @@ class EdgeProcessorTest extends FlatSpec {
   val tx: Transaction = dummyTx(data)
   val invalidTx = dummyTx(data, -1L)
   val srcHash = tx.src.hash
-  val txHash = tx.hash
+  val txHash = tx.baseHash
   val invalidSpendHash = invalidTx.hash
   val randomPeer: (Id, PeerData) = (id, peerData)
 
