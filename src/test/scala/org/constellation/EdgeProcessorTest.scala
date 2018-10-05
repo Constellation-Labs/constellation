@@ -13,11 +13,12 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.APIClient
-import org.scalatest.FlatSpec
+import org.scalatest.{AsyncFlatSpec, FlatSpec}
 import scalaj.http.HttpResponse
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContextExecutor, Future}
+import scala.util.Success
 
 class EdgeProcessorTest extends FlatSpec {
   implicit val system: ActorSystem = ActorSystem("TransactionProcessorTest")
@@ -81,16 +82,31 @@ class EdgeProcessorTest extends FlatSpec {
   }
 
   "Incoming transactions" should " be signed if already signed by this keyPair" in {
-    val validatorResponse = Validation.validateTransaction(data.dbActor,tx)
+    val validatorResponse = Validation.validateTransaction(data.dbActor, tx)
     val keyPair: KeyPair = KeyUtils.makeKeyPair()
     val thing = new Data
     thing.updateKeyPair(keyPair)
     val dummyDao = makeDao(thing)
-    validatorResponse.foreach { tx2 =>
-      peerManager.expectMsg(APIBroadcast(_.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx2)))
-      val signedTransaction = EdgeProcessor.updateWithSelfSignatureEmit(tx, dummyDao)
-      assert(signedTransaction.signatures.exists(_.publicKey == dummyDao.keyPair.getPublic))
+    validatorResponse.onComplete {
+      case Success(tx2) =>
+        peerManager.expectMsg(
+          APIBroadcast(
+            _.put(
+              s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}",
+              tx2
+            )
+          )
+        )
+        val signedTransaction =
+          EdgeProcessor.updateWithSelfSignatureEmit(tx, dummyDao)
+        assert(
+          signedTransaction.signatures
+            .exists(_.publicKey == dummyDao.keyPair.getPublic)
+        )
+      case scala.util.Failure(exception) => assert(false)
     }
+    // Careful with asserts in async functions in tests -- if they fail after the test it doesn't blow up.
+    Await.result(validatorResponse, Duration(1, "seconds"))
   }
 
   "Incoming transactions" should "not be signed if already signed by this keyPair" in {
