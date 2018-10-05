@@ -2,26 +2,22 @@ package org.constellation
 
 import java.security.KeyPair
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import akka.testkit.{TestProbe, _}
+import akka.testkit.TestProbe
 import org.constellation.Fixtures.{addPeerRequest, dummyTx, id}
-import org.constellation.LevelDB.DBGet
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.consensus.{EdgeProcessor, Validation}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.APIClient
-import org.scalatest.FlatSpec
-import scalaj.http.HttpResponse
 import org.scalamock.scalatest.MockFactory
+import org.scalatest.{FlatSpec, OneInstancePerTest}
 
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContextExecutor}
-import scala.util.Success
+import scala.concurrent.ExecutionContextExecutor
 
-class EdgeProcessorTest extends FlatSpec with MockFactory {
+class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTest {
   implicit val system: ActorSystem = ActorSystem("TransactionProcessorTest")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
@@ -66,7 +62,7 @@ class EdgeProcessorTest extends FlatSpec with MockFactory {
   val invalidSpendHash = invalidTx.hash
   val randomPeer: (Id, PeerData) = (id, peerData)
 
-  val mocko = stub[LvlDB]
+  val mocko = stub[LvlDB]("my-fucking-stub")
 
   (mocko.getAddressCacheData _).when(srcHash).returns(Some(AddressCacheData(100000000000000000L, 100000000000000000L, None)))
   (mocko.getTransactionCacheData _).when(txHash).returns(Some(TransactionCacheData(tx, false)))
