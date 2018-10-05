@@ -1,12 +1,15 @@
 package org.constellation.consensus
 
 import java.security.KeyPair
+import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorSystem
-import akka.testkit.{TestKit, TestProbe}
+import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.testkit.{TestActor, TestKit, TestProbe}
+import akka.util.Timeout
 import org.constellation.crypto.KeyUtils
-import org.constellation.Data
+import org.constellation.{Data, LevelDBActor}
 import org.constellation.Fixtures._
+import org.constellation.LevelDB.DBGet
 import org.constellation.primitives.Schema._
 import org.constellation.util.Signed
 import org.scalatest.{FlatSpec, FlatSpecLike}
@@ -19,6 +22,13 @@ class EdgeProcessorTest extends TestKit(ActorSystem("EdgeProcessorTest")) with F
     val metricsManager = TestProbe()
 
     val dao = new Data()
+
+    implicit val timeout: Timeout = Timeout(30, TimeUnit.SECONDS)
+
+    val dbActor = TestProbe()
+
+
+    dao.dbActor = dbActor.ref
 
     dao.metricsManager = metricsManager.ref
 
@@ -56,6 +66,23 @@ class EdgeProcessorTest extends TestKit(ActorSystem("EdgeProcessorTest")) with F
     val conflictingCheckpointBlock = existingCheckpointBlock.plus(newKeyPair)
 
     val cpcd = CheckpointCacheData(existingCheckpointBlock)
+
+    val cpHash = cpcd.checkpointBlock.soeHash
+    val ccHash = conflictingCheckpointBlock.soeHash
+
+    dbActor.setAutoPilot(new TestActor.AutoPilot {
+      def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
+        case DBGet(`cpHash`) =>
+          sender ! Some(cpcd.checkpointBlock.resolvedOE)
+          TestActor.KeepRunning
+        case DBGet(`ccHash`) =>
+          sender ! Some(CheckpointCacheData(conflictingCheckpointBlock, true))
+          TestActor.KeepRunning
+        case _ =>
+          sender ! None
+          TestActor.KeepRunning
+      }
+    })
 
     val mostValidCheckpointBlock = EdgeProcessor.handleConflictingCheckpoint(cpcd, conflictingCheckpointBlock, dao)
 

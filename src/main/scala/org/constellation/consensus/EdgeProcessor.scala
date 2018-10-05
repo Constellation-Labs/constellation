@@ -117,6 +117,7 @@ object EdgeProcessor {
 
   def updateActiveCheckpointBlock(cb: CheckpointCacheData) = {
     // TODO: mutate checkpointBlockBaseHash -> cb.soeHash pointer
+    // lookup base hash from checkpoint block, update soeHash, save
   }
 
   def handleConflictingCheckpoint(ca: CheckpointCacheData, cb: CheckpointBlock, dao: Data): CheckpointCacheData= {
@@ -135,7 +136,9 @@ object EdgeProcessor {
     ca.checkpointBlock.baseHash == cb.baseHash && ca.checkpointBlock.soeHash != cb.soeHash
   }
 
-  def handleSignatureConflict(ca: CheckpointCacheData, mostRecentCheckpointCacheData: CheckpointCacheData, dao: Data): CheckpointCacheData = {
+  def handleSignatureConflict(ca: CheckpointCacheData,
+                              mostRecentCheckpointCacheData: CheckpointCacheData,
+                              dao: Data): CheckpointCacheData = {
     val previousSignatures: Set[HashSignature] =
       ca.getChildrenSignatures(dao.dbActor, dao.edgeProcessor)
 

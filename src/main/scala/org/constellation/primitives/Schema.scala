@@ -356,6 +356,9 @@ object Schema {
     }
   }
 
+  // TODO:
+  case class ActiveCheckpointCacheData(soeHash: String)
+
   case class CheckpointCacheData(
                                   checkpointBlock: CheckpointBlock,
                                   inDAG: Boolean = false,
