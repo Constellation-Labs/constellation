@@ -1,6 +1,6 @@
 package org.constellation
 
-import java.security.{KeyPair, SecureRandom}
+import java.security.KeyPair
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.stream.ActorMaterializer
@@ -17,7 +17,9 @@ import org.scalatest.FlatSpec
 import scalaj.http.HttpResponse
 import org.scalamock.scalatest.MockFactory
 
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContextExecutor}
+import scala.util.Success
 
 class EdgeProcessorTest extends FlatSpec with MockFactory {
   implicit val system: ActorSystem = ActorSystem("TransactionProcessorTest")
@@ -60,7 +62,7 @@ class EdgeProcessorTest extends FlatSpec with MockFactory {
   val tx: Transaction = dummyTx(data)
   val invalidTx = dummyTx(data, -1L)
   val srcHash = tx.src.hash
-  val txHash = tx.hash
+  val txHash = tx.baseHash
   val invalidSpendHash = invalidTx.hash
   val randomPeer: (Id, PeerData) = (id, peerData)
 
@@ -84,7 +86,7 @@ class EdgeProcessorTest extends FlatSpec with MockFactory {
   }
 
   "Incoming transactions" should " be signed if already signed by this keyPair" in {
-    val validatorResponse = Validation.validateTransaction(data.dbActor,tx)
+    val validatorResponse = Validation.validateTransaction(data.dbActor, tx)
     val keyPair: KeyPair = KeyUtils.makeKeyPair()
     val thing = new Data
     thing.updateKeyPair(keyPair)
