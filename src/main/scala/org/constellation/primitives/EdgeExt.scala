@@ -8,6 +8,7 @@ import org.constellation.primitives.Schema.{CheckpointBlock, CheckpointCacheData
 import constellation._
 import org.constellation.Data
 import akka.pattern.ask
+import org.constellation.consensus.EdgeProcessor
 
 import scala.concurrent.Future
 
@@ -25,10 +26,8 @@ trait EdgeExt extends NodeData with Ledger with MetricsExt with PeerInfo with Ed
 
   def markParentsUnresolved(missingParentHash: String, cb: CheckpointBlock) =
     resolveNotifierCallbacks.get(missingParentHash) match {
-        case Some(cbs) =>
-          if (!cbs.contains(cb)) {
+        case Some(cbs) if !cbs.contains(cb) =>
             resolveNotifierCallbacks(missingParentHash) :+= cb
-          }
         case None =>
           queryMissingResolutionData(missingParentHash, cb.signatures.map{_.toId}.toSet)
           resolveNotifierCallbacks(missingParentHash) = Seq(cb)

@@ -394,6 +394,10 @@ object Schema {
       checkpoint.edge.store(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
     }
 
+    def markResolved(db: ActorRef, cache: CheckpointCacheData): Unit = {
+      checkpoint.edge.store(db, {prevCache: CheckpointCacheData => prevCache.copy(resolved = true)}, cache, true)
+    }
+
     def plus(keyPair: KeyPair): CheckpointBlock = {
       this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.plus(keyPair)))
     }

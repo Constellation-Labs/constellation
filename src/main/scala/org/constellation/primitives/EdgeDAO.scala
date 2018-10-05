@@ -47,7 +47,7 @@ trait EdgeDAO {
 
 
   /**
-    * Storage for cb missing ancestors
+    * Storage for cb missing ancestors. Hash of soe to every checkpoint that depends upon it
     */
   val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
 

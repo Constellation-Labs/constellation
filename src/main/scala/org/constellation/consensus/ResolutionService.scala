@@ -2,61 +2,55 @@ package org.constellation.consensus
 
 import java.util.concurrent.TimeUnit
 
+import akka.actor.ActorRef
 import akka.util.Timeout
 import org.constellation.Data
-import org.constellation.primitives.Schema
-import org.constellation.primitives.Schema.{CheckpointBlock, SignedObservationEdgeCache}
+import org.constellation.primitives.{APIBroadcast, Schema}
+import org.constellation.primitives.Schema.{CheckpointBlock, CheckpointCacheData, SignedObservationEdgeCache}
 
+import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
 
 object ResolutionService {
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-  case class ResolutionStatus(isAhead: Boolean, greatestAncestor: Option[CheckpointBlock] = None)
+  case class ResolutionStatus(
+                               cb: CheckpointBlock,
+                               resolvedParents: Seq[(String, Option[SignedObservationEdgeCache])],
+                               unresolvedParents: Seq[(String, Option[SignedObservationEdgeCache])]
+                             )
 
   /**
-    * Find greatest common ancestor shared between newly observed cb and active tip surface. If not equal to last snapshot,
-    * cb is a branch (potential fork)
+    * TODO: Need to include signatories ABOVE this checkpoint block later in the case of signature decay. Add to SignedObservationEdgeCache
     *
     * @param dao
     * @param cb
     * @return
     */
-  def greatestCommonAncestor(dao: Data, cb: CheckpointBlock): Option[CheckpointBlock] = None
-
-  /**
-    * Index newly observed cb.
-    *
-    * @param dao
-    * @param gca
-    */
-  def storeBranch(dao: Data, gca: CheckpointBlock, cb: CheckpointBlock): Unit = {
-    dao.branches(cb.baseHash) = gca
-
-  }
-
-
-  // TODO: Need to include signatories ABOVE this checkpoint block later in the case of signature decay.
   def downloadAncestry(dao: Data, cb: CheckpointBlock) = {
     val observers: Set[Schema.Id] = cb.signatures.map {
       _.toId
-    }.toSet //Todo flatMap over db queries to impl above.
+    }.toSet
     dao.queryMissingResolutionData(cb.baseHash, observers)
   }
 
   /**
+    * If this newly resolved checkpoint block was a previously unresolved parent, reprocess the child
     *
-    * @param parentHash
-    * @param oECache
     * @param dao
     * @param cb
-    * @return
     */
-  def parentResolution(parentHash: String, oECache: Option[SignedObservationEdgeCache])(dao: Data, cb: CheckpointBlock) = {
-    val isMissing = parentHash.isEmpty | dao.resolveNotifierCallbacks.contains(parentHash)
-    val isResolved = oECache.exists(_.resolved)
-    if (isMissing) dao.markParentsUnresolved(parentHash, cb)
-    isResolved
+  def reprocessUnresolvedChildren(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext) = {
+    val children = dao.resolveNotifierCallbacks(cb.baseHash)
+    val unresolvedChildren = children.map { child =>
+      val isResolved = dao.hashToSignedObservationEdgeCache(child.baseHash).filter(soeCache => soeCache.exists(!_.resolved))
+      isResolved.map(resolutionStatus => child)
+    }
+    unresolvedChildren.foreach { unresolvedChildrenFut =>
+      unresolvedChildrenFut.map { unresolvedChild =>
+        EdgeProcessor.handleCheckpoint(unresolvedChild, dao, true)
+      }//Todo log exception add retry
+    }
   }
 
   /**
@@ -66,17 +60,14 @@ object ResolutionService {
     * @param executionContext
     * @return
     */
-  def findRoot(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext) = {
-    val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes
-      .map { h => dao.hashToSignedObservationEdgeCache(h).map {
-        h -> _
-      }
+  def partitionByParentsResolved(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext) = {
+    val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes.map { hash =>
+        dao.hashToSignedObservationEdgeCache(hash).map { hash -> _ }
       }
     )
     parentCache.map { query: Seq[(String, Option[SignedObservationEdgeCache])] =>
-      val parentsResolved = query.map { case (hash, queryResult) => parentResolution(hash, queryResult)(dao, cb) }.forall(_ == true)
-      if (!parentsResolved) ResolutionStatus(isAhead = true, greatestAncestor = greatestCommonAncestor(dao, cb))
-      else ResolutionStatus(isAhead = false, greatestAncestor = greatestCommonAncestor(dao, cb))
+      val (unresolvedParents, resolvedParents) = query.partition { case (hash, queryResult) => queryResult.exists(_.resolved) }
+      (unresolvedParents, resolvedParents)
     }
   }
 
@@ -88,14 +79,20 @@ object ResolutionService {
     * @param executionContext
     * @return
     */
-  def resolveCheckpoint(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): Future[ResolutionStatus] =
-    findRoot(dao, cb).map {
-      case rs@ResolutionStatus(false, gcaOpt) =>
-        if (gcaOpt.contains(dao.snapshot.getOrElse(None))) dao.addToSnapshotRelativeTips(cb)
-        else gcaOpt.foreach(storeBranch(dao, _, cb))
-        rs
-      case rs@ResolutionStatus(true, None) =>
-        downloadAncestry(dao, cb)
-        rs
+  def resolveCheckpoint(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): Future[ResolutionStatus] = {
+    partitionByParentsResolved(dao, cb).map { case (unresolvedParents, resolvedParents) =>
+      if (unresolvedParents.isEmpty){
+        cb.markResolved(dao.dbActor, CheckpointCacheData(cb, inDAG = true, resolved = true))
+      }
+      else {
+        unresolvedParents.foreach {
+          case (missingParentHash, queryResult) =>
+            if (queryResult.isEmpty) downloadAncestry(dao, cb)
+            dao.markParentsUnresolved(missingParentHash, cb)
+        }
+      }
+      reprocessUnresolvedChildren(dao, cb)
+      ResolutionStatus(cb, unresolvedParents, resolvedParents)
     }
+  }
 }

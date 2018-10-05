@@ -89,16 +89,16 @@ class ResolutionServiceTest extends FlatSpec {
   val bogusCb = Fixtures.createCheckpointBlock(Seq.fill(3)(bogusTx), Seq.fill(2)(bogusSoe))(keyPair)
 
   "CheckpointBlocks with resolved parents" should "have isAhead = false " in {
-    val isBranch = ResolutionService.findRoot(mockData, parentCb)
-    isBranch.foreach { resolutionStatus =>
-      assert(!resolutionStatus.isAhead)
+    val isBranch = ResolutionService.partitionByParentsResolved(mockData, parentCb)
+    isBranch.foreach { case (resolvedParents, unresolvedParents) =>
+      assert(unresolvedParents.isEmpty)
     }
   }
 
   "CheckpointBlocks with unresolved parents" should "have isAhead = true" in {
-    val isBranch = ResolutionService.findRoot(mockData, bogusCb)
-    isBranch.foreach { resolutionStatus =>
-      assert(resolutionStatus.isAhead)
+    val isBranch = ResolutionService.partitionByParentsResolved(mockData, bogusCb)
+    isBranch.foreach { case (resolvedParents, unresolvedParents) =>
+      assert(resolvedParents.isEmpty)
     }
   }
 
@@ -117,7 +117,7 @@ class ResolutionServiceTest extends FlatSpec {
     }.toSet)
     val res = ResolutionService.resolveCheckpoint(mockData, bogusCb)
     res.foreach { resolutionStatus =>
-      assert(resolutionStatus.isAhead)
+      assert(resolutionStatus.unresolvedParents.nonEmpty)
       peerManager.expectMsg(msg)
     }
   }
