@@ -387,7 +387,16 @@ object Schema {
     def uniqueSignatures: Boolean = signatures.groupBy(_.b58EncodedPublicKey).forall(_._2.size == 1)
 
     def signedBy(id: Id) : Boolean = witnessIds.contains(id)
+
     def hashSignaturesOf(id: Id) : Seq[HashSignature] = signatures.filter(_.toId == id)
+
+    def signatureConflict(other: CheckpointBlock): Boolean = {
+      signatures.exists{s =>
+        other.signatures.exists{ s2 =>
+          s.signature != s2.signature && s.b58EncodedPublicKey == s2.b58EncodedPublicKey
+        }
+      }
+    }
 
     def witnessIds: Seq[Id] = signatures.map{_.toId}
 

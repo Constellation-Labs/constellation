@@ -687,7 +687,10 @@ class EdgeProcessor(dao: DAO)
 
     case HandleCheckpoint(cb) =>
 
-      val (cbAfterProcessing, updatedMemPool) = if (!cb.uniqueSignatures) cb -> memPool else {
+      val (cbAfterProcessing, updatedMemPool) = if (!cb.uniqueSignatures) {
+        dao.metricsManager ! IncrementMetric("checkpointUniqueSignaturesFailure")
+        cb -> memPool
+      }else {
 
         val cache = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]].get()
 
@@ -709,6 +712,11 @@ class EdgeProcessor(dao: DAO)
             // Check if in memPool now
             memPool.checkpoints.get(cb.baseHash).map{
               mcb =>
+
+                if (mcb.signatureConflict(cb)) {
+                  dao.metricsManager ! IncrementMetric("checkpointSignatureMergeConflictDetectedERROR")
+                }
+
                 val updated1 = mcb.plus(cb)
                 val updated = if (updated1.signedBy(dao.id)) updated1 else updated1.plus(kp)
                 updated -> memPool.plus(updated)
@@ -759,7 +767,10 @@ class EdgeProcessor(dao: DAO)
 
 }
 
-class CheckpointUniqueSigner(dao: DAO)
+
+// Deprecated but maybe use later
+
+@deprecated class CheckpointUniqueSigner(dao: DAO)
                             (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
 
   private val id: Id = dao.id
@@ -819,7 +830,10 @@ class CheckpointUniqueSigner(dao: DAO)
 }
 
 
-class CheckpointMemPoolVerifier(dao: DAO)
+
+
+// Deprecated but maybe re-use later
+@deprecated class CheckpointMemPoolVerifier(dao: DAO)
                                (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
 
   // dao.heartbeatActor ! HeartbeatSubscribe
