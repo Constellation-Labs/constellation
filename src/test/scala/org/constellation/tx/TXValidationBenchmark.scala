@@ -10,7 +10,7 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.util.SignHelp
 import org.scalatest.FlatSpec
 import constellation._
-import org.constellation.{Data, LevelDB, LevelDBActor}
+import org.constellation.{DAO, LevelDB, LevelDBActor}
 import org.constellation.primitives.Schema.{AddressCacheData, Id}
 import better.files._
 import org.constellation.LevelDB.{DBGet, DBPut}
@@ -100,7 +100,7 @@ class TXValidationBenchmark extends FlatSpec {
 
     implicit val as: ActorSystem = ActorSystem("test")
 
-    val dao = new Data()
+    val dao = new DAO()
 
     dao.keyPair = kp
 

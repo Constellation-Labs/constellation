@@ -34,10 +34,6 @@ trait BundleDataExt extends Reputation with MetricsExt with NodeData  {
   @volatile var syncPendingBundleHashes: Set[String] = Set()
   @volatile var syncPendingTXHashes: Set[String] = Set()
 
-  val activeDAGManager = new ActiveDAGManager()
-
- // @volatile var activeDAGBundles: Seq[Sheaf] = Seq()
-  def activeDAGBundles: Seq[Sheaf] = activeDAGManager.activeSheafs
 
   @volatile var linearCheckpointBundles: Set[Bundle] = Set[Bundle]()
   @volatile var lastCheckpointBundle: Option[Bundle] = None
@@ -329,11 +325,11 @@ trait BundleDataExt extends Reputation with MetricsExt with NodeData  {
        // }
     }
 
-    // Set this to be active for the combiners.
+/*    // Set this to be active for the combiners.
     if (!activeDAGBundles.contains(sheaf) &&
       !sheaf.bundle.extractIds.contains(id) && sheaf.bundle != genesisBundle.get) {
       activeDAGManager.acceptSheaf(sheaf)
-    }
+    }*/
   }
 
   def updateBundleFrom(left: Sheaf, right: Sheaf): Sheaf = {

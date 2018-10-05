@@ -2,7 +2,7 @@ package org.constellation.p2p
 
 import java.net.InetSocketAddress
 
-import org.constellation.Data
+import org.constellation.DAO
 import org.constellation.primitives.Schema._
 import constellation._
 import org.constellation.util.{APIClient, Signed}
@@ -14,7 +14,7 @@ import scala.concurrent.{Await, Future}
 
 trait Download extends PeerAuth {
 
-  val data: Data
+  val data: DAO
   import data._
 
   // TODO: update since heartbeat is gone

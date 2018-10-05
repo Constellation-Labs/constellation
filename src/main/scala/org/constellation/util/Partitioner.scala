@@ -2,7 +2,7 @@ package org.constellation.util
 
 import org.constellation.primitives.Schema.{Id, Transaction}
 
-object XORPartition {
+object Partitioner {
 
 
   // TODO:  Use XOR for random partition assignment later.

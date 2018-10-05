@@ -8,7 +8,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import akka.util.Timeout
-import org.constellation.{Data, Fixtures}
+import org.constellation.{DAO, Fixtures}
 import org.constellation.crypto.KeyUtils
 import org.scalatest._
 
@@ -34,7 +34,7 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
 
     val udpActor: ActorRef =
       system.actorOf(
-        Props(new UDPActor(dao = new Data())), s"ConstellationUDPActor" + Random.nextInt()
+        Props(new UDPActor(dao = new DAO())), s"ConstellationUDPActor" + Random.nextInt()
       )
 
     /*

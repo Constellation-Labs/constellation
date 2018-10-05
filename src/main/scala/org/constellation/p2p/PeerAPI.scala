@@ -21,11 +21,11 @@ import org.constellation.util.{CommonEndpoints, HashSignature, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
 import akka.pattern.ask
-import org.constellation.Data
+import org.constellation.DAO
 import org.constellation.LevelDB.DBPut
 import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote, StartConsensusRound}
-import org.constellation.consensus.EdgeProcessor.HandleTransaction
+import org.constellation.consensus.EdgeProcessor.{HandleCheckpoint, HandleTransaction}
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.consensus.{EdgeProcessor, Validation}
@@ -45,7 +45,7 @@ object PeerAPI {
 
 }
 
-class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
+class PeerAPI(val dao: DAO)(implicit system: ActorSystem, val timeout: Timeout)
   extends Json4sSupport with CommonEndpoints with ServeUI {
 
   implicit val serialization: Serialization.type = native.Serialization
@@ -115,13 +115,17 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
           entity(as[CheckpointBlock]) { cb =>
             // Temporary, need to go thru flow
 
-            val blockWithSigAdded = cb.plus(dao.keyPair)
-            if (dao.nodeState == Ready) {
-              Future {
-                EdgeProcessor.handleCheckpoint(cb, dao)(dao.edgeExecutionContext)
-              }(dao.edgeExecutionContext)
-            }
-            complete(blockWithSigAdded)
+            val res = if (dao.nodeState == Ready) {
+              val blockWithSigAdded = (dao.cpSigner ? cb).mapTo[Option[CheckpointBlock]].get()
+              blockWithSigAdded.foreach{
+                b =>
+                  Future {
+                    EdgeProcessor.handleCheckpoint(b, dao)(dao.edgeExecutionContext)
+                  }(dao.edgeExecutionContext)
+              }
+              blockWithSigAdded
+            } else None
+            complete(res)
           }
         }
       }
@@ -132,20 +136,10 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
       put {
         entity(as[Transaction]) {
           tx =>
-
             if (dao.nodeState == Ready) {
-              Future {
-                /*
-                Future {
-              dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
-              EdgeProcessor.handleTransaction(tx, dao)(dao.edgeExecutionContext)
-            }(dao.edgeExecutionContext)
-               */
-                //    logger.debug(s"transaction endpoint, $tx")
-                dao.edgeProcessor ! HandleTransaction(tx)
-              }
+              // TDOO: Change to ask later for status info
+              dao.edgeProcessor ! HandleTransaction(tx)
             }
-
             complete(StatusCodes.OK)
         }
       } ~
@@ -169,11 +163,9 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
       put {
         entity(as[CheckpointBlock]) {
           cb =>
-            if (dao.nodeState == Ready) {
-              Future {
-                EdgeProcessor.handleCheckpoint(cb, dao)(dao.edgeExecutionContext)
-              }(dao.edgeExecutionContext)
-            }
+            val ret = if (dao.nodeState == Ready) {
+              dao.edgeProcessor ? HandleCheckpoint(cb)
+            } else None
             complete(StatusCodes.OK)
         }
       } ~

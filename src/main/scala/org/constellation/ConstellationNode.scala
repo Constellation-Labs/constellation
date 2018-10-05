@@ -101,7 +101,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
                          implicit val executionContext: ExecutionContext
                        ){
 
-  val data = new Data()
+  val data = new DAO()
   data.updateKeyPair(configKeyPair)
 
   import data._

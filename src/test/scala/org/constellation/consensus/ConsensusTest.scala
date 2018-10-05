@@ -8,7 +8,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActor, TestKit, TestProbe}
 import akka.util.Timeout
-import org.constellation.Data
+import org.constellation.DAO
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.{RegisterNextActor, UDPMessage, UDPSend}
 import org.constellation.util.TestNode
@@ -39,7 +39,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     implicit val timeout: Timeout = Timeout(30, TimeUnit.SECONDS)
 
-    val data = new Data()
+    val data = new DAO()
 
     val consensusActor: ActorRef =
       system.actorOf(Props(

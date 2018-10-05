@@ -36,7 +36,6 @@ object DownloadChainComputeSingle {
 
     val tips = a1.getBlocking[Seq[CheckpointBlock]]("tips")
 
-
     tips.foreach{
       z =>
         println(z.signatures.size)

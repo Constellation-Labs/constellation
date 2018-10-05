@@ -32,7 +32,7 @@ object LevelDB {
 
 import org.constellation.LevelDB._
 
-class LevelDBActor(dao: Data)(implicit timeoutI: Timeout, system: ActorSystem) extends Actor {
+class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem) extends Actor {
 
   implicit val executionContext: ExecutionContext = system.dispatchers.lookup("db-io-dispatcher")
 
@@ -57,7 +57,7 @@ class LevelDBActor(dao: Data)(implicit timeoutI: Timeout, system: ActorSystem) e
     case DBPut(key, obj) =>
       dao.numDBPuts += 1
       val bytes = KryoSerializer.serializeAnyRef(obj)
-      db.putBytes(key, bytes)
+      sender() ! db.putBytes(key, bytes)
 
     case DBUpdate(key, func, empty) =>
       dao.numDBUpdates += 1

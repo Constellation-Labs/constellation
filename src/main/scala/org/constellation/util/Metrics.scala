@@ -1,17 +1,17 @@
 package org.constellation.util
 
 import com.softwaremill.macmemo.memoize
-import org.constellation.Data
+import org.constellation.DAO
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.MetricsResult
 
 import scala.concurrent.duration._
-import org.constellation.crypto.Wallet
+import org.constellation.crypto.SimpleWalletLike
 import constellation._
 
 import scala.util.Try
 
-class Metrics(val dao: Data = null) extends Wallet {
+class Metrics(val dao: DAO = null) extends SimpleWalletLike {
 
   import dao._
 
@@ -33,8 +33,8 @@ class Metrics(val dao: Data = null) extends Wallet {
         "numValidBundleHashesRemovedFromMemory" -> numValidBundleHashesRemovedFromMemory.toString,
         "udpPacketGroupSize" -> udpPacketGroupSize.toString,
         "address" -> selfAddress.address,
-        "balance" -> (selfIdBalance
-          .getOrElse(0L) / Schema.NormalizationFactor).toString,
+/*        "balance" -> (selfIdBalance
+          .getOrElse(0L) / Schema.NormalizationFactor).toString,*/
         "id" -> id.b58,
         "z_keyPair" -> keyPair.json,
         "shortId" -> id.short,
@@ -65,7 +65,7 @@ class Metrics(val dao: Data = null) extends Wallet {
           }
           .getOrElse("N/A"),
         //   "bestBundleCandidateHashes" -> bestBundleCandidateHashes.map{_.hash}.mkString(","),
-        "numActiveBundles" -> activeDAGBundles.size.toString,
+      /*  "numActiveBundles" -> activeDAGBundles.size.toString,*/
         "last10ValidBundleHashes" -> last100ValidBundleMetaData
           .map {
             _.bundle.hash
@@ -126,16 +126,6 @@ class Metrics(val dao: Data = null) extends Wallet {
         "z_peers" -> peers.map {
           _.data
         }.json,
-        "z_validLedger" -> validLedger.toMap.json,
-        "z_mempoolLedger" -> memPoolLedger.toMap.json,
-        "z_Bundles" -> activeDAGBundles
-          .sortBy { z =>
-            -1 * z.totalScore.getOrElse(0D)
-          }
-          .map {
-            _.bundle.pretty
-          }
-          .mkString(" --- "),
         "downloadMode" -> downloadMode.toString,
         "allPeersHaveKnownBestBundles" -> Try {
           peerSync.forall {
@@ -143,12 +133,12 @@ class Metrics(val dao: Data = null) extends Wallet {
               lookupBundle(hb.maxBundle.hash).nonEmpty
           }.toString
         }.getOrElse(""),
-        "allPeersAgreeOnValidLedger" -> Try {
+    /*    "allPeersAgreeOnValidLedger" -> Try {
           peerSync.forall {
             case (_, hb) =>
               hb.validLedger == validLedger.toMap
           }.toString
-        }.getOrElse(""),
+        }.getOrElse(""),*/
         "allPeersHaveResolvedMaxBundles" -> Try {
           peerSync.forall {
             _._2.safeMaxBundle.exists {

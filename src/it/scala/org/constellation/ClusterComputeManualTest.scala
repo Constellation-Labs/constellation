@@ -46,7 +46,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
     println(apis.map{
       _.postSync(
         "config/update",
-        ConfigurationUpdate(maxWidth = 10, minCheckpointFormationThreshold = 10, minCBSignatureThreshold = 5)
+        ConfigurationUpdate(maxWidth = 10, minCheckpointFormationThreshold = 10, minCBSignatureThreshold = 3)
       )
     })
 

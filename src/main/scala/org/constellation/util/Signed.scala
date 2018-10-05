@@ -76,14 +76,23 @@ case class SignatureBatch(
   }
 
   def plus(other: SignatureBatch): SignatureBatch = {
+    val toAdd = other.signatures
+    val newSignatures = (signatures ++ toAdd).distinct
+    val unique = newSignatures.groupBy(_.b58EncodedPublicKey).map{_._2.maxBy(_.signature)}.toSeq.sorted
     this.copy(
-      signatures = (signatures ++ other.signatures).distinct.sorted
+      signatures = unique
+    )
+  }
+  def plus(hs: HashSignature): SignatureBatch = {
+    val toAdd = Seq(hs)
+    val newSignatures = (signatures ++ toAdd).distinct
+    val unique = newSignatures.groupBy(_.b58EncodedPublicKey).map{_._2.maxBy(_.signature)}.toSeq.sorted
+    this.copy(
+      signatures = unique
     )
   }
   def plus(other: KeyPair): SignatureBatch = {
-    this.copy(
-      signatures = (signatures :+ hashSign(hash, other)).distinct.sorted
-    )
+    plus(hashSign(hash, other))
   }
 
   override def empty: SignatureBatch = SignatureBatch(hash, Seq())
@@ -162,8 +171,8 @@ trait POWSignHelp {
     SignatureBatch(hash, Seq(hashSign(hash, keyPair)))
   }
 
-  def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge = {
-    SignedObservationEdge(hashSignBatchZeroTyped(oe, kp))
+  def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedVertex = {
+    SignedVertex(hashSignBatchZeroTyped(oe, kp))
   }
 
   /**

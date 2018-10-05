@@ -7,12 +7,12 @@ import org.constellation.primitives.Schema.{Id, InternalHeartbeat, SendToAddress
 import akka.pattern.ask
 import akka.util.Timeout
 import constellation._
-import org.constellation.Data
+import org.constellation.DAO
 import org.constellation.util.HeartbeatSubscribe
 
 import scala.util.Random
 
-class RandomTransactionManager(dao: Data)(
+class RandomTransactionManager(dao: DAO)(
   implicit val timeout: Timeout
 ) extends Actor {
 

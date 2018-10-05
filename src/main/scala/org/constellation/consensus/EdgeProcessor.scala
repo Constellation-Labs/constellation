@@ -4,7 +4,7 @@ import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
-import org.constellation.Data
+import org.constellation.DAO
 import org.constellation.LevelDB.{DBGet, DBPut, DBUpdate}
 import org.constellation.primitives.Schema._
 import akka.pattern.ask
@@ -33,7 +33,7 @@ object EdgeProcessor {
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
   def handleCheckpoint(cb: CheckpointBlock,
-                       dao: Data,
+                       dao: DAO,
                        internalMessage: Boolean = false)(implicit executionContext: ExecutionContext): Unit = {
 
     if (!internalMessage) {
@@ -46,7 +46,15 @@ object EdgeProcessor {
     // TODO : Handle resolution issues.
     val potentialChildren = dao.resolveNotifierCallbacks.get(cb.soeHash)
 
-    val cache = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]]
+    val cache = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]].get()
+
+    cache.map{ c =>
+      dao.metricsManager ! IncrementMetric("checkpointCacheFound")
+      c.checkpointBlock
+    }
+
+
+
 
     def signFlow(): Unit = {
       // Mock
@@ -134,49 +142,51 @@ object EdgeProcessor {
       }
 
     }
+    /*
 
-    def mainFlow(): Unit = {
+        def mainFlow(): Unit = {
 
 
-      cache.foreach { c =>
+          cache.foreach { c =>
 
-        // Base hash not stored in DB, no possible signature conflict
-        if (c.isEmpty) {
-          dao.metricsManager ! IncrementMetric("unknownCheckpointMessages")
-          // resolutionFlow()
-          // DEBUG
-          signFlow()
-        } else {
-
-          val ca = c.get
-
-          if (ca.resolved) {
-            if (ca.inDAG) {
-              if (ca.checkpointBlock != cb) {
-                // Data mismatch on base hash lookup, i.e. signature conflict
-                // TODO: Conflict resolution
-                //resolveConflict(cb, ca)
-              } else {
-                // Duplicate checkpoint message, no action required.
-              }
+            // Base hash not stored in DB, no possible signature conflict
+            if (c.isEmpty) {
+              dao.metricsManager ! IncrementMetric("unknownCheckpointMessages")
+              // resolutionFlow()
+              // DEBUG
+              signFlow()
             } else {
-              // warn or store information about potential conflict
-              // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
+
+              val ca = c.get
+
+              if (ca.resolved) {
+                if (ca.inDAG) {
+                  if (ca.checkpointBlock != cb) {
+                    // Data mismatch on base hash lookup, i.e. signature conflict
+                    // TODO: Conflict resolution
+                    //resolveConflict(cb, ca)
+                  } else {
+                    // Duplicate checkpoint message, no action required.
+                  }
+                } else {
+                  // warn or store information about potential conflict
+                  // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
+                }
+              } else {
+
+                // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
+                // Otherwise do nothing as the resolution is already in progress.
+
+              }
+
+              // if (ca.checkpointBlock
+
             }
-          } else {
-
-            // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
-            // Otherwise do nothing as the resolution is already in progress.
-
           }
-
-          // if (ca.checkpointBlock
-
         }
-      }
-    }
 
-    mainFlow()
+        mainFlow()
+    */
 
     //  Resolve.resolveCheckpoint(dao, cb)
   }
@@ -184,15 +194,18 @@ object EdgeProcessor {
   // TODO : Add checks on max number in mempool and max num signatures.
 
   // TEMPORARY mock-up for pre-consensus integration mimics transactions
-  def updateCheckpointWithSelfSignatureEmit(cb: CheckpointBlock, dao: Data): CheckpointBlock = {
+  def updateCheckpointWithSelfSignatureEmit(cb: CheckpointBlock, dao: DAO): CheckpointBlock = {
     val cbPrime = if (!cb.signatures.exists(_.publicKey == dao.keyPair.getPublic)) {
       // We haven't yet signed this CB
-      val cb2 = cb.plus(dao.keyPair)
-      dao.metricsManager ! IncrementMetric("signaturesPerformed")
-      // Send peers new signature
-      dao.peerManager ! APIBroadcast(_.put(s"checkpoint/${cb.baseHash}", cb2))
-      dao.metricsManager ! IncrementMetric("checkpointBroadcasts")
-      cb2
+
+      val cb2Opt = (dao.cpSigner ? cb).mapTo[Option[CheckpointBlock]].get()
+      cb2Opt.foreach { cb2 =>
+        dao.metricsManager ! IncrementMetric("signaturesPerformed")
+        // Send peers new signature
+        dao.peerManager ! APIBroadcast(_.put(s"checkpoint/${cb.baseHash}", cb2))
+        dao.metricsManager ! IncrementMetric("checkpointBroadcasts")
+      }
+      cb2Opt.getOrElse(cb)
     } else {
       // We have already signed this CB,
       cb
@@ -201,10 +214,24 @@ object EdgeProcessor {
   }
 
   // TEMPORARY mock-up for pre-consensus integration mimics transactions
-  def updateCheckpointMergeMemPool(cb: CheckpointBlock, dao: Data) : Unit = {
+  def updateCheckpointMergeMemPool(cb: CheckpointBlock, dao: DAO) : Unit = {
     val cbPostUpdate = if (dao.checkpointMemPool.contains(cb.baseHash)) {
       // Merge signatures together
-      val updated = dao.checkpointMemPool(cb.baseHash).plus(cb)
+
+
+      val block = dao.checkpointMemPool(cb.baseHash)
+
+      cb.signatures.foreach{
+        hs =>
+          if (block.signatures.exists{ s =>
+            s.b58EncodedPublicKey == hs.b58EncodedPublicKey && s.signature != hs.signature
+          }) {
+            dao.metricsManager ! IncrementMetric("checkpointSignatureMemPoolMergeConflictOverlapDetected")
+          }
+
+      }
+
+      val updated = block.plus(cb)
       // Update memPool with new signatures.
       dao.checkpointMemPool(cb.baseHash) = updated
       updated
@@ -283,8 +310,36 @@ object EdgeProcessor {
     }
   }
 
+  def acceptCheckpoint(cb: CheckpointBlock)(implicit dao: DAO): Unit = {
+    // Accept transactions
+    cb.transactions.foreach { t =>
+      dao.metricsManager ! IncrementMetric("transactionAccepted")
+      t.store(
+        dao.dbActor,
+        TransactionCacheData(
+          t,
+          valid = true,
+          inMemPool = false,
+          inDAG = true,
+          Map(cb.baseHash -> true),
+          resolved = true,
+          cbBaseHash = Some(cb.baseHash)
+        ))
+      t.ledgerApply(dao.dbActor)
+    }
+    dao.metricsManager ! IncrementMetric("checkpointAccepted")
+    cb.store(
+      dao.dbActor,
+      CheckpointCacheData(
+        cb,
+        inDAG = true,
+        resolved = true
+      ),
+      resolved = true
+    )
+  }
 
-  def attemptFormCheckpointUpdateState(dao: Data): Option[CheckpointBlock] = {
+  def attemptFormCheckpointUpdateState(dao: DAO): Option[CheckpointBlock] = {
 
     // TODO: Send a DBUpdate to modify tip data to include newly formed CB as a 'child', but only after acceptance
     if (dao.canCreateCheckpoint) {
@@ -327,7 +382,7 @@ object EdgeProcessor {
     *                         from other pools for processing different operations.
     */
   def handleTransaction(
-                         tx: Transaction, dao: Data
+                         tx: Transaction, dao: DAO
                        )(implicit executionContext: ExecutionContext): Unit = {
 
     // TODO: Store TX in DB and during signing updates delete the old SOE ? Or clean it up later?
@@ -380,12 +435,12 @@ object EdgeProcessor {
       case t : TransactionValidationStatus =>
 
         // TODO : Add info somewhere so node can find out transaction was invalid on a callback
-        reportInvalidTransaction(dao: Data, t: TransactionValidationStatus)
+        reportInvalidTransaction(dao: DAO, t: TransactionValidationStatus)
     }
 
   }
 
-  def reportInvalidTransaction(dao: Data, t: TransactionValidationStatus): Unit = {
+  def reportInvalidTransaction(dao: DAO, t: TransactionValidationStatus): Unit = {
     dao.metricsManager ! IncrementMetric("invalidTransactions")
     if (t.isDuplicateHash) {
       dao.metricsManager ! IncrementMetric("hashDuplicateTransactions")
@@ -395,7 +450,7 @@ object EdgeProcessor {
     }
   }
 
-  def triggerCheckpointBlocking(dao: Data,
+  def triggerCheckpointBlocking(dao: DAO,
                                 tx: Transaction)(implicit timeout: Timeout, executionContext: ExecutionContext): Unit = {
     if (dao.canCreateCheckpoint) {
 
@@ -419,10 +474,10 @@ object EdgeProcessor {
       val roundHash = RoundHash(obe.left.hash + obe.right.hash)
 
       // Start check pointing consensus round
-/*      dao.consensus ! InitializeConsensusRound(facilitators, roundHash, (result) => {
-        println(s"consensus round complete result roundHash = $roundHash, result = $result")
-        EdgeProcessor.handleCheckpoint(result.checkpointBlock, dao)
-      }, CheckpointVote(checkpointBlock))*/
+      /*      dao.consensus ! InitializeConsensusRound(facilitators, roundHash, (result) => {
+              println(s"consensus round complete result roundHash = $roundHash, result = $result")
+              EdgeProcessor.handleCheckpoint(result.checkpointBlock, dao)
+            }, CheckpointVote(checkpointBlock))*/
       dao.consensus ! ConsensusVote(dao.id, CheckpointVote(checkpointBlock), roundHash)
 
     }
@@ -436,7 +491,7 @@ object EdgeProcessor {
                                          )
 
 
-  def createCheckpointBlock(transactions: Seq[Transaction], tips: Seq[SignedObservationEdge])
+  def createCheckpointBlock(transactions: Seq[Transaction], tips: Seq[SignedVertex])
                            (implicit keyPair: KeyPair): CheckpointBlock = {
 
     val checkpointEdgeData = CheckpointEdgeData(transactions.map{_.hash}.sorted)
@@ -459,7 +514,7 @@ object EdgeProcessor {
   def createCheckpointEdgeProposal(
                                     transactionMemPoolThresholdMet: Set[String],
                                     minCheckpointFormationThreshold: Int,
-                                    tips: Seq[SignedObservationEdge],
+                                    tips: Seq[SignedVertex],
                                   )(implicit keyPair: KeyPair): CreateCheckpointEdgeResponse = {
 
     val transactionsUsed = transactionMemPoolThresholdMet.take(minCheckpointFormationThreshold)
@@ -485,129 +540,289 @@ object EdgeProcessor {
       updatedTransactionMemPoolThresholdMet)
   }
 
-  // TODO: Re-enable this section later, turning off for now for simplicity
-  // Required later for dependency blocks / app support
-  /**
-    * Potentially add our signature to a transaction and if we haven't yet signed it emit to peers
-    * @param tx : Transaction
-    * @param dao : Data access object
-    * @return Maybe updated transaction
-    */
-  def updateWithSelfSignatureEmit(tx: Transaction, dao: Data): Transaction = {
-    val txPrime = if (!tx.signatures.exists(_.publicKey == dao.keyPair.getPublic)) {
-      // We haven't yet signed this TX
-      val tx2 = tx.plus(dao.keyPair)
-      dao.metricsManager ! IncrementMetric("signaturesPerformed")
-      // Send peers new signature
-      dao.peerManager ! APIBroadcast(_.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx2))
-      dao.metricsManager ! IncrementMetric("transactionBroadcasts")
-      tx2
-    } else {
-      // We have already signed this transaction,
-      tx
-    }
-    txPrime
-  }
+  def formCheckpoint(memPool: MemPool)(implicit dao: DAO): MemPool = {
 
-  // TODO: Re-enable this section later, turning off for now for simplicity
-  // Required later for dependency blocks / app support
-  /**
-    * Check the memPool to see if signatures are already stored under same OE hash,
-    * if so, add current signatures to existing ones. Otherwise, store this in memPool
-    * @param tx : Transaction after self signature added
-    * @param dao : Data access object
-    * @return : Potentially updated transaction.
-    */
-  def updateMergeMemPool(tx: Transaction, dao: Data) : Unit = {
-    val txPostUpdate = if (dao.transactionMemPoolMultiWitness.contains(tx.baseHash)) {
-      // Merge signatures together
-      val updated = dao.transactionMemPoolMultiWitness(tx.baseHash).plus(tx)
-      // Update memPool with new signatures.
-      dao.transactionMemPoolMultiWitness(tx.baseHash) = updated
-      updated
-    }
-    else {
-      tx.ledgerApplyMemPool(dao.dbActor)
-      dao.transactionMemPoolMultiWitness(tx.baseHash) = tx
-      tx
+    def canCreateCheckpoint: Boolean = {
+      memPool.transactions.size >= dao.minCheckpointFormationThreshold &&
+        memPool.thresholdMetCheckpoints.size >= 2
     }
 
-    // Check to see if we have enough signatures to include in CB
-    if (txPostUpdate.signatures.size >= dao.minTXSignatureThreshold) {
-      // Set threshold as met
-      dao.transactionMemPoolThresholdMet += tx.baseHash
+    val postCreationMemPool = if (!canCreateCheckpoint) memPool else {
+
+      val tips = Random.shuffle(memPool.thresholdMetCheckpoints.toSeq).take(2)
+
+      val tipSOE = tips.map {_._2.checkpointBlock.checkpoint.edge.signedObservationEdge}
+
+      val transactions = Random.shuffle(memPool.transactions).take(dao.minCheckpointFormationThreshold)
+
+      val checkpointBlock = createCheckpointBlock(transactions.toSeq, tipSOE)(dao.keyPair)
+      dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
+
+      val newMemPool = memPool.copy(transactions = memPool.transactions.diff(transactions)).plus(checkpointBlock)
+
+      // Temporary bypass to consensus for mock
+      // Send all data (even if this is redundant.)
+      dao.peerManager ! APIBroadcast(_.put(s"checkpoint/${checkpointBlock.baseHash}", checkpointBlock))
+
+      newMemPool
     }
+
+    postCreationMemPool
+
   }
 
 }
 
-class EdgeProcessor(dao: Data)
+case class TipData(checkpointBlock: CheckpointBlock, numUses: Int)
+
+case class MemPool(
+                    transactions: Set[Transaction] = Set(),
+                    checkpoints: Map[String, CheckpointBlock] = Map(),
+                    thresholdMetCheckpoints: Map[String, TipData] = Map()
+                  ) {
+  def plus(checkpointBlock: CheckpointBlock)(implicit dao: DAO): MemPool = {
+    if (checkpointBlock.signatures.size >= dao.minCBSignatureThreshold) {
+
+      acceptCheckpoint(checkpointBlock)
+
+      def reuseTips: Boolean = thresholdMetCheckpoints.size < dao.maxWidth
+
+      val keysToRemove = checkpointBlock.parentSOEBaseHashes.flatMap {
+        h =>
+          thresholdMetCheckpoints.get(h).flatMap {
+            case TipData(block, numUses) =>
+
+              def doRemove(): Option[String] = {
+                dao.metricsManager ! IncrementMetric("checkpointTipsRemoved")
+                Some(block.baseHash)
+              }
+
+              if (reuseTips) {
+                if (numUses >= 2) {
+                  doRemove()
+                } else {
+                  None
+                }
+              } else {
+                doRemove()
+              }
+          }
+      }
+
+      val keysToUpdate = checkpointBlock.parentSOEBaseHashes.flatMap {
+        h =>
+          thresholdMetCheckpoints.get(h).flatMap {
+            case TipData(block, numUses) =>
+
+              def doUpdate(): Option[(String, TipData)] = {
+                dao.metricsManager ! IncrementMetric("checkpointTipsIncremented")
+                Some(block.baseHash -> TipData(block, numUses + 1))
+              }
+
+              if (reuseTips && numUses <= 2) {
+                doUpdate()
+              } else None
+          }
+      }.toMap
+
+
+      this.copy(
+        checkpoints = checkpoints - checkpointBlock.baseHash,
+        thresholdMetCheckpoints = thresholdMetCheckpoints +
+          (checkpointBlock.baseHash -> TipData(checkpointBlock, 0)) ++
+          keysToUpdate --
+          keysToRemove
+      )
+    } else {
+      this.copy(
+        checkpoints = checkpoints + (checkpointBlock.baseHash -> checkpointBlock)
+      )
+    }
+  }
+}
+
+class EdgeProcessor(dao: DAO)
                    (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
 
   implicit val sys: ActorSystem = context.system
   implicit val kp: KeyPair = dao.keyPair
+  implicit val _dao: DAO = dao
 
   dao.heartbeatActor ! HeartbeatSubscribe
 
-  def receive: Receive = {
+  def receive: Receive = active(MemPool())
+
+  def active(memPool: MemPool): Receive = {
+
+    case go: GenesisObservation =>
+
+      // Dumb way to set these as active tips, won't pass a double validation but no big deal.
+
+      context become active(
+        MemPool(
+          Set(),
+          Map(
+            go.initialDistribution.baseHash -> go.initialDistribution,
+            go.initialDistribution2.baseHash -> go.initialDistribution2
+          ),
+          Map(
+            go.initialDistribution.baseHash -> TipData(go.initialDistribution, 0),
+            go.initialDistribution2.baseHash -> TipData(go.initialDistribution2, 0)
+          )
+        )
+      )
 
     case HandleTransaction(transaction) =>
-      log.debug(s"handle transaction = $transaction")
+      // Re-enable validation here after verifying futures not an issue
+      dao.metricsManager ! IncrementMetric("transactionsReceived")
 
-      handleTransaction(transaction, dao)
+      val pool = memPool.copy(transactions = memPool.transactions + transaction)
+      dao.metricsManager ! UpdateMetric("transactionMemPool", pool.transactions.size.toString)
+
+      val updated = formCheckpoint(pool)
+
+      context become active(updated)
+    //log.debug(s"handle transaction = $transaction")
+    //handleTransaction(transaction, dao)
+
+    case HandleCheckpoint(cb) =>
+
+      val (cbAfterProcessing, updatedMemPool) = if (!cb.uniqueSignatures) cb -> memPool else {
+
+        val cache = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]].get()
+
+        cache.map { c =>
+          dao.metricsManager ! IncrementMetric("checkpointCacheFound")
+          // Do nothing, we've already signed and accepted it
+          c.checkpointBlock -> memPool
+        }.getOrElse{
+
+          dao.metricsManager ! IncrementMetric("checkpointCacheEmpty")
+
+          // Check if stored as threshold met
+          memPool.thresholdMetCheckpoints.get(cb.baseHash).map{
+            tmcb =>
+              dao.metricsManager ! IncrementMetric("checkpointThresholdMetLookupFound")
+              // Do nothing, threshold already met
+              tmcb.checkpointBlock -> memPool
+          }.getOrElse{
+            // Check if in memPool now
+            memPool.checkpoints.get(cb.baseHash).map{
+              mcb =>
+                val updated1 = mcb.plus(cb)
+                val updated = if (updated1.signedBy(dao.id)) updated1 else updated1.plus(kp)
+                updated -> memPool.plus(updated)
+            }.getOrElse{
+
+              // Not stored anywhere, first observance
+              dao.metricsManager ! IncrementMetric("checkpointFirstObserved")
+
+              val updated = if (cb.signedBy(dao.id)) cb else cb.plus(kp)
+              updated -> memPool.plus(updated)
+
+            }
+          }
+        }
+      }
+
+
+
+      if (cbAfterProcessing != cb) {
+        dao.peerManager ! APIBroadcast(_.put(s"checkpoint/${cbAfterProcessing.baseHash}", cbAfterProcessing))
+      }
+
+
+      // TODO: Return actual newly formed checkpoint as optional metadata to attach to a proper response
+      // To the sender() with all this info including the cache lookup and validation status etc. and what updates happened
+
+      val postCreationMemPool = formCheckpoint(updatedMemPool)
+
+      dao.metricsManager ! UpdateMetric("checkpointMemPool", postCreationMemPool.checkpoints.size.toString)
+      dao.metricsManager ! UpdateMetric("checkpointMemPoolThresholdMet", postCreationMemPool.thresholdMetCheckpoints.size.toString)
+      dao.metricsManager ! UpdateMetric("transactionMemPool", postCreationMemPool.transactions.size.toString)
+
+
+      sender() ! cbAfterProcessing
+      context become active(postCreationMemPool)
+
+
+
+
+    // handleCheckpoint(cb, dao)
 
     case ConsensusRoundResult(checkpointBlock: CheckpointBlock, roundHash: RoundHash[Checkpoint]) =>
       log.debug(s"handle checkpointBlock = $checkpointBlock")
 
       handleCheckpoint(checkpointBlock, dao)
+
   }
 
 }
 
-class CheckpointUniqueSigner(dao: Data)
-                   (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
+class CheckpointUniqueSigner(dao: DAO)
+                            (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
 
   private val id: Id = dao.id
   private val kp: KeyPair = dao.keyPair
 
 
   import com.twitter.storehaus.cache._
-  val cache: LRUCache[String, HashSignature] = LRUCache[String, HashSignature](10000)
+  val cache: LRUCache[String, HashSignature] = LRUCache[String, HashSignature](20000)
 
   def receive: Receive = {
+
     case cb: CheckpointBlock =>
 
-      val sigOpt = cache.get(cb.baseHash)
+      val signatures = cb.hashSignaturesOf(id)
 
-      if (cb.signedBy(id)) {
+      val ret = if (!cb.uniqueSignatures) {
 
-        val signatures = cb.hashSignaturesOf(id)
+        dao.metricsManager ! IncrementMetric("checkpointSignatureDuplicateDetected")
+
         if (signatures.size > 1) {
-          dao.metricsManager ! IncrementMetric("checkpointDuplicateSignatureDetectedERROR")
+          dao.metricsManager ! IncrementMetric("checkpointDuplicateSelfSignatureDetectedERROR")
         }
 
-        if (sigOpt.exists(hs => !signatures.contains(hs))) {
-          dao.metricsManager ! IncrementMetric("checkpointDuplicateCacheSignatureDetectedERROR")
-        }
+        None
+      } else {
 
-      }
-/*
+        val sigOpt = cache.get(cb.baseHash)
+        // val memPool = dao.checkpointMemPool.get(cb.baseHash)
+        // val dbCB = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointBlock]].get()
 
-        sender() ! {
-          cb
+        if (cb.signedBy(id)) {
+
+          val signatures = cb.hashSignaturesOf(id)
+
+          if (sigOpt.isEmpty) {
+            dao.metricsManager ! IncrementMetric("checkpointSignatureMissingFromCache")
+            cache.put(cb.baseHash, signatures.head)
+          }
+
+          if (sigOpt.exists(hs => !signatures.contains(hs))) {
+            dao.metricsManager ! IncrementMetric("checkpointDuplicateSelfCacheSignatureDetectedERROR")
+            None
+          } else Some(cb)
+
+          // TODO: If mempool or DB is inconsistent need to update them, probably not necessarily
+
         } else {
-          cb.plus(kp)
+
+          val cb2 = sigOpt.map{cb.plus}.getOrElse(cb.plus(kp))
+          Some(cb2)
         }
-      }*/
+      }
+
+      sender() ! ret
   }
 
 }
 
 
-class CheckpointMemPoolVerifier(dao: Data)
-                   (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
+class CheckpointMemPoolVerifier(dao: DAO)
+                               (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
 
-  dao.heartbeatActor ! HeartbeatSubscribe
+  // dao.heartbeatActor ! HeartbeatSubscribe
 
   private var lastTime = System.currentTimeMillis()
 
@@ -635,13 +850,13 @@ class CheckpointMemPoolVerifier(dao: Data)
               val missing = peerIds.filterNot(checkpointBlock.witnessIds.contains)
               dao.peerManager ! APIBroadcast(_.post(s"request/signature", checkpointBlock).foreach{
                 z =>
-                val cbP = z.body.x[CheckpointBlock]
-                val cbPrime = updateCheckpointWithSelfSignatureEmit(cbP, dao)
+                  val cbP = z.body.x[CheckpointBlock]
+                  val cbPrime = updateCheckpointWithSelfSignatureEmit(cbP, dao)
 
-                // Add to memPool or update an existing hash with new signatures and check for signature threshold
-                updateCheckpointMergeMemPool(cbPrime, dao)
+                  // Add to memPool or update an existing hash with new signatures and check for signature threshold
+                  updateCheckpointMergeMemPool(cbPrime, dao)
 
-                attemptFormCheckpointUpdateState(dao)
+                  attemptFormCheckpointUpdateState(dao)
               }(dao.edgeExecutionContext), peerSubset = missing.toSet)
             }
 

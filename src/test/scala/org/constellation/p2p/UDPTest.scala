@@ -15,7 +15,7 @@ import org.scalatest._
 
 import scala.util.{Random, Try}
 import constellation._
-import org.constellation.{Data, TestHelpers}
+import org.constellation.{DAO, TestHelpers}
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.primitives.Schema.{Gossip, Id, Peer}
 import org.constellation.serializer.KryoSerializer

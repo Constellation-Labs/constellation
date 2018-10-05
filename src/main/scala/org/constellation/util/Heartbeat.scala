@@ -3,7 +3,7 @@ package org.constellation.util
 import java.util.concurrent.{ScheduledFuture, ScheduledThreadPoolExecutor, TimeUnit}
 
 import akka.actor.{Actor, ActorRef}
-import org.constellation.Data
+import org.constellation.DAO
 import org.constellation.primitives.Schema.InternalHeartbeat
 
 import scala.util.Random
@@ -11,7 +11,7 @@ import scala.util.Random
 
 case object HeartbeatSubscribe
 
-class Heartbeat(dao: Data) extends Actor {
+class Heartbeat(dao: DAO) extends Actor {
 
   var actors : Seq[ActorRef] = Seq()
 

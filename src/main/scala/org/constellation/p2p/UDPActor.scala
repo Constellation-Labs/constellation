@@ -14,7 +14,7 @@ import scala.collection.mutable
 import scala.util.Random
 import org.constellation.serializer.KryoSerializer._
 import constellation._
-import org.constellation.Data
+import org.constellation.DAO
 
 // Consider adding ID to all UDP messages? Possibly easier.
 case class UDPMessage(data: Any, remote: InetSocketAddress)
@@ -31,7 +31,7 @@ case object GetPacketGroups
 class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
                port: Int = 16180,
                bindInterface: String = "0.0.0.0",
-               dao: Data) extends Actor {
+               dao: DAO) extends Actor {
 
   import context.system
 

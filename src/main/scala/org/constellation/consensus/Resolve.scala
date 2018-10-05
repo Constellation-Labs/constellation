@@ -4,7 +4,7 @@ import java.util.concurrent.TimeUnit
 
 import akka.pattern.ask
 import akka.util.Timeout
-import org.constellation.Data
+import org.constellation.DAO
 import org.constellation.LevelDB.DBGet
 import org.constellation.primitives.Schema.{CheckpointBlock, CheckpointCacheData, SignedObservationEdgeCache}
 import constellation.EasyFutureBlock
@@ -18,7 +18,7 @@ object Resolve {
 
   // TODO: Need to include signatories ABOVE this checkpoint block later in the case
   // of signature decay.
-  def attemptResolveIndividual(dao: Data, cb: CheckpointBlock, h: String) = {
+  def attemptResolveIndividual(dao: DAO, cb: CheckpointBlock, h: String) = {
     cb.signatures.map{_.toId}
 
     dao.peerManager ? APIBroadcast({
@@ -28,7 +28,7 @@ object Resolve {
   }
 
   // WIP
-  def resolveCheckpoint(dao: Data, cb: CheckpointBlock)(implicit ec: ExecutionContext): Future[Boolean] = {
+  def resolveCheckpoint(dao: DAO, cb: CheckpointBlock)(implicit ec: ExecutionContext): Future[Boolean] = {
 
     // Step 1 - Find out if both parents are resolved.
 

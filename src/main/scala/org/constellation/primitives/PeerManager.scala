@@ -2,7 +2,7 @@ package org.constellation.primitives
 
 import akka.actor.Actor
 import akka.stream.ActorMaterializer
-import org.constellation.{AddPeerRequest, Data}
+import org.constellation.{AddPeerRequest, DAO}
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.APIClient
 
@@ -13,7 +13,7 @@ case class PeerHealthCheck(status: Map[Id, Boolean])
 
 case object GetPeerInfo
 
-class PeerManager(dao: Data)(implicit val materialize: ActorMaterializer) extends Actor {
+class PeerManager(dao: DAO)(implicit val materialize: ActorMaterializer) extends Actor {
 
   override def receive: Receive = active(Map.empty)
 

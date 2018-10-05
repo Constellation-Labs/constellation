@@ -176,10 +176,11 @@ object Schema {
     * Encapsulation for all witness information about a given observation edge.
     * @param signatureBatch : Collection of validation signatures about the edge.
     */
-  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash {
-    def plus(keyPair: KeyPair): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(keyPair))
-    def plus(other: SignatureBatch): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other))
-    def plus(other: SignedObservationEdge): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
+  case class SignedVertex(signatureBatch: SignatureBatch) extends ProductHash {
+    def plus(keyPair: KeyPair): SignedVertex = this.copy(signatureBatch = signatureBatch.plus(keyPair))
+    def plus(hs: HashSignature): SignedVertex = this.copy(signatureBatch = signatureBatch.plus(hs))
+    def plus(other: SignatureBatch): SignedVertex = this.copy(signatureBatch = signatureBatch.plus(other))
+    def plus(other: SignedVertex): SignedVertex = this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
     def baseHash: String = signatureBatch.hash
   }
 
@@ -258,15 +259,15 @@ object Schema {
 
   }
 
-  case class CheckpointEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData]) {
+  case class CheckpointEdge(edge: Edge[SignedVertex, SignedVertex, CheckpointEdgeData]) {
     def plus(other: CheckpointEdge) = this.copy(edge = edge.plus(other.edge))
   }
-  case class ValidationEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, Nothing])
+  case class ValidationEdge(edge: Edge[SignedVertex, SignedVertex, Nothing])
 
   case class Edge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
   (
     observationEdge: ObservationEdge,
-    signedObservationEdge: SignedObservationEdge,
+    signedObservationEdge: SignedVertex,
     resolvedObservationEdge: ResolvedObservationEdge[L,R,D]
   ) {
 
@@ -289,6 +290,10 @@ object Schema {
 
     def plus(keyPair: KeyPair): Edge[L, R, D] = {
       this.copy(signedObservationEdge = signedObservationEdge.plus(keyPair))
+    }
+
+    def plus(hs: HashSignature): Edge[L, R, D] = {
+      this.copy(signedObservationEdge = signedObservationEdge.plus(hs))
     }
 
     def plus(other: Edge[_,_,_]): Edge[L, R, D] = {
@@ -372,12 +377,14 @@ object Schema {
 
   }
 
-  case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
+  case class SignedObservationEdgeCache(signedObservationEdge: SignedVertex, resolved: Boolean = false)
 
   case class CheckpointBlock(
                               transactions: Seq[Transaction],
                               checkpoint: CheckpointEdge
                                   ) {
+
+    def uniqueSignatures: Boolean = signatures.groupBy(_.b58EncodedPublicKey).forall(_._2.size == 1)
 
     def signedBy(id: Id) : Boolean = witnessIds.contains(id)
     def hashSignaturesOf(id: Id) : Seq[HashSignature] = signatures.filter(_.toId == id)
@@ -404,11 +411,15 @@ object Schema {
       this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.plus(keyPair)))
     }
 
+    def plus(hs: HashSignature): CheckpointBlock = {
+      this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.plus(hs)))
+    }
+
     def plus(other: CheckpointBlock): CheckpointBlock = {
       this.copy(checkpoint = checkpoint.plus(other.checkpoint))
     }
 
-    def resolvedOE: ResolvedObservationEdge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData] =
+    def resolvedOE: ResolvedObservationEdge[SignedVertex, SignedVertex, CheckpointEdgeData] =
       checkpoint.edge.resolvedObservationEdge
 
     def parentSOE = Seq(resolvedOE.left, resolvedOE.right)
@@ -416,12 +427,12 @@ object Schema {
 
     def parentSOEBaseHashes: Seq[String] = parentSOE.map{_.baseHash}
 
-    def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
+    def soe: SignedVertex = checkpoint.edge.signedObservationEdge
 
   }
 
   case class EdgeSheaf(
-                        signedObservationEdge: SignedObservationEdge,
+                        signedObservationEdge: SignedVertex,
                         parent: String,
                         height: Long,
                         depth: Int,
@@ -718,7 +729,7 @@ object Schema {
     def short: String = id.toString.slice(15, 20)
     def medium: String = id.toString.slice(15, 25).replaceAll(":", "")
     def address: AddressMetaData = pubKeyToAddress(id)
-    def b58: String = Base58.encode(id.getEncoded)
+    def b58: String = encodedId.b58Encoded
     def id: PublicKey = encodedId.toPublicKey
   }
 

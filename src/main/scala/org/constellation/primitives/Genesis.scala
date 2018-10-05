@@ -14,7 +14,7 @@ object Genesis {
   val CoinBaseHash = "coinbase"
 
   def createDistribution(
-                          selfAddressStr: String, ids: Seq[Id], genesisSOE: SignedObservationEdge, keyPair: KeyPair
+                          selfAddressStr: String, ids: Seq[Id], genesisSOE: SignedVertex, keyPair: KeyPair
                         ): CheckpointBlock = {
 
     val distr = ids.map{ id =>
@@ -64,8 +64,8 @@ object Genesis {
     val soe = signedObservationEdge(oe)(keyPair)
 
     val roe = ResolvedObservationEdge(
-      null.asInstanceOf[SignedObservationEdge],
-      null.asInstanceOf[SignedObservationEdge],
+      null.asInstanceOf[SignedVertex],
+      null.asInstanceOf[SignedVertex],
       Some(cb)
     )
 
@@ -83,7 +83,7 @@ object Genesis {
 
 import Genesis._
 
-trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
+trait Genesis extends NodeData with BundleDataExt with EdgeDAO {
 
   def createGenesisAndInitialDistribution(ids: Set[Id]): GenesisObservation = {
     createGenesisAndInitialDistributionDirect(selfAddressStr, ids, keyPair)
@@ -116,12 +116,14 @@ trait Genesis extends NodeData with Ledger with BundleDataExt with EdgeDAO {
   //  metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
 
     genesisObservation = Some(go)
+/*
 
     // Dumb way to set these as active tips, won't pass a double validation but no big deal.
     checkpointMemPool(go.initialDistribution.baseHash) = go.initialDistribution
     checkpointMemPool(go.initialDistribution2.baseHash) = go.initialDistribution2
     checkpointMemPoolThresholdMet(go.initialDistribution.baseHash) = go.initialDistribution -> 0
     checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = go.initialDistribution2 -> 0
+*/
 
    // metricsManager ! UpdateMetric("activeTips", "2")
     metricsManager ! UpdateMetric("genesisAccepted", "true")

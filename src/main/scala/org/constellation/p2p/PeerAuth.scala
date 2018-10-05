@@ -9,7 +9,7 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import org.constellation.util.{APIClient, Signed}
 import constellation._
-import org.constellation.Data
+import org.constellation.DAO
 import org.constellation.consensus.Consensus.RemoteMessage
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -17,9 +17,13 @@ import scala.util.{Failure, Try}
 import org.constellation.primitives.Schema._
 import scalaj.http.HttpResponse
 
+
+
+// TODO: Needs to be merged with other peer auth flow and updated substantially
+// Don't use this yet.
 trait PeerAuth {
 
-  val data: Data
+  val data: DAO
   import data._
   val udpActor: ActorRef
   var requestExternalAddressCheck: Boolean

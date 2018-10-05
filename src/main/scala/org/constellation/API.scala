@@ -18,7 +18,7 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.LevelDB.{DBGet, DBPut}
-import org.constellation.crypto.Wallet
+import org.constellation.crypto.SimpleWalletLike
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.{CommonEndpoints, Metrics, ServeUI}
@@ -38,10 +38,10 @@ case class ConfigurationUpdate(
                               )
 
 class API(udpAddress: InetSocketAddress,
-          val dao: Data = null,
+          val dao: DAO = null,
           cellManager: ActorRef)(implicit system: ActorSystem, val timeout: Timeout)
   extends Json4sSupport
-    with Wallet
+    with SimpleWalletLike
     with ServeUI
     with CommonEndpoints {
 
@@ -189,6 +189,7 @@ class API(udpAddress: InetSocketAddress,
           entity(as[GenesisObservation]) { go =>
             Future {
               acceptGenesis(go)
+              dao.edgeProcessor ! go
               // TODO: Report errors and add validity check
             }
             complete(StatusCodes.OK)
