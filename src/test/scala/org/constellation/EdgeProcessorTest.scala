@@ -1,6 +1,6 @@
 package org.constellation
 
-import java.security.{KeyPair, SecureRandom}
+import java.security.KeyPair
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.stream.ActorMaterializer
@@ -13,11 +13,10 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.APIClient
-import org.scalatest.{AsyncFlatSpec, FlatSpec}
-import scalaj.http.HttpResponse
+import org.scalatest.FlatSpec
 
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContextExecutor, Future}
+import scala.concurrent.{Await, ExecutionContextExecutor}
 import scala.util.Success
 
 class EdgeProcessorTest extends FlatSpec {
