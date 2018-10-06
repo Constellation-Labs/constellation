@@ -483,7 +483,8 @@ object EdgeProcessor {
     * @return Maybe updated transaction
     */
   def updateWithSelfSignatureEmit(tx: Transaction, dao: Data): Transaction = {
-    val txPrime = if (!tx.signatures.exists(_.publicKey == dao.keyPair.getPublic)) {
+    val sigExists = tx.signatures.exists(_.publicKey == dao.keyPair.getPublic)
+    val txPrime = if (!sigExists) {
       // We haven't yet signed this TX
       val tx2 = tx.plus(dao.keyPair)
       dao.metricsManager ! IncrementMetric("signaturesPerformed")

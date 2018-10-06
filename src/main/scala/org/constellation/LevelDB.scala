@@ -6,7 +6,7 @@ import better.files._
 import com.typesafe.scalalogging.Logger
 import constellation.{ParseExt, SerExt}
 import org.constellation.LevelDB.RestartDB
-import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCacheData, SignedObservationEdgeCache, TransactionCacheData}
+import org.constellation.primitives.Schema._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.ProductHash
 import org.iq80.leveldb._
@@ -47,7 +47,12 @@ trait LvlDB {
   def putSignedObservationEdgeCache(key: String, t: SignedObservationEdgeCache): Unit
   def updateSignedObservationEdgeCache(key: String, f: SignedObservationEdgeCache => SignedObservationEdgeCache, empty: SignedObservationEdgeCache): SignedObservationEdgeCache
   def getSignedObservationEdgeCache(key: String): Option[SignedObservationEdgeCache]
-
+  def putTransactionEdgeData(key: String, t: TransactionEdgeData): Unit
+  def updateTransactionEdgeData(key: String, f: TransactionEdgeData => TransactionEdgeData, empty: TransactionEdgeData): TransactionEdgeData
+  def getTransactionEdgeData(key: String): Option[TransactionEdgeData]
+  def putCheckpointEdgeData(key: String, t: CheckpointEdgeData): Unit
+  def updateCheckpointEdgeData(key: String, f: CheckpointEdgeData => CheckpointEdgeData, empty: CheckpointEdgeData): CheckpointEdgeData
+  def getCheckpointEdgeData(key: String): Option[CheckpointEdgeData]
 }
 
 class LvlDBImpl(dao: Data) extends LvlDB {
@@ -137,6 +142,33 @@ class LvlDBImpl(dao: Data) extends LvlDB {
 
   override def getSignedObservationEdgeCache(key: String): Option[SignedObservationEdgeCache] =
     get(key, classOf[SignedObservationEdgeCache])
+  override def putTransactionEdgeData(
+    key: String,
+    t: TransactionEdgeData
+  ): Unit = put(key, classOf[TransactionEdgeData])
+  override def updateTransactionEdgeData(
+    key: String,
+    f: TransactionEdgeData => TransactionEdgeData,
+    empty: TransactionEdgeData
+  ): TransactionEdgeData = update(key, classOf[TransactionEdgeData], f, empty)
+  override def getTransactionEdgeData(
+    key: String
+  ): Option[
+    TransactionEdgeData
+  ] = get(key, classOf[TransactionEdgeData])
+  override def putCheckpointEdgeData(
+    key: String,
+    t: CheckpointEdgeData
+  ): Unit = put(key, classOf[TransactionEdgeData])
+  override def updateCheckpointEdgeData(
+    key: String,
+    f: CheckpointEdgeData => CheckpointEdgeData,
+    empty: CheckpointEdgeData
+  ): CheckpointEdgeData = update(key, classOf[CheckpointEdgeData], f, empty)
+  override def getCheckpointEdgeData(
+    key: String
+  ): Option[
+    CheckpointEdgeData] = get(key, classOf[CheckpointEdgeData])
 }
 
 import org.constellation.LevelDB._

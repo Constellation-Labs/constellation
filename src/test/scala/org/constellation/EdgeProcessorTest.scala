@@ -77,7 +77,7 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
   }
 
   "Incoming transactions" should "be signed and returned if valid" in {
-    val validatorResponse = Validation.validateTransaction(data.dbActor,tx)
+    val validatorResponse = Validation.validateTransaction(data.dbActor, tx)
     assert(validatorResponse.transaction === tx)
   }
 

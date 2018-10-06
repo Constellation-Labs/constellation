@@ -280,7 +280,7 @@ object Schema {
       db.putSignedObservationEdgeCache(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
       resolvedObservationEdge.data.foreach {
         data =>
-          db.putTransactionCacheData(data.hash, data.asInstanceOf[TransactionCacheData])
+          db.putTransactionEdgeData(data.hash, data.asInstanceOf[TransactionEdgeData])
       }
     }
 
@@ -289,7 +289,7 @@ object Schema {
       db.putSignedObservationEdgeCache(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
       resolvedObservationEdge.data.foreach {
         data =>
-          db.putCheckpointCacheData(data.hash, data.asInstanceOf[CheckpointCacheData])
+          db.putCheckpointEdgeData(data.hash, data.asInstanceOf[CheckpointEdgeData])
       }
     }
 
