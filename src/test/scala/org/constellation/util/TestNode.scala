@@ -31,7 +31,7 @@ object TestNode {
       peerTCPPort = randomPeerTCPPort
     )
 
-    node.data.minCBSignatureThreshold = 3
+    node.data.processingConfig = node.data.processingConfig.copy(minCBSignatureThreshold = 3)
 
     node
   }

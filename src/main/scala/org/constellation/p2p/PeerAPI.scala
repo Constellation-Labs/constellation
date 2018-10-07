@@ -50,7 +50,7 @@ class PeerAPI(val dao: DAO)(implicit system: ActorSystem, val timeout: Timeout)
 
   implicit val serialization: Serialization.type = native.Serialization
 
-  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-dispatcher")
+  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("peer-api-dispatcher")
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller

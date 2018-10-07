@@ -64,13 +64,13 @@ class RandomDataTest extends FlatSpec {
 
 
     var width = 2
-    val maxWidth = 7
+    val maxWidth = 50
 
 
     val activeBlocks = TrieMap[SignedVertex, Int]()
 
 
-    val maxNumBlocks = 200
+    val maxNumBlocks = 1000
     var blockNum = 0
 
     activeBlocks(startingTips.head) = 0

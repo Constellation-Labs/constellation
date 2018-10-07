@@ -641,6 +641,8 @@ case class MemPool(
   }
 }
 
+case object GetMemPool
+
 class EdgeProcessor(dao: DAO)
                    (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
 
@@ -653,6 +655,9 @@ class EdgeProcessor(dao: DAO)
   def receive: Receive = active(MemPool())
 
   def active(memPool: MemPool): Receive = {
+
+    case GetMemPool =>
+      sender() ! memPool
 
     case go: GenesisObservation =>
 
@@ -690,7 +695,7 @@ class EdgeProcessor(dao: DAO)
       val (cbAfterProcessing, updatedMemPool) = if (!cb.uniqueSignatures) {
         dao.metricsManager ! IncrementMetric("checkpointUniqueSignaturesFailure")
         cb -> memPool
-      }else {
+      } else {
 
         val cache = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]].get()
 

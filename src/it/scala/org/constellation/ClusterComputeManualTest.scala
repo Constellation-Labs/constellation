@@ -46,11 +46,16 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
     println(apis.map{
       _.postSync(
         "config/update",
-        ConfigurationUpdate(maxWidth = 10, minCheckpointFormationThreshold = 10, minCBSignatureThreshold = 3)
+        ProcessingConfig(maxWidth = 10, minCheckpointFormationThreshold = 10, minCBSignatureThreshold = 3)
       )
     })
 
     sim.run(apis = apis, peerApis = peerAPIs, attemptSetExternalIP = true)
+
+
+    Thread.sleep(30*1000)
+    sim.triggerRandom(apis)
+
 
 
   }

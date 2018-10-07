@@ -1,5 +1,7 @@
 package org.constellation.util
 
+import java.util.concurrent.TimeUnit
+
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
@@ -11,12 +13,17 @@ import org.json4s.native.Serialization
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import constellation._
+import org.constellation.consensus.{GetMemPool, MemPool}
+import akka.pattern.ask
+import akka.util.Timeout
 
 trait CommonEndpoints extends Json4sSupport {
 
   implicit val serialization: Serialization.type
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String]
+
+  implicit val _timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
   val dao: DAO
 
@@ -28,7 +35,8 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.id)
       } ~
     path("tips") {
-      complete(dao.checkpointMemPoolThresholdMet.map{_._2._1}.toSeq)
+      val mp = (dao.edgeProcessor ? GetMemPool).mapTo[MemPool].get()
+      complete(mp.thresholdMetCheckpoints.map{_._2.checkpointBlock})
     }
   }
 }

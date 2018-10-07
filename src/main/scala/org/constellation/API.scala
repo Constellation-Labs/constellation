@@ -31,10 +31,11 @@ import scala.util.{Failure, Success, Try}
 
 case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id)
 
-case class ConfigurationUpdate(
-                                maxWidth: Int = 100,
-                                minCheckpointFormationThreshold: Int = 30,
-                                minCBSignatureThreshold: Int = 5
+case class ProcessingConfig(
+                                maxWidth: Int = 10,
+                                minCheckpointFormationThreshold: Int = 10,
+                                minCBSignatureThreshold: Int = 5,
+                                randomTXPerRound: Int = 50
                               )
 
 class API(udpAddress: InetSocketAddress,
@@ -64,8 +65,11 @@ class API(udpAddress: InetSocketAddress,
   val getEndpoints: Route =
     extractClientIP { clientIP =>
       get {
+        path("genesis") {
+          complete(dao.genesisObservation)
+        } ~
         path("checkpoint" / Segment) { s =>
-          val res = (dao.dbActor ? DBGet(s)).mapTo[Option[CheckpointBlock]].get()
+          val res = (dao.dbActor ? DBGet(s)).mapTo[Option[CheckpointCacheData]].get().map{_.checkpointBlock}
           complete(res)
         } ~
           path("restart") {
@@ -142,10 +146,8 @@ class API(udpAddress: InetSocketAddress,
     post {
       pathPrefix("config") {
         path("update") {
-          entity(as[ConfigurationUpdate]) { cu =>
-            dao.maxWidth = cu.maxWidth
-            dao.minCBSignatureThreshold = cu.minCBSignatureThreshold
-            dao.minCheckpointFormationThreshold = cu.minCheckpointFormationThreshold
+          entity(as[ProcessingConfig]) { cu =>
+            dao.processingConfig = cu
             complete(StatusCodes.OK)
           }
         }
@@ -159,7 +161,7 @@ class API(udpAddress: InetSocketAddress,
         complete(StatusCodes.OK)
       } ~
       path("random") { // Temporary
-        dao.generateRandomTX = true
+        dao.generateRandomTX = !dao.generateRandomTX
         complete(StatusCodes.OK)
       } ~
       path("peerHealthCheck") {
