@@ -3,18 +3,15 @@ package org.constellation.primitives
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
-import akka.actor.ActorRef
-import cats.kernel.Monoid
 import constellation.pubKeyToAddress
-import org.constellation.LevelDB.{DBPut, DBUpdate}
-import org.constellation.LvlDB
+import org.constellation.KVDB
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 
-import scala.collection.{SortedSet, mutable}
 import scala.collection.concurrent.TrieMap
+import scala.collection.{SortedSet, mutable}
 import scala.util.Random
 
 // This can't be a trait due to serialization issues
@@ -205,11 +202,11 @@ object Schema {
 
   case class Transaction(edge: Edge[Address, Address, TransactionEdgeData]) {
 
-    def store(dbActor: LvlDB, cache: TransactionCacheData): Unit = {
+    def store(dbActor: KVDB, cache: TransactionCacheData): Unit = {
       edge.storeTransactionCacheData(dbActor, {originalCache: TransactionCacheData => cache.plus(originalCache)}, cache)
     }
 
-    def ledgerApplyMemPool(dbActor: LvlDB): Unit = {
+    def ledgerApplyMemPool(dbActor: KVDB): Unit = {
       dbActor.updateAddressCacheData(
         src.hash,
         { a: AddressCacheData => a.copy(memPoolBalance = a.memPoolBalance - amount)},
@@ -222,7 +219,7 @@ object Schema {
       )
     }
 
-    def ledgerApply(dbActor: LvlDB): Unit = {
+    def ledgerApply(dbActor: KVDB): Unit = {
       dbActor.updateAddressCacheData(
         src.hash,
         { a: AddressCacheData => a.copy(balance = a.balance - amount)},
@@ -275,7 +272,7 @@ object Schema {
     def parentHashes = Seq(observationEdge.left.hash, observationEdge.right.hash)
     def parents = Seq(observationEdge.left, observationEdge.right)
 
-    def storeTransactionCacheData(db: LvlDB, update: TransactionCacheData => TransactionCacheData, empty: TransactionCacheData, resolved: Boolean = false): Unit = {
+    def storeTransactionCacheData(db: KVDB, update: TransactionCacheData => TransactionCacheData, empty: TransactionCacheData, resolved: Boolean = false): Unit = {
       db.updateTransactionCacheData(signedObservationEdge.baseHash, update, empty)
       db.putSignedObservationEdgeCache(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
       resolvedObservationEdge.data.foreach {
@@ -284,7 +281,7 @@ object Schema {
       }
     }
 
-    def storeCheckpointData(db: LvlDB, update: CheckpointCacheData => CheckpointCacheData, empty: CheckpointCacheData, resolved: Boolean = false): Unit = {
+    def storeCheckpointData(db: KVDB, update: CheckpointCacheData => CheckpointCacheData, empty: CheckpointCacheData, resolved: Boolean = false): Unit = {
       db.updateCheckpointCacheData(signedObservationEdge.baseHash, update, empty)
       db.putSignedObservationEdgeCache(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
       resolvedObservationEdge.data.foreach {
@@ -391,7 +388,7 @@ object Schema {
     // TODO: Optimize call, should store this value instead of recalculating every time.
     def soeHash: String = checkpoint.edge.signedObservationEdge.hash
 
-    def store(db: LvlDB, cache: CheckpointCacheData, resolved: Boolean): Unit = {
+    def store(db: KVDB, cache: CheckpointCacheData, resolved: Boolean): Unit = {
 /*
       transactions.foreach { rt =>
         rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))

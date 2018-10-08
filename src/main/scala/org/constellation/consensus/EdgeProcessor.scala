@@ -3,25 +3,20 @@ package org.constellation.consensus
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
-import org.constellation.Data
-import org.constellation.LevelDB.{DBGet, DBPut, DBUpdate}
-import org.constellation.primitives.Schema._
+import akka.actor.{Actor, ActorLogging, ActorSystem}
 import akka.pattern.ask
-import Validation.TransactionValidationStatus
 import akka.util.Timeout
-import EdgeProcessor._
 import com.typesafe.scalalogging.Logger
-import org.constellation.consensus.Consensus._
-import org.constellation.consensus.EdgeProcessor.HandleTransaction
-import org.constellation.primitives._
 import constellation._
+import org.constellation.Data
+import org.constellation.consensus.Consensus._
+import org.constellation.consensus.EdgeProcessor.{HandleTransaction, _}
+import org.constellation.consensus.Validation.TransactionValidationStatus
+import org.constellation.primitives.Schema._
+import org.constellation.primitives._
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
-import akka.pattern.ask
-import akka.util.Timeout
 
 object EdgeProcessor {
 

@@ -112,9 +112,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
     Props(new PeerManager(data)), s"PeerManager_$publicKeyHash"
   )
 
-  val dbActor: LvlDB = TypedActor(system).typedActorOf(TypedProps(
-    classOf[LvlDB],
-    new LvlDBImpl(data)), s"LvlDB_$publicKeyHash")
+  val dbActor: KVDB = TypedActor(system).typedActorOf(TypedProps(
+    classOf[KVDB],
+    new KVDBImpl(data)), s"LvlDB_$publicKeyHash")
 
   val udpActor: ActorRef =
     system.actorOf(

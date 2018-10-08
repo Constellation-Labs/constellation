@@ -18,7 +18,6 @@ import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._

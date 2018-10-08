@@ -31,7 +31,7 @@ object LevelDB {
 
 }
 
-trait LvlDB {
+trait KVDB {
 
   def restart(): Unit
   def delete(key: String): Boolean
@@ -55,8 +55,8 @@ trait LvlDB {
   def getCheckpointEdgeData(key: String): Option[CheckpointEdgeData]
 }
 
-class LvlDBImpl(dao: Data) extends LvlDB {
-  private val logger = Logger("LvlDB")
+class KVDBImpl(dao: Data) extends KVDB {
+  private val logger = Logger("KVDB")
 
   private def tmpDirId = file"tmp/${dao.id.medium}/db"
   private def mkDB: LevelDB = LevelDB(tmpDirId)
