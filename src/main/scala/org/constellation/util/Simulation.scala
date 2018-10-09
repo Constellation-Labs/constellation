@@ -2,102 +2,88 @@ package org.constellation.util
 
 import java.util.concurrent.ForkJoinPool
 
-import org.constellation.primitives.Schema._
+import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.AddPeerRequest
+import org.constellation.primitives.Schema._
 import scalaj.http.HttpResponse
 
-import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
 
+class Simulation {
 
-class Simulation(apis: Seq[APIClient]) {
+  val logger = Logger(s"Simulation")
 
   implicit val ec: ExecutionContextExecutorService =
     ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
-  def healthy(): Boolean = apis.forall{
-    a =>
-      val res = a.getBlockingStr("health", timeoutSeconds = 100)
-      println(res)
-      res == "OK"
+  def healthy(apis: Seq[APIClient]): Boolean = {
+    apis.forall(a => {
+      val res = a.getSync("health", timeoutSeconds = 100).isSuccess
+      res
+    })
   }
-  def setIdLocal(): Unit = apis.foreach{ a =>
+
+  def hasGenesis(apis: Seq[APIClient]): Boolean = {
+    apis.forall(a => {
+      val res = a.getSync(s"hasGenesis" , timeoutSeconds = 100).isSuccess
+      res
+    })
+  }
+
+  def getCheckpointTips(apis: Seq[APIClient]): Seq[Map[String, CheckpointBlock]] = {
+    apis.map(a => {
+      a.getBlocking[Map[String, CheckpointBlock]](s"checkpointTips" , timeoutSeconds = 100)
+    })
+  }
+
+  def setIdLocal(apis: Seq[APIClient]): Unit = apis.foreach{ a =>
     val id = a.getBlocking[Id]("id")
     a.id = id
   }
-  def setExternalIP(): Boolean =
-    apis.forall{a => a.postSync("ip", a.host + ":" + a.udpPort).isSuccess}
 
-  def verifyGenesisReceived(): Boolean = {
+  def setExternalIP(apis: Seq[APIClient]): Boolean =
+    apis.forall{a => a.postSync("ip", a.hostName + ":" + a.udpPort).isSuccess}
+
+  def verifyGenesisReceived(apis: Seq[APIClient]): Boolean = {
     apis.forall { a =>
-      val gbmd = a.getBlocking[Metrics]("metrics")
+      val gbmd = a.getBlocking[MetricsResult]("metrics")
       gbmd.metrics("numValidBundles").toInt >= 1
     }
   }
 
-  def genesisOE(): GenesisObservation = {
+  def genesis(apis: Seq[APIClient]): GenesisObservation = {
     val ids = apis.map{_.id}
-    apis.head.postBlocking[GenesisObservation]("genesisObservation", ids.tail.toSet)
+    apis.head.postBlocking[GenesisObservation]("genesis/create", ids.tail.toSet)
   }
 
-  def genesis(): Unit = {
-    val r1 = apis.head
-    // Create a genesis transaction
-    val numCoinsInitial = 4e9.toLong
-    val genTx = r1.getBlocking[Transaction]("genesis/" + numCoinsInitial)
-    Thread.sleep(2000)
-    val gbmd = r1.getBlocking[Metrics]("metrics")
-    assert(gbmd.metrics("numValidBundles").toInt >= 1)
-    // JSON parsing error, needs to be fixed
-    /*
-    val gbmd = r1.getBlocking[Seq[BundleMetaData]]("bundles")
-    assert(gbmd.size == 1)
-    assert(gbmd.head.height.get == 0)
-    val genesisBundle = gbmd.head.bundle
-    assert(genesisBundle.extractIds.head == r1.id)
-    assert(genesisBundle.extractTXHash.size == 1)
-    assert(gbmd.head.totalScore.nonEmpty)*/
-  }
+  def addPeers(apis: Seq[APIClient], peerAPIs: Seq[APIClient])(implicit executionContext: ExecutionContext) = {
 
-  def addPeers(): Seq[Future[Unit]] = {
-    val results = apis.flatMap { a =>
-      val ip = a.host
-      println(s"Trying to add nodes to $ip")
-      val others = apis.filter {_.id != a.id}.map { z => z.host + ":" + z.udpPort}
+    val joinedAPIs = apis.zip(peerAPIs)
+    val results = joinedAPIs.flatMap { case (a, peerAPI) =>
+      val ip = a.hostName
+      logger.info(s"Trying to add nodes to $ip")
+      val others = joinedAPIs.filter { case (b, _) => b.id != a.id}
+        .map { case (z, bPeer) => AddPeerRequest(z.hostName, z.udpPort, bPeer.apiPort, z.id)}
       others.map {
         n =>
           Future {
-            val res = a.postSync("peer", n)
-            println(s"Tried to add peer $n to $ip res: $res")
-          }
-      }
-    }
-    results
-  }
-  def addPeersV2(): Seq[Future[Unit]] = {
-    val results = apis.flatMap { a =>
-      val ip = a.host
-      println(s"Trying to add nodes to $ip")
-      val others = apis.filter {_.id != a.id}.map { z => AddPeerRequest(z.host, z.udpPort, z.peerHttpPort, z.id)}
-      others.map {
-        n =>
-          Future {
-            val res = a.postSync("addPeerV2", n)
-            println(s"Tried to add peer $n to $ip res: $res")
+            val res = a.postSync("addPeer", n)
+            logger.info(s"Tried to add peer $n to $ip res: $res")
           }
       }
     }
     results
   }
 
-  def verifyPeersAdded(): Boolean = apis.forall { api =>
+  def verifyPeersAdded(apis: Seq[APIClient]): Boolean = apis.forall { api =>
     val peers = api.getBlocking[Seq[Peer]]("peerids")
-    println("Peers length: " + peers.length)
+    logger.info("Peers length: " + peers.length)
     peers.length == (apis.length - 1)
   }
 
-  def assignReputations(): Unit = apis.foreach{ api =>
+  def assignReputations(apis: Seq[APIClient]): Unit = apis.foreach{ api =>
     val others = apis.filter{_ != api}
     val havePublic = Random.nextDouble() > 0.5
     val haveSecret = Random.nextDouble() > 0.5 || havePublic
@@ -110,175 +96,78 @@ class Simulation(apis: Seq[APIClient]) {
     })
   }
 
-  def initialDistributionTX(): Seq[Transaction] = {
+  def randomNode(apis: Seq[APIClient]) = apis(Random.nextInt(apis.length))
 
-    println("-"*10)
-    println("Initial distribution")
-    println("-"*10)
-
-    apis.tail.map{ n =>
-      val dst = n.id.address.address
-      val s = SendToAddress(dst, 1e7.toLong)
-      apis.head.postBlocking[Transaction]("sendToAddress", s)
-    }
-  }
-
-
-  def randomNode = apis(Random.nextInt(apis.length))
-  def randomOtherNode(not: APIClient): APIClient = apis.filter{_ != not}(Random.nextInt(apis.length - 1))
-
-  def sendRandomTransaction: Future[Transaction] = {
-    Future {
-      val src = randomNode
-      val dst = randomOtherNode(src).id.address.address
-      val s = SendToAddress(dst, Random.nextInt(1000).toLong)
-      src.postBlocking[Transaction]("sendToAddress", s)
-    }(ec)
-  }
-
-  def sendRandomTransactionV2: Future[HttpResponse[String]] = {
-    val src = randomNode
-    val dst = randomOtherNode(src).id.address.address
-    val s = SendToAddress(dst, Random.nextInt(1000).toLong)
-    src.post("sendV2", s)
-  }
-
-  def sendRandomTransactions(numTX: Int = 20): Set[Transaction] = {
-
-    val txResponse = Seq.fill(numTX) {
-      sendRandomTransaction
-    }
-
-    val txResponseFut = Future.sequence(txResponse)
-    val txs = txResponseFut.get(100).toSet
-    txs
-  }
-
-  def validateRun(txSent: Set[Transaction], validationFractionAcceptable: Double): Boolean = {
-
-    var done = false
-    var attempts = 0
-    val hashes = txSent.map{_.hash}
-
-    while (!done && attempts < 50) {
-
-      attempts += 1
-      Thread.sleep(5000)
-      val validTXs = apis.map{_.getBlocking[Seq[String]]("validTX")}
-      val pctComplete = validTXs.map{ v =>
-        val missingFraction = hashes.diff(v.toSet).size.toDouble / hashes.size
-        val complete = 1 - missingFraction
-        complete
-      }
-      done = pctComplete.forall(_ >= validationFractionAcceptable)
-//      println("Num valid TX hashes " + validTXs.map{_.size})
-      println("Pct complete " + pctComplete.map{a =>  (a*100).toString.slice(0, 4) + "%"})
-
-      // This is just used to ensure processing continues
-      if (attempts % 2 == 0) sendRandomTransaction
-
-    }
-
-    done
-  }
-
-  def nonEmptyBalance(): Boolean = apis.forall(_.getBlockingStr("balance").toLong > 0L)
+  def randomOtherNode(not: APIClient, apis: Seq[APIClient]): APIClient = apis.filter{_ != not}(Random.nextInt(apis.length - 1))
 
   var healthChecks = 0
 
-  def awaitHealthy(): Unit = {
+  def awaitHealthy(apis: Seq[APIClient]): Unit = {
     while (healthChecks < 10) {
-      if (Try{healthy()}.getOrElse(false)) {
+      if (Try{healthy(apis)}.getOrElse(false)) {
         healthChecks = Int.MaxValue
       } else {
         healthChecks += 1
-        println(s"Unhealthy nodes. Waiting 30s. Num attempts: $healthChecks out of 10")
+        logger.error(s"Unhealthy nodes. Waiting 30s. Num attempts: $healthChecks out of 10")
         Thread.sleep(30000)
-
       }
     }
-    assert(healthy())
+
+    assert(healthy(apis))
   }
 
-  def runV2(attemptSetExternalIP: Boolean = false): Unit = {
+  var genChecks = 0
 
-    awaitHealthy()
-    setIdLocal()
-    if (attemptSetExternalIP) {
-      assert(setExternalIP())
+  def awaitGenesisStored(apis: Seq[APIClient]): Unit = {
+    while (genChecks < 10) {
+      if (Try{hasGenesis(apis)}.getOrElse(false)) {
+        genChecks = Int.MaxValue
+      } else {
+        genChecks += 1
+        logger.error(s"Genesis not stored. Waiting 30s. Num attempts: $genChecks out of 10")
+        Thread.sleep(30000)
+      }
     }
-    apis.foreach(_.postEmpty("disableDownload"))
-    val results = addPeersV2()
-    //import scala.concurrent.duration._
-    //Await.result(Future.sequence(results), 60.seconds)
+
+    assert(hasGenesis(apis))
+  }
+
+  def sendRandomTransaction(apis: Seq[APIClient]): Future[HttpResponse[String]] = {
+    val src = randomNode(apis)
+    val dst = randomOtherNode(src, apis).id.address.address
+
+    val s = SendToAddress(dst, Random.nextInt(1000).toLong)
+    src.post("sendTransactionToAddress", s)
+  }
+
+  def run(attemptSetExternalIP: Boolean = false, apis: Seq[APIClient], peerApis: Seq[APIClient])(implicit executionContext: ExecutionContext): Unit = {
+
+    awaitHealthy(apis)
+
+    setIdLocal(apis)
+
+    if (attemptSetExternalIP) {
+      assert(setExternalIP(apis))
+    }
+
+    addPeers(apis, peerApis)
+
     Thread.sleep(5000)
+
     assert(
       apis.forall{a =>
-//        a.postEmpty()
-        val res = a.postBlockingEmpty[Seq[(Id, Boolean)]]("peerHealthCheckV2")
+        val res = a.postBlockingEmpty[Seq[(Id, Boolean)]]("peerHealthCheck")
         res.forall(_._2) && res.size == apis.size - 1
       }
     )
 
-    val goe = genesisOE()
+    val goe = genesis(apis)
 
-    apis.foreach{_.post("acceptGenesisOE", goe)}
+    apis.foreach{_.post("genesis/accept", goe)}
 
-    Thread.sleep(5000)
+    awaitGenesisStored(apis)
 
-    apis.foreach{_.post("startRandomTX", goe).onComplete(println)}
-
-
-    // assert(verifyPeersAdded())
-
-  }
-
-  def run(validationFractionAcceptable: Double = 1.0, attemptSetExternalIP: Boolean = true): Unit = {
-
-    while (healthChecks < 10) {
-      if (Try{healthy()}.getOrElse(false)) {
-        healthChecks = Int.MaxValue
-      } else {
-        healthChecks += 1
-        println(s"Unhealthy nodes. Waiting 30s. Num attempts: $healthChecks out of 10")
-        Thread.sleep(30000)
-
-      }
-    }
-
-    assert(healthy())
-    setIdLocal()
-    if (attemptSetExternalIP) {
-      assert(setExternalIP())
-    }
-    genesis()
-
-    val results = addPeers()
-    import scala.concurrent.duration._
-    Await.result(Future.sequence(results), 60.seconds)
-
-    assert(verifyPeersAdded())
-
-    Thread.sleep(2000)
-
-    assert(verifyGenesisReceived())
-
-    initialDistributionTX()
-
-    Thread.sleep(25000)
-
-//    assert(nonEmptyBalance())
-
-    val start = System.currentTimeMillis()
-
-    val txs = sendRandomTransactions()
-
-    assert(validateRun(txs, validationFractionAcceptable))
-
-    val end = System.currentTimeMillis()
-
-    println(s"Completion time seconds: ${(end-start) / 1000}")
-
+    apis.foreach(_.postEmpty("random"))
   }
 
 }

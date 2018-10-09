@@ -278,7 +278,7 @@ trait KeyUtilsExt {
     val ints = validInt.map{_.toString.toInt}
     val sum = ints.sum
     val par = sum % 9
-    val res2 = "0xDAG" + par + end
+    val res2 = "DAG" + par + end
 //    println(s"res2 $res2 end ints $ints digits: $validInt endSum: $sum divmod9 $par ${res2.length}")
     res2
   }

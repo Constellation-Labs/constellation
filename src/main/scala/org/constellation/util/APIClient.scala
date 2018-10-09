@@ -2,23 +2,44 @@ package org.constellation.util
 
 import java.util.concurrent.TimeUnit
 
+import akka.actor.ActorSystem
+import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.constellation.primitives.Schema.Id
-import org.json4s.{Formats, native}
 import org.json4s.native.Serialization
+import org.json4s.{Formats, native}
 import scalaj.http.{Http, HttpRequest, HttpResponse}
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
-class APIClient(val host: String = "127.0.0.1", val port: Int) {
+object APIClient {
+  def apply(host: String = "127.0.0.1", port: Int, udpPort: Int = 16180)
+           (implicit system: ActorSystem, materialize: ActorMaterializer
+  ): APIClient = {
+    new APIClient(host, port)
+  }
+}
 
-  import scala.concurrent.ExecutionContext.Implicits.global
+class APIClient(host: String = "127.0.0.1", port: Int)(
+  implicit val system: ActorSystem,
+  implicit val materialize: ActorMaterializer) {
 
-  var udpPort: Int = 16180
+  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
+
+  val hostName: String = host
   var id: Id = _
-  var peerHttpPort: Int = _
 
-  private val baseURI = s"http://$host:$port"
+  val udpPort: Int = 16180
+  val apiPort: Int = port
+
+  def udpAddress: String = hostName + ":" + udpPort
+
+  def setExternalIP(): Boolean = postSync("ip", hostName + ":" + udpPort).isSuccess
+
+  private def baseURI: String = {
+    val uri = s"http://$hostName:$apiPort"
+    uri
+  }
 
   def base(suffix: String) = s"$baseURI/$suffix"
 
@@ -47,13 +68,19 @@ class APIClient(val host: String = "127.0.0.1", val port: Int) {
 
   implicit val serialization: Serialization.type = native.Serialization
 
-  def post(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit f : Formats = constellation.constellationFormats): Future[HttpResponse[String]] = {
+  def post(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)
+          (implicit f : Formats = constellation.constellationFormats): Future[HttpResponse[String]] = {
     Future(postSync(suffix, b))
+  }
+
+  def put(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)
+          (implicit f : Formats = constellation.constellationFormats): Future[HttpResponse[String]] = {
+    Future(putSync(suffix, b))
   }
 
   def postEmpty(suffix: String, timeoutSeconds: Int = 5)(implicit f : Formats = constellation.constellationFormats)
   : HttpResponse[String] = {
-    httpWithAuth(suffix).method("POST") .asString
+    httpWithAuth(suffix).method("POST").asString
   }
 
   def postSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
@@ -63,8 +90,25 @@ class APIClient(val host: String = "127.0.0.1", val port: Int) {
     httpWithAuth(suffix).postData(ser).header("content-type", "application/json").asString
   }
 
+  def putSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
+    implicit f : Formats = constellation.constellationFormats
+  ): HttpResponse[String] = {
+    val ser = Serialization.write(b)
+    httpWithAuth(suffix).put(ser).header("content-type", "application/json").asString
+  }
+
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
-    val res = postSync(suffix, b)
+    val res: HttpResponse[String] = postSync(suffix, b)
+    Serialization.read[T](res.body)
+  }
+
+  def postNonBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): Future[T] = {
+    post(suffix, b).map { res =>
+      Serialization.read[T](res.body)
+    }
+  }
+
+  def read[T <: AnyRef](res: HttpResponse[String])(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): T = {
     Serialization.read[T](res.body)
   }
 
@@ -87,8 +131,14 @@ class APIClient(val host: String = "127.0.0.1", val port: Int) {
     Serialization.read[T](getBlockingStr(suffix, queryParams, timeoutSeconds))
   }
 
+  def readHttpResponseEntity[T <: AnyRef](response: String)
+                              (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
+    Serialization.read[T](response)
+  }
+
   def getBlockingStr(suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5): String = {
-    val resp = httpWithAuth(suffix, timeoutSeconds).params(queryParams).asString
+    val resp: HttpResponse[String] = httpWithAuth(suffix, timeoutSeconds).params(queryParams).asString
+
     resp.body
   }
 

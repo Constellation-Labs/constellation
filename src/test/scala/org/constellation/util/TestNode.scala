@@ -8,31 +8,51 @@ import akka.stream.ActorMaterializer
 import org.constellation.ConstellationNode
 import org.constellation.crypto.KeyUtils
 
-import scala.concurrent.ExecutionContextExecutor
-
-
+import scala.concurrent.ExecutionContext
+import scala.util.Try
 
 object TestNode {
 
-  def apply(seedHosts: Seq[InetSocketAddress] = Seq(), keyPair: KeyPair = KeyUtils.makeKeyPair(),
-            heartbeatEnabled: Boolean = false, randomizePorts: Boolean = true, generateRandomTransactions: Boolean = false)(
+  private var nodes = Seq[ConstellationNode]()
+
+  def apply(seedHosts: Seq[InetSocketAddress] = Seq(),
+            keyPair: KeyPair = KeyUtils.makeKeyPair(),
+            randomizePorts: Boolean = true)(
     implicit system: ActorSystem,
-    materialize: ActorMaterializer,
-    executionContext: ExecutionContextExecutor
+    materializer: ActorMaterializer,
+    executionContext: ExecutionContext
   ): ConstellationNode = {
 
-    val randomPort = if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9000
-    val randomPeerPort = if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9001
-    val randomPeerTCPPort = if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9002
-    val randomUDPPort = if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 16180
-    val node = new ConstellationNode(keyPair, seedHosts, "0.0.0.0", randomPort, udpPort = randomUDPPort,
-      heartbeatEnabled = heartbeatEnabled, generateRandomTransactions = generateRandomTransactions, autoSetExternalAddress = true,
+    val randomPort =
+      if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9000
+    val randomPeerPort =
+      if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9001
+    val randomPeerTCPPort =
+      if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9002
+    val randomUDPPort =
+      if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 16180
+
+    val node = new ConstellationNode(
+      keyPair,
+      seedHosts,
+      "0.0.0.0",
+      randomPort,
+      udpPort = randomUDPPort,
+      autoSetExternalAddress = true,
       peerHttpPort = randomPeerPort,
-      peerTCPPort = randomPeerTCPPort
-      //, udpInterface = "127.0.0.1"
+      peerTCPPort = randomPeerTCPPort,
     )
-    node.data.confirmWindow = 6
+
+    nodes = nodes :+ node
+
     node
+  }
+
+  def clearNodes(): Unit = {
+    Try {
+      nodes.foreach { node => node.shutdown() }
+      nodes = Seq()
+    }
   }
 
 }

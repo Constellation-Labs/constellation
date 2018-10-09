@@ -1,10 +1,9 @@
 package org.constellation.serializer
 
-import java.security.PublicKey
-
 import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
-import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey
+import org.constellation.consensus.Consensus
+import org.constellation.consensus.Consensus.{VoteData => _, _}
 import org.constellation.p2p.SerializedUDPMessage
 import org.constellation.primitives.Schema._
 import org.constellation.util.{EncodedPublicKey, HashSignature, SignatureBatch, Signed}
@@ -16,13 +15,29 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
 
   def registerClasses(kryo: Kryo): Unit = {
 
-    kryo.register(classOf[AddressCache])
+    kryo.register(classOf[Address])
+    kryo.register(classOf[CheckpointEdge])
+    kryo.register(classOf[AddressCacheData])
+    kryo.register(classOf[TransactionCacheData])
+    kryo.register(classOf[CheckpointCacheData])
+    kryo.register(classOf[SignedObservationEdgeCache])
+    kryo.register(classOf[Transaction])
+    kryo.register(classOf[Edge[Address, Address, TransactionEdgeData]])
+    kryo.register(classOf[ResolvedObservationEdge[Address, Address, TransactionEdgeData]])
+    kryo.register(classOf[Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData]])
+    kryo.register(classOf[ResolvedObservationEdge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData]])
+    kryo.register(classOf[Edge[SignedObservationEdge, SignedObservationEdge, Nothing]])
+    kryo.register(classOf[ResolvedObservationEdge[SignedObservationEdge, SignedObservationEdge, Nothing]])
     kryo.register(classOf[SignatureBatch])
     kryo.register(classOf[HashSignature])
-    kryo.register(classOf[TX])
     kryo.register(classOf[SignedObservationEdge])
     kryo.register(classOf[ObservationEdge])
     kryo.register(classOf[CheckpointBlock])
+    kryo.register(classOf[TypedEdgeHash])
+  //  kryo.register(classOf[EdgeHashType])
+    kryo.register(classOf[Enumeration#Value])
+    kryo.register(classOf[TransactionEdgeData])
+    kryo.register(classOf[CheckpointEdgeData])
 
     kryo.register(classOf[DownloadRequest])
     kryo.register(classOf[ParentBundleHash])
@@ -62,6 +77,11 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Signed[BundleBlock]])
     kryo.register(classOf[Signed[BundleData]])
 
+    kryo.register(classOf[ConsensusVote[Consensus.Checkpoint]])
+    kryo.register(classOf[CheckpointVote])
+    kryo.register(classOf[RoundHash[Consensus.Checkpoint]])
+    kryo.register(classOf[ConsensusProposal[Consensus.Checkpoint]])
+    kryo.register(classOf[CheckpointProposal])
 
     // These may not be necessary
     kryo.register(classOf[Gossip[Signed[AddressMetaData]]])
@@ -87,10 +107,10 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Gossip[HandShakeResponseMessage]])
     kryo.register(classOf[Gossip[Peer]])
 
-
     kryo.register(classOf[AddressMetaData])
 
-
+    kryo.register(Class.forName("org.constellation.primitives.Schema$EdgeHashType$"))
+    kryo.register(Class.forName("scala.Enumeration$Val"))
     kryo.register(Class.forName("scala.collection.immutable.HashSet$HashSet1"))
     kryo.register(Class.forName("scala.collection.immutable.Set$EmptySet$"))
     kryo.register(Class.forName("scala.collection.immutable.$colon$colon"))

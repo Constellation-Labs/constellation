@@ -4,7 +4,6 @@ import org.constellation.primitives.Schema.Id
 
 trait Reputation {
 
-
   @volatile var secretReputation: Map[Id, Double] = Map()
   @volatile var publicReputation: Map[Id, Double] = Map()
   @volatile var normalizedDeterministicReputation: Map[Id, Double] = Map()
@@ -17,6 +16,5 @@ trait Reputation {
         id -> r.toDouble / total.toDouble
     }
   }
-
 
 }

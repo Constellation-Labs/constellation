@@ -109,10 +109,10 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
   private val clusterId = sys.env.getOrElse("CLUSTER_ID", "constellation-app")
 
-  // TODO: disabling until we port over to our new consensus mechanism
   "Cluster integration" should "ping a cluster, check health, go through genesis flow" in {
 
     println("Grabbing cluster STS : " + clusterId)
+
     val mappings = getPodMappings(clusterId)
 
     mappings.foreach{println}
@@ -120,12 +120,20 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     val ips = mappings.map{_.externalIP}
 
     val apis = ips.map{ ip =>
-      new APIClient(ip, 9000)
+      APIClient(ip, 9000)
     }
 
-    val sim = new Simulation(apis)
+    val splitApis = apis.splitAt(1)
 
-    sim.run(validationFractionAcceptable = 0.7D)
+    val initialApis = splitApis._2
+
+    val newApi = splitApis._1(0)
+
+    println("initialApis = ", initialApis)
+
+    println("newApi = ", newApi)
+
+    val sim = new Simulation()
 
   }
 

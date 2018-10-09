@@ -12,7 +12,6 @@ import scala.concurrent.ExecutionContextExecutor
 
 object DownloadChainSingle {
 
-
   def main(args: Array[String]): Unit = {
 
     implicit val materialize: ActorMaterializer = ActorMaterializer()
@@ -30,13 +29,13 @@ object DownloadChainSingle {
     val ips = mappings.map{_.externalIP}
 
     val apis = ips.map{ ip =>
-      val r = new APIClient(ip, 9000)
+      val r = APIClient(ip, 9000)
       r
     }
 
     val nodeIp = "35.238.105.67"
 
-    val a1 = apis.filter{_.host == nodeIp}.head
+    val a1 = apis.filter{_.hostName == nodeIp}.head
 
     val chainFile = File("single-chain.jsonl")
     chainFile.delete()

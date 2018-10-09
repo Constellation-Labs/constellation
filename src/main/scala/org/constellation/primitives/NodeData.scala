@@ -1,24 +1,27 @@
 package org.constellation.primitives
 
-import java.io.File
 import java.net.InetSocketAddress
 import java.security.KeyPair
 
+import akka.actor.ActorRef
+import constellation._
+import org.constellation.KVDB
 import org.constellation.primitives.Schema._
 import org.constellation.util.Signed
-import constellation._
-import org.constellation.LevelDB
-
-import scala.util.Try
 
 trait NodeData {
 
-  var sendRandomTXV2: Boolean = false
+  var dbActor : KVDB = _
+  var peerManager: ActorRef = _
+  var consensus: ActorRef = _
+  var metricsManager: ActorRef = _
+  var edgeProcessor: ActorRef = _
+  var memPoolManager: ActorRef = _
 
   var minGenesisDistrSize: Int = 3
   @volatile var downloadMode: Boolean = true
   @volatile var downloadInProgress: Boolean = false
-  var generateRandomTX: Boolean = true
+  var generateRandomTX: Boolean = false
 
   var lastConfirmationUpdateTime: Long = System.currentTimeMillis()
 
@@ -38,23 +41,9 @@ trait NodeData {
 
   var remotes: Seq[InetSocketAddress] = Seq()
   def selfPeer: Signed[Peer] = Peer(id, externalAddress, apiAddress, remotes, externalHostString).signed()
-/*
-
-  @volatile var db: LevelDB = _
-
-  def tmpDirId = new File("tmp", id.medium)
-
-  def restartDB(): Unit = {
-    Try {
-      db.destroy()
-    }
-    db = new LevelDB(new File(tmpDirId, "db"))
-  }
-*/
 
   def updateKeyPair(kp: KeyPair): Unit = {
     keyPair = kp
-    //restartDB()
   }
 
 }
