@@ -8,6 +8,7 @@ import cats.kernel.Monoid
 import constellation.pubKeyToAddress
 import org.constellation.LevelDB.{DBPut, DBUpdate}
 import org.constellation.consensus.Consensus.RemoteMessage
+import org.constellation.consensus.{MemPool, TipData}
 import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
@@ -33,9 +34,12 @@ object Schema {
                                        cbEdgeHash: Option[String]
                                      )
 
-  sealed trait NodeState
-  final case object PendingDownload extends NodeState
-  final case object Ready extends NodeState
+
+
+  object NodeStatus extends Enumeration {
+    type NodeStatus = Value
+    val PendingDownload, DownloadInProgress, Ready = Value
+  }
 
   sealed trait ValidationStatus
 
@@ -139,6 +143,9 @@ object Schema {
                                         lastRequestTime: Long,
                                         numRequests: Int
                                       )
+
+
+
 
 
   /**
@@ -455,7 +462,25 @@ object Schema {
                                  genesis: CheckpointBlock,
                                  initialDistribution: CheckpointBlock,
                                  initialDistribution2: CheckpointBlock
-                               )
+                               ) {
+
+    def notGenesisTips(tips: Seq[CheckpointBlock]): Boolean = {
+      !tips.contains(initialDistribution) && !tips.contains(initialDistribution2)
+    }
+    
+    def initialMemPool = MemPool(
+      Set(),
+      Map(
+        initialDistribution.baseHash -> initialDistribution,
+        initialDistribution2.baseHash -> initialDistribution2
+      ),
+      Map(
+        initialDistribution.baseHash -> TipData(initialDistribution, 0),
+        initialDistribution2.baseHash -> TipData(initialDistribution2, 0)
+      )
+    )
+    
+  }
 
 
 

@@ -101,11 +101,11 @@ class ConstellationNode(val configKeyPair: KeyPair,
                          implicit val executionContext: ExecutionContext
                        ){
 
-  val data = new DAO()
-  data.updateKeyPair(configKeyPair)
+  implicit val dao: DAO = new DAO()
+  dao.updateKeyPair(configKeyPair)
 
-  import data._
-  data.actorMaterializer = materialize
+  import dao._
+  dao.actorMaterializer = materialize
 
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
@@ -117,28 +117,28 @@ class ConstellationNode(val configKeyPair: KeyPair,
   val udpAddress = new InetSocketAddress(hostName, udpPort)
 
   if (autoSetExternalAddress) {
-    data.externalAddress = Some(udpAddress)
-    data.apiAddress = Some(new InetSocketAddress(hostName, httpPort))
-    data.tcpAddress = Some(new InetSocketAddress(hostName, peerTCPPort))
+    dao.externalAddress = Some(udpAddress)
+    dao.apiAddress = Some(new InetSocketAddress(hostName, httpPort))
+    dao.tcpAddress = Some(new InetSocketAddress(hostName, peerTCPPort))
   }
 
   val heartBeat: ActorRef = system.actorOf(
-    Props(new Heartbeat(data)), s"Heartbeat_$publicKeyHash"
+    Props(new Heartbeat(dao)), s"Heartbeat_$publicKeyHash"
   )
-  data.heartbeatActor = heartBeat
+  dao.heartbeatActor = heartBeat
 
 
   val randomTX : ActorRef = system.actorOf(
-    Props(new RandomTransactionManager(data)), s"RandomTXManager_$publicKeyHash"
+    Props(new RandomTransactionManager(dao)), s"RandomTXManager_$publicKeyHash"
   )
 
   val cpUniqueSigner : ActorRef = system.actorOf(
-    Props(new CheckpointUniqueSigner(data)), s"CheckpointUniqueSigner_$publicKeyHash"
+    Props(new CheckpointUniqueSigner(dao)), s"CheckpointUniqueSigner_$publicKeyHash"
   )
 
   // Setup actors
   val metricsManager: ActorRef = system.actorOf(
-    Props(new MetricsManager(data)), s"MetricsManager_$publicKeyHash"
+    Props(new MetricsManager(dao)), s"MetricsManager_$publicKeyHash"
   )
 
   val memPoolManager: ActorRef = system.actorOf(
@@ -146,7 +146,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   )
 
   val peerManager: ActorRef = system.actorOf(
-    Props(new PeerManager(data)), s"PeerManager_$publicKeyHash"
+    Props(new PeerManager(dao)), s"PeerManager_$publicKeyHash"
   )
 
   val cellManager: ActorRef = system.actorOf(
@@ -154,36 +154,36 @@ class ConstellationNode(val configKeyPair: KeyPair,
   )
 
   val dbActor: ActorRef =  system.actorOf(
-    Props(new LevelDBActor(data)), s"ConstellationDBActor_$publicKeyHash"
+    Props(new LevelDBActor(dao)), s"ConstellationDBActor_$publicKeyHash"
   )
 
   val udpActor: ActorRef =
     system.actorOf(
-      Props(new UDPActor(None, udpPort, udpInterface, data)), s"ConstellationUDPActor_$publicKeyHash"
+      Props(new UDPActor(None, udpPort, udpInterface, dao)), s"ConstellationUDPActor_$publicKeyHash"
     )
 
   val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(data)),
+    Props(new Consensus(dao)),
     s"ConstellationConsensusActor_$publicKeyHash")
 
   val edgeProcessorActor: ActorRef = system.actorOf(
-    Props(new EdgeProcessor(data)),
+    Props(new EdgeProcessor(dao)),
     s"ConstellationEdgeProcessorActor_$publicKeyHash")
 
   val cpMemPoolVerify: ActorRef = system.actorOf(
-    Props(new CheckpointMemPoolVerifier(data)),
+    Props(new CheckpointMemPoolVerifier(dao)),
     s"CheckpointMemPoolVerifier_$publicKeyHash")
 
 
-  data.dbActor = dbActor
-  data.consensus = consensusActor
-  data.peerManager = peerManager
-  data.metricsManager = metricsManager
-  data.edgeProcessor = edgeProcessorActor
-  data.cpSigner = cpUniqueSigner
+  dao.dbActor = dbActor
+  dao.consensus = consensusActor
+  dao.peerManager = peerManager
+  dao.metricsManager = metricsManager
+  dao.edgeProcessor = edgeProcessorActor
+  dao.cpSigner = cpUniqueSigner
 
   // If we are exposing rpc then create routes
-  val routes: Route = new API(udpAddress, data, cellManager).authRoutes
+  val routes: Route = new API(udpAddress, cellManager).authRoutes
 
   logger.info("API Binding")
 
@@ -191,7 +191,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   // Setup http server for internal API
   val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
 
-  val peerRoutes : Route = new PeerAPI(data).routes
+  val peerRoutes : Route = new PeerAPI(dao).routes
 
   // Setup http server for peer API
   Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)

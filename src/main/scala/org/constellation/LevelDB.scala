@@ -105,6 +105,9 @@ class LevelDB (val file: File) {
   def putJson[T <: ProductHash](t: T): Try[Unit] = put(t.hash, t.json)
 
   def kryoGet(key: String): Option[AnyRef] = Try{getBytes(key).map {KryoSerializer.deserialize}}.toOption.flatten
+  //def kryoGetT[T <: ClassTag](key: String): Option[AnyRef] = Try{getBytes(key).map {KryoSerializer.deserialize}}.toOption.flatten
+
+
   def kryoPut(key: String, obj: AnyRef): Try[Unit] = {
     val bytes = KryoSerializer.serializeAnyRef(obj)
     putBytes(key, bytes)

@@ -62,6 +62,12 @@ class Simulation {
     apis.head.postBlocking[GenesisObservation]("genesis/create", ids.tail.toSet)
   }
 
+  def addPeer(apis: Seq[APIClient], peer: AddPeerRequest)(implicit executionContext: ExecutionContext) = {
+    apis.map{
+      _.postSync("addPeer", peer)
+    }
+  }
+
   def addPeers(apis: Seq[APIClient], peerAPIs: Seq[APIClient])(implicit executionContext: ExecutionContext) = {
 
     val joinedAPIs = apis.zip(peerAPIs)

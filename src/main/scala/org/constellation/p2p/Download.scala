@@ -1,22 +1,212 @@
 package org.constellation.p2p
 
 import java.net.InetSocketAddress
+import java.util.concurrent.{ConcurrentLinkedQueue, TimeUnit}
 
+import com.typesafe.scalalogging.Logger
 import org.constellation.DAO
 import org.constellation.primitives.Schema._
 import constellation._
+import org.constellation.primitives.{APIBroadcast, GetPeerInfo, PeerData, UpdateMetric}
 import org.constellation.util.{APIClient, Signed}
 import scalaj.http.HttpResponse
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
+import akka.pattern.ask
+import akka.util.Timeout
+import org.constellation.consensus.EdgeProcessor
 
+import scala.collection.concurrent.TrieMap
+import scala.util.{Failure, Try}
+
+/// New download code
+object Download {
+
+  val logger = Logger(s"Download")
+  implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+
+  def downloadSingle(activeTips: Seq[CheckpointBlock], singlePeer: PeerData, id: Id)(implicit dao: DAO): Unit = {
+
+    implicit val ec: ExecutionContextExecutor = singlePeer.client.system.dispatcher
+
+    val cbs = TrieMap[String, CheckpointBlock]()
+
+    @volatile var count = 0
+
+    val parentsAwaitingDownload = new ConcurrentLinkedQueue[String]()
+    val threadsFinished = TrieMap[Int, Boolean]()
+
+    activeTips.foreach{ z =>
+      cbs(z.baseHash) = z
+      z.parentSOEBaseHashes.foreach{h =>
+        parentsAwaitingDownload.add(h)
+      }
+    }
+
+    val par = Seq.fill(100)(0)
+    val downloadResult = par.map{ i =>
+
+      Future {
+        threadsFinished(i) = false
+
+        do {
+
+          val hash = parentsAwaitingDownload.poll()
+          if (hash != null) {
+            threadsFinished(i) = false
+            if (!cbs.contains(hash)) {
+
+/* // TODO: Investigate bug here with ECs
+
+              val askRes = dao.peerManager ? APIBroadcast(_.get("checkpoint/" + hash).map {
+                _.body.x[Option[CheckpointBlock]]
+              }, peerSubset = Set(id))
+
+              val result = askRes.mapTo[Map[Id, Future[Option[CheckpointBlock]]]].flatMap {_.head._2}
+              val cbo = result.get()
+*/
+
+              val cbo = singlePeer.client.getSync("checkpoint/" + hash).body.x[Option[CheckpointBlock]]
+
+              if (cbo.nonEmpty) {
+                val cb = cbo.get
+                if (!cbs.contains(cb.baseHash) && cb != dao.genesisObservation.get.initialDistribution &&
+                  cb != dao.genesisObservation.get.initialDistribution2) {
+                  cbs(cb.baseHash) = cb
+                  count += 1
+                  if (count % 100 == 0) {
+                    dao.metricsManager ! UpdateMetric("downloadedBlocks", count.toString)
+                  }
+                  cb.parentSOEBaseHashes.foreach {
+                    parentsAwaitingDownload.add
+                  }
+                }
+              }
+            }
+          } else {
+            threadsFinished(i) = true
+          }
+
+        } while (threadsFinished.exists(_._2 == false))
+
+      }
+    }
+
+    Future.sequence(downloadResult).get(1000)
+
+    dao.metricsManager ! UpdateMetric("downloadedBlocks", count.toString)
+    dao.metricsManager ! UpdateMetric("downloadedBlocksMemSize", cbs.size.toString)
+
+    logger.debug("First pass download finished")
+
+    dao.metricsManager ! UpdateMetric("downloadFirstPassComplete", "true")
+
+    cbs.map { case (_, cb) => EdgeProcessor.acceptCheckpoint(cb) }
+
+    dao.nodeState
+
+  }
+
+
+  def download()(implicit dao: DAO, ec: ExecutionContext): Unit = {
+
+    Try {
+      logger.info("Download started")
+      dao.nodeState = NodeStatus.DownloadInProgress
+
+      val res = (dao.peerManager ? APIBroadcast(_.getSync("genesis").body.x[Option[GenesisObservation]]))
+        .mapTo[Map[Id, Option[GenesisObservation]]].get()
+
+      // TODO: Error handling and verification
+      val genesis = res.filter {
+        _._2.nonEmpty
+      }.map {
+        _._2.get
+      }.head
+      dao.acceptGenesis(genesis)
+
+      dao.metricsManager ! UpdateMetric("downloadedGenesis", "true")
+
+      val allTips = (dao.peerManager ? APIBroadcast(_.getSync("tips").body.x[Seq[CheckpointBlock]]))
+        .mapTo[Map[Id, Seq[CheckpointBlock]]].get()
+
+      // To not download from other nodes currently downloading, fix with NodeStatus metadata
+      val (id, activeTips) = allTips.filter { case (_, t) => genesis.notGenesisTips(t) }.head
+
+      val peerData = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get()
+
+      val singlePeer = peerData(id)
+
+      dao.metricsManager ! UpdateMetric("downloadedActiveTips", activeTips.size.toString)
+
+      downloadSingle(activeTips, singlePeer, id)
+
+      //val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
+
+      dao.nodeState = NodeStatus.Ready
+
+    } match {
+      case Failure(e) => e.printStackTrace()
+      case _ => logger.info("Download succeeded")
+    }
+
+  }
+
+
+}
+
+/*
+// This has something to do with the API dispatcher EC vs fixedthreadpool, not the futures I think
+// TODO: Debug this to fix, faster but executes out of order?
+      def processAncestor(h: String): Future[Unit] = {
+        if (!cbs.contains(h)) {
+          val res =
+            (dao.peerManager ? APIBroadcast(_.get("checkpoint/" + h).map {
+              _.body.x[Option[CheckpointBlock]]
+            }(ec)))
+              .mapTo[Map[Id, Future[Option[CheckpointBlock]]]].flatMap {
+              _.head._2
+            }
+
+          res.map {
+            _.map { cb =>
+              if (!cbs.contains(cb.baseHash)) {
+                cbs(cb.baseHash) = cb
+                count += 1
+                if (count % 100 == 0) {
+                  dao.metricsManager ! UpdateMetric("downloadedBlocks", count.toString)
+                }
+                if (!cb.parentSOE.contains(null)) {
+                  Future.sequence(cb.parentSOEBaseHashes.map(processAncestor))
+                } else Future.unit
+              } else Future.unit
+            }.getOrElse(Future.unit)
+          }
+        } else Future.unit
+      }
+
+      val done = activeTips.par.map { z =>
+        cbs(z.baseHash) = z
+        z.parentSOEBaseHashes.par.map {
+          processAncestor
+        }
+      }
+
+      val wait = Future.sequence(done.toList.flatMap {
+        _.toList
+      })
+
+      wait.get(600)
+ */
+
+
+// Previous download code
 trait Download extends PeerAuth {
 
   val data: DAO
   import data._
-
   // TODO: update since heartbeat is gone
   def downloadHeartbeat(): Unit = {
     if (downloadInProgress || !downloadMode || peers.isEmpty) return

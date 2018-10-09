@@ -37,6 +37,9 @@ trait CommonEndpoints extends Json4sSupport {
     path("tips") {
       val mp = (dao.edgeProcessor ? GetMemPool).mapTo[MemPool].get()
       complete(mp.thresholdMetCheckpoints.map{_._2.checkpointBlock})
+    } ~
+    path("genesis") {
+      complete(dao.genesisObservation)
     }
   }
 }

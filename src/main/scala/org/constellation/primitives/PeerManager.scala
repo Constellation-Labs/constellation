@@ -7,7 +7,7 @@ import org.constellation.primitives.Schema.Id
 import org.constellation.util.APIClient
 
 
-case class PeerData(addRequest: AddPeerRequest, client: APIClient)
+case class PeerData(addRequest: AddPeerRequest, client: APIClient, timeAdded: Long = System.currentTimeMillis())
 case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
 case class PeerHealthCheck(status: Map[Id, Boolean])
 

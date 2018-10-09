@@ -23,6 +23,7 @@ class APIClient (
 
   var udpPort: Int = 16180
   var apiPort: Int = _
+  var peerAPIPort: Int = 9001
 
   def setConnection(host: String = "127.0.0.1", port: Int): APIClient = {
     hostName = host

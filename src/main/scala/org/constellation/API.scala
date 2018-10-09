@@ -19,6 +19,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.crypto.SimpleWalletLike
+import org.constellation.p2p.Download
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.{CommonEndpoints, Metrics, ServeUI}
@@ -39,8 +40,7 @@ case class ProcessingConfig(
                               )
 
 class API(udpAddress: InetSocketAddress,
-          val dao: DAO = null,
-          cellManager: ActorRef)(implicit system: ActorSystem, val timeout: Timeout)
+          cellManager: ActorRef)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   extends Json4sSupport
     with SimpleWalletLike
     with ServeUI
@@ -144,6 +144,12 @@ class API(udpAddress: InetSocketAddress,
 
   private val postEndpoints =
     post {
+      pathPrefix("download") {
+        path("start") {
+          Future{Download.download()}(dao.edgeExecutionContext)
+          complete(StatusCodes.OK)
+        }
+      } ~
       pathPrefix("config") {
         path("update") {
           entity(as[ProcessingConfig]) { cu =>
@@ -153,10 +159,10 @@ class API(udpAddress: InetSocketAddress,
         }
       } ~
       path("ready") { // Temp
-        if (dao.nodeState != Ready) {
-          dao.nodeState = Ready
+        if (dao.nodeState != NodeStatus.Ready) {
+          dao.nodeState = NodeStatus.Ready
         } else {
-          dao.nodeState = PendingDownload
+          dao.nodeState = NodeStatus.PendingDownload
         }
         complete(StatusCodes.OK)
       } ~
@@ -189,11 +195,8 @@ class API(udpAddress: InetSocketAddress,
         } ~
         path("accept") {
           entity(as[GenesisObservation]) { go =>
-            Future {
-              acceptGenesis(go)
-              dao.edgeProcessor ! go
-              // TODO: Report errors and add validity check
-            }
+            dao.edgeProcessor ! go
+            // TODO: Report errors and add validity check
             complete(StatusCodes.OK)
           }
         }

@@ -7,6 +7,7 @@ import com.twitter.chill.{IKryoRegistrar, KryoInstantiator, KryoPool, ScalaKryoI
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.p2p.SerializedUDPMessage
 
+import scala.reflect.ClassTag
 import scala.util.Random
 
 object KryoSerializer {
@@ -53,5 +54,15 @@ object KryoSerializer {
   def deserialize(message: Array[Byte]): AnyRef= {
     kryoPool.fromBytes(message)
   }
+/*
+  def deserializeT[T : ClassTag](message: Array[Byte]): AnyRef= {
+
+    val clz = {
+      import scala.reflect._
+      classTag[T].runtimeClass.asInstanceOf[Class[T]]
+    }
+    kryoPool.fromBytes(message, clz)
+  }
+*/
 
 }

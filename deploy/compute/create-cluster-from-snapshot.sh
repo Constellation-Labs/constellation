@@ -3,7 +3,7 @@
 # https://cloud.google.com/sdk/gcloud/reference/compute/instances/create
 # https://cloud.google.com/sdk/gcloud/reference/compute/firewall-rules/create
 
-NAME="dev-2"
+NAME="dev-3"
 
 gcloud compute --project "esoteric-helix-197319" disks create $NAME --size "100" --zone "us-east1-b" --source-snapshot "dev" --type "pd-standard"
 
