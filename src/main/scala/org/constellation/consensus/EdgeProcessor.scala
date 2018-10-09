@@ -3,25 +3,21 @@ package org.constellation.consensus
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
-import org.constellation.Data
-import org.constellation.LevelDB.{DBGet, DBPut, DBUpdate}
-import org.constellation.primitives.Schema._
+import akka.actor.{Actor, ActorLogging, ActorSystem}
 import akka.pattern.ask
-import Validation.TransactionValidationStatus
 import akka.util.Timeout
-import EdgeProcessor.{HandleTransaction, signFlow, validByTransactionAncestors, _}
 import com.typesafe.scalalogging.Logger
-import org.constellation.consensus.Consensus._
-import org.constellation.consensus.EdgeProcessor.HandleTransaction
-import org.constellation.primitives._
 import constellation._
+import org.constellation.Data
+import org.constellation.consensus.Consensus._
+import org.constellation.consensus.EdgeProcessor.{HandleTransaction, _}
+import org.constellation.consensus.Validation.{TransactionValidationStatus, validateCheckpointBlock}
+import org.constellation.primitives.Schema._
+import org.constellation.primitives._
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext}
 import scala.util.Random
-import akka.pattern.ask
-import akka.util.Timeout
 
 object EdgeProcessor {
 
@@ -41,37 +37,6 @@ object EdgeProcessor {
     attemptFormCheckpointUpdateState(dao)
   }
 
-  def resolveTxAncestryConflict = {}
-  //Todo recurse down ancestors until snapshot. As we iterate, we choose ancestors that have the
-  // the most optimal transaction overlap.
-
-  def validateByAncestorTips = {}//Todo recurse through same tree used in conflict resolution. Check the SOE's are valid. Recurse till Snapshot.
-
-  def validByTransactionAncestors(transactions: Seq[TransactionValidationStatus], cb: CheckpointBlock): Boolean =
-    transactions.nonEmpty && transactions.forall { s: TransactionValidationStatus =>
-      cb.checkpoint.edge.parentHashes.forall { ancestorHash =>
-        s.validByAncestor(ancestorHash)
-    }
-  }
-
-  def validateCheckpointBlock(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): Future[Boolean] = { // Future[Option[CheckpointBlock]]
-    val allTransactions: Future[Seq[TransactionValidationStatus]] = Future.sequence(cb.transactions.map { tx =>
-      Validation.validateTransaction(dao.dbActor, tx)
-      })
-    val isValidated = allTransactions.map { transactions =>
-      val validatedByTransactions = transactions.forall(_.validByCurrentState)
-      val validByAncestors = validByTransactionAncestors(transactions, cb)
-      val validByAncestorTips = validateByAncestorTips
-      val isValid = validatedByTransactions && validByAncestors
-      //TODO: Validate the checkpoint to see if any there are any duplicate transactions
-      //Todo we also need a batch transaction validator, i.e. take cpb, take all tx, group by source address, sum ammts per address (reducebykey) then query balance
-      if (isValid)
-        signFlow(dao, cb)
-        isValid
-    }
-    isValidated
-  }
-
   def handleCheckpoint(cb: CheckpointBlock,
                        dao: Data,
                        internalMessage: Boolean = false)(implicit executionContext: ExecutionContext): Unit = {
@@ -80,39 +45,9 @@ object EdgeProcessor {
     } else {
       dao.metricsManager ! IncrementMetric("internalCheckpointMessages")
     }
-    val potentialChildren: Option[Seq[CheckpointBlock]] = dao.resolveNotifierCallbacks.get(cb.soeHash)
-    val cache: Future[Option[CheckpointCacheData]] = dao.hashToCheckpointCacheData(cb.baseHash)
-//    val resolution = Resolver.resolveCheckpoint(dao, cb).map { r =>
-//      if (r) {
-//        dao.metricsManager ! IncrementMetric("resolvedCheckpointMessages")
-//        validateCheckpointBlock(dao, cb).foreach(if(_)signFlow(dao, cb))
-//      }
-//      else {
-//        dao.metricsManager ! IncrementMetric("unresolvedCheckpointMessages")
-//      }
-//    }
+    val resolutionStatus = ResolutionService.resolveCheckpoint(dao, cb)
+    val validationStatus = resolutionStatus.map(resStatus => validateCheckpointBlock(dao, resStatus.cb))
   }
-
-  def rollBackGraph(cb: CheckpointBlock) = {}//Todo decide cb to keep. taverse down tree. Can use @tailrec
-
-  def handleConflictingCheckpoint(ca: CheckpointCacheData, cb: CheckpointBlock, dao: Data) = {
-      dao.metricsManager ! IncrementMetric("dupCheckpointReceived")
-      if (ca.resolved) {
-        // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
-        // Otherwise do nothing as the resolution is already in progress.
-      }
-      val isDup = ca.checkpointBlock != cb
-      if (ca.inDAG && isDup) {// Data mismatch on base hash lookup, i.e. signature conflict
-        val mostSignatures = ca.checkpointBlock :: cb :: Nil maxBy(_.signatures.length)
-//        val maxByChildren =
-        if (mostSignatures == cb) rollBackGraph(mostSignatures)
-      }
-      val potentialConflict = {
-        // warn or store information about potential conflict
-        // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
-        //Todo figure out where to store and store it method
-      }
-    }
 
   // TODO : Add checks on max number in mempool and max num signatures.
   // TEMPORARY mock-up for pre-consensus integration mimics transactions

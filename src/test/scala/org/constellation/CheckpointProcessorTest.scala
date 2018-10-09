@@ -8,7 +8,7 @@ import akka.testkit.{TestActor, TestProbe}
 import constellation.signedObservationEdge
 import org.constellation.Fixtures.{addPeerRequest, dummyTx, id}
 import org.constellation.LevelDB.DBGet
-import org.constellation.consensus.EdgeProcessor
+import org.constellation.consensus.{EdgeProcessor, Validation}
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.{APIBroadcast, IncrementMetric, PeerData}
@@ -88,18 +88,18 @@ class CheckpointProcessorTest extends FlatSpec {
   }
 
   "Invalid CheckpointBlocks" should "return false" in {
-    val validatedCheckpointBlock = EdgeProcessor.validateCheckpointBlock(data, cb)
-    validatedCheckpointBlock.foreach(response => assert(!response))
+    val validatedCheckpointBlock = Validation.validateCheckpointBlock(data, cb)
+    validatedCheckpointBlock.foreach(response => assert(!response.isValid))
   }
 
 
   "CheckpointBlocks invalid by ancestry" should "return false" in {
-    assert(!EdgeProcessor.validByTransactionAncestors(Seq(), cb))
+    assert(!Validation.validByTransactionAncestors(Seq(), cb))
   }
 
   "CheckpointBlocks invalid by state" should "return false" in {
-    val validatedCheckpointBlock = EdgeProcessor.validateCheckpointBlock(data, cb)
-    validatedCheckpointBlock.foreach(response => assert(!response))
+    val validatedCheckpointBlock = Validation.validateCheckpointBlock(data, cb)
+    validatedCheckpointBlock.foreach(response => assert(!response.isValid))
   }
 
   "hashToSignedObservationEdgeCache" should "return SignedObservationEdgeCache" in {
