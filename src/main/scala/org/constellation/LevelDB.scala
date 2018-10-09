@@ -6,6 +6,7 @@ import better.files._
 import com.typesafe.scalalogging.Logger
 import constellation.{ParseExt, SerExt}
 import org.constellation.LevelDB.RestartDB
+import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.ProductHash
@@ -74,6 +75,11 @@ class KVDBImpl(dao: Data) extends KVDB {
     db.getBytes(key).map(bytes => KryoSerializer.deserialize(bytes, cls))
   }
 
+  private def getUnsafe[T <: AnyRef](key: String): Option[AnyRef] = {
+    dao.numDBGets += 1
+    db.getBytes(key).map(bytes => KryoSerializer.deserialize(bytes))
+  }
+
   private def update[T <: AnyRef](key: String, cls: Class[T], updateF: T => T, empty: T): T = {
     dao.numDBUpdates += 1
     val o = get(key, cls).map(updateF).getOrElse(empty)
@@ -121,19 +127,45 @@ class KVDBImpl(dao: Data) extends KVDB {
   override def putAddressCacheData(
     key: String,
     t: AddressCacheData
-  ): Unit = put(key, classOf[AddressCacheData])
+  ): Unit = put(key, t)
   override def updateAddressCacheData(
     key: String,
     f: AddressCacheData => AddressCacheData,
     empty: AddressCacheData
   ): AddressCacheData = update(key, classOf[AddressCacheData], f, empty)
+
   override def getAddressCacheData(
-    key: String
-  ): Option[
-    AddressCacheData] = get(key, classOf[AddressCacheData])
+                                    key: String
+                                  ): Option[AddressCacheData] = {
+    val t = Try {
+      get(key, classOf[AddressCacheData])
+    }
+
+    if (t.isFailure) {
+      logger.error(s"Failure in deserializing for key $key")
+      val w = getUnsafe(key)
+
+      val r = w.get.asInstanceOf[AddressCacheData]
+      val dd = r.balance + r.balance
+      val cc = r.memPoolBalance + r.memPoolBalance
+
+      w match {
+        case Some(q) => q match {
+          case a: Schema.AddressCacheData =>
+            logger.info(a.toString)
+          case b =>
+            logger.info(b.toString)
+        }
+        case None => logger.info("Nothing inside.")
+      }
+      throw t.failed.get
+    }
+
+    t.get
+  }
 
   override def putSignedObservationEdgeCache(key: String, t: SignedObservationEdgeCache): Unit =
-    put(key, classOf[SignedObservationEdgeCache])
+    put(key, t)
 
   override def updateSignedObservationEdgeCache(key: String,
                                                 f: SignedObservationEdgeCache => SignedObservationEdgeCache,
@@ -145,7 +177,7 @@ class KVDBImpl(dao: Data) extends KVDB {
   override def putTransactionEdgeData(
     key: String,
     t: TransactionEdgeData
-  ): Unit = put(key, classOf[TransactionEdgeData])
+  ): Unit = put(key, t)
   override def updateTransactionEdgeData(
     key: String,
     f: TransactionEdgeData => TransactionEdgeData,
@@ -159,7 +191,7 @@ class KVDBImpl(dao: Data) extends KVDB {
   override def putCheckpointEdgeData(
     key: String,
     t: CheckpointEdgeData
-  ): Unit = put(key, classOf[TransactionEdgeData])
+  ): Unit = put(key, t)
   override def updateCheckpointEdgeData(
     key: String,
     f: CheckpointEdgeData => CheckpointEdgeData,
