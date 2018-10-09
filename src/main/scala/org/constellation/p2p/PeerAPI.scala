@@ -11,14 +11,16 @@ import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.Data
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
-import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.consensus.EdgeProcessor.HandleTransaction
+import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.p2p.PeerAPI.EdgeResponse
 import org.constellation.primitives.Schema._
+import org.constellation.primitives.{Deregistration, IPManager, PendingRegistration}
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{CommonEndpoints, ServeUI}
+import org.constellation.util.CommonEndpoints
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -26,6 +28,9 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
+case class PeerRegistrationRequest(host: String, port: Int, key: String)
+case class PeerUnregister(host: String, port: Int, key: String)
+
 
 object PeerAPI {
 
@@ -36,8 +41,8 @@ object PeerAPI {
 
 }
 
-class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
-  extends Json4sSupport with CommonEndpoints with ServeUI {
+class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
+  extends Json4sSupport with CommonEndpoints with IPEnforcer {
 
   implicit val serialization: Serialization.type = native.Serialization
 
@@ -46,13 +51,19 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-  val logger = Logger(s"PeerAPI")
+  private val logger = Logger(s"PeerAPI")
 
-  val config: Config = ConfigFactory.load()
+  private val config: Config = ConfigFactory.load()
+
+  private var pendingRegistrations = Map[String, PeerRegistrationRequest]()
+
+  private def getHostAndPortFromRemoteAddress(clientIP: RemoteAddress) = {
+    clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)}
+  }
 
   private val getEndpoints = {
-    extractClientIP { clientIP =>
-      get {
+    get {
+      extractClientIP { clientIP =>
         path("ip") {
           complete(clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)})
         } ~
@@ -72,13 +83,46 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
     }
   }
 
-  private val postEndpoints =
+  private val signEndpoints =
     post {
       path ("sign") {
         entity(as[PeerAuthSignRequest]) { e =>
           complete(hashSign(e.salt.toString, dao.keyPair))
         }
       } ~
+      path("register") {
+        extractClientIP { clientIP =>
+          entity(as[PeerRegistrationRequest]) { request =>
+            val maybeData = getHostAndPortFromRemoteAddress(clientIP)
+            maybeData match {
+              case Some(PeerIPData(host, portOption)) =>
+                dao.peerManager ! PendingRegistration(host, request)
+                pendingRegistrations = pendingRegistrations.updated(host, request)
+                complete(StatusCodes.OK)
+              case None =>
+                complete(StatusCodes.BadRequest)
+            }
+          }
+        }
+      }
+    }
+
+  private val postEndpoints =
+    post {
+      path ("deregister") {
+        extractClientIP { clientIP =>
+          entity(as[PeerUnregister]) { request =>
+            val maybeData = getHostAndPortFromRemoteAddress(clientIP)
+            maybeData match {
+              case Some(PeerIPData(host, portOption)) =>
+                dao.peerManager ! Deregistration(request.host, request.port, request.key)
+                complete(StatusCodes.OK)
+              case None =>
+                complete(StatusCodes.BadRequest)
+            }
+          }
+      }
+    } ~
       path("checkpointEdgeVote") {
         entity(as[Array[Byte]]) { e =>
             val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusVote[Consensus.Checkpoint]]
@@ -97,7 +141,7 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
           complete(StatusCodes.OK)
         }
       }
-    }
+  }
 
   private val mixedEndpoints = {
     path("transaction" / Segment) { s =>
@@ -151,8 +195,13 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
   }
 
   val routes: Route = {
-    getEndpoints ~ postEndpoints ~ mixedEndpoints ~ commonEndpoints // ~
+    rejectBannedIP {
+      signEndpoints ~ commonEndpoints ~ enforceKnownIP {
+        getEndpoints ~ postEndpoints ~ mixedEndpoints
+      }
+    } // ~
     //  faviconRoute ~ jsRequest ~ serveMainPage // <-- Temporary for debugging, control routes disabled.
+
   }
 
 }

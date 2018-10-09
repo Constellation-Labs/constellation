@@ -1,9 +1,7 @@
 package org.constellation.serializer
 
-import java.security.PublicKey
-
 import akka.util.ByteString
-import com.twitter.chill.{IKryoRegistrar, KryoInstantiator, KryoPool, ScalaKryoInstantiator}
+import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.p2p.SerializedUDPMessage
 

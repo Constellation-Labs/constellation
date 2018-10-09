@@ -2,7 +2,6 @@ package org.constellation.primitives
 
 import java.util.concurrent.Executors
 
-import akka.actor.ActorRef
 import org.constellation.primitives.Schema._
 
 import scala.collection.concurrent.TrieMap

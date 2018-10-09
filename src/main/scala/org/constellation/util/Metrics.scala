@@ -1,14 +1,13 @@
 package org.constellation.util
 
 import com.softwaremill.macmemo.memoize
+import constellation._
 import org.constellation.Data
+import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.MetricsResult
 
 import scala.concurrent.duration._
-import org.constellation.crypto.Wallet
-import constellation._
-
 import scala.util.Try
 
 class Metrics(val data: Data = null) extends Wallet {

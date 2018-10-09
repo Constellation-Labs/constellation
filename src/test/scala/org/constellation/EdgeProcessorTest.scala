@@ -70,9 +70,8 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
   data.dbActor = mockLvlDB
 
   def getAPIClient(hostName: String, httpPort: Int) = {
-    val api = new APIClient().setConnection(host = hostName, port = httpPort)
+    val api = APIClient(host = hostName, port = httpPort, udpPort = 16180)
     api.id = id
-    api.udpPort = 16180
     api
   }
 

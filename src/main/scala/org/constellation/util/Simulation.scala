@@ -3,16 +3,12 @@ package org.constellation.util
 import java.util.concurrent.ForkJoinPool
 
 import com.typesafe.scalalogging.Logger
-
-import scala.concurrent.duration._
-import org.constellation.primitives.Schema._
 import constellation._
 import org.constellation.AddPeerRequest
+import org.constellation.primitives.Schema._
 import scalaj.http.HttpResponse
 
-import scala.collection.concurrent.TrieMap
-import scala.collection.immutable.HashMap
-import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
 
 class Simulation {
