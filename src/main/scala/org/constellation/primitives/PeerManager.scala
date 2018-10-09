@@ -40,6 +40,9 @@ class PeerManager(ipManager: IPManager, dao: Data)(implicit val materialize: Act
       client.id = id
       val updatedPeerInfo = peerInfo + (id -> PeerData(a, client))
 
+      val remoteAddr = RemoteAddress(new InetSocketAddress(host, port))
+      ipManager.addKnownIP(remoteAddr)
+
       dao.metricsManager ! UpdateMetric(
         "peers",
         updatedPeerInfo.map { case (idI, clientI) =>
