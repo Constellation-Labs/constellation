@@ -13,8 +13,6 @@ import org.iq80.leveldb._
 import org.iq80.leveldb.impl.Iq80DBFactory._
 
 import scala.concurrent.ExecutionContext
-import scala.reflect.ClassTag
-import scala.reflect._
 import scala.util.Try
 
 // https://doc.akka.io/docs/akka/2.5/persistence-query-leveldb.html
