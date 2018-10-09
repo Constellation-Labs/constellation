@@ -87,10 +87,10 @@ class KVDBImpl(dao: Data) extends KVDB {
   private def put(key: String, obj: AnyRef) = {
     dao.numDBPuts += 1
     val bytes = KryoSerializer.serializeAnyRef(obj)
-    db.putBytes(key, bytes)
+    db.putBytes(key, bytes).get
   }
 
-  private def get[T <: AnyRef](key: String, cls: Class[T]): Option[T] = {
+  private def get[T <: AnyRef](key: String): Option[T] = {
     dao.numDBGets += 1
     db.getBytes(key)
       .map(bytes => KryoSerializer.deserialize(bytes).asInstanceOf[T])
@@ -101,35 +101,39 @@ class KVDBImpl(dao: Data) extends KVDB {
     db.getBytes(key).map(bytes => KryoSerializer.deserialize(bytes))
   }
 
-  private def update[T <: AnyRef: ClassTag](key: String,
-                                            updateF: T => T,
-                                            empty: T): T = {
+  private def update[T <: AnyRef](key: String, updateF: T => T, empty: T): T = {
     dao.numDBUpdates += 1
-    val o = get(key, classTag[T].runtimeClass.asInstanceOf[Class[T]])
+    val o = get[T](key)
       .map(updateF)
       .getOrElse(empty)
     put(key, o)
     o
   }
 
+  override def restart(): Unit = {
+    Try { db.destroy() }
+      .foreach(e => logger.warn("Exception while destroying LevelDB db", e))
+    db = mkDB
+  }
+
+  override def delete(key: String): Boolean =
+    if (db.contains(key)) {
+      dao.numDBDeletes += 1
+      db.delete(key).isSuccess
+    } else true
+
   override def putCheckpointCacheData(s: String, c: CheckpointCacheData): Unit =
     put(s, c)
 
   override def getCheckpointCacheData(s: String): Option[CheckpointCacheData] =
-    get(s, classOf[CheckpointCacheData])
+    get[CheckpointCacheData](s)
 
   override def putTransactionCacheData(s: String,
                                        t: TransactionCacheData): Unit =
     put(s, t)
   override def getTransactionCacheData(
     s: String
-  ): Option[TransactionCacheData] = get(s, classOf[TransactionCacheData])
-
-  override def restart(): Unit = {
-    Try { db.destroy() }
-      .foreach(e => logger.warn("Exception while destroying LevelDB db", e))
-    db = mkDB
-  }
+  ): Option[TransactionCacheData] = get[TransactionCacheData](s)
 
   override def updateCheckpointCacheData(
     key: String,
@@ -143,12 +147,6 @@ class KVDBImpl(dao: Data) extends KVDB {
     empty: TransactionCacheData
   ): TransactionCacheData = update(key, f, empty)
 
-  override def delete(key: String): Boolean =
-    if (db.contains(key)) {
-      dao.numDBDeletes += 1
-      db.delete(key).isSuccess
-    } else true
-
   override def putAddressCacheData(key: String, t: AddressCacheData): Unit =
     put(key, t)
 
@@ -159,7 +157,7 @@ class KVDBImpl(dao: Data) extends KVDB {
   ): AddressCacheData = update(key, f, empty)
 
   override def getAddressCacheData(key: String): Option[AddressCacheData] = {
-    get(key, classOf[AddressCacheData])
+    get[AddressCacheData](key)
   }
 
   override def putSignedObservationEdgeCache(
@@ -178,7 +176,7 @@ class KVDBImpl(dao: Data) extends KVDB {
   override def getSignedObservationEdgeCache(
     key: String
   ): Option[SignedObservationEdgeCache] =
-    get(key, classOf[SignedObservationEdgeCache])
+    get[SignedObservationEdgeCache](key)
   override def putTransactionEdgeData(key: String,
                                       t: TransactionEdgeData): Unit =
     put(key, t)
@@ -191,7 +189,7 @@ class KVDBImpl(dao: Data) extends KVDB {
 
   override def getTransactionEdgeData(
     key: String
-  ): Option[TransactionEdgeData] = get(key, classOf[TransactionEdgeData])
+  ): Option[TransactionEdgeData] = get[TransactionEdgeData](key)
 
   override def putCheckpointEdgeData(key: String, t: CheckpointEdgeData): Unit =
     put(key, t)
@@ -203,7 +201,7 @@ class KVDBImpl(dao: Data) extends KVDB {
   ): CheckpointEdgeData = update(key, f, empty)
 
   override def getCheckpointEdgeData(key: String): Option[CheckpointEdgeData] =
-    get(key, classOf[CheckpointEdgeData])
+    get[CheckpointEdgeData](key)
 }
 
 import org.constellation.LevelDB._
