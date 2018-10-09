@@ -76,14 +76,16 @@ class PeerManager(ipManager: IPManager, dao: Data)(implicit val materialize: Act
       implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
 
       val client = APIClient(request.host, request.port)
-      val req = PeerAuthSignRequest()
 
-      // TODO: Either need to move this somewhere else, or do non-blocking
-      // Definitely don't want to be blocking the entire actor while we wait...
+      val req = client.postNonBlocking[HashSignature]("sign", PeerAuthSignRequest())
 
-      val sig = client.postBlocking[HashSignature]("sign", req)
+      req.failed.foreach { t => logger.warn(s"Sign request to ${request.host}:${request.port} failed.", t)}
+
+      req.foreach { sig =>
         if (sig.b58EncodedPublicKey != request.key) {
-          logger.warn(s"keys should be the same: ${sig.b58EncodedPublicKey} != ${request.key}")
+          logger.warn(
+            s"keys should be the same: ${sig.b58EncodedPublicKey} != ${request.key}"
+          )
         }
 
         // TODO: Not completely sure how to validate this:
@@ -91,10 +93,12 @@ class PeerManager(ipManager: IPManager, dao: Data)(implicit val materialize: Act
 
         // For now -- let's assume successful response
 
-        val remoteAddr = RemoteAddress(new InetSocketAddress(request.host, request.port))
+        val remoteAddr = RemoteAddress(
+          new InetSocketAddress(request.host, request.port)
+        )
         ipManager.addKnownIP(remoteAddr)
-
-
+        logger.info(s"Added $remoteAddr to known peers.")
+      }
 
     case Deregistration(ip, port, key) =>
 
