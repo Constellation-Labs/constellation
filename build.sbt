@@ -14,7 +14,7 @@ lazy val versions = new {
 
 lazy val commonSettings = Seq(
   version := _version,
-  scalaVersion := "2.12.6",
+  scalaVersion := "2.12.7",
   organization := "org.constellation",
   name := "constellation",
   mainClass := Some("org.constellation.ConstellationNode"),

@@ -114,7 +114,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   val dbActor: KVDB = TypedActor(system).typedActorOf(TypedProps(
     classOf[KVDB],
-    new KVDBImpl(data)), s"LvlDB_$publicKeyHash")
+    new KVDBImpl(data)), s"KVDB_$publicKeyHash")
 
   val udpActor: ActorRef =
     system.actorOf(

@@ -32,29 +32,33 @@ object TransactionValidation {
     // Before that, it exists only in the memPool and is not stored in the database.
     val isDuplicate = dbActor.getTransactionCacheData(tx.hash).exists(_.inDAG)
 
-    val sufficientBalance = dbActor.getAddressCacheData(tx.src.hash).exists(_.balance >= tx.amount)
+    val sufficientBalance =
+      dbActor.getAddressCacheData(tx.src.hash).exists(_.balance >= tx.amount)
 
-    val res = Future {
-      if (!isDuplicate && sufficientBalance) {}
+    Future {
+      if (!isDuplicate && sufficientBalance) {
 
-      // Check to see if we should add our signature to the transaction
-      if (!tx.signatures.exists(_.publicKey == keyPair.getPublic)) {
-        // We haven't yet signed this TX
-        val tx2 = tx.plus(keyPair)
-        // Send peers new signature
-        val broadcast: APIBroadcast[Future[HttpResponse[String]]] = APIBroadcast(
-          _.put(
-            s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}",
-            tx2
+        // Check to see if we should add our signature to the transaction
+        if (!tx.signatures.exists(_.publicKey == keyPair.getPublic)) {
+          // We haven't yet signed this TX
+          val tx2 = tx.plus(keyPair)
+          // Send peers new signature
+          val broadcast
+            : APIBroadcast[Future[HttpResponse[String]]] = APIBroadcast(
+            _.put(
+              s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}",
+              tx2
+            )
           )
-        )
-        peerManager ! broadcast
-        tx2
+          peerManager ! broadcast
+          tx2
+        } else {
+          // We have already signed this transaction,
+          tx
+        }
       } else {
-        // We have already signed this transaction,
-        tx
+        throw new RuntimeException("Illegal Transaction")
       }
     }
-    res
   }
 }

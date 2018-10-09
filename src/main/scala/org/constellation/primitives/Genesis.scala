@@ -73,6 +73,7 @@ trait Genesis extends NodeData with Ledger with EdgeDAO {
 
   def acceptGenesis(go: GenesisObservation): Unit = {
     // Store hashes for the edges
+
     go.genesis.store(dbActor, CheckpointCacheData(go.genesis, inDAG = true, resolved = true), resolved = true)
     go.initialDistribution.store(dbActor, CheckpointCacheData(go.initialDistribution, inDAG = true, resolved = true), resolved = true)
     go.initialDistribution2.store(dbActor, CheckpointCacheData(go.initialDistribution2, inDAG = true, resolved = true), resolved = true)
