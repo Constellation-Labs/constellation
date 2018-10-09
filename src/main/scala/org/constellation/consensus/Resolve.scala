@@ -5,10 +5,8 @@ import java.util.concurrent.TimeUnit
 import akka.pattern.ask
 import akka.util.Timeout
 import org.constellation.Data
-import org.constellation.LevelDB.DBGet
-import org.constellation.primitives.Schema.{CheckpointBlock, CheckpointCacheData, SignedObservationEdgeCache}
-import constellation.EasyFutureBlock
 import org.constellation.primitives.APIBroadcast
+import org.constellation.primitives.Schema.CheckpointBlock
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -19,7 +17,9 @@ object Resolve {
   // TODO: Need to include signatories ABOVE this checkpoint block later in the case
   // of signature decay.
   def attemptResolveIndividual(dao: Data, cb: CheckpointBlock, h: String) = {
-    cb.signatures.map{_.toId}
+    cb.signatures.map {
+      _.toId
+    }
 
     dao.peerManager ? APIBroadcast({
       apiClient =>
@@ -31,18 +31,15 @@ object Resolve {
   def resolveCheckpoint(dao: Data, cb: CheckpointBlock)(implicit ec: ExecutionContext): Future[Boolean] = {
 
     // Step 1 - Find out if both parents are resolved.
+    Future {
 
-    val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes.map{ h =>
-      (dao.dbActor ? DBGet(h)).mapTo[Option[SignedObservationEdgeCache]].map{h -> _}
-    })
-
-    val resolved = parentCache.map{ cache =>
+      val cache = cb.checkpoint.edge.parentHashes.map { h => h -> dao.dbActor.getSignedObservationEdgeCache(h) }
 
       val parentsResolved = cache.forall(_._2.exists(_.resolved))
 
-      val missingParents = cache.filter{case (h, c) => c.isEmpty && !dao.resolveNotifierCallbacks.contains(h)}
+      val missingParents = cache.filter { case (h, c) => c.isEmpty && !dao.resolveNotifierCallbacks.contains(h) }
 
-      missingParents.foreach{
+      missingParents.foreach {
         case (h, c) =>
           dao.resolveNotifierCallbacks.get(h) match {
             case Some(cbs) =>
@@ -61,7 +58,6 @@ object Resolve {
       parentsResolved
     }
 
-    resolved
 
   }
 

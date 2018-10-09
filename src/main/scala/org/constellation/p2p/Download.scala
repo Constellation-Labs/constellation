@@ -94,7 +94,7 @@ trait Download extends PeerAuth {
             val transactions: Seq[Transaction] = response.transactions
 
             // store the bundle
-            handleBundle(sheaf.bundle)
+//            handleBundle(sheaf.bundle)
 
             // store the transactions
             // TODO: update for latest

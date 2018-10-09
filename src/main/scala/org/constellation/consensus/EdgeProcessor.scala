@@ -3,25 +3,20 @@ package org.constellation.consensus
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
-import org.constellation.Data
-import org.constellation.LevelDB.{DBGet, DBPut, DBUpdate}
-import org.constellation.primitives.Schema._
+import akka.actor.{Actor, ActorLogging, ActorSystem}
 import akka.pattern.ask
-import Validation.TransactionValidationStatus
 import akka.util.Timeout
-import EdgeProcessor._
 import com.typesafe.scalalogging.Logger
-import org.constellation.consensus.Consensus._
-import org.constellation.consensus.EdgeProcessor.HandleTransaction
-import org.constellation.primitives._
 import constellation._
+import org.constellation.Data
+import org.constellation.consensus.Consensus._
+import org.constellation.consensus.EdgeProcessor.{HandleTransaction, _}
+import org.constellation.consensus.Validation.TransactionValidationStatus
+import org.constellation.primitives.Schema._
+import org.constellation.primitives._
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
-import akka.pattern.ask
-import akka.util.Timeout
 
 object EdgeProcessor {
 
@@ -45,7 +40,7 @@ object EdgeProcessor {
     // TODO : Handle resolution issues.
     val potentialChildren = dao.resolveNotifierCallbacks.get(cb.soeHash)
 
-    val cache = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]]
+    val cache = dao.dbActor.getCheckpointCacheData(cb.baseHash)
 
     def signFlow(): Unit = {
       // Mock
@@ -79,40 +74,25 @@ object EdgeProcessor {
         if (r) {
           dao.metricsManager ! IncrementMetric("resolvedCheckpointMessages")
 
-          val validAccordingToCurrentState = Future.sequence(
-            cb.transactions.map {
-              Validation.validateTransaction(dao.dbActor, _)
-            }
-          ).map {
-            _.forall(_.validByCurrentState)
-          }
+          val validatedTransactions = cb.transactions.map(Validation.validateTransaction(dao.dbActor, _))
+          val validAccordingToCurrentState = validatedTransactions.forall(_.validByCurrentState)
 
-          validAccordingToCurrentState.foreach { v =>
-            if (v) {
+            if (validAccordingToCurrentState) {
               signFlow()
             }
             else {
-              val validByAncestors = Future.sequence(
-                cb.transactions.map {
-                  Validation.validateTransaction(dao.dbActor, _)
-                }
-              ).map {
-                _.forall { s =>
+                val v = validatedTransactions.forall { s =>
                   cb.checkpoint.edge.parentHashes.forall { ancestorHash =>
                     s.validByAncestor(ancestorHash)
                   }
                 }
-              }
 
-              validByAncestors.foreach { v =>
                 if (v) {
                   // resolveAncestryConflict(cb)
                 }
               }
               // Check if parent tips are valid to merge.
-            }
 
-          }
 
 
           // TODO: Process children
@@ -135,44 +115,40 @@ object EdgeProcessor {
     }
 
     def mainFlow(): Unit = {
+      // Base hash not stored in DB, no possible signature conflict
+      if (cache.isEmpty) {
+        dao.metricsManager ! IncrementMetric("unknownCheckpointMessages")
+        // resolutionFlow()
+        // DEBUG
+        signFlow()
+      } else {
 
+        val ca = cache.get
 
-      cache.foreach { c =>
-
-        // Base hash not stored in DB, no possible signature conflict
-        if (c.isEmpty) {
-          dao.metricsManager ! IncrementMetric("unknownCheckpointMessages")
-          // resolutionFlow()
-          // DEBUG
-          signFlow()
-        } else {
-
-          val ca = c.get
-
-          if (ca.resolved) {
-            if (ca.inDAG) {
-              if (ca.checkpointBlock != cb) {
-                // Data mismatch on base hash lookup, i.e. signature conflict
-                // TODO: Conflict resolution
-                //resolveConflict(cb, ca)
-              } else {
-                // Duplicate checkpoint message, no action required.
-              }
+        if (ca.resolved) {
+          if (ca.inDAG) {
+            if (ca.checkpointBlock != cb) {
+              // Data mismatch on base hash lookup, i.e. signature conflict
+              // TODO: Conflict resolution
+              //resolveConflict(cb, ca)
             } else {
-              // warn or store information about potential conflict
-              // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
+              // Duplicate checkpoint message, no action required.
             }
           } else {
-
-            // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
-            // Otherwise do nothing as the resolution is already in progress.
-
+            // warn or store information about potential conflict
+            // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
           }
+        } else {
 
-          // if (ca.checkpointBlock
+          // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
+          // Otherwise do nothing as the resolution is already in progress.
 
         }
+
+        // if (ca.checkpointBlock
+
       }
+
     }
 
     mainFlow()
@@ -334,9 +310,7 @@ object EdgeProcessor {
     // in event where a new signature is being made by another peer it's most likely still valid, should
     // cache the results of this somewhere.
 
-    val validationResult = Validation.validateTransaction(dao.dbActor, tx)
-
-    val finished = Await.result(validationResult, 90.seconds)
+    val finished = Validation.validateTransaction(dao.dbActor, tx)
 
     finished match {
       // TODO : Increment metrics here for each case
@@ -504,7 +478,8 @@ object EdgeProcessor {
     * @return Maybe updated transaction
     */
   def updateWithSelfSignatureEmit(tx: Transaction, dao: Data): Transaction = {
-    val txPrime = if (!tx.signatures.exists(_.publicKey == dao.keyPair.getPublic)) {
+    val sigExists = tx.signatures.exists(_.publicKey == dao.keyPair.getPublic)
+    val txPrime = if (!sigExists) {
       // We haven't yet signed this TX
       val tx2 = tx.plus(dao.keyPair)
       dao.metricsManager ! IncrementMetric("signaturesPerformed")
@@ -564,7 +539,7 @@ class EdgeProcessor(dao: Data)
 
       handleTransaction(transaction, dao)
 
-    case ConsensusRoundResult(checkpointBlock: CheckpointBlock, roundHash: RoundHash[Checkpoint]) =>
+    case ConsensusRoundResult(checkpointBlock, roundHash: RoundHash[Checkpoint]) =>
       log.debug(s"handle checkpointBlock = $checkpointBlock")
 
       handleCheckpoint(checkpointBlock, dao)

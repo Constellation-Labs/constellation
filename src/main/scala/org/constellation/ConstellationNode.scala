@@ -4,7 +4,7 @@ import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem, Props, TypedActor, TypedProps}
 import akka.dispatch.ExecutionContexts
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Route
@@ -112,13 +112,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
     Props(new PeerManager(data)), s"PeerManager_$publicKeyHash"
   )
 
-  val cellManager: ActorRef = system.actorOf(
-    Props(new CellManager(memPoolManager, metricsManager, peerManager)), s"CellManager_$publicKeyHash"
-  )
-
-  val dbActor: ActorRef =  system.actorOf(
-    Props(new LevelDBActor(data)), s"ConstellationDBActor_$publicKeyHash"
-  )
+  val dbActor: KVDB = TypedActor(system).typedActorOf(TypedProps(
+    classOf[KVDB],
+    new KVDBImpl(data)), s"KVDB_$publicKeyHash")
 
   val udpActor: ActorRef =
     system.actorOf(
@@ -140,7 +136,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   data.edgeProcessor = edgeProcessorActor
 
   // If we are exposing rpc then create routes
-  val routes: Route = new API(udpAddress, data, cellManager).authRoutes
+  val routes: Route = new API(udpAddress, data).authRoutes
 
   // Setup http server for internal API
   val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
@@ -157,6 +153,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
       .flatMap(_.unbind())
     // TODO: we should add this back but it currently causes issues in the integration test
     //.onComplete(_ => system.terminate())
+
+    TypedActor(system).stop(dbActor)
   }
 
   //////////////

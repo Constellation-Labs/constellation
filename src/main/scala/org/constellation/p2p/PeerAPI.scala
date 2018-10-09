@@ -1,10 +1,6 @@
 package org.constellation.p2p
 
-import java.net.InetSocketAddress
-import java.security.KeyPair
-import java.util.concurrent.{Executors, ScheduledThreadPoolExecutor}
-
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
@@ -15,24 +11,19 @@ import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+import org.constellation.Data
+import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
+import org.constellation.consensus.{Consensus, EdgeProcessor}
+import org.constellation.consensus.EdgeProcessor.HandleTransaction
+import org.constellation.p2p.PeerAPI.EdgeResponse
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, IncrementMetric, TransactionValidation}
-import org.constellation.util.{CommonEndpoints, HashSignature, ServeUI}
+import org.constellation.serializer.KryoSerializer
+import org.constellation.util.{CommonEndpoints, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
-import akka.pattern.ask
-import org.constellation.Data
-import org.constellation.LevelDB.DBPut
-import org.constellation.LevelDB.{DBGet, DBPut}
-import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote, StartConsensusRound}
-import org.constellation.consensus.EdgeProcessor.HandleTransaction
-import org.constellation.consensus.{Consensus, EdgeProcessor}
-import org.constellation.serializer.KryoSerializer
-import org.constellation.consensus.{EdgeProcessor, Validation}
-import org.constellation.p2p.PeerAPI.EdgeResponse
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Random, Try}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
 
@@ -66,20 +57,16 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
           complete(clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)})
         } ~
         path("edge" / Segment) { soeHash =>
-          val result = Try{
-            (dao.dbActor ? DBGet(soeHash)).mapTo[Option[SignedObservationEdgeCache]].get(t=5)
-          }.toOption
+          val cacheOpt = dao.dbActor.getSignedObservationEdgeCache(soeHash)
 
-          val resWithCBOpt = result.map{
-            cacheOpt =>
-              val cbOpt = cacheOpt.flatMap{ c =>
-                (dao.dbActor ? DBGet(c.signedObservationEdge.baseHash)).mapTo[Option[CheckpointCacheData]].get(t=5)
-                  .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
-              }
-              EdgeResponse(cacheOpt, cbOpt)
+          val cbOpt = cacheOpt.flatMap { c =>
+            dao.dbActor.getCheckpointCacheData(c.signedObservationEdge.baseHash)
+              .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
           }
 
-          complete(resWithCBOpt.getOrElse(EdgeResponse()))
+          val resWithCBOpt = EdgeResponse(cacheOpt, cbOpt)
+
+          complete(resWithCBOpt)
         }
       }
     }
@@ -136,7 +123,7 @@ class PeerAPI(val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
         val response = if (memPoolPresence) {
           TransactionQueryResponse(s, dao.transactionMemPool.collectFirst{case x if x.hash == s => x}, inMemPool = true, inDAG = false, None)
         } else {
-          (dao.dbActor ? DBGet(s)).mapTo[Option[TransactionCacheData]].get().map{
+          dao.dbActor.getTransactionCacheData(s).map {
             cd =>
               TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence, cd.inDAG, cd.cbBaseHash)
           }.getOrElse{
