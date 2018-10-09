@@ -50,8 +50,9 @@ class API(udpAddress: InetSocketAddress,
 
   val config: Config = ConfigFactory.load()
 
-  val authId: String = config.getString("auth.id")
-  val authPassword: String = config.getString("auth.password")
+  private val authEnabled = config.getBoolean("auth.enabled")
+  private val authId: String = config.getString("auth.id")
+  private val authPassword: String = config.getString("auth.password")
 
   val getEndpoints: Route =
     extractClientIP { clientIP =>
@@ -107,10 +108,6 @@ class API(udpAddress: InetSocketAddress,
           } ~
           path("nodeKeyPair") {
             complete(keyPair)
-          } ~
-          // TODO: revisit
-          path("health") {
-            complete(StatusCodes.OK)
           } ~
           path("peers") {
             val res = (data.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].getOpt().getOrElse(Map())
@@ -237,12 +234,22 @@ class API(udpAddress: InetSocketAddress,
       }
     }
 
+  private val noAuthRoutes =
+    get {
+      // TODO: revisit
+      path("health") {
+        complete(StatusCodes.OK)
+      } ~
+      path("favicon.ico") {
+        getFromResource("favicon.ico")
+      }
+    }
 
-  private val routes: Route = cors() {
+  private val mainRoutes: Route = cors() {
     getEndpoints ~ postEndpoints ~ jsRequest ~ serveMainPage
   }
 
-  def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
+  private def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
     credentials match {
       case p @ Credentials.Provided(id)
         if id == authId && p.verify(authPassword) =>
@@ -251,6 +258,14 @@ class API(udpAddress: InetSocketAddress,
     }
   }
 
-  val authRoutes: Route = faviconRoute ~ routes
+  val routes = if (authEnabled) {
+    noAuthRoutes ~ authenticateBasic(realm = "secure site",
+      myUserPassAuthenticator) {
+      user =>
+        mainRoutes
+    }
+  } else {
+    noAuthRoutes ~ mainRoutes
+  }
 
 }

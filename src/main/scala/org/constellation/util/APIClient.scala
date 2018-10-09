@@ -45,10 +45,9 @@ class APIClient(host: String = "127.0.0.1", port: Int)(
 
   private val config = ConfigFactory.load()
 
+  private val authEnabled = config.getBoolean("auth.enabled")
   private val authId = config.getString("auth.id")
   private val authPassword = config.getString("auth.password")
-
-  private val authEnabled = false
 
   implicit class HttpRequestAuth(req: HttpRequest) {
     def addAuthIfEnabled(): HttpRequest = {
