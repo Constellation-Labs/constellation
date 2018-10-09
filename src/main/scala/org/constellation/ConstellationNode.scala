@@ -137,7 +137,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   data.edgeProcessor = edgeProcessorActor
 
   // If we are exposing rpc then create routes
-  val routes: Route = new API(udpAddress, data).authRoutes
+  val routes: Route = new API(udpAddress, data).routes
 
   // Setup http server for internal API
   private val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
