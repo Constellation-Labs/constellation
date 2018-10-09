@@ -153,6 +153,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
       .flatMap(_.unbind())
     // TODO: we should add this back but it currently causes issues in the integration test
     //.onComplete(_ => system.terminate())
+
+    TypedActor(system).stop(dbActor)
   }
 
   //////////////
