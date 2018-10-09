@@ -3,9 +3,8 @@ package org.constellation.primitives
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
-import akka.actor.ActorRef
 import constellation.pubKeyToAddress
-import org.constellation.LevelDB.{DBPut, DBUpdate}
+import org.constellation.KVDB
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
@@ -203,30 +202,30 @@ object Schema {
 
   case class Transaction(edge: Edge[Address, Address, TransactionEdgeData]) {
 
-    def store(dbActor: ActorRef, cache: TransactionCacheData): Unit = {
-      edge.store(dbActor, {originalCache: TransactionCacheData => cache.plus(originalCache)}, cache)
+    def store(dbActor: KVDB, cache: TransactionCacheData): Unit = {
+      edge.storeTransactionCacheData(dbActor, {originalCache: TransactionCacheData => cache.plus(originalCache)}, cache)
     }
 
-    def ledgerApplyMemPool(dbActor: ActorRef): Unit = {
-      dbActor ! DBUpdate(
+    def ledgerApplyMemPool(dbActor: KVDB): Unit = {
+      dbActor.updateAddressCacheData(
         src.hash,
         { a: AddressCacheData => a.copy(memPoolBalance = a.memPoolBalance - amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
-      dbActor ! DBUpdate(
+      dbActor.updateAddressCacheData(
         dst.hash,
         { a: AddressCacheData => a.copy(memPoolBalance = a.memPoolBalance + amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
     }
 
-    def ledgerApply(dbActor: ActorRef): Unit = {
-      dbActor ! DBUpdate(
+    def ledgerApply(dbActor: KVDB): Unit = {
+      dbActor.updateAddressCacheData(
         src.hash,
         { a: AddressCacheData => a.copy(balance = a.balance - amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
-      dbActor ! DBUpdate(
+      dbActor.updateAddressCacheData(
         dst.hash,
         { a: AddressCacheData => a.copy(balance = a.balance + amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
@@ -273,16 +272,21 @@ object Schema {
     def parentHashes = Seq(observationEdge.left.hash, observationEdge.right.hash)
     def parents = Seq(observationEdge.left, observationEdge.right)
 
-    def store[T <: AnyRef](db: ActorRef, update: T => T, empty: T, resolved: Boolean = false): Unit = {
-      db ! DBUpdate(signedObservationEdge.baseHash, update, empty)
-      db ! DBPut(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
-      storeData(db: ActorRef)
-    }
-
-    def storeData(db: ActorRef): Unit = {
+    def storeTransactionCacheData(db: KVDB, update: TransactionCacheData => TransactionCacheData, empty: TransactionCacheData, resolved: Boolean = false): Unit = {
+      db.updateTransactionCacheData(signedObservationEdge.baseHash, update, empty)
+      db.putSignedObservationEdgeCache(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
       resolvedObservationEdge.data.foreach {
         data =>
-          db ! DBPut(data.hash, data)
+          db.putTransactionEdgeData(data.hash, data.asInstanceOf[TransactionEdgeData])
+      }
+    }
+
+    def storeCheckpointData(db: KVDB, update: CheckpointCacheData => CheckpointCacheData, empty: CheckpointCacheData, resolved: Boolean = false): Unit = {
+      db.updateCheckpointCacheData(signedObservationEdge.baseHash, update, empty)
+      db.putSignedObservationEdgeCache(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
+      resolvedObservationEdge.data.foreach {
+        data =>
+          db.putCheckpointEdgeData(data.hash, data.asInstanceOf[CheckpointEdgeData])
       }
     }
 
@@ -384,13 +388,13 @@ object Schema {
     // TODO: Optimize call, should store this value instead of recalculating every time.
     def soeHash: String = checkpoint.edge.signedObservationEdge.hash
 
-    def store(db: ActorRef, cache: CheckpointCacheData, resolved: Boolean): Unit = {
+    def store(db: KVDB, cache: CheckpointCacheData, resolved: Boolean): Unit = {
 /*
       transactions.foreach { rt =>
         rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))
       }
 */
-      checkpoint.edge.store(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
+      checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
     }
 
     def plus(keyPair: KeyPair): CheckpointBlock = {

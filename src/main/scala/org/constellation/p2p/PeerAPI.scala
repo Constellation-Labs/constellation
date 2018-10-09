@@ -6,7 +6,6 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
-import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
@@ -14,7 +13,6 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.Data
-import org.constellation.LevelDB.DBGet
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
 import org.constellation.consensus.EdgeProcessor.HandleTransaction
 import org.constellation.consensus.{Consensus, EdgeProcessor}
@@ -27,7 +25,7 @@ import org.json4s.native
 import org.json4s.native.Serialization
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Random, Try}
+import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
 case class PeerRegistrationRequest(host: String, port: Int, key: String)
@@ -70,20 +68,16 @@ class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system:
           complete(clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)})
         } ~
         path("edge" / Segment) { soeHash =>
-          val result = Try{
-            (dao.dbActor ? DBGet(soeHash)).mapTo[Option[SignedObservationEdgeCache]].get(t=5)
-          }.toOption
+          val cacheOpt = dao.dbActor.getSignedObservationEdgeCache(soeHash)
 
-          val resWithCBOpt = result.map{
-            cacheOpt =>
-              val cbOpt = cacheOpt.flatMap{ c =>
-                (dao.dbActor ? DBGet(c.signedObservationEdge.baseHash)).mapTo[Option[CheckpointCacheData]].get(t=5)
-                  .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
-              }
-              EdgeResponse(cacheOpt, cbOpt)
+          val cbOpt = cacheOpt.flatMap { c =>
+            dao.dbActor.getCheckpointCacheData(c.signedObservationEdge.baseHash)
+              .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
           }
 
-          complete(resWithCBOpt.getOrElse(EdgeResponse()))
+          val resWithCBOpt = EdgeResponse(cacheOpt, cbOpt)
+
+          complete(resWithCBOpt)
         }
       }
     }
@@ -173,7 +167,7 @@ class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system:
         val response = if (memPoolPresence) {
           TransactionQueryResponse(s, dao.transactionMemPool.collectFirst{case x if x.hash == s => x}, inMemPool = true, inDAG = false, None)
         } else {
-          (dao.dbActor ? DBGet(s)).mapTo[Option[TransactionCacheData]].get().map{
+          dao.dbActor.getTransactionCacheData(s).map {
             cd =>
               TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence, cd.inDAG, cd.cbBaseHash)
           }.getOrElse{
