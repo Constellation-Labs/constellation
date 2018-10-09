@@ -72,7 +72,7 @@ class KVDBImpl(dao: Data) extends KVDB {
 
   private def get[T <: AnyRef](key: String, cls: Class[T]): Option[T] = {
     dao.numDBGets += 1
-    db.getBytes(key).map(bytes => KryoSerializer.deserialize(bytes, cls))
+    db.getBytes(key).map(bytes => KryoSerializer.deserialize(bytes).asInstanceOf[T])
   }
 
   private def getUnsafe[T <: AnyRef](key: String): Option[AnyRef] = {
@@ -151,7 +151,7 @@ class KVDBImpl(dao: Data) extends KVDB {
 
       w match {
         case Some(q) => q match {
-          case a: Schema.AddressCacheData =>
+          case a: AddressCacheData =>
             logger.info(a.toString)
           case b =>
             logger.info(b.toString)
