@@ -356,9 +356,6 @@ object Schema {
     }
   }
 
-  // TODO:
-  case class ActiveCheckpointCacheData(soeHash: String)
-
   case class CheckpointCacheData(
                                   checkpointBlock: CheckpointBlock,
                                   inDAG: Boolean = false,
@@ -367,7 +364,8 @@ object Schema {
                                   inMemPool: Boolean = false,
                                   lastResolveAttempt: Option[Long] = None,
                                   rxTime: Long = System.currentTimeMillis(), // TODO: Unify common metadata like this
-                                  children: Set[String] = Set()
+                                  children: Set[String] = Set(),
+                                  soeHash: String
                                 ) {
 
     def plus(previous: CheckpointCacheData): CheckpointCacheData = {
@@ -378,10 +376,11 @@ object Schema {
     }
 
     def updateParentsChildRefs(edgeProcessor: ActorRef, dbActor: ActorRef)(implicit timeout: Timeout): Seq[CheckpointCacheData] = {
+      import constellation._
 
       val parentEdges: Seq[Option[EdgeResponse]] = checkpointBlock.parentSOE.map(p => {
-        val edge = (edgeProcessor ? LookupEdge(p.hash)).mapTo[EdgeResponse]
-        edge.value.get.toOption
+        val edge = (edgeProcessor ? LookupEdge(p.hash)).mapTo[EdgeResponse].getOpt()
+        edge
       })
 
       val updates = parentEdges.map(f => {
@@ -405,10 +404,11 @@ object Schema {
       if (children.isEmpty) {
         signatures
       } else {
+        import constellation._
 
         val childrenEdges = children.map(f => {
-          val edge = (edgeProcessor ? LookupEdge(f)).mapTo[EdgeResponse]
-          edge.value.get.toOption
+          val edge = (edgeProcessor ? LookupEdge(f)).mapTo[EdgeResponse].getOpt()
+          edge
         })
 
         val childrenCheckpointCache: Set[CheckpointCacheData] = childrenEdges.map(f => f.get.cb.get)

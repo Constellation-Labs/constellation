@@ -31,7 +31,7 @@ class CheckpointProcessorTest extends FlatSpec {
   dbActor.setAutoPilot(new TestActor.AutoPilot {
     def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
       case DBGet(`baseHash`) =>
-        sender ! Some(CheckpointCacheData(cb, true))
+        sender ! Some(CheckpointCacheData(cb, true, soeHash = cb.soeHash))
         TestActor.KeepRunning
       case _ =>
         sender ! None

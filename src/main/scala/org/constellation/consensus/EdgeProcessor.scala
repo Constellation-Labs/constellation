@@ -115,9 +115,9 @@ object EdgeProcessor {
     }
   }
 
-  def updateActiveCheckpointBlock(cb: CheckpointCacheData) = {
-    // TODO: mutate checkpointBlockBaseHash -> cb.soeHash pointer
-    // lookup base hash from checkpoint block, update soeHash, save
+  def updateActiveCheckpointBlock(dbActor: ActorRef, updatedCheckpointCacheData: CheckpointCacheData): Unit = {
+    val uccd = updatedCheckpointCacheData.copy(soeHash = updatedCheckpointCacheData.checkpointBlock.soeHash)
+    uccd.checkpointBlock.store(dbActor, uccd, uccd.resolved)
   }
 
   def handleConflictingCheckpoint(ca: CheckpointCacheData, cb: CheckpointBlock, dao: Data): CheckpointCacheData= {
@@ -146,7 +146,7 @@ object EdgeProcessor {
       mostRecentCheckpointCacheData.getChildrenSignatures(dao.dbActor, dao.edgeProcessor)
 
     if (mostRecentSignatures.size > previousSignatures.size) {
-      updateActiveCheckpointBlock(mostRecentCheckpointCacheData)
+      updateActiveCheckpointBlock(dao.dbActor, mostRecentCheckpointCacheData)
       mostRecentCheckpointCacheData
     } else {
       ca
@@ -241,7 +241,7 @@ object EdgeProcessor {
 
       dao.metricsManager ! IncrementMetric("checkpointAccepted")
 
-      val checkpointCacheData = CheckpointCacheData(cb, inDAG = true, resolved = true)
+      val checkpointCacheData = CheckpointCacheData(cb, inDAG = true, resolved = true, soeHash = cb.soeHash)
 
       cb.store(
         dao.dbActor,
@@ -521,8 +521,8 @@ object EdgeProcessor {
    val resWithCBOpt = result.map{
      cacheOpt =>
       val cbOpt = cacheOpt.flatMap{ c =>
-        (dao.dbActor ? DBGet(c.signedObservationEdge.hash)).mapTo[Option[CheckpointCacheData]].get(t=5)
-          .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
+        (dao.dbActor ? DBGet(c.signedObservationEdge.baseHash)).mapTo[Option[CheckpointCacheData]].get(t=5)
+         // .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
       }
 
       EdgeResponse(cacheOpt, cbOpt)
@@ -554,7 +554,9 @@ class EdgeProcessor(dao: Data)
     case LookupEdge(soeHash: String) =>
       log.debug(s"lookup edge = $soeHash")
 
-      lookupEdge(dao, soeHash)
+      val edge = lookupEdge(dao, soeHash)
+
+      sender() ! edge
   }
 
 }

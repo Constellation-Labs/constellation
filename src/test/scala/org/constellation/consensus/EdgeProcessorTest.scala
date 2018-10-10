@@ -10,8 +10,9 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.{Data, LevelDBActor}
 import org.constellation.Fixtures._
 import org.constellation.LevelDB.DBGet
+import org.constellation.consensus.EdgeProcessor.LookupEdge
 import org.constellation.primitives.Schema._
-import org.constellation.util.Signed
+import org.constellation.util.{SignatureBatch, Signed}
 import org.scalatest.{FlatSpec, FlatSpecLike}
 import org.constellation.util.SignHelp._
 
@@ -27,8 +28,11 @@ class EdgeProcessorTest extends TestKit(ActorSystem("EdgeProcessorTest")) with F
 
     val dbActor = TestProbe()
 
+    val edgeProcessor = TestProbe()
 
     dao.dbActor = dbActor.ref
+
+    dao.edgeProcessor = edgeProcessor.ref
 
     dao.metricsManager = metricsManager.ref
 
@@ -65,10 +69,20 @@ class EdgeProcessorTest extends TestKit(ActorSystem("EdgeProcessorTest")) with F
 
     val conflictingCheckpointBlock = existingCheckpointBlock.plus(newKeyPair)
 
-    val cpcd = CheckpointCacheData(existingCheckpointBlock)
+    val childCheckpoint = createCheckpointBlock(transactions, Seq(soed, SignedObservationEdge(SignatureBatch(conflictingCheckpointBlock.soeHash, Seq()))))
+
+    val childCheckpointCache = CheckpointCacheData(childCheckpoint, soeHash = childCheckpoint.soeHash)
+
+    val cccd = CheckpointCacheData(conflictingCheckpointBlock, soeHash = conflictingCheckpointBlock.soeHash, children = Set(childCheckpoint.soeHash))
+
+    val cpcd = CheckpointCacheData(existingCheckpointBlock, soeHash = existingCheckpointBlock.soeHash)
 
     val cpHash = cpcd.checkpointBlock.soeHash
     val ccHash = conflictingCheckpointBlock.soeHash
+    val baseHash = conflictingCheckpointBlock.baseHash
+
+    val childBaseHash = childCheckpoint.baseHash
+    val childSoeHash = childCheckpoint.soeHash
 
     dbActor.setAutoPilot(new TestActor.AutoPilot {
       def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
@@ -76,7 +90,16 @@ class EdgeProcessorTest extends TestKit(ActorSystem("EdgeProcessorTest")) with F
           sender ! Some(cpcd.checkpointBlock.resolvedOE)
           TestActor.KeepRunning
         case DBGet(`ccHash`) =>
-          sender ! Some(CheckpointCacheData(conflictingCheckpointBlock, true))
+          sender ! Some(SignedObservationEdgeCache(SignedObservationEdge(SignatureBatch(baseHash, Seq()))))
+          TestActor.KeepRunning
+        case DBGet(`baseHash`) =>
+          sender ! Some(cccd)
+          TestActor.KeepRunning
+        case DBGet(`childSoeHash`) =>
+          sender ! Some(SignedObservationEdgeCache(SignedObservationEdge(SignatureBatch(childBaseHash, Seq()))))
+          TestActor.KeepRunning
+        case DBGet(`childBaseHash`) =>
+          sender ! Some(childCheckpointCache)
           TestActor.KeepRunning
         case _ =>
           sender ! None
@@ -84,9 +107,19 @@ class EdgeProcessorTest extends TestKit(ActorSystem("EdgeProcessorTest")) with F
       }
     })
 
+    edgeProcessor.setAutoPilot(new TestActor.AutoPilot {
+      def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
+        case LookupEdge(`childSoeHash`) =>
+          val edge = EdgeProcessor.lookupEdge(dao, childSoeHash)
+          sender ! edge
+          edge
+          TestActor.KeepRunning
+      }
+    })
+
     val mostValidCheckpointBlock = EdgeProcessor.handleConflictingCheckpoint(cpcd, conflictingCheckpointBlock, dao)
 
-    assert(mostValidCheckpointBlock == conflictingCheckpointBlock)
+    assert(mostValidCheckpointBlock == cccd)
   }
 
 }
