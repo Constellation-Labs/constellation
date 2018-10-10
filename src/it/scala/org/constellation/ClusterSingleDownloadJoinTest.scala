@@ -26,11 +26,11 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
 
     import better.files._
 
-    val ips = file"hosts.txt".lines.toSeq
+    val ips = file"hosts.txt".lines.toSeq ++ file"hosts2.txt".lines.toSeq
 
     println(ips)
 
-    val ips2 = file"hosts2.txt".lines.toSeq
+    val ips2 = file"hosts3.txt".lines.toSeq
 
 
     val apis = ips.map{ ip =>

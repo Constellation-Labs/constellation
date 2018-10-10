@@ -32,7 +32,7 @@ object Download {
 
     implicit val ec: ExecutionContextExecutor = singlePeer.client.system.dispatcher
 
-    val cbs = TrieMap[String, CheckpointBlock]()
+   // val cbs = TrieMap[String, CheckpointBlock]()
 
     @volatile var count = 0
 
@@ -40,7 +40,7 @@ object Download {
     val threadsFinished = TrieMap[Int, Boolean]()
 
     activeTips.foreach{ z =>
-      cbs(z.baseHash) = z
+      EdgeProcessor.acceptCheckpoint(z)
       z.parentSOEBaseHashes.foreach{h =>
         parentsAwaitingDownload.add(h)
       }
@@ -57,7 +57,8 @@ object Download {
           val hash = parentsAwaitingDownload.poll()
           if (hash != null) {
             threadsFinished(i) = false
-            if (!cbs.contains(hash)) {
+            val soeCache = (dao.dbActor ? DBGet(hash)).mapTo[Option[SignedObservationEdgeCache]].get()
+            if (soeCache.isEmpty) {
 
 /* // TODO: Investigate bug here with ECs
 
@@ -73,9 +74,12 @@ object Download {
 
               if (cbo.nonEmpty) {
                 val cb = cbo.get
-                if (!cbs.contains(cb.baseHash) && cb != dao.genesisObservation.get.initialDistribution &&
+                val cbCache = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]].get()
+
+                if (cbCache.isEmpty && cb != dao.genesisObservation.get.initialDistribution &&
                   cb != dao.genesisObservation.get.initialDistribution2) {
-                  cbs(cb.baseHash) = cb
+
+                  EdgeProcessor.acceptCheckpoint(cb)
                   count += 1
                   if (count % 100 == 0) {
                     dao.metricsManager ! UpdateMetric("downloadedBlocks", count.toString)
@@ -95,14 +99,17 @@ object Download {
       }
     }
 
-    Future.sequence(downloadResult).get(1000)
+    //Future.sequence(downloadResult).get(100000)
 
-    dao.metricsManager ! UpdateMetric("downloadedBlocks", count.toString)
-    dao.metricsManager ! UpdateMetric("downloadedBlocksMemSize", cbs.size.toString)
+    Thread.sleep(20*1000)
+
+   // dao.metricsManager ! UpdateMetric("downloadedBlocks", count.toString)
+//    dao.metricsManager ! UpdateMetric("downloadedBlocksMemSize", cbs.size.toString)
 
     logger.debug("First pass download finished")
 
     dao.metricsManager ! UpdateMetric("downloadFirstPassComplete", "true")
+/*
 
     cbs.map { case (_, cb) =>
       // Blocks may have been accepted in the mean time before this gets called
@@ -110,6 +117,7 @@ object Download {
         EdgeProcessor.acceptCheckpoint(cb)
       }
     }
+*/
 
     dao.nodeState = NodeState.Ready
     dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, NodeState.Ready)))
