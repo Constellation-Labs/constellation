@@ -794,7 +794,9 @@ class EdgeProcessor(dao: DAO)
     case InternalHeartbeat =>
 
       val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
-      val facilitators = peerIds.filter{_._2.timeAdded < (System.currentTimeMillis() - 30*1000)}.toMap
+      val facilitators = peerIds.filter{case (_, pd) =>
+        pd.timeAdded < (System.currentTimeMillis() - 30*1000) && pd.nodeStatus == NodeState.Ready
+      }.toMap
       context become active(memPool.copy(facilitators = facilitators))
 
     case GetMemPool =>
@@ -917,7 +919,7 @@ class EdgeProcessor(dao: DAO)
 
     case InternalHeartbeat =>
 
-      if (System.currentTimeMillis() > (lastTime + 10000) && dao.nodeState == NodeStatus.Ready) {
+      if (System.currentTimeMillis() > (lastTime + 10000) && dao.nodeState == NodeState.Ready) {
 
         val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq.map{_._1}
 

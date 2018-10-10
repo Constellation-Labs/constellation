@@ -54,7 +54,11 @@ object DownloadChainComputeSingle {
           if (hash != null) {
             threadsFinished(i) = false
             if (!cbs.contains(hash)) {
-              val cbo = a1.getSync("checkpoint/" + hash).body.x[Option[CheckpointBlock]]
+              val str = "checkpoint/" + hash
+              println(str)
+              val value = a1.getSync(str)
+              println(value)
+              val cbo = value.body.x[Option[CheckpointBlock]]
               if (cbo.nonEmpty) {
                 val cb = cbo.get
                 if (!cbs.contains(cb.baseHash)) {

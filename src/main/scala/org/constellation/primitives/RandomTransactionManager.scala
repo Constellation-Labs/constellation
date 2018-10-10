@@ -3,7 +3,7 @@ package org.constellation.primitives
 import java.util.concurrent.{ScheduledFuture, ScheduledThreadPoolExecutor, TimeUnit}
 
 import akka.actor.{Actor, ActorRef}
-import org.constellation.primitives.Schema.{Id, InternalHeartbeat, SendToAddress}
+import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState, SendToAddress}
 import akka.pattern.ask
 import akka.util.Timeout
 import constellation._
@@ -26,7 +26,9 @@ class RandomTransactionManager(dao: DAO)(
     case InternalHeartbeat =>
 
       if (dao.transactionMemPool.size < 1000 && dao.generateRandomTX) {
-        val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
+        val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq.filter{case (_, pd) =>
+          pd.timeAdded < (System.currentTimeMillis() - 30*1000) && pd.nodeStatus == NodeState.Ready
+        }
 
         Seq.fill(50)(0).par.foreach { _ =>
 

@@ -9,7 +9,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.util.Signed
 import constellation._
 import org.constellation.LevelDB
-import org.constellation.primitives.Schema.NodeStatus.NodeStatus
+import org.constellation.primitives.Schema.NodeState.NodeState
 
 import scala.util.Try
 
@@ -39,7 +39,7 @@ trait NodeData {
   def selfAddress: AddressMetaData = id.address
   def selfAddressStr: String = selfAddress.address
 
-  @volatile var nodeState: NodeStatus = NodeStatus.PendingDownload
+  @volatile var nodeState: NodeState = NodeState.PendingDownload
 
   var externalHostString: String = "127.0.0.1"
   @volatile var externalAddress: Option[InetSocketAddress] = None

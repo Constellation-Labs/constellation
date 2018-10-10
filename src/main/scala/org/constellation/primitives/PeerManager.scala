@@ -3,12 +3,23 @@ package org.constellation.primitives
 import akka.actor.Actor
 import akka.stream.ActorMaterializer
 import org.constellation.{AddPeerRequest, DAO}
-import org.constellation.primitives.Schema.Id
+import org.constellation.primitives.Schema.{Id, NodeState}
+import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.util.APIClient
 
 
-case class PeerData(addRequest: AddPeerRequest, client: APIClient, timeAdded: Long = System.currentTimeMillis())
+case class SetNodeStatus(id: Id, nodeStatus: NodeState)
+
+
+case class PeerData(
+                     addRequest: AddPeerRequest,
+                     client: APIClient,
+                     timeAdded: Long = System.currentTimeMillis(),
+                     nodeStatus: NodeState = NodeState.Ready
+                   )
+
 case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
+
 case class PeerHealthCheck(status: Map[Id, Boolean])
 
 case object GetPeerInfo
@@ -19,11 +30,20 @@ class PeerManager(dao: DAO)(implicit val materialize: ActorMaterializer) extends
 
   def active(peerInfo: Map[Id, PeerData]): Receive = {
 
-    case a @ AddPeerRequest(host, udpPort, port, id) =>
+    case SetNodeStatus(id, nodeStatus) =>
+
+      val updated = peerInfo.get(id).map{
+        pd =>
+          peerInfo + (id -> pd.copy(nodeStatus = nodeStatus))
+      }.getOrElse(peerInfo)
+
+      context become active(updated)
+
+    case a @ AddPeerRequest(host, udpPort, port, id, ns) =>
       val client = new APIClient()(context.system, materialize).setConnection(host, port)
 
       client.id = id
-      val updatedPeerInfo = peerInfo + (id -> PeerData(a, client))
+      val updatedPeerInfo = peerInfo + (id -> PeerData(a, client, nodeStatus = ns))
 
       dao.metricsManager ! UpdateMetric(
         "peers",

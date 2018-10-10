@@ -8,7 +8,7 @@ import org.constellation.util.{APIClient, Simulation}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.concurrent.ExecutionContextExecutor
-
+import org.constellation.primitives.Schema.NodeState
 
 class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
@@ -66,6 +66,11 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
     apis.foreach {
       a =>
         sim.addPeer(apis2, AddPeerRequest(a.hostName, a.udpPort, 9001, a.id)).foreach{println}
+    }
+
+    apis2.foreach{
+      a =>
+        sim.addPeer(apis, AddPeerRequest(a.hostName, a.udpPort, 9001, a.id, NodeState.DownloadInProgress)).foreach{println}
     }
 
     apis2.foreach{

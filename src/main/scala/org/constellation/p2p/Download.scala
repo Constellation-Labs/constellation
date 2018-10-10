@@ -7,7 +7,7 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.DAO
 import org.constellation.primitives.Schema._
 import constellation._
-import org.constellation.primitives.{APIBroadcast, GetPeerInfo, PeerData, UpdateMetric}
+import org.constellation.primitives._
 import org.constellation.util.{APIClient, Signed}
 import scalaj.http.HttpResponse
 
@@ -16,6 +16,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import akka.pattern.ask
 import akka.util.Timeout
+import org.constellation.LevelDB.DBGet
 import org.constellation.consensus.EdgeProcessor
 
 import scala.collection.concurrent.TrieMap
@@ -103,9 +104,15 @@ object Download {
 
     dao.metricsManager ! UpdateMetric("downloadFirstPassComplete", "true")
 
-    cbs.map { case (_, cb) => EdgeProcessor.acceptCheckpoint(cb) }
+    cbs.map { case (_, cb) =>
+      // Blocks may have been accepted in the mean time before this gets called
+      if ((dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]].get().isEmpty) {
+        EdgeProcessor.acceptCheckpoint(cb)
+      }
+    }
 
-    dao.nodeState
+    dao.nodeState = NodeState.Ready
+    dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, NodeState.Ready)))
 
   }
 
@@ -114,7 +121,7 @@ object Download {
 
     Try {
       logger.info("Download started")
-      dao.nodeState = NodeStatus.DownloadInProgress
+      dao.nodeState = NodeState.DownloadInProgress
 
       val res = (dao.peerManager ? APIBroadcast(_.getSync("genesis").body.x[Option[GenesisObservation]]))
         .mapTo[Map[Id, Option[GenesisObservation]]].get()
@@ -145,7 +152,7 @@ object Download {
 
       //val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
 
-      dao.nodeState = NodeStatus.Ready
+      dao.nodeState = NodeState.Ready
 
     } match {
       case Failure(e) => e.printStackTrace()

@@ -16,7 +16,7 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, IncrementMetric, TransactionValidation}
+import org.constellation.primitives.{APIBroadcast, IncrementMetric, SetNodeStatus, TransactionValidation}
 import org.constellation.util.{CommonEndpoints, HashSignature, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
@@ -87,6 +87,12 @@ class PeerAPI(val dao: DAO)(implicit system: ActorSystem, val timeout: Timeout)
 
   private val postEndpoints =
     post {
+      path("status") {
+        entity(as[SetNodeStatus]) { sns =>
+          dao.peerManager ! sns
+          complete(StatusCodes.OK)
+        }
+      } ~
       path ("sign") {
         entity(as[PeerAuthSignRequest]) { e =>
           complete(hashSign(e.salt.toString, dao.keyPair))
@@ -153,7 +159,7 @@ class PeerAPI(val dao: DAO)(implicit system: ActorSystem, val timeout: Timeout)
       put {
         entity(as[Transaction]) {
           tx =>
-            if (dao.nodeState == NodeStatus.Ready) {
+            if (dao.nodeState == NodeState.Ready) {
               // TDOO: Change to ask later for status info
               dao.edgeProcessor ! HandleTransaction(tx)
             }
@@ -180,7 +186,7 @@ class PeerAPI(val dao: DAO)(implicit system: ActorSystem, val timeout: Timeout)
       put {
         entity(as[CheckpointBlock]) {
           cb =>
-            val ret = if (dao.nodeState == NodeStatus.Ready) {
+            val ret = if (dao.nodeState == NodeState.Ready) {
               dao.edgeProcessor ? HandleCheckpoint(cb)
             } else None
             complete(StatusCodes.OK)

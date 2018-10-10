@@ -54,7 +54,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
 
     Thread.sleep(30*1000)
-    sim.triggerRandom(apis)
+   // sim.triggerRandom(apis)
 
 
 

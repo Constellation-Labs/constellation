@@ -20,6 +20,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.p2p.Download
+import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.{CommonEndpoints, Metrics, ServeUI}
@@ -30,7 +31,7 @@ import scalaj.http.HttpResponse
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id)
+case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id, nodeStatus: NodeState = NodeState.Ready)
 
 case class ProcessingConfig(
                                 maxWidth: Int = 10,
@@ -159,10 +160,10 @@ class API(udpAddress: InetSocketAddress,
         }
       } ~
       path("ready") { // Temp
-        if (dao.nodeState != NodeStatus.Ready) {
-          dao.nodeState = NodeStatus.Ready
+        if (dao.nodeState != NodeState.Ready) {
+          dao.nodeState = NodeState.Ready
         } else {
-          dao.nodeState = NodeStatus.PendingDownload
+          dao.nodeState = NodeState.PendingDownload
         }
         complete(StatusCodes.OK)
       } ~
