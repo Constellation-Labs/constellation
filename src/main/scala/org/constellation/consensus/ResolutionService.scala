@@ -15,7 +15,7 @@ object ResolutionService {
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
   case class ResolutionStatus(
-                               cb: CheckpointBlock,
+                               cb: CheckpointCacheData,
                                resolvedParents: Seq[(String, Option[SignedObservationEdgeCache])],
                                unresolvedParents: Seq[(String, Option[SignedObservationEdgeCache])]
                              )
@@ -35,21 +35,36 @@ object ResolutionService {
   }
 
   /**
-    * If this newly resolved checkpoint block was a previously unresolved parent, reprocess the child
+    *
+    * @param dao
+    * @param unresolvedChildren
+    */
+  def reprocessUnresolvedChildren(dao: Data, unresolvedChildren: Seq[CheckpointBlock])(implicit executionContext: ExecutionContext) = unresolvedChildren.foreach { unresolvedChild =>
+    EdgeProcessor.handleCheckpoint(unresolvedChild, dao, true) //Todo log exception add retry
+  }
+
+  /**
     *
     * @param dao
     * @param cb
     */
-  def reprocessUnresolvedChildren(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext) = {
-    val children = dao.resolveNotifierCallbacks(cb.baseHash)
-    val unresolvedChildren = children.map { child =>
-      val isResolved = dao.hashToSignedObservationEdgeCache(child.baseHash).filter(soeCache => soeCache.exists(!_.resolved))
-      isResolved.map(resolutionStatus => child)
-    }
-    unresolvedChildren.foreach { unresolvedChildrenFut =>
-      unresolvedChildrenFut.map { unresolvedChild =>
-        EdgeProcessor.handleCheckpoint(unresolvedChild, dao, true)
-      }//Todo log exception add retry
+  def reprocessUnresolvedParents(dao: Data, cb: CheckpointBlock): (String, Option[SignedObservationEdgeCache]) => Unit = {
+    case (missingParentHash: String, queryResult: Option[SignedObservationEdgeCache]) =>
+      if (queryResult.isEmpty) downloadAncestry(dao, cb)
+      dao.markParentsUnresolved(missingParentHash, cb)
+  }
+
+  /**
+    * If this newly resolved checkpoint block was a previously unresolved parent, reprocess the child
+    *
+    * @param dao
+    * @param children
+    * @param executionContext
+    * @return
+    */
+  def isUnresolved(dao: Data, children: Seq[CheckpointBlock])(implicit executionContext: ExecutionContext): Seq[CheckpointBlock] = {
+    children.filter { child =>
+      dao.dbActor.getSignedObservationEdgeCache(child.baseHash).exists(!_.resolved)
     }
   }
 
@@ -57,18 +72,13 @@ object ResolutionService {
     *
     * @param dao
     * @param cb
-    * @param executionContext
     * @return
     */
-  def partitionByParentsResolved(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext) = {
-    val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes.map { hash =>
-        dao.hashToSignedObservationEdgeCache(hash).map { hash -> _ }
-      }
-    )
-    parentCache.map { query: Seq[(String, Option[SignedObservationEdgeCache])] =>
-      val (unresolvedParents, resolvedParents) = query.partition { case (hash, queryResult) => queryResult.exists(_.resolved) }
-      (unresolvedParents, resolvedParents)
-    }
+  def partitionByParentsResolved(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext):
+  (Seq[(String, Option[SignedObservationEdgeCache])], Seq[(String, Option[SignedObservationEdgeCache])]) = {
+    val parentCache = cb.checkpoint.edge.parentHashes.map { hash => (hash, dao.dbActor.getSignedObservationEdgeCache(hash)) }
+    val (unresolvedParents, resolvedParents) = parentCache.partition { case (hash, queryResult) => queryResult.exists(_.resolved) }
+    (unresolvedParents, resolvedParents)
   }
 
   /**
@@ -79,20 +89,17 @@ object ResolutionService {
     * @param executionContext
     * @return
     */
-  def resolveCheckpoint(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): Future[ResolutionStatus] = {
-    partitionByParentsResolved(dao, cb).map { case (unresolvedParents, resolvedParents) =>
-      if (unresolvedParents.isEmpty){
-        cb.markResolved(dao.dbActor, CheckpointCacheData(cb, inDAG = true, resolved = true))
-      }
-      else {
-        unresolvedParents.foreach {
-          case (missingParentHash, queryResult) =>
-            if (queryResult.isEmpty) downloadAncestry(dao, cb)
-            dao.markParentsUnresolved(missingParentHash, cb)
-        }
-      }
-      reprocessUnresolvedChildren(dao, cb)
-      ResolutionStatus(cb, unresolvedParents, resolvedParents)
-    }
+  def resolveCheckpoint(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): ResolutionStatus = {
+    val (unresolvedParents, resolvedParents) = partitionByParentsResolved(dao, cb)
+    val isResolved = unresolvedParents.isEmpty
+    val children = dao.resolveNotifierCallbacks.get(cb.baseHash)
+    val unresolvedChildren = children.map(isUnresolved(dao, _))
+    val checkpointCacheData = CheckpointCacheData(cb, resolved = isResolved, children = children.getOrElse(Seq()).map(_.baseHash).toSet)//Todo change type on children, this is gross
+
+    if (!isResolved) unresolvedParents.foreach { case (h, qR) => reprocessUnresolvedParents(dao, cb)(h, qR) }
+    unresolvedChildren.foreach(reprocessUnresolvedChildren(dao, _))
+    cb.storeResolution(dao.dbActor, checkpointCacheData)
+
+    ResolutionStatus(checkpointCacheData, unresolvedParents, resolvedParents)
   }
 }

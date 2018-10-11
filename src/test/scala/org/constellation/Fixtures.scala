@@ -3,21 +3,16 @@ package org.constellation
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
-import akka.actor.ActorSystem
 import constellation._
 import org.constellation.consensus.EdgeProcessor.createCheckpointEdgeProposal
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.{PeerData, Schema}
-import org.constellation.primitives.Schema._
-import org.constellation.util.{APIClient, Signed, TestNode}
+import org.constellation.primitives.Schema.{Id, Peer, SendToAddress, _}
+import org.constellation.util.Signed
 
 import scala.util.Random
 
 
 object Fixtures {
-
-//  lazy val testNode =  TestNode(heartbeatEnabled = true, randomizePorts = false)
-
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()
   val tempKey2: KeyPair = KeyUtils.makeKeyPair()

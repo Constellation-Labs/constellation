@@ -50,8 +50,8 @@ class CheckpointProcessorTest extends ProcessorTest {
   }
 
   "Invalid CheckpointBlocks" should "return false" in {
-    val validatedCheckpointBlock: Future[Validation.CheckpointValidationStatus] = Validation.validateCheckpointBlock(data, cb)
-    validatedCheckpointBlock.map(response => assert(!response.isValid))
+    val validatedCheckpointBlock = Validation.validateCheckpointBlock(data, cb)
+    assert(!validatedCheckpointBlock.isValid)
   }
 
 
@@ -61,17 +61,16 @@ class CheckpointProcessorTest extends ProcessorTest {
 
   "CheckpointBlocks invalid by state" should "return false" in {
     val validatedCheckpointBlock = Validation.validateCheckpointBlock(data, cb)
-    validatedCheckpointBlock.map(response => assert(!response.isValid))
+    assert(!validatedCheckpointBlock.isValid)
   }
 
   "hashToSignedObservationEdgeCache" should "return SignedObservationEdgeCache" in {
-    val res = data.hashToSignedObservationEdgeCache(cb.baseHash)
-    res.map(response => assert(response.isDefined))
-
+    val response = data.dbActor.getSignedObservationEdgeCache(cb.baseHash)
+    assert(response.isDefined)
   }
 
   "hashToCheckpointCacheData" should "return CheckpointCacheData" in {
-    val res = data.hashToCheckpointCacheData(cb.baseHash)
-    res.map(response => assert(response.isDefined))
+    val response = data.dbActor.getCheckpointCacheData(cb.baseHash)
+    assert(response.isDefined)
   }
 }

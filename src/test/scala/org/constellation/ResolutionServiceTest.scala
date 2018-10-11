@@ -18,16 +18,9 @@ import org.scalatest.FlatSpec
 
 import scala.concurrent.ExecutionContextExecutor
 
-class ResolutionServiceTest extends FlatSpec {
-  implicit val system: ActorSystem = ActorSystem("ResolutionServiceTest")
-  implicit val materialize: ActorMaterializer = ActorMaterializer()
-  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+class ResolutionServiceTest extends ProcessorTest {
+  val bogusTxValidStatus = TransactionValidationStatus(tx, None, None)
 
-  val keyPair: KeyPair = KeyUtils.makeKeyPair()
-  val peerData = PeerData(addPeerRequest, getAPIClient("", 1))
-  val peerManager = TestProbe()
-  val metricsManager = TestProbe()
-  val dbActor = TestProbe()
   dbActor.setAutoPilot(new TestActor.AutoPilot {
     def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
       case DBGet(`baseHash`) =>
@@ -38,36 +31,6 @@ class ResolutionServiceTest extends FlatSpec {
         TestActor.KeepRunning
     }
   })
-
-  val mockData = new Data
-  mockData.updateKeyPair(keyPair)
-
-  def makeDao(mockData: Data, peerManager: TestProbe = peerManager, metricsManager: TestProbe = metricsManager,
-              dbActor: TestProbe = dbActor) = {
-    mockData.actorMaterializer = materialize
-    mockData.dbActor = dbActor.testActor
-    mockData.metricsManager = metricsManager.testActor
-    mockData.peerManager = peerManager.testActor
-    mockData
-  }
-
-  val data = makeDao(mockData)
-  val tx: Transaction = dummyTx(data)
-  val invalidTx = dummyTx(data, -1L)
-  val srcHash = tx.src.hash
-  val txHash = tx.hash
-  val invalidSpendHash = invalidTx.hash
-  val randomPeer: (Id, PeerData) = (id, peerData)
-
-  def getAPIClient(hostName: String, httpPort: Int) = {
-    val api = new APIClient().setConnection(host = hostName, port = httpPort)
-    api.id = id
-    api.udpPort = 16180
-    api
-  }
-
-  val bogusTxValidStatus = TransactionValidationStatus(tx, None, None)
-
 
   def getSignedObservationEdge(trx: Transaction) = {
     val ced = CheckpointEdgeData(Seq(tx.edge.signedObservationEdge.signatureBatch.hash))
@@ -89,24 +52,18 @@ class ResolutionServiceTest extends FlatSpec {
   val bogusCb = Fixtures.createCheckpointBlock(Seq.fill(3)(bogusTx), Seq.fill(2)(bogusSoe))(keyPair)
 
   "CheckpointBlocks with resolved parents" should "have isAhead = false " in {
-    val isBranch = ResolutionService.partitionByParentsResolved(mockData, parentCb)
-    isBranch.foreach { case (resolvedParents, unresolvedParents) =>
+    val (resolvedParents, unresolvedParents): (Seq[(String, Option[SignedObservationEdgeCache])], Seq[(String, Option[SignedObservationEdgeCache])]) = ResolutionService.partitionByParentsResolved(mockData, parentCb)
       assert(unresolvedParents.isEmpty)
-    }
   }
 
   "CheckpointBlocks with unresolved parents" should "have isAhead = true" in {
-    val isBranch = ResolutionService.partitionByParentsResolved(mockData, bogusCb)
-    isBranch.foreach { case (resolvedParents, unresolvedParents) =>
+    val (resolvedParents, unresolvedParents) = ResolutionService.partitionByParentsResolved(mockData, bogusCb)
       assert(resolvedParents.isEmpty)
-    }
   }
 
   "CheckpointBlocks that are invalid " should "have isAhead = false " in {
-    val res = ResolutionService.resolveCheckpoint(mockData, parentCb)
-    res.foreach { resolutionStatus =>
+    val res: ResolutionService.ResolutionStatus = ResolutionService.resolveCheckpoint(mockData, parentCb)
       assert(!data.snapshotRelativeTips.contains(parentCb))
-    }
   }
 
   "CheckpointBlocks that are ahead" should "query the signers" in {
@@ -116,9 +73,7 @@ class ResolutionServiceTest extends FlatSpec {
       _.toId
     }.toSet)
     val res = ResolutionService.resolveCheckpoint(mockData, bogusCb)
-    res.foreach { resolutionStatus =>
-      assert(resolutionStatus.unresolvedParents.nonEmpty)
-      peerManager.expectMsg(msg)
-    }
+    peerManager.expectMsg(msg)
+    assert(res.unresolvedParents.nonEmpty)
   }
 }

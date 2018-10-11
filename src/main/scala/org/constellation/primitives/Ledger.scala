@@ -1,7 +1,5 @@
 package org.constellation.primitives
 
-import org.constellation.primitives.Schema.{Id, Transaction}
-
 import scala.collection.concurrent.TrieMap
 
 trait Ledger extends NodeData {

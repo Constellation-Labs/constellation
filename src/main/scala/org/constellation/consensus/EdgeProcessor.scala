@@ -15,8 +15,7 @@ import org.constellation.consensus.Validation.{TransactionValidationStatus, vali
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.ExecutionContext
 import scala.util.Random
 
 object EdgeProcessor {
@@ -40,13 +39,19 @@ object EdgeProcessor {
   def handleCheckpoint(cb: CheckpointBlock,
                        dao: Data,
                        internalMessage: Boolean = false)(implicit executionContext: ExecutionContext): Unit = {
-    if (!internalMessage) {
-      dao.metricsManager ! IncrementMetric("checkpointMessages")
-    } else {
+    if (!internalMessage) dao.metricsManager ! IncrementMetric("checkpointMessages")
+    else dao.metricsManager ! IncrementMetric("internalCheckpointMessages")
+
+    val previousCacheData = dao.dbActor.getCheckpointCacheData(cb.baseHash)
+    if (previousCacheData.exists(_.inDAG)) {
       dao.metricsManager ! IncrementMetric("internalCheckpointMessages")
+      return
     }
-    val resolutionStatus = ResolutionService.resolveCheckpoint(dao, cb)
-    val validationStatus = resolutionStatus.map(resStatus => validateCheckpointBlock(dao, resStatus.cb))
+//    if (previousCacheData.exists(_.isResolved))
+
+    val resolutionStatus: ResolutionService.ResolutionStatus = ResolutionService.resolveCheckpoint(dao, cb)
+    val validationStatus: Validation.CheckpointValidationStatus = validateCheckpointBlock(dao, cb)
+
   }
 
   // TODO : Add checks on max number in mempool and max num signatures.
@@ -202,9 +207,7 @@ object EdgeProcessor {
     // in event where a new signature is being made by another peer it's most likely still valid, should
     // cache the results of this somewhere.
 
-    val validationResult = Validation.validateTransaction(dao.dbActor, tx)
-
-    val finished = Await.result(validationResult, 90.seconds)
+    val finished = Validation.validateTransaction(dao.dbActor, tx)
 
     finished match {
       // TODO : Increment metrics here for each case
@@ -372,7 +375,8 @@ object EdgeProcessor {
     * @return Maybe updated transaction
     */
   def updateWithSelfSignatureEmit(tx: Transaction, dao: Data): Transaction = {
-    val txPrime = if (!tx.signatures.exists(_.publicKey == dao.keyPair.getPublic)) {
+    val sigExists = tx.signatures.exists(_.publicKey == dao.keyPair.getPublic)
+    val txPrime = if (!sigExists) {
       // We haven't yet signed this TX
       val tx2 = tx.plus(dao.keyPair)
       dao.metricsManager ! IncrementMetric("signaturesPerformed")
@@ -432,7 +436,7 @@ class EdgeProcessor(dao: Data)
 
       handleTransaction(transaction, dao)
 
-    case ConsensusRoundResult(checkpointBlock: CheckpointBlock, roundHash: RoundHash[Checkpoint]) =>
+    case ConsensusRoundResult(checkpointBlock, roundHash: RoundHash[Checkpoint]) =>
       log.debug(s"handle checkpointBlock = $checkpointBlock")
 
       handleCheckpoint(checkpointBlock, dao)

@@ -17,7 +17,6 @@ import scala.concurrent.ExecutionContextExecutor
 trait ProcessorTest extends AsyncFlatSpec {
   implicit val system: ActorSystem = ActorSystem("ProcessorTest")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
-//  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   val keyPair: KeyPair = KeyUtils.makeKeyPair()
   val peerData = PeerData(addPeerRequest, getAPIClient("", 1))
@@ -26,6 +25,7 @@ trait ProcessorTest extends AsyncFlatSpec {
   val dbActor = TestProbe()
   val mockData = new Data
   mockData.updateKeyPair(keyPair)
+  val mockKVDB = new KVDBImpl(mockData)
 
   val data = makeDao(mockData)
   val tx: Transaction = dummyTx(data)
@@ -38,16 +38,15 @@ trait ProcessorTest extends AsyncFlatSpec {
   def makeDao(mockData: Data, peerManager: TestProbe = peerManager, metricsManager: TestProbe = metricsManager,
               dbActor: TestProbe = dbActor) = {
     mockData.actorMaterializer = materialize
-    mockData.dbActor = dbActor.testActor
+    mockData.dbActor = mockKVDB
     mockData.metricsManager = metricsManager.testActor
     mockData.peerManager = peerManager.testActor
     mockData
   }
 
   def getAPIClient(hostName: String, httpPort: Int) = {
-    val api = new APIClient().setConnection(host = hostName, port = httpPort)
+    val api = new APIClient(hostName, httpPort)
     api.id = id
-    api.udpPort = 16180
     api
   }
 }

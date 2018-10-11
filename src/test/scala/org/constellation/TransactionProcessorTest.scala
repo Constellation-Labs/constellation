@@ -1,22 +1,15 @@
 package org.constellation
 
-import java.security.{KeyPair, SecureRandom}
+import java.security.KeyPair
 
-import akka.actor.{ActorRef, ActorSystem}
-import akka.stream.ActorMaterializer
+import akka.actor.ActorRef
 import akka.testkit.{TestProbe, _}
-import org.constellation.Fixtures.{addPeerRequest, dummyTx, id}
-import org.constellation.LevelDB.{DBGet, DBUpdate}
+import org.constellation.LevelDB.DBGet
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.consensus.{EdgeProcessor, Validation}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.APIClient
-import org.scalatest.FlatSpec
-import scalaj.http.HttpResponse
-
-import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class TransactionProcessorTest extends ProcessorTest {
 
@@ -41,9 +34,7 @@ class TransactionProcessorTest extends ProcessorTest {
 
   "Incoming transactions" should "be signed and returned if valid" in {
     val validatorResponse = Validation.validateTransaction(data.dbActor,tx)
-    validatorResponse map { tx2 =>
-      assert(tx2.transaction == tx)
-    }
+      assert(validatorResponse.transaction == tx)
   }
 
   "Incoming transactions" should " be signed if already signed by this keyPair" in {
@@ -53,12 +44,9 @@ class TransactionProcessorTest extends ProcessorTest {
     dummyData.updateKeyPair(keyPair)
     val pm = TestProbe()
     val dummyDao = makeDao(dummyData, pm, TestProbe(), TestProbe())
-    validatorResponse.map { tx2 =>
-//      pm.expectMsg(APIBroadcast(_.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx2))) todo, getting boxed error
-      val signedTransaction = EdgeProcessor.updateWithSelfSignatureEmit(tx, dummyDao)
-      println(signedTransaction)
-      assert(signedTransaction.signatures.exists(_.publicKey == dummyDao.keyPair.getPublic))
-    }
+    val signedTransaction = EdgeProcessor.updateWithSelfSignatureEmit(tx, dummyDao)
+    pm.expectMsg(_: APIBroadcast.type)
+    assert(signedTransaction.signatures.exists(_.publicKey == dummyDao.keyPair.getPublic))
   }
 
   "Incoming transactions" should "not be signed if already signed by this keyPair" in {
@@ -70,8 +58,8 @@ class TransactionProcessorTest extends ProcessorTest {
     val bogusTransactionValidationStatus = TransactionValidationStatus(tx, Some(TransactionCacheData(tx, true, false, true)), None)
     EdgeProcessor.reportInvalidTransaction(data, bogusTransactionValidationStatus)
     metricsManager.expectMsg(IncrementMetric("invalidTransactions"))
-//    metricsManager.expectMsg(IncrementMetric("insufficientBalanceTransactions")) todo weird not being received but printing correct criteria
     metricsManager.expectMsg(IncrementMetric("hashDuplicateTransactions"))
+    metricsManager.expectMsg(IncrementMetric("insufficientBalanceTransactions"))
     assert(true)
   }
 

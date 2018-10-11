@@ -1,29 +1,47 @@
 package org.constellation.primitives
 
-import akka.actor.Actor
-import akka.stream.ActorMaterializer
-import org.constellation.{AddPeerRequest, Data}
-import org.constellation.primitives.Schema.Id
-import org.constellation.util.APIClient
+import java.net.InetSocketAddress
 
+import akka.actor.{Actor, ActorSystem}
+import akka.http.scaladsl.model.RemoteAddress
+import akka.stream.ActorMaterializer
+import com.typesafe.scalalogging.Logger
+import org.constellation.p2p.{PeerAuthSignRequest, PeerRegistrationRequest}
+import org.constellation.primitives.Schema.Id
+import org.constellation.util.{APIClient, HashSignature}
+import org.constellation.{AddPeerRequest, Data}
+
+import scala.collection.Set
+import scala.concurrent.ExecutionContext
 
 case class PeerData(addRequest: AddPeerRequest, client: APIClient)
 case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
 case class PeerHealthCheck(status: Map[Id, Boolean])
+case class PendingRegistration(ip: String, request: PeerRegistrationRequest)
+case class Deregistration(ip: String, port: Int, key: String)
 
 case object GetPeerInfo
 
-class PeerManager(dao: Data)(implicit val materialize: ActorMaterializer) extends Actor {
+class PeerManager(ipManager: IPManager, dao: Data)(implicit val materialize: ActorMaterializer) extends Actor {
+
+  val logger = Logger(s"PeerManager")
 
   override def receive: Receive = active(Map.empty)
 
+  implicit val system: ActorSystem = context.system
+
   def active(peerInfo: Map[Id, PeerData]): Receive = {
 
+
+
     case a @ AddPeerRequest(host, udpPort, port, id) =>
-      val client = new APIClient()(context.system, materialize).setConnection(host, port)
+      val client = APIClient(host, port)
 
       client.id = id
       val updatedPeerInfo = peerInfo + (id -> PeerData(a, client))
+
+      val remoteAddr = RemoteAddress(new InetSocketAddress(host, port))
+      ipManager.addKnownIP(remoteAddr)
 
       dao.metricsManager ! UpdateMetric(
         "peers",
@@ -53,6 +71,38 @@ class PeerManager(dao: Data)(implicit val materialize: ActorMaterializer) extend
       val replyTo = sender()
       replyTo ! peerInfo
     }
+
+    case PendingRegistration(ip, request) =>
+      implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
+
+      val client = APIClient(request.host, request.port)
+
+      val req = client.postNonBlocking[HashSignature]("sign", PeerAuthSignRequest())
+
+      req.failed.foreach { t => logger.warn(s"Sign request to ${request.host}:${request.port} failed.", t)}
+
+      req.foreach { sig =>
+        if (sig.b58EncodedPublicKey != request.key) {
+          logger.warn(
+            s"keys should be the same: ${sig.b58EncodedPublicKey} != ${request.key}"
+          )
+        }
+
+        // TODO: Not completely sure how to validate this:
+        // 1: Presumably we should compare the public key to what we sent earlier. Are there encoding questions?
+
+        // For now -- let's assume successful response
+
+        val remoteAddr = RemoteAddress(
+          new InetSocketAddress(request.host, request.port)
+        )
+        ipManager.addKnownIP(remoteAddr)
+        logger.info(s"Added $remoteAddr to known peers.")
+      }
+
+    case Deregistration(ip, port, key) =>
+
+      // Do we need to validate this? Or just remove from knownIPs?
 
   }
 }
