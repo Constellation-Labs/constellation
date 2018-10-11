@@ -32,14 +32,4 @@ trait EdgeExt extends NodeData with Ledger with MetricsExt with PeerInfo with Ed
           queryMissingResolutionData(missingParentHash, cb.signatures.map{_.toId}.toSet)
           resolveNotifierCallbacks(missingParentHash) = Seq(cb)
       }
-
-  def hashToSignedObservationEdgeCache(hash: String): Future[Option[SignedObservationEdgeCache]] = {
-    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
-    (dbActor ? DBGet(hash)).mapTo[Option[SignedObservationEdgeCache]]
-  }
-
-  def hashToCheckpointCacheData(hash: String) = {
-    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
-    (dbActor ? DBGet(hash)).mapTo[Option[CheckpointCacheData]]
-  }
 }

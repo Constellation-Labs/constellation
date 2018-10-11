@@ -120,7 +120,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     val ips = mappings.map{_.externalIP}
 
     val apis = ips.map{ ip =>
-      new APIClient().setConnection(ip, 9000)
+      APIClient(ip, 9000)
     }
 
     val splitApis = apis.splitAt(1)

@@ -1,18 +1,12 @@
 package org.constellation
 
-import java.util.concurrent.ForkJoinPool
-
-import org.constellation.ClusterTest.getPodMappings
-import org.constellation.primitives.Schema._
-import org.constellation.util.{APIClient, Simulation}
-import ClusterTest._
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
+import org.constellation.ClusterTest.getPodMappings
+import org.constellation.util.APIClient
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.Random
-import constellation._
+import scala.concurrent.ExecutionContextExecutor
 
 object ClusterDebug extends TestKit(ActorSystem("ClusterTest")){
 
@@ -33,7 +27,7 @@ object ClusterDebug extends TestKit(ActorSystem("ClusterTest")){
     val ips = mappings.map{_.externalIP}
 
     val rpcs = ips.map{ ip =>
-      val r = new APIClient().setConnection(ip, 9000)
+      val r = APIClient(ip, 9000)
       r
     }
 

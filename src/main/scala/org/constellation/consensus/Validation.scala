@@ -2,19 +2,14 @@ package org.constellation.consensus
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorRef
-import akka.pattern.ask
 import akka.util.Timeout
-import org.constellation.Data
-import org.constellation.LevelDB.DBGet
+import org.constellation.{Data, KVDB}
 import org.constellation.consensus.EdgeProcessor.signFlow
-import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointBlock, Transaction, TransactionCacheData}
 
 import scala.concurrent.{ExecutionContext, Future}
 
 object Validation {
-
   /**
     *
     * @param transactions
@@ -35,23 +30,19 @@ object Validation {
     * @param executionContext
     * @return
     */
-  def validateCheckpointBlock(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): Future[CheckpointValidationStatus] = {
-    val allTransactions: Future[Seq[TransactionValidationStatus]] = Future.sequence(cb.transactions.map { tx =>
-      Validation.validateTransaction(dao.dbActor, tx)
-    })
-    allTransactions.map { transactions: Seq[TransactionValidationStatus] =>
-      val validatedByTransactions = transactions.forall(_.validByCurrentState)
-      val validByAncestors = validByTransactionAncestors(transactions, cb)
-      val validByBatch = transactions.groupBy(_.transaction.src).filter { case (src, txs) =>
-        val batchTotal = txs.map(_.transaction.amount).sum
-        val currentBalance = 0 // Todo, check according to a ledger state and mempool if double spend, keep track of double spend votes and report back to conflict resolution
-        currentBalance + batchTotal >= 0
-      }
-      val doubleSpentTransactions = validByBatch.values
-      val isValid = validatedByTransactions && validByAncestors && doubleSpentTransactions.isEmpty
-      if (isValid) signFlow(dao, cb)
-      CheckpointValidationStatus(cb, isValid, doubleSpentTransactions)
+  def validateCheckpointBlock(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): CheckpointValidationStatus = {
+    val transactions = cb.transactions.map { tx => Validation.validateTransaction(dao.dbActor, tx) }
+    val validatedByTransactions = transactions.forall(_.validByCurrentState)
+    val validByAncestors = validByTransactionAncestors(transactions, cb)
+    val validByBatch = transactions.groupBy(_.transaction.src).filter { case (src, txs) =>
+      val batchTotal = txs.map(_.transaction.amount).sum
+      val currentBalance = 0 // Todo, check according to a ledger state and mempool if double spend, keep track of double spend votes and report back to conflict resolution
+      currentBalance + batchTotal >= 0
     }
+    val doubleSpentTransactions = validByBatch.values
+    val isValid = validatedByTransactions && validByAncestors && doubleSpentTransactions.isEmpty
+    if (isValid) signFlow(dao, cb)
+    CheckpointValidationStatus(cb, isValid, doubleSpentTransactions)
   }
 
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
@@ -94,16 +85,12 @@ object Validation {
     * @param tx : Resolved transaction
     * @return Future of whether or not the transaction should be considered valid
     * **/
-  def validateTransaction(dbActor: ActorRef, tx: Transaction)(implicit ec: ExecutionContext): Future[TransactionValidationStatus] = {
+  def validateTransaction(dbActor: KVDB, tx: Transaction): TransactionValidationStatus = {
 
     // A transaction should only be considered in the DAG once it has been committed to a checkpoint block.
     // Before that, it exists only in the memPool and is not stored in the database.
-    val txCache = (dbActor ? DBGet(tx.baseHash)).mapTo[Option[TransactionCacheData]] //.map{_.exists{_.inDAG}}
-    val addressCache = (dbActor ? DBGet(tx.src.hash)).mapTo[Option[AddressCacheData]] //.map(_.exists(_.balance >= tx.amount))
-    txCache.flatMap{ txc =>
-      addressCache.map{ ac =>
-        TransactionValidationStatus(tx, txc, ac)
-      }
-    }
+    val txCache = dbActor.getTransactionCacheData(tx.baseHash)
+    val addressCache = dbActor.getAddressCacheData(tx.src.hash)
+    TransactionValidationStatus(tx, txCache, addressCache)
   }
 }

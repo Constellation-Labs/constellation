@@ -2,13 +2,12 @@ package org.constellation.primitives
 
 import java.net.InetSocketAddress
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import org.constellation.primitives.Schema.{Id, LocalPeerData, Peer, PeerSyncHeartbeat}
 import org.constellation.util.{APIClient, Signed}
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
 import scala.concurrent.ExecutionContextExecutor
 
 trait PeerInfo {
@@ -32,7 +31,7 @@ trait PeerInfo {
       signedPeerIDLookup.get(id).map { p =>
         val a = p.data.externalHostString
    //     println("Updating api client send to hostname : " + a)
-        val client = new APIClient().setConnection(a, p.data.apiAddress.map{_.getPort}.getOrElse(9000))
+        val client = APIClient(a, p.data.apiAddress.map{_.getPort}.getOrElse(9000))
         rawPeerLookup(id) = LocalPeerData(client)
         client
 

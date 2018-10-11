@@ -1,9 +1,9 @@
 package org.constellation
 
 import java.net.InetSocketAddress
-import java.security.{KeyPair, PublicKey}
+import java.security.KeyPair
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, path, _}
@@ -13,29 +13,26 @@ import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromE
 import akka.pattern.ask
 import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
-import com.softwaremill.macmemo.memoize
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema._
-import org.constellation.primitives._
-import org.constellation.util.{Metrics, ServeUI}
+import org.constellation.primitives.{APIBroadcast, _}
+import org.constellation.util.ServeUI
 import org.json4s.native
 import org.json4s.native.Serialization
 import scalaj.http.HttpResponse
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id)
 
 class API(udpAddress: InetSocketAddress,
-          val data: Data = null,
-          cellManager: ActorRef)(implicit system: ActorSystem, val timeout: Timeout)
+          val data: Data = null)
+         (implicit system: ActorSystem, val timeout: Timeout)
   extends Json4sSupport
     with Wallet
     with ServeUI {
@@ -53,8 +50,9 @@ class API(udpAddress: InetSocketAddress,
 
   val config: Config = ConfigFactory.load()
 
-  val authId: String = config.getString("auth.id")
-  val authPassword: String = config.getString("auth.password")
+  private val authEnabled = config.getBoolean("auth.enabled")
+  private val authId: String = config.getString("auth.id")
+  private val authPassword: String = config.getString("auth.password")
 
   val getEndpoints: Route =
     extractClientIP { clientIP =>
@@ -111,10 +109,6 @@ class API(udpAddress: InetSocketAddress,
           path("nodeKeyPair") {
             complete(keyPair)
           } ~
-          // TODO: revisit
-          path("health") {
-            complete(StatusCodes.OK)
-          } ~
           path("peers") {
             val res = (data.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].getOpt().getOrElse(Map())
             complete(res)
@@ -152,8 +146,10 @@ class API(udpAddress: InetSocketAddress,
 
             val res = idMap.map{
               case (id, fut) =>
-                val maybeResponse = fut.getOpt()
-                id -> maybeResponse.exists{_.isSuccess}
+                val resp = fut.get()
+                id -> resp.isSuccess
+//                val maybeResponse = fut.getOpt()
+//                id -> maybeResponse.exists{_.isSuccess}
             }.toSeq
 
             complete(res)
@@ -238,12 +234,22 @@ class API(udpAddress: InetSocketAddress,
       }
     }
 
+  private val noAuthRoutes =
+    get {
+      // TODO: revisit
+      path("health") {
+        complete(StatusCodes.OK)
+      } ~
+      path("favicon.ico") {
+        getFromResource("favicon.ico")
+      }
+    }
 
-  private val routes: Route = cors() {
+  private val mainRoutes: Route = cors() {
     getEndpoints ~ postEndpoints ~ jsRequest ~ serveMainPage
   }
 
-  def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
+  private def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
     credentials match {
       case p @ Credentials.Provided(id)
         if id == authId && p.verify(authPassword) =>
@@ -252,6 +258,14 @@ class API(udpAddress: InetSocketAddress,
     }
   }
 
-  val authRoutes: Route = faviconRoute ~ routes
+  val routes = if (authEnabled) {
+    noAuthRoutes ~ authenticateBasic(realm = "secure site",
+      myUserPassAuthenticator) {
+      user =>
+        mainRoutes
+    }
+  } else {
+    noAuthRoutes ~ mainRoutes
+  }
 
 }

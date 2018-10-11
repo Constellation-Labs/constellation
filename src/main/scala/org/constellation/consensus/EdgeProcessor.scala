@@ -14,14 +14,10 @@ import org.constellation.consensus.EdgeProcessor.{HandleTransaction, _}
 import org.constellation.consensus.Validation.{TransactionValidationStatus, validateCheckpointBlock}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.{Random, Try}
-import akka.pattern.ask
-import akka.util.Timeout
-import org.constellation.LevelDB.DBGet
 import org.constellation.util.HashSignature
+
+import scala.concurrent.ExecutionContext
+import scala.util.Random
 
 object EdgeProcessor {
 
@@ -48,22 +44,21 @@ object EdgeProcessor {
   def handleCheckpoint(cb: CheckpointBlock,
                        dao: Data,
                        internalMessage: Boolean = false)(implicit executionContext: ExecutionContext): Unit = {
-    if (!internalMessage) {
-      dao.metricsManager ! IncrementMetric("checkpointMessages")
-    } else {
+    if (!internalMessage) dao.metricsManager ! IncrementMetric("checkpointMessages")
+    else dao.metricsManager ! IncrementMetric("internalCheckpointMessages")
+
+    val previousCacheData = dao.dbActor.getCheckpointCacheData(cb.baseHash)
+    if (previousCacheData.exists(_.inDAG)) {
       dao.metricsManager ! IncrementMetric("internalCheckpointMessages")
+      return
     }
 
-    val resolutionStatus = ResolutionService.resolveCheckpoint(dao, cb)
+    val resolutionStatus: ResolutionService.ResolutionStatus = ResolutionService.resolveCheckpoint(dao, cb)
+    val validationStatus: Validation.CheckpointValidationStatus = validateCheckpointBlock(dao, cb)
 
-    val validationStatus: Future[Future[Validation.CheckpointValidationStatus]] =
-      resolutionStatus.map(resStatus => validateCheckpointBlock(dao, resStatus.cb))
-
-    if (validationStatus.get().get().isValid) {
-      val checkpointCacheData = dao.hashToCheckpointCacheData(resolutionStatus.get().cb.baseHash).get()
-
-      if (checkpointCacheData.nonEmpty) {
-        handleConflictingCheckpoint(checkpointCacheData.get, cb, dao)
+    if (validationStatus.isValid) {
+      if (previousCacheData.nonEmpty) {
+        handleConflictingCheckpoint(previousCacheData.get, cb, dao)
       } else {
         cb.store(dao.dbActor, CheckpointCacheData(cb, soeHash = cb.soeHash), true)
       }
@@ -263,9 +258,7 @@ object EdgeProcessor {
     // in event where a new signature is being made by another peer it's most likely still valid, should
     // cache the results of this somewhere.
 
-    val validationResult = Validation.validateTransaction(dao.dbActor, tx)
-
-    val finished = Await.result(validationResult, 90.seconds)
+    val finished = Validation.validateTransaction(dao.dbActor, tx)
 
     finished match {
       // TODO : Increment metrics here for each case
@@ -422,7 +415,8 @@ object EdgeProcessor {
     * @return Maybe updated transaction
     */
   def updateWithSelfSignatureEmit(tx: Transaction, dao: Data): Transaction = {
-    val txPrime = if (!tx.signatures.exists(_.publicKey == dao.keyPair.getPublic)) {
+    val sigExists = tx.signatures.exists(_.publicKey == dao.keyPair.getPublic)
+    val txPrime = if (!sigExists) {
       // We haven't yet signed this TX
       val tx2 = tx.plus(dao.keyPair)
       dao.metricsManager ! IncrementMetric("signaturesPerformed")
@@ -468,22 +462,14 @@ object EdgeProcessor {
   }
 
   def lookupEdge(dao: Data, soeHash: String): EdgeResponse = {
+    val cacheOpt = dao.dbActor.getSignedObservationEdgeCache(soeHash)
 
-   val result = Try{
-     (dao.dbActor ? DBGet(soeHash)).mapTo[Option[SignedObservationEdgeCache]].get(t=5)
-   }.toOption
-
-   val resWithCBOpt = result.map{
-     cacheOpt =>
-      val cbOpt = cacheOpt.flatMap{ c =>
-        (dao.dbActor ? DBGet(c.signedObservationEdge.baseHash)).mapTo[Option[CheckpointCacheData]].get(t=5)
-         // .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
-      }
-
-      EdgeResponse(cacheOpt, cbOpt)
+    val cbOpt = cacheOpt.flatMap { c =>
+      dao.dbActor.getCheckpointCacheData(c.signedObservationEdge.baseHash)
+        .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
     }
 
-    resWithCBOpt.getOrElse(EdgeResponse())
+    EdgeResponse(cacheOpt, cbOpt)
   }
 
 }
