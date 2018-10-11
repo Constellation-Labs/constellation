@@ -15,27 +15,16 @@ class CheckpointProcessorTest extends ProcessorTest {
 
   val bogusTxValidStatus = TransactionValidationStatus(tx, None, None)
   val ced = CheckpointEdgeData(Seq(tx.edge.signedObservationEdge.signatureBatch.hash))
-
   val oe = ObservationEdge(
     TypedEdgeHash(tx.baseHash, EdgeHashType.CheckpointHash),
     TypedEdgeHash(tx.baseHash, EdgeHashType.CheckpointHash),
     data = Some(TypedEdgeHash(ced.hash, EdgeHashType.CheckpointDataHash))
   )
-
   val soe = signedObservationEdge(oe)(keyPair)
   val cb = Fixtures.createCheckpointBlock(Seq.fill(3)(tx), Seq.fill(2)(soe))(keyPair)
   val baseHash = cb.baseHash
 
-  dbActor.setAutoPilot(new TestActor.AutoPilot {
-    def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
-      case DBGet(`baseHash`) =>
-        sender ! Some(CheckpointCacheData(cb, true))
-        TestActor.KeepRunning
-      case _ =>
-        sender ! None
-        TestActor.KeepRunning
-    }
-  })
+  data.dbActor.putCheckpointCacheData(cb.baseHash, CheckpointCacheData(cb, true))
 
   "Incoming CheckpointBlocks" should "be signed and processed if new" in {
     EdgeProcessor.handleCheckpoint(cb, data)

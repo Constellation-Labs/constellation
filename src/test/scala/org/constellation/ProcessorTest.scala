@@ -29,6 +29,7 @@ trait ProcessorTest extends AsyncFlatSpec {
 
   val data = makeDao(mockData)
   val tx: Transaction = dummyTx(data)
+  val tx2: Transaction = dummyTx(data, 3L)
   val invalidTx = dummyTx(data, -1L)
   val srcHash = tx.src.hash
   val txHash = tx.hash
