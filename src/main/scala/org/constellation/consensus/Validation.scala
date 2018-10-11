@@ -5,26 +5,62 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
+import org.constellation.Data
 import org.constellation.LevelDB.DBGet
+import org.constellation.consensus.EdgeProcessor.signFlow
 import org.constellation.primitives.Schema
-import org.constellation.primitives.Schema.{AddressCacheData, Transaction, TransactionCacheData}
+import org.constellation.primitives.Schema.{AddressCacheData, CheckpointBlock, Transaction, TransactionCacheData}
 
 import scala.concurrent.{ExecutionContext, Future}
 
 object Validation {
 
-  def validateCheckpoint(
-                          dbActor: ActorRef,
-                          cb: Schema.CheckpointBlock
-                        )(implicit ec: ExecutionContext): Future[CheckpointValidationStatus] = {
-    Future{CheckpointValidationStatus()}
+  /**
+    *
+    * @param transactions
+    * @param cb
+    * @return
+    */
+  def validByTransactionAncestors(transactions: Seq[TransactionValidationStatus], cb: CheckpointBlock): Boolean =
+    transactions.nonEmpty && transactions.forall { s: TransactionValidationStatus =>
+      cb.checkpoint.edge.parentHashes.forall { ancestorHash =>
+        s.validByAncestor(ancestorHash)
+      }
+    }
+
+  /**
+    *
+    * @param dao
+    * @param cb
+    * @param executionContext
+    * @return
+    */
+  def validateCheckpointBlock(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): Future[CheckpointValidationStatus] = {
+    val allTransactions: Future[Seq[TransactionValidationStatus]] = Future.sequence(cb.transactions.map { tx =>
+      Validation.validateTransaction(dao.dbActor, tx)
+    })
+    allTransactions.map { transactions: Seq[TransactionValidationStatus] =>
+      val validatedByTransactions = transactions.forall(_.validByCurrentState)
+      val validByAncestors = validByTransactionAncestors(transactions, cb)
+      val validByBatch = transactions.groupBy(_.transaction.src).filter { case (src, txs) =>
+        val batchTotal = txs.map(_.transaction.amount).sum
+        val currentBalance = 0 // Todo, check according to a ledger state and mempool if double spend, keep track of double spend votes and report back to conflict resolution
+        currentBalance + batchTotal >= 0
+      }
+      val doubleSpentTransactions = validByBatch.values
+      val isValid = validatedByTransactions && validByAncestors && doubleSpentTransactions.isEmpty
+      if (isValid) signFlow(dao, cb)
+      CheckpointValidationStatus(cb, isValid, doubleSpentTransactions)
+    }
   }
 
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
   // TODO : Add an LRU cache for looking up TransactionCacheData instead of pure LDB calls.
 
-  case class CheckpointValidationStatus(
+  case class CheckpointValidationStatus(cp: CheckpointBlock,
+                                        isValid: Boolean,
+                                        invalidTxs: Iterable[Seq[TransactionValidationStatus]]
                                         )
 
   case class TransactionValidationStatus(

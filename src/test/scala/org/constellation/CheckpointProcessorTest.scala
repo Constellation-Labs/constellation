@@ -1,69 +1,17 @@
 package org.constellation
 
-import java.security.KeyPair
-
-import akka.actor.{ActorRef, ActorSystem}
-import akka.stream.ActorMaterializer
-import akka.testkit.{TestActor, TestProbe}
+import akka.actor.ActorRef
+import akka.testkit.TestActor
 import constellation.signedObservationEdge
-import org.constellation.Fixtures.{addPeerRequest, dummyTx, id}
 import org.constellation.LevelDB.DBGet
-import org.constellation.consensus.EdgeProcessor
 import org.constellation.consensus.Validation.TransactionValidationStatus
-import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.{APIBroadcast, IncrementMetric, PeerData}
+import org.constellation.consensus.{EdgeProcessor, Validation}
+import org.constellation.primitives.IncrementMetric
 import org.constellation.primitives.Schema._
-import org.constellation.util.APIClient
-import org.scalatest.FlatSpec
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.Future
 
-class CheckpointProcessorTest extends FlatSpec {
-  implicit val system: ActorSystem = ActorSystem("CheckpointProcessorTest")
-  implicit val materialize: ActorMaterializer = ActorMaterializer()
-  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
-
-  val keyPair: KeyPair = KeyUtils.makeKeyPair()
-  val peerData = PeerData(addPeerRequest, getAPIClient("", 1))
-  val peerManager = TestProbe()
-  val metricsManager = TestProbe()
-  val dbActor = TestProbe()
-  dbActor.setAutoPilot(new TestActor.AutoPilot {
-    def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
-      case DBGet(`baseHash`) =>
-        sender ! Some(CheckpointCacheData(cb, true, soeHash = cb.soeHash))
-        TestActor.KeepRunning
-      case _ =>
-        sender ! None
-        TestActor.KeepRunning
-    }
-  })
-
-  val mockData = new Data
-  mockData.updateKeyPair(keyPair)
-
-  def makeDao(mockData: Data, peerManager: TestProbe = peerManager, metricsManager: TestProbe = metricsManager,
-              dbActor: TestProbe = dbActor) = {
-    mockData.actorMaterializer = materialize
-    mockData.dbActor = dbActor.testActor
-    mockData.metricsManager = metricsManager.testActor
-    mockData.peerManager = peerManager.testActor
-    mockData
-  }
-  val data = makeDao(mockData)
-  val tx: Transaction = dummyTx(data)
-  val invalidTx = dummyTx(data, -1L)
-  val srcHash = tx.src.hash
-  val txHash = tx.hash
-  val invalidSpendHash = invalidTx.hash
-  val randomPeer: (Id, PeerData) = (id, peerData)
-
-  def getAPIClient(hostName: String, httpPort: Int) = {
-    val api = new APIClient().setConnection(host = hostName, port = httpPort)
-    api.id = id
-    api.udpPort = 16180
-    api
-  }
+class CheckpointProcessorTest extends ProcessorTest {
 
   val bogusTxValidStatus = TransactionValidationStatus(tx, None, None)
   val ced = CheckpointEdgeData(Seq(tx.edge.signedObservationEdge.signatureBatch.hash))
@@ -78,44 +26,50 @@ class CheckpointProcessorTest extends FlatSpec {
   val cb = Fixtures.createCheckpointBlock(Seq.fill(3)(tx), Seq.fill(2)(soe))(keyPair)
   val baseHash = cb.baseHash
 
+  dbActor.setAutoPilot(new TestActor.AutoPilot {
+    def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
+      case DBGet(`baseHash`) =>
+        sender ! Some(CheckpointCacheData(cb, true, soeHash = cb.soeHash))
+        TestActor.KeepRunning
+      case _ =>
+        sender ! None
+        TestActor.KeepRunning
+    }
+  })
+
   "Incoming CheckpointBlocks" should "be signed and processed if new" in {
     EdgeProcessor.handleCheckpoint(cb, data)
     metricsManager.expectMsg(IncrementMetric("checkpointMessages"))
+    assert( true )
   }
 
   "Previously observed CheckpointBlocks" should "indicate to metricsManager" in {
-    metricsManager.expectMsg(IncrementMetric("dupCheckpointReceived"))
+    EdgeProcessor.handleCheckpoint(cb, data, true)
+    metricsManager.expectMsg(IncrementMetric("internalCheckpointMessages"))
+    assert( true )
   }
 
   "Invalid CheckpointBlocks" should "return false" in {
-    val validatedCheckpointBlock = EdgeProcessor.validateCheckpointBlock(data, cb)
-    validatedCheckpointBlock.foreach(response => assert(!response))
+    val validatedCheckpointBlock: Future[Validation.CheckpointValidationStatus] = Validation.validateCheckpointBlock(data, cb)
+    validatedCheckpointBlock.map(response => assert(!response.isValid))
   }
 
-
   "CheckpointBlocks invalid by ancestry" should "return false" in {
-    assert(!EdgeProcessor.validByTransactionAncestors(Seq(), cb))
+    assert(!Validation.validByTransactionAncestors(Seq(), cb))
   }
 
   "CheckpointBlocks invalid by state" should "return false" in {
-    val validatedCheckpointBlock = EdgeProcessor.validateCheckpointBlock(data, cb)
-    validatedCheckpointBlock.foreach(response => assert(!response))
+    val validatedCheckpointBlock = Validation.validateCheckpointBlock(data, cb)
+    validatedCheckpointBlock.map(response => assert(!response.isValid))
   }
-
-  "CheckpointBlocks valid according to current state" should "be signed and returned if valid" in {
-//      val signedCb = cb.plus(data.keyPair)
-//      peerManager.expectMsg(APIBroadcast(_.put(s"checkpoint/${cb.baseHash}", signedCb)))
-  }
-
 
   "hashToSignedObservationEdgeCache" should "return SignedObservationEdgeCache" in {
     val res = data.hashToSignedObservationEdgeCache(cb.baseHash)
-    res.foreach(response => assert(response.isDefined))
-
+    res.map(response => assert(response.isDefined))
   }
 
   "hashToCheckpointCacheData" should "return CheckpointCacheData" in {
     val res = data.hashToCheckpointCacheData(cb.baseHash)
-    res.foreach(response => assert(response.isDefined))
+    res.map(response => assert(response.isDefined))
   }
 }

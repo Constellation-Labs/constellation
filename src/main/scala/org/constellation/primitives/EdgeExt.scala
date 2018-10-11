@@ -8,30 +8,28 @@ import org.constellation.primitives.Schema.{CheckpointBlock, CheckpointCacheData
 import constellation._
 import org.constellation.Data
 import akka.pattern.ask
+import org.constellation.consensus.EdgeProcessor
 
 import scala.concurrent.Future
 
 trait EdgeExt extends NodeData with Ledger with MetricsExt with PeerInfo with EdgeDAO {
 
-  // TODO: Need to include signatories ABOVE this checkpoint block later in the case of signature decay.
-  def attemptResolveIndividual(cb: CheckpointBlock, h: String) = {
+  def queryMissingResolutionData(h: String, signers: Set[Schema.Id]) = {
     implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
-    cb.signatures.map{_.toId}
-
     peerManager ? APIBroadcast({
       apiClient =>
         apiClient.get("edge/" + h)
-    })
+    }, peerSubset = signers)
   }
+
+  def addToSnapshotRelativeTips(cb: CheckpointBlock) = snapshotRelativeTips + cb
 
   def markParentsUnresolved(missingParentHash: String, cb: CheckpointBlock) =
     resolveNotifierCallbacks.get(missingParentHash) match {
-        case Some(cbs) =>
-          if (!cbs.contains(cb)) {
+        case Some(cbs) if !cbs.contains(cb) =>
             resolveNotifierCallbacks(missingParentHash) :+= cb
-          }
         case None =>
-          attemptResolveIndividual(cb, missingParentHash)
+          queryMissingResolutionData(missingParentHash, cb.signatures.map{_.toId}.toSet)
           resolveNotifierCallbacks(missingParentHash) = Seq(cb)
       }
 

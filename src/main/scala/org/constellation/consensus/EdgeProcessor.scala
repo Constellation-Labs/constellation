@@ -4,24 +4,23 @@ import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
-import org.constellation.Data
-import org.constellation.LevelDB.{DBGet, DBPut, DBUpdate}
-import org.constellation.primitives.Schema._
 import akka.pattern.ask
-import Validation.TransactionValidationStatus
 import akka.util.Timeout
-import EdgeProcessor.{HandleTransaction, signFlow, validByTransactionAncestors, _}
 import com.typesafe.scalalogging.Logger
-import org.constellation.consensus.Consensus._
-import org.constellation.consensus.EdgeProcessor.HandleTransaction
-import org.constellation.primitives._
 import constellation._
+import org.constellation.Data
+import org.constellation.consensus.Consensus._
+import org.constellation.consensus.EdgeProcessor.{HandleTransaction, _}
+import org.constellation.consensus.Validation.{TransactionValidationStatus, validateCheckpointBlock}
+import org.constellation.primitives.Schema._
+import org.constellation.primitives._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Random, Try}
 import akka.pattern.ask
 import akka.util.Timeout
+import org.constellation.LevelDB.DBGet
 import org.constellation.util.HashSignature
 
 object EdgeProcessor {
@@ -35,37 +34,6 @@ object EdgeProcessor {
 
   val logger = Logger(s"EdgeProcessor")
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
-
-  def resolveTxAncestryConflict = {}
-  //Todo recurse down ancestors until snapshot. As we iterate, we choose ancestors that have the
-  // the most optimal transaction overlap.
-
-  def validateByAncestorTips = {}//Todo recurse through same tree used in conflict resolution. Check the SOE's are valid. Recurse till Snapshot.
-
-  def validByTransactionAncestors(transactions: Seq[TransactionValidationStatus], cb: CheckpointBlock): Boolean =
-    transactions.nonEmpty && transactions.forall { s: TransactionValidationStatus =>
-      cb.checkpoint.edge.parentHashes.forall { ancestorHash =>
-        s.validByAncestor(ancestorHash)
-    }
-  }
-
-  def validateCheckpointBlock(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): Future[Boolean] = {
-    val allTransactions: Future[Seq[TransactionValidationStatus]] = Future.sequence(cb.transactions.map { tx =>
-      Validation.validateTransaction(dao.dbActor, tx)
-      })
-    val isValidated = allTransactions.map { transactions =>
-      val validatedByTransactions = transactions.forall(_.validByCurrentState)
-      val validByAncestors = validByTransactionAncestors(transactions, cb)
-      val validByAncestorTips = validateByAncestorTips
-      val isValid = validatedByTransactions && validByAncestors
-      //TODO: Validate the checkpoint to see if any there are any duplicate transactions
-      //Todo we also need a batch transaction validator, i.e. take cpb, take all tx, group by source address, sum ammts per address (reducebykey) then query balance
-      if (isValid)
-        signFlow(dao, cb)
-        isValid
-    }
-    isValidated
-  }
 
   def signFlow(dao: Data, cb: CheckpointBlock): Unit = {
     // Mock
@@ -86,32 +54,19 @@ object EdgeProcessor {
       dao.metricsManager ! IncrementMetric("internalCheckpointMessages")
     }
 
-    val potentialChildren: Option[Seq[CheckpointBlock]] = dao.resolveNotifierCallbacks.get(cb.soeHash)
+    val resolutionStatus = ResolutionService.resolveCheckpoint(dao, cb)
 
-    val cache: Future[Option[CheckpointCacheData]] = dao.hashToCheckpointCacheData(cb.baseHash)
+    val validationStatus: Future[Future[Validation.CheckpointValidationStatus]] =
+      resolutionStatus.map(resStatus => validateCheckpointBlock(dao, resStatus.cb))
 
-    val parentCache = Future.sequence(cb.checkpoint.edge.parentHashes
-      .map { h => dao.hashToSignedObservationEdgeCache(h).map{h -> _} }
-    )
+    if (validationStatus.get().get().isValid) {
+      val checkpointCacheData = dao.hashToCheckpointCacheData(resolutionStatus.get().cb.baseHash).get()
 
-    cache.foreach {
-      case Some(checkpointCacheData) => handleConflictingCheckpoint(checkpointCacheData, cb, dao)
-      case None =>
-        Resolve.resolveCheckpoint(dao, cb).map { r =>
-          if (r) {
-
-            dao.metricsManager ! IncrementMetric("resolvedCheckpointMessages")
-
-            validateCheckpointBlock(dao, cb).foreach( {
-              if (_) {
-                signFlow(dao, cb)
-              }
-            })
-          }
-          else {
-            dao.metricsManager ! IncrementMetric("unresolvedCheckpointMessages")
-          }
-        }
+      if (checkpointCacheData.nonEmpty) {
+        handleConflictingCheckpoint(checkpointCacheData.get, cb, dao)
+      } else {
+        cb.store(dao.dbActor, CheckpointCacheData(cb, soeHash = cb.soeHash), true)
+      }
     }
   }
 

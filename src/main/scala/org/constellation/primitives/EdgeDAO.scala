@@ -32,9 +32,6 @@ trait EdgeDAO {
   // Map from checkpoint hash to number of times used as a tip (number of children)
   val checkpointMemPoolThresholdMet: TrieMap[String, (CheckpointBlock, Int)] = TrieMap()
 
-
-  val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
-
   val edgeExecutionContext: ExecutionContextExecutor =
 
     ExecutionContext.fromExecutor(Executors.newFixedThreadPool(20))
@@ -48,4 +45,17 @@ trait EdgeDAO {
   // Temporary to get peer data for tx hash partitioning
   @volatile var peerInfo: Map[Id, PeerData] = Map()
 
+
+  /**
+    * Storage for cb missing ancestors. Hash of soe to every checkpoint that depends upon it
+    */
+  val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
+
+  var snapshotRelativeTips: Set[CheckpointBlock] = Set()
+
+  val branches: TrieMap[String, CheckpointBlock] = TrieMap()
+
+  @volatile var stateBranchTip: String = ""
+
+  var snapshot: Option[CheckpointBlock] = genesisObservation.map(_.genesis)//todo unbreak things
 }
