@@ -1,15 +1,10 @@
 package org.constellation
 
-import akka.actor.ActorRef
-import akka.testkit.TestActor
 import constellation.signedObservationEdge
-import org.constellation.LevelDB.DBGet
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.consensus.{EdgeProcessor, Validation}
 import org.constellation.primitives.IncrementMetric
 import org.constellation.primitives.Schema._
-
-import scala.concurrent.Future
 
 class CheckpointProcessorTest extends ProcessorTest {
 

@@ -34,7 +34,7 @@ class ResolutionServiceTest extends ProcessorTest {
       assert(!data.snapshotRelativeTips.contains(parentCb))
   }
   "CheckpointBlocks that are ahead" should "query the signers" in {
-    data.dbActor.updateSignedObservationEdgeCache(bogusSoe.hash, _.copy(resolved = false), SignedObservationEdgeCache(soe, true))
+    data.dbActor.updateSignedObservationEdgeCache(bogusSoe.hash, _.copy(resolved = false), SignedObservationEdgeCache(bogusSoe, true))
     val msg = APIBroadcast({ apiClient =>
       apiClient.get("edge/" + bogusCb.baseHash)
     }, peerSubset = bogusCb.signatures.map {
