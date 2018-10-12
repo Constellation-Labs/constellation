@@ -7,7 +7,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{TestActor, TestKit, TestProbe}
 import akka.util.Timeout
 import org.constellation.crypto.KeyUtils
-import org.constellation.{Data, LevelDBActor}
+import org.constellation.{Data, LevelDBActor, ProcessorTest}
 import org.constellation.Fixtures._
 import org.constellation.LevelDB.DBGet
 import org.constellation.consensus.EdgeProcessor.LookupEdge
@@ -16,21 +16,19 @@ import org.constellation.util.{SignatureBatch, Signed}
 import org.scalatest.{FlatSpec, FlatSpecLike}
 import org.constellation.util.SignHelp._
 
-class EdgeProcessorTest extends TestKit(ActorSystem("EdgeProcessorTest")) with FlatSpecLike {
+class EdgeProcessorTest extends ProcessorTest {
 
   "The handleConflictingCheckpoint method" should "handle conflicting checkpointBlocks" in {
 
     val metricsManager = TestProbe()
 
-    val dao = new Data()
+    val dao = data
 
     implicit val timeout: Timeout = Timeout(30, TimeUnit.SECONDS)
 
     val dbActor = TestProbe()
 
     val edgeProcessor = TestProbe()
-
-    dao.dbActor = dbActor.ref
 
     dao.edgeProcessor = edgeProcessor.ref
 

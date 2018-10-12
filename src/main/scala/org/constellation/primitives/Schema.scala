@@ -378,7 +378,7 @@ object Schema {
       )
     }
 
-    def updateParentsChildRefs(edgeProcessor: ActorRef, dbActor: ActorRef)(implicit timeout: Timeout): Seq[CheckpointCacheData] = {
+    def updateParentsChildRefs(edgeProcessor: ActorRef, dbActor: KVDB)(implicit timeout: Timeout): Seq[CheckpointCacheData] = {
       import constellation._
 
       val parentEdges: Seq[Option[EdgeResponse]] = checkpointBlock.parentSOE.map(p => {
@@ -400,7 +400,7 @@ object Schema {
       updates
     }
 
-    @tailrec final def getChildrenSignatures(dbActor: ActorRef,
+    @tailrec final def getChildrenSignatures(dbActor: KVDB,
                               edgeProcessor: ActorRef,
                               signatures: Set[HashSignature] = Set(),
                               children: Set[String] = children)(implicit timeout: Timeout): Set[HashSignature] = {

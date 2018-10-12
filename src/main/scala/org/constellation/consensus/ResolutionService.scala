@@ -94,7 +94,7 @@ object ResolutionService {
     val isResolved = unresolvedParents.isEmpty
     val children = dao.resolveNotifierCallbacks.get(cb.baseHash)
     val unresolvedChildren = children.map(isUnresolved(dao, _))
-    val checkpointCacheData = CheckpointCacheData(cb, resolved = isResolved, children = children.getOrElse(Seq()).map(_.baseHash).toSet)//Todo change type on children, this is gross
+    val checkpointCacheData = CheckpointCacheData(cb, resolved = isResolved, children = children.getOrElse(Seq()).map(_.baseHash).toSet, soeHash = cb.soeHash)//Todo change type on children, this is gross
 
     if (!isResolved) unresolvedParents.foreach { case (h, qR) => reprocessUnresolvedParents(dao, cb)(h, qR) }
     unresolvedChildren.foreach(reprocessUnresolvedChildren(dao, _))

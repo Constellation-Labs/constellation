@@ -8,7 +8,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.Data
+import org.constellation.{Data, KVDB}
 import org.constellation.consensus.Consensus._
 import org.constellation.consensus.EdgeProcessor.{HandleTransaction, _}
 import org.constellation.consensus.Validation.{TransactionValidationStatus, validateCheckpointBlock}
@@ -65,7 +65,7 @@ object EdgeProcessor {
     }
   }
 
-  def updateActiveCheckpointBlock(dbActor: ActorRef, updatedCheckpointCacheData: CheckpointCacheData): Unit = {
+  def updateActiveCheckpointBlock(dbActor: KVDB, updatedCheckpointCacheData: CheckpointCacheData): Unit = {
     val uccd = updatedCheckpointCacheData.copy(soeHash = updatedCheckpointCacheData.checkpointBlock.soeHash)
     uccd.checkpointBlock.store(dbActor, uccd, uccd.resolved)
   }
