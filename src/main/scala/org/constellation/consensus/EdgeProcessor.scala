@@ -37,32 +37,37 @@ object EdgeProcessor {
     val cbPrime = updateCheckpointWithSelfSignatureEmit(cb, dao)
     // Add to memPool or update an existing hash with new signatures and check for signature threshold
     updateCheckpointMergeMemPool(cbPrime, dao)
-
     attemptFormCheckpointUpdateState(dao)
   }
 
+  /**
+    *
+    * @param cb
+    * @param dao
+    * @param internalMessage
+    * @param executionContext
+    */
   def handleCheckpoint(cb: CheckpointBlock,
                        dao: Data,
                        internalMessage: Boolean = false)(implicit executionContext: ExecutionContext): Unit = {
     if (!internalMessage) dao.metricsManager ! IncrementMetric("checkpointMessages")
     else dao.metricsManager ! IncrementMetric("internalCheckpointMessages")
+    val existingCacheData = dao.dbActor.getCheckpointCacheData(cb.baseHash)
 
-    val previousCacheData = dao.dbActor.getCheckpointCacheData(cb.baseHash)
-    if (previousCacheData.exists(_.inDAG)) {
-      dao.metricsManager ! IncrementMetric("internalCheckpointMessages")
-      return
-    }
+    if (existingCacheData.exists(_.inDAG)) return //already committed to snapshot
+    else {
+      val resolutionStatus: Option[ResolutionService.ResolutionStatus] = existingCacheData.flatMap(ResolutionService.resolveCheckpoint(dao, _))
+      val validationStatus: Option[Validation.CheckpointValidationStatus] = resolutionStatus.map(resStat => Validation.validateCheckpointBlock(dao, resStat.cb.checkpointBlock))
 
-    val resolutionStatus: ResolutionService.ResolutionStatus = ResolutionService.resolveCheckpoint(dao, cb)
-    val validationStatus: Validation.CheckpointValidationStatus = validateCheckpointBlock(dao, cb)
-
-    if (validationStatus.isValid) {
-      if (previousCacheData.nonEmpty) {
-        handleConflictingCheckpoint(previousCacheData.get, cb, dao)
-      } else {
-        cb.store(dao.dbActor, CheckpointCacheData(cb, soeHash = cb.soeHash), true)
+      if (validationStatus.get.isValid) {
+        if (existingCacheData.nonEmpty) {
+          handleConflictingCheckpoint(existingCacheData.get, cb, dao)
+        } else {
+          cb.store(dao.dbActor, CheckpointCacheData(cb, soeHash = cb.soeHash), true)
+        }
       }
     }
+
   }
 
   def updateActiveCheckpointBlock(dbActor: KVDB, updatedCheckpointCacheData: CheckpointCacheData): Unit = {
@@ -466,7 +471,7 @@ object EdgeProcessor {
 
     val cbOpt = cacheOpt.flatMap { c =>
       dao.dbActor.getCheckpointCacheData(c.signedObservationEdge.baseHash)
-        .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
+       // .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
     }
 
     EdgeResponse(cacheOpt, cbOpt)

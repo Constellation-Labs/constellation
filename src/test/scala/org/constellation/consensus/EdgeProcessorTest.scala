@@ -82,28 +82,13 @@ class EdgeProcessorTest extends ProcessorTest {
     val childBaseHash = childCheckpoint.baseHash
     val childSoeHash = childCheckpoint.soeHash
 
-    dbActor.setAutoPilot(new TestActor.AutoPilot {
-      def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
-        case DBGet(`cpHash`) =>
-          sender ! Some(cpcd.checkpointBlock.resolvedOE)
-          TestActor.KeepRunning
-        case DBGet(`ccHash`) =>
-          sender ! Some(SignedObservationEdgeCache(SignedObservationEdge(SignatureBatch(baseHash, Seq()))))
-          TestActor.KeepRunning
-        case DBGet(`baseHash`) =>
-          sender ! Some(cccd)
-          TestActor.KeepRunning
-        case DBGet(`childSoeHash`) =>
-          sender ! Some(SignedObservationEdgeCache(SignedObservationEdge(SignatureBatch(childBaseHash, Seq()))))
-          TestActor.KeepRunning
-        case DBGet(`childBaseHash`) =>
-          sender ! Some(childCheckpointCache)
-          TestActor.KeepRunning
-        case _ =>
-          sender ! None
-          TestActor.KeepRunning
-      }
-    })
+    dao.dbActor.putSignedObservationEdgeCache(ccHash, SignedObservationEdgeCache(SignedObservationEdge(SignatureBatch(baseHash, Seq()))))
+
+    dao.dbActor.putSignedObservationEdgeCache(childSoeHash, SignedObservationEdgeCache(SignedObservationEdge(SignatureBatch(childBaseHash, Seq()))))
+
+    dao.dbActor.putCheckpointCacheData(baseHash, cccd)
+
+    dao.dbActor.putCheckpointCacheData(childBaseHash, childCheckpointCache)
 
     edgeProcessor.setAutoPilot(new TestActor.AutoPilot {
       def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {

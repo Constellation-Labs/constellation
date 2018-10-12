@@ -84,4 +84,15 @@ object Fixtures {
 
     CheckpointBlock(transactions, checkpointEdge)
   }
+
+  def getSignedObservationEdge(tx: Transaction, keyPair: KeyPair) = {
+    val ced = CheckpointEdgeData(Seq(tx.edge.signedObservationEdge.signatureBatch.hash))
+    val oe = ObservationEdge(
+      TypedEdgeHash(tx.baseHash, EdgeHashType.CheckpointHash),
+      TypedEdgeHash(tx.baseHash, EdgeHashType.CheckpointHash),
+      data = Some(TypedEdgeHash(ced.hash, EdgeHashType.CheckpointDataHash))
+    )
+    val soe: SignedObservationEdge = signedObservationEdge(oe)(keyPair)
+    soe
+  }
 }

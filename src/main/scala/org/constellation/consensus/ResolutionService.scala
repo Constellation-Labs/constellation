@@ -48,7 +48,7 @@ object ResolutionService {
     * @param dao
     * @param cb
     */
-  def reprocessUnresolvedParents(dao: Data, cb: CheckpointBlock): (String, Option[SignedObservationEdgeCache]) => Unit = {
+  def reprocessUnresolvedParents(dao: Data, cb: CheckpointBlock): (String, Option[SignedObservationEdgeCache]) => Unit = {//Todo test me
     case (missingParentHash: String, queryResult: Option[SignedObservationEdgeCache]) =>
       if (queryResult.isEmpty) downloadAncestry(dao, cb)
       dao.markParentsUnresolved(missingParentHash, cb)
@@ -89,17 +89,21 @@ object ResolutionService {
     * @param executionContext
     * @return
     */
-  def resolveCheckpoint(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): ResolutionStatus = {
-    val (unresolvedParents, resolvedParents) = partitionByParentsResolved(dao, cb)
-    val isResolved = unresolvedParents.isEmpty
-    val children = dao.resolveNotifierCallbacks.get(cb.baseHash)
+  def resolveCheckpoint(dao: Data, checkpointCache: CheckpointCacheData)(implicit executionContext: ExecutionContext): Option[ResolutionStatus] = {
+    val children = dao.resolveNotifierCallbacks.get(checkpointCache.checkpointBlock.baseHash)
     val unresolvedChildren = children.map(isUnresolved(dao, _))
-    val checkpointCacheData = CheckpointCacheData(cb, resolved = isResolved, children = children.getOrElse(Seq()).map(_.baseHash).toSet, soeHash = cb.soeHash)//Todo change type on children, this is gross
+    if (!checkpointCache.resolved) {
+      val (unresolvedParents, resolvedParents) = partitionByParentsResolved(dao, checkpointCache.checkpointBlock)
+      val isResolved = unresolvedParents.isEmpty
+      val checkpointCacheData = CheckpointCacheData(checkpointCache.checkpointBlock, resolved = isResolved, children = children.getOrElse(Seq()).map(_.baseHash).toSet, soeHash = checkpointCache.checkpointBlock.soeHash)//Todo change type on children, this is gross
+      if (!isResolved) unresolvedParents.foreach { case (h, qR) => reprocessUnresolvedParents(dao, checkpointCache.checkpointBlock)(h, qR) }
 
-    if (!isResolved) unresolvedParents.foreach { case (h, qR) => reprocessUnresolvedParents(dao, cb)(h, qR) }
-    unresolvedChildren.foreach(reprocessUnresolvedChildren(dao, _))
-    cb.storeResolution(dao.dbActor, checkpointCacheData)
+      checkpointCache.checkpointBlock.storeResolution(dao.dbActor, checkpointCacheData)
+      Some(ResolutionStatus(checkpointCacheData, unresolvedParents, resolvedParents))
+    } else {
 
-    ResolutionStatus(checkpointCacheData, unresolvedParents, resolvedParents)
+      unresolvedChildren.foreach(reprocessUnresolvedChildren(dao, _))
+      None
+    }
   }
 }
