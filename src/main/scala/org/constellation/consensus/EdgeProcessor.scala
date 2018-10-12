@@ -84,6 +84,8 @@ object EdgeProcessor {
       mostRecentCheckpointCacheData
     }
 
+    updateActiveCheckpointBlock(dao.dbActor, checkpointBlock)
+
     checkpointBlock
   }
 
@@ -101,7 +103,6 @@ object EdgeProcessor {
       mostRecentCheckpointCacheData.getChildrenSignatures(dao.dbActor, dao.edgeProcessor)
 
     if (mostRecentSignatures.size > previousSignatures.size) {
-      updateActiveCheckpointBlock(dao.dbActor, mostRecentCheckpointCacheData)
       mostRecentCheckpointCacheData
     } else {
       ca

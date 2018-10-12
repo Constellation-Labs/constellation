@@ -402,7 +402,7 @@ object Schema {
 
     @tailrec final def getChildrenSignatures(dbActor: KVDB,
                               edgeProcessor: ActorRef,
-                              signatures: Set[HashSignature] = Set(),
+                              signatures: Set[HashSignature] = checkpointBlock.signatures.toSet,
                               children: Set[String] = children)(implicit timeout: Timeout): Set[HashSignature] = {
       if (children.isEmpty) {
         signatures

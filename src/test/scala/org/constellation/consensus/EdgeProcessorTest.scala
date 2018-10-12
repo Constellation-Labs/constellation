@@ -18,48 +18,42 @@ import org.constellation.util.SignHelp._
 
 class EdgeProcessorTest extends ProcessorTest {
 
-  "The handleConflictingCheckpoint method" should "handle conflicting checkpointBlocks" in {
+  var transactions: Seq[Transaction] = _
+  var tips: Seq[SignedObservationEdge] = _
+  var soed: SignedObservationEdge = _
+  val edgeProcessor = TestProbe()
 
-    val metricsManager = TestProbe()
+  implicit val timeout: Timeout = Timeout(30, TimeUnit.SECONDS)
+  implicit val kp: KeyPair = KeyUtils.makeKeyPair()
 
-    val dao = data
+  data.edgeProcessor = edgeProcessor.ref
+  data.metricsManager = metricsManager.ref
+  data.keyPair = keyPair
 
-    implicit val timeout: Timeout = Timeout(30, TimeUnit.SECONDS)
+  val CoinBaseHash = "coinbase"
 
-    val dbActor = TestProbe()
+  val debtAddress = KeyUtils.makeKeyPair().getPublic
+  val selfAddress = KeyUtils.makeKeyPair().getPublic
 
-    val edgeProcessor = TestProbe()
+  val dumTx = dummyTx(data)
 
-    dao.edgeProcessor = edgeProcessor.ref
+  val genTXHash = dumTx.edge.signedObservationEdge.signatureBatch.hash
 
-    dao.metricsManager = metricsManager.ref
+  val cb = CheckpointEdgeData(Seq(genTXHash))
 
-    implicit val keyPair: KeyPair = KeyUtils.makeKeyPair()
+  val obe = ObservationEdge(
+    TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
+    TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
+    data = Some(TypedEdgeHash(cb.hash, EdgeHashType.CheckpointDataHash))
+  )
 
-    dao.keyPair = keyPair
+  soed = signedObservationEdge(obe)
 
-    val CoinBaseHash = "coinbase"
+  tips = Seq(soed, soed)
 
-    val debtAddress = KeyUtils.makeKeyPair().getPublic
-    val selfAddress = KeyUtils.makeKeyPair().getPublic
+  transactions = Seq(dummyTx(data), dummyTx(data))
 
-    val dumTx = dummyTx(dao)
-
-    val genTXHash = dumTx.edge.signedObservationEdge.signatureBatch.hash
-
-    val cb = CheckpointEdgeData(Seq(genTXHash))
-
-    val obe = ObservationEdge(
-      TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
-      TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
-      data = Some(TypedEdgeHash(cb.hash, EdgeHashType.CheckpointDataHash))
-    )
-
-    val soed = signedObservationEdge(obe)
-
-    val tips = Seq(soed, soed)
-
-    val transactions = Seq(dummyTx(dao), dummyTx(dao))
+  "The handleConflictingCheckpoint method" should "handle an incoming checkpoint with more signatures then the cached data" in {
 
     val existingCheckpointBlock = createCheckpointBlock(transactions, tips)
 
@@ -67,7 +61,11 @@ class EdgeProcessorTest extends ProcessorTest {
 
     val conflictingCheckpointBlock = existingCheckpointBlock.plus(newKeyPair)
 
-    val childCheckpoint = createCheckpointBlock(transactions, Seq(soed, SignedObservationEdge(SignatureBatch(conflictingCheckpointBlock.soeHash, Seq()))))
+    var childCheckpoint = createCheckpointBlock(transactions, Seq(soed, SignedObservationEdge(SignatureBatch(conflictingCheckpointBlock.soeHash, Seq()))))
+
+    val newKeyPair2 = KeyUtils.makeKeyPair()
+
+    childCheckpoint = childCheckpoint.plus(newKeyPair2)
 
     val childCheckpointCache = CheckpointCacheData(childCheckpoint, soeHash = childCheckpoint.soeHash)
 
@@ -82,27 +80,104 @@ class EdgeProcessorTest extends ProcessorTest {
     val childBaseHash = childCheckpoint.baseHash
     val childSoeHash = childCheckpoint.soeHash
 
-    dao.dbActor.putSignedObservationEdgeCache(ccHash, SignedObservationEdgeCache(SignedObservationEdge(SignatureBatch(baseHash, Seq()))))
+    data.dbActor.putSignedObservationEdgeCache(ccHash, SignedObservationEdgeCache(SignedObservationEdge(SignatureBatch(baseHash, Seq()))))
 
-    dao.dbActor.putSignedObservationEdgeCache(childSoeHash, SignedObservationEdgeCache(SignedObservationEdge(SignatureBatch(childBaseHash, Seq()))))
+    data.dbActor.putSignedObservationEdgeCache(childSoeHash, SignedObservationEdgeCache(SignedObservationEdge(SignatureBatch(childBaseHash, Seq()))))
 
-    dao.dbActor.putCheckpointCacheData(baseHash, cccd)
+    data.dbActor.putCheckpointCacheData(baseHash, cccd)
 
-    dao.dbActor.putCheckpointCacheData(childBaseHash, childCheckpointCache)
+    data.dbActor.putCheckpointCacheData(childBaseHash, childCheckpointCache)
 
     edgeProcessor.setAutoPilot(new TestActor.AutoPilot {
       def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
         case LookupEdge(`childSoeHash`) =>
-          val edge = EdgeProcessor.lookupEdge(dao, childSoeHash)
+          val edge = EdgeProcessor.lookupEdge(data, childSoeHash)
           sender ! edge
           edge
           TestActor.KeepRunning
       }
     })
 
-    val mostValidCheckpointBlock = EdgeProcessor.handleConflictingCheckpoint(cpcd, conflictingCheckpointBlock, dao)
+    val mostValidCheckpointBlock = EdgeProcessor.handleConflictingCheckpoint(cpcd, conflictingCheckpointBlock, data)
+
+    val storedCheckpointCacheData = data.dbActor.getCheckpointCacheData(mostValidCheckpointBlock.checkpointBlock.baseHash).get
+
+    data.dbActor.delete(ccHash)
+    data.dbActor.delete(childSoeHash)
+    data.dbActor.delete(baseHash)
+    data.dbActor.delete(childBaseHash)
+    data.dbActor.delete(mostValidCheckpointBlock.checkpointBlock.baseHash)
+
+    assert(conflictingCheckpointBlock.soeHash == storedCheckpointCacheData.soeHash)
+
+    assert(storedCheckpointCacheData.checkpointBlock == conflictingCheckpointBlock)
 
     assert(mostValidCheckpointBlock == cccd)
+  }
+
+  "The handleConflictingCheckpoint method" should "handle an incoming checkpoint with less signatures then the cached data" in {
+
+    var existingCheckpointBlock = createCheckpointBlock(transactions, tips)
+
+    val newKeyPair = KeyUtils.makeKeyPair()
+
+    val newKeyPair2 = KeyUtils.makeKeyPair()
+    val newKeyPair3 = KeyUtils.makeKeyPair()
+
+    val conflictingCheckpointBlock = existingCheckpointBlock.plus(newKeyPair)
+
+    existingCheckpointBlock = existingCheckpointBlock.plus(newKeyPair2).plus(newKeyPair3)
+
+    var childCheckpoint = createCheckpointBlock(transactions, Seq(soed, SignedObservationEdge(SignatureBatch(conflictingCheckpointBlock.soeHash, Seq()))))
+
+    childCheckpoint = childCheckpoint.plus(newKeyPair2)
+
+    val childCheckpointCache = CheckpointCacheData(childCheckpoint, soeHash = childCheckpoint.soeHash)
+
+    val cccd = CheckpointCacheData(conflictingCheckpointBlock, soeHash = conflictingCheckpointBlock.soeHash, children = Set(childCheckpoint.soeHash))
+
+    val cpcd = CheckpointCacheData(existingCheckpointBlock, soeHash = existingCheckpointBlock.soeHash)
+
+    val cpHash = cpcd.checkpointBlock.soeHash
+    val ccHash = conflictingCheckpointBlock.soeHash
+    val baseHash = conflictingCheckpointBlock.baseHash
+
+    val childBaseHash = childCheckpoint.baseHash
+    val childSoeHash = childCheckpoint.soeHash
+
+    data.dbActor.putSignedObservationEdgeCache(ccHash, SignedObservationEdgeCache(SignedObservationEdge(SignatureBatch(baseHash, Seq()))))
+
+    data.dbActor.putSignedObservationEdgeCache(childSoeHash, SignedObservationEdgeCache(SignedObservationEdge(SignatureBatch(childBaseHash, Seq()))))
+
+    data.dbActor.putCheckpointCacheData(baseHash, cccd)
+
+    data.dbActor.putCheckpointCacheData(childBaseHash, childCheckpointCache)
+
+    edgeProcessor.setAutoPilot(new TestActor.AutoPilot {
+      def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
+        case LookupEdge(`childSoeHash`) =>
+          val edge = EdgeProcessor.lookupEdge(data, childSoeHash)
+          sender ! edge
+          edge
+          TestActor.KeepRunning
+      }
+    })
+
+    val mostValidCheckpointBlock = EdgeProcessor.handleConflictingCheckpoint(cpcd, conflictingCheckpointBlock, data)
+
+    val storedCheckpointCacheData = data.dbActor.getCheckpointCacheData(mostValidCheckpointBlock.checkpointBlock.baseHash).get
+
+    data.dbActor.delete(ccHash)
+    data.dbActor.delete(childSoeHash)
+    data.dbActor.delete(baseHash)
+    data.dbActor.delete(childBaseHash)
+    data.dbActor.delete(mostValidCheckpointBlock.checkpointBlock.baseHash)
+
+    assert(cpcd.checkpointBlock.soeHash == storedCheckpointCacheData.soeHash)
+
+    assert(storedCheckpointCacheData.checkpointBlock == cpcd.checkpointBlock)
+
+    assert(mostValidCheckpointBlock == cpcd)
   }
 
 }
