@@ -3,7 +3,8 @@ package org.constellation.primitives
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
-import akka.testkit.TestProbe
+import akka.actor.ActorRef
+import akka.testkit.{TestActor, TestProbe}
 import akka.util.Timeout
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
@@ -11,6 +12,8 @@ import org.scalatest.FlatSpec
 import org.constellation.Fixtures._
 import constellation._
 import org.constellation.ProcessorTest
+import org.constellation.consensus.EdgeProcessor
+import org.constellation.consensus.EdgeProcessor.LookupEdge
 
 class SchemaTest extends ProcessorTest {
 
@@ -41,6 +44,16 @@ class SchemaTest extends ProcessorTest {
 
     val tips = Seq(soed, soed)
 
+    val checkpointEdge = CheckpointEdge(
+      Edge(obe, soed, ResolvedObservationEdge(tips.head, tips(1), Some(CheckpointEdgeData(Seq()))))
+    )
+
+    val tipHash = soed.hash
+
+    data.dbActor.putSignedObservationEdgeCache(soed.hash, SignedObservationEdgeCache(soed))
+
+    data.dbActor.putCheckpointCacheData(soed.baseHash, CheckpointCacheData(CheckpointBlock(Seq(), checkpointEdge), soeHash = "test"))
+
     val transactions = Seq(dummyTx(data), dummyTx(data))
 
     val checkpointBlock = createCheckpointBlock(transactions, tips)
@@ -49,9 +62,27 @@ class SchemaTest extends ProcessorTest {
 
     val edgeProcessor = TestProbe()
 
+    edgeProcessor.setAutoPilot(new TestActor.AutoPilot {
+      def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
+        case LookupEdge(`tipHash`) =>
+          val edge = EdgeProcessor.lookupEdge(data, tipHash)
+          sender ! edge
+          edge
+          TestActor.KeepRunning
+      }
+    })
+
+    val initialStoredParentCheckpointCache = data.dbActor.getCheckpointCacheData(soed.baseHash).get
+
+    assert(initialStoredParentCheckpointCache.children.isEmpty)
+
     val updates = checkpointCacheData.updateParentsChildRefs(edgeProcessor.ref, data.dbActor)
 
-    assert(updates == Seq())
+    val afterStoredParentCheckpointCache = data.dbActor.getCheckpointCacheData(soed.baseHash).get
+
+    assert(afterStoredParentCheckpointCache.children.size == 1)
+
+    assert(afterStoredParentCheckpointCache.children.head == checkpointCacheData.checkpointBlock.soeHash)
   }
 
 }

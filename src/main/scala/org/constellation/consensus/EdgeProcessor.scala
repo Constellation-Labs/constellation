@@ -472,6 +472,7 @@ object EdgeProcessor {
 
     val cbOpt = cacheOpt.flatMap { c =>
       dao.dbActor.getCheckpointCacheData(c.signedObservationEdge.baseHash)
+      // TODO: what is this for below exactly? its breaking tests
        // .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
     }
 
