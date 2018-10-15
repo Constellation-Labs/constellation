@@ -25,9 +25,9 @@ class RandomTransactionManager(dao: DAO)(
       */
     case InternalHeartbeat =>
 
-      if (dao.transactionMemPool.size < 1000 && dao.generateRandomTX) {
+      if (dao.transactionMemPool.size < 1000 && dao.generateRandomTX && dao.nodeState == NodeState.Ready) {
         val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq.filter{case (_, pd) =>
-          pd.timeAdded < (System.currentTimeMillis() - 30*1000) && pd.nodeStatus == NodeState.Ready
+          pd.timeAdded < (System.currentTimeMillis() - 30*1000) && pd.nodeState == NodeState.Ready
         }
 
         Seq.fill(50)(0).par.foreach { _ =>

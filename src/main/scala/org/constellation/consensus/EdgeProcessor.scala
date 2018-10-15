@@ -22,7 +22,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.Random
 import akka.pattern.ask
 import akka.util.Timeout
-import org.constellation.util.{HashSignature, HeartbeatSubscribe}
+import org.constellation.util.{HashSignature, HeartbeatSubscribe, ProductHash}
 
 object EdgeProcessor {
 
@@ -386,7 +386,7 @@ object EdgeProcessor {
     *                         from other pools for processing different operations.
     */
   def handleTransaction(
-                         tx: Transaction, memPool: MemPool
+                         tx: Transaction, memPool: MemPool, skipValidation: Boolean = true
                        )(implicit executionContext: ExecutionContext, dao: DAO): MemPool = {
 
     // TODO: Store TX in DB immediately rather than waiting
@@ -397,35 +397,40 @@ object EdgeProcessor {
     // in event where a new signature is being made by another peer it's most likely still valid, should
     // cache the results of this somewhere.
 
-    val validationResult = Validation.validateTransaction(dao.dbActor, tx)
 
-    val finished = Await.result(validationResult, 90.seconds)
+    // TODO: Move memPool update logic to actor and send response back to EdgeProcessor
+    if (!memPool.transactions.contains(tx)) {
+      val pool = memPool.copy(transactions = memPool.transactions + tx)
+      dao.metricsManager ! UpdateMetric("transactionMemPool", pool.transactions.size.toString)
+      dao.metricsManager ! IncrementMetric("transactionValidMessages")
+      val updated = formCheckpoint(pool) // TODO: Send to checkpoint formation actor instead
+      updated
+    } else {
+      dao.metricsManager ! IncrementMetric("transactionValidMemPoolDuplicateMessages")
+      memPool
+    }
 
-    finished match {
-      // TODO : Increment metrics here for each case
-      case t : TransactionValidationStatus if t.validByCurrentStateMemPool =>
+    /*
+        val validationResult = Validation.validateTransaction(dao.dbActor, tx)
 
-        // TODO: Move memPool update logic to actor and send response back to EdgeProcessor
-        if (!memPool.transactions.contains(tx)) {
-          val pool = memPool.copy(transactions = memPool.transactions + tx)
-          dao.metricsManager ! UpdateMetric("transactionMemPool", pool.transactions.size.toString)
-          dao.metricsManager ! IncrementMetric("transactionValidMessages")
-          val updated = formCheckpoint(pool) // TODO: Send to checkpoint formation actor instead
-          updated
-        } else {
-          dao.metricsManager ! IncrementMetric("transactionValidMemPoolDuplicateMessages")
-          memPool
+        val finished = Await.result(validationResult, 90.seconds)
+
+        finished match {
+          // TODO : Increment metrics here for each case
+          case t : TransactionValidationStatus if t.validByCurrentStateMemPool =>
+
+
+            // TODO : Store something here for status queries. Make sure it doesn't cause a conflict
+
+          case t : TransactionValidationStatus =>
+
+            // TODO : Add info somewhere so node can find out transaction was invalid on a callback
+            reportInvalidTransaction(dao: DAO, t: TransactionValidationStatus)
+            memPool
         }
 
+        */
 
-        // TODO : Store something here for status queries. Make sure it doesn't cause a conflict
-
-      case t : TransactionValidationStatus =>
-
-        // TODO : Add info somewhere so node can find out transaction was invalid on a callback
-        reportInvalidTransaction(dao: DAO, t: TransactionValidationStatus)
-        memPool
-    }
   }
 
   def reportInvalidTransaction(dao: DAO, t: TransactionValidationStatus): Unit = {
@@ -703,11 +708,19 @@ object EdgeProcessor {
 
 case class TipData(checkpointBlock: CheckpointBlock, numUses: Int)
 
+case class SnapshotInfo(
+                         snapshot: Snapshot,
+                         acceptedCBSinceSnapshot: Seq[String] = Seq()
+                       )
+
 case class MemPool(
                     transactions: Set[Transaction] = Set(),
                     checkpoints: Map[String, CheckpointBlock] = Map(),
                     thresholdMetCheckpoints: Map[String, TipData] = Map(),
-                    facilitators: Map[Id, PeerData] = Map()
+                    facilitators: Map[Id, PeerData] = Map(),
+                    heartBeatRound: Int = 0,
+                    snapshot: Snapshot = Snapshot("", Seq()),
+                    acceptedCBSinceSnapshot: Seq[String] = Seq()
                   ) {
   def plus(checkpointBlock: CheckpointBlock, facilitatorCount: Option[Int] = None)(implicit dao: DAO): MemPool = {
 
@@ -766,7 +779,8 @@ case class MemPool(
         thresholdMetCheckpoints = thresholdMetCheckpoints +
           (checkpointBlock.baseHash -> TipData(checkpointBlock, 0)) ++
           keysToUpdate --
-          keysToRemove
+          keysToRemove,
+        acceptedCBSinceSnapshot = acceptedCBSinceSnapshot :+ checkpointBlock.baseHash
       )
     } else {
       this.copy(
@@ -777,6 +791,10 @@ case class MemPool(
 }
 
 case object GetMemPool
+
+case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String]) extends ProductHash
+
+case class DownloadComplete(latestSnapshot: Snapshot)
 
 class EdgeProcessor(dao: DAO)
                    (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
@@ -791,13 +809,40 @@ class EdgeProcessor(dao: DAO)
 
   def active(memPool: MemPool): Receive = {
 
+    case DownloadComplete(latestSnapshot) =>
+
+      dao.nodeState = NodeState.Ready
+      dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
+      dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, NodeState.Ready)))
+
+      context become active(memPool.copy(
+        snapshot = latestSnapshot,
+        acceptedCBSinceSnapshot = memPool.acceptedCBSinceSnapshot.filterNot(latestSnapshot.checkpointBlocks.contains)
+      ))
+
+
     case InternalHeartbeat =>
 
       val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
       val facilitators = peerIds.filter{case (_, pd) =>
-        pd.timeAdded < (System.currentTimeMillis() - 30*1000) && pd.nodeStatus == NodeState.Ready
+        pd.timeAdded < (System.currentTimeMillis() - 30*1000) && pd.nodeState == NodeState.Ready
       }.toMap
-      context become active(memPool.copy(facilitators = facilitators))
+
+      val snapshotUpdatedMemPool = if (memPool.heartBeatRound % 30 == 0 && memPool.acceptedCBSinceSnapshot.nonEmpty && dao.nodeState == NodeState.Ready) {
+        val snapshot = Snapshot(memPool.snapshot.hash, memPool.acceptedCBSinceSnapshot)
+        dao.dbActor ! DBPut(snapshot.hash, snapshot)
+        if (snapshot.lastSnapshot != "") {
+          val lastSnapshotVerification = (dao.dbActor ? DBGet(snapshot.lastSnapshot)).mapTo[Option[Snapshot]].get()
+          if (lastSnapshotVerification.isEmpty) {
+            dao.metricsManager ! IncrementMetric("snapshotVerificationFailed")
+          } else {
+            dao.metricsManager ! IncrementMetric("snapshotVerificationCount")
+          }
+        }
+        dao.metricsManager ! IncrementMetric("snapshotCount")
+        memPool.copy(snapshot = snapshot, acceptedCBSinceSnapshot = Seq())
+      } else memPool
+      context become active(snapshotUpdatedMemPool.copy(facilitators = facilitators, heartBeatRound = memPool.heartBeatRound + 1))
 
     case GetMemPool =>
       sender() ! memPool

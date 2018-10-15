@@ -2,7 +2,7 @@ package org.constellation.primitives
 
 import akka.actor.Actor
 import akka.stream.ActorMaterializer
-import org.constellation.{AddPeerRequest, DAO}
+import org.constellation.{AddPeerRequest, DAO, HostPort, RemovePeerRequest}
 import org.constellation.primitives.Schema.{Id, NodeState}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.util.APIClient
@@ -15,7 +15,7 @@ case class PeerData(
                      addRequest: AddPeerRequest,
                      client: APIClient,
                      timeAdded: Long = System.currentTimeMillis(),
-                     nodeStatus: NodeState = NodeState.Ready
+                     nodeState: NodeState = NodeState.Ready
                    )
 
 case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
@@ -30,11 +30,28 @@ class PeerManager(dao: DAO)(implicit val materialize: ActorMaterializer) extends
 
   def active(peerInfo: Map[Id, PeerData]): Receive = {
 
+    case RemovePeerRequest(hp, id) =>
+
+      val updatedPeerInfo = peerInfo.filter { case (pid, d) =>
+        val badHost = hp.exists { case HostPort(host, port) => d.client.hostName == host && d.client.apiPort == port }
+        val badId = id.contains(pid)
+        !badHost && !badId
+      }
+
+      dao.metricsManager ! UpdateMetric(
+        "peers",
+        updatedPeerInfo.map { case (idI, clientI) =>
+          val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort}"
+          s"${idI.short} API: $addr"
+        }.mkString(" --- ")
+      )
+      context become active (updatedPeerInfo)
+
     case SetNodeStatus(id, nodeStatus) =>
 
       val updated = peerInfo.get(id).map{
         pd =>
-          peerInfo + (id -> pd.copy(nodeStatus = nodeStatus))
+          peerInfo + (id -> pd.copy(nodeState = nodeStatus))
       }.getOrElse(peerInfo)
 
       context become active(updated)
@@ -43,7 +60,7 @@ class PeerManager(dao: DAO)(implicit val materialize: ActorMaterializer) extends
       val client = new APIClient()(context.system, materialize).setConnection(host, port)
 
       client.id = id
-      val updatedPeerInfo = peerInfo + (id -> PeerData(a, client, nodeStatus = ns))
+      val updatedPeerInfo = peerInfo + (id -> PeerData(a, client, nodeState = ns))
 
       dao.metricsManager ! UpdateMetric(
         "peers",

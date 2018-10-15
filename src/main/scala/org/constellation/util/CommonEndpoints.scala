@@ -13,9 +13,10 @@ import org.json4s.native.Serialization
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import constellation._
-import org.constellation.consensus.{GetMemPool, MemPool}
+import org.constellation.consensus.{GetMemPool, MemPool, Snapshot, SnapshotInfo}
 import akka.pattern.ask
 import akka.util.Timeout
+import org.constellation.LevelDB.DBGet
 
 trait CommonEndpoints extends Json4sSupport {
 
@@ -37,6 +38,13 @@ trait CommonEndpoints extends Json4sSupport {
     path("tips") {
       val mp = (dao.edgeProcessor ? GetMemPool).mapTo[MemPool].get()
       complete(mp.thresholdMetCheckpoints.map{_._2.checkpointBlock})
+    } ~
+      path("info") {
+      val mp = (dao.edgeProcessor ? GetMemPool).mapTo[MemPool].get()
+      complete(SnapshotInfo(mp.snapshot, mp.acceptedCBSinceSnapshot))
+    } ~
+    path("snapshot" / Segment) {s =>
+      complete((dao.dbActor ? DBGet(s)).mapTo[Option[Snapshot]].get())
     } ~
     path("genesis") {
       complete(dao.genesisObservation)

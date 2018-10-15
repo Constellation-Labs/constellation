@@ -5,7 +5,7 @@ import java.security.PublicKey
 import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey
-import org.constellation.consensus.Consensus
+import org.constellation.consensus.{Consensus, Snapshot}
 import org.constellation.consensus.Consensus.{VoteData => _, _}
 import org.constellation.p2p.SerializedUDPMessage
 import org.constellation.primitives.Schema.EdgeHashType
@@ -42,6 +42,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Enumeration#Value])
     kryo.register(classOf[TransactionEdgeData])
     kryo.register(classOf[CheckpointEdgeData])
+    kryo.register(classOf[Snapshot])
 
     kryo.register(classOf[DownloadRequest])
     kryo.register(classOf[ParentBundleHash])

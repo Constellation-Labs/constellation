@@ -40,7 +40,7 @@ class MetricsManager(dao: DAO) extends Actor {
 
       round += 1
       if (round % 10 == 0) {
-        logger.info("Metrics: " + metrics)
+     //   logger.info("Metrics: " + metrics)
         val count = metrics.getOrElse("transactionAccepted", "0").toLong
         val delta = System.currentTimeMillis() - lastCheckTime
         val deltaTX = count - lastTXCount

@@ -8,8 +8,8 @@ import better.files.File
 import constellation._
 import org.constellation.ClusterTest.getPodMappings
 import org.constellation.RestartCluster.system
-import org.constellation.consensus.EdgeProcessor
-import org.constellation.primitives.{MetricsManager, PeerManager}
+import org.constellation.consensus.{EdgeProcessor, MemPool, Snapshot, SnapshotInfo}
+import org.constellation.primitives.{IncrementMetric, MetricsManager, PeerManager}
 import org.constellation.primitives.Schema.{CheckpointBlock, Sheaf, Transaction}
 import org.constellation.util.APIClient
 
@@ -114,21 +114,47 @@ object DownloadChainComputeSingle {
 
     val a1 = apis.head
 
-    val tips = a1.getBlocking[Seq[CheckpointBlock]]("tips")
+   // val tips = a1.getBlocking[Seq[CheckpointBlock]]("tips")
 
-    doDownload(tips, a1)
-/*
-    val dao = new DAO()
+  //  doDownload(tips, a1)
+    val snapshotInfo = a1.getBlocking[SnapshotInfo]("info")
 
-    // Setup actors
-    val metricsManager: ActorRef = system.actorOf(
-      Props(new MetricsManager(dao)), s"MetricsManager"
-    )
 
-    val peerManager: ActorRef = system.actorOf(
-      Props(new PeerManager(dao)), s"PeerManager"
-    )
-*/
+    def getSnapshots(hash: String, blocks: Seq[String] = Seq()): Seq[String] = {
+      val sn = a1.getBlocking[Option[Snapshot]]("snapshot/" + hash)
+      if (sn.isEmpty) {
+        println("empty snapshot")
+        blocks
+      } else {
+        val next = sn.get.lastSnapshot
+        println("next " + next + " num: " + sn.get.checkpointBlocks.size)
+        if (next == "") blocks
+        else {
+          getSnapshots(next, blocks ++ sn.get.checkpointBlocks)
+        }
+      }
+    }
+
+    val snapshotBlocks = getSnapshots(snapshotInfo.snapshot.lastSnapshot) ++ snapshotInfo.acceptedCBSinceSnapshot
+
+    println(snapshotBlocks.size)
+    println(snapshotInfo.snapshot.lastSnapshot)
+
+
+   // println(info)
+
+    /*
+        val dao = new DAO()
+
+        // Setup actors
+        val metricsManager: ActorRef = system.actorOf(
+          Props(new MetricsManager(dao)), s"MetricsManager"
+        )
+
+        val peerManager: ActorRef = system.actorOf(
+          Props(new PeerManager(dao)), s"PeerManager"
+        )
+    */
 
     system.terminate()
 

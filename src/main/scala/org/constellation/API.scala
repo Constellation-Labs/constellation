@@ -33,6 +33,9 @@ import scala.util.{Failure, Success, Try}
 
 case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id, nodeStatus: NodeState = NodeState.Ready)
 
+case class HostPort(host: String, port: Int)
+case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
+
 case class ProcessingConfig(
                                 maxWidth: Int = 10,
                                 minCheckpointFormationThreshold: Int = 10,
@@ -145,6 +148,14 @@ class API(udpAddress: InetSocketAddress,
 
   private val postEndpoints =
     post {
+      pathPrefix("peer") {
+        path("remove") {
+          entity(as[RemovePeerRequest]) { e =>
+            dao.peerManager ! e
+            complete(StatusCodes.OK)
+          }
+        }
+      } ~
       pathPrefix("download") {
         path("start") {
           Future{Download.download()}(dao.edgeExecutionContext)

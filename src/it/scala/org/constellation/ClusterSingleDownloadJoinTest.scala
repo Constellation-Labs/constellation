@@ -26,11 +26,11 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
 
     import better.files._
 
-    val ips = file"hosts.txt".lines.toSeq ++ file"hosts2.txt".lines.toSeq
+    val ips = file"hosts.txt".lines.toSeq // ++ file"hosts2.txt".lines.toSeq
 
     println(ips)
 
-    val ips2 = file"hosts3.txt".lines.toSeq
+    val ips2 = file"hosts2.txt".lines.toSeq
 
 
     val apis = ips.map{ ip =>
@@ -57,6 +57,13 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
 
     sim.awaitHealthy(apis2)
 
+
+    apis.foreach { a =>
+      apis2.foreach { a2 =>
+        println(a.postSync("peer/remove", RemovePeerRequest(Some(HostPort(a2.hostName, 9001)))))
+      }
+    }
+
     apis2.map{_.postSync(
       "config/update",
       ProcessingConfig(maxWidth = 10, minCheckpointFormationThreshold = 10, minCBSignatureThreshold = 3)
@@ -73,8 +80,9 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
         sim.addPeer(apis, AddPeerRequest(a.hostName, a.udpPort, 9001, a.id, NodeState.DownloadInProgress)).foreach{println}
     }
 
-    apis2.foreach{
-      _.postEmpty("download/start")
+    apis2.foreach{ a2 =>
+      a2.postEmpty("download/start")
+      a2.postEmpty("random")
     }
 
 
