@@ -4,17 +4,15 @@ import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
 import akka.actor.ActorRef
-import cats.kernel.Monoid
 import constellation.pubKeyToAddress
 import org.constellation.LevelDB.{DBPut, DBUpdate}
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.consensus.{MemPool, TipData}
-import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 
-import scala.collection.{SortedSet, mutable}
 import scala.collection.concurrent.TrieMap
+import scala.collection.{SortedSet, mutable}
 import scala.util.Random
 
 // This can't be a trait due to serialization issues

@@ -2,10 +2,10 @@ package org.constellation.primitives
 
 import akka.actor.Actor
 import akka.stream.ActorMaterializer
-import org.constellation.{AddPeerRequest, DAO, HostPort, RemovePeerRequest}
-import org.constellation.primitives.Schema.{Id, NodeState}
 import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.{Id, NodeState}
 import org.constellation.util.APIClient
+import org.constellation.{AddPeerRequest, DAO, HostPort, RemovePeerRequest}
 
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)

@@ -1,14 +1,12 @@
 package org.constellation.util
 
 import com.softwaremill.macmemo.memoize
+import constellation._
 import org.constellation.DAO
-import org.constellation.primitives.Schema
+import org.constellation.crypto.SimpleWalletLike
 import org.constellation.primitives.Schema.MetricsResult
 
 import scala.concurrent.duration._
-import org.constellation.crypto.SimpleWalletLike
-import constellation._
-
 import scala.util.Try
 
 class Metrics(val dao: DAO = null) extends SimpleWalletLike {

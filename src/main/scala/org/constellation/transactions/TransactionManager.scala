@@ -1,13 +1,10 @@
 package org.constellation.transactions
 
-import akka.actor.ActorRef
-import org.constellation.DAO
-import org.constellation.primitives.{APIBroadcast, PeerManager}
-import org.constellation.primitives.Schema.SendToAddress
 import constellation._
+import org.constellation.DAO
 import org.constellation.consensus.EdgeProcessor.HandleTransaction
-
-import scala.concurrent.Future
+import org.constellation.primitives.APIBroadcast
+import org.constellation.primitives.Schema.SendToAddress
 
 object TransactionManager {
 

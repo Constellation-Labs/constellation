@@ -1,14 +1,10 @@
 package org.constellation.serializer
 
-import java.security.PublicKey
-
 import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
-import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey
-import org.constellation.consensus.{Consensus, Snapshot}
 import org.constellation.consensus.Consensus.{VoteData => _, _}
+import org.constellation.consensus.{Consensus, Snapshot}
 import org.constellation.p2p.SerializedUDPMessage
-import org.constellation.primitives.Schema.EdgeHashType
 import org.constellation.primitives.Schema._
 import org.constellation.util.{EncodedPublicKey, HashSignature, SignatureBatch, Signed}
 

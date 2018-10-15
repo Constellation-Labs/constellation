@@ -1,26 +1,23 @@
 package org.constellation.p2p
 
 import java.net.InetSocketAddress
-import java.util.concurrent.{ConcurrentLinkedQueue, TimeUnit}
+import java.util.concurrent.TimeUnit
 
+import akka.pattern.ask
+import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
-import org.constellation.DAO
-import org.constellation.primitives.Schema._
 import constellation._
+import org.constellation.DAO
+import org.constellation.LevelDB.{DBGet, DBPut}
+import org.constellation.consensus._
+import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Signed}
 import scalaj.http.HttpResponse
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
-import akka.pattern.ask
-import akka.util.Timeout
-import org.constellation.LevelDB.{DBGet, DBPut}
-import org.constellation.consensus._
-
-import scala.annotation.tailrec
-import scala.collection.concurrent.TrieMap
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Try}
 
 /// New download code

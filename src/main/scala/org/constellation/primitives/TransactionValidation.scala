@@ -1,19 +1,17 @@
 package org.constellation.primitives
 
+import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorRef
-import org.constellation.primitives.Schema.{AddressCacheData, Transaction, TransactionCacheData}
 import akka.pattern.ask
 import akka.util.Timeout
 import org.constellation.LevelDB.DBGet
-
-import scala.concurrent.ExecutionContext.Implicits.global
-import java.security.KeyPair
-
+import org.constellation.primitives.Schema.{AddressCacheData, Transaction, TransactionCacheData}
 import scalaj.http.HttpResponse
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 
 object TransactionValidation {

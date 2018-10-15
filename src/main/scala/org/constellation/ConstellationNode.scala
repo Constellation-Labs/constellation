@@ -5,7 +5,6 @@ import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
-import akka.dispatch.ExecutionContexts
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Route
 import akka.io.Udp
@@ -15,12 +14,11 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.{CheckpointMemPoolVerifier, CheckpointUniqueSigner, Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
-import org.constellation.p2p.{PeerAPI, RegisterNextActor, UDPActor}
-import org.constellation.primitives.Schema.{AddPeerFromLocal, ToggleHeartbeat}
+import org.constellation.p2p.{PeerAPI, UDPActor}
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Heartbeat}
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object ConstellationNode {

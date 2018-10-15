@@ -2,11 +2,9 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
-import org.constellation.primitives.Schema._
 import constellation._
 import org.constellation.LevelDB.DBPut
-
-import scala.collection.concurrent.TrieMap
+import org.constellation.primitives.Schema._
 
 
 object Genesis {
@@ -81,7 +79,7 @@ object Genesis {
 
 }
 
-import Genesis._
+import org.constellation.primitives.Genesis._
 
 trait Genesis extends NodeData with BundleDataExt with EdgeDAO {
 

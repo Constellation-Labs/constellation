@@ -6,9 +6,8 @@ import akka.pattern.ask
 import akka.util.Timeout
 import org.constellation.DAO
 import org.constellation.LevelDB.DBGet
-import org.constellation.primitives.Schema.{CheckpointBlock, CheckpointCacheData, SignedObservationEdgeCache}
-import constellation.EasyFutureBlock
 import org.constellation.primitives.APIBroadcast
+import org.constellation.primitives.Schema.{CheckpointBlock, SignedObservationEdgeCache}
 
 import scala.concurrent.{ExecutionContext, Future}
 

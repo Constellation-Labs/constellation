@@ -1,17 +1,13 @@
 package org.constellation.primitives
 
-import java.io.File
 import java.net.InetSocketAddress
 import java.security.KeyPair
 
 import akka.actor.ActorRef
+import constellation._
+import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.util.Signed
-import constellation._
-import org.constellation.LevelDB
-import org.constellation.primitives.Schema.NodeState.NodeState
-
-import scala.util.Try
 
 trait NodeData {
 

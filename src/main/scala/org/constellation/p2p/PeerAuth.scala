@@ -7,15 +7,15 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
-import org.constellation.util.{APIClient, Signed}
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.Consensus.RemoteMessage
+import org.constellation.primitives.Schema._
+import org.constellation.util.{APIClient, Signed}
+import scalaj.http.HttpResponse
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Try}
-import org.constellation.primitives.Schema._
-import scalaj.http.HttpResponse
 
 
 

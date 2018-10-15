@@ -2,18 +2,15 @@ package org.constellation.consensus
 
 import java.security.KeyPair
 
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
+import akka.actor.{Actor, ActorLogging, ActorSystem}
+import akka.pattern.ask
 import akka.util.Timeout
 import constellation._
-import akka.pattern.ask
 import org.constellation.DAO
 import org.constellation.consensus.Consensus._
-import org.constellation.consensus.EdgeProcessor.{CreateCheckpointEdgeResponse, HandleCheckpoint}
-import org.constellation.p2p.UDPSend
-import org.constellation.primitives.{APIBroadcast, GetPeerInfo, PeerData, PeerManager}
 import org.constellation.primitives.Schema._
+import org.constellation.primitives.{APIBroadcast, GetPeerInfo, PeerData}
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.Signed
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.immutable.HashMap

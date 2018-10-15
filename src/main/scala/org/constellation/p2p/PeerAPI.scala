@@ -1,37 +1,31 @@
 package org.constellation.p2p
 
-import java.net.InetSocketAddress
-import java.security.KeyPair
-import java.util.concurrent.{Executors, ScheduledThreadPoolExecutor}
-
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
+import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+import org.constellation.DAO
+import org.constellation.LevelDB.DBGet
+import org.constellation.consensus.Consensus
+import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
+import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, HandleCheckpoint, HandleTransaction, SignatureRequest, SignatureResponse}
+import org.constellation.p2p.PeerAPI.EdgeResponse
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, IncrementMetric, SetNodeStatus, TransactionValidation}
-import org.constellation.util.{CommonEndpoints, HashSignature, ServeUI}
+import org.constellation.primitives.SetNodeStatus
+import org.constellation.serializer.KryoSerializer
+import org.constellation.util.{CommonEndpoints, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
-import akka.pattern.ask
-import org.constellation.DAO
-import org.constellation.LevelDB.DBPut
-import org.constellation.LevelDB.{DBGet, DBPut}
-import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote, StartConsensusRound}
-import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, HandleCheckpoint, HandleSignatureRequest, HandleTransaction, SignatureRequest, SignatureResponse}
-import org.constellation.consensus.{Consensus, EdgeProcessor}
-import org.constellation.serializer.KryoSerializer
-import org.constellation.consensus.{EdgeProcessor, Validation}
-import org.constellation.p2p.PeerAPI.EdgeResponse
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.ExecutionContext
 import scala.util.{Random, Try}
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())

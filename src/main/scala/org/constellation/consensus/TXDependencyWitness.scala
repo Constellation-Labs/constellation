@@ -1,8 +1,8 @@
 package org.constellation.consensus
 
 import org.constellation.DAO
-import org.constellation.primitives.{APIBroadcast, IncrementMetric}
 import org.constellation.primitives.Schema.Transaction
+import org.constellation.primitives.{APIBroadcast, IncrementMetric}
 
 object TXDependencyWitness {
 

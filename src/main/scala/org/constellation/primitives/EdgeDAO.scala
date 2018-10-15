@@ -2,7 +2,6 @@ package org.constellation.primitives
 
 import java.util.concurrent.Executors
 
-import akka.actor.ActorRef
 import org.constellation.ProcessingConfig
 import org.constellation.primitives.Schema._
 

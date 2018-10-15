@@ -6,15 +6,11 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{Actor, ActorRef}
 import akka.io.{IO, Udp}
 import akka.util.{ByteString, Timeout}
-import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
+import org.constellation.DAO
 import org.constellation.consensus.Consensus.RemoteMessage
+import org.constellation.serializer.KryoSerializer._
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
-import scala.util.Random
-import org.constellation.serializer.KryoSerializer._
-import constellation._
-import org.constellation.DAO
 
 // Consider adding ID to all UDP messages? Possibly easier.
 case class UDPMessage(data: Any, remote: InetSocketAddress)
@@ -48,8 +44,6 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
   implicit val timeout: Timeout = Timeout(10, TimeUnit.SECONDS)
 
   private val packetGroups = TrieMap[Long, TrieMap[Int, SerializedUDPMessage]]()
-
-  import constellation._
 
   def receive: PartialFunction[Any, Unit] = {
     case Udp.Bound(_) =>
