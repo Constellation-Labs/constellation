@@ -2,10 +2,8 @@ package org.constellation.util
 
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
-import akka.actor.ActorRef
 import cats.kernel.Monoid
 import constellation._
-import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema._
@@ -49,7 +47,6 @@ trait ProductHash extends Product {
   def powInput(signatures: Seq[String]): String = (productSeq ++ signatures).json
   def pow(signatures: Seq[String], difficulty: Int): String = POW.proofOfWork(powInput(signatures), Some(difficulty))
   def productSeq: Seq[Any] = this.productIterator.toArray.toSeq
-  def put(db: ActorRef): Unit = db ! DBPut(hash, this)
 
 }
 

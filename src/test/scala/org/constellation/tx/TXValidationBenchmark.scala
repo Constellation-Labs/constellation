@@ -1,22 +1,24 @@
 package org.constellation.tx
 
 
-import java.security.{KeyPair, Signature}
+import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorSystem, Props}
-import better.files.File
-import org.constellation.crypto.KeyUtils
-import org.constellation.util.SignHelp
-import org.scalatest.FlatSpec
+import akka.pattern.ask
+import akka.util.Timeout
+import better.files.{File, _}
 import constellation._
 import org.constellation.{DAO, LevelDB, LevelDBActor}
 import org.constellation.primitives.Schema.{AddressCacheData, Id}
 import better.files._
 import org.constellation.LevelDB.{DBGet, DBPut}
+import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema
-import akka.pattern.ask
-import akka.util.Timeout
+import org.constellation.primitives.Schema.AddressCacheData
+import org.constellation.util.SignHelp
+import org.constellation.{Data, LevelDB, LevelDBActor}
+import org.scalatest.FlatSpec
 
 import scala.util.Try
 

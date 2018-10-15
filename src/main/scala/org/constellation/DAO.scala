@@ -6,7 +6,6 @@ import org.constellation.primitives._
 
 class DAO extends MetricsExt
   with NodeData
-  with BundleDataExt
   with Reputation
   with PeerInfo
   with Genesis
@@ -19,10 +18,11 @@ class DAO extends MetricsExt
   var confirmWindow : Int = 30
 
   def restartNode(): Unit = {
-    genesisBundle = None
     downloadMode = true
     syncPendingTXHashes = Set()
     syncPendingBundleHashes = Set()
+    validLedger.clear()
+    memPoolLedger.clear()
     signedPeerLookup.clear()
     maxBundleMetaData = None
     bundleToSheaf.clear()
@@ -30,7 +30,6 @@ class DAO extends MetricsExt
     resetMetrics()
     peersAwaitingAuthenticationToNumAttempts.clear()
     signedPeerLookup.clear()
-    txInMaxBundleNotInValidation = Set()
     peerSync.clear()
     deadPeers = Seq()
   }

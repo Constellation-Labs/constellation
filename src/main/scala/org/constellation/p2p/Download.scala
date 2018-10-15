@@ -12,6 +12,9 @@ import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import constellation._
+import org.constellation.Data
+import org.constellation.primitives.Schema._
 import org.constellation.util.{APIClient, Signed}
 import scalaj.http.HttpResponse
 
@@ -439,14 +442,14 @@ trait Download extends PeerAuth {
 
     downloadInProgress = true
 
-    val apiClient = new APIClient()
+    val client = APIClient(port = 9000)
 
     // get max bundle and genesis hash
-    val maxBundleResponse = getMaxBundleHash(apiClient)
+    val maxBundleResponse = getMaxBundleHash(client)
 
     val apiAddress = maxBundleResponse._1.get
 
-    apiClient.setConnection(apiAddress.getHostName, apiAddress.getPort)
+    val apiClient = APIClient(apiAddress.getHostName, apiAddress.getPort)
 
     val maxBundleSheaf = maxBundleResponse._2.get.sheaf.get
     val maxBundleHash = maxBundleSheaf.bundle.hash
@@ -508,7 +511,7 @@ trait Download extends PeerAuth {
             val transactions: Seq[Transaction] = response.transactions
 
             // store the bundle
-            handleBundle(sheaf.bundle)
+//            handleBundle(sheaf.bundle)
 
             // store the transactions
             // TODO: update for latest
@@ -568,12 +571,14 @@ trait Download extends PeerAuth {
   def getRandomPeerClientConnection(peerSelection: Iterator[Signed[Peer]]): APIClient = {
     val peer = peerSelection.next().data.apiAddress.get
 
-    val client = new APIClient().setConnection(peer.getHostName, peer.getPort)
+    val client = APIClient(peer.getHostName, peer.getPort)
 
     client
   }
 
   def getMaxBundleHash(apiClient: APIClient): (Option[InetSocketAddress], Option[MaxBundleGenesisHashQueryResponse]) = {
+    // TODO: get rid of apiClient here -- it's only used to read and deserialize the HTTPResponse from the broadcast.
+    // Must be a better way
     val maxBundles: Seq[(InetSocketAddress, Future[HttpResponse[String]])] = getBroadcastTCP(route = "maxBundle")
 
     val futures = Future.sequence(maxBundles.map(b => b._2))

@@ -29,7 +29,7 @@ object DownloadChainSingle {
     val ips = mappings.map{_.externalIP}
 
     val apis = ips.map{ ip =>
-      val r = new APIClient().setConnection(ip, 9000)
+      val r = APIClient(ip, 9000)
       r
     }
 

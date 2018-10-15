@@ -5,9 +5,9 @@ import java.security.{KeyPair, PublicKey}
 
 import constellation._
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.{PeerData, Schema}
+import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.{Id, Peer, SendToAddress}
-import org.constellation.util.{APIClient, Signed, TestNode}
+import org.constellation.util.Signed
 
 
 object Fixtures {

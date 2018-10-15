@@ -10,6 +10,8 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
 import org.constellation.LevelDB.{DBGet, DBPut}
+import constellation._
+import org.constellation.Data
 import org.constellation.consensus.Consensus._
 import org.constellation.consensus.EdgeProcessor.{HandleTransaction, _}
 import org.constellation.consensus.Validation.TransactionValidationStatus
@@ -46,15 +48,7 @@ object EdgeProcessor {
     // TODO : Handle resolution issues.
     val potentialChildren = dao.resolveNotifierCallbacks.get(cb.soeHash)
 
-    val cache = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]].get()
-
-    cache.map{ c =>
-      dao.metricsManager ! IncrementMetric("checkpointCacheFound")
-      c.checkpointBlock
-    }
-
-
-
+    val cache = dao.dbActor.getCheckpointCacheData(cb.baseHash)
 
     def signFlow(): Unit = {
       // Mock
@@ -88,40 +82,25 @@ object EdgeProcessor {
         if (r) {
           dao.metricsManager ! IncrementMetric("resolvedCheckpointMessages")
 
-          val validAccordingToCurrentState = Future.sequence(
-            cb.transactions.map {
-              Validation.validateTransaction(dao.dbActor, _)
-            }
-          ).map {
-            _.forall(_.validByCurrentState)
-          }
+          val validatedTransactions = cb.transactions.map(Validation.validateTransaction(dao.dbActor, _))
+          val validAccordingToCurrentState = validatedTransactions.forall(_.validByCurrentState)
 
-          validAccordingToCurrentState.foreach { v =>
-            if (v) {
+            if (validAccordingToCurrentState) {
               signFlow()
             }
             else {
-              val validByAncestors = Future.sequence(
-                cb.transactions.map {
-                  Validation.validateTransaction(dao.dbActor, _)
-                }
-              ).map {
-                _.forall { s =>
+                val v = validatedTransactions.forall { s =>
                   cb.checkpoint.edge.parentHashes.forall { ancestorHash =>
                     s.validByAncestor(ancestorHash)
                   }
                 }
-              }
 
-              validByAncestors.foreach { v =>
                 if (v) {
                   // resolveAncestryConflict(cb)
                 }
               }
               // Check if parent tips are valid to merge.
-            }
 
-          }
 
 
           // TODO: Process children
@@ -144,46 +123,46 @@ object EdgeProcessor {
     }
     /*
 
-        def mainFlow(): Unit = {
+    def mainFlow(): Unit = {
 
 
-          cache.foreach { c =>
 
-            // Base hash not stored in DB, no possible signature conflict
-            if (c.isEmpty) {
-              dao.metricsManager ! IncrementMetric("unknownCheckpointMessages")
-              // resolutionFlow()
-              // DEBUG
-              signFlow()
-            } else {
 
-              val ca = c.get
+        // Base hash not stored in DB, no possible signature conflict
+        if (cache.isEmpty) {
+          dao.metricsManager ! IncrementMetric("unknownCheckpointMessages")
+          // resolutionFlow()
+          // DEBUG
+          signFlow()
+        } else {
 
-              if (ca.resolved) {
-                if (ca.inDAG) {
-                  if (ca.checkpointBlock != cb) {
-                    // Data mismatch on base hash lookup, i.e. signature conflict
-                    // TODO: Conflict resolution
-                    //resolveConflict(cb, ca)
-                  } else {
-                    // Duplicate checkpoint message, no action required.
-                  }
-                } else {
-                  // warn or store information about potential conflict
-                  // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
-                }
+          val ca = cache.get
+
+          if (ca.resolved) {
+            if (ca.inDAG) {
+              if (ca.checkpointBlock != cb) {
+                // Data mismatch on base hash lookup, i.e. signature conflict
+                // TODO: Conflict resolution
+                //resolveConflict(cb, ca)
               } else {
-
-                // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
-                // Otherwise do nothing as the resolution is already in progress.
-
+                // Duplicate checkpoint message, no action required.
               }
-
-              // if (ca.checkpointBlock
-
+            } else {
+              // warn or store information about potential conflict
+              // if block is not yet in DAG then it doesn't matter, can just store updated value or whatever
             }
+          } else {
+
+            // Data is stored but not resolved, potentially trigger resolution check to see if something failed?
+            // Otherwise do nothing as the resolution is already in progress.
+
           }
+
+          // if (ca.checkpointBlock
+
         }
+
+    }
 
         mainFlow()
     */
@@ -393,8 +372,7 @@ object EdgeProcessor {
     // in event where a new signature is being made by another peer it's most likely still valid, should
     // cache the results of this somewhere.
 
-
-    // TODO: Move memPool update logic to actor and send response back to EdgeProcessor
+// TODO: Move memPool update logic to actor and send response back to EdgeProcessor
     if (!memPool.transactions.contains(tx)) {
       val pool = memPool.copy(transactions = memPool.transactions + tx)
       dao.metricsManager ! UpdateMetric("transactionMemPool", pool.transactions.size.toString)
@@ -406,10 +384,9 @@ object EdgeProcessor {
       memPool
     }
 
-    /*
-        val validationResult = Validation.validateTransaction(dao.dbActor, tx)
+    /*    val finished = Validation.validateTransaction(dao.dbActor, tx)
 
-        val finished = Await.result(validationResult, 90.seconds)
+
 
         finished match {
           // TODO : Increment metrics here for each case
@@ -875,7 +852,7 @@ class EdgeProcessor(dao: DAO)
       sender() ! cbAfterProcessing
       context become active(postCreationMemPool)
 
-    case ConsensusRoundResult(checkpointBlock: CheckpointBlock, roundHash: RoundHash[Checkpoint]) =>
+    case ConsensusRoundResult(checkpointBlock, roundHash: RoundHash[Checkpoint]) =>
       log.debug(s"handle checkpointBlock = $checkpointBlock")
 
      // handleCheckpoint(checkpointBlock, dao)

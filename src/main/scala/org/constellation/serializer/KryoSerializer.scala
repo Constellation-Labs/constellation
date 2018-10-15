@@ -62,4 +62,8 @@ object KryoSerializer {
   }
 */
 
+  def deserialize[T](message: Array[Byte], cls: Class[T]): T = {
+    kryoPool.fromBytes(message, cls)
+  }
+
 }

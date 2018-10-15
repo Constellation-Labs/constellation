@@ -3,7 +3,7 @@ package org.constellation
 import java.net.InetSocketAddress
 import java.security.KeyPair
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, path, _}
@@ -21,9 +21,12 @@ import org.constellation.LevelDB.DBGet
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.p2p.Download
 import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.{CommonEndpoints, ServeUI}
+import org.constellation.primitives.{APIBroadcast, _}
+import org.constellation.util.ServeUI
 import org.json4s.native
 import org.json4s.native.Serialization
 import scalaj.http.HttpResponse
@@ -32,6 +35,8 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id, nodeStatus: NodeState = NodeState.Ready)
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 case class HostPort(host: String, port: Int)
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
@@ -63,8 +68,9 @@ class API(udpAddress: InetSocketAddress,
 
   val config: Config = ConfigFactory.load()
 
-  val authId: String = config.getString("auth.id")
-  val authPassword: String = config.getString("auth.password")
+  private val authEnabled = config.getBoolean("auth.enabled")
+  private val authId: String = config.getString("auth.id")
+  private val authPassword: String = config.getString("auth.password")
 
   val getEndpoints: Route =
     extractClientIP { clientIP =>
@@ -189,8 +195,10 @@ class API(udpAddress: InetSocketAddress,
 
             val res = idMap.map{
               case (id, fut) =>
-                val maybeResponse = fut.getOpt()
-                id -> maybeResponse.exists{_.isSuccess}
+                val resp = fut.get()
+                id -> resp.isSuccess
+//                val maybeResponse = fut.getOpt()
+//                id -> maybeResponse.exists{_.isSuccess}
             }.toSeq
 
             complete(res)
@@ -273,12 +281,22 @@ class API(udpAddress: InetSocketAddress,
       }
     }
 
+  private val noAuthRoutes =
+    get {
+      // TODO: revisit
+      path("health") {
+        complete(StatusCodes.OK)
+      } ~
+      path("favicon.ico") {
+        getFromResource("favicon.ico")
+      }
+    }
 
-  private val routes: Route = cors() {
+  private val mainRoutes: Route = cors() {
     getEndpoints ~ postEndpoints ~ jsRequest ~ commonEndpoints ~ serveMainPage
   }
 
-  def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
+  private def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
     credentials match {
       case p @ Credentials.Provided(id)
         if id == authId && p.verify(authPassword) =>
@@ -287,6 +305,14 @@ class API(udpAddress: InetSocketAddress,
     }
   }
 
-  val authRoutes: Route = faviconRoute ~ routes
+  val routes = if (authEnabled) {
+    noAuthRoutes ~ authenticateBasic(realm = "secure site",
+      myUserPassAuthenticator) {
+      user =>
+        mainRoutes
+    }
+  } else {
+    noAuthRoutes ~ mainRoutes
+  }
 
 }

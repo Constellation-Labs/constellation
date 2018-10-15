@@ -5,7 +5,9 @@ import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem, Props, TypedActor, TypedProps}
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.RemoteAddress
 import akka.http.scaladsl.server.Route
 import akka.io.Udp
 import akka.stream.ActorMaterializer
@@ -15,6 +17,8 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.{CheckpointMemPoolVerifier, CheckpointUniqueSigner, Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.{PeerAPI, UDPActor}
+import org.constellation.p2p.{PeerAPI, UDPActor}
+import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Heartbeat}
 
@@ -22,6 +26,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object ConstellationNode {
+import scala.concurrent.{ExecutionContext, Future}
 
   def main(args: Array[String]): Unit = {
     val logger = Logger(s"Main")
@@ -102,6 +107,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
   implicit val dao: DAO = new DAO()
   dao.updateKeyPair(configKeyPair)
 
+  val ipManager = IPManager()
+
   import dao._
   dao.actorMaterializer = materialize
 
@@ -144,16 +151,12 @@ class ConstellationNode(val configKeyPair: KeyPair,
   )
 
   val peerManager: ActorRef = system.actorOf(
-    Props(new PeerManager(dao)), s"PeerManager_$publicKeyHash"
+    Props(new PeerManager(ipManager, dao)), s"PeerManager_$publicKeyHash"
   )
 
-  val cellManager: ActorRef = system.actorOf(
-    Props(new CellManager(memPoolManager, metricsManager, peerManager)), s"CellManager_$publicKeyHash"
-  )
-
-  val dbActor: ActorRef =  system.actorOf(
-    Props(new LevelDBActor(dao)), s"ConstellationDBActor_$publicKeyHash"
-  )
+  val dbActor: KVDB = TypedActor(system).typedActorOf(TypedProps(
+    classOf[KVDB],
+    new KVDBImpl(dao)), s"KVDB_$publicKeyHash")
 
   val udpActor: ActorRef =
     system.actorOf(
@@ -181,26 +184,53 @@ class ConstellationNode(val configKeyPair: KeyPair,
   dao.cpSigner = cpUniqueSigner
 
   // If we are exposing rpc then create routes
-  val routes: Route = new API(udpAddress, cellManager).authRoutes
+  val routes: Route = new API(udpAddress, data).routes
 
   logger.info("API Binding")
 
 
   // Setup http server for internal API
-  val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
+  private val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
+
+  val peerAPI = new PeerAPI(ipManager, data)
+
+  val peerRoutes : Route = peerAPI.routes
+
+
+  seedPeers.foreach {
+    peer => ipManager.addKnownIP(RemoteAddress(peer))
+  }
+
+  def addAddressToKnownIPs(addr: ValidPeerIPData): Unit = {
+    val remoteAddr = RemoteAddress(new InetSocketAddress(addr.canonicalHostName, addr.port))
+    ipManager.addKnownIP(remoteAddr)
+  }
+
+  def getIPData: ValidPeerIPData = {
+    ValidPeerIPData(this.hostName, this.peerHttpPort)
+  }
+
+  def getInetSocketAddress: InetSocketAddress = {
+    new InetSocketAddress(this.hostName, this.peerHttpPort)
+  }
 
   val peerRoutes : Route = new PeerAPI(dao).routes
 
   // Setup http server for peer API
-  Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)
+  private val peerBindingFuture = Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind
 
     bindingFuture
-      .flatMap(_.unbind())
+      .foreach(_.unbind())
+
+    peerBindingFuture
+      .foreach(_.unbind())
     // TODO: we should add this back but it currently causes issues in the integration test
     //.onComplete(_ => system.terminate())
+
+    TypedActor(system).stop(dbActor)
   }
 
   //////////////
@@ -208,10 +238,16 @@ class ConstellationNode(val configKeyPair: KeyPair,
   // TODO : Move to separate test class - these are within jvm only but won't hurt anything
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
-  def getAPIClient(): APIClient = {
-    val api = new APIClient().setConnection(host = hostName, port = httpPort)
+  def getAPIClient(host: String = hostName, port: Int = httpPort, udpPort: Int = udpPort): APIClient = {
+    val api = APIClient(host, port, udpPort)
     api.id = id
-    api.udpPort = udpPort
+    api
+  }
+
+  def getAPIClientForNode(node: ConstellationNode): APIClient = {
+    val ipData = node.getIPData
+    val api = APIClient(host = ipData.canonicalHostName, port = ipData.port)
+    api.id = id
     api
   }
 

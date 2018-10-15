@@ -5,9 +5,11 @@ import java.security.KeyPair
 import constellation._
 import org.constellation.LevelDB.DBPut
 import org.constellation.primitives.Schema._
+import org.constellation.primitives.Schema._
 
 
 object Genesis {
+trait Genesis extends NodeData with Ledger with EdgeDAO {
 
   val CoinBaseHash = "coinbase"
 
@@ -89,6 +91,7 @@ trait Genesis extends NodeData with BundleDataExt with EdgeDAO {
 
   def acceptGenesis(go: GenesisObservation): Unit = {
     // Store hashes for the edges
+
     go.genesis.store(dbActor, CheckpointCacheData(go.genesis, inDAG = true, resolved = true), resolved = true)
     go.initialDistribution.store(dbActor, CheckpointCacheData(go.initialDistribution, inDAG = true, resolved = true), resolved = true)
     go.initialDistribution2.store(dbActor, CheckpointCacheData(go.initialDistribution2, inDAG = true, resolved = true), resolved = true)
@@ -97,16 +100,13 @@ trait Genesis extends NodeData with BundleDataExt with EdgeDAO {
     go.genesis.transactions.foreach{
       rtx =>
         val bal = rtx.amount - (go.initialDistribution.transactions.map {_.amount}.sum * 2)
-        dbActor ! DBPut(
-          rtx.dst.hash,
-          AddressCacheData(bal, bal, Some(1000D))
-        )
+        dbActor.putAddressCacheData(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000D)))
     }
 
     // Store the balance for the initial distribution addresses along with starting rep score.
     go.initialDistribution.transactions.foreach{ t =>
       val bal = t.amount * 2
-      dbActor ! DBPut(t.dst.hash, AddressCacheData(bal, bal, Some(1000D)))
+      dbActor.putAddressCacheData(t.dst.hash, AddressCacheData(bal, bal, Some(1000D)))
     }
 
     val numTX = (1 + go.initialDistribution.transactions.size * 2).toString

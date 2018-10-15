@@ -130,7 +130,7 @@ class Simulation {
         genChecks = Int.MaxValue
       } else {
         genChecks += 1
-        logger.error(s"Missing genesis nodes. Waiting 30s. Num attempts: $genChecks out of 10")
+        logger.error(s"Genesis not stored. Waiting 30s. Num attempts: $genChecks out of 10")
         Thread.sleep(30000)
       }
     }
