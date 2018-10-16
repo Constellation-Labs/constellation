@@ -3,13 +3,11 @@ package org.constellation.primitives
 import java.security.KeyPair
 
 import constellation._
-import org.constellation.LevelDB.DBPut
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.Schema._
+
 
 
 object Genesis {
-trait Genesis extends NodeData with Ledger with EdgeDAO {
 
   val CoinBaseHash = "coinbase"
 
@@ -83,7 +81,7 @@ trait Genesis extends NodeData with Ledger with EdgeDAO {
 
 import org.constellation.primitives.Genesis._
 
-trait Genesis extends NodeData with BundleDataExt with EdgeDAO {
+trait Genesis extends NodeData with EdgeDAO {
 
   def createGenesisAndInitialDistribution(ids: Set[Id]): GenesisObservation = {
     createGenesisAndInitialDistributionDirect(selfAddressStr, ids, keyPair)

@@ -19,14 +19,7 @@ class DAO extends MetricsExt
 
   def restartNode(): Unit = {
     downloadMode = true
-    syncPendingTXHashes = Set()
-    syncPendingBundleHashes = Set()
-    validLedger.clear()
-    memPoolLedger.clear()
     signedPeerLookup.clear()
-    maxBundleMetaData = None
-    bundleToSheaf.clear()
-    last100ValidBundleMetaData = Seq()
     resetMetrics()
     peersAwaitingAuthenticationToNumAttempts.clear()
     signedPeerLookup.clear()

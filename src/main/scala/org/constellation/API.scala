@@ -17,22 +17,15 @@ import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.LevelDB.DBGet
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.p2p.Download
 import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.crypto.Wallet
 import org.constellation.primitives.Schema._
-import org.constellation.primitives._
-import org.constellation.util.{CommonEndpoints, ServeUI}
 import org.constellation.primitives.{APIBroadcast, _}
-import org.constellation.util.ServeUI
+import org.constellation.util.{CommonEndpoints, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
 import scalaj.http.HttpResponse
-
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
 
 case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id, nodeStatus: NodeState = NodeState.Ready)
 import scala.concurrent.{ExecutionContext, Future}
@@ -48,8 +41,7 @@ case class ProcessingConfig(
                                 randomTXPerRound: Int = 50
                               )
 
-class API(udpAddress: InetSocketAddress,
-          cellManager: ActorRef)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
+class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   extends Json4sSupport
     with SimpleWalletLike
     with ServeUI
@@ -79,7 +71,7 @@ class API(udpAddress: InetSocketAddress,
           complete(dao.genesisObservation)
         } ~
         path("checkpoint" / Segment) { s =>
-          val res = (dao.dbActor ? DBGet(s)).mapTo[Option[CheckpointCacheData]].get().map{_.checkpointBlock}
+          val res = dao.dbActor.getCheckpointCacheData(s).map{_.checkpointBlock}
           complete(res)
         } ~
           path("restart") {
@@ -182,6 +174,7 @@ class API(udpAddress: InetSocketAddress,
         } else {
           dao.nodeState = NodeState.PendingDownload
         }
+        dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
         complete(StatusCodes.OK)
       } ~
       path("random") { // Temporary

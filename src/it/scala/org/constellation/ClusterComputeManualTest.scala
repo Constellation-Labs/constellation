@@ -32,11 +32,11 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
 
     val apis = ips.map{ ip =>
-      new APIClient().setConnection(ip, 9000)
+      new APIClient(ip, 9000)
     }
 
     val peerAPIs = ips.map{ip =>
-      new APIClient().setConnection(ip, 9001)
+      new APIClient(ip, 9001)
     }
 
     val sim = new Simulation()

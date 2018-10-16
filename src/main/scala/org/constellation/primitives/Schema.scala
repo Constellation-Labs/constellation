@@ -3,7 +3,6 @@ package org.constellation.primitives
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
-import akka.actor.ActorRef
 import constellation.pubKeyToAddress
 import org.constellation.KVDB
 import org.constellation.consensus.Consensus.RemoteMessage

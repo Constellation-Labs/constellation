@@ -136,7 +136,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 */
 
     val peerAPIs = ips.map{ip =>
-      new APIClient().setConnection(ip, 9001)
+      new APIClient(ip, 9001)
     }
 
     val sim = new Simulation()

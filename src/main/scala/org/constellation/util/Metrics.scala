@@ -4,14 +4,9 @@ import com.softwaremill.macmemo.memoize
 import constellation._
 import org.constellation.DAO
 import org.constellation.crypto.SimpleWalletLike
-import constellation._
-import org.constellation.Data
-import org.constellation.crypto.Wallet
-import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.MetricsResult
 
 import scala.concurrent.duration._
-import scala.util.Try
 
 class Metrics(val dao: DAO = null) extends SimpleWalletLike {
 
@@ -70,15 +65,7 @@ class Metrics(val dao: DAO = null) extends SimpleWalletLike {
         "z_peers" -> peers.map {
           _.data
         }.json,
-        "z_validLedger" -> validLedger.toMap.json,
-        "z_mempoolLedger" -> memPoolLedger.toMap.json,
-        "downloadMode" -> downloadMode.toString,
-        "allPeersAgreeOnValidLedger" -> Try {
-          peerSync.forall {
-            case (_, hb) =>
-              hb.validLedger == validLedger.toMap
-          }.toString
-        }.getOrElse("")
+        "downloadMode" -> downloadMode.toString
       ))
   }
 }

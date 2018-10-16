@@ -35,6 +35,8 @@ trait KVDB {
 
   def restart(): Unit
   def delete(key: String): Boolean
+  def getSnapshot(key: String) : Option[consensus.Snapshot]
+  def putSnapshot(key: String, snapshot: consensus.Snapshot): Unit
   def putCheckpointCacheData(key: String, c: CheckpointCacheData): Unit
   def updateCheckpointCacheData(key: String,
                                 f: CheckpointCacheData => CheckpointCacheData,
@@ -74,7 +76,7 @@ trait KVDB {
   def getCheckpointEdgeData(key: String): Option[CheckpointEdgeData]
 }
 
-class KVDBImpl(dao: Data) extends KVDB {
+class KVDBImpl(dao: DAO) extends KVDB {
   private val logger = Logger("KVDB")
 
   private def tmpDirId = file"tmp/${dao.id.medium}/db"
@@ -119,6 +121,10 @@ class KVDBImpl(dao: Data) extends KVDB {
       dao.numDBDeletes += 1
       db.delete(key).isSuccess
     } else true
+
+  override def putSnapshot(key: String, snapshot: consensus.Snapshot): Unit = put(key, snapshot)
+
+  override def getSnapshot(key: String): Option[consensus.Snapshot] = get[consensus.Snapshot](key)
 
   override def putCheckpointCacheData(s: String, c: CheckpointCacheData): Unit =
     put(s, c)

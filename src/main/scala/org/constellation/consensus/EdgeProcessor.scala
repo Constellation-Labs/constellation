@@ -9,9 +9,6 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
-import org.constellation.LevelDB.{DBGet, DBPut}
-import constellation._
-import org.constellation.Data
 import org.constellation.consensus.Consensus._
 import org.constellation.consensus.EdgeProcessor.{HandleTransaction, _}
 import org.constellation.consensus.Validation.TransactionValidationStatus
@@ -616,7 +613,7 @@ object EdgeProcessor {
       cb -> memPool
     } else {
 
-      val cache = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]].get()
+      val cache = dao.dbActor.getCheckpointCacheData(cb.baseHash)
 
       cache.map { c =>
         dao.metricsManager ! IncrementMetric("checkpointCacheFound")
@@ -803,9 +800,9 @@ class EdgeProcessor(dao: DAO)
 
       val snapshotUpdatedMemPool = if (memPool.heartBeatRound % 30 == 0 && memPool.acceptedCBSinceSnapshot.nonEmpty && dao.nodeState == NodeState.Ready) {
         val snapshot = Snapshot(memPool.snapshot.hash, memPool.acceptedCBSinceSnapshot)
-        dao.dbActor ! DBPut(snapshot.hash, snapshot)
+        dao.dbActor.putSnapshot(snapshot.hash, snapshot)
         if (snapshot.lastSnapshot != "") {
-          val lastSnapshotVerification = (dao.dbActor ? DBGet(snapshot.lastSnapshot)).mapTo[Option[Snapshot]].get()
+          val lastSnapshotVerification = dao.dbActor.getSnapshot(snapshot.lastSnapshot)
           if (lastSnapshotVerification.isEmpty) {
             dao.metricsManager ! IncrementMetric("snapshotVerificationFailed")
           } else {

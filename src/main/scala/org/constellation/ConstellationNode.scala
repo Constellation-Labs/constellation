@@ -4,7 +4,6 @@ import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.actor.{ActorRef, ActorSystem, Props, TypedActor, TypedProps}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.RemoteAddress
@@ -17,7 +16,6 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.{CheckpointMemPoolVerifier, CheckpointUniqueSigner, Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.{PeerAPI, UDPActor}
-import org.constellation.p2p.{PeerAPI, UDPActor}
 import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Heartbeat}
@@ -26,7 +24,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object ConstellationNode {
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
   def main(args: Array[String]): Unit = {
     val logger = Logger(s"Main")
@@ -184,7 +182,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   dao.cpSigner = cpUniqueSigner
 
   // If we are exposing rpc then create routes
-  val routes: Route = new API(udpAddress, data).routes
+  val routes: Route = new API(udpAddress).routes
 
   logger.info("API Binding")
 
@@ -192,7 +190,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   // Setup http server for internal API
   private val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
 
-  val peerAPI = new PeerAPI(ipManager, data)
+  val peerAPI = new PeerAPI(ipManager, dao)
 
   val peerRoutes : Route = peerAPI.routes
 
@@ -214,7 +212,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
     new InetSocketAddress(this.hostName, this.peerHttpPort)
   }
 
-  val peerRoutes : Route = new PeerAPI(dao).routes
 
   // Setup http server for peer API
   private val peerBindingFuture = Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)

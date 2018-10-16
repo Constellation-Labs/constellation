@@ -5,10 +5,7 @@ import java.util.concurrent.TimeUnit
 import akka.pattern.ask
 import akka.util.Timeout
 import org.constellation.DAO
-import org.constellation.LevelDB.DBGet
-import org.constellation.Data
 import org.constellation.primitives.APIBroadcast
-import org.constellation.primitives.Schema.{CheckpointBlock, SignedObservationEdgeCache}
 import org.constellation.primitives.Schema.CheckpointBlock
 
 import scala.concurrent.{ExecutionContext, Future}

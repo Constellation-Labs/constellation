@@ -17,7 +17,7 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.AddressCacheData
 import org.constellation.util.SignHelp
-import org.constellation.{Data, LevelDB, LevelDBActor}
+import org.constellation.{DAO, LevelDB, LevelDBActor}
 import org.scalatest.FlatSpec
 
 import scala.util.Try

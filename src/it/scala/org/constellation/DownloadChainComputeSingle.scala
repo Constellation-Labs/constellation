@@ -108,7 +108,7 @@ object DownloadChainComputeSingle {
     println(ips)
 
     val apis = ips.map{ ip =>
-      val r = new APIClient().setConnection(ip, 9000)
+      val r = new APIClient(ip, 9000)
       r
     }
 

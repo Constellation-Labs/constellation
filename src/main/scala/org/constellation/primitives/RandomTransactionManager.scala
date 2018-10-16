@@ -7,8 +7,6 @@ import constellation._
 import org.constellation.DAO
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState, SendToAddress}
 import org.constellation.util.HeartbeatSubscribe
-import org.constellation.Data
-import org.constellation.primitives.Schema.{Id, InternalHeartbeat, SendToAddress}
 
 import scala.util.Random
 

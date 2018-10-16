@@ -8,13 +8,9 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
-import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import constellation._
-import org.constellation.Data
-import org.constellation.primitives.Schema._
 import org.constellation.util.{APIClient, Signed}
 import scalaj.http.HttpResponse
 
@@ -33,13 +29,13 @@ object Download {
 
 
   def downloadHash(hash: String, singlePeer: PeerData)(implicit dao: DAO, ec: ExecutionContext): Future[Unit] = {
-    val cache = (dao.dbActor ? DBGet(hash)).mapTo[Option[CheckpointCacheData]].get()
+    val cache = dao.dbActor.getCheckpointCacheData(hash)
     if (cache.isEmpty) {
       singlePeer.client.get("checkpoint/" + hash).map {
         _.body.x[Option[CheckpointBlock]]
       }.map {
         _.map { cb =>
-          val cbCache = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointCacheData]].get()
+          val cbCache = dao.dbActor.getCheckpointCacheData(cb.baseHash)
           if (cbCache.isEmpty && cb != dao.genesisObservation.get.initialDistribution &&
             cb != dao.genesisObservation.get.initialDistribution2) {
             EdgeProcessor.acceptCheckpoint(cb)
@@ -121,7 +117,7 @@ object Download {
       if (cb != dao.genesisObservation.get.initialDistribution &&
         cb != dao.genesisObservation.get.initialDistribution2) {
 
-        if ((dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointBlock]].get().isEmpty) {
+        if (dao.dbActor.getCheckpointCacheData(cb.baseHash).isEmpty) {
           EdgeProcessor.acceptCheckpoint(cb)
           dao.metricsManager ! IncrementMetric("downloadedBlocks")
         } else {
@@ -169,14 +165,14 @@ object Download {
 
       val startingCBs = snapshotInfo.acceptedCBSinceSnapshot ++ snapshotInfo.snapshot.checkpointBlocks
 
-      dao.dbActor ! DBPut(snapshotInfo.snapshot.hash, snapshotInfo.snapshot)
+      dao.dbActor.putSnapshot(snapshotInfo.snapshot.hash, snapshotInfo.snapshot)
 
 
       def getSnapshots(hash: String, blocks: Seq[String] = Seq()): Seq[String] = {
         val sn = snapshotClient.getBlocking[Option[Snapshot]]("snapshot/" + hash)
         sn match {
           case Some(snapshot) =>
-            dao.dbActor ! DBPut(hash, snapshot)
+            dao.dbActor.putSnapshot(hash, snapshot)
             if (snapshot.lastSnapshot == "") {
               dao.metricsManager ! IncrementMetric("downloadSnapshotEmptyStr")
               blocks

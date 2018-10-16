@@ -5,16 +5,12 @@ import java.net.InetSocketAddress
 import akka.actor.{Actor, ActorSystem}
 import akka.http.scaladsl.model.RemoteAddress
 import akka.stream.ActorMaterializer
-import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.{Id, NodeState}
-import org.constellation.util.APIClient
-import org.constellation.{AddPeerRequest, DAO, HostPort, RemovePeerRequest}
-
 import com.typesafe.scalalogging.Logger
 import org.constellation.p2p.{PeerAuthSignRequest, PeerRegistrationRequest}
-import org.constellation.primitives.Schema.Id
+import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.{Id, NodeState}
 import org.constellation.util.{APIClient, HashSignature}
-import org.constellation.{AddPeerRequest, Data}
+import org.constellation.{AddPeerRequest, DAO, HostPort, RemovePeerRequest}
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 import scala.collection.Set
@@ -46,7 +42,7 @@ class PeerManager(ipManager: IPManager, dao: DAO)(implicit val materialize: Acto
 
   def active(peerInfo: Map[Id, PeerData]): Receive = {
 
-case RemovePeerRequest(hp, id) =>
+    case RemovePeerRequest(hp, id) =>
 
       val updatedPeerInfo = peerInfo.filter { case (pid, d) =>
         val badHost = hp.exists { case HostPort(host, port) => d.client.hostName == host && d.client.apiPort == port }
@@ -70,7 +66,9 @@ case RemovePeerRequest(hp, id) =>
           peerInfo + (id -> pd.copy(nodeState = nodeStatus))
       }.getOrElse(peerInfo)
 
-      context become active(updated)    case a @ AddPeerRequest(host, udpPort, port, id, ns) =>
+      context become active(updated)
+
+    case a @ AddPeerRequest(host, udpPort, port, id, ns) =>
       val client =  APIClient(host, port)
 
       client.id = id
@@ -138,7 +136,7 @@ case RemovePeerRequest(hp, id) =>
 
     case Deregistration(ip, port, key) =>
 
-      // Do we need to validate this? Or just remove from knownIPs?
+    // Do we need to validate this? Or just remove from knownIPs?
 
   }
 }

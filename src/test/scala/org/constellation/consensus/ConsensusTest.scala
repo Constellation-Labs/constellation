@@ -15,7 +15,6 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.collection.immutable.{HashMap, Map}
 import org.constellation.Fixtures._
-import org.constellation.Data
 import org.constellation.crypto.KeyUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 

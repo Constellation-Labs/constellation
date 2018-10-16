@@ -4,14 +4,7 @@ import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorRef
-import akka.pattern.ask
 import akka.util.Timeout
-import org.constellation.LevelDB.DBGet
-import org.constellation.primitives.Schema.{AddressCacheData, Transaction, TransactionCacheData}
-import scalaj.http.HttpResponse
-
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 import org.constellation.KVDB
 import org.constellation.primitives.Schema.Transaction
 import scalaj.http.HttpResponse
