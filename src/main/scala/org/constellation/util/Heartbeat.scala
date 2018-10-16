@@ -1,42 +1,34 @@
 package org.constellation.util
 
-import java.util.concurrent.{ScheduledFuture, ScheduledThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorRef}
 import org.constellation.DAO
 import org.constellation.primitives.Schema.InternalHeartbeat
 
-import scala.util.Random
-
+import scala.concurrent.duration.Duration
 
 case object HeartbeatSubscribe
+case object TriggerHeartbeats
 
 class Heartbeat(dao: DAO) extends Actor {
 
-  var actors : Seq[ActorRef] = Seq()
-
-  val random = new Random()
   val period = 1
-  val timeUnit = TimeUnit.SECONDS
 
-  private val bufferTask = new Runnable {
-    def run(): Unit = {
+  context.system.scheduler.schedule(Duration.Zero, Duration(period, TimeUnit.SECONDS), self, HeartbeatSubscribe)(context.dispatcher)
+
+  def active(actors : Set[ActorRef]): Receive = {
+
+    case HeartbeatSubscribe =>
+      context.become(active(actors + sender()))
+
+    case TriggerHeartbeats =>
       if (dao.heartbeatEnabled) {
         actors.foreach {
           _ ! InternalHeartbeat
         }
       }
-    }
   }
 
-  var heartBeatMonitor: ScheduledFuture[_] = _
-  var heartBeat: ScheduledThreadPoolExecutor = _
-
-  heartBeat = new ScheduledThreadPoolExecutor(10)
-  heartBeatMonitor = heartBeat.scheduleAtFixedRate(bufferTask, 1, period, timeUnit)
-
-  def receive: Receive = {
-    case HeartbeatSubscribe =>
-      actors :+= sender()
-  }
+  def receive: Receive = active(Set())
 }
