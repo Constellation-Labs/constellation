@@ -125,104 +125,107 @@ object Download {
         }
       }
     case None =>
-        dao.metricsManager ! IncrementMetric("downloadBlockEmptyResponse")
+      dao.metricsManager ! IncrementMetric("downloadBlockEmptyResponse")
     }
   }
 
 
-  def download()(implicit dao: DAO, ec: ExecutionContext): Unit = {
+  def downloadActual()(implicit dao: DAO, ec: ExecutionContext): Unit = {
+    logger.info("Download started")
+    dao.nodeState = NodeState.DownloadInProgress
 
-    Try {
-      logger.info("Download started")
-      dao.nodeState = NodeState.DownloadInProgress
+    val res = (dao.peerManager ? APIBroadcast(_.getSync("genesis").body.x[Option[GenesisObservation]]))
+      .mapTo[Map[Id, Option[GenesisObservation]]].get()
 
-      val res = (dao.peerManager ? APIBroadcast(_.getSync("genesis").body.x[Option[GenesisObservation]]))
-        .mapTo[Map[Id, Option[GenesisObservation]]].get()
+    // TODO: Error handling and verification
+    val genesis = res.filter {
+      _._2.nonEmpty
+    }.map {
+      _._2.get
+    }.head
+    dao.acceptGenesis(genesis)
 
-      // TODO: Error handling and verification
-      val genesis = res.filter {
-        _._2.nonEmpty
-      }.map {
-        _._2.get
-      }.head
-      dao.acceptGenesis(genesis)
+    dao.metricsManager ! UpdateMetric("downloadedGenesis", "true")
 
-      dao.metricsManager ! UpdateMetric("downloadedGenesis", "true")
+    /*
+          val allTips = (dao.peerManager ? APIBroadcast(_.getSync("tips").body.x[Seq[CheckpointBlock]]))
+            .mapTo[Map[Id, Seq[CheckpointBlock]]].get()
+    */
 
-      /*
-            val allTips = (dao.peerManager ? APIBroadcast(_.getSync("tips").body.x[Seq[CheckpointBlock]]))
-              .mapTo[Map[Id, Seq[CheckpointBlock]]].get()
-      */
+    val peerData = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().filter{_._2.nodeState == NodeState.Ready}
 
-      val peerData = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().filter{_._2.nodeState == NodeState.Ready}
+    val snapshotClient = peerData.head._2.client
 
-      val snapshotPeer = peerData.head._1
-      val snapshotClient = peerData.head._2.client
+    val snapshotInfo = snapshotClient.getBlocking[SnapshotInfo]("info")
+    // To not download from other nodes currently downloading, fix with NodeStatus metadata
+    // val (id, activeTips) = allTips.filter { case (_, t) => genesis.notGenesisTips(t) }.head
 
-      val snapshotInfo = snapshotClient.getBlocking[SnapshotInfo]("info")
-      // To not download from other nodes currently downloading, fix with NodeStatus metadata
-      // val (id, activeTips) = allTips.filter { case (_, t) => genesis.notGenesisTips(t) }.head
+    val startingCBs = snapshotInfo.acceptedCBSinceSnapshot ++ snapshotInfo.snapshot.checkpointBlocks
 
-      val startingCBs = snapshotInfo.acceptedCBSinceSnapshot ++ snapshotInfo.snapshot.checkpointBlocks
-
-      dao.dbActor.putSnapshot(snapshotInfo.snapshot.hash, snapshotInfo.snapshot)
+    dao.dbActor.putSnapshot(snapshotInfo.snapshot.hash, snapshotInfo.snapshot)
 
 
-      def getSnapshots(hash: String, blocks: Seq[String] = Seq()): Seq[String] = {
-        val sn = snapshotClient.getBlocking[Option[Snapshot]]("snapshot/" + hash)
-        sn match {
-          case Some(snapshot) =>
-            dao.dbActor.putSnapshot(hash, snapshot)
-            if (snapshot.lastSnapshot == "") {
-              dao.metricsManager ! IncrementMetric("downloadSnapshotEmptyStr")
-              blocks
-            } else {
-              dao.metricsManager ! IncrementMetric("downloadedSnapshotHashes")
-              getSnapshots(snapshot.lastSnapshot, blocks ++ snapshot.checkpointBlocks)
-            }
-          case None =>
-            dao.metricsManager ! IncrementMetric("downloadSnapshotQueryFailed")
+    def getSnapshots(hash: String, blocks: Seq[String] = Seq()): Seq[String] = {
+      val sn = snapshotClient.getBlocking[Option[Snapshot]]("snapshot/" + hash)
+      sn match {
+        case Some(snapshot) =>
+          dao.dbActor.putSnapshot(hash, snapshot)
+          if (snapshot.lastSnapshot == "") {
+            dao.metricsManager ! IncrementMetric("downloadSnapshotEmptyStr")
             blocks
-        }
-      }
-
-      val snapshotBlocks = getSnapshots(snapshotInfo.snapshot.lastSnapshot) ++ startingCBs
-      val snapshotBlocksDistinct = snapshotBlocks.distinct
-
-      dao.metricsManager ! UpdateMetric("downloadExpectedNumBlocks", snapshotBlocks.size.toString)
-      dao.metricsManager ! UpdateMetric("downloadExpectedNumBlocksDistinct", snapshotBlocksDistinct.size.toString)
-
-      val grouped = snapshotBlocksDistinct.grouped(snapshotBlocksDistinct.size / peerData.size).toSeq.zip(peerData.values)
-
-      val downloadRes = grouped.par.map{
-        case (hashes, peer) =>
-          hashes.par.map{
-            hash =>
-              downloadJustOneHash(hash, peer)
-              Seq()
+          } else {
+            dao.metricsManager ! IncrementMetric("downloadedSnapshotHashes")
+            getSnapshots(snapshot.lastSnapshot, blocks ++ snapshot.checkpointBlocks)
           }
+        case None =>
+          dao.metricsManager ! IncrementMetric("downloadSnapshotQueryFailed")
+          blocks
       }
+    }
 
-      downloadRes.flatten.toList
+    val snapshotBlocks = getSnapshots(snapshotInfo.snapshot.lastSnapshot) ++ startingCBs
+    val snapshotBlocksDistinct = snapshotBlocks.distinct
 
-  //    dao.metricsManager ! UpdateMetric("downloadedActiveTips", activeTips.size.toString)
+    dao.metricsManager ! UpdateMetric("downloadExpectedNumBlocks", snapshotBlocks.size.toString)
+    dao.metricsManager ! UpdateMetric("downloadExpectedNumBlocksDistinct", snapshotBlocksDistinct.size.toString)
+
+    val grouped = snapshotBlocksDistinct.grouped(snapshotBlocksDistinct.size / peerData.size).toSeq.zip(peerData.values)
+
+    val downloadRes = grouped.par.map{
+      case (hashes, peer) =>
+        hashes.par.map{
+          hash =>
+            downloadJustOneHash(hash, peer)
+            Seq()
+        }
+    }
+
+    downloadRes.flatten.toList
+
+    //    dao.metricsManager ! UpdateMetric("downloadedActiveTips", activeTips.size.toString)
 
     //  val singlePeer = peerData(id)
 
-     // dao.metricsManager ! UpdateMetric("downloadedActiveTips", activeTips.size.toString)
+    // dao.metricsManager ! UpdateMetric("downloadedActiveTips", activeTips.size.toString)
 
-     // downloadSingle(activeTips, singlePeer, id)
+    // downloadSingle(activeTips, singlePeer, id)
 
-      //val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
+    //val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
 
     //  dao.nodeState = NodeState.Ready
 
-      logger.debug("First pass download finished")
+    logger.debug("First pass download finished")
 
-      dao.metricsManager ! UpdateMetric("downloadFirstPassComplete", "true")
+    dao.metricsManager ! UpdateMetric("downloadFirstPassComplete", "true")
 
-      dao.edgeProcessor ! DownloadComplete(snapshotInfo.snapshot)
+    dao.edgeProcessor ! DownloadComplete(snapshotInfo.snapshot)
 
+  }
+
+  def download()(implicit dao: DAO, ec: ExecutionContext): Unit = {
+
+    Try {
+      downloadActual()
     } match {
       case Failure(e) => e.printStackTrace()
       case _ => logger.info("Download succeeded")
@@ -507,7 +510,7 @@ trait Download extends PeerAuth {
             val transactions: Seq[Transaction] = response.transactions
 
             // store the bundle
-//            handleBundle(sheaf.bundle)
+            //            handleBundle(sheaf.bundle)
 
             // store the transactions
             // TODO: update for latest
