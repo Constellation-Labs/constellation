@@ -12,7 +12,7 @@ object Genesis {
   val CoinBaseHash = "coinbase"
 
   def createDistribution(
-                          selfAddressStr: String, ids: Seq[Id], genesisSOE: SignedVertex, keyPair: KeyPair
+                          selfAddressStr: String, ids: Seq[Id], genesisSOE: SignedObservationEdge, keyPair: KeyPair
                         ): CheckpointBlock = {
 
     val distr = ids.map{ id =>
@@ -62,8 +62,8 @@ object Genesis {
     val soe = signedObservationEdge(oe)(keyPair)
 
     val roe = ResolvedObservationEdge(
-      null.asInstanceOf[SignedVertex],
-      null.asInstanceOf[SignedVertex],
+      null.asInstanceOf[SignedObservationEdge],
+      null.asInstanceOf[SignedObservationEdge],
       Some(cb)
     )
 

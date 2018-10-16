@@ -4,7 +4,7 @@ import java.security.KeyPair
 
 import org.scalatest.FlatSpec
 import constellation._
-import org.constellation.primitives.Schema.{CheckpointBlock, SignedVertex}
+import org.constellation.primitives.Schema.{CheckpointBlock, SignedObservationEdge}
 import org.constellation.primitives.{Genesis, Schema}
 
 import scala.collection.concurrent.TrieMap
@@ -34,7 +34,7 @@ class RandomDataTest extends FlatSpec {
     )
   }
 
-  def randomBlock(tips: Seq[SignedVertex], startingKeyPair: KeyPair = keyPairs.head): Schema.CheckpointBlock = {
+  def randomBlock(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): Schema.CheckpointBlock = {
     val txs = Seq.fill(5)(randomTransaction)
     EdgeProcessor.createCheckpointBlock(txs, tips)(startingKeyPair)
   }
@@ -67,7 +67,7 @@ class RandomDataTest extends FlatSpec {
     val maxWidth = 50
 
 
-    val activeBlocks = TrieMap[SignedVertex, Int]()
+    val activeBlocks = TrieMap[SignedObservationEdge, Int]()
 
 
     val maxNumBlocks = 1000
@@ -76,7 +76,7 @@ class RandomDataTest extends FlatSpec {
     activeBlocks(startingTips.head) = 0
     activeBlocks(startingTips.last) = 0
 
-    val cbIndex = TrieMap[SignedVertex, CheckpointBlock]()
+    val cbIndex = TrieMap[SignedObservationEdge, CheckpointBlock]()
     //cbIndex(go.initialDistribution.soe) = go.initialDistribution
     //cbIndex(go.initialDistribution2.soe) = go.initialDistribution2
     var blockId = 3

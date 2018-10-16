@@ -168,8 +168,8 @@ trait POWSignHelp {
     SignatureBatch(hash, Seq(hashSign(hash, keyPair)))
   }
 
-  def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedVertex = {
-    SignedVertex(hashSignBatchZeroTyped(oe, kp))
+  def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge = {
+    SignedObservationEdge(hashSignBatchZeroTyped(oe, kp))
   }
 
   /**

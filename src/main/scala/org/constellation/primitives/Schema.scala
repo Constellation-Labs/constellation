@@ -180,11 +180,11 @@ object Schema {
     * Encapsulation for all witness information about a given observation edge.
     * @param signatureBatch : Collection of validation signatures about the edge.
     */
-  case class SignedVertex(signatureBatch: SignatureBatch) extends ProductHash {
-    def plus(keyPair: KeyPair): SignedVertex = this.copy(signatureBatch = signatureBatch.plus(keyPair))
-    def plus(hs: HashSignature): SignedVertex = this.copy(signatureBatch = signatureBatch.plus(hs))
-    def plus(other: SignatureBatch): SignedVertex = this.copy(signatureBatch = signatureBatch.plus(other))
-    def plus(other: SignedVertex): SignedVertex = this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
+  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash {
+    def plus(keyPair: KeyPair): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(keyPair))
+    def plus(hs: HashSignature): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(hs))
+    def plus(other: SignatureBatch): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other))
+    def plus(other: SignedObservationEdge): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
     def baseHash: String = signatureBatch.hash
   }
 
@@ -263,15 +263,15 @@ object Schema {
 
   }
 
-  case class CheckpointEdge(edge: Edge[SignedVertex, SignedVertex, CheckpointEdgeData]) {
+  case class CheckpointEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData]) {
     def plus(other: CheckpointEdge) = this.copy(edge = edge.plus(other.edge))
   }
-  case class ValidationEdge(edge: Edge[SignedVertex, SignedVertex, Nothing])
+  case class ValidationEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, Nothing])
 
   case class Edge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
   (
     observationEdge: ObservationEdge,
-    signedObservationEdge: SignedVertex,
+    signedObservationEdge: SignedObservationEdge,
     resolvedObservationEdge: ResolvedObservationEdge[L,R,D]
   ) {
 
@@ -386,7 +386,7 @@ object Schema {
 
   }
 
-  case class SignedObservationEdgeCache(signedObservationEdge: SignedVertex, resolved: Boolean = false)
+  case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
 
   case class CheckpointBlock(
                               transactions: Seq[Transaction],
@@ -437,7 +437,7 @@ object Schema {
       this.copy(checkpoint = checkpoint.plus(other.checkpoint))
     }
 
-    def resolvedOE: ResolvedObservationEdge[SignedVertex, SignedVertex, CheckpointEdgeData] =
+    def resolvedOE: ResolvedObservationEdge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData] =
       checkpoint.edge.resolvedObservationEdge
 
     def parentSOE = Seq(resolvedOE.left, resolvedOE.right)
@@ -445,12 +445,12 @@ object Schema {
 
     def parentSOEBaseHashes: Seq[String] = parentSOE.map{_.baseHash}
 
-    def soe: SignedVertex = checkpoint.edge.signedObservationEdge
+    def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
   }
 
   case class EdgeSheaf(
-                        signedObservationEdge: SignedVertex,
+                        signedObservationEdge: SignedObservationEdge,
                         parent: String,
                         height: Long,
                         depth: Int,

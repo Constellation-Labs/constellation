@@ -32,7 +32,7 @@ class Heartbeat(dao: DAO) extends Actor {
   var heartBeatMonitor: ScheduledFuture[_] = _
   var heartBeat: ScheduledThreadPoolExecutor = _
 
-  heartBeat = new ScheduledThreadPoolExecutor(10)
+  heartBeat = new ScheduledThreadPoolExecutor(1)
   heartBeatMonitor = heartBeat.scheduleAtFixedRate(bufferTask, 1, period, timeUnit)
 
   def receive: Receive = {

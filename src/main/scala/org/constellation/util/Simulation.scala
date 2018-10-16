@@ -106,9 +106,11 @@ class Simulation {
 
   def randomOtherNode(not: APIClient, apis: Seq[APIClient]): APIClient = apis.filter{_ != not}(Random.nextInt(apis.length - 1))
 
-  var healthChecks = 0
 
   def awaitHealthy(apis: Seq[APIClient]): Unit = {
+
+    var healthChecks = 0
+
     while (healthChecks < 10) {
       if (Try{healthy(apis)}.getOrElse(false)) {
         healthChecks = Int.MaxValue
@@ -122,9 +124,11 @@ class Simulation {
     assert(healthy(apis))
   }
 
-  var genChecks = 0
 
   def awaitGenesisStored(apis: Seq[APIClient]): Unit = {
+
+    var genChecks = 0
+
     while (genChecks < 10) {
       if (Try{hasGenesis(apis)}.getOrElse(false)) {
         genChecks = Int.MaxValue
@@ -136,6 +140,45 @@ class Simulation {
     }
 
     assert(hasGenesis(apis))
+  }
+
+  def awaitConditionMet(
+                         err: String,
+                         t : => Boolean,
+                         maxRetries: Int = 10,
+                         delay: Long = 2000
+                       ): Unit = {
+
+    var retries = 0
+    var done = false
+
+    do {
+      retries += 1
+      done = t
+      logger.info(s"$err Waiting ${delay/1000} sec. Num attempts: $retries out of $maxRetries")
+      Thread.sleep(delay)
+    } while (!done && retries < maxRetries)
+    if (!done) logger.error(s"$err TIME EXCEEDED")
+    assert(done)
+
+  }
+
+  def awaitCheckpointsAccepted(
+                                apis: Seq[APIClient],
+                                numAccepted: Int = 10,
+                                maxRetries: Int = 10,
+                                delay: Long = 2000
+                              ): Unit = {
+    awaitConditionMet(
+      s"Accepted checkpoints below $numAccepted",
+      {
+        apis.forall{ a =>
+          val metrics = a.getBlocking[MetricsResult]("metrics")
+          val maybeString = metrics.metrics.get("checkpointAccepted")
+          maybeString.exists(_.toInt > numAccepted)
+        }
+      }, maxRetries, delay
+    )
   }
 
   def sendRandomTransaction(apis: Seq[APIClient]): Future[HttpResponse[String]] = {
@@ -187,6 +230,10 @@ class Simulation {
     triggerRandom(apis)
 
     setReady(apis)
+
+    awaitCheckpointsAccepted(apis)
+
+    logger.info("Checkpoint validation passed")
 
   }
 

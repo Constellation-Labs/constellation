@@ -454,7 +454,7 @@ object EdgeProcessor {
                                          )
 
 
-  def createCheckpointBlock(transactions: Seq[Transaction], tips: Seq[SignedVertex])
+  def createCheckpointBlock(transactions: Seq[Transaction], tips: Seq[SignedObservationEdge])
                            (implicit keyPair: KeyPair): CheckpointBlock = {
 
     val checkpointEdgeData = CheckpointEdgeData(transactions.map{_.hash}.sorted)
@@ -477,7 +477,7 @@ object EdgeProcessor {
   def createCheckpointEdgeProposal(
                                     transactionMemPoolThresholdMet: Set[String],
                                     minCheckpointFormationThreshold: Int,
-                                    tips: Seq[SignedVertex],
+                                    tips: Seq[SignedObservationEdge],
                                   )(implicit keyPair: KeyPair): CreateCheckpointEdgeResponse = {
 
     val transactionsUsed = transactionMemPoolThresholdMet.take(minCheckpointFormationThreshold)
