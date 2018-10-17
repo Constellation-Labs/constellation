@@ -32,6 +32,7 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
     // Cleanup DBs
     File(tmpDir).delete()
     TestNode.clearNodes()
+    system.terminate()
   }
 
   def createNode(randomizePorts: Boolean = true, seedHosts: Seq[InetSocketAddress] = Seq()): ConstellationNode = {
