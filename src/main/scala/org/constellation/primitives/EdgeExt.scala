@@ -4,9 +4,24 @@ import java.util.concurrent.TimeUnit
 
 import akka.pattern.ask
 import akka.util.Timeout
+import org.constellation.Data
 import org.constellation.primitives.Schema.CheckpointBlock
 
 trait EdgeExt extends NodeData with Ledger with MetricsExt with PeerInfo with EdgeDAO {
+
+  /**
+    * TODO: Need to include signatories ABOVE this checkpoint block later in the case of signature decay. Add to SignedObservationEdgeCache
+    *
+    * @param cb
+    * @return
+    */
+  def downloadAncestry(cb: CheckpointBlock) = {
+    val observers: Set[Schema.Id] = cb.signatures.map {
+      _.toId
+    }.toSet
+    queryMissingResolutionData(cb.baseHash, observers)
+  }
+
   /**
     *
     * @param h
@@ -26,14 +41,14 @@ trait EdgeExt extends NodeData with Ledger with MetricsExt with PeerInfo with Ed
     * @param missingParentHash
     * @param cb
     */
-  def markParentsUnresolved(missingParentHash: String, cb: CheckpointBlock) =
-    resolveNotifierCallbacks.get(missingParentHash) match {
-      case Some(cbs) if !cbs.contains(cb) =>
-        resolveNotifierCallbacks(missingParentHash) :+= cb
-      case None =>
-        queryMissingResolutionData(missingParentHash, cb.signatures.map {
-          _.toId
-        }.toSet)
-        resolveNotifierCallbacks(missingParentHash) = Seq(cb)
+  def markParentsUnresolved(missingParentHash: String, cb: CheckpointBlock) = {
+    val children = resolveNotifierCallbacks.get(missingParentHash)
+    if (children.isDefined && children.exists(_.contains(cb)))
+      children.foreach(c => resolveNotifierCallbacks.update(missingParentHash, c :+ cb))
+    else {
+      downloadAncestry(cb)
+      resolveNotifierCallbacks.update(missingParentHash, Seq(cb))
     }
+  }
+
 }

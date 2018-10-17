@@ -15,24 +15,21 @@ class ResolutionServiceTest extends ProcessorTest {
   val bogusSoe: SignedObservationEdge = getSignedObservationEdge(bogusTx, keyPair)
   val bogusCb: CheckpointBlock = createCheckpointBlock(Seq.fill(3)(bogusTx), Seq.fill(2)(bogusSoe))(keyPair)
   val bogusCheckpointCacheData = CheckpointCacheData(bogusCb)
-  data.dbActor.putSignedObservationEdgeCache(soe.hash, SignedObservationEdgeCache(soe, true))
-  data.dbActor.putSignedObservationEdgeCache(bogusSoe.hash, SignedObservationEdgeCache(bogusSoe, false))
-  data.dbActor.putCheckpointCacheData(parentCb.baseHash, CheckpointCacheData(parentCb, true))
+//  data.dbActor.putSignedObservationEdgeCache(soe.hash, SignedObservationEdgeCache(soe, true))
+//  data.dbActor.putSignedObservationEdgeCache(bogusSoe.hash, SignedObservationEdgeCache(bogusSoe, false))
+//  data.dbActor.putCheckpointCacheData(parentCb.baseHash, CheckpointCacheData(parentCb, true))
 
-  "CheckpointBlocks with resolved parents" should "have isAhead = false " in {
-    val (resolvedParents, unresolvedParents): (Seq[(String, Option[SignedObservationEdgeCache])], Seq[(String, Option[SignedObservationEdgeCache])]) = ResolutionService.partitionByParentsResolved(mockData, parentCb)
-      assert(unresolvedParents.isEmpty)
+  "CheckpointBlocks that are resolved" should "return None" in {
+    val res = ResolutionService.resolveCheckpoint(mockData, CheckpointCacheData(bogusCb, resolved = true))
+    assert(res.isEmpty)
   }
 
-  "CheckpointBlocks with unresolved parents" should "have isAhead = true" in {
-    val (resolvedParents, unresolvedParents) = ResolutionService.partitionByParentsResolved(mockData, bogusCb)
-      assert(resolvedParents.isEmpty)
-  }
-
-  "CheckpointBlocks that are invalid " should "have isAhead = false " in {
+  "CheckpointBlocks with no resolved parents" should "not have resolvedParents" in {
     val res = ResolutionService.resolveCheckpoint(mockData, bogusCheckpointCacheData)
-      assert(!data.snapshotRelativeTips.contains(parentCb))
+    assert(res.exists(_.resolvedParents.isEmpty))
+    assert(res.exists(_.unresolvedParents.length == 2))
   }
+
   "CheckpointBlocks that are ahead" should "query the signers" in {
     data.dbActor.updateSignedObservationEdgeCache(bogusSoe.hash, _.copy(resolved = false), SignedObservationEdgeCache(bogusSoe, true))
     val msg = APIBroadcast({ apiClient =>
@@ -42,6 +39,7 @@ class ResolutionServiceTest extends ProcessorTest {
     }.toSet)
     val res = ResolutionService.resolveCheckpoint(mockData, CheckpointCacheData(bogusCb))
     peerManager.expectMsg(_: APIBroadcast.type )
-    assert(res.exists(_.unresolvedParents.nonEmpty))
+    assert(res.exists(_.resolvedParents.length == 2))
+    assert(true)
   }
 }

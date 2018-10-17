@@ -52,7 +52,7 @@ object EdgeProcessor {
     if (existingCacheData.exists(_.inDAG)) return //already committed to snapshot
     else {
       val resolutionStatus: Option[ResolutionService.ResolutionStatus] = existingCacheData.flatMap(ResolutionService.resolveCheckpoint(dao, _))
-      val validationStatus: Option[Validation.CheckpointValidationStatus] = resolutionStatus.map(resStat => Validation.validateCheckpointBlock(dao, resStat.cb.checkpointBlock))
+//      val validationStatus: Option[Validation.CheckpointValidationStatus] = resolutionStatus.map(resStat => Validation.validateCheckpointBlock(dao, resStat.ccd.checkpointBlock))
       //Todo handle conflicts here
     }
   }

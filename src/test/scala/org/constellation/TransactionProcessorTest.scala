@@ -60,7 +60,6 @@ class TransactionProcessorTest extends ProcessorTest {
     metricsManager.expectMsg(IncrementMetric("invalidTransactions"))
     metricsManager.expectMsg(IncrementMetric("hashDuplicateTransactions"))
     metricsManager.expectMsg(IncrementMetric("insufficientBalanceTransactions"))
-    assert(true)
   }
 
   "New valid incoming transactions" should "be added to the mempool" in {

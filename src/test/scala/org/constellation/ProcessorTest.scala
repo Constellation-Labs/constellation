@@ -10,13 +10,15 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.PeerData
 import org.constellation.primitives.Schema.{Id, Transaction}
 import org.constellation.util.APIClient
-import org.scalatest.AsyncFlatSpec
+import org.scalatest.FlatSpec
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.ExecutionContext
 
-trait ProcessorTest extends AsyncFlatSpec {
+trait ProcessorTest extends FlatSpec {
   implicit val system: ActorSystem = ActorSystem("ProcessorTest")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
+  implicit val executionContext = ExecutionContext.global
+
 
   val keyPair: KeyPair = KeyUtils.makeKeyPair()
   val peerData = PeerData(addPeerRequest, getAPIClient("", 1))

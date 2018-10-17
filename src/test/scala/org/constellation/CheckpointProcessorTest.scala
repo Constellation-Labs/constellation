@@ -6,7 +6,10 @@ import org.constellation.consensus.{EdgeProcessor, Validation}
 import org.constellation.primitives.IncrementMetric
 import org.constellation.primitives.Schema._
 
+import scala.concurrent.ExecutionContext
+
 class CheckpointProcessorTest extends ProcessorTest {
+//  implicit val executionContext = ExecutionContext.global
 
   val bogusTxValidStatus = TransactionValidationStatus(tx, None, None)
   val ced = CheckpointEdgeData(Seq(tx.edge.signedObservationEdge.signatureBatch.hash))
@@ -24,13 +27,11 @@ class CheckpointProcessorTest extends ProcessorTest {
   "Incoming CheckpointBlocks" should "be signed and processed if new" in {
     EdgeProcessor.handleCheckpoint(cb, data)
     metricsManager.expectMsg(IncrementMetric("checkpointMessages"))
-    assert( true )
   }
 
   "Previously observed CheckpointBlocks" should "indicate to metricsManager" in {
     EdgeProcessor.handleCheckpoint(cb, data, true)
     metricsManager.expectMsg(IncrementMetric("internalCheckpointMessages"))
-    assert( true )
   }
 
   "Invalid CheckpointBlocks" should "return false" in {
