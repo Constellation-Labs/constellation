@@ -125,6 +125,54 @@ class Simulation {
   }
 
 
+  def checkGenesis(
+                                apis: Seq[APIClient],
+                                maxRetries: Int = 10,
+                                delay: Long = 3000
+                              ): Boolean = {
+    awaitConditionMet(
+      s"Genesis not stored",
+      {
+        apis.forall{ a =>
+          a.getBlocking[Option[GenesisObservation]]("genesis").nonEmpty
+        }
+      }, maxRetries, delay
+    )
+  }
+
+  def checkPeersHealthy(
+                                apis: Seq[APIClient],
+                                maxRetries: Int = 10,
+                                delay: Long = 3000
+                              ): Boolean = {
+    awaitConditionMet(
+      s"Peer health checks failed",
+      {
+        apis.forall{ a =>
+          val res = a.postBlockingEmpty[Seq[(Id, Boolean)]]("peerHealthCheck")
+          res.forall(_._2) && res.size == apis.size - 1
+        }
+      }, maxRetries, delay
+    )
+  }
+
+
+  def checkHealthy(
+                                apis: Seq[APIClient],
+                                maxRetries: Int = 10,
+                                delay: Long = 3000
+                              ): Boolean = {
+    awaitConditionMet(
+      s"Unhealthy nodes",
+      {
+        apis.forall{ a =>
+          a.getSync("health").isSuccess
+        }
+      }, maxRetries, delay
+    )
+  }
+
+
   def awaitGenesisStored(apis: Seq[APIClient]): Unit = {
 
     var genChecks = 0
@@ -147,7 +195,7 @@ class Simulation {
                          t : => Boolean,
                          maxRetries: Int = 10,
                          delay: Long = 2000
-                       ): Unit = {
+                       ): Boolean = {
 
     var retries = 0
     var done = false
@@ -160,15 +208,15 @@ class Simulation {
     } while (!done && retries < maxRetries)
     if (!done) logger.error(s"$err TIME EXCEEDED")
     assert(done)
-
+    done
   }
 
   def awaitCheckpointsAccepted(
                                 apis: Seq[APIClient],
                                 numAccepted: Int = 20,
-                                maxRetries: Int = 10,
+                                maxRetries: Int = 20,
                                 delay: Long = 3000
-                              ): Unit = {
+                              ): Boolean = {
     awaitConditionMet(
       s"Accepted checkpoints below $numAccepted",
       {
@@ -200,9 +248,10 @@ class Simulation {
            attemptSetExternalIP: Boolean = false,
            apis: Seq[APIClient],
            peerApis: Seq[APIClient]
-         )(implicit executionContext: ExecutionContext): Unit = {
+         )(implicit executionContext: ExecutionContext): Boolean = {
 
-    awaitHealthy(apis)
+    assert(checkHealthy(apis))
+    logger.info("Health validation passed")
 
     setIdLocal(apis)
 
@@ -211,29 +260,24 @@ class Simulation {
     }
 
     addPeers(apis, peerApis)
-
-    Thread.sleep(10000)
-
-    assert(
-      apis.forall{a =>
-        val res = a.postBlockingEmpty[Seq[(Id, Boolean)]]("peerHealthCheck")
-        res.forall(_._2) && res.size == apis.size - 1
-      }
-    )
+    assert(checkPeersHealthy(apis))
+    logger.info("Peer validation passed")
 
     val goe = genesis(apis)
-
     apis.foreach{_.post("genesis/accept", goe)}
 
-    awaitGenesisStored(apis)
+    assert(checkGenesis(apis))
+    logger.info("Genesis validation passed")
 
     triggerRandom(apis)
 
     setReady(apis)
 
-    awaitCheckpointsAccepted(apis)
+    assert(awaitCheckpointsAccepted(apis))
 
     logger.info("Checkpoint validation passed")
+
+    true
 
   }
 

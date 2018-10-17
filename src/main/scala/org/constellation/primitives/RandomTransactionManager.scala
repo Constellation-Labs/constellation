@@ -24,28 +24,31 @@ class RandomTransactionManager(dao: DAO)(
     case InternalHeartbeat =>
 
       if (dao.transactionMemPool.size < 1000 && dao.generateRandomTX && dao.nodeState == NodeState.Ready) {
-        val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq.filter{case (_, pd) =>
-          pd.timeAdded < (System.currentTimeMillis() - 30*1000) && pd.nodeState == NodeState.Ready
+        val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq.filter { case (_, pd) =>
+          pd.timeAdded < (System.currentTimeMillis() - 30 * 1000) && pd.nodeState == NodeState.Ready
         }
 
-        Seq.fill(50)(0).par.foreach { _ =>
+        if (peerIds.nonEmpty) {
 
-          // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
-          // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
+          Seq.fill(50)(0).par.foreach { _ =>
 
-          def getRandomPeer: (Id, PeerData) = peerIds(Random.nextInt(peerIds.size))
+            // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
+            // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
 
-          val sendRequest = SendToAddress(getRandomPeer._1.address.address, Random.nextInt(10000).toLong)
-          val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair)
-          dao.metricsManager ! IncrementMetric("signaturesPerformed")
-          dao.metricsManager ! IncrementMetric("randomTransactionsGenerated")
-          dao.metricsManager ! IncrementMetric("sentTransactions")
+            def getRandomPeer: (Id, PeerData) = peerIds(Random.nextInt(peerIds.size))
 
-          // TODO: Change to transport layer call
-          dao.peerManager ! APIBroadcast(
-            _.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx),
-            peerSubset = Set(getRandomPeer._1)
-          )
+            val sendRequest = SendToAddress(getRandomPeer._1.address.address, Random.nextInt(10000).toLong)
+            val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair)
+            dao.metricsManager ! IncrementMetric("signaturesPerformed")
+            dao.metricsManager ! IncrementMetric("randomTransactionsGenerated")
+            dao.metricsManager ! IncrementMetric("sentTransactions")
+
+            // TODO: Change to transport layer call
+            dao.peerManager ! APIBroadcast(
+              _.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx),
+              peerSubset = Set(getRandomPeer._1)
+            )
+          }
         }
       }
 

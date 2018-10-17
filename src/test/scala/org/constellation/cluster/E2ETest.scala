@@ -15,21 +15,21 @@ import scala.concurrent.forkjoin.ForkJoinPool
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
 import scala.util.Try
 
-class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
+class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
   val tmpDir = "tmp"
 
   implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
-  override def beforeEach(): Unit = {
+  override def beforeAll(): Unit = {
     // Cleanup DBs
     Try{File(tmpDir).delete()}
   }
 
-  override def afterEach() {
+  override def afterAll() {
     // Cleanup DBs
-    File(tmpDir).delete()
+    Try{File(tmpDir).delete()}
     TestNode.clearNodes()
     system.terminate()
   }
@@ -43,27 +43,29 @@ class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
 
-  "E2E Multiple Nodes DAG" should "add peers and build DAG with transactions" in {
 
-    val totalNumNodes = 3
+  val totalNumNodes = 3
 
-    val n1 = createNode(randomizePorts = false)
+  private val n1 = createNode(randomizePorts = false)
 
-    val addr = n1.getInetSocketAddress
+  //private val address1 = n1.getInetSocketAddress
 
-    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(createNode(seedHosts = Seq(addr)))
+  private val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(createNode(seedHosts = Seq())) // seedHosts = Seq(address1)
 
-    val apis = nodes.map{_.getAPIClient()}
+  private val apis = nodes.map{_.getAPIClient()}
 
-    val peerApis = nodes.map{ node => {
-      val n = node.getAPIClient(port = node.peerHttpPort)
-      n
-    }}
+  private val peerApis = nodes.map{ node => {
+    val n = node.getAPIClient(port = node.peerHttpPort)
+    n
+  }}
 
-    val sim = new Simulation()
+  private val sim = new Simulation()
 
-    sim.run(apis = apis, peerApis = peerApis)
+  "E2E Run" should "demonstrate full flow" in {
 
+    assert(sim.run(apis = apis, peerApis = peerApis))
+
+  }
   //  Thread.sleep(200*1000)
     // sim.triggerRandom(apis) Thread.sleep(5000*60*60)
 /*
@@ -87,8 +89,7 @@ class MultiNodeDAGTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
 
     val checkpointTips = sim.getCheckpointTips(apis)*/
 
-    assert(true)
-  }
+   // assert(true)
 
   def verifyCheckpointTips(sim: Simulation, apis: Seq[APIClient]): Boolean = {
 
