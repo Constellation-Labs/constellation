@@ -41,7 +41,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
     val sim = new Simulation()
 
-    sim.awaitHealthy(apis)
+    assert(sim.checkHealthy(apis))
 
     println(apis.map{
       _.postSync(

@@ -5,6 +5,7 @@ import java.util.concurrent.ForkJoinPool
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.AddPeerRequest
+import org.constellation.consensus.SnapshotInfo
 import org.constellation.primitives.Schema._
 import scalaj.http.HttpResponse
 
@@ -106,25 +107,6 @@ class Simulation {
 
   def randomOtherNode(not: APIClient, apis: Seq[APIClient]): APIClient = apis.filter{_ != not}(Random.nextInt(apis.length - 1))
 
-
-  def awaitHealthy(apis: Seq[APIClient]): Unit = {
-
-    var healthChecks = 0
-
-    while (healthChecks < 10) {
-      if (Try{healthy(apis)}.getOrElse(false)) {
-        healthChecks = Int.MaxValue
-      } else {
-        healthChecks += 1
-        logger.error(s"Unhealthy nodes. Waiting 30s. Num attempts: $healthChecks out of 10")
-        Thread.sleep(30000)
-      }
-    }
-
-    assert(healthy(apis))
-  }
-
-
   def checkGenesis(
                                 apis: Seq[APIClient],
                                 maxRetries: Int = 10,
@@ -173,22 +155,26 @@ class Simulation {
   }
 
 
-  def awaitGenesisStored(apis: Seq[APIClient]): Unit = {
-
-    var genChecks = 0
-
-    while (genChecks < 10) {
-      if (Try{hasGenesis(apis)}.getOrElse(false)) {
-        genChecks = Int.MaxValue
-      } else {
-        genChecks += 1
-        logger.error(s"Genesis not stored. Waiting 30s. Num attempts: $genChecks out of 10")
-        Thread.sleep(30000)
-      }
-    }
-
-    assert(hasGenesis(apis))
+  def checkSnapshot(
+                                apis: Seq[APIClient],
+                                num: Int = 2,
+                                maxRetries: Int = 30,
+                                delay: Long = 3000
+                              ): Boolean = {
+    awaitConditionMet(
+      s"Less than $num snapshots",
+      {
+        apis.forall{ a =>
+          val m = a.metrics
+          val info = a.getBlocking[SnapshotInfo]("info")
+          info.snapshot.checkpointBlocks.nonEmpty && info.acceptedCBSinceSnapshot.nonEmpty &&
+          m.get("snapshotCount").exists{_.toInt > num}
+        }
+      }, maxRetries, delay
+    )
   }
+
+
 
   def awaitConditionMet(
                          err: String,
@@ -221,8 +207,7 @@ class Simulation {
       s"Accepted checkpoints below $numAccepted",
       {
         apis.forall{ a =>
-          val metrics = a.getBlocking[MetricsResult]("metrics")
-          val maybeString = metrics.metrics.get("checkpointAccepted")
+          val maybeString = a.metrics.get("checkpointAccepted")
           maybeString.exists(_.toInt > numAccepted)
         }
       }, maxRetries, delay
@@ -276,6 +261,10 @@ class Simulation {
     assert(awaitCheckpointsAccepted(apis))
 
     logger.info("Checkpoint validation passed")
+
+    assert(checkSnapshot(apis))
+
+    logger.info("Snapshot validation passed")
 
     true
 

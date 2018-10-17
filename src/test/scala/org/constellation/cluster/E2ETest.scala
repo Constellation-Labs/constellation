@@ -66,6 +66,12 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     assert(sim.run(apis = apis, peerApis = peerApis))
 
   }
+/*
+  "Stop and verify" should "stop transactions and check data" in {
+
+    assert(true)
+  }*/
+
   //  Thread.sleep(200*1000)
     // sim.triggerRandom(apis) Thread.sleep(5000*60*60)
 /*

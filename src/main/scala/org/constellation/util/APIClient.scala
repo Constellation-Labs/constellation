@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
-import org.constellation.primitives.Schema.Id
+import org.constellation.primitives.Schema.{Id, MetricsResult}
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import scalaj.http.{Http, HttpRequest, HttpResponse}
@@ -67,6 +67,8 @@ class APIClient(host: String = "127.0.0.1", port: Int)(
   }
 
   implicit val serialization: Serialization.type = native.Serialization
+
+  def metrics: Map[String, String] = getBlocking[MetricsResult]("metrics").metrics
 
   def post(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)
           (implicit f : Formats = constellation.constellationFormats): Future[HttpResponse[String]] = {

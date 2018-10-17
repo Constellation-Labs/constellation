@@ -798,7 +798,10 @@ class EdgeProcessor(dao: DAO)
         pd.timeAdded < (System.currentTimeMillis() - 30*1000) && pd.nodeState == NodeState.Ready
       }.toMap
 
-      val snapshotUpdatedMemPool = if (memPool.heartBeatRound % 30 == 0 && memPool.acceptedCBSinceSnapshot.nonEmpty && dao.nodeState == NodeState.Ready) {
+      val snapshotUpdatedMemPool = if (
+        memPool.heartBeatRound % dao.snapshotInterval == 0 &&
+        memPool.acceptedCBSinceSnapshot.nonEmpty && dao.nodeState == NodeState.Ready
+      ) {
         val snapshot = Snapshot(memPool.snapshot.hash, memPool.acceptedCBSinceSnapshot)
         dao.dbActor.putSnapshot(snapshot.hash, snapshot)
         if (snapshot.lastSnapshot != "") {

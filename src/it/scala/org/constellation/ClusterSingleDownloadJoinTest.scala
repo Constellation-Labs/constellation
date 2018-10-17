@@ -55,7 +55,7 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
     sim.setIdLocal(apis)
     sim.setIdLocal(apis2)
 
-    sim.awaitHealthy(apis2)
+    assert(sim.checkHealthy(apis2))
 
 
     apis.foreach { a =>

@@ -125,7 +125,7 @@ trait Genesis extends NodeData with EdgeDAO {
     metricsManager ! UpdateMetric("genesisAccepted", "true")
  //   metricsManager ! UpdateMetric("z_genesisBlock", go.json)
 
-    println(s"accept genesis = ", go)
+   // println(s"accept genesis = ", go)
   }
 
 }
