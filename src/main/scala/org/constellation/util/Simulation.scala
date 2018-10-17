@@ -165,9 +165,9 @@ class Simulation {
 
   def awaitCheckpointsAccepted(
                                 apis: Seq[APIClient],
-                                numAccepted: Int = 10,
+                                numAccepted: Int = 20,
                                 maxRetries: Int = 10,
-                                delay: Long = 2000
+                                delay: Long = 3000
                               ): Unit = {
     awaitConditionMet(
       s"Accepted checkpoints below $numAccepted",

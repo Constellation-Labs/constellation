@@ -10,6 +10,8 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
 trait EdgeDAO {
 
+  var snapshotInterval: Long = (30*1000).toLong
+
   var genesisObservation: Option[GenesisObservation] = None
   def maxWidth: Int = processingConfig.maxWidth
   def minCheckpointFormationThreshold: Int = processingConfig.minCheckpointFormationThreshold
