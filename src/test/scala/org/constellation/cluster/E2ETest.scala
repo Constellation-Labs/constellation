@@ -7,7 +7,8 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import org.constellation.ConstellationNode
+import org.constellation.primitives.Schema.NodeState
+import org.constellation.{AddPeerRequest, ConstellationNode, HostPort}
 import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
@@ -44,7 +45,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
 
 
-  val totalNumNodes = 3
+  val totalNumNodes = 5
 
   private val n1 = createNode(randomizePorts = false)
 
@@ -54,23 +55,44 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
   private val apis = nodes.map{_.getAPIClient()}
 
-  private val peerApis = nodes.map{ node => {
-    val n = node.getAPIClient(port = node.peerHttpPort)
-    n
-  }}
+  private val addPeerRequests = nodes.map{_.getAddPeerRequest}
 
   private val sim = new Simulation()
 
+  private val initialAPIs = apis.slice(0, 3)
+
+  private val downloadAPIs = apis.slice(3, totalNumNodes + 1)
+
   "E2E Run" should "demonstrate full flow" in {
 
-    assert(sim.run(apis = apis, peerApis = peerApis))
+
+    assert(sim.run(initialAPIs, addPeerRequests.slice(0,3)))
+
+    assert(sim.checkHealthy(downloadAPIs))
+
+    val downloadNodePeerRequests = addPeerRequests.slice(3, totalNumNodes + 1)
+      .map{_.copy(nodeStatus = NodeState.DownloadInProgress)}
+
+    sim.addPeersFromRequest(downloadAPIs, downloadNodePeerRequests)
+
+    downloadNodePeerRequests.foreach{ apr =>
+      sim.addPeer(initialAPIs, apr)
+    }
+
+    addPeerRequests.slice(0, 3).foreach{ apr =>
+      sim.addPeer(downloadAPIs, apr)
+    }
+
+    assert(sim.checkPeersHealthy(apis))
+
+    downloadAPIs.foreach{ a2 =>
+      a2.postEmpty("download/start")
+      a2.postEmpty("random")
+    }
+
+    assert(sim.checkReady(downloadAPIs))
 
   }
-/*
-  "Stop and verify" should "stop transactions and check data" in {
-
-    assert(true)
-  }*/
 
   //  Thread.sleep(200*1000)
     // sim.triggerRandom(apis) Thread.sleep(5000*60*60)

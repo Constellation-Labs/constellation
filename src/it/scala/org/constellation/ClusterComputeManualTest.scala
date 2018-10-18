@@ -35,25 +35,29 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
       new APIClient(ip, 9000)
     }
 
-    val peerAPIs = ips.map{ip =>
-      new APIClient(ip, 9001)
-    }
-
     val sim = new Simulation()
 
     assert(sim.checkHealthy(apis))
 
+    sim.setIdLocal(apis)
+
+
+    val addPeerRequests = apis.map{ a =>
+      AddPeerRequest(a.hostName, a.udpPort, 9001, a.id)
+    }
+
+/*
     println(apis.map{
       _.postSync(
         "config/update",
         ProcessingConfig(maxWidth = 10, minCheckpointFormationThreshold = 10, minCBSignatureThreshold = 3)
       )
     })
+*/
 
-    sim.run(apis = apis, peerApis = peerAPIs, attemptSetExternalIP = true)
+    sim.run(apis, addPeerRequests, attemptSetExternalIP = true)
 
-
-    Thread.sleep(30*1000)
+   // Thread.sleep(30*1000)
    // sim.triggerRandom(apis)
 
 

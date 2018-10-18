@@ -140,7 +140,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     }
 
     val sim = new Simulation()
-    sim.run(apis = apis, peerApis = peerAPIs, attemptSetExternalIP = true)
+   // sim.run(apis = apis, peerApis = peerAPIs, attemptSetExternalIP = true)
 
   }
 

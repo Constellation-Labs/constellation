@@ -134,7 +134,7 @@ object Download {
     logger.info("Download started")
     dao.nodeState = NodeState.DownloadInProgress
 
-    val res = (dao.peerManager ? APIBroadcast(_.getSync("genesis").body.x[Option[GenesisObservation]]))
+    val res = (dao.peerManager ? APIBroadcast(_.getBlocking[Option[GenesisObservation]]("genesis")))
       .mapTo[Map[Id, Option[GenesisObservation]]].get()
 
     // TODO: Error handling and verification

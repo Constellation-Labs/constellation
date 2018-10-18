@@ -241,6 +241,10 @@ class ConstellationNode(val configKeyPair: KeyPair,
     api
   }
 
+  def getAddPeerRequest: AddPeerRequest = {
+    AddPeerRequest(hostName, udpPort, peerHttpPort, dao.id)
+  }
+
   def getAPIClientForNode(node: ConstellationNode): APIClient = {
     val ipData = node.getIPData
     val api = APIClient(host = ipData.canonicalHostName, port = ipData.port)
