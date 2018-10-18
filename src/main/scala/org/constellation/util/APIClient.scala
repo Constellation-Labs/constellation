@@ -133,6 +133,11 @@ class APIClient(host: String = "127.0.0.1", port: Int)(
     Serialization.read[T](getBlockingStr(suffix, queryParams, timeoutSeconds))
   }
 
+  def getNonBlocking[T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5)
+                              (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): Future[T] = {
+    Future(getBlocking[T](suffix, queryParams, timeoutSeconds))
+  }
+
   def readHttpResponseEntity[T <: AnyRef](response: String)
                               (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
     Serialization.read[T](response)
