@@ -2,17 +2,15 @@ package org.constellation.util
 
 import com.softwaremill.macmemo.memoize
 import constellation._
-import org.constellation.Data
-import org.constellation.crypto.Wallet
-import org.constellation.primitives.Schema
+import org.constellation.DAO
+import org.constellation.crypto.SimpleWalletLike
 import org.constellation.primitives.Schema.MetricsResult
 
 import scala.concurrent.duration._
-import scala.util.Try
 
-class Metrics(val data: Data = null) extends Wallet {
+class Metrics(val dao: DAO = null) extends SimpleWalletLike {
 
-  import data._
+  import dao._
 
   @memoize(maxSize = 1, expiresAfter = 2.seconds)
   def calculateMetrics(): MetricsResult = {
@@ -31,8 +29,8 @@ class Metrics(val data: Data = null) extends Wallet {
         "numValidBundleHashesRemovedFromMemory" -> numValidBundleHashesRemovedFromMemory.toString,
         "udpPacketGroupSize" -> udpPacketGroupSize.toString,
         "address" -> selfAddress.address,
-        "balance" -> (selfIdBalance
-          .getOrElse(0L) / Schema.NormalizationFactor).toString,
+/*        "balance" -> (selfIdBalance
+          .getOrElse(0L) / Schema.NormalizationFactor).toString,*/
         "id" -> id.b58,
         "z_keyPair" -> keyPair.json,
         "shortId" -> id.short,
@@ -67,15 +65,7 @@ class Metrics(val data: Data = null) extends Wallet {
         "z_peers" -> peers.map {
           _.data
         }.json,
-        "z_validLedger" -> validLedger.toMap.json,
-        "z_mempoolLedger" -> memPoolLedger.toMap.json,
-        "downloadMode" -> downloadMode.toString,
-        "allPeersAgreeOnValidLedger" -> Try {
-          peerSync.forall {
-            case (_, hb) =>
-              hb.validLedger == validLedger.toMap
-          }.toString
-        }.getOrElse("")
+        "downloadMode" -> downloadMode.toString
       ))
   }
 }

@@ -13,7 +13,7 @@ import org.iq80.leveldb._
 import org.iq80.leveldb.impl.Iq80DBFactory._
 
 import scala.concurrent.ExecutionContext
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 // https://doc.akka.io/docs/akka/2.5/persistence-query-leveldb.html
 
@@ -35,6 +35,8 @@ trait KVDB {
 
   def restart(): Unit
   def delete(key: String): Boolean
+  def getSnapshot(key: String) : Option[consensus.Snapshot]
+  def putSnapshot(key: String, snapshot: consensus.Snapshot): Unit
   def putCheckpointCacheData(key: String, c: CheckpointCacheData): Unit
   def updateCheckpointCacheData(key: String,
                                 f: CheckpointCacheData => CheckpointCacheData,
@@ -74,7 +76,7 @@ trait KVDB {
   def getCheckpointEdgeData(key: String): Option[CheckpointEdgeData]
 }
 
-class KVDBImpl(dao: Data) extends KVDB {
+class KVDBImpl(dao: DAO) extends KVDB {
   private val logger = Logger("KVDB")
 
   private def tmpDirId = file"tmp/${dao.id.medium}/db"
@@ -85,7 +87,7 @@ class KVDBImpl(dao: Data) extends KVDB {
   private def put(key: String, obj: AnyRef) = {
     dao.numDBPuts += 1
     val bytes = KryoSerializer.serializeAnyRef(obj)
-    db.putBytes(key, bytes).get
+    db.putBytes(key, bytes)
   }
 
   private def get[T <: AnyRef](key: String): Option[T] = {
@@ -119,6 +121,10 @@ class KVDBImpl(dao: Data) extends KVDB {
       dao.numDBDeletes += 1
       db.delete(key).isSuccess
     } else true
+
+  override def putSnapshot(key: String, snapshot: consensus.Snapshot): Unit = put(key, snapshot)
+
+  override def getSnapshot(key: String): Option[consensus.Snapshot] = get[consensus.Snapshot](key)
 
   override def putCheckpointCacheData(s: String, c: CheckpointCacheData): Unit =
     put(s, c)
@@ -204,7 +210,7 @@ class KVDBImpl(dao: Data) extends KVDB {
 
 import org.constellation.LevelDB._
 
-class LevelDBActor(dao: Data)(implicit timeoutI: Timeout, system: ActorSystem)
+class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem)
     extends Actor {
 
   implicit val executionContext: ExecutionContext =
@@ -232,7 +238,7 @@ class LevelDBActor(dao: Data)(implicit timeoutI: Timeout, system: ActorSystem)
     case DBPut(key, obj) =>
       dao.numDBPuts += 1
       val bytes = KryoSerializer.serializeAnyRef(obj)
-      db.putBytes(key, bytes)
+      sender() ! db.putBytes(key, bytes)
 
     case DBUpdate(key, func, empty) =>
       dao.numDBUpdates += 1
@@ -267,7 +273,19 @@ class LevelDB(val file: File) {
   def contains(s: String): Boolean = getBytes(s).nonEmpty
   def contains[T <: ProductHash](t: T): Boolean = getBytes(t.hash).nonEmpty
   def putStr(k: String, v: String) = Try { db.put(bytes(k), bytes(v)) }
-  def putBytes(k: String, v: Array[Byte]) = Try { db.put(bytes(k), v) }
+  def putBytes(k: String, v: Array[Byte]): Unit = {
+
+    var retries = 0
+    var done = false
+    do {
+      val attempt = Try {db.put(bytes(k), v)}
+      attempt match {
+        case Failure(e) => e.printStackTrace()
+        case _ =>
+      }
+      done = attempt.isSuccess
+    } while (!done && retries < 3)
+  }
   def put(k: String, v: String) = Try { db.put(bytes(k), bytes(v)) }
   def putHash[T <: ProductHash, Q <: ProductHash](t: T, q: Q): Try[Unit] =
     put(t.hash, q.hash)
@@ -287,7 +305,9 @@ class LevelDB(val file: File) {
 
   def kryoGet(key: String): Option[AnyRef] =
     Try { getBytes(key).map { KryoSerializer.deserialize } }.toOption.flatten
-  def kryoPut(key: String, obj: AnyRef): Try[Unit] = {
+  //def kryoGetT[T <: ClassTag](key: String): Option[AnyRef] = Try{getBytes(key).map {KryoSerializer.deserialize}}.toOption.flatten
+
+  def kryoPut(key: String, obj: AnyRef): Unit = {
     val bytes = KryoSerializer.serializeAnyRef(obj)
     putBytes(key, bytes)
   }

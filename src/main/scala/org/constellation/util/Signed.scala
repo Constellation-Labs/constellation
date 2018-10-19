@@ -73,14 +73,23 @@ case class SignatureBatch(
   }
 
   def plus(other: SignatureBatch): SignatureBatch = {
+    val toAdd = other.signatures
+    val newSignatures = (signatures ++ toAdd).distinct
+    val unique = newSignatures.groupBy(_.b58EncodedPublicKey).map{_._2.maxBy(_.signature)}.toSeq.sorted
     this.copy(
-      signatures = (signatures ++ other.signatures).distinct.sorted
+      signatures = unique
+    )
+  }
+  def plus(hs: HashSignature): SignatureBatch = {
+    val toAdd = Seq(hs)
+    val newSignatures = (signatures ++ toAdd).distinct
+    val unique = newSignatures.groupBy(_.b58EncodedPublicKey).map{_._2.maxBy(_.signature)}.toSeq.sorted
+    this.copy(
+      signatures = unique
     )
   }
   def plus(other: KeyPair): SignatureBatch = {
-    this.copy(
-      signatures = (signatures :+ hashSign(hash, other)).distinct.sorted
-    )
+    plus(hashSign(hash, other))
   }
 
   override def empty: SignatureBatch = SignatureBatch(hash, Seq())
@@ -92,6 +101,7 @@ case class SignatureBatch(
 
 case class EncodedPublicKey(b58Encoded: String) {
   def toPublicKey: PublicKey = bytesToPublicKey(Base58.decode(b58Encoded))
+  def toId = Id(this)
 }
 
 // TODO: Move POW to separate class for rate liming.
@@ -153,8 +163,9 @@ trait POWSignHelp {
     )
   }
 
-  def hashSignBatchZeroTyped(hash: ProductHash, keyPair: KeyPair): SignatureBatch = {
-    SignatureBatch(hash.hash, Seq(hashSign(hash.hash, keyPair)))
+  def hashSignBatchZeroTyped(productHash: ProductHash, keyPair: KeyPair): SignatureBatch = {
+    val hash = productHash.hash
+    SignatureBatch(hash, Seq(hashSign(hash, keyPair)))
   }
 
   def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge = {

@@ -2,6 +2,7 @@ package org.constellation.primitives
 
 import java.util.concurrent.Executors
 
+import org.constellation.ProcessingConfig
 import org.constellation.primitives.Schema._
 
 import scala.collection.concurrent.TrieMap
@@ -9,14 +10,18 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
 trait EdgeDAO {
 
+  var snapshotInterval: Int = 30
+
   var genesisObservation: Option[GenesisObservation] = None
-  val maxWidth = 30
-  val minCheckpointFormationThreshold = 100
-  val minTXSignatureThreshold = 3
-  val minCBSignatureThreshold = 3
+  def maxWidth: Int = processingConfig.maxWidth
+  def minCheckpointFormationThreshold: Int = processingConfig.minCheckpointFormationThreshold
+  def minCBSignatureThreshold: Int = processingConfig.minCBSignatureThreshold
+
+  val minTXSignatureThreshold = 5
   val maxUniqueTXSize = 500
   val maxNumSignaturesPerTX = 20
 
+  var processingConfig = ProcessingConfig()
 
   @volatile var transactionMemPool: Seq[Transaction] = Seq()
 

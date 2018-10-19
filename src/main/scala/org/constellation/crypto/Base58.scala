@@ -2,7 +2,6 @@ package org.constellation.crypto
 
 
 import java.math.BigInteger
-import java.nio.ByteOrder
 
 import scala.annotation.tailrec
 

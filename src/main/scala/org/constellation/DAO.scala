@@ -4,11 +4,10 @@ import akka.stream.ActorMaterializer
 import com.typesafe.scalalogging.Logger
 import org.constellation.primitives._
 
-class Data extends MetricsExt
+class DAO extends MetricsExt
   with NodeData
   with Reputation
   with PeerInfo
-  with Ledger
   with Genesis
   with EdgeDAO {
 
@@ -20,8 +19,6 @@ class Data extends MetricsExt
 
   def restartNode(): Unit = {
     downloadMode = true
-    validLedger.clear()
-    memPoolLedger.clear()
     signedPeerLookup.clear()
     resetMetrics()
     peersAwaitingAuthenticationToNumAttempts.clear()

@@ -5,6 +5,7 @@ import java.util.concurrent.ForkJoinPool
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.AddPeerRequest
+import org.constellation.consensus.SnapshotInfo
 import org.constellation.primitives.Schema._
 import scalaj.http.HttpResponse
 
@@ -58,29 +59,12 @@ class Simulation {
     apis.head.postBlocking[GenesisObservation]("genesis/create", ids.tail.toSet)
   }
 
-  def addPeers(apis: Seq[APIClient], peerAPIs: Seq[APIClient])(implicit executionContext: ExecutionContext) = {
-
-    val joinedAPIs = apis.zip(peerAPIs)
-    val results = joinedAPIs.flatMap { case (a, peerAPI) =>
-      val ip = a.hostName
-      logger.info(s"Trying to add nodes to $ip")
-      val others = joinedAPIs.filter { case (b, _) => b.id != a.id}
-        .map { case (z, bPeer) => AddPeerRequest(z.hostName, z.udpPort, bPeer.apiPort, z.id)}
-      others.map {
-        n =>
-          Future {
-            val res = a.postSync("addPeer", n)
-            logger.info(s"Tried to add peer $n to $ip res: $res")
-          }
-      }
+  def addPeer(
+               apis: Seq[APIClient], peer: AddPeerRequest
+             )(implicit executionContext: ExecutionContext): Seq[HttpResponse[String]] = {
+    apis.map{
+      _.postSync("addPeer", peer)
     }
-    results
-  }
-
-  def verifyPeersAdded(apis: Seq[APIClient]): Boolean = apis.forall { api =>
-    val peers = api.getBlocking[Seq[Peer]]("peerids")
-    logger.info("Peers length: " + peers.length)
-    peers.length == (apis.length - 1)
   }
 
   def assignReputations(apis: Seq[APIClient]): Unit = apis.foreach{ api =>
@@ -100,36 +84,143 @@ class Simulation {
 
   def randomOtherNode(not: APIClient, apis: Seq[APIClient]): APIClient = apis.filter{_ != not}(Random.nextInt(apis.length - 1))
 
-  var healthChecks = 0
-
-  def awaitHealthy(apis: Seq[APIClient]): Unit = {
-    while (healthChecks < 10) {
-      if (Try{healthy(apis)}.getOrElse(false)) {
-        healthChecks = Int.MaxValue
-      } else {
-        healthChecks += 1
-        logger.error(s"Unhealthy nodes. Waiting 30s. Num attempts: $healthChecks out of 10")
-        Thread.sleep(30000)
-      }
-    }
-
-    assert(healthy(apis))
+  def checkGenesis(
+                    apis: Seq[APIClient],
+                    maxRetries: Int = 10,
+                    delay: Long = 3000
+                  ): Boolean = {
+    awaitConditionMet(
+      s"Genesis not stored",
+      {
+        apis.forall{ a =>
+          a.getBlocking[Option[GenesisObservation]]("genesis").nonEmpty
+        }
+      }, maxRetries, delay
+    )
   }
 
-  var genChecks = 0
+  def checkReady(
+                  apis: Seq[APIClient],
+                  maxRetries: Int = 20,
+                  delay: Long = 3000
+                ): Boolean = {
+    awaitMetric(
+      "Node state not ready",
+      _.get("nodeState").contains("Ready"),
+      apis,
+      maxRetries,
+      delay
+    )
+  }
 
-  def awaitGenesisStored(apis: Seq[APIClient]): Unit = {
-    while (genChecks < 10) {
-      if (Try{hasGenesis(apis)}.getOrElse(false)) {
-        genChecks = Int.MaxValue
-      } else {
-        genChecks += 1
-        logger.error(s"Genesis not stored. Waiting 30s. Num attempts: $genChecks out of 10")
-        Thread.sleep(30000)
-      }
-    }
+  def awaitMetric(
+                   err: String,
+                   t: Map[String, String] => Boolean,
+                   apis: Seq[APIClient],
+                   maxRetries: Int = 10,
+                   delay: Long = 3000
+                 ): Boolean = {
+    awaitConditionMet(
+      err,
+      {
+        apis.forall{ a =>
+          t(a.metrics)
+        }
+      }, maxRetries, delay
+    )
 
-    assert(hasGenesis(apis))
+  }
+
+  def checkPeersHealthy(
+                         apis: Seq[APIClient],
+                         maxRetries: Int = 10,
+                         delay: Long = 3000
+                       ): Boolean = {
+    awaitConditionMet(
+      s"Peer health checks failed",
+      {
+        apis.forall{ a =>
+          val res = a.postBlockingEmpty[Seq[(Id, Boolean)]]("peerHealthCheck")
+          res.forall(_._2) && res.size == apis.size - 1
+        }
+      }, maxRetries, delay
+    )
+  }
+
+
+  def checkHealthy(
+                    apis: Seq[APIClient],
+                    maxRetries: Int = 10,
+                    delay: Long = 3000
+                  ): Boolean = {
+    awaitConditionMet(
+      s"Unhealthy nodes",
+      {
+        apis.forall{ a =>
+          a.getSync("health").isSuccess
+        }
+      }, maxRetries, delay
+    )
+  }
+
+
+  def checkSnapshot(
+                     apis: Seq[APIClient],
+                     num: Int = 2,
+                     maxRetries: Int = 30,
+                     delay: Long = 3000
+                   ): Boolean = {
+    awaitConditionMet(
+      s"Less than $num snapshots",
+      {
+        apis.forall{ a =>
+          val m = a.metrics
+          val info = a.getBlocking[SnapshotInfo]("info")
+          info.snapshot.checkpointBlocks.nonEmpty && info.acceptedCBSinceSnapshot.nonEmpty &&
+            m.get("snapshotCount").exists{_.toInt >= num}
+        }
+      }, maxRetries, delay
+    )
+  }
+
+
+
+  def awaitConditionMet(
+                         err: String,
+                         t : => Boolean,
+                         maxRetries: Int = 10,
+                         delay: Long = 2000
+                       ): Boolean = {
+
+    var retries = 0
+    var done = false
+
+    do {
+      retries += 1
+      done = t
+      logger.info(s"$err Waiting ${delay/1000} sec. Num attempts: $retries out of $maxRetries")
+      Thread.sleep(delay)
+    } while (!done && retries < maxRetries)
+    if (!done) logger.error(s"$err TIME EXCEEDED")
+    assert(done)
+    done
+  }
+
+  def awaitCheckpointsAccepted(
+                                apis: Seq[APIClient],
+                                numAccepted: Int = 20,
+                                maxRetries: Int = 20,
+                                delay: Long = 3000
+                              ): Boolean = {
+    awaitConditionMet(
+      s"Accepted checkpoints below $numAccepted",
+      {
+        apis.forall{ a =>
+          val maybeString = a.metrics.get("checkpointAccepted")
+          maybeString.exists(_.toInt > numAccepted)
+        }
+      }, maxRetries, delay
+    )
   }
 
   def sendRandomTransaction(apis: Seq[APIClient]): Future[HttpResponse[String]] = {
@@ -140,9 +231,33 @@ class Simulation {
     src.post("sendTransactionToAddress", s)
   }
 
-  def run(attemptSetExternalIP: Boolean = false, apis: Seq[APIClient], peerApis: Seq[APIClient])(implicit executionContext: ExecutionContext): Unit = {
+  def triggerRandom(apis: Seq[APIClient]): Unit = {
+    apis.foreach(_.postEmpty("random"))
+  }
+  def setReady(apis: Seq[APIClient]): Unit = {
+    apis.foreach(_.postEmpty("ready"))
+  }
 
-    awaitHealthy(apis)
+  def addPeersFromRequest(apis: Seq[APIClient], addPeerRequests: Seq[AddPeerRequest]): Unit = {
+    apis.foreach{
+      a =>
+        addPeerRequests.zip(apis).foreach{
+          case (add, a2) =>
+            if (a2 != a) {
+              assert(addPeer(Seq(a), add).forall(_.isSuccess))
+            }
+        }
+    }
+  }
+
+  def run(
+           apis: Seq[APIClient],
+           addPeerRequests: Seq[AddPeerRequest],
+           attemptSetExternalIP: Boolean = false
+         )(implicit executionContext: ExecutionContext): Boolean = {
+
+    assert(checkHealthy(apis))
+    logger.info("Health validation passed")
 
     setIdLocal(apis)
 
@@ -150,24 +265,35 @@ class Simulation {
       assert(setExternalIP(apis))
     }
 
-    addPeers(apis, peerApis)
+    logger.info("Adding peers manually")
 
-    Thread.sleep(5000)
+    addPeersFromRequest(apis, addPeerRequests)
 
-    assert(
-      apis.forall{a =>
-        val res = a.postBlockingEmpty[Seq[(Id, Boolean)]]("peerHealthCheck")
-        res.forall(_._2) && res.size == apis.size - 1
-      }
-    )
+    logger.info("Peers added")
+
+    assert(checkPeersHealthy(apis))
+    logger.info("Peer validation passed")
 
     val goe = genesis(apis)
-
     apis.foreach{_.post("genesis/accept", goe)}
 
-    awaitGenesisStored(apis)
+    assert(checkGenesis(apis))
+    logger.info("Genesis validation passed")
 
-    apis.foreach(_.postEmpty("random"))
+    triggerRandom(apis)
+
+    setReady(apis)
+
+    assert(awaitCheckpointsAccepted(apis))
+
+    logger.info("Checkpoint validation passed")
+
+    assert(checkSnapshot(apis))
+
+    logger.info("Snapshot validation passed")
+
+    true
+
   }
 
 }

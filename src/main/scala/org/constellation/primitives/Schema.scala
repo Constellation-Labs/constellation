@@ -6,7 +6,7 @@ import java.security.{KeyPair, PublicKey}
 import constellation.pubKeyToAddress
 import org.constellation.KVDB
 import org.constellation.consensus.Consensus.RemoteMessage
-import org.constellation.crypto.Base58
+import org.constellation.consensus.{MemPool, TipData}
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 
@@ -31,9 +31,12 @@ object Schema {
                                        cbEdgeHash: Option[String]
                                      )
 
-  sealed trait NodeState
-  final case object PendingDownload extends NodeState
-  final case object Ready extends NodeState
+
+
+  object NodeState extends Enumeration {
+    type NodeState = Value
+    val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, Ready = Value
+  }
 
   sealed trait ValidationStatus
 
@@ -139,6 +142,9 @@ object Schema {
                                       )
 
 
+
+
+
   /**
     * Our basic set of allowed edge hash types
     */
@@ -176,6 +182,7 @@ object Schema {
     */
   case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash {
     def plus(keyPair: KeyPair): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(keyPair))
+    def plus(hs: HashSignature): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(hs))
     def plus(other: SignatureBatch): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other))
     def plus(other: SignedObservationEdge): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
     def baseHash: String = signatureBatch.hash
@@ -294,6 +301,10 @@ object Schema {
       this.copy(signedObservationEdge = signedObservationEdge.plus(keyPair))
     }
 
+    def plus(hs: HashSignature): Edge[L, R, D] = {
+      this.copy(signedObservationEdge = signedObservationEdge.plus(hs))
+    }
+
     def plus(other: Edge[_,_,_]): Edge[L, R, D] = {
       this.copy(signedObservationEdge = signedObservationEdge.plus(other.signedObservationEdge))
     }
@@ -354,7 +365,7 @@ object Schema {
   }
 
   case class CheckpointCacheData(
-                                  checkpointBlock: CheckpointBlock,
+                                  checkpointBlock: CheckpointBlock, // this is the primary tip hash of current state
                                   inDAG: Boolean = false,
                                   resolved: Boolean = false,
                                   resolutionInProgress: Boolean = false,
@@ -362,7 +373,8 @@ object Schema {
                                   lastResolveAttempt: Option[Long] = None,
                                   rxTime: Long = System.currentTimeMillis(), // TODO: Unify common metadata like this
                                   children: Set[String] = Set(),
-                                  forkChildren: Set[String] = Set()
+                                  forkChildren: Set[String] = Set(),
+                                  forkTipHashes: Set[String] = Set(),
                                 ) {
 
     def plus(previous: CheckpointCacheData): CheckpointCacheData = {
@@ -380,6 +392,22 @@ object Schema {
                               transactions: Seq[Transaction],
                               checkpoint: CheckpointEdge
                                   ) {
+
+    def uniqueSignatures: Boolean = signatures.groupBy(_.b58EncodedPublicKey).forall(_._2.size == 1)
+
+    def signedBy(id: Id) : Boolean = witnessIds.contains(id)
+
+    def hashSignaturesOf(id: Id) : Seq[HashSignature] = signatures.filter(_.toId == id)
+
+    def signatureConflict(other: CheckpointBlock): Boolean = {
+      signatures.exists{s =>
+        other.signatures.exists{ s2 =>
+          s.signature != s2.signature && s.b58EncodedPublicKey == s2.b58EncodedPublicKey
+        }
+      }
+    }
+
+    def witnessIds: Seq[Id] = signatures.map{_.toId}
 
     def signatures: Seq[HashSignature] = checkpoint.edge.signedObservationEdge.signatureBatch.signatures
 
@@ -401,6 +429,10 @@ object Schema {
       this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.plus(keyPair)))
     }
 
+    def plus(hs: HashSignature): CheckpointBlock = {
+      this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.plus(hs)))
+    }
+
     def plus(other: CheckpointBlock): CheckpointBlock = {
       this.copy(checkpoint = checkpoint.plus(other.checkpoint))
     }
@@ -409,8 +441,11 @@ object Schema {
       checkpoint.edge.resolvedObservationEdge
 
     def parentSOE = Seq(resolvedOE.left, resolvedOE.right)
+    def parentSOEHashes = Seq(resolvedOE.left.hash, resolvedOE.right.hash)
 
     def parentSOEBaseHashes: Seq[String] = parentSOE.map{_.baseHash}
+
+    def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
   }
 
@@ -430,7 +465,25 @@ object Schema {
                                  genesis: CheckpointBlock,
                                  initialDistribution: CheckpointBlock,
                                  initialDistribution2: CheckpointBlock
-                               )
+                               ) {
+
+    def notGenesisTips(tips: Seq[CheckpointBlock]): Boolean = {
+      !tips.contains(initialDistribution) && !tips.contains(initialDistribution2)
+    }
+
+    def initialMemPool = MemPool(
+      Set(),
+      Map(
+        initialDistribution.baseHash -> initialDistribution,
+        initialDistribution2.baseHash -> initialDistribution2
+      ),
+      Map(
+        initialDistribution.baseHash -> TipData(initialDistribution, 0),
+        initialDistribution2.baseHash -> TipData(initialDistribution2, 0)
+      )
+    )
+
+  }
 
 
 
@@ -713,7 +766,7 @@ object Schema {
     def short: String = id.toString.slice(15, 20)
     def medium: String = id.toString.slice(15, 25).replaceAll(":", "")
     def address: AddressMetaData = pubKeyToAddress(id)
-    def b58: String = Base58.encode(id.getEncoded)
+    def b58: String = encodedId.b58Encoded
     def id: PublicKey = encodedId.toPublicKey
   }
 
