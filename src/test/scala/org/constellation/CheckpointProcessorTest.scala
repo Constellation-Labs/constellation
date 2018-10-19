@@ -5,12 +5,12 @@ import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.consensus.{EdgeProcessor, Validation}
 import org.constellation.primitives.IncrementMetric
 import org.constellation.primitives.Schema._
+import org.scalamock.scalatest.MockFactory
+import org.scalatest.{FlatSpec, OneInstancePerTest}
 
 import scala.concurrent.ExecutionContext
 
-class CheckpointProcessorTest extends ProcessorTest {
-//  implicit val executionContext = ExecutionContext.global
-
+class CheckpointProcessorTest extends FlatSpec with  ProcessorTest {
   val bogusTxValidStatus = TransactionValidationStatus(tx, None, None)
   val ced = CheckpointEdgeData(Seq(tx.edge.signedObservationEdge.signatureBatch.hash))
   val oe = ObservationEdge(
@@ -21,8 +21,10 @@ class CheckpointProcessorTest extends ProcessorTest {
   val soe = signedObservationEdge(oe)(keyPair)
   val cb = Fixtures.createCheckpointBlock(Seq.fill(3)(tx), Seq.fill(2)(soe))(keyPair)
   val baseHash = cb.baseHash
-
-  data.dbActor.putCheckpointCacheData(cb.baseHash, CheckpointCacheData(cb, true))
+  (data.dbActor.getCheckpointCacheData _).when(cb.baseHash).returns(Some(CheckpointCacheData(cb, true)))
+  (data.dbActor.getTransactionCacheData _).when(tx.baseHash).returns(Some(TransactionCacheData(tx)))
+  (data.dbActor.getAddressCacheData _).when(tx.src.hash).returns(Some(AddressCacheData(100000000000000000L, 100000000000000000L, None)))
+  (data.dbActor.getSignedObservationEdgeCache _).when(cb.baseHash).returns(Some(SignedObservationEdgeCache(soe)))
 
   "Incoming CheckpointBlocks" should "be signed and processed if new" in {
     EdgeProcessor.handleCheckpoint(cb, data)

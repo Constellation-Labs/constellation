@@ -31,7 +31,7 @@ object Validation {
     * @return
     */
   def validateCheckpointBlock(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): CheckpointValidationStatus = {
-    val transactions = cb.transactions.map { tx => Validation.validateTransaction(dao.dbActor, tx) }
+    val transactions: Seq[TransactionValidationStatus] = cb.transactions.map { tx => Validation.validateTransaction(dao.dbActor, tx) }
     val validatedByTransactions = transactions.forall(_.validByCurrentState)
     val validByAncestors = validByTransactionAncestors(transactions, cb)
     val validByBatch = transactions.groupBy(_.transaction.src).filter { case (src, txs) =>

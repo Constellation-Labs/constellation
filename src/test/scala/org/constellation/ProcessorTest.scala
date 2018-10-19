@@ -10,15 +10,15 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.PeerData
 import org.constellation.primitives.Schema.{Id, Transaction}
 import org.constellation.util.APIClient
-import org.scalatest.FlatSpec
+import org.scalamock.scalatest.MockFactory
+import org.scalatest.{FlatSpec, OneInstancePerTest}
 
 import scala.concurrent.ExecutionContext
 
-trait ProcessorTest extends FlatSpec {
+trait ProcessorTest extends MockFactory with OneInstancePerTest {
   implicit val system: ActorSystem = ActorSystem("ProcessorTest")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext = ExecutionContext.global
-
 
   val keyPair: KeyPair = KeyUtils.makeKeyPair()
   val peerData = PeerData(addPeerRequest, getAPIClient("", 1))
@@ -41,11 +41,12 @@ trait ProcessorTest extends FlatSpec {
   def makeDao(mockData: Data, peerManager: TestProbe = peerManager, metricsManager: TestProbe = metricsManager,
               dbActor: TestProbe = dbActor) = {
     mockData.actorMaterializer = materialize
-    mockData.dbActor = mockKVDB
+    mockData.dbActor = stub[KVDB]
     mockData.metricsManager = metricsManager.testActor
     mockData.peerManager = peerManager.testActor
     mockData
   }
+
 
   def getAPIClient(hostName: String, httpPort: Int) = {
     val api = new APIClient(hostName, httpPort)

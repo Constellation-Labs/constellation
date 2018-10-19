@@ -10,27 +10,13 @@ import org.constellation.consensus.{EdgeProcessor, Validation}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.scalamock.scalatest.MockFactory
+import org.scalatest.{FlatSpec, OneInstancePerTest}
 
-class TransactionProcessorTest extends ProcessorTest {
-
-  dbActor.setAutoPilot(new TestActor.AutoPilot {
-    def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
-      case _ =>
-        sender ! None
-        TestActor.KeepRunning
-      case DBGet(`srcHash`) =>
-        sender ! Some(AddressCacheData(100000000000000000L, 100000000000000000L, None))
-        TestActor.KeepRunning
-
-      case DBGet(`txHash`) =>
-        sender ! Some(TransactionCacheData(tx, false))
-        TestActor.KeepRunning
-
-      case DBGet(`invalidSpendHash`) =>
-        sender ! Some(TransactionCacheData(tx, true))
-        TestActor.KeepRunning
-    }
-  })
+class TransactionProcessorTest extends FlatSpec with ProcessorTest {
+  (data.dbActor.getTransactionCacheData _).when(txHash).returns(Some(TransactionCacheData(tx, false)))
+  (data.dbActor.getTransactionCacheData _).when(invalidSpendHash).returns(Some(TransactionCacheData(tx, true)))
+  (data.dbActor.getAddressCacheData _).when(srcHash).returns(Some(AddressCacheData(100000000000000000L, 100000000000000000L, None)))
 
   "Incoming transactions" should "be signed and returned if valid" in {
     val validatorResponse = Validation.validateTransaction(data.dbActor,tx)
@@ -68,8 +54,8 @@ class TransactionProcessorTest extends ProcessorTest {
   }
 
   "Observed valid incoming transactions" should "be merged into observation edges" in {
-    val updated = data.transactionMemPoolMultiWitness(tx.baseHash).plus(tx)
-    data.transactionMemPoolMultiWitness(tx.baseHash) = tx
+    EdgeProcessor.updateMergeMemPool(tx, data)
+    val updated: Transaction = data.transactionMemPoolMultiWitness(tx.baseHash).plus(tx)
     assert(data.transactionMemPoolMultiWitness(tx.baseHash) == updated)
   }
 }
