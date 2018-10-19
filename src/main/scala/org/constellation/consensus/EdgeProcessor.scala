@@ -775,6 +775,8 @@ class EdgeProcessor(dao: DAO)
 
   dao.heartbeatActor ! HeartbeatSubscribe
 
+  private val snapshotZero = Snapshot("", Seq()).hash
+
   def receive: Receive = active(MemPool())
 
   def active(memPool: MemPool): Receive = {
@@ -804,7 +806,7 @@ class EdgeProcessor(dao: DAO)
       ) {
         val snapshot = Snapshot(memPool.snapshot.hash, memPool.acceptedCBSinceSnapshot)
         dao.dbActor.putSnapshot(snapshot.hash, snapshot)
-        if (snapshot.lastSnapshot != "") {
+        if (snapshot.lastSnapshot != snapshotZero) {
           val lastSnapshotVerification = dao.dbActor.getSnapshot(snapshot.lastSnapshot)
           if (lastSnapshotVerification.isEmpty) {
             dao.metricsManager ! IncrementMetric("snapshotVerificationFailed")

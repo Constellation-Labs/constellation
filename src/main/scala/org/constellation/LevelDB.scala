@@ -13,7 +13,7 @@ import org.iq80.leveldb._
 import org.iq80.leveldb.impl.Iq80DBFactory._
 
 import scala.concurrent.ExecutionContext
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 // https://doc.akka.io/docs/akka/2.5/persistence-query-leveldb.html
 
@@ -87,7 +87,7 @@ class KVDBImpl(dao: DAO) extends KVDB {
   private def put(key: String, obj: AnyRef) = {
     dao.numDBPuts += 1
     val bytes = KryoSerializer.serializeAnyRef(obj)
-    db.putBytes(key, bytes).get
+    db.putBytes(key, bytes)
   }
 
   private def get[T <: AnyRef](key: String): Option[T] = {
@@ -273,7 +273,19 @@ class LevelDB(val file: File) {
   def contains(s: String): Boolean = getBytes(s).nonEmpty
   def contains[T <: ProductHash](t: T): Boolean = getBytes(t.hash).nonEmpty
   def putStr(k: String, v: String) = Try { db.put(bytes(k), bytes(v)) }
-  def putBytes(k: String, v: Array[Byte]) = Try { db.put(bytes(k), v) }
+  def putBytes(k: String, v: Array[Byte]): Unit = {
+
+    var retries = 0
+    var done = false
+    do {
+      val attempt = Try {db.put(bytes(k), v)}
+      attempt match {
+        case Failure(e) => e.printStackTrace()
+        case _ =>
+      }
+      done = attempt.isSuccess
+    } while (!done && retries < 3)
+  }
   def put(k: String, v: String) = Try { db.put(bytes(k), bytes(v)) }
   def putHash[T <: ProductHash, Q <: ProductHash](t: T, q: Q): Try[Unit] =
     put(t.hash, q.hash)
@@ -295,7 +307,7 @@ class LevelDB(val file: File) {
     Try { getBytes(key).map { KryoSerializer.deserialize } }.toOption.flatten
   //def kryoGetT[T <: ClassTag](key: String): Option[AnyRef] = Try{getBytes(key).map {KryoSerializer.deserialize}}.toOption.flatten
 
-  def kryoPut(key: String, obj: AnyRef): Try[Unit] = {
+  def kryoPut(key: String, obj: AnyRef): Unit = {
     val bytes = KryoSerializer.serializeAnyRef(obj)
     putBytes(key, bytes)
   }

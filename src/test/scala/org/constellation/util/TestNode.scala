@@ -46,7 +46,7 @@ object TestNode {
     nodes = nodes :+ node
 
     node.dao.processingConfig = node.dao.processingConfig.copy(minCBSignatureThreshold = 3)
-    node.dao.snapshotInterval = 4
+    node.dao.snapshotInterval = 5
 
     node
   }

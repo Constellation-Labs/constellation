@@ -5,7 +5,10 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
-import org.constellation.primitives.Schema.{Id, MetricsResult}
+import org.constellation.consensus.{Snapshot, SnapshotInfo}
+import org.constellation.p2p.Download.downloadCBFromHash
+import org.constellation.primitives.Schema.{CheckpointBlock, Id, MetricsResult}
+import org.constellation.primitives.{IncrementMetric, UpdateMetric}
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import scalaj.http.{Http, HttpRequest, HttpResponse}
@@ -142,6 +145,35 @@ class APIClient(host: String = "127.0.0.1", port: Int)(
     val resp: HttpResponse[String] = httpWithAuth(suffix, timeoutSeconds).params(queryParams).asString
 
     resp.body
+  }
+
+  def simpleDownload(): Seq[CheckpointBlock] = {
+
+    val snapshotInfo = getBlocking[SnapshotInfo]("info")
+
+    val startingCBs = snapshotInfo.acceptedCBSinceSnapshot ++ snapshotInfo.snapshot.checkpointBlocks
+
+    def getSnapshots(hash: String, blocks: Seq[String] = Seq()): Seq[String] = {
+      val sn = getBlocking[Option[Snapshot]]("snapshot/" + hash)
+      sn match {
+        case Some(snapshot) =>
+          if (snapshot.lastSnapshot == "") {
+            blocks
+          } else {
+            getSnapshots(snapshot.lastSnapshot, blocks ++ snapshot.checkpointBlocks)
+          }
+        case None =>
+          blocks
+      }
+    }
+
+    val snapshotBlocks = getSnapshots(snapshotInfo.snapshot.lastSnapshot) ++ startingCBs
+    val snapshotBlocksDistinct = snapshotBlocks.distinct
+
+    snapshotBlocks.flatMap{ cb =>
+      getBlocking[Option[CheckpointBlock]]("checkpoint/" + cb)
+    }
+
   }
 
 }

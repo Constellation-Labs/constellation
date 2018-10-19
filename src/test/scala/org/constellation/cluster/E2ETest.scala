@@ -25,14 +25,16 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
   override def beforeAll(): Unit = {
     // Cleanup DBs
-    Try{File(tmpDir).delete()}
+    //Try{File(tmpDir).delete()}
+    //Try{new java.io.File(tmpDir).mkdirs()}
+
   }
 
   override def afterAll() {
     // Cleanup DBs
-    Try{File(tmpDir).delete()}
     TestNode.clearNodes()
     system.terminate()
+    Try{File(tmpDir).delete()}
   }
 
   def createNode(randomizePorts: Boolean = true, seedHosts: Seq[InetSocketAddress] = Seq()): ConstellationNode = {
@@ -65,6 +67,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
   "E2E Run" should "demonstrate full flow" in {
 
+    println("API Ports: " + apis.map{_.apiPort})
 
     assert(sim.run(initialAPIs, addPeerRequests.slice(0,3)))
 
@@ -92,49 +95,19 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     assert(sim.checkReady(downloadAPIs))
 
-  }
+    // Stop transactions
+    sim.triggerRandom(apis)
 
-  //  Thread.sleep(200*1000)
-    // sim.triggerRandom(apis) Thread.sleep(5000*60*60)
-/*
+    Thread.sleep(10000)
+    assert(apis.map{_.metrics("checkpointAccepted")}.distinct.size == 1)
+    assert(apis.map{_.metrics("transactionAccepted")}.distinct.size == 1)
 
-    var txs = 3
+    val blocks = apis.map{_.simpleDownload()}
 
-    while (txs > 0) {
-      sim.sendRandomTransaction(apis)
-      txs = txs - 1
-    }
-*/
+    assert(blocks.map{_.size}.distinct.size == 1)
+    assert(blocks.forall{b => b.size == b.distinct.size})
+    assert(blocks.map{_.toSet}.distinct.size == 1)
 
-    // wip
-/*
-    val stopWatch = Stopwatch.createStarted()
-    val elapsed = stopWatch.elapsed()
-
-    while (!verifyCheckpointTips(sim, apis) && elapsed.getSeconds <= 30) {
-
-    }
-
-    val checkpointTips = sim.getCheckpointTips(apis)*/
-
-   // assert(true)
-
-  def verifyCheckpointTips(sim: Simulation, apis: Seq[APIClient]): Boolean = {
-
-    val checkpointTips = sim.getCheckpointTips(apis)
-
-    val head = checkpointTips.head
-
-    if (head.size >= 1) {
-      val allEqual = checkpointTips.forall(f => {
-        val equal = f.keySet.diff(head.keySet).isEmpty
-        equal
-      })
-
-      allEqual
-    } else {
-      false
-    }
   }
 
 }

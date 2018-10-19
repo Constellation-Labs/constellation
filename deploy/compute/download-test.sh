@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-HOSTS_FILE=${1:-hosts3.txt}
+HOSTS_FILE=${1:-hosts2.txt}
 
 echo "Redeploying $HOSTS_FILE"
 cat $HOSTS_FILE
