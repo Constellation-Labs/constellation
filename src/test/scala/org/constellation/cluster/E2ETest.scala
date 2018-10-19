@@ -86,6 +86,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
       sim.addPeer(downloadAPIs, apr)
     }
 
+
     assert(sim.checkPeersHealthy(apis))
 
     downloadAPIs.foreach{ a2 =>
