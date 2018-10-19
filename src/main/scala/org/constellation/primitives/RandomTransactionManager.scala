@@ -30,7 +30,7 @@ class RandomTransactionManager(dao: DAO)(
 
         if (peerIds.nonEmpty) {
 
-          Seq.fill(50)(0).par.foreach { _ =>
+          Seq.fill(dao.processingConfig.randomTXPerRound)(0).par.foreach { _ =>
 
             // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
             // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
