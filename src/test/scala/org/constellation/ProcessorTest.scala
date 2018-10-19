@@ -11,7 +11,7 @@ import org.constellation.primitives.PeerData
 import org.constellation.primitives.Schema.{Id, Transaction}
 import org.constellation.util.APIClient
 import org.scalamock.scalatest.MockFactory
-import org.scalatest.{FlatSpec, OneInstancePerTest}
+import org.scalatest.OneInstancePerTest
 
 import scala.concurrent.ExecutionContext
 

@@ -5,10 +5,7 @@ import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.consensus.{EdgeProcessor, Validation}
 import org.constellation.primitives.IncrementMetric
 import org.constellation.primitives.Schema._
-import org.scalamock.scalatest.MockFactory
-import org.scalatest.{FlatSpec, OneInstancePerTest}
-
-import scala.concurrent.ExecutionContext
+import org.scalatest.FlatSpec
 
 class CheckpointProcessorTest extends FlatSpec with  ProcessorTest {
   val bogusTxValidStatus = TransactionValidationStatus(tx, None, None)

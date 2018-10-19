@@ -2,16 +2,13 @@ package org.constellation
 
 import java.security.KeyPair
 
-import akka.actor.ActorRef
-import akka.testkit.{TestProbe, _}
-import org.constellation.LevelDB.DBGet
+import akka.testkit.TestProbe
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.consensus.{EdgeProcessor, Validation}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.scalamock.scalatest.MockFactory
-import org.scalatest.{FlatSpec, OneInstancePerTest}
+import org.scalatest.FlatSpec
 
 class TransactionProcessorTest extends FlatSpec with ProcessorTest {
   (data.dbActor.getTransactionCacheData _).when(txHash).returns(Some(TransactionCacheData(tx, false)))

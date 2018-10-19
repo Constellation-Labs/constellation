@@ -5,8 +5,7 @@ import org.constellation.consensus.ResolutionService
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.primitives.APIBroadcast
 import org.constellation.primitives.Schema._
-import org.scalamock.scalatest.MockFactory
-import org.scalatest.{FlatSpec, OneInstancePerTest}
+import org.scalatest.FlatSpec
 
 class ResolutionServiceTest extends FlatSpec with ProcessorTest {
   val bogusTxValidStatus = TransactionValidationStatus(tx, None, None)
