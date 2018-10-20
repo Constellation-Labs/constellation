@@ -14,7 +14,7 @@ lazy val versions = new {
 
 lazy val commonSettings = Seq(
   version := _version,
-  scalaVersion := "2.12.6",
+  scalaVersion := "2.12.7",
   organization := "org.constellation",
   name := "constellation",
   mainClass := Some("org.constellation.ConstellationNode"),
@@ -50,7 +50,7 @@ lazy val commonSettings = Seq(
  */
   javaOptions in Universal ++= Seq(
     // -J params will be added as jvm parameters
-   "-J-Xmx12000m" //,
+  // "-J-Xmx12000m" //,
   //  "-J-Xms4000m",
 
     // you can access any build setting/task here
@@ -95,12 +95,14 @@ lazy val testDependencies = Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.0",
   "org.scalatest" %% "scalatest" % "3.0.5",
   "org.scalactic" %% "scalactic" % "3.0.5",
-  "org.scalamock" %% "scalamock-scalatest-support" % "3.6.0",
+  "org.scalamock" %% "scalamock" % "4.1.0",
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
 ).map(_ % "it,test" )
 
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
+
+test in assembly := {}
 
 lazy val root = (project in file("."))
   .configs(IntegrationTest)

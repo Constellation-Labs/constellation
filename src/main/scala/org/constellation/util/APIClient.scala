@@ -5,30 +5,35 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
-import org.constellation.primitives.Schema.Id
-import org.json4s.{Formats, native}
+import org.constellation.consensus.{Snapshot, SnapshotInfo}
+import org.constellation.p2p.Download.downloadCBFromHash
+import org.constellation.primitives.Schema.{CheckpointBlock, Id, MetricsResult}
+import org.constellation.primitives.{IncrementMetric, UpdateMetric}
 import org.json4s.native.Serialization
+import org.json4s.{Formats, native}
 import scalaj.http.{Http, HttpRequest, HttpResponse}
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContext, Future}
 
-class APIClient (
+object APIClient {
+  def apply(host: String = "127.0.0.1", port: Int, udpPort: Int = 16180)
+           (implicit system: ActorSystem, materialize: ActorMaterializer
+  ): APIClient = {
+    new APIClient(host, port)
+  }
+}
+
+class APIClient(host: String = "127.0.0.1", port: Int)(
   implicit val system: ActorSystem,
   implicit val materialize: ActorMaterializer) {
 
   implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
 
-  var hostName: String = "127.0.0.1"
+  val hostName: String = host
   var id: Id = _
 
-  var udpPort: Int = 16180
-  var apiPort: Int = _
-
-  def setConnection(host: String = "127.0.0.1", port: Int): APIClient = {
-    hostName = host
-    apiPort = port
-    this
-  }
+  val udpPort: Int = 16180
+  val apiPort: Int = port
 
   def udpAddress: String = hostName + ":" + udpPort
 
@@ -43,10 +48,9 @@ class APIClient (
 
   private val config = ConfigFactory.load()
 
+  private val authEnabled = config.getBoolean("auth.enabled")
   private val authId = config.getString("auth.id")
   private val authPassword = config.getString("auth.password")
-
-  private val authEnabled = false
 
   implicit class HttpRequestAuth(req: HttpRequest) {
     def addAuthIfEnabled(): HttpRequest = {
@@ -67,6 +71,8 @@ class APIClient (
 
   implicit val serialization: Serialization.type = native.Serialization
 
+  def metrics: Map[String, String] = getBlocking[MetricsResult]("metrics").metrics
+
   def post(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)
           (implicit f : Formats = constellation.constellationFormats): Future[HttpResponse[String]] = {
     Future(postSync(suffix, b))
@@ -79,7 +85,7 @@ class APIClient (
 
   def postEmpty(suffix: String, timeoutSeconds: Int = 5)(implicit f : Formats = constellation.constellationFormats)
   : HttpResponse[String] = {
-    httpWithAuth(suffix).method("POST") .asString
+    httpWithAuth(suffix).method("POST").asString
   }
 
   def postSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
@@ -99,6 +105,12 @@ class APIClient (
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
     val res: HttpResponse[String] = postSync(suffix, b)
     Serialization.read[T](res.body)
+  }
+
+  def postNonBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): Future[T] = {
+    post(suffix, b).map { res =>
+      Serialization.read[T](res.body)
+    }
   }
 
   def read[T <: AnyRef](res: HttpResponse[String])(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): T = {
@@ -124,6 +136,11 @@ class APIClient (
     Serialization.read[T](getBlockingStr(suffix, queryParams, timeoutSeconds))
   }
 
+  def getNonBlocking[T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5)
+                              (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): Future[T] = {
+    Future(getBlocking[T](suffix, queryParams, timeoutSeconds))
+  }
+
   def readHttpResponseEntity[T <: AnyRef](response: String)
                               (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
     Serialization.read[T](response)
@@ -133,6 +150,35 @@ class APIClient (
     val resp: HttpResponse[String] = httpWithAuth(suffix, timeoutSeconds).params(queryParams).asString
 
     resp.body
+  }
+
+  def simpleDownload(): Seq[CheckpointBlock] = {
+
+    val snapshotInfo = getBlocking[SnapshotInfo]("info")
+
+    val startingCBs = snapshotInfo.acceptedCBSinceSnapshot ++ snapshotInfo.snapshot.checkpointBlocks
+
+    def getSnapshots(hash: String, blocks: Seq[String] = Seq()): Seq[String] = {
+      val sn = getBlocking[Option[Snapshot]]("snapshot/" + hash)
+      sn match {
+        case Some(snapshot) =>
+          if (snapshot.lastSnapshot == "") {
+            blocks
+          } else {
+            getSnapshots(snapshot.lastSnapshot, blocks ++ snapshot.checkpointBlocks)
+          }
+        case None =>
+          blocks
+      }
+    }
+
+    val snapshotBlocks = getSnapshots(snapshotInfo.snapshot.lastSnapshot) ++ startingCBs
+    val snapshotBlocksDistinct = snapshotBlocks.distinct
+
+    snapshotBlocks.flatMap{ cb =>
+      getBlocking[Option[CheckpointBlock]]("checkpoint/" + cb)
+    }
+
   }
 
 }

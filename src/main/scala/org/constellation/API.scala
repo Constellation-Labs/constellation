@@ -1,9 +1,9 @@
 package org.constellation
 
 import java.net.InetSocketAddress
-import java.security.{KeyPair, PublicKey}
+import java.security.KeyPair
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, path, _}
@@ -13,34 +13,41 @@ import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromE
 import akka.pattern.ask
 import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
-import com.softwaremill.macmemo.memoize
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.LevelDB.{DBGet, DBPut}
-import org.constellation.crypto.Wallet
+import org.constellation.crypto.SimpleWalletLike
+import org.constellation.p2p.Download
+import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
-import org.constellation.primitives._
-import org.constellation.util.{Metrics, ServeUI}
+import org.constellation.primitives.{APIBroadcast, _}
+import org.constellation.util.{CommonEndpoints, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
 import scalaj.http.HttpResponse
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
+case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id, nodeStatus: NodeState = NodeState.Ready)
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
-case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id)
+case class HostPort(host: String, port: Int)
+case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
 
-class API(udpAddress: InetSocketAddress,
-          val data: Data = null,
-          cellManager: ActorRef)(implicit system: ActorSystem, val timeout: Timeout)
+case class ProcessingConfig(
+                                maxWidth: Int = 10,
+                                minCheckpointFormationThreshold: Int = 10,
+                                minCBSignatureThreshold: Int = 5,
+                                randomTXPerRound: Int = 50
+                              )
+
+class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   extends Json4sSupport
-    with Wallet
-    with ServeUI {
+    with SimpleWalletLike
+    with ServeUI
+    with CommonEndpoints {
 
-  import data._
+  import dao._
 
   implicit val serialization: Serialization.type = native.Serialization
 
@@ -53,14 +60,22 @@ class API(udpAddress: InetSocketAddress,
 
   val config: Config = ConfigFactory.load()
 
-  val authId: String = config.getString("auth.id")
-  val authPassword: String = config.getString("auth.password")
+  private val authEnabled = config.getBoolean("auth.enabled")
+  private val authId: String = config.getString("auth.id")
+  private val authPassword: String = config.getString("auth.password")
 
   val getEndpoints: Route =
     extractClientIP { clientIP =>
       get {
+        path("genesis") {
+          complete(dao.genesisObservation)
+        } ~
+        path("checkpoint" / Segment) { s =>
+          val res = dao.dbActor.getCheckpointCacheData(s).map{_.checkpointBlock}
+          complete(res)
+        } ~
           path("restart") {
-            data.restartNode()
+            dao.restartNode()
             complete(StatusCodes.OK)
           } ~
           path("setKeyPair") {
@@ -68,7 +83,7 @@ class API(udpAddress: InetSocketAddress,
               logger.debug("Set key pair " + kpp)
               val res = if (kpp.length > 10) {
                 val rr = Try {
-                  data.updateKeyPair(kpp.x[KeyPair])
+                  dao.updateKeyPair(kpp.x[KeyPair])
                   StatusCodes.OK
                 }.getOrElse(StatusCodes.BadRequest)
                 rr
@@ -78,7 +93,7 @@ class API(udpAddress: InetSocketAddress,
           } ~
           path("metrics") {
             val response = MetricsResult(
-              (data.metricsManager ? GetMetrics).mapTo[Map[String, String]].getOpt().getOrElse(Map())
+              (dao.metricsManager ? GetMetrics).mapTo[Map[String, String]].getOpt().getOrElse(Map())
             )
             complete(response)
           } ~
@@ -104,19 +119,11 @@ class API(udpAddress: InetSocketAddress,
           path("selfAddress") {
             complete(id.address)
           } ~
-          path("id") { // TODO : This should be served both on internal / external API
-            // ^ Create shared routes for common functionality like this.
-            complete(id)
-          } ~
           path("nodeKeyPair") {
             complete(keyPair)
           } ~
-          // TODO: revisit
-          path("health") {
-            complete(StatusCodes.OK)
-          } ~
           path("peers") {
-            val res = (data.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].getOpt().getOrElse(Map())
+            val res = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].getOpt().getOrElse(Map())
             complete(res)
           } ~
           path("peerids") {
@@ -125,24 +132,53 @@ class API(udpAddress: InetSocketAddress,
             })
           } ~
           path("hasGenesis") {
-            if (data.genesisObservation.isDefined) {
+            if (dao.genesisObservation.isDefined) {
               complete(StatusCodes.OK)
             } else {
               complete(StatusCodes.NotFound)
             }
           } ~
           path("checkpointTips") {
-            complete(data.confirmedCheckpoints)
-          } ~
-          jsRequest ~
-          serveMainPage
+            complete(dao.confirmedCheckpoints)
+          }
       }
     }
 
   private val postEndpoints =
     post {
+      pathPrefix("peer") {
+        path("remove") {
+          entity(as[RemovePeerRequest]) { e =>
+            dao.peerManager ! e
+            complete(StatusCodes.OK)
+          }
+        }
+      } ~
+      pathPrefix("download") {
+        path("start") {
+          Future{Download.download()}(dao.edgeExecutionContext)
+          complete(StatusCodes.OK)
+        }
+      } ~
+      pathPrefix("config") {
+        path("update") {
+          entity(as[ProcessingConfig]) { cu =>
+            dao.processingConfig = cu
+            complete(StatusCodes.OK)
+          }
+        }
+      } ~
+      path("ready") { // Temp
+        if (dao.nodeState != NodeState.Ready) {
+          dao.nodeState = NodeState.Ready
+        } else {
+          dao.nodeState = NodeState.PendingDownload
+        }
+        dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
+        complete(StatusCodes.OK)
+      } ~
       path("random") { // Temporary
-        data.generateRandomTX = true
+        dao.generateRandomTX = !dao.generateRandomTX
         complete(StatusCodes.OK)
       } ~
       path("peerHealthCheck") {
@@ -152,8 +188,10 @@ class API(udpAddress: InetSocketAddress,
 
             val res = idMap.map{
               case (id, fut) =>
-                val maybeResponse = fut.getOpt()
-                id -> maybeResponse.exists{_.isSuccess}
+                val resp = fut.get()
+                id -> resp.isSuccess
+//                val maybeResponse = fut.getOpt()
+//                id -> maybeResponse.exists{_.isSuccess}
             }.toSeq
 
             complete(res)
@@ -170,10 +208,8 @@ class API(udpAddress: InetSocketAddress,
         } ~
         path("accept") {
           entity(as[GenesisObservation]) { go =>
-            Future {
-              acceptGenesis(go)
-              // TODO: Report errors and add validity check
-            }
+            dao.edgeProcessor ! go
+            // TODO: Report errors and add validity check
             complete(StatusCodes.OK)
           }
         }
@@ -184,7 +220,7 @@ class API(udpAddress: InetSocketAddress,
           println(s"send transaction to address $e")
 
           Future {
-            transactions.TransactionManager.handleSendToAddress(e, data)
+            transactions.TransactionManager.handleSendToAddress(e, dao)
           }
 
           complete(StatusCodes.OK)
@@ -215,9 +251,9 @@ class API(udpAddress: InetSocketAddress,
               }
             }
           logger.debug(s"Set external IP RPC request $externalIp $addr")
-          data.externalAddress = Some(addr)
+          dao.externalAddress = Some(addr)
           if (ipp.nonEmpty)
-            data.apiAddress = Some(new InetSocketAddress(ipp, 9000))
+            dao.apiAddress = Some(new InetSocketAddress(ipp, 9000))
           complete(StatusCodes.OK)
         }
       } ~
@@ -238,12 +274,22 @@ class API(udpAddress: InetSocketAddress,
       }
     }
 
+  private val noAuthRoutes =
+    get {
+      // TODO: revisit
+      path("health") {
+        complete(StatusCodes.OK)
+      } ~
+      path("favicon.ico") {
+        getFromResource("favicon.ico")
+      }
+    }
 
-  private val routes: Route = cors() {
-    getEndpoints ~ postEndpoints ~ jsRequest ~ serveMainPage
+  private val mainRoutes: Route = cors() {
+    getEndpoints ~ postEndpoints ~ jsRequest ~ commonEndpoints ~ serveMainPage
   }
 
-  def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
+  private def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
     credentials match {
       case p @ Credentials.Provided(id)
         if id == authId && p.verify(authPassword) =>
@@ -252,6 +298,14 @@ class API(udpAddress: InetSocketAddress,
     }
   }
 
-  val authRoutes: Route = faviconRoute ~ routes
+  val routes = if (authEnabled) {
+    noAuthRoutes ~ authenticateBasic(realm = "secure site",
+      myUserPassAuthenticator) {
+      user =>
+        mainRoutes
+    }
+  } else {
+    noAuthRoutes ~ mainRoutes
+  }
 
 }

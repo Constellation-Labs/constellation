@@ -1,197 +1,133 @@
 package org.constellation.p2p
 
 import java.net.InetSocketAddress
+import java.util.concurrent.TimeUnit
 
-import org.constellation.Data
-import org.constellation.primitives.Schema._
+import akka.pattern.ask
+import akka.util.Timeout
+import com.typesafe.scalalogging.Logger
 import constellation._
+import org.constellation.DAO
+import org.constellation.consensus._
+import org.constellation.primitives.Schema._
+import org.constellation.primitives._
 import org.constellation.util.{APIClient, Signed}
 import scalaj.http.HttpResponse
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.{Failure, Try}
 
-trait Download extends PeerAuth {
+/// New download code
+object Download {
 
-  val data: Data
-  import data._
+  val logger = Logger(s"Download")
+  implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-  // TODO: update since heartbeat is gone
-  def downloadHeartbeat(): Unit = {
-    if (downloadInProgress || !downloadMode || peers.isEmpty) return
+  def downloadCBFromHash(hash: String, singlePeer: PeerData)(implicit dao: DAO, ec: ExecutionContext): Unit = {
+    singlePeer.client.getBlocking[Option[CheckpointBlock]]("checkpoint/" + hash) match { case Some(cb) =>
+      if (cb != dao.genesisObservation.get.initialDistribution &&
+        cb != dao.genesisObservation.get.initialDistribution2) {
 
-    logger.debug("Requesting data download")
-
-    downloadInProgress = true
-
-    val apiClient = new APIClient()
-
-    // get max bundle and genesis hash
-    val maxBundleResponse = getMaxBundleHash(apiClient)
-
-    val apiAddress = maxBundleResponse._1.get
-
-    apiClient.setConnection(apiAddress.getHostName, apiAddress.getPort)
-
-    val maxBundleSheaf = maxBundleResponse._2.get.sheaf.get
-    val maxBundleHash = maxBundleSheaf.bundle.hash
-    val genesisBundle = maxBundleResponse._2.get.genesisBundle.get
-
-    val genesisTx = maxBundleResponse._2.get.genesisTX.get
-
-    // update our genesis bundle
-  //  acceptGenesis(genesisBundle, genesisTx)
-
-    val pendingChainHashes = getPendingChainHashes(maxBundleHash, genesisBundle.hash, apiClient)
-
-    val peerSelection = Iterator.continually(peers).flatten
-
-    resolveChain(pendingChainHashes, peerSelection, apiClient)
-  }
-
-  def isChainFullyResolved(pendingChainHashes: mutable.LinkedHashMap[String, Boolean]): Boolean = {
-    !pendingChainHashes.values.toSet(false)
-  }
-
-  def resolveChain(pendingChainHashes: mutable.LinkedHashMap[String, Boolean],
-                   peerSelection: Iterator[Signed[Peer]],
-                   apiClient: APIClient): Unit = {
-
-    // TODO: add retry for missing bundles
-    resolveBundleData(pendingChainHashes, peerSelection, apiClient).foreach(f => {
-      f.onComplete(r => {
-        // check if we are finished downloading
-        if (isChainFullyResolved(pendingChainHashes)) {
-          // turn off download mode
-          downloadMode = false
-          downloadInProgress = false
-        }
-      })
-    })
-  }
-
-  def resolveBundleData(pendingChainHashes: mutable.LinkedHashMap[String, Boolean],
-                        peerSelection: Iterator[Signed[Peer]],
-                        apiClient: APIClient): Seq[Future[Unit]] = {
-
-    val bundleResponses = getPartitionedPendingChainHashes(pendingChainHashes).flatMap(group => {
-      val client = getRandomPeerClientConnection(peerSelection)
-
-      group.map(bundle => {
-        client.get("fullBundle/" + bundle._1)
-      })
-    }).toSeq
-
-    bundleResponses.map(response => {
-      response.map(r => {
-        if (r.isSuccess) {
-          val response = apiClient.readHttpResponseEntity[BundleHashQueryResponse](r.body)
-
-          if (response.sheaf.isDefined) {
-            val sheaf: Sheaf = response.sheaf.get
-
-            val transactions: Seq[Transaction] = response.transactions
-
-            // store the bundle
-            handleBundle(sheaf.bundle)
-
-            // store the transactions
-            // TODO: update for latest
-          //  transactions.foreach(handleTransaction)
-
-            // set the bundle to be non pending
-            pendingChainHashes(sheaf.bundle.hash) = true
-          }
-
+        if (dao.dbActor.getCheckpointCacheData(cb.baseHash).isEmpty) {
+          EdgeProcessor.acceptCheckpoint(cb)
+          dao.metricsManager ! IncrementMetric("downloadedBlocks")
         } else {
-          logger.debug(s"fetch bundle failure ")
+          dao.metricsManager ! IncrementMetric("downloadedBlockButHashAlreadyExistsInDB")
         }
-      })
-    })
-  }
-
-  def getPendingChainHashes(maxBundleHash: String,
-                            genesisBundleHash: String,
-                            apiClient: APIClient): mutable.LinkedHashMap[String, Boolean] = {
-    val pendingChainHashes = mutable.LinkedHashMap[String, Boolean](maxBundleHash -> false)
-
-    var hash = maxBundleHash
-
-    // grab all of the chain hashes
-    while (hash != genesisBundleHash) {
-      val ancestors = apiClient.get("ancestors/" + hash)
-
-      val response = Await.ready(ancestors, 90 seconds)
-
-      val ancestorHashes = apiClient.read[Seq[String]](response.get())
-
-      hash = ancestorHashes.head
-
-      ancestorHashes.foreach(h => {
-        pendingChainHashes.+=(h -> false)
-      })
-    }
-
-    pendingChainHashes
-  }
-
-  def getPartitionedPendingChainHashes(pendingChainHashes: mutable.LinkedHashMap[String, Boolean]):
-    Iterator[mutable.LinkedHashMap[String, Boolean]] = {
-
-    val chainHashes = pendingChainHashes.filterNot(p => p._2)
-
-    // split out work and request bundles and transactions for all of the chain hashes
-    val groupedChain = if (chainHashes.size > peers.size) {
-      chainHashes.grouped(chainHashes.size / peers.size)
-    } else {
-      chainHashes.grouped(peers.size)
-    }
-
-    groupedChain
-  }
-
-  def getRandomPeerClientConnection(peerSelection: Iterator[Signed[Peer]]): APIClient = {
-    val peer = peerSelection.next().data.apiAddress.get
-
-    val client = new APIClient().setConnection(peer.getHostName, peer.getPort)
-
-    client
-  }
-
-  def getMaxBundleHash(apiClient: APIClient): (Option[InetSocketAddress], Option[MaxBundleGenesisHashQueryResponse]) = {
-    val maxBundles: Seq[(InetSocketAddress, Future[HttpResponse[String]])] = getBroadcastTCP(route = "maxBundle")
-
-    val futures = Future.sequence(maxBundles.map(b => b._2))
-
-    Await.ready(futures, 90 seconds)
-
-    val maxBundle = maxBundles.foldLeft[(Option[InetSocketAddress],
-      Option[MaxBundleGenesisHashQueryResponse])]((None, None))((acc, f) => {
-
-      val right = f._2.get()
-
-      val leftHash: Option[Sheaf] = if (acc._2.isDefined) acc._2.get.sheaf else None
-      val rightHash = apiClient.read[Option[MaxBundleGenesisHashQueryResponse]](right)
-
-      if (leftHash.isDefined && rightHash.isDefined && rightHash.get.sheaf.isDefined) {
-        val leftHashScore = leftHash.get.totalScore.get
-
-        val rightHashScore = rightHash.get.sheaf.get.totalScore.get
-
-        if (leftHashScore > rightHashScore) {
-          acc
-        } else {
-          (Some(f._1), rightHash)
-        }
-      } else if (leftHash.isDefined) {
-        acc
-      } else {
-        (Some(f._1), rightHash)
       }
-    })
-
-    maxBundle
+    case None =>
+      dao.metricsManager ! IncrementMetric("downloadBlockEmptyResponse")
+    }
   }
+
+
+  def downloadActual()(implicit dao: DAO, ec: ExecutionContext): Unit = {
+    logger.info("Download started")
+    dao.nodeState = NodeState.DownloadInProgress
+
+    val res = (dao.peerManager ? APIBroadcast(_.getBlocking[Option[GenesisObservation]]("genesis")))
+      .mapTo[Map[Id, Option[GenesisObservation]]].get()
+
+    // TODO: Error handling and verification
+    val genesis = res.filter {
+      _._2.nonEmpty
+    }.map {
+      _._2.get
+    }.head
+    dao.acceptGenesis(genesis)
+
+    dao.metricsManager ! UpdateMetric("downloadedGenesis", "true")
+
+    val peerData = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().filter{_._2.nodeState == NodeState.Ready}
+
+    val snapshotClient = peerData.head._2.client
+
+    val snapshotInfo = snapshotClient.getBlocking[SnapshotInfo]("info")
+    // To not download from other nodes currently downloading, fix with NodeStatus metadata
+    // val (id, activeTips) = allTips.filter { case (_, t) => genesis.notGenesisTips(t) }.head
+
+    val startingCBs = snapshotInfo.acceptedCBSinceSnapshot ++ snapshotInfo.snapshot.checkpointBlocks
+
+    dao.dbActor.putSnapshot(snapshotInfo.snapshot.hash, snapshotInfo.snapshot)
+
+
+    def getSnapshots(hash: String, blocks: Seq[String] = Seq()): Seq[String] = {
+      val sn = snapshotClient.getBlocking[Option[Snapshot]]("snapshot/" + hash)
+      sn match {
+        case Some(snapshot) =>
+          dao.dbActor.putSnapshot(hash, snapshot)
+          if (snapshot.lastSnapshot == "") {
+            dao.metricsManager ! IncrementMetric("downloadSnapshotEmptyStr")
+            blocks
+          } else {
+            dao.metricsManager ! IncrementMetric("downloadedSnapshotHashes")
+            getSnapshots(snapshot.lastSnapshot, blocks ++ snapshot.checkpointBlocks)
+          }
+        case None =>
+          dao.metricsManager ! IncrementMetric("downloadSnapshotQueryFailed")
+          blocks
+      }
+    }
+
+    val snapshotBlocks = getSnapshots(snapshotInfo.snapshot.lastSnapshot) ++ startingCBs
+    val snapshotBlocksDistinct = snapshotBlocks.distinct
+
+    dao.metricsManager ! UpdateMetric("downloadExpectedNumBlocks", snapshotBlocks.size.toString)
+    dao.metricsManager ! UpdateMetric("downloadExpectedNumBlocksDistinct", snapshotBlocksDistinct.size.toString)
+
+    val grouped = snapshotBlocksDistinct.grouped(snapshotBlocksDistinct.size / peerData.size).toSeq.zip(peerData.values)
+
+    val downloadRes = grouped.par.map{
+      case (hashes, peer) =>
+        hashes.par.map{
+          hash =>
+            downloadCBFromHash(hash, peer)
+            Seq()
+        }
+    }
+
+    downloadRes.flatten.toList
+
+    logger.debug("First pass download finished")
+
+    dao.metricsManager ! UpdateMetric("downloadFirstPassComplete", "true")
+
+    dao.edgeProcessor ! DownloadComplete(snapshotInfo.snapshot)
+
+  }
+
+  def download()(implicit dao: DAO, ec: ExecutionContext): Unit = {
+
+    Try {
+      downloadActual()
+    } match {
+      case Failure(e) => e.printStackTrace()
+      case _ => logger.info("Download succeeded")
+    }
+
+  }
+
 
 }

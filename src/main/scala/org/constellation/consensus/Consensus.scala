@@ -2,18 +2,15 @@ package org.constellation.consensus
 
 import java.security.KeyPair
 
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
+import akka.actor.{Actor, ActorLogging, ActorSystem}
+import akka.pattern.ask
 import akka.util.Timeout
 import constellation._
-import akka.pattern.ask
-import org.constellation.Data
+import org.constellation.DAO
 import org.constellation.consensus.Consensus._
-import org.constellation.consensus.EdgeProcessor.{CreateCheckpointEdgeResponse, HandleCheckpoint}
-import org.constellation.p2p.UDPSend
-import org.constellation.primitives.{APIBroadcast, GetPeerInfo, PeerData, PeerManager}
 import org.constellation.primitives.Schema._
+import org.constellation.primitives.{APIBroadcast, GetPeerInfo, PeerData}
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.Signed
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.immutable.HashMap
@@ -60,12 +57,12 @@ object Consensus {
                         callback: ConsensusRoundResult[_ <: CC] => Unit = (result: ConsensusRoundResult[_ <: CC]) => {})
 
   case class ConsensusRoundState(selfId: Option[Id] = None,
-                                 dao: Data,
+                                 dao: DAO,
                                  roundStates: HashMap[RoundHash[_ <: CC], RoundState] = HashMap())
 
   def notifyFacilitatorsOfMessage(facilitators: Set[Id],
                                   self: Id,
-                                  dao: Data,
+                                  dao: DAO,
                                   message: RemoteMessage,
                                   path: String)(implicit system: ActorSystem): Boolean = {
 
@@ -137,7 +134,7 @@ object Consensus {
     bundleProposal
   }
 
-  def getFacilitators(dao: Data)(implicit timeout: Timeout): Set[Id] = {
+  def getFacilitators(dao: DAO)(implicit timeout: Timeout): Set[Id] = {
     val peers = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().keySet
     peers
   }
@@ -239,7 +236,7 @@ object Consensus {
   }
 }
 
-class Consensus(dao: Data)
+class Consensus(dao: DAO)
                (implicit timeout: Timeout, executionContext: ExecutionContext, system: ActorSystem, keyPair: KeyPair) extends Actor with ActorLogging {
 
   def receive: Receive = consensus(ConsensusRoundState(dao = dao,

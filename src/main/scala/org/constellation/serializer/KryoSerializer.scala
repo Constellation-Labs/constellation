@@ -1,9 +1,7 @@
 package org.constellation.serializer
 
-import java.security.PublicKey
-
 import akka.util.ByteString
-import com.twitter.chill.{IKryoRegistrar, KryoInstantiator, KryoPool, ScalaKryoInstantiator}
+import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.p2p.SerializedUDPMessage
 
@@ -52,6 +50,20 @@ object KryoSerializer {
 
   def deserialize(message: Array[Byte]): AnyRef= {
     kryoPool.fromBytes(message)
+  }
+/*
+  def deserializeT[T : ClassTag](message: Array[Byte]): AnyRef= {
+
+    val clz = {
+      import scala.reflect._
+      classTag[T].runtimeClass.asInstanceOf[Class[T]]
+    }
+    kryoPool.fromBytes(message, clz)
+  }
+*/
+
+  def deserialize[T](message: Array[Byte], cls: Class[T]): T = {
+    kryoPool.fromBytes(message, cls)
   }
 
 }

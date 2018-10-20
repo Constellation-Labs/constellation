@@ -3,17 +3,15 @@ package org.constellation.primitives
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
-import akka.actor.ActorRef
-import cats.kernel.Monoid
 import constellation.pubKeyToAddress
-import org.constellation.LevelDB.{DBPut, DBUpdate}
+import org.constellation.KVDB
 import org.constellation.consensus.Consensus.RemoteMessage
-import org.constellation.crypto.Base58
+import org.constellation.consensus.{MemPool, TipData}
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 
-import scala.collection.{SortedSet, mutable}
 import scala.collection.concurrent.TrieMap
+import scala.collection.{SortedSet, mutable}
 import scala.util.Random
 
 // This can't be a trait due to serialization issues
@@ -33,9 +31,12 @@ object Schema {
                                        cbEdgeHash: Option[String]
                                      )
 
-  sealed trait NodeState
-  final case object PendingDownload extends NodeState
-  final case object Ready extends NodeState
+
+
+  object NodeState extends Enumeration {
+    type NodeState = Value
+    val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, Ready = Value
+  }
 
   sealed trait ValidationStatus
 
@@ -141,6 +142,9 @@ object Schema {
                                       )
 
 
+
+
+
   /**
     * Our basic set of allowed edge hash types
     */
@@ -178,6 +182,7 @@ object Schema {
     */
   case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash {
     def plus(keyPair: KeyPair): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(keyPair))
+    def plus(hs: HashSignature): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(hs))
     def plus(other: SignatureBatch): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other))
     def plus(other: SignedObservationEdge): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
     def baseHash: String = signatureBatch.hash
@@ -204,30 +209,30 @@ object Schema {
 
   case class Transaction(edge: Edge[Address, Address, TransactionEdgeData]) {
 
-    def store(dbActor: ActorRef, cache: TransactionCacheData): Unit = {
-      edge.store(dbActor, {originalCache: TransactionCacheData => cache.plus(originalCache)}, cache)
+    def store(dbActor: KVDB, cache: TransactionCacheData): Unit = {
+      edge.storeTransactionCacheData(dbActor, {originalCache: TransactionCacheData => cache.plus(originalCache)}, cache)
     }
 
-    def ledgerApplyMemPool(dbActor: ActorRef): Unit = {
-      dbActor ! DBUpdate(
+    def ledgerApplyMemPool(dbActor: KVDB): Unit = {
+      dbActor.updateAddressCacheData(
         src.hash,
         { a: AddressCacheData => a.copy(memPoolBalance = a.memPoolBalance - amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
-      dbActor ! DBUpdate(
+      dbActor.updateAddressCacheData(
         dst.hash,
         { a: AddressCacheData => a.copy(memPoolBalance = a.memPoolBalance + amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
     }
 
-    def ledgerApply(dbActor: ActorRef): Unit = {
-      dbActor ! DBUpdate(
+    def ledgerApply(dbActor: KVDB): Unit = {
+      dbActor.updateAddressCacheData(
         src.hash,
         { a: AddressCacheData => a.copy(balance = a.balance - amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
-      dbActor ! DBUpdate(
+      dbActor.updateAddressCacheData(
         dst.hash,
         { a: AddressCacheData => a.copy(balance = a.balance + amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
@@ -274,21 +279,30 @@ object Schema {
     def parentHashes = Seq(observationEdge.left.hash, observationEdge.right.hash)
     def parents = Seq(observationEdge.left, observationEdge.right)
 
-    def store[T <: AnyRef](db: ActorRef, update: T => T, empty: T, resolved: Boolean = false): Unit = {
-      db ! DBUpdate(signedObservationEdge.baseHash, update, empty)
-      db ! DBPut(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
-      storeData(db: ActorRef)
-    }
-
-    def storeData(db: ActorRef): Unit = {
+    def storeTransactionCacheData(db: KVDB, update: TransactionCacheData => TransactionCacheData, empty: TransactionCacheData, resolved: Boolean = false): Unit = {
+      db.updateTransactionCacheData(signedObservationEdge.baseHash, update, empty)
+      db.putSignedObservationEdgeCache(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
       resolvedObservationEdge.data.foreach {
         data =>
-          db ! DBPut(data.hash, data)
+          db.putTransactionEdgeData(data.hash, data.asInstanceOf[TransactionEdgeData])
+      }
+    }
+
+    def storeCheckpointData(db: KVDB, update: CheckpointCacheData => CheckpointCacheData, empty: CheckpointCacheData, resolved: Boolean = false): Unit = {
+      db.updateCheckpointCacheData(signedObservationEdge.baseHash, update, empty)
+      db.putSignedObservationEdgeCache(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
+      resolvedObservationEdge.data.foreach {
+        data =>
+          db.putCheckpointEdgeData(data.hash, data.asInstanceOf[CheckpointEdgeData])
       }
     }
 
     def plus(keyPair: KeyPair): Edge[L, R, D] = {
       this.copy(signedObservationEdge = signedObservationEdge.plus(keyPair))
+    }
+
+    def plus(hs: HashSignature): Edge[L, R, D] = {
+      this.copy(signedObservationEdge = signedObservationEdge.plus(hs))
     }
 
     def plus(other: Edge[_,_,_]): Edge[L, R, D] = {
@@ -351,7 +365,7 @@ object Schema {
   }
 
   case class CheckpointCacheData(
-                                  checkpointBlock: CheckpointBlock,
+                                  checkpointBlock: CheckpointBlock, // this is the primary tip hash of current state
                                   inDAG: Boolean = false,
                                   resolved: Boolean = false,
                                   resolutionInProgress: Boolean = false,
@@ -359,7 +373,8 @@ object Schema {
                                   lastResolveAttempt: Option[Long] = None,
                                   rxTime: Long = System.currentTimeMillis(), // TODO: Unify common metadata like this
                                   children: Set[String] = Set(),
-                                  forkChildren: Set[String] = Set()
+                                  forkChildren: Set[String] = Set(),
+                                  forkTipHashes: Set[String] = Set(),
                                 ) {
 
     def plus(previous: CheckpointCacheData): CheckpointCacheData = {
@@ -378,6 +393,22 @@ object Schema {
                               checkpoint: CheckpointEdge
                                   ) {
 
+    def uniqueSignatures: Boolean = signatures.groupBy(_.b58EncodedPublicKey).forall(_._2.size == 1)
+
+    def signedBy(id: Id) : Boolean = witnessIds.contains(id)
+
+    def hashSignaturesOf(id: Id) : Seq[HashSignature] = signatures.filter(_.toId == id)
+
+    def signatureConflict(other: CheckpointBlock): Boolean = {
+      signatures.exists{s =>
+        other.signatures.exists{ s2 =>
+          s.signature != s2.signature && s.b58EncodedPublicKey == s2.b58EncodedPublicKey
+        }
+      }
+    }
+
+    def witnessIds: Seq[Id] = signatures.map{_.toId}
+
     def signatures: Seq[HashSignature] = checkpoint.edge.signedObservationEdge.signatureBatch.signatures
 
     def baseHash: String = checkpoint.edge.baseHash
@@ -385,17 +416,21 @@ object Schema {
     // TODO: Optimize call, should store this value instead of recalculating every time.
     def soeHash: String = checkpoint.edge.signedObservationEdge.hash
 
-    def store(db: ActorRef, cache: CheckpointCacheData, resolved: Boolean): Unit = {
+    def store(db: KVDB, cache: CheckpointCacheData, resolved: Boolean): Unit = {
 /*
       transactions.foreach { rt =>
         rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))
       }
 */
-      checkpoint.edge.store(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
+      checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
     }
 
     def plus(keyPair: KeyPair): CheckpointBlock = {
       this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.plus(keyPair)))
+    }
+
+    def plus(hs: HashSignature): CheckpointBlock = {
+      this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.plus(hs)))
     }
 
     def plus(other: CheckpointBlock): CheckpointBlock = {
@@ -406,8 +441,11 @@ object Schema {
       checkpoint.edge.resolvedObservationEdge
 
     def parentSOE = Seq(resolvedOE.left, resolvedOE.right)
+    def parentSOEHashes = Seq(resolvedOE.left.hash, resolvedOE.right.hash)
 
     def parentSOEBaseHashes: Seq[String] = parentSOE.map{_.baseHash}
+
+    def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
   }
 
@@ -421,12 +459,31 @@ object Schema {
 
 
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
+  case class ValidPeerIPData(canonicalHostName: String, port: Int)
 
   case class GenesisObservation(
                                  genesis: CheckpointBlock,
                                  initialDistribution: CheckpointBlock,
                                  initialDistribution2: CheckpointBlock
-                               )
+                               ) {
+
+    def notGenesisTips(tips: Seq[CheckpointBlock]): Boolean = {
+      !tips.contains(initialDistribution) && !tips.contains(initialDistribution2)
+    }
+
+    def initialMemPool = MemPool(
+      Set(),
+      Map(
+        initialDistribution.baseHash -> initialDistribution,
+        initialDistribution2.baseHash -> initialDistribution2
+      ),
+      Map(
+        initialDistribution.baseHash -> TipData(initialDistribution, 0),
+        initialDistribution2.baseHash -> TipData(initialDistribution2, 0)
+      )
+    )
+
+  }
 
 
 
@@ -709,7 +766,7 @@ object Schema {
     def short: String = id.toString.slice(15, 20)
     def medium: String = id.toString.slice(15, 25).replaceAll(":", "")
     def address: AddressMetaData = pubKeyToAddress(id)
-    def b58: String = Base58.encode(id.getEncoded)
+    def b58: String = encodedId.b58Encoded
     def id: PublicKey = encodedId.toPublicKey
   }
 

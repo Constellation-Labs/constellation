@@ -1,14 +1,13 @@
 package org.constellation.consensus
 
-import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.ActorMaterializer
-import akka.testkit.{TestActor, TestKit, TestProbe}
+import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
-import org.constellation.Data
+import org.constellation.DAO
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.{RegisterNextActor, UDPMessage, UDPSend}
 import org.constellation.util.TestNode
@@ -17,11 +16,8 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 import scala.collection.immutable.{HashMap, Map}
 import org.constellation.Fixtures._
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.Schema.GetPeersID
-import org.constellation.primitives.Schema._
+import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
-import scala.collection.mutable
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContextExecutor
 
 class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecLike with BeforeAndAfterAll {
@@ -39,7 +35,7 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
 
     implicit val timeout: Timeout = Timeout(30, TimeUnit.SECONDS)
 
-    val data = new Data()
+    val data = new DAO()
 
     val consensusActor: ActorRef =
       system.actorOf(Props(

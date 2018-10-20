@@ -2,10 +2,8 @@ package org.constellation.util
 
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
-import akka.actor.ActorRef
 import cats.kernel.Monoid
 import constellation._
-import org.constellation.LevelDB.DBPut
 import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema._
@@ -49,7 +47,6 @@ trait ProductHash extends Product {
   def powInput(signatures: Seq[String]): String = (productSeq ++ signatures).json
   def pow(signatures: Seq[String], difficulty: Int): String = POW.proofOfWork(powInput(signatures), Some(difficulty))
   def productSeq: Seq[Any] = this.productIterator.toArray.toSeq
-  def put(db: ActorRef): Unit = db ! DBPut(hash, this)
 
 }
 
@@ -76,14 +73,23 @@ case class SignatureBatch(
   }
 
   def plus(other: SignatureBatch): SignatureBatch = {
+    val toAdd = other.signatures
+    val newSignatures = (signatures ++ toAdd).distinct
+    val unique = newSignatures.groupBy(_.b58EncodedPublicKey).map{_._2.maxBy(_.signature)}.toSeq.sorted
     this.copy(
-      signatures = (signatures ++ other.signatures).distinct.sorted
+      signatures = unique
+    )
+  }
+  def plus(hs: HashSignature): SignatureBatch = {
+    val toAdd = Seq(hs)
+    val newSignatures = (signatures ++ toAdd).distinct
+    val unique = newSignatures.groupBy(_.b58EncodedPublicKey).map{_._2.maxBy(_.signature)}.toSeq.sorted
+    this.copy(
+      signatures = unique
     )
   }
   def plus(other: KeyPair): SignatureBatch = {
-    this.copy(
-      signatures = (signatures :+ hashSign(hash, other)).distinct.sorted
-    )
+    plus(hashSign(hash, other))
   }
 
   override def empty: SignatureBatch = SignatureBatch(hash, Seq())
@@ -95,6 +101,7 @@ case class SignatureBatch(
 
 case class EncodedPublicKey(b58Encoded: String) {
   def toPublicKey: PublicKey = bytesToPublicKey(Base58.decode(b58Encoded))
+  def toId = Id(this)
 }
 
 // TODO: Move POW to separate class for rate liming.
@@ -156,8 +163,9 @@ trait POWSignHelp {
     )
   }
 
-  def hashSignBatchZeroTyped(hash: ProductHash, keyPair: KeyPair): SignatureBatch = {
-    SignatureBatch(hash.hash, Seq(hashSign(hash.hash, keyPair)))
+  def hashSignBatchZeroTyped(productHash: ProductHash, keyPair: KeyPair): SignatureBatch = {
+    val hash = productHash.hash
+    SignatureBatch(hash, Seq(hashSign(hash, keyPair)))
   }
 
   def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge = {

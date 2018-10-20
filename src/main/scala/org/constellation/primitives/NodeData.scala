@@ -1,30 +1,31 @@
 package org.constellation.primitives
 
-import java.io.File
 import java.net.InetSocketAddress
 import java.security.KeyPair
 
 import akka.actor.ActorRef
+import constellation._
+import org.constellation.KVDB
+import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.util.Signed
-import constellation._
-import org.constellation.LevelDB
-
-import scala.util.Try
 
 trait NodeData {
 
-  var dbActor : ActorRef = _
+  var dbActor : KVDB = _
   var peerManager: ActorRef = _
   var consensus: ActorRef = _
   var metricsManager: ActorRef = _
   var edgeProcessor: ActorRef = _
   var memPoolManager: ActorRef = _
+  var heartbeatActor: ActorRef = _
+  var cpSigner: ActorRef = _
 
   var minGenesisDistrSize: Int = 3
   @volatile var downloadMode: Boolean = true
   @volatile var downloadInProgress: Boolean = false
   var generateRandomTX: Boolean = false
+  var heartbeatEnabled: Boolean = true
 
   var lastConfirmationUpdateTime: Long = System.currentTimeMillis()
 
@@ -35,7 +36,7 @@ trait NodeData {
   def selfAddress: AddressMetaData = id.address
   def selfAddressStr: String = selfAddress.address
 
-  @volatile var nodeState: NodeState = PendingDownload
+  @volatile var nodeState: NodeState = NodeState.PendingDownload
 
   var externalHostString: String = "127.0.0.1"
   @volatile var externalAddress: Option[InetSocketAddress] = None

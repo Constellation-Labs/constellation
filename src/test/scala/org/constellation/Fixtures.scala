@@ -5,9 +5,9 @@ import java.security.{KeyPair, PublicKey}
 
 import constellation._
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.{PeerData, Schema}
+import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.{Id, Peer, SendToAddress}
-import org.constellation.util.{APIClient, Signed, TestNode}
+import org.constellation.util.Signed
 
 
 object Fixtures {
@@ -47,7 +47,7 @@ object Fixtures {
   val idSet4B = Set(id1, id2, id3, id5)
   val idSet5 = Set(id1, id2, id3, id4, id5)
 
-  def dummyTx(data: Data, amt: Long = 1L) = {
+  def dummyTx(data: DAO, amt: Long = 1L) = {
     val sendRequest = SendToAddress(id.address.address, amt)
     createTransaction(data.selfAddressStr, sendRequest.dst, sendRequest.amountActual, data.keyPair)
   }
