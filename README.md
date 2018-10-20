@@ -9,9 +9,9 @@ protocol that you can build upon and interface with using common software standa
 Visit the repository
 [**wiki**](https://github.com/Constellation-Labs/constellation/wiki) 
 for developer tools and documentation and consult the 
-[**/docs**](https://github.com/Constellation-Labs/constellation/docs/).
+[**/docs**](https://github.com/Constellation-Labs/constellation/tree/dev/docs).
 for an explainer of the protocol archetecture or an extended overview of the 
-[project structure](https://github.com/Constellation-Labs/constellation/docs/directory-tree/).
+[project structure](https://github.com/Constellation-Labs/constellation/blob/dev/docs/directory-tree.md).
 
 ```scala
 src
@@ -31,14 +31,13 @@ src
 ```
 
 ### :computer: Build instructions
-For details on the build process, as well as pointers for docker, vagrant and deployment, see [/docs/build-instructions](https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/build-instructions.md).
+For details on the build process, as well as pointers for docker, vagrant and deployment, see [/docs/build-instructions](https://github.com/Constellation-Labs/constellation/blob/dev/docs/build-instructions.md).
 
 ### :green_book: API Docs
 We intend to use **Swagger** to publish comprehensive API docs.
 
 ### :rotating_light: Troubleshooting
 For issues and bug reports, see [wiki/Contribution-guidelines](https://github.com/Constellation-Labs/constellation/wiki/Contribution-guidelines). 
-
 There you also find general pointers toward the development process. Note that the `master` branch might be behind the `dev` branch by a few weeks.
 
 ### :two_hearts: Community
@@ -46,9 +45,7 @@ For questions and contributions, can find links to the community outlets and mor
 [**resource list**](https://github.com/Constellation-Labs/awesome-constellation). 
 Our knowledge- and news-outlet is the 
 [**Orion**](https://orion.constellationlabs.io/) 
-Discourse forum. 
-
-Join our [Discord](https://discordapp.com/invite/KMSmXbV) server for a chat. 
+Discourse forum. To quickly reach out, join our [Discord](https://discordapp.com/invite/KMSmXbV) server for a chat:
 
   <a href="https://discordapp.com/invite/KMSmXbV">
 	  <img src="https://img.shields.io/badge/chat-discord-brightgreen.svg"/>
