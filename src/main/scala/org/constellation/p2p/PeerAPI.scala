@@ -6,25 +6,26 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
+import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
-import org.constellation.Data
+import org.constellation.DAO
+import org.constellation.consensus.Consensus
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
-import org.constellation.consensus.EdgeProcessor.HandleTransaction
-import org.constellation.consensus.{Consensus, EdgeProcessor}
+import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, HandleCheckpoint, HandleTransaction, SignatureRequest, SignatureResponse}
 import org.constellation.p2p.PeerAPI.EdgeResponse
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{Deregistration, IPManager, PendingRegistration}
+import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.CommonEndpoints
 import org.json4s.native
 import org.json4s.native.Serialization
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
@@ -41,12 +42,12 @@ object PeerAPI {
 
 }
 
-class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system: ActorSystem, val timeout: Timeout)
+class PeerAPI(override val ipManager: IPManager, val dao: DAO)(implicit system: ActorSystem, val timeout: Timeout)
   extends Json4sSupport with CommonEndpoints with IPEnforcer {
 
   implicit val serialization: Serialization.type = native.Serialization
 
-  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-dispatcher")
+  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("peer-api-dispatcher")
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
@@ -85,6 +86,12 @@ class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system:
 
   private val signEndpoints =
     post {
+      path("status") {
+        entity(as[SetNodeStatus]) { sns =>
+          dao.peerManager ! sns
+          complete(StatusCodes.OK)
+        }
+      } ~
       path ("sign") {
         entity(as[PeerAuthSignRequest]) { e =>
           complete(hashSign(e.salt.toString, dao.keyPair))
@@ -140,6 +147,42 @@ class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system:
 
           complete(StatusCodes.OK)
         }
+      } ~
+      pathPrefix("request") {
+        path("signature") {
+          entity(as[SignatureRequest]) { sr =>
+            // Temporary, need to go thru flow
+
+
+            dao.edgeProcessor ! sr
+            //val res = if (dao.nodeState == NodeStatus.Ready) {
+              /*val blockWithSigAdded = (dao.cpSigner ? cb).mapTo[Option[CheckpointBlock]].get()
+              blockWithSigAdded.foreach{
+                b =>
+                  Future {
+                    EdgeProcessor.handleCheckpoint(b, dao)(dao.edgeExecutionContext)
+                  }(dao.edgeExecutionContext)
+              }
+              blockWithSigAdded*/
+             // None
+            //} else None
+            complete(StatusCodes.OK)
+          }
+        }
+      } ~ pathPrefix("response") {
+        path("signature") {
+          entity(as[SignatureResponse]) { sr =>
+            dao.edgeProcessor ! sr
+            complete(StatusCodes.OK)
+          }
+        }
+      } ~ pathPrefix("finished") {
+        path ("checkpoint") {
+          entity(as[FinishedCheckpoint]) { fc =>
+            dao.edgeProcessor ! fc
+            complete(StatusCodes.OK)
+          }
+        }
       }
   }
 
@@ -148,14 +191,9 @@ class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system:
       put {
         entity(as[Transaction]) {
           tx =>
-            Future {
-              /*
-                Future {
-              dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
-              EdgeProcessor.handleTransaction(tx, dao)(dao.edgeExecutionContext)
-            }(dao.edgeExecutionContext)
-               */
-          //    logger.debug(s"transaction endpoint, $tx")
+            dao.metricsManager ! IncrementMetric("transactionRXByAPI")
+            if (dao.nodeState == NodeState.Ready) {
+              // TDOO: Change to ask later for status info
               dao.edgeProcessor ! HandleTransaction(tx)
             }
             complete(StatusCodes.OK)
@@ -181,22 +219,22 @@ class PeerAPI(override val ipManager: IPManager, val dao: Data)(implicit system:
       put {
         entity(as[CheckpointBlock]) {
           cb =>
-            EdgeProcessor.handleCheckpoint(cb, dao)
-            Future{
-              EdgeProcessor.handleCheckpoint(cb, dao)(dao.edgeExecutionContext)
-            }(dao.edgeExecutionContext)
+            val ret = if (dao.nodeState == NodeState.Ready) {
+              dao.edgeProcessor ? HandleCheckpoint(cb)
+            } else None
             complete(StatusCodes.OK)
         }
       } ~
       get {
-        complete("CB goes here")
+        val res = dao.dbActor.getCheckpointCacheData(s).map{_.checkpointBlock}
+        complete(res)
       } ~ complete (StatusCodes.BadRequest)
     }
   }
 
   val routes: Route = {
     rejectBannedIP {
-      signEndpoints ~ commonEndpoints ~ enforceKnownIP {
+      signEndpoints ~ commonEndpoints ~  { //enforceKnownIP
         getEndpoints ~ postEndpoints ~ mixedEndpoints
       }
     } // ~

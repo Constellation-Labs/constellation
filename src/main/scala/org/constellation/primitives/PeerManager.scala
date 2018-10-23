@@ -7,22 +7,32 @@ import akka.http.scaladsl.model.RemoteAddress
 import akka.stream.ActorMaterializer
 import com.typesafe.scalalogging.Logger
 import org.constellation.p2p.{PeerAuthSignRequest, PeerRegistrationRequest}
-import org.constellation.primitives.Schema.Id
+import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.{Id, NodeState}
 import org.constellation.util.{APIClient, HashSignature}
-import org.constellation.{AddPeerRequest, Data}
+import org.constellation.{AddPeerRequest, DAO, HostPort, RemovePeerRequest}
 
+case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 import scala.collection.Set
 import scala.concurrent.ExecutionContext
 
-case class PeerData(addRequest: AddPeerRequest, client: APIClient)
+
+case class PeerData(
+                     addRequest: AddPeerRequest,
+                     client: APIClient,
+                     timeAdded: Long = System.currentTimeMillis(),
+                     nodeState: NodeState = NodeState.Ready
+                   )
+
 case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
+
 case class PeerHealthCheck(status: Map[Id, Boolean])
 case class PendingRegistration(ip: String, request: PeerRegistrationRequest)
 case class Deregistration(ip: String, port: Int, key: String)
 
 case object GetPeerInfo
 
-class PeerManager(ipManager: IPManager, dao: Data)(implicit val materialize: ActorMaterializer) extends Actor {
+class PeerManager(ipManager: IPManager, dao: DAO)(implicit val materialize: ActorMaterializer) extends Actor {
 
   val logger = Logger(s"PeerManager")
 
@@ -32,13 +42,37 @@ class PeerManager(ipManager: IPManager, dao: Data)(implicit val materialize: Act
 
   def active(peerInfo: Map[Id, PeerData]): Receive = {
 
+    case RemovePeerRequest(hp, id) =>
 
+      val updatedPeerInfo = peerInfo.filter { case (pid, d) =>
+        val badHost = hp.exists { case HostPort(host, port) => d.client.hostName == host && d.client.apiPort == port }
+        val badId = id.contains(pid)
+        !badHost && !badId
+      }
 
-    case a @ AddPeerRequest(host, udpPort, port, id) =>
-      val client = APIClient(host, port)
+      dao.metricsManager ! UpdateMetric(
+        "peers",
+        updatedPeerInfo.map { case (idI, clientI) =>
+          val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort}"
+          s"${idI.short} API: $addr"
+        }.mkString(" --- ")
+      )
+      context become active (updatedPeerInfo)
+
+    case SetNodeStatus(id, nodeStatus) =>
+
+      val updated = peerInfo.get(id).map{
+        pd =>
+          peerInfo + (id -> pd.copy(nodeState = nodeStatus))
+      }.getOrElse(peerInfo)
+
+      context become active(updated)
+
+    case a @ AddPeerRequest(host, udpPort, port, id, ns) =>
+      val client =  APIClient(host, port)
 
       client.id = id
-      val updatedPeerInfo = peerInfo + (id -> PeerData(a, client))
+      val updatedPeerInfo = peerInfo + (id -> PeerData(a, client, nodeState = ns))
 
       val remoteAddr = RemoteAddress(new InetSocketAddress(host, port))
       ipManager.addKnownIP(remoteAddr)
@@ -102,7 +136,7 @@ class PeerManager(ipManager: IPManager, dao: Data)(implicit val materialize: Act
 
     case Deregistration(ip, port, key) =>
 
-      // Do we need to validate this? Or just remove from knownIPs?
+    // Do we need to validate this? Or just remove from knownIPs?
 
   }
 }

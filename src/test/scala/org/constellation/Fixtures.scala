@@ -46,12 +46,12 @@ object Fixtures {
   val idSet4B = Set(id1, id2, id3, id5)
   val idSet5 = Set(id1, id2, id3, id4, id5)
 
-  def dummyTx(data: Data, amt: Long = 1L) = {
+  def dummyTx(data: DAO, amt: Long = 1L) = {
     val sendRequest = SendToAddress(id.address.address, amt)
     createTransaction(data.selfAddressStr, sendRequest.dst, sendRequest.amountActual, data.keyPair)
   }
 
-  def dummyCheckpointBlock(dao: Data) = {
+  def dummyCheckpointBlock(dao: DAO) = {
     val tips = Random.shuffle(dao.checkpointMemPoolThresholdMet.toSeq).take(2)
     val tipSOE = tips.map {_._1}.map {dao.checkpointMemPool}.map {
       _.checkpoint.edge.signedObservationEdge

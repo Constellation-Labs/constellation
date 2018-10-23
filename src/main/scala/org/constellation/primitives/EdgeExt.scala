@@ -4,10 +4,9 @@ import java.util.concurrent.TimeUnit
 
 import akka.pattern.ask
 import akka.util.Timeout
-import org.constellation.Data
 import org.constellation.primitives.Schema.CheckpointBlock
 
-trait EdgeExt extends NodeData with Ledger with MetricsExt with PeerInfo with EdgeDAO {
+trait EdgeExt extends NodeData with MetricsExt with PeerInfo with EdgeDAO {
 
   /**
     * TODO: Need to include signatories ABOVE this checkpoint block later in the case of signature decay. Add to SignedObservationEdgeCache

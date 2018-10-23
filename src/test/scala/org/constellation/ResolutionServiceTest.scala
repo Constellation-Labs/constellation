@@ -1,5 +1,6 @@
 package org.constellation
 
+import akka.testkit.TestProbe
 import org.constellation.Fixtures.{createCheckpointBlock, dummyTx, getSignedObservationEdge}
 import org.constellation.consensus.ResolutionService
 import org.constellation.consensus.Validation.TransactionValidationStatus
@@ -8,6 +9,8 @@ import org.constellation.primitives.Schema._
 import org.scalatest.FlatSpec
 
 class ResolutionServiceTest extends FlatSpec with ProcessorTest {
+  val dummyEdgeProcessor = TestProbe()
+  val resService = new ResolutionService(dummyEdgeProcessor.ref)
   val bogusTxValidStatus = TransactionValidationStatus(tx, None, None)
   val soe: SignedObservationEdge = getSignedObservationEdge(tx, keyPair)
   val parentCb = Fixtures.createCheckpointBlock(Seq.fill(3)(tx), Seq.fill(2)(soe))(keyPair)
@@ -20,12 +23,12 @@ class ResolutionServiceTest extends FlatSpec with ProcessorTest {
   (data.dbActor.getSignedObservationEdgeCache _).when(bogusSoe.hash).returns(Some(SignedObservationEdgeCache(bogusSoe, false)))
 
   "CheckpointBlocks that are resolved" should "return None" in {
-    val res = ResolutionService.resolveCheckpoint(mockData, CheckpointCacheData(bogusCb, resolved = true))
+    val res = resService.resolveCheckpoint(mockData, CheckpointCacheData(bogusCb, resolved = true))
     assert(res.isEmpty)
   }
 
   "CheckpointBlocks with no resolved parents" should "not have resolvedParents" in {
-    val res = ResolutionService.resolveCheckpoint(mockData, bogusCheckpointCacheData)
+    val res = resService.resolveCheckpoint(mockData, bogusCheckpointCacheData)
     assert(res.exists(_.resolvedParents.isEmpty))
     assert(res.exists(_.unresolvedParents.length == 2))
   }
@@ -36,7 +39,7 @@ class ResolutionServiceTest extends FlatSpec with ProcessorTest {
     }, peerSubset = bogusCb.signatures.map {
       _.toId
     }.toSet)
-    val res = ResolutionService.resolveCheckpoint(mockData, bogusCheckpointCacheData)
+    val res = resService.resolveCheckpoint(mockData, bogusCheckpointCacheData)
     peerManager.expectMsg(_: APIBroadcast.type )
     assert(res.exists(_.resolvedParents.isEmpty))
   }

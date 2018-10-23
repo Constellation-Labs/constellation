@@ -25,7 +25,7 @@ trait ProcessorTest extends MockFactory with OneInstancePerTest {
   val peerManager = TestProbe()
   val metricsManager = TestProbe()
   val dbActor = TestProbe()
-  val mockData = new Data
+  val mockData = new DAO
   mockData.updateKeyPair(keyPair)
   val mockKVDB = new KVDBImpl(mockData)
 
@@ -38,7 +38,7 @@ trait ProcessorTest extends MockFactory with OneInstancePerTest {
   val invalidSpendHash = invalidTx.hash
   val randomPeer: (Id, PeerData) = (id, peerData)
 
-  def makeDao(mockData: Data, peerManager: TestProbe = peerManager, metricsManager: TestProbe = metricsManager,
+  def makeDao(mockData: DAO, peerManager: TestProbe = peerManager, metricsManager: TestProbe = metricsManager,
               dbActor: TestProbe = dbActor) = {
     mockData.actorMaterializer = materialize
     mockData.dbActor = stub[KVDB]

@@ -4,15 +4,16 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorRef
 import akka.util.Timeout
-import org.constellation.Data
+import org.constellation.DAO
 import org.constellation.primitives.{APIBroadcast, Schema}
 import org.constellation.primitives.Schema.{CheckpointBlock, CheckpointCacheData, SignedObservationEdgeCache}
 
 import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
 
-object ResolutionService {
+class ResolutionService(val edgeProcessor: ActorRef) {
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+
 
   case class ResolutionStatus(
                                checkpointCacheData: CheckpointCacheData,
@@ -26,7 +27,7 @@ object ResolutionService {
     * @param checkpointCache
     * @param missingParents
     */
-  def processUnresolvedParents(dao: Data, checkpointCache: CheckpointCacheData, missingParents: Seq[String]) =
+  def processUnresolvedParents(dao: DAO, checkpointCache: CheckpointCacheData, missingParents: Seq[String]) =
     missingParents.foreach(dao.markParentsUnresolved(_, checkpointCache.checkpointBlock))
 
   /**
@@ -34,9 +35,9 @@ object ResolutionService {
     * @param dao
     * @param unresolvedChildren
     */
-  def reprocessUnresolvedChildren(dao: Data, unresolvedChildren: Seq[CheckpointBlock])
+  def reprocessUnresolvedChildren(dao: DAO, unresolvedChildren: Seq[CheckpointBlock])
                                  (implicit executionContext: ExecutionContext) = unresolvedChildren.foreach { unresolvedChild =>
-    EdgeProcessor.handleCheckpoint(unresolvedChild, dao, true) //Todo log exception add retry
+    edgeProcessor ! unresolvedChild
   }
 
   /**
@@ -47,7 +48,7 @@ object ResolutionService {
     * @param executionContext
     * @return
     */
-  def isUnresolved(dao: Data, children: Seq[CheckpointBlock])(implicit executionContext: ExecutionContext): Seq[CheckpointBlock] =
+  def isUnresolved(dao: DAO, children: Seq[CheckpointBlock])(implicit executionContext: ExecutionContext): Seq[CheckpointBlock] =
     children.filter { child =>
       dao.dbActor.getSignedObservationEdgeCache(child.baseHash).exists(!_.resolved)
     }
@@ -58,7 +59,7 @@ object ResolutionService {
     * @param cb
     * @return
     */
-  def partitionByParentsResolved(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext):
+  def partitionByParentsResolved(dao: DAO, cb: CheckpointBlock)(implicit executionContext: ExecutionContext):
   (Seq[(String, Option[SignedObservationEdgeCache])], Seq[(String, Option[SignedObservationEdgeCache])]) = {
     val parentCache = cb.checkpoint.edge.parentHashes.map { hash => (hash, dao.dbActor.getSignedObservationEdgeCache(hash)) }
     parentCache.partition { case (_, queryResult) => queryResult.exists(_.resolved) }
@@ -71,7 +72,7 @@ object ResolutionService {
     * @param executionContext
     * @return
     */
-  def resolveCheckpoint(dao: Data, checkpointCache: CheckpointCacheData)(implicit executionContext: ExecutionContext): Option[ResolutionStatus] = {
+  def resolveCheckpoint(dao: DAO, checkpointCache: CheckpointCacheData)(implicit executionContext: ExecutionContext): Option[ResolutionStatus] = {
     val children = dao.resolveNotifierCallbacks.get(checkpointCache.checkpointBlock.baseHash)
     val unresolvedChildren = children.map(isUnresolved(dao, _))
     if (!checkpointCache.resolved) {

@@ -1,13 +1,19 @@
 package org.constellation.primitives
 
+import java.security.KeyPair
+
 import constellation._
 import org.constellation.primitives.Schema._
 
-trait Genesis extends NodeData with Ledger with EdgeDAO {
+
+
+object Genesis {
 
   val CoinBaseHash = "coinbase"
 
-  def createDistribution(ids: Seq[Id], genesisSOE: SignedObservationEdge): CheckpointBlock = {
+  def createDistribution(
+                          selfAddressStr: String, ids: Seq[Id], genesisSOE: SignedObservationEdge, keyPair: KeyPair
+                        ): CheckpointBlock = {
 
     val distr = ids.map{ id =>
       createTransaction(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
@@ -21,7 +27,7 @@ trait Genesis extends NodeData with Ledger with EdgeDAO {
       data = Some(TypedEdgeHash(distrCB.hash, EdgeHashType.CheckpointDataHash))
     )
 
-    val distrSOE = signedObservationEdge(distrOE)
+    val distrSOE = signedObservationEdge(distrOE)(keyPair)
 
     val distrROE = ResolvedObservationEdge(genesisSOE, genesisSOE, Some(distrCB))
 
@@ -37,7 +43,7 @@ trait Genesis extends NodeData with Ledger with EdgeDAO {
     * @param ids: Initial node public keys
     * @return : Resolved edges for state update
     */
-  def createGenesisAndInitialDistribution(ids: Set[Id]): GenesisObservation = {
+  def createGenesisAndInitialDistributionDirect(selfAddressStr: String, ids: Set[Id], keyPair: KeyPair): GenesisObservation = {
 
     val debtAddress = makeKeyPair().address.address
 
@@ -53,7 +59,7 @@ trait Genesis extends NodeData with Ledger with EdgeDAO {
       data = Some(TypedEdgeHash(cb.hash, EdgeHashType.CheckpointDataHash))
     )
 
-    val soe = signedObservationEdge(oe)
+    val soe = signedObservationEdge(oe)(keyPair)
 
     val roe = ResolvedObservationEdge(
       null.asInstanceOf[SignedObservationEdge],
@@ -65,10 +71,20 @@ trait Genesis extends NodeData with Ledger with EdgeDAO {
 
     val genesisCBO = CheckpointBlock(Seq(redTXGenesisResolved), CheckpointEdge(redGenesis))
 
-    val distr1CBO = createDistribution(ids.toSeq, soe)
-    val distr2CBO = createDistribution(ids.toSeq, soe)
+    val distr1CBO = createDistribution(selfAddressStr, ids.toSeq, soe, keyPair)
+    val distr2CBO = createDistribution(selfAddressStr, ids.toSeq, soe, keyPair)
 
     GenesisObservation(genesisCBO, distr1CBO, distr2CBO)
+  }
+
+}
+
+import org.constellation.primitives.Genesis._
+
+trait Genesis extends NodeData with EdgeDAO {
+
+  def createGenesisAndInitialDistribution(ids: Set[Id]): GenesisObservation = {
+    createGenesisAndInitialDistributionDirect(selfAddressStr, ids, keyPair)
   }
 
   def acceptGenesis(go: GenesisObservation): Unit = {
@@ -96,18 +112,20 @@ trait Genesis extends NodeData with Ledger with EdgeDAO {
   //  metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
 
     genesisObservation = Some(go)
+/*
 
     // Dumb way to set these as active tips, won't pass a double validation but no big deal.
     checkpointMemPool(go.initialDistribution.baseHash) = go.initialDistribution
     checkpointMemPool(go.initialDistribution2.baseHash) = go.initialDistribution2
     checkpointMemPoolThresholdMet(go.initialDistribution.baseHash) = go.initialDistribution -> 0
     checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = go.initialDistribution2 -> 0
+*/
 
    // metricsManager ! UpdateMetric("activeTips", "2")
     metricsManager ! UpdateMetric("genesisAccepted", "true")
  //   metricsManager ! UpdateMetric("z_genesisBlock", go.json)
 
-    println(s"accept genesis = ", go)
+   // println(s"accept genesis = ", go)
   }
 
 }

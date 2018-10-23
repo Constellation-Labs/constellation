@@ -3,11 +3,11 @@ package org.constellation.consensus
 import java.util.concurrent.TimeUnit
 
 import akka.util.Timeout
-import org.constellation.{Data, KVDB}
 import org.constellation.consensus.EdgeProcessor.signFlow
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointBlock, Transaction, TransactionCacheData}
+import org.constellation.{DAO, KVDB}
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 object Validation {
   /**
@@ -30,7 +30,7 @@ object Validation {
     * @param executionContext
     * @return
     */
-  def validateCheckpointBlock(dao: Data, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): CheckpointValidationStatus = {
+  def validateCheckpointBlock(dao: DAO, cb: CheckpointBlock)(implicit executionContext: ExecutionContext): CheckpointValidationStatus = {
     val transactions: Seq[TransactionValidationStatus] = cb.transactions.map { tx => Validation.validateTransaction(dao.dbActor, tx) }
     val validatedByTransactions = transactions.forall(_.validByCurrentState)
     val validByAncestors = validByTransactionAncestors(transactions, cb)

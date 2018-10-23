@@ -9,12 +9,15 @@ import akka.pattern.ask
 import akka.util.Timeout
 import better.files.{File, _}
 import constellation._
+import org.constellation.{DAO, LevelDB, LevelDBActor}
+import org.constellation.primitives.Schema.{AddressCacheData, Id}
+import better.files._
 import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.AddressCacheData
 import org.constellation.util.SignHelp
-import org.constellation.{Data, LevelDB, LevelDBActor}
+import org.constellation.{DAO, LevelDB, LevelDBActor}
 import org.scalatest.FlatSpec
 
 import scala.util.Try
@@ -99,7 +102,7 @@ class TXValidationBenchmark extends FlatSpec {
 
     implicit val as: ActorSystem = ActorSystem("test")
 
-    val dao = new Data()
+    val dao = new DAO()
 
     dao.keyPair = kp
 

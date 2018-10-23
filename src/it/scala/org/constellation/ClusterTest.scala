@@ -123,6 +123,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
       APIClient(ip, 9000)
     }
 
+/*
     val splitApis = apis.splitAt(1)
 
     val initialApis = splitApis._2
@@ -132,8 +133,14 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     println("initialApis = ", initialApis)
 
     println("newApi = ", newApi)
+*/
+
+    val peerAPIs = ips.map{ip =>
+      new APIClient(ip, 9001)
+    }
 
     val sim = new Simulation()
+   // sim.run(apis = apis, peerApis = peerAPIs, attemptSetExternalIP = true)
 
   }
 

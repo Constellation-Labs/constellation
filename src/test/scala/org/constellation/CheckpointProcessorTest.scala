@@ -23,16 +23,6 @@ class CheckpointProcessorTest extends FlatSpec with  ProcessorTest {
   (data.dbActor.getAddressCacheData _).when(tx.src.hash).returns(Some(AddressCacheData(100000000000000000L, 100000000000000000L, None)))
   (data.dbActor.getSignedObservationEdgeCache _).when(cb.baseHash).returns(Some(SignedObservationEdgeCache(soe)))
 
-  "Incoming CheckpointBlocks" should "be signed and processed if new" in {
-    EdgeProcessor.handleCheckpoint(cb, data)
-    metricsManager.expectMsg(IncrementMetric("checkpointMessages"))
-  }
-
-  "Previously observed CheckpointBlocks" should "indicate to metricsManager" in {
-    EdgeProcessor.handleCheckpoint(cb, data, true)
-    metricsManager.expectMsg(IncrementMetric("internalCheckpointMessages"))
-  }
-
   "Invalid CheckpointBlocks" should "return false" in {
     val validatedCheckpointBlock = Validation.validateCheckpointBlock(data, cb)
     assert(!validatedCheckpointBlock.isValid)
