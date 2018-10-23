@@ -3,13 +3,13 @@ package org.constellation.primitives
 import java.util.concurrent.TimeUnit
 
 import akka.actor.Actor
-import com.typesafe.scalalogging.Logger
-import org.constellation.DAO
-import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState}
-import org.constellation.util.HeartbeatSubscribe
 import akka.pattern.ask
 import akka.util.Timeout
+import com.typesafe.scalalogging.Logger
 import constellation._
+import org.constellation.DAO
+import org.constellation.primitives.Schema.{Id, InternalHeartbeat}
+import org.constellation.util.HeartbeatSubscribe
 
 case object GetMetrics
 

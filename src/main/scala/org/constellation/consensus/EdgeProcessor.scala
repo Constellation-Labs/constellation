@@ -10,7 +10,7 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.Consensus._
-import org.constellation.consensus.EdgeProcessor.{HandleTransaction, _}
+import org.constellation.consensus.EdgeProcessor._
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._

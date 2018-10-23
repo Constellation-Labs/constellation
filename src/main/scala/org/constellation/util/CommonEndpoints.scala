@@ -12,7 +12,7 @@ import akka.util.Timeout
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
-import org.constellation.consensus.{GetMemPool, MemPool, SnapshotInfo}
+import org.constellation.consensus.{GetMemPool, MemPool}
 import org.json4s.native.Serialization
 
 trait CommonEndpoints extends Json4sSupport {

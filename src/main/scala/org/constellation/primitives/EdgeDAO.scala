@@ -3,13 +3,13 @@ package org.constellation.primitives
 import java.util.concurrent.{Executors, TimeUnit}
 
 import akka.util.Timeout
-import org.constellation.{DAO, ProcessingConfig}
 import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
-import org.constellation.consensus.{EdgeProcessor, Snapshot, SnapshotInfo, TipData}
+import org.constellation.consensus.{Snapshot, SnapshotInfo, TipData}
 import org.constellation.primitives.Schema._
+import org.constellation.{DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 import scala.util.Random
 
 

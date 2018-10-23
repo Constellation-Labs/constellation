@@ -14,9 +14,9 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
-import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
-import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, HandleCheckpoint, HandleTransaction, SignatureRequest, SignatureResponse, handleTransaction}
+import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, HandleCheckpoint, SignatureRequest, handleTransaction}
+import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.p2p.PeerAPI.EdgeResponse
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
