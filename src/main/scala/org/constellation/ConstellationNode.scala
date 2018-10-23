@@ -67,12 +67,13 @@ import scala.concurrent.ExecutionContext
         keyPair,
         seeds,
         config.getString("http.interface"),
-        config.getInt("http.port"),
+        Option(System.getenv("DAG_HTTP_PORT")).map{_.toInt}.getOrElse(config.getInt("http.port")),
         config.getString("udp.interface"),
         config.getInt("udp.port"),
         timeoutSeconds = rpcTimeout,
         hostName = hostName,
-        requestExternalAddressCheck = requestExternalAddressCheck
+        requestExternalAddressCheck = requestExternalAddressCheck,
+        peerHttpPort = Option(System.getenv("DAG_PEER_HTTP_PORT")).map{_.toInt}.getOrElse(9001)
       )
     } match {
       case Failure(e) => e.printStackTrace()
@@ -112,7 +113,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
-  logger.info("Node init")
+  logger.info(s"Node init with API $httpInterface $httpPort peerPort: $peerHttpPort")
 
   implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
 
@@ -141,7 +142,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   // Setup actors
   val metricsManager: ActorRef = system.actorOf(
-    Props(new MetricsManager(dao)), s"MetricsManager_$publicKeyHash"
+    Props(new MetricsManager()), s"MetricsManager_$publicKeyHash"
   )
 
   val memPoolManager: ActorRef = system.actorOf(
@@ -190,7 +191,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   // Setup http server for internal API
   private val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
 
-  val peerAPI = new PeerAPI(ipManager, dao)
+  val peerAPI = new PeerAPI(ipManager)
 
   val peerRoutes : Route = peerAPI.routes
 
@@ -253,5 +254,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   }
 
   logger.info("Node started")
+
+  metricsManager ! UpdateMetric("address", dao.selfAddressStr)
 
 }

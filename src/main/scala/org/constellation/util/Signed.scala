@@ -185,7 +185,8 @@ trait POWSignHelp {
                         dst: String,
                         amount: Long,
                         keyPair: KeyPair,
-                        normalized: Boolean = true): Transaction = {
+                        normalized: Boolean = true
+                       ): Transaction = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
     val txData = TransactionEdgeData(amountToUse)

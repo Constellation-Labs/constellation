@@ -45,8 +45,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[TransactionHash])
     kryo.register(classOf[BatchTXHashRequest])
     kryo.register(classOf[BatchBundleHashRequest])
-    kryo.register(classOf[DownloadResponse])
-    kryo.register(classOf[PeerSyncHeartbeat])
     kryo.register(classOf[Set[String]])
 
     kryo.register(classOf[SerializedUDPMessage])
@@ -57,9 +55,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
 
     kryo.register(classOf[Id])
     kryo.register(classOf[Peer])
-    kryo.register(classOf[Bundle])
     kryo.register(classOf[BundleData])
-    kryo.register(classOf[Sheaf])
     kryo.register(classOf[Transaction])
     kryo.register(classOf[TransactionData])
 
@@ -73,7 +69,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Signed[ConflictDetectedData]])
     kryo.register(classOf[Signed[ConflictDetected]])
     kryo.register(classOf[Signed[VoteData]])
-    kryo.register(classOf[Signed[VoteDataSimpler]])
     kryo.register(classOf[Signed[Vote]])
     kryo.register(classOf[Signed[BundleBlock]])
     kryo.register(classOf[Signed[BundleData]])
@@ -83,30 +78,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[RoundHash[Consensus.Checkpoint]])
     kryo.register(classOf[ConsensusProposal[Consensus.Checkpoint]])
     kryo.register(classOf[CheckpointProposal])
-
-    // These may not be necessary
-    kryo.register(classOf[Gossip[Signed[AddressMetaData]]])
-    kryo.register(classOf[Gossip[Signed[CounterPartyTXRequest]]])
-    kryo.register(classOf[Gossip[Signed[TransactionData]]])
-    kryo.register(classOf[Gossip[Signed[Transaction]]])
-    kryo.register(classOf[Gossip[Signed[ConflictDetectedData]]])
-    kryo.register(classOf[Gossip[Signed[ConflictDetected]]])
-    kryo.register(classOf[Gossip[Signed[VoteData]]])
-    kryo.register(classOf[Gossip[Signed[VoteDataSimpler]]])
-    kryo.register(classOf[Gossip[Signed[Vote]]])
-    kryo.register(classOf[Gossip[Signed[BundleBlock]]])
-    kryo.register(classOf[Gossip[Signed[BundleData]]])
-    kryo.register(classOf[Gossip[RequestBundleData]])
-    kryo.register(classOf[Gossip[PeerSyncHeartbeat]])
-    kryo.register(classOf[Gossip[Bundle]])
-    kryo.register(classOf[Gossip[DownloadRequest]])
-    kryo.register(classOf[Gossip[DownloadResponse]])
-    kryo.register(classOf[Gossip[SyncData]])
-    kryo.register(classOf[Gossip[MissingTXProof]])
-    kryo.register(classOf[Gossip[RequestTXProof]])
-    kryo.register(classOf[Gossip[HandShake]])
-    kryo.register(classOf[Gossip[HandShakeResponseMessage]])
-    kryo.register(classOf[Gossip[Peer]])
 
     kryo.register(classOf[AddressMetaData])
 

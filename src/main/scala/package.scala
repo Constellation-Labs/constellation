@@ -61,7 +61,7 @@ package object constellation extends KeyUtilsExt with POWExt
 
   implicit val constellationFormats: Formats = DefaultFormats +
     new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer + new InetSocketAddressSerializer +
-  ShortTypeHints(List(classOf[TransactionHash], classOf[ParentBundleHash], classOf[Bundle])) + new EnumNameSerializer(EdgeHashType) +
+  ShortTypeHints(List(classOf[TransactionHash], classOf[ParentBundleHash])) + new EnumNameSerializer(EdgeHashType) +
     new EnumNameSerializer(NodeState)
 
   def caseClassToJson(message: Any): String = {

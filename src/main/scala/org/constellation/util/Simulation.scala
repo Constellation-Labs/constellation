@@ -10,7 +10,7 @@ import org.constellation.primitives.Schema._
 import scalaj.http.HttpResponse
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
-import scala.util.{Random, Try}
+import scala.util.Random
 
 class Simulation {
 
@@ -166,9 +166,9 @@ class Simulation {
 
   def checkSnapshot(
                      apis: Seq[APIClient],
-                     num: Int = 2,
-                     maxRetries: Int = 30,
-                     delay: Long = 3000
+                     num: Int = 5,
+                     maxRetries: Int = 60,
+                     delay: Long = 5000
                    ): Boolean = {
     awaitConditionMet(
       s"Less than $num snapshots",
@@ -244,7 +244,10 @@ class Simulation {
         addPeerRequests.zip(apis).foreach{
           case (add, a2) =>
             if (a2 != a) {
-              assert(addPeer(Seq(a), add).forall(_.isSuccess))
+              val addAdjusted = if (a.internalPeerHost.nonEmpty && a2.internalPeerHost.nonEmpty) add
+              else add.copy(auxHost = "")
+
+              assert(addPeer(Seq(a), addAdjusted).forall(_.isSuccess))
             }
         }
     }
@@ -270,6 +273,7 @@ class Simulation {
     addPeersFromRequest(apis, addPeerRequests)
 
     logger.info("Peers added")
+    logger.info("Validating peer health checks")
 
     assert(checkPeersHealthy(apis))
     logger.info("Peer validation passed")

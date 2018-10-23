@@ -4,11 +4,11 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import constellation.makeKeyPair
+import org.constellation.primitives.Schema.NodeState
 import org.constellation.util.{APIClient, Simulation}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.concurrent.ExecutionContextExecutor
-import org.constellation.primitives.Schema.NodeState
 
 class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 

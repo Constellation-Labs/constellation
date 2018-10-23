@@ -1,13 +1,6 @@
 package org.constellation.util
 
-import org.constellation.p2p.SerializedUDPMessage
 import org.scalatest.FlatSpec
-import org.constellation.serializer.KryoSerializer._
-import akka.util.ByteString
-import org.constellation.TestHelpers
-import org.constellation.consensus.Consensus.RemoteMessage
-import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.Schema._
 
 class KryoSerializerTest extends FlatSpec {
 

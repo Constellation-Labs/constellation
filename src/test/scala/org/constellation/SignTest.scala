@@ -2,7 +2,6 @@ package org.constellation
 
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.primitives.Schema._
-import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{ProductHash, Signed}
 import org.scalatest.FlatSpec
 

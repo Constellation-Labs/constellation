@@ -4,11 +4,10 @@ package org.constellation.wallet
 import java.io.{File, FileInputStream}
 import java.security.{KeyPair, KeyStore, PrivateKey, PublicKey}
 
-import org.scalatest.FlatSpec
 import org.constellation.crypto.KeyUtils._
-import org.json4s.{DefaultFormats, Formats, NoTypeHints}
 import org.json4s.native.Serialization
-import java.security.KeyStore
+import org.json4s.{DefaultFormats, Formats}
+import org.scalatest.FlatSpec
 
 case class SetSerialize(s: Set[String])
 

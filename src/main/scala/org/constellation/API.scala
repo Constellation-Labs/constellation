@@ -27,7 +27,7 @@ import org.json4s.native
 import org.json4s.native.Serialization
 import scalaj.http.HttpResponse
 
-case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id, nodeStatus: NodeState = NodeState.Ready)
+case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id, nodeStatus: NodeState = NodeState.Ready, auxHost: String = "")
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 

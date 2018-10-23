@@ -31,7 +31,6 @@ object Consensus {
   case class ConflictVote(data: Vote) extends VoteData[Conflict]
 
   case class CheckpointProposal(data: CheckpointBlock) extends ProposalData[Checkpoint]
-  case class ConflictProposal(data: Bundle) extends ProposalData[Conflict]
 
   case class RoundHash[+T <: CC](hash: String)
 
@@ -181,7 +180,8 @@ object Consensus {
           CheckpointProposal(data)
         case ConflictVote(data) =>
           // TODO
-          ConflictProposal(Bundle(BundleData(Seq()).signed()(keyPair = keyPair)))
+          //ConflictProposal(Bundle(BundleData(Seq()).signed()(keyPair = keyPair)))
+          null
       }
 
       // TODO

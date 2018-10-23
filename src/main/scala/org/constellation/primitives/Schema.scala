@@ -11,7 +11,7 @@ import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.{SortedSet, mutable}
+import scala.collection.mutable
 import scala.util.Random
 
 // This can't be a trait due to serialization issues
@@ -53,10 +53,6 @@ object Schema {
 
   // I.e. equivalent to number of sat per btc
   val NormalizationFactor: Long = 1e8.toLong
-
-  case class BundleHashQueryResponse(hash: String, sheaf: Option[Sheaf], transactions: Seq[Transaction])
-
-  case class MaxBundleGenesisHashQueryResponse(genesisBundle: Option[Bundle], genesisTX: Option[Transaction], sheaf: Option[Sheaf])
 
   case class SendToAddress(
                             dst: String,
@@ -239,6 +235,19 @@ object Schema {
       )
     }
 
+    def ledgerApplySnapshot(dbActor: KVDB): Unit = {
+      dbActor.updateAddressCacheData(
+        src.hash,
+        { a: AddressCacheData => a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - amount)},
+        AddressCacheData(0L, 0L) // unused since this address should already exist here
+      )
+      dbActor.updateAddressCacheData(
+        dst.hash,
+        { a: AddressCacheData => a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + amount)},
+        AddressCacheData(0L, 0L) // unused since this address should already exist here
+      )
+    }
+
     def src: Address = edge.resolvedObservationEdge.left
     def dst: Address = edge.resolvedObservationEdge.right
 
@@ -321,7 +330,8 @@ object Schema {
                                reputation: Option[Double] = None,
                                ancestorBalances: Map[String, Long] = Map(),
                                ancestorReputations: Map[String, Long] = Map(),
-                               recentTransactions: Seq[String] = Seq()
+                               recentTransactions: Seq[String] = Seq(),
+                               balanceByLatestSnapshot: Long = 0L
                              ) {
 
     def plus(previous: AddressCacheData): AddressCacheData = {
@@ -375,6 +385,8 @@ object Schema {
                                   children: Set[String] = Set(),
                                   forkChildren: Set[String] = Set(),
                                   forkTipHashes: Set[String] = Set(),
+                                  maxHeight: Option[Long] = None,
+                                  minHeight: Option[Long] = None
                                 ) {
 
     def plus(previous: CheckpointCacheData): CheckpointCacheData = {
@@ -492,240 +504,8 @@ object Schema {
   // TODO: Change options to ResolvedBundleMetaData
 
 
-  /**
-    * Local neighborhood data about a bundle
-    * @param bundle : The raw bundle as embedded in the chain
-    * @param height : Main Chain height
-    * @param reputations : Raw heuristic score calculated from previous parent bundle
-    * @param totalScore : Total score of entire chain including this bundle
-    * @param rxTime : Local node receipt time
-    * @param transactionsResolved : Whether or not the transaction hashes have been resolved.
-    */
-  case class Sheaf(
-                    bundle: Bundle,
-                    height: Option[Int] = None,
-                    reputations: Map[String, Long] = Map(),
-                    totalScore: Option[Double] = None,
-                    rxTime: Long = System.currentTimeMillis(),
-                    transactionsResolved: Boolean = false,
-                    parent: Option[Bundle] = None,
-                    child: Option[Bundle] = None,
-                    pendingChildren: Option[Seq[Bundle]] = None,
-                    neighbors: Option[Seq[Sheaf]] = None
-                  ) {
-    def safeBundle = Option(bundle)
-    def isResolved: Boolean = reputations.nonEmpty && transactionsResolved && height.nonEmpty && totalScore.nonEmpty
-    def cellKey: CellKey = CellKey(bundle.extractParentBundleHash.pbHash, bundle.maxStackDepth, height.getOrElse(0))
-  }
-
   case class CellKey(hashPointer: String, depth: Int, height: Int)
 
-  case class Cell(members: SortedSet[Sheaf])
-
-  final case class PeerSyncHeartbeat(
-                                      maxBundleMeta: Sheaf,
-                                      validLedger: Map[String, Long],
-                                      id: Id
-                                    ) extends GossipMessage with RemoteMessage {
-    def safeMaxBundle = Option(maxBundle)
-    def maxBundle: Bundle = maxBundleMeta.bundle
-  }
-
-  final case class Bundle(
-                           bundleData: Signed[BundleData]
-                         ) extends ProductHash with Fiber with GossipMessage
-    with RemoteMessage {
-
-    def extractTXHash: Set[TransactionHash] = {
-      def process(s: Signed[BundleData]): Set[TransactionHash] = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            process(b2.bundleData)
-          case h: TransactionHash => Set(h)
-          case _ => Set[TransactionHash]()
-        }
-        if (depths.nonEmpty) {
-          depths.reduce( (s1: Set[TransactionHash], s2: Set[TransactionHash]) => s1 ++ s2)
-        } else {
-          Set[TransactionHash]()
-        }
-      }
-      process(bundleData)
-    }
-
-    val bundleNumber: Long = 0L //Random.nextLong()
-
-    /*
-        def extractTreeVisual: TreeVisual = {
-          val parentHash = extractParentBundleHash.hash.slice(0, 5)
-          def process(s: Signed[BundleData], parent: String): Seq[TreeVisual] = {
-            val bd = s.data.bundles
-            val depths = bd.map {
-              case tx: TX =>
-                TreeVisual(s"TX: ${tx.short} amount: ${tx.tx.data.normalizedAmount}", parent, Seq())
-              case b2: Bundle =>
-                val name = s"Bundle: ${b2.short} numTX: ${b2.extractTX.size}"
-                val children = process(b2.bundleData, name)
-                TreeVisual(name, parent, children)
-              case _ => Seq()
-            }
-            depths
-          }.asInstanceOf[Seq[TreeVisual]]
-          val parentName = s"Bundle: $short numTX: ${extractTX.size} node: ${bundleData.id.short} parent: $parentHash"
-          val children = process(bundleData, parentName)
-          TreeVisual(parentName, "null", children)
-        }
-    */
-
-    def extractParentBundleHash: ParentBundleHash = {
-      def process(s: Signed[BundleData]): ParentBundleHash = {
-        val bd = s.data.bundles
-        val depths = bd.collectFirst{
-          case b2: Bundle =>
-            process(b2.bundleData)
-          case bh: ParentBundleHash => bh
-        }
-        depths.get
-      }
-      process(bundleData)
-    }
-
-    def extractBundleHashId: (BundleHash, Id) = {
-      def process(s: Signed[BundleData]): (BundleHash, Id) = {
-        val bd = s.data.bundles
-        val depths = bd.collectFirst{
-          case b2: Bundle =>
-            process(b2.bundleData)
-          case bh: BundleHash => bh -> s.id
-        }.get
-        depths
-      }
-      process(bundleData)
-    }
-
-    def extractSubBundlesMinSize(minSize: Int = 2) = {
-      extractSubBundles.filter{_.maxStackDepth >= minSize}
-    }
-
-    def extractSubBundleHashes: Set[String] = {
-      def process(s: Signed[BundleData]): Set[String] = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            Set(b2.hash) ++ process(b2.bundleData)
-          case _ => Set[String]()
-        }
-        depths.reduce(_ ++ _)
-      }
-      process(bundleData)
-    }
-
-    def extractSubBundles: Set[Bundle] = {
-      def process(s: Signed[BundleData]): Set[Bundle] = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            Set(b2) ++ process(b2.bundleData)
-          case _ => Set[Bundle]()
-        }
-        depths.reduce(_ ++ _)
-      }
-      process(bundleData)
-    }
-
-    /*
-        def extractTX: Set[TX] = {
-          def process(s: Signed[BundleData]): Set[TX] = {
-            val bd = s.data.bundles
-            val depths = bd.map {
-              case b2: Bundle =>
-                process(b2.bundleData)
-              case tx: TX => Set(tx)
-              case _ => Set[TX]()
-            }
-            if (depths.nonEmpty) {
-              depths.reduce(_ ++ _)
-            } else {
-              Set()
-            }
-          }
-          process(bundleData)
-        }
-    */
-
-    // Copy this to temp val on class so as not to re-calculate
-    def extractIds: Set[Id] = {
-      def process(s: Signed[BundleData]): Set[Id] = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            b2.bundleData.encodedPublicKeys.headOption.map{Id}.toSet ++ process(b2.bundleData)
-          case _ => Set[Id]()
-        }
-        depths.reduce(_ ++ _) ++ s.encodedPublicKeys.headOption.map{Id}.toSet
-      }
-      process(bundleData)
-    }
-
-    def maxStackDepth: Int = {
-      def process(s: Signed[BundleData]): Int = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            process(b2.bundleData) + 1
-          case _ => 0
-        }
-        depths.max
-      }
-      process(bundleData) + 1
-    }
-
-    def totalNumEvents: Int = {
-      def process(s: Signed[BundleData]): Int = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            process(b2.bundleData) + 1
-          case _ => 1
-        }
-        depths.sum
-      }
-      process(bundleData) + 1
-    }
-
-    def roundHash: String = {
-      bundleNumber.toString
-    }
-
-  }
-
-  final case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash with RemoteMessage
-    with Fiber
-    with GossipMessage {
-    def iter: Seq[Signed[_ >: T <: ProductHash]] = {
-      def process[Q <: ProductHash](s: Signed[Q]): Seq[Signed[ProductHash]] = {
-        s.data match {
-          case Gossip(g) =>
-            val res = process(g)
-            res :+ g
-          case _ => Seq()
-        }
-      }
-      process(event) :+ event
-    }
-    def stackDepth: Int = {
-      def process[Q <: ProductHash](s: Signed[Q]): Int = {
-        s.data match {
-          case Gossip(g) =>
-            process(g) + 1
-          case _ => 0
-        }
-      }
-      process(event) + 1
-    }
-
-  }
 
   // TODO: Move other messages here.
   sealed trait InternalCommand
@@ -744,15 +524,8 @@ object Schema {
   trait DownloadMessage
 
   case class DownloadRequest(time: Long = System.currentTimeMillis()) extends DownloadMessage with RemoteMessage
-  case class DownloadResponse(
-                               maxBundle: Bundle,
-                               genesisBundle: Bundle,
-                               genesisTX: Transaction
-                             ) extends DownloadMessage with RemoteMessage
 
   final case class SyncData(validTX: Set[Transaction], memPoolTX: Set[Transaction]) extends GossipMessage with RemoteMessage
-
-  case class MissingTXProof(tx: Transaction, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage with RemoteMessage
 
   final case class RequestTXProof(txHash: String) extends GossipMessage with RemoteMessage
 
@@ -827,10 +600,6 @@ object Schema {
       accept.++(reject).sortBy(t => t.hashCode()).map(f => f.hash).mkString("-")
     }
   }
-
-  final case class VoteCandidate(tx: Transaction, gossip: Seq[Gossip[ProductHash]])
-
-  final case class VoteDataSimpler(accept: Seq[VoteCandidate], reject: Seq[VoteCandidate]) extends ProductHash
 
   final case class Vote(vote: Signed[VoteData]) extends ProductHash with Fiber
 

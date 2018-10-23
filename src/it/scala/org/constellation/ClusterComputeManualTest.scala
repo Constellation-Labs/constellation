@@ -8,6 +8,7 @@ import org.constellation.util.{APIClient, Simulation}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.concurrent.ExecutionContextExecutor
+import scala.util.Try
 
 
 class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
@@ -26,14 +27,33 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
     import better.files._
 
-    val ips = file"hosts.txt".lines.toSeq
+
+
+    var ignoreIPs = Seq[String]()
+
+    val auxAPIs = Try{file"aux-hosts.txt".lines.toSeq}.getOrElse(Seq()).map{ ip =>
+      val split = ip.split(":")
+      val host = split.head
+      val str = host + ":" + split(1)
+      ignoreIPs :+= str
+      val offset = split(2).toInt
+      println(s"Initializing API to $str offset: $offset")
+      new APIClient(split.head, port = offset + 1, peerHTTPPort = offset + 2, internalPeerHost = split(3))
+    }
+
+    val ips = file"hosts.txt".lines.toSeq.filterNot(ignoreIPs.contains)
 
     println(ips)
 
-
     val apis = ips.map{ ip =>
-      new APIClient(ip, 9000)
-    }
+      val split = ip.split(":")
+      val portOffset = if (split.length == 1) 8999 else split(1).toInt
+      val a = new APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
+      println(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
+      a
+    } ++ auxAPIs
+
+    println("Num APIs " + apis.size)
 
     val sim = new Simulation()
 
@@ -41,9 +61,9 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
     sim.setIdLocal(apis)
 
-
     val addPeerRequests = apis.map{ a =>
-      AddPeerRequest(a.hostName, a.udpPort, 9001, a.id)
+      val aux = if (auxAPIs.contains(a)) a.internalPeerHost else ""
+      AddPeerRequest(a.hostName, a.udpPort, a.peerHTTPPort, a.id, auxHost = aux)
     }
 
 /*
@@ -57,7 +77,14 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
     sim.run(apis, addPeerRequests, attemptSetExternalIP = true)
 
-   // Thread.sleep(30*1000)
+/*
+
+    assert(sim.checkPeersHealthy(apis))
+    sim.logger.info("Peer validation passed")
+*/
+
+
+    // Thread.sleep(30*1000)
    // sim.triggerRandom(apis)
 
 

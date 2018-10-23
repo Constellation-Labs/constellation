@@ -6,9 +6,7 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.constellation.consensus.{Snapshot, SnapshotInfo}
-import org.constellation.p2p.Download.downloadCBFromHash
 import org.constellation.primitives.Schema.{CheckpointBlock, Id, MetricsResult}
-import org.constellation.primitives.{IncrementMetric, UpdateMetric}
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import scalaj.http.{Http, HttpRequest, HttpResponse}
@@ -23,7 +21,7 @@ object APIClient {
   }
 }
 
-class APIClient(host: String = "127.0.0.1", port: Int)(
+class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9001, val internalPeerHost: String = "")(
   implicit val system: ActorSystem,
   implicit val materialize: ActorMaterializer) {
 
@@ -83,7 +81,7 @@ class APIClient(host: String = "127.0.0.1", port: Int)(
     Future(putSync(suffix, b))
   }
 
-  def postEmpty(suffix: String, timeoutSeconds: Int = 5)(implicit f : Formats = constellation.constellationFormats)
+  def postEmpty(suffix: String, timeoutSeconds: Int = 15)(implicit f : Formats = constellation.constellationFormats)
   : HttpResponse[String] = {
     httpWithAuth(suffix).method("POST").asString
   }

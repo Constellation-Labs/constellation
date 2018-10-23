@@ -14,9 +14,9 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
-import org.constellation.consensus.Consensus
+import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
-import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, HandleCheckpoint, HandleTransaction, SignatureRequest, SignatureResponse}
+import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, HandleCheckpoint, HandleTransaction, SignatureRequest, SignatureResponse, handleTransaction}
 import org.constellation.p2p.PeerAPI.EdgeResponse
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -25,7 +25,7 @@ import org.constellation.util.CommonEndpoints
 import org.json4s.native
 import org.json4s.native.Serialization
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
@@ -42,7 +42,7 @@ object PeerAPI {
 
 }
 
-class PeerAPI(override val ipManager: IPManager, val dao: DAO)(implicit system: ActorSystem, val timeout: Timeout)
+class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   extends Json4sSupport with CommonEndpoints with IPEnforcer {
 
   implicit val serialization: Serialization.type = native.Serialization
@@ -151,35 +151,19 @@ class PeerAPI(override val ipManager: IPManager, val dao: DAO)(implicit system: 
       pathPrefix("request") {
         path("signature") {
           entity(as[SignatureRequest]) { sr =>
-            // Temporary, need to go thru flow
-
-
-            dao.edgeProcessor ! sr
-            //val res = if (dao.nodeState == NodeStatus.Ready) {
-              /*val blockWithSigAdded = (dao.cpSigner ? cb).mapTo[Option[CheckpointBlock]].get()
-              blockWithSigAdded.foreach{
-                b =>
-                  Future {
-                    EdgeProcessor.handleCheckpoint(b, dao)(dao.edgeExecutionContext)
-                  }(dao.edgeExecutionContext)
-              }
-              blockWithSigAdded*/
-             // None
-            //} else None
-            complete(StatusCodes.OK)
+            onComplete(Future{EdgeProcessor.handleSignatureRequest(sr)}(dao.edgeExecutionContext)) {
+              response =>
+                val flatten = response.toOption.flatten
+                complete(flatten)
+            }
           }
         }
-      } ~ pathPrefix("response") {
-        path("signature") {
-          entity(as[SignatureResponse]) { sr =>
-            dao.edgeProcessor ! sr
-            complete(StatusCodes.OK)
-          }
-        }
-      } ~ pathPrefix("finished") {
+      } ~
+        pathPrefix("finished") {
         path ("checkpoint") {
           entity(as[FinishedCheckpoint]) { fc =>
-            dao.edgeProcessor ! fc
+            // TODO: Validation / etc.
+            Future{dao.threadSafeTipService.accept(fc.checkpointBlock)}(dao.edgeExecutionContext)
             complete(StatusCodes.OK)
           }
         }
@@ -192,10 +176,15 @@ class PeerAPI(override val ipManager: IPManager, val dao: DAO)(implicit system: 
         entity(as[Transaction]) {
           tx =>
             dao.metricsManager ! IncrementMetric("transactionRXByAPI")
-            if (dao.nodeState == NodeState.Ready) {
               // TDOO: Change to ask later for status info
-              dao.edgeProcessor ! HandleTransaction(tx)
-            }
+         //   dao.edgeProcessor ! HandleTransaction(tx)
+
+            Future {
+              if (dao.nodeState == NodeState.Ready) {
+                handleTransaction(tx)
+              }
+            }(dao.edgeExecutionContext)
+
             complete(StatusCodes.OK)
         }
       } ~
@@ -215,7 +204,7 @@ class PeerAPI(override val ipManager: IPManager, val dao: DAO)(implicit system: 
         complete(response)
       } ~ complete (StatusCodes.BadRequest)
     } ~
-    path("checkpoint" / Segment) { s =>
+    path("checkpoint" / Segment) { s => // Deprecated
       put {
         entity(as[CheckpointBlock]) {
           cb =>

@@ -2,10 +2,10 @@ package org.constellation.consensus
 
 import java.security.KeyPair
 
-import org.scalatest.FlatSpec
 import constellation._
 import org.constellation.primitives.Schema.{CheckpointBlock, SignedObservationEdge}
 import org.constellation.primitives.{Genesis, Schema}
+import org.scalatest.FlatSpec
 
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
@@ -144,8 +144,6 @@ class RandomDataTest extends FlatSpec {
       Map("id" -> conv(go.genesis.soe.hash), "parentIds" -> Seq[String]())
     )).json
     println(json)
-
-    import better.files._
 
   //  file"../d3-dag/test/data/dag.json".write(json)
 

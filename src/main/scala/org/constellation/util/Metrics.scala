@@ -51,7 +51,6 @@ class Metrics(val dao: DAO = null) extends SimpleWalletLike {
             s"${z.data.id.short} API: $addr"
           }
           .mkString(" --- "),
-        "z_peerSync" -> peerSync.toMap.toString,
         "z_peerLookup" -> signedPeerLookup.toMap.toString,
         "downloadInProgress" -> downloadInProgress.toString,
         "reputations" -> normalizedDeterministicReputation

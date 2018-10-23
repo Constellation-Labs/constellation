@@ -9,9 +9,6 @@ import akka.pattern.ask
 import akka.util.Timeout
 import better.files.{File, _}
 import constellation._
-import org.constellation.{DAO, LevelDB, LevelDBActor}
-import org.constellation.primitives.Schema.{AddressCacheData, Id}
-import better.files._
 import org.constellation.LevelDB.{DBGet, DBPut}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema

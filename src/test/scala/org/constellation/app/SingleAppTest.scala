@@ -1,6 +1,5 @@
 package org.constellation.app
 
-import org.constellation.ConstellationNode
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
 class SingleAppTest extends FlatSpec with BeforeAndAfterAll {

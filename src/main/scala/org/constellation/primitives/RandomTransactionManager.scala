@@ -37,8 +37,8 @@ class RandomTransactionManager(dao: DAO)(
 
             def getRandomPeer: (Id, PeerData) = peerIds(Random.nextInt(peerIds.size))
 
-            val sendRequest = SendToAddress(getRandomPeer._1.address.address, Random.nextInt(10000).toLong)
-            val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair)
+            val sendRequest = SendToAddress(getRandomPeer._1.address.address, Random.nextInt(1000).toLong + 1L, normalized = false)
+            val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair, normalized = false)
             dao.metricsManager ! IncrementMetric("signaturesPerformed")
             dao.metricsManager ! IncrementMetric("randomTransactionsGenerated")
             dao.metricsManager ! IncrementMetric("sentTransactions")

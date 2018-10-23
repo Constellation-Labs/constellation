@@ -1,6 +1,5 @@
 package org.constellation.p2p
 
-import java.net.InetSocketAddress
 import java.util.concurrent.TimeUnit
 
 import akka.pattern.ask
@@ -11,12 +10,8 @@ import org.constellation.DAO
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, Signed}
-import scalaj.http.HttpResponse
 
-import scala.collection.mutable
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Try}
 
 /// New download code

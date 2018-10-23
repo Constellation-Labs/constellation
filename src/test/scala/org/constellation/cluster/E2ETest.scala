@@ -7,9 +7,8 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import org.constellation.primitives.Schema.NodeState
-import org.constellation.{AddPeerRequest, ConstellationNode, HostPort}
-import org.constellation.util.{APIClient, Simulation, TestNode}
+import org.constellation.ConstellationNode
+import org.constellation.util.{Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
 import scala.concurrent.forkjoin.ForkJoinPool
@@ -72,6 +71,8 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     println("API Ports: " + apis.map{_.apiPort})
 
     assert(sim.run(initialAPIs, addPeerRequests.slice(0, downloadIndex)))
+
+    //Thread.sleep(1000*1000)
 
     // Stop transactions
     sim.triggerRandom(apis)
