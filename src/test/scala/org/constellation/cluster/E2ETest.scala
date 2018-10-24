@@ -77,8 +77,10 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     // Stop transactions
     sim.triggerRandom(apis)
 
-    Thread.sleep(5000)
+    Thread.sleep(10000)
 
+    // TODO: Change assertions to check several times instead of just waiting ^ with sleep
+    // Follow pattern in Simulation.await examples
     assert(apis.map{_.metrics("checkpointAccepted")}.distinct.size == 1)
     assert(apis.map{_.metrics("transactionAccepted")}.distinct.size == 1)
 

@@ -45,7 +45,7 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
     case InternalHeartbeat =>
 
       round += 1
-      if (round % 10 == 0) {
+      if (round % dao.processingConfig.metricCheckInterval == 0) {
 
         val peers = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
 
@@ -59,12 +59,21 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
 
      //   logger.info("Metrics: " + metrics)
         val count = metrics.getOrElse("transactionAccepted", "0").toLong
+        val startTime = metrics.getOrElse("nodeStartTimeMS", "1").toLong
         val delta = System.currentTimeMillis() - lastCheckTime
+        val deltaStart = System.currentTimeMillis() - startTime
         val deltaTX = count - lastTXCount
         val tps = deltaTX.toDouble * 1000 / delta
+        val tpsAll = count.toDouble * 1000 / deltaStart
         lastTXCount = count
         lastCheckTime = System.currentTimeMillis()
-        context become active(metrics + ("TPS" -> tps.toString, "balances" -> balanceMetrics))
+        context become active(
+          metrics + (
+            "TPS_last_" + dao.processingConfig.metricCheckInterval + "_seconds" -> tps.toString,
+            "TPS_all" -> tpsAll.toString,
+            "balances" -> balanceMetrics
+          )
+        )
       }
 
   }

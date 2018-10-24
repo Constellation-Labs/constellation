@@ -57,6 +57,7 @@ class PeerManager(ipManager: IPManager, dao: DAO)(implicit val materialize: Acto
           s"${idI.short} API: $addr"
         }.mkString(" --- ")
       )
+      dao.peerInfo = updatedPeerInfo
       context become active (updatedPeerInfo)
 
     case SetNodeStatus(id, nodeStatus) =>
@@ -86,7 +87,7 @@ class PeerManager(ipManager: IPManager, dao: DAO)(implicit val materialize: Acto
           s"${idI.short} API: $addr"
         }.mkString(" --- ")
       )
-      // dao.peerInfo = updatedPeerInfo
+      dao.peerInfo = updatedPeerInfo
       context become active(updatedPeerInfo)
 
     case APIBroadcast(func, skipIds, subset) =>

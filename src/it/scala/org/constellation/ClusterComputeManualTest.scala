@@ -31,6 +31,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
     var ignoreIPs = Seq[String]()
 
+/*
     val auxAPIs = Try{file"aux-hosts.txt".lines.toSeq}.getOrElse(Seq()).map{ ip =>
       val split = ip.split(":")
       val host = split.head
@@ -40,6 +41,24 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
       println(s"Initializing API to $str offset: $offset")
       new APIClient(split.head, port = offset + 1, peerHTTPPort = offset + 2, internalPeerHost = split(3))
     }
+
+
+    val auxMultiAPIs = Try{file"aux-multi-host.txt".lines.toSeq}.getOrElse(Seq()).flatMap{ ip =>
+      val split = ip.split(":")
+      val host = split.head
+      val str = host + ":" + split(1)
+      val offset = split(2).toInt + 2
+      Seq.tabulate(3){i =>
+        val adjustedOffset = offset + i*2
+        println(s"Initializing API to $str offset: $adjustedOffset")
+        new APIClient(split.head, port = adjustedOffset + 1, peerHTTPPort = adjustedOffset + 2, internalPeerHost = split(3))
+
+      }
+    }
+
+*/
+    val auxAPIs = Seq[APIClient]()
+    val auxMultiAPIs = Seq[APIClient]()
 
     val ips = file"hosts.txt".lines.toSeq.filterNot(ignoreIPs.contains)
 
@@ -51,7 +70,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
       val a = new APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
       println(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
       a
-    } ++ auxAPIs
+    } ++ auxAPIs ++ auxMultiAPIs
 
     println("Num APIs " + apis.size)
 

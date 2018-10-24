@@ -5,13 +5,15 @@ import akka.pattern.ask
 import akka.util.Timeout
 import constellation._
 import org.constellation.DAO
+import org.constellation.consensus.EdgeProcessor
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState, SendToAddress}
 import org.constellation.util.HeartbeatSubscribe
 
+import scala.concurrent.Future
 import scala.util.Random
 
-class RandomTransactionManager(dao: DAO)(
-  implicit val timeout: Timeout
+class RandomTransactionManager()(
+  implicit val timeout: Timeout, dao: DAO
 ) extends Actor {
 
   dao.heartbeatActor ! HeartbeatSubscribe
@@ -23,14 +25,16 @@ class RandomTransactionManager(dao: DAO)(
       */
     case InternalHeartbeat =>
 
-      if (dao.transactionMemPool.size < 1000 && dao.generateRandomTX && dao.nodeState == NodeState.Ready) {
+      val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
+      dao.metricsManager ! UpdateMetric("transactionMemPoolSize", memPoolCount.toString)
+      if (memPoolCount < 1000 && dao.generateRandomTX && dao.nodeState == NodeState.Ready) {
         val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq.filter { case (_, pd) =>
           pd.timeAdded < (System.currentTimeMillis() - 30 * 1000) && pd.nodeState == NodeState.Ready
         }
 
         if (peerIds.nonEmpty) {
 
-          Seq.fill(dao.processingConfig.randomTXPerRound)(0).par.foreach { _ =>
+          val txs = Seq.fill(dao.processingConfig.randomTXPerRound)(0).par.map { _ =>
 
             // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
             // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
@@ -43,13 +47,21 @@ class RandomTransactionManager(dao: DAO)(
             dao.metricsManager ! IncrementMetric("randomTransactionsGenerated")
             dao.metricsManager ! IncrementMetric("sentTransactions")
 
-            // TODO: Change to transport layer call
+            tx
+/*            // TODO: Change to transport layer call
             dao.peerManager ! APIBroadcast(
               _.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx),
               peerSubset = Set(getRandomPeer._1)
-            )
+            )*/
           }
+
+          dao.threadSafeTXMemPool.batchPutDebug(txs.toList)
+
         }
+      }
+
+      if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold) {
+        Future{EdgeProcessor.formCheckpoint()}(dao.edgeExecutionContext)
       }
 
   }

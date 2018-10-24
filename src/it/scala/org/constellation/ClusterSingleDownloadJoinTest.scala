@@ -66,7 +66,7 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
 
     apis2.map{_.postSync(
       "config/update",
-      ProcessingConfig(maxWidth = 10, minCheckpointFormationThreshold = 10, minCBSignatureThreshold = 3)
+      ProcessingConfig(maxWidth = 10, minCheckpointFormationThreshold = 10, numFacilitatorPeers = 3)
     )}
 
 
@@ -87,6 +87,7 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
 
 
     Thread.sleep(30*1000)
+
 
 
   }

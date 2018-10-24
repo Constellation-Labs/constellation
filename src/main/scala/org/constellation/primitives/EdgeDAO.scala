@@ -9,7 +9,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.{DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Random
 
 
@@ -23,6 +23,11 @@ class ThreadSafeTXMemPool() {
       transactions = right
       Some(left)
     } else None
+  }
+
+  def batchPutDebug(txs: Seq[Transaction]) : Boolean = this.synchronized{
+    transactions ++= txs
+    true
   }
 
   def put(transaction: Transaction): Boolean = this.synchronized{
@@ -65,6 +70,10 @@ class ThreadSafeTipService() {
     if (dao.nodeState == NodeState.Ready && acceptedCBSinceSnapshot.nonEmpty) {
 
       val nextSnapshot = Snapshot(snapshot.hash, acceptedCBSinceSnapshot)
+
+
+      // TODO: Make this a future and have it not break the unit test
+      // Also make the db puts blocking, may help for different issue
       Snapshot.acceptSnapshot(snapshot)
 
       if (snapshot.lastSnapshot != Snapshot.snapshotZeroHash) {
@@ -73,8 +82,17 @@ class ThreadSafeTipService() {
           dao.metricsManager ! IncrementMetric("snapshotVerificationFailed")
         } else {
           dao.metricsManager ! IncrementMetric("snapshotVerificationCount")
+          if (
+            !lastSnapshotVerification.get.checkpointBlocks.map{dao.dbActor.getCheckpointCacheData}.forall(_.nonEmpty)
+          ) {
+            dao.metricsManager ! IncrementMetric("snapshotCBVerificationFailed")
+          } else {
+            dao.metricsManager ! IncrementMetric("snapshotCBVerificationCount")
+          }
+
         }
       }
+
       dao.metricsManager ! IncrementMetric("snapshotCount")
       snapshot = nextSnapshot
       acceptedCBSinceSnapshot = Seq()
@@ -86,7 +104,7 @@ class ThreadSafeTipService() {
     thresholdMetCheckpoints += genesisObservation.initialDistribution2.baseHash -> TipData(genesisObservation.initialDistribution2, 0)
   }
 
-  def pull(): Option[(Seq[SignedObservationEdge], Set[Id])] = this.synchronized{
+  def pull()(implicit dao: DAO): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = this.synchronized{
     if (thresholdMetCheckpoints.size >= 2 && facilitators.nonEmpty) {
       val tips = Random.shuffle(thresholdMetCheckpoints.toSeq).take(2)
 
@@ -104,17 +122,19 @@ class ThreadSafeTipService() {
       // TODO: Use XOR distance instead as it handles peer data mismatch cases better
       val facilitatorIndex = (BigInt(mergedTipHash, 16) % totalNumFacil).toInt
       val sortedFacils = facilitators.toSeq.sortBy(_._1.encodedId.b58Encoded)
-      val selectedFacils = Seq.tabulate(2) { i => (i + facilitatorIndex) % totalNumFacil }.map {
+      val selectedFacils = Seq.tabulate(dao.processingConfig.numFacilitatorPeers) { i => (i + facilitatorIndex) % totalNumFacil }.map {
         sortedFacils(_)
       }
-      val finalFacilitators = selectedFacils.map {_._1}.toSet
+      val finalFacilitators = selectedFacils.toMap
+      dao.metricsManager ! UpdateMetric("activeTips", thresholdMetCheckpoints.size.toString)
+
       Some(tipSOE -> finalFacilitators)
     } else None
   }
 
   def accept(checkpointBlock: CheckpointBlock)(implicit dao: DAO): Unit = this.synchronized {
 
-    acceptCheckpoint(checkpointBlock)
+    Future{acceptCheckpoint(checkpointBlock)}(dao.edgeExecutionContext)
 
     def reuseTips: Boolean = thresholdMetCheckpoints.size < dao.maxWidth
 
@@ -178,7 +198,7 @@ trait EdgeDAO {
   var genesisObservation: Option[GenesisObservation] = None
   def maxWidth: Int = processingConfig.maxWidth
   def minCheckpointFormationThreshold: Int = processingConfig.minCheckpointFormationThreshold
-  def minCBSignatureThreshold: Int = processingConfig.minCBSignatureThreshold
+  def minCBSignatureThreshold: Int = processingConfig.numFacilitatorPeers
 
   val minTXSignatureThreshold = 5
   val maxUniqueTXSize = 500
@@ -204,7 +224,13 @@ trait EdgeDAO {
   val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
 
   val edgeExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(20))
+    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(200))
+
+  val signatureResponsePool: ExecutionContextExecutor =
+    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(100))
+
+  val txProcessorPool: ExecutionContextExecutor =
+    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(100))
 
   def canCreateCheckpoint: Boolean = {
     transactionMemPool.size >= minCheckpointFormationThreshold && checkpointMemPoolThresholdMet.size >= 2

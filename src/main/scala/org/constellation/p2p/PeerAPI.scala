@@ -26,7 +26,7 @@ import org.json4s.native
 import org.json4s.native.Serialization
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Random
+import scala.util.{Failure, Random, Success}
 
 case class PeerAuthSignRequest(salt: Long = Random.nextLong())
 case class PeerRegistrationRequest(host: String, port: Int, key: String)
@@ -151,10 +151,14 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
       pathPrefix("request") {
         path("signature") {
           entity(as[SignatureRequest]) { sr =>
-            onComplete(Future{EdgeProcessor.handleSignatureRequest(sr)}(dao.edgeExecutionContext)) {
-              response =>
-                val flatten = response.toOption.flatten
-                complete(flatten)
+            dao.metricsManager ! IncrementMetric("apiRXSignatureRequest")
+            onComplete(Future{EdgeProcessor.handleSignatureRequest(sr)}(dao.signatureResponsePool)) {
+              case Failure(e) =>
+                e.printStackTrace()
+                dao.metricsManager ! IncrementMetric("signatureResponseFAILEDRespondingwithEmpty")
+                complete(None)
+              case Success(r) =>
+                complete(Some(r))
             }
           }
         }
@@ -163,6 +167,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
         path ("checkpoint") {
           entity(as[FinishedCheckpoint]) { fc =>
             // TODO: Validation / etc.
+            dao.metricsManager ! IncrementMetric("apiRXFinishedCheckpoint")
             Future{dao.threadSafeTipService.accept(fc.checkpointBlock)}(dao.edgeExecutionContext)
             complete(StatusCodes.OK)
           }

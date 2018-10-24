@@ -17,8 +17,8 @@ import org.constellation.primitives._
 import org.constellation.util.{HashSignature, HeartbeatSubscribe, ProductHash}
 import scalaj.http.HttpResponse
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Random, Try}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.util.{Failure, Random, Success, Try}
 
 object EdgeProcessor {
 
@@ -552,27 +552,59 @@ object EdgeProcessor {
   // TODO: Move to checkpoint formation actor
   def formCheckpoint()(implicit dao: DAO): Unit = {
 
-    implicit val ec = dao.edgeExecutionContext
+    implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
     val maybeTransactions = dao.threadSafeTXMemPool.pull(dao.minCheckpointFormationThreshold)
 
+    dao.metricsManager ! IncrementMetric("attemptFormCheckpointCalls")
+
+    if (maybeTransactions.isEmpty) {
+      dao.metricsManager ! IncrementMetric("attemptFormCheckpointInsufficientTX")
+    }
 
     maybeTransactions.foreach { transactions =>
 
-      dao.threadSafeTipService.pull().foreach{ case (tipSOE, finalFacilitators) =>
+      val maybeTips = dao.threadSafeTipService.pull()
+      if (maybeTips.isEmpty) {
+        dao.metricsManager ! IncrementMetric("attemptFormCheckpointInsufficientTipsOrFacilitators")
+      }
+
+      maybeTips.foreach{ case (tipSOE, facils) =>
 
         val checkpointBlock = createCheckpointBlock(transactions, tipSOE)(dao.keyPair)
         dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
 
-        val response = (dao.peerManager ? APIBroadcast(
-          _.post(s"request/signature", SignatureRequest(checkpointBlock, finalFacilitators + dao.id)),
-          peerSubset = finalFacilitators
-        )).mapTo[Map[Id, Future[HttpResponse[String]]]].get().mapValues(_.map{_.body.x[Option[SignatureResponse]]})
+        val finalFacilitators = facils.keySet
 
-        val attempt = Try{Future.sequence(response.values).get()}
+        val response = facils.map { case (facilId, data) =>
+          facilId -> data.client.post(s"request/signature", SignatureRequest(checkpointBlock, finalFacilitators + dao.id))
+            .map {
+              _.body.x[Option[SignatureResponse]]
+            }
+        }
+
+        val attempt = Try{Future.sequence(response.values).get(180)}
 
         if (attempt.isFailure) {
           dao.metricsManager ! IncrementMetric("checkpointSignatureResponseMissing")
+          response.foreach{
+            case (responseId, fut) =>
+              val hostFailedName = facils(responseId).client.hostName + ":" + facils(responseId).client.apiPort
+              fut.value match {
+                case Some(Failure(e)) =>
+                  dao.metricsManager ! IncrementMetric("failureOnSignatureRequestFAILED_" + hostFailedName)
+                  e.printStackTrace()
+                case Some(Success(x)) =>
+                  if (x.isEmpty) {
+                    dao.metricsManager ! IncrementMetric("failureOnSignatureRequestSUCCESSOFNONE_" + hostFailedName)
+                  }
+                case None =>
+                  dao.metricsManager ! IncrementMetric("failureOnSignatureRequestNONE_" + hostFailedName)
+                case _ =>
+                  dao.metricsManager ! IncrementMetric("unexpectedFutureOnFailedRequest_" + hostFailedName)
+              }
+          }
+
         } else {
 
           if (attempt.get.exists(_.isEmpty)) {
@@ -587,7 +619,19 @@ object EdgeProcessor {
             }
               .reduce { (x: CheckpointBlock, y: CheckpointBlock) => x.plus(y) }.plus(checkpointBlock)
             dao.threadSafeTipService.accept(finalCB)
-            dao.peerManager ! APIBroadcast(_.post(s"finished/checkpoint", FinishedCheckpoint(finalCB, finalFacilitators)))
+            // TODO: Check failures and/or remove constraint of single actor
+
+
+
+            dao.peerInfo.foreach{ case (id, client) =>
+              client.client.post(s"finished/checkpoint", FinishedCheckpoint(finalCB, finalFacilitators)).onComplete{
+                case Failure(e) =>
+                  dao.metricsManager ! IncrementMetric("failedCheckpointFinishedMessages")
+                case _ =>
+              }
+            }
+
+
           }
         }
       }
@@ -596,16 +640,16 @@ object EdgeProcessor {
   }
 
   // Temporary for testing join/leave logic.
-  def handleSignatureRequest(sr: SignatureRequest)(implicit dao: DAO): Option[SignatureResponse] = {
-    if (sr.facilitators.contains(dao.id)) {
-      val replyTo = sr.checkpointBlock.witnessIds.head
+  def handleSignatureRequest(sr: SignatureRequest)(implicit dao: DAO): SignatureResponse = {
+    //if (sr.facilitators.contains(dao.id)) {
+     // val replyTo = sr.checkpointBlock.witnessIds.head
       val updated = sr.checkpointBlock.plus(dao.keyPair)
-      Some(SignatureResponse(updated, sr.facilitators))
+      SignatureResponse(updated, sr.facilitators)
       /*dao.peerManager ! APIBroadcast(
         _.post(s"response/signature", SignatureResponse(updated, sr.facilitators)),
         peerSubset = Set(replyTo)
       )*/
-    } else None
+   // } else None
   }
 
 /*

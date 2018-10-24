@@ -10,7 +10,7 @@ import org.constellation.primitives.Schema._
 import scalaj.http.HttpResponse
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
-import scala.util.Random
+import scala.util.{Random, Try}
 
 class Simulation {
 
@@ -157,7 +157,11 @@ class Simulation {
       s"Unhealthy nodes",
       {
         apis.forall{ a =>
-          a.getSync("health").isSuccess
+          val attempt = Try{a.getSync("health").isSuccess}
+          if (attempt.isFailure) {
+            println(s"Failure on: ${a.hostName}:${a.apiPort}")
+          }
+          attempt.getOrElse(false)
         }
       }, maxRetries, delay
     )

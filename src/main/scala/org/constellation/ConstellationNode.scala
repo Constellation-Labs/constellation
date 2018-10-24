@@ -19,6 +19,7 @@ import org.constellation.p2p.{PeerAPI, UDPActor}
 import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Heartbeat}
+import org.joda.time.DateTime
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -63,17 +64,29 @@ import scala.concurrent.ExecutionContext
       val keyPair = KeyUtils.makeKeyPair()
       logger.info("post key pair")
 
+      val portOffset = args.headOption.map{_.toInt}
+      val httpPortFromArg = portOffset.map{_ + 1}
+      val peerHttpPortFromArg = portOffset.map{_ + 2}
+
+      val httpPort = httpPortFromArg.getOrElse(Option(System.getenv("DAG_HTTP_PORT")).map {
+        _.toInt
+      }.getOrElse(config.getInt("http.port")))
+
+      val peerHttpPort = peerHttpPortFromArg.getOrElse(Option(System.getenv("DAG_PEER_HTTP_PORT")).map {
+        _.toInt
+      }.getOrElse(9001))
+
       val node = new ConstellationNode(
         keyPair,
         seeds,
         config.getString("http.interface"),
-        Option(System.getenv("DAG_HTTP_PORT")).map{_.toInt}.getOrElse(config.getInt("http.port")),
+        httpPort,
         config.getString("udp.interface"),
         config.getInt("udp.port"),
         timeoutSeconds = rpcTimeout,
         hostName = hostName,
         requestExternalAddressCheck = requestExternalAddressCheck,
-        peerHttpPort = Option(System.getenv("DAG_PEER_HTTP_PORT")).map{_.toInt}.getOrElse(9001)
+        peerHttpPort = peerHttpPort
       )
     } match {
       case Failure(e) => e.printStackTrace()
@@ -133,7 +146,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
 
   val randomTX : ActorRef = system.actorOf(
-    Props(new RandomTransactionManager(dao)), s"RandomTXManager_$publicKeyHash"
+    Props(new RandomTransactionManager()), s"RandomTXManager_$publicKeyHash"
   )
 
   val cpUniqueSigner : ActorRef = system.actorOf(
@@ -256,5 +269,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   logger.info("Node started")
 
   metricsManager ! UpdateMetric("address", dao.selfAddressStr)
+  metricsManager ! UpdateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
+  metricsManager ! UpdateMetric("nodeStartDate", new DateTime(System.currentTimeMillis()).toString)
 
 }

@@ -46,9 +46,10 @@ object TestNode {
     nodes = nodes :+ node
 
     node.dao.processingConfig = node.dao.processingConfig.copy(
-      minCBSignatureThreshold = 3,
+      numFacilitatorPeers = 2,
       minCheckpointFormationThreshold = 2,
-      randomTXPerRound = 10
+      randomTXPerRound = 10,
+      metricCheckInterval = 10
     )
     node.dao.snapshotInterval = 5
 

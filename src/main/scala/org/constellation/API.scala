@@ -35,10 +35,12 @@ case class HostPort(host: String, port: Int)
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
 
 case class ProcessingConfig(
-                                maxWidth: Int = 10,
-                                minCheckpointFormationThreshold: Int = 10,
-                                minCBSignatureThreshold: Int = 5,
-                                randomTXPerRound: Int = 50
+                             maxWidth: Int = 20,
+                             minCheckpointFormationThreshold: Int = 300,
+                             numFacilitatorPeers: Int = 2,
+                             randomTXPerRound: Int = 1200,
+                             metricCheckInterval: Int = 60,
+                             maxMemPoolSize: Int = 1000
                               )
 
 class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
@@ -244,6 +246,8 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
               case Array(ip, port) =>
                 ipp = ip
                 externalHostString = ip
+                import better.files._
+                file"external_host_ip".write(ip)
                 new InetSocketAddress(ip, port.toInt)
               case a @ _ => {
                 logger.debug(s"Unmatched Array: $a")
