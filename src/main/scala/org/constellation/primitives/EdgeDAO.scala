@@ -30,13 +30,12 @@ class ThreadSafeTXMemPool() {
     true
   }
 
-  def put(transaction: Transaction): Boolean = this.synchronized{
-    if (!transactions.contains(transaction)) {
-      if (transactions.size < 1000) {
-        transactions :+= transaction
-      }
-      true
-    } else false
+  def put(transaction: Transaction)(implicit dao: DAO): Boolean = this.synchronized{
+    val notContained = !transactions.contains(transaction)
+    if (notContained && transactions.size < dao.processingConfig.maxMemPoolSize) {
+      transactions :+= transaction
+    }
+    notContained
   }
 
   def unsafeCount: Int = transactions.size
