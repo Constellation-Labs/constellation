@@ -93,7 +93,11 @@ class Simulation {
       s"Genesis not stored",
       {
         apis.forall{ a =>
-          a.getBlocking[Option[GenesisObservation]]("genesis").nonEmpty
+          val maybeObservation = a.getBlocking[Option[GenesisObservation]]("genesis")
+          if (maybeObservation.isDefined) {
+            println(s"Genesis stored on ${a.hostName} ${a.apiPort}")
+          }
+          maybeObservation.nonEmpty
         }
       }, maxRetries, delay
     )
@@ -150,8 +154,8 @@ class Simulation {
 
   def checkHealthy(
                     apis: Seq[APIClient],
-                    maxRetries: Int = 10,
-                    delay: Long = 3000
+                    maxRetries: Int = 30,
+                    delay: Long = 5000
                   ): Boolean = {
     awaitConditionMet(
       s"Unhealthy nodes",

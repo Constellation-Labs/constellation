@@ -31,7 +31,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
     var ignoreIPs = Seq[String]()
 
-/*
+
     val auxAPIs = Try{file"aux-hosts.txt".lines.toSeq}.getOrElse(Seq()).map{ ip =>
       val split = ip.split(":")
       val host = split.head
@@ -42,6 +42,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
       new APIClient(split.head, port = offset + 1, peerHTTPPort = offset + 2, internalPeerHost = split(3))
     }
 
+    var startAuxMulti = true
 
     val auxMultiAPIs = Try{file"aux-multi-host.txt".lines.toSeq}.getOrElse(Seq()).flatMap{ ip =>
       val split = ip.split(":")
@@ -51,14 +52,21 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
       Seq.tabulate(3){i =>
         val adjustedOffset = offset + i*2
         println(s"Initializing API to $str offset: $adjustedOffset")
+        if (startAuxMulti) {
+          import scala.sys.process._
+          val javaCmd = s"java -jar ~/dag.jar $adjustedOffset > ~/dag-$i.log 2>&1 &"
+          val sshCmd = Seq("ssh", host, s"""bash -c '$javaCmd'""")
+          println(sshCmd.mkString(" "))
+          println(sshCmd.!!)
+        }
         new APIClient(split.head, port = adjustedOffset + 1, peerHTTPPort = adjustedOffset + 2, internalPeerHost = split(3))
 
       }
     }
 
-*/
-    val auxAPIs = Seq[APIClient]()
-    val auxMultiAPIs = Seq[APIClient]()
+
+   // val auxAPIs = Seq[APIClient]()
+   // val auxMultiAPIs = Seq[APIClient]()
 
     val ips = file"hosts.txt".lines.toSeq.filterNot(ignoreIPs.contains)
 
@@ -95,6 +103,31 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 */
 
     sim.run(apis, addPeerRequests, attemptSetExternalIP = true)
+
+/*
+    sim.logger.info("Genesis validation passed")
+
+    sim.triggerRandom(apis)
+
+    sim.setReady(apis)
+
+    assert(sim.awaitCheckpointsAccepted(apis))
+
+    sim.logger.info("Checkpoint validation passed")
+
+    assert(sim.checkSnapshot(apis))
+
+    sim.logger.info("Snapshot validation passed")
+*/
+
+
+    /*
+        println((apis.head.hostName, apis.head.apiPort))
+        val goe = sim.genesis(apis)
+        println(goe)
+        apis.foreach{_.post("genesis/accept", goe)}
+        sim.checkGenesis(apis)
+    */
 
 /*
 

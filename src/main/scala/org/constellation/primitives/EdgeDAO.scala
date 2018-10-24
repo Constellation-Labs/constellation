@@ -112,10 +112,6 @@ class ThreadSafeTipService() {
         _._2.checkpointBlock.checkpoint.edge.signedObservationEdge
       }.sortBy(_.hash)
 
-      tipSOE.foreach{ soe =>
-        thresholdMetCheckpoints -= soe.baseHash
-      }
-
       val mergedTipHash = tipSOE.map {_.hash}.mkString("")
 
       val totalNumFacil = facilitators.size

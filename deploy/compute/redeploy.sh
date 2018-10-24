@@ -13,4 +13,4 @@ pssh -h $HOSTS_FILE -i 'killall java'
 pssh -h $HOSTS_FILE -i "rm -rf /home/$USER/tmp"
 pssh -h $HOSTS_FILE -i 'source ~/.ssh/environment; java -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.authenticate=false -Dm.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=$(cat external_host_ip) -Dcom.sun.management.jmxremote.local.only=false -jar ~/dag.jar > ~/dag.log 2>&1 &' && \
 echo "Done"
-# sbt "it:testOnly org.constellation.ClusterComputeManualTest"
+sbt "it:testOnly org.constellation.ClusterComputeManualTest"
