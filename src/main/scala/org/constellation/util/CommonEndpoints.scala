@@ -32,22 +32,23 @@ trait CommonEndpoints extends Json4sSupport {
       path("id") {
         complete(dao.id)
       } ~
-    path("tips") {
-      val mp = (dao.edgeProcessor ? GetMemPool).mapTo[MemPool].get()
-      complete(mp.thresholdMetCheckpoints.map{_._2.checkpointBlock})
-    } ~
+      path("tips") {
+        complete(dao.threadSafeTipService.tips)
+      } ~
       path("info") {
-      //val mp = (dao.edgeProcessor ? GetMemPool).mapTo[MemPool].get()
-      complete(dao.threadSafeTipService.getSnapshotInfo)
-    } ~
-    path("snapshot" / Segment) {s =>
-      complete(dao.dbActor.getSnapshot(s))
-    } ~
-    path("genesis") {
-      complete(dao.genesisObservation)
-    } ~
-    pathPrefix("address" / Segment) { a =>
-      complete(dao.dbActor.getAddressCacheData(a))
-    }
+        complete(dao.threadSafeTipService.getSnapshotInfo)
+      } ~
+      path("snapshot" / Segment) {s =>
+        complete(dao.dbActor.getSnapshot(s))
+      } ~
+      path("genesis") {
+        complete(dao.genesisObservation)
+      } ~
+      pathPrefix("address" / Segment) { a =>
+        complete(dao.dbActor.getAddressCacheData(a))
+      } ~
+      pathPrefix("balance" / Segment) { a =>
+        complete(dao.dbActor.getAddressCacheData(a).map{_.balanceByLatestSnapshot})
+      }
   }
 }

@@ -11,7 +11,9 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files._
 import com.google.common.hash.Hashing
+import org.constellation.DAO
 import org.constellation.crypto.KeyUtilsExt
+import org.constellation.primitives.IncrementMetric
 import org.constellation.primitives.Schema._
 import org.constellation.util.{POWExt, POWSignHelp}
 import org.json4s.JsonAST.{JInt, JString}
@@ -21,7 +23,7 @@ import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObjec
 
 import scala.concurrent.{Await, Future}
 import scala.reflect.ClassTag
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /**
   * Project wide convenience functions.
@@ -133,5 +135,18 @@ package object constellation extends KeyUtilsExt with POWExt
   }
 
   def signHashWithKeyB64(hash: String, privateKey: PrivateKey): String = base64(signData(hash.getBytes())(privateKey))
+
+  def tryWithMetric[T](t : => T, metricPrefix: String)(implicit dao: DAO) = {
+    val attempt = Try{
+      t
+    } match {
+      case Success(x) =>
+        dao.metricsManager ! IncrementMetric(metricPrefix + "_success")
+      case Failure(e) =>
+        e.printStackTrace()
+        dao.metricsManager ! IncrementMetric(metricPrefix + "_failure")
+    }
+    attempt
+  }
 
 }

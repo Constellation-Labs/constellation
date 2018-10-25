@@ -518,6 +518,8 @@ object Schema {
   final case object GetValidTX extends InternalCommand
   final case object GetMemPoolUTXO extends InternalCommand
   final case object ToggleHeartbeat extends InternalCommand
+
+  // TODO: Add round to internalheartbeat, would be better than replicating it all over the place
   final case object InternalHeartbeat extends InternalCommand
   final case object InternalBundleHeartbeat extends InternalCommand
 
@@ -544,10 +546,6 @@ object Schema {
     def b58: String = encodedId.b58Encoded
     def id: PublicKey = encodedId.toPublicKey
   }
-
-  case class GetId()
-
-  case class GetBalance(account: PublicKey)
 
   case class HandShake(
                         originPeer: Signed[Peer],

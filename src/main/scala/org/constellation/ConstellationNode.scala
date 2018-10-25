@@ -148,11 +148,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
   val randomTX : ActorRef = system.actorOf(
     Props(new RandomTransactionManager()), s"RandomTXManager_$publicKeyHash"
   )
-
-  val cpUniqueSigner : ActorRef = system.actorOf(
-    Props(new CheckpointUniqueSigner(dao)), s"CheckpointUniqueSigner_$publicKeyHash"
-  )
-
   // Setup actors
   val metricsManager: ActorRef = system.actorOf(
     Props(new MetricsManager()), s"MetricsManager_$publicKeyHash"
@@ -183,9 +178,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
     Props(new EdgeProcessor(dao)),
     s"ConstellationEdgeProcessorActor_$publicKeyHash")
 
-  val cpMemPoolVerify: ActorRef = system.actorOf(
-    Props(new CheckpointMemPoolVerifier(dao)),
-    s"CheckpointMemPoolVerifier_$publicKeyHash")
 
 
   dao.dbActor = dbActor
@@ -193,7 +185,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
   dao.peerManager = peerManager
   dao.metricsManager = metricsManager
   dao.edgeProcessor = edgeProcessorActor
-  dao.cpSigner = cpUniqueSigner
 
   // If we are exposing rpc then create routes
   val routes: Route = new API(udpAddress).routes
@@ -267,7 +258,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   }
 
   logger.info("Node started")
-
+  dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
   metricsManager ! UpdateMetric("address", dao.selfAddressStr)
   metricsManager ! UpdateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
   metricsManager ! UpdateMetric("nodeStartDate", new DateTime(System.currentTimeMillis()).toString)

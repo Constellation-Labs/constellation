@@ -55,9 +55,18 @@ class ThreadSafeTipService() {
   private var facilitators: Map[Id, PeerData] = Map()
   private var snapshot: Snapshot = Snapshot.snapshotZero
 
+  def tips: Map[String, TipData] = thresholdMetCheckpoints
+
   def getSnapshotInfo: SnapshotInfo = this.synchronized(SnapshotInfo(snapshot, acceptedCBSinceSnapshot))
 
   var totalNumCBsInShapshots = 0L
+
+  // ONLY TO BE USED BY DOWNLOAD COMPLETION CALLER
+  def setSnapshot(latestSnapshot: Snapshot): Unit = this.synchronized{
+    snapshot = latestSnapshot
+    // Below may not be necessary, just a sanity check
+    acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.filterNot(snapshot.checkpointBlocks.contains)
+  }
 
   def attemptSnapshot()(implicit dao: DAO): Unit = this.synchronized{
 

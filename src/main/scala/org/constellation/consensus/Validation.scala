@@ -10,6 +10,10 @@ import org.constellation.primitives.Schema.{AddressCacheData, Transaction, Trans
 
 import scala.concurrent.{ExecutionContext, Future}
 
+
+// TODO: Needs revisiting, data model needs to be updated to incorporate validating diff since snapshot
+// Validation by a state only works as a rough pre-filter on memPool, but still is useful
+
 object Validation {
 
   def validateCheckpoint(

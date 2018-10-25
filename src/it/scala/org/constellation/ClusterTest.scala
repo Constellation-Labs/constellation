@@ -94,6 +94,7 @@ object ClusterTest {
 
 }
 
+// TODO: Re-enable after doing kubernetes entropy / haveged fix
 class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
   override def afterAll {
