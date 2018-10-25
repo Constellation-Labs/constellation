@@ -25,56 +25,62 @@ class RandomTransactionManager()(
       */
     case InternalHeartbeat =>
 
-      if (dao.metricsManager != null) {
-        val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
-        dao.metricsManager ! UpdateMetric("transactionMemPoolSize", memPoolCount.toString)
-        if (memPoolCount < dao.processingConfig.maxMemPoolSize && dao.generateRandomTX && dao.nodeState == NodeState.Ready) {
-          val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq.filter { case (_, pd) =>
-            pd.timeAdded < (System.currentTimeMillis() - 30 * 1000) && pd.nodeState == NodeState.Ready
-          }
+      tryWithMetric ({
+        if (dao.metricsManager != null) {
+          val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
+          dao.metricsManager ! UpdateMetric("transactionMemPoolSize", memPoolCount.toString)
+          if (memPoolCount < dao.processingConfig.maxMemPoolSize && dao.generateRandomTX && dao.nodeState == NodeState.Ready) {
 
-          if (peerIds.nonEmpty) {
+            val peerQuery = dao.peerInfo.toSeq //(dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
+            val peerIds = peerQuery.filter { case (_, pd) =>
+              pd.timeAdded < (System.currentTimeMillis() - 30 * 1000) && pd.nodeState == NodeState.Ready
+            }
 
-            val txs = Seq.fill(dao.processingConfig.randomTXPerRound)(0).par.map { _ =>
+            if (peerIds.nonEmpty) {
 
-              // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
-              // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
+              val txs = Seq.fill(dao.processingConfig.randomTXPerRound)(0).par.map { _ =>
 
-              def getRandomPeer: (Id, PeerData) = peerIds(Random.nextInt(peerIds.size))
+                // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
+                // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
 
-              val sendRequest = SendToAddress(getRandomPeer._1.address.address, Random.nextInt(1000).toLong + 1L, normalized = false)
-              val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair, normalized = false)
-              dao.metricsManager ! IncrementMetric("signaturesPerformed")
-              dao.metricsManager ! IncrementMetric("randomTransactionsGenerated")
-              dao.metricsManager ! IncrementMetric("sentTransactions")
+                def getRandomPeer: (Id, PeerData) = peerIds(Random.nextInt(peerIds.size))
 
-              tx
-              /*            // TODO: Change to transport layer call
+                val sendRequest = SendToAddress(getRandomPeer._1.address.address, Random.nextInt(1000).toLong + 1L, normalized = false)
+                val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair, normalized = false)
+                dao.metricsManager ! IncrementMetric("signaturesPerformed")
+                dao.metricsManager ! IncrementMetric("randomTransactionsGenerated")
+                dao.metricsManager ! IncrementMetric("sentTransactions")
+
+                tx
+                /*            // TODO: Change to transport layer call
             dao.peerManager ! APIBroadcast(
               _.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx),
               peerSubset = Set(getRandomPeer._1)
             )*/
+              }
+
+              txs.foreach {
+                dao.threadSafeTXMemPool.put
+              }
+
             }
+          }
 
-            txs.foreach{dao.threadSafeTXMemPool.put}
-
+          if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold && dao.generateRandomTX) {
+            Future {
+              Try {
+                EdgeProcessor.formCheckpoint()
+              } match {
+                case Success(x) =>
+                  dao.metricsManager ! IncrementMetric("successOnFormCheckpointCall")
+                case Failure(e) =>
+                  e.printStackTrace()
+                  dao.metricsManager ! IncrementMetric("failureOnFormCheckpointCall")
+              }
+            }(dao.edgeExecutionContext)
           }
         }
-
-        if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold && dao.generateRandomTX) {
-          Future {
-            Try {
-              EdgeProcessor.formCheckpoint()
-            } match {
-              case Success(x) =>
-                dao.metricsManager ! IncrementMetric("successOnFormCheckpointCall")
-              case Failure(e) =>
-                e.printStackTrace()
-                dao.metricsManager ! IncrementMetric("failureOnFormCheckpointCall")
-            }
-          }(dao.edgeExecutionContext)
-        }
-      }
+      }, "randomTransactionRound")
 
   }
 }
