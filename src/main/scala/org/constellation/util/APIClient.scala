@@ -150,9 +150,11 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
     resp.body
   }
 
-  def simpleDownload(): Seq[CheckpointBlock] = {
+  def getSnapshotInfo(): SnapshotInfo = getBlocking[SnapshotInfo]("info")
 
-    val snapshotInfo = getBlocking[SnapshotInfo]("info")
+  def simpleDownload(): Seq[String] = {
+
+    val snapshotInfo = getSnapshotInfo()
 
     val startingCBs = snapshotInfo.acceptedCBSinceSnapshot ++ snapshotInfo.snapshot.checkpointBlocks
 
@@ -160,23 +162,20 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
       val sn = getBlocking[Option[Snapshot]]("snapshot/" + hash)
       sn match {
         case Some(snapshot) =>
-          if (snapshot.lastSnapshot == "") {
-            blocks
+          if (snapshot.lastSnapshot == "" || snapshot.lastSnapshot == Snapshot.snapshotZeroHash) {
+            blocks ++ snapshot.checkpointBlocks
           } else {
             getSnapshots(snapshot.lastSnapshot, blocks ++ snapshot.checkpointBlocks)
           }
         case None =>
+          println("MISSING SNAPSHOT")
           blocks
       }
     }
 
     val snapshotBlocks = getSnapshots(snapshotInfo.snapshot.lastSnapshot) ++ startingCBs
     val snapshotBlocksDistinct = snapshotBlocks.distinct
-
-    snapshotBlocks.flatMap{ cb =>
-      getBlocking[Option[CheckpointBlock]]("checkpoint/" + cb)
-    }
-
+    snapshotBlocksDistinct
   }
 
 }

@@ -10,7 +10,7 @@ import org.constellation.{DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.Random
+import scala.util.{Failure, Random, Success, Try}
 
 
 class ThreadSafeTXMemPool() {
@@ -57,12 +57,14 @@ class ThreadSafeTipService() {
 
   def getSnapshotInfo: SnapshotInfo = this.synchronized(SnapshotInfo(snapshot, acceptedCBSinceSnapshot))
 
+  var totalNumCBsInShapshots = 0L
+
   def attemptSnapshot()(implicit dao: DAO): Unit = this.synchronized{
 
-    val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
+    val peerIds = dao.peerInfo //(dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
     val facilMap = peerIds.filter{case (_, pd) =>
-      pd.timeAdded < (System.currentTimeMillis() - 30*1000) && pd.nodeState == NodeState.Ready
-    }.toMap
+      pd.timeAdded < (System.currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000) && pd.nodeState == NodeState.Ready
+    }
 
     facilitators = facilMap
 
@@ -70,12 +72,16 @@ class ThreadSafeTipService() {
 
       val nextSnapshot = Snapshot(snapshot.hash, acceptedCBSinceSnapshot)
 
-
       // TODO: Make this a future and have it not break the unit test
       // Also make the db puts blocking, may help for different issue
-      Snapshot.acceptSnapshot(snapshot)
+      if (snapshot != Snapshot.snapshotZero) {
+        dao.metricsManager ! IncrementMetric("snapshotCount")
+        Snapshot.acceptSnapshot(snapshot)
+        totalNumCBsInShapshots += snapshot.checkpointBlocks.size
+        dao.metricsManager ! UpdateMetric("totalNumCBsInShapshots", totalNumCBsInShapshots.toString)
+      }
 
-      if (snapshot.lastSnapshot != Snapshot.snapshotZeroHash) {
+      if (snapshot.lastSnapshot != Snapshot.snapshotZeroHash && snapshot.lastSnapshot != "") {
         val lastSnapshotVerification = dao.dbActor.getSnapshot(snapshot.lastSnapshot)
         if (lastSnapshotVerification.isEmpty) {
           dao.metricsManager ! IncrementMetric("snapshotVerificationFailed")
@@ -92,9 +98,9 @@ class ThreadSafeTipService() {
         }
       }
 
-      dao.metricsManager ! IncrementMetric("snapshotCount")
       snapshot = nextSnapshot
       acceptedCBSinceSnapshot = Seq()
+      dao.metricsManager ! UpdateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
     }
   }
 
@@ -127,9 +133,19 @@ class ThreadSafeTipService() {
     } else None
   }
 
+
   def accept(checkpointBlock: CheckpointBlock)(implicit dao: DAO): Unit = this.synchronized {
 
-    Future{acceptCheckpoint(checkpointBlock)}(dao.edgeExecutionContext)
+    // Below should be future, turned off for sanity checking
+    Try{ acceptCheckpoint(checkpointBlock) } match {
+      case Success(x) =>
+        dao.metricsManager ! IncrementMetric("acceptCheckpointSuccess")
+      case Failure(e) =>
+        e.printStackTrace()
+        dao.metricsManager ! IncrementMetric("acceptCheckpointFailure")
+    }
+
+ //(dao.edgeExecutionContext)
 
     def reuseTips: Boolean = thresholdMetCheckpoints.size < dao.maxWidth
 
@@ -177,6 +193,7 @@ class ThreadSafeTipService() {
       keysToRemove
 
     acceptedCBSinceSnapshot = acceptedCBSinceSnapshot :+ checkpointBlock.baseHash
+    dao.metricsManager ! UpdateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
   }
 
 }
@@ -219,13 +236,13 @@ trait EdgeDAO {
   val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
 
   val edgeExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(200))
+    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(20))
 
   val signatureResponsePool: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(100))
+    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(10))
 
   val txProcessorPool: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(100))
+    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(10))
 
   def canCreateCheckpoint: Boolean = {
     transactionMemPool.size >= minCheckpointFormationThreshold && checkpointMemPoolThresholdMet.size >= 2

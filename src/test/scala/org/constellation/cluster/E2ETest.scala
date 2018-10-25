@@ -8,6 +8,7 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import org.constellation.ConstellationNode
+import org.constellation.primitives.Schema.CheckpointBlock
 import org.constellation.util.{Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
@@ -36,11 +37,15 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     Try{File(tmpDir).delete()}
   }
 
-  def createNode(randomizePorts: Boolean = true, seedHosts: Seq[InetSocketAddress] = Seq()): ConstellationNode = {
+  def createNode(
+                  randomizePorts: Boolean = true,
+                  seedHosts: Seq[InetSocketAddress] = Seq(),
+                  portOffset: Int = 0
+                ): ConstellationNode = {
     implicit val executionContext: ExecutionContextExecutorService =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
-    TestNode(randomizePorts = randomizePorts)
+    TestNode(randomizePorts = randomizePorts, portOffset = portOffset)
   }
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
@@ -52,7 +57,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
   //private val address1 = n1.getInetSocketAddress
 
-  private val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(createNode(seedHosts = Seq())) // seedHosts = Seq(address1)
+  private val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes-1)(i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i*2)+2)) // seedHosts = Seq(address1)
 
   private val apis = nodes.map{_.getAPIClient()}
 
@@ -77,18 +82,43 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     // Stop transactions
     sim.triggerRandom(apis)
 
-    Thread.sleep(10000)
+    sim.logger.info("Stopping transactions to run parity check")
+
+    Thread.sleep(30000)
 
     // TODO: Change assertions to check several times instead of just waiting ^ with sleep
     // Follow pattern in Simulation.await examples
     assert(apis.map{_.metrics("checkpointAccepted")}.distinct.size == 1)
     assert(apis.map{_.metrics("transactionAccepted")}.distinct.size == 1)
 
-    val blocks = apis.map{_.simpleDownload()}
+    val blockHashes = apis.map{_.simpleDownload()}
+
+    assert(blockHashes.map{_.size}.distinct.size == 1)
+    assert(blockHashes.map{_.toSet}.distinct.size == 1)
+
+    val downloadedBlocks = apis.map{ a =>
+      blockHashes.head.distinct.map{ h =>
+        a.getBlocking[Option[CheckpointBlock]]("checkpoint/" + h)
+      }
+    }
+
+    assert(downloadedBlocks.forall(_.forall(_.nonEmpty)))
+    assert(downloadedBlocks.map(_.map{_.get}.toSet).distinct.size == 1)
+
+    /*
+    snapshotBlocksDistinct.flatMap{ cb =>
+      val cbA =
+      println("MISSING CHECKPOINT")
+      cbA
+    }
+*/
+/*
+
 
     assert(blocks.map{_.size}.distinct.size == 1)
     assert(blocks.forall{b => b.size == b.distinct.size})
     assert(blocks.map{_.toSet}.distinct.size == 1)
+*/
 
     // TODO: Fix download test flakiness. Works sometimes
 

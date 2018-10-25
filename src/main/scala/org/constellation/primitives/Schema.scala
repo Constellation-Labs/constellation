@@ -149,8 +149,10 @@ object Schema {
     val AddressHash,
     CheckpointDataHash, CheckpointHash,
     TransactionDataHash, TransactionHash,
-    ValidationHash = Value
+    ValidationHash, BundleDataHash = Value
   }
+
+  case class BundleEdgeData(rank: Double, hashes: Seq[String])
 
   /**
     * Wrapper for encapsulating a typed hash reference

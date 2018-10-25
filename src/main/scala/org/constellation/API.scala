@@ -40,7 +40,8 @@ case class ProcessingConfig(
                              numFacilitatorPeers: Int = 2,
                              randomTXPerRound: Int = 1200,
                              metricCheckInterval: Int = 60,
-                             maxMemPoolSize: Int = 1000
+                             maxMemPoolSize: Int = 1000,
+                             minPeerTimeAddedSeconds: Int = 30
                               )
 
 class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)

@@ -168,7 +168,12 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
           entity(as[FinishedCheckpoint]) { fc =>
             // TODO: Validation / etc.
             dao.metricsManager ! IncrementMetric("apiRXFinishedCheckpoint")
-            Future{dao.threadSafeTipService.accept(fc.checkpointBlock)}(dao.edgeExecutionContext)
+            val attempt = Future{dao.threadSafeTipService.accept(fc.checkpointBlock)}(dao.edgeExecutionContext)
+            attempt.onComplete{
+              case Failure(e) => e.printStackTrace(); dao.metricsManager ! IncrementMetric("finishedCheckpointAcceptanceFailure")
+              case Success(x) => dao.metricsManager ! IncrementMetric("finishedCheckpointAcceptanceSuccess")
+            }
+
             complete(StatusCodes.OK)
           }
         }

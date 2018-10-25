@@ -6,6 +6,7 @@ import better.files._
 import com.typesafe.scalalogging.Logger
 import constellation.{ParseExt, SerExt}
 import org.constellation.LevelDB.RestartDB
+import org.constellation.primitives.IncrementMetric
 import org.constellation.primitives.Schema._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.ProductHash
@@ -85,9 +86,14 @@ class KVDBImpl(dao: DAO) extends KVDB {
   private var db = mkDB
 
   private def put(key: String, obj: AnyRef) = {
-    dao.numDBPuts += 1
+    dao.metricsManager ! IncrementMetric("DBPut")
     val bytes = KryoSerializer.serializeAnyRef(obj)
-    db.putBytes(key, bytes)
+    val success = db.putBytes(key, bytes)
+    if (!success) {
+      dao.metricsManager ! IncrementMetric("DBPutFailure")
+      logger.error("DB PUT FAILED")
+    }
+    success
   }
 
   private def get[T <: AnyRef](key: String): Option[T] = {
@@ -273,7 +279,7 @@ class LevelDB(val file: File) {
   def contains(s: String): Boolean = getBytes(s).nonEmpty
   def contains[T <: ProductHash](t: T): Boolean = getBytes(t.hash).nonEmpty
   def putStr(k: String, v: String) = Try { db.put(bytes(k), bytes(v)) }
-  def putBytes(k: String, v: Array[Byte]): Unit = {
+  def putBytes(k: String, v: Array[Byte]): Boolean = {
 
     var retries = 0
     var done = false
@@ -285,6 +291,7 @@ class LevelDB(val file: File) {
       }
       done = attempt.isSuccess
     } while (!done && retries < 3)
+    done
   }
   def put(k: String, v: String) = Try { db.put(bytes(k), bytes(v)) }
   def putHash[T <: ProductHash, Q <: ProductHash](t: T, q: Q): Try[Unit] =

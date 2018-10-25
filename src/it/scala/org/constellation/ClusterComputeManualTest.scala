@@ -80,7 +80,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
       val a = new APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
       println(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
       a
-    } ++ auxAPIs // ++ auxMultiAPIs
+    } // ++ auxAPIs // ++ auxMultiAPIs
 
     println("Num APIs " + apis.size)
 

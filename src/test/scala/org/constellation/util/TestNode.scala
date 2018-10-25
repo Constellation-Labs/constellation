@@ -17,20 +17,22 @@ object TestNode {
 
   def apply(seedHosts: Seq[InetSocketAddress] = Seq(),
             keyPair: KeyPair = KeyUtils.makeKeyPair(),
-            randomizePorts: Boolean = true)(
+            randomizePorts: Boolean = true,
+            portOffset: Int = 0
+           )(
     implicit system: ActorSystem,
     materializer: ActorMaterializer,
     executionContext: ExecutionContext
   ): ConstellationNode = {
 
     val randomPort =
-      if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9000
+      if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9000 + portOffset
     val randomPeerPort =
-      if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9001
+      if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9001 + portOffset
     val randomPeerTCPPort =
-      if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9002
+      if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9002 + portOffset
     val randomUDPPort =
-      if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 16180
+      if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 16180 + portOffset
 
     val node = new ConstellationNode(
       keyPair,
@@ -48,8 +50,11 @@ object TestNode {
     node.dao.processingConfig = node.dao.processingConfig.copy(
       numFacilitatorPeers = 2,
       minCheckpointFormationThreshold = 2,
-      randomTXPerRound = 10,
-      metricCheckInterval = 10
+      randomTXPerRound = 5,
+      metricCheckInterval = 10,
+      maxWidth = 7,
+      maxMemPoolSize = 15,
+      minPeerTimeAddedSeconds = 1
     )
     node.dao.snapshotInterval = 5
 
