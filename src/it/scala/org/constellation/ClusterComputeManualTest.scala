@@ -94,21 +94,21 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
     val primaryHostsFile = System.getenv().getOrDefault("HOSTS_FILE", "hosts.txt")
 
-    sim.logger(s"Using primary hosts file: $primaryHostsFile")
+    sim.logger.info(s"Using primary hosts file: $primaryHostsFile")
 
     val ips = file"$primaryHostsFile".lines.toSeq.filterNot(ignoreIPs.contains)
 
-    sim.logger(ips)
+    sim.logger.info(ips.toString)
 
     val apis = ips.map{ ip =>
       val split = ip.split(":")
       val portOffset = if (split.length == 1) 8999 else split(1).toInt
       val a = new APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
-      sim.logger(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
+      sim.logger.info(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
       a
     } ++ auxAPIs
 
-    sim.logger("Num APIs " + apis.size)
+    sim.logger.info("Num APIs " + apis.size)
 
 
     assert(sim.checkHealthy(apis))

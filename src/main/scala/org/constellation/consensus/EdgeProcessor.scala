@@ -939,11 +939,11 @@ class EdgeProcessor(dao: DAO)
       dao.acceptGenesis(go)
       dao.threadSafeTipService.acceptGenesis(go)
 
-//      @deprecated
+/*//      @deprecated
     case ConsensusRoundResult(checkpointBlock, roundHash: RoundHash[Checkpoint]) =>
       log.debug(s"handle checkpointBlock = $checkpointBlock")
 
-    // handleCheckpoint(checkpointBlock, dao)
+    // handleCheckpoint(checkpointBlock, dao)*/
 
   }
 

@@ -13,9 +13,9 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
-import org.constellation.consensus.{CheckpointMemPoolVerifier, CheckpointUniqueSigner, Consensus, EdgeProcessor}
+import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
-import org.constellation.datastore.Datastore
+import org.constellation.datastore.{Datastore, SimpleKVDatastore}
 import org.constellation.datastore.leveldb.LevelDBDatastore
 import org.constellation.p2p.{PeerAPI, UDPActor}
 import org.constellation.primitives.Schema.ValidPeerIPData
@@ -165,7 +165,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   val dbActor: Datastore = TypedActor(system).typedActorOf(TypedProps(
     classOf[Datastore],
-    new LevelDBDatastore(dao)), s"KVDB_$publicKeyHash")
+    new SimpleKVDatastore(dao)), s"KVDB_$publicKeyHash")
 
   val udpActor: ActorRef =
     system.actorOf(
