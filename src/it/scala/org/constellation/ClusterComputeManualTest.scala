@@ -12,6 +12,7 @@ import scala.util.Try
 import better.files._
 
 
+
 object ComputeTestUtil {
 
 
@@ -60,6 +61,18 @@ object ComputeTestUtil {
 
 }
 
+/**
+  * Main integration test / node initializer / cluster startup script
+  *
+  * Several API calls in here should be part of the regular node initialization, so this
+  * test should do less
+  *
+  * We also can't make this a main method in the main folder (for the regular init API calls as opposed to the test calls)
+  * so this needs to be split up at some point. Putting another main in the regular classpath causes an issue with
+  * sbt docker image, needs to be fixed and then portions of this can be split into separate mains for init methods
+  * vs actual test
+  *
+  */
 class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
   override def afterAll {
@@ -69,32 +82,34 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-  private val kp = makeKeyPair()
+  // For fixing some old bug, revisit later if necessary
+  makeKeyPair()
 
   "Cluster integration" should "ping a cluster, check health, go through genesis flow" in {
+
+    val sim = new Simulation()
 
     // Unused for standard tests, only for custom ones
     val (ignoreIPs, auxAPIs) = ComputeTestUtil.getAuxiliaryNodes()
 
     val primaryHostsFile = System.getenv().getOrDefault("HOSTS_FILE", "hosts.txt")
 
-    println(s"Using primary hosts file: $primaryHostsFile")
+    sim.logger(s"Using primary hosts file: $primaryHostsFile")
 
     val ips = file"$primaryHostsFile".lines.toSeq.filterNot(ignoreIPs.contains)
 
-    println(ips)
+    sim.logger(ips)
 
     val apis = ips.map{ ip =>
       val split = ip.split(":")
       val portOffset = if (split.length == 1) 8999 else split(1).toInt
       val a = new APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
-      println(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
+      sim.logger(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
       a
     } ++ auxAPIs
 
-    println("Num APIs " + apis.size)
+    sim.logger("Num APIs " + apis.size)
 
-    val sim = new Simulation()
 
     assert(sim.checkHealthy(apis))
 
@@ -105,17 +120,18 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
       AddPeerRequest(a.hostName, a.udpPort, a.peerHTTPPort, a.id, auxHost = aux)
     }
 
-    // For debugging / adjusting options after compile
-/*
-    println(apis.map{
-      _.postSync(
-        "config/update",
-        ProcessingConfig(maxWidth = 10, minCheckpointFormationThreshold = 10, minCBSignatureThreshold = 3)
-      )
-    })
-*/
-
     sim.run(apis, addPeerRequests, attemptSetExternalIP = true)
+
+
+    // For debugging / adjusting options after compile
+    /*
+        println(apis.map{
+          _.postSync(
+            "config/update",
+            ProcessingConfig(maxWidth = 10, minCheckpointFormationThreshold = 10, minCBSignatureThreshold = 3)
+          )
+        })
+    */
 
 
   }

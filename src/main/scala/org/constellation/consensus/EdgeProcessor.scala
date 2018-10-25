@@ -901,31 +901,27 @@ class EdgeProcessor(dao: DAO)
 
   def active(memPool: MemPool): Receive = {
 
-
-
-
     case DownloadComplete(latestSnapshot) =>
 
       dao.nodeState = NodeState.Ready
       dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
       dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, NodeState.Ready)))
-
-      context become active(memPool.copy(
-        snapshot = latestSnapshot,
-        acceptedCBSinceSnapshot = memPool.acceptedCBSinceSnapshot.filterNot(latestSnapshot.checkpointBlocks.contains)
-      ))
-
+      dao.threadSafeTipService.setSnapshot(latestSnapshot)
 
     case InternalHeartbeat =>
 
+      // TODO: Refactor round into InternalHeartbeat
       if (memPool.heartBeatRound % dao.snapshotInterval == 0) {
-        Future{dao.threadSafeTipService.attemptSnapshot()}(dao.edgeExecutionContext)
+        Future{
+          tryWithMetric(dao.threadSafeTipService.attemptSnapshot(), "snapshotAttempt")
+        }(dao.edgeExecutionContext)
       }
       context become active(memPool.copy(heartBeatRound = memPool.heartBeatRound + 1))
 
     case GetMemPool =>
       sender() ! memPool
 
+      // TODO: Figure out whether or not this call being here impacts DB failures
     case AcceptCheckpoint(checkpointBlock) =>
 
       // Below should be future, turned off for sanity checking
@@ -937,166 +933,17 @@ class EdgeProcessor(dao: DAO)
           dao.metricsManager ! IncrementMetric("acceptCheckpointFailure")
       }
 
-
     case go: GenesisObservation =>
 
       // Dumb way to set these as active tips, won't pass a double validation but no big deal.
       dao.acceptGenesis(go)
       dao.threadSafeTipService.acceptGenesis(go)
 
-
-/*    case HandleTransaction(transaction) =>
-
-      if (dao.nodeState == NodeState.Ready) {
-        context become active(handleTransaction(transaction))
-      }*/
-
-    case sr: SignatureRequest =>
-
-      sender() ! handleSignatureRequest(sr)
-
-/*
-    case sr: SignatureResponse =>
-
-      val (_, postCreationMemPool) = handleSignatureResponse(sr, memPool)
-      context become active(postCreationMemPool)
-*/
-
-/*
-    case fc: FinishedCheckpoint =>
-
-      if (fc.checkpointBlock.signatures.size == fc.facilitators.size) {
-        context become active(memPool.plus(fc.checkpointBlock, Some(fc.facilitators.size)))
-      }
-
-*/
-
-    case HandleCheckpoint(cb) =>
-
-    /*  val (cbAfterProcessing, postCreationMemPool) = handleCheckpoint(cb, memPool)
-      sender() ! cbAfterProcessing
-      context become active(postCreationMemPool)*/
-
+//      @deprecated
     case ConsensusRoundResult(checkpointBlock, roundHash: RoundHash[Checkpoint]) =>
       log.debug(s"handle checkpointBlock = $checkpointBlock")
 
     // handleCheckpoint(checkpointBlock, dao)
-
-  }
-
-}
-
-
-// Deprecated but maybe use later
-@deprecated class CheckpointUniqueSigner(dao: DAO)
-                                        (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
-
-  private val id: Id = dao.id
-  private val kp: KeyPair = dao.keyPair
-
-
-  import com.twitter.storehaus.cache._
-  val cache: LRUCache[String, HashSignature] = LRUCache[String, HashSignature](20000)
-
-  def receive: Receive = {
-
-    case cb: CheckpointBlock =>
-
-      val signatures = cb.hashSignaturesOf(id)
-
-      val ret = if (!cb.uniqueSignatures) {
-
-        dao.metricsManager ! IncrementMetric("checkpointSignatureDuplicateDetected")
-
-        if (signatures.size > 1) {
-          dao.metricsManager ! IncrementMetric("checkpointDuplicateSelfSignatureDetectedERROR")
-        }
-
-        None
-      } else {
-
-        val sigOpt = cache.get(cb.baseHash)
-        // val memPool = dao.checkpointMemPool.get(cb.baseHash)
-        // val dbCB = (dao.dbActor ? DBGet(cb.baseHash)).mapTo[Option[CheckpointBlock]].get()
-
-        if (cb.signedBy(id)) {
-
-          val signatures = cb.hashSignaturesOf(id)
-
-          if (sigOpt.isEmpty) {
-            dao.metricsManager ! IncrementMetric("checkpointSignatureMissingFromCache")
-            cache.put(cb.baseHash, signatures.head)
-          }
-
-          if (sigOpt.exists(hs => !signatures.contains(hs))) {
-            dao.metricsManager ! IncrementMetric("checkpointDuplicateSelfCacheSignatureDetectedERROR")
-            None
-          } else Some(cb)
-
-          // TODO: If mempool or DB is inconsistent need to update them, probably not necessarily
-
-        } else {
-
-          val cb2 = sigOpt.map{cb.plus}.getOrElse(cb.plus(kp))
-          Some(cb2)
-        }
-      }
-
-      sender() ! ret
-  }
-
-}
-
-
-
-
-// Deprecated but maybe re-use later
-@deprecated class CheckpointMemPoolVerifier(dao: DAO)
-                                           (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
-
-  // dao.heartbeatActor ! HeartbeatSubscribe
-
-  private var lastTime = System.currentTimeMillis()
-
-  def receive: Receive = {
-
-    case InternalHeartbeat =>
-
-      if (System.currentTimeMillis() > (lastTime + 10000) && dao.nodeState == NodeState.Ready) {
-
-        val peerIds = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq.map{_._1}
-
-        dao.checkpointMemPool.take(20).foreach{
-          case (_, checkpointBlock) =>
-
-            if (!checkpointBlock.witnessIds.contains(dao.id)) {
-              Future {
-                val cbPrime = updateCheckpointWithSelfSignatureEmit(checkpointBlock, dao)
-
-                // Add to memPool or update an existing hash with new signatures and check for signature threshold
-                updateCheckpointMergeMemPool(cbPrime, dao)
-
-                attemptFormCheckpointUpdateState(dao)
-              }(dao.edgeExecutionContext)
-            } else {
-              val missing = peerIds.filterNot(checkpointBlock.witnessIds.contains)
-              dao.peerManager ! APIBroadcast(_.post(s"request/signature", checkpointBlock).foreach{
-                z =>
-                  val cbP = z.body.x[CheckpointBlock]
-                  val cbPrime = updateCheckpointWithSelfSignatureEmit(cbP, dao)
-
-                  // Add to memPool or update an existing hash with new signatures and check for signature threshold
-                  updateCheckpointMergeMemPool(cbPrime, dao)
-
-                  attemptFormCheckpointUpdateState(dao)
-              }(dao.edgeExecutionContext), peerSubset = missing.toSet)
-            }
-
-
-        }
-
-        lastTime = System.currentTimeMillis()
-      }
 
   }
 

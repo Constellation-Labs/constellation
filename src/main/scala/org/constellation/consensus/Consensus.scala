@@ -16,6 +16,9 @@ import scala.collection.concurrent.TrieMap
 import scala.collection.immutable.HashMap
 import scala.concurrent.ExecutionContext
 
+// Unused currently -- bug causing issue, EdgeProcessor has a simpler version of this in
+// formCheckpoint without facilitator crosstalk or set union stage
+
 object Consensus {
   sealed trait CC
 
