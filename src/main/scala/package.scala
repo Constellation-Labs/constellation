@@ -132,10 +132,22 @@ package object constellation extends KeyUtilsExt with POWExt
 
   def signHashWithKeyB64(hash: String, privateKey: PrivateKey): String = base64(signData(hash.getBytes())(privateKey))
 
-  def tryWithMetric[T](t : => T, metricPrefix: String)(implicit dao: DAO) = {
+  def tryWithMetric[T](t : => T, metricPrefix: String)(implicit dao: DAO): Try[T] = {
     val attempt = Try{
       t
-    } match {
+    }
+    attempt match {
+      case Success(x) =>
+        dao.metricsManager ! IncrementMetric(metricPrefix + "_success")
+      case Failure(e) =>
+        e.printStackTrace()
+        dao.metricsManager ! IncrementMetric(metricPrefix + "_failure")
+    }
+    attempt
+  }
+
+  def tryToMetric[T](attempt : Try[T], metricPrefix: String)(implicit dao: DAO) = {
+    attempt match {
       case Success(x) =>
         dao.metricsManager ! IncrementMetric(metricPrefix + "_success")
       case Failure(e) =>

@@ -1,5 +1,7 @@
 package org.constellation
 
+import java.io.File
+
 import akka.stream.ActorMaterializer
 import com.typesafe.scalalogging.Logger
 import org.constellation.primitives._
@@ -16,6 +18,13 @@ class DAO extends MetricsExt
   var actorMaterializer: ActorMaterializer = _
 
   var confirmWindow : Int = 30
+
+  def dbPath: File = {
+    val f = new File(s"tmp/${id.medium}/db")
+    f.mkdirs()
+    f
+  }
+
 
   def restartNode(): Unit = {
     downloadMode = true

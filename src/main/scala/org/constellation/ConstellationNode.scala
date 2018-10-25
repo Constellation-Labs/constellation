@@ -17,6 +17,7 @@ import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.{Datastore, SimpleKVDatastore}
 import org.constellation.datastore.leveldb.LevelDBDatastore
+import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.p2p.{PeerAPI, UDPActor}
 import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
@@ -163,7 +164,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
     Props(new PeerManager(ipManager, dao)), s"PeerManager_$publicKeyHash"
   )
 
-  val dbActor = new SimpleKVDatastore(dao)
+ // val dbActor = new SimpleKVDatastore(dao)
+  val dbActor = new SwayDBDatastore(dao)
 /*
 
   val dbActor: Datastore = TypedActor(system).typedActorOf(TypedProps(

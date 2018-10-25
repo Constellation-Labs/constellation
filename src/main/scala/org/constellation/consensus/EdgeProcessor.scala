@@ -925,13 +925,17 @@ class EdgeProcessor(dao: DAO)
     case AcceptCheckpoint(checkpointBlock) =>
 
       // Below should be future, turned off for sanity checking
-      Try{ acceptCheckpoint(checkpointBlock) } match {
-        case Success(x) =>
-          dao.metricsManager ! IncrementMetric("acceptCheckpointSuccess")
-        case Failure(e) =>
-          e.printStackTrace()
-          dao.metricsManager ! IncrementMetric("acceptCheckpointFailure")
-      }
+      Future {
+        Try {
+          acceptCheckpoint(checkpointBlock)
+        } match {
+          case Success(x) =>
+            dao.metricsManager ! IncrementMetric("acceptCheckpointSuccess")
+          case Failure(e) =>
+            e.printStackTrace()
+            dao.metricsManager ! IncrementMetric("acceptCheckpointFailure")
+        }
+      }(dao.edgeExecutionContext)
 
     case go: GenesisObservation =>
 

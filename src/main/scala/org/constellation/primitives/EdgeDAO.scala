@@ -238,13 +238,13 @@ trait EdgeDAO {
   val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
 
   val edgeExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(20))
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(100))
 
   val signatureResponsePool: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(10))
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(100))
 
   val txProcessorPool: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(10))
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(100))
 
   def canCreateCheckpoint: Boolean = {
     transactionMemPool.size >= minCheckpointFormationThreshold && checkpointMemPoolThresholdMet.size >= 2

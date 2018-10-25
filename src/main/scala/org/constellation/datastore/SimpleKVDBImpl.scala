@@ -25,7 +25,11 @@ class SimpleKVDBImpl extends KVDB {
     if (res.isEmpty) {
       put(key, empty)
       empty
-    } else res.get
+    } else {
+      val res2 = res.get
+      put(key, res2)
+      res2
+    }
   }
 
   override def delete(key: String): Boolean = {
