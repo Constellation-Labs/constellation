@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 
+DIR="${BASH_SOURCE%/*}"
+if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
+
 HOSTS_FILE=${1:-hosts.txt}
+JAR_TAG=${2-dev}
 
 echo "Redeploying $HOSTS_FILE"
 cat $HOSTS_FILE
 
 sbt assembly && \
-gsutil cp target/scala-2.12/constellation-assembly-1.0.1.jar gs://constellation-dag/release/dag.jar && \
-gsutil acl ch -u AllUsers:R gs://constellation-dag/release/dag.jar && \
-pssh -h $HOSTS_FILE -i 'gsutil cp gs://constellation-dag/release/dag.jar .' && \
-pssh -h $HOSTS_FILE -i 'killall java'
-pssh -h $HOSTS_FILE -i 'rm -rf /home/$USER/tmp'
-pssh -h $HOSTS_FILE -i 'source ~/.ssh/environment; java -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.authenticate=false -Dm.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=$(cat external_host_ip) -Dcom.sun.management.jmxremote.local.only=false -jar ~/dag.jar > ~/dag.log 2>&1 &' && \
-echo "Done"
-sbt "it:testOnly org.constellation.ClusterComputeManualTest"
+pssh -h $HOSTS_FILE -i 'sudo apt install -y google-cloud-sdk' # Snapshot GCP image didn't have this for some reason, remove later
+gsutil cp target/scala-2.12/constellation-assembly-1.0.1.jar gs://constellation-dag/release/dag-$JAR_TAG.jar && \
+gsutil acl ch -u AllUsers:R gs://constellation-dag/release/dag-$JAR_TAG.jar && \
+pssh -h $HOSTS_FILE -i "gsutil cp gs://constellation-dag/release/dag-$JAR_TAG.jar ." && \
+
+source $DIR/restart.sh

@@ -9,7 +9,56 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.Try
+import better.files._
 
+
+object ComputeTestUtil {
+
+
+  // For custom deployments to non-GCP instances
+  // When deploy script is better this can go away. Was used for testing on home computer
+  def getAuxiliaryNodes(startMultiNodeMachines: Boolean = false)
+                       (implicit as: ActorSystem, mat: ActorMaterializer): (Seq[String], Seq[APIClient]) = {
+
+    var ignoreIPs = Seq[String]()
+
+    val auxAPIs = Try {
+      file"aux-hosts.txt".lines.toSeq
+    }.getOrElse(Seq()).map { ip =>
+      val split = ip.split(":")
+      val host = split.head
+      val str = host + ":" + split(1)
+      ignoreIPs :+= str
+      val offset = split(2).toInt
+      println(s"Initializing API to $str offset: $offset")
+      new APIClient(split.head, port = offset + 1, peerHTTPPort = offset + 2, internalPeerHost = split(3))
+    }
+
+    val auxMultiAPIs = Try{file"aux-multi-host.txt".lines.toSeq}.getOrElse(Seq()).flatMap{ ip =>
+      val split = ip.split(":")
+      val host = split.head
+      val str = host + ":" + split(1)
+      val offset = split(2).toInt + 2
+      Seq.tabulate(3){i =>
+        val adjustedOffset = offset + i*2
+        println(s"Initializing API to $str offset: $adjustedOffset")
+        if (startMultiNodeMachines) {
+          import scala.sys.process._
+          val javaCmd = s"java -jar ~/dag.jar $adjustedOffset > ~/dag-$i.log 2>&1 &"
+          val sshCmd = Seq("ssh", host, s"""bash -c '$javaCmd'""")
+          println(sshCmd.mkString(" "))
+          println(sshCmd.!!)
+        }
+        new APIClient(split.head, port = adjustedOffset + 1, peerHTTPPort = adjustedOffset + 2, internalPeerHost = split(3))
+
+      }
+    }
+
+    ignoreIPs -> (auxAPIs ++ auxMultiAPIs)
+
+  }
+
+}
 
 class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
@@ -24,53 +73,14 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
   "Cluster integration" should "ping a cluster, check health, go through genesis flow" in {
 
+    // Unused for standard tests, only for custom ones
+    val (ignoreIPs, auxAPIs) = ComputeTestUtil.getAuxiliaryNodes()
 
-    import better.files._
+    val primaryHostsFile = System.getenv().getOrDefault("HOSTS_FILE", "hosts.txt")
 
+    println(s"Using primary hosts file: $primaryHostsFile")
 
-
-    var ignoreIPs = Seq[String]()
-
-
-    val auxAPIs = Try{file"aux-hosts.txt".lines.toSeq}.getOrElse(Seq()).map{ ip =>
-      val split = ip.split(":")
-      val host = split.head
-      val str = host + ":" + split(1)
-      ignoreIPs :+= str
-      val offset = split(2).toInt
-      println(s"Initializing API to $str offset: $offset")
-      new APIClient(split.head, port = offset + 1, peerHTTPPort = offset + 2, internalPeerHost = split(3))
-    }
-
-/*
-    var startAuxMulti = true
-
-    val auxMultiAPIs = Try{file"aux-multi-host.txt".lines.toSeq}.getOrElse(Seq()).flatMap{ ip =>
-      val split = ip.split(":")
-      val host = split.head
-      val str = host + ":" + split(1)
-      val offset = split(2).toInt + 2
-      Seq.tabulate(3){i =>
-        val adjustedOffset = offset + i*2
-        println(s"Initializing API to $str offset: $adjustedOffset")
-        if (startAuxMulti) {
-          import scala.sys.process._
-          val javaCmd = s"java -jar ~/dag.jar $adjustedOffset > ~/dag-$i.log 2>&1 &"
-          val sshCmd = Seq("ssh", host, s"""bash -c '$javaCmd'""")
-          println(sshCmd.mkString(" "))
-          println(sshCmd.!!)
-        }
-        new APIClient(split.head, port = adjustedOffset + 1, peerHTTPPort = adjustedOffset + 2, internalPeerHost = split(3))
-
-      }
-    }
-*/
-
-
-   // val auxAPIs = Seq[APIClient]()
-   // val auxMultiAPIs = Seq[APIClient]()
-
-    val ips = file"hosts.txt".lines.toSeq.filterNot(ignoreIPs.contains)
+    val ips = file"$primaryHostsFile".lines.toSeq.filterNot(ignoreIPs.contains)
 
     println(ips)
 
@@ -80,7 +90,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
       val a = new APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
       println(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
       a
-    } // ++ auxAPIs // ++ auxMultiAPIs
+    } ++ auxAPIs
 
     println("Num APIs " + apis.size)
 
@@ -95,6 +105,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
       AddPeerRequest(a.hostName, a.udpPort, a.peerHTTPPort, a.id, auxHost = aux)
     }
 
+    // For debugging / adjusting options after compile
 /*
     println(apis.map{
       _.postSync(
@@ -105,42 +116,6 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 */
 
     sim.run(apis, addPeerRequests, attemptSetExternalIP = true)
-
-/*
-    sim.logger.info("Genesis validation passed")
-
-    sim.triggerRandom(apis)
-
-    sim.setReady(apis)
-
-    assert(sim.awaitCheckpointsAccepted(apis))
-
-    sim.logger.info("Checkpoint validation passed")
-
-    assert(sim.checkSnapshot(apis))
-
-    sim.logger.info("Snapshot validation passed")
-*/
-
-
-    /*
-        println((apis.head.hostName, apis.head.apiPort))
-        val goe = sim.genesis(apis)
-        println(goe)
-        apis.foreach{_.post("genesis/accept", goe)}
-        sim.checkGenesis(apis)
-    */
-
-/*
-
-    assert(sim.checkPeersHealthy(apis))
-    sim.logger.info("Peer validation passed")
-*/
-
-
-    // Thread.sleep(30*1000)
-   // sim.triggerRandom(apis)
-
 
 
   }
