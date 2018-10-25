@@ -4,7 +4,7 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorRef
 import akka.util.Timeout
-import org.constellation.KVDB
+import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.{AddressCacheData, Transaction, TransactionCacheData}
 
@@ -57,7 +57,7 @@ object Validation {
     * @param tx : Resolved transaction
     * @return Future of whether or not the transaction should be considered valid
     * **/
-  def validateTransaction(dbActor: KVDB, tx: Transaction): TransactionValidationStatus = {
+  def validateTransaction(dbActor: Datastore, tx: Transaction): TransactionValidationStatus = {
 
     // A transaction should only be considered in the DAG once it has been committed to a checkpoint block.
     // Before that, it exists only in the memPool and is not stored in the database.

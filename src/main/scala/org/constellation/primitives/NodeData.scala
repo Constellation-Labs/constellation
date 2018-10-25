@@ -5,14 +5,14 @@ import java.security.KeyPair
 
 import akka.actor.ActorRef
 import constellation._
-import org.constellation.KVDB
+import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.util.Signed
 
 trait NodeData {
 
-  var dbActor : KVDB = _
+  var dbActor : Datastore = _
   var peerManager: ActorRef = _
   var consensus: ActorRef = _
   var metricsManager: ActorRef = _

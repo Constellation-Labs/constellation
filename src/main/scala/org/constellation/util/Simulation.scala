@@ -40,7 +40,8 @@ class Simulation {
   }
 
   def setIdLocal(apis: Seq[APIClient]): Unit = apis.foreach{ a =>
-    val id = a.getBlocking[Id]("id")
+  logger.info(s"Getting id for ${a.hostName}:${a.apiPort}")
+    val id = a.getBlocking[Id]("id", timeoutSeconds = 60)
     a.id = id
   }
 
