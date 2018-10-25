@@ -1,4 +1,3 @@
-
 import java.net.InetSocketAddress
 import java.nio.{ByteBuffer, ByteOrder}
 import java.security.{KeyPair, PrivateKey, PublicKey}
@@ -9,7 +8,7 @@ import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
-import better.files._
+import better.files.File
 import com.google.common.hash.Hashing
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtilsExt
@@ -18,16 +17,13 @@ import org.constellation.primitives.Schema._
 import org.constellation.util.{POWExt, POWSignHelp}
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.ext.EnumNameSerializer
-import org.json4s.native._
+import org.json4s.native.{Serialization, parseJsonOpt}
 import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, ShortTypeHints}
 
 import scala.concurrent.{Await, Future}
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
-/**
-  * Project wide convenience functions.
-  */
 package object constellation extends KeyUtilsExt with POWExt
   with POWSignHelp {
 

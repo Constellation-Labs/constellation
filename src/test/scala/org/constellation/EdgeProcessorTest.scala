@@ -9,6 +9,7 @@ import org.constellation.Fixtures.{addPeerRequest, dummyTx, id}
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.consensus.{EdgeProcessor, Validation}
 import org.constellation.crypto.KeyUtils
+import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.APIClient
@@ -62,7 +63,7 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
   val invalidSpendHash = invalidTx.hash
   val randomPeer: (Id, PeerData) = (id, peerData)
 
-  val mockLvlDB = stub[KVDB]
+  val mockLvlDB = stub[Datastore]
 
   (mockLvlDB.getAddressCacheData _).when(srcHash).returns(Some(AddressCacheData(100000000000000000L, 100000000000000000L, None)))
   (mockLvlDB.getTransactionCacheData _).when(txHash).returns(Some(TransactionCacheData(tx, false)))

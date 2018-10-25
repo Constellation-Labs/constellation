@@ -15,6 +15,8 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.{CheckpointMemPoolVerifier, CheckpointUniqueSigner, Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
+import org.constellation.datastore.Datastore
+import org.constellation.datastore.leveldb.LevelDBDatastore
 import org.constellation.p2p.{PeerAPI, UDPActor}
 import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
@@ -161,9 +163,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
     Props(new PeerManager(ipManager, dao)), s"PeerManager_$publicKeyHash"
   )
 
-  val dbActor: KVDB = TypedActor(system).typedActorOf(TypedProps(
-    classOf[KVDB],
-    new KVDBImpl(dao)), s"KVDB_$publicKeyHash")
+  val dbActor: Datastore = TypedActor(system).typedActorOf(TypedProps(
+    classOf[Datastore],
+    new LevelDBDatastore(dao)), s"KVDB_$publicKeyHash")
 
   val udpActor: ActorRef =
     system.actorOf(
