@@ -10,7 +10,7 @@ import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState, Se
 import org.constellation.util.HeartbeatSubscribe
 
 import scala.concurrent.Future
-import scala.util.Random
+import scala.util.{Failure, Random, Success, Try}
 
 class RandomTransactionManager()(
   implicit val timeout: Timeout, dao: DAO
@@ -63,7 +63,15 @@ class RandomTransactionManager()(
 
         if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold && dao.generateRandomTX) {
           Future {
-            EdgeProcessor.formCheckpoint()
+            Try {
+              EdgeProcessor.formCheckpoint()
+            } match {
+              case Success(x) =>
+                dao.metricsManager ! IncrementMetric("successOnFormCheckpointCall")
+              case Failure(e) =>
+                e.printStackTrace()
+                dao.metricsManager ! IncrementMetric("failureOnFormCheckpointCall")
+            }
           }(dao.edgeExecutionContext)
         }
       }

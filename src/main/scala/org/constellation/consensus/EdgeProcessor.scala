@@ -884,6 +884,9 @@ object Snapshot {
 
 }
 
+// Debugging LevelDB
+case class AcceptCheckpoint(cb: CheckpointBlock)
+
 class EdgeProcessor(dao: DAO)
                    (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
 
@@ -897,6 +900,9 @@ class EdgeProcessor(dao: DAO)
   def receive: Receive = active(MemPool())
 
   def active(memPool: MemPool): Receive = {
+
+
+
 
     case DownloadComplete(latestSnapshot) =>
 
@@ -919,6 +925,18 @@ class EdgeProcessor(dao: DAO)
 
     case GetMemPool =>
       sender() ! memPool
+
+    case AcceptCheckpoint(checkpointBlock) =>
+
+      // Below should be future, turned off for sanity checking
+      Try{ acceptCheckpoint(checkpointBlock) } match {
+        case Success(x) =>
+          dao.metricsManager ! IncrementMetric("acceptCheckpointSuccess")
+        case Failure(e) =>
+          e.printStackTrace()
+          dao.metricsManager ! IncrementMetric("acceptCheckpointFailure")
+      }
+
 
     case go: GenesisObservation =>
 

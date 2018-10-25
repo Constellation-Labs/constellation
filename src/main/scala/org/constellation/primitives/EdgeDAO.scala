@@ -4,7 +4,7 @@ import java.util.concurrent.{Executors, TimeUnit}
 
 import akka.util.Timeout
 import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
-import org.constellation.consensus.{Snapshot, SnapshotInfo, TipData}
+import org.constellation.consensus.{AcceptCheckpoint, Snapshot, SnapshotInfo, TipData}
 import org.constellation.primitives.Schema._
 import org.constellation.{DAO, ProcessingConfig}
 
@@ -136,15 +136,8 @@ class ThreadSafeTipService() {
 
   def accept(checkpointBlock: CheckpointBlock)(implicit dao: DAO): Unit = this.synchronized {
 
-    // Below should be future, turned off for sanity checking
-    Try{ acceptCheckpoint(checkpointBlock) } match {
-      case Success(x) =>
-        dao.metricsManager ! IncrementMetric("acceptCheckpointSuccess")
-      case Failure(e) =>
-        e.printStackTrace()
-        dao.metricsManager ! IncrementMetric("acceptCheckpointFailure")
-    }
 
+    dao.edgeProcessor ! AcceptCheckpoint(checkpointBlock)
  //(dao.edgeExecutionContext)
 
     def reuseTips: Boolean = thresholdMetCheckpoints.size < dao.maxWidth
