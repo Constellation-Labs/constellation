@@ -62,7 +62,7 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
     TimeUnit.SECONDS.toMillis(timeoutSeconds).toInt
   }
 
-  def httpWithAuth(suffix: String, timeoutSeconds: Int = 90): HttpRequest = {
+  def httpWithAuth(suffix: String, timeoutSeconds: Int = 30): HttpRequest = {
     val timeoutMs = timeoutMS(timeoutSeconds)
     Http(base(suffix)).addAuthIfEnabled().timeout(timeoutMs, timeoutMs)
   }

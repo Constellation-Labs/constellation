@@ -5,8 +5,8 @@ import java.io.File
 import org.constellation.DAO
 import org.constellation.datastore.{KVDB, KVDBDatastoreImpl}
 import org.constellation.serializer.KryoSerializer
-
 import constellation._
+import org.constellation.primitives.IncrementMetric
 
 class SwayDBImpl()(implicit dao: DAO) extends KVDB {
 
@@ -19,6 +19,12 @@ class SwayDBImpl()(implicit dao: DAO) extends KVDB {
   override def put(key: String, obj: AnyRef): Boolean = {
     val triedMeter = db.put(key, KryoSerializer.serializeAnyRef(obj))
     tryToMetric(triedMeter, "dbPutAttempt")
+
+    val getCheckAttempt = get[AnyRef](key)
+    if (getCheckAttempt.isEmpty) {
+      dao.metricsManager ! IncrementMetric("dbPutVerificationFailed")
+    }
+
     triedMeter.isSuccess
   }
 

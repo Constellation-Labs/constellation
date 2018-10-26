@@ -583,56 +583,58 @@ object EdgeProcessor {
             }
         }
 
-        val attempt = Try{Future.sequence(response.values).get(180)}
+        val eventualMaybeResponses = Future.sequence(response.values)
 
-        if (attempt.isFailure) {
-          dao.metricsManager ! IncrementMetric("checkpointSignatureResponseMissing")
-          response.foreach{
-            case (responseId, fut) =>
-              val hostFailedName = facils(responseId).client.hostName + ":" + facils(responseId).client.apiPort
-              fut.value match {
-                case Some(Failure(e)) =>
-                  dao.metricsManager ! IncrementMetric("failureOnSignatureRequestFAILED_" + hostFailedName)
-                  e.printStackTrace()
-                case Some(Success(x)) =>
-                  if (x.isEmpty) {
-                    dao.metricsManager ! IncrementMetric("failureOnSignatureRequestSUCCESSOFNONE_" + hostFailedName)
+        eventualMaybeResponses.onComplete {
+          attempt =>
+            if (attempt.isFailure) {
+              dao.metricsManager ! IncrementMetric("checkpointSignatureResponseMissing")
+              response.foreach {
+                case (responseId, fut) =>
+                  val hostFailedName = facils(responseId).client.hostName + ":" + facils(responseId).client.apiPort
+                  fut.value match {
+                    case Some(Failure(e)) =>
+                      dao.metricsManager ! IncrementMetric("failureOnSignatureRequestFAILED_" + hostFailedName)
+                      e.printStackTrace()
+                    case Some(Success(x)) =>
+                      if (x.isEmpty) {
+                        dao.metricsManager ! IncrementMetric("failureOnSignatureRequestSUCCESSOFNONE_" + hostFailedName)
+                      }
+                    case None =>
+                      dao.metricsManager ! IncrementMetric("failureOnSignatureRequestNONE_" + hostFailedName)
+                    case _ =>
+                      dao.metricsManager ! IncrementMetric("unexpectedFutureOnFailedRequest_" + hostFailedName)
                   }
-                case None =>
-                  dao.metricsManager ! IncrementMetric("failureOnSignatureRequestNONE_" + hostFailedName)
-                case _ =>
-                  dao.metricsManager ! IncrementMetric("unexpectedFutureOnFailedRequest_" + hostFailedName)
               }
-          }
 
-        } else {
+            } else {
 
-          if (attempt.get.exists(_.isEmpty)) {
-            dao.metricsManager ! IncrementMetric("checkpointSignatureExistsResponseIsOption")
-          } else {
+              if (attempt.get.exists(_.isEmpty)) {
+                dao.metricsManager ! IncrementMetric("checkpointSignatureExistsResponseIsOption")
+              } else {
 
-            dao.metricsManager ! IncrementMetric("checkpointSignatureAllResponsesPresent")
-            val finalCB = attempt.get.flatMap {
-              _.map {
-                _.checkpointBlock
-              }
-            }
-              .reduce { (x: CheckpointBlock, y: CheckpointBlock) => x.plus(y) }.plus(checkpointBlock)
-            dao.threadSafeTipService.accept(finalCB)
-            // TODO: Check failures and/or remove constraint of single actor
-
+                dao.metricsManager ! IncrementMetric("checkpointSignatureAllResponsesPresent")
+                val finalCB = attempt.get.flatMap {
+                  _.map {
+                    _.checkpointBlock
+                  }
+                }
+                  .reduce { (x: CheckpointBlock, y: CheckpointBlock) => x.plus(y) }.plus(checkpointBlock)
+                dao.threadSafeTipService.accept(finalCB)
+                // TODO: Check failures and/or remove constraint of single actor
 
 
-            dao.peerInfo.foreach{ case (id, client) =>
-              client.client.post(s"finished/checkpoint", FinishedCheckpoint(finalCB, finalFacilitators)).onComplete{
-                case Failure(e) =>
-                  dao.metricsManager ! IncrementMetric("failedCheckpointFinishedMessages")
-                case _ =>
+                dao.peerInfo.foreach { case (id, client) =>
+                  client.client.post(s"finished/checkpoint", FinishedCheckpoint(finalCB, finalFacilitators)).onComplete {
+                    case Failure(e) =>
+                      dao.metricsManager ! IncrementMetric("failedCheckpointFinishedMessages")
+                    case _ =>
+                  }
+                }
+
+
               }
             }
-
-
-          }
         }
       }
     }

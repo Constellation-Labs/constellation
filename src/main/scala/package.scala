@@ -157,4 +157,17 @@ package object constellation extends KeyUtilsExt with POWExt
     attempt
   }
 
+  def attemptWithRetry(t : => Boolean, maxRetries: Int = 10, delay: Long = 2000): Boolean = {
+
+      var retries = 0
+      var done = false
+
+      do {
+        retries += 1
+        done = t
+        Thread.sleep(delay)
+      } while (!done && retries < maxRetries)
+      done
+  }
+
 }
