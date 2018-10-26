@@ -165,7 +165,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   )
 
  // val dbActor = new SimpleKVDatastore(dao)
-  val dbActor = new SwayDBDatastore(dao)
+  val dbActor = SwayDBDatastore(dao)
 /*
 
   val dbActor: Datastore = TypedActor(system).typedActorOf(TypedProps(

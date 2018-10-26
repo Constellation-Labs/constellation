@@ -1,8 +1,7 @@
 package org.constellation
 
-import java.io.File
-
 import akka.stream.ActorMaterializer
+import better.files.File
 import com.typesafe.scalalogging.Logger
 import org.constellation.primitives._
 
@@ -20,8 +19,8 @@ class DAO extends MetricsExt
   var confirmWindow : Int = 30
 
   def dbPath: File = {
-    val f = new File(s"tmp/${id.medium}/db")
-    f.mkdirs()
+    val f = File(s"tmp/${id.medium}/db")
+    f.createDirectoryIfNotExists()
     f
   }
 
