@@ -569,7 +569,7 @@ object EdgeProcessor {
         dao.metricsManager ! IncrementMetric("attemptFormCheckpointInsufficientTipsOrFacilitators")
       }
 
-      maybeTips.foreach{ case (tipSOE, facils) =>
+      maybeTips.foreach { case (tipSOE, facils) =>
 
         val checkpointBlock = createCheckpointBlock(transactions, tipSOE)(dao.keyPair)
         dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
@@ -577,69 +577,75 @@ object EdgeProcessor {
         val finalFacilitators = facils.keySet
 
         val response = facils.map { case (facilId, data) =>
-          facilId -> data.client.post(s"request/signature", SignatureRequest(checkpointBlock, finalFacilitators + dao.id))
-            .map {
-              _.body.x[Option[SignatureResponse]]
-            }
+          facilId -> tryWithMetric( // TODO: onComplete instead, debugging with other changes first.
+            {
+              data.client.postSync(s"request/signature", SignatureRequest(checkpointBlock, finalFacilitators + dao.id))
+            },
+            "formCheckpointPOSTCallSignatureRequest"
+          )
         }
 
-        val eventualMaybeResponses = Future.sequence(response.values)
+        if (response.exists(_._2.isFailure)) {
 
-        eventualMaybeResponses.onComplete {
-          attempt =>
-            if (attempt.isFailure) {
-              dao.metricsManager ! IncrementMetric("checkpointSignatureResponseMissing")
-              response.foreach {
-                case (responseId, fut) =>
-                  val hostFailedName = facils(responseId).client.hostName + ":" + facils(responseId).client.apiPort
-                  fut.value match {
-                    case Some(Failure(e)) =>
-                      dao.metricsManager ! IncrementMetric("failureOnSignatureRequestFAILED_" + hostFailedName)
-                      e.printStackTrace()
-                    case Some(Success(x)) =>
-                      if (x.isEmpty) {
-                        dao.metricsManager ! IncrementMetric("failureOnSignatureRequestSUCCESSOFNONE_" + hostFailedName)
-                      }
-                    case None =>
-                      dao.metricsManager ! IncrementMetric("failureOnSignatureRequestNONE_" + hostFailedName)
-                    case _ =>
-                      dao.metricsManager ! IncrementMetric("unexpectedFutureOnFailedRequest_" + hostFailedName)
-                  }
-              }
+          dao.metricsManager ! IncrementMetric("formCheckpointSignatureResponseMissing")
+
+        } else {
+
+          val nonFailedResponses = response.mapValues(_.get)
+
+          if (!nonFailedResponses.forall(_._2.isSuccess)) {
+
+            dao.metricsManager ! IncrementMetric("formCheckpointSignatureResponseNot2xx")
+
+          } else {
+
+            val parsed = nonFailedResponses.mapValues(v =>
+              tryWithMetric({
+                v.body.x[Option[SignatureResponse]]
+              }, "formCheckpointSignatureResponseJsonParsingFailed")
+            )
+
+            if (parsed.exists(_._2.isFailure)) {
+
+              dao.metricsManager ! IncrementMetric("formCheckpointSignatureResponseExistsParsingFailure")
 
             } else {
 
-              if (attempt.get.exists(_.isEmpty)) {
-                dao.metricsManager ! IncrementMetric("checkpointSignatureExistsResponseIsOption")
+              val withValue = parsed.mapValues(_.get)
+
+              if (withValue.exists(_._2.isEmpty)) {
+
+                dao.metricsManager ! IncrementMetric("formCheckpointSignatureResponseEmpty")
+
               } else {
 
-                dao.metricsManager ! IncrementMetric("checkpointSignatureAllResponsesPresent")
-                val finalCB = attempt.get.flatMap {
-                  _.map {
-                    _.checkpointBlock
-                  }
+                // Successful formation
+                dao.metricsManager ! IncrementMetric("formCheckpointSignatureResponseAllResponsesPresent")
+
+                val blocks = withValue.values.map {
+                  _.get.checkpointBlock
                 }
-                  .reduce { (x: CheckpointBlock, y: CheckpointBlock) => x.plus(y) }.plus(checkpointBlock)
+                val finalCB = blocks.reduce { (x: CheckpointBlock, y: CheckpointBlock) => x.plus(y) }.plus(checkpointBlock)
                 dao.threadSafeTipService.accept(finalCB)
                 // TODO: Check failures and/or remove constraint of single actor
-
-
                 dao.peerInfo.foreach { case (id, client) =>
-                  client.client.post(s"finished/checkpoint", FinishedCheckpoint(finalCB, finalFacilitators)).onComplete {
-                    case Failure(e) =>
-                      dao.metricsManager ! IncrementMetric("failedCheckpointFinishedMessages")
-                    case _ =>
-                  }
+                  tryWithMetric(
+                    client.client.postSync(s"finished/checkpoint", FinishedCheckpoint(finalCB, finalFacilitators)),
+                    "finishedCheckpointBroadcast"
+                  )
                 }
 
-
               }
+
             }
+
+          }
+
         }
       }
     }
-
   }
+
 
   // Temporary for testing join/leave logic.
   def handleSignatureRequest(sr: SignatureRequest)(implicit dao: DAO): SignatureResponse = {
@@ -653,119 +659,6 @@ object EdgeProcessor {
       )*/
    // } else None
   }
-
-/*
-  def handleSignatureResponse(sr: SignatureResponse, memPool: MemPool)(implicit kp: KeyPair, dao: DAO): (CheckpointBlock, MemPool) = {
-
-    val cb = sr.checkpointBlock
-
-    val (cbAfterProcessing, updatedMemPool) = memPool.checkpoints.get(cb.baseHash).map{
-      mcb =>
-
-        if (mcb.signatureConflict(cb)) {
-          dao.metricsManager ! IncrementMetric("checkpointSignatureMergeConflictDetectedERROR")
-        }
-
-        val updated1 = mcb.plus(cb)
-        val updated = updated1 //if (updated1.signedBy(dao.id)) updated1 else updated1.plus(kp)
-        updated -> memPool.plus(updated, facilitatorCount = Some(sr.facilitators.size))
-    }.getOrElse{
-
-      // Not stored anywhere, first observance
-      dao.metricsManager ! IncrementMetric("checkpointFirstObserved")
-
-      val updated = cb // if (cb.signedBy(dao.id)) cb else cb.plus(kp)
-      updated -> memPool.plus(updated, facilitatorCount = Some(sr.facilitators.size))
-
-    }
-
-    if (updatedMemPool.thresholdMetCheckpoints.contains(cbAfterProcessing.baseHash)) {
-      dao.peerManager ! APIBroadcast(_.post(s"finished/checkpoint", FinishedCheckpoint(cbAfterProcessing, sr.facilitators)))
-    }
-
-
-    // TODO: Return actual newly formed checkpoint as optional metadata to attach to a proper response
-    // To the sender() with all this info including the cache lookup and validation status etc. and what updates happened
-
-    val postCreationMemPool = formCheckpoint(updatedMemPool)
-
-    dao.metricsManager ! UpdateMetric("checkpointMemPool", postCreationMemPool.checkpoints.size.toString)
-    dao.metricsManager ! UpdateMetric("checkpointMemPoolThresholdMet", postCreationMemPool.thresholdMetCheckpoints.size.toString)
-    dao.metricsManager ! UpdateMetric("transactionMemPool", postCreationMemPool.transactions.size.toString)
-
-    cbAfterProcessing -> postCreationMemPool
-
-  }
-*/
-
-/*
-  def handleCheckpoint(cb: CheckpointBlock, memPool: MemPool)(implicit kp: KeyPair, dao: DAO): (CheckpointBlock, MemPool) = {
-    val (cbAfterProcessing, updatedMemPool) = if (!cb.uniqueSignatures) {
-      dao.metricsManager ! IncrementMetric("checkpointUniqueSignaturesFailure")
-      cb -> memPool
-    } else {
-
-      val cache = dao.dbActor.getCheckpointCacheData(cb.baseHash)
-
-      cache.map { c =>
-        dao.metricsManager ! IncrementMetric("checkpointCacheFound")
-        // Do nothing, we've already signed and accepted it
-        c.checkpointBlock -> memPool
-      }.getOrElse{
-
-        dao.metricsManager ! IncrementMetric("checkpointCacheEmpty")
-
-        // Check if stored as threshold met
-        memPool.thresholdMetCheckpoints.get(cb.baseHash).map{
-          tmcb =>
-            dao.metricsManager ! IncrementMetric("checkpointThresholdMetLookupFound")
-            // Do nothing, threshold already met
-            tmcb.checkpointBlock -> memPool
-        }.getOrElse{
-          // Check if in memPool now
-          memPool.checkpoints.get(cb.baseHash).map{
-            mcb =>
-
-              if (mcb.signatureConflict(cb)) {
-                dao.metricsManager ! IncrementMetric("checkpointSignatureMergeConflictDetectedERROR")
-              }
-
-              val updated1 = mcb.plus(cb)
-              val updated = if (updated1.signedBy(dao.id)) updated1 else updated1.plus(kp)
-              updated -> memPool.plus(updated)
-          }.getOrElse{
-
-            // Not stored anywhere, first observance
-            dao.metricsManager ! IncrementMetric("checkpointFirstObserved")
-
-            val updated = if (cb.signedBy(dao.id)) cb else cb.plus(kp)
-            updated -> memPool.plus(updated)
-
-          }
-        }
-      }
-    }
-
-
-
-    if (cbAfterProcessing != cb) {
-      dao.peerManager ! APIBroadcast(_.put(s"checkpoint/${cbAfterProcessing.baseHash}", cbAfterProcessing))
-    }
-
-
-    // TODO: Return actual newly formed checkpoint as optional metadata to attach to a proper response
-    // To the sender() with all this info including the cache lookup and validation status etc. and what updates happened
-
-    val postCreationMemPool = formCheckpoint(updatedMemPool)
-
-    dao.metricsManager ! UpdateMetric("checkpointMemPool", postCreationMemPool.checkpoints.size.toString)
-    dao.metricsManager ! UpdateMetric("checkpointMemPoolThresholdMet", postCreationMemPool.thresholdMetCheckpoints.size.toString)
-    dao.metricsManager ! UpdateMetric("transactionMemPool", postCreationMemPool.transactions.size.toString)
-
-    cbAfterProcessing -> postCreationMemPool
-
-  }
-*/
 
 }
 
@@ -910,34 +803,17 @@ class EdgeProcessor(dao: DAO)
       dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, NodeState.Ready)))
       dao.threadSafeTipService.setSnapshot(latestSnapshot)
 
-    case InternalHeartbeat =>
+    case InternalHeartbeat(round) =>
 
       // TODO: Refactor round into InternalHeartbeat
-      if (memPool.heartBeatRound % dao.snapshotInterval == 0) {
-        Future{
-          tryWithMetric(dao.threadSafeTipService.attemptSnapshot(), "snapshotAttempt")
-        }(dao.edgeExecutionContext)
+      if (round % dao.snapshotInterval == 0) {
+        futureTryWithTimeoutMetric(
+          dao.threadSafeTipService.attemptSnapshot(), "snapshotAttempt"
+        )(dao.edgeExecutionContext, dao)
       }
-      context become active(memPool.copy(heartBeatRound = memPool.heartBeatRound + 1))
 
     case GetMemPool =>
       sender() ! memPool
-
-      // TODO: Figure out whether or not this call being here impacts DB failures
-    case AcceptCheckpoint(checkpointBlock) =>
-
-      // Below should be future, turned off for sanity checking
-      Future {
-        Try {
-          acceptCheckpoint(checkpointBlock)
-        } match {
-          case Success(x) =>
-            dao.metricsManager ! IncrementMetric("acceptCheckpointSuccess")
-          case Failure(e) =>
-            e.printStackTrace()
-            dao.metricsManager ! IncrementMetric("acceptCheckpointFailure")
-        }
-      }(dao.edgeExecutionContext)
 
     case go: GenesisObservation =>
 

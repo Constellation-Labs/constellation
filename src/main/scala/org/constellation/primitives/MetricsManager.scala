@@ -19,8 +19,6 @@ case class IncrementMetric(key: String)
 
 class MetricsManager()(implicit dao: DAO) extends Actor {
 
-  var round = 0L
-
   val logger = Logger("Metrics")
 
   var lastCheckTime: Long = System.currentTimeMillis()
@@ -42,9 +40,8 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
       val updatedMap = metrics + (key -> metrics.get(key).map{z => (z.toLong + 1).toString}.getOrElse("1"))
       context become active(updatedMap)
 
-    case InternalHeartbeat =>
+    case InternalHeartbeat(round) =>
 
-      round += 1
       if (round % dao.processingConfig.metricCheckInterval == 0) {
 
         val peers = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq

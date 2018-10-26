@@ -20,7 +20,8 @@ import org.json4s.ext.EnumNameSerializer
 import org.json4s.native.{Serialization, parseJsonOpt}
 import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, ShortTypeHints}
 
-import scala.concurrent.{Await, Future}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
@@ -170,4 +171,58 @@ package object constellation extends KeyUtilsExt with POWExt
       done
   }
 
+
+  def withTimeout[T](fut:Future[T])(implicit ec:ExecutionContext, after:Duration): Future[T] = {
+    val prom = Promise[T]()
+    val timeout = TimeoutScheduler.scheduleTimeout(prom, after)
+    val combinedFut = Future.firstCompletedOf(List(fut, prom.future))
+    fut onComplete{case result => timeout.cancel()}
+    combinedFut
+  }
+
+  import scala.concurrent.duration._
+  def withTimeoutSecondsAndMetric[T](fut:Future[T], metricPrefix: String, timeoutSeconds: Int = 10)
+                                    (implicit ec:ExecutionContext, dao: DAO): Future[T] = {
+    val prom = Promise[T]()
+    val after = timeoutSeconds.seconds
+    val timeout = TimeoutScheduler.scheduleTimeout(prom, after)
+    val combinedFut = Future.firstCompletedOf(List(fut, prom.future))
+    fut onComplete{
+      result =>
+
+        dao.metricsManager ! IncrementMetric(metricPrefix + s"_timeoutAfter${timeoutSeconds}seconds")
+        timeout.cancel()
+    }
+    combinedFut
+  }
+
+  def futureTryWithTimeoutMetric[T](t: => T, metricPrefix: String, timeoutSeconds: Int = 10)
+                             (implicit ec:ExecutionContext, dao: DAO): Future[Try[T]] = {
+    withTimeoutSecondsAndMetric(
+      Future{
+        tryWithMetric(t, metricPrefix) // This is an inner try as opposed to an onComplete so we can
+        // Have different metrics for timeout vs actual failure.
+      }(ec),
+      metricPrefix
+    )
+  }
+
+}
+
+object TimeoutScheduler{
+
+  import org.jboss.netty.util.{HashedWheelTimer, TimerTask, Timeout}
+  import java.util.concurrent.TimeUnit
+  import scala.concurrent.duration.Duration
+  import scala.concurrent.Promise
+  import java.util.concurrent.TimeoutException
+
+  val timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
+  def scheduleTimeout(promise:Promise[_], after:Duration) = {
+    timer.newTimeout(new TimerTask{
+      def run(timeout:Timeout){
+        promise.failure(new TimeoutException("Operation timed out after " + after.toMillis + " millis"))
+      }
+    }, after.toNanos, TimeUnit.NANOSECONDS)
+  }
 }

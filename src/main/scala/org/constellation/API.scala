@@ -36,13 +36,16 @@ case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = Non
 
 case class ProcessingConfig(
                              maxWidth: Int = 20,
-                             minCheckpointFormationThreshold: Int = 300,
+                             minCheckpointFormationThreshold: Int = 50,
                              numFacilitatorPeers: Int = 2,
-                             randomTXPerRound: Int = 100,
+                             randomTXPerRound: Int = 5,
                              metricCheckInterval: Int = 60,
                              maxMemPoolSize: Int = 1000,
-                             minPeerTimeAddedSeconds: Int = 30
-                              )
+                             minPeerTimeAddedSeconds: Int = 30,
+                             maxActiveTipsAllowedInMemory: Int = 1000,
+                             maxAcceptedCBHashesInMemory: Int = 5000
+)
+
 
 class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   extends Json4sSupport
@@ -70,18 +73,15 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
   val getEndpoints: Route =
     extractClientIP { clientIP =>
       get {
-        path("genesis") {
-          complete(dao.genesisObservation)
-        } ~
         path("checkpoint" / Segment) { s =>
           val res = dao.dbActor.getCheckpointCacheData(s).map{_.checkpointBlock}
           complete(res)
         } ~
-          path("restart") {
+          path("restart") { // TODO: Revisit / fix
             dao.restartNode()
             complete(StatusCodes.OK)
           } ~
-          path("setKeyPair") {
+          path("setKeyPair") { // TODO: Change to keys/set - update ui call
             parameter('keyPair) { kpp =>
               logger.debug("Set key pair " + kpp)
               val res = if (kpp.length > 10) {
@@ -104,10 +104,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
             val pair = constellation.makeKeyPair()
             wallet :+= pair
             complete(pair)
-          } ~
-          path("stackSize" / IntNumber) { num =>
-            minGenesisDistrSize = num
-            complete(StatusCodes.OK)
           } ~
           path("makeKeyPairs" / IntNumber) { numPairs =>
             val pair = Seq.fill(numPairs) {

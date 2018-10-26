@@ -72,7 +72,7 @@ class PeerManager(ipManager: IPManager, dao: DAO)(implicit val materialize: Acto
     case a @ AddPeerRequest(host, udpPort, port, id, ns, auxHost) =>
 
       val adjustedHost = if (auxHost.nonEmpty) auxHost else host
-      val client =  APIClient(adjustedHost, port)
+      val client =  APIClient(adjustedHost, port)(dao.edgeExecutionContext)
 
       client.id = id
       val updatedPeerInfo = peerInfo + (id -> PeerData(a, client, nodeState = ns))

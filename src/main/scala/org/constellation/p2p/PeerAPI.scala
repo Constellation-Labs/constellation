@@ -151,14 +151,15 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
       pathPrefix("request") {
         path("signature") {
           entity(as[SignatureRequest]) { sr =>
-            dao.metricsManager ! IncrementMetric("apiRXSignatureRequest")
-            onComplete(Future{EdgeProcessor.handleSignatureRequest(sr)}(dao.signatureResponsePool)) {
-              case Failure(e) =>
-                e.printStackTrace()
-                dao.metricsManager ! IncrementMetric("signatureResponseFAILEDRespondingwithEmpty")
-                complete(None)
-              case Success(r) =>
-                complete(Some(r))
+            dao.metricsManager ! IncrementMetric("peerApiRXSignatureRequest")
+            onComplete(
+              futureTryWithTimeoutMetric(
+                EdgeProcessor.handleSignatureRequest(sr), "peerAPIHandleSignatureRequest"
+              )(dao.signatureResponsePool, dao)
+            ) {
+              result => // ^ Errors captured above
+                val maybeResponse = result.toOption.flatMap {_.toOption}
+                complete(maybeResponse)
             }
           }
         }
@@ -167,14 +168,16 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
         path ("checkpoint") {
           entity(as[FinishedCheckpoint]) { fc =>
             // TODO: Validation / etc.
-            dao.metricsManager ! IncrementMetric("apiRXFinishedCheckpoint")
-            val attempt = Future{dao.threadSafeTipService.accept(fc.checkpointBlock)}(dao.edgeExecutionContext)
-            attempt.onComplete{
-              case Failure(e) => e.printStackTrace(); dao.metricsManager ! IncrementMetric("finishedCheckpointAcceptanceFailure")
-              case Success(x) => dao.metricsManager ! IncrementMetric("finishedCheckpointAcceptanceSuccess")
+            dao.metricsManager ! IncrementMetric("peerApiRXFinishedCheckpoint")
+            onComplete(
+              futureTryWithTimeoutMetric(
+                dao.threadSafeTipService.accept(fc.checkpointBlock), "peerAPIFinishedCheckpointRX"
+              )(dao.edgeExecutionContext, dao)
+            ) {
+              result => // ^ Errors captured above
+                val maybeResponse = result.toOption.flatMap {_.toOption}
+                complete(maybeResponse)
             }
-
-            complete(StatusCodes.OK)
           }
         }
       }

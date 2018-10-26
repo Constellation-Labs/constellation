@@ -203,8 +203,6 @@ object Schema {
   case class ResolvedObservationEdge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
   (left: L, right: R, data: Option[D] = None)
 
-  case class EdgeCell(members: mutable.SortedSet[EdgeSheaf])
-
   case class Transaction(edge: Edge[Address, Address, TransactionEdgeData]) {
 
     def store(dbActor: Datastore, cache: TransactionCacheData): Unit = {
@@ -463,15 +461,6 @@ object Schema {
 
   }
 
-  case class EdgeSheaf(
-                        signedObservationEdge: SignedObservationEdge,
-                        parent: String,
-                        height: Long,
-                        depth: Int,
-                        score: Double
-                      )
-
-
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
   case class ValidPeerIPData(canonicalHostName: String, port: Int)
 
@@ -520,7 +509,9 @@ object Schema {
   final case object ToggleHeartbeat extends InternalCommand
 
   // TODO: Add round to internalheartbeat, would be better than replicating it all over the place
-  final case object InternalHeartbeat extends InternalCommand
+
+  case class InternalHeartbeat(round: Long = 0L)
+
   final case object InternalBundleHeartbeat extends InternalCommand
 
   final case class ValidateTransaction(tx: Transaction) extends InternalCommand

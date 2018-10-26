@@ -25,6 +25,12 @@ class DAO extends MetricsExt
     f
   }
 
+  def snapshotPath: File = {
+    val f = new File(s"tmp/${id.medium}/snapshots")
+    f.mkdirs()
+    f
+  }
+
 
   def restartNode(): Unit = {
     downloadMode = true

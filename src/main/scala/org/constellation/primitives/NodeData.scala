@@ -21,7 +21,6 @@ trait NodeData {
   var heartbeatActor: ActorRef = _
   var cpSigner: ActorRef = _
 
-  var minGenesisDistrSize: Int = 3
   @volatile var downloadMode: Boolean = true
   @volatile var downloadInProgress: Boolean = false
   var generateRandomTX: Boolean = false

@@ -19,7 +19,7 @@ object ComputeTestUtil {
   // For custom deployments to non-GCP instances
   // When deploy script is better this can go away. Was used for testing on home computer
   def getAuxiliaryNodes(startMultiNodeMachines: Boolean = false)
-                       (implicit as: ActorSystem, mat: ActorMaterializer): (Seq[String], Seq[APIClient]) = {
+                       (implicit as: ActorSystem, mat: ActorMaterializer, ec: ExecutionContextExecutor): (Seq[String], Seq[APIClient]) = {
 
     var ignoreIPs = Seq[String]()
 

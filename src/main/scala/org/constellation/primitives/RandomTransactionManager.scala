@@ -17,23 +17,30 @@ class RandomTransactionManager()(
 ) extends Actor {
 
   dao.heartbeatActor ! HeartbeatSubscribe
+  private var lastExecutionTime = System.currentTimeMillis()
 
   override def receive: Receive = {
+
 
     /**
       * This spawns random transactions for simulating load. For testing purposes only.
       */
-    case InternalHeartbeat =>
+    case InternalHeartbeat(_) =>
 
       tryWithMetric ({
-        if (dao.metricsManager != null) {
+
+
+        if (dao.metricsManager != null && System.currentTimeMillis() > (lastExecutionTime + 2*1000) ) {
+
+          lastExecutionTime = System.currentTimeMillis()
+
           val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
           dao.metricsManager ! UpdateMetric("transactionMemPoolSize", memPoolCount.toString)
           if (memPoolCount < dao.processingConfig.maxMemPoolSize && dao.generateRandomTX && dao.nodeState == NodeState.Ready) {
 
             val peerQuery = dao.peerInfo.toSeq //(dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
             val peerIds = peerQuery.filter { case (_, pd) =>
-              pd.timeAdded < (System.currentTimeMillis() - 30 * 1000) && pd.nodeState == NodeState.Ready
+              pd.timeAdded < (System.currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000) && pd.nodeState == NodeState.Ready
             }
 
             if (peerIds.nonEmpty) {
@@ -67,17 +74,11 @@ class RandomTransactionManager()(
           }
 
           if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold && dao.generateRandomTX) {
-            Future {
-              Try {
-                EdgeProcessor.formCheckpoint()
-              } match {
-                case Success(x) =>
-                  dao.metricsManager ! IncrementMetric("successOnFormCheckpointCall")
-                case Failure(e) =>
-                  e.printStackTrace()
-                  dao.metricsManager ! IncrementMetric("failureOnFormCheckpointCall")
-              }
-            }(dao.edgeExecutionContext)
+            futureTryWithTimeoutMetric(
+              EdgeProcessor.formCheckpoint(),
+              "formCheckpointFromRandomTXManager",
+              timeoutSeconds = 30
+            )(dao.edgeExecutionContext, dao)
           }
         }
       }, "randomTransactionRound")

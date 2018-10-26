@@ -15,17 +15,21 @@ import scala.concurrent.{ExecutionContext, Future}
 
 object APIClient {
   def apply(host: String = "127.0.0.1", port: Int, udpPort: Int = 16180)
-           (implicit system: ActorSystem, materialize: ActorMaterializer
+           (
+             implicit executionContext: ExecutionContext
+             //implicit system: ActorSystem, materialize: ActorMaterializer
   ): APIClient = {
     new APIClient(host, port)
   }
 }
 
 class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9001, val internalPeerHost: String = "")(
-  implicit val system: ActorSystem,
-  implicit val materialize: ActorMaterializer) {
+ // implicit val system: ActorSystem,
+ // implicit val materialize: ActorMaterializer
+ implicit val executionContext: ExecutionContext
+  ) {
 
-  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
+  //implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
 
   val hostName: String = host
   var id: Id = _
