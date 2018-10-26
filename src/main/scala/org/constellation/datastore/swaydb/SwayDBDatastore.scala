@@ -1,20 +1,21 @@
 package org.constellation.datastore.swaydb
 
-import java.io.File
-
-import org.constellation.DAO
-import org.constellation.datastore.{KVDB, KVDBDatastoreImpl}
-import org.constellation.serializer.KryoSerializer
 import constellation._
+import org.constellation.DAO
+import org.constellation.datastore.proxy.KVDBAuditProxy
+import org.constellation.datastore.{KVDB, KVDBDatastoreImpl}
 import org.constellation.primitives.IncrementMetric
+import org.constellation.serializer.KryoSerializer
 
-class SwayDBImpl()(implicit dao: DAO) extends KVDB {
+class SwayDBImpl(dao: DAO) extends KVDB {
+
+  implicit val d: DAO = dao
 
   import swaydb._
   import swaydb.serializers.Default._ //import default serializers
 
   //Create a persistent database. If the directories do not exist, they will be created.
-  private val db = SwayDB.persistent[String, Array[Byte]](dir = dao.dbPath.toPath.resolve("disk1")).get
+  private val db = SwayDB.persistent[String, Array[Byte]](dir = (dao.dbPath / "disk1").path).get
 
   override def put(key: String, obj: AnyRef): Boolean = {
     val triedMeter = db.put(key, KryoSerializer.serializeAnyRef(obj))
@@ -58,8 +59,15 @@ class SwayDBImpl()(implicit dao: DAO) extends KVDB {
   }
 }
 
-class SwayDBDatastore(dao: DAO) extends KVDBDatastoreImpl {
+object SwayDBImpl {
+  def apply(dao: DAO): SwayDBImpl = new SwayDBImpl(dao)
+}
 
-  val kvdb = new SwayDBImpl()(dao)
+class SwayDBDatastore(dao: DAO) extends KVDBDatastoreImpl {
+  val kvdb = KVDBAuditProxy(SwayDBImpl(dao))
+}
+
+object SwayDBDatastore {
+  def apply(dao: DAO): SwayDBDatastore = new SwayDBDatastore(dao)
 }
 
