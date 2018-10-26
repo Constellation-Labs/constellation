@@ -188,11 +188,19 @@ package object constellation extends KeyUtilsExt with POWExt
     val timeout = TimeoutScheduler.scheduleTimeout(prom, after)
     val combinedFut = Future.firstCompletedOf(List(fut, prom.future))
     fut onComplete{
-      result =>
-
-        dao.metricsManager ! IncrementMetric(metricPrefix + s"_timeoutAfter${timeoutSeconds}seconds")
+      _ =>
         timeout.cancel()
     }
+    prom.future.onComplete{
+      result =>
+        if (result.isSuccess) {
+          dao.metricsManager ! IncrementMetric(metricPrefix + s"_timeoutAfter${timeoutSeconds}seconds")
+        }
+        if (result.isFailure) {
+          dao.metricsManager ! IncrementMetric(metricPrefix + s"_timeoutFAILUREDEBUGAfter${timeoutSeconds}seconds")
+        }
+    }
+
     combinedFut
   }
 
