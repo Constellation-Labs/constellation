@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
+import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo}
 import org.constellation.primitives.Schema.{CheckpointBlock, Id, MetricsResult}
 import org.json4s.native.Serialization
@@ -26,10 +27,12 @@ object APIClient {
 class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9001, val internalPeerHost: String = "")(
  // implicit val system: ActorSystem,
  // implicit val materialize: ActorMaterializer
- implicit val executionContext: ExecutionContext
+ implicit val executionContext: ExecutionContext,
+ dao: DAO = null
   ) {
 
   //implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
+  val daoOpt = Option(dao)
 
   val hostName: String = host
   var id: Id = _
@@ -66,9 +69,14 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
     TimeUnit.SECONDS.toMillis(timeoutSeconds).toInt
   }
 
+  def optHeaders: Map[String, String] = daoOpt.map{
+    d =>
+      Map("Remote-Address" -> d.externalHostString, "X-Real-IP" -> d.externalHostString)
+  }.getOrElse(Map())
+
   def httpWithAuth(suffix: String, timeoutSeconds: Int = 30): HttpRequest = {
     val timeoutMs = timeoutMS(timeoutSeconds)
-    Http(base(suffix)).addAuthIfEnabled().timeout(timeoutMs, timeoutMs)
+    Http(base(suffix)).addAuthIfEnabled().timeout(timeoutMs, timeoutMs).headers(optHeaders)
   }
 
   implicit val serialization: Serialization.type = native.Serialization

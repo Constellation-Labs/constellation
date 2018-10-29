@@ -66,8 +66,16 @@ import scala.concurrent.ExecutionContext
 
       File(".dag").createDirectoryIfNotExists()
 
+      KeyUtils.insertProvider()
+
       val keyPairPath = ".dag/key"
       val localKeyPair = Try{File(keyPairPath).lines.mkString.x[KeyPair]}
+
+      localKeyPair match {
+        case Failure(e) =>
+          e.printStackTrace()
+        case _ =>
+      }
 
 
       // TODO: update to take from config

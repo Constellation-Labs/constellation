@@ -63,6 +63,12 @@ case class HashSignature(signature: String,
   }
 }
 
+case class SingleHashSignature(hash: String, hashSignature: HashSignature) {
+  def valid: Boolean = hashSignature.valid(hash)
+
+
+}
+
 case class SignatureBatch(
                          hash: String,
                          signatures: Seq[HashSignature]

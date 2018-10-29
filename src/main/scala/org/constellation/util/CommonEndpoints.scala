@@ -13,7 +13,11 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
 import org.constellation.consensus.{GetMemPool, MemPool}
+import org.constellation.primitives.Schema.NodeState.NodeState
 import org.json4s.native.Serialization
+
+
+case class NodeStateInfo(nodeState: NodeState)
 
 trait CommonEndpoints extends Json4sSupport {
 
@@ -51,7 +55,7 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.dbActor.getAddressCacheData(a).map{_.balanceByLatestSnapshot})
       } ~
     path("state") {
-      complete(dao.nodeState)
+      complete(NodeStateInfo(dao.nodeState))
     }
   }
 }

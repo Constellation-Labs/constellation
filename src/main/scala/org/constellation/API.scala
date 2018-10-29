@@ -154,10 +154,11 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           }
         } ~
         path("add") {
-          entity(as[HostPort]) { case HostPort(host, port) =>
+          entity(as[HostPort]) { case hp @ HostPort(host, port) =>
 
             onComplete{
               futureTryWithTimeoutMetric({
+                logger.info(s"Attempting to register with $hp")
                 new APIClient(host, port).postSync(
                   "register",
                   PeerRegistrationRequest(externalHostString, dao.externlPeerHTTPPort, dao.id.b58)
@@ -193,6 +194,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         } else {
           dao.nodeState = NodeState.PendingDownload
         }
+        dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
         dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
         complete(StatusCodes.OK)
       } ~

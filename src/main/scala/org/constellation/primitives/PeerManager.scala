@@ -9,8 +9,11 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.p2p.{PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{Id, NodeState}
-import org.constellation.util.{APIClient, EncodedPublicKey, HashSignature}
+import org.constellation.util._
 import org.constellation.{AddPeerRequest, DAO, HostPort, RemovePeerRequest}
+
+import scala.concurrent.ExecutionContextExecutor
+import scala.util.Random
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 import scala.collection.Set
@@ -32,6 +35,8 @@ case class Deregistration(ip: String, port: Int, key: String)
 
 case object GetPeerInfo
 
+case class UpdatePeerInfo(peerData: PeerData)
+
 class PeerManager(ipManager: IPManager, dao: DAO)(implicit val materialize: ActorMaterializer) extends Actor {
 
   val logger = Logger(s"PeerManager")
@@ -41,25 +46,33 @@ class PeerManager(ipManager: IPManager, dao: DAO)(implicit val materialize: Acto
   implicit val system: ActorSystem = context.system
 
 
-  private def updatePeerInfo(peerInfo: Map[Id, PeerData], id: Id, peerData: PeerData): Unit = {
-    val updatedPeerInfo = peerInfo + (id -> peerData)
-
-    val remoteAddr = RemoteAddress(new InetSocketAddress(peerData.client.hostName, peerData.client.apiPort))
-    ipManager.addKnownIP(remoteAddr)
-
+  private def updateMetricsAndDAO(updatedPeerInfo: Map[Id, PeerData]): Unit = {
     dao.metricsManager ! UpdateMetric(
       "peers",
       updatedPeerInfo.map { case (idI, clientI) =>
-        val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort}"
+        val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort - 1}"
         s"${idI.short} API: $addr"
       }.mkString(" --- ")
     )
     dao.peerInfo = updatedPeerInfo
-    logger.info(s"Added $remoteAddr to known peers.")
     context become active(updatedPeerInfo)
   }
 
+  private def updatePeerInfo(peerInfo: Map[Id, PeerData], peerData: PeerData): Unit = {
+    val updatedPeerInfo = peerInfo + (peerData.client.id -> peerData)
+
+    val remoteAddr = RemoteAddress(new InetSocketAddress(peerData.client.hostName, peerData.client.apiPort))
+    ipManager.addKnownIP(remoteAddr)
+    logger.info(s"Added $remoteAddr to known peers.")
+
+    updateMetricsAndDAO(updatedPeerInfo)
+  }
+
   def active(peerInfo: Map[Id, PeerData]): Receive = {
+
+    case UpdatePeerInfo(peerData) =>
+
+      updatePeerInfo(peerInfo, peerData)
 
     case RemovePeerRequest(hp, id) =>
 
@@ -69,15 +82,7 @@ class PeerManager(ipManager: IPManager, dao: DAO)(implicit val materialize: Acto
         !badHost && !badId
       }
 
-      dao.metricsManager ! UpdateMetric(
-        "peers",
-        updatedPeerInfo.map { case (idI, clientI) =>
-          val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort - 1}"
-          s"${idI.short} API: $addr"
-        }.mkString(" --- ")
-      )
-      dao.peerInfo = updatedPeerInfo
-      context become active (updatedPeerInfo)
+      updateMetricsAndDAO(updatedPeerInfo)
 
     case SetNodeStatus(id, nodeStatus) =>
 
@@ -86,7 +91,7 @@ class PeerManager(ipManager: IPManager, dao: DAO)(implicit val materialize: Acto
           peerInfo + (id -> pd.copy(nodeState = nodeStatus))
       }.getOrElse(peerInfo)
 
-      context become active(updated)
+      updateMetricsAndDAO(updated)
 
     case a @ AddPeerRequest(host, udpPort, port, id, ns, auxHost) =>
 
@@ -96,7 +101,7 @@ class PeerManager(ipManager: IPManager, dao: DAO)(implicit val materialize: Acto
 
       val peerData = PeerData(a, client, nodeState = ns)
 
-      updatePeerInfo(peerInfo, id, peerData)
+      updatePeerInfo(peerInfo, peerData)
 
     case APIBroadcast(func, skipIds, subset) =>
       val replyTo = sender()
@@ -112,19 +117,21 @@ class PeerManager(ipManager: IPManager, dao: DAO)(implicit val materialize: Acto
 
       replyTo ! result
 
-    case GetPeerInfo => {
+    case GetPeerInfo =>
       val replyTo = sender()
       replyTo ! peerInfo
-    }
 
-    case PendingRegistration(ip, request) =>
-     // implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
-      implicit val ec = dao.edgeExecutionContext
+
+    case pr @ PendingRegistration(ip, request) =>
+
+      logger.info(s"Pending Registration request: $pr")
+      // implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
+      implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
       val client = APIClient(request.host, request.port)(dao.edgeExecutionContext)
 
-      val authSignRequest = PeerAuthSignRequest()
-      val req = client.postNonBlocking[HashSignature]("sign", request)
+      val authSignRequest = PeerAuthSignRequest(Random.nextLong())
+      val req = client.postNonBlocking[SingleHashSignature]("sign", authSignRequest)
 
       req.failed.foreach { t =>
         logger.warn(s"Sign request to ${request.host}:${request.port} failed.", t)
@@ -132,28 +139,31 @@ class PeerManager(ipManager: IPManager, dao: DAO)(implicit val materialize: Acto
       }
 
       req.foreach { sig =>
-        if (sig.b58EncodedPublicKey != request.key) {
+        if (sig.hashSignature.b58EncodedPublicKey != request.key) {
           logger.warn(
-            s"keys should be the same: ${sig.b58EncodedPublicKey} != ${request.key}"
+            s"keys should be the same: ${sig.hashSignature.b58EncodedPublicKey} != ${request.key}"
           )
           dao.metricsManager ! IncrementMetric("peerKeyMismatch")
         }
 
-        if (!sig.valid(authSignRequest.salt.toString)) {
-
-          logger.info(s"Invalid peer signature $request")
+        if (!sig.valid) {
+          logger.info(s"Invalid peer signature $request $authSignRequest $sig")
           dao.metricsManager ! IncrementMetric("invalidPeerRegistrationSignature")
-        } else {
-
-          val state = client.getBlocking[NodeState]("state")
-
-          val id = Id(EncodedPublicKey(sig.b58EncodedPublicKey))
-          val add = AddPeerRequest(request.host, 16180, request.port, id, nodeStatus = state)
-          val peerData = PeerData(add, client, nodeState = state)
-          client.id = id
-          updatePeerInfo(peerInfo, id, peerData)
-
         }
+
+        dao.metricsManager ! IncrementMetric("peerAddedFromRegistrationFlow")
+
+        logger.info(s"Valid peer signature $request $authSignRequest $sig")
+
+        val state = client.getBlocking[NodeStateInfo]("state").nodeState
+
+        val id = Id(EncodedPublicKey(sig.hashSignature.b58EncodedPublicKey))
+        val add = AddPeerRequest(request.host, 16180, request.port, id, nodeStatus = state)
+        val peerData = PeerData(add, client, nodeState = state)
+        client.id = id
+        self ! UpdatePeerInfo(peerData)
+
+
       }
 
     case Deregistration(ip, port, key) =>

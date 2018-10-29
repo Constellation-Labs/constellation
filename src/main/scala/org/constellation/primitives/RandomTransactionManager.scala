@@ -43,6 +43,9 @@ class RandomTransactionManager()(
               pd.timeAdded < (System.currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000) && pd.nodeState == NodeState.Ready
             }
 
+            dao.metricsManager ! UpdateMetric("numPeersOnDAO", peerQuery.size.toString)
+            dao.metricsManager ! UpdateMetric("numPeersOnDAOThatAreReady", peerIds.size.toString)
+
             if (peerIds.nonEmpty) {
 
               val txs = Seq.fill(dao.processingConfig.randomTXPerRound)(0).par.map { _ =>
@@ -70,6 +73,9 @@ class RandomTransactionManager()(
                 dao.threadSafeTXMemPool.put
               }
 
+            } else {
+
+              dao.metricsManager ! IncrementMetric("triedToGenerateTransactionsButHaveNoPeers")
             }
           }
 

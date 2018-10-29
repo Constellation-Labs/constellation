@@ -21,14 +21,14 @@ import org.constellation.p2p.PeerAPI.EdgeResponse
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.CommonEndpoints
+import org.constellation.util.{CommonEndpoints, SingleHashSignature}
 import org.json4s.native
 import org.json4s.native.Serialization
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Random, Success}
 
-case class PeerAuthSignRequest(salt: Long = Random.nextLong())
+case class PeerAuthSignRequest(salt: Long)
 case class PeerRegistrationRequest(host: String, port: Int, key: String)
 case class PeerUnregister(host: String, port: Int, key: String)
 
@@ -59,7 +59,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
   private var pendingRegistrations = Map[String, PeerRegistrationRequest]()
 
   private def getHostAndPortFromRemoteAddress(clientIP: RemoteAddress) = {
-    clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)}
+    clientIP.toOption.map{z => PeerIPData(z.getHostAddress, Some(clientIP.getPort()))}
   }
 
   private val getEndpoints = {
@@ -94,19 +94,26 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
       } ~
       path ("sign") {
         entity(as[PeerAuthSignRequest]) { e =>
-          complete(hashSign(e.salt.toString, dao.keyPair))
+          val hash = e.salt.toString
+
+          val signature = hashSign(hash, dao.keyPair)
+          complete(SingleHashSignature(hash, signature))
         }
       } ~
       path("register") {
         extractClientIP { clientIP =>
           entity(as[PeerRegistrationRequest]) { request =>
+            val hostAddress = clientIP.toOption.map{_.getHostAddress}
+            logger.info(s"Received peer registration request $request on $clientIP $hostAddress ${clientIP.toOption} ${clientIP.toIP}")
             val maybeData = getHostAndPortFromRemoteAddress(clientIP)
             maybeData match {
               case Some(PeerIPData(host, _)) =>
+                logger.info("Parsed host and port, sending peer manager request")
                 dao.peerManager ! PendingRegistration(host, request)
                 pendingRegistrations = pendingRegistrations.updated(host, request)
                 complete(StatusCodes.OK)
               case None =>
+                logger.info(s"Failed to parse host and port for $request")
                 complete(StatusCodes.BadRequest)
             }
           }
@@ -150,16 +157,21 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
       } ~
       pathPrefix("request") {
         path("signature") {
-          entity(as[SignatureRequest]) { sr =>
-            dao.metricsManager ! IncrementMetric("peerApiRXSignatureRequest")
-            onComplete(
-              futureTryWithTimeoutMetric(
-                EdgeProcessor.handleSignatureRequest(sr), "peerAPIHandleSignatureRequest"
-              )(dao.signatureResponsePool, dao)
-            ) {
-              result => // ^ Errors captured above
-                val maybeResponse = result.toOption.flatMap {_.toOption}
-                complete(maybeResponse)
+          extractClientIP { ip =>
+            logger.info(s"Client IP info on request signature ${ip.toOption.map{_.getHostAddress}} ${ip.toIP.map{_.ip.getHostAddress}}")
+            entity(as[SignatureRequest]) { sr =>
+              dao.metricsManager ! IncrementMetric("peerApiRXSignatureRequest")
+              onComplete(
+                futureTryWithTimeoutMetric(
+                  EdgeProcessor.handleSignatureRequest(sr), "peerAPIHandleSignatureRequest"
+                )(dao.signatureResponsePool, dao)
+              ) {
+                result => // ^ Errors captured above
+                  val maybeResponse = result.toOption.flatMap {
+                    _.toOption
+                  }
+                  complete(maybeResponse)
+              }
             }
           }
         }
@@ -235,11 +247,11 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
   }
 
   val routes: Route = {
-    rejectBannedIP {
-      signEndpoints ~ commonEndpoints ~  { //enforceKnownIP
+   // rejectBannedIP {
+      signEndpoints ~ commonEndpoints ~  // { //enforceKnownIP
         getEndpoints ~ postEndpoints ~ mixedEndpoints
-      }
-    } // ~
+    //  }
+   // } // ~
     //  faviconRoute ~ jsRequest ~ serveMainPage // <-- Temporary for debugging, control routes disabled.
 
   }

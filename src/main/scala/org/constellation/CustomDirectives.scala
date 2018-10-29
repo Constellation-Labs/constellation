@@ -37,6 +37,8 @@ object CustomDirectives {
 
     def rejectBannedIP: Directive0 = {
       extractClientIP flatMap { ip =>
+
+        println(s"Reject banned ip: ${ip.toOption.map{_.getHostAddress}} ${ip.toIP.map{_.ip.getHostAddress}}")
         if (ipManager.bannedIP(ip)) {
           complete(StatusCodes.Forbidden)
         } else {
