@@ -102,7 +102,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
           entity(as[PeerRegistrationRequest]) { request =>
             val maybeData = getHostAndPortFromRemoteAddress(clientIP)
             maybeData match {
-              case Some(PeerIPData(host, portOption)) =>
+              case Some(PeerIPData(host, _)) =>
                 dao.peerManager ! PendingRegistration(host, request)
                 pendingRegistrations = pendingRegistrations.updated(host, request)
                 complete(StatusCodes.OK)

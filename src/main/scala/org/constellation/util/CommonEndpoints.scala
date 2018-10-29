@@ -49,6 +49,9 @@ trait CommonEndpoints extends Json4sSupport {
       } ~
       pathPrefix("balance" / Segment) { a =>
         complete(dao.dbActor.getAddressCacheData(a).map{_.balanceByLatestSnapshot})
-      }
+      } ~
+    path("state") {
+      complete(dao.nodeState)
+    }
   }
 }

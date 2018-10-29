@@ -38,6 +38,8 @@ trait NodeData {
   @volatile var nodeState: NodeState = NodeState.PendingDownload
 
   var externalHostString: String = "127.0.0.1"
+  var externlPeerHTTPPort: Int = 9001
+
   @volatile var externalAddress: Option[InetSocketAddress] = None
   @volatile var apiAddress: Option[InetSocketAddress] = None
   @volatile var tcpAddress: Option[InetSocketAddress] = None

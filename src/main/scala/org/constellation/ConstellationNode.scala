@@ -138,6 +138,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
   implicit val dao: DAO = new DAO()
   dao.updateKeyPair(configKeyPair)
 
+  dao.externlPeerHTTPPort = peerHttpPort
+
   import dao._
 
   val heartBeat: ActorRef = system.actorOf(

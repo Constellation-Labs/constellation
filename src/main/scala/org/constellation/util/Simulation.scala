@@ -4,7 +4,7 @@ import java.util.concurrent.ForkJoinPool
 
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.AddPeerRequest
+import org.constellation.{AddPeerRequest, HostPort}
 import org.constellation.consensus.SnapshotInfo
 import org.constellation.primitives.Schema._
 import scalaj.http.HttpResponse
@@ -65,6 +65,14 @@ class Simulation {
              )(implicit executionContext: ExecutionContext): Seq[HttpResponse[String]] = {
     apis.map{
       _.postSync("addPeer", peer)
+    }
+  }
+
+  def addPeerWithRegistrationFlow(
+               apis: Seq[APIClient], peer: HostPort
+             )(implicit executionContext: ExecutionContext): Seq[HttpResponse[String]] = {
+    apis.map{
+      _.postSync("peer/add", peer)
     }
   }
 
@@ -262,10 +270,25 @@ class Simulation {
     }
   }
 
+  def addPeersFromRegistrationRequest(apis: Seq[APIClient], addPeerRequests: Seq[AddPeerRequest]): Unit = {
+    apis.foreach{
+      a =>
+        addPeerRequests.zip(apis).foreach{
+          case (add, a2) =>
+            if (a2 != a) {
+              val addAdjusted = if (a.internalPeerHost.nonEmpty && a2.internalPeerHost.nonEmpty) add
+              else add.copy(auxHost = "")
+              assert(addPeerWithRegistrationFlow(Seq(a), HostPort(addAdjusted.host, addAdjusted.httpPort)).forall(_.isSuccess))
+            }
+        }
+    }
+  }
+
   def run(
            apis: Seq[APIClient],
            addPeerRequests: Seq[AddPeerRequest],
-           attemptSetExternalIP: Boolean = false
+           attemptSetExternalIP: Boolean = false,
+           useRegistrationFlow: Boolean = false
          )(implicit executionContext: ExecutionContext): Boolean = {
 
     assert(checkHealthy(apis))
@@ -279,7 +302,10 @@ class Simulation {
 
     logger.info("Adding peers manually")
 
-    addPeersFromRequest(apis, addPeerRequests)
+
+    if (useRegistrationFlow) {
+      addPeersFromRegistrationRequest(apis, addPeerRequests)
+    } else addPeersFromRequest(apis, addPeerRequests)
 
     logger.info("Peers added")
     logger.info("Validating peer health checks")

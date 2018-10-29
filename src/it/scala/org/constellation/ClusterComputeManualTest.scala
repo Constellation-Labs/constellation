@@ -120,7 +120,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
       AddPeerRequest(a.hostName, a.udpPort, a.peerHTTPPort, a.id, auxHost = aux)
     }
 
-    sim.run(apis, addPeerRequests, attemptSetExternalIP = true)
+    sim.run(apis, addPeerRequests, attemptSetExternalIP = true, useRegistrationFlow = true)
 
 
     // For debugging / adjusting options after compile

@@ -27,10 +27,10 @@ class SwayDBImpl(dao: DAO) extends KVDB {
     val triedMeter = db.put(key, KryoSerializer.serializeAnyRef(obj))
     tryToMetric(triedMeter, "dbPutAttempt")
 
-    val getCheckAttempt = get[AnyRef](key)
+/*    val getCheckAttempt = get[AnyRef](key)
     if (getCheckAttempt.isEmpty) {
       dao.metricsManager ! IncrementMetric("dbPutVerificationFailed")
-    }
+    }*/
 
     triedMeter.isSuccess
   }

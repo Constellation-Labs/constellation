@@ -18,11 +18,11 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.crypto.SimpleWalletLike
-import org.constellation.p2p.Download
+import org.constellation.p2p.{Download, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, _}
-import org.constellation.util.{CommonEndpoints, ServeUI}
+import org.constellation.util.{APIClient, CommonEndpoints, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
 import scalaj.http.HttpResponse
@@ -151,6 +151,25 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           entity(as[RemovePeerRequest]) { e =>
             dao.peerManager ! e
             complete(StatusCodes.OK)
+          }
+        } ~
+        path("add") {
+          entity(as[HostPort]) { case HostPort(host, port) =>
+
+            onComplete{
+              futureTryWithTimeoutMetric({
+                new APIClient(host, port).postSync(
+                  "register",
+                  PeerRegistrationRequest(externalHostString, dao.externlPeerHTTPPort, dao.id.b58)
+                )
+              },
+                "addPeerWithRegistration"
+              )
+            } { result =>
+
+              complete(StatusCodes.OK)
+            }
+
           }
         }
       } ~
