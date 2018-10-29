@@ -23,6 +23,8 @@ import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Heartbeat}
 import org.joda.time.DateTime
+import constellation._
+import better.files._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -62,10 +64,24 @@ import scala.concurrent.ExecutionContext
           } else false
       */
 
+      File(".dag").createDirectoryIfNotExists()
+
+      val keyPairPath = ".dag/key"
+      val localKeyPair = Try{File(keyPairPath).lines.mkString.x[KeyPair]}
+
+
       // TODO: update to take from config
       logger.info("pre Key pair")
-      val keyPair = KeyUtils.makeKeyPair()
+      val keyPair = {
+        localKeyPair.getOrElse {
+          logger.info(s"Key pair not found in $keyPairPath - Generating new key pair")
+          val kp = KeyUtils.makeKeyPair()
+          File(keyPairPath).write(kp.json)
+          kp
+        }
+      }
       logger.info("post key pair")
+
 
       val portOffset = args.headOption.map{_.toInt}
       val httpPortFromArg = portOffset.map{_ + 1}
@@ -122,9 +138,23 @@ class ConstellationNode(val configKeyPair: KeyPair,
   implicit val dao: DAO = new DAO()
   dao.updateKeyPair(configKeyPair)
 
+  import dao._
+
+  val heartBeat: ActorRef = system.actorOf(
+    Props(new Heartbeat(dao)), s"Heartbeat_$publicKeyHash"
+  )
+
+  dao.heartbeatActor = heartBeat
+  // Setup actors
+  val metricsManager: ActorRef = system.actorOf(
+    Props(new MetricsManager()), s"MetricsManager_$publicKeyHash"
+  )
+
+  dao.metricsManager = metricsManager
+
+
   val ipManager = IPManager()
 
-  import dao._
   dao.actorMaterializer = materialize
 
   val logger = Logger(s"ConstellationNode_$publicKeyHash")
@@ -142,19 +172,13 @@ class ConstellationNode(val configKeyPair: KeyPair,
     dao.tcpAddress = Some(new InetSocketAddress(hostName, peerTCPPort))
   }
 
-  val heartBeat: ActorRef = system.actorOf(
-    Props(new Heartbeat(dao)), s"Heartbeat_$publicKeyHash"
-  )
-  dao.heartbeatActor = heartBeat
+
 
 
   val randomTX : ActorRef = system.actorOf(
     Props(new RandomTransactionManager()), s"RandomTXManager_$publicKeyHash"
   )
-  // Setup actors
-  val metricsManager: ActorRef = system.actorOf(
-    Props(new MetricsManager()), s"MetricsManager_$publicKeyHash"
-  )
+
 
   val memPoolManager: ActorRef = system.actorOf(
     Props(new MemPoolManager(metricsManager)), s"MemPoolManager_$publicKeyHash"
@@ -191,7 +215,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
   dao.dbActor = dbActor
   dao.consensus = consensusActor
   dao.peerManager = peerManager
-  dao.metricsManager = metricsManager
   dao.edgeProcessor = edgeProcessorActor
 
   // If we are exposing rpc then create routes

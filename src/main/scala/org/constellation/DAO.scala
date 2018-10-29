@@ -25,8 +25,8 @@ class DAO extends MetricsExt
   }
 
   def snapshotPath: File = {
-    val f = new File(s"tmp/${id.medium}/snapshots")
-    f.mkdirs()
+    val f = File(s"tmp/${id.medium}/snapshots")
+    f.createDirectoryIfNotExists()
     f
   }
 

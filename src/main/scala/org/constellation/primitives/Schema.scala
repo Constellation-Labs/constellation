@@ -330,7 +330,7 @@ object Schema {
                                reputation: Option[Double] = None,
                                ancestorBalances: Map[String, Long] = Map(),
                                ancestorReputations: Map[String, Long] = Map(),
-                               recentTransactions: Seq[String] = Seq(),
+                           //    recentTransactions: Seq[String] = Seq(),
                                balanceByLatestSnapshot: Long = 0L
                              ) {
 
@@ -339,9 +339,9 @@ object Schema {
         ancestorBalances =
           ancestorBalances ++ previous.ancestorBalances.filterKeys(k => !ancestorBalances.contains(k)),
         ancestorReputations =
-          ancestorReputations ++ previous.ancestorReputations.filterKeys(k => !ancestorReputations.contains(k)),
-        recentTransactions =
-          recentTransactions ++ previous.recentTransactions.filter(k => !recentTransactions.contains(k))
+          ancestorReputations ++ previous.ancestorReputations.filterKeys(k => !ancestorReputations.contains(k))
+        //recentTransactions =
+        //  recentTransactions ++ previous.recentTransactions.filter(k => !recentTransactions.contains(k))
       )
     }
 

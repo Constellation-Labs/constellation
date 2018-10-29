@@ -79,6 +79,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         } ~
           path("restart") { // TODO: Revisit / fix
             dao.restartNode()
+            System.exit(0)
             complete(StatusCodes.OK)
           } ~
           path("setKeyPair") { // TODO: Change to keys/set - update ui call

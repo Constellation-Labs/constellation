@@ -3,7 +3,7 @@ package org.constellation.serializer
 import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
 import org.constellation.consensus.Consensus.{VoteData => _, _}
-import org.constellation.consensus.{Consensus, Snapshot}
+import org.constellation.consensus.{Consensus, Snapshot, StoredSnapshot}
 import org.constellation.p2p.SerializedUDPMessage
 import org.constellation.primitives.Schema._
 import org.constellation.util.{EncodedPublicKey, HashSignature, SignatureBatch, Signed}
@@ -15,6 +15,8 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
 
   def registerClasses(kryo: Kryo): Unit = {
 
+    kryo.register(classOf[StoredSnapshot])
+    kryo.register(classOf[Seq[CheckpointBlock]])
     kryo.register(classOf[Address])
     kryo.register(classOf[CheckpointEdge])
     kryo.register(classOf[AddressCacheData])

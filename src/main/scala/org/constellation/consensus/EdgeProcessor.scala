@@ -602,7 +602,7 @@ object EdgeProcessor {
             val parsed = nonFailedResponses.mapValues(v =>
               tryWithMetric({
                 v.body.x[Option[SignatureResponse]]
-              }, "formCheckpointSignatureResponseJsonParsingFailed")
+              }, "formCheckpointSignatureResponseJsonParsing")
             )
 
             if (parsed.exists(_._2.isFailure)) {
@@ -749,6 +749,7 @@ case class MemPool(
 case object GetMemPool
 
 case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String]) extends ProductHash
+case class StoredSnapshot(snapshot: Snapshot, checkpointBlocks: Seq[CheckpointBlock])
 
 case class DownloadComplete(latestSnapshot: Snapshot)
 

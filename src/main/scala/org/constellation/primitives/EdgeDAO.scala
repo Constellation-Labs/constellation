@@ -6,7 +6,7 @@ import akka.util.Timeout
 import better.files.File
 import com.twitter.storehaus.cache.LRUCache
 import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
-import org.constellation.consensus.{AcceptCheckpoint, Snapshot, SnapshotInfo, TipData}
+import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.{DAO, ProcessingConfig}
@@ -108,8 +108,17 @@ class ThreadSafeTipService() {
         dao.metricsManager ! IncrementMetric("snapshotCount")
 
         // Write snapshot to file
-        tryWithMetric(
-          File(File(dao.snapshotPath.toPath), snapshot.hash).writeByteArray(KryoSerializer.serializeAnyRef(snapshot)),
+        tryWithMetric({
+          val maybeBlocks = snapshot.checkpointBlocks.map {h =>
+            val res = checkpointCache.get(h)
+            if (res.isEmpty) dao.dbActor.getCheckpointCacheData(h).map{_.checkpointBlock}
+            else res
+          }
+          if (maybeBlocks.exists(_.isEmpty)) {
+            dao.metricsManager ! IncrementMetric("snapshotWriteToDiskMissingData")
+          }
+          File(dao.snapshotPath, snapshot.hash).writeByteArray(KryoSerializer.serializeAnyRef(StoredSnapshot(snapshot, maybeBlocks.flatten)))
+        },
           "snapshotWriteToDisk"
         )
 

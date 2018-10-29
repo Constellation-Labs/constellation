@@ -6,6 +6,7 @@ import org.constellation.datastore.proxy.KVDBAuditProxy
 import org.constellation.datastore.{KVDB, KVDBDatastoreImpl}
 import org.constellation.primitives.IncrementMetric
 import org.constellation.serializer.KryoSerializer
+import swaydb.data.config.MMAP
 
 class SwayDBImpl(dao: DAO) extends KVDB {
 
@@ -15,7 +16,12 @@ class SwayDBImpl(dao: DAO) extends KVDB {
   import swaydb.serializers.Default._ //import default serializers
 
   //Create a persistent database. If the directories do not exist, they will be created.
-  private val db = SwayDB.persistent[String, Array[Byte]](dir = (dao.dbPath / "disk1").path).get
+  private val db = SwayDB.persistent[String, Array[Byte]](
+    dir = (dao.dbPath / "disk1").path,
+    mmapMaps = false,
+    mmapSegments = MMAP.Disable,
+    mmapAppendix = false
+  ).get
 
   override def put(key: String, obj: AnyRef): Boolean = {
     val triedMeter = db.put(key, KryoSerializer.serializeAnyRef(obj))
@@ -64,7 +70,8 @@ object SwayDBImpl {
 }
 
 class SwayDBDatastore(dao: DAO) extends KVDBDatastoreImpl {
-  val kvdb = KVDBAuditProxy(SwayDBImpl(dao))
+  //val kvdb = KVDBAuditProxy(SwayDBImpl(dao))
+  val kvdb = SwayDBImpl(dao)
 }
 
 object SwayDBDatastore {

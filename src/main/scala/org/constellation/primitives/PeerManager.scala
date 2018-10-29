@@ -53,7 +53,7 @@ class PeerManager(ipManager: IPManager, dao: DAO)(implicit val materialize: Acto
       dao.metricsManager ! UpdateMetric(
         "peers",
         updatedPeerInfo.map { case (idI, clientI) =>
-          val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort}"
+          val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort - 1}"
           s"${idI.short} API: $addr"
         }.mkString(" --- ")
       )

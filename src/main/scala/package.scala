@@ -60,7 +60,7 @@ package object constellation extends KeyUtilsExt with POWExt
 
   implicit val constellationFormats: Formats = DefaultFormats +
     new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer + new InetSocketAddressSerializer +
-  ShortTypeHints(List(classOf[TransactionHash], classOf[ParentBundleHash])) + new EnumNameSerializer(EdgeHashType) +
+    ShortTypeHints(List(classOf[TransactionHash], classOf[ParentBundleHash])) + new EnumNameSerializer(EdgeHashType) +
     new EnumNameSerializer(NodeState)
 
   def caseClassToJson(message: Any): String = {
@@ -147,7 +147,7 @@ package object constellation extends KeyUtilsExt with POWExt
     attempt
   }
 
-  def tryToMetric[T](attempt : Try[T], metricPrefix: String)(implicit dao: DAO) = {
+  def tryToMetric[T](attempt : Try[T], metricPrefix: String)(implicit dao: DAO): Try[T] = {
     attempt match {
       case Success(x) =>
         dao.metricsManager ! IncrementMetric(metricPrefix + "_success")
@@ -160,15 +160,15 @@ package object constellation extends KeyUtilsExt with POWExt
 
   def attemptWithRetry(t : => Boolean, maxRetries: Int = 10, delay: Long = 2000): Boolean = {
 
-      var retries = 0
-      var done = false
+    var retries = 0
+    var done = false
 
-      do {
-        retries += 1
-        done = t
-        Thread.sleep(delay)
-      } while (!done && retries < maxRetries)
-      done
+    do {
+      retries += 1
+      done = t
+      Thread.sleep(delay)
+    } while (!done && retries < maxRetries)
+    done
   }
 
 
@@ -187,9 +187,8 @@ package object constellation extends KeyUtilsExt with POWExt
     val after = timeoutSeconds.seconds
     val timeout = TimeoutScheduler.scheduleTimeout(prom, after)
     val combinedFut = Future.firstCompletedOf(List(fut, prom.future))
-    fut onComplete{
-      _ =>
-        timeout.cancel()
+    fut onComplete{ _ =>
+      timeout.cancel()
     }
     prom.future.onComplete{
       result =>
@@ -205,13 +204,14 @@ package object constellation extends KeyUtilsExt with POWExt
   }
 
   def futureTryWithTimeoutMetric[T](t: => T, metricPrefix: String, timeoutSeconds: Int = 10)
-                             (implicit ec:ExecutionContext, dao: DAO): Future[Try[T]] = {
+                                   (implicit ec:ExecutionContext, dao: DAO): Future[Try[T]] = {
     withTimeoutSecondsAndMetric(
       Future{
         tryWithMetric(t, metricPrefix) // This is an inner try as opposed to an onComplete so we can
         // Have different metrics for timeout vs actual failure.
       }(ec),
-      metricPrefix
+      metricPrefix,
+      timeoutSeconds = timeoutSeconds
     )
   }
 
