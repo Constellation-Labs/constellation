@@ -40,7 +40,7 @@ class RandomTransactionManager()(
 
             val peerQuery = dao.peerInfo.toSeq //(dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
             val peerIds = peerQuery.filter { case (_, pd) =>
-              pd.timeAdded < (System.currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000) && pd.nodeState == NodeState.Ready
+              pd.peerMetadata.timeAdded < (System.currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000) && pd.peerMetadata.nodeState == NodeState.Ready
             }
 
             dao.metricsManager ! UpdateMetric("numPeersOnDAO", peerQuery.size.toString)

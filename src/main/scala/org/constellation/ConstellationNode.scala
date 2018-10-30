@@ -50,7 +50,6 @@ import scala.concurrent.ExecutionContext
 
 
       val seeds = Seq()
-      val hostName = "127.0.0.1"
       val requestExternalAddressCheck = false
       /*
           val seeds = args.headOption.map(_.split(",").map{constellation.addressToSocket}.toSeq).getOrElse(Seq())
@@ -64,9 +63,13 @@ import scala.concurrent.ExecutionContext
           } else false
       */
 
-      File(".dag").createDirectoryIfNotExists()
+      val preferencesPath = File(".dag")
+      preferencesPath.createDirectoryIfNotExists()
 
       KeyUtils.insertProvider()
+
+      val hostName = Try{File("external_host_ip").lines.mkString}.getOrElse("127.0.0.1")
+
 
       val keyPairPath = ".dag/key"
       val localKeyPair = Try{File(keyPairPath).lines.mkString.x[KeyPair]}
@@ -287,8 +290,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
     api
   }
 
-  def getAddPeerRequest: AddPeerRequest = {
-    AddPeerRequest(hostName, udpPort, peerHttpPort, dao.id)
+  def getAddPeerRequest: PeerMetadata = {
+    PeerMetadata(hostName, udpPort, peerHttpPort, dao.id)
   }
 
   def getAPIClientForNode(node: ConstellationNode): APIClient = {
@@ -303,5 +306,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   metricsManager ! UpdateMetric("address", dao.selfAddressStr)
   metricsManager ! UpdateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
   metricsManager ! UpdateMetric("nodeStartDate", new DateTime(System.currentTimeMillis()).toString)
+
+  PeerManager.initiatePeerReload()
 
 }

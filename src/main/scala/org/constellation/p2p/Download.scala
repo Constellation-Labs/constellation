@@ -55,7 +55,7 @@ object Download {
 
     dao.metricsManager ! UpdateMetric("downloadedGenesis", "true")
 
-    val peerData = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().filter{_._2.nodeState == NodeState.Ready}
+    val peerData = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().filter{_._2.peerMetadata.nodeState == NodeState.Ready}
 
     val snapshotClient = peerData.head._2.client
 

@@ -40,7 +40,7 @@ object Fixtures {
   val address4: InetSocketAddress = constellation.addressToSocket("localhost:16184")
   val address5: InetSocketAddress = constellation.addressToSocket("localhost:16185")
 
-  val addPeerRequest = AddPeerRequest("host:", 1, 1, id: Id)
+  val addPeerRequest = PeerMetadata("host:", 1, 1, id: Id)
 
   val idSet4 = Set(id1, id2, id3, id4)
   val idSet4B = Set(id1, id2, id3, id5)

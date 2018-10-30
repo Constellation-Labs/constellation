@@ -26,10 +26,19 @@ import org.constellation.util.{APIClient, CommonEndpoints, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
 import scalaj.http.HttpResponse
-
-case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id, nodeStatus: NodeState = NodeState.Ready, auxHost: String = "")
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
+
+case class PeerMetadata(
+                     host: String,
+                     udpPort: Int,
+                     httpPort: Int,
+                     id: Id,
+                     nodeState: NodeState = NodeState.Ready,
+                     timeAdded: Long = System.currentTimeMillis(),
+                     auxHost: String = ""
+                   )
+
 
 case class HostPort(host: String, port: Int)
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
@@ -239,7 +248,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         }
       } ~
       path("addPeer"){
-        entity(as[AddPeerRequest]) { e =>
+        entity(as[PeerMetadata]) { e =>
 
           Future {
             peerManager ! e

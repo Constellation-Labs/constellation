@@ -23,7 +23,7 @@ import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObjec
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.reflect.ClassTag
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 package object constellation extends KeyUtilsExt with POWExt
   with POWSignHelp {
@@ -207,6 +207,7 @@ package object constellation extends KeyUtilsExt with POWExt
                                    (implicit ec:ExecutionContext, dao: DAO): Future[Try[T]] = {
     withTimeoutSecondsAndMetric(
       Future{
+        Thread.currentThread().setName(metricPrefix + Random.nextInt(10000))
         tryWithMetric(t, metricPrefix) // This is an inner try as opposed to an onComplete so we can
         // Have different metrics for timeout vs actual failure.
       }(ec),

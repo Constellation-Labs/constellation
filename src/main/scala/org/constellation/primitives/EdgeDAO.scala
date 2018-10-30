@@ -93,7 +93,7 @@ class ThreadSafeTipService() {
 
     val peerIds = dao.peerInfo //(dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
     val facilMap = peerIds.filter{case (_, pd) =>
-      pd.timeAdded < (System.currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000) && pd.nodeState == NodeState.Ready
+      pd.peerMetadata.timeAdded < (System.currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000) && pd.peerMetadata.nodeState == NodeState.Ready
     }
 
     facilitators = facilMap

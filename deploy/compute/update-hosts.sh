@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-HOSTS_FILE=${1:-hosts.txt}
+HOSTS_FILE=${1:-hosts-dev.txt}
 GROUP=${2-dev}
 
 #gcloud --format=json compute instances list --filter="labels.group=dev"

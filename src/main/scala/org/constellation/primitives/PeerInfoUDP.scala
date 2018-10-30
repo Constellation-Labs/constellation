@@ -10,7 +10,8 @@ import org.constellation.util.{APIClient, Signed}
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContextExecutor
 
-trait PeerInfo {
+@deprecated
+trait PeerInfoUDP {
 
   @volatile var deadPeers: Seq[InetSocketAddress] = Seq()
 

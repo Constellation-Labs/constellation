@@ -629,6 +629,7 @@ object EdgeProcessor {
 
                   if (sr.reRegister) {
                     // PeerManager.attemptRegisterPeer() TODO : Finish
+
                   }
 
                 }

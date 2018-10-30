@@ -11,50 +11,64 @@ import org.constellation.p2p.{PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{Id, NodeState}
 import org.constellation.util._
-import org.constellation.{AddPeerRequest, DAO, HostPort, RemovePeerRequest}
+import org.constellation.{DAO, HostPort, PeerMetadata, RemovePeerRequest}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
-import scala.util.Random
+import scala.util.{Random, Try}
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 import scala.collection.Set
 import scala.concurrent.ExecutionContext
 
 import constellation._
+import better.files._
 
 object PeerManager {
+
+  def initiatePeerReload()(implicit dao: DAO): Unit = {
+
+    tryWithMetric(
+      {
+        dao.peersInfoPath.lines.mkString.x[Seq[PeerMetadata]].foreach{
+          pmd =>
+            dao.peerManager ! pmd
+        }
+      },
+      "peerReloading"
+    )
+
+  }
+
 
   val logger = Logger(s"PeerManagerObj")
 
   def attemptRegisterPeer(hp: HostPort)(implicit dao: DAO): Future[Any] = {
 
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
-   // if (!dao.peerInfo.exists(_._2.client.hostName == hp.host)) {
+    // if (!dao.peerInfo.exists(_._2.client.hostName == hp.host)) {
 
-      futureTryWithTimeoutMetric({
-        logger.info(s"Attempting to register with $hp")
+    futureTryWithTimeoutMetric({
+      logger.info(s"Attempting to register with $hp")
 
-        new APIClient(hp.host, hp.port).postSync(
-          "register",
-          PeerRegistrationRequest(dao.externalHostString, dao.externlPeerHTTPPort, dao.id.b58)
-        )
-      },
-        "addPeerWithRegistration"
+      new APIClient(hp.host, hp.port).postSync(
+        "register",
+        PeerRegistrationRequest(dao.externalHostString, dao.externlPeerHTTPPort, dao.id.b58)
       )
+    },
+      "addPeerWithRegistration"
+    )
     //} else {
-     // Future.successful(
-//        ()
-  //    )
-//    }
+    // Future.successful(
+    //        ()
+    //    )
+    //    }
   }
 
 }
 
 case class PeerData(
-                     addRequest: AddPeerRequest,
-                     client: APIClient,
-                     timeAdded: Long = System.currentTimeMillis(),
-                     nodeState: NodeState = NodeState.Ready
+                     peerMetadata: PeerMetadata,
+                     client: APIClient
                    )
 
 case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
@@ -85,6 +99,9 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
       }.mkString(" --- ")
     )
     dao.peerInfo = updatedPeerInfo
+
+    dao.peersInfoPath.write(updatedPeerInfo.values.toSeq.json)
+
     context become active(updatedPeerInfo)
   }
 
@@ -118,18 +135,18 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
       val updated = peerInfo.get(id).map{
         pd =>
-          peerInfo + (id -> pd.copy(nodeState = nodeStatus))
+          peerInfo + (id -> pd.copy(peerMetadata = pd.peerMetadata.copy(nodeState = nodeStatus)))
       }.getOrElse(peerInfo)
 
       updateMetricsAndDAO(updated)
 
-    case a @ AddPeerRequest(host, udpPort, port, id, ns, auxHost) =>
+    case a @ PeerMetadata(host, udpPort, port, id, ns, time, auxHost) =>
 
       val adjustedHost = if (auxHost.nonEmpty) auxHost else host
       val client =  APIClient(adjustedHost, port)(dao.edgeExecutionContext, dao)
       client.id = id
 
-      val peerData = PeerData(a, client, nodeState = ns)
+      val peerData = PeerData(a, client)
 
       updatePeerInfo(peerInfo, peerData)
 
@@ -192,8 +209,8 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
           val state = client.getBlocking[NodeStateInfo]("state").nodeState
 
           val id = Id(EncodedPublicKey(sig.hashSignature.b58EncodedPublicKey))
-          val add = AddPeerRequest(request.host, 16180, request.port, id, nodeStatus = state)
-          val peerData = PeerData(add, client, nodeState = state)
+          val add = PeerMetadata(request.host, 16180, request.port, id, nodeState = state)
+          val peerData = PeerData(add, client)
           client.id = id
           self ! UpdatePeerInfo(peerData)
 

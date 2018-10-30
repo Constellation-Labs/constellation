@@ -10,6 +10,7 @@ import constellation._
 import org.constellation.DAO
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat}
 import org.constellation.util.HeartbeatSubscribe
+import org.joda.time.DateTime
 
 case object GetMetrics
 
@@ -68,7 +69,9 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
           metrics + (
             "TPS_last_" + dao.processingConfig.metricCheckInterval + "_seconds" -> tps.toString,
             "TPS_all" -> tpsAll.toString,
-            "balances" -> balanceMetrics
+            "balances" -> balanceMetrics,
+            "nodeCurrentTimeMS" -> System.currentTimeMillis().toString,
+            "nodeCurrentDate" -> new DateTime().toString()
           )
         )
       }

@@ -74,12 +74,12 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
 
     apis.foreach {
       a =>
-        sim.addPeer(apis2, AddPeerRequest(a.hostName, a.udpPort, 9001, a.id)).foreach{println}
+        sim.addPeer(apis2, PeerMetadata(a.hostName, a.udpPort, 9001, a.id)).foreach{println}
     }
 
     apis2.foreach{
       a =>
-        sim.addPeer(apis, AddPeerRequest(a.hostName, a.udpPort, 9001, a.id, NodeState.DownloadInProgress)).foreach{println}
+        sim.addPeer(apis, PeerMetadata(a.hostName, a.udpPort, 9001, a.id, NodeState.DownloadInProgress)).foreach{println}
     }
 
     apis2.foreach{ a2 =>

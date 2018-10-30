@@ -8,7 +8,7 @@ import org.constellation.primitives._
 class DAO extends MetricsExt
   with NodeData
   with Reputation
-  with PeerInfo
+  with PeerInfoUDP
   with Genesis
   with EdgeDAO {
 
@@ -27,6 +27,11 @@ class DAO extends MetricsExt
   def snapshotPath: File = {
     val f = File(s"tmp/${id.medium}/snapshots")
     f.createDirectoryIfNotExists()
+    f
+  }
+
+  def peersInfoPath: File = {
+    val f = File(s"tmp/${id.medium}/peers")
     f
   }
 

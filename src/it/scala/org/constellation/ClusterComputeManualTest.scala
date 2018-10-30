@@ -117,7 +117,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
     val addPeerRequests = apis.map{ a =>
       val aux = if (auxAPIs.contains(a)) a.internalPeerHost else ""
-      AddPeerRequest(a.hostName, a.udpPort, a.peerHTTPPort, a.id, auxHost = aux)
+      PeerMetadata(a.hostName, a.udpPort, a.peerHTTPPort, a.id, auxHost = aux)
     }
 
     sim.run(apis, addPeerRequests, attemptSetExternalIP = true, useRegistrationFlow = true)

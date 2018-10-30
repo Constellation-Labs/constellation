@@ -4,7 +4,7 @@ import java.util.concurrent.ForkJoinPool
 
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.{AddPeerRequest, HostPort}
+import org.constellation.{PeerMetadata, HostPort}
 import org.constellation.consensus.SnapshotInfo
 import org.constellation.primitives.Schema._
 import scalaj.http.HttpResponse
@@ -61,7 +61,7 @@ class Simulation {
   }
 
   def addPeer(
-               apis: Seq[APIClient], peer: AddPeerRequest
+               apis: Seq[APIClient], peer: PeerMetadata
              )(implicit executionContext: ExecutionContext): Seq[HttpResponse[String]] = {
     apis.map{
       _.postSync("addPeer", peer)
@@ -255,7 +255,7 @@ class Simulation {
     apis.foreach(_.postEmpty("ready"))
   }
 
-  def addPeersFromRequest(apis: Seq[APIClient], addPeerRequests: Seq[AddPeerRequest]): Unit = {
+  def addPeersFromRequest(apis: Seq[APIClient], addPeerRequests: Seq[PeerMetadata]): Unit = {
     apis.foreach{
       a =>
         addPeerRequests.zip(apis).foreach{
@@ -270,7 +270,7 @@ class Simulation {
     }
   }
 
-  def addPeersFromRegistrationRequest(apis: Seq[APIClient], addPeerRequests: Seq[AddPeerRequest]): Unit = {
+  def addPeersFromRegistrationRequest(apis: Seq[APIClient], addPeerRequests: Seq[PeerMetadata]): Unit = {
     apis.foreach{
       a =>
         addPeerRequests.zip(apis).foreach{
@@ -286,7 +286,7 @@ class Simulation {
 
   def run(
            apis: Seq[APIClient],
-           addPeerRequests: Seq[AddPeerRequest],
+           addPeerRequests: Seq[PeerMetadata],
            attemptSetExternalIP: Boolean = false,
            useRegistrationFlow: Boolean = false
          )(implicit executionContext: ExecutionContext): Boolean = {
