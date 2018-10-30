@@ -21,7 +21,7 @@ import org.constellation.p2p.PeerAPI.EdgeResponse
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{CommonEndpoints, SingleHashSignature}
+import org.constellation.util.{CommonEndpoints, EncodedPublicKey, SingleHashSignature}
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -29,7 +29,9 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Random, Success}
 
 case class PeerAuthSignRequest(salt: Long)
-case class PeerRegistrationRequest(host: String, port: Int, key: String)
+case class PeerRegistrationRequest(host: String, port: Int, key: String) {
+  def id = Id(EncodedPublicKey(key)) // TODO: Just send full Id class
+}
 case class PeerUnregister(host: String, port: Int, key: String)
 
 

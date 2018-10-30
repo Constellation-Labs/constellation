@@ -153,7 +153,9 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
     case a @ PeerMetadata(host, udpPort, port, id, ns, time, auxHost) =>
 
-      if (host != dao.externalHostString && host != "127.0.0.1") {
+      val validHost = (host != dao.externalHostString && host != "127.0.0.1") || !dao.preventLocalhostAsPeer
+
+      if (id != dao.id && validHost) {
 
         val adjustedHost = if (auxHost.nonEmpty) auxHost else host
         val client = APIClient(adjustedHost, port)(dao.edgeExecutionContext, dao)
@@ -165,7 +167,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
             pmd.foreach {
               md =>
                 if (!dao.peerInfo.exists(_._2.peerMetadata.host == md.host) && md.host != dao.externalHostString &&
-                md.host != "127.0.0.1") {
+                md.host != "127.0.0.1" && dao.id != md.id) {
                   new APIClient(md.host, md.httpPort)(dao.edgeExecutionContext, dao)
                     .getNonBlocking[PeerRegistrationRequest]("registration/request").onComplete {
                     case Success(registrationRequest) =>
@@ -211,8 +213,14 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
       logger.info(s"Pending Registration request: $pr")
 
-      if (peerInfo.exists(_._2.client.hostName == ip) || ip == dao.externalHostString || request.host == dao.externalHostString ||
-      request.host == "127.0.0.1") {
+      val validExternalHost = request.host != dao.externalHostString && request.host != "127.0.0.1"
+      val hostAlreadyExists = peerInfo.exists(_._2.client.hostName == ip)
+      val validHost = (validExternalHost && !hostAlreadyExists) || !dao.preventLocalhostAsPeer
+      val isSelfId = dao.id == request.id
+
+      val badAttempt = isSelfId || !validHost
+
+      if (badAttempt) {
         dao.metricsManager ! IncrementMetric("duplicatePeerAdditionAttempt")
       } else {
         // implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")

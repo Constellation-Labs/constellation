@@ -116,7 +116,8 @@ import scala.concurrent.ExecutionContext
         timeoutSeconds = rpcTimeout,
         hostName = hostName,
         requestExternalAddressCheck = requestExternalAddressCheck,
-        peerHttpPort = peerHttpPort
+        peerHttpPort = peerHttpPort,
+        attemptDownload = true
       )
     } match {
       case Failure(e) => e.printStackTrace()
@@ -140,7 +141,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
                         val requestExternalAddressCheck : Boolean = false,
                         val autoSetExternalAddress: Boolean = false,
                         val peerHttpPort: Int = 9001,
-                        val peerTCPPort: Int = 9002)(
+                        val peerTCPPort: Int = 9002,
+                        val attemptDownload: Boolean = false
+                       )(
                          implicit val system: ActorSystem,
                          implicit val materialize: ActorMaterializer,
                          implicit val executionContext: ExecutionContext
@@ -148,6 +151,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   implicit val dao: DAO = new DAO()
   dao.updateKeyPair(configKeyPair)
+
+  dao.preventLocalhostAsPeer = attemptDownload
 
   dao.externlPeerHTTPPort = peerHttpPort
 
@@ -311,6 +316,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
   metricsManager ! UpdateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
   metricsManager ! UpdateMetric("nodeStartDate", new DateTime(System.currentTimeMillis()).toString)
 
-  PeerManager.initiatePeerReload()(dao, dao.edgeExecutionContext)
+  if (attemptDownload) {
+    PeerManager.initiatePeerReload()(dao, dao.edgeExecutionContext)
+  }
 
 }

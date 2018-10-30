@@ -18,6 +18,8 @@ class DAO extends MetricsExt
 
   var confirmWindow : Int = 30
 
+  var preventLocalhostAsPeer: Boolean = true
+
   def dbPath: File = {
     val f = File(s"tmp/${id.medium}/db")
     f.createDirectoryIfNotExists()
