@@ -637,13 +637,29 @@ object EdgeProcessor {
                 val blocks = responseValues.map {_.checkpointBlock}
 
                 val finalCB = blocks.reduce { (x: CheckpointBlock, y: CheckpointBlock) => x.plus(y) }.plus(checkpointBlock)
-                dao.threadSafeTipService.accept(finalCB)
-                // TODO: Check failures and/or remove constraint of single actor
-                dao.peerInfo.foreach { case (id, client) =>
-                  tryWithMetric(
-                    client.client.postSync(s"finished/checkpoint", FinishedCheckpoint(finalCB, finalFacilitators)),
-                    "finishedCheckpointBroadcast"
-                  )
+
+                if (finalCB.signatures.size != finalFacilitators.size + 1) {
+                  dao.metricsManager ! IncrementMetric("missingBlockSignatures")
+                } else {
+                  dao.metricsManager ! IncrementMetric("sufficientBlockSignatures")
+
+                  if (!finalCB.simpleValidation()) {
+
+                    dao.metricsManager ! IncrementMetric("finalCBFailedValidation")
+
+                  } else {
+                    dao.metricsManager ! IncrementMetric("finalCBPassedValidation")
+
+                    dao.threadSafeTipService.accept(finalCB)
+                    // TODO: Check failures and/or remove constraint of single actor
+                    dao.peerInfo.foreach { case (id, client) =>
+                      tryWithMetric(
+                        client.client.postSync(s"finished/checkpoint", FinishedCheckpoint(finalCB, finalFacilitators)),
+                        "finishedCheckpointBroadcast"
+                      )
+                    }
+                  }
+
                 }
 
               }
@@ -661,14 +677,19 @@ object EdgeProcessor {
   // Temporary for testing join/leave logic.
   def handleSignatureRequest(sr: SignatureRequest)(implicit dao: DAO): SignatureResponse = {
     //if (sr.facilitators.contains(dao.id)) {
-     // val replyTo = sr.checkpointBlock.witnessIds.head
-      val updated = sr.checkpointBlock.plus(dao.keyPair)
-      SignatureResponse(updated, sr.facilitators)
-      /*dao.peerManager ! APIBroadcast(
-        _.post(s"response/signature", SignatureResponse(updated, sr.facilitators)),
-        peerSubset = Set(replyTo)
-      )*/
-   // } else None
+    // val replyTo = sr.checkpointBlock.witnessIds.head
+    val updated = if (sr.checkpointBlock.simpleValidation()) {
+      sr.checkpointBlock.plus(dao.keyPair)
+    }
+    else {
+      sr.checkpointBlock
+    }
+    SignatureResponse(updated, sr.facilitators)
+    /*dao.peerManager ! APIBroadcast(
+      _.post(s"response/signature", SignatureResponse(updated, sr.facilitators)),
+      peerSubset = Set(replyTo)
+    )*/
+    // } else None
   }
 
 }
@@ -810,6 +831,7 @@ class EdgeProcessor(dao: DAO)
 
     case DownloadComplete(latestSnapshot) =>
 
+      dao.generateRandomTX = true
       dao.threadSafeTipService.setSnapshot(latestSnapshot)
       dao.nodeState = NodeState.Ready
       dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
@@ -833,11 +855,11 @@ class EdgeProcessor(dao: DAO)
       dao.acceptGenesis(go)
       dao.threadSafeTipService.acceptGenesis(go)
 
-/*//      @deprecated
-    case ConsensusRoundResult(checkpointBlock, roundHash: RoundHash[Checkpoint]) =>
-      log.debug(s"handle checkpointBlock = $checkpointBlock")
+    /*//      @deprecated
+        case ConsensusRoundResult(checkpointBlock, roundHash: RoundHash[Checkpoint]) =>
+          log.debug(s"handle checkpointBlock = $checkpointBlock")
 
-    // handleCheckpoint(checkpointBlock, dao)*/
+        // handleCheckpoint(checkpointBlock, dao)*/
 
   }
 

@@ -100,7 +100,7 @@ class ThreadSafeTipService() {
 
     if (dao.nodeState == NodeState.Ready && acceptedCBSinceSnapshot.nonEmpty) {
 
-      val nextSnapshot = Snapshot(snapshot.hash, acceptedCBSinceSnapshot)
+      val nextSnapshot = Snapshot(snapshot.hash, acceptedCBSinceSnapshot.sorted)
 
       // TODO: Make this a future and have it not break the unit test
       // Also make the db puts blocking, may help for different issue

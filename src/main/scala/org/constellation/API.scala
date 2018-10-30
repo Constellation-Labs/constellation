@@ -196,6 +196,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
       } ~
       path("random") { // Temporary
         dao.generateRandomTX = !dao.generateRandomTX
+        dao.metricsManager ! UpdateMetric("generateRandomTX", dao.generateRandomTX.toString)
         complete(StatusCodes.OK)
       } ~
       path("peerHealthCheck") {

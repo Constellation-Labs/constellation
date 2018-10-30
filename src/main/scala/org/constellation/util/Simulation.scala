@@ -248,8 +248,8 @@ class Simulation {
     src.post("sendTransactionToAddress", s)
   }
 
-  def triggerRandom(apis: Seq[APIClient]): Unit = {
-    apis.foreach(_.postEmpty("random"))
+  def triggerRandom(apis: Seq[APIClient]): Seq[HttpResponse[String]] = {
+    apis.map(_.postEmpty("random"))
   }
   def setReady(apis: Seq[APIClient]): Unit = {
     apis.foreach(_.postEmpty("ready"))

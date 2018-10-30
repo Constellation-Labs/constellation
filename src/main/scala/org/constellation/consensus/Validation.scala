@@ -16,13 +16,6 @@ import scala.concurrent.{ExecutionContext, Future}
 
 object Validation {
 
-  def validateCheckpoint(
-                          dbActor: ActorRef,
-                          cb: Schema.CheckpointBlock
-                        )(implicit ec: ExecutionContext): Future[CheckpointValidationStatus] = {
-    Future{CheckpointValidationStatus()}
-  }
-
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
   // TODO : Add an LRU cache for looking up TransactionCacheData instead of pure LDB calls.

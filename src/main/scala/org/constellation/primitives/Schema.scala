@@ -4,6 +4,7 @@ import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
 import constellation.pubKeyToAddress
+import org.constellation.DAO
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.consensus.{MemPool, TipData}
 import org.constellation.datastore.Datastore
@@ -11,7 +12,6 @@ import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
 import scala.util.Random
 
 // This can't be a trait due to serialization issues
@@ -264,6 +264,11 @@ object Schema {
       edge = edge.plus(keyPair)
     )
 
+    def valid: Boolean = validSrcSignature &&
+      dst.address.nonEmpty &&
+      dst.address.length > 30 &&
+      dst.address.startsWith("DAG")
+
     def validSrcSignature: Boolean = {
       edge.signedObservationEdge.signatureBatch.signatures.exists{ hs =>
         hs.publicKey.address == src.address && hs.valid(edge.signedObservationEdge.signatureBatch.hash)
@@ -330,7 +335,7 @@ object Schema {
                                reputation: Option[Double] = None,
                                ancestorBalances: Map[String, Long] = Map(),
                                ancestorReputations: Map[String, Long] = Map(),
-                           //    recentTransactions: Seq[String] = Seq(),
+                               //    recentTransactions: Seq[String] = Seq(),
                                balanceByLatestSnapshot: Long = 0L
                              ) {
 
@@ -403,7 +408,48 @@ object Schema {
   case class CheckpointBlock(
                               transactions: Seq[Transaction],
                               checkpoint: CheckpointEdge
-                                  ) {
+                            ) {
+
+    def transactionsValid: Boolean = transactions.nonEmpty && transactions.forall(_.valid)
+
+    // TODO: Return checkpoint validation status for more info rather than just a boolean
+    def simpleValidation(
+                          balanceAccessFunction: AddressCacheData => Long = (a: AddressCacheData) => a.balance
+                        )(implicit dao: DAO): Boolean = {
+      val success = if (!validSignatures || signatures.isEmpty) {
+        false
+      } else if (!transactionsValid) {
+        false
+      } else {
+
+        val addressCache = transactions.map {_.src.address}.map { a => a -> dao.dbActor.getAddressCacheData(a) }
+        val cachesFound = addressCache.forall(_._2.nonEmpty)
+        if (!cachesFound) {
+          false
+        } else {
+
+          val sumByAddress = transactions
+            .map { t => t.src.address -> t.amount }
+            .groupBy(_._1).mapValues(_.map {_._2}.sum)
+
+          val lookup = addressCache.toMap.mapValues(_.get)
+
+          val sufficientBalances = sumByAddress.forall { case (k, v) =>
+            balanceAccessFunction(lookup(k)) >= v
+          }
+
+          sufficientBalances
+        }
+      }
+
+      if (success) {
+        dao.metricsManager ! IncrementMetric("checkpointValidationSuccess")
+      } else {
+        dao.metricsManager ! IncrementMetric("checkpointValidationFailure")
+      }
+
+      success
+    }
 
     def uniqueSignatures: Boolean = signatures.groupBy(_.b58EncodedPublicKey).forall(_._2.size == 1)
 
@@ -425,15 +471,17 @@ object Schema {
 
     def baseHash: String = checkpoint.edge.baseHash
 
+    def validSignatures: Boolean = signatures.forall(_.valid(baseHash))
+
     // TODO: Optimize call, should store this value instead of recalculating every time.
     def soeHash: String = checkpoint.edge.signedObservationEdge.hash
 
     def store(db: Datastore, cache: CheckpointCacheData, resolved: Boolean): Unit = {
-/*
-      transactions.foreach { rt =>
-        rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))
-      }
-*/
+      /*
+            transactions.foreach { rt =>
+              rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))
+            }
+      */
       checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
     }
 
