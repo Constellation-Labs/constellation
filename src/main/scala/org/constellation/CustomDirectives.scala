@@ -1,9 +1,12 @@
 package org.constellation
 
-import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Directive0
+import akka.event.LoggingAdapter
+import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
+import akka.http.scaladsl.server.{Directive0, RouteResult}
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.RouteResult.{Complete, Rejected}
 import com.google.common.util.concurrent.RateLimiter
+import com.typesafe.scalalogging.Logger
 import org.constellation.primitives.IPManager
 
 object CustomDirectives {
@@ -56,6 +59,23 @@ object CustomDirectives {
         }
       }
     }
+  }
+
+  def wrapper(logger: Logger, requestTimestamp: Long)(req: HttpRequest)(res: RouteResult) = res match {
+    case Complete(resp) =>
+      val responseTimestamp: Long = System.nanoTime
+      val elapsedTime: Long = (responseTimestamp - requestTimestamp) / 1000000
+      val loggingString =
+        s"""Logged Request:${req.method}:${req.uri}:${resp.status}:${elapsedTime}ms"""
+      logger.info(loggingString)
+    case Rejected(reason) =>
+      logger.info(s"Rejected Reason: ${reason.mkString(",")}")
+  }
+
+  def printResponseTime(logger: Logger)(log: LoggingAdapter) = {
+    val requestTimestamp = System.nanoTime
+
+    wrapper(logger, requestTimestamp) _
   }
 
 }

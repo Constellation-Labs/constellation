@@ -5,9 +5,13 @@ import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props, TypedActor, TypedProps}
+import akka.event.Logging.LogLevel
+import akka.event.{Logging, LoggingAdapter}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.RemoteAddress
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.model.{HttpRequest, RemoteAddress}
+import akka.http.scaladsl.server.RouteResult.{Complete, Rejected}
+import akka.http.scaladsl.server.{Directive0, Route, RouteResult}
+import akka.http.scaladsl.server.directives.{DebuggingDirectives, LogEntry, LoggingMagnet}
 import akka.io.Udp
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
@@ -25,6 +29,7 @@ import org.constellation.util.{APIClient, Heartbeat}
 import org.joda.time.DateTime
 import constellation._
 import better.files._
+import org.constellation.CustomDirectives.printResponseTime
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -227,8 +232,12 @@ class ConstellationNode(val configKeyPair: KeyPair,
   dao.peerManager = peerManager
   dao.edgeProcessor = edgeProcessorActor
 
+  private val logReqResp: Directive0 = DebuggingDirectives.logRequestResult(
+    LoggingMagnet(printResponseTime(logger))
+  )
+
   // If we are exposing rpc then create routes
-  val routes: Route = new API(udpAddress).routes
+  val routes: Route = logReqResp { new API(udpAddress).routes }
 
   logger.info("API Binding")
 
@@ -238,7 +247,23 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   val peerAPI = new PeerAPI(ipManager)
 
-  val peerRoutes : Route = peerAPI.routes
+  def akkaResponseTimeLoggingFunction(
+                                       loggingAdapter:   LoggingAdapter,
+                                       requestTimestamp: Long,
+                                       level:            LogLevel       = Logging.InfoLevel)(req: HttpRequest)(res: RouteResult): Unit = {
+    val entry = res match {
+      case Complete(resp) =>
+        val responseTimestamp: Long = System.nanoTime
+        val elapsedTime: Long = (responseTimestamp - requestTimestamp) / 1000000
+        val loggingString = s"""Logged Request:${req.method}:${req.uri}:${resp.status}:$elapsedTime"""
+        LogEntry(loggingString, level)
+      case Rejected(reason) =>
+        LogEntry(s"Rejected Reason: ${reason.mkString(",")}", level)
+    }
+    entry.logTo(loggingAdapter)
+  }
+
+  val peerRoutes : Route = logReqResp { peerAPI.routes }
 
 
   seedPeers.foreach {
