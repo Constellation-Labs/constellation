@@ -4,27 +4,27 @@ import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{ActorRef, ActorSystem, Props, TypedActor, TypedProps}
+import akka.actor.{ActorRef, ActorSystem, Props, TypedActor}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.RemoteAddress
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.server.directives.{DebuggingDirectives, LoggingMagnet}
+import akka.http.scaladsl.server.{Directive0, Route}
 import akka.io.Udp
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
+import better.files._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
+import constellation._
+import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
-import org.constellation.datastore.{Datastore, SimpleKVDatastore}
-import org.constellation.datastore.leveldb.LevelDBDatastore
 import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.p2p.{PeerAPI, UDPActor}
 import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Heartbeat}
 import org.joda.time.DateTime
-import constellation._
-import better.files._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -230,8 +230,12 @@ class ConstellationNode(val configKeyPair: KeyPair,
   dao.peerManager = peerManager
   dao.edgeProcessor = edgeProcessorActor
 
+  private val logReqResp: Directive0 = DebuggingDirectives.logRequestResult(
+    LoggingMagnet(printResponseTime(logger))
+  )
+
   // If we are exposing rpc then create routes
-  val routes: Route = new API(udpAddress).routes
+  val routes: Route = logReqResp { new API(udpAddress).routes }
 
   logger.info("API Binding")
 
@@ -241,7 +245,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   val peerAPI = new PeerAPI(ipManager)
 
-  val peerRoutes : Route = peerAPI.routes
+  val peerRoutes : Route = logReqResp { peerAPI.routes }
 
 
   seedPeers.foreach {
