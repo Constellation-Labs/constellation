@@ -247,22 +247,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   val peerAPI = new PeerAPI(ipManager)
 
-  def akkaResponseTimeLoggingFunction(
-                                       loggingAdapter:   LoggingAdapter,
-                                       requestTimestamp: Long,
-                                       level:            LogLevel       = Logging.InfoLevel)(req: HttpRequest)(res: RouteResult): Unit = {
-    val entry = res match {
-      case Complete(resp) =>
-        val responseTimestamp: Long = System.nanoTime
-        val elapsedTime: Long = (responseTimestamp - requestTimestamp) / 1000000
-        val loggingString = s"""Logged Request:${req.method}:${req.uri}:${resp.status}:$elapsedTime"""
-        LogEntry(loggingString, level)
-      case Rejected(reason) =>
-        LogEntry(s"Rejected Reason: ${reason.mkString(",")}", level)
-    }
-    entry.logTo(loggingAdapter)
-  }
-
   val peerRoutes : Route = logReqResp { peerAPI.routes }
 
 
