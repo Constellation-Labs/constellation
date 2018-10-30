@@ -4,32 +4,27 @@ import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{ActorRef, ActorSystem, Props, TypedActor, TypedProps}
-import akka.event.Logging.LogLevel
-import akka.event.{Logging, LoggingAdapter}
+import akka.actor.{ActorRef, ActorSystem, Props, TypedActor}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.{HttpRequest, RemoteAddress}
-import akka.http.scaladsl.server.RouteResult.{Complete, Rejected}
-import akka.http.scaladsl.server.{Directive0, Route, RouteResult}
-import akka.http.scaladsl.server.directives.{DebuggingDirectives, LogEntry, LoggingMagnet}
+import akka.http.scaladsl.model.RemoteAddress
+import akka.http.scaladsl.server.directives.{DebuggingDirectives, LoggingMagnet}
+import akka.http.scaladsl.server.{Directive0, Route}
 import akka.io.Udp
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
+import better.files._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
+import constellation._
+import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
-import org.constellation.datastore.{Datastore, SimpleKVDatastore}
-import org.constellation.datastore.leveldb.LevelDBDatastore
 import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.p2p.{PeerAPI, UDPActor}
 import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Heartbeat}
 import org.joda.time.DateTime
-import constellation._
-import better.files._
-import org.constellation.CustomDirectives.printResponseTime
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}

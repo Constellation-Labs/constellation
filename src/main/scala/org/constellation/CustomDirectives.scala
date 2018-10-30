@@ -2,9 +2,9 @@ package org.constellation
 
 import akka.event.LoggingAdapter
 import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
-import akka.http.scaladsl.server.{Directive0, RouteResult}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.RouteResult.{Complete, Rejected}
+import akka.http.scaladsl.server.{Directive0, RouteResult}
 import com.google.common.util.concurrent.RateLimiter
 import com.typesafe.scalalogging.Logger
 import org.constellation.primitives.IPManager
