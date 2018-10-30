@@ -546,8 +546,9 @@ object EdgeProcessor {
   // TODO: Send facilitator selection data (i.e. criteria) as well for verification
 
   case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
-  case class SignatureResponse(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
+  case class SignatureResponse(checkpointBlock: CheckpointBlock, facilitators: Set[Id], reRegister: Boolean = false)
   case class FinishedCheckpoint(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
+  case class FinishedCheckpointResponse(reRegister: Boolean = false)
 
   // TODO: Move to checkpoint formation actor
   def formCheckpoint()(implicit dao: DAO): Unit = {
@@ -622,9 +623,18 @@ object EdgeProcessor {
                 // Successful formation
                 dao.metricsManager ! IncrementMetric("formCheckpointSignatureResponseAllResponsesPresent")
 
-                val blocks = withValue.values.map {
-                  _.get.checkpointBlock
+                val responseValues = withValue.values.map{_.get}
+
+                responseValues.foreach{ sr =>
+
+                  if (sr.reRegister) {
+                    // PeerManager.attemptRegisterPeer() TODO : Finish
+                  }
+
                 }
+
+                val blocks = responseValues.map {_.checkpointBlock}
+
                 val finalCB = blocks.reduce { (x: CheckpointBlock, y: CheckpointBlock) => x.plus(y) }.plus(checkpointBlock)
                 dao.threadSafeTipService.accept(finalCB)
                 // TODO: Check failures and/or remove constraint of single actor

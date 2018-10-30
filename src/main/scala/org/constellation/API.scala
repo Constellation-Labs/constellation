@@ -155,17 +155,8 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         } ~
         path("add") {
           entity(as[HostPort]) { case hp @ HostPort(host, port) =>
-
             onComplete{
-              futureTryWithTimeoutMetric({
-                logger.info(s"Attempting to register with $hp")
-                new APIClient(host, port).postSync(
-                  "register",
-                  PeerRegistrationRequest(externalHostString, dao.externlPeerHTTPPort, dao.id.b58)
-                )
-              },
-                "addPeerWithRegistration"
-              )
+              PeerManager.attemptRegisterPeer(hp)
             } { result =>
 
               complete(StatusCodes.OK)

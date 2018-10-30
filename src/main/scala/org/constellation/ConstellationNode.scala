@@ -195,7 +195,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   )
 
   val peerManager: ActorRef = system.actorOf(
-    Props(new PeerManager(ipManager, dao)), s"PeerManager_$publicKeyHash"
+    Props(new PeerManager(ipManager)), s"PeerManager_$publicKeyHash"
   )
 
  // val dbActor = new SimpleKVDatastore(dao)

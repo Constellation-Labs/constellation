@@ -17,7 +17,7 @@ import scala.concurrent.{ExecutionContext, Future}
 object APIClient {
   def apply(host: String = "127.0.0.1", port: Int, udpPort: Int = 16180)
            (
-             implicit executionContext: ExecutionContext
+             implicit executionContext: ExecutionContext, dao: DAO = null
              //implicit system: ActorSystem, materialize: ActorMaterializer
   ): APIClient = {
     new APIClient(host, port)
