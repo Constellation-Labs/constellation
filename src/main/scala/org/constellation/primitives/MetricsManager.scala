@@ -49,10 +49,16 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
 
         val allAddresses = peers.map{_._1.address.address} :+ dao.selfAddressStr
 
-        val balanceMetrics = allAddresses.map{a =>
+        val balancesBySnapshotMetrics = allAddresses.map{a =>
           val balance = dao.dbActor.getAddressCacheData(a).map{_.balanceByLatestSnapshot}.getOrElse(0L)
           a.slice(0, 8) + " " + balance
-        }.mkString(", ")
+        }.sorted.mkString(", ")
+
+
+        val balancesMetrics = allAddresses.map{a =>
+          val balance = dao.dbActor.getAddressCacheData(a).map{_.balance}.getOrElse(0L)
+          a.slice(0, 8) + " " + balance
+        }.sorted.mkString(", ")
 
 
      //   logger.info("Metrics: " + metrics)
@@ -69,7 +75,8 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
           metrics + (
             "TPS_last_" + dao.processingConfig.metricCheckInterval + "_seconds" -> tps.toString,
             "TPS_all" -> tpsAll.toString,
-            "balances" -> balanceMetrics,
+            "balancesBySnapshot" -> balancesBySnapshotMetrics,
+            "balances" -> balancesMetrics,
             "nodeCurrentTimeMS" -> System.currentTimeMillis().toString,
             "nodeCurrentDate" -> new DateTime().toString()
           )

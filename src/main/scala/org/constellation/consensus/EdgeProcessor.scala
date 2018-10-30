@@ -810,15 +810,15 @@ class EdgeProcessor(dao: DAO)
 
     case DownloadComplete(latestSnapshot) =>
 
+      dao.threadSafeTipService.setSnapshot(latestSnapshot)
       dao.nodeState = NodeState.Ready
       dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
       dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, NodeState.Ready)))
-      dao.threadSafeTipService.setSnapshot(latestSnapshot)
 
     case InternalHeartbeat(round) =>
 
       // TODO: Refactor round into InternalHeartbeat
-      if (round % dao.snapshotInterval == 0) {
+      if (round % dao.snapshotInterval == 0 && dao.nodeState == NodeState.Ready) {
         futureTryWithTimeoutMetric(
           dao.threadSafeTipService.attemptSnapshot(), "snapshotAttempt"
         )(dao.edgeExecutionContext, dao)

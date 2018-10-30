@@ -164,6 +164,33 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
 
   def getSnapshotInfo(): SnapshotInfo = getBlocking[SnapshotInfo]("info")
 
+
+  def getSnapshots(): Seq[Snapshot] = {
+
+    val snapshotInfo = getSnapshotInfo()
+
+    val startingSnapshot = snapshotInfo.snapshot
+
+    def getSnapshots(hash: String, snapshots: Seq[Snapshot] = Seq()): Seq[Snapshot] = {
+      val sn = getBlocking[Option[Snapshot]]("snapshot/" + hash)
+      sn match {
+        case Some(snapshot) =>
+          if (snapshot.lastSnapshot == "" || snapshot.lastSnapshot == Snapshot.snapshotZeroHash) {
+            snapshots :+ snapshot
+          } else {
+            getSnapshots(snapshot.lastSnapshot, snapshots :+ snapshot)
+          }
+        case None =>
+          println("MISSING SNAPSHOT")
+          snapshots
+      }
+    }
+
+    val snapshots = getSnapshots(startingSnapshot.lastSnapshot, Seq(startingSnapshot))
+    snapshots
+  }
+
+
   def simpleDownload(): Seq[String] = {
 
     val snapshotInfo = getSnapshotInfo()

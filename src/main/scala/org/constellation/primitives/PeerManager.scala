@@ -153,35 +153,40 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
     case a @ PeerMetadata(host, udpPort, port, id, ns, time, auxHost) =>
 
-      val adjustedHost = if (auxHost.nonEmpty) auxHost else host
-      val client =  APIClient(adjustedHost, port)(dao.edgeExecutionContext, dao)
-      client.id = id
+      if (host != dao.externalHostString && host != "127.0.0.1") {
 
-      client.getNonBlocking[Seq[PeerMetadata]]("peers").onComplete{
+        val adjustedHost = if (auxHost.nonEmpty) auxHost else host
+        val client = APIClient(adjustedHost, port)(dao.edgeExecutionContext, dao)
+        client.id = id
 
-        case Success(pmd) =>
-          pmd.foreach{
-            md =>
-              if (!dao.peerInfo.exists(_._2.peerMetadata.host == md.host)) {
-                new APIClient(md.host, md.httpPort)(dao.edgeExecutionContext, dao)
-                  .getNonBlocking[PeerRegistrationRequest]("registration/request").onComplete{
-                  case Success(registrationRequest) =>
-                    self ! PendingRegistration(md.host, registrationRequest)
-                  case Failure(e) =>
-                    dao.metricsManager ! IncrementMetric("peerGetRegistrationRequestFailed")
-                }(dao.edgeExecutionContext)
-              }
+        client.getNonBlocking[Seq[PeerMetadata]]("peers").onComplete {
 
-          }
+          case Success(pmd) =>
+            pmd.foreach {
+              md =>
+                if (!dao.peerInfo.exists(_._2.peerMetadata.host == md.host) && md.host != dao.externalHostString &&
+                md.host != "127.0.0.1") {
+                  new APIClient(md.host, md.httpPort)(dao.edgeExecutionContext, dao)
+                    .getNonBlocking[PeerRegistrationRequest]("registration/request").onComplete {
+                    case Success(registrationRequest) =>
+                      self ! PendingRegistration(md.host, registrationRequest)
+                    case Failure(e) =>
+                      dao.metricsManager ! IncrementMetric("peerGetRegistrationRequestFailed")
+                  }(dao.edgeExecutionContext)
+                }
 
-        case Failure(e) =>
-          dao.metricsManager ! IncrementMetric("peerDiscoveryQueryFailed")
+            }
 
-      }(dao.edgeExecutionContext)
+          case Failure(e) =>
+            dao.metricsManager ! IncrementMetric("peerDiscoveryQueryFailed")
 
-      val peerData = PeerData(a, client)
+        }(dao.edgeExecutionContext)
 
-      updatePeerInfo(peerInfo, peerData)
+
+        val peerData = PeerData(a, client)
+
+        updatePeerInfo(peerInfo, peerData)
+      }
 
     case APIBroadcast(func, skipIds, subset) =>
       val replyTo = sender()
@@ -206,7 +211,8 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
       logger.info(s"Pending Registration request: $pr")
 
-      if (peerInfo.exists(_._2.client.hostName == ip)) {
+      if (peerInfo.exists(_._2.client.hostName == ip) || ip == dao.externalHostString || request.host == dao.externalHostString ||
+      request.host == "127.0.0.1") {
         dao.metricsManager ! IncrementMetric("duplicatePeerAdditionAttempt")
       } else {
         // implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
