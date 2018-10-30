@@ -21,19 +21,21 @@ object Download {
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
   def downloadCBFromHash(hash: String, singlePeer: PeerData)(implicit dao: DAO, ec: ExecutionContext): Unit = {
-    singlePeer.client.getBlocking[Option[CheckpointBlock]]("checkpoint/" + hash) match { case Some(cb) =>
-      if (cb != dao.genesisObservation.get.initialDistribution &&
-        cb != dao.genesisObservation.get.initialDistribution2) {
-
-        if (dao.dbActor.getCheckpointCacheData(cb.baseHash).isEmpty) {
-          EdgeProcessor.acceptCheckpoint(cb)
-          dao.metricsManager ! IncrementMetric("downloadedBlocks")
-        } else {
-          dao.metricsManager ! IncrementMetric("downloadedBlockButHashAlreadyExistsInDB")
-        }
+    if (dao.dbActor.getCheckpointCacheData(hash).isEmpty) {
+      singlePeer.client.getBlocking[Option[CheckpointBlock]]("checkpoint/" + hash) match {
+        case Some(cb) =>
+          if (cb != dao.genesisObservation.get.initialDistribution &&
+            cb != dao.genesisObservation.get.initialDistribution2) {
+            //if (dao.dbActor.getCheckpointCacheData(cb.baseHash).isEmpty) {
+              EdgeProcessor.acceptCheckpoint(cb)
+              dao.metricsManager ! IncrementMetric("downloadedBlocks")
+            //} else {
+             // dao.metricsManager ! IncrementMetric("downloadedBlockButHashAlreadyExistsInDB")
+            //}
+          }
+        case None =>
+          dao.metricsManager ! IncrementMetric("downloadBlockEmptyResponse")
       }
-    case None =>
-      dao.metricsManager ! IncrementMetric("downloadBlockEmptyResponse")
     }
   }
 
@@ -41,6 +43,7 @@ object Download {
   def downloadActual()(implicit dao: DAO, ec: ExecutionContext): Unit = {
     logger.info("Download started")
     dao.nodeState = NodeState.DownloadInProgress
+    PeerManager.broadcastNodeState()
 
     val res = (dao.peerManager ? APIBroadcast(_.getBlocking[Option[GenesisObservation]]("genesis")))
       .mapTo[Map[Id, Option[GenesisObservation]]].get()
@@ -115,12 +118,7 @@ object Download {
 
   def download()(implicit dao: DAO, ec: ExecutionContext): Unit = {
 
-    Try {
-      downloadActual()
-    } match {
-      case Failure(e) => e.printStackTrace()
-      case _ => logger.info("Download succeeded")
-    }
+    tryWithMetric(downloadActual(), "download")
 
   }
 

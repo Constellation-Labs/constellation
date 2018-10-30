@@ -119,7 +119,14 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
           }
         }
       }
-    }
+    } ~
+      get {
+        pathPrefix("registration") {
+          path("request") {
+            complete(dao.peerRegistrationRequest)
+          }
+        }
+      }
 
   private val postEndpoints =
     post {

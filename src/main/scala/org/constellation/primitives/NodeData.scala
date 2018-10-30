@@ -6,6 +6,7 @@ import java.security.KeyPair
 import akka.actor.ActorRef
 import constellation._
 import org.constellation.datastore.Datastore
+import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.util.Signed
@@ -39,6 +40,8 @@ trait NodeData {
 
   var externalHostString: String = "127.0.0.1"
   var externlPeerHTTPPort: Int = 9001
+
+  def peerRegistrationRequest = PeerRegistrationRequest(externalHostString, externlPeerHTTPPort, id.b58)
 
   @volatile var externalAddress: Option[InetSocketAddress] = None
   @volatile var apiAddress: Option[InetSocketAddress] = None

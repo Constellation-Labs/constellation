@@ -131,10 +131,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           path("nodeKeyPair") {
             complete(keyPair)
           } ~
-          path("peers") {
-            val res = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].getOpt().getOrElse(Map())
-            complete(res)
-          } ~
           path("peerids") {
             complete(peers.map {
               _.data

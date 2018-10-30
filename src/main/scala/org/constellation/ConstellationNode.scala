@@ -311,6 +311,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
   metricsManager ! UpdateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
   metricsManager ! UpdateMetric("nodeStartDate", new DateTime(System.currentTimeMillis()).toString)
 
-  PeerManager.initiatePeerReload()
+  PeerManager.initiatePeerReload()(dao, dao.edgeExecutionContext)
 
 }

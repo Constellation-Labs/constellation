@@ -7,7 +7,7 @@ import akka.http.scaladsl.model.RemoteAddress
 import akka.stream.ActorMaterializer
 import com.typesafe.scalalogging.Logger
 import constellation.futureTryWithTimeoutMetric
-import org.constellation.p2p.{PeerAuthSignRequest, PeerRegistrationRequest}
+import org.constellation.p2p.{Download, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{Id, NodeState}
 import org.constellation.util._
@@ -22,10 +22,11 @@ import scala.concurrent.ExecutionContext
 
 import constellation._
 import better.files._
+import scala.util.{Success, Failure}
 
 object PeerManager {
 
-  def initiatePeerReload()(implicit dao: DAO): Unit = {
+  def initiatePeerReload()(implicit dao: DAO, ec: ExecutionContextExecutor): Unit = {
 
     tryWithMetric(
       {
@@ -37,7 +38,17 @@ object PeerManager {
       "peerReloading"
     )
 
+    // TODO: Instead wait until peer discovery phase complete
+    Thread.sleep(15*1000)
+    Download.download()
+
+
   }
+
+  def broadcastNodeState()(implicit dao: DAO): Unit = {
+    dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
+  }
+
 
 
   val logger = Logger(s"PeerManagerObj")
@@ -52,7 +63,7 @@ object PeerManager {
 
       new APIClient(hp.host, hp.port).postSync(
         "register",
-        PeerRegistrationRequest(dao.externalHostString, dao.externlPeerHTTPPort, dao.id.b58)
+        dao.peerRegistrationRequest
       )
     },
       "addPeerWithRegistration"
@@ -100,7 +111,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
     )
     dao.peerInfo = updatedPeerInfo
 
-    dao.peersInfoPath.write(updatedPeerInfo.values.toSeq.json)
+    dao.peersInfoPath.write(updatedPeerInfo.values.toSeq.map{_.peerMetadata}.json)
 
     context become active(updatedPeerInfo)
   }
@@ -145,6 +156,28 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
       val adjustedHost = if (auxHost.nonEmpty) auxHost else host
       val client =  APIClient(adjustedHost, port)(dao.edgeExecutionContext, dao)
       client.id = id
+
+      client.getNonBlocking[Seq[PeerMetadata]]("peers").onComplete{
+
+        case Success(pmd) =>
+          pmd.foreach{
+            md =>
+              if (!dao.peerInfo.exists(_._2.peerMetadata.host == md.host)) {
+                new APIClient(md.host, md.httpPort)(dao.edgeExecutionContext, dao)
+                  .getNonBlocking[PeerRegistrationRequest]("registration/request").onComplete{
+                  case Success(registrationRequest) =>
+                    self ! PendingRegistration(md.host, registrationRequest)
+                  case Failure(e) =>
+                    dao.metricsManager ! IncrementMetric("peerGetRegistrationRequestFailed")
+                }(dao.edgeExecutionContext)
+              }
+
+          }
+
+        case Failure(e) =>
+          dao.metricsManager ! IncrementMetric("peerDiscoveryQueryFailed")
+
+      }(dao.edgeExecutionContext)
 
       val peerData = PeerData(a, client)
 

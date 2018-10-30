@@ -56,6 +56,9 @@ trait CommonEndpoints extends Json4sSupport {
       } ~
     path("state") {
       complete(NodeStateInfo(dao.nodeState))
+    } ~
+    path("peers") {
+      complete(dao.peerInfo.map{_._2.peerMetadata}.toSeq)
     }
   }
 }
