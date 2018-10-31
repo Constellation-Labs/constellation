@@ -29,7 +29,7 @@ output "instance_ips" {
 
 // A single Google Cloud Engine instance
 resource "google_compute_instance" "default" {
- count          = 2
+ count          = 5
  name = "constellation-${random_id.instance_id.hex}-${count.index}"
  machine_type   = "n1-standard-1"
  zone           = "us-west2-b"
@@ -57,7 +57,7 @@ resource "google_compute_instance" "default" {
  }
 
  scheduling {
-  preemptible = "true" // "true"
+  preemptible = "false" // "true"
   automatic_restart = "false"
  }
 
