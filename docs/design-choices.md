@@ -3,16 +3,18 @@
 This file summarizes current resoning for our approach and design decissions, 
 reviews and references. Please communicate suggestions by making a thread on the 
 [community portal Orion](https://orion.constellationlabs.io/accounts/login/?next=/) 
-or approaching the developers on the
-[discord](https://discordapp.com/invite/KMSmXbV)
-server.
+or approaching the developers on the [discord](https://discordapp.com/invite/KMSmXbV) server:
+
+  <a href="https://discordapp.com/invite/KMSmXbV">
+	  <img src="https://img.shields.io/badge/chat-discord-brightgreen.svg"/>
+  </a>
 
 Many decissions can be traced back to the fundamental goal to provide and
 accessible, scalable protocol that focuses on solving the consensus task. 
 For a cursory glipse into the core teams perspectives, you may check out the following clips:
 
-* [youtube.com/constellation-labs/talk-at-Tech-Crunch](https://youtu.be/SsYZF4msXuQ) (Aug. 2018, 40 mins)
-* [youtube.com/constellation-labs/testnet-overview](https://youtu.be/xjn6Te7Twg4) (Sept. 2018, 22 mins)
+* [youtube.com/constellation-labs/talk-at-Tech-Crunch](https://youtu.be/fCscJL3_tdU) (Oct. 2018, 28 mins)
+* [youtube.com/constellation-labs/testnet-overview](https://youtu.be/SsYZF4msXuQ) (Aug. 2018, 22 mins)
 
 #### Why scala?
 There are some general notes on Scala and also on other functional programming languages actively used for crypto projects in the
