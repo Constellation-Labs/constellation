@@ -9,7 +9,7 @@ import com.typesafe.scalalogging.Logger
 import constellation.futureTryWithTimeoutMetric
 import org.constellation.p2p.{Download, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.{Id, NodeState}
+import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState}
 import org.constellation.util._
 import org.constellation.{DAO, HostPort, PeerMetadata, RemovePeerRequest}
 
@@ -36,6 +36,22 @@ object PeerManager {
         }
       },
       "peerReloading"
+    )
+
+    tryWithMetric(
+      {
+        dao.peersInfoPath.lines.foreach{
+          line =>
+            line.split(":") match {
+              case Array(host, port) =>
+                Try{dao.peerManager ! HostPort(host, port.toInt)} // increment parsing error
+              case _ =>
+
+            }
+
+        }
+      },
+      "readSeedsFile"
     )
 
     // TODO: Instead wait until peer discovery phase complete
@@ -75,6 +91,30 @@ object PeerManager {
     //    }
   }
 
+
+  def peerDiscovery(client: APIClient)(implicit dao: DAO): Unit = {
+    client.getNonBlocking[Seq[PeerMetadata]]("peers").onComplete {
+      case Success(pmd) =>
+        pmd.foreach {
+          md =>
+            if (!dao.peerInfo.exists(_._2.peerMetadata.host == md.host) && md.host != dao.externalHostString &&
+              md.host != "127.0.0.1" && dao.id != md.id) {
+              val client = new APIClient(md.host, md.httpPort)(dao.edgeExecutionContext, dao)
+              client.getNonBlocking[PeerRegistrationRequest]("registration/request").onComplete {
+                case Success(registrationRequest) =>
+                  dao.peerManager ! PendingRegistration(md.host, registrationRequest)
+                  client.postNonBlocking("register", dao.peerRegistrationRequest)
+                case Failure(e) =>
+                  dao.metricsManager ! IncrementMetric("peerGetRegistrationRequestFailed")
+              }(dao.edgeExecutionContext)
+            }
+        }
+      case Failure(e) =>
+        dao.metricsManager ! IncrementMetric("peerDiscoveryQueryFailed")
+
+    }(dao.edgeExecutionContext)
+  }
+
 }
 
 case class PeerData(
@@ -99,6 +139,8 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
   override def receive: Receive = active(Map.empty)
 
   implicit val system: ActorSystem = context.system
+
+  dao.heartbeatActor ! HeartbeatSubscribe
 
 
   private def updateMetricsAndDAO(updatedPeerInfo: Map[Id, PeerData]): Unit = {
@@ -128,6 +170,39 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
   def active(peerInfo: Map[Id, PeerData]): Receive = {
 
+    case InternalHeartbeat(round) =>
+
+      if (round % dao.processingConfig.peerHealthCheckInterval == 0) {
+        peerInfo.values.foreach{
+          d =>
+            d.client.get("health").onComplete{
+              case Success(x) if x.isSuccess =>
+                dao.metricsManager ! IncrementMetric("peerHealthCheckPassed")
+              case _ =>
+                dao.metricsManager ! IncrementMetric("peerHealthCheckFailed")
+                self ! RemovePeerRequest(Some(HostPort(d.peerMetadata.host, d.peerMetadata.httpPort)))
+            }(dao.edgeExecutionContext)
+        }
+      }
+
+      if (round % dao.processingConfig.peerDiscoveryInterval == 0) {
+
+        peerInfo.values.foreach{ d =>
+          PeerManager.peerDiscovery(d.client)
+        }
+
+      }
+
+
+    case hp @ HostPort(host, port) =>
+
+      if (
+        !peerInfo.exists{case (_, data) => data.peerMetadata.host == host && data.peerMetadata.httpPort == port} &&
+        host != dao.externalHostString
+      ) {
+        PeerManager.attemptRegisterPeer(hp)
+      }
+
     case UpdatePeerInfo(peerData) =>
 
       updatePeerInfo(peerInfo, peerData)
@@ -138,6 +213,10 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
         val badHost = hp.exists { case HostPort(host, port) => d.client.hostName == host && d.client.apiPort == port }
         val badId = id.contains(pid)
         !badHost && !badId
+      }
+
+      if (peerInfo != updatedPeerInfo) {
+        dao.metricsManager ! IncrementMetric("peerRemoved")
       }
 
       updateMetricsAndDAO(updatedPeerInfo)
@@ -161,29 +240,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
         val client = APIClient(adjustedHost, port)(dao.edgeExecutionContext, dao)
         client.id = id
 
-        client.getNonBlocking[Seq[PeerMetadata]]("peers").onComplete {
-
-          case Success(pmd) =>
-            pmd.foreach {
-              md =>
-                if (!dao.peerInfo.exists(_._2.peerMetadata.host == md.host) && md.host != dao.externalHostString &&
-                md.host != "127.0.0.1" && dao.id != md.id) {
-                  new APIClient(md.host, md.httpPort)(dao.edgeExecutionContext, dao)
-                    .getNonBlocking[PeerRegistrationRequest]("registration/request").onComplete {
-                    case Success(registrationRequest) =>
-                      self ! PendingRegistration(md.host, registrationRequest)
-                    case Failure(e) =>
-                      dao.metricsManager ! IncrementMetric("peerGetRegistrationRequestFailed")
-                  }(dao.edgeExecutionContext)
-                }
-
-            }
-
-          case Failure(e) =>
-            dao.metricsManager ! IncrementMetric("peerDiscoveryQueryFailed")
-
-        }(dao.edgeExecutionContext)
-
+        PeerManager.peerDiscovery(client)
 
         val peerData = PeerData(a, client)
 
@@ -213,6 +270,8 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
       logger.info(s"Pending Registration request: $pr")
 
+      // TODO: Refactor and add metrics
+      // Also should attempt to allow peers to re-register to potentially update their status or ID? Or handle elsewhere.
       val validExternalHost = request.host != dao.externalHostString && request.host != "127.0.0.1"
       val hostAlreadyExists = peerInfo.exists(_._2.client.hostName == ip)
       val validHost = (validExternalHost && !hostAlreadyExists) || !dao.preventLocalhostAsPeer

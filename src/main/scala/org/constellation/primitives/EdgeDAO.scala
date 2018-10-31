@@ -33,10 +33,17 @@ class ThreadSafeTXMemPool() {
     true
   }
 
-  def put(transaction: Transaction)(implicit dao: DAO): Boolean = this.synchronized{
+  def put(transaction: Transaction, overrideLimit: Boolean = false)(implicit dao: DAO): Boolean = this.synchronized{
     val notContained = !transactions.contains(transaction)
-    if (notContained && transactions.size < dao.processingConfig.maxMemPoolSize) {
-      transactions :+= transaction
+
+    if (notContained) {
+      if (overrideLimit) {
+        // Prepend in front to process user TX first before random ones
+        transactions = Seq(transaction) ++ transactions
+
+      } else if (transactions.size < dao.processingConfig.maxMemPoolSize) {
+        transactions :+= transaction
+      }
     }
     notContained
   }

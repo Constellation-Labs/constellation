@@ -37,6 +37,11 @@ class DAO extends MetricsExt
     f
   }
 
+  def seedsPath: File = {
+    val f = File(s"tmp/${id.medium}/seeds")
+    f
+  }
+
 
   def restartNode(): Unit = {
     downloadMode = true

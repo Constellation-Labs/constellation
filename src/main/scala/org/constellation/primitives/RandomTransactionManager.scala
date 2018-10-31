@@ -29,6 +29,8 @@ class RandomTransactionManager()(
 
       tryWithMetric ({
 
+        Thread.currentThread().setName("RTMHBLoop") // Debug
+
 
         if (dao.metricsManager != null && System.currentTimeMillis() > (lastExecutionTime + 2*1000) ) {
 
@@ -69,8 +71,8 @@ class RandomTransactionManager()(
             )*/
               }
 
-              txs.foreach {
-                dao.threadSafeTXMemPool.put
+              txs.foreach { t =>
+                dao.threadSafeTXMemPool.put(t)
               }
 
             } else {

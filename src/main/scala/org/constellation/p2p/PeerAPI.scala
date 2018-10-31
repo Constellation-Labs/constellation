@@ -125,7 +125,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
       get {
         pathPrefix("registration") {
           path("request") {
-            complete(dao.peerRegistrationRequest)
+            complete(dao.peerRegistrationRequest) // Include status also
           }
         }
       }
@@ -235,8 +235,8 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
         entity(as[Transaction]) {
           tx =>
             dao.metricsManager ! IncrementMetric("transactionRXByAPI")
-              // TDOO: Change to ask later for status info
-         //   dao.edgeProcessor ! HandleTransaction(tx)
+            // TDOO: Change to ask later for status info
+            //   dao.edgeProcessor ! HandleTransaction(tx)
 
             Future {
               if (dao.nodeState == NodeState.Ready) {
@@ -246,22 +246,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 
             complete(StatusCodes.OK)
         }
-      } ~
-      get {
-        val memPoolPresence = dao.transactionMemPool.exists(_.hash == s)
-        val response = if (memPoolPresence) {
-          TransactionQueryResponse(s, dao.transactionMemPool.collectFirst{case x if x.hash == s => x}, inMemPool = true, inDAG = false, None)
-        } else {
-          dao.dbActor.getTransactionCacheData(s).map {
-            cd =>
-              TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence, cd.inDAG, cd.cbBaseHash)
-          }.getOrElse{
-            TransactionQueryResponse(s, None, inMemPool = false, inDAG = false, None)
-          }
-        }
-
-        complete(response)
-      } ~ complete (StatusCodes.BadRequest)
+      }
     } ~
     path("checkpoint" / Segment) { s => // Deprecated
       put {
@@ -291,3 +276,19 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
   }
 
 }
+/*      get {
+        val memPoolPresence = dao.transactionMemPool.exists(_.hash == s)
+        val response = if (memPoolPresence) {
+          TransactionQueryResponse(s, dao.transactionMemPool.collectFirst{case x if x.hash == s => x}, inMemPool = true, inDAG = false, None)
+        } else {
+          dao.dbActor.getTransactionCacheData(s).map {
+            cd =>
+              TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence, cd.inDAG, cd.cbBaseHash)
+          }.getOrElse{
+            TransactionQueryResponse(s, None, inMemPool = false, inDAG = false, None)
+          }
+        }
+
+        complete(response)
+      } ~ complete (StatusCodes.BadRequest)
+    } ~*/

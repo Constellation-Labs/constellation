@@ -59,6 +59,10 @@ trait CommonEndpoints extends Json4sSupport {
     } ~
     path("peers") {
       complete(dao.peerInfo.map{_._2.peerMetadata}.toSeq)
+    } ~
+    path("transaction" / Segment) {
+      h =>
+        complete(dao.dbActor.getTransactionCacheData(h))
     }
   }
 }

@@ -52,8 +52,12 @@ case class ProcessingConfig(
                              maxMemPoolSize: Int = 1000,
                              minPeerTimeAddedSeconds: Int = 30,
                              maxActiveTipsAllowedInMemory: Int = 1000,
-                             maxAcceptedCBHashesInMemory: Int = 5000
-)
+                             maxAcceptedCBHashesInMemory: Int = 5000,
+                             peerHealthCheckInterval : Int = 10,
+                             peerDiscoveryInterval : Int = 30
+) {
+
+}
 
 
 class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
@@ -232,16 +236,15 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           }
         }
       } ~
-      path("sendTransactionToAddress"){
-        entity(as[SendToAddress]) { e =>
+      path("send"){
+        entity(as[SendToAddress]) { sendRequest =>
 
-          println(s"send transaction to address $e")
+          logger.info(s"send transaction to address $sendRequest")
 
-          Future {
-            transactions.TransactionManager.handleSendToAddress(e, dao)
-          }
+          val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amountActual, dao.keyPair)
+          dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
 
-          complete(StatusCodes.OK)
+          complete(tx.hash)
         }
       } ~
       path("addPeer"){
