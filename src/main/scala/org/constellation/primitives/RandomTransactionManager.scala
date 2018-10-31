@@ -27,9 +27,10 @@ class RandomTransactionManager()(
       */
     case InternalHeartbeat(_) =>
 
-      tryWithMetric ({
+      val originalName = Thread.currentThread().getName
+      Thread.currentThread().setName("RTMHBLoop") // Debug
 
-        Thread.currentThread().setName("RTMHBLoop") // Debug
+      tryWithMetric ({
 
 
         if (dao.metricsManager != null && System.currentTimeMillis() > (lastExecutionTime + 2*1000) ) {
@@ -90,6 +91,9 @@ class RandomTransactionManager()(
           }
         }
       }, "randomTransactionRound")
+
+
+      Thread.currentThread().setName(originalName) // Debug
 
   }
 }
