@@ -1,3 +1,10 @@
+terraform {
+  backend "gcs" {
+    bucket  = "constellation-tf"
+    prefix  = "terraform/state"
+  }
+}
+
 variable "ssh_user" {
   type = "string"
 }
