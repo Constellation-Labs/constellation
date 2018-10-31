@@ -98,7 +98,7 @@ object KeyUtils {
                 signFunc: String = DefaultSignFunc
               )(implicit privKey: PrivateKey): Array[Byte] = {
     val signature = Signature.getInstance(signFunc, provider)
-    signature.initSign(privKey)
+    signature.initSign(privKey, secureRandom)
     signature.update(bytes)
     val signedOutput = signature.sign()
     signedOutput
