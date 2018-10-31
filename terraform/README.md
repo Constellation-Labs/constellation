@@ -22,16 +22,23 @@ By default, the terraform command will ask for the ssh user to use. If you'd pre
 
 #Initialize
 
-cd to terraform/default (or copy paste and change settings) and then run
+cd to terraform/default
+ 
+(or copy paste and change settings, make sure to change terraform.backend.prefix in main.tf)
+
+If you have a pre-existing state already (after copying folder with new name), say 'no' when the prompt asks to copy the state 
+ 
+and then run
+
 terraform init # to setup plugins
-terraform show # after the cluster is online
 
-to verify it's working.
-
-
-in default folder, run terraform init once to set everything up.
+terraform show # to see existing state (or if it's a new folder should return empty)
 
 ### Usage
 Something something terraform apply / terraform destroy
 
+terraform show # after the cluster is online
 
+to verify it's working.
+
+./ips_to_hosts_file.sh # to grab ips
