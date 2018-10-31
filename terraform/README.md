@@ -1,4 +1,5 @@
 ## Setup
+in default folder, run terraform init once to set everything up.
 
 ### Usage
 Something something terraform apply / terraform destroy
