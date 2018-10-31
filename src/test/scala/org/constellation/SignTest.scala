@@ -1,9 +1,11 @@
 package org.constellation
 
 import org.constellation.consensus.Consensus.RemoteMessage
+import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.util.{ProductHash, Signed}
 import org.scalatest.FlatSpec
+import KeyUtils._
 
 case class TestSignable(a: String, b: Int) extends ProductHash
 case class TestSignabledWrapper(testSignable: Signed[TestSignable]) extends RemoteMessage
@@ -28,7 +30,7 @@ class SignTest extends FlatSpec {
 
   "Simple Sign" should "sign and hash a simple fake case class properly" in {
 
-    val kp = makeKeyPair()
+    val kp = KeyUtils.makeKeyPair()
     val data = TestSignable("a", 1)
     (0 to 2).foreach { d =>
       val powSigned = signPairs(data, Seq(kp), d)

@@ -8,6 +8,9 @@ import org.constellation.crypto.KeyUtils._
 import org.json4s.native.Serialization
 import org.json4s.{DefaultFormats, Formats}
 import org.scalatest.FlatSpec
+import org.constellation.crypto.KeyUtils._
+
+import constellation._
 
 case class SetSerialize(s: Set[String])
 
@@ -23,7 +26,7 @@ class ValidateWalletFuncTest  extends FlatSpec {
 
   }
 
-  "Wallet KeyStore" should "build a keystore properly" in {
+/*  "Wallet KeyStore" should "build a keystore properly" in {
 
     val file = new File("keystoretest.p12")
     val file2 = new File("keystoretest.bks")
@@ -48,7 +51,7 @@ class ValidateWalletFuncTest  extends FlatSpec {
 
     // Put more tests in here.
 
-  }
+  }*/
 
   "KeyGen" should "make proper keys" in {
     val privK = kp.getPrivate.toString
@@ -62,8 +65,8 @@ class ValidateWalletFuncTest  extends FlatSpec {
   }
 
   "KeyPair JSON" should "serialize to json4s using custom serializer" in {
-    implicit val formats: Formats = DefaultFormats +
-      new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer
+  //  implicit val formats: Formats = DefaultFormats +
+//      new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer
     val ser = Serialization.write(kp.getPublic)
     val deser = Serialization.read[PublicKey](ser)
     assert(deser == kp.getPublic)

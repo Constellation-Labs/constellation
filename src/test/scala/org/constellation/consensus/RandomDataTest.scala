@@ -10,6 +10,7 @@ import org.scalatest.FlatSpec
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
 
+import org.constellation.crypto.KeyUtils._
 
 class RandomDataTest extends FlatSpec {
 

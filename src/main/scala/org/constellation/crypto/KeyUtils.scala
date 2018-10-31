@@ -16,8 +16,12 @@ import org.spongycastle.asn1.x500.style.BCStyle
 import org.spongycastle.asn1.x509.SubjectPublicKeyInfo
 import org.spongycastle.cert.X509v1CertificateBuilder
 import org.spongycastle.operator.jcajce.JcaContentSignerBuilder
+import java.security.KeyFactory
 
-object KeyUtils extends KeyUtilsExt
+import com.typesafe.scalalogging.Logger
+import org.spongycastle.jce.provider.BouncyCastleProvider
+import java.security.Security
+import constellation.SHA256Ext
 
 /**
   * Need to compare this to:
@@ -38,7 +42,182 @@ object KeyUtils extends KeyUtilsExt
   * for security policy implications.
   *
   */
-trait KeyUtilsExt {
+object KeyUtils {
+
+  private val logger = Logger("KeyUtils")
+
+  def insertProvider(): BouncyCastleProvider = {
+    import java.security.Security
+    val provider = new org.spongycastle.jce.provider.BouncyCastleProvider()
+    val ret = Security.insertProviderAt(provider, 1)
+    logger.info(s"Insert provider return $ret")
+    provider
+  }
+
+  val provider: BouncyCastleProvider = insertProvider()
+  val secureRandom: SecureRandom = SecureRandom.getInstance("NativePRNGNonBlocking")
+  val secp256k = "secp256k1"
+  val DefaultSignFunc = "SHA512withECDSA"
+
+  /**
+    * Simple Bitcoin like wallet grabbed from some stackoverflow post
+    * Mostly for testing purposes, feel free to improve.
+    * Source: https://stackoverflow.com/questions/29778852/how-to-create-ecdsa-keypair-256bit-for-bitcoin-curve-secp256k1-using-spongy
+    * @return : Private / Public keys following BTC implementation
+    */
+  def makeKeyPair(): KeyPair = {
+    val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance("ECDsA", provider)
+    val ecSpec = new ECGenParameterSpec(secp256k)
+    keyGen.initialize(ecSpec, secureRandom)
+    keyGen.generateKeyPair
+  }
+
+  // Utilities for getting around conversion errors / passing around parameters
+  // through strange APIs that might take issue with your strings
+  def base64(bytes: Array[Byte]): String = Base64.getEncoder.encodeToString(bytes)
+  def fromBase64(b64Str: String): Array[Byte] = Base64.getDecoder.decode(b64Str)
+  def base64FromBytes(bytes: Array[Byte]): String = new String(bytes)
+
+  /**
+    * https://stackoverflow.com/questions/31485517/verify-ecdsa-signature-using-spongycastle
+    * https://docs.oracle.com/javase/7/docs/technotes/guides/security/SunProviders.html
+    * https://bouncycastle.org/specifications.html
+    * https://stackoverflow.com/questions/16662408/correct-way-to-sign-and-verify-signature-using-bouncycastle
+    * @param bytes: Data to sign. Use text.toBytes or even better base64 encryption
+    * @param signFunc: How to sign the data. There's a bunch of these,
+    *                this needs to be made into an enum or something (instead of a val const),
+    *                make sure if you fix it you make it consistent with json4s
+    *                usages!
+    * @param privKey: Java Private Key generated above with ECDSA
+    * @return : Signature of bytes based on the text signed with the private key
+    *         This can be checked by anyone to be equal to the input text with
+    *         access only to the public key paired to the input private key! Fun
+    */
+  def signData(
+                bytes: Array[Byte],
+                signFunc: String = DefaultSignFunc
+              )(implicit privKey: PrivateKey): Array[Byte] = {
+    val signature = Signature.getInstance(signFunc, provider)
+    signature.initSign(privKey)
+    signature.update(bytes)
+    val signedOutput = signature.sign()
+    signedOutput
+  }
+
+  /**
+    * Verify a signature of some input text with a public key
+    * This is called by verifier nodes checking to see if transactions are legit
+    *
+    * WARNING IF THIS FUNCTION IS MODIFIED BY AN ILLEGITIMATE NODE YOU WILL
+    * BE BLACKLISTED FROM THE NETWORK. DO NOT MODIFY THIS FUNCTION UNLESS YOU
+    * HAVE APPROVAL. OTHER NODES WILL CHECK YOUR VERIFICATIONS.
+    *
+    * YOU HAVE BEEN WARNED.
+    *
+    * @param originalInput: Byte input to verify, recommended that you
+    *                         use base64 encoding if dealing with arbitrary text
+    *                         meant to be shared over RPC / API protocols that
+    *                         have issues with strange characters. If within same
+    *                         JVM then just use text.getBytes (see unit tests for examples)
+    * @param signedOutput: Byte array of output of calling signData method above
+    * @param signFunc: Signature function to use. Use the default one for now.
+    *                To be discussed elsewhere if revision necessary
+    * @param pubKey: Public key to perform verification against.
+    *              Only the public key which corresponds to the private key who
+    *              performed the signing will verify properly
+    * @return : True if the signature / transaction is legitimate.
+    *         False means dishonest signer / fake transaction
+    */
+  def verifySignature(
+                       originalInput: Array[Byte],
+                       signedOutput: Array[Byte],
+                       signFunc: String = DefaultSignFunc
+                     )(implicit pubKey: PublicKey): Boolean = {
+    val verifyingSignature = Signature.getInstance(signFunc, provider)
+    verifyingSignature.initVerify(pubKey)
+    verifyingSignature.update(originalInput)
+    val result = verifyingSignature.verify(signedOutput)
+    result
+  }
+
+  // https://stackoverflow.com/questions/42651856/how-to-decode-rsa-public-keyin-java-from-a-text-view-in-android-studio
+  def bytesToPublicKey(encodedBytes: Array[Byte]): PublicKey = {
+    val spec = new X509EncodedKeySpec(encodedBytes)
+    val kf = KeyFactory.getInstance("ECDsA", provider)
+    kf.generatePublic(spec)
+  }
+
+  def bytesToPrivateKey(encodedBytes: Array[Byte]): PrivateKey = {
+    val spec = new PKCS8EncodedKeySpec(encodedBytes)
+    val kf = KeyFactory.getInstance("ECDsA", provider)
+    kf.generatePrivate(spec)
+  }
+
+
+  def hex2bytes(hex: String): Array[Byte] = {
+    if(hex.contains(" ")){
+      hex.split(" ").map(Integer.parseInt(_, 16).toByte)
+    } else if(hex.contains("-")){
+      hex.split("-").map(Integer.parseInt(_, 16).toByte)
+    } else {
+      hex.sliding(2,2).toArray.map(Integer.parseInt(_, 16).toByte)
+    }
+  }
+
+  def bytes2hex(bytes: Array[Byte], sep: Option[String] = None): String = {
+    sep match {
+      case None =>  bytes.map("%02x".format(_)).mkString
+      case _ =>  bytes.map("%02x".format(_)).mkString(sep.get)
+    }
+    // bytes.foreach(println)
+  }
+
+
+  // convert normal string to hex bytes string
+  def string2hex(str: String): String = {
+    str.toList.map(_.toInt.toHexString).mkString
+  }
+
+  // convert hex bytes string to normal string
+  def hex2string(hex: String): String = {
+    hex.sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toChar).mkString
+  }
+
+  def keyHashToAddress(hash: String): String = {
+    val end = hash.slice(hash.length - 36, hash.length)
+    val validInt = end.filter {Character.isDigit}
+    val ints = validInt.map{_.toString.toInt}
+    val sum = ints.sum
+    val par = sum % 9
+    val res2 = "DAG" + par + end
+//    println(s"res2 $res2 end ints $ints digits: $validInt endSum: $sum divmod9 $par ${res2.length}")
+    res2
+  }
+
+  // TODO : Use a more secure address function.
+  // Couldn't find a quick dependency for this, TBI
+  // https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses
+  def publicKeyToAddressString(
+                                key: PublicKey
+                              ): String = {
+    val res = Base58.encode(base64(key.getEncoded).sha256.sha256.getBytes())
+    keyHashToAddress(res)
+  }
+
+  def publicKeysToAddressString(
+                                 key: Seq[PublicKey]
+                               ): String = {
+    val res = Base58.encode(key.map{z => base64(z.getEncoded)}.mkString.sha256.sha256.getBytes())
+    keyHashToAddress(res)
+  }
+
+
+}
+
+/*
+
+object WalletKeyStore {
+
 
   def makeWalletKeyStore(
                           validityInDays: Int = 500000,
@@ -131,222 +310,7 @@ trait KeyUtilsExt {
     ks -> bks
   }
 
-  def insertProvider(): Int = {
-    import java.security.Security
-    Security.insertProviderAt(new org.spongycastle.jce.provider.BouncyCastleProvider(), 1)
-  }
-
-  /**
-    * Simple Bitcoin like wallet grabbed from some stackoverflow post
-    * Mostly for testing purposes, feel free to improve.
-    * Source: https://stackoverflow.com/questions/29778852/how-to-create-ecdsa-keypair-256bit-for-bitcoin-curve-secp256k1-using-spongy
-    * @return : Private / Public keys following BTC implementation
-    */
-  def makeKeyPair(secureRandom: SecureRandom = SecureRandom.getInstance("NativePRNGNonBlocking")): KeyPair = {
-    import java.security.Security
-    Security.insertProviderAt(new org.spongycastle.jce.provider.BouncyCastleProvider(), 1)
-    val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance("ECDsA", "SC")
-    val ecSpec = new ECGenParameterSpec("secp256k1")
-    keyGen.initialize(ecSpec, secureRandom)
-    keyGen.generateKeyPair
-  }
-
-  def makeKeyPairFrom(provider: Provider): KeyPair = {
-    val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance("ECDsA", provider)
-    val ecSpec = new ECGenParameterSpec("secp256k1")
-    keyGen.initialize(ecSpec, SecureRandom.getInstance("NativePRNGNonBlocking"))
-    keyGen.generateKeyPair
-  }
-
-  // Utilities for getting around conversion errors / passing around parameters
-  // through strange APIs that might take issue with your strings
-  def base64(bytes: Array[Byte]): String = Base64.getEncoder.encodeToString(bytes)
-  def fromBase64(b64Str: String): Array[Byte] = Base64.getDecoder.decode(b64Str)
-  def base64FromBytes(bytes: Array[Byte]): String = new String(bytes)
-
-  val DefaultSignFunc = "SHA512withECDSA"
-
-  /**
-    * https://stackoverflow.com/questions/31485517/verify-ecdsa-signature-using-spongycastle
-    * https://docs.oracle.com/javase/7/docs/technotes/guides/security/SunProviders.html
-    * https://bouncycastle.org/specifications.html
-    * https://stackoverflow.com/questions/16662408/correct-way-to-sign-and-verify-signature-using-bouncycastle
-    * @param bytes: Data to sign. Use text.toBytes or even better base64 encryption
-    * @param signFunc: How to sign the data. There's a bunch of these,
-    *                this needs to be made into an enum or something (instead of a val const),
-    *                make sure if you fix it you make it consistent with json4s
-    *                usages!
-    * @param privKey: Java Private Key generated above with ECDSA
-    * @return : Signature of bytes based on the text signed with the private key
-    *         This can be checked by anyone to be equal to the input text with
-    *         access only to the public key paired to the input private key! Fun
-    */
-  def signData(
-                bytes: Array[Byte],
-                signFunc: String = DefaultSignFunc
-              )(implicit privKey: PrivateKey): Array[Byte] = {
-    val signature = Signature.getInstance(signFunc, "SC")
-    signature.initSign(privKey)
-    signature.update(bytes)
-    val signedOutput = signature.sign()
-    signedOutput
-  }
-
-  /**
-    * Verify a signature of some input text with a public key
-    * This is called by verifier nodes checking to see if transactions are legit
-    *
-    * WARNING IF THIS FUNCTION IS MODIFIED BY AN ILLEGITIMATE NODE YOU WILL
-    * BE BLACKLISTED FROM THE NETWORK. DO NOT MODIFY THIS FUNCTION UNLESS YOU
-    * HAVE APPROVAL. OTHER NODES WILL CHECK YOUR VERIFICATIONS.
-    *
-    * YOU HAVE BEEN WARNED.
-    *
-    * @param originalInput: Byte input to verify, recommended that you
-    *                         use base64 encoding if dealing with arbitrary text
-    *                         meant to be shared over RPC / API protocols that
-    *                         have issues with strange characters. If within same
-    *                         JVM then just use text.getBytes (see unit tests for examples)
-    * @param signedOutput: Byte array of output of calling signData method above
-    * @param signFunc: Signature function to use. Use the default one for now.
-    *                To be discussed elsewhere if revision necessary
-    * @param pubKey: Public key to perform verification against.
-    *              Only the public key which corresponds to the private key who
-    *              performed the signing will verify properly
-    * @return : True if the signature / transaction is legitimate.
-    *         False means dishonest signer / fake transaction
-    */
-  def verifySignature(
-                       originalInput: Array[Byte],
-                       signedOutput: Array[Byte],
-                       signFunc: String = DefaultSignFunc
-                     )(implicit pubKey: PublicKey): Boolean = {
-    val verifyingSignature = Signature.getInstance(signFunc, "SC")
-    verifyingSignature.initVerify(pubKey)
-    verifyingSignature.update(originalInput)
-    val result = verifyingSignature.verify(signedOutput)
-    result
-  }
-
-  // https://stackoverflow.com/questions/42651856/how-to-decode-rsa-public-keyin-java-from-a-text-view-in-android-studio
-  def bytesToPublicKey(encodedBytes: Array[Byte]): PublicKey = {
-    val spec = new X509EncodedKeySpec(encodedBytes)
-    import java.security.KeyFactory
-    val kf = KeyFactory.getInstance("ECDsA", "SC")
-    kf.generatePublic(spec)
-  }
-
-  def bytesToPrivateKey(encodedBytes: Array[Byte]): PrivateKey = {
-    val spec = new PKCS8EncodedKeySpec(encodedBytes)
-    import java.security.KeyFactory
-    val kf = KeyFactory.getInstance("ECDsA", "SC")
-    kf.generatePrivate(spec)
-  }
-
-
-  def hex2bytes(hex: String): Array[Byte] = {
-    if(hex.contains(" ")){
-      hex.split(" ").map(Integer.parseInt(_, 16).toByte)
-    } else if(hex.contains("-")){
-      hex.split("-").map(Integer.parseInt(_, 16).toByte)
-    } else {
-      hex.sliding(2,2).toArray.map(Integer.parseInt(_, 16).toByte)
-    }
-  }
-
-  def bytes2hex(bytes: Array[Byte], sep: Option[String] = None): String = {
-    sep match {
-      case None =>  bytes.map("%02x".format(_)).mkString
-      case _ =>  bytes.map("%02x".format(_)).mkString(sep.get)
-    }
-    // bytes.foreach(println)
-  }
-
-
-  // convert normal string to hex bytes string
-  def string2hex(str: String): String = {
-    str.toList.map(_.toInt.toHexString).mkString
-  }
-
-  // convert hex bytes string to normal string
-  def hex2string(hex: String): String = {
-    hex.sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toChar).mkString
-  }
-
-  def keyHashToAddress(hash: String): String = {
-    val end = hash.slice(hash.length - 36, hash.length)
-    val validInt = end.filter {Character.isDigit}
-    val ints = validInt.map{_.toString.toInt}
-    val sum = ints.sum
-    val par = sum % 9
-    val res2 = "DAG" + par + end
-//    println(s"res2 $res2 end ints $ints digits: $validInt endSum: $sum divmod9 $par ${res2.length}")
-    res2
-  }
-
-  // TODO : Use a more secure address function.
-  // Couldn't find a quick dependency for this, TBI
-  // https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses
-  def publicKeyToAddressString(
-                                key: PublicKey
-                              ): String = {
-    import constellation.SHA256Ext
-    val res = Base58.encode(base64(key.getEncoded).sha256.sha256.getBytes())
-    keyHashToAddress(res)
-  }
-
-  def publicKeysToAddressString(
-                                 key: Seq[PublicKey]
-                               ): String = {
-    import constellation.SHA256Ext
-    val res = Base58.encode(key.map{z => base64(z.getEncoded)}.mkString.sha256.sha256.getBytes())
-    keyHashToAddress(res)
-  }
-
-  class PrivateKeySerializer extends CustomSerializer[PrivateKey](format => ( {
-    case jObj: JObject =>
-      implicit val f: Formats = format
-      bytesToPrivateKey(Base58.decode((jObj \ "key").extract[String]))
-  }, {
-    case key: PrivateKey =>
-      JObject("key" -> JString(Base58.encode(key.getEncoded)))
-  }
-  ))
-
-  class PublicKeySerializer extends CustomSerializer[PublicKey](format => ( {
-    case jstr: JObject =>
-      implicit val f: Formats = format
-      bytesToPublicKey(Base58.decode((jstr \ "key").extract[String]))
-  }, {
-    case key: PublicKey =>
-      JObject("key" -> JString(Base58.encode(key.getEncoded)))
-  }
-  ))
-
-  class KeyPairSerializer extends CustomSerializer[KeyPair](format => ( {
-    case jObj: JObject =>
-      implicit val f: Formats = format
-      val pubKey = (jObj \ "publicKey").extract[PublicKey]
-      val privKey = (jObj \ "privateKey").extract[PrivateKey]
-      val kp = new KeyPair(pubKey, privKey)
-      kp
-  }, {
-    case key: KeyPair =>
-      implicit val f: Formats = format
-      JObject(
-        "publicKey" -> JObject("key" -> JString(Base58.encode(key.getPublic.getEncoded))),
-        "privateKey" -> JObject("key" -> JString(Base58.encode(key.getPrivate.getEncoded)))
-      )
-  }
-  ))
-
-  implicit class PublicKeyExt(publicKey: PublicKey) {
-    // Conflict with old schema, add later
-    //  def address: Address = pubKeyToAddress(publicKey)
-    def encoded: EncodedPublicKey = EncodedPublicKey(Base58.encode(publicKey.getEncoded))
-    def toId: Id = encoded.toId
-  }
-
 
 }
 
+*/

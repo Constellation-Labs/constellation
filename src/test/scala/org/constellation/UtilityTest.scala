@@ -4,7 +4,7 @@ import java.security.KeyPair
 
 import constellation._
 import org.scalatest.FlatSpec
-
+import org.constellation.crypto.KeyUtils._
 //case class Test(a: EdgeHashType, b: EdgeHashType)
 
 class UtilityTest extends FlatSpec {

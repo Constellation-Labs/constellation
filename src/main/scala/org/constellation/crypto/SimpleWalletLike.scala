@@ -14,7 +14,7 @@ trait SimpleWalletLike {
 
   // For generating additional keyPairs, maybe make this just regular API call instead.
   def walletPair: KeyPair = {
-    val pair = constellation.makeKeyPair()
+    val pair = KeyUtils.makeKeyPair()
     wallet :+= pair
     pair
   }

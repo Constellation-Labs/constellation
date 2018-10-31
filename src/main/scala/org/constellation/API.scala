@@ -17,7 +17,7 @@ import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.crypto.SimpleWalletLike
+import org.constellation.crypto.{KeyUtils, SimpleWalletLike}
 import org.constellation.p2p.{Download, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
@@ -26,6 +26,7 @@ import org.constellation.util.{APIClient, CommonEndpoints, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
 import scalaj.http.HttpResponse
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
@@ -115,13 +116,13 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
             complete(response)
           } ~
           path("makeKeyPair") {
-            val pair = constellation.makeKeyPair()
+            val pair = KeyUtils.makeKeyPair()
             wallet :+= pair
             complete(pair)
           } ~
           path("makeKeyPairs" / IntNumber) { numPairs =>
             val pair = Seq.fill(numPairs) {
-              constellation.makeKeyPair()
+              KeyUtils.makeKeyPair()
             }
             wallet ++= pair
             complete(pair)

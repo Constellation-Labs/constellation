@@ -19,7 +19,7 @@ import org.constellation.{DAO, LevelDBActor}
 import org.scalatest.FlatSpec
 
 import scala.util.Try
-
+import org.constellation.crypto.KeyUtils._
 class TXValidationBenchmark extends FlatSpec {
 
   val kp: KeyPair = KeyUtils.makeKeyPair()

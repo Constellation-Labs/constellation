@@ -66,7 +66,7 @@ import scala.concurrent.ExecutionContext
       val preferencesPath = File(".dag")
       preferencesPath.createDirectoryIfNotExists()
 
-      KeyUtils.insertProvider()
+      KeyUtils.provider // Ensure initialized
 
       val hostName = Try{File("external_host_ip").lines.mkString}.getOrElse("127.0.0.1")
 

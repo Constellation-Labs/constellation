@@ -10,6 +10,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.Try
 import better.files._
+import org.constellation.crypto.KeyUtils
 
 
 
@@ -83,7 +84,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   // For fixing some old bug, revisit later if necessary
-  makeKeyPair()
+  KeyUtils.makeKeyPair()
 
   "Cluster integration" should "ping a cluster, check health, go through genesis flow" in {
 

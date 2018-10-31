@@ -7,6 +7,8 @@ import org.scalatest.FlatSpec
 
 import scala.collection.JavaConverters._
 
+import org.constellation.crypto.KeyUtils._
+
 case class ShamirOutput(fileName: String, part: Int, hex: String)
 
 class ShamirETHTest extends FlatSpec {

@@ -3,6 +3,7 @@ package org.constellation.primitives
 import java.security.KeyPair
 
 import constellation._
+import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 
 
@@ -45,7 +46,7 @@ object Genesis {
     */
   def createGenesisAndInitialDistributionDirect(selfAddressStr: String, ids: Set[Id], keyPair: KeyPair): GenesisObservation = {
 
-    val debtAddress = makeKeyPair().address.address
+    val debtAddress = KeyUtils.makeKeyPair().address.address
 
     val redTXGenesisResolved = createTransaction(debtAddress, selfAddressStr, 4e9.toLong, keyPair)
 

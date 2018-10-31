@@ -11,10 +11,11 @@ import akka.util.Timeout
 import better.files.File
 import com.google.common.hash.Hashing
 import org.constellation.DAO
-import org.constellation.crypto.KeyUtilsExt
+import org.constellation.crypto.{Base58, KeyUtils}
+import org.constellation.crypto.KeyUtils.{bytesToPrivateKey, bytesToPublicKey}
 import org.constellation.primitives.IncrementMetric
 import org.constellation.primitives.Schema._
-import org.constellation.util.{POWExt, POWSignHelp}
+import org.constellation.util.{EncodedPublicKey, POWExt, POWSignHelp}
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.ext.EnumNameSerializer
 import org.json4s.native.{Serialization, parseJsonOpt}
@@ -24,8 +25,9 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.reflect.ClassTag
 import scala.util.{Failure, Random, Success, Try}
+import KeyUtils._
 
-package object constellation extends KeyUtilsExt with POWExt
+package object constellation extends POWExt
   with POWSignHelp {
 
   val minimumTime : Long = 1518898908367L
@@ -215,6 +217,52 @@ package object constellation extends KeyUtilsExt with POWExt
       timeoutSeconds = timeoutSeconds
     )
   }
+
+
+  class PrivateKeySerializer extends CustomSerializer[PrivateKey](format => ( {
+    case jObj: JObject =>
+     // implicit val f: Formats = format
+      bytesToPrivateKey(Base58.decode((jObj \ "key").extract[String]))
+  }, {
+    case key: PrivateKey =>
+      JObject("key" -> JString(Base58.encode(key.getEncoded)))
+  }
+  ))
+
+  class PublicKeySerializer extends CustomSerializer[PublicKey](format => ( {
+    case jstr: JObject =>
+     // implicit val f: Formats = format
+      bytesToPublicKey(Base58.decode((jstr \ "key").extract[String]))
+  }, {
+    case key: PublicKey =>
+      JObject("key" -> JString(Base58.encode(key.getEncoded)))
+  }
+  ))
+
+  class KeyPairSerializer extends CustomSerializer[KeyPair](format => ( {
+    case jObj: JObject =>
+    //  implicit val f: Formats = format
+      val pubKey = (jObj \ "publicKey").extract[PublicKey]
+      val privKey = (jObj \ "privateKey").extract[PrivateKey]
+      val kp = new KeyPair(pubKey, privKey)
+      kp
+  }, {
+    case key: KeyPair =>
+    //  implicit val f: Formats = format
+      JObject(
+        "publicKey" -> JObject("key" -> JString(Base58.encode(key.getPublic.getEncoded))),
+        "privateKey" -> JObject("key" -> JString(Base58.encode(key.getPrivate.getEncoded)))
+      )
+  }
+  ))
+
+  implicit class PublicKeyExt(publicKey: PublicKey) {
+    // Conflict with old schema, add later
+    //  def address: Address = pubKeyToAddress(publicKey)
+    def encoded: EncodedPublicKey = EncodedPublicKey(Base58.encode(publicKey.getEncoded))
+    def toId: Id = encoded.toId
+  }
+
 
 }
 
