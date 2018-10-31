@@ -209,9 +209,12 @@ package object constellation extends POWExt
                                    (implicit ec:ExecutionContext, dao: DAO): Future[Try[T]] = {
     withTimeoutSecondsAndMetric(
       Future{
+        val originalName = Thread.currentThread().getName
         Thread.currentThread().setName(metricPrefix + Random.nextInt(10000))
-        tryWithMetric(t, metricPrefix) // This is an inner try as opposed to an onComplete so we can
+        val attempt = tryWithMetric(t, metricPrefix) // This is an inner try as opposed to an onComplete so we can
         // Have different metrics for timeout vs actual failure.
+        Thread.currentThread().setName(originalName)
+        attempt
       }(ec),
       metricPrefix,
       timeoutSeconds = timeoutSeconds

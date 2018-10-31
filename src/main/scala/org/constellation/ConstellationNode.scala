@@ -66,7 +66,7 @@ import scala.concurrent.ExecutionContext
       val preferencesPath = File(".dag")
       preferencesPath.createDirectoryIfNotExists()
 
-      KeyUtils.provider // Ensure initialized
+      val _ = KeyUtils.provider // Ensure initialized
 
       val hostName = Try{File("external_host_ip").lines.mkString}.getOrElse("127.0.0.1")
 
@@ -121,7 +121,7 @@ import scala.concurrent.ExecutionContext
       )
     } match {
       case Failure(e) => e.printStackTrace()
-      case Success(x) => logger.info("success")
+      case Success(_) => logger.info("success")
 
         while (true) {
           Thread.sleep(60*1000)

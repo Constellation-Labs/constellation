@@ -179,7 +179,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
               onComplete(
                 futureTryWithTimeoutMetric(
                   EdgeProcessor.handleSignatureRequest(sr), "peerAPIHandleSignatureRequest"
-                )(dao.signatureResponsePool, dao)
+                )(dao.edgeExecutionContext, dao)
               ) {
                 result => // ^ Errors captured above
                   val knownHost = dao.peerInfo.exists(_._2.client.hostName == ip)
