@@ -4,7 +4,7 @@ import java.util.concurrent.ForkJoinPool
 
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.AddPeerRequest
+import org.constellation.{PeerMetadata, HostPort}
 import org.constellation.consensus.SnapshotInfo
 import org.constellation.primitives.Schema._
 import scalaj.http.HttpResponse
@@ -40,7 +40,8 @@ class Simulation {
   }
 
   def setIdLocal(apis: Seq[APIClient]): Unit = apis.foreach{ a =>
-    val id = a.getBlocking[Id]("id")
+  logger.info(s"Getting id for ${a.hostName}:${a.apiPort}")
+    val id = a.getBlocking[Id]("id", timeoutSeconds = 60)
     a.id = id
   }
 
@@ -60,10 +61,18 @@ class Simulation {
   }
 
   def addPeer(
-               apis: Seq[APIClient], peer: AddPeerRequest
+               apis: Seq[APIClient], peer: PeerMetadata
              )(implicit executionContext: ExecutionContext): Seq[HttpResponse[String]] = {
     apis.map{
       _.postSync("addPeer", peer)
+    }
+  }
+
+  def addPeerWithRegistrationFlow(
+               apis: Seq[APIClient], peer: HostPort
+             )(implicit executionContext: ExecutionContext): Seq[HttpResponse[String]] = {
+    apis.map{
+      _.postSync("peer/add", peer)
     }
   }
 
@@ -93,7 +102,11 @@ class Simulation {
       s"Genesis not stored",
       {
         apis.forall{ a =>
-          a.getBlocking[Option[GenesisObservation]]("genesis").nonEmpty
+          val maybeObservation = a.getBlocking[Option[GenesisObservation]]("genesis")
+          if (maybeObservation.isDefined) {
+            println(s"Genesis stored on ${a.hostName} ${a.apiPort}")
+          }
+          maybeObservation.nonEmpty
         }
       }, maxRetries, delay
     )
@@ -150,14 +163,18 @@ class Simulation {
 
   def checkHealthy(
                     apis: Seq[APIClient],
-                    maxRetries: Int = 10,
-                    delay: Long = 3000
+                    maxRetries: Int = 30,
+                    delay: Long = 5000
                   ): Boolean = {
     awaitConditionMet(
       s"Unhealthy nodes",
       {
         apis.forall{ a =>
-          a.getSync("health").isSuccess
+          val attempt = Try{a.getSync("health").isSuccess}
+          if (attempt.isFailure) {
+            println(s"Failure on: ${a.hostName}:${a.apiPort}")
+          }
+          attempt.getOrElse(false)
         }
       }, maxRetries, delay
     )
@@ -166,9 +183,9 @@ class Simulation {
 
   def checkSnapshot(
                      apis: Seq[APIClient],
-                     num: Int = 2,
-                     maxRetries: Int = 30,
-                     delay: Long = 3000
+                     num: Int = 5,
+                     maxRetries: Int = 60,
+                     delay: Long = 5000
                    ): Boolean = {
     awaitConditionMet(
       s"Less than $num snapshots",
@@ -208,9 +225,9 @@ class Simulation {
 
   def awaitCheckpointsAccepted(
                                 apis: Seq[APIClient],
-                                numAccepted: Int = 20,
-                                maxRetries: Int = 20,
-                                delay: Long = 3000
+                                numAccepted: Int = 10,
+                                maxRetries: Int = 30,
+                                delay: Long = 5000
                               ): Boolean = {
     awaitConditionMet(
       s"Accepted checkpoints below $numAccepted",
@@ -228,23 +245,40 @@ class Simulation {
     val dst = randomOtherNode(src, apis).id.address.address
 
     val s = SendToAddress(dst, Random.nextInt(1000).toLong)
-    src.post("sendTransactionToAddress", s)
+    src.post("send", s)
   }
 
-  def triggerRandom(apis: Seq[APIClient]): Unit = {
-    apis.foreach(_.postEmpty("random"))
+  def triggerRandom(apis: Seq[APIClient]): Seq[HttpResponse[String]] = {
+    apis.map(_.postEmpty("random"))
   }
   def setReady(apis: Seq[APIClient]): Unit = {
     apis.foreach(_.postEmpty("ready"))
   }
 
-  def addPeersFromRequest(apis: Seq[APIClient], addPeerRequests: Seq[AddPeerRequest]): Unit = {
+  def addPeersFromRequest(apis: Seq[APIClient], addPeerRequests: Seq[PeerMetadata]): Unit = {
     apis.foreach{
       a =>
         addPeerRequests.zip(apis).foreach{
           case (add, a2) =>
             if (a2 != a) {
-              assert(addPeer(Seq(a), add).forall(_.isSuccess))
+              val addAdjusted = if (a.internalPeerHost.nonEmpty && a2.internalPeerHost.nonEmpty) add
+              else add.copy(auxHost = "")
+
+              assert(addPeer(Seq(a), addAdjusted).forall(_.isSuccess))
+            }
+        }
+    }
+  }
+
+  def addPeersFromRegistrationRequest(apis: Seq[APIClient], addPeerRequests: Seq[PeerMetadata]): Unit = {
+    apis.foreach{
+      a =>
+        addPeerRequests.zip(apis).foreach{
+          case (add, a2) =>
+            if (a2 != a) {
+              val addAdjusted = if (a.internalPeerHost.nonEmpty && a2.internalPeerHost.nonEmpty) add
+              else add.copy(auxHost = "")
+              assert(addPeerWithRegistrationFlow(Seq(a), HostPort(addAdjusted.host, addAdjusted.httpPort)).forall(_.isSuccess))
             }
         }
     }
@@ -252,8 +286,9 @@ class Simulation {
 
   def run(
            apis: Seq[APIClient],
-           addPeerRequests: Seq[AddPeerRequest],
-           attemptSetExternalIP: Boolean = false
+           addPeerRequests: Seq[PeerMetadata],
+           attemptSetExternalIP: Boolean = false,
+           useRegistrationFlow: Boolean = false
          )(implicit executionContext: ExecutionContext): Boolean = {
 
     assert(checkHealthy(apis))
@@ -267,9 +302,13 @@ class Simulation {
 
     logger.info("Adding peers manually")
 
-    addPeersFromRequest(apis, addPeerRequests)
+
+    if (useRegistrationFlow) {
+      addPeersFromRegistrationRequest(apis, addPeerRequests)
+    } else addPeersFromRequest(apis, addPeerRequests)
 
     logger.info("Peers added")
+    logger.info("Validating peer health checks")
 
     assert(checkPeersHealthy(apis))
     logger.info("Peer validation passed")

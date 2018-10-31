@@ -3,13 +3,15 @@ package org.constellation
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
-import constellation.makeKeyPair
+import org.constellation.crypto.KeyUtils.makeKeyPair
+import org.constellation.primitives.Schema.NodeState
 import org.constellation.util.{APIClient, Simulation}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.concurrent.ExecutionContextExecutor
-import org.constellation.primitives.Schema.NodeState
 
+
+// TODO: Refactor and automate more
 class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
   override def afterAll {
@@ -26,7 +28,7 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
 
     import better.files._
 
-    val ips = file"hosts.txt".lines.toSeq // ++ file"hosts2.txt".lines.toSeq
+    val ips = file"hosts.txt".lines.toSeq.map{_.split(":").head} // ++ file"hosts2.txt".lines.toSeq
 
     println(ips)
 
@@ -66,18 +68,18 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
 
     apis2.map{_.postSync(
       "config/update",
-      ProcessingConfig(maxWidth = 10, minCheckpointFormationThreshold = 10, minCBSignatureThreshold = 3)
+      ProcessingConfig(maxWidth = 10, minCheckpointFormationThreshold = 10, numFacilitatorPeers = 3)
     )}
 
 
     apis.foreach {
       a =>
-        sim.addPeer(apis2, AddPeerRequest(a.hostName, a.udpPort, 9001, a.id)).foreach{println}
+        sim.addPeer(apis2, PeerMetadata(a.hostName, a.udpPort, 9001, a.id)).foreach{println}
     }
 
     apis2.foreach{
       a =>
-        sim.addPeer(apis, AddPeerRequest(a.hostName, a.udpPort, 9001, a.id, NodeState.DownloadInProgress)).foreach{println}
+        sim.addPeer(apis, PeerMetadata(a.hostName, a.udpPort, 9001, a.id, NodeState.DownloadInProgress)).foreach{println}
     }
 
     apis2.foreach{ a2 =>
@@ -87,6 +89,7 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
 
 
     Thread.sleep(30*1000)
+
 
 
   }

@@ -16,6 +16,9 @@ import scala.collection.concurrent.TrieMap
 import scala.collection.immutable.HashMap
 import scala.concurrent.ExecutionContext
 
+// Unused currently -- bug causing issue, EdgeProcessor has a simpler version of this in
+// formCheckpoint without facilitator crosstalk or set union stage
+
 object Consensus {
   sealed trait CC
 
@@ -31,7 +34,6 @@ object Consensus {
   case class ConflictVote(data: Vote) extends VoteData[Conflict]
 
   case class CheckpointProposal(data: CheckpointBlock) extends ProposalData[Checkpoint]
-  case class ConflictProposal(data: Bundle) extends ProposalData[Conflict]
 
   case class RoundHash[+T <: CC](hash: String)
 
@@ -181,7 +183,8 @@ object Consensus {
           CheckpointProposal(data)
         case ConflictVote(data) =>
           // TODO
-          ConflictProposal(Bundle(BundleData(Seq()).signed()(keyPair = keyPair)))
+          //ConflictProposal(Bundle(BundleData(Seq()).signed()(keyPair = keyPair)))
+          null
       }
 
       // TODO

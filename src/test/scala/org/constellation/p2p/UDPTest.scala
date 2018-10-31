@@ -1,25 +1,13 @@
 package org.constellation.p2p
 
-import java.net.InetSocketAddress
-import java.security.{KeyPair, PrivateKey, PublicKey}
+import java.security.PublicKey
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, ActorSystem, Props}
-import akka.io.Udp
-import akka.serialization.SerializationExtension
-import akka.testkit.{ImplicitSender, TestKit, TestProbe}
-import akka.util.{ByteString, Timeout}
-import com.esotericsoftware.kryo.io.{Input, Output}
-import org.json4s.native.Serialization
+import akka.actor.ActorSystem
+import akka.testkit.{ImplicitSender, TestKit}
+import akka.util.Timeout
+import org.constellation.primitives.Schema.Id
 import org.scalatest._
-
-import scala.util.{Random, Try}
-import constellation._
-import org.constellation.{DAO, TestHelpers}
-import org.constellation.consensus.Consensus.RemoteMessage
-import org.constellation.primitives.Schema.{Gossip, Id, Peer}
-import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{ProductHash, Signed}
 
 case class AnotherPublicKey(c: Id, seq: Seq[PublicKey])
 case class TestManyPublicKeys(a: PublicKey, b: Seq[PublicKey], d: AnotherPublicKey)

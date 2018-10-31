@@ -39,23 +39,7 @@ lazy val commonSettings = Seq(
     """-DakkaActorSystemName="$AKKA_ACTOR_SYSTEM_NAME""""
   ),
   resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases",
-  resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
-/*
-,
-    """-Dakka.remote.netty.tcp.hostname="$(eval "echo $AKKA_REMOTING_BIND_HOST")"""",
-    """-Dakka.remote.netty.tcp.port="$AKKA_REMOTING_BIND_PORT"""",
-    "-Dakka.io.dns.resolver=async-dns",
-    "-Dakka.io.dns.async-dns.resolve-srv=true",
-    "-Dakka.io.dns.async-dns.resolv-conf=on"
- */
-  javaOptions in Universal ++= Seq(
-    // -J params will be added as jvm parameters
-  // "-J-Xmx12000m" //,
-  //  "-J-Xms4000m",
-
-    // you can access any build setting/task here
-    //s"-version=${version.value}"
-  )
+  resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/"
 
 )
 
@@ -86,8 +70,8 @@ lazy val coreDependencies = Seq(
   "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.typesafe.slick" %% "slick" % "3.2.3",
   "com.h2database" % "h2" % "1.4.197",
-  "com.twitter" %% "storehaus-cache" % "0.15.0"
-  // "com.esotericsoftware" % "kryo" % "4.0.2"
+  "com.twitter" %% "storehaus-cache" % "0.15.0",
+  "io.swaydb" %% "swaydb" % "0.6"
 )
 
 //Test dependencies

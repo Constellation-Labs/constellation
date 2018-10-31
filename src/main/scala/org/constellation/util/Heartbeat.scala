@@ -15,6 +15,8 @@ class Heartbeat(dao: DAO) extends Actor {
 
   val period = 1
 
+  var round = 0L
+
   context.system.scheduler.schedule(Duration.Zero, Duration(period, TimeUnit.SECONDS), self, TriggerHeartbeats)(context.dispatcher)
 
   def active(actors : Set[ActorRef]): Receive = {
@@ -24,8 +26,9 @@ class Heartbeat(dao: DAO) extends Actor {
 
     case TriggerHeartbeats =>
       if (dao.heartbeatEnabled) {
+        round += 1L
         actors.foreach {
-          _ ! InternalHeartbeat
+          _ ! InternalHeartbeat(round)
         }
       }
   }

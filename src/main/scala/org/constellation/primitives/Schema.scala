@@ -4,14 +4,14 @@ import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 
 import constellation.pubKeyToAddress
-import org.constellation.KVDB
+import org.constellation.DAO
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.consensus.{MemPool, TipData}
+import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.{SortedSet, mutable}
 import scala.util.Random
 
 // This can't be a trait due to serialization issues
@@ -53,10 +53,6 @@ object Schema {
 
   // I.e. equivalent to number of sat per btc
   val NormalizationFactor: Long = 1e8.toLong
-
-  case class BundleHashQueryResponse(hash: String, sheaf: Option[Sheaf], transactions: Seq[Transaction])
-
-  case class MaxBundleGenesisHashQueryResponse(genesisBundle: Option[Bundle], genesisTX: Option[Transaction], sheaf: Option[Sheaf])
 
   case class SendToAddress(
                             dst: String,
@@ -153,8 +149,10 @@ object Schema {
     val AddressHash,
     CheckpointDataHash, CheckpointHash,
     TransactionDataHash, TransactionHash,
-    ValidationHash = Value
+    ValidationHash, BundleDataHash = Value
   }
+
+  case class BundleEdgeData(rank: Double, hashes: Seq[String])
 
   /**
     * Wrapper for encapsulating a typed hash reference
@@ -205,15 +203,13 @@ object Schema {
   case class ResolvedObservationEdge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
   (left: L, right: R, data: Option[D] = None)
 
-  case class EdgeCell(members: mutable.SortedSet[EdgeSheaf])
-
   case class Transaction(edge: Edge[Address, Address, TransactionEdgeData]) {
 
-    def store(dbActor: KVDB, cache: TransactionCacheData): Unit = {
+    def store(dbActor: Datastore, cache: TransactionCacheData): Unit = {
       edge.storeTransactionCacheData(dbActor, {originalCache: TransactionCacheData => cache.plus(originalCache)}, cache)
     }
 
-    def ledgerApplyMemPool(dbActor: KVDB): Unit = {
+    def ledgerApplyMemPool(dbActor: Datastore): Unit = {
       dbActor.updateAddressCacheData(
         src.hash,
         { a: AddressCacheData => a.copy(memPoolBalance = a.memPoolBalance - amount)},
@@ -226,7 +222,7 @@ object Schema {
       )
     }
 
-    def ledgerApply(dbActor: KVDB): Unit = {
+    def ledgerApply(dbActor: Datastore): Unit = {
       dbActor.updateAddressCacheData(
         src.hash,
         { a: AddressCacheData => a.copy(balance = a.balance - amount)},
@@ -235,6 +231,19 @@ object Schema {
       dbActor.updateAddressCacheData(
         dst.hash,
         { a: AddressCacheData => a.copy(balance = a.balance + amount)},
+        AddressCacheData(0L, 0L) // unused since this address should already exist here
+      )
+    }
+
+    def ledgerApplySnapshot(dbActor: Datastore): Unit = {
+      dbActor.updateAddressCacheData(
+        src.hash,
+        { a: AddressCacheData => a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - amount)},
+        AddressCacheData(0L, 0L) // unused since this address should already exist here
+      )
+      dbActor.updateAddressCacheData(
+        dst.hash,
+        { a: AddressCacheData => a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
     }
@@ -254,6 +263,11 @@ object Schema {
     def plus(keyPair: KeyPair): Transaction = this.copy(
       edge = edge.plus(keyPair)
     )
+
+    def valid: Boolean = validSrcSignature &&
+      dst.address.nonEmpty &&
+      dst.address.length > 30 &&
+      dst.address.startsWith("DAG")
 
     def validSrcSignature: Boolean = {
       edge.signedObservationEdge.signatureBatch.signatures.exists{ hs =>
@@ -279,7 +293,7 @@ object Schema {
     def parentHashes = Seq(observationEdge.left.hash, observationEdge.right.hash)
     def parents = Seq(observationEdge.left, observationEdge.right)
 
-    def storeTransactionCacheData(db: KVDB, update: TransactionCacheData => TransactionCacheData, empty: TransactionCacheData, resolved: Boolean = false): Unit = {
+    def storeTransactionCacheData(db: Datastore, update: TransactionCacheData => TransactionCacheData, empty: TransactionCacheData, resolved: Boolean = false): Unit = {
       db.updateTransactionCacheData(signedObservationEdge.baseHash, update, empty)
       db.putSignedObservationEdgeCache(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
       resolvedObservationEdge.data.foreach {
@@ -288,7 +302,7 @@ object Schema {
       }
     }
 
-    def storeCheckpointData(db: KVDB, update: CheckpointCacheData => CheckpointCacheData, empty: CheckpointCacheData, resolved: Boolean = false): Unit = {
+    def storeCheckpointData(db: Datastore, update: CheckpointCacheData => CheckpointCacheData, empty: CheckpointCacheData, resolved: Boolean = false): Unit = {
       db.updateCheckpointCacheData(signedObservationEdge.baseHash, update, empty)
       db.putSignedObservationEdgeCache(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
       resolvedObservationEdge.data.foreach {
@@ -321,7 +335,8 @@ object Schema {
                                reputation: Option[Double] = None,
                                ancestorBalances: Map[String, Long] = Map(),
                                ancestorReputations: Map[String, Long] = Map(),
-                               recentTransactions: Seq[String] = Seq()
+                               //    recentTransactions: Seq[String] = Seq(),
+                               balanceByLatestSnapshot: Long = 0L
                              ) {
 
     def plus(previous: AddressCacheData): AddressCacheData = {
@@ -329,9 +344,9 @@ object Schema {
         ancestorBalances =
           ancestorBalances ++ previous.ancestorBalances.filterKeys(k => !ancestorBalances.contains(k)),
         ancestorReputations =
-          ancestorReputations ++ previous.ancestorReputations.filterKeys(k => !ancestorReputations.contains(k)),
-        recentTransactions =
-          recentTransactions ++ previous.recentTransactions.filter(k => !recentTransactions.contains(k))
+          ancestorReputations ++ previous.ancestorReputations.filterKeys(k => !ancestorReputations.contains(k))
+        //recentTransactions =
+        //  recentTransactions ++ previous.recentTransactions.filter(k => !recentTransactions.contains(k))
       )
     }
 
@@ -375,6 +390,8 @@ object Schema {
                                   children: Set[String] = Set(),
                                   forkChildren: Set[String] = Set(),
                                   forkTipHashes: Set[String] = Set(),
+                                  maxHeight: Option[Long] = None,
+                                  minHeight: Option[Long] = None
                                 ) {
 
     def plus(previous: CheckpointCacheData): CheckpointCacheData = {
@@ -391,7 +408,48 @@ object Schema {
   case class CheckpointBlock(
                               transactions: Seq[Transaction],
                               checkpoint: CheckpointEdge
-                                  ) {
+                            ) {
+
+    def transactionsValid: Boolean = transactions.nonEmpty && transactions.forall(_.valid)
+
+    // TODO: Return checkpoint validation status for more info rather than just a boolean
+    def simpleValidation(
+                          balanceAccessFunction: AddressCacheData => Long = (a: AddressCacheData) => a.balance
+                        )(implicit dao: DAO): Boolean = {
+      val success = if (!validSignatures || signatures.isEmpty) {
+        false
+      } else if (!transactionsValid) {
+        false
+      } else {
+
+        val addressCache = transactions.map {_.src.address}.map { a => a -> dao.dbActor.getAddressCacheData(a) }
+        val cachesFound = addressCache.forall(_._2.nonEmpty)
+        if (!cachesFound) {
+          false
+        } else {
+
+          val sumByAddress = transactions
+            .map { t => t.src.address -> t.amount }
+            .groupBy(_._1).mapValues(_.map {_._2}.sum)
+
+          val lookup = addressCache.toMap.mapValues(_.get)
+
+          val sufficientBalances = sumByAddress.forall { case (k, v) =>
+            balanceAccessFunction(lookup(k)) >= v
+          }
+
+          sufficientBalances
+        }
+      }
+
+      if (success) {
+        dao.metricsManager ! IncrementMetric("checkpointValidationSuccess")
+      } else {
+        dao.metricsManager ! IncrementMetric("checkpointValidationFailure")
+      }
+
+      success
+    }
 
     def uniqueSignatures: Boolean = signatures.groupBy(_.b58EncodedPublicKey).forall(_._2.size == 1)
 
@@ -413,15 +471,17 @@ object Schema {
 
     def baseHash: String = checkpoint.edge.baseHash
 
+    def validSignatures: Boolean = signatures.forall(_.valid(baseHash))
+
     // TODO: Optimize call, should store this value instead of recalculating every time.
     def soeHash: String = checkpoint.edge.signedObservationEdge.hash
 
-    def store(db: KVDB, cache: CheckpointCacheData, resolved: Boolean): Unit = {
-/*
-      transactions.foreach { rt =>
-        rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))
-      }
-*/
+    def store(db: Datastore, cache: CheckpointCacheData, resolved: Boolean): Unit = {
+      /*
+            transactions.foreach { rt =>
+              rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))
+            }
+      */
       checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
     }
 
@@ -448,15 +508,6 @@ object Schema {
     def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
   }
-
-  case class EdgeSheaf(
-                        signedObservationEdge: SignedObservationEdge,
-                        parent: String,
-                        height: Long,
-                        depth: Int,
-                        score: Double
-                      )
-
 
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
   case class ValidPeerIPData(canonicalHostName: String, port: Int)
@@ -492,240 +543,8 @@ object Schema {
   // TODO: Change options to ResolvedBundleMetaData
 
 
-  /**
-    * Local neighborhood data about a bundle
-    * @param bundle : The raw bundle as embedded in the chain
-    * @param height : Main Chain height
-    * @param reputations : Raw heuristic score calculated from previous parent bundle
-    * @param totalScore : Total score of entire chain including this bundle
-    * @param rxTime : Local node receipt time
-    * @param transactionsResolved : Whether or not the transaction hashes have been resolved.
-    */
-  case class Sheaf(
-                    bundle: Bundle,
-                    height: Option[Int] = None,
-                    reputations: Map[String, Long] = Map(),
-                    totalScore: Option[Double] = None,
-                    rxTime: Long = System.currentTimeMillis(),
-                    transactionsResolved: Boolean = false,
-                    parent: Option[Bundle] = None,
-                    child: Option[Bundle] = None,
-                    pendingChildren: Option[Seq[Bundle]] = None,
-                    neighbors: Option[Seq[Sheaf]] = None
-                  ) {
-    def safeBundle = Option(bundle)
-    def isResolved: Boolean = reputations.nonEmpty && transactionsResolved && height.nonEmpty && totalScore.nonEmpty
-    def cellKey: CellKey = CellKey(bundle.extractParentBundleHash.pbHash, bundle.maxStackDepth, height.getOrElse(0))
-  }
-
   case class CellKey(hashPointer: String, depth: Int, height: Int)
 
-  case class Cell(members: SortedSet[Sheaf])
-
-  final case class PeerSyncHeartbeat(
-                                      maxBundleMeta: Sheaf,
-                                      validLedger: Map[String, Long],
-                                      id: Id
-                                    ) extends GossipMessage with RemoteMessage {
-    def safeMaxBundle = Option(maxBundle)
-    def maxBundle: Bundle = maxBundleMeta.bundle
-  }
-
-  final case class Bundle(
-                           bundleData: Signed[BundleData]
-                         ) extends ProductHash with Fiber with GossipMessage
-    with RemoteMessage {
-
-    def extractTXHash: Set[TransactionHash] = {
-      def process(s: Signed[BundleData]): Set[TransactionHash] = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            process(b2.bundleData)
-          case h: TransactionHash => Set(h)
-          case _ => Set[TransactionHash]()
-        }
-        if (depths.nonEmpty) {
-          depths.reduce( (s1: Set[TransactionHash], s2: Set[TransactionHash]) => s1 ++ s2)
-        } else {
-          Set[TransactionHash]()
-        }
-      }
-      process(bundleData)
-    }
-
-    val bundleNumber: Long = 0L //Random.nextLong()
-
-    /*
-        def extractTreeVisual: TreeVisual = {
-          val parentHash = extractParentBundleHash.hash.slice(0, 5)
-          def process(s: Signed[BundleData], parent: String): Seq[TreeVisual] = {
-            val bd = s.data.bundles
-            val depths = bd.map {
-              case tx: TX =>
-                TreeVisual(s"TX: ${tx.short} amount: ${tx.tx.data.normalizedAmount}", parent, Seq())
-              case b2: Bundle =>
-                val name = s"Bundle: ${b2.short} numTX: ${b2.extractTX.size}"
-                val children = process(b2.bundleData, name)
-                TreeVisual(name, parent, children)
-              case _ => Seq()
-            }
-            depths
-          }.asInstanceOf[Seq[TreeVisual]]
-          val parentName = s"Bundle: $short numTX: ${extractTX.size} node: ${bundleData.id.short} parent: $parentHash"
-          val children = process(bundleData, parentName)
-          TreeVisual(parentName, "null", children)
-        }
-    */
-
-    def extractParentBundleHash: ParentBundleHash = {
-      def process(s: Signed[BundleData]): ParentBundleHash = {
-        val bd = s.data.bundles
-        val depths = bd.collectFirst{
-          case b2: Bundle =>
-            process(b2.bundleData)
-          case bh: ParentBundleHash => bh
-        }
-        depths.get
-      }
-      process(bundleData)
-    }
-
-    def extractBundleHashId: (BundleHash, Id) = {
-      def process(s: Signed[BundleData]): (BundleHash, Id) = {
-        val bd = s.data.bundles
-        val depths = bd.collectFirst{
-          case b2: Bundle =>
-            process(b2.bundleData)
-          case bh: BundleHash => bh -> s.id
-        }.get
-        depths
-      }
-      process(bundleData)
-    }
-
-    def extractSubBundlesMinSize(minSize: Int = 2) = {
-      extractSubBundles.filter{_.maxStackDepth >= minSize}
-    }
-
-    def extractSubBundleHashes: Set[String] = {
-      def process(s: Signed[BundleData]): Set[String] = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            Set(b2.hash) ++ process(b2.bundleData)
-          case _ => Set[String]()
-        }
-        depths.reduce(_ ++ _)
-      }
-      process(bundleData)
-    }
-
-    def extractSubBundles: Set[Bundle] = {
-      def process(s: Signed[BundleData]): Set[Bundle] = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            Set(b2) ++ process(b2.bundleData)
-          case _ => Set[Bundle]()
-        }
-        depths.reduce(_ ++ _)
-      }
-      process(bundleData)
-    }
-
-    /*
-        def extractTX: Set[TX] = {
-          def process(s: Signed[BundleData]): Set[TX] = {
-            val bd = s.data.bundles
-            val depths = bd.map {
-              case b2: Bundle =>
-                process(b2.bundleData)
-              case tx: TX => Set(tx)
-              case _ => Set[TX]()
-            }
-            if (depths.nonEmpty) {
-              depths.reduce(_ ++ _)
-            } else {
-              Set()
-            }
-          }
-          process(bundleData)
-        }
-    */
-
-    // Copy this to temp val on class so as not to re-calculate
-    def extractIds: Set[Id] = {
-      def process(s: Signed[BundleData]): Set[Id] = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            b2.bundleData.encodedPublicKeys.headOption.map{Id}.toSet ++ process(b2.bundleData)
-          case _ => Set[Id]()
-        }
-        depths.reduce(_ ++ _) ++ s.encodedPublicKeys.headOption.map{Id}.toSet
-      }
-      process(bundleData)
-    }
-
-    def maxStackDepth: Int = {
-      def process(s: Signed[BundleData]): Int = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            process(b2.bundleData) + 1
-          case _ => 0
-        }
-        depths.max
-      }
-      process(bundleData) + 1
-    }
-
-    def totalNumEvents: Int = {
-      def process(s: Signed[BundleData]): Int = {
-        val bd = s.data.bundles
-        val depths = bd.map {
-          case b2: Bundle =>
-            process(b2.bundleData) + 1
-          case _ => 1
-        }
-        depths.sum
-      }
-      process(bundleData) + 1
-    }
-
-    def roundHash: String = {
-      bundleNumber.toString
-    }
-
-  }
-
-  final case class Gossip[T <: ProductHash](event: Signed[T]) extends ProductHash with RemoteMessage
-    with Fiber
-    with GossipMessage {
-    def iter: Seq[Signed[_ >: T <: ProductHash]] = {
-      def process[Q <: ProductHash](s: Signed[Q]): Seq[Signed[ProductHash]] = {
-        s.data match {
-          case Gossip(g) =>
-            val res = process(g)
-            res :+ g
-          case _ => Seq()
-        }
-      }
-      process(event) :+ event
-    }
-    def stackDepth: Int = {
-      def process[Q <: ProductHash](s: Signed[Q]): Int = {
-        s.data match {
-          case Gossip(g) =>
-            process(g) + 1
-          case _ => 0
-        }
-      }
-      process(event) + 1
-    }
-
-  }
 
   // TODO: Move other messages here.
   sealed trait InternalCommand
@@ -736,7 +555,11 @@ object Schema {
   final case object GetValidTX extends InternalCommand
   final case object GetMemPoolUTXO extends InternalCommand
   final case object ToggleHeartbeat extends InternalCommand
-  final case object InternalHeartbeat extends InternalCommand
+
+  // TODO: Add round to internalheartbeat, would be better than replicating it all over the place
+
+  case class InternalHeartbeat(round: Long = 0L)
+
   final case object InternalBundleHeartbeat extends InternalCommand
 
   final case class ValidateTransaction(tx: Transaction) extends InternalCommand
@@ -744,15 +567,8 @@ object Schema {
   trait DownloadMessage
 
   case class DownloadRequest(time: Long = System.currentTimeMillis()) extends DownloadMessage with RemoteMessage
-  case class DownloadResponse(
-                               maxBundle: Bundle,
-                               genesisBundle: Bundle,
-                               genesisTX: Transaction
-                             ) extends DownloadMessage with RemoteMessage
 
   final case class SyncData(validTX: Set[Transaction], memPoolTX: Set[Transaction]) extends GossipMessage with RemoteMessage
-
-  case class MissingTXProof(tx: Transaction, gossip: Seq[Gossip[ProductHash]]) extends GossipMessage with RemoteMessage
 
   final case class RequestTXProof(txHash: String) extends GossipMessage with RemoteMessage
 
@@ -769,10 +585,6 @@ object Schema {
     def b58: String = encodedId.b58Encoded
     def id: PublicKey = encodedId.toPublicKey
   }
-
-  case class GetId()
-
-  case class GetBalance(account: PublicKey)
 
   case class HandShake(
                         originPeer: Signed[Peer],
@@ -827,10 +639,6 @@ object Schema {
       accept.++(reject).sortBy(t => t.hashCode()).map(f => f.hash).mkString("-")
     }
   }
-
-  final case class VoteCandidate(tx: Transaction, gossip: Seq[Gossip[ProductHash]])
-
-  final case class VoteDataSimpler(accept: Seq[VoteCandidate], reject: Seq[VoteCandidate]) extends ProductHash
 
   final case class Vote(vote: Signed[VoteData]) extends ProductHash with Fiber
 

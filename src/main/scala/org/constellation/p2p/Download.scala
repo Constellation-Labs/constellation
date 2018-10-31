@@ -1,6 +1,5 @@
 package org.constellation.p2p
 
-import java.net.InetSocketAddress
 import java.util.concurrent.TimeUnit
 
 import akka.pattern.ask
@@ -11,12 +10,8 @@ import org.constellation.DAO
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, Signed}
-import scalaj.http.HttpResponse
 
-import scala.collection.mutable
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Try}
 
 /// New download code
@@ -26,19 +21,21 @@ object Download {
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
   def downloadCBFromHash(hash: String, singlePeer: PeerData)(implicit dao: DAO, ec: ExecutionContext): Unit = {
-    singlePeer.client.getBlocking[Option[CheckpointBlock]]("checkpoint/" + hash) match { case Some(cb) =>
-      if (cb != dao.genesisObservation.get.initialDistribution &&
-        cb != dao.genesisObservation.get.initialDistribution2) {
-
-        if (dao.dbActor.getCheckpointCacheData(cb.baseHash).isEmpty) {
-          EdgeProcessor.acceptCheckpoint(cb)
-          dao.metricsManager ! IncrementMetric("downloadedBlocks")
-        } else {
-          dao.metricsManager ! IncrementMetric("downloadedBlockButHashAlreadyExistsInDB")
-        }
+    if (dao.dbActor.getCheckpointCacheData(hash).isEmpty) {
+      singlePeer.client.getBlocking[Option[CheckpointBlock]]("checkpoint/" + hash) match {
+        case Some(cb) =>
+          if (cb != dao.genesisObservation.get.initialDistribution &&
+            cb != dao.genesisObservation.get.initialDistribution2) {
+            //if (dao.dbActor.getCheckpointCacheData(cb.baseHash).isEmpty) {
+              EdgeProcessor.acceptCheckpoint(cb)
+              dao.metricsManager ! IncrementMetric("downloadedBlocks")
+            //} else {
+             // dao.metricsManager ! IncrementMetric("downloadedBlockButHashAlreadyExistsInDB")
+            //}
+          }
+        case None =>
+          dao.metricsManager ! IncrementMetric("downloadBlockEmptyResponse")
       }
-    case None =>
-      dao.metricsManager ! IncrementMetric("downloadBlockEmptyResponse")
     }
   }
 
@@ -46,6 +43,7 @@ object Download {
   def downloadActual()(implicit dao: DAO, ec: ExecutionContext): Unit = {
     logger.info("Download started")
     dao.nodeState = NodeState.DownloadInProgress
+    PeerManager.broadcastNodeState()
 
     val res = (dao.peerManager ? APIBroadcast(_.getBlocking[Option[GenesisObservation]]("genesis")))
       .mapTo[Map[Id, Option[GenesisObservation]]].get()
@@ -60,7 +58,7 @@ object Download {
 
     dao.metricsManager ! UpdateMetric("downloadedGenesis", "true")
 
-    val peerData = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().filter{_._2.nodeState == NodeState.Ready}
+    val peerData = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().filter{_._2.peerMetadata.nodeState == NodeState.Ready}
 
     val snapshotClient = peerData.head._2.client
 
@@ -120,12 +118,7 @@ object Download {
 
   def download()(implicit dao: DAO, ec: ExecutionContext): Unit = {
 
-    Try {
-      downloadActual()
-    } match {
-      case Failure(e) => e.printStackTrace()
-      case _ => logger.info("Download succeeded")
-    }
+    tryWithMetric(downloadActual(), "download")
 
   }
 
