@@ -7,6 +7,7 @@ import constellation._
 import org.constellation.crypto.Base58
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema._
+import org.constellation.crypto.KeyUtils._
 
 object POW extends POWExt
 
@@ -61,6 +62,12 @@ case class HashSignature(signature: String,
   override def compare(that: HashSignature): Int = {
     signature compare that.signature
   }
+}
+
+case class SingleHashSignature(hash: String, hashSignature: HashSignature) {
+  def valid: Boolean = hashSignature.valid(hash)
+
+
 }
 
 case class SignatureBatch(
@@ -185,7 +192,8 @@ trait POWSignHelp {
                         dst: String,
                         amount: Long,
                         keyPair: KeyPair,
-                        normalized: Boolean = true): Transaction = {
+                        normalized: Boolean = true
+                       ): Transaction = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
     val txData = TransactionEdgeData(amountToUse)

@@ -5,6 +5,7 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import constellation._
+import org.constellation.crypto.KeyUtils
 import org.constellation.util.{APIClient, Simulation}
 import org.json4s.JsonAST.JArray
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
@@ -94,6 +95,7 @@ object ClusterTest {
 
 }
 
+// TODO: Re-enable after doing kubernetes entropy / haveged fix
 class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
   override def afterAll {
@@ -105,7 +107,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
 
   import ClusterTest._
 
-  private val kp = makeKeyPair()
+  private val kp = KeyUtils.makeKeyPair()
 
   private val clusterId = sys.env.getOrElse("CLUSTER_ID", "constellation-app")
 

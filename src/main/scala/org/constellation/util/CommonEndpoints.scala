@@ -12,8 +12,12 @@ import akka.util.Timeout
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
-import org.constellation.consensus.{GetMemPool, MemPool, SnapshotInfo}
+import org.constellation.consensus.{GetMemPool, MemPool}
+import org.constellation.primitives.Schema.NodeState.NodeState
 import org.json4s.native.Serialization
+
+
+case class NodeStateInfo(nodeState: NodeState)
 
 trait CommonEndpoints extends Json4sSupport {
 
@@ -32,19 +36,33 @@ trait CommonEndpoints extends Json4sSupport {
       path("id") {
         complete(dao.id)
       } ~
-    path("tips") {
-      val mp = (dao.edgeProcessor ? GetMemPool).mapTo[MemPool].get()
-      complete(mp.thresholdMetCheckpoints.map{_._2.checkpointBlock})
-    } ~
+      path("tips") {
+        complete(dao.threadSafeTipService.tips)
+      } ~
       path("info") {
-      val mp = (dao.edgeProcessor ? GetMemPool).mapTo[MemPool].get()
-      complete(SnapshotInfo(mp.snapshot, mp.acceptedCBSinceSnapshot))
+        complete(dao.threadSafeTipService.getSnapshotInfo)
+      } ~
+      path("snapshot" / Segment) {s =>
+        complete(dao.dbActor.getSnapshot(s))
+      } ~
+      path("genesis") {
+        complete(dao.genesisObservation)
+      } ~
+      pathPrefix("address" / Segment) { a =>
+        complete(dao.dbActor.getAddressCacheData(a))
+      } ~
+      pathPrefix("balance" / Segment) { a =>
+        complete(dao.dbActor.getAddressCacheData(a).map{_.balanceByLatestSnapshot})
+      } ~
+    path("state") {
+      complete(NodeStateInfo(dao.nodeState))
     } ~
-    path("snapshot" / Segment) {s =>
-      complete(dao.dbActor.getSnapshot(s))
+    path("peers") {
+      complete(dao.peerInfo.map{_._2.peerMetadata}.toSeq)
     } ~
-    path("genesis") {
-      complete(dao.genesisObservation)
+    path("transaction" / Segment) {
+      h =>
+        complete(dao.dbActor.getTransactionCacheData(h))
     }
   }
 }

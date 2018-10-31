@@ -8,13 +8,6 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.constellation.DAO
-import org.constellation.consensus.Consensus._
-import org.constellation.p2p.{RegisterNextActor, UDPMessage, UDPSend}
-import org.constellation.util.TestNode
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
-
-import scala.collection.immutable.{HashMap, Map}
-import org.constellation.Fixtures._
 import org.constellation.crypto.KeyUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 

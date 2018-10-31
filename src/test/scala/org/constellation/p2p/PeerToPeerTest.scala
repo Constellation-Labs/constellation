@@ -8,7 +8,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import akka.util.Timeout
-import org.constellation.{DAO, Fixtures}
+import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.scalatest._
 

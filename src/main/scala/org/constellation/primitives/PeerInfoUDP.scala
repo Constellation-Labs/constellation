@@ -4,13 +4,14 @@ import java.net.InetSocketAddress
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import org.constellation.primitives.Schema.{Id, LocalPeerData, Peer, PeerSyncHeartbeat}
+import org.constellation.primitives.Schema.{Id, LocalPeerData, Peer}
 import org.constellation.util.{APIClient, Signed}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContextExecutor
 
-trait PeerInfo {
+@deprecated
+trait PeerInfoUDP {
 
   @volatile var deadPeers: Seq[InetSocketAddress] = Seq()
 
@@ -19,8 +20,6 @@ trait PeerInfo {
   val lastPeerRX : TrieMap[Id, Long] = TrieMap()
 
   val peersAwaitingAuthenticationToNumAttempts: TrieMap[InetSocketAddress, Int] = TrieMap()
-
-  val peerSync: TrieMap[Id, PeerSyncHeartbeat] = TrieMap()
 
   val rawPeerLookup: TrieMap[Id, LocalPeerData] = TrieMap()
 

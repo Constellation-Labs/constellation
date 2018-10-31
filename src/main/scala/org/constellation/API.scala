@@ -17,29 +17,49 @@ import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.crypto.SimpleWalletLike
-import org.constellation.p2p.Download
+import org.constellation.crypto.{KeyUtils, SimpleWalletLike}
+import org.constellation.p2p.{Download, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, _}
-import org.constellation.util.{CommonEndpoints, ServeUI}
+import org.constellation.util.{APIClient, CommonEndpoints, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
 import scalaj.http.HttpResponse
 
-case class AddPeerRequest(host: String, udpPort: Int, httpPort: Int, id: Id, nodeStatus: NodeState = NodeState.Ready)
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
+
+case class PeerMetadata(
+                     host: String,
+                     udpPort: Int,
+                     httpPort: Int,
+                     id: Id,
+                     nodeState: NodeState = NodeState.Ready,
+                     timeAdded: Long = System.currentTimeMillis(),
+                     auxHost: String = ""
+                   )
+
 
 case class HostPort(host: String, port: Int)
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
 
 case class ProcessingConfig(
-                                maxWidth: Int = 10,
-                                minCheckpointFormationThreshold: Int = 10,
-                                minCBSignatureThreshold: Int = 5,
-                                randomTXPerRound: Int = 50
-                              )
+                             maxWidth: Int = 20,
+                             minCheckpointFormationThreshold: Int = 50,
+                             numFacilitatorPeers: Int = 2,
+                             randomTXPerRound: Int = 5,
+                             metricCheckInterval: Int = 60,
+                             maxMemPoolSize: Int = 1000,
+                             minPeerTimeAddedSeconds: Int = 30,
+                             maxActiveTipsAllowedInMemory: Int = 1000,
+                             maxAcceptedCBHashesInMemory: Int = 5000,
+                             peerHealthCheckInterval : Int = 10,
+                             peerDiscoveryInterval : Int = 30
+) {
+
+}
+
 
 class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   extends Json4sSupport
@@ -67,18 +87,16 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
   val getEndpoints: Route =
     extractClientIP { clientIP =>
       get {
-        path("genesis") {
-          complete(dao.genesisObservation)
-        } ~
         path("checkpoint" / Segment) { s =>
           val res = dao.dbActor.getCheckpointCacheData(s).map{_.checkpointBlock}
           complete(res)
         } ~
-          path("restart") {
+          path("restart") { // TODO: Revisit / fix
             dao.restartNode()
+            System.exit(0)
             complete(StatusCodes.OK)
           } ~
-          path("setKeyPair") {
+          path("setKeyPair") { // TODO: Change to keys/set - update ui call
             parameter('keyPair) { kpp =>
               logger.debug("Set key pair " + kpp)
               val res = if (kpp.length > 10) {
@@ -98,17 +116,13 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
             complete(response)
           } ~
           path("makeKeyPair") {
-            val pair = constellation.makeKeyPair()
+            val pair = KeyUtils.makeKeyPair()
             wallet :+= pair
             complete(pair)
           } ~
-          path("stackSize" / IntNumber) { num =>
-            minGenesisDistrSize = num
-            complete(StatusCodes.OK)
-          } ~
           path("makeKeyPairs" / IntNumber) { numPairs =>
             val pair = Seq.fill(numPairs) {
-              constellation.makeKeyPair()
+              KeyUtils.makeKeyPair()
             }
             wallet ++= pair
             complete(pair)
@@ -121,10 +135,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           } ~
           path("nodeKeyPair") {
             complete(keyPair)
-          } ~
-          path("peers") {
-            val res = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].getOpt().getOrElse(Map())
-            complete(res)
           } ~
           path("peerids") {
             complete(peers.map {
@@ -152,6 +162,17 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
             dao.peerManager ! e
             complete(StatusCodes.OK)
           }
+        } ~
+        path("add") {
+          entity(as[HostPort]) { case hp @ HostPort(host, port) =>
+            onComplete{
+              PeerManager.attemptRegisterPeer(hp)
+            } { result =>
+
+              complete(StatusCodes.OK)
+            }
+
+          }
         }
       } ~
       pathPrefix("download") {
@@ -174,11 +195,13 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         } else {
           dao.nodeState = NodeState.PendingDownload
         }
+        dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
         dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
         complete(StatusCodes.OK)
       } ~
       path("random") { // Temporary
         dao.generateRandomTX = !dao.generateRandomTX
+        dao.metricsManager ! UpdateMetric("generateRandomTX", dao.generateRandomTX.toString)
         complete(StatusCodes.OK)
       } ~
       path("peerHealthCheck") {
@@ -214,20 +237,19 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           }
         }
       } ~
-      path("sendTransactionToAddress"){
-        entity(as[SendToAddress]) { e =>
+      path("send"){
+        entity(as[SendToAddress]) { sendRequest =>
 
-          println(s"send transaction to address $e")
+          logger.info(s"send transaction to address $sendRequest")
 
-          Future {
-            transactions.TransactionManager.handleSendToAddress(e, dao)
-          }
+          val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amountActual, dao.keyPair)
+          dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
 
-          complete(StatusCodes.OK)
+          complete(tx.hash)
         }
       } ~
       path("addPeer"){
-        entity(as[AddPeerRequest]) { e =>
+        entity(as[PeerMetadata]) { e =>
 
           Future {
             peerManager ! e
@@ -244,6 +266,8 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
               case Array(ip, port) =>
                 ipp = ip
                 externalHostString = ip
+                import better.files._
+                file"external_host_ip".write(ip)
                 new InetSocketAddress(ip, port.toInt)
               case a @ _ => {
                 logger.debug(s"Unmatched Array: $a")

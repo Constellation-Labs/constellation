@@ -5,10 +5,9 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
+import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo}
-import org.constellation.p2p.Download.downloadCBFromHash
 import org.constellation.primitives.Schema.{CheckpointBlock, Id, MetricsResult}
-import org.constellation.primitives.{IncrementMetric, UpdateMetric}
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import scalaj.http.{Http, HttpRequest, HttpResponse}
@@ -17,17 +16,23 @@ import scala.concurrent.{ExecutionContext, Future}
 
 object APIClient {
   def apply(host: String = "127.0.0.1", port: Int, udpPort: Int = 16180)
-           (implicit system: ActorSystem, materialize: ActorMaterializer
+           (
+             implicit executionContext: ExecutionContext, dao: DAO = null
+             //implicit system: ActorSystem, materialize: ActorMaterializer
   ): APIClient = {
     new APIClient(host, port)
   }
 }
 
-class APIClient(host: String = "127.0.0.1", port: Int)(
-  implicit val system: ActorSystem,
-  implicit val materialize: ActorMaterializer) {
+class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9001, val internalPeerHost: String = "")(
+ // implicit val system: ActorSystem,
+ // implicit val materialize: ActorMaterializer
+ implicit val executionContext: ExecutionContext,
+ dao: DAO = null
+  ) {
 
-  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
+  //implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
+  val daoOpt = Option(dao)
 
   val hostName: String = host
   var id: Id = _
@@ -64,9 +69,14 @@ class APIClient(host: String = "127.0.0.1", port: Int)(
     TimeUnit.SECONDS.toMillis(timeoutSeconds).toInt
   }
 
-  def httpWithAuth(suffix: String, timeoutSeconds: Int = 20): HttpRequest = {
+  def optHeaders: Map[String, String] = daoOpt.map{
+    d =>
+      Map("Remote-Address" -> d.externalHostString, "X-Real-IP" -> d.externalHostString)
+  }.getOrElse(Map())
+
+  def httpWithAuth(suffix: String, timeoutSeconds: Int = 30): HttpRequest = {
     val timeoutMs = timeoutMS(timeoutSeconds)
-    Http(base(suffix)).addAuthIfEnabled().timeout(timeoutMs, timeoutMs)
+    Http(base(suffix)).addAuthIfEnabled().timeout(timeoutMs, timeoutMs).headers(optHeaders)
   }
 
   implicit val serialization: Serialization.type = native.Serialization
@@ -83,7 +93,7 @@ class APIClient(host: String = "127.0.0.1", port: Int)(
     Future(putSync(suffix, b))
   }
 
-  def postEmpty(suffix: String, timeoutSeconds: Int = 5)(implicit f : Formats = constellation.constellationFormats)
+  def postEmpty(suffix: String, timeoutSeconds: Int = 15)(implicit f : Formats = constellation.constellationFormats)
   : HttpResponse[String] = {
     httpWithAuth(suffix).method("POST").asString
   }
@@ -152,9 +162,38 @@ class APIClient(host: String = "127.0.0.1", port: Int)(
     resp.body
   }
 
-  def simpleDownload(): Seq[CheckpointBlock] = {
+  def getSnapshotInfo(): SnapshotInfo = getBlocking[SnapshotInfo]("info")
 
-    val snapshotInfo = getBlocking[SnapshotInfo]("info")
+
+  def getSnapshots(): Seq[Snapshot] = {
+
+    val snapshotInfo = getSnapshotInfo()
+
+    val startingSnapshot = snapshotInfo.snapshot
+
+    def getSnapshots(hash: String, snapshots: Seq[Snapshot] = Seq()): Seq[Snapshot] = {
+      val sn = getBlocking[Option[Snapshot]]("snapshot/" + hash)
+      sn match {
+        case Some(snapshot) =>
+          if (snapshot.lastSnapshot == "" || snapshot.lastSnapshot == Snapshot.snapshotZeroHash) {
+            snapshots :+ snapshot
+          } else {
+            getSnapshots(snapshot.lastSnapshot, snapshots :+ snapshot)
+          }
+        case None =>
+          println("MISSING SNAPSHOT")
+          snapshots
+      }
+    }
+
+    val snapshots = getSnapshots(startingSnapshot.lastSnapshot, Seq(startingSnapshot))
+    snapshots
+  }
+
+
+  def simpleDownload(): Seq[String] = {
+
+    val snapshotInfo = getSnapshotInfo()
 
     val startingCBs = snapshotInfo.acceptedCBSinceSnapshot ++ snapshotInfo.snapshot.checkpointBlocks
 
@@ -162,23 +201,20 @@ class APIClient(host: String = "127.0.0.1", port: Int)(
       val sn = getBlocking[Option[Snapshot]]("snapshot/" + hash)
       sn match {
         case Some(snapshot) =>
-          if (snapshot.lastSnapshot == "") {
-            blocks
+          if (snapshot.lastSnapshot == "" || snapshot.lastSnapshot == Snapshot.snapshotZeroHash) {
+            blocks ++ snapshot.checkpointBlocks
           } else {
             getSnapshots(snapshot.lastSnapshot, blocks ++ snapshot.checkpointBlocks)
           }
         case None =>
+          println("MISSING SNAPSHOT")
           blocks
       }
     }
 
     val snapshotBlocks = getSnapshots(snapshotInfo.snapshot.lastSnapshot) ++ startingCBs
     val snapshotBlocksDistinct = snapshotBlocks.distinct
-
-    snapshotBlocks.flatMap{ cb =>
-      getBlocking[Option[CheckpointBlock]]("checkpoint/" + cb)
-    }
-
+    snapshotBlocksDistinct
   }
 
 }
