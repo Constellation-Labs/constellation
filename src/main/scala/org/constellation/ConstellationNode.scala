@@ -122,6 +122,11 @@ import scala.concurrent.ExecutionContext
     } match {
       case Failure(e) => e.printStackTrace()
       case Success(x) => logger.info("success")
+
+        while (true) {
+          Thread.sleep(60*1000)
+        }
+
     }
 
   }
