@@ -133,11 +133,11 @@ resource "google_compute_instance" "default" {
 }
 
 resource "google_compute_network" "default" {
-  name = "dag-network"
+  name = "dag-network-${random_id.instance_id.hex}"
 }
 
 resource "google_compute_firewall" "default" {
- name    = "constellation-app-firewall"
+ name    = "constellation-app-firewall-${random_id.instance_id.hex}"
  network = "${google_compute_network.default.name}"
 
  // enable_logging = true
