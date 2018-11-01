@@ -282,7 +282,6 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
       if (badAttempt) {
         dao.metricsManager ! IncrementMetric("duplicatePeerAdditionAttempt")
       } else {
-        // implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
         implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
         val client = APIClient(request.host, request.port)(dao.edgeExecutionContext, dao)

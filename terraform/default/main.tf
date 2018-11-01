@@ -38,7 +38,7 @@ output "instance_ips" {
 resource "google_compute_instance" "default" {
  count          = 5
  name = "constellation-${random_id.instance_id.hex}-${count.index}"
- machine_type   = "n1-standard-1"
+ machine_type   = "n1-highcpu-4"
  zone           = "us-west2-b"
  can_ip_forward = true
 

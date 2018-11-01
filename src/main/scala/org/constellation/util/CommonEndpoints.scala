@@ -12,9 +12,12 @@ import akka.util.Timeout
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
-import org.constellation.consensus.{GetMemPool, MemPool}
+import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.serializer.KryoSerializer
 import org.json4s.native.Serialization
+
+import scala.concurrent.Future
 
 
 case class NodeStateInfo(nodeState: NodeState)
@@ -27,7 +30,7 @@ trait CommonEndpoints extends Json4sSupport {
 
   implicit val _timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-  val dao: DAO
+  implicit val dao: DAO
 
   val commonEndpoints: Route = get {
     path("health") {
@@ -39,11 +42,32 @@ trait CommonEndpoints extends Json4sSupport {
       path("tips") {
         complete(dao.threadSafeTipService.tips)
       } ~
+    path("snapshotHashes") {
+      complete(dao.snapshotPath.list.toSeq.map{_.name})
+    } ~
       path("info") {
-        complete(dao.threadSafeTipService.getSnapshotInfo)
+        val info = dao.threadSafeTipService.getSnapshotInfo
+
+        complete(info.copy(acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.get}))
       } ~
       path("snapshot" / Segment) {s =>
         complete(dao.dbActor.getSnapshot(s))
+      } ~
+      path("storedSnapshot" / Segment) {s =>
+        onComplete{
+          Future{
+            import better.files._
+            tryWithMetric({
+              KryoSerializer.deserializeCast[StoredSnapshot](File(dao.snapshotPath, s).byteArray)
+            },
+              "readSnapshot"
+            )
+          }(dao.edgeExecutionContext)
+        } {
+          res =>
+            complete(res.toOption.flatMap{_.toOption})
+        }
+
       } ~
       path("genesis") {
         complete(dao.genesisObservation)
@@ -62,7 +86,9 @@ trait CommonEndpoints extends Json4sSupport {
     } ~
     path("transaction" / Segment) {
       h =>
-        complete(dao.dbActor.getTransactionCacheData(h))
-    }
+        complete(dao.transactionService.get(h))
+    } ~
+    path("checkpoint" / Segment) { h => complete(dao.checkpointService.get(h))}
+
   }
 }

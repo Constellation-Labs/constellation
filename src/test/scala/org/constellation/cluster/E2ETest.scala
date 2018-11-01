@@ -8,7 +8,7 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import org.constellation.ConstellationNode
-import org.constellation.primitives.Schema.CheckpointBlock
+import org.constellation.primitives.Schema.{CheckpointBlock, CheckpointCacheData}
 import org.constellation.util.{Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
@@ -98,7 +98,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     val downloadedBlocks = apis.map{ a =>
       blockHashes.head.distinct.map{ h =>
-        a.getBlocking[Option[CheckpointBlock]]("checkpoint/" + h)
+        a.getBlocking[Option[CheckpointCacheData]]("checkpoint/" + h).flatMap{_.checkpointBlock}
       }
     }
 

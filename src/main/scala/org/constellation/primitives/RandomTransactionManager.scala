@@ -5,95 +5,78 @@ import akka.pattern.ask
 import akka.util.Timeout
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.EdgeProcessor
+import org.constellation.consensus.SnapshotTrigger
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState, SendToAddress}
 import org.constellation.util.HeartbeatSubscribe
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Random, Success, Try}
 
-class RandomTransactionManager()(
-  implicit val timeout: Timeout, dao: DAO
-) extends Actor {
+object RandomTransactionManager {
 
-  dao.heartbeatActor ! HeartbeatSubscribe
-  private var lastExecutionTime = System.currentTimeMillis()
+  def trigger(round: Long)(implicit dao: DAO): Future[Try[Any]] = {
 
-  override def receive: Receive = {
+    implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
+    futureTryWithTimeoutMetric({
 
-    /**
-      * This spawns random transactions for simulating load. For testing purposes only.
-      */
-    case InternalHeartbeat(_) =>
+      if (dao.metricsManager != null) {
 
-      val originalName = Thread.currentThread().getName
-      Thread.currentThread().setName("RTMHBLoop") // Debug
+        val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
+        dao.metricsManager ! UpdateMetric("transactionMemPoolSize", memPoolCount.toString)
+        if (memPoolCount < dao.processingConfig.maxMemPoolSize && dao.generateRandomTX && dao.nodeState == NodeState.Ready) {
 
-      tryWithMetric ({
-
-
-        if (dao.metricsManager != null && System.currentTimeMillis() > (lastExecutionTime + 2*1000) ) {
-
-          lastExecutionTime = System.currentTimeMillis()
-
-          val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
-          dao.metricsManager ! UpdateMetric("transactionMemPoolSize", memPoolCount.toString)
-          if (memPoolCount < dao.processingConfig.maxMemPoolSize && dao.generateRandomTX && dao.nodeState == NodeState.Ready) {
-
-            val peerQuery = dao.peerInfo.toSeq //(dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
-            val peerIds = peerQuery.filter { case (_, pd) =>
-              pd.peerMetadata.timeAdded < (System.currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000) && pd.peerMetadata.nodeState == NodeState.Ready
-            }
-
-            dao.metricsManager ! UpdateMetric("numPeersOnDAO", peerQuery.size.toString)
-            dao.metricsManager ! UpdateMetric("numPeersOnDAOThatAreReady", peerIds.size.toString)
-
-            if (peerIds.nonEmpty) {
-
-              val txs = Seq.fill(dao.processingConfig.randomTXPerRound)(0).par.map { _ =>
-
-                // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
-                // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
-
-                def getRandomPeer: (Id, PeerData) = peerIds(Random.nextInt(peerIds.size))
-
-                val sendRequest = SendToAddress(getRandomPeer._1.address.address, Random.nextInt(1000).toLong + 1L, normalized = false)
-                val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair, normalized = false)
-                dao.metricsManager ! IncrementMetric("signaturesPerformed")
-                dao.metricsManager ! IncrementMetric("randomTransactionsGenerated")
-                dao.metricsManager ! IncrementMetric("sentTransactions")
-
-                tx
-                /*            // TODO: Change to transport layer call
-            dao.peerManager ! APIBroadcast(
-              _.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx),
-              peerSubset = Set(getRandomPeer._1)
-            )*/
-              }
-
-              txs.foreach { t =>
-                dao.threadSafeTXMemPool.put(t)
-              }
-
-            } else {
-
-              dao.metricsManager ! IncrementMetric("triedToGenerateTransactionsButHaveNoPeers")
-            }
+          val peerQuery = dao.peerInfo.toSeq //(dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
+          val peerIds = peerQuery.filter { case (_, pd) =>
+            pd.peerMetadata.timeAdded < (System.currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000) && pd.peerMetadata.nodeState == NodeState.Ready
           }
 
-          if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold && dao.generateRandomTX) {
-            futureTryWithTimeoutMetric(
-              EdgeProcessor.formCheckpoint(),
-              "formCheckpointFromRandomTXManager",
-              timeoutSeconds = 30
-            )(dao.edgeExecutionContext, dao)
+          dao.metricsManager ! UpdateMetric("numPeersOnDAO", peerQuery.size.toString)
+          dao.metricsManager ! UpdateMetric("numPeersOnDAOThatAreReady", peerIds.size.toString)
+
+          if (peerIds.nonEmpty) {
+
+            val txs = Seq.fill(dao.processingConfig.randomTXPerRound)(0).par.map { _ =>
+
+              // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
+              // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
+
+              def getRandomPeer: (Id, PeerData) = peerIds(Random.nextInt(peerIds.size))
+
+              val sendRequest = SendToAddress(getRandomPeer._1.address.address, Random.nextInt(1000).toLong + 1L, normalized = false)
+              val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair, normalized = false)
+              dao.metricsManager ! IncrementMetric("signaturesPerformed")
+              dao.metricsManager ! IncrementMetric("randomTransactionsGenerated")
+              dao.metricsManager ! IncrementMetric("sentTransactions")
+
+              tx
+              /*            // TODO: Change to transport layer call
+        dao.peerManager ! APIBroadcast(
+          _.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx),
+          peerSubset = Set(getRandomPeer._1)
+        )*/
+            }
+
+            txs.foreach { t =>
+              dao.threadSafeTXMemPool.put(t)
+            }
+
+          } else {
+
+            dao.metricsManager ! IncrementMetric("triedToGenerateTransactionsButHaveNoPeers")
           }
         }
-      }, "randomTransactionRound")
+
+        if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold && dao.generateRandomTX) {
+          futureTryWithTimeoutMetric(
+            SnapshotTrigger.formCheckpoint(),
+            "formCheckpointFromRandomTXManager",
+            timeoutSeconds = 30
+          )(dao.edgeExecutionContext, dao)
+        }
+      }
 
 
-      Thread.currentThread().setName(originalName) // Debug
-
+    }, "randomTransactionLoop")
   }
 }

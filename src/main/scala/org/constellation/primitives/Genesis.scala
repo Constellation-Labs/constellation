@@ -3,6 +3,7 @@ package org.constellation.primitives
 import java.security.KeyPair
 
 import constellation._
+import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 
@@ -88,23 +89,21 @@ trait Genesis extends NodeData with EdgeDAO {
     createGenesisAndInitialDistributionDirect(selfAddressStr, ids, keyPair)
   }
 
-  def acceptGenesis(go: GenesisObservation): Unit = {
+  def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = false)(implicit dao: DAO): Unit = {
     // Store hashes for the edges
 
     go.genesis.store(
-      dbActor,
-      CheckpointCacheData(go.genesis, inDAG = true, resolved = true, maxHeight = Some(0), minHeight = Some(0)),
-      resolved = true
+      CheckpointCacheData(Some(go.genesis), height = Some(Height(0, 0)))
     )
+
     go.initialDistribution.store(
-      dbActor,
-      CheckpointCacheData(go.initialDistribution, inDAG = true, resolved = true, maxHeight = Some(1), minHeight = Some(1)),
-      resolved = true
+      CheckpointCacheData(Some(go.initialDistribution), height = Some(Height(1, 1)))
+
     )
+
     go.initialDistribution2.store(
-      dbActor,
-      CheckpointCacheData(go.initialDistribution2, inDAG = true, resolved = true, maxHeight = Some(1), minHeight = Some(1)),
-      resolved = true
+      CheckpointCacheData(Some(go.initialDistribution2), height = Some(Height(1, 1)))
+
     )
 
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
@@ -137,6 +136,7 @@ trait Genesis extends NodeData with EdgeDAO {
    // metricsManager ! UpdateMetric("activeTips", "2")
     metricsManager ! UpdateMetric("genesisAccepted", "true")
  //   metricsManager ! UpdateMetric("z_genesisBlock", go.json)
+    dao.threadSafeTipService.acceptGenesis(go)
 
    // println(s"accept genesis = ", go)
   }

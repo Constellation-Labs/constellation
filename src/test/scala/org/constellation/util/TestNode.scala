@@ -54,9 +54,10 @@ object TestNode {
       metricCheckInterval = 10,
       maxWidth = 7,
       maxMemPoolSize = 15,
-      minPeerTimeAddedSeconds = 1
+      minPeerTimeAddedSeconds = 1,
+      snapshotInterval = 30,
+      snapshotHeightInterval = 3
     )
-    node.dao.snapshotInterval = 5
 
     node
   }

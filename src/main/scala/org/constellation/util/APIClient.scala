@@ -31,7 +31,6 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
  dao: DAO = null
   ) {
 
-  //implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
   val daoOpt = Option(dao)
 
   val hostName: String = host

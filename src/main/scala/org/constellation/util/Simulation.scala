@@ -183,7 +183,7 @@ class Simulation {
 
   def checkSnapshot(
                      apis: Seq[APIClient],
-                     num: Int = 5,
+                     num: Int = 3,
                      maxRetries: Int = 60,
                      delay: Long = 5000
                    ): Boolean = {

@@ -5,8 +5,7 @@ import better.files.File
 import com.typesafe.scalalogging.Logger
 import org.constellation.primitives._
 
-class DAO extends MetricsExt
-  with NodeData
+class DAO extends NodeData
   with Reputation
   with PeerInfoUDP
   with Genesis
@@ -46,7 +45,6 @@ class DAO extends MetricsExt
   def restartNode(): Unit = {
     downloadMode = true
     signedPeerLookup.clear()
-    resetMetrics()
     peersAwaitingAuthenticationToNumAttempts.clear()
     signedPeerLookup.clear()
     deadPeers = Seq()

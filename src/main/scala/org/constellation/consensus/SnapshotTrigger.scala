@@ -10,7 +10,7 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.Consensus._
-import org.constellation.consensus.EdgeProcessor._
+import org.constellation.consensus.SnapshotTrigger._
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -20,7 +20,7 @@ import scalaj.http.HttpResponse
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Failure, Random, Success, Try}
 
-object EdgeProcessor {
+object SnapshotTrigger {
 
   case class HandleTransaction(tx: Transaction)
   case class HandleCheckpoint(checkpointBlock: CheckpointBlock)
@@ -30,104 +30,48 @@ object EdgeProcessor {
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
 
-  def acceptCheckpoint(cb: CheckpointBlock)(implicit dao: DAO): Unit = {
+  def acceptCheckpoint(checkpointCacheData: CheckpointCacheData)(implicit dao: DAO): Unit = {
 
-    val parents = cb.parentSOEBaseHashes.map{dao.dbActor.getCheckpointCacheData}
-
-    val maxHeight = if (parents.exists(_.isEmpty)) {
-      dao.metricsManager ! IncrementMetric("checkpointAcceptedWithMissingParent")
-      None
+    if (checkpointCacheData.checkpointBlock.isEmpty) {
+      dao.metricsManager ! IncrementMetric("acceptCheckpointCalledWithEmptyCB")
     } else {
 
-      val parents2 = parents.map{_.get}
-      val heights = parents2.map{_.maxHeight}
-      if (heights.exists{_.isEmpty}) {
-        dao.metricsManager ! IncrementMetric("checkpointAcceptedWithMissingParentMaxHeight")
+      val cb = checkpointCacheData.checkpointBlock.get
+
+      val height = cb.calculateHeight()
+
+      val fallbackHeight = if (height.isEmpty) checkpointCacheData.height else height
+
+      if (fallbackHeight.isEmpty) {
+        dao.metricsManager ! IncrementMetric("heightEmpty")
+      } else {
+        dao.metricsManager ! IncrementMetric("heightNonEmpty")
       }
 
-      val nonEmptyHeights = heights.flatten
-      if (nonEmptyHeights.isEmpty) None else {
-        Some(nonEmptyHeights.max + 1)
+      // Accept transactions
+      cb.transactions.foreach { t =>
+        dao.metricsManager ! IncrementMetric("transactionAccepted")
+        t.store(
+          TransactionCacheData(
+            t,
+            valid = true,
+            inMemPool = false,
+            inDAG = true,
+            Map(cb.baseHash -> true),
+            resolved = true,
+            cbBaseHash = Some(cb.baseHash)
+          ))
+        t.ledgerApply(dao.dbActor)
       }
+      dao.metricsManager ! IncrementMetric("checkpointAccepted")
+      cb.store(
+        CheckpointCacheData(
+          Some(cb),
+          height = fallbackHeight
+        )
+      )
+
     }
-
-    val minHeight = if (parents.exists(_.isEmpty)) {
-      None
-    } else {
-
-      val parents2 = parents.map{_.get}
-      val heights = parents2.map{_.minHeight}
-      if (heights.exists{_.isEmpty}) {
-        dao.metricsManager ! IncrementMetric("checkpointAcceptedWithMissingParentMinHeight")
-      }
-
-      val nonEmptyHeights = heights.flatten
-      if (nonEmptyHeights.isEmpty) None else {
-        Some(nonEmptyHeights.min + 1)
-      }
-    }
-
-    // Accept transactions
-    cb.transactions.foreach { t =>
-      dao.metricsManager ! IncrementMetric("transactionAccepted")
-      t.store(
-        dao.dbActor,
-        TransactionCacheData(
-          t,
-          valid = true,
-          inMemPool = false,
-          inDAG = true,
-          Map(cb.baseHash -> true),
-          resolved = true,
-          cbBaseHash = Some(cb.baseHash)
-        ))
-      t.ledgerApply(dao.dbActor)
-    }
-    dao.metricsManager ! IncrementMetric("checkpointAccepted")
-    cb.store(
-      dao.dbActor,
-      CheckpointCacheData(
-        cb,
-        inDAG = true,
-        resolved = true,
-        maxHeight = maxHeight,
-        minHeight = minHeight
-      ),
-      resolved = true
-    )
-  }
-
-  def attemptFormCheckpointUpdateState(dao: DAO): Option[CheckpointBlock] = {
-
-    // TODO: Send a DBUpdate to modify tip data to include newly formed CB as a 'child', but only after acceptance
-    if (dao.canCreateCheckpoint) {
-      // Form new checkpoint block.
-
-      // TODO : Validate this batch doesn't have a double spend, if it does,
-      // just drop all conflicting. Shouldn't be necessary since memPool is already validated
-      // relative to current state but it can't hurt
-
-      val tips = Random.shuffle(dao.checkpointMemPoolThresholdMet.toSeq).take(2)
-
-      val tipSOE = tips.map {_._2._1.checkpoint.edge.signedObservationEdge}
-
-      val transactions = Random.shuffle(dao.transactionMemPool).take(dao.minCheckpointFormationThreshold)
-      dao.transactionMemPool = dao.transactionMemPool.filterNot(transactions.contains)
-
-      val checkpointBlock = createCheckpointBlock(transactions, tipSOE)(dao.keyPair)
-      dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
-
-      val cbBaseHash = checkpointBlock.baseHash
-
-      dao.checkpointMemPool(cbBaseHash) = checkpointBlock
-      dao.metricsManager ! UpdateMetric("checkpointMemPool", dao.checkpointMemPool.size.toString)
-
-      // Temporary bypass to consensus for mock
-      // Send all data (even if this is redundant.)
-      dao.peerManager ! APIBroadcast(_.put(s"checkpoint/$cbBaseHash", checkpointBlock))
-
-      Some(checkpointBlock)
-    } else None
   }
 
   /**
@@ -199,39 +143,6 @@ object EdgeProcessor {
     }
   }
 
-  def triggerCheckpointBlocking(dao: DAO,
-                                tx: Transaction)(implicit timeout: Timeout, executionContext: ExecutionContext): Unit = {
-    if (dao.canCreateCheckpoint) {
-
-      println(s"starting checkpoint blocking")
-
-      val checkpointBlock = attemptFormCheckpointUpdateState(dao).get
-
-      dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
-
-      val cbBaseHash = checkpointBlock.baseHash
-      dao.checkpointMemPool(cbBaseHash) = checkpointBlock
-
-      // TODO: should be subset
-      val facilitators = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().keySet
-
-      // TODO: what is the round hash based on?
-      // what are thresholds and checkpoint selection
-
-      val obe = checkpointBlock.checkpoint.edge.observationEdge
-
-      val roundHash = RoundHash(obe.left.hash + obe.right.hash)
-
-      // Start check pointing consensus round
-      /*      dao.consensus ! InitializeConsensusRound(facilitators, roundHash, (result) => {
-              println(s"consensus round complete result roundHash = $roundHash, result = $result")
-              EdgeProcessor.handleCheckpoint(result.checkpointBlock, dao)
-            }, CheckpointVote(checkpointBlock))*/
-      dao.consensus ! ConsensusVote(dao.id, CheckpointVote(checkpointBlock), roundHash)
-
-    }
-  }
-
   case class CreateCheckpointEdgeResponse(
                                            checkpointEdge: CheckpointEdge,
                                            transactionsUsed: Set[String],
@@ -292,7 +203,7 @@ object EdgeProcessor {
 
   case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
   case class SignatureResponse(checkpointBlock: CheckpointBlock, facilitators: Set[Id], reRegister: Boolean = false)
-  case class FinishedCheckpoint(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
+  case class FinishedCheckpoint(checkpointCacheData: CheckpointCacheData, facilitators: Set[Id])
   case class FinishedCheckpointResponse(reRegister: Boolean = false)
 
   // TODO: Move to checkpoint formation actor
@@ -395,11 +306,14 @@ object EdgeProcessor {
                   } else {
                     dao.metricsManager ! IncrementMetric("finalCBPassedValidation")
 
-                    dao.threadSafeTipService.accept(finalCB)
+
+                    val cache = CheckpointCacheData(Some(finalCB), height = finalCB.calculateHeight())
+
+                    dao.threadSafeTipService.accept(cache)
                     // TODO: Check failures and/or remove constraint of single actor
                     dao.peerInfo.foreach { case (id, client) =>
                       tryWithMetric(
-                        client.client.postSync(s"finished/checkpoint", FinishedCheckpoint(finalCB, finalFacilitators)),
+                        client.client.postSync(s"finished/checkpoint", FinishedCheckpoint(cache, finalFacilitators)),
                         "finishedCheckpointBroadcast"
                       )
                     }
@@ -443,85 +357,9 @@ case class TipData(checkpointBlock: CheckpointBlock, numUses: Int)
 
 case class SnapshotInfo(
                          snapshot: Snapshot,
-                         acceptedCBSinceSnapshot: Seq[String] = Seq()
+                         acceptedCBSinceSnapshot: Seq[String] = Seq(),
+                         acceptedCBSinceSnapshotCache: Seq[CheckpointCacheData] = Seq()
                        )
-
-case class MemPool(
-                    transactions: Set[Transaction] = Set(),
-                    checkpoints: Map[String, CheckpointBlock] = Map(),
-                    thresholdMetCheckpoints: Map[String, TipData] = Map(),
-                    facilitators: Map[Id, PeerData] = Map(),
-                    heartBeatRound: Int = 0,
-                    snapshot: Snapshot = Snapshot("", Seq()),
-                    acceptedCBSinceSnapshot: Seq[String] = Seq()
-                  ) {
-  def plus(checkpointBlock: CheckpointBlock, facilitatorCount: Option[Int] = None)(implicit dao: DAO): MemPool = {
-
-    // TODO: Remove option and use one or the other
-    def finished: Boolean = facilitatorCount.map{
-      checkpointBlock.signatures.size == _
-    }.getOrElse(checkpointBlock.signatures.size >= dao.minCBSignatureThreshold)
-
-    if (finished) {
-
-      acceptCheckpoint(checkpointBlock)
-
-      def reuseTips: Boolean = thresholdMetCheckpoints.size < dao.maxWidth
-
-      val keysToRemove = checkpointBlock.parentSOEBaseHashes.flatMap {
-        h =>
-          thresholdMetCheckpoints.get(h).flatMap {
-            case TipData(block, numUses) =>
-
-              def doRemove(): Option[String] = {
-                dao.metricsManager ! IncrementMetric("checkpointTipsRemoved")
-                Some(block.baseHash)
-              }
-
-              if (reuseTips) {
-                if (numUses >= 2) {
-                  doRemove()
-                } else {
-                  None
-                }
-              } else {
-                doRemove()
-              }
-          }
-      }
-
-      val keysToUpdate = checkpointBlock.parentSOEBaseHashes.flatMap {
-        h =>
-          thresholdMetCheckpoints.get(h).flatMap {
-            case TipData(block, numUses) =>
-
-              def doUpdate(): Option[(String, TipData)] = {
-                dao.metricsManager ! IncrementMetric("checkpointTipsIncremented")
-                Some(block.baseHash -> TipData(block, numUses + 1))
-              }
-
-              if (reuseTips && numUses <= 2) {
-                doUpdate()
-              } else None
-          }
-      }.toMap
-
-
-      this.copy(
-        checkpoints = checkpoints - checkpointBlock.baseHash,
-        thresholdMetCheckpoints = thresholdMetCheckpoints +
-          (checkpointBlock.baseHash -> TipData(checkpointBlock, 0)) ++
-          keysToUpdate --
-          keysToRemove,
-        acceptedCBSinceSnapshot = acceptedCBSinceSnapshot :+ checkpointBlock.baseHash
-      )
-    } else {
-      this.copy(
-        checkpoints = checkpoints + (checkpointBlock.baseHash -> checkpointBlock)
-      )
-    }
-  }
-}
 
 case object GetMemPool
 
@@ -532,20 +370,32 @@ case class DownloadComplete(latestSnapshot: Snapshot)
 
 object Snapshot {
 
+  def triggerSnapshot(round: Long)(implicit dao: DAO): Unit = {
+    // TODO: Refactor round into InternalHeartbeat
+    if (round % dao.processingConfig.snapshotInterval == 0 && dao.nodeState == NodeState.Ready) {
+      futureTryWithTimeoutMetric(
+        dao.threadSafeTipService.attemptSnapshot(), "snapshotAttempt"
+      )(dao.edgeExecutionContext, dao)
+    }
+  }
+
+
+
   val snapshotZero = Snapshot("", Seq())
   val snapshotZeroHash: String = Snapshot("", Seq()).hash
 
   def acceptSnapshot(snapshot: Snapshot)(implicit dao: DAO): Unit = {
     dao.dbActor.putSnapshot(snapshot.hash, snapshot)
-    val cbData = snapshot.checkpointBlocks.map{dao.dbActor.getCheckpointCacheData}
+    val cbData = snapshot.checkpointBlocks.map{dao.checkpointService.get}
     if (cbData.exists{_.isEmpty}) {
       dao.metricsManager ! IncrementMetric("snapshotCBAcceptQueryFailed")
     }
 
     for (
       cbOpt <- cbData;
-      cb <- cbOpt;
-      tx <- cb.checkpointBlock.transactions
+      cbCache <- cbOpt;
+      cb <- cbCache.checkpointBlock;
+      tx <- cb.transactions
     ) {
       // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
       // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
@@ -557,11 +407,9 @@ object Snapshot {
 
 }
 
-// Debugging LevelDB
-case class AcceptCheckpoint(cb: CheckpointBlock)
 
-class EdgeProcessor(dao: DAO)
-                   (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
+class SnapshotTrigger(dao: DAO)
+                     (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
 
   implicit val sys: ActorSystem = context.system
   implicit val kp: KeyPair = dao.keyPair
@@ -569,36 +417,16 @@ class EdgeProcessor(dao: DAO)
 
   dao.heartbeatActor ! HeartbeatSubscribe
 
+  def receive: Receive = active()
 
-  def receive: Receive = active(MemPool())
-
-  def active(memPool: MemPool): Receive = {
-
-    case DownloadComplete(latestSnapshot) =>
-
-      dao.generateRandomTX = true
-      dao.threadSafeTipService.setSnapshot(latestSnapshot)
-      dao.nodeState = NodeState.Ready
-      dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
-      dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, NodeState.Ready)))
+  def active(): Receive = {
 
     case InternalHeartbeat(round) =>
-
-      // TODO: Refactor round into InternalHeartbeat
-      if (round % dao.snapshotInterval == 0 && dao.nodeState == NodeState.Ready) {
-        futureTryWithTimeoutMetric(
-          dao.threadSafeTipService.attemptSnapshot(), "snapshotAttempt"
-        )(dao.edgeExecutionContext, dao)
-      }
-
-    case GetMemPool =>
-      sender() ! memPool
 
     case go: GenesisObservation =>
 
       // Dumb way to set these as active tips, won't pass a double validation but no big deal.
       dao.acceptGenesis(go)
-      dao.threadSafeTipService.acceptGenesis(go)
 
     /*//      @deprecated
         case ConsensusRoundResult(checkpointBlock, roundHash: RoundHash[Checkpoint]) =>

@@ -46,16 +46,18 @@ case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = Non
 
 case class ProcessingConfig(
                              maxWidth: Int = 20,
-                             minCheckpointFormationThreshold: Int = 50,
+                             minCheckpointFormationThreshold: Int = 500,
                              numFacilitatorPeers: Int = 2,
-                             randomTXPerRound: Int = 5,
+                             randomTXPerRound: Int = 200,
                              metricCheckInterval: Int = 60,
-                             maxMemPoolSize: Int = 1000,
+                             maxMemPoolSize: Int = 2000,
                              minPeerTimeAddedSeconds: Int = 30,
                              maxActiveTipsAllowedInMemory: Int = 1000,
                              maxAcceptedCBHashesInMemory: Int = 5000,
-                             peerHealthCheckInterval : Int = 10,
-                             peerDiscoveryInterval : Int = 30
+                             peerHealthCheckInterval : Int = 20,
+                             peerDiscoveryInterval : Int = 40,
+                             snapshotHeightInterval: Int = 30,
+                             snapshotInterval: Int = 30
 ) {
 
 }
@@ -87,10 +89,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
   val getEndpoints: Route =
     extractClientIP { clientIP =>
       get {
-        path("checkpoint" / Segment) { s =>
-          val res = dao.dbActor.getCheckpointCacheData(s).map{_.checkpointBlock}
-          complete(res)
-        } ~
           path("restart") { // TODO: Revisit / fix
             dao.restartNode()
             System.exit(0)
@@ -147,9 +145,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
             } else {
               complete(StatusCodes.NotFound)
             }
-          } ~
-          path("checkpointTips") {
-            complete(dao.confirmedCheckpoints)
           }
       }
     }
@@ -231,7 +226,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         } ~
         path("accept") {
           entity(as[GenesisObservation]) { go =>
-            dao.edgeProcessor ! go
+            dao.acceptGenesis(go, setAsTips = true)
             // TODO: Report errors and add validity check
             complete(StatusCodes.OK)
           }
