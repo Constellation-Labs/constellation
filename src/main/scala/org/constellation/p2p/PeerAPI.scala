@@ -69,7 +69,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
       extractClientIP { clientIP =>
         path("ip") {
           complete(clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)})
-        } ~
+        } /*~
         path("edge" / Segment) { soeHash =>
           val cacheOpt = dao.dbActor.getSignedObservationEdgeCache(soeHash)
 
@@ -81,7 +81,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
           val resWithCBOpt = EdgeResponse(cacheOpt, cbOpt)
 
           complete(resWithCBOpt)
-        }
+        }*/
       }
     }
   }

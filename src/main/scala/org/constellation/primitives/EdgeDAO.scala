@@ -241,7 +241,41 @@ class ThreadSafeTipService() {
 
     acceptedCBSinceSnapshot = acceptedCBSinceSnapshot :+ checkpointBlock.baseHash
     dao.metricsManager ! UpdateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
+
   }
+
+}
+
+
+// TODO: Use atomicReference increment pattern instead of synchronized
+
+class CheckpointService() {
+
+
+  val checkpointCache: LRUCache[String, CheckpointCacheData] = {
+    import com.twitter.storehaus.cache._
+    LRUCache[String, CheckpointCacheData](50000)
+  }
+
+  def get(key: String): Option[CheckpointCacheData] = this.synchronized{
+    checkpointCache.get(key)
+  }
+
+  def put(key: String, cache: CheckpointCacheData): Unit = this.synchronized{
+    checkpointCache(key) = cache
+  }
+
+  def update(
+              key: String,
+              updateFunc: CheckpointCacheData => CheckpointCacheData,
+              empty: => CheckpointCacheData
+            ): CheckpointCacheData =
+    this.synchronized{
+      val data = get(key).map {updateFunc}.getOrElse(empty)
+      put(key, data)
+      data
+    }
+
 
 }
 

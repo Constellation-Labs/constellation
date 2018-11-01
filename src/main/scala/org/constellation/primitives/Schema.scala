@@ -379,20 +379,25 @@ object Schema {
     }
   }
 
+  case class Height(min: Long, max: Long)
+
+  case class CommonMetadata(
+                             valid: Boolean = false,
+                             inDAG: Boolean = false,
+                             resolved: Boolean = false,
+                             resolutionInProgress: Boolean = false,
+                             inMemPool: Boolean = false,
+                             lastResolveAttempt: Option[Long] = None,
+                             rxTime: Long = System.currentTimeMillis(), // TODO: Unify common metadata like this
+                           )
+
   case class CheckpointCacheData(
-                                  checkpointBlock: CheckpointBlock, // this is the primary tip hash of current state
-                                  inDAG: Boolean = false,
-                                  resolved: Boolean = false,
-                                  resolutionInProgress: Boolean = false,
-                                  inMemPool: Boolean = false,
-                                  lastResolveAttempt: Option[Long] = None,
-                                  rxTime: Long = System.currentTimeMillis(), // TODO: Unify common metadata like this
+                                  checkpointBlock: Option[CheckpointBlock] = None,
+                                  metadata: CommonMetadata = CommonMetadata(),
                                   children: Set[String] = Set(),
-                                  forkChildren: Set[String] = Set(),
-                                  forkTipHashes: Set[String] = Set(),
-                                  maxHeight: Option[Long] = None,
-                                  minHeight: Option[Long] = None
+                                  height: Option[Height] = None
                                 ) {
+/*
 
     def plus(previous: CheckpointCacheData): CheckpointCacheData = {
       this.copy(
@@ -400,6 +405,7 @@ object Schema {
         rxTime = previous.rxTime
       )
     }
+*/
 
   }
 
