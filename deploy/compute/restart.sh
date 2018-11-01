@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 HOSTS_FILE=${1:-hosts-dev.txt}
-JAR_TAG=${2-dev}
+JAR_TAG=${2:-dev}
 
 echo "Restarting $HOSTS_FILE with jar tag $JAR_TAG"
 cat $HOSTS_FILE
