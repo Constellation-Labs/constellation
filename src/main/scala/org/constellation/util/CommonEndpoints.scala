@@ -7,7 +7,6 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.FromEntityUnmarshaller
-import akka.pattern.ask
 import akka.util.Timeout
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport

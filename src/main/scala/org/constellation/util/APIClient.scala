@@ -2,12 +2,10 @@ package org.constellation.util
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorSystem
-import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo}
-import org.constellation.primitives.Schema.{CheckpointBlock, Id, MetricsResult}
+import org.constellation.primitives.Schema.{Id, MetricsResult}
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import scalaj.http.{Http, HttpRequest, HttpResponse}

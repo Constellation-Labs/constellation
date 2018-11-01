@@ -13,7 +13,6 @@ import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 
 import scala.concurrent.ExecutionContext
-import scala.util.{Failure, Try}
 
 /// New download code
 object Download {

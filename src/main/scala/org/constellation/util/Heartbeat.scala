@@ -3,11 +3,10 @@ package org.constellation.util
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorRef}
-import constellation.futureTryWithTimeoutMetric
 import org.constellation.DAO
 import org.constellation.consensus.Snapshot
 import org.constellation.primitives.RandomTransactionManager
-import org.constellation.primitives.Schema.{InternalHeartbeat, NodeState}
+import org.constellation.primitives.Schema.InternalHeartbeat
 
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration

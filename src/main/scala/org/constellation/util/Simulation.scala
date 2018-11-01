@@ -4,9 +4,9 @@ import java.util.concurrent.ForkJoinPool
 
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.{PeerMetadata, HostPort}
 import org.constellation.consensus.SnapshotInfo
 import org.constellation.primitives.Schema._
+import org.constellation.{HostPort, PeerMetadata}
 import scalaj.http.HttpResponse
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}

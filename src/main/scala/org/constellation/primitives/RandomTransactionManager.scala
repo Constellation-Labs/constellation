@@ -1,16 +1,12 @@
 package org.constellation.primitives
 
-import akka.actor.Actor
-import akka.pattern.ask
-import akka.util.Timeout
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.SnapshotTrigger
-import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState, SendToAddress}
-import org.constellation.util.HeartbeatSubscribe
+import org.constellation.primitives.Schema.{Id, NodeState, SendToAddress}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.{Random, Try}
 
 object RandomTransactionManager {
 

@@ -6,7 +6,6 @@ import java.security.{KeyPair, PublicKey}
 import constellation.pubKeyToAddress
 import org.constellation.DAO
 import org.constellation.consensus.Consensus.RemoteMessage
-import org.constellation.consensus.{TipData}
 import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._

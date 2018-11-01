@@ -6,18 +6,16 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
-import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
-import org.constellation.{DAO, HostPort}
+import org.constellation.DAO
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
-import org.constellation.consensus.SnapshotTrigger.{FinishedCheckpoint, FinishedCheckpointResponse, HandleCheckpoint, SignatureRequest, handleTransaction}
+import org.constellation.consensus.SnapshotTrigger.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest, handleTransaction}
 import org.constellation.consensus.{Consensus, SnapshotTrigger}
-import org.constellation.p2p.PeerAPI.EdgeResponse
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
@@ -26,7 +24,6 @@ import org.json4s.native
 import org.json4s.native.Serialization
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Random, Success}
 
 case class PeerAuthSignRequest(salt: Long)
 case class PeerRegistrationRequest(host: String, port: Int, key: String) {

@@ -3,14 +3,13 @@ package org.constellation
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
-import constellation._
+import better.files._
+import org.constellation.crypto.KeyUtils
 import org.constellation.util.{APIClient, Simulation}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.Try
-import better.files._
-import org.constellation.crypto.KeyUtils
 
 
 

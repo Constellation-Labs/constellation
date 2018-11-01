@@ -2,10 +2,10 @@ package org.constellation
 
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.KeyUtils
+import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.util.{ProductHash, Signed}
 import org.scalatest.FlatSpec
-import KeyUtils._
 
 case class TestSignable(a: String, b: Int) extends ProductHash
 case class TestSignabledWrapper(testSignable: Signed[TestSignable]) extends RemoteMessage

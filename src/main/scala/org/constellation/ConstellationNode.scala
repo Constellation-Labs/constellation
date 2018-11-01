@@ -9,7 +9,6 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.RemoteAddress
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LoggingMagnet}
 import akka.http.scaladsl.server.{Directive0, Route}
-import akka.io.Udp
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files._
@@ -17,10 +16,9 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.CustomDirectives.printResponseTime
-import org.constellation.consensus.{Consensus, SnapshotTrigger}
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.swaydb.SwayDBDatastore
-import org.constellation.p2p.{PeerAPI, UDPActor}
+import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Heartbeat}

@@ -9,7 +9,7 @@ import com.typesafe.scalalogging.Logger
 import constellation.futureTryWithTimeoutMetric
 import org.constellation.p2p.{Download, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState}
+import org.constellation.primitives.Schema.{Id, InternalHeartbeat}
 import org.constellation.util._
 import org.constellation.{DAO, HostPort, PeerMetadata, RemovePeerRequest}
 
@@ -17,12 +17,10 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
-import scala.collection.Set
-import scala.concurrent.ExecutionContext
-
 import constellation._
-import better.files._
-import scala.util.{Success, Failure}
+
+import scala.collection.Set
+import scala.util.{Failure, Success}
 
 object PeerManager {
 

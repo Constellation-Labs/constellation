@@ -8,7 +8,6 @@ import org.constellation.datastore.leveldb.LevelDB
 import org.constellation.datastore.leveldb.LevelDB._
 import org.constellation.serializer.KryoSerializer
 
-import scala.concurrent.ExecutionContext
 import scala.util.Try
 
 class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem)

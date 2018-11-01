@@ -4,21 +4,16 @@ import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorLogging, ActorSystem}
-import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.Consensus._
-import org.constellation.consensus.SnapshotTrigger._
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.{HashSignature, HeartbeatSubscribe, ProductHash}
-import scalaj.http.HttpResponse
+import org.constellation.util.{HeartbeatSubscribe, ProductHash}
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Failure, Random, Success, Try}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
 object SnapshotTrigger {
 

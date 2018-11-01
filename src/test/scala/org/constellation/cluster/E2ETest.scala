@@ -8,7 +8,7 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import org.constellation.ConstellationNode
-import org.constellation.primitives.Schema.{CheckpointBlock, CheckpointCacheData}
+import org.constellation.primitives.Schema.CheckpointCacheData
 import org.constellation.util.{Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 

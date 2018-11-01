@@ -6,8 +6,6 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestProbe
 import org.constellation.Fixtures.{addPeerRequest, dummyTx, id}
-import org.constellation.consensus.Validation.TransactionValidationStatus
-import org.constellation.consensus.{SnapshotTrigger, Validation}
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema._

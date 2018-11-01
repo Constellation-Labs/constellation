@@ -1,10 +1,9 @@
 package org.constellation.datastore
 
 import org.constellation.DAO
-
-import scala.collection.concurrent.TrieMap
 import org.constellation.serializer.KryoSerializer
 
+import scala.collection.concurrent.TrieMap
 import scala.util.Try
 
 class SimpleKVDBImpl extends KVDB {

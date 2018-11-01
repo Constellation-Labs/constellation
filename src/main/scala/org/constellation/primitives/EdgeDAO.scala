@@ -4,7 +4,7 @@ import java.util.concurrent.{Executors, TimeUnit}
 
 import akka.util.Timeout
 import better.files.File
-import com.twitter.storehaus.cache.{LRUCache, MutableLRUCache}
+import com.twitter.storehaus.cache.MutableLRUCache
 import org.constellation.consensus.SnapshotTrigger.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
@@ -12,8 +12,8 @@ import org.constellation.serializer.KryoSerializer
 import org.constellation.{DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Failure, Random, Success, Try}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.util.Random
 
 
 class ThreadSafeTXMemPool() {
@@ -52,7 +52,6 @@ class ThreadSafeTXMemPool() {
 
 }
 
-import akka.pattern.ask
 import constellation._
 
 class ThreadSafeTipService() {

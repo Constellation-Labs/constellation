@@ -5,7 +5,6 @@ import java.security.KeyPair
 
 import akka.actor.ActorRef
 import constellation._
-import org.constellation.datastore.Datastore
 import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.primitives.Schema.NodeState.NodeState
