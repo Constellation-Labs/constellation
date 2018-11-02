@@ -176,7 +176,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
               onComplete(
                 futureTryWithTimeoutMetric(
                   SnapshotTrigger.handleSignatureRequest(sr), "peerAPIHandleSignatureRequest"
-                )(dao.edgeExecutionContext, dao)
+                )(dao.signatureExecutionContext, dao)
               ) {
                 result => // ^ Errors captured above
                   val knownHost = dao.peerInfo.exists(_._2.client.hostName == ip)
@@ -208,7 +208,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
                   if (fc.checkpointCacheData.checkpointBlock.exists{_.simpleValidation()}) {
                     dao.threadSafeTipService.accept(fc.checkpointCacheData)
                   } else Future.successful(), "peerAPIFinishedCheckpointRX"
-                )(dao.edgeExecutionContext, dao)
+                )(dao.finishedExecutionContext, dao)
               ) {
                 result => // ^ Errors captured above
                   val maybeResponse = result.toOption.flatMap {

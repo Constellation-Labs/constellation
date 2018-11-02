@@ -209,7 +209,7 @@ object Schema {
       dao.transactionService.put(this.hash, cache)
     }
 
-    def ledgerApplyMemPool(dbActor: Datastore): Unit = {
+    /*def ledgerApplyMemPool(dbActor: Datastore): Unit = {
       dbActor.updateAddressCacheData(
         src.hash,
         { a: AddressCacheData => a.copy(memPoolBalance = a.memPoolBalance - amount)},
@@ -220,28 +220,28 @@ object Schema {
         { a: AddressCacheData => a.copy(memPoolBalance = a.memPoolBalance + amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
-    }
+    }*/
 
-    def ledgerApply(dbActor: Datastore): Unit = {
-      dbActor.updateAddressCacheData(
+    def ledgerApply()(implicit dao: DAO): Unit = {
+      dao.addressService.update(
         src.hash,
         { a: AddressCacheData => a.copy(balance = a.balance - amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
-      dbActor.updateAddressCacheData(
+      dao.addressService.update(
         dst.hash,
         { a: AddressCacheData => a.copy(balance = a.balance + amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
     }
 
-    def ledgerApplySnapshot(dbActor: Datastore): Unit = {
-      dbActor.updateAddressCacheData(
+    def ledgerApplySnapshot()(implicit dao: DAO): Unit = {
+      dao.addressService.update(
         src.hash,
         { a: AddressCacheData => a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
-      dbActor.updateAddressCacheData(
+      dao.addressService.update(
         dst.hash,
         { a: AddressCacheData => a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
@@ -451,7 +451,7 @@ object Schema {
       val height = maxHeight.flatMap{ max =>
         minHeight.map{
           min =>
-            Height(max, min)
+            Height(min, max)
         }
       }
 
@@ -471,7 +471,7 @@ object Schema {
         false
       } else {
 
-        val addressCache = transactions.map {_.src.address}.map { a => a -> dao.dbActor.getAddressCacheData(a) }
+        val addressCache = transactions.map {_.src.address}.map { a => a -> dao.addressService.get(a) }
         val cachesFound = addressCache.forall(_._2.nonEmpty)
         if (!cachesFound) {
           false

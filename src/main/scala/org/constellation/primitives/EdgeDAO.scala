@@ -12,6 +12,7 @@ import org.constellation.serializer.KryoSerializer
 import org.constellation.{DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 import scala.util.Random
 
@@ -63,11 +64,6 @@ class ThreadSafeTipService() {
   private var acceptedCBSinceSnapshot: Seq[String] = Seq()
   private var facilitators: Map[Id, PeerData] = Map()
   private var snapshot: Snapshot = Snapshot.snapshotZero
-
-  private val checkpointCache = {
-    import com.twitter.storehaus.cache._
-    LRUCache[String, CheckpointBlock](5000)
-  }
 
   def tips: Map[String, TipData] = thresholdMetCheckpoints
 
@@ -144,7 +140,7 @@ class ThreadSafeTipService() {
               _.baseHash
             })
             File(dao.snapshotPath, snapshot.hash).writeByteArray(KryoSerializer.serializeAnyRef(StoredSnapshot(snapshot, flatten)))
-            dao.dbActor.kvdb.put("latestSnapshot", snapshot)
+            // dao.dbActor.kvdb.put("latestSnapshot", snapshot)
           },
             "snapshotWriteToDisk"
           )
@@ -152,11 +148,14 @@ class ThreadSafeTipService() {
           Snapshot.acceptSnapshot(snapshot)
           totalNumCBsInShapshots += snapshot.checkpointBlocks.size
           dao.metricsManager ! UpdateMetric("totalNumCBsInShapshots", totalNumCBsInShapshots.toString)
+          dao.metricsManager ! UpdateMetric("lastSnapshotHash", snapshot.hash)
         }
 
+        // TODO: Verify from file
+/*
         if (snapshot.lastSnapshot != Snapshot.snapshotZeroHash && snapshot.lastSnapshot != "") {
 
-          val lastSnapshotVerification = dao.dbActor.getSnapshot(snapshot.lastSnapshot)
+          val lastSnapshotVerification = File(dao.snapshotPath, snapshot.lastSnapshot).read
           if (lastSnapshotVerification.isEmpty) {
             dao.metricsManager ! IncrementMetric("snapshotVerificationFailed")
           } else {
@@ -173,6 +172,7 @@ class ThreadSafeTipService() {
 
           }
         }
+*/
 
         lastSnapshotHeight = nextHeightInterval
         snapshot = nextSnapshot
@@ -295,6 +295,29 @@ class StorageService[T](size: Int = 50000) {
     MutableLRUCache[String, T](size)
   }
 
+  // val actualDatastore = ... .update
+
+  // val mutexStore = TrieMap[String, AtomicUpdater]
+
+  // val mutexKeyCache = mutable.Queue()
+
+  // if mutexKeyCache > size :
+  // poll and remove from mutexStore?
+  // mutexStore.getOrElseUpdate(hash)
+  // Map[Address, AtomicUpdater] // computeIfAbsent getOrElseUpdate
+/*  class AtomicUpdater {
+    def update(
+                key: String,
+                updateFunc: T => T,
+                empty: => T
+              ): T =
+      this.synchronized{
+        val data = get(key).map {updateFunc}.getOrElse(empty)
+        put(key, data)
+        data
+      }
+  }*/
+
   def get(key: String): Option[T] = this.synchronized{
     lruCache.get(key)
   }
@@ -319,14 +342,19 @@ class StorageService[T](size: Int = 50000) {
 
 
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
-class CheckpointService() extends StorageService[CheckpointCacheData]
-class TransactionService() extends StorageService[TransactionCacheData]
+class CheckpointService(size: Int = 50000) extends StorageService[CheckpointCacheData](size)
+class TransactionService(size: Int = 50000) extends StorageService[TransactionCacheData](size)
+class AddressService(size: Int = 50000) extends StorageService[AddressCacheData](size)
 
 trait EdgeDAO {
 
+  var processingConfig = ProcessingConfig()
 
-  val checkpointService = new CheckpointService()
-  val transactionService = new TransactionService()
+
+  val checkpointService = new CheckpointService(processingConfig.checkpointLRUMaxSize)
+  val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
+  val addressService = new AddressService(processingConfig.addressLRUMaxSize)
+
   val threadSafeTXMemPool = new ThreadSafeTXMemPool()
   val threadSafeTipService = new ThreadSafeTipService()
 
@@ -335,11 +363,16 @@ trait EdgeDAO {
   def minCheckpointFormationThreshold: Int = processingConfig.minCheckpointFormationThreshold
   def minCBSignatureThreshold: Int = processingConfig.numFacilitatorPeers
 
-  var processingConfig = ProcessingConfig()
 
   val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
 
   val edgeExecutionContext: ExecutionContextExecutor =
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+
+  val signatureExecutionContext: ExecutionContextExecutor =
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+
+  val finishedExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
 
   // Temporary to get peer data for tx hash partitioning

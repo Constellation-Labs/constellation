@@ -154,6 +154,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   implicit val dao: DAO = new DAO()
   dao.updateKeyPair(configKeyPair)
+  dao.idDir.createDirectoryIfNotExists(createParents = true)
 
   dao.preventLocalhostAsPeer = attemptDownload
 
@@ -197,9 +198,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
     Props(new PeerManager(ipManager)), s"PeerManager_$publicKeyHash"
   )
 
-  val dbActor = SwayDBDatastore(dao)
+ // val dbActor = SwayDBDatastore(dao)
 
-  dao.dbActor = dbActor
+//  dao.dbActor = dbActor
   dao.peerManager = peerManager
 
   private val logReqResp: Directive0 = DebuggingDirectives.logRequestResult(
@@ -207,7 +208,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   )
 
   // If we are exposing rpc then create routes
-  val routes: Route = logReqResp { new API(udpAddress).routes }
+  val routes: Route = new API(udpAddress).routes // logReqResp { }
 
   logger.info("API Binding")
 
@@ -217,7 +218,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   val peerAPI = new PeerAPI(ipManager)
 
-  val peerRoutes : Route = logReqResp { peerAPI.routes }
+  val peerRoutes : Route = peerAPI.routes  // logReqResp { }
 
   seedPeers.foreach {
     peer => ipManager.addKnownIP(RemoteAddress(peer))
@@ -250,7 +251,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
     // TODO: we should add this back but it currently causes issues in the integration test
     //.onComplete(_ => system.terminate())
 
-    TypedActor(system).stop(dbActor)
+    //TypedActor(system).stop(dbActor)
   }
 
   //////////////

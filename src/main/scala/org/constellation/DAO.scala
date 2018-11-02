@@ -19,6 +19,8 @@ class DAO extends NodeData
 
   var preventLocalhostAsPeer: Boolean = true
 
+  def idDir = File(s"tmp/${id.medium}")
+
   def dbPath: File = {
     val f = File(s"tmp/${id.medium}/db")
     f.createDirectoryIfNotExists()

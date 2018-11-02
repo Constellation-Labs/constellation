@@ -50,13 +50,13 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
         val allAddresses = peers.map{_._1.address.address} :+ dao.selfAddressStr
 
         val balancesBySnapshotMetrics = allAddresses.map{a =>
-          val balance = dao.dbActor.getAddressCacheData(a).map{_.balanceByLatestSnapshot}.getOrElse(0L)
+          val balance = dao.addressService.get(a).map{_.balanceByLatestSnapshot}.getOrElse(0L)
           a.slice(0, 8) + " " + balance
         }.sorted.mkString(", ")
 
 
         val balancesMetrics = allAddresses.map{a =>
-          val balance = dao.dbActor.getAddressCacheData(a).map{_.balance}.getOrElse(0L)
+          val balance = dao.addressService.get(a).map{_.balance}.getOrElse(0L)
           a.slice(0, 8) + " " + balance
         }.sorted.mkString(", ")
 

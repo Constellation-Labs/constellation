@@ -58,7 +58,7 @@ object Download {
     // TODO: Move elsewhere unify with other code.
     def acceptSnapshot(r: StoredSnapshot) = {
       r.checkpointCache.foreach{dao.threadSafeTipService.accept}
-      dao.dbActor.putSnapshot(r.snapshot.hash, r.snapshot)
+      //dao.dbActor.putSnapshot(r.snapshot.hash, r.snapshot)
       import better.files._
       File(dao.snapshotPath, r.snapshot.hash).writeByteArray(KryoSerializer.serializeAnyRef(r))
     }

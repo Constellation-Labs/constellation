@@ -28,6 +28,7 @@ object Resolve {
   }
 
   // WIP
+/*
   def resolveCheckpoint(dao: DAO, cb: CheckpointBlock)(implicit ec: ExecutionContext): Future[Boolean] = {
 
     // Step 1 - Find out if both parents are resolved.
@@ -58,7 +59,6 @@ object Resolve {
       parentsResolved
     }
 
-
-  }
+*/
 
 }

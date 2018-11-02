@@ -13,7 +13,7 @@ import org.constellation.util.Signed
 
 trait NodeData {
 
-  var dbActor : SwayDBDatastore = _
+  // var dbActor : SwayDBDatastore = _
   var peerManager: ActorRef = _
   var consensus: ActorRef = _
   var metricsManager: ActorRef = _

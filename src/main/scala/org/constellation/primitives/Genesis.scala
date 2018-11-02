@@ -110,13 +110,13 @@ trait Genesis extends NodeData with EdgeDAO {
     go.genesis.transactions.foreach{
       rtx =>
         val bal = rtx.amount - (go.initialDistribution.transactions.map {_.amount}.sum * 2)
-        dbActor.putAddressCacheData(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal))
+        dao.addressService.put(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal))
     }
 
     // Store the balance for the initial distribution addresses along with starting rep score.
     go.initialDistribution.transactions.foreach{ t =>
       val bal = t.amount * 2
-      dbActor.putAddressCacheData(t.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal))
+      dao.addressService.put(t.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal))
     }
 
     val numTX = (1 + go.initialDistribution.transactions.size * 2).toString

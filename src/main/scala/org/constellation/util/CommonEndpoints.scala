@@ -41,6 +41,11 @@ trait CommonEndpoints extends Json4sSupport {
       path("tips") {
         complete(dao.threadSafeTipService.tips)
       } ~
+      path("heights") {
+        val maybeHeights = dao.threadSafeTipService.tips
+          .flatMap { case (k, v) => dao.checkpointService.get(k).flatMap {_.height}}.toSeq
+        complete(maybeHeights)
+      } ~
     path("snapshotHashes") {
       complete(dao.snapshotPath.list.toSeq.map{_.name})
     } ~
@@ -49,9 +54,9 @@ trait CommonEndpoints extends Json4sSupport {
 
         complete(info.copy(acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.get}))
       } ~
-      path("snapshot" / Segment) {s =>
+/*      path("snapshot" / Segment) {s =>
         complete(dao.dbActor.getSnapshot(s))
-      } ~
+      } ~*/
       path("storedSnapshot" / Segment) {s =>
         onComplete{
           Future{
@@ -72,10 +77,10 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.genesisObservation)
       } ~
       pathPrefix("address" / Segment) { a =>
-        complete(dao.dbActor.getAddressCacheData(a))
+        complete(dao.addressService.get(a))
       } ~
       pathPrefix("balance" / Segment) { a =>
-        complete(dao.dbActor.getAddressCacheData(a).map{_.balanceByLatestSnapshot})
+        complete(dao.addressService.get(a).map{_.balanceByLatestSnapshot})
       } ~
     path("state") {
       complete(NodeStateInfo(dao.nodeState))

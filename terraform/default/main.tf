@@ -48,7 +48,7 @@ resource "google_compute_instance" "default" {
  boot_disk {
    initialize_params {
      image = "ubuntu-os-cloud/ubuntu-1604-lts",
-     size = 100
+     size = 200
    }
    auto_delete = true
  }

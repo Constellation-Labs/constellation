@@ -56,7 +56,7 @@ object SnapshotTrigger {
             resolved = true,
             cbBaseHash = Some(cb.baseHash)
           ))
-        t.ledgerApply(dao.dbActor)
+        t.ledgerApply()
       }
       dao.metricsManager ! IncrementMetric("checkpointAccepted")
       cb.store(
@@ -380,7 +380,7 @@ object Snapshot {
   val snapshotZeroHash: String = Snapshot("", Seq()).hash
 
   def acceptSnapshot(snapshot: Snapshot)(implicit dao: DAO): Unit = {
-    dao.dbActor.putSnapshot(snapshot.hash, snapshot)
+    // dao.dbActor.putSnapshot(snapshot.hash, snapshot)
     val cbData = snapshot.checkpointBlocks.map{dao.checkpointService.get}
     if (cbData.exists{_.isEmpty}) {
       dao.metricsManager ! IncrementMetric("snapshotCBAcceptQueryFailed")
@@ -394,7 +394,7 @@ object Snapshot {
     ) {
       // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
       // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
-      tx.ledgerApplySnapshot(dao.dbActor)
+      tx.ledgerApplySnapshot()
       dao.metricsManager ! IncrementMetric("snapshotAppliedBalance")
     }
   }

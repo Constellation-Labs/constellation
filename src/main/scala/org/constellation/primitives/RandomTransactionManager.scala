@@ -32,7 +32,8 @@ object RandomTransactionManager {
 
           if (peerIds.nonEmpty) {
 
-            val txs = Seq.fill(dao.processingConfig.randomTXPerRound)(0).par.map { _ =>
+            val numTX = (dao.processingConfig.randomTXPerRoundPerPeer / peerIds.size) + 1
+            Seq.fill(numTX)(0).foreach { _ =>
 
               // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
               // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
@@ -45,16 +46,12 @@ object RandomTransactionManager {
               dao.metricsManager ! IncrementMetric("randomTransactionsGenerated")
               dao.metricsManager ! IncrementMetric("sentTransactions")
 
-              tx
+              dao.threadSafeTXMemPool.put(tx)
               /*            // TODO: Change to transport layer call
         dao.peerManager ! APIBroadcast(
           _.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx),
           peerSubset = Set(getRandomPeer._1)
         )*/
-            }
-
-            txs.foreach { t =>
-              dao.threadSafeTXMemPool.put(t)
             }
 
           } else {
@@ -67,7 +64,7 @@ object RandomTransactionManager {
           futureTryWithTimeoutMetric(
             SnapshotTrigger.formCheckpoint(),
             "formCheckpointFromRandomTXManager",
-            timeoutSeconds = 30
+            timeoutSeconds = dao.processingConfig.formCheckpointTimeout
           )(dao.edgeExecutionContext, dao)
         }
       }

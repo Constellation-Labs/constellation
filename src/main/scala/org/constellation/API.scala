@@ -45,19 +45,23 @@ case class HostPort(host: String, port: Int)
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
 
 case class ProcessingConfig(
-                             maxWidth: Int = 20,
-                             minCheckpointFormationThreshold: Int = 500,
+                             maxWidth: Int = 10,
+                             minCheckpointFormationThreshold: Int = 100,
                              numFacilitatorPeers: Int = 2,
-                             randomTXPerRound: Int = 200,
+                             randomTXPerRoundPerPeer: Int = 500,
                              metricCheckInterval: Int = 60,
                              maxMemPoolSize: Int = 2000,
                              minPeerTimeAddedSeconds: Int = 30,
                              maxActiveTipsAllowedInMemory: Int = 1000,
                              maxAcceptedCBHashesInMemory: Int = 5000,
-                             peerHealthCheckInterval : Int = 20,
-                             peerDiscoveryInterval : Int = 40,
-                             snapshotHeightInterval: Int = 30,
-                             snapshotInterval: Int = 30
+                             peerHealthCheckInterval : Int = 30,
+                             peerDiscoveryInterval : Int = 60,
+                             snapshotHeightInterval: Int = 5,
+                             snapshotInterval: Int = 45,
+                             checkpointLRUMaxSize: Int = 2000,
+                             transactionLRUMaxSize: Int = 10000,
+                             addressLRUMaxSize: Int = 10000,
+                             formCheckpointTimeout: Int = 60
 ) {
 
 }
