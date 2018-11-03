@@ -76,6 +76,7 @@ resource "google_compute_instance" "default" {
     connection {
       type = "ssh"
       user = "${var.ssh_user}"
+      timeout = "30s"
     }
   }
 
