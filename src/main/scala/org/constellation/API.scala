@@ -4,6 +4,7 @@ import java.net.InetSocketAddress
 import java.security.KeyPair
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.coding.Gzip
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, path, _}
@@ -322,14 +323,16 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
     }
   }
 
-  val routes = if (authEnabled) {
-    noAuthRoutes ~ authenticateBasic(realm = "secure site",
-      myUserPassAuthenticator) {
-      user =>
-        mainRoutes
+  val routes = encodeResponseWith(Gzip) {
+    if (authEnabled) {
+      noAuthRoutes ~ authenticateBasic(realm = "secure site",
+        myUserPassAuthenticator) {
+        user =>
+          mainRoutes
+      }
+    } else {
+      noAuthRoutes ~ mainRoutes
     }
-  } else {
-    noAuthRoutes ~ mainRoutes
   }
 
 }

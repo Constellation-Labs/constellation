@@ -43,6 +43,14 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
     assert(actualPeers.peers.contains(node1Path))*/
   }
 
+  "GET to /id" should "be encoded using gzip" in {
+    val keyPair = KeyUtils.makeKeyPair()
+    val appNode = TestNode(Seq(), keyPair)
+    val rpc = APIClient(port=appNode.httpPort)
+    val resp = rpc.getSync("id")
+    assert(resp.header("Content-Encoding").contains("gzip"))
+  }
+
   "GET to /id" should "get the current nodes public key id" in {
     val keyPair = KeyUtils.makeKeyPair()
     val appNode = TestNode(Seq(), keyPair)
