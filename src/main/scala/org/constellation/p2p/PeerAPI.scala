@@ -1,6 +1,7 @@
 package org.constellation.p2p
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.coding.Gzip
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
@@ -265,7 +266,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
     }
   }
 
-  val routes: Route = {
+  val routes: Route = encodeResponseWith(Gzip) {
    // rejectBannedIP {
       signEndpoints ~ commonEndpoints ~  // { //enforceKnownIP
         getEndpoints ~ postEndpoints ~ mixedEndpoints
