@@ -129,6 +129,24 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 
   private val postEndpoints =
     post {
+      path("faucet") {
+        entity(as[SendToAddress]) { sendRequest =>
+          // TODO: Add limiting
+          if (sendRequest.amountActual < (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor)) {
+            logger.info(s"send transaction to address $sendRequest")
+
+            val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amountActual, dao.keyPair)
+            dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
+            dao.metricsManager ! IncrementMetric("faucetRequest")
+
+            complete(Some(tx.hash))
+          } else {
+            logger.info(s"Invalid faucet request $sendRequest")
+            dao.metricsManager ! IncrementMetric("faucetInvalidRequest")
+            complete(None)
+          }
+        }
+      } ~
       path ("deregister") {
         extractClientIP { clientIP =>
           entity(as[PeerUnregister]) { request =>

@@ -57,11 +57,13 @@ case class ProcessingConfig(
                              peerHealthCheckInterval : Int = 30,
                              peerDiscoveryInterval : Int = 60,
                              snapshotHeightInterval: Int = 5,
-                             snapshotInterval: Int = 45,
+                             snapshotHeightDelayInterval: Int = 10,
+                             snapshotInterval: Int = 25,
                              checkpointLRUMaxSize: Int = 2000,
                              transactionLRUMaxSize: Int = 10000,
                              addressLRUMaxSize: Int = 10000,
-                             formCheckpointTimeout: Int = 60
+                             formCheckpointTimeout: Int = 60,
+                             maxFaucetSize: Int = 1000
 ) {
 
 }

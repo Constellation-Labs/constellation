@@ -81,6 +81,16 @@ class ThreadSafeTipService() {
   // TODO: Read from lastSnapshot in DB optionally, assign elsewhere
   var lastSnapshotHeight = 0
 
+  def getMinTipHeight()(implicit dao: DAO) = thresholdMetCheckpoints.keys.map {
+    dao.checkpointService.get
+  }.flatMap {
+    _.flatMap {
+      _.height.map {
+        _.min
+      }
+    }
+  }.min
+
   def attemptSnapshot()(implicit dao: DAO): Unit = this.synchronized{
 
     // Sanity check memory protection
@@ -105,54 +115,71 @@ class ThreadSafeTipService() {
 
     if (dao.nodeState == NodeState.Ready && acceptedCBSinceSnapshot.nonEmpty) {
 
-      val maybeDatas = acceptedCBSinceSnapshot.map(dao.checkpointService.get)
+      val minTipHeight = getMinTipHeight()
+      dao.metricsManager ! UpdateMetric("minTipHeight", minTipHeight.toString)
+
       val nextHeightInterval = lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval
 
-      val blocksWithinHeightInterval = maybeDatas.filter{
-        _.exists(_.height.exists{h =>
-          h.min > lastSnapshotHeight && h.min <= nextHeightInterval})
-      }
+      val canSnapshot = minTipHeight > (nextHeightInterval + dao.processingConfig.snapshotHeightDelayInterval)
+      if (!canSnapshot) {
+        dao.metricsManager ! IncrementMetric("snapshotHeightIntervalConditionNotMet")
+      } else {
 
-      val blockWithMaxIntervalHeight = blocksWithinHeightInterval.exists{_.exists(_.height.exists(_.min == nextHeightInterval))}
+        val maybeDatas = acceptedCBSinceSnapshot.map(dao.checkpointService.get)
 
-      if (blockWithMaxIntervalHeight && blocksWithinHeightInterval.nonEmpty) {
-
-        val blockCaches = blocksWithinHeightInterval.map{_.get}
-
-        val hashesForNextSnapshot = blockCaches.map {_.checkpointBlock.get.baseHash}.sorted
-        val nextSnapshot = Snapshot(snapshot.hash, hashesForNextSnapshot)
-
-        // TODO: Make this a future and have it not break the unit test
-        // Also make the db puts blocking, may help for different issue
-        if (snapshot != Snapshot.snapshotZero) {
-          dao.metricsManager ! IncrementMetric("snapshotCount")
-
-          // Write snapshot to file
-          tryWithMetric({
-            val maybeBlocks = snapshot.checkpointBlocks.map {
-              dao.checkpointService.get
-            }
-            if (maybeBlocks.exists(_.exists(_.checkpointBlock.isEmpty))) {
-              // TODO : This should never happen, if it does we need to reset the node state and redownload
-              dao.metricsManager ! IncrementMetric("snapshotWriteToDiskMissingData")
-            }
-            val flatten = maybeBlocks.flatten.sortBy(_.checkpointBlock.map {
-              _.baseHash
-            })
-            File(dao.snapshotPath, snapshot.hash).writeByteArray(KryoSerializer.serializeAnyRef(StoredSnapshot(snapshot, flatten)))
-            // dao.dbActor.kvdb.put("latestSnapshot", snapshot)
-          },
-            "snapshotWriteToDisk"
-          )
-
-          Snapshot.acceptSnapshot(snapshot)
-          totalNumCBsInShapshots += snapshot.checkpointBlocks.size
-          dao.metricsManager ! UpdateMetric("totalNumCBsInShapshots", totalNumCBsInShapshots.toString)
-          dao.metricsManager ! UpdateMetric("lastSnapshotHash", snapshot.hash)
+        val blocksWithinHeightInterval = maybeDatas.filter {
+          _.exists(_.height.exists { h =>
+            h.min > lastSnapshotHeight && h.min <= nextHeightInterval
+          })
         }
 
-        // TODO: Verify from file
-/*
+        if (blocksWithinHeightInterval.isEmpty) {
+          dao.metricsManager ! IncrementMetric("snapshotNoBlocksWithinHeightInterval")
+        } else {
+
+          val blockCaches = blocksWithinHeightInterval.map {
+            _.get
+          }
+
+          val hashesForNextSnapshot = blockCaches.map {
+            _.checkpointBlock.get.baseHash
+          }.sorted
+          val nextSnapshot = Snapshot(snapshot.hash, hashesForNextSnapshot)
+
+          // TODO: Make this a future and have it not break the unit test
+          // Also make the db puts blocking, may help for different issue
+          if (snapshot != Snapshot.snapshotZero) {
+            dao.metricsManager ! IncrementMetric("snapshotCount")
+
+            // Write snapshot to file
+            tryWithMetric({
+              val maybeBlocks = snapshot.checkpointBlocks.map {
+                dao.checkpointService.get
+              }
+              if (maybeBlocks.exists(_.exists(_.checkpointBlock.isEmpty))) {
+                // TODO : This should never happen, if it does we need to reset the node state and redownload
+                dao.metricsManager ! IncrementMetric("snapshotWriteToDiskMissingData")
+              }
+              val flatten = maybeBlocks.flatten.sortBy(_.checkpointBlock.map {
+                _.baseHash
+              })
+              File(dao.snapshotPath, snapshot.hash).writeByteArray(KryoSerializer.serializeAnyRef(StoredSnapshot(snapshot, flatten)))
+              // dao.dbActor.kvdb.put("latestSnapshot", snapshot)
+            },
+              "snapshotWriteToDisk"
+            )
+
+            Snapshot.acceptSnapshot(snapshot)
+            dao.checkpointService.delete(snapshot.checkpointBlocks.toSet)
+
+
+            totalNumCBsInShapshots += snapshot.checkpointBlocks.size
+            dao.metricsManager ! UpdateMetric("totalNumCBsInShapshots", totalNumCBsInShapshots.toString)
+            dao.metricsManager ! UpdateMetric("lastSnapshotHash", snapshot.hash)
+          }
+
+          // TODO: Verify from file
+          /*
         if (snapshot.lastSnapshot != Snapshot.snapshotZeroHash && snapshot.lastSnapshot != "") {
 
           val lastSnapshotVerification = File(dao.snapshotPath, snapshot.lastSnapshot).read
@@ -174,22 +201,13 @@ class ThreadSafeTipService() {
         }
 */
 
-        lastSnapshotHeight = nextHeightInterval
-        snapshot = nextSnapshot
-        acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.filterNot(hashesForNextSnapshot.contains)
-        dao.metricsManager ! UpdateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
-        dao.metricsManager ! UpdateMetric("lastSnapshotHeight", lastSnapshotHeight.toString)
-        dao.metricsManager ! UpdateMetric("nextSnapshotHeight", (lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval).toString)
-      } else {
-
-        dao.metricsManager ! IncrementMetric("snapshotHeightIntervalConditionNotMet")
-        // DEBUG
-        /*val heightData = maybeDatas.flatMap {
-          _.flatMap(_.height.map {
-            _.min
-          })
+          lastSnapshotHeight = nextHeightInterval
+          snapshot = nextSnapshot
+          acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.filterNot(hashesForNextSnapshot.contains)
+          dao.metricsManager ! UpdateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
+          dao.metricsManager ! UpdateMetric("lastSnapshotHeight", lastSnapshotHeight.toString)
+          dao.metricsManager ! UpdateMetric("nextSnapshotHeight", (lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval).toString)
         }
-        dao.metricsManager ! UpdateMetric("snapshotHeightIntervalData", heightData.toString)*/
       }
     }
   }
@@ -317,6 +335,10 @@ class StorageService[T](size: Int = 50000) {
         data
       }
   }*/
+
+  def delete(keys: Set[String]) = this.synchronized{
+    lruCache.multiRemove(keys)
+  }
 
   def get(key: String): Option[T] = this.synchronized{
     lruCache.get(key)
