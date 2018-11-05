@@ -52,11 +52,12 @@ object TestNode {
       minCheckpointFormationThreshold = 2,
       randomTXPerRoundPerPeer = 5,
       metricCheckInterval = 10,
-      maxWidth = 7,
+      maxWidth = 3,
       maxMemPoolSize = 15,
       minPeerTimeAddedSeconds = 1,
-      snapshotInterval = 30,
-      snapshotHeightInterval = 3
+      snapshotInterval = 5,
+      snapshotHeightInterval = 2,
+      snapshotHeightDelayInterval = 1
     )
 
     node
