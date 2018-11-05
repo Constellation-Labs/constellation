@@ -2,13 +2,9 @@ package org.constellation.consensus
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorRef
 import akka.util.Timeout
 import org.constellation.datastore.Datastore
-import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.{AddressCacheData, Transaction, TransactionCacheData}
-
-import scala.concurrent.{ExecutionContext, Future}
 
 
 // TODO: Needs revisiting, data model needs to be updated to incorporate validating diff since snapshot

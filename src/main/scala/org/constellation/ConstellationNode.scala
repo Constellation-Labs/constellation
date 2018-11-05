@@ -9,7 +9,6 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.RemoteAddress
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LoggingMagnet}
 import akka.http.scaladsl.server.{Directive0, Route}
-import akka.io.Udp
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files._
@@ -17,10 +16,9 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.CustomDirectives.printResponseTime
-import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.swaydb.SwayDBDatastore
-import org.constellation.p2p.{PeerAPI, UDPActor}
+import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Heartbeat}
@@ -156,6 +154,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   implicit val dao: DAO = new DAO()
   dao.updateKeyPair(configKeyPair)
+  dao.idDir.createDirectoryIfNotExists(createParents = true)
 
   dao.preventLocalhostAsPeer = attemptDownload
 
@@ -164,7 +163,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   import dao._
 
   val heartBeat: ActorRef = system.actorOf(
-    Props(new Heartbeat(dao)), s"Heartbeat_$publicKeyHash"
+    Props(new Heartbeat()), s"Heartbeat_$publicKeyHash"
   )
 
   dao.heartbeatActor = heartBeat
@@ -195,57 +194,21 @@ class ConstellationNode(val configKeyPair: KeyPair,
     dao.tcpAddress = Some(new InetSocketAddress(hostName, peerTCPPort))
   }
 
-
-
-
-  val randomTX : ActorRef = system.actorOf(
-    Props(new RandomTransactionManager()), s"RandomTXManager_$publicKeyHash"
-  )
-
-
-  val memPoolManager: ActorRef = system.actorOf(
-    Props(new MemPoolManager(metricsManager)), s"MemPoolManager_$publicKeyHash"
-  )
-
   val peerManager: ActorRef = system.actorOf(
     Props(new PeerManager(ipManager)), s"PeerManager_$publicKeyHash"
   )
 
- // val dbActor = new SimpleKVDatastore(dao)
-  val dbActor = SwayDBDatastore(dao)
-/*
+ // val dbActor = SwayDBDatastore(dao)
 
-  val dbActor: Datastore = TypedActor(system).typedActorOf(TypedProps(
-    classOf[Datastore],
-    new SimpleKVDatastore(dao)), s"KVDB_$publicKeyHash")
-*/
-
-  val udpActor: ActorRef =
-    system.actorOf(
-      Props(new UDPActor(None, udpPort, udpInterface, dao)), s"ConstellationUDPActor_$publicKeyHash"
-    )
-
-  val consensusActor: ActorRef = system.actorOf(
-    Props(new Consensus(dao)),
-    s"ConstellationConsensusActor_$publicKeyHash")
-
-  val edgeProcessorActor: ActorRef = system.actorOf(
-    Props(new EdgeProcessor(dao)),
-    s"ConstellationEdgeProcessorActor_$publicKeyHash")
-
-
-
-  dao.dbActor = dbActor
-  dao.consensus = consensusActor
+//  dao.dbActor = dbActor
   dao.peerManager = peerManager
-  dao.edgeProcessor = edgeProcessorActor
 
   private val logReqResp: Directive0 = DebuggingDirectives.logRequestResult(
     LoggingMagnet(printResponseTime(logger))
   )
 
   // If we are exposing rpc then create routes
-  val routes: Route = logReqResp { new API(udpAddress).routes }
+  val routes: Route = new API(udpAddress).routes // logReqResp { }
 
   logger.info("API Binding")
 
@@ -255,8 +218,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   val peerAPI = new PeerAPI(ipManager)
 
-  val peerRoutes : Route = logReqResp { peerAPI.routes }
-
+  val peerRoutes : Route = peerAPI.routes  // logReqResp { }
 
   seedPeers.foreach {
     peer => ipManager.addKnownIP(RemoteAddress(peer))
@@ -280,7 +242,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
   private val peerBindingFuture = Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)
 
   def shutdown(): Unit = {
-    udpActor ! Udp.Unbind
 
     bindingFuture
       .foreach(_.unbind())
@@ -290,7 +251,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
     // TODO: we should add this back but it currently causes issues in the integration test
     //.onComplete(_ => system.terminate())
 
-    TypedActor(system).stop(dbActor)
+    //TypedActor(system).stop(dbActor)
   }
 
   //////////////

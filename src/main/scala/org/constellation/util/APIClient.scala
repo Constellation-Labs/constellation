@@ -2,12 +2,10 @@ package org.constellation.util
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorSystem
-import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.constellation.DAO
-import org.constellation.consensus.{Snapshot, SnapshotInfo}
-import org.constellation.primitives.Schema.{CheckpointBlock, Id, MetricsResult}
+import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.primitives.Schema.{Id, MetricsResult}
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import scalaj.http.{Http, HttpRequest, HttpResponse}
@@ -31,7 +29,6 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
  dao: DAO = null
   ) {
 
-  //implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
   val daoOpt = Option(dao)
 
   val hostName: String = host
@@ -191,30 +188,14 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
   }
 
 
-  def simpleDownload(): Seq[String] = {
+  def simpleDownload(): Seq[StoredSnapshot] = {
 
-    val snapshotInfo = getSnapshotInfo()
+    val hashes = getBlocking[Seq[String]]("snapshotHashes")
 
-    val startingCBs = snapshotInfo.acceptedCBSinceSnapshot ++ snapshotInfo.snapshot.checkpointBlocks
-
-    def getSnapshots(hash: String, blocks: Seq[String] = Seq()): Seq[String] = {
-      val sn = getBlocking[Option[Snapshot]]("snapshot/" + hash)
-      sn match {
-        case Some(snapshot) =>
-          if (snapshot.lastSnapshot == "" || snapshot.lastSnapshot == Snapshot.snapshotZeroHash) {
-            blocks ++ snapshot.checkpointBlocks
-          } else {
-            getSnapshots(snapshot.lastSnapshot, blocks ++ snapshot.checkpointBlocks)
-          }
-        case None =>
-          println("MISSING SNAPSHOT")
-          blocks
-      }
+    hashes.map{ h =>
+      getBlocking[Option[StoredSnapshot]]("storedSnapshot/" + h).get
     }
 
-    val snapshotBlocks = getSnapshots(snapshotInfo.snapshot.lastSnapshot) ++ startingCBs
-    val snapshotBlocksDistinct = snapshotBlocks.distinct
-    snapshotBlocksDistinct
   }
 
 }

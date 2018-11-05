@@ -50,13 +50,15 @@ object TestNode {
     node.dao.processingConfig = node.dao.processingConfig.copy(
       numFacilitatorPeers = 2,
       minCheckpointFormationThreshold = 2,
-      randomTXPerRound = 5,
+      randomTXPerRoundPerPeer = 5,
       metricCheckInterval = 10,
-      maxWidth = 7,
+      maxWidth = 3,
       maxMemPoolSize = 15,
-      minPeerTimeAddedSeconds = 1
+      minPeerTimeAddedSeconds = 1,
+      snapshotInterval = 5,
+      snapshotHeightInterval = 2,
+      snapshotHeightDelayInterval = 1
     )
-    node.dao.snapshotInterval = 5
 
     node
   }

@@ -64,7 +64,6 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
     case Udp.Received(data, remote) =>
 
-      dao.udpPacketGroupSize = packetGroups.size
 
       if (dao.bannedIPs.contains(remote)) {
         println(s"BANNED MESSAGE DETECTED FROM $remote")

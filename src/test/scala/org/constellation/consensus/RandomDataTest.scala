@@ -3,14 +3,13 @@ package org.constellation.consensus
 import java.security.KeyPair
 
 import constellation._
+import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema.{CheckpointBlock, SignedObservationEdge}
 import org.constellation.primitives.{Genesis, Schema}
 import org.scalatest.FlatSpec
 
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
-
-import org.constellation.crypto.KeyUtils._
 
 class RandomDataTest extends FlatSpec {
 
@@ -37,7 +36,7 @@ class RandomDataTest extends FlatSpec {
 
   def randomBlock(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): Schema.CheckpointBlock = {
     val txs = Seq.fill(5)(randomTransaction)
-    EdgeProcessor.createCheckpointBlock(txs, tips)(startingKeyPair)
+    SnapshotTrigger.createCheckpointBlock(txs, tips)(startingKeyPair)
   }
 
   "Signatures combiners" should "be unique" in {

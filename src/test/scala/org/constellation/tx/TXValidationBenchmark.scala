@@ -10,6 +10,7 @@ import akka.util.Timeout
 import better.files.{File, _}
 import constellation._
 import org.constellation.crypto.KeyUtils
+import org.constellation.crypto.KeyUtils._
 import org.constellation.datastore.leveldb.LevelDB
 import org.constellation.datastore.leveldb.LevelDB.{DBGet, DBPut}
 import org.constellation.primitives.Schema
@@ -19,7 +20,6 @@ import org.constellation.{DAO, LevelDBActor}
 import org.scalatest.FlatSpec
 
 import scala.util.Try
-import org.constellation.crypto.KeyUtils._
 class TXValidationBenchmark extends FlatSpec {
 
   val kp: KeyPair = KeyUtils.makeKeyPair()

@@ -81,7 +81,6 @@ trait PeerAuth {
 
     dest.foreach{ i =>
       if (!skipIDs.contains(i)) {
-        totalNumBroadcastMessages += 1
 
         val address = signedPeerIDLookup(i).data.externalAddress
 

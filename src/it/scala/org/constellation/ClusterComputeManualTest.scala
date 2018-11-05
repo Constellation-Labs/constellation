@@ -3,14 +3,13 @@ package org.constellation
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
-import constellation._
+import better.files._
+import org.constellation.crypto.KeyUtils
 import org.constellation.util.{APIClient, Simulation}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.Try
-import better.files._
-import org.constellation.crypto.KeyUtils
 
 
 
@@ -107,7 +106,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
       val a = new APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
       sim.logger.info(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
       a
-    } ++ auxAPIs
+    } // ++ auxAPIs
 
     sim.logger.info("Num APIs " + apis.size)
 

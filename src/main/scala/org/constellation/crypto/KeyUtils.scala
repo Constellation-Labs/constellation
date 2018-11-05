@@ -1,27 +1,12 @@
 package org.constellation.crypto
 
-import java.io.{ByteArrayInputStream, File}
-import java.math.BigInteger
-import java.security.cert.CertificateFactory
 import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
-import java.security.{SecureRandom, _}
-import java.util.{Base64, Date}
-
-import org.constellation.primitives.Schema.Id
-import org.constellation.util.EncodedPublicKey
-import org.json4s.JsonAST.JString
-import org.json4s.{CustomSerializer, Formats, JObject}
-import org.spongycastle.asn1.x500.X500NameBuilder
-import org.spongycastle.asn1.x500.style.BCStyle
-import org.spongycastle.asn1.x509.SubjectPublicKeyInfo
-import org.spongycastle.cert.X509v1CertificateBuilder
-import org.spongycastle.operator.jcajce.JcaContentSignerBuilder
-import java.security.KeyFactory
+import java.security.{KeyFactory, SecureRandom, _}
+import java.util.Base64
 
 import com.typesafe.scalalogging.Logger
-import org.spongycastle.jce.provider.BouncyCastleProvider
-import java.security.Security
 import constellation.SHA256Ext
+import org.spongycastle.jce.provider.BouncyCastleProvider
 
 /**
   * Need to compare this to:

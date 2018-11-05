@@ -1,11 +1,10 @@
 package org.constellation.datastore.leveldb
 import better.files._
+import constellation._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.ProductHash
 import org.iq80.leveldb.impl.Iq80DBFactory.{asString, bytes, factory}
 import org.iq80.leveldb.{DB, Options}
-
-import constellation._
 
 import scala.util.{Failure, Try}
 

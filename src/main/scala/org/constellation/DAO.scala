@@ -5,8 +5,7 @@ import better.files.File
 import com.typesafe.scalalogging.Logger
 import org.constellation.primitives._
 
-class DAO extends MetricsExt
-  with NodeData
+class DAO extends NodeData
   with Reputation
   with PeerInfoUDP
   with Genesis
@@ -19,6 +18,8 @@ class DAO extends MetricsExt
   var confirmWindow : Int = 30
 
   var preventLocalhostAsPeer: Boolean = true
+
+  def idDir = File(s"tmp/${id.medium}")
 
   def dbPath: File = {
     val f = File(s"tmp/${id.medium}/db")
@@ -46,7 +47,6 @@ class DAO extends MetricsExt
   def restartNode(): Unit = {
     downloadMode = true
     signedPeerLookup.clear()
-    resetMetrics()
     peersAwaitingAuthenticationToNumAttempts.clear()
     signedPeerLookup.clear()
     deadPeers = Seq()

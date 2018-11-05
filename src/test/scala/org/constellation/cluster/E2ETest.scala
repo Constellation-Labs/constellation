@@ -8,7 +8,8 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import org.constellation.ConstellationNode
-import org.constellation.primitives.Schema.CheckpointBlock
+import org.constellation.consensus.StoredSnapshot
+import org.constellation.primitives.Schema.CheckpointCacheData
 import org.constellation.util.{Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
@@ -91,27 +92,12 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     assert(apis.map{_.metrics("checkpointAccepted")}.distinct.size == 1)
     assert(apis.map{_.metrics("transactionAccepted")}.distinct.size == 1)
 
-    val blockHashes = apis.map{_.simpleDownload()}
-
-    assert(blockHashes.map{_.size}.distinct.size == 1)
-    assert(blockHashes.map{_.toSet}.distinct.size == 1)
-
-    val downloadedBlocks = apis.map{ a =>
-      blockHashes.head.distinct.map{ h =>
-        a.getBlocking[Option[CheckpointBlock]]("checkpoint/" + h)
-      }
+    val storedSnapshots = apis.map{_.simpleDownload()}.map{
+      _.slice(0, 3)
     }
 
-    assert(downloadedBlocks.forall(_.forall(_.nonEmpty)))
-    assert(downloadedBlocks.map(_.map{_.get}.toSet).distinct.size == 1)
+    assert(storedSnapshots.toSet.map{x : Seq[StoredSnapshot] => x.map{_.checkpointCache.flatMap{_.checkpointBlock}}.toSet}.size == 1)
 
-    /*
-    snapshotBlocksDistinct.flatMap{ cb =>
-      val cbA =
-      println("MISSING CHECKPOINT")
-      cbA
-    }
-*/
 /*
 
 
