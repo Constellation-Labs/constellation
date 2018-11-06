@@ -2,6 +2,8 @@ package org.constellation.util
 
 import java.util.concurrent.TimeUnit
 
+import akka.http.scaladsl.coding.Gzip
+import akka.util.ByteString
 import com.typesafe.config.ConfigFactory
 import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
@@ -99,14 +101,22 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
     implicit f : Formats = constellation.constellationFormats
   ): HttpResponse[String] = {
     val ser = Serialization.write(b)
-    httpWithAuth(suffix).postData(ser).header("content-type", "application/json").asString
+    val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
+    httpWithAuth(suffix)
+      .postData(gzipped)
+      .headers("content-type" -> "application/json", "Content-Encoding" -> "gzip")
+      .asString
   }
 
   def putSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
     implicit f : Formats = constellation.constellationFormats
   ): HttpResponse[String] = {
     val ser = Serialization.write(b)
-    httpWithAuth(suffix).put(ser).header("content-type", "application/json").asString
+    val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
+    httpWithAuth(suffix)
+      .put(gzipped)
+      .headers("content-type" -> "application/json", "Content-Encoding" -> "gzip")
+      .asString
   }
 
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
