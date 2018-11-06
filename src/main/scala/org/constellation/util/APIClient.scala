@@ -39,6 +39,12 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
   val udpPort: Int = 16180
   val apiPort: Int = port
 
+  /***
+    * Basically a magic number, but according to Google & others, this is around the point where gzip'ing pays off.
+    * See: https://webmasters.stackexchange.com/questions/31750/what-is-recommended-minimum-object-size-for-gzip-performance-benefits
+    */
+  private val gzipThreshold = 860
+
   def udpAddress: String = hostName + ":" + udpPort
 
   def setExternalIP(): Boolean = postSync("ip", hostName + ":" + udpPort).isSuccess
@@ -97,26 +103,39 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
     httpWithAuth(suffix).method("POST").asString
   }
 
+
   def postSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
     implicit f : Formats = constellation.constellationFormats
   ): HttpResponse[String] = {
     val ser = Serialization.write(b)
-    val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
-    httpWithAuth(suffix)
-      .postData(gzipped)
-      .headers("content-type" -> "application/json", "Content-Encoding" -> "gzip")
-      .asString
+    val resp = if (ser.length >= gzipThreshold) {
+      val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
+      httpWithAuth(suffix)
+        .postData(gzipped)
+        .headers("content-type" -> "application/json", "Content-Encoding" -> "gzip")
+    } else {
+      httpWithAuth(suffix)
+        .postData(ser)
+        .headers("content-type" -> "application/json")
+    }
+    resp.asString
   }
 
   def putSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
     implicit f : Formats = constellation.constellationFormats
   ): HttpResponse[String] = {
     val ser = Serialization.write(b)
-    val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
-    httpWithAuth(suffix)
-      .put(gzipped)
-      .headers("content-type" -> "application/json", "Content-Encoding" -> "gzip")
-      .asString
+    val resp = if (ser.length >= gzipThreshold) {
+      val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
+      httpWithAuth(suffix)
+        .postData(gzipped)
+        .headers("content-type" -> "application/json", "Content-Encoding" -> "gzip")
+    } else {
+      httpWithAuth(suffix)
+        .postData(ser)
+        .headers("content-type" -> "application/json")
+    }
+    resp.asString
   }
 
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
