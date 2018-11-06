@@ -103,10 +103,9 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
     httpWithAuth(suffix).method("POST").asString
   }
 
-
-  def postSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
+  private def postSyncRequest(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
     implicit f : Formats = constellation.constellationFormats
-  ): HttpResponse[String] = {
+  ): HttpRequest = {
     val ser = Serialization.write(b)
     val resp = if (ser.length >= gzipThreshold) {
       val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
@@ -118,24 +117,20 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
         .postData(ser)
         .headers("content-type" -> "application/json")
     }
-    resp.asString
+    resp
+  }
+
+
+  def postSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
+    implicit f : Formats = constellation.constellationFormats
+  ): HttpResponse[String] = {
+    postSyncRequest(suffix, b, timeoutSeconds).asString
   }
 
   def putSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
     implicit f : Formats = constellation.constellationFormats
   ): HttpResponse[String] = {
-    val ser = Serialization.write(b)
-    val resp = if (ser.length >= gzipThreshold) {
-      val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
-      httpWithAuth(suffix)
-        .postData(gzipped)
-        .headers("content-type" -> "application/json", "Content-Encoding" -> "gzip")
-    } else {
-      httpWithAuth(suffix)
-        .postData(ser)
-        .headers("content-type" -> "application/json")
-    }
-    resp.asString
+    postSyncRequest(suffix, b, timeoutSeconds).method("PUT").asString
   }
 
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
