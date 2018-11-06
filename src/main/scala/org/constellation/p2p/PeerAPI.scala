@@ -266,14 +266,16 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
     }
   }
 
-  val routes: Route = encodeResponseWith(Gzip) {
-   // rejectBannedIP {
-      signEndpoints ~ commonEndpoints ~  // { //enforceKnownIP
+  val routes: Route = decodeRequest {
+    encodeResponse {
+      // rejectBannedIP {
+      signEndpoints ~ commonEndpoints ~ // { //enforceKnownIP
         getEndpoints ~ postEndpoints ~ mixedEndpoints
-    //  }
-   // } // ~
-    //  faviconRoute ~ jsRequest ~ serveMainPage // <-- Temporary for debugging, control routes disabled.
+      //  }
+      // } // ~
+      //  faviconRoute ~ jsRequest ~ serveMainPage // <-- Temporary for debugging, control routes disabled.
 
+    }
   }
 
 }
