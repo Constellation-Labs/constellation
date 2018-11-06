@@ -15,11 +15,8 @@ import org.constellation.util.{HeartbeatSubscribe, ProductHash}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
-object SnapshotTrigger {
+object EdgeProcessor {
 
-  case class HandleTransaction(tx: Transaction)
-  case class HandleCheckpoint(checkpointBlock: CheckpointBlock)
-  case class HandleSignatureRequest(checkpointBlock: CheckpointBlock)
 
   val logger = Logger(s"EdgeProcessor")
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
@@ -46,7 +43,9 @@ object SnapshotTrigger {
       // Accept transactions
       cb.transactions.foreach { t =>
         dao.metricsManager ! IncrementMetric("transactionAccepted")
-        t.store(
+
+        // Re-enable later
+        /* t.store(
           TransactionCacheData(
             t,
             valid = true,
@@ -55,7 +54,7 @@ object SnapshotTrigger {
             Map(cb.baseHash -> true),
             resolved = true,
             cbBaseHash = Some(cb.baseHash)
-          ))
+          ))*/
         t.ledgerApply()
       }
       dao.metricsManager ! IncrementMetric("checkpointAccepted")
@@ -308,7 +307,7 @@ object SnapshotTrigger {
                     // TODO: Check failures and/or remove constraint of single actor
                     dao.peerInfo.foreach { case (id, client) =>
                       tryWithMetric(
-                        client.client.postSync(s"finished/checkpoint", FinishedCheckpoint(cache, finalFacilitators)),
+                        client.client.post(s"finished/checkpoint", FinishedCheckpoint(cache, finalFacilitators)),
                         "finishedCheckpointBroadcast"
                       )
                     }
@@ -353,7 +352,11 @@ case class TipData(checkpointBlock: CheckpointBlock, numUses: Int)
 case class SnapshotInfo(
                          snapshot: Snapshot,
                          acceptedCBSinceSnapshot: Seq[String] = Seq(),
-                         acceptedCBSinceSnapshotCache: Seq[CheckpointCacheData] = Seq()
+                         acceptedCBSinceSnapshotCache: Seq[CheckpointCacheData] = Seq(),
+                         lastSnapshotHeight: Long = 0L,
+                         snapshotHashes: Seq[String] = Seq(),
+                         addressCacheData: Map[String, AddressCacheData] = Map(),
+                         tips: Map[String, TipData] = Map()
                        )
 
 case object GetMemPool
@@ -404,8 +407,8 @@ object Snapshot {
 }
 
 
-class SnapshotTrigger(dao: DAO)
-                     (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
+class EdgeProcessor(dao: DAO)
+                   (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
 
   implicit val sys: ActorSystem = context.system
   implicit val kp: KeyPair = dao.keyPair

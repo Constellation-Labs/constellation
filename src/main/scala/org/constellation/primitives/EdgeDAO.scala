@@ -5,7 +5,7 @@ import java.util.concurrent.{Executors, TimeUnit}
 import akka.util.Timeout
 import better.files.File
 import com.twitter.storehaus.cache.MutableLRUCache
-import org.constellation.consensus.SnapshotTrigger.acceptCheckpoint
+import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.serializer.KryoSerializer
@@ -67,21 +67,47 @@ class ThreadSafeTipService() {
 
   def tips: Map[String, TipData] = thresholdMetCheckpoints
 
-  def getSnapshotInfo: SnapshotInfo = this.synchronized(SnapshotInfo(snapshot, acceptedCBSinceSnapshot))
+  def getSnapshotInfo()(implicit dao: DAO): SnapshotInfo = this.synchronized(
+    SnapshotInfo(
+      snapshot,
+      acceptedCBSinceSnapshot,
+      lastSnapshotHeight = lastSnapshotHeight,
+      snapshotHashes = dao.snapshotHashes,
+      addressCacheData = dao.addressService.lruCache.iterator.toMap,
+      tips = thresholdMetCheckpoints
+    )
+  )
 
   var totalNumCBsInShapshots = 0L
 
+  var performSnapshots : Boolean = true
+
   // ONLY TO BE USED BY DOWNLOAD COMPLETION CALLER
-  def setSnapshot(latestSnapshot: Snapshot): Unit = this.synchronized{
-    snapshot = latestSnapshot
+  def setSnapshot(latestSnapshotInfo: SnapshotInfo)(implicit dao: DAO): Unit = this.synchronized{
+    snapshot = latestSnapshotInfo.snapshot
+    lastSnapshotHeight = latestSnapshotInfo.lastSnapshotHeight
+    thresholdMetCheckpoints = latestSnapshotInfo.tips
+
+    latestSnapshotInfo.acceptedCBSinceSnapshotCache.foreach{
+      h =>
+        tryWithMetric(acceptCheckpoint(h), "acceptCheckpoint")
+    }
+
+    dao.metricsManager ! UpdateMetric(
+      "acceptCBCacheMatchesAcceptedSize",
+      (latestSnapshotInfo.acceptedCBSinceSnapshot.size ==
+        latestSnapshotInfo.acceptedCBSinceSnapshotCache.size).toString
+    )
+
     // Below may not be necessary, just a sanity check
-    acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.filterNot(snapshot.checkpointBlocks.contains)
+    acceptedCBSinceSnapshot = latestSnapshotInfo.acceptedCBSinceSnapshot
+
   }
 
   // TODO: Read from lastSnapshot in DB optionally, assign elsewhere
-  var lastSnapshotHeight = 0
+  var lastSnapshotHeight = 0L
 
-  def getMinTipHeight()(implicit dao: DAO) = thresholdMetCheckpoints.keys.map {
+  def getMinTipHeight()(implicit dao: DAO): Long = thresholdMetCheckpoints.keys.map {
     dao.checkpointService.get
   }.flatMap {
     _.flatMap {
@@ -90,6 +116,13 @@ class ThreadSafeTipService() {
       }
     }
   }.min
+
+  var syncBuffer : Seq[CheckpointCacheData] = Seq()
+
+  def syncBufferAccept(cb: CheckpointCacheData)(implicit dao: DAO): Unit = this.synchronized{
+    syncBuffer :+= cb
+    dao.metricsManager ! UpdateMetric("syncBufferSize", syncBuffer.size.toString)
+  }
 
   def attemptSnapshot()(implicit dao: DAO): Unit = this.synchronized{
 
@@ -336,7 +369,7 @@ class StorageService[T](size: Int = 50000) {
       }
   }*/
 
-  def delete(keys: Set[String]) = this.synchronized{
+  def delete(keys: Set[String]): lruCache.type = this.synchronized{
     lruCache.multiRemove(keys)
   }
 
@@ -389,6 +422,12 @@ trait EdgeDAO {
   val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
 
   val edgeExecutionContext: ExecutionContextExecutor =
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+
+  val peerAPIExecutionContext: ExecutionContextExecutor =
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+
+  val apiClientExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
 
   val signatureExecutionContext: ExecutionContextExecutor =
