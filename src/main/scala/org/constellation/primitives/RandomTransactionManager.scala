@@ -2,7 +2,7 @@ package org.constellation.primitives
 
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.SnapshotTrigger
+import org.constellation.consensus.EdgeProcessor
 import org.constellation.primitives.Schema.{Id, NodeState, SendToAddress}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -20,7 +20,15 @@ object RandomTransactionManager {
 
         val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
         dao.metricsManager ! UpdateMetric("transactionMemPoolSize", memPoolCount.toString)
-        if (memPoolCount < dao.processingConfig.maxMemPoolSize && dao.generateRandomTX && dao.nodeState == NodeState.Ready) {
+        if (
+          memPoolCount < dao.processingConfig.maxMemPoolSize &&
+            dao.generateRandomTX &&
+            dao.nodeState == NodeState.Ready &&
+          dao.addressService.get(dao.selfAddressStr).exists(
+            _.balanceByLatestSnapshot >= 100*Schema.NormalizationFactor
+          )
+
+        ) {
 
           val peerQuery = dao.peerInfo.toSeq //(dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
           val peerIds = peerQuery.filter { case (_, pd) =>
@@ -62,7 +70,7 @@ object RandomTransactionManager {
 
         if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold && dao.generateRandomTX) {
           futureTryWithTimeoutMetric(
-            SnapshotTrigger.formCheckpoint(),
+            EdgeProcessor.formCheckpoint(),
             "formCheckpointFromRandomTXManager",
             timeoutSeconds = dao.processingConfig.formCheckpointTimeout
           )(dao.edgeExecutionContext, dao)

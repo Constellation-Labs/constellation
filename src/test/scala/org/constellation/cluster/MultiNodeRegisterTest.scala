@@ -7,7 +7,7 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import org.constellation.ConstellationNode
+import org.constellation.{ConstellationNode, HostPort}
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.util.TestNode
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
@@ -35,7 +35,7 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
     system.terminate()
   }
 
-  def createNode(randomizePorts: Boolean = true, seedHosts: Seq[InetSocketAddress] = Seq()): ConstellationNode = {
+  def createNode(randomizePorts: Boolean = true, seedHosts: Seq[HostPort] = Seq()): ConstellationNode = {
     implicit val executionContext: ExecutionContext =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 

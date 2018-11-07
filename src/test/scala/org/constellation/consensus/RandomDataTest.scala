@@ -36,7 +36,7 @@ class RandomDataTest extends FlatSpec {
 
   def randomBlock(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): Schema.CheckpointBlock = {
     val txs = Seq.fill(5)(randomTransaction)
-    SnapshotTrigger.createCheckpointBlock(txs, tips)(startingKeyPair)
+    EdgeProcessor.createCheckpointBlock(txs, tips)(startingKeyPair)
   }
 
   "Signatures combiners" should "be unique" in {

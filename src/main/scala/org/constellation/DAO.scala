@@ -33,6 +33,10 @@ class DAO extends NodeData
     f
   }
 
+  def snapshotHashes: Seq[String] = {
+    snapshotPath.list.toSeq.map{_.name}
+  }
+
   def peersInfoPath: File = {
     val f = File(s"tmp/${id.medium}/peers")
     f
