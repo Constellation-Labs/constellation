@@ -6,7 +6,7 @@ JAR_TAG=${2:-dev}
 echo "Restarting $HOSTS_FILE with jar tag $JAR_TAG"
 cat $HOSTS_FILE
 
-pscp -h $HOSTS_FILE ./deploy/compute/run.sh /home/$USER/
+pscp -h $HOSTS_FILE ./deploy/compute/manual/run.sh /home/$USER/
 pssh -h $HOSTS_FILE -i 'killall bash'
 pssh -h $HOSTS_FILE -i 'killall java'
 pssh -h $HOSTS_FILE -i 'rm -rf /home/$USER/tmp'
