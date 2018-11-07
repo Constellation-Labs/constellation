@@ -9,7 +9,7 @@ import com.typesafe.scalalogging.Logger
 import constellation.futureTryWithTimeoutMetric
 import org.constellation.p2p.{Download, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.{Id, InternalHeartbeat}
+import org.constellation.primitives.Schema.{Id, InternalHeartbeat, SendToAddress}
 import org.constellation.util._
 import org.constellation.{DAO, HostPort, PeerMetadata, RemovePeerRequest}
 
@@ -60,6 +60,10 @@ object PeerManager {
 
     // TODO: Instead wait until peer discovery phase complete
     Thread.sleep(15*1000)
+
+    dao.peerInfo.map{_._2.client}.foreach{
+      _.post("faucet", SendToAddress(dao.selfAddressStr, 500L))
+    }
     Download.download()
 
 

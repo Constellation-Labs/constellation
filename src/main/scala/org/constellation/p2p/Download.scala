@@ -74,11 +74,16 @@ object Download {
         c =>
           dao.metricsManager ! IncrementMetric("downloadedBlocks")
           // Bypasses tip update / accumulating acceptedSinceCB
-          tryWithMetric(acceptCheckpoint(c), "acceptCheckpoint")
+
+          // TODO: Rebuild ledger and verify, turning off for debug
+          dao.metricsManager ! IncrementMetric("checkpointAccepted")
+
+          //tryWithMetric(acceptCheckpoint(c), "acceptCheckpoint")
           c.checkpointBlock.foreach{
             _.transactions.foreach{
               tx =>
-                tx.ledgerApplySnapshot()
+           //     tx.ledgerApplySnapshot()
+                  dao.metricsManager ! IncrementMetric("transactionAccepted")
                 // dao.transactionService.delete(Set(tx.hash))
             }
           }

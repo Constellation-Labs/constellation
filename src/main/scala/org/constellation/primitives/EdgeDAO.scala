@@ -74,7 +74,8 @@ class ThreadSafeTipService() {
       lastSnapshotHeight = lastSnapshotHeight,
       snapshotHashes = dao.snapshotHashes,
       addressCacheData = dao.addressService.lruCache.iterator.toMap,
-      tips = thresholdMetCheckpoints
+      tips = thresholdMetCheckpoints,
+      snapshotCache = snapshot.checkpointBlocks.flatMap{dao.checkpointService.get}
     )
   )
 
@@ -88,9 +89,31 @@ class ThreadSafeTipService() {
     lastSnapshotHeight = latestSnapshotInfo.lastSnapshotHeight
     thresholdMetCheckpoints = latestSnapshotInfo.tips
 
+    // Below may not be necessary, just a sanity check
+    acceptedCBSinceSnapshot = latestSnapshotInfo.acceptedCBSinceSnapshot
+    latestSnapshotInfo.addressCacheData.foreach{
+      case (k,v) =>
+        dao.addressService.put(k, v)
+    }
+
+    latestSnapshotInfo.snapshotCache.foreach{
+      h =>
+        dao.metricsManager ! IncrementMetric("checkpointAccepted")
+        dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
+        h.checkpointBlock.get.transactions.foreach{
+          _ =>
+            dao.metricsManager ! IncrementMetric("transactionAccepted")
+        }
+    }
+
     latestSnapshotInfo.acceptedCBSinceSnapshotCache.foreach{
       h =>
-        tryWithMetric(acceptCheckpoint(h), "acceptCheckpoint")
+        dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
+        dao.metricsManager ! IncrementMetric("checkpointAccepted")
+        h.checkpointBlock.get.transactions.foreach{
+          _ =>
+          dao.metricsManager ! IncrementMetric("transactionAccepted")
+        }
     }
 
     dao.metricsManager ! UpdateMetric(
@@ -99,8 +122,6 @@ class ThreadSafeTipService() {
         latestSnapshotInfo.acceptedCBSinceSnapshotCache.size).toString
     )
 
-    // Below may not be necessary, just a sanity check
-    acceptedCBSinceSnapshot = latestSnapshotInfo.acceptedCBSinceSnapshot
 
   }
 
@@ -387,8 +408,8 @@ class StorageService[T](size: Int = 50000) {
               empty: => T
             ): T =
     this.synchronized{
-      val data = get(key).map {updateFunc}.getOrElse(empty)
-      put(key, data)
+      val data = lruCache.get(key).map {updateFunc}.getOrElse(empty)
+      lruCache.+=(key, data)
       data
     }
 

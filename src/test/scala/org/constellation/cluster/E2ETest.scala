@@ -80,7 +80,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     val downloadAPI = downloadNode.getAPIClient()
     assert(sim.checkReady(Seq(downloadAPI)))
 
-    Thread.sleep(45*1000)
+    Thread.sleep(30*1000)
 
     val allAPIs = apis :+ downloadAPI
 

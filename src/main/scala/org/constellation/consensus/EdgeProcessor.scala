@@ -356,7 +356,8 @@ case class SnapshotInfo(
                          lastSnapshotHeight: Long = 0L,
                          snapshotHashes: Seq[String] = Seq(),
                          addressCacheData: Map[String, AddressCacheData] = Map(),
-                         tips: Map[String, TipData] = Map()
+                         tips: Map[String, TipData] = Map(),
+                         snapshotCache: Seq[CheckpointCacheData] = Seq()
                        )
 
 case object GetMemPool
