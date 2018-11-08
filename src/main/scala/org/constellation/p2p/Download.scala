@@ -153,8 +153,16 @@ object Download {
     dao.generateRandomTX = true
     dao.nodeState = NodeState.Ready
 
-    dao.threadSafeTipService.syncBuffer.foreach{
-      dao.threadSafeTipService.accept
+    dao.threadSafeTipService.syncBuffer.foreach{ h =>
+
+      if (!snapshotInfo2.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo2.snapshotCache.contains(h)) {
+        dao.metricsManager ! IncrementMetric("checkpointAccepted")
+        dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
+        h.checkpointBlock.get.transactions.foreach {
+          _ =>
+            dao.metricsManager ! IncrementMetric("transactionAccepted")
+        }
+      }
     }
 
     dao.threadSafeTipService.syncBuffer = Seq()

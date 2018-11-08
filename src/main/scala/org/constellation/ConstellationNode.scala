@@ -115,7 +115,8 @@ import scala.concurrent.ExecutionContext
         hostName = hostName,
         requestExternalAddressCheck = requestExternalAddressCheck,
         peerHttpPort = peerHttpPort,
-        attemptDownload = true
+        attemptDownload = true,
+        allowLocalhostPeers = false
       )
     } match {
       case Failure(e) => e.printStackTrace()
@@ -134,7 +135,7 @@ import scala.concurrent.ExecutionContext
 }
 
 class ConstellationNode(val configKeyPair: KeyPair,
-                        val seedPeers: Seq[InetSocketAddress],
+                        val seedPeers: Seq[HostPort],
                         val httpInterface: String,
                         val httpPort: Int,
                         val udpInterface: String = "0.0.0.0",
@@ -145,7 +146,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
                         val autoSetExternalAddress: Boolean = false,
                         val peerHttpPort: Int = 9001,
                         val peerTCPPort: Int = 9002,
-                        val attemptDownload: Boolean = false
+                        val attemptDownload: Boolean = false,
+                        val allowLocalhostPeers: Boolean = false
                        )(
                          implicit val system: ActorSystem,
                          implicit val materialize: ActorMaterializer,
@@ -156,9 +158,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
   dao.updateKeyPair(configKeyPair)
   dao.idDir.createDirectoryIfNotExists(createParents = true)
 
-  dao.preventLocalhostAsPeer = attemptDownload
+  dao.preventLocalhostAsPeer = !allowLocalhostPeers
   dao.externalHostString = hostName
-
   dao.externlPeerHTTPPort = peerHttpPort
 
   import dao._
@@ -221,9 +222,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   val peerRoutes : Route = peerAPI.routes  // logReqResp { }
 
-  seedPeers.foreach {
+/*  seedPeers.foreach {
     peer => ipManager.addKnownIP(RemoteAddress(peer))
-  }
+  }*/
 
   def addAddressToKnownIPs(addr: ValidPeerIPData): Unit = {
     val remoteAddr = RemoteAddress(new InetSocketAddress(addr.canonicalHostName, addr.port))
@@ -286,6 +287,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
   dao.metricsManager ! UpdateMetric("version", "1.0.6")
 
   if (attemptDownload) {
+    seedPeers.foreach{
+      dao.peerManager ! _
+    }
     PeerManager.initiatePeerReload()(dao, dao.edgeExecutionContext)
   }
 

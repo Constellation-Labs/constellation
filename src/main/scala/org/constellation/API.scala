@@ -243,7 +243,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
 
           logger.info(s"send transaction to address $sendRequest")
 
-          val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amountActual, dao.keyPair)
+          val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amountActual, dao.keyPair, normalized = false)
           dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
 
           complete(tx.hash)
@@ -277,6 +277,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
             }
           logger.debug(s"Set external IP RPC request $externalIp $addr")
           dao.externalAddress = Some(addr)
+          dao.metricsManager ! UpdateMetric("externalHost", dao.externalHostString)
           if (ipp.nonEmpty)
             dao.apiAddress = Some(new InetSocketAddress(ipp, 9000))
           complete(StatusCodes.OK)

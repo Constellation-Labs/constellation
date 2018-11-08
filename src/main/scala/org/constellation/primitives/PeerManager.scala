@@ -107,15 +107,15 @@ object PeerManager {
     futureTryWithTimeoutMetric({
       logger.info(s"Attempting to register with $hp")
 
-      val client = new APIClient(hp.host, hp.port)(dao.apiClientExecutionContext, dao)
+    val client = new APIClient(hp.host, hp.port)(dao.apiClientExecutionContext, dao)
 
-      client.getNonBlocking[PeerRegistrationRequest]("registration/request").onComplete {
-        case Success(registrationRequest) =>
-          dao.peerManager ! PendingRegistration(hp.host, registrationRequest)
-          client.postNonBlocking("register", dao.peerRegistrationRequest)
-        case Failure(e) =>
-          dao.metricsManager ! IncrementMetric("peerGetRegistrationRequestFailed")
-      }(dao.apiClientExecutionContext)
+    client.getNonBlocking[PeerRegistrationRequest]("registration/request").onComplete {
+      case Success(registrationRequest) =>
+        dao.peerManager ! PendingRegistration(hp.host, registrationRequest)
+        client.postNonBlocking("register", dao.peerRegistrationRequest)
+      case Failure(e) =>
+        dao.metricsManager ! IncrementMetric("peerGetRegistrationRequestFailed")
+    }(dao.apiClientExecutionContext)
     },
       "addPeerWithRegistrationSymmetric"
     )
@@ -239,7 +239,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
       if (
         !peerInfo.exists{case (_, data) => data.peerMetadata.host == host && data.peerMetadata.httpPort == port} &&
-          PeerManager.validWithLoopbackGuard(host)
+        PeerManager.validWithLoopbackGuard(host)
       ) {
         PeerManager.attemptRegisterPeer(hp)
       }

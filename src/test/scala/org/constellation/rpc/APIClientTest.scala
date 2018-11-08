@@ -29,7 +29,7 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
 
     val expectedPeers = Seq(node1Path)
 
-    val node2 = TestNode(expectedPeers)
+    val node2 = TestNode() //expectedPeers)
 
     // TODO: Change to new peer add function
 /*    val rpc = APIClient(port = node2.httpPort)

@@ -7,7 +7,7 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import org.constellation.ConstellationNode
+import org.constellation.{ConstellationNode, HostPort}
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.Schema.CheckpointCacheData
 import org.constellation.util.{Simulation, TestNode}
@@ -40,13 +40,13 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
   def createNode(
                   randomizePorts: Boolean = true,
-                  seedHosts: Seq[InetSocketAddress] = Seq(),
+                  seedHosts: Seq[HostPort] = Seq(),
                   portOffset: Int = 0
                 ): ConstellationNode = {
     implicit val executionContext: ExecutionContextExecutorService =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
-    TestNode(randomizePorts = randomizePorts, portOffset = portOffset)
+    TestNode(randomizePorts = randomizePorts, portOffset = portOffset, seedHosts = seedHosts)
   }
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
@@ -66,22 +66,28 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
   private val sim = new Simulation()
 
-  private val downloadIndex = 3
-
-  private val initialAPIs = apis.slice(0, downloadIndex)
-
-  //private val downloadAPIs = apis.slice(downloadIndex, totalNumNodes + 1)
+  private val initialAPIs = apis
 
   "E2E Run" should "demonstrate full flow" in {
 
     println("API Ports: " + apis.map{_.apiPort})
 
-    assert(sim.run(initialAPIs, addPeerRequests.slice(0, downloadIndex)))
+    assert(sim.run(initialAPIs, addPeerRequests))
 
-    //Thread.sleep(1000*1000)
+
+    val downloadNode = TestNode(Seq(HostPort("localhost", 9001)), portOffset = 6, randomizePorts = false)
+
+    val downloadAPI = downloadNode.getAPIClient()
+    assert(sim.checkReady(Seq(downloadAPI)))
+
+    Thread.sleep(60*1000)
+
+    val allAPIs = apis :+ downloadAPI
+
+    // Thread.sleep(1000*1000)
 
     // Stop transactions
-    sim.triggerRandom(apis)
+    sim.triggerRandom(allAPIs)
 
     sim.logger.info("Stopping transactions to run parity check")
 
@@ -89,67 +95,17 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     // TODO: Change assertions to check several times instead of just waiting ^ with sleep
     // Follow pattern in Simulation.await examples
-    assert(apis.map{_.metrics("checkpointAccepted")}.distinct.size == 1)
-    assert(apis.map{_.metrics("transactionAccepted")}.distinct.size == 1)
+    assert(allAPIs.map{_.metrics("checkpointAccepted")}.distinct.size == 1)
+    assert(allAPIs.map{_.metrics("transactionAccepted")}.distinct.size == 1)
 
-    val storedSnapshots = apis.map{_.simpleDownload()}.map{
-      _.slice(0, 3)
-    }
+    val storedSnapshots = allAPIs.map{_.simpleDownload()}
 
-    assert(storedSnapshots.toSet.map{x : Seq[StoredSnapshot] => x.map{_.checkpointCache.flatMap{_.checkpointBlock}}.toSet}.size == 1)
-
-/*
-
-
-    assert(blocks.map{_.size}.distinct.size == 1)
-    assert(blocks.forall{b => b.size == b.distinct.size})
-    assert(blocks.map{_.toSet}.distinct.size == 1)
-*/
-
-    // TODO: Fix download test flakiness. Works sometimes
-
-/*
-
-    assert(sim.checkHealthy(downloadAPIs))
-
-    val downloadNodePeerRequests = addPeerRequests.slice(downloadIndex, totalNumNodes + 1)
-      .map{_.copy(nodeStatus = NodeState.DownloadInProgress)}
-
-    sim.addPeersFromRequest(downloadAPIs, downloadNodePeerRequests)
-
-    downloadNodePeerRequests.foreach{ apr =>
-      sim.addPeer(initialAPIs, apr)
-    }
-
-    addPeerRequests.slice(0, downloadIndex).foreach{ apr =>
-      sim.addPeer(downloadAPIs, apr)
-    }
-
-    assert(sim.checkPeersHealthy(apis))
-
-    downloadAPIs.foreach{ a2 =>
-      a2.postEmpty("download/start")
-      a2.postEmpty("random")
-    }
-
-    assert(sim.checkReady(downloadAPIs))
-
-    //Thread.sleep(5000)
-
-    // Stop transactions
-    sim.triggerRandom(apis)
-
-    Thread.sleep(15000)
-    assert(apis.map{_.metrics("checkpointAccepted")}.distinct.size == 1)
-    assert(apis.map{_.metrics("transactionAccepted")}.distinct.size == 1)
-
-    val blocks = apis.map{_.simpleDownload()}
-
-    assert(blocks.map{_.size}.distinct.size == 1)
-    assert(blocks.forall{b => b.size == b.distinct.size})
-    assert(blocks.map{_.toSet}.distinct.size == 1)
-*/
-
+    assert(
+      storedSnapshots.toSet
+        .map{x : Seq[StoredSnapshot] =>
+          x.map{_.checkpointCache.flatMap{_.checkpointBlock}}.toSet
+        }.size == 1
+    )
   }
 
 }

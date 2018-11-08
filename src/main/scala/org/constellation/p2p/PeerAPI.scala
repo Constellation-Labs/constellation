@@ -135,7 +135,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
           if (sendRequest.amountActual < (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor)) {
             logger.info(s"send transaction to address $sendRequest")
 
-            val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amountActual, dao.keyPair)
+            val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amountActual, dao.keyPair, normalized = false)
             dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
             dao.metricsManager ! IncrementMetric("faucetRequest")
 
@@ -223,9 +223,17 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
               dao.metricsManager ! IncrementMetric("peerApiRXFinishedCheckpoint")
               onComplete(
                 futureTryWithTimeoutMetric(
-                  if (fc.checkpointCacheData.checkpointBlock.exists{_.simpleValidation()}) {
-                    dao.threadSafeTipService.accept(fc.checkpointCacheData)
-                  } else Future.successful(), "peerAPIFinishedCheckpointRX"
+                  if (dao.nodeState == NodeState.DownloadCompleteAwaitingFinalSync) {
+                    dao.threadSafeTipService.syncBufferAccept(fc.checkpointCacheData)
+                    Future.successful()
+                  } else if (dao.nodeState == NodeState.Ready) {
+                    if (fc.checkpointCacheData.checkpointBlock.exists {
+                      _.simpleValidation()
+                    }) {
+                      dao.threadSafeTipService.accept(fc.checkpointCacheData)
+                    } else Future.successful()
+                  } else Future.successful()
+                  , "peerAPIFinishedCheckpointRX"
                 )(dao.finishedExecutionContext, dao)
               ) {
                 result => // ^ Errors captured above
