@@ -183,18 +183,16 @@ class Simulation {
 
   def checkSnapshot(
                      apis: Seq[APIClient],
-                     num: Int = 3,
-                     maxRetries: Int = 60,
-                     delay: Long = 5000
+                     num: Int = 2,
+                     maxRetries: Int = 100,
+                     delay: Long = 10000
                    ): Boolean = {
     awaitConditionMet(
       s"Less than $num snapshots",
       {
         apis.forall{ a =>
-          val m = a.metrics
-          val info = a.getBlocking[SnapshotInfo]("info")
-          info.snapshot.checkpointBlocks.nonEmpty && info.acceptedCBSinceSnapshot.nonEmpty &&
-            m.get("snapshotCount").exists{_.toInt >= num}
+          val m = Try{a.metrics}.toOption.getOrElse(Map())
+          m.get("snapshotCount").exists{_.toInt >= num}
         }
       }, maxRetries, delay
     )
