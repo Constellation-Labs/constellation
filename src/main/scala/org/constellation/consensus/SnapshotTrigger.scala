@@ -353,7 +353,12 @@ case class TipData(checkpointBlock: CheckpointBlock, numUses: Int)
 case class SnapshotInfo(
                          snapshot: Snapshot,
                          acceptedCBSinceSnapshot: Seq[String] = Seq(),
-                         acceptedCBSinceSnapshotCache: Seq[CheckpointCacheData] = Seq()
+                         acceptedCBSinceSnapshotCache: Seq[CheckpointCacheData] = Seq(),
+                         lastSnapshotHeight: Int = 0,
+                         snapshotHashes: Seq[String] = Seq(),
+                         addressCacheData: Map[String, AddressCacheData] = Map(),
+                         tips: Map[String, TipData] = Map(),
+                         snapshotCache: Seq[CheckpointCacheData] = Seq()
                        )
 
 case object GetMemPool

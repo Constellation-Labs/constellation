@@ -67,15 +67,60 @@ class ThreadSafeTipService() {
 
   def tips: Map[String, TipData] = thresholdMetCheckpoints
 
-  def getSnapshotInfo: SnapshotInfo = this.synchronized(SnapshotInfo(snapshot, acceptedCBSinceSnapshot))
+  def getSnapshotInfo()(implicit dao: DAO): SnapshotInfo = this.synchronized(
+    SnapshotInfo(
+      snapshot,
+      acceptedCBSinceSnapshot,
+      lastSnapshotHeight = lastSnapshotHeight,
+      snapshotHashes = dao.snapshotHashes,
+      addressCacheData = dao.addressService.lruCache.iterator.toMap,
+      tips = thresholdMetCheckpoints,
+      snapshotCache = snapshot.checkpointBlocks.flatMap{dao.checkpointService.get}
+    )
+  )
 
   var totalNumCBsInShapshots = 0L
 
   // ONLY TO BE USED BY DOWNLOAD COMPLETION CALLER
-  def setSnapshot(latestSnapshot: Snapshot): Unit = this.synchronized{
-    snapshot = latestSnapshot
+  def setSnapshot(latestSnapshotInfo: SnapshotInfo)(implicit dao: DAO): Unit = this.synchronized{
+    snapshot = latestSnapshotInfo.snapshot
+    lastSnapshotHeight = latestSnapshotInfo.lastSnapshotHeight
+    thresholdMetCheckpoints = latestSnapshotInfo.tips
+
     // Below may not be necessary, just a sanity check
-    acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.filterNot(snapshot.checkpointBlocks.contains)
+    acceptedCBSinceSnapshot = latestSnapshotInfo.acceptedCBSinceSnapshot
+    latestSnapshotInfo.addressCacheData.foreach{
+      case (k,v) =>
+        dao.addressService.put(k, v)
+    }
+
+    latestSnapshotInfo.snapshotCache.foreach{
+      h =>
+        dao.metricsManager ! IncrementMetric("checkpointAccepted")
+        dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
+        h.checkpointBlock.get.transactions.foreach{
+          _ =>
+            dao.metricsManager ! IncrementMetric("transactionAccepted")
+        }
+    }
+
+    latestSnapshotInfo.acceptedCBSinceSnapshotCache.foreach{
+      h =>
+        dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
+        dao.metricsManager ! IncrementMetric("checkpointAccepted")
+        h.checkpointBlock.get.transactions.foreach{
+          _ =>
+          dao.metricsManager ! IncrementMetric("transactionAccepted")
+        }
+    }
+
+    dao.metricsManager ! UpdateMetric(
+      "acceptCBCacheMatchesAcceptedSize",
+      (latestSnapshotInfo.acceptedCBSinceSnapshot.size ==
+        latestSnapshotInfo.acceptedCBSinceSnapshotCache.size).toString
+    )
+
+
   }
 
   // TODO: Read from lastSnapshot in DB optionally, assign elsewhere
@@ -90,6 +135,13 @@ class ThreadSafeTipService() {
       }
     }
   }.min
+
+  var syncBuffer : Seq[CheckpointCacheData] = Seq()
+
+  def syncBufferAccept(cb: CheckpointCacheData)(implicit dao: DAO): Unit = this.synchronized{
+    syncBuffer :+= cb
+    dao.metricsManager ! UpdateMetric("syncBufferSize", syncBuffer.size.toString)
+  }
 
   def attemptSnapshot()(implicit dao: DAO): Unit = this.synchronized{
 
@@ -390,6 +442,12 @@ trait EdgeDAO {
 
   val edgeExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+
+ // val peerAPIExecutionContext: ExecutionContextExecutor =
+ //   ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+
+  val apiClientExecutionContext: ExecutionContextExecutor = edgeExecutionContext
+  //  ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
 
   val signatureExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))

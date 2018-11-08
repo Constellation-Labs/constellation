@@ -157,6 +157,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   dao.idDir.createDirectoryIfNotExists(createParents = true)
 
   dao.preventLocalhostAsPeer = attemptDownload
+  dao.externalHostString = hostName
 
   dao.externlPeerHTTPPort = peerHttpPort
 
@@ -281,6 +282,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
   metricsManager ! UpdateMetric("address", dao.selfAddressStr)
   metricsManager ! UpdateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
   metricsManager ! UpdateMetric("nodeStartDate", new DateTime(System.currentTimeMillis()).toString)
+  dao.metricsManager ! UpdateMetric("externalHost", dao.externalHostString)
+  dao.metricsManager ! UpdateMetric("version", "1.0.6")
 
   if (attemptDownload) {
     PeerManager.initiatePeerReload()(dao, dao.edgeExecutionContext)
