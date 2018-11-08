@@ -417,7 +417,26 @@ class StorageService[T](size: Int = 50000) {
 
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
 class CheckpointService(size: Int = 50000) extends StorageService[CheckpointCacheData](size)
-class TransactionService(size: Int = 50000) extends StorageService[TransactionCacheData](size)
+class TransactionService(size: Int = 50000) extends StorageService[TransactionCacheData](size) {
+  private val queue = mutable.Queue[TransactionSerialized]()
+  private val maxQueueSize = 20
+  override def put(
+    key: String,
+    cache: TransactionCacheData
+  ): Unit = {
+    val tx = TransactionSerialized(cache.transaction)
+    queue.synchronized {
+      if (queue.size == maxQueueSize) {
+        queue.dequeue()
+      }
+
+      queue.enqueue(tx)
+      super.put(key, cache)
+    }
+  }
+
+  def getLast20TX = queue.reverse
+}
 class AddressService(size: Int = 50000) extends StorageService[AddressCacheData](size)
 
 trait EdgeDAO {
