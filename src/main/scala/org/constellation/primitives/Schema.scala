@@ -2,6 +2,7 @@ package org.constellation.primitives
 
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
+import java.time.Instant
 
 import constellation.pubKeyToAddress
 import org.constellation.DAO
@@ -679,6 +680,12 @@ object Schema {
   final case class Vote(vote: Signed[VoteData]) extends ProductHash with Fiber
 
   case class TransactionSerialized(hash: String, sender: String, receiver: String, amount: Long, signers: Set[String], time: Long)
+  object TransactionSerialized {
+    def apply(tx: Transaction): TransactionSerialized =
+      new TransactionSerialized(tx.hash, tx.src.address, tx.dst.address, tx.amount,
+        tx.signatures.map(_.address).toSet, Instant.now.getEpochSecond)
+  }
+
   case class Node(address: String, host: String, port: Int)
 
 }
