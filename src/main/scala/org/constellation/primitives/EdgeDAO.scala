@@ -138,7 +138,7 @@ class ThreadSafeTipService() {
 
   var syncBuffer : Seq[CheckpointCacheData] = Seq()
 
-  def syncBufferAccept(cb: CheckpointCacheData)(implicit dao: DAO): Unit = this.synchronized{
+  def syncBufferAccept(cb: CheckpointCacheData)(implicit dao: DAO): Unit = {
     syncBuffer :+= cb
     dao.metricsManager ! UpdateMetric("syncBufferSize", syncBuffer.size.toString)
   }

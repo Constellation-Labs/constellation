@@ -15,6 +15,7 @@ import org.constellation.serializer.KryoSerializer
 import org.constellation.util.APIClient
 
 import scala.concurrent.ExecutionContext
+import scala.util.{Failure, Try}
 
 /// New download code
 object Download {
@@ -47,10 +48,11 @@ object Download {
 
     val snapshotClient = peerData.head._2.client
 
-    val snapshotInfo = snapshotClient.getBlocking[SnapshotInfo]("info", timeoutSeconds = 300)
+    logger.info(s"Downloading from: ${snapshotClient.hostName}:${snapshotClient.apiPort}")
+
+    val snapshotInfo = snapshotClient.getBlockingBytesKryo[SnapshotInfo]("info", timeoutSeconds = 300)
 
     dao.metricsManager ! UpdateMetric("downloadExpectedNumSnapshotsIncludingPreExisting", snapshotInfo.snapshotHashes.size.toString)
-
 
     val preExistingSnapshots = dao.snapshotPath.list.toSeq.map{_.name}
 
@@ -98,17 +100,21 @@ object Download {
     }
 
     def processSnapshotHash(peer: APIClient, hash: String): Boolean = {
-      val res = peer.getBlocking[Option[StoredSnapshot]]("storedSnapshot/" + hash)
-      res.foreach{
+      val res = Try{peer.getBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash, timeoutSeconds = 100)}
+      res match {
+        case Failure(e) => e.printStackTrace()
+        case _ =>
+      }
+      res.toOption.foreach{
         r =>
           dao.metricsManager ! IncrementMetric("downloadedSnapshots")
           dao.metricsManager ! IncrementMetric("snapshotCount")
           acceptSnapshot(r)
       }
-      if (res.isEmpty) {
+      if (res.isFailure) {
         dao.metricsManager ! IncrementMetric("downloadSnapshotDataFailed")
       }
-      res.nonEmpty
+      res.isSuccess
     }
 
     val downloadRes = grouped.par.map{
@@ -121,10 +127,11 @@ object Download {
     downloadRes.flatten.toList
     dao.metricsManager ! UpdateMetric("downloadFirstPassComplete", "true")
     dao.nodeState = NodeState.DownloadCompleteAwaitingFinalSync
+    dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
 
     // Thread.sleep(10*1000)
 
-    val snapshotInfo2 = snapshotClient.getBlocking[SnapshotInfo]("info", timeoutSeconds = 300)
+    val snapshotInfo2 = snapshotClient.getBlockingBytesKryo[SnapshotInfo]("info", timeoutSeconds = 300)
 
     val snapshotHashes2 = snapshotInfo2.snapshotHashes
       .filterNot(preExistingSnapshots.contains)

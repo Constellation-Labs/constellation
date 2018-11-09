@@ -286,7 +286,8 @@ class Simulation {
            apis: Seq[APIClient],
            addPeerRequests: Seq[PeerMetadata],
            attemptSetExternalIP: Boolean = false,
-           useRegistrationFlow: Boolean = false
+           useRegistrationFlow: Boolean = false,
+           snapshotCount: Int = 2
          )(implicit executionContext: ExecutionContext): Boolean = {
 
     assert(checkHealthy(apis))
@@ -325,7 +326,7 @@ class Simulation {
 
     logger.info("Checkpoint validation passed")
 
-    assert(checkSnapshot(apis))
+    assert(checkSnapshot(apis, num = snapshotCount))
 
     logger.info("Snapshot validation passed")
 

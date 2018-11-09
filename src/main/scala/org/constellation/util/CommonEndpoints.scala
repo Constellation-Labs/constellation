@@ -3,11 +3,11 @@ package org.constellation.util
 import java.util.concurrent.TimeUnit
 
 import akka.http.scaladsl.marshalling.Marshaller._
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{HttpEntity, HttpResponse, MediaTypes, StatusCodes}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.FromEntityUnmarshaller
-import akka.util.Timeout
+import akka.util.{ByteString, Timeout}
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
@@ -51,8 +51,11 @@ trait CommonEndpoints extends Json4sSupport {
     } ~
       path("info") {
         val info = dao.threadSafeTipService.getSnapshotInfo
-
-        complete(info.copy(acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.get}))
+        val res =
+          KryoSerializer.serializeAnyRef(
+            info.copy(acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.get})
+          )
+        complete(res)
       } ~
 /*      path("snapshot" / Segment) {s =>
         complete(dao.dbActor.getSnapshot(s))
@@ -62,14 +65,23 @@ trait CommonEndpoints extends Json4sSupport {
           Future{
             import better.files._
             tryWithMetric({
-              KryoSerializer.deserializeCast[StoredSnapshot](File(dao.snapshotPath, s).byteArray)
+              File(dao.snapshotPath, s).byteArray
             },
               "readSnapshot"
             )
           }(dao.edgeExecutionContext)
         } {
           res =>
-            complete(res.toOption.flatMap{_.toOption})
+            val byteArray = res.toOption.flatMap {_.toOption}.getOrElse(Array[Byte]())
+
+            val body = ByteString(byteArray)
+
+            val entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, body)
+
+            val httpResponse = HttpResponse(entity = entity)
+
+            complete(httpResponse)
+            //complete(bytes)
         }
 
       } ~
