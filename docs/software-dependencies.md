@@ -9,7 +9,7 @@ You'll get a good impression of the used external Scala tools by taking a look a
 
 See
 
-* [/docs/design-choices.md]()https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/design-choices.md)
+* [/docs/design-choices.md](https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/design-choices.md)
 
 #### :book: References
 
