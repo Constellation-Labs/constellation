@@ -18,5 +18,5 @@ https://github.com/Constellation-Labs/constellation/blob/dev/docs/images/archite
 ![
 from /docs/images/architecture-diagrams/protocol-data-flow-sketch.png
 ](
-https://github.com/Constellation-Labs/constellation/blob/developer/nikolaj/add-docs/docs/images/architecture-diagrams/protocol-data-flow-sketch.png
+https://github.com/Constellation-Labs/constellation/blob/dev/docs/images/architecture-diagrams/protocol-data-flow-sketch.png
 )
