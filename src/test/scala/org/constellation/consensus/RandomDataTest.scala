@@ -3,14 +3,13 @@ package org.constellation.consensus
 import java.security.KeyPair
 
 import constellation._
+import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema.{CheckpointBlock, SignedObservationEdge}
 import org.constellation.primitives.{Genesis, Schema}
 import org.scalatest.FlatSpec
 
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
-
-import org.constellation.crypto.KeyUtils._
 
 class RandomDataTest extends FlatSpec {
 

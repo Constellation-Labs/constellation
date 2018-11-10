@@ -22,28 +22,30 @@ trait ServeUI {
     }
   }
 
-  def serveMainPage: Route = complete {
-    logger.debug(s"Serve main page")
+  def serveMainPage: Route = get {
+    path("")  {
+      logger.debug(s"Serve main page")
 
-    val bodyText = ""
+      val bodyText = ""
 
-    val html = s"""<!DOCTYPE html>
-                  |<html lang="en">
-                  |<head>
-                  |    <meta charset="UTF-8">
-                  |    <title>Constellation</title>
-                  |</head>
-                  |<body>
-                  |$bodyText
-                  |<script src="ui-opt.js" type="text/javascript"></script>
-                  |<script type="text/javascript">
-                  |org.constellation.ui.App().main()
-                  |</script>
-                  |</body>
-                  |</html>""".stripMargin.replaceAll("\n", "")
+      val html = s"""<!DOCTYPE html>
+                      |<html lang="en">
+                      |<head>
+                      |    <meta charset="UTF-8">
+                      |    <title>Constellation</title>
+                      |</head>
+                      |<body>
+                      |$bodyText
+                      |<script src="ui-opt.js" type="text/javascript"></script>
+                      |<script type="text/javascript">
+                      |org.constellation.ui.App().main()
+                      |</script>
+                      |</body>
+                      |</html>""".stripMargin.replaceAll("\n", "")
 
-    val entity = HttpEntity(ContentTypes.`text/html(UTF-8)`, html)
-    HttpResponse(entity = entity)
+      val entity = HttpEntity(ContentTypes.`text/html(UTF-8)`, html)
+      complete(entity)
+    }
   }
 
   val faviconRoute: Route = get {

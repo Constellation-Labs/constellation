@@ -4,6 +4,7 @@ import java.net.InetSocketAddress
 import java.security.KeyPair
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.coding.Gzip
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, path, _}
@@ -18,11 +19,11 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.crypto.{KeyUtils, SimpleWalletLike}
-import org.constellation.p2p.{Download, PeerRegistrationRequest}
+import org.constellation.p2p.Download
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, _}
-import org.constellation.util.{APIClient, CommonEndpoints, ServeUI}
+import org.constellation.util.{CommonEndpoints, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
 import scalaj.http.HttpResponse
@@ -45,17 +46,25 @@ case class HostPort(host: String, port: Int)
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
 
 case class ProcessingConfig(
-                             maxWidth: Int = 20,
-                             minCheckpointFormationThreshold: Int = 50,
+                             maxWidth: Int = 10,
+                             minCheckpointFormationThreshold: Int = 100,
                              numFacilitatorPeers: Int = 2,
-                             randomTXPerRound: Int = 5,
+                             randomTXPerRoundPerPeer: Int = 500,
                              metricCheckInterval: Int = 60,
-                             maxMemPoolSize: Int = 1000,
+                             maxMemPoolSize: Int = 2000,
                              minPeerTimeAddedSeconds: Int = 30,
                              maxActiveTipsAllowedInMemory: Int = 1000,
                              maxAcceptedCBHashesInMemory: Int = 5000,
-                             peerHealthCheckInterval : Int = 10,
-                             peerDiscoveryInterval : Int = 30
+                             peerHealthCheckInterval : Int = 30,
+                             peerDiscoveryInterval : Int = 60,
+                             snapshotHeightInterval: Int = 5,
+                             snapshotHeightDelayInterval: Int = 10,
+                             snapshotInterval: Int = 25,
+                             checkpointLRUMaxSize: Int = 2000,
+                             transactionLRUMaxSize: Int = 10000,
+                             addressLRUMaxSize: Int = 10000,
+                             formCheckpointTimeout: Int = 60,
+                             maxFaucetSize: Int = 1000
 ) {
 
 }
@@ -87,10 +96,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
   val getEndpoints: Route =
     extractClientIP { clientIP =>
       get {
-        path("checkpoint" / Segment) { s =>
-          val res = dao.dbActor.getCheckpointCacheData(s).map{_.checkpointBlock}
-          complete(res)
-        } ~
           path("restart") { // TODO: Revisit / fix
             dao.restartNode()
             System.exit(0)
@@ -147,9 +152,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
             } else {
               complete(StatusCodes.NotFound)
             }
-          } ~
-          path("checkpointTips") {
-            complete(dao.confirmedCheckpoints)
           }
       }
     }
@@ -231,7 +233,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         } ~
         path("accept") {
           entity(as[GenesisObservation]) { go =>
-            dao.edgeProcessor ! go
+            dao.acceptGenesis(go, setAsTips = true)
             // TODO: Report errors and add validity check
             complete(StatusCodes.OK)
           }
@@ -310,7 +312,11 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
     }
 
   private val mainRoutes: Route = cors() {
-    getEndpoints ~ postEndpoints ~ jsRequest ~ commonEndpoints ~ serveMainPage
+    decodeRequest {
+      encodeResponse {
+        getEndpoints ~ decodeRequest(postEndpoints) ~ jsRequest ~ commonEndpoints ~ serveMainPage
+      }
+    }
   }
 
   private def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
@@ -322,14 +328,15 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
     }
   }
 
-  val routes = if (authEnabled) {
-    noAuthRoutes ~ authenticateBasic(realm = "secure site",
-      myUserPassAuthenticator) {
-      user =>
-        mainRoutes
+  val routes =
+    if (authEnabled) {
+      noAuthRoutes ~ authenticateBasic(realm = "secure site",
+        myUserPassAuthenticator) {
+        user =>
+          mainRoutes
+      }
+    } else {
+      noAuthRoutes ~ mainRoutes
     }
-  } else {
-    noAuthRoutes ~ mainRoutes
-  }
 
 }

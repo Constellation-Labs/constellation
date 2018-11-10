@@ -2,12 +2,12 @@ package org.constellation.util
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorSystem
-import akka.stream.ActorMaterializer
+import akka.http.scaladsl.coding.Gzip
+import akka.util.ByteString
 import com.typesafe.config.ConfigFactory
 import org.constellation.DAO
-import org.constellation.consensus.{Snapshot, SnapshotInfo}
-import org.constellation.primitives.Schema.{CheckpointBlock, Id, MetricsResult}
+import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.primitives.Schema.{Id, MetricsResult}
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import scalaj.http.{Http, HttpRequest, HttpResponse}
@@ -31,7 +31,6 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
  dao: DAO = null
   ) {
 
-  //implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-client-dispatcher")
   val daoOpt = Option(dao)
 
   val hostName: String = host
@@ -39,6 +38,12 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
 
   val udpPort: Int = 16180
   val apiPort: Int = port
+
+  /***
+    * Basically a magic number, but according to Google & others, this is around the point where gzip'ing pays off.
+    * See: https://webmasters.stackexchange.com/questions/31750/what-is-recommended-minimum-object-size-for-gzip-performance-benefits
+    */
+  private val gzipThreshold = 860
 
   def udpAddress: String = hostName + ":" + udpPort
 
@@ -98,18 +103,34 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
     httpWithAuth(suffix).method("POST").asString
   }
 
+  private def postSyncRequest(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
+    implicit f : Formats = constellation.constellationFormats
+  ): HttpRequest = {
+    val ser = Serialization.write(b)
+    val resp = if (ser.length >= gzipThreshold) {
+      val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
+      httpWithAuth(suffix)
+        .postData(gzipped)
+        .headers("content-type" -> "application/json", "Content-Encoding" -> "gzip")
+    } else {
+      httpWithAuth(suffix)
+        .postData(ser)
+        .headers("content-type" -> "application/json")
+    }
+    resp
+  }
+
+
   def postSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
     implicit f : Formats = constellation.constellationFormats
   ): HttpResponse[String] = {
-    val ser = Serialization.write(b)
-    httpWithAuth(suffix).postData(ser).header("content-type", "application/json").asString
+    postSyncRequest(suffix, b, timeoutSeconds).asString
   }
 
   def putSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
     implicit f : Formats = constellation.constellationFormats
   ): HttpResponse[String] = {
-    val ser = Serialization.write(b)
-    httpWithAuth(suffix).put(ser).header("content-type", "application/json").asString
+    postSyncRequest(suffix, b, timeoutSeconds).method("PUT").asString
   }
 
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
@@ -191,30 +212,14 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
   }
 
 
-  def simpleDownload(): Seq[String] = {
+  def simpleDownload(): Seq[StoredSnapshot] = {
 
-    val snapshotInfo = getSnapshotInfo()
+    val hashes = getBlocking[Seq[String]]("snapshotHashes")
 
-    val startingCBs = snapshotInfo.acceptedCBSinceSnapshot ++ snapshotInfo.snapshot.checkpointBlocks
-
-    def getSnapshots(hash: String, blocks: Seq[String] = Seq()): Seq[String] = {
-      val sn = getBlocking[Option[Snapshot]]("snapshot/" + hash)
-      sn match {
-        case Some(snapshot) =>
-          if (snapshot.lastSnapshot == "" || snapshot.lastSnapshot == Snapshot.snapshotZeroHash) {
-            blocks ++ snapshot.checkpointBlocks
-          } else {
-            getSnapshots(snapshot.lastSnapshot, blocks ++ snapshot.checkpointBlocks)
-          }
-        case None =>
-          println("MISSING SNAPSHOT")
-          blocks
-      }
+    hashes.map{ h =>
+      getBlocking[Option[StoredSnapshot]]("storedSnapshot/" + h).get
     }
 
-    val snapshotBlocks = getSnapshots(snapshotInfo.snapshot.lastSnapshot) ++ startingCBs
-    val snapshotBlocksDistinct = snapshotBlocks.distinct
-    snapshotBlocksDistinct
   }
 
 }

@@ -16,6 +16,15 @@ otherwise, make a new credentials json file by creating a new service account ke
 
 
 ### SSH USER
+
+MAKE SURE YOU HAVE EXECUTED
+
+ssh-add ~/.ssh/id_rsa
+
+Otherwise you will break the cluster!
+
+Terraform requires agent forwarding to pick up the keys, it will break the machines due to overwhelming sshd slots
+
 By default, the terraform command will ask for the ssh user to use. If you'd prefer to avoid answering this every time, you can set the TF_VAR_ssh_user env variable.
 ```export TF_VAR_ssh_user=${USER}``` is probably what you want.
 

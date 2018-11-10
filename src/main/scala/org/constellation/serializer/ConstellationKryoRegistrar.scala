@@ -16,6 +16,8 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
   def registerClasses(kryo: Kryo): Unit = {
 
     kryo.register(classOf[StoredSnapshot])
+    kryo.register(classOf[Height])
+    kryo.register(classOf[CommonMetadata])
     kryo.register(classOf[Seq[CheckpointBlock]])
     kryo.register(classOf[Address])
     kryo.register(classOf[CheckpointEdge])

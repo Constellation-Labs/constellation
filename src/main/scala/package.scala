@@ -11,8 +11,8 @@ import akka.util.Timeout
 import better.files.File
 import com.google.common.hash.Hashing
 import org.constellation.DAO
+import org.constellation.crypto.KeyUtils.{bytesToPrivateKey, bytesToPublicKey, _}
 import org.constellation.crypto.{Base58, KeyUtils}
-import org.constellation.crypto.KeyUtils.{bytesToPrivateKey, bytesToPublicKey}
 import org.constellation.primitives.IncrementMetric
 import org.constellation.primitives.Schema._
 import org.constellation.util.{EncodedPublicKey, POWExt, POWSignHelp}
@@ -25,7 +25,6 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.reflect.ClassTag
 import scala.util.{Failure, Random, Success, Try}
-import KeyUtils._
 
 package object constellation extends POWExt
   with POWSignHelp {
@@ -271,11 +270,12 @@ package object constellation extends POWExt
 
 object TimeoutScheduler{
 
-  import org.jboss.netty.util.{HashedWheelTimer, TimerTask, Timeout}
-  import java.util.concurrent.TimeUnit
-  import scala.concurrent.duration.Duration
+  import java.util.concurrent.{TimeUnit, TimeoutException}
+
+  import org.jboss.netty.util.{HashedWheelTimer, Timeout, TimerTask}
+
   import scala.concurrent.Promise
-  import java.util.concurrent.TimeoutException
+  import scala.concurrent.duration.Duration
 
   val timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
   def scheduleTimeout(promise:Promise[_], after:Duration) = {

@@ -7,6 +7,7 @@ trait Datastore {
   def delete(key: String): Boolean
   def getSnapshot(key: String) : Option[consensus.Snapshot]
   def putSnapshot(key: String, snapshot: consensus.Snapshot): Unit
+
   def putCheckpointCacheData(key: String, c: CheckpointCacheData): Unit
   def updateCheckpointCacheData(key: String,
                                 f: CheckpointCacheData => CheckpointCacheData,

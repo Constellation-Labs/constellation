@@ -1,23 +1,22 @@
 package org.constellation.p2p
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.coding.Gzip
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
-import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
-import org.constellation.{DAO, HostPort}
+import org.constellation.DAO
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
-import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, HandleCheckpoint, SignatureRequest, handleTransaction}
+import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest, handleTransaction}
 import org.constellation.consensus.{Consensus, EdgeProcessor}
-import org.constellation.p2p.PeerAPI.EdgeResponse
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
@@ -26,7 +25,6 @@ import org.json4s.native
 import org.json4s.native.Serialization
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Random, Success}
 
 case class PeerAuthSignRequest(salt: Long)
 case class PeerRegistrationRequest(host: String, port: Int, key: String) {
@@ -49,7 +47,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 
   implicit val serialization: Serialization.type = native.Serialization
 
-  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("peer-api-dispatcher")
+  implicit val executionContext: ExecutionContext = dao.edgeExecutionContext // system.dispatchers.lookup("peer-api-dispatcher")
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
@@ -69,7 +67,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
       extractClientIP { clientIP =>
         path("ip") {
           complete(clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)})
-        } ~
+        } /*~
         path("edge" / Segment) { soeHash =>
           val cacheOpt = dao.dbActor.getSignedObservationEdgeCache(soeHash)
 
@@ -81,7 +79,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
           val resWithCBOpt = EdgeResponse(cacheOpt, cbOpt)
 
           complete(resWithCBOpt)
-        }
+        }*/
       }
     }
   }
@@ -132,6 +130,28 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 
   private val postEndpoints =
     post {
+      path("faucet") {
+        entity(as[SendToAddress]) { sendRequest =>
+          // TODO: Add limiting
+          if (sendRequest.amountActual < (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor)) {
+            logger.info(s"Faucet approved to $sendRequest")
+
+            val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amountActual, dao.keyPair,
+              normalized = false
+            )
+
+            logger.info(s"Faucet request tx hash: ${tx.hash}")
+            dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
+            dao.metricsManager ! IncrementMetric("faucetRequest")
+
+            complete(Some(tx.hash))
+          } else {
+            logger.info(s"Invalid faucet request $sendRequest")
+            dao.metricsManager ! IncrementMetric("faucetInvalidRequest")
+            complete(None)
+          }
+        }
+      } ~
       path ("deregister") {
         extractClientIP { clientIP =>
           entity(as[PeerUnregister]) { request =>
@@ -179,7 +199,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
               onComplete(
                 futureTryWithTimeoutMetric(
                   EdgeProcessor.handleSignatureRequest(sr), "peerAPIHandleSignatureRequest"
-                )(dao.edgeExecutionContext, dao)
+                )(dao.signatureExecutionContext, dao)
               ) {
                 result => // ^ Errors captured above
                   val knownHost = dao.peerInfo.exists(_._2.client.hostName == ip)
@@ -208,10 +228,18 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
               dao.metricsManager ! IncrementMetric("peerApiRXFinishedCheckpoint")
               onComplete(
                 futureTryWithTimeoutMetric(
-                  if (fc.checkpointBlock.simpleValidation()) {
-                    dao.threadSafeTipService.accept(fc.checkpointBlock)
-                  } else Future.successful(), "peerAPIFinishedCheckpointRX"
-                )(dao.edgeExecutionContext, dao)
+                  if (dao.nodeState == NodeState.DownloadCompleteAwaitingFinalSync) {
+                    dao.threadSafeTipService.syncBufferAccept(fc.checkpointCacheData)
+                    Future.successful()
+                  } else if (dao.nodeState == NodeState.Ready) {
+                    if (fc.checkpointCacheData.checkpointBlock.exists {
+                      _.simpleValidation()
+                    }) {
+                      dao.threadSafeTipService.accept(fc.checkpointCacheData)
+                    } else Future.successful()
+                  } else Future.successful()
+                  , "peerAPIFinishedCheckpointRX"
+                )(dao.finishedExecutionContext, dao)
               ) {
                 result => // ^ Errors captured above
                   val maybeResponse = result.toOption.flatMap {
@@ -247,32 +275,19 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
             complete(StatusCodes.OK)
         }
       }
-    } ~
-    path("checkpoint" / Segment) { s => // Deprecated
-      put {
-        entity(as[CheckpointBlock]) {
-          cb =>
-            val ret = if (dao.nodeState == NodeState.Ready) {
-              dao.edgeProcessor ? HandleCheckpoint(cb)
-            } else None
-            complete(StatusCodes.OK)
-        }
-      } ~
-      get {
-        val res = dao.dbActor.getCheckpointCacheData(s).map{_.checkpointBlock}
-        complete(res)
-      } ~ complete (StatusCodes.BadRequest)
     }
   }
 
-  val routes: Route = {
-   // rejectBannedIP {
-      signEndpoints ~ commonEndpoints ~  // { //enforceKnownIP
+  val routes: Route = decodeRequest {
+    encodeResponse {
+      // rejectBannedIP {
+      signEndpoints ~ commonEndpoints ~ // { //enforceKnownIP
         getEndpoints ~ postEndpoints ~ mixedEndpoints
-    //  }
-   // } // ~
-    //  faviconRoute ~ jsRequest ~ serveMainPage // <-- Temporary for debugging, control routes disabled.
+      //  }
+      // } // ~
+      //  faviconRoute ~ jsRequest ~ serveMainPage // <-- Temporary for debugging, control routes disabled.
 
+    }
   }
 
 }

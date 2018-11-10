@@ -1,10 +1,10 @@
 package org.constellation.datastore.leveldb
+import better.files._
 import com.typesafe.scalalogging.Logger
+import org.constellation.DAO
 import org.constellation.datastore.KVDB
 import org.constellation.primitives.IncrementMetric
 import org.constellation.serializer.KryoSerializer
-import org.constellation.DAO
-import better.files._
 
 import scala.util.Try
 
@@ -28,13 +28,11 @@ class LevelDBImpl(dao: DAO) extends KVDB {
   }
 
   override def get[T <: AnyRef](key: String): Option[T] = {
-    dao.numDBGets += 1
     db.getBytes(key)
       .map(bytes => KryoSerializer.deserialize(bytes).asInstanceOf[T])
   }
 
   override def update[T <: AnyRef](key: String, updateF: T => T, empty: T): T = {
-    dao.numDBUpdates += 1
     val o = get[T](key)
       .map(updateF)
       .getOrElse(empty)
@@ -50,12 +48,10 @@ class LevelDBImpl(dao: DAO) extends KVDB {
 
   override def delete(key: String): Boolean =
     if (db.contains(key)) {
-      dao.numDBDeletes += 1
       db.delete(key).isSuccess
     } else true
 
   private def getUnsafe[T <: AnyRef](key: String): Option[AnyRef] = {
-    dao.numDBGets += 1
     db.getBytes(key).map(bytes => KryoSerializer.deserialize(bytes))
   }
 }

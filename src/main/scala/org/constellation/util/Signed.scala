@@ -5,9 +5,9 @@ import java.security.{KeyPair, PrivateKey, PublicKey}
 import cats.kernel.Monoid
 import constellation._
 import org.constellation.crypto.Base58
+import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema._
-import org.constellation.crypto.KeyUtils._
 
 object POW extends POWExt
 

@@ -6,9 +6,9 @@ import java.security.{KeyPair, PublicKey}
 import constellation.pubKeyToAddress
 import org.constellation.DAO
 import org.constellation.consensus.Consensus.RemoteMessage
-import org.constellation.consensus.{MemPool, TipData}
 import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
+import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.util._
 
 import scala.collection.concurrent.TrieMap
@@ -36,6 +36,12 @@ object Schema {
   object NodeState extends Enumeration {
     type NodeState = Value
     val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, Ready = Value
+  }
+
+  val processCheckpointStates = Seq(NodeState.DownloadCompleteAwaitingFinalSync, NodeState.Ready)
+
+  def processCheckpoints()(implicit dao: DAO): Boolean = {
+    processCheckpointStates.contains(dao.nodeState)
   }
 
   sealed trait ValidationStatus
@@ -205,11 +211,12 @@ object Schema {
 
   case class Transaction(edge: Edge[Address, Address, TransactionEdgeData]) {
 
-    def store(dbActor: Datastore, cache: TransactionCacheData): Unit = {
-      edge.storeTransactionCacheData(dbActor, {originalCache: TransactionCacheData => cache.plus(originalCache)}, cache)
+    def store(cache: TransactionCacheData)(implicit dao: DAO): Unit = {
+      //edge.storeTransactionCacheData({originalCache: TransactionCacheData => cache.plus(originalCache)}, cache)
+      dao.transactionService.put(this.hash, cache)
     }
 
-    def ledgerApplyMemPool(dbActor: Datastore): Unit = {
+    /*def ledgerApplyMemPool(dbActor: Datastore): Unit = {
       dbActor.updateAddressCacheData(
         src.hash,
         { a: AddressCacheData => a.copy(memPoolBalance = a.memPoolBalance - amount)},
@@ -220,28 +227,28 @@ object Schema {
         { a: AddressCacheData => a.copy(memPoolBalance = a.memPoolBalance + amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
-    }
+    }*/
 
-    def ledgerApply(dbActor: Datastore): Unit = {
-      dbActor.updateAddressCacheData(
+    def ledgerApply()(implicit dao: DAO): Unit = {
+      dao.addressService.update(
         src.hash,
         { a: AddressCacheData => a.copy(balance = a.balance - amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
-      dbActor.updateAddressCacheData(
+      dao.addressService.update(
         dst.hash,
         { a: AddressCacheData => a.copy(balance = a.balance + amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
     }
 
-    def ledgerApplySnapshot(dbActor: Datastore): Unit = {
-      dbActor.updateAddressCacheData(
+    def ledgerApplySnapshot()(implicit dao: DAO): Unit = {
+      dao.addressService.update(
         src.hash,
         { a: AddressCacheData => a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
       )
-      dbActor.updateAddressCacheData(
+      dao.addressService.update(
         dst.hash,
         { a: AddressCacheData => a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + amount)},
         AddressCacheData(0L, 0L) // unused since this address should already exist here
@@ -379,20 +386,25 @@ object Schema {
     }
   }
 
+  case class Height(min: Long, max: Long)
+
+  case class CommonMetadata(
+                             valid: Boolean = true,
+                             inDAG: Boolean = false,
+                             resolved: Boolean = true,
+                             resolutionInProgress: Boolean = false,
+                             inMemPool: Boolean = false,
+                             lastResolveAttempt: Option[Long] = None,
+                             rxTime: Long = System.currentTimeMillis(), // TODO: Unify common metadata like this
+                           )
+
   case class CheckpointCacheData(
-                                  checkpointBlock: CheckpointBlock, // this is the primary tip hash of current state
-                                  inDAG: Boolean = false,
-                                  resolved: Boolean = false,
-                                  resolutionInProgress: Boolean = false,
-                                  inMemPool: Boolean = false,
-                                  lastResolveAttempt: Option[Long] = None,
-                                  rxTime: Long = System.currentTimeMillis(), // TODO: Unify common metadata like this
+                                  checkpointBlock: Option[CheckpointBlock] = None,
+                                  metadata: CommonMetadata = CommonMetadata(),
                                   children: Set[String] = Set(),
-                                  forkChildren: Set[String] = Set(),
-                                  forkTipHashes: Set[String] = Set(),
-                                  maxHeight: Option[Long] = None,
-                                  minHeight: Option[Long] = None
+                                  height: Option[Height] = None
                                 ) {
+/*
 
     def plus(previous: CheckpointCacheData): CheckpointCacheData = {
       this.copy(
@@ -400,6 +412,7 @@ object Schema {
         rxTime = previous.rxTime
       )
     }
+*/
 
   }
 
@@ -409,6 +422,49 @@ object Schema {
                               transactions: Seq[Transaction],
                               checkpoint: CheckpointEdge
                             ) {
+
+    def calculateHeight()(implicit dao: DAO): Option[Height] = {
+
+      val parents = parentSOEBaseHashes.map {
+        dao.checkpointService.get
+      }
+
+      val maxHeight = if (parents.exists(_.isEmpty)) {
+        None
+      } else {
+
+        val parents2 = parents.map {_.get}
+        val heights = parents2.map {_.height.map{_.max}}
+
+        val nonEmptyHeights = heights.flatten
+        if (nonEmptyHeights.isEmpty) None else {
+          Some(nonEmptyHeights.max + 1)
+        }
+      }
+
+      val minHeight = if (parents.exists(_.isEmpty)) {
+        None
+      } else {
+
+        val parents2 = parents.map {_.get}
+        val heights = parents2.map {_.height.map{_.min}}
+
+        val nonEmptyHeights = heights.flatten
+        if (nonEmptyHeights.isEmpty) None else {
+          Some(nonEmptyHeights.min + 1)
+        }
+      }
+
+      val height = maxHeight.flatMap{ max =>
+        minHeight.map{
+          min =>
+            Height(min, max)
+        }
+      }
+
+      height
+
+    }
 
     def transactionsValid: Boolean = transactions.nonEmpty && transactions.forall(_.valid)
 
@@ -422,7 +478,7 @@ object Schema {
         false
       } else {
 
-        val addressCache = transactions.map {_.src.address}.map { a => a -> dao.dbActor.getAddressCacheData(a) }
+        val addressCache = transactions.map {_.src.address}.map { a => a -> dao.addressService.get(a) }
         val cachesFound = addressCache.forall(_._2.nonEmpty)
         if (!cachesFound) {
           false
@@ -476,13 +532,15 @@ object Schema {
     // TODO: Optimize call, should store this value instead of recalculating every time.
     def soeHash: String = checkpoint.edge.signedObservationEdge.hash
 
-    def store(db: Datastore, cache: CheckpointCacheData, resolved: Boolean): Unit = {
+    def store(cache: CheckpointCacheData)(implicit dao: DAO): Unit = {
       /*
             transactions.foreach { rt =>
               rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))
             }
       */
-      checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
+     // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
+      dao.checkpointService.put(baseHash, cache)
+
     }
 
     def plus(keyPair: KeyPair): CheckpointBlock = {
@@ -522,18 +580,6 @@ object Schema {
       !tips.contains(initialDistribution) && !tips.contains(initialDistribution2)
     }
 
-    def initialMemPool = MemPool(
-      Set(),
-      Map(
-        initialDistribution.baseHash -> initialDistribution,
-        initialDistribution2.baseHash -> initialDistribution2
-      ),
-      Map(
-        initialDistribution.baseHash -> TipData(initialDistribution, 0),
-        initialDistribution2.baseHash -> TipData(initialDistribution2, 0)
-      )
-    )
-
   }
 
 
@@ -541,9 +587,6 @@ object Schema {
   // case class UnresolvedEdge(edge: )
 
   // TODO: Change options to ResolvedBundleMetaData
-
-
-  case class CellKey(hashPointer: String, depth: Int, height: Int)
 
 
   // TODO: Move other messages here.

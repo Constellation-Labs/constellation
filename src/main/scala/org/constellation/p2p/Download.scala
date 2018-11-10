@@ -7,12 +7,14 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
+import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.serializer.KryoSerializer
+import org.constellation.util.APIClient
 
 import scala.concurrent.ExecutionContext
-import scala.util.{Failure, Try}
 
 /// New download code
 object Download {
@@ -20,26 +22,7 @@ object Download {
   val logger = Logger(s"Download")
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-  def downloadCBFromHash(hash: String, singlePeer: PeerData)(implicit dao: DAO, ec: ExecutionContext): Unit = {
-    if (dao.dbActor.getCheckpointCacheData(hash).isEmpty) {
-      singlePeer.client.getBlocking[Option[CheckpointBlock]]("checkpoint/" + hash) match {
-        case Some(cb) =>
-          if (cb != dao.genesisObservation.get.initialDistribution &&
-            cb != dao.genesisObservation.get.initialDistribution2) {
-            //if (dao.dbActor.getCheckpointCacheData(cb.baseHash).isEmpty) {
-              EdgeProcessor.acceptCheckpoint(cb)
-              dao.metricsManager ! IncrementMetric("downloadedBlocks")
-            //} else {
-             // dao.metricsManager ! IncrementMetric("downloadedBlockButHashAlreadyExistsInDB")
-            //}
-          }
-        case None =>
-          dao.metricsManager ! IncrementMetric("downloadBlockEmptyResponse")
-      }
-    }
-  }
-
-
+// Add warning for empty peers
   def downloadActual()(implicit dao: DAO, ec: ExecutionContext): Unit = {
     logger.info("Download started")
     dao.nodeState = NodeState.DownloadInProgress
@@ -47,6 +30,8 @@ object Download {
 
     val res = (dao.peerManager ? APIBroadcast(_.getBlocking[Option[GenesisObservation]]("genesis")))
       .mapTo[Map[Id, Option[GenesisObservation]]].get()
+
+
 
     // TODO: Error handling and verification
     val genesis = res.filter {
@@ -63,56 +48,118 @@ object Download {
     val snapshotClient = peerData.head._2.client
 
     val snapshotInfo = snapshotClient.getBlocking[SnapshotInfo]("info")
-    // To not download from other nodes currently downloading, fix with NodeStatus metadata
-    // val (id, activeTips) = allTips.filter { case (_, t) => genesis.notGenesisTips(t) }.head
 
-    val startingCBs = snapshotInfo.acceptedCBSinceSnapshot ++ snapshotInfo.snapshot.checkpointBlocks
+    val preExistingSnapshots = dao.snapshotPath.list.toSeq.map{_.name}
 
-    dao.dbActor.putSnapshot(snapshotInfo.snapshot.hash, snapshotInfo.snapshot)
+    val snapshotHashes = snapshotInfo.snapshotHashes.filterNot(preExistingSnapshots.contains)
 
+    dao.metricsManager ! UpdateMetric("downloadExpectedNumSnapshots", snapshotHashes.size.toString)
 
-    def getSnapshots(hash: String, blocks: Seq[String] = Seq()): Seq[String] = {
-      val sn = snapshotClient.getBlocking[Option[Snapshot]]("snapshot/" + hash)
-      sn match {
-        case Some(snapshot) =>
-          dao.dbActor.putSnapshot(hash, snapshot)
-          if (snapshot.lastSnapshot == "") {
-            dao.metricsManager ! IncrementMetric("downloadSnapshotEmptyStr")
-            blocks
-          } else {
-            dao.metricsManager ! IncrementMetric("downloadedSnapshotHashes")
-            getSnapshots(snapshot.lastSnapshot, blocks ++ snapshot.checkpointBlocks)
+    val groupSize = (snapshotHashes.size / peerData.size) + 1
+
+    dao.metricsManager ! UpdateMetric("downloadGroupSize", groupSize.toString)
+
+    val groupedHashes = snapshotHashes.grouped(groupSize).toSeq
+
+    dao.metricsManager ! UpdateMetric("downloadGroupedHashesSize", groupedHashes.size.toString)
+
+    val grouped = groupedHashes.zip(peerData.values)
+    dao.metricsManager ! UpdateMetric("downloadGroupedZipSize", grouped.size.toString)
+
+    dao.metricsManager ! UpdateMetric("downloadGroupCheckSize", grouped.flatMap(_._1).size.toString)
+
+    // TODO: Move elsewhere unify with other code.
+    def acceptSnapshot(r: StoredSnapshot) = {
+      r.checkpointCache.foreach{
+        c =>
+          dao.metricsManager ! IncrementMetric("downloadedBlocks")
+          // Bypasses tip update / accumulating acceptedSinceCB
+
+          // TODO: Rebuild ledger and verify, turning off for debug
+          dao.metricsManager ! IncrementMetric("checkpointAccepted")
+
+          //tryWithMetric(acceptCheckpoint(c), "acceptCheckpoint")
+          c.checkpointBlock.foreach{
+            _.transactions.foreach{
+              tx =>
+           //     tx.ledgerApplySnapshot()
+                  dao.metricsManager ! IncrementMetric("transactionAccepted")
+                // dao.transactionService.delete(Set(tx.hash))
+            }
           }
-        case None =>
-          dao.metricsManager ! IncrementMetric("downloadSnapshotQueryFailed")
-          blocks
+
       }
+      //dao.dbActor.putSnapshot(r.snapshot.hash, r.snapshot)
+      import better.files._
+      File(dao.snapshotPath, r.snapshot.hash).writeByteArray(KryoSerializer.serializeAnyRef(r))
     }
 
-    val snapshotBlocks = getSnapshots(snapshotInfo.snapshot.lastSnapshot) ++ startingCBs
-    val snapshotBlocksDistinct = snapshotBlocks.distinct
-
-    dao.metricsManager ! UpdateMetric("downloadExpectedNumBlocks", snapshotBlocks.size.toString)
-    dao.metricsManager ! UpdateMetric("downloadExpectedNumBlocksDistinct", snapshotBlocksDistinct.size.toString)
-
-    val grouped = snapshotBlocksDistinct.grouped(snapshotBlocksDistinct.size / peerData.size).toSeq.zip(peerData.values)
+    def processSnapshotHash(peer: APIClient, hash: String): Boolean = {
+      val res = peer.getBlocking[Option[StoredSnapshot]]("storedSnapshot/" + hash)
+      res.foreach{
+        r =>
+          dao.metricsManager ! IncrementMetric("downloadedSnapshots")
+          dao.metricsManager ! IncrementMetric("snapshotCount")
+          acceptSnapshot(r)
+      }
+      if (res.isEmpty) {
+        dao.metricsManager ! IncrementMetric("downloadSnapshotDataFailed")
+      }
+      res.nonEmpty
+    }
 
     val downloadRes = grouped.par.map{
       case (hashes, peer) =>
-        hashes.par.map{
-          hash =>
-            downloadCBFromHash(hash, peer)
-            Seq()
+        hashes.par.map{ hash =>
+          processSnapshotHash(peer.client, hash)
         }
     }
 
     downloadRes.flatten.toList
+    dao.metricsManager ! UpdateMetric("downloadFirstPassComplete", "true")
+    dao.nodeState = NodeState.DownloadCompleteAwaitingFinalSync
+
+    // Thread.sleep(10*1000)
+
+    val snapshotInfo2 = snapshotClient.getBlocking[SnapshotInfo]("info")
+
+    val snapshotHashes2 = snapshotInfo2.snapshotHashes
+      .filterNot(preExistingSnapshots.contains)
+      .filterNot(snapshotHashes.contains)
+
+    dao.metricsManager ! UpdateMetric("downloadExpectedNumSnapshotsSecondPass", snapshotHashes2.size.toString)
+
+
+    val groupSize2Original = snapshotHashes2.size / peerData.size
+    val groupSize2 = Math.max(groupSize2Original, 1)
+    val grouped2 = snapshotHashes2.grouped(groupSize2).toSeq.zip(peerData.values)
+
+    val downloadRes2 = grouped2.par.map{
+      case (hashes, peer) =>
+        hashes.par.map{ hash =>
+          processSnapshotHash(peer.client, hash)
+        }
+    }
+
+    downloadRes2.flatten.toList
+    dao.metricsManager ! UpdateMetric("downloadSecondPassComplete", "true")
 
     logger.debug("First pass download finished")
 
-    dao.metricsManager ! UpdateMetric("downloadFirstPassComplete", "true")
+    dao.threadSafeTipService.setSnapshot(snapshotInfo2)
+    dao.generateRandomTX = true
+    dao.nodeState = NodeState.Ready
 
-    dao.edgeProcessor ! DownloadComplete(snapshotInfo.snapshot)
+    dao.threadSafeTipService.syncBuffer.foreach{
+      dao.threadSafeTipService.accept
+    }
+
+    dao.threadSafeTipService.syncBuffer = Seq()
+
+    dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
+    dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, NodeState.Ready)))
+
+
 
   }
 

@@ -51,6 +51,10 @@ object KryoSerializer {
   def deserialize(message: Array[Byte]): AnyRef= {
     kryoPool.fromBytes(message)
   }
+
+  def deserializeCast[T](message: Array[Byte]): T = {
+    kryoPool.fromBytes(message).asInstanceOf[T]
+  }
 /*
   def deserializeT[T : ClassTag](message: Array[Byte]): AnyRef= {
 
