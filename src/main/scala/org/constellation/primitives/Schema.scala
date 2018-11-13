@@ -392,10 +392,11 @@ object Schema {
                              rxTime: Long = System.currentTimeMillis(), // TODO: Unify common metadata like this
                            )
 
+  // TODO: Separate cache with metadata vs what is stored in snapshot.
   case class CheckpointCacheData(
                                   checkpointBlock: Option[CheckpointBlock] = None,
-                                  metadata: CommonMetadata = CommonMetadata(),
-                                  children: Set[String] = Set(),
+                         //         metadata: CommonMetadata = CommonMetadata(),
+                         //         children: Set[String] = Set(),
                                   height: Option[Height] = None
                                 ) {
 /*

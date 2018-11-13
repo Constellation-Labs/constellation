@@ -51,6 +51,14 @@ trait ProductHash extends Product {
 
 }
 
+
+case class SingleHashSignature(hash: String, hashSignature: HashSignature) {
+  def valid: Boolean = hashSignature.valid(hash)
+
+
+}
+
+
 case class HashSignature(signature: String,
                          b58EncodedPublicKey: String) extends Ordered[HashSignature] {
   def publicKey: PublicKey = EncodedPublicKey(b58EncodedPublicKey).toPublicKey
@@ -64,12 +72,6 @@ case class HashSignature(signature: String,
   }
 }
 
-case class SingleHashSignature(hash: String, hashSignature: HashSignature) {
-  def valid: Boolean = hashSignature.valid(hash)
-
-
-}
-
 case class SignatureBatch(
                          hash: String,
                          signatures: Seq[HashSignature]
@@ -78,6 +80,17 @@ case class SignatureBatch(
   def valid: Boolean = {
     signatures.forall(_.valid(hash))
   }
+
+  override def empty: SignatureBatch = SignatureBatch(hash, Seq())
+
+  override def combine(x: SignatureBatch, y: SignatureBatch): SignatureBatch =
+    x.copy(signatures = (x.signatures ++ y.signatures).distinct.sorted)
+
+  def plus(other: KeyPair): SignatureBatch = {
+    plus(hashSign(hash, other))
+  }
+
+
 
   def plus(other: SignatureBatch): SignatureBatch = {
     val toAdd = other.signatures
@@ -95,14 +108,7 @@ case class SignatureBatch(
       signatures = unique
     )
   }
-  def plus(other: KeyPair): SignatureBatch = {
-    plus(hashSign(hash, other))
-  }
 
-  override def empty: SignatureBatch = SignatureBatch(hash, Seq())
-
-  override def combine(x: SignatureBatch, y: SignatureBatch): SignatureBatch =
-    x.copy(signatures = (x.signatures ++ y.signatures).distinct.sorted)
 
 }
 

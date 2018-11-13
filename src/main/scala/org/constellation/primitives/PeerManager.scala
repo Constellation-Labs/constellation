@@ -61,9 +61,7 @@ object PeerManager {
     // TODO: Instead wait until peer discovery phase complete
     Thread.sleep(15*1000)
 
-    dao.peerInfo.map{_._2.client}.foreach{
-      _.post("faucet", SendToAddress(dao.selfAddressStr, 500L))
-    }
+
     Download.download()
 
 

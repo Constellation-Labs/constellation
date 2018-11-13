@@ -29,6 +29,10 @@ object Download {
     dao.nodeState = NodeState.DownloadInProgress
     PeerManager.broadcastNodeState()
 
+    dao.peerInfo.map{_._2.client}.foreach{
+      _.post("faucet", SendToAddress(dao.selfAddressStr, 500L))
+    }
+
     val res = (dao.peerManager ? APIBroadcast(_.getBlocking[Option[GenesisObservation]]("genesis")))
       .mapTo[Map[Id, Option[GenesisObservation]]].get()
 
