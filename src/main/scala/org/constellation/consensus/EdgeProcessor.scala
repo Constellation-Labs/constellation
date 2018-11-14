@@ -8,14 +8,16 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
+import org.constellation.consensus.EdgeProcessor.FinishedCheckpoint
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.{HeartbeatSubscribe, ProductHash}
+import org.constellation.util.{APIClient, HeartbeatSubscribe, ProductHash}
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.util.{Failure, Success, Try}
 
-object SnapshotTrigger {
+object EdgeProcessor {
 
   case class HandleTransaction(tx: Transaction)
   case class HandleCheckpoint(checkpointBlock: CheckpointBlock)
@@ -307,9 +309,10 @@ object SnapshotTrigger {
                     dao.threadSafeTipService.accept(cache)
                     // TODO: Check failures and/or remove constraint of single actor
                     dao.peerInfo.foreach { case (id, client) =>
-                      tryWithMetric(
+                      futureTryWithTimeoutMetric(
                         client.client.postSync(s"finished/checkpoint", FinishedCheckpoint(cache, finalFacilitators)),
-                        "finishedCheckpointBroadcast"
+                        "finishedCheckpointBroadcast",
+                        timeoutSeconds = 20
                       )
                     }
                   }
@@ -345,6 +348,83 @@ object SnapshotTrigger {
     )*/
     // } else None
   }
+
+
+  def simpleResolveCheckpoint(hash: String)(implicit dao: DAO): Boolean = {
+
+    var activePeer = dao.peerInfo.values.head.client
+    var remainingPeers : Seq[APIClient] = dao.peerInfo.values.map{_.client}.filterNot(_ == activePeer).toSeq
+
+    var done = false
+
+    while (!done && remainingPeers.nonEmpty) {
+
+      // TODO: Refactor all the error handling on these to include proper status codes etc.
+      // See formCheckpoint for better example of error handling
+      val res = tryWithMetric(
+        {activePeer.getBlocking[Option[CheckpointCacheData]]("checkpoint/" + hash, timeoutSeconds = 10)},
+        "downloadCheckpoint"
+      )
+
+      done = res.toOption.exists(_.nonEmpty)
+
+      if (done) {
+        val x = res.get.get
+        if (!dao.checkpointService.lruCache.contains(x.checkpointBlock.get.baseHash)) {
+          dao.metricsManager ! IncrementMetric("resolveAcceptCBCall")
+          acceptWithResolveAttempt(x)
+        }
+      } else {
+        if (remainingPeers.nonEmpty) {
+          dao.metricsManager ! IncrementMetric("resolvePeerIncrement")
+          activePeer = remainingPeers.head
+          remainingPeers = remainingPeers.filterNot(_ == activePeer)
+        }
+      }
+    }
+    done
+
+  }
+
+  def acceptWithResolveAttempt(checkpointCacheData: CheckpointCacheData)(implicit dao: DAO): Unit = {
+
+    dao.threadSafeTipService.accept(checkpointCacheData)
+    val block = checkpointCacheData.checkpointBlock.get
+    val parents = block.parentSOEBaseHashes
+    val parentExists = parents.map{h => h -> dao.checkpointService.lruCache.contains(h)}
+    if (parentExists.forall(_._2)) {
+      dao.metricsManager ! IncrementMetric("resolveFinishedCheckpointParentsPresent")
+    } else {
+      dao.metricsManager ! IncrementMetric("resolveFinishedCheckpointParentMissing")
+      parentExists.filterNot(_._2).foreach{
+        case (h, _ ) =>
+          futureTryWithTimeoutMetric(
+            simpleResolveCheckpoint(h),
+            "resolveCheckpoint",
+            timeoutSeconds = 30
+          )(dao.edgeExecutionContext, dao)
+      }
+
+    }
+
+  }
+
+  def handleFinishedCheckpoint(fc: FinishedCheckpoint)(implicit dao: DAO): Future[Try[Any]] = {
+    futureTryWithTimeoutMetric(
+      if (dao.nodeState == NodeState.DownloadCompleteAwaitingFinalSync) {
+        dao.threadSafeTipService.syncBufferAccept(fc.checkpointCacheData)
+        Future.successful()
+      } else if (dao.nodeState == NodeState.Ready) {
+        if (fc.checkpointCacheData.checkpointBlock.exists {
+          _.simpleValidation()
+        }) {
+          acceptWithResolveAttempt(fc.checkpointCacheData)
+        } else Future.successful()
+      } else Future.successful()
+      , "handleFinishedCheckpoint"
+    )(dao.finishedExecutionContext, dao)
+  }
+
 
 }
 
@@ -409,32 +489,3 @@ object Snapshot {
 }
 
 
-class SnapshotTrigger(dao: DAO)
-                     (implicit timeout: Timeout, executionContext: ExecutionContext) extends Actor with ActorLogging {
-
-  implicit val sys: ActorSystem = context.system
-  implicit val kp: KeyPair = dao.keyPair
-  implicit val _dao: DAO = dao
-
-  dao.heartbeatActor ! HeartbeatSubscribe
-
-  def receive: Receive = active()
-
-  def active(): Receive = {
-
-    case InternalHeartbeat(round) =>
-
-    case go: GenesisObservation =>
-
-      // Dumb way to set these as active tips, won't pass a double validation but no big deal.
-      dao.acceptGenesis(go)
-
-    /*//      @deprecated
-        case ConsensusRoundResult(checkpointBlock, roundHash: RoundHash[Checkpoint]) =>
-          log.debug(s"handle checkpointBlock = $checkpointBlock")
-
-        // handleCheckpoint(checkpointBlock, dao)*/
-
-  }
-
-}

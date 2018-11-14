@@ -7,7 +7,7 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.SnapshotTrigger.acceptCheckpoint
+import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._

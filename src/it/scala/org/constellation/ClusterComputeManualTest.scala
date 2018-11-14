@@ -92,7 +92,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
     // Unused for standard tests, only for custom ones
     val (ignoreIPs, auxAPIs) = ComputeTestUtil.getAuxiliaryNodes()
 
-    val primaryHostsFile = System.getenv().getOrDefault("HOSTS_FILE", "hosts.txt")
+    val primaryHostsFile = System.getenv().getOrDefault("HOSTS_FILE", "hosts-2.txt")
 
     sim.logger.info(s"Using primary hosts file: $primaryHostsFile")
 

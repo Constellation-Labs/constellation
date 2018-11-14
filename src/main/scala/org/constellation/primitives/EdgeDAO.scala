@@ -5,7 +5,7 @@ import java.util.concurrent.{Executors, TimeUnit}
 import akka.util.Timeout
 import better.files.File
 import com.twitter.storehaus.cache.MutableLRUCache
-import org.constellation.consensus.SnapshotTrigger.acceptCheckpoint
+import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.serializer.KryoSerializer
@@ -476,6 +476,8 @@ trait EdgeDAO {
 
   // Temporary to get peer data for tx hash partitioning
   @volatile var peerInfo: Map[Id, PeerData] = Map()
+
+  def readyPeers = peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
 
 
 }

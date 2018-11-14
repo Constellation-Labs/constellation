@@ -14,8 +14,8 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
-import org.constellation.consensus.SnapshotTrigger.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest, handleTransaction}
-import org.constellation.consensus.{Consensus, SnapshotTrigger}
+import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest, handleTransaction}
+import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
@@ -195,7 +195,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
               dao.metricsManager ! IncrementMetric("peerApiRXSignatureRequest")
               onComplete(
                 futureTryWithTimeoutMetric(
-                  SnapshotTrigger.handleSignatureRequest(sr), "peerAPIHandleSignatureRequest"
+                  EdgeProcessor.handleSignatureRequest(sr), "peerAPIHandleSignatureRequest"
                 )(dao.signatureExecutionContext, dao)
               ) {
                 result => // ^ Errors captured above
@@ -224,19 +224,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
               // TODO: Validation / etc.
               dao.metricsManager ! IncrementMetric("peerApiRXFinishedCheckpoint")
               onComplete(
-                futureTryWithTimeoutMetric(
-                  if (dao.nodeState == NodeState.DownloadCompleteAwaitingFinalSync) {
-                    dao.threadSafeTipService.syncBufferAccept(fc.checkpointCacheData)
-                    Future.successful()
-                  } else if (dao.nodeState == NodeState.Ready) {
-                    if (fc.checkpointCacheData.checkpointBlock.exists {
-                      _.simpleValidation()
-                    }) {
-                      dao.threadSafeTipService.accept(fc.checkpointCacheData)
-                    } else Future.successful()
-                  } else Future.successful()
-                  , "peerAPIFinishedCheckpointRX"
-                )(dao.finishedExecutionContext, dao)
+                EdgeProcessor.handleFinishedCheckpoint(fc)
               ) {
                 result => // ^ Errors captured above
                   val maybeResponse = result.toOption.flatMap {

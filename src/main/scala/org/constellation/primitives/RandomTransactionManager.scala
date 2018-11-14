@@ -2,7 +2,7 @@ package org.constellation.primitives
 
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.SnapshotTrigger
+import org.constellation.consensus.EdgeProcessor
 import org.constellation.primitives.Schema.{Id, NodeState, SendToAddress}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -60,9 +60,9 @@ object RandomTransactionManager {
           }
         }
 
-        if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold && dao.generateRandomTX) {
+        if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold && dao.generateRandomTX && dao.nodeState == NodeState.Ready) {
           futureTryWithTimeoutMetric(
-            SnapshotTrigger.formCheckpoint(),
+            EdgeProcessor.formCheckpoint(),
             "formCheckpointFromRandomTXManager",
             timeoutSeconds = dao.processingConfig.formCheckpointTimeout
           )(dao.edgeExecutionContext, dao)
