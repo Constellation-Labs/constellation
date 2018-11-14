@@ -17,6 +17,9 @@ class DAO extends NodeData
 
   var confirmWindow : Int = 30
 
+  var transactionAcceptedAfterDownload: Long = 0L
+  var downloadFinishedTime: Long = System.currentTimeMillis()
+
   var preventLocalhostAsPeer: Boolean = true
 
   def idDir = File(s"tmp/${id.medium}")

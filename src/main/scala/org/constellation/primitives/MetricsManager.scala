@@ -62,14 +62,15 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
 
 
      //   logger.info("Metrics: " + metrics)
-        val count = metrics.getOrElse("transactionAccepted", "0").toLong
-        val startTime = metrics.getOrElse("nodeStartTimeMS", "1").toLong
-        val delta = System.currentTimeMillis() - lastCheckTime
+        val countAll = metrics.getOrElse("transactionAccepted", "0").toLong - dao.transactionAcceptedAfterDownload
+        val startTime = dao.downloadFinishedTime // metrics.getOrElse("nodeStartTimeMS", "1").toLong
         val deltaStart = System.currentTimeMillis() - startTime
-        val deltaTX = count - lastTXCount
+        val tpsAll = countAll.toDouble * 1000 / deltaStart
+
+        val delta = System.currentTimeMillis() - lastCheckTime
+        val deltaTX = countAll - lastTXCount
         val tps = deltaTX.toDouble * 1000 / delta
-        val tpsAll = count.toDouble * 1000 / deltaStart
-        lastTXCount = count
+        lastTXCount = countAll
         lastCheckTime = System.currentTimeMillis()
         context become active(
           metrics + (

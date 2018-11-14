@@ -104,21 +104,38 @@ object Download {
     }
 
     def processSnapshotHash(peer: APIClient, hash: String): Boolean = {
-      val res = Try{peer.getBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash, timeoutSeconds = 100)}
-      res match {
-        case Failure(e) => e.printStackTrace()
-        case _ =>
+
+      var activePeer = peer
+      var remainingPeers : Seq[APIClient] = peerData.values.map{_.client}.filterNot(_ == activePeer).toSeq
+
+      var done = false
+
+      while (!done && remainingPeers.nonEmpty) {
+
+        val res = Try{activePeer.getBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash, timeoutSeconds = 100)}
+        res match {
+          case Failure(e) => e.printStackTrace()
+          case _ =>
+        }
+        res.toOption.foreach{
+          r =>
+            dao.metricsManager ! IncrementMetric("downloadedSnapshots")
+            dao.metricsManager ! IncrementMetric("snapshotCount")
+            acceptSnapshot(r)
+        }
+        if (res.isFailure) {
+          dao.metricsManager ! IncrementMetric("downloadSnapshotDataFailed")
+        }
+        done = res.isSuccess
+
+        if (!done && remainingPeers.nonEmpty) {
+          activePeer = remainingPeers.head
+          remainingPeers = remainingPeers.filterNot(_ == activePeer)
+        }
+
       }
-      res.toOption.foreach{
-        r =>
-          dao.metricsManager ! IncrementMetric("downloadedSnapshots")
-          dao.metricsManager ! IncrementMetric("snapshotCount")
-          acceptSnapshot(r)
-      }
-      if (res.isFailure) {
-        dao.metricsManager ! IncrementMetric("downloadSnapshotDataFailed")
-      }
-      res.isSuccess
+
+      done
     }
 
     val downloadRes = grouped.par.map{
@@ -169,12 +186,12 @@ object Download {
       if (!snapshotInfo2.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo2.snapshotCache.contains(h)) {
         dao.metricsManager ! IncrementMetric("syncBufferCBAccepted")
         dao.threadSafeTipService.accept(h)
-/*        dao.metricsManager ! IncrementMetric("checkpointAccepted")
-        dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
-        h.checkpointBlock.get.transactions.foreach {
-          _ =>
-            dao.metricsManager ! IncrementMetric("transactionAccepted")
-        }*/
+        /*        dao.metricsManager ! IncrementMetric("checkpointAccepted")
+                dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
+                h.checkpointBlock.get.transactions.foreach {
+                  _ =>
+                    dao.metricsManager ! IncrementMetric("transactionAccepted")
+                }*/
       }
     }
 
@@ -182,7 +199,9 @@ object Download {
 
     dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
     dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, NodeState.Ready)))
-
+    dao.downloadFinishedTime = System.currentTimeMillis()
+    dao.transactionAcceptedAfterDownload = (dao.metricsManager ? GetMetrics)
+      .mapTo[Map[String, String]].get().get("transactionAccepted").map{_.toLong}.getOrElse(0L)
 
 
   }

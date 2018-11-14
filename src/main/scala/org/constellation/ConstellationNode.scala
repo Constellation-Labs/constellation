@@ -284,7 +284,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   metricsManager ! UpdateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
   metricsManager ! UpdateMetric("nodeStartDate", new DateTime(System.currentTimeMillis()).toString)
   dao.metricsManager ! UpdateMetric("externalHost", dao.externalHostString)
-  dao.metricsManager ! UpdateMetric("version", "1.0.7")
+  dao.metricsManager ! UpdateMetric("version", "1.0.8")
 
   if (attemptDownload) {
     seedPeers.foreach{
