@@ -59,7 +59,7 @@ case class ProcessingConfig(
                              snapshotHeightInterval: Int = 5,
                              snapshotHeightDelayInterval: Int = 15,
                              snapshotInterval: Int = 25,
-                             checkpointLRUMaxSize: Int = 2000,
+                             checkpointLRUMaxSize: Int = 4000,
                              transactionLRUMaxSize: Int = 10000,
                              addressLRUMaxSize: Int = 10000,
                              formCheckpointTimeout: Int = 60,

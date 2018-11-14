@@ -297,58 +297,71 @@ class ThreadSafeTipService() {
   // TODO: Synchronize only on values modified by this, same for other functions
   def accept(checkpointCacheData: CheckpointCacheData)(implicit dao: DAO): Unit = this.synchronized {
 
-    tryWithMetric(acceptCheckpoint(checkpointCacheData), "acceptCheckpoint")
+    if (dao.checkpointService.lruCache.contains(checkpointCacheData.checkpointBlock.map {
+      _.baseHash
+    }.getOrElse(""))) {
 
-    def reuseTips: Boolean = thresholdMetCheckpoints.size < dao.maxWidth
+      dao.metricsManager ! IncrementMetric("checkpointAcceptBlockAlreadyStored")
 
-    checkpointCacheData.checkpointBlock.foreach { checkpointBlock =>
+    } else {
 
-      val keysToRemove = checkpointBlock.parentSOEBaseHashes.flatMap {
-        h =>
-          thresholdMetCheckpoints.get(h).flatMap {
-            case TipData(block, numUses) =>
+      tryWithMetric(acceptCheckpoint(checkpointCacheData), "acceptCheckpoint")
 
-              def doRemove(): Option[String] = {
-                dao.metricsManager ! IncrementMetric("checkpointTipsRemoved")
-                Some(block.baseHash)
-              }
+      def reuseTips: Boolean = thresholdMetCheckpoints.size < dao.maxWidth
 
-              if (reuseTips) {
-                if (numUses >= 2) {
-                  doRemove()
-                } else {
-                  None
+      checkpointCacheData.checkpointBlock.foreach { checkpointBlock =>
+
+        val keysToRemove = checkpointBlock.parentSOEBaseHashes.flatMap {
+          h =>
+            thresholdMetCheckpoints.get(h).flatMap {
+              case TipData(block, numUses) =>
+
+                def doRemove(): Option[String] = {
+                  dao.metricsManager ! IncrementMetric("checkpointTipsRemoved")
+                  Some(block.baseHash)
                 }
-              } else {
-                doRemove()
-              }
-          }
+
+                if (reuseTips) {
+                  if (numUses >= 2) {
+                    doRemove()
+                  } else {
+                    None
+                  }
+                } else {
+                  doRemove()
+                }
+            }
+        }
+
+        val keysToUpdate = checkpointBlock.parentSOEBaseHashes.flatMap {
+          h =>
+            thresholdMetCheckpoints.get(h).flatMap {
+              case TipData(block, numUses) =>
+
+                def doUpdate(): Option[(String, TipData)] = {
+                  dao.metricsManager ! IncrementMetric("checkpointTipsIncremented")
+                  Some(block.baseHash -> TipData(block, numUses + 1))
+                }
+
+                if (reuseTips && numUses <= 2) {
+                  doUpdate()
+                } else None
+            }
+        }.toMap
+
+        thresholdMetCheckpoints = thresholdMetCheckpoints +
+          (checkpointBlock.baseHash -> TipData(checkpointBlock, 0)) ++
+          keysToUpdate --
+          keysToRemove
+
+        if (acceptedCBSinceSnapshot.contains(checkpointBlock.baseHash)) {
+          dao.metricsManager ! IncrementMetric("checkpointAcceptedButAlreadyInAcceptedCBSinceSnapshot")
+        } else {
+          acceptedCBSinceSnapshot = acceptedCBSinceSnapshot :+ checkpointBlock.baseHash
+          dao.metricsManager ! UpdateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
+        }
+
       }
-
-      val keysToUpdate = checkpointBlock.parentSOEBaseHashes.flatMap {
-        h =>
-          thresholdMetCheckpoints.get(h).flatMap {
-            case TipData(block, numUses) =>
-
-              def doUpdate(): Option[(String, TipData)] = {
-                dao.metricsManager ! IncrementMetric("checkpointTipsIncremented")
-                Some(block.baseHash -> TipData(block, numUses + 1))
-              }
-
-              if (reuseTips && numUses <= 2) {
-                doUpdate()
-              } else None
-          }
-      }.toMap
-
-      thresholdMetCheckpoints = thresholdMetCheckpoints +
-        (checkpointBlock.baseHash -> TipData(checkpointBlock, 0)) ++
-        keysToUpdate --
-        keysToRemove
-
-      acceptedCBSinceSnapshot = acceptedCBSinceSnapshot :+ checkpointBlock.baseHash
-      dao.metricsManager ! UpdateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
-
     }
   }
 
