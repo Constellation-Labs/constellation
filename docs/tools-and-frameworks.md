@@ -1,17 +1,15 @@
 ### Tools and frameworks to work with the Constellation protocol
-#### Options
 
+(todo: plaintext explainations of what we use and short note on alternatives):
 
-#### Core team
-
-(todo: plaintext explainations of what we use):
-
-* [wikipedia/Docker_(software)](https://en.wikipedia.org/wiki/Docker_(software))
-* [wikipedia/Vagrant_(software)](https://en.wikipedia.org/wiki/Vagrant_(software))
+* [wikipedia/Docker](https://en.wikipedia.org/wiki/Docker_(software))
+* [wikipedia/Vagrant](https://en.wikipedia.org/wiki/Vagrant_(software))
+* [wikipedia/Google_Cloud_Platform](https://en.wikipedia.org/wiki/Google_Cloud_Platform)
+* [wikipedia/Terraform](https://en.wikipedia.org/wiki/Terraform_(software))
 * [circleci.com/docs/](https://circleci.com/docs/)
+* ...
 
-(tbd)
+#### Discussion
+See
 
-For a discussion, see:
-
-* [/docs/design-choices.md](https://github.com/Constellation-Labs/constellation/docs/design-choices.md)
+* [/docs/design-choices.md](https://github.com/Constellation-Labs/constellation/blob/dev/docs/design-choices.md)
