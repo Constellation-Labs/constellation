@@ -100,7 +100,5 @@ root
         	UtilityTest.scala
 └── ui
 ```
-	 
-(todo: add remaining files)
-	 
+
 (todo: add explainers to all folders and to the most critical files)
