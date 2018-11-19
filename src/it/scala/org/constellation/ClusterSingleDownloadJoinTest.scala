@@ -3,15 +3,15 @@ package org.constellation
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
-import org.constellation.crypto.KeyUtils.makeKeyPair
-import org.constellation.primitives.Schema.NodeState
+import better.files._
+import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
+import org.constellation.crypto.KeyUtils
 import org.constellation.util.{APIClient, Simulation}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.concurrent.ExecutionContextExecutor
 
 
-// TODO: Refactor and automate more
 class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
   override def afterAll {
@@ -21,76 +21,47 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-  private val kp = makeKeyPair()
+  // For fixing some old bug, revisit later if necessary
+  KeyUtils.makeKeyPair()
 
   "Cluster integration" should "ping a cluster, check health, go through genesis flow" in {
 
-
-    import better.files._
-
-    val ips = file"hosts.txt".lines.toSeq.map{_.split(":").head} // ++ file"hosts2.txt".lines.toSeq
-
-    println(ips)
-
-    val ips2 = file"hosts2.txt".lines.toSeq
-
-
-    val apis = ips.map{ ip =>
-      new APIClient(ip, 9000)
-    }
-
-    val peerAPIs = ips.map{ip =>
-      new APIClient(ip, 9001)
-    }
-
-
-    val apis2 = ips2.map{ ip =>
-      new APIClient(ip, 9000)
-    }
-
-    val peerAPIs2 = ips2.map{ip =>
-      new APIClient(ip, 9001)
-    }
-
     val sim = new Simulation()
 
-    sim.setIdLocal(apis)
-    sim.setIdLocal(apis2)
+    // Unused for standard tests, only for custom ones
+    val (ignoreIPs, auxAPIs) = ComputeTestUtil.getAuxiliaryNodes()
 
-    assert(sim.checkHealthy(apis2))
+    val primaryHostsFile = System.getenv().getOrDefault("HOSTS_FILE", "hosts-3.txt")
+
+    sim.logger.info(s"Using primary hosts file: $primaryHostsFile")
+
+    val ips = file"$primaryHostsFile".lines.toSeq.filterNot(ignoreIPs.contains)
+
+    sim.logger.info(ips.toString)
+
+    val apis = ips.map{ ip =>
+      val split = ip.split(":")
+      val portOffset = if (split.length == 1) 8999 else split(1).toInt
+      val a = new APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
+      sim.logger.info(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
+      a
+    } // ++ auxAPIs
+
+    sim.logger.info("Num APIs " + apis.size)
 
 
-    apis.foreach { a =>
-      apis2.foreach { a2 =>
-        println(a.postSync("peer/remove", RemovePeerRequest(Some(HostPort(a2.hostName, 9001)))))
-      }
-    }
+    assert(sim.checkHealthy(apis))
 
-    apis2.map{_.postSync(
-      "config/update",
-      ProcessingConfig(maxWidth = 10, minCheckpointFormationThreshold = 10, numFacilitatorPeers = 3)
-    )}
+    sim.setExternalIP(apis)
 
-
-    apis.foreach {
+    apis.foreach{
       a =>
-        sim.addPeer(apis2, PeerMetadata(a.hostName, a.udpPort, 9001, a.id)).foreach{println}
+        println(a.postSync("peer/add", HostPort("104.198.7.226", 9001)))
+        println("starting download on: " + a.hostName)
+        Thread.sleep(20*1000)
+        println(a.postEmpty("download/start"))
+        Thread.sleep(120*1000)
     }
-
-    apis2.foreach{
-      a =>
-        sim.addPeer(apis, PeerMetadata(a.hostName, a.udpPort, 9001, a.id, NodeState.DownloadInProgress)).foreach{println}
-    }
-
-    apis2.foreach{ a2 =>
-      a2.postEmpty("download/start")
-      a2.postEmpty("random")
-    }
-
-
-    Thread.sleep(30*1000)
-
-
 
   }
 
