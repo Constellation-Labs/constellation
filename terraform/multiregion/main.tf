@@ -101,7 +101,3 @@ module "instance_g" {
 output "cluster_tag" {
   value = "constellation-${random_id.instance_id.hex}"
 }
-
-output "things" {
-  value = ["${module.instance_a.instance_ips}","${module.instance_b.instance_ips}"]
-}
