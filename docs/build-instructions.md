@@ -2,19 +2,19 @@
 ### :computer: On Linux and Mac
 1. Check out the repository
 
-```haskell
+```bash
 git clone git@github.com:Constellation-Labs/constellation.git
 ```
 
 2. From root directory `constellation`, run 
 
-```haskell
+```bash
 ./build.sh
 ```
 
 or optionally (to connect to other host)
 
-```haskell
+```bash
 ./build.sh seedhost:port
 ```
 
@@ -33,13 +33,13 @@ Note: *For now this installation is not covered here in detail.*
 2. Follow directions for building for development.
 3. Run
 
-```haskell
+```bash
 sbt docker:publishLocal
 ```
 
 4. Run
 
-```haskell
+```bash
 ./run-local-docker.sh
 ```
 
@@ -52,7 +52,7 @@ This is **deprecated** but may be useful for people running Windows, etc.:
 
 1. Download [vagrant](https://www.vagrantup.com).
 2. Run 
-```haskell
+```bash
 vagrant up
 ```
 from project directory. See also

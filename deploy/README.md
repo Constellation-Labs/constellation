@@ -1,18 +1,20 @@
 Ensure
 
+```
+Host * 
+StrictHostKeyChecking no
+```
 
-Host *
-    StrictHostKeyChecking no
+Present in `~/.ssh/config` before running pssh commands.
 
-Present in ~/.ssh/config before running pssh commands
-
-
-Using GCP Compute instances temporarily instead of Kubernetes due to low entropy bug
+We're using GCP Compute instances temporarily instead of Kubernetes due to low entropy bug.
 
 Workflow:
 
-create-cluster-from-snapshot.sh <num-machines> <node-label> for bringing up machines
+`create-cluster-from-snapshot.sh <num-machines> <node-label>`
 
-update-hosts.sh <hosts-file> <node-label>
+for bringing up machines
 
-redeploy.sh <hosts-file> <node-label>
+`update-hosts.sh <hosts-file> <node-label>`
+
+`redeploy.sh <hosts-file> <node-label>`

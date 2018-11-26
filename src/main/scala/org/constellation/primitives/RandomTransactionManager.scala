@@ -20,7 +20,15 @@ object RandomTransactionManager {
 
         val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
         dao.metricsManager ! UpdateMetric("transactionMemPoolSize", memPoolCount.toString)
-        if (memPoolCount < dao.processingConfig.maxMemPoolSize && dao.generateRandomTX && dao.nodeState == NodeState.Ready) {
+        if (
+          memPoolCount < dao.processingConfig.maxMemPoolSize &&
+            dao.generateRandomTX &&
+            dao.nodeState == NodeState.Ready &&
+          dao.addressService.get(dao.selfAddressStr).exists(
+            _.balanceByLatestSnapshot >= 100*Schema.NormalizationFactor
+          )
+
+        ) {
 
           val peerQuery = dao.peerInfo.toSeq //(dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
           val peerIds = peerQuery.filter { case (_, pd) =>

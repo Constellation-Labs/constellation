@@ -9,6 +9,7 @@ import org.constellation.DAO
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
+import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.util._
 
 import scala.collection.concurrent.TrieMap
@@ -36,6 +37,12 @@ object Schema {
   object NodeState extends Enumeration {
     type NodeState = Value
     val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, Ready = Value
+  }
+
+  val processCheckpointStates = Seq(NodeState.DownloadCompleteAwaitingFinalSync, NodeState.Ready)
+
+  def processCheckpoints()(implicit dao: DAO): Boolean = {
+    processCheckpointStates.contains(dao.nodeState)
   }
 
   sealed trait ValidationStatus
