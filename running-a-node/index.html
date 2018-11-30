@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>Running a node - Constellation Documentation</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Running a node";
+    var mkdocs_page_input_path = "running-a-node.md";
+    var mkdocs_page_url = null;
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js" defer></script>
+  <script src="../js/modernizr-2.8.3.min.js" defer></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href=".." class="icon icon-home"> Constellation Documentation</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+	  
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="..">Introduction</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../architecture/">Architecture</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../design-choices/">Design choices</a>
+	    </li>
+          
+            <li class="toctree-l1 current">
+		
+    <a class="current" href="./">Running a node</a>
+    <ul class="subnav">
+            
+    <li class="toctree-l2"><a href="#running-a-node">Running a node</a></li>
+    
+        <ul>
+        
+            <li><a class="toctree-l3" href="#download-release">Download release</a></li>
+        
+            <li><a class="toctree-l3" href="#node-requirements">Node Requirements</a></li>
+        
+            <li><a class="toctree-l3" href="#ip-configuration">IP Configuration</a></li>
+        
+            <li><a class="toctree-l3" href="#terraform-optional">Terraform (Optional!)</a></li>
+        
+        </ul>
+    
+
+    </ul>
+	    </li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="..">Constellation Documentation</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="..">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Running a node</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <h1 id="running-a-node">Running a node</h1>
+<p>Constellation nodes are currently released as JAR file. These can be run on any system supporting java 8 or higher.</p>
+<h2 id="download-release">Download release</h2>
+<p>Releases are currently distributed as Java JAR files. <a href="https://github.com/Constellation-Labs/constellation/releases">Download the latest from github.</a></p>
+<h2 id="node-requirements">Node Requirements</h2>
+<p>To run a constellation node, you'll need a machine with java 8 or higher installed.
+While we expect that running on Windows will work, we have only internally tested on MacOS and Linux.</p>
+<h3 id="instance-specs">Instance specs:</h3>
+<p>We haven't spent much time optimizing for resource usage, so these specs are higher than we anticipate at mainnet.
+Currently, for testnet, we recommend:
+CPU: 2-core minimum.
+Memory: 3GB or higher
+Disk: 200GB available for nodes intended to run indefinitely.</p>
+<h3 id="node-configuration">Node Configuration</h3>
+<h2 id="ip-configuration">IP Configuration</h2>
+<p>Nodes can be configured in two ways. Some options are available through the cmdline, and more extensive options are available by supplying a configuration file. There is a default configuration file (https://github.com/Constellation-Labs/constellation/blob/dev/src/main/resources/reference.conf), but the options in it can be overriden by providing an additional conf file. The format is HOCON from Lightbend Config (https://github.com/lightbend/config) but is essentially a superset of YAML &amp; JSON.</p>
+<h3 id="open-ports">Open Ports</h3>
+<p>A constellation node has two API's: A control API meant for the node operator to make changes to node operation, and a data (or peer) API, used by nodes to communicate with each other.</p>
+<p>By default, the control API uses port 9000, and the peer API uses port 9001. These can be overridden in the node configuration, but whatever they are set to, these ports must be open and exposed to the public internet.</p>
+<h3 id="running-a-node-at-home">Running a node at home</h3>
+<p>While running a from your home internet is possible, it's not a supported or recommended setup. It can be difficult to properly expose ports on your computer to the public internet, because home networking equipment like modems and routers often have firewalls blocking these ports, and often home networks do not have a stable ip address. For now, our official recommendation is to use a cloud provider.</p>
+<h3 id="cloud-providers">Cloud providers</h3>
+<p>Any cloud provider should work fine. While we do all our testing on GCP (Google Cloud Provider), we are not using any proprietary features. If you can launch a machine, install java 8 or higher, assign an external IP, and open the ports for the control API and peer API, you shouldn't have any problems.</p>
+<h2 id="terraform-optional">Terraform (Optional!)</h2>
+<p>At Constellation Labs we use terraform to quickly launch and destroy clusters for testing. Our terraform configurations are checked in to the repository in the terraform directory, so they are available as a guide if you'd like to use it yourself. They automate some nice but optional things like running the node as a service. They are currently setup for GCP, and they have a few constellation-specific hardcoded variables (backend storage location, project name). That said -- if you're familiar with terraform, they should be straightforward to adapt for your uses. While we are not officially supporting this right now, we can provide some support on discord for this method.</p>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="../design-choices/" class="btn btn-neutral" title="Design choices"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href="../design-choices/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js" defer></script>
+      <script src="../search/main.js" defer></script>
+
+</body>
+</html>
