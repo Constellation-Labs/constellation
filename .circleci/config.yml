@@ -1,6 +1,0 @@
-# Configuration for CircleCI
-# https://circleci.com/gh/Constellation-Labs/constellation
- general:
-  branches:
-    ignore:
-      - gh-pages
