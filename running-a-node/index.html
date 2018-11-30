@@ -19,7 +19,7 @@
     // Current page data
     var mkdocs_page_name = "Running a node";
     var mkdocs_page_input_path = "running-a-node.md";
-    var mkdocs_page_url = null;
+    var mkdocs_page_url = "/constellation/running-a-node/";
   </script>
   
   <script src="../js/jquery-2.1.1.min.js" defer></script>
@@ -76,9 +76,13 @@
         
             <li><a class="toctree-l3" href="#node-requirements">Node Requirements</a></li>
         
-            <li><a class="toctree-l3" href="#ip-configuration">IP Configuration</a></li>
+            <li><a class="toctree-l3" href="#connecting-to-an-existing-network">Connecting To An Existing Network</a></li>
         
-            <li><a class="toctree-l3" href="#terraform-optional">Terraform (Optional!)</a></li>
+            <li><a class="toctree-l3" href="#node-configuration">Node Configuration</a></li>
+        
+            <li><a class="toctree-l3" href="#where-to-run">Where to Run</a></li>
+        
+            <li><a class="toctree-l3" href="#additional-tools">Additional Tools</a></li>
         
         </ul>
     
@@ -111,6 +115,9 @@
     <li>Running a node</li>
     <li class="wy-breadcrumbs-aside">
       
+        <a href="https://github.com/Constellation-Labs/constellation/edit/dev/docs-gh-pages/running-a-node.md"
+          class="icon icon-github"> Edit on GitHub</a>
+      
     </li>
   </ul>
   <hr/>
@@ -126,22 +133,32 @@
 <p>To run a constellation node, you'll need a machine with java 8 or higher installed.
 While we expect that running on Windows will work, we have only internally tested on MacOS and Linux.</p>
 <h3 id="instance-specs">Instance specs:</h3>
-<p>We haven't spent much time optimizing for resource usage, so these specs are higher than we anticipate at mainnet.
-Currently, for testnet, we recommend:
-CPU: 2-core minimum.
-Memory: 3GB or higher
-Disk: 200GB available for nodes intended to run indefinitely.</p>
-<h3 id="node-configuration">Node Configuration</h3>
-<h2 id="ip-configuration">IP Configuration</h2>
-<p>Nodes can be configured in two ways. Some options are available through the cmdline, and more extensive options are available by supplying a configuration file. There is a default configuration file (https://github.com/Constellation-Labs/constellation/blob/dev/src/main/resources/reference.conf), but the options in it can be overriden by providing an additional conf file. The format is HOCON from Lightbend Config (https://github.com/lightbend/config) but is essentially a superset of YAML &amp; JSON.</p>
-<h3 id="open-ports">Open Ports</h3>
+<p>We haven't spent much time optimizing for resource usage, so these specs are higher than we anticipate at mainnet.</p>
+<p>Currently, for testnet, we recommend:</p>
+<ul>
+<li>CPU: 2-core minimum.</li>
+<li>Memory: 3GB or higher</li>
+<li>Disk: 200GB available.</li>
+</ul>
+<h2 id="connecting-to-an-existing-network">Connecting To An Existing Network</h2>
+<p>The most important configuration to connect to our testnet is providing a seed node to connect to. The easiest way to do this right now is to set it with an environment variable (example ip only, don't use):</p>
+<p><code>export DAG_SEED_PEER=123.456.123.456:9001</code></p>
+<p>We are not currently running any publicly joinable network -- please get in touch on Telegram or Discord if you'd like to connect a node to our testnet network.</p>
+<h2 id="node-configuration">Node Configuration</h2>
+<p>Nodes can be configured in two ways. Some options are available through the cmdline, and more extensive options are available by supplying a configuration file. There is a <a href="https://github.com/Constellation-Labs/constellation/blob/dev/src/main/resources/reference.conf">default configuration file</a>, but the options in it can be overriden by providing an additional conf file. The format is HOCON from <a href="https://github.com/lightbend/config">Lightbend Config</a> but is essentially a superset of YAML &amp; JSON. We intend to document available configuration options in more depth soon.</p>
+<h3 id="port-configuration">Port Configuration</h3>
 <p>A constellation node has two API's: A control API meant for the node operator to make changes to node operation, and a data (or peer) API, used by nodes to communicate with each other.</p>
 <p>By default, the control API uses port 9000, and the peer API uses port 9001. These can be overridden in the node configuration, but whatever they are set to, these ports must be open and exposed to the public internet.</p>
-<h3 id="running-a-node-at-home">Running a node at home</h3>
-<p>While running a from your home internet is possible, it's not a supported or recommended setup. It can be difficult to properly expose ports on your computer to the public internet, because home networking equipment like modems and routers often have firewalls blocking these ports, and often home networks do not have a stable ip address. For now, our official recommendation is to use a cloud provider.</p>
+<h2 id="where-to-run">Where to Run</h2>
+<p>As a team we have the most expertise with <a href="https://cloud.google.com/">Google Cloud</a>, and it is our recommended platform for those without one already, but any cloud provider will work.</p>
 <h3 id="cloud-providers">Cloud providers</h3>
 <p>Any cloud provider should work fine. While we do all our testing on GCP (Google Cloud Provider), we are not using any proprietary features. If you can launch a machine, install java 8 or higher, assign an external IP, and open the ports for the control API and peer API, you shouldn't have any problems.</p>
-<h2 id="terraform-optional">Terraform (Optional!)</h2>
+<h3 id="running-a-node-at-home">Running a node at home</h3>
+<p>While running a from your home internet is possible, it's not a supported or recommended setup. It can be difficult to properly expose ports on your computer to the public internet, because home networking equipment like modems and routers often have firewalls blocking these ports, and often home networks do not have a stable ip address. For now, our official recommendation is to use a cloud provider.</p>
+<h2 id="additional-tools">Additional Tools</h2>
+<h3 id="docker">Docker</h3>
+<p>We intend to have official docker images soon -- stay tuned.</p>
+<h3 id="terraform-optional">Terraform (Optional!)</h3>
 <p>At Constellation Labs we use terraform to quickly launch and destroy clusters for testing. Our terraform configurations are checked in to the repository in the terraform directory, so they are available as a guide if you'd like to use it yourself. They automate some nice but optional things like running the node as a service. They are currently setup for GCP, and they have a few constellation-specific hardcoded variables (backend storage location, project name). That said -- if you're familiar with terraform, they should be straightforward to adapt for your uses. While we are not officially supporting this right now, we can provide some support on discord for this method.</p>
               
             </div>
@@ -175,6 +192,8 @@ Disk: 200GB available for nodes intended to run indefinitely.</p>
 
   <div class="rst-versions" role="note" style="cursor: pointer">
     <span class="rst-current-version" data-toggle="rst-current-version">
+      
+          <a href="https://github.com/Constellation-Labs/constellation/" class="fa fa-github" style="float: left; color: #fcfcfc"> GitHub</a>
       
       
         <span><a href="../design-choices/" style="color: #fcfcfc;">&laquo; Previous</a></span>
