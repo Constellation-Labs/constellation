@@ -2,6 +2,9 @@
 Install [MkDocs](https://www.mkdocs.org/).
 Available through homebrew, pip, etc.
 
+## Configuration
+[mkdocs.yml](mkdocs.yml) is where mkdocs specific configuration happens. See the [MkDocs config documentation](https://www.mkdocs.org/user-guide/configuration/) for more information on what is possible.
+
 ## Development
 ```mkdocs serve``` from the constellation root directory wil start a development server that auto-builds and serves the docs at http://localhost:8000. This is very useful for testing out changes.
 
