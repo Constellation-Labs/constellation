@@ -31,23 +31,34 @@ object ConstellationNode {
 import scala.concurrent.ExecutionContext
 
   def main(args: Array[String]): Unit = {
-    val logger = Logger(s"Main")
+    val logger = Logger("ConstellationNode")
     logger.info("Main init")
 
-    Try {
+    logger.info("Config load")
+    val config = ConfigFactory.load()
 
+    Try {
 
       implicit val system: ActorSystem = ActorSystem("Constellation")
       implicit val materializer: ActorMaterializer = ActorMaterializer()
       implicit val executionContext: ExecutionContext = system.dispatchers.lookup("main-dispatcher")
 
-      logger.info("Config load")
-      val config = ConfigFactory.load()
-
       val rpcTimeout = config.getInt("rpc.timeout")
 
 
-      val seeds = Seq()
+      // TODO: Add scopt to support cmdline args.
+      val seeds: Seq[HostPort] =
+        if (config.hasPath("seedPeers")) {
+        import scala.collection.JavaConverters._
+        val peersList = config.getStringList("seedPeers")
+        peersList
+          .asScala
+          .map(_.split(":"))
+          .map(arr => HostPort(arr(0), arr(1).toInt))
+      } else Seq()
+
+      logger.info(s"Seeds: $seeds")
+
       val requestExternalAddressCheck = false
       /*
           val seeds = args.headOption.map(_.split(",").map{constellation.addressToSocket}.toSeq).getOrElse(Seq())

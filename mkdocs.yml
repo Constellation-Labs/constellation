@@ -1,0 +1,6 @@
+site_name: Constellation Documentation
+site_url: https://constellation-labs.github.io/constellation
+docs_dir: docs-gh-pages
+theme: readthedocs
+edit_uri: edit/dev/docs-gh-pages
+repo_url: https://github.com/Constellation-Labs/constellation/
