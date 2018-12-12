@@ -2,29 +2,50 @@ package org.constellation.consensus
 
 import java.security.KeyPair
 
+import akka.actor.{ActorSystem, Props}
+import akka.testkit.TestKit
 import constellation._
+import org.constellation.{DAO, Fixtures}
 import org.constellation.crypto.KeyUtils._
-import org.constellation.primitives.Schema.{CheckpointBlock, SignedObservationEdge}
-import org.constellation.primitives.{Genesis, Schema}
-import org.scalatest.FlatSpec
+import org.constellation.primitives.Schema._
+import org.constellation.primitives.{Genesis, MetricsManager, Schema}
+import org.constellation.util.{EncodedPublicKey, Heartbeat}
+import org.scalamock.scalatest.MockFactory
+import org.scalatest._
 
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
 
-class RandomDataTest extends FlatSpec {
+object RandomData {
+  val keyPairs: Seq[KeyPair] = Seq.fill(10)(makeKeyPair())
 
-
-  private val keyPairs = Seq.fill(10)(makeKeyPair())
-
-  private val go = Genesis.createGenesisAndInitialDistributionDirect(
+  val go: GenesisObservation = Genesis.createGenesisAndInitialDistributionDirect(
     keyPairs.head.address.address,
-    keyPairs.tail.map{_.getPublic.toId}.toSet,
+    keyPairs.tail.map {
+      _.getPublic.toId
+    }.toSet,
     keyPairs.head
   )
 
-  private val startingTips = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
+  val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
 
-  def randomTransaction: Schema.Transaction = {
+  def randomBlock(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): Schema.CheckpointBlock = {
+    val txs = Seq.fill(5)(randomTransaction)
+    EdgeProcessor.createCheckpointBlock(txs, tips)(startingKeyPair)
+  }
+
+  def randomBlockWithDuplicatedTransaction(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): CheckpointBlock = {
+    val txs = Seq.fill(5)(randomTransaction)
+    val txsWithDuplication = txs :+ txs.head
+    EdgeProcessor.createCheckpointBlock(txsWithDuplication, tips)(startingKeyPair)
+  }
+
+  def randomBlockWithInvalidTransactions(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): CheckpointBlock = {
+    val txs = Seq.fill(5)(randomTransaction) :+ randomInvalidTransaction
+    EdgeProcessor.createCheckpointBlock(txs, tips)(startingKeyPair)
+  }
+
+  def randomTransaction: Transaction = {
     val src = Random.shuffle(keyPairs).head
     createTransaction(
       src.address.address,
@@ -34,18 +55,39 @@ class RandomDataTest extends FlatSpec {
     )
   }
 
-  def randomBlock(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): Schema.CheckpointBlock = {
-    val txs = Seq.fill(5)(randomTransaction)
-    EdgeProcessor.createCheckpointBlock(txs, tips)(startingKeyPair)
+  def randomInvalidTransaction: Transaction = {
+    val src = Random.shuffle(keyPairs).head
+    createTransaction(
+      src.address.address,
+      Random.shuffle(keyPairs).head.address.address,
+      -100,
+      src
+    )
   }
+
+  def fillAddressCache(cb: CheckpointBlock, delta: Long)(implicit dao: DAO): Unit = {
+    cb.transactions
+      .map(t => t.src.address -> t.amount)
+      .groupBy(_._1).mapValues(_.map(_._2).sum)
+      .foreach { transaction =>
+        dao.addressService.put(transaction._1, AddressCacheData(transaction._2 + delta, 0))
+      }
+  }
+
+  def getMetricsManagerRef(implicit system: ActorSystem, dao: DAO) = system.actorOf(Props(new MetricsManager()), "MetricsManager")
+}
+
+class RandomDataTest extends FlatSpec {
+
+  import RandomData._
 
   "Signatures combiners" should "be unique" in {
 
     val cb = randomBlock(startingTips, keyPairs.head)
     val cb2SameSignature = randomBlock(startingTips, keyPairs.head)
 
-   // val bogus = cb.plus(keyPairs.head).signatures
-  //  bogus.foreach{println}
+    //    val bogus = cb.plus(keyPairs.head).signatures
+    //    bogus.foreach{println}
 
     println(hashSign("asdf", keyPairs.head))
     println(hashSign("asdf", keyPairs.head))
@@ -53,15 +95,12 @@ class RandomDataTest extends FlatSpec {
     println(hashSign("asdf", keyPairs.head))
     println(hashSign("asdf", keyPairs.head))
 
-//    assert(bogus.size == 1)
+    //    assert(bogus.size == 1)
 
     //val cb = randomBlock(startingTips, keyPairs.last)
-
-
   }
 
   "Generate random CBs" should "build a graph" in {
-
 
     var width = 2
     val maxWidth = 50
@@ -91,7 +130,7 @@ class RandomDataTest extends FlatSpec {
       blockNum += 1
       val tips = Random.shuffle(activeBlocks).take(2)
 
-      tips.foreach{ case (tip, numUses) =>
+      tips.foreach { case (tip, numUses) =>
 
         def doRemove(): Unit = activeBlocks.remove(tip)
 
@@ -107,7 +146,9 @@ class RandomDataTest extends FlatSpec {
 
       }
 
-      val block = randomBlock(tips.map{_._1}.toSeq)
+      val block = randomBlock(tips.map {
+        _._1
+      }.toSeq)
       cbIndex(block.soe) = block
       activeBlocks(block.soe) = 0
 
@@ -128,7 +169,7 @@ class RandomDataTest extends FlatSpec {
       go.initialDistribution2.soe.hash -> 2
     )
 
-    val conv = convMap.toMap ++ genIdMap  /*cbIndex.toSeq.zipWithIndex.map{
+    val conv = convMap.toMap ++ genIdMap /*cbIndex.toSeq.zipWithIndex.map{
       case ((soe, cb), id) =>
         soe.hash -> (id + 3)
     }.toMap*/
@@ -145,8 +186,7 @@ class RandomDataTest extends FlatSpec {
     )).json
     println(json)
 
-  //  file"../d3-dag/test/data/dag.json".write(json)
-
+    //  file"../d3-dag/test/data/dag.json".write(json)
 
 
     //createTransaction()
@@ -154,5 +194,65 @@ class RandomDataTest extends FlatSpec {
 
   }
 
+}
 
+class ValidationSpec extends TestKit(ActorSystem("Validation"))
+  with WordSpecLike with Matchers with BeforeAndAfterAll
+  with MockFactory {
+
+  import RandomData._
+
+  implicit val dao: DAO = stub[DAO]
+
+  override def beforeAll(): Unit = {
+    (dao.id _).when().returns(Fixtures.id)
+
+    dao.heartbeatActor = system.actorOf(Props(new Heartbeat()), "Hearthbeat")
+    dao.metricsManager = system.actorOf(Props(new MetricsManager()), "MetricsManager")
+  }
+
+  override def afterAll(): Unit = {
+    TestKit.shutdownActorSystem(system)
+  }
+
+  "Checkpoint block validation" when {
+    "all transactions are valid" should {
+      "pass validation" in {
+        val cb = randomBlock(startingTips, keyPairs.head)
+
+        fillAddressCache(cb, 0L)
+
+        assert(cb.simpleValidation())
+      }
+    }
+
+    "block is malformed" should {
+      "not pass validation" in {
+        val cb = randomBlock(startingTips, keyPairs.head)
+
+        fillAddressCache(cb, -1L)
+
+        assert(!cb.simpleValidation())
+      }
+    }
+
+    "at least one transaction is duplicated" should {
+      "not pass validation" in {
+        val cb = randomBlockWithDuplicatedTransaction(startingTips, keyPairs.head)
+
+        fillAddressCache(cb, 0L)
+
+        assert(!cb.simpleValidation())
+      }
+    }
+
+    "at least one transaction has lower than 0 amount" should {
+      "not pass validation" in {
+        val cb = randomBlockWithInvalidTransactions(startingTips, keyPairs.head)
+
+        fillAddressCache(cb, 0L)
+        assert(!cb.simpleValidation())
+      }
+    }
+  }
 }

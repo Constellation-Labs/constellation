@@ -31,7 +31,6 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
   override def receive: Receive = active(Map("id" -> dao.id.b58))
 
   def active(metrics: Map[String, String]): Receive = {
-
     case GetMetrics => sender() ! metrics
 
     case UpdateMetric(key, value) => context become active(metrics + (key -> value))

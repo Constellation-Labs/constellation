@@ -268,7 +268,8 @@ object Schema {
     def valid: Boolean = validSrcSignature &&
       dst.address.nonEmpty &&
       dst.address.length > 30 &&
-      dst.address.startsWith("DAG")
+      dst.address.startsWith("DAG") &&
+      amount > 0
 
     def validSrcSignature: Boolean = {
       edge.signedObservationEdge.signatureBatch.signatures.exists{ hs =>
@@ -472,6 +473,11 @@ object Schema {
       } else if (!transactionsValid) {
         false
       } else {
+
+        val uniqueCount = transactions.map(_.hash).toSet.size
+        if (uniqueCount != transactions.size) {
+          return false
+        }
 
         val addressCache = transactions.map {_.src.address}.map { a => a -> dao.addressService.get(a) }
         val cachesFound = addressCache.forall(_._2.nonEmpty)
