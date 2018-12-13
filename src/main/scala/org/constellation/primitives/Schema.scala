@@ -232,7 +232,7 @@ object Schema {
       dao.addressService.update(
         dst.hash,
         { a: AddressCacheData => a.copy(balance = a.balance + amount)},
-        AddressCacheData(0L, 0L) // unused since this address should already exist here
+        AddressCacheData(amount, 0L) // unused since this address should already exist here
       )
     }
 
@@ -245,7 +245,7 @@ object Schema {
       dao.addressService.update(
         dst.hash,
         { a: AddressCacheData => a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + amount)},
-        AddressCacheData(0L, 0L) // unused since this address should already exist here
+        AddressCacheData(amount, 0L) // unused since this address should already exist here
       )
     }
 
