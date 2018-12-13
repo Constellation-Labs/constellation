@@ -3,12 +3,13 @@ package org.constellation.consensus
 import java.security.KeyPair
 
 import akka.actor.{ActorSystem, Props}
-import akka.testkit.TestKit
+import akka.stream.ActorMaterializer
+import akka.testkit.{TestKit, TestProbe}
 import constellation._
 import org.constellation.{DAO, Fixtures}
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{Genesis, MetricsManager, Schema}
+import org.constellation.primitives._
 import org.constellation.util.{EncodedPublicKey, Heartbeat}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
@@ -45,6 +46,11 @@ object RandomData {
     EdgeProcessor.createCheckpointBlock(txs, tips)(startingKeyPair)
   }
 
+  def randomBlockWithEmptyTransaction(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): CheckpointBlock = {
+    val txs = Seq.fill(5)(randomTransaction) :+ randomEmptyTransaction
+    EdgeProcessor.createCheckpointBlock(txs, tips)(startingKeyPair)
+  }
+
   def randomTransaction: Transaction = {
     val src = Random.shuffle(keyPairs).head
     createTransaction(
@@ -60,7 +66,17 @@ object RandomData {
     createTransaction(
       src.address.address,
       Random.shuffle(keyPairs).head.address.address,
-      -100,
+      -100L,
+      src
+    )
+  }
+
+  def randomEmptyTransaction: Transaction = {
+    val src = Random.shuffle(keyPairs).head
+    createTransaction(
+      src.address.address,
+      Random.shuffle(keyPairs).head.address.address,
+      0L,
       src
     )
   }
@@ -75,6 +91,8 @@ object RandomData {
   }
 
   def getMetricsManagerRef(implicit system: ActorSystem, dao: DAO) = system.actorOf(Props(new MetricsManager()), "MetricsManager")
+
+  def getAddress(keyPair: KeyPair) = keyPair.address.address
 }
 
 class RandomDataTest extends FlatSpec {
@@ -196,20 +214,24 @@ class RandomDataTest extends FlatSpec {
 
 }
 
-class ValidationSpec extends TestKit(ActorSystem("Validation"))
-  with WordSpecLike with Matchers with BeforeAndAfterAll
-  with MockFactory {
+class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLike with Matchers with BeforeAndAfterEach
+  with BeforeAndAfterAll with MockFactory with OneInstancePerTest {
 
   import RandomData._
 
   implicit val dao: DAO = stub[DAO]
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
 
-  override def beforeAll(): Unit = {
-    (dao.id _).when().returns(Fixtures.id)
+  (dao.id _).when().returns(Fixtures.id)
 
-    dao.heartbeatActor = system.actorOf(Props(new Heartbeat()), "Hearthbeat")
-    dao.metricsManager = system.actorOf(Props(new MetricsManager()), "MetricsManager")
-  }
+  val hbProbe = TestProbe.apply("hearthbeat")
+  dao.heartbeatActor = hbProbe.ref
+
+  val metricsProbe = TestProbe.apply("metricsManager")
+  dao.metricsManager = metricsProbe.ref
+
+  val peerProbe = TestProbe.apply("peerManager")
+  dao.peerManager = peerProbe.ref
 
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
@@ -246,12 +268,78 @@ class ValidationSpec extends TestKit(ActorSystem("Validation"))
       }
     }
 
-    "at least one transaction has lower than 0 amount" should {
+    "at least one transaction has non-positive amount" should {
       "not pass validation" in {
         val cb = randomBlockWithInvalidTransactions(startingTips, keyPairs.head)
 
         fillAddressCache(cb, 0L)
         assert(!cb.simpleValidation())
+      }
+    }
+
+    "at least one transaction has zero amount" should {
+      "pass validation" in {
+        val cb = randomBlockWithEmptyTransaction(startingTips, keyPairs.head)
+
+        fillAddressCache(cb, 0L)
+        assert(cb.simpleValidation())
+      }
+    }
+
+    "checkpoint block is internally inconsistent" should {
+      "not pass validation" in {
+        val kp = Random.shuffle(keyPairs).take(3)
+        val a :: b :: c :: _ = kp
+
+        val txs = Seq(
+          createTransaction(getAddress(a), getAddress(b), 75L, a),
+          createTransaction(getAddress(a), getAddress(c), 75L, a),
+        )
+
+        val cb = EdgeProcessor.createCheckpointBlock(txs, startingTips)(keyPairs.head)
+
+        dao.addressService.put(getAddress(a), AddressCacheData(100L, 0))
+
+        assert(!cb.simpleValidation())
+      }
+    }
+  }
+
+  "two checkpoint blocks has same ancestor" when {
+    "combined relative to the snapshot are invalid" should {
+      "not pass validation" in {
+        val kp = Random.shuffle(keyPairs).take(3)
+        val a :: b :: c :: _ = kp
+
+        def fill(address: String, amount: Long): Unit = {
+          val tx = createTransaction(go.initialDistribution.soe.hash, address, amount, keyPairs.head)
+          tx.ledgerApply()
+          tx.ledgerApplySnapshot()
+        }
+
+        fill(getAddress(a), 100L)
+        fill(getAddress(b), 0L)
+        fill(getAddress(c), 5L)
+
+        println(dao.addressService.get(getAddress(a)))
+        println(dao.addressService.get(getAddress(b)))
+        println(dao.addressService.get(getAddress(c)))
+
+        val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
+        println(tx1.edge.resolvedObservationEdge.data)
+        val cb1 = EdgeProcessor.createCheckpointBlock(Seq(tx1), startingTips)(keyPairs.head)
+
+        val tx2 = createTransaction(getAddress(a), getAddress(c), 75L, a)
+        val cb2 = EdgeProcessor.createCheckpointBlock(Seq(tx2), startingTips)(keyPairs.head)
+
+        val tx3 = createTransaction(getAddress(c), getAddress(b), 5L, c)
+        val cb3 = EdgeProcessor.createCheckpointBlock(Seq(tx3), Seq(cb1.soe, cb2.soe))(keyPairs.head)
+
+        println("Valid 1 = ?", cb1.simpleValidation())
+        println("Valid 2 = ?", cb2.simpleValidation())
+        println("Valid 3 = ?", cb3.simpleValidation())
+
+        // TODO
       }
     }
   }
