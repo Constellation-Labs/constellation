@@ -149,7 +149,7 @@ object Schema {
     val AddressHash,
     CheckpointDataHash, CheckpointHash,
     TransactionDataHash, TransactionHash,
-    ValidationHash, BundleDataHash = Value
+    ValidationHash, BundleDataHash, ChannelMessageHash = Value
   }
 
   case class BundleEdgeData(rank: Double, hashes: Seq[String])
