@@ -269,7 +269,7 @@ object Schema {
       dst.address.nonEmpty &&
       dst.address.length > 30 &&
       dst.address.startsWith("DAG") &&
-      amount >= 0
+      amount > 0
 
     def validSrcSignature: Boolean = {
       edge.signedObservationEdge.signatureBatch.signatures.exists{ hs =>

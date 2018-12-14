@@ -90,9 +90,13 @@ object RandomData {
       }
   }
 
-  def getMetricsManagerRef(implicit system: ActorSystem, dao: DAO) = system.actorOf(Props(new MetricsManager()), "MetricsManager")
+  def getAddress(keyPair: KeyPair): String = keyPair.address.address
 
-  def getAddress(keyPair: KeyPair) = keyPair.address.address
+  def fill(address: String, amount: Long)(implicit dao: DAO): Unit = {
+    val tx = createTransaction(go.initialDistribution.soe.hash, address, amount, keyPairs.head)
+    tx.ledgerApply
+    tx.ledgerApplySnapshot
+  }
 }
 
 class RandomDataTest extends FlatSpec {
@@ -273,16 +277,18 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
         val cb = randomBlockWithInvalidTransactions(startingTips, keyPairs.head)
 
         fillAddressCache(cb, 0L)
+
         assert(!cb.simpleValidation())
       }
     }
 
     "at least one transaction has zero amount" should {
-      "pass validation" in {
+      "not pass validation" in {
         val cb = randomBlockWithEmptyTransaction(startingTips, keyPairs.head)
 
         fillAddressCache(cb, 0L)
-        assert(cb.simpleValidation())
+
+        assert(!cb.simpleValidation())
       }
     }
 
@@ -311,35 +317,18 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
         val kp = Random.shuffle(keyPairs).take(3)
         val a :: b :: c :: _ = kp
 
-        def fill(address: String, amount: Long): Unit = {
-          val tx = createTransaction(go.initialDistribution.soe.hash, address, amount, keyPairs.head)
-          tx.ledgerApply()
-          tx.ledgerApplySnapshot()
-        }
-
         fill(getAddress(a), 100L)
         fill(getAddress(b), 0L)
-        fill(getAddress(c), 5L)
-
-        println(dao.addressService.get(getAddress(a)))
-        println(dao.addressService.get(getAddress(b)))
-        println(dao.addressService.get(getAddress(c)))
 
         val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
-        println(tx1.edge.resolvedObservationEdge.data)
         val cb1 = EdgeProcessor.createCheckpointBlock(Seq(tx1), startingTips)(keyPairs.head)
 
         val tx2 = createTransaction(getAddress(a), getAddress(c), 75L, a)
         val cb2 = EdgeProcessor.createCheckpointBlock(Seq(tx2), startingTips)(keyPairs.head)
 
-        val tx3 = createTransaction(getAddress(c), getAddress(b), 5L, c)
-        val cb3 = EdgeProcessor.createCheckpointBlock(Seq(tx3), Seq(cb1.soe, cb2.soe))(keyPairs.head)
+        if (cb1.simpleValidation()) { cb1.transactions.foreach(_.ledgerApply) }
 
-        println("Valid 1 = ?", cb1.simpleValidation())
-        println("Valid 2 = ?", cb2.simpleValidation())
-        println("Valid 3 = ?", cb3.simpleValidation())
-
-        // TODO
+        assert(!cb2.simpleValidation())
       }
     }
   }
