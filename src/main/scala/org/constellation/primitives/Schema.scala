@@ -198,7 +198,7 @@ object Schema {
     * Collection of references to transaction hashes
     * @param hashes : TX edge hashes
     */
-  case class CheckpointEdgeData(hashes: Seq[String]) extends ProductHash
+  case class CheckpointEdgeData(hashes: Seq[String], messages: Seq[String] = Seq()) extends ProductHash
 
   case class ResolvedObservationEdge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
   (left: L, right: R, data: Option[D] = None)

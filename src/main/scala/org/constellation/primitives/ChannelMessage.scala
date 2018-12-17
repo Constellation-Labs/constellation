@@ -12,6 +12,7 @@ case class ChannelMessageData(
                          channelMerkleRoot: String
                          ) extends ProductHash
 
+// Intended replacement for 'Edge' class since we're not really using parent data right now anyways.
 case class ObservationEdgeWithValues[+D <: ProductHash](
                                        oe: ObservationEdge,
                                        soe: SignedObservationEdge,

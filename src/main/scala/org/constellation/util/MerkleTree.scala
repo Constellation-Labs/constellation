@@ -1,24 +1,29 @@
 package org.constellation.util
 
-import scala.annotation.tailrec
 
 case class MerkleNode(hash: String, leftChild: String, rightChild: String) {
   def children = Seq(leftChild, rightChild)
   def isParentOf(other: String): Boolean = children.contains(other)
+  def valid: Boolean = MerkleTree.merkleHashFunc(leftChild, rightChild) == hash
+}
+
+
+case class MerkleProof(input: String, nodes: Seq[MerkleNode], root: String) {
+
+  def verify(): Boolean = {
+    val childToParent = MerkleTree.childToParent(nodes)
+    val parents = MerkleTree.collectParents(Seq(), childToParent(input), childToParent)
+    parents.last.hash == root && parents.head.isParentOf(input) && parents.forall{_.valid}
+  }
 }
 
 case class MerkleResult(inputs: Seq[String], nodes: Seq[MerkleNode]) {
 
-  def createProof(inputIndex: Int) = {
-
-    val parentMap = nodes.flatMap{ n =>
-      n.children.map{
-        _ => n.hash
-      }
-    }.groupBy()
+  def createProof(inputIndex: Int): MerkleProof = {
     val startingPoint = inputs(inputIndex)
-    val zeroChild = nodes.filter(n => n.isParentOf(startingPoint)).head
-
+    val parentMap = MerkleTree.childToParent(nodes)
+    val firstParent = parentMap(startingPoint)
+    MerkleProof(startingPoint, MerkleTree.collectParents(Seq(), firstParent, parentMap), nodes.last.hash)
   }
 }
 
@@ -27,15 +32,25 @@ import constellation.SHA256Ext
 
 object MerkleTree {
 
+
+  def childToParent(nodes: Seq[MerkleNode]): Map[String, MerkleNode] = nodes.flatMap{ n =>
+    n.children.map{
+      _ -> n
+    }
+  }.toMap
+
   def collectParents(
-                       remainingNodes: Seq[MerkleNode],
-                       children: Seq[MerkleNode],
-                       activeNode: MerkleNode
-                     ) = {
-    if (remainingNodes.isEmpty) {
-      children :+ activeNode
-    } else {
-      val nextChild = remainingNodes.filter(n => n.isParentOf(startingPoint)).head
+                       parents: Seq[MerkleNode],
+                       activeNode: MerkleNode,
+                       childToParent: Map[String, MerkleNode]
+                     ): Seq[MerkleNode] = {
+
+    val newParents = parents :+ activeNode
+    childToParent.get(activeNode.hash) match {
+      case None =>
+        newParents
+      case Some(parent) =>
+        collectParents(newParents, parent, childToParent)
     }
   }
 
@@ -48,10 +63,14 @@ object MerkleTree {
     MerkleResult(hashes, merkleIteration(Seq(), zero))
   }
 
+  def merkleHashFunc(left: String, right: String): String = {
+    (left + right).sha256
+  }
+
   def applyRound(level: Seq[String]): Seq[MerkleNode] = {
     level.grouped(2).toSeq.map{
       case Seq(l, r) =>
-        MerkleNode((l + r).sha256, l, r)
+        MerkleNode(merkleHashFunc(l,r), l, r)
     }
   }
 
