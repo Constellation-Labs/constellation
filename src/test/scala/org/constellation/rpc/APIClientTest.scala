@@ -1,11 +1,15 @@
 package org.constellation.rpc
 
+import java.net.InetSocketAddress
+
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import constellation._
+import io.circe.Decoder
+import io.circe.generic.auto._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.{Id, Peers}
-import org.constellation.util.{APIClient, TestNode}
+import org.constellation.util.{Http4sClient, TestNode}
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
@@ -15,6 +19,9 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   implicit val system: ActorSystem = ActorSystem("BlockChain")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+
+  implicit val decodeInet: Decoder[InetSocketAddress] =
+    Decoder.forProduct2[InetSocketAddress, String, Int]("host", "port")((host, port) => new InetSocketAddress(host, port))
 
   /*
 
@@ -38,7 +45,7 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
     val node2 = TestNode(expectedPeers)
 
-    val rpc = new APIClient(port=node2.httpPort)
+    val rpc = new Http4sClient(port=Some(node2.httpPort))
 
     Thread.sleep(2000)
 
@@ -52,11 +59,15 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   "GET to /id" should "get the current nodes public key id" in {
     val keyPair = KeyUtils.makeKeyPair()
     val appNode = TestNode(Seq(), keyPair)
-    val rpc = new APIClient(port=appNode.httpPort)
+    val rpc = new Http4sClient(port=Some(appNode.httpPort))
 
     val id = rpc.getBlocking[Id]("id")
 
-    assert(Id(keyPair.getPublic.encoded) == id)
+    val rpc3 = new Http4sClient(port = Some(appNode.httpPort))
+
+    val id2 = rpc3.getBlocking[Id]("id")
+    assert(Id(keyPair.getPublic.encoded) == id2)
+    assert(id == id2)
   }
 
   "GET to /balance" should "get the correct current balance for the provided pubKey" in {
@@ -80,12 +91,12 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val node1Path = node1.udpAddressString
     val node2Path = node2.udpAddressString
 
-    val rpc1 = new APIClient(port=node1.httpPort)
-    val rpc2 = new APIClient(port=node2.httpPort)
+    val rpc1 = new Http4sClient(port=Some(node1.httpPort))
+    val rpc2 = new Http4sClient(port=Some(node2.httpPort))
 
-    val addPeerResponse = rpc2.postSync("peer", node1Path)
+    val addPeerResponse = rpc2.postBlocking[String]("peer", body = node1Path)
 
-    assert(addPeerResponse.isSuccess)
+    assert(addPeerResponse == "OK")
 
     // TODO: bug here with lookup of peer, execution context issue, timing?
 

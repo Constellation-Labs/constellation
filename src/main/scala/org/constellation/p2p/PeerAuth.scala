@@ -8,7 +8,7 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
-import org.constellation.util.{APIClient, Signed}
+import org.constellation.util.{Http4sClient, Signed}
 import constellation._
 import org.constellation.Data
 import org.constellation.consensus.Consensus.RemoteMessage
@@ -31,7 +31,7 @@ trait PeerAuth {
   implicit val actorSystem: ActorSystem
 
 
-  def apiBroadcast[T](f: APIClient => T, skipIDs: Seq[Id] = Seq()): Iterable[T]  = {
+  def apiBroadcast[T](f: Http4sClient => T, skipIDs: Seq[Id] = Seq()): Iterable[T]  = {
     signedPeerIDLookup.keys.filterNot{skipIDs.contains}.flatMap{
       i =>
       getOrElseUpdateAPIClient(i).map{

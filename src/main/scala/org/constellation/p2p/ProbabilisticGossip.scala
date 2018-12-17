@@ -2,15 +2,11 @@ package org.constellation.p2p
 
 import java.net.InetSocketAddress
 
-import akka.http.scaladsl.model.StatusCodes
+import constellation._
 import org.constellation.Data
 import org.constellation.primitives.Schema._
-import org.constellation.util.{APIClient, ProductHash}
-import constellation._
-import org.constellation.LevelDB.{DBDelete, DBPut}
 
-import scala.concurrent.Future
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.Random
 
 trait ProbabilisticGossip extends PeerAuth {
 

@@ -248,7 +248,8 @@ class API(
           path("submitTX") {
             parameter('address, 'amount) { (address, amount) =>
               logger.error(s"SubmitTX : $address $amount")
-              handleSendRequest(SendToAddress(address, amount.toLong))
+              val tx = createTransaction(address, amount.toLong, true)
+              complete(tx)
             }
           } ~
           pathPrefix("address") {
@@ -506,16 +507,17 @@ class API(
         }
       } ~
       path("peerHealthCheckV2") {
-        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse[String]]]]
+        val response = (peerManager ? APIBroadcast(_.get[String]("health").unsafeToFuture)).mapTo[Map[Id, Future[String]]]
         val res = response.getOpt().map{
           idMap =>
-            val res = idMap.map{
+            val resp : Seq[Pair] = idMap.map{
               case (id, fut) =>
                 val maybeResponse = fut.getOpt()
              //   println(s"Maybe response $maybeResponse")
-                id -> maybeResponse.exists{_.isSuccess}
+                Pair(id, maybeResponse.exists(_.equalsIgnoreCase("OK")))
             }.toSeq
-            complete(res)
+
+            complete(resp)
         }.getOrElse(complete(StatusCodes.InternalServerError))
         res
       } ~
@@ -622,7 +624,8 @@ class API(
         } ~
         path("sendToAddress") {
           entity(as[SendToAddress]) { s =>
-            handleSendRequest(s)
+            val tx = createTransaction(s.dst, s.amount, s.normalized)
+            complete(tx)
           }
         } ~
         path("tx") {

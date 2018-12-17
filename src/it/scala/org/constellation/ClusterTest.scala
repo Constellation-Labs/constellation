@@ -5,7 +5,7 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import constellation._
-import org.constellation.util.{APIClient, Simulation}
+import org.constellation.util.{Http4sClient, Simulation}
 import org.json4s.JsonAST.JArray
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
@@ -120,7 +120,7 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
     val ips = mappings.map{_.externalIP}
 
     val apis = ips.map{ ip =>
-      new APIClient(ip, 9000)
+      new Http4sClient(ip, Some(9000))
     }
 
     val sim = new Simulation(apis)

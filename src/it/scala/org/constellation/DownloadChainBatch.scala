@@ -6,8 +6,8 @@ import constellation._
 import org.constellation.ClusterDebug.system
 import org.constellation.ClusterTest.getPodMappings
 import org.constellation.primitives.Schema._
-import org.constellation.util.APIClient
-
+import org.constellation.util.Http4sClient
+import io.circe.generic.auto._
 import scala.concurrent.ExecutionContextExecutor
 
 object DownloadChainBatch {
@@ -30,7 +30,7 @@ object DownloadChainBatch {
     val ips = mappings.map{_.externalIP}
 
     val apis = ips.map{ ip =>
-      val r = new APIClient(ip, 9000)
+      val r = new Http4sClient(ip, Some(9000))
       r
     }
 

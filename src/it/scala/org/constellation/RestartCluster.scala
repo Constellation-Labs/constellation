@@ -5,7 +5,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import org.constellation.ClusterTest.getPodMappings
 import org.constellation.crypto.KeyUtils
-import org.constellation.util.APIClient
+import org.constellation.util.Http4sClient
 
 import scala.concurrent.ExecutionContextExecutor
 
@@ -28,7 +28,7 @@ object RestartCluster extends TestKit(ActorSystem("ClusterTest")){
     val ips = mappings.map{_.externalIP}
 
     val rpcs = ips.map{ ip =>
-      val r = new APIClient(ip, 9000)
+      val r = new Http4sClient(ip, Some(9000))
       r
     }
 
@@ -39,17 +39,17 @@ object RestartCluster extends TestKit(ActorSystem("ClusterTest")){
 
 
     rpcs.foreach {
-      _.get("restart")
+      _.get[String]("restart")
     }
     Thread.sleep(5000)
 
     rpcs.foreach {
-      _.get("restart")
+      _.get[String]("restart")
     }
     Thread.sleep(5000)
 
     rpcs.foreach {
-      _.get("restart")
+      _.get[String]("restart")
     }
 
     Thread.sleep(5000)

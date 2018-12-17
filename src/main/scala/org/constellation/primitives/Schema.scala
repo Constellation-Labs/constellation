@@ -5,15 +5,14 @@ import java.net.InetSocketAddress
 import java.security.PublicKey
 
 import akka.actor.ActorRef
-import cats.kernel.Monoid
 import constellation.pubKeyToAddress
-import org.constellation.LevelDB.DBPut
+import io.circe.Decoder
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.Base58
 import org.constellation.util._
 
-import scala.collection.{SortedSet, mutable}
 import scala.collection.concurrent.TrieMap
+import scala.collection.{SortedSet, mutable}
 import scala.util.Random
 
 // This can't be a trait due to serialization issues
@@ -476,6 +475,8 @@ object Schema {
 
   case class Peers(peers: Seq[InetSocketAddress])
 
+  case class Pair(id: Id, flag: Boolean)
+
   case class Id(encodedId: EncodedPublicKey) {
     def short: String = id.toString.slice(15, 20)
     def medium: String = id.toString.slice(15, 25).replaceAll(":", "")
@@ -519,7 +520,7 @@ object Schema {
                             //    mostRecentSignedPeer: Signed[Peer],
                             //    updatedPeer: Peer,
                             //    lastRXTime: Long = System.currentTimeMillis(),
-                            apiClient: APIClient
+                            apiClient: Http4sClient
                           )
 
 
@@ -558,5 +559,6 @@ object Schema {
   case class TransactionSerialized(hash: String, sender: String, receiver: String, amount: Long, signers: Set[String])
   case class Node(address: String, host: String, port: Int)
 
-
+  implicit val decodeInet: Decoder[InetSocketAddress] =
+    Decoder.forProduct2[InetSocketAddress, String, Int]("host", "port")((host, port) => new InetSocketAddress(host, port))
 }

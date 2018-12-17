@@ -17,7 +17,7 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.{PeerAPI, PeerToPeer, RegisterNextActor, UDPActor}
 import org.constellation.primitives.Schema.{AddPeerFromLocal, ToggleHeartbeat}
 import org.constellation.primitives._
-import org.constellation.util.APIClient
+import org.constellation.util.Http4sClient
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.Try
@@ -194,16 +194,16 @@ class ConstellationNode(
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
 
 
-  def getAPIClient(): APIClient = {
-    val api = new APIClient(port=httpPort)
+  def getAPIClient(): Http4sClient = {
+    val api = new Http4sClient(port=Some(httpPort))
     api.id = id
     api.udpPort = udpPort
     api.peerHttpPort = peerHttpPort
     api
   }
 
-  def healthy: Boolean = Try{getAPIClient().getSync("health").isSuccess}.getOrElse(false)
-  def add(other: ConstellationNode) = getAPIClient().postSync("peer", other.udpAddressString)
+  def healthy: Boolean = Try{getAPIClient().getBlocking[String]("health") == "OK"}.getOrElse(false)
+  def add(other: ConstellationNode) = getAPIClient().postBlocking[String]("peer", body = other.udpAddressString)
 
   def shutdown(): Unit = {
     udpActor ! Udp.Unbind

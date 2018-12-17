@@ -1,19 +1,19 @@
 package org.constellation.primitives
 
-import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
+import akka.http.scaladsl.model.ContentTypes._
+import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.server.Directives.complete
 import akka.http.scaladsl.server.StandardRoute
 import akka.util.Timeout
-import constellation.createTransactionSafe
-import org.constellation.LevelDB
-import org.constellation.primitives.Schema._
-import constellation._
+import constellation.{createTransactionSafe, _}
 import org.constellation.LevelDB.{DBGet, DBPut}
+import org.constellation.primitives.Schema._
 
 import scala.collection.concurrent.TrieMap
-import scala.util.{Random, Try}
+import scala.util.Random
 
 trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo {
 
@@ -84,11 +84,6 @@ trait TransactionExt extends NodeData with Ledger with MetricsExt with PeerInfo 
     last100SelfSentTransactions :+= tx
     updateMempool(tx)
     tx
-  }
-
-  def handleSendRequest(s: SendToAddress): StandardRoute = {
-    val tx = createTransaction(s.dst, s.amount, s.normalized)
-    complete(tx.prettyJson)
   }
 
   def acceptTransaction(tx: Transaction): Unit = {

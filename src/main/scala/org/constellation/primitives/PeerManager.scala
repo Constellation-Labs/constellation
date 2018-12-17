@@ -4,17 +4,19 @@ import akka.actor.Actor
 import akka.stream.ActorMaterializer
 import org.constellation.AddPeerRequest
 import org.constellation.primitives.Schema.Id
-import org.constellation.util.APIClient
+import org.constellation.util.Http4sClient
 
 import scala.collection.mutable
+import scala.concurrent.ExecutionContext
 
-case class PeerData(addRequest: AddPeerRequest, client: APIClient)
-case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
+case class PeerData(addRequest: AddPeerRequest, client: Http4sClient)
+case class APIBroadcast[T](func: Http4sClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
 case class PeerHealthCheck(status: Map[Id, Boolean])
 
 case object GetPeerInfo
 
 class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
+  implicit val ec = ExecutionContext.global
 
   override def receive = active(Map.empty)
 
@@ -22,7 +24,7 @@ class PeerManager()(implicit val materialize: ActorMaterializer) extends Actor {
 
     case a @ AddPeerRequest(host, udpPort, port, id) =>
       // println(s"Added peer $a")
-      val client = new APIClient(host, port)
+      val client = new Http4sClient(host, Some(port))
       client.id = id
       context become active(peerInfo + (id -> PeerData(a, client)))
 

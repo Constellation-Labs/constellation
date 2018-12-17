@@ -5,10 +5,9 @@ import java.net.InetSocketAddress
 import akka.actor.{ActorRef, ActorSystem}
 import akka.stream.ActorMaterializer
 import org.constellation.primitives.Schema.{Id, LocalPeerData, Peer, PeerSyncHeartbeat}
-import org.constellation.util.{APIClient, Signed}
+import org.constellation.util.{Http4sClient, Signed}
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
 import scala.concurrent.ExecutionContextExecutor
 
 trait PeerInfo {
@@ -28,12 +27,12 @@ trait PeerInfo {
 
   def getOrElseUpdateAPIClient(id: Id)(
     implicit system: ActorSystem, materialize: ActorMaterializer, executionContext: ExecutionContextExecutor
-  ): Option[APIClient] = {
+  ): Option[Http4sClient] = {
     rawPeerLookup.get(id).map { z => Some(z.apiClient) }.getOrElse {
       signedPeerIDLookup.get(id).map { p =>
         val a = p.data.externalHostString
    //     println("Updating api client send to hostname : " + a)
-        val client = new APIClient(a, p.data.apiAddress.map{_.getPort}.getOrElse(9000))
+        val client = new Http4sClient(a, p.data.apiAddress.map{_.getPort}.orElse(Some(9000)))
         rawPeerLookup(id) = LocalPeerData(client)
         client
 

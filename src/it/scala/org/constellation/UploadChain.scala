@@ -2,14 +2,14 @@ package org.constellation
 
 import akka.stream.ActorMaterializer
 import constellation._
-import org.constellation.RestartCluster.system
 import org.constellation.ClusterTest.getPodMappings
+import org.constellation.RestartCluster.system
 import org.constellation.primitives.Schema.{BundleHashQueryResponse, Metrics}
-import org.constellation.util.{APIClient, Simulation}
+import org.constellation.util.Http4sClient
+import io.circe.generic.auto._
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContextExecutor
-import scala.util.Try
 
 object UploadChain {
 
@@ -51,7 +51,7 @@ object UploadChain {
 
 
     val mappings2 = getPodMappings("constellation-app")
-    val apisProd = mappings2.map { z => new APIClient(z.externalIP, 9000) }
+    val apisProd = mappings2.map { z => new Http4sClient(z.externalIP, Some(9000)) }
 
     val mp = apisProd.map {
       _.getBlocking[Metrics]("metrics").metrics

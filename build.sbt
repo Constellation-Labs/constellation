@@ -10,11 +10,12 @@ lazy val versions = new {
   val akkaHttp = "10.0.10"
   val akkaHttpCors = "0.2.2"
   val spongyCastle = "1.58.0.0"
+  val http4sVersion = "0.20.0-M4"
 }
 
 lazy val commonSettings = Seq(
   version := _version,
-  scalaVersion := "2.12.6",
+  scalaVersion := "2.12.7",
   organization := "org.constellation",
   name := "constellation",
   mainClass := Some("org.constellation.ConstellationNode"),
@@ -59,6 +60,23 @@ lazy val commonSettings = Seq(
 
 )
 
+lazy val typeLevelDepedencies = Seq(
+  "org.typelevel" %% "cats-effect" % "1.0.0"
+) ++ circe
+
+lazy val circe = Seq(
+  "io.circe" %% "circe-core",
+  "io.circe" %% "circe-generic",
+  "io.circe" %% "circe-parser"
+).map(_ % "0.9.3")
+
+lazy val http4sDependencies = Seq(
+  "org.http4s" %% "http4s-dsl",
+  "org.http4s" %% "http4s-blaze-server",
+  "org.http4s" %% "http4s-blaze-client",
+  "org.http4s" %% "http4s-circe"
+).map(_ % versions.http4sVersion) ++ typeLevelDepedencies
+
 lazy val coreDependencies = Seq(
   "com.github.pathikrit" %% "better-files" % "3.5.0",
   "com.roundeights" %% "hasher" % "1.2.0",
@@ -89,7 +107,7 @@ lazy val coreDependencies = Seq(
   "com.h2database" % "h2" % "1.4.197",
   "com.twitter" %% "storehaus-cache" % "0.15.0"
   // "com.esotericsoftware" % "kryo" % "4.0.2"
-)
+) ++ http4sDependencies
 
 //Test dependencies
 lazy val testDependencies = Seq(
