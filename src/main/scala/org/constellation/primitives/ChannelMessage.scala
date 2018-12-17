@@ -9,7 +9,7 @@ import org.constellation.util.ProductHash
 case class ChannelMessageData(
                          message: String,
                          previousMessageTXHash: String,
-                         channelMerkleRoot: String
+                         channelId: String
                          ) extends ProductHash
 
 // Intended replacement for 'Edge' class since we're not really using parent data right now anyways.
@@ -30,7 +30,7 @@ object ChannelMessage {
            )(implicit kp: KeyPair): ChannelMessage = {
 
     val data = ChannelMessageData(message, previous, root)
-    val oe = ObservationEdge(parents.head, parents(1), Some(TypedEdgeHash(data.hash, EdgeHashType.ChannelMessageHash)))
+    val oe = ObservationEdge(parents.head, parents(1), Some(TypedEdgeHash(data.hash, EdgeHashType.ChannelMessageDataHash)))
     val soe = constellation.signedObservationEdge(oe)
     ChannelMessage(ObservationEdgeWithValues(
       oe, soe, data
