@@ -10,6 +10,8 @@ import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
+import cats.data._
+import cats.implicits._
 
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
@@ -414,10 +416,141 @@ object Schema {
 
   case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
 
+  sealed trait CheckpointBlockValidation {
+    def errorMessage: String
+  }
+
+  case class EmptySignatures() extends CheckpointBlockValidation {
+    def errorMessage: String = "CheckpointBlock has no signatures"
+  }
+
+
+  case class InvalidSignature(signature: String) extends CheckpointBlockValidation {
+    def errorMessage: String = s"CheckpointBlock inclused signature=$signature which is invalid"
+  }
+
+  object InvalidSignature {
+    def apply(s: HashSignature) = new InvalidSignature(s.signature)
+  }
+
+
+  case class InvalidTransaction(txHash: String) extends CheckpointBlockValidation {
+    def errorMessage: String = s"CheckpointBlock includes transaction=$txHash which is invalid"
+  }
+
+  object InvalidTransaction {
+    def apply(t: Transaction) = new InvalidTransaction(t.hash)
+  }
+
+
+  case class DuplicatedTransaction(txHash: String) extends CheckpointBlockValidation {
+    def errorMessage: String = s"CheckpointBlock includes duplicated transaction=$txHash"
+  }
+
+  object DuplicatedTransaction {
+    def apply(t: Transaction) = new DuplicatedTransaction(t.hash)
+  }
+
+
+  case class NoAddressCacheFound(txHash: String) extends CheckpointBlockValidation {
+    def errorMessage: String = s"CheckpointBlock includes transaction=$txHash which has no address cache"
+  }
+
+  object NoAddressCacheFound {
+    def apply(t: Transaction) = new NoAddressCacheFound(t.hash)
+  }
+
+
+  case class InsufficientBalance(address: String) extends CheckpointBlockValidation {
+    def errorMessage: String = s"CheckpointBlock includes transaction from address=$address which has insufficient balance"
+  }
+
+  sealed trait CheckpointBlockValidatorNel {
+
+    type ValidationResult[A] = ValidatedNel[CheckpointBlockValidation, A]
+
+    def validateTransactionIntegrity(t: Transaction): ValidationResult[Transaction] =
+      if (t.valid) t.validNel else InvalidTransaction(t).invalidNel
+
+    def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] = {
+      val cache = dao.addressService.get(t.src.address)
+      cache.fold[ValidationResult[Transaction]](NoAddressCacheFound(t).invalidNel)(_ => t.validNel)
+    }
+
+    def validateTransaction(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
+      validateTransactionIntegrity(t)
+        .product(validateSourceAddressCache(t))
+        .map(_ => t)
+
+    def validateTransactions(t: Iterable[Transaction])(implicit dao: DAO): ValidationResult[List[Transaction]] =
+      t.toList.map(validateTransaction(_).map(List(_))).combineAll
+
+    def validateDuplicatedTransactions(t: Iterable[Transaction]): ValidationResult[List[Transaction]] = {
+      val diff = t.toList.diff(t.toSet.toList)
+
+      if (diff.isEmpty) {
+        t.toList.validNel
+      } else {
+        def toError(t: Transaction): ValidationResult[Transaction] = DuplicatedTransaction(t).invalidNel
+
+        diff.map(toError(_).map(List(_))).combineAll
+      }
+    }
+
+    def validateSignatureIntegrity(s: HashSignature, baseHash: String): ValidationResult[HashSignature] =
+      if (s.valid(baseHash)) s.validNel else InvalidSignature(s).invalidNel
+
+    def validateSignature(s: HashSignature, baseHash: String): ValidationResult[HashSignature] =
+      validateSignatureIntegrity(s, baseHash)
+        .map(_ => s)
+
+    def validateSignatures(s: Iterable[HashSignature], baseHash: String): ValidationResult[List[HashSignature]] =
+      s.toList.map(validateSignature(_, baseHash).map(List(_))).combineAll
+
+    def validateEmptySignatures(s: Iterable[HashSignature]): ValidationResult[List[HashSignature]] =
+      if (s.nonEmpty) s.toList.validNel else EmptySignatures().invalidNel
+
+    def validateSourceAddressBalances(
+      t: Iterable[Transaction],
+      balanceAccessFunction: AddressCacheData => Long,
+    )(implicit dao: DAO): ValidationResult[List[Transaction]] = {
+      def lookup(key: String) = dao.addressService
+        .get(key)
+        .map(_.balance)
+        .getOrElse(0L)
+
+      def validateBalance(address: String, t: Iterable[Transaction]): ValidationResult[List[Transaction]] = {
+        val diff = lookup(address) - t.map(_.amount).sum
+
+        if (diff >= 0L) t.toList.validNel else InsufficientBalance(address).invalidNel
+      }
+
+      t.toList
+        .groupBy(_.src.address)
+        .map(a => validateBalance(a._1, a._2))
+        .toList
+        .combineAll
+    }
+
+    def validateCheckpointBlock(
+      cb: CheckpointBlock,
+      balanceAccessFunction: AddressCacheData => Long,
+    )(implicit dao: DAO): ValidationResult[CheckpointBlock] = {
+      validateEmptySignatures(cb.signatures)
+        .product(validateSignatures(cb.signatures, cb.baseHash))
+        .product(validateTransactions(cb.transactions))
+        .product(validateDuplicatedTransactions(cb.transactions))
+        .product(validateSourceAddressBalances(cb.transactions, balanceAccessFunction))
+        .map(_ => cb)
+    }
+  }
+
+  object CheckpointBlockValidatorNel extends CheckpointBlockValidatorNel
+
   case class CheckpointBlock(
-                              transactions: Seq[Transaction],
-                              checkpoint: CheckpointEdge
-                            ) {
+    transactions: Seq[Transaction],
+    checkpoint: CheckpointEdge
+  ) {
 
     def calculateHeight()(implicit dao: DAO): Option[Height] = {
 
@@ -466,46 +599,22 @@ object Schema {
 
     // TODO: Return checkpoint validation status for more info rather than just a boolean
     def simpleValidation(
-                          balanceAccessFunction: AddressCacheData => Long = (a: AddressCacheData) => a.balance
-                        )(implicit dao: DAO): Boolean = {
-      val success = if (!validSignatures || signatures.isEmpty) {
-        false
-      } else if (!transactionsValid) {
-        false
-      } else {
+      balanceAccessFunction: AddressCacheData => Long = (a: AddressCacheData) => a.balance
+    )(implicit dao: DAO): Boolean = {
 
-        val uniqueCount = transactions.map(_.hash).toSet.size
-        if (uniqueCount != transactions.size) {
-          return false
-        }
+      val validation = CheckpointBlockValidatorNel.validateCheckpointBlock(
+        CheckpointBlock(transactions, checkpoint),
+        balanceAccessFunction
+      )
 
-        val addressCache = transactions.map {_.src.address}.map { a => a -> dao.addressService.get(a) }
-        val cachesFound = addressCache.forall(_._2.nonEmpty)
-        if (!cachesFound) {
-          false
-        } else {
-
-          val sumByAddress = transactions
-            .map { t => t.src.address -> t.amount }
-            .groupBy(_._1).mapValues(_.map {_._2}.sum)
-
-          val lookup = addressCache.toMap.mapValues(_.get)
-
-          val sufficientBalances = sumByAddress.forall { case (k, v) =>
-            balanceAccessFunction(lookup(k)) >= v
-          }
-
-          sufficientBalances
-        }
-      }
-
-      if (success) {
+      if (validation.isValid) {
         dao.metricsManager ! IncrementMetric("checkpointValidationSuccess")
       } else {
         dao.metricsManager ! IncrementMetric("checkpointValidationFailure")
       }
 
-      success
+      // TODO: Return Validation instead of Boolean
+      validation.isValid
     }
 
     def uniqueSignatures: Boolean = signatures.groupBy(_.b58EncodedPublicKey).forall(_._2.size == 1)

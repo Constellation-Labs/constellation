@@ -319,6 +319,7 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
 
         fill(getAddress(a), 100L)
         fill(getAddress(b), 0L)
+        fill(getAddress(c), 0L)
 
         val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
         val cb1 = EdgeProcessor.createCheckpointBlock(Seq(tx1), startingTips)(keyPairs.head)
@@ -329,6 +330,54 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
         if (cb1.simpleValidation()) { cb1.transactions.foreach(_.ledgerApply) }
 
         assert(!cb2.simpleValidation())
+      }
+    }
+  }
+
+  "two groups of checkpoint blocks lower blocks beyond the snapshot" when {
+    "first group is internally inconsistent" should {
+      "not pass validation" in {
+        val kp = Random.shuffle(keyPairs).take(5)
+        val a :: b :: c :: d :: e :: _ = kp
+
+        fill(getAddress(a), 100L)
+        fill(getAddress(b), 0L)
+        fill(getAddress(c), 150L)
+        fill(getAddress(d), 15L)
+        fill(getAddress(e), 0L)
+
+        // First group
+        val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
+        val cb1 = EdgeProcessor.createCheckpointBlock(Seq(tx1), startingTips)(keyPairs.head)
+
+        val tx2 = createTransaction(getAddress(a), getAddress(b), 75L, a)
+        val cb2 = EdgeProcessor.createCheckpointBlock(Seq(tx2), startingTips)(keyPairs.head)
+
+        val tx3 = createTransaction(getAddress(d), getAddress(e), 5L, d)
+        val cb3 = EdgeProcessor.createCheckpointBlock(Seq(tx3), Seq(cb1.soe, cb2.soe))(keyPairs.head)
+
+        // Second group
+        val tx4 = createTransaction(getAddress(c), getAddress(a), 75L, c)
+        val cb4 = EdgeProcessor.createCheckpointBlock(Seq(tx4), startingTips)(keyPairs.head)
+
+        val tx5 = createTransaction(getAddress(c), getAddress(a), 75L, c)
+        val cb5 = EdgeProcessor.createCheckpointBlock(Seq(tx5), startingTips)(keyPairs.head)
+
+        val tx6 = createTransaction(getAddress(d), getAddress(e), 5L, d)
+        val cb6 = EdgeProcessor.createCheckpointBlock(Seq(tx6), Seq(cb4.soe, cb5.soe))(keyPairs.head)
+
+        // Tip
+        val tx7 = createTransaction(getAddress(d), getAddress(e), 5L, d)
+        val cb7 = EdgeProcessor.createCheckpointBlock(Seq(tx7), Seq(cb3.soe, cb6.soe))(keyPairs.head)
+
+//        if (cb1.simpleValidation()) { println("cb1"); cb1.transactions.foreach(_.ledgerApply) }
+//        if (cb2.simpleValidation()) { println("cb2"); cb2.transactions.foreach(_.ledgerApply) }
+//        if (cb4.simpleValidation()) { println("cb4"); cb4.transactions.foreach(_.ledgerApply) }
+//        if (cb5.simpleValidation()) { println("cb5"); cb5.transactions.foreach(_.ledgerApply) }
+//        if (cb6.simpleValidation()) { println("cb6"); cb6.transactions.foreach(_.ledgerApply) }
+
+        assert(!cb7.simpleValidation())
+
       }
     }
   }
