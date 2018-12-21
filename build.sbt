@@ -1,7 +1,8 @@
 import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 
-enablePlugins(JavaAppPackaging)
+enablePlugins(JavaAppPackaging, JavaAgent)
 addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
+javaAgents += "org.aspectj" % "aspectjweaver" % "1.9.2" % "runtime"
 
 lazy val _version = "1.0.1"
 
@@ -10,6 +11,8 @@ lazy val versions = new {
   val akkaHttp = "10.1.5"
   val akkaHttpCors = "0.3.0"
   val spongyCastle = "1.58.0.0"
+  val micrometer = "1.1.1"
+  val prometheus = "0.6.0"
 }
 
 lazy val commonSettings = Seq(
@@ -71,7 +74,11 @@ lazy val coreDependencies = Seq(
   "com.typesafe.slick" %% "slick" % "3.2.3",
   "com.h2database" % "h2" % "1.4.197",
   "com.twitter" %% "storehaus-cache" % "0.15.0",
-  "io.swaydb" %% "swaydb" % "0.6"
+  "io.swaydb" %% "swaydb" % "0.6",
+  "io.kontainers" %% "micrometer-akka" % "0.9.1",
+  "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
+  "io.prometheus" % "simpleclient" % versions.prometheus,
+  "io.prometheus" % "simpleclient_common" % versions.prometheus
 )
 
 //Test dependencies

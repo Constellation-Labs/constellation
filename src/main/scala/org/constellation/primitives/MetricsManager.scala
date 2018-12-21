@@ -11,6 +11,11 @@ import org.constellation.DAO
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat}
 import org.constellation.util.HeartbeatSubscribe
 import org.joda.time.DateTime
+import io.kontainers.micrometer.akka.AkkaMetricRegistry
+import io.micrometer.core.instrument.Clock
+import io.micrometer.core.instrument.binder.jvm.{JvmMemoryMetrics, JvmGcMetrics, JvmThreadMetrics}
+import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
+import io.prometheus.client.CollectorRegistry
 
 case object GetMetrics
 
@@ -27,6 +32,13 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
   implicit val timeout: Timeout = Timeout(15, TimeUnit.SECONDS)
 
   dao.heartbeatActor ! HeartbeatSubscribe
+
+  //Create micrometer registry, tell it to gather jvm metrics
+  val prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT, CollectorRegistry.defaultRegistry, Clock.SYSTEM)
+  AkkaMetricRegistry.setRegistry(prometheusMeterRegistry)
+  new JvmMemoryMetrics().bindTo(prometheusMeterRegistry)
+  new JvmGcMetrics().bindTo(prometheusMeterRegistry)
+  new JvmThreadMetrics().bindTo(prometheusMeterRegistry)
 
   override def receive: Receive = active(Map("id" -> dao.id.b58))
 

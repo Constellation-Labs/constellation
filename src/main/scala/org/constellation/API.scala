@@ -29,6 +29,9 @@ import scalaj.http.HttpResponse
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
+import io.prometheus.client.CollectorRegistry
+import io.prometheus.client.exporter.common.TextFormat
+import java.io.{StringWriter, Writer}
 
 case class PeerMetadata(
                      host: String,
@@ -118,6 +121,11 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
               (dao.metricsManager ? GetMetrics).mapTo[Map[String, String]].getOpt().getOrElse(Map())
             )
             complete(response)
+          } ~
+          path("micrometer-metrics") {
+            val writer: Writer = new StringWriter()
+            TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
+            complete(writer.toString)
           } ~
           path("makeKeyPair") {
             val pair = KeyUtils.makeKeyPair()
