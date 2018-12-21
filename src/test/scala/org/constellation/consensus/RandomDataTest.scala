@@ -6,6 +6,7 @@ import akka.actor.{ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import constellation._
+import cats.implicits._
 import org.constellation.{DAO, Fixtures}
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
@@ -35,22 +36,6 @@ object RandomData {
     EdgeProcessor.createCheckpointBlock(txs, tips)(startingKeyPair)
   }
 
-  def randomBlockWithDuplicatedTransaction(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): CheckpointBlock = {
-    val txs = Seq.fill(5)(randomTransaction)
-    val txsWithDuplication = txs :+ txs.head
-    EdgeProcessor.createCheckpointBlock(txsWithDuplication, tips)(startingKeyPair)
-  }
-
-  def randomBlockWithInvalidTransactions(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): CheckpointBlock = {
-    val txs = Seq.fill(5)(randomTransaction) :+ randomInvalidTransaction
-    EdgeProcessor.createCheckpointBlock(txs, tips)(startingKeyPair)
-  }
-
-  def randomBlockWithEmptyTransaction(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): CheckpointBlock = {
-    val txs = Seq.fill(5)(randomTransaction) :+ randomEmptyTransaction
-    EdgeProcessor.createCheckpointBlock(txs, tips)(startingKeyPair)
-  }
-
   def randomTransaction: Transaction = {
     val src = Random.shuffle(keyPairs).head
     createTransaction(
@@ -61,41 +46,34 @@ object RandomData {
     )
   }
 
-  def randomInvalidTransaction: Transaction = {
-    val src = Random.shuffle(keyPairs).head
-    createTransaction(
-      src.address.address,
-      Random.shuffle(keyPairs).head.address.address,
-      -100L,
-      src
-    )
-  }
-
-  def randomEmptyTransaction: Transaction = {
-    val src = Random.shuffle(keyPairs).head
-    createTransaction(
-      src.address.address,
-      Random.shuffle(keyPairs).head.address.address,
-      0L,
-      src
-    )
-  }
-
-  def fillAddressCache(cb: CheckpointBlock, delta: Long)(implicit dao: DAO): Unit = {
-    cb.transactions
-      .map(t => t.src.address -> t.amount)
-      .groupBy(_._1).mapValues(_.map(_._2).sum)
-      .foreach { transaction =>
-        dao.addressService.put(transaction._1, AddressCacheData(transaction._2 + delta, 0))
-      }
-  }
-
   def getAddress(keyPair: KeyPair): String = keyPair.address.address
 
-  def fill(address: String, amount: Long)(implicit dao: DAO): Unit = {
-    val tx = createTransaction(go.initialDistribution.soe.hash, address, amount, keyPairs.head)
-    tx.ledgerApply
-    tx.ledgerApplySnapshot
+  def fill(balances: Map[String, Long])(implicit dao: DAO): Iterable[Transaction] = {
+    val txs = balances.map {
+      case (address, amount) => createTransaction(keyPairs.head.address.address, address, amount, keyPairs.head)
+    }
+
+    txs.foreach(tx => {
+      tx.ledgerApply()
+      tx.ledgerApplySnapshot()
+    })
+
+    txs
+  }
+
+  def setupSnapshot(cb: Seq[CheckpointBlock])(implicit dao: DAO): Seq[CheckpointBlock] = {
+    dao.threadSafeTipService.setSnapshot(SnapshotInfo(
+      dao.threadSafeTipService.getSnapshotInfo().snapshot,
+      cb.map(_.baseHash),
+      Seq(),
+      0,
+      Seq(),
+      Map.empty,
+      Map.empty,
+      Seq()
+    ))
+
+    cb
   }
 }
 
@@ -237,6 +215,20 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
   val peerProbe = TestProbe.apply("peerManager")
   dao.peerManager = peerProbe.ref
 
+  go.genesis.store(CheckpointCacheData(Some(go.genesis)))
+  go.initialDistribution.store(CheckpointCacheData(Some(go.initialDistribution)))
+  go.initialDistribution2.store(CheckpointCacheData(Some(go.initialDistribution2)))
+  dao.threadSafeTipService.setSnapshot(SnapshotInfo(
+    Snapshot.snapshotZero,
+    Seq(go.genesis.baseHash, go.initialDistribution.baseHash, go.initialDistribution2.baseHash),
+    Seq(),
+    0,
+    Seq(),
+    Map.empty,
+    Map.empty,
+    Seq()
+  ))
+
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
   }
@@ -244,19 +236,77 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
   "Checkpoint block validation" when {
     "all transactions are valid" should {
       "pass validation" in {
-        val cb = randomBlock(startingTips, keyPairs.head)
+        val kp = keyPairs.take(6)
+        val _ :: a :: b :: c :: d :: e :: _ = kp
 
-        fillAddressCache(cb, 0L)
+        val txs1 = fill(Map(
+          getAddress(a) -> 150L,
+          getAddress(b) -> 0L,
+          getAddress(c) -> 150L
+        ))
 
-        assert(cb.simpleValidation())
+        val txs2 = fill(Map(
+          getAddress(d) -> 15L,
+          getAddress(e) -> 0L
+        ))
+
+        val cbInit1 = EdgeProcessor.createCheckpointBlock(txs1.toSeq, startingTips)(keyPairs.head)
+        val cbInit2 = EdgeProcessor.createCheckpointBlock(txs2.toSeq, startingTips)(keyPairs.head)
+
+        cbInit1.store(CheckpointCacheData(Some(cbInit1)))
+        cbInit2.store(CheckpointCacheData(Some(cbInit2)))
+
+        setupSnapshot(Seq(cbInit1, cbInit2))
+
+        val tips = Seq(cbInit1.soe, cbInit2.soe)
+
+        // First group
+        val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
+        val cb1 = EdgeProcessor.createCheckpointBlock(Seq(tx1), tips)(keyPairs.head)
+
+        val tx2 = createTransaction(getAddress(a), getAddress(b), 75L, a)
+        val cb2 = EdgeProcessor.createCheckpointBlock(Seq(tx2), tips)(keyPairs.head)
+
+        val tx3 = createTransaction(getAddress(d), getAddress(e), 5L, d)
+        val cb3 = EdgeProcessor.createCheckpointBlock(Seq(tx3), Seq(cb1.soe, cb2.soe))(keyPairs.head)
+
+        // Second group
+        val tx4 = createTransaction(getAddress(c), getAddress(a), 75L, c)
+        val cb4 = EdgeProcessor.createCheckpointBlock(Seq(tx4), tips)(keyPairs.head)
+
+        val tx5 = createTransaction(getAddress(c), getAddress(a), 75L, c)
+        val cb5 = EdgeProcessor.createCheckpointBlock(Seq(tx5), tips)(keyPairs.head)
+
+        val tx6 = createTransaction(getAddress(d), getAddress(e), 5L, d)
+        val cb6 = EdgeProcessor.createCheckpointBlock(Seq(tx6), Seq(cb4.soe, cb5.soe))(keyPairs.head)
+
+        // Tip
+        val tx7 = createTransaction(getAddress(d), getAddress(e), 5L, d)
+        val cb7 = EdgeProcessor.createCheckpointBlock(Seq(tx7), Seq(cb3.soe, cb6.soe))(keyPairs.head)
+
+        Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
+          .foreach(cb => cb.store(CheckpointCacheData(Some(cb))))
+
+        assert(cb7.simpleValidation())
       }
     }
 
     "block is malformed" should {
       "not pass validation" in {
-        val cb = randomBlock(startingTips, keyPairs.head)
+        val kp = keyPairs.take(4)
+        val _ :: a :: b :: c :: _ = kp
 
-        fillAddressCache(cb, -1L)
+        val txs = Seq(
+          createTransaction(getAddress(a), getAddress(b), 75L, a),
+          createTransaction(getAddress(c), getAddress(b), 75L, c)
+        )
+
+        val cb = EdgeProcessor.createCheckpointBlock(txs, startingTips)(keyPairs.head)
+
+        fill(Map(
+          getAddress(a) -> 74L,
+          getAddress(c) -> 75L
+        ))
 
         assert(!cb.simpleValidation())
       }
@@ -264,9 +314,17 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
 
     "at least one transaction is duplicated" should {
       "not pass validation" in {
-        val cb = randomBlockWithDuplicatedTransaction(startingTips, keyPairs.head)
+        val kp = keyPairs.take(4)
+        val _ :: a :: b :: c :: _ = kp
 
-        fillAddressCache(cb, 0L)
+        val tx = createTransaction(getAddress(a), getAddress(b), 75L, a)
+        val txs = Seq(tx, tx)
+
+        val cb = EdgeProcessor.createCheckpointBlock(txs, startingTips)(keyPairs.head)
+
+        fill(Map(
+          getAddress(a) -> 150L
+        ))
 
         assert(!cb.simpleValidation())
       }
@@ -274,9 +332,20 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
 
     "at least one transaction has non-positive amount" should {
       "not pass validation" in {
-        val cb = randomBlockWithInvalidTransactions(startingTips, keyPairs.head)
+        val kp = keyPairs.take(4)
+        val _ :: a :: b :: c :: _ = kp
 
-        fillAddressCache(cb, 0L)
+        val txs = Seq(
+          createTransaction(getAddress(a), getAddress(b), 75L, a),
+          createTransaction(getAddress(b), getAddress(c), -5L, b)
+        )
+
+        val cb = EdgeProcessor.createCheckpointBlock(txs, startingTips)(keyPairs.head)
+
+        fill(Map(
+          getAddress(a) -> 75L,
+          getAddress(b) -> 75L
+        ))
 
         assert(!cb.simpleValidation())
       }
@@ -284,18 +353,29 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
 
     "at least one transaction has zero amount" should {
       "not pass validation" in {
-        val cb = randomBlockWithEmptyTransaction(startingTips, keyPairs.head)
+        val kp = keyPairs.take(4)
+        val _ :: a :: b :: c :: _ = kp
 
-        fillAddressCache(cb, 0L)
+        val txs = Seq(
+          createTransaction(getAddress(a), getAddress(b), 75L, a),
+          createTransaction(getAddress(b), getAddress(c), 0L, b)
+        )
+
+        val cb = EdgeProcessor.createCheckpointBlock(txs, startingTips)(keyPairs.head)
+
+        fill(Map(
+          getAddress(a) -> 75L,
+          getAddress(b) -> 75L
+        ))
 
         assert(!cb.simpleValidation())
       }
     }
 
-    "checkpoint block is internally inconsistent" should {
+    "at least one transaction has no address cache stored" should {
       "not pass validation" in {
-        val kp = Random.shuffle(keyPairs).take(3)
-        val a :: b :: c :: _ = kp
+        val kp = keyPairs.take(4)
+        val _ :: a :: b :: c :: _ = kp
 
         val txs = Seq(
           createTransaction(getAddress(a), getAddress(b), 75L, a),
@@ -304,7 +384,25 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
 
         val cb = EdgeProcessor.createCheckpointBlock(txs, startingTips)(keyPairs.head)
 
-        dao.addressService.put(getAddress(a), AddressCacheData(100L, 0))
+        assert(!cb.simpleValidation())
+      }
+    }
+
+    "checkpoint block is internally inconsistent" should {
+      "not pass validation" in {
+        val kp = keyPairs.take(4)
+        val _ :: a :: b :: c :: _ = kp
+
+        val txs = Seq(
+          createTransaction(getAddress(a), getAddress(b), 75L, a),
+          createTransaction(getAddress(a), getAddress(c), 75L, a),
+        )
+
+        val cb = EdgeProcessor.createCheckpointBlock(txs, startingTips)(keyPairs.head)
+
+        fill(Map(
+          getAddress(a) -> 100L
+        ))
 
         assert(!cb.simpleValidation())
       }
@@ -314,12 +412,14 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
   "two checkpoint blocks has same ancestor" when {
     "combined relative to the snapshot are invalid" should {
       "not pass validation" in {
-        val kp = Random.shuffle(keyPairs).take(3)
-        val a :: b :: c :: _ = kp
+        val kp = keyPairs.take(4)
+        val _ :: a :: b :: c :: _ = kp
 
-        fill(getAddress(a), 100L)
-        fill(getAddress(b), 0L)
-        fill(getAddress(c), 0L)
+        fill(Map(
+          getAddress(a) -> 100L,
+          getAddress(b) -> 0L,
+          getAddress(c) -> 0L
+        ))
 
         val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
         val cb1 = EdgeProcessor.createCheckpointBlock(Seq(tx1), startingTips)(keyPairs.head)
@@ -337,31 +437,46 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
   "two groups of checkpoint blocks lower blocks beyond the snapshot" when {
     "first group is internally inconsistent" should {
       "not pass validation" in {
-        val kp = Random.shuffle(keyPairs).take(5)
-        val a :: b :: c :: d :: e :: _ = kp
+        val kp = keyPairs.take(6)
+        val _ :: a :: b :: c :: d :: e :: _ = kp
 
-        fill(getAddress(a), 100L)
-        fill(getAddress(b), 0L)
-        fill(getAddress(c), 150L)
-        fill(getAddress(d), 15L)
-        fill(getAddress(e), 0L)
+        val txs1 = fill(Map(
+          getAddress(a) -> 100L,
+          getAddress(b) -> 0L,
+          getAddress(c) -> 150L
+        ))
+
+        val txs2 = fill(Map(
+          getAddress(d) -> 15L,
+          getAddress(e) -> 0L
+        ))
+
+        val cbInit1 = EdgeProcessor.createCheckpointBlock(txs1.toSeq, startingTips)(keyPairs.head)
+        val cbInit2 = EdgeProcessor.createCheckpointBlock(txs2.toSeq, startingTips)(keyPairs.head)
+
+        cbInit1.store(CheckpointCacheData(Some(cbInit1)))
+        cbInit2.store(CheckpointCacheData(Some(cbInit2)))
+
+        setupSnapshot(Seq(cbInit1, cbInit2))
+
+        val tips = Seq(cbInit1.soe, cbInit2.soe)
 
         // First group
         val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
-        val cb1 = EdgeProcessor.createCheckpointBlock(Seq(tx1), startingTips)(keyPairs.head)
+        val cb1 = EdgeProcessor.createCheckpointBlock(Seq(tx1), tips)(keyPairs.head)
 
         val tx2 = createTransaction(getAddress(a), getAddress(b), 75L, a)
-        val cb2 = EdgeProcessor.createCheckpointBlock(Seq(tx2), startingTips)(keyPairs.head)
+        val cb2 = EdgeProcessor.createCheckpointBlock(Seq(tx2), tips)(keyPairs.head)
 
         val tx3 = createTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb3 = EdgeProcessor.createCheckpointBlock(Seq(tx3), Seq(cb1.soe, cb2.soe))(keyPairs.head)
 
         // Second group
         val tx4 = createTransaction(getAddress(c), getAddress(a), 75L, c)
-        val cb4 = EdgeProcessor.createCheckpointBlock(Seq(tx4), startingTips)(keyPairs.head)
+        val cb4 = EdgeProcessor.createCheckpointBlock(Seq(tx4), tips)(keyPairs.head)
 
         val tx5 = createTransaction(getAddress(c), getAddress(a), 75L, c)
-        val cb5 = EdgeProcessor.createCheckpointBlock(Seq(tx5), startingTips)(keyPairs.head)
+        val cb5 = EdgeProcessor.createCheckpointBlock(Seq(tx5), tips)(keyPairs.head)
 
         val tx6 = createTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb6 = EdgeProcessor.createCheckpointBlock(Seq(tx6), Seq(cb4.soe, cb5.soe))(keyPairs.head)
@@ -370,14 +485,10 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
         val tx7 = createTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb7 = EdgeProcessor.createCheckpointBlock(Seq(tx7), Seq(cb3.soe, cb6.soe))(keyPairs.head)
 
-//        if (cb1.simpleValidation()) { println("cb1"); cb1.transactions.foreach(_.ledgerApply) }
-//        if (cb2.simpleValidation()) { println("cb2"); cb2.transactions.foreach(_.ledgerApply) }
-//        if (cb4.simpleValidation()) { println("cb4"); cb4.transactions.foreach(_.ledgerApply) }
-//        if (cb5.simpleValidation()) { println("cb5"); cb5.transactions.foreach(_.ledgerApply) }
-//        if (cb6.simpleValidation()) { println("cb6"); cb6.transactions.foreach(_.ledgerApply) }
+        Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
+          .foreach(cb => cb.store(CheckpointCacheData(Some(cb))))
 
         assert(!cb7.simpleValidation())
-
       }
     }
   }

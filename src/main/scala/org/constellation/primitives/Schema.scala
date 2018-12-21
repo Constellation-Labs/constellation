@@ -4,14 +4,15 @@ import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 import java.time.Instant
 
+import cats.data.Validated.Invalid
+import cats.data._
+import cats.implicits._
 import constellation.pubKeyToAddress
 import org.constellation.DAO
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
-import cats.data._
-import cats.implicits._
 
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
@@ -426,7 +427,7 @@ object Schema {
 
 
   case class InvalidSignature(signature: String) extends CheckpointBlockValidation {
-    def errorMessage: String = s"CheckpointBlock inclused signature=$signature which is invalid"
+    def errorMessage: String = s"CheckpointBlock includes signature=$signature which is invalid"
   }
 
   object InvalidSignature {
@@ -465,6 +466,20 @@ object Schema {
     def errorMessage: String = s"CheckpointBlock includes transaction from address=$address which has insufficient balance"
   }
 
+  object InsufficientBalance {
+    def apply(t: Transaction) = new InsufficientBalance(t.src.address)
+  }
+
+
+  // TODO: pass also a transaction metadata
+  case class InternalInconsistency(cbHash: String) extends CheckpointBlockValidation {
+    def errorMessage: String = s"CheckpointBlock=$cbHash includes transaction/s which has insufficient balance"
+  }
+
+  object InternalInconsistency {
+    def apply(cb: CheckpointBlock) = new InternalInconsistency(cb.baseHash)
+  }
+
   sealed trait CheckpointBlockValidatorNel {
 
     type ValidationResult[A] = ValidatedNel[CheckpointBlockValidation, A]
@@ -472,10 +487,10 @@ object Schema {
     def validateTransactionIntegrity(t: Transaction): ValidationResult[Transaction] =
       if (t.valid) t.validNel else InvalidTransaction(t).invalidNel
 
-    def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] = {
-      val cache = dao.addressService.get(t.src.address)
-      cache.fold[ValidationResult[Transaction]](NoAddressCacheFound(t).invalidNel)(_ => t.validNel)
-    }
+    def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
+      dao.addressService
+        .get(t.src.address)
+        .fold[ValidationResult[Transaction]](NoAddressCacheFound(t).invalidNel)(_ => t.validNel)
 
     def validateTransaction(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
       validateTransactionIntegrity(t)
@@ -532,6 +547,65 @@ object Schema {
         .combineAll
     }
 
+    type AddressBalance = Map[String, Long]
+
+    def getParents(c: CheckpointBlock)(implicit dao: DAO): List[CheckpointBlock] =
+      c.parentSOEBaseHashes
+        .toList
+        .map(dao.checkpointService.get)
+        .map(_.flatMap(_.checkpointBlock))
+        .sequence[Option, CheckpointBlock]
+        .getOrElse(List())
+
+    def isInSnapshot(c: CheckpointBlock)(implicit dao: DAO): Boolean =
+      dao.threadSafeTipService
+        .getSnapshotInfo()
+        .acceptedCBSinceSnapshot
+        .contains(c.baseHash)
+
+    def getSummaryBalance(c: CheckpointBlock)(implicit dao: DAO): AddressBalance = {
+      val spend = c.transactions
+        .groupBy(_.src.address)
+        .mapValues(_.map(-_.amount).sum)
+
+      val received = c.transactions
+        .groupBy(_.dst.address)
+        .mapValues(_.map(_.amount).sum)
+
+      spend |+| received
+    }
+
+    def getSnapshotBalances(implicit dao: DAO): AddressBalance =
+      dao.threadSafeTipService
+        .getSnapshotInfo()
+        .addressCacheData
+        .mapValues(_.balanceByLatestSnapshot)
+
+    def validateDiff(a: (String, Long))(implicit dao: DAO): Boolean = a match {
+      case (hash, diff) => getSnapshotBalances.getOrElse(hash, 0L) + diff >= 0
+    }
+
+    def validateCheckpointBlockTree(cb: CheckpointBlock)(implicit dao: DAO): Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance] =
+      if (isInSnapshot(cb)) Map.empty[String, Long].rightIor
+      else
+        getParents(cb)
+          .map(validateCheckpointBlockTree)
+          .foldLeft(Map.empty[String, Long].rightIor[NonEmptyList[CheckpointBlockValidation]])((result, d) =>
+            result.combine(d))
+          .map(getSummaryBalance(cb) |+| _)
+          .flatMap(diffs =>
+            if (diffs.forall(validateDiff))
+              diffs.rightIor
+            else
+              Ior.both(NonEmptyList.of(InternalInconsistency(cb)), diffs))
+
+    implicit def validateTreeToValidated(v: Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance]): ValidationResult[AddressBalance] =
+      v match {
+        case Ior.Right(a) => a.validNel
+        case Ior.Left(a) => a.invalid
+        case Ior.Both(a, _) => a.invalid
+      }
+
     def validateCheckpointBlock(
       cb: CheckpointBlock,
       balanceAccessFunction: AddressCacheData => Long,
@@ -541,6 +615,7 @@ object Schema {
         .product(validateTransactions(cb.transactions))
         .product(validateDuplicatedTransactions(cb.transactions))
         .product(validateSourceAddressBalances(cb.transactions, balanceAccessFunction))
+        .product(validateCheckpointBlockTree(cb))
         .map(_ => cb)
     }
   }
@@ -671,7 +746,7 @@ object Schema {
     def parentSOE = Seq(resolvedOE.left, resolvedOE.right)
     def parentSOEHashes = Seq(resolvedOE.left.hash, resolvedOE.right.hash)
 
-    def parentSOEBaseHashes: Seq[String] = parentSOE.map{_.baseHash}
+    def parentSOEBaseHashes: Seq[String] = parentSOE.map(h => if (h == null) "" else h.baseHash)
 
     def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
