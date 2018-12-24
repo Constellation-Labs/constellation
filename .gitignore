@@ -8,5 +8,3 @@ tmp2/
 src/main/resources/ui/ui*
 *.terraform/
 site/
-.dag/key
-swaydb-stress-test.log
