@@ -47,7 +47,7 @@ class MetricsManagerTest ()
 
   "MetricsManager" should "report micrometer metrics" in {
     val familySamples = Collections.list(CollectorRegistry.defaultRegistry.metricFamilySamples())
-    familySamples should have size 20
+    familySamples should have size 24
   }
 
   private def getKeyPair = {
