@@ -12,8 +12,7 @@ import io.prometheus.client.CollectorRegistry
 import org.constellation.crypto.KeyUtils
 import org.constellation.util.Heartbeat
 import scala.util.{Failure, Try}
-
-import io.prometheus.client.Collector.MetricFamilySamples
+import java.util.Collections
 
 class MetricsManagerTest ()
   extends TestKit(ActorSystem("ConstellationTest"))
@@ -47,8 +46,8 @@ class MetricsManagerTest ()
   logger.info("MetricsManager actor initialized")
 
   "MetricsManager" should "report micrometer metrics" in {
-    val metricSample: MetricFamilySamples = CollectorRegistry.defaultRegistry.metricFamilySamples().nextElement()
-    assert(!metricSample.name.isEmpty)
+    val familySamples = Collections.list(CollectorRegistry.defaultRegistry.metricFamilySamples())
+    familySamples should have size 20
   }
 
   private def getKeyPair = {
