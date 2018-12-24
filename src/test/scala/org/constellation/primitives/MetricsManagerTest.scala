@@ -1,17 +1,13 @@
 package org.constellation.primitives
 
-import java.security.KeyPair
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import akka.testkit.{TestActorRef, TestKit}
 import org.constellation.DAO
 import akka.actor.{ActorRef, ActorSystem, Props}
-import better.files._
 import com.typesafe.scalalogging.Logger
-import constellation._
 import io.prometheus.client.CollectorRegistry
 import org.constellation.crypto.KeyUtils
 import org.constellation.util.Heartbeat
-import scala.util.{Failure, Try}
 import java.util.Collections
 
 class MetricsManagerTest ()
@@ -30,7 +26,7 @@ class MetricsManagerTest ()
 
   logger.info("Initializing the DAO actor")
   implicit val dao: DAO = new DAO()
-  dao.updateKeyPair(getKeyPair)
+ dao.updateKeyPair(KeyUtils.makeKeyPair())
   dao.idDir.createDirectoryIfNotExists(createParents = true)
   dao.preventLocalhostAsPeer = false
   dao.externalHostString = ""
@@ -48,27 +44,5 @@ class MetricsManagerTest ()
   "MetricsManager" should "report micrometer metrics" in {
     val familySamples = Collections.list(CollectorRegistry.defaultRegistry.metricFamilySamples())
     familySamples should have size 24
-  }
-
-  private def getKeyPair = {
-    val keyPairPath = ".dag/key"
-    val localKeyPair = Try {
-      File(keyPairPath).lines.mkString.x[KeyPair]
-    }
-    localKeyPair match {
-      case Failure(e) =>
-        e.printStackTrace()
-      case _ =>
-    }
-    // TODO: update to take from config
-    val keyPair: KeyPair = {
-      localKeyPair.getOrElse {
-        logger.info(s"Key pair not found in $keyPairPath - Generating new key pair")
-        val kp = KeyUtils.makeKeyPair()
-        File(keyPairPath).write(kp.json)
-        kp
-      }
-    }
-    keyPair
   }
 }
