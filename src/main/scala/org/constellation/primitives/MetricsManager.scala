@@ -39,10 +39,8 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
 
   dao.heartbeatActor ! HeartbeatSubscribe
 
-  //Create micrometer registry, tell it to gather jvm metrics
   val prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT, CollectorRegistry.defaultRegistry, Clock.SYSTEM)
   AkkaMetricRegistry.setRegistry(prometheusMeterRegistry)
-
   new JvmMemoryMetrics().bindTo(prometheusMeterRegistry)
   new JvmGcMetrics().bindTo(prometheusMeterRegistry)
   new JvmThreadMetrics().bindTo(prometheusMeterRegistry)
@@ -53,7 +51,6 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
   new ClassLoaderMetrics()bindTo((prometheusMeterRegistry))
   new DiskSpaceMetrics(new File(System.getProperty("user.dir"))).bindTo(prometheusMeterRegistry);
   // new DatabaseTableMetrics().bindTo(prometheusMeterRegistry)
-
 
   override def receive: Receive = active(Map("id" -> dao.id.b58))
 
