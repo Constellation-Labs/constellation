@@ -18,7 +18,6 @@ import io.micrometer.core.instrument.Clock
 import io.micrometer.core.instrument.binder.jvm._
 import io.micrometer.core.instrument.binder.system._
 import io.micrometer.core.instrument.binder.logging._
-import io.micrometer.core.instrument.binder.jvm
 //import io.micrometer.core.instrument.binder.db._
 
 import io.prometheus.client.CollectorRegistry
@@ -40,6 +39,7 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
   dao.heartbeatActor ! HeartbeatSubscribe
 
   val prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT, CollectorRegistry.defaultRegistry, Clock.SYSTEM)
+  prometheusMeterRegistry.config().commonTags("application", s"Constellation_${dao.keyPair.getPublic().hash}")
   AkkaMetricRegistry.setRegistry(prometheusMeterRegistry)
   new JvmMemoryMetrics().bindTo(prometheusMeterRegistry)
   new JvmGcMetrics().bindTo(prometheusMeterRegistry)
