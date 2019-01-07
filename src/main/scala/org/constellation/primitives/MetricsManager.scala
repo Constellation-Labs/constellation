@@ -1,5 +1,6 @@
 package org.constellation.primitives
 
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 import akka.actor.Actor
@@ -11,6 +12,15 @@ import org.constellation.DAO
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat}
 import org.constellation.util.HeartbeatSubscribe
 import org.joda.time.DateTime
+import io.kontainers.micrometer.akka.AkkaMetricRegistry
+import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
+import io.micrometer.core.instrument.Clock
+import io.micrometer.core.instrument.binder.jvm._
+import io.micrometer.core.instrument.binder.system._
+import io.micrometer.core.instrument.binder.logging._
+//import io.micrometer.core.instrument.binder.db._
+
+import io.prometheus.client.CollectorRegistry
 
 case object GetMetrics
 
@@ -27,6 +37,20 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
   implicit val timeout: Timeout = Timeout(15, TimeUnit.SECONDS)
 
   dao.heartbeatActor ! HeartbeatSubscribe
+
+  val prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT, CollectorRegistry.defaultRegistry, Clock.SYSTEM)
+  prometheusMeterRegistry.config().commonTags("application", s"Constellation_${dao.keyPair.getPublic().hash}")
+  AkkaMetricRegistry.setRegistry(prometheusMeterRegistry)
+  new JvmMemoryMetrics().bindTo(prometheusMeterRegistry)
+  new JvmGcMetrics().bindTo(prometheusMeterRegistry)
+  new JvmThreadMetrics().bindTo(prometheusMeterRegistry)
+  new UptimeMetrics().bindTo(prometheusMeterRegistry)
+  new ProcessorMetrics().bindTo(prometheusMeterRegistry)
+  new FileDescriptorMetrics().bindTo(prometheusMeterRegistry)
+  new LogbackMetrics().bindTo(prometheusMeterRegistry)
+  new ClassLoaderMetrics()bindTo((prometheusMeterRegistry))
+  new DiskSpaceMetrics(new File(System.getProperty("user.dir"))).bindTo(prometheusMeterRegistry);
+  // new DatabaseTableMetrics().bindTo(prometheusMeterRegistry)
 
   override def receive: Receive = active(Map("id" -> dao.id.b58))
 
