@@ -610,13 +610,17 @@ object Schema {
       cb: CheckpointBlock,
       balanceAccessFunction: AddressCacheData => Long,
     )(implicit dao: DAO): ValidationResult[CheckpointBlock] = {
+      val preTreeResult =
       validateEmptySignatures(cb.signatures)
         .product(validateSignatures(cb.signatures, cb.baseHash))
         .product(validateTransactions(cb.transactions))
         .product(validateDuplicatedTransactions(cb.transactions))
         .product(validateSourceAddressBalances(cb.transactions, balanceAccessFunction))
-        .product(validateCheckpointBlockTree(cb))
-        .map(_ => cb)
+
+      val postTreeIgnoreEmptySnapshot = if (dao.threadSafeTipService.lastSnapshotHeight == 0) preTreeResult
+      else preTreeResult.product(validateCheckpointBlockTree(cb))
+
+      postTreeIgnoreEmptySnapshot.map(_ => cb)
     }
   }
 
