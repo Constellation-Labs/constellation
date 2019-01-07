@@ -66,7 +66,7 @@ object RandomData {
       dao.threadSafeTipService.getSnapshotInfo().snapshot,
       cb.map(_.baseHash),
       Seq(),
-      0,
+      1,
       Seq(),
       Map.empty,
       Map.empty,
