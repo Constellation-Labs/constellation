@@ -7,3 +7,5 @@ tmp/
 tmp2/
 src/main/resources/ui/ui*
 *.terraform/
+site/
+.floo*
