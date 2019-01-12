@@ -19,9 +19,7 @@ or optionally (to connect to other host)
 ```
 
 3. Interact with app via the API 
-By default this is 
-http://localhost:9000. 
-Look at the file _API.scala_ for endpoints.
+By default this is `http://localhost:9000`. Look at the file _API.scala_ for endpoints.
 
 ### :whale2: Docker execution 
 
