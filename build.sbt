@@ -21,6 +21,7 @@ lazy val commonSettings = Seq(
   name := "constellation",
   mainClass := Some("org.constellation.ConstellationNode"),
   parallelExecution in Test := false,
+  dockerBaseImage := "openjdk:8-jdk",
   dockerExposedPorts := Seq(2551, 9000, 6006, 9010, 9001, 9002),
   dockerExposedUdpPorts := Seq(16180),
   dockerCommands := dockerCommands.value.flatMap {
