@@ -1,8 +1,7 @@
 import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 
-enablePlugins(JavaAppPackaging, JavaAgent)
+enablePlugins(JavaAppPackaging)
 addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
-javaAgents += "org.aspectj" % "aspectjweaver" % "1.9.2" % "runtime"
 
 lazy val _version = "1.0.1"
 
@@ -11,7 +10,7 @@ lazy val versions = new {
   val akkaHttp = "10.1.5"
   val akkaHttpCors = "0.3.0"
   val spongyCastle = "1.58.0.0"
-  val micrometer = "1.1.1"
+  val micrometer = "1.1.2"
   val prometheus = "0.6.0"
 }
 
@@ -22,6 +21,7 @@ lazy val commonSettings = Seq(
   name := "constellation",
   mainClass := Some("org.constellation.ConstellationNode"),
   parallelExecution in Test := false,
+  dockerBaseImage := "openjdk:8-jdk",
   dockerExposedPorts := Seq(2551, 9000, 6006, 9010, 9001, 9002),
   dockerExposedUdpPorts := Seq(16180),
   dockerCommands := dockerCommands.value.flatMap {
