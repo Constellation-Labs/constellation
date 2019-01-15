@@ -182,7 +182,7 @@ package object constellation extends POWExt
   }
 
   import scala.concurrent.duration._
-  def withTimeoutSecondsAndMetric[T](fut:Future[T], metricPrefix: String, timeoutSeconds: Int = 10)
+  def withTimeoutSecondsAndMetric[T](fut:Future[T], metricPrefix: String, timeoutSeconds: Int = 10, onError: => Unit = ())
                                     (implicit ec:ExecutionContext, dao: DAO): Future[T] = {
     val prom = Promise[T]()
     val after = timeoutSeconds.seconds
@@ -193,6 +193,7 @@ package object constellation extends POWExt
     }
     prom.future.onComplete{
       result =>
+        onError
         if (result.isSuccess) {
           dao.metricsManager ! IncrementMetric(metricPrefix + s"_timeoutAfter${timeoutSeconds}seconds")
         }
@@ -204,7 +205,7 @@ package object constellation extends POWExt
     combinedFut
   }
 
-  def futureTryWithTimeoutMetric[T](t: => T, metricPrefix: String, timeoutSeconds: Int = 10)
+  def futureTryWithTimeoutMetric[T](t: => T, metricPrefix: String, timeoutSeconds: Int = 10, onError: => Unit = ())
                                    (implicit ec:ExecutionContext, dao: DAO): Future[Try[T]] = {
     withTimeoutSecondsAndMetric(
       Future{

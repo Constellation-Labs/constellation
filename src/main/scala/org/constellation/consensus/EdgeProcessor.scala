@@ -45,6 +45,12 @@ object EdgeProcessor {
         dao.metricsManager ! IncrementMetric("heightNonEmpty")
       }
 
+      cb.checkpoint.edge.resolvedObservationEdge.data.get.messages.foreach{ m =>
+        dao.messageService.put(m.signedMessageData.data.channelId, m)
+        dao.messageService.put(m.signedMessageData.signatures.hash, m)
+        dao.metricsManager ! IncrementMetric("messageAccepted")
+      }
+
       // Accept transactions
       cb.transactions.foreach { t =>
         dao.metricsManager ! IncrementMetric("transactionAccepted")
@@ -148,10 +154,13 @@ object EdgeProcessor {
                                          )
 
 
-  def createCheckpointBlock(transactions: Seq[Transaction], tips: Seq[SignedObservationEdge])
-                           (implicit keyPair: KeyPair): CheckpointBlock = {
+  def createCheckpointBlock(
+                             transactions: Seq[Transaction],
+                             tips: Seq[SignedObservationEdge],
+                             messages: Seq[ChannelMessage] = Seq()
+                           )(implicit keyPair: KeyPair): CheckpointBlock = {
 
-    val checkpointEdgeData = CheckpointEdgeData(transactions.map{_.hash}.sorted)
+    val checkpointEdgeData = CheckpointEdgeData(transactions.map{_.hash}.sorted, messages)
 
     val observationEdge = ObservationEdge(
       TypedEdgeHash(tips.head.hash, EdgeHashType.CheckpointHash),
@@ -204,7 +213,7 @@ object EdgeProcessor {
   case class FinishedCheckpointResponse(reRegister: Boolean = false)
 
   // TODO: Move to checkpoint formation actor
-  def formCheckpoint()(implicit dao: DAO): Unit = {
+  def formCheckpoint(messages: Seq[ChannelMessage] = Seq())(implicit dao: DAO): Unit = {
 
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
@@ -225,7 +234,7 @@ object EdgeProcessor {
 
       maybeTips.foreach { case (tipSOE, facils) =>
 
-        val checkpointBlock = createCheckpointBlock(transactions, tipSOE)(dao.keyPair)
+        val checkpointBlock = createCheckpointBlock(transactions, tipSOE, messages)(dao.keyPair)
         dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
 
         val finalFacilitators = facils.keySet
@@ -326,6 +335,12 @@ object EdgeProcessor {
           }
 
         }
+        // Cleanup locks
+
+        messages.foreach{ m =>
+          dao.threadSafeMessageMemPool.activeChannels(m.signedMessageData.data.channelId).release()
+        }
+
       }
     }
   }

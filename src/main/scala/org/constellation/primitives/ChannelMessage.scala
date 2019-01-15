@@ -2,34 +2,47 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
+import org.constellation.DAO
 import org.constellation.primitives.Schema.{EdgeHashType, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
-import org.constellation.util.ProductHash
-
+import org.constellation.util.{ProductHash, SignatureBatch}
+import constellation._
 
 case class ChannelMessageData(
-                         message: String,
-                         previousMessageTXHash: String,
-                         channelId: String
-                         ) extends ProductHash
+                               message: String,
+                               previousMessageDataHash: String,
+                               channelId: String
+                             ) extends ProductHash
 
-// Intended replacement for 'Edge' class since we're not really using parent data right now anyways.
-case class ObservationEdgeWithValues[+D <: ProductHash](
-                                       oe: ObservationEdge,
-                                       soe: SignedObservationEdge,
-                                       data: D
-                                       )
+case class SignedData[+D <: ProductHash](
+                                          data: D,
+                                          signatures: SignatureBatch
+                                        ) extends ProductHash
+
+case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
+
+object ChannelMessage {
+  def create(message: String, previous: String, channelId: String)(implicit dao: DAO): ChannelMessage = {
+    val data = ChannelMessageData(message, previous, channelId)
+    ChannelMessage(
+      SignedData(data, hashSignBatchZeroTyped(data, dao.keyPair))
+    )
+  }
+}
+
+
+// TODO: Parent references?
+/*
 
 case class ChannelMessage(
-                         oeWithValues: ObservationEdgeWithValues[ChannelMessageData]
+                         oeWithValues: SignedData[ChannelMessageData]
                          )
-
 object ChannelMessage {
 
   def apply(
-             message: String, previous: String, root: String, parents: Seq[TypedEdgeHash]
+             message: String, previous: String, channelId: String, parents: Seq[TypedEdgeHash]
            )(implicit kp: KeyPair): ChannelMessage = {
 
-    val data = ChannelMessageData(message, previous, root)
+    val data = ChannelMessageData(message, previous, channelId)
     val oe = ObservationEdge(parents.head, parents(1), Some(TypedEdgeHash(data.hash, EdgeHashType.ChannelMessageDataHash)))
     val soe = constellation.signedObservationEdge(oe)
     ChannelMessage(ObservationEdgeWithValues(
@@ -39,3 +52,4 @@ object ChannelMessage {
   }
 
 }
+*/
