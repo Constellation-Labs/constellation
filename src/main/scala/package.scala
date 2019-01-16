@@ -167,7 +167,8 @@ package object constellation extends POWExt
     do {
       retries += 1
       done = t
-      Thread.sleep(delay)
+      val normalizedDelay = delay + Random.nextInt((delay * (scala.math.pow(2, retries))).toInt)
+      Thread.sleep(normalizedDelay)
     } while (!done && retries < maxRetries)
     done
   }
