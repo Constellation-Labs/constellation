@@ -141,12 +141,12 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
                 "readSnapshotForMessage"
               ).toOption.map{ storedSnapshot =>
 
-                val blockProof = MerkleTree(storedSnapshot.snapshot.checkpointBlocks).createProof(cmd.blockHash.get)
+                val blockProof = MerkleTree(storedSnapshot.snapshot.checkpointBlocks.toList).createProof(cmd.blockHash.get)
                 val block = storedSnapshot.checkpointCache.filter {
                   _.checkpointBlock.get.baseHash == cmd.blockHash.get
                 }.head.checkpointBlock.get
                 val messageProofInput = block.transactions.map{_.hash} ++ block.checkpoint.edge.resolvedObservationEdge.data.get.messages.map{_.signedMessageData.signatures.hash}
-                val messageProof = MerkleTree(messageProofInput).createProof(cmd.channelMessage.signedMessageData.signatures.hash)
+                val messageProof = MerkleTree(messageProofInput.toList).createProof(cmd.channelMessage.signedMessageData.signatures.hash)
                 ChannelProof(
                   cmd,
                   blockProof,
