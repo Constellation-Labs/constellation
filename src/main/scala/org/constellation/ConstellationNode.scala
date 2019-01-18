@@ -199,6 +199,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
 
   val udpAddressString: String = hostName + ":" + udpPort
+  lazy val hostPort = HostPort(hostName, httpPort)
   val udpAddress = new InetSocketAddress(hostName, udpPort)
 
   if (autoSetExternalAddress) {

@@ -2,12 +2,11 @@ package org.constellation.util
 
 import java.util.concurrent.ForkJoinPool
 
+import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.consensus.SnapshotInfo
 import org.constellation.primitives.Schema._
 import org.constellation.{HostPort, PeerMetadata}
-import scalaj.http.HttpResponse
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
@@ -62,7 +61,7 @@ class Simulation {
 
   def addPeer(
                apis: Seq[APIClient], peer: PeerMetadata
-             )(implicit executionContext: ExecutionContext): Seq[HttpResponse[String]] = {
+             )(implicit executionContext: ExecutionContext): Seq[Response[String]] = {
     apis.map{
       _.postSync("addPeer", peer)
     }
@@ -70,7 +69,7 @@ class Simulation {
 
   def addPeerWithRegistrationFlow(
                apis: Seq[APIClient], peer: HostPort
-             )(implicit executionContext: ExecutionContext): Seq[HttpResponse[String]] = {
+             )(implicit executionContext: ExecutionContext): Seq[Response[String]] = {
     apis.map{
       _.postSync("peer/add", peer)
     }
@@ -238,7 +237,7 @@ class Simulation {
     )
   }
 
-  def sendRandomTransaction(apis: Seq[APIClient]): Future[HttpResponse[String]] = {
+  def sendRandomTransaction(apis: Seq[APIClient]): Future[Response[String]] = {
     val src = randomNode(apis)
     val dst = randomOtherNode(src, apis).id.address.address
 
@@ -246,7 +245,7 @@ class Simulation {
     src.post("send", s)
   }
 
-  def triggerRandom(apis: Seq[APIClient]): Seq[HttpResponse[String]] = {
+  def triggerRandom(apis: Seq[APIClient]): Seq[Response[String]] = {
     apis.map(_.postEmpty("random"))
   }
   def setReady(apis: Seq[APIClient]): Unit = {

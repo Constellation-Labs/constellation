@@ -10,7 +10,7 @@ import scala.util.{Random, Try}
 
 object RandomTransactionManager {
 
-  def trigger(round: Long)(implicit dao: DAO): Future[Try[Any]] = {
+  def trigger(round: Long)(implicit dao: DAO): Future[Try[Unit]] = {
 
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 

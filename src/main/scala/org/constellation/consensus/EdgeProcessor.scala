@@ -3,19 +3,17 @@ package org.constellation.consensus
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, ActorLogging, ActorSystem}
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.EdgeProcessor.FinishedCheckpoint
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, HeartbeatSubscribe, ProductHash}
+import org.constellation.util.{APIClient, ProductHash}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 object EdgeProcessor {
 
@@ -255,7 +253,7 @@ object EdgeProcessor {
 
             val parsed = nonFailedResponses.mapValues(v =>
               tryWithMetric({
-                v.body.x[Option[SignatureResponse]]
+                v.unsafeBody.x[Option[SignatureResponse]]
               }, "formCheckpointSignatureResponseJsonParsing")
             )
 
@@ -413,14 +411,14 @@ object EdgeProcessor {
     futureTryWithTimeoutMetric(
       if (dao.nodeState == NodeState.DownloadCompleteAwaitingFinalSync) {
         dao.threadSafeTipService.syncBufferAccept(fc.checkpointCacheData)
-        Future.successful()
+        Future.successful(Unit)
       } else if (dao.nodeState == NodeState.Ready) {
         if (fc.checkpointCacheData.checkpointBlock.exists {
           _.simpleValidation()
         }) {
           acceptWithResolveAttempt(fc.checkpointCacheData)
-        } else Future.successful()
-      } else Future.successful()
+        } else Future.successful(Unit)
+      } else Future.successful(Unit)
       , "handleFinishedCheckpoint"
     )(dao.finishedExecutionContext, dao)
   }

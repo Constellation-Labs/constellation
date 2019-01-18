@@ -25,13 +25,14 @@ import org.constellation.primitives.{APIBroadcast, _}
 import org.constellation.util.{CommonEndpoints, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
-import scalaj.http.HttpResponse
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
 import java.io.{StringWriter, Writer}
+
+import com.softwaremill.sttp.Response
 
 case class PeerMetadata(
                      host: String,
@@ -189,11 +190,9 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           }
         } ~
         path("add") {
-          entity(as[HostPort]) { case hp @ HostPort(host, port) =>
-            onComplete{
-              PeerManager.attemptRegisterPeer(hp)
-            } { result =>
-
+          entity(as[HostPort]) { hp =>
+            onComplete(PeerManager.attemptRegisterPeer(hp)) { result =>
+              logger.info(s"Add Peer Request: $hp. Result: $result")
               complete(StatusCodes.OK)
             }
 
@@ -230,7 +229,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         complete(StatusCodes.OK)
       } ~
       path("peerHealthCheck") {
-        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse[String]]]]
+        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[Response[String]]]]
         val res = response.getOpt().map{
           idMap =>
 

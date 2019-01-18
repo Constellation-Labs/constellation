@@ -3,16 +3,25 @@ import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 enablePlugins(JavaAppPackaging)
 addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 
+scalacOptions := Seq("-unchecked", "-deprecation")
+
 lazy val _version = "1.0.1"
 
 lazy val versions = new {
-  val akka = "2.5.16"
-  val akkaHttp = "10.1.5"
-  val akkaHttpCors = "0.3.0"
+  val akka = "2.5.19"
+  val akkaHttp = "10.1.7"
+  val akkaHttpCors = "0.3.4"
   val spongyCastle = "1.58.0.0"
   val micrometer = "1.1.2"
-  val prometheus = "0.6.0"
+  val prometheus  = "0.6.0"
+  val sttp = "1.5.7"
 }
+
+lazy val sttpDependencies = Seq(
+  "com.softwaremill.sttp" %% "akka-http-backend" % versions.sttp,
+  "com.softwaremill.sttp" %% "json4s" % versions.sttp,
+  "com.softwaremill.sttp" %% "prometheus-backend" % versions.sttp
+)
 
 lazy val commonSettings = Seq(
   version := _version,
@@ -42,7 +51,8 @@ lazy val commonSettings = Seq(
     """-DakkaActorSystemName="$AKKA_ACTOR_SYSTEM_NAME""""
   ),
   resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases",
-  resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/"
+  resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
+  resolvers += Resolver.bintrayRepo("lonelyplanet", "maven")
 
 )
 
@@ -53,9 +63,10 @@ lazy val coreDependencies = Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
+  "com.typesafe.akka" %% "akka-stream" % versions.akka,
   "ch.megard" %% "akka-http-cors" % versions.akkaHttpCors,
   "de.heikoseeberger" %% "akka-http-json4s" % "1.16.1",
-  "org.json4s" %% "json4s-native" % "3.6.1",
+  "org.json4s" %% "json4s-native" % "3.6.3",
   "com.madgag.spongycastle" % "core" % versions.spongyCastle,
   "com.madgag.spongycastle" % "prov" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
@@ -64,8 +75,7 @@ lazy val coreDependencies = Seq(
   "org.bouncycastle" % "bcprov-jdk15on" % "1.51",
   "org.iq80.leveldb"            % "leveldb"          % "0.10" withSources() withJavadoc(),
   "com.codahale" % "shamir" % "0.6.0" withSources() withJavadoc(),
-  "org.json4s" %% "json4s-ext" % "3.5.2",
-  "org.scalaj" %% "scalaj-http" % "2.4.1" withJavadoc() withSources(),
+  "org.json4s" %% "json4s-ext" % "3.6.3",
   "com.twitter" %% "chill" % "0.9.3",
   "com.twitter" %% "algebird-core" % "0.13.4",
   "org.typelevel" %% "cats-core" % "1.3.1",
@@ -77,9 +87,10 @@ lazy val coreDependencies = Seq(
   "io.swaydb" %% "swaydb" % "0.6",
   "io.kontainers" %% "micrometer-akka" % "0.9.1",
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
+  "com.lonelyplanet" %% "prometheus-akka-http" % "0.4.0",
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus
-)
+) ++ sttpDependencies
 
 //Test dependencies
 lazy val testDependencies = Seq(
