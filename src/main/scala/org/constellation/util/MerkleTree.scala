@@ -19,8 +19,7 @@ case class MerkleProof(input: String, nodes: Seq[MerkleNode], root: String) {
 
 case class MerkleResult(inputs: Seq[String], nodes: Seq[MerkleNode]) {
 
-  def createProof(inputIndex: Int): MerkleProof = {
-    val startingPoint = inputs(inputIndex)
+  def createProof(startingPoint: String): MerkleProof = {
     val parentMap = MerkleTree.childToParent(nodes)
     val firstParent = parentMap(startingPoint)
     MerkleProof(startingPoint, MerkleTree.collectParents(Seq(), firstParent, parentMap), nodes.last.hash)

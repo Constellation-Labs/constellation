@@ -468,7 +468,7 @@ class StorageService[T](size: Int = 50000) {
 
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
 class CheckpointService(size: Int = 50000) extends StorageService[CheckpointCacheData](size)
-class MessageService(size: Int = 50000) extends StorageService[ChannelMessage](size)
+class MessageService(size: Int = 50000) extends StorageService[ChannelMessageMetadata](size)
 class TransactionService(size: Int = 50000) extends StorageService[TransactionCacheData](size) {
   private val queue = mutable.Queue[TransactionSerialized]()
   private val maxQueueSize = 20

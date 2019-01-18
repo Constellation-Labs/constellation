@@ -9,6 +9,7 @@ import akka.util.Timeout
 import better.files.File
 import org.constellation.{ConstellationNode, HostPort}
 import org.constellation.consensus.StoredSnapshot
+import org.constellation.primitives.{ChannelMessageMetadata, ChannelProof}
 import org.constellation.primitives.Schema.CheckpointCacheData
 import org.constellation.util.{Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
@@ -78,6 +79,18 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     val downloadAPI = downloadNode.getAPIClient()
     assert(sim.checkReady(Seq(downloadAPI)))
+
+    val messageChannel = initialAPIs.head.getBlocking[Seq[String]]("channels").head
+
+    val messageWithinSnapshot = initialAPIs.head.getBlocking[Option[ChannelProof]]("channel/" + messageChannel)
+
+    assert(messageWithinSnapshot.exists{ proof =>
+      val m = proof.channelMessageMetadata
+      m.snapshotHash.nonEmpty && m.blockHash.nonEmpty && proof.checkpointMessageProof.verify() &&
+      proof.checkpointProof.verify() &&
+      m.blockHash.contains{proof.checkpointProof.input} &&
+      m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
+    })
 
     Thread.sleep(20*1000)
 

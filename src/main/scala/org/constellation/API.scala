@@ -22,7 +22,7 @@ import org.constellation.p2p.Download
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, _}
-import org.constellation.util.{CommonEndpoints, ServeUI}
+import org.constellation.util.{CommonEndpoints, MerkleTree, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
 import scalaj.http.HttpResponse
@@ -32,6 +32,10 @@ import scala.util.Try
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
 import java.io.{StringWriter, Writer}
+
+import better.files.File
+import org.constellation.consensus.StoredSnapshot
+import org.constellation.serializer.KryoSerializer
 
 case class PeerMetadata(
                      host: String,
@@ -66,7 +70,8 @@ case class ProcessingConfig(
                              transactionLRUMaxSize: Int = 10000,
                              addressLRUMaxSize: Int = 10000,
                              formCheckpointTimeout: Int = 60,
-                             maxFaucetSize: Int = 1000
+                             maxFaucetSize: Int = 1000,
+                             roundsPerMessage: Int = 10
 ) {
 
 }
@@ -98,6 +103,64 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
   val getEndpoints: Route =
     extractClientIP { clientIP =>
       get {
+        path("channels") {
+          complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
+        } ~
+        path ("channel" / Segment) { channelHash =>
+
+
+          val maxDepth = 10
+
+          def getMessageWithSnapshotHash(
+                                          depth: Int,
+                                          lastMessage: Option[ChannelMessageMetadata]
+                                        ): Option[ChannelMessageMetadata] = {
+            if (depth > maxDepth) None
+            else {
+              lastMessage.flatMap{ m =>
+                if (m.snapshotHash.nonEmpty) Some(m)
+                else {
+                 getMessageWithSnapshotHash(
+                   depth + 1,
+                   dao.messageService.get(m.channelMessage.signedMessageData.data.previousMessageDataHash)
+                 )
+                }
+              }
+            }
+          }
+
+          val res = getMessageWithSnapshotHash(0, dao.messageService.get(channelHash))
+
+          val proof = res.flatMap{ cmd =>
+
+            cmd.snapshotHash.flatMap{ snapshotHash =>
+
+              tryWithMetric({
+                KryoSerializer.deserializeCast[StoredSnapshot](File(dao.snapshotPath, snapshotHash).byteArray)
+              },
+                "readSnapshotForMessage"
+              ).toOption.map{ storedSnapshot =>
+
+                val blockProof = MerkleTree(storedSnapshot.snapshot.checkpointBlocks).createProof(cmd.blockHash.get)
+                val block = storedSnapshot.checkpointCache.filter {
+                  _.checkpointBlock.get.baseHash == cmd.blockHash.get
+                }.head.checkpointBlock.get
+                val messageProofInput = block.transactions.map{_.hash} ++ block.checkpoint.edge.resolvedObservationEdge.data.get.messages.map{_.signedMessageData.signatures.hash}
+                val messageProof = MerkleTree(messageProofInput).createProof(cmd.channelMessage.signedMessageData.signatures.hash)
+                ChannelProof(
+                  cmd,
+                  blockProof,
+                  messageProof
+                )
+              }
+
+
+            }
+
+          }
+
+          complete(proof)
+        } ~
           path("restart") { // TODO: Revisit / fix
             dao.restartNode()
             System.exit(0)

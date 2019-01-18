@@ -46,8 +46,8 @@ object EdgeProcessor {
       }
 
       cb.checkpoint.edge.resolvedObservationEdge.data.get.messages.foreach{ m =>
-        dao.messageService.put(m.signedMessageData.data.channelId, m)
-        dao.messageService.put(m.signedMessageData.signatures.hash, m)
+        dao.messageService.put(m.signedMessageData.data.channelId, ChannelMessageMetadata(m, Some(cb.baseHash)))
+        dao.messageService.put(m.signedMessageData.signatures.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.metricsManager ! IncrementMetric("messageAccepted")
       }
 
@@ -482,8 +482,26 @@ object Snapshot {
   def acceptSnapshot(snapshot: Snapshot)(implicit dao: DAO): Unit = {
     // dao.dbActor.putSnapshot(snapshot.hash, snapshot)
     val cbData = snapshot.checkpointBlocks.map{dao.checkpointService.get}
+
+
+
     if (cbData.exists{_.isEmpty}) {
       dao.metricsManager ! IncrementMetric("snapshotCBAcceptQueryFailed")
+    }
+
+
+    for (
+      cbOpt <- cbData;
+      cbCache <- cbOpt;
+      cb <- cbCache.checkpointBlock;
+      data <- cb.checkpoint.edge.resolvedObservationEdge.data;
+      message <- data.messages
+    ) {
+      dao.messageService.update(message.signedMessageData.signatures.hash,
+        _.copy(snapshotHash = Some(snapshot.hash)),
+        ChannelMessageMetadata(message, Some(cb.baseHash), Some(snapshot.hash))
+      )
+      dao.metricsManager ! IncrementMetric("messageSnapshotHashUpdated")
     }
 
     for (

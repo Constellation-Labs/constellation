@@ -4,7 +4,7 @@ import java.security.KeyPair
 
 import org.constellation.DAO
 import org.constellation.primitives.Schema.{EdgeHashType, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
-import org.constellation.util.{ProductHash, SignatureBatch}
+import org.constellation.util.{MerkleProof, MerkleResult, ProductHash, SignatureBatch}
 import constellation._
 
 case class ChannelMessageData(
@@ -18,6 +18,12 @@ case class SignedData[+D <: ProductHash](
                                           signatures: SignatureBatch
                                         ) extends ProductHash
 
+case class ChannelMessageMetadata(
+                                 channelMessage: ChannelMessage,
+                                 blockHash: Option[String] = None,
+                                 snapshotHash: Option[String] = None
+                                 )
+
 case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 
 object ChannelMessage {
@@ -28,6 +34,13 @@ object ChannelMessage {
     )
   }
 }
+
+case class ChannelProof(
+                       channelMessageMetadata: ChannelMessageMetadata,
+                       // snapshotProof: MerkleProof,
+                       checkpointProof: MerkleProof,
+                       checkpointMessageProof: MerkleProof
+                       )
 
 
 // TODO: Parent references?
