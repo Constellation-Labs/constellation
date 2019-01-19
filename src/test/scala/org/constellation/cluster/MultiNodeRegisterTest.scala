@@ -72,7 +72,7 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
             a.configKeyPair.getPublic.toString
           )
         val res = a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
-        res
+        assert(res.isSuccess)
       }
       register(n,m)
       register(m,n)

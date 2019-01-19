@@ -83,7 +83,7 @@ object PeerManager {
     futureTryWithTimeoutMetric({
       logger.info(s"Attempting to register with $hp")
 
-      new APIClient(hp.host, hp.port).postSync(
+      APIClient(hp.host, hp.port).postSync(
         "register",
         dao.peerRegistrationRequest
       )
@@ -105,12 +105,12 @@ object PeerManager {
     futureTryWithTimeoutMetric({
       logger.info(s"Attempting to register with $hp")
 
-    val client = new APIClient(hp.host, hp.port)(dao.apiClientExecutionContext, dao)
+    val client = APIClient(hp.host, hp.port)(dao.apiClientExecutionContext, dao)
 
     client.getNonBlocking[PeerRegistrationRequest]("registration/request").onComplete {
       case Success(registrationRequest) =>
         dao.peerManager ! PendingRegistration(hp.host, registrationRequest)
-        client.postNonBlocking("register", dao.peerRegistrationRequest)
+        client.post("register", dao.peerRegistrationRequest)
       case Failure(e) =>
         dao.metricsManager ! IncrementMetric("peerGetRegistrationRequestFailed")
     }(dao.apiClientExecutionContext)
@@ -127,11 +127,11 @@ object PeerManager {
         pmd.foreach {
           md =>
             if (dao.id != md.id && validPeerAddition(HostPort(md.host, md.httpPort), dao.peerInfo)) {
-              val client = new APIClient(md.host, md.httpPort)(dao.apiClientExecutionContext, dao)
+              val client = APIClient(md.host, md.httpPort)(dao.apiClientExecutionContext, dao)
               client.getNonBlocking[PeerRegistrationRequest]("registration/request").onComplete {
                 case Success(registrationRequest) =>
                   dao.peerManager ! PendingRegistration(md.host, registrationRequest)
-                  client.postNonBlocking("register", dao.peerRegistrationRequest)
+                  client.post("register", dao.peerRegistrationRequest)
                 case Failure(e) =>
                   dao.metricsManager ! IncrementMetric("peerGetRegistrationRequestFailed")
               }(dao.apiClientExecutionContext)

@@ -8,8 +8,8 @@ import org.constellation.serializer.KryoSerializer
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import com.softwaremill.sttp._
-import com.softwaremill.sttp.akkahttp._
 import com.softwaremill.sttp.json4s._
+import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.typesafe.scalalogging.Logger
 
@@ -18,23 +18,22 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 
 object APIClient {
 
-  def apply(host: String = "127.0.0.1", port: Int, udpPort: Int = 16180)
+  def apply(host: String = "127.0.0.1", port: Int, peerHTTPPort: Int = 9001, internalPeerHost: String = "")
            (
-             implicit executionContext: ExecutionContext, dao: DAO = null
-             //implicit system: ActorSystem, materialize: ActorMaterializer
+             implicit executionContext: ExecutionContext,
+             dao: DAO = null
   ): APIClient = {
-    new APIClient(host, port)
+    new APIClient(host, port, peerHTTPPort, internalPeerHost)(executionContext, dao)
   }
 }
 
-class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9001, val internalPeerHost: String = "")(
+class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9001, val internalPeerHost: String = "")(
  // implicit val system: ActorSystem,
- // implicit val materialize: ActorMaterializer
  implicit val executionContext: ExecutionContext,
  dao: DAO = null
   ) {
 
-  implicit val backend = new LoggingSttpBackend(PrometheusBackend(AkkaHttpBackend()))
+  implicit val backend = new LoggingSttpBackend[Future, Nothing](PrometheusBackend[Future, Nothing](OkHttpFutureBackend()))
   implicit val serialization = native.Serialization
 
   val logger = Logger(s"APIClient(host=$host, port=$port)")
@@ -92,9 +91,8 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
 
   def post(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)
           (implicit f : Formats = constellation.constellationFormats): Future[Response[String]] = {
-    val ser = Serialization.write(b)
     httpWithAuth(suffix)(Method.POST)
-      .body(ser)
+      .body(b)
       .contentType("application/json")
       .send()
   }
@@ -123,8 +121,7 @@ class APIClient(host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9
   }
 
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
-    val res: Response[String] = postSync(suffix, b)
-    Serialization.read[T](res.unsafeBody)
+     postNonBlocking(suffix, b, timeoutSeconds).blocking(timeoutSeconds)
   }
 
   def postNonBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): Future[T] = {

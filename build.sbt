@@ -18,7 +18,7 @@ lazy val versions = new {
 }
 
 lazy val sttpDependencies = Seq(
-  "com.softwaremill.sttp" %% "akka-http-backend" % versions.sttp,
+  "com.softwaremill.sttp" %% "okhttp-backend" % versions.sttp,
   "com.softwaremill.sttp" %% "json4s" % versions.sttp,
   "com.softwaremill.sttp" %% "prometheus-backend" % versions.sttp
 )
@@ -51,9 +51,7 @@ lazy val commonSettings = Seq(
     """-DakkaActorSystemName="$AKKA_ACTOR_SYSTEM_NAME""""
   ),
   resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases",
-  resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
-  resolvers += Resolver.bintrayRepo("lonelyplanet", "maven")
-
+  resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/"
 )
 
 lazy val coreDependencies = Seq(
@@ -63,7 +61,6 @@ lazy val coreDependencies = Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
-  "com.typesafe.akka" %% "akka-stream" % versions.akka,
   "ch.megard" %% "akka-http-cors" % versions.akkaHttpCors,
   "de.heikoseeberger" %% "akka-http-json4s" % "1.16.1",
   "org.json4s" %% "json4s-native" % "3.6.3",
@@ -87,7 +84,6 @@ lazy val coreDependencies = Seq(
   "io.swaydb" %% "swaydb" % "0.6",
   "io.kontainers" %% "micrometer-akka" % "0.9.1",
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
-  "com.lonelyplanet" %% "prometheus-akka-http" % "0.4.0",
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus
 ) ++ sttpDependencies
