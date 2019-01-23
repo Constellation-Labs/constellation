@@ -82,7 +82,14 @@ object RandomTransactionManager {
             }
           }
 
-          if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold && dao.generateRandomTX && dao.nodeState == NodeState.Ready) {
+          if (
+            memPoolCount > dao.processingConfig.minCheckpointFormationThreshold &&
+              dao.generateRandomTX &&
+              dao.nodeState == NodeState.Ready &&
+              !dao.blockFormationInProgress
+          ) {
+
+            dao.blockFormationInProgress = true
 
             val messages = dao.threadSafeMessageMemPool.pull(1).getOrElse(Seq())
             futureTryWithTimeoutMetric(
@@ -93,9 +100,12 @@ object RandomTransactionManager {
                 messages.foreach { m =>
                   dao.threadSafeMessageMemPool.activeChannels(m.signedMessageData.data.channelId).release()
                 }
+                dao.blockFormationInProgress = false
               }
             )(dao.edgeExecutionContext, dao)
           }
+          dao.metricsManager ! UpdateMetric("blockFormationInProgress", dao.blockFormationInProgress.toString)
+
         }
       }
 

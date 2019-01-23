@@ -34,7 +34,7 @@ import io.prometheus.client.exporter.common.TextFormat
 import java.io.{StringWriter, Writer}
 
 import better.files.File
-import org.constellation.consensus.StoredSnapshot
+import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.serializer.KryoSerializer
 
 case class PeerMetadata(
@@ -53,7 +53,7 @@ case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = Non
 
 case class ProcessingConfig(
                              maxWidth: Int = 10,
-                             minCheckpointFormationThreshold: Int = 100,
+                             minCheckpointFormationThreshold: Int = 50,
                              numFacilitatorPeers: Int = 2,
                              randomTXPerRoundPerPeer: Int = 100,
                              metricCheckInterval: Int = 60,
@@ -63,8 +63,8 @@ case class ProcessingConfig(
                              maxAcceptedCBHashesInMemory: Int = 5000,
                              peerHealthCheckInterval : Int = 30,
                              peerDiscoveryInterval : Int = 60,
-                             snapshotHeightInterval: Int = 5,
-                             snapshotHeightDelayInterval: Int = 15,
+                             snapshotHeightInterval: Int = 2,
+                             snapshotHeightDelayInterval: Int = 5,
                              snapshotInterval: Int = 25,
                              checkpointLRUMaxSize: Int = 4000,
                              transactionLRUMaxSize: Int = 10000,
@@ -109,27 +109,8 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         path ("channel" / Segment) { channelHash =>
 
 
-          val maxDepth = 10
 
-          def getMessageWithSnapshotHash(
-                                          depth: Int,
-                                          lastMessage: Option[ChannelMessageMetadata]
-                                        ): Option[ChannelMessageMetadata] = {
-            if (depth > maxDepth) None
-            else {
-              lastMessage.flatMap{ m =>
-                if (m.snapshotHash.nonEmpty) Some(m)
-                else {
-                 getMessageWithSnapshotHash(
-                   depth + 1,
-                   dao.messageService.get(m.channelMessage.signedMessageData.data.previousMessageDataHash)
-                 )
-                }
-              }
-            }
-          }
-
-          val res = getMessageWithSnapshotHash(0, dao.messageService.get(channelHash))
+          val res = Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.get(channelHash))
 
           val proof = res.flatMap{ cmd =>
 

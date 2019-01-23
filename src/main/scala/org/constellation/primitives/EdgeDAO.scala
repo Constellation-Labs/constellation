@@ -99,7 +99,7 @@ class ThreadSafeTipService() {
 
 
   private var thresholdMetCheckpoints: Map[String, TipData] = Map()
-  private var acceptedCBSinceSnapshot: Seq[String] = Seq()
+  var acceptedCBSinceSnapshot: Seq[String] = Seq()
   private var facilitators: Map[Id, PeerData] = Map()
   private var snapshot: Snapshot = Snapshot.snapshotZero
 
@@ -111,7 +111,7 @@ class ThreadSafeTipService() {
       acceptedCBSinceSnapshot,
       lastSnapshotHeight = lastSnapshotHeight,
       snapshotHashes = dao.snapshotHashes,
-      addressCacheData = dao.addressService.lruCache.iterator.toMap,
+      addressCacheData = dao.addressService.toMap(),
       tips = thresholdMetCheckpoints,
       snapshotCache = snapshot.checkpointBlocks.flatMap{dao.checkpointService.get}
     )
@@ -253,7 +253,7 @@ class ThreadSafeTipService() {
               val flatten = maybeBlocks.flatten.sortBy(_.checkpointBlock.map {
                 _.baseHash
               })
-              File(dao.snapshotPath, snapshot.hash).writeByteArray(KryoSerializer.serializeAnyRef(StoredSnapshot(snapshot, flatten)))
+              Snapshot.writeSnapshot(StoredSnapshot(snapshot, flatten))
               // dao.dbActor.kvdb.put("latestSnapshot", snapshot)
             },
               "snapshotWriteToDisk"
@@ -462,6 +462,10 @@ class StorageService[T](size: Int = 50000) {
       data
     }
 
+  def toMap(): Map[String, T] = this.synchronized {
+    lruCache.iterator.toMap
+  }
+
 
 }
 
@@ -494,6 +498,8 @@ class AddressService(size: Int = 50000) extends StorageService[AddressCacheData]
 trait EdgeDAO {
 
   var processingConfig = ProcessingConfig()
+
+  @volatile var blockFormationInProgress: Boolean = false
 
 
   val checkpointService = new CheckpointService(processingConfig.checkpointLRUMaxSize)

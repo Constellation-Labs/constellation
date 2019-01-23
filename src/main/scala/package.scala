@@ -142,7 +142,7 @@ package object constellation extends POWExt
       case Success(x) =>
         dao.metricsManager ! IncrementMetric(metricPrefix + "_success")
       case Failure(e) =>
-        e.printStackTrace()
+        metricPrefix + ": " + e.printStackTrace()
         dao.metricsManager ! IncrementMetric(metricPrefix + "_failure")
     }
     attempt
