@@ -56,7 +56,7 @@ object MerkleTree {
     }
   }
 
-  def apply(hashes: Seq[String]): MerkleResult = {
+  def apply(hashes: List[String]): MerkleResult = {
     if (hashes.isEmpty) {
       throw new Exception("Merkle function call on empty collection of hashes")
     }
@@ -87,7 +87,7 @@ object MerkleTree {
 
   def main(args: Array[String]): Unit = {
 
-    val testHash = Seq.tabulate(25){i => s"e_$i"}.map{_.sha256}
+    val testHash = List.tabulate(25){i => s"e_$i"}.map{_.sha256}
 
     val result = apply(testHash)
 
