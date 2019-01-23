@@ -17,7 +17,6 @@ import scala.util.Try
 
 class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
-
   val logger = Logger("MultiNodeRegisterTest")
 
   val tmpDir = "tmp"
@@ -56,7 +55,7 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
 
     val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(createNode())
 
-    nodes.foreach { node => println(node.getIPData) }
+    nodes.foreach { node => logger.debug(node.getIPData.toString) }
 
     nodes.foreach { n =>
       assert(n.ipManager.listKnownIPs.isEmpty)

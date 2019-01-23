@@ -103,16 +103,16 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
         extractClientIP { clientIP =>
           entity(as[PeerRegistrationRequest]) { request =>
             val hostAddress = clientIP.toOption.map{_.getHostAddress}
-            logger.info(s"Received peer registration request $request on $clientIP $hostAddress ${clientIP.toOption} ${clientIP.toIP}")
+            logger.debug(s"Received peer registration request $request on $clientIP $hostAddress ${clientIP.toOption} ${clientIP.toIP}")
             val maybeData = getHostAndPortFromRemoteAddress(clientIP)
             maybeData match {
               case Some(PeerIPData(host, _)) =>
-                logger.info("Parsed host and port, sending peer manager request")
+                logger.debug("Parsed host and port, sending peer manager request")
                 dao.peerManager ! PendingRegistration(host, request)
                 pendingRegistrations = pendingRegistrations.updated(host, request)
                 complete(StatusCodes.OK)
               case None =>
-                logger.info(s"Failed to parse host and port for $request")
+                logger.warn(s"Failed to parse host and port for $request")
                 complete(StatusCodes.BadRequest)
             }
           }

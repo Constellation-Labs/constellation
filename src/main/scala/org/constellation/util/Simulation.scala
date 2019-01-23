@@ -103,7 +103,7 @@ class Simulation {
         apis.forall{ a =>
           val maybeObservation = a.getBlocking[Option[GenesisObservation]]("genesis")
           if (maybeObservation.isDefined) {
-            println(s"Genesis stored on ${a.hostName} ${a.apiPort}")
+            logger.info(s"Genesis stored on ${a.hostName} ${a.apiPort}")
           }
           maybeObservation.nonEmpty
         }
@@ -171,7 +171,7 @@ class Simulation {
         apis.forall{ a =>
           val attempt = Try{a.getSync("health").isSuccess}
           if (attempt.isFailure) {
-            println(s"Failure on: ${a.hostName}:${a.apiPort}")
+            logger.warn(s"Failure on: ${a.hostName}:${a.apiPort}")
           }
           attempt.getOrElse(false)
         }

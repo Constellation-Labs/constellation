@@ -9,7 +9,7 @@ import com.typesafe.scalalogging.Logger
 import constellation.futureTryWithTimeoutMetric
 import org.constellation.p2p.{Download, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.{Id, InternalHeartbeat, SendToAddress}
+import org.constellation.primitives.Schema.{Id, InternalHeartbeat}
 import org.constellation.util._
 import org.constellation.{DAO, HostPort, PeerMetadata, RemovePeerRequest}
 
@@ -105,18 +105,19 @@ object PeerManager {
     futureTryWithTimeoutMetric({
       logger.info(s"Attempting to register with $hp")
 
-    val client = APIClient(hp.host, hp.port)(dao.apiClientExecutionContext, dao)
+      val client = APIClient(hp.host, hp.port)(dao.apiClientExecutionContext, dao)
 
-    client.getNonBlocking[PeerRegistrationRequest]("registration/request").onComplete {
-      case Success(registrationRequest) =>
-        dao.peerManager ! PendingRegistration(hp.host, registrationRequest)
-        client.post("register", dao.peerRegistrationRequest)
-      case Failure(e) =>
-        dao.metricsManager ! IncrementMetric("peerGetRegistrationRequestFailed")
-    }(dao.apiClientExecutionContext)
-    },
-      "addPeerWithRegistrationSymmetric"
-    )
+      client.getNonBlocking[PeerRegistrationRequest]("registration/request")
+          .map { registrationRequest =>
+            dao.peerManager ! PendingRegistration(hp.host, registrationRequest)
+            client.post("register", dao.peerRegistrationRequest)
+          }
+          .recover { case e: Throwable =>
+            logger.error("registration request failed", e)
+            dao.metricsManager ! IncrementMetric("peerGetRegistrationRequestFailed")
+            throw e
+          }(dao.apiClientExecutionContext)
+      }, "addPeerWithRegistrationSymmetric")
 
   }
 
@@ -307,7 +308,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
     case pr @ PendingRegistration(ip, request) =>
 
-      logger.info(s"Pending Registration request: $pr")
+      logger.debug(s"Pending Registration request: $pr")
 
       // TODO: Refactor and add metrics
       // Also should attempt to allow peers to re-register to potentially update their status or ID? Or handle elsewhere.
@@ -344,13 +345,13 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
           }
 
           if (!sig.valid) {
-            logger.info(s"Invalid peer signature $request $authSignRequest $sig")
+            logger.warn(s"Invalid peer signature $request $authSignRequest $sig")
             dao.metricsManager ! IncrementMetric("invalidPeerRegistrationSignature")
           }
 
           dao.metricsManager ! IncrementMetric("peerAddedFromRegistrationFlow")
 
-          logger.info(s"Valid peer signature $request $authSignRequest $sig")
+          logger.debug(s"Valid peer signature $request $authSignRequest $sig")
 
           val state = client.getBlocking[NodeStateInfo]("state").nodeState
 

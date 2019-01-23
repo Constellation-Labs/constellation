@@ -55,7 +55,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val coreDependencies = Seq(
-  "com.github.pathikrit" %% "better-files" % "3.6.0",
+  "com.github.pathikrit" %% "better-files" % "3.7.0" withSources() withJavadoc(),
   "com.roundeights" %% "hasher" % "1.2.0",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0",
   "ch.qos.logback" % "logback-classic" % "1.2.3",

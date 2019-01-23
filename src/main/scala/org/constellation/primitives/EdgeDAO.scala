@@ -73,7 +73,7 @@ class ThreadSafeTipService() {
       acceptedCBSinceSnapshot,
       lastSnapshotHeight = lastSnapshotHeight,
       snapshotHashes = dao.snapshotHashes,
-      addressCacheData = dao.addressService.lruCache.iterator.toMap,
+      addressCacheData = dao.addressService.lruToMap(),
       tips = thresholdMetCheckpoints,
       snapshotCache = snapshot.checkpointBlocks.flatMap{dao.checkpointService.get}
     )
@@ -423,6 +423,10 @@ class StorageService[T](size: Int = 50000) {
       put(key, data)
       data
     }
+
+  def lruToMap(): Map[String, T] = this.synchronized {
+    lruCache.iterator.toMap
+  }
 
 
 }
