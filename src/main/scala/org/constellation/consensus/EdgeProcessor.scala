@@ -368,7 +368,7 @@ object EdgeProcessor {
 
       if (done) {
         val x = res.get.get
-        if (!dao.checkpointService.lruCache.contains(x.checkpointBlock.get.baseHash)) {
+        if (!dao.checkpointService.contains(x.checkpointBlock.get.baseHash)) {
           dao.metricsManager ! IncrementMetric("resolveAcceptCBCall")
           acceptWithResolveAttempt(x)
         }
@@ -389,7 +389,7 @@ object EdgeProcessor {
     dao.threadSafeTipService.accept(checkpointCacheData)
     val block = checkpointCacheData.checkpointBlock.get
     val parents = block.parentSOEBaseHashes
-    val parentExists = parents.map{h => h -> dao.checkpointService.lruCache.contains(h)}
+    val parentExists = parents.map{h => h -> dao.checkpointService.contains(h)}
     if (parentExists.forall(_._2)) {
       dao.metricsManager ! IncrementMetric("resolveFinishedCheckpointParentsPresent")
     } else {
