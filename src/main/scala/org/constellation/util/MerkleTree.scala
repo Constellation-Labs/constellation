@@ -85,15 +85,4 @@ object MerkleTree {
     }
   }
 
-  def main(args: Array[String]): Unit = {
-
-    val testHash = List.tabulate(25){i => s"e_$i"}.map{_.sha256}
-
-    val result = apply(testHash)
-
-
-
-
-  }
-
 }
