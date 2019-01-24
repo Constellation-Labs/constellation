@@ -91,7 +91,7 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
 
   def post(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)
           (implicit f : Formats = constellation.constellationFormats): Future[Response[String]] = {
-    httpWithAuth(suffix)(Method.POST)
+    httpWithAuth(suffix, timeoutSeconds = timeoutSeconds)(Method.POST)
       .body(b)
       .contentType("application/json")
       .send()
@@ -100,12 +100,12 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
   def put(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)
           (implicit f : Formats = constellation.constellationFormats): Future[Response[String]] = {
     val ser = Serialization.write(b)
-    httpWithAuth(suffix)(Method.PUT).body(ser).contentType("application/json").send()
+    httpWithAuth(suffix, timeoutSeconds = timeoutSeconds)(Method.PUT).body(ser).contentType("application/json").send()
   }
 
   def postEmpty(suffix: String, timeoutSeconds: Int = 15)(implicit f : Formats = constellation.constellationFormats)
   : Response[String] = {
-    httpWithAuth(suffix)(Method.POST).send().blocking()
+    httpWithAuth(suffix, timeoutSeconds = timeoutSeconds)(Method.POST).send().blocking()
   }
 
   def postSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
@@ -125,7 +125,7 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
   }
 
   def postNonBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): Future[T] = {
-    httpWithAuth(suffix)(Method.POST)
+    httpWithAuth(suffix, timeoutSeconds = timeoutSeconds)(Method.POST)
       .body(b)
       .contentType("application/json")
       .response(asJson[T])
@@ -134,7 +134,7 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
   }
 
   def postBlockingEmpty[T <: AnyRef](suffix: String, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
-    val res = postEmpty(suffix)
+    val res = postEmpty(suffix, timeoutSeconds)
     Serialization.read[T](res.unsafeBody)
   }
 
