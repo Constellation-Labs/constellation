@@ -5,6 +5,8 @@ addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.fu
 
 scalacOptions := Seq("-unchecked", "-deprecation")
 
+logBuffered in Test := false
+
 lazy val _version = "1.0.1"
 
 lazy val versions = new {

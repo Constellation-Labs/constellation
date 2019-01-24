@@ -100,11 +100,13 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     val storedSnapshots = allAPIs.map{_.simpleDownload()}
 
+    val snaps = storedSnapshots.toSet
+      .map{x : Seq[StoredSnapshot] =>
+        x.map{_.checkpointCache.flatMap{_.checkpointBlock}}.toSet
+      }
+
     assert(
-      storedSnapshots.toSet
-        .map{x : Seq[StoredSnapshot] =>
-          x.map{_.checkpointCache.flatMap{_.checkpointBlock}}.toSet
-        }.size == 1
+      snaps.size == 1
     )
 
   }

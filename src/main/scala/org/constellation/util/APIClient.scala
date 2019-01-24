@@ -1,5 +1,7 @@
 package org.constellation.util
 
+import akka.http.scaladsl.coding.Gzip
+import akka.util.ByteString
 import com.typesafe.config.ConfigFactory
 import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
@@ -91,16 +93,24 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
 
   def post(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)
           (implicit f : Formats = constellation.constellationFormats): Future[Response[String]] = {
+    val ser = Serialization.write(b)
+    val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
     httpWithAuth(suffix, timeoutSeconds = timeoutSeconds)(Method.POST)
-      .body(b)
+      .body(gzipped)
       .contentType("application/json")
+      .header("Content-Encoding", "gzip")
       .send()
   }
 
   def put(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)
           (implicit f : Formats = constellation.constellationFormats): Future[Response[String]] = {
     val ser = Serialization.write(b)
-    httpWithAuth(suffix, timeoutSeconds = timeoutSeconds)(Method.PUT).body(ser).contentType("application/json").send()
+    val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
+    httpWithAuth(suffix, timeoutSeconds = timeoutSeconds)(Method.PUT)
+      .body(gzipped)
+      .contentType("application/json")
+      .header("Content-Encoding", "gzip")
+      .send()
   }
 
   def postEmpty(suffix: String, timeoutSeconds: Int = 15)(implicit f : Formats = constellation.constellationFormats)
@@ -125,9 +135,12 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
   }
 
   def postNonBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): Future[T] = {
+    val ser = Serialization.write(b)
+    val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
     httpWithAuth(suffix, timeoutSeconds = timeoutSeconds)(Method.POST)
-      .body(b)
+      .body(gzipped)
       .contentType("application/json")
+      .header("Content-Encoding", "gzip")
       .response(asJson[T])
       .send()
       .map(_.unsafeBody)
