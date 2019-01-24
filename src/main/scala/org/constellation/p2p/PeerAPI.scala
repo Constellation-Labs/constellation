@@ -263,30 +263,12 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
     }
   }
 
-  val routes: Route = {
-   // rejectBannedIP {
-      signEndpoints ~ commonEndpoints ~  // { //enforceKnownIP
-        getEndpoints ~ postEndpoints ~ mixedEndpoints
-    //  }
-   // } // ~
-    //  faviconRoute ~ jsRequest ~ serveMainPage // <-- Temporary for debugging, control routes disabled.
-
+  val routes: Route = decodeRequest {
+    encodeResponse {
+      // rejectBannedIP {
+      signEndpoints ~ commonEndpoints ~ // { //enforceKnownIP
+      getEndpoints ~ postEndpoints ~ mixedEndpoints
+    }
   }
 
 }
-/*      get {
-        val memPoolPresence = dao.transactionMemPool.exists(_.hash == s)
-        val response = if (memPoolPresence) {
-          TransactionQueryResponse(s, dao.transactionMemPool.collectFirst{case x if x.hash == s => x}, inMemPool = true, inDAG = false, None)
-        } else {
-          dao.dbActor.getTransactionCacheData(s).map {
-            cd =>
-              TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence, cd.inDAG, cd.cbBaseHash)
-          }.getOrElse{
-            TransactionQueryResponse(s, None, inMemPool = false, inDAG = false, None)
-          }
-        }
-
-        complete(response)
-      } ~ complete (StatusCodes.BadRequest)
-    } ~*/

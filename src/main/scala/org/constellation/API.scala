@@ -343,7 +343,11 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
     }
 
   private val mainRoutes: Route = cors() {
-    getEndpoints ~ postEndpoints ~ jsRequest ~ commonEndpoints ~ serveMainPage
+    decodeRequest {
+      encodeResponse {
+        getEndpoints ~ postEndpoints ~ jsRequest ~ commonEndpoints ~ serveMainPage
+      }
+    }
   }
 
   private def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
