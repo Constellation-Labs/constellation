@@ -77,6 +77,8 @@ object MerkleTree {
     level.grouped(2).toSeq.map{
       case Seq(l, r) =>
         MerkleNode(merkleHashFunc(l,r), l, r)
+      case Seq(l) =>
+        MerkleNode(merkleHashFunc(l,l), l, l)
     }
   }
 
