@@ -11,7 +11,7 @@ import akka.util.{ByteString, Timeout}
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
-import org.constellation.consensus.StoredSnapshot
+import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.serializer.KryoSerializer
 import org.json4s.native.Serialization
@@ -47,7 +47,7 @@ trait CommonEndpoints extends Json4sSupport {
         complete(maybeHeights)
       } ~
     path("snapshotHashes") {
-      complete(dao.snapshotPath.list.toSeq.map{_.name})
+      complete(Snapshot.snapshotHashes())
     } ~
       path("info") {
         val info = dao.threadSafeTipService.getSnapshotInfo
@@ -63,12 +63,7 @@ trait CommonEndpoints extends Json4sSupport {
       path("storedSnapshot" / Segment) {s =>
         onComplete{
           Future{
-            import better.files._
-            tryWithMetric({
-              File(dao.snapshotPath, s).byteArray
-            },
-              "readSnapshot"
-            )
+            Snapshot.loadSnapshotBytes(s)
           }(dao.edgeExecutionContext)
         } {
           res =>

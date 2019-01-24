@@ -59,7 +59,8 @@ object TestNode {
       minPeerTimeAddedSeconds = 1,
       snapshotInterval = 5,
       snapshotHeightInterval = 2,
-      snapshotHeightDelayInterval = 1
+      snapshotHeightDelayInterval = 1,
+      roundsPerMessage = 1
     )
 
     node

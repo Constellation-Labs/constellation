@@ -152,7 +152,7 @@ object Schema {
     val AddressHash,
     CheckpointDataHash, CheckpointHash,
     TransactionDataHash, TransactionHash,
-    ValidationHash, BundleDataHash = Value
+    ValidationHash, BundleDataHash, ChannelMessageDataHash = Value
   }
 
   case class BundleEdgeData(rank: Double, hashes: Seq[String])
@@ -201,7 +201,7 @@ object Schema {
     * Collection of references to transaction hashes
     * @param hashes : TX edge hashes
     */
-  case class CheckpointEdgeData(hashes: Seq[String]) extends ProductHash
+  case class CheckpointEdgeData(hashes: Seq[String], messages: Seq[ChannelMessage] = Seq()) extends ProductHash
 
   case class ResolvedObservationEdge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
   (left: L, right: R, data: Option[D] = None)
@@ -559,7 +559,6 @@ object Schema {
 
     def isInSnapshot(c: CheckpointBlock)(implicit dao: DAO): Boolean =
       dao.threadSafeTipService
-        .getSnapshotInfo()
         .acceptedCBSinceSnapshot
         .contains(c.baseHash)
 
@@ -575,14 +574,16 @@ object Schema {
       spend |+| received
     }
 
+/*
     def getSnapshotBalances(implicit dao: DAO): AddressBalance =
       dao.threadSafeTipService
         .getSnapshotInfo()
         .addressCacheData
         .mapValues(_.balanceByLatestSnapshot)
+*/
 
     def validateDiff(a: (String, Long))(implicit dao: DAO): Boolean = a match {
-      case (hash, diff) => getSnapshotBalances.getOrElse(hash, 0L) + diff >= 0
+      case (hash, diff) => dao.addressService.get(hash).map{_.balanceByLatestSnapshot}.getOrElse(0L) + diff >= 0
     }
 
     def validateCheckpointBlockTree(cb: CheckpointBlock)(implicit dao: DAO): Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance] =
