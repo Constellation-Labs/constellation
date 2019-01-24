@@ -105,6 +105,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     // Stop transactions
     sim.triggerRandom(allAPIs)
 
+
     sim.logger.info("Stopping transactions to run parity check")
 
     Thread.sleep(30000)
