@@ -57,10 +57,13 @@ object MerkleTree {
   }
 
   def apply(hashes: List[String]): MerkleResult = {
+
     if (hashes.isEmpty) {
       throw new Exception("Merkle function call on empty collection of hashes")
     }
     val even = if (hashes.size % 2 != 0) hashes :+ hashes.last else hashes
+    println(s"Creating Merkle tree on ${even.length} hashes")
+
     val zero = applyRound(even)
     MerkleResult(hashes, merkleIteration(Seq(), zero))
   }
@@ -70,6 +73,7 @@ object MerkleTree {
   }
 
   def applyRound(level: Seq[String]): Seq[MerkleNode] = {
+    println(s"Applying Merkle round on ${level.length} level length")
     level.grouped(2).toSeq.map{
       case Seq(l, r) =>
         MerkleNode(merkleHashFunc(l,r), l, r)

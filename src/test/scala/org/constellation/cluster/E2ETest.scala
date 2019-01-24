@@ -84,13 +84,15 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     val messageWithinSnapshot = initialAPIs.head.getBlocking[Option[ChannelProof]]("channel/" + messageChannel)
 
-    assert(messageWithinSnapshot.exists{ proof =>
+    def messageValid() = messageWithinSnapshot.exists{ proof =>
       val m = proof.channelMessageMetadata
       m.snapshotHash.nonEmpty && m.blockHash.nonEmpty && proof.checkpointMessageProof.verify() &&
       proof.checkpointProof.verify() &&
       m.blockHash.contains{proof.checkpointProof.input} &&
       m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
-    })
+    }
+    // messageValid()
+    assert(messageValid())
 
     Thread.sleep(20*1000)
 
