@@ -14,7 +14,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
-import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest, handleTransaction}
+import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest, SignatureResponseWrapper, handleTransaction}
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -195,7 +195,9 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
               dao.metricsManager ! IncrementMetric("peerApiRXSignatureRequest")
               onComplete(
                 futureTryWithTimeoutMetric(
-                  EdgeProcessor.handleSignatureRequest(sr), "peerAPIHandleSignatureRequest"
+                  EdgeProcessor.handleSignatureRequest(sr),
+                  "peerAPIHandleSignatureRequest",
+                  60
                 )(dao.signatureExecutionContext, dao)
               ) {
                 result => // ^ Errors captured above
@@ -203,7 +205,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
                   val maybeResponse = result.toOption.flatMap {
                     _.toOption
                   }.map{_.copy(reRegister = !knownHost)}
-                  complete(maybeResponse)
+                  complete(SignatureResponseWrapper(maybeResponse).json)
               }
             }
           }

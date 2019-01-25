@@ -1,14 +1,12 @@
 package org.constellation.primitives
 
-import java.util.concurrent.{Executors, TimeUnit}
+import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 
 import akka.util.Timeout
-import better.files.File
 import com.twitter.storehaus.cache.MutableLRUCache
 import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
-import org.constellation.serializer.KryoSerializer
 import org.constellation.{DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
@@ -53,6 +51,44 @@ class ThreadSafeTXMemPool() {
 
 }
 
+class ThreadSafeMessageMemPool() {
+
+  private var messages = Seq[ChannelMessage]()
+
+  val activeChannels: TrieMap[String, Semaphore] = TrieMap()
+
+  def pull(minCount: Int): Option[Seq[ChannelMessage]] = this.synchronized{
+    if (messages.size > minCount) {
+      val (left, right) = messages.splitAt(minCount)
+      messages = right
+      Some(left)
+    } else None
+  }
+
+  def batchPutDebug(messagesToAdd: Seq[ChannelMessage]) : Boolean = this.synchronized{
+    messages ++= messagesToAdd
+    true
+  }
+
+  def put(message: ChannelMessage, overrideLimit: Boolean = false)(implicit dao: DAO): Boolean = this.synchronized{
+    val notContained = !messages.contains(message)
+
+    if (notContained) {
+      if (overrideLimit) {
+        // Prepend in front to process user TX first before random ones
+        messages = Seq(message) ++ messages
+
+      } else if (messages.size < dao.processingConfig.maxMemPoolSize) {
+        messages :+= message
+      }
+    }
+    notContained
+  }
+
+  def unsafeCount: Int = messages.size
+
+}
+
 import constellation._
 
 class ThreadSafeTipService() {
@@ -61,7 +97,7 @@ class ThreadSafeTipService() {
 
 
   private var thresholdMetCheckpoints: Map[String, TipData] = Map()
-  private var acceptedCBSinceSnapshot: Seq[String] = Seq()
+  var acceptedCBSinceSnapshot: Seq[String] = Seq()
   private var facilitators: Map[Id, PeerData] = Map()
   private var snapshot: Snapshot = Snapshot.snapshotZero
 
@@ -73,11 +109,12 @@ class ThreadSafeTipService() {
       acceptedCBSinceSnapshot,
       lastSnapshotHeight = lastSnapshotHeight,
       snapshotHashes = dao.snapshotHashes,
-      addressCacheData = dao.addressService.lruToMap(),
+      addressCacheData = dao.addressService.toMap(),
       tips = thresholdMetCheckpoints,
       snapshotCache = snapshot.checkpointBlocks.flatMap{dao.checkpointService.get}
     )
   )
+
 
   var totalNumCBsInShapshots = 0L
 
@@ -215,7 +252,7 @@ class ThreadSafeTipService() {
               val flatten = maybeBlocks.flatten.sortBy(_.checkpointBlock.map {
                 _.baseHash
               })
-              File(dao.snapshotPath, snapshot.hash).writeByteArray(KryoSerializer.serializeAnyRef(StoredSnapshot(snapshot, flatten)))
+              Snapshot.writeSnapshot(StoredSnapshot(snapshot, flatten))
               // dao.dbActor.kvdb.put("latestSnapshot", snapshot)
             },
               "snapshotWriteToDisk"
@@ -428,7 +465,7 @@ class StorageService[T](size: Int = 50000) {
       data
     }
 
-  def lruToMap(): Map[String, T] = this.synchronized {
+  def toMap(): Map[String, T] = this.synchronized {
     lruCache.iterator.toMap
   }
 
@@ -438,6 +475,7 @@ class StorageService[T](size: Int = 50000) {
 
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
 class CheckpointService(size: Int = 50000) extends StorageService[CheckpointCacheData](size)
+class MessageService(size: Int = 50000) extends StorageService[ChannelMessageMetadata](size)
 class TransactionService(size: Int = 50000) extends StorageService[TransactionCacheData](size) {
   private val queue = mutable.Queue[TransactionSerialized]()
   private val maxQueueSize = 20
@@ -464,12 +502,16 @@ trait EdgeDAO {
 
   var processingConfig = ProcessingConfig()
 
+  @volatile var blockFormationInProgress: Boolean = false
+
 
   val checkpointService = new CheckpointService(processingConfig.checkpointLRUMaxSize)
   val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
   val addressService = new AddressService(processingConfig.addressLRUMaxSize)
+  val messageService = new MessageService()
 
   val threadSafeTXMemPool = new ThreadSafeTXMemPool()
+  val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
   val threadSafeTipService = new ThreadSafeTipService()
 
   var genesisObservation: Option[GenesisObservation] = None
@@ -498,7 +540,7 @@ trait EdgeDAO {
   // Temporary to get peer data for tx hash partitioning
   @volatile var peerInfo: Map[Id, PeerData] = Map()
 
-  def readyPeers = peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
+  def readyPeers: Map[Id, PeerData] = peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
 
 
 }
