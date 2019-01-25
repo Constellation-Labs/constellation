@@ -62,7 +62,11 @@ object PeerManager {
     Thread.sleep(15*1000)
 
 
-    Download.download()
+    if (dao.peersInfoPath.nonEmpty || dao.seedsPath.nonEmpty) {
+      Download.download()
+    } else {
+      logger.warn("No peers or seeds configured yet. Skipping initial download.")
+    }
 
 
   }

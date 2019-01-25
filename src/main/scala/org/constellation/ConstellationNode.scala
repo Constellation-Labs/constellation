@@ -79,28 +79,30 @@ import scala.concurrent.ExecutionContext
 
       val hostName = Try{File("external_host_ip").lines.mkString}.getOrElse("127.0.0.1")
 
-
-      val keyPairPath = ".dag/key"
-      val localKeyPair = Try{File(keyPairPath).lines.mkString.x[KeyPair]}
-
-      localKeyPair match {
-        case Failure(e) =>
-          e.printStackTrace()
-        case _ =>
-      }
-
-
       // TODO: update to take from config
-      logger.info("pre Key pair")
-      val keyPair = {
-        localKeyPair.getOrElse {
-          logger.info(s"Key pair not found in $keyPairPath - Generating new key pair")
-          val kp = KeyUtils.makeKeyPair()
-          File(keyPairPath).write(kp.json)
-          kp
+    val keyPairFile = File(".dag/key")
+      val keyPair: KeyPair =
+      if (keyPairFile.notExists) {
+        logger.warn(
+          s"Key pair not found in $keyPairFile - Generating new key pair"
+        )
+        val kp = KeyUtils.makeKeyPair()
+        keyPairFile.write(kp.json)
+        kp
+      } else {
+
+        try {
+          keyPairFile.lines.mkString.x[KeyPair]
+        } catch {
+          case e: Exception =>
+            logger.error(
+              s"Keypair stored in $keyPairFile is invalid. Please delete it and rerun to create a new one.",
+              e
+            )
+          throw e
         }
       }
-      logger.info("post key pair")
+
 
 
       val portOffset = args.headOption.map{_.toInt}
