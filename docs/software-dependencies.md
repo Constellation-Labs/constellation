@@ -26,8 +26,9 @@ For further discussion relating to the dependiecs, see [/docs/design-choices.md]
 (todo: plaintext explainations of what we use and short note on alternatives):
 
 * [wiipedia/sbt](https://en.wikipedia.org/wiki/Sbt_(software))], Scala Build Tool
-* [wikipedia/Google_Cloud_Platform](https://en.wikipedia.org/wiki/Google_Cloud_Platform), Cloud hosting
-* [wikipedia/Docker](https://en.wikipedia.org/wiki/Docker_(software)), Container tool, see the 12min videos on [run](https://youtu.be/YFl2mCHdv24) and [compose](https://youtu.be/Qw9zlE3t8Ko) by J. Wright
+* [wikipedia/Google_Cloud_Platform](https://en.wikipedia.org/wiki/Google_Cloud_Platform), Cloud hosting - see 11min video on [how to set up a VM](https://youtu.be/chk2rRjSn5o) by sentdex
+* [wikipedia/PuTTY](https://en.wikipedia.org/wiki/PuTTY), SSH and telnet client ([download](https://www.putty.org/)), can be used to establish connection with GCP
+* [wikipedia/Docker](https://en.wikipedia.org/wiki/Docker_(software)), Container tool - see the 12min videos on [docker-run](https://youtu.be/YFl2mCHdv24) reps. [docker-compose](https://youtu.be/Qw9zlE3t8Ko) by Jake Wright
 * [grafana.com](https://grafana.com/), Analytics and monitoring platform, used with docker
 * [wikipedia/Vagrant](https://en.wikipedia.org/wiki/Vagrant_(software)), VM tool
 * [wikipedia/Terraform](https://en.wikipedia.org/wiki/Terraform_(software)), Infrastructure as code tool
