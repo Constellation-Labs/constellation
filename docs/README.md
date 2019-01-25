@@ -2,21 +2,16 @@ These docs provide technical information to understand, build and run the code b
 developed in this repository. 
 
 ## Table of contents
-Here's quick-links to the markdown files in this wiki:
+Here's quick-links to the markdown files in this folder:
 
 * [Annotated project folder tree](https://github.com/Constellation-Labs/constellation/blob/dev/docs/directory-tree.md)
 * [Architecture diagrams](https://github.com/Constellation-Labs/constellation/blob/dev/docs/architecture.md)
-* [Build instructions](https://github.com/Constellation-Labs/constellation/blob/dev/docs/build-instructions.md)
-* Code base architecture documentation
-* Development process
+* [Build instructions and pointers on how to run a node](https://github.com/Constellation-Labs/constellation/blob/dev/docs/build-instructions.md)
 * [Discussion of design choices](https://github.com/Constellation-Labs/constellation/blob/dev/docs/design-choices.md)
-* [Recommended tools and frameworks](https://github.com/Constellation-Labs/constellation/blob/dev/docs/tools-and-frameworks.md)
-* [Software dependencies](https://github.com/Constellation-Labs/constellation/blob/dev/docs/software-dependencies.md)
+* [Software dependencies and recommended tools and frameworks](https://github.com/Constellation-Labs/constellation/blob/dev/docs/software-dependencies.md)
 
 Much of the content here can be viewed at the 
-[documentation web page](https://constellation-labs.github.io/constellation/). Here are some hyperlinks:
-
-* [Running a node](https://constellation-labs.github.io/constellation/running-a-node/)
+[documentation web page](https://constellation-labs.github.io/constellation/).
 
 ## Wait, there's more...
 ### :books: Wiki
