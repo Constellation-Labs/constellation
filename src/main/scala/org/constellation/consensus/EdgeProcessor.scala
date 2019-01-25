@@ -4,21 +4,19 @@ import java.nio.file.Path
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, ActorLogging, ActorSystem}
 import akka.util.Timeout
-import better.files.File
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.EdgeProcessor.FinishedCheckpoint
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{APIClient, HeartbeatSubscribe, ProductHash}
+import org.constellation.util.{APIClient, ProductHash}
 
+import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 object EdgeProcessor {
 
@@ -269,7 +267,7 @@ object EdgeProcessor {
             val parsed = nonFailedResponses.mapValues(v =>
               tryWithMetric({
 
-                val result = Try{v.body.x[Option[SignatureResponseWrapper]].flatMap{_.signatureResponse}}
+                val result = Try{v.unsafeBody.x[Option[SignatureResponseWrapper]].flatMap{_.signatureResponse}}
                 if (result.isFailure) {
                   logger.error(s"Json response parsing error code: ${v.code} body: ${v.body}")
                   dao.metricsManager ! IncrementMetric(s"signatureResponseCode_${v.code}")
@@ -388,7 +386,7 @@ object EdgeProcessor {
       // TODO: Refactor all the error handling on these to include proper status codes etc.
       // See formCheckpoint for better example of error handling
       val res = tryWithMetric(
-        {activePeer.getBlocking[Option[CheckpointCacheData]]("checkpoint/" + hash, timeoutSeconds = 10)},
+        {activePeer.getBlocking[Option[CheckpointCacheData]]("checkpoint/" + hash, timeout = 10.seconds)},
         "downloadCheckpoint"
       )
 
@@ -396,7 +394,7 @@ object EdgeProcessor {
 
       if (done) {
         val x = res.get.get
-        if (!dao.checkpointService.lruCache.contains(x.checkpointBlock.get.baseHash)) {
+        if (!dao.checkpointService.contains(x.checkpointBlock.get.baseHash)) {
           dao.metricsManager ! IncrementMetric("resolveAcceptCBCall")
           acceptWithResolveAttempt(x)
         }
@@ -417,7 +415,7 @@ object EdgeProcessor {
     dao.threadSafeTipService.accept(checkpointCacheData)
     val block = checkpointCacheData.checkpointBlock.get
     val parents = block.parentSOEBaseHashes
-    val parentExists = parents.map{h => h -> dao.checkpointService.lruCache.contains(h)}
+    val parentExists = parents.map{h => h -> dao.checkpointService.contains(h)}
     if (parentExists.forall(_._2)) {
       dao.metricsManager ! IncrementMetric("resolveFinishedCheckpointParentsPresent")
     } else {
@@ -439,14 +437,14 @@ object EdgeProcessor {
     futureTryWithTimeoutMetric(
       if (dao.nodeState == NodeState.DownloadCompleteAwaitingFinalSync) {
         dao.threadSafeTipService.syncBufferAccept(fc.checkpointCacheData)
-        Future.successful()
+        Future.successful(Unit)
       } else if (dao.nodeState == NodeState.Ready) {
         if (fc.checkpointCacheData.checkpointBlock.exists {
           _.simpleValidation()
         }) {
           acceptWithResolveAttempt(fc.checkpointCacheData)
-        } else Future.successful()
-      } else Future.successful()
+        } else Future.successful(Unit)
+      } else Future.successful(Unit)
       , "handleFinishedCheckpoint"
     )(dao.finishedExecutionContext, dao)
   }

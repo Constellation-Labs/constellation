@@ -5,8 +5,8 @@ import com.twitter.chill.IKryoRegistrar
 import org.constellation.consensus.Consensus.{VoteData => _, _}
 import org.constellation.consensus._
 import org.constellation.p2p.SerializedUDPMessage
-import org.constellation.primitives.{ChannelMessage, ChannelMessageData, SignedData}
 import org.constellation.primitives.Schema._
+import org.constellation.primitives.{ChannelMessage, ChannelMessageData, SignedData}
 import org.constellation.util.{EncodedPublicKey, HashSignature, SignatureBatch, Signed}
 
 class ConstellationKryoRegistrar extends IKryoRegistrar {

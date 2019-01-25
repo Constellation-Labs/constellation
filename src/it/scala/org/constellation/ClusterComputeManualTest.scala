@@ -32,7 +32,7 @@ object ComputeTestUtil {
       ignoreIPs :+= str
       val offset = split(2).toInt
       println(s"Initializing API to $str offset: $offset")
-      new APIClient(split.head, port = offset + 1, peerHTTPPort = offset + 2, internalPeerHost = split(3))
+      APIClient(split.head, port = offset + 1, peerHTTPPort = offset + 2, internalPeerHost = split(3))
     }
 
     val auxMultiAPIs = Try{file"aux-multi-host.txt".lines.toSeq}.getOrElse(Seq()).flatMap{ ip =>
@@ -50,7 +50,7 @@ object ComputeTestUtil {
           println(sshCmd.mkString(" "))
           println(sshCmd.!!)
         }
-        new APIClient(split.head, port = adjustedOffset + 1, peerHTTPPort = adjustedOffset + 2, internalPeerHost = split(3))
+        APIClient(split.head, port = adjustedOffset + 1, peerHTTPPort = adjustedOffset + 2, internalPeerHost = split(3))
 
       }
     }
@@ -103,7 +103,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
     val apis = ips.map{ ip =>
       val split = ip.split(":")
       val portOffset = if (split.length == 1) 8999 else split(1).toInt
-      val a = new APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
+      val a = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
       sim.logger.info(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
       a
     } // ++ auxAPIs

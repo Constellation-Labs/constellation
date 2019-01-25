@@ -7,12 +7,12 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.APIClient
+import scala.concurrent.duration._
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Try}
@@ -54,7 +54,7 @@ object Download {
 
     logger.info(s"Downloading from: ${snapshotClient.hostName}:${snapshotClient.apiPort}")
 
-    val snapshotInfo = snapshotClient.getBlockingBytesKryo[SnapshotInfo]("info", timeoutSeconds = 300)
+    val snapshotInfo = snapshotClient.getBlockingBytesKryo[SnapshotInfo]("info", timeout = 300.seconds)
 
     dao.metricsManager ! UpdateMetric("downloadExpectedNumSnapshotsIncludingPreExisting", snapshotInfo.snapshotHashes.size.toString)
 
@@ -112,7 +112,7 @@ object Download {
 
       while (!done && remainingPeers.nonEmpty) {
 
-        val res = Try{activePeer.getBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash, timeoutSeconds = 100)}
+        val res = Try{activePeer.getBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash, timeout = 100.seconds)}
         res match {
           case Failure(e) => e.printStackTrace()
           case _ =>
@@ -152,7 +152,7 @@ object Download {
 
     // Thread.sleep(10*1000)
 
-    val snapshotInfo2 = snapshotClient.getBlockingBytesKryo[SnapshotInfo]("info", timeoutSeconds = 300)
+    val snapshotInfo2 = snapshotClient.getBlockingBytesKryo[SnapshotInfo]("info", timeout = 300.seconds)
 
     val snapshotHashes2 = snapshotInfo2.snapshotHashes
       .filterNot(preExistingSnapshots.contains)

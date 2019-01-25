@@ -11,8 +11,8 @@ import akka.util.Timeout
 import better.files.File
 import com.google.common.hash.Hashing
 import org.constellation.DAO
+import org.constellation.crypto.Base58
 import org.constellation.crypto.KeyUtils.{bytesToPrivateKey, bytesToPublicKey, _}
-import org.constellation.crypto.{Base58, KeyUtils}
 import org.constellation.primitives.IncrementMetric
 import org.constellation.primitives.Schema._
 import org.constellation.util.{EncodedPublicKey, POWExt, POWSignHelp}

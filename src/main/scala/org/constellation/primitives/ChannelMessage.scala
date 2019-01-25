@@ -1,11 +1,8 @@
 package org.constellation.primitives
 
-import java.security.KeyPair
-
-import org.constellation.DAO
-import org.constellation.primitives.Schema.{EdgeHashType, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
-import org.constellation.util.{MerkleProof, MerkleResult, ProductHash, SignatureBatch}
 import constellation._
+import org.constellation.DAO
+import org.constellation.util.{MerkleProof, ProductHash, SignatureBatch}
 
 case class ChannelMessageData(
                                message: String,

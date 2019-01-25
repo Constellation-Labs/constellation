@@ -6,13 +6,13 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
+import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.primitives.Schema._
 import org.constellation.util.{APIClient, Signed}
-import scalaj.http.HttpResponse
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Try}
@@ -36,7 +36,7 @@ trait PeerAuth {
 
   def getBroadcastTCP(skipIDs: Seq[Id] = Seq(),
                       idSubset: Seq[Id] = Seq(),
-                      route: String): Seq[(InetSocketAddress, Future[HttpResponse[String]])] = {
+                      route: String): Seq[(InetSocketAddress, Future[Response[String]])] = {
     val addresses = getBroadcastPeers(skipIDs, idSubset).map(_.apiAddress)
 
     addresses.map(a => {

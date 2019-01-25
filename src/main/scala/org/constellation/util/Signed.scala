@@ -3,6 +3,7 @@ package org.constellation.util
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import cats.kernel.Monoid
+import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.crypto.Base58
 import org.constellation.crypto.KeyUtils._
@@ -126,6 +127,7 @@ case class Signed[T <: ProductHash](data: T,
                                     time: Long,
                                     encodedPublicKeys: Seq[EncodedPublicKey],
                                     signatures: Seq[String]) extends ProductHash {
+  val logger = Logger("Signed")
   def publicKeys: Seq[PublicKey] = encodedPublicKeys.map{_.toPublicKey}
 
   def id: Id = Id(publicKeys.head.encoded)
@@ -133,12 +135,12 @@ case class Signed[T <: ProductHash](data: T,
   def validSignatures: Boolean = signatures.zip(encodedPublicKeys).forall{ case (sig, pubEncoded) =>
     val pub = pubEncoded.toPublicKey
     val validS = verifySignature(data.signInput, fromBase64(sig))(pub) && signatures.nonEmpty && encodedPublicKeys.nonEmpty
-    println(s"validS $validS")
-    println(s"hash ${data.hash}")
-    println(s"sign input ${data.signInput.toSeq}")
-    println(s"fromb64 ${fromBase64(sig).toSeq}")
-    println(s"pub $pub")
-    println(s"json ${data.json}")
+    logger.debug(s"validS $validS")
+    logger.debug(s"hash ${data.hash}")
+    logger.debug(s"sign input ${data.signInput.toSeq}")
+    logger.debug(s"fromb64 ${fromBase64(sig).toSeq}")
+    logger.debug(s"pub $pub")
+    logger.debug(s"json ${data.json}")
     validS
   }
 

@@ -1,20 +1,17 @@
 package org.constellation.cluster
 
-import java.net.InetSocketAddress
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ForkJoinPool, TimeUnit}
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import org.constellation.{ConstellationNode, HostPort}
 import org.constellation.consensus.StoredSnapshot
-import org.constellation.primitives.{ChannelMessageMetadata, ChannelProof}
-import org.constellation.primitives.Schema.CheckpointCacheData
+import org.constellation.primitives.ChannelProof
 import org.constellation.util.{Simulation, TestNode}
+import org.constellation.{ConstellationNode, HostPort}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
-import scala.concurrent.forkjoin.ForkJoinPool
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
 import scala.util.Try
 
@@ -75,9 +72,10 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     assert(sim.run(initialAPIs, addPeerRequests, snapshotCount = 5))
 
-    val downloadNode = TestNode(Seq(HostPort("localhost", 9001)), portOffset = 6, randomizePorts = false)
+    val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)), randomizePorts = false, portOffset = 50)
 
     val downloadAPI = downloadNode.getAPIClient()
+    println(s"DownloadNode API Port: ${downloadAPI.apiPort}")
     assert(sim.checkReady(Seq(downloadAPI)))
 
     val messageChannel = initialAPIs.head.getBlocking[Seq[String]]("channels").head
@@ -118,11 +116,13 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     val storedSnapshots = allAPIs.map{_.simpleDownload()}
 
+    val snaps = storedSnapshots.toSet
+      .map{x : Seq[StoredSnapshot] =>
+        x.map{_.checkpointCache.flatMap{_.checkpointBlock}}.toSet
+      }
+
     assert(
-      storedSnapshots.toSet
-        .map{x : Seq[StoredSnapshot] =>
-          x.map{_.checkpointCache.flatMap{_.checkpointBlock}}.toSet
-        }.size == 1
+      snaps.size == 1
     )
 
   }

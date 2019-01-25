@@ -11,7 +11,7 @@ import akka.util.{ByteString, Timeout}
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
-import org.constellation.consensus.{Snapshot, StoredSnapshot}
+import org.constellation.consensus.Snapshot
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.serializer.KryoSerializer
 import org.json4s.native.Serialization

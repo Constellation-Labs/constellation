@@ -4,7 +4,6 @@ import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 import java.time.Instant
 
-import cats.data.Validated.Invalid
 import cats.data._
 import cats.implicits._
 import constellation.pubKeyToAddress

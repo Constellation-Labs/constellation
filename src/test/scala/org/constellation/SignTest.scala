@@ -1,5 +1,6 @@
 package org.constellation
 
+import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
@@ -13,6 +14,8 @@ case class TestSignabledWrapper(testSignable: Signed[TestSignable]) extends Remo
 import constellation._
 
 class SignTest extends FlatSpec {
+  
+  val logger = Logger("SignTest")
 
 
   "Hashing" should "should work on test data" in {
@@ -88,7 +91,7 @@ class SignTest extends FlatSpec {
 
     assert(hs.handShake.validSignatures)
     //assert(hs.handShake.validSignatures)
-    println(hs.handShake.encodedPublicKeys)
+    logger.debug(hs.handShake.encodedPublicKeys.toString)
 
 
  //   val grp2 = KryoSerializer.serializeGrouped(hs)
@@ -103,15 +106,15 @@ class SignTest extends FlatSpec {
 
     assert(
       hs.handShake.signatures.zip(hs.handShake.encodedPublicKeys).forall{ case (sig, pubEncoded) =>
-      import hs.handShake._
+      import hs.handShake.{logger => _, _}
       val pub = pubEncoded.toPublicKey
       val validS = verifySignature(data.signInput, fromBase64(sig))(pub) && signatures.nonEmpty && encodedPublicKeys.nonEmpty
-      println(s"validS $validS")
-      println(s"hash ${data.hash}")
-      println(s"sign input ${data.signInput.toSeq}")
-      println(s"fromb64 ${fromBase64(sig).toSeq}")
-      println(s"pub $pub")
-      println(s"json ${data.json}")
+      logger.debug(s"validS $validS")
+      logger.debug(s"hash ${data.hash}")
+      logger.debug(s"sign input ${data.signInput.toSeq}")
+      logger.debug(s"fromb64 ${fromBase64(sig).toSeq}")
+      logger.debug(s"pub $pub")
+      logger.debug(s"json ${data.json}")
       validS
     })
 

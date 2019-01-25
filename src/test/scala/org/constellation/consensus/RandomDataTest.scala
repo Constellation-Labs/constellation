@@ -2,16 +2,15 @@ package org.constellation.consensus
 
 import java.security.KeyPair
 
-import akka.actor.{ActorSystem, Props}
+import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
+import com.typesafe.scalalogging.Logger
 import constellation._
-import cats.implicits._
-import org.constellation.{DAO, Fixtures}
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.{EncodedPublicKey, Heartbeat}
+import org.constellation.{DAO, Fixtures}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 
@@ -19,6 +18,9 @@ import scala.collection.concurrent.TrieMap
 import scala.util.Random
 
 object RandomData {
+
+  val logger = Logger("RandomData")
+  
   val keyPairs: Seq[KeyPair] = Seq.fill(10)(makeKeyPair())
 
   val go: GenesisObservation = Genesis.createGenesisAndInitialDistributionDirect(
@@ -87,13 +89,13 @@ class RandomDataTest extends FlatSpec {
     val cb2SameSignature = randomBlock(startingTips, keyPairs.head)
 
     //    val bogus = cb.plus(keyPairs.head).signatures
-    //    bogus.foreach{println}
+    //    bogus.foreach{logger.debug}
 
-    println(hashSign("asdf", keyPairs.head))
-    println(hashSign("asdf", keyPairs.head))
-    println(hashSign("asdf", keyPairs.head))
-    println(hashSign("asdf", keyPairs.head))
-    println(hashSign("asdf", keyPairs.head))
+    logger.debug(hashSign("asdf", keyPairs.head).toString)
+    logger.debug(hashSign("asdf", keyPairs.head).toString)
+    logger.debug(hashSign("asdf", keyPairs.head).toString)
+    logger.debug(hashSign("asdf", keyPairs.head).toString)
+    logger.debug(hashSign("asdf", keyPairs.head).toString)
 
     //    assert(bogus.size == 1)
 
@@ -161,7 +163,7 @@ class RandomDataTest extends FlatSpec {
 
     }
 
-    println(cbIndex.size)
+    logger.debug(cbIndex.size.toString)
 
     val genIdMap = Map(
       go.genesis.soe.hash -> 0,
@@ -184,7 +186,7 @@ class RandomDataTest extends FlatSpec {
       Map("id" -> conv(go.initialDistribution2.soe.hash), "parentIds" -> Seq(conv(go.genesis.soe.hash))),
       Map("id" -> conv(go.genesis.soe.hash), "parentIds" -> Seq[String]())
     )).json
-    println(json)
+    logger.debug(json)
 
     //  file"../d3-dag/test/data/dag.json".write(json)
 
