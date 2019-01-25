@@ -439,6 +439,7 @@ object Snapshot {
         }
       }
     }
+
     findLatestMessageWithSnapshotHashInner(depth, lastMessage)
   }
 
