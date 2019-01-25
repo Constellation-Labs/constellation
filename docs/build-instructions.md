@@ -46,6 +46,8 @@ By default this is `http://localhost:9000`. Look at the file _API.scala_ for end
 
 ### :whale2: Docker execution 
 
+Note: *For now this installation is not covered here in detail. We will publish the corresponding images to dockerhub soon.*
+
 1. Install `docker` and `docker-compose`.
 
 * Docker > 18.0 [docker](https://www.docker.com/), ([install](https://docs.docker.com/install/))
@@ -69,8 +71,6 @@ chmod +x /usr/local/bin/docker-compose
 sudo docker-compose --version
 
 2. Follow directions for building for development.
-
-Note: *For now this installation is not covered here in detail. We will publish the corresponding images to dockerhub soon.*
 
 3. Run the [sbt](https://en.wikipedia.org/wiki/Sbt_(software)) docker command
 
