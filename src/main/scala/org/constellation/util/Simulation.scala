@@ -7,6 +7,7 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.primitives.Schema._
 import org.constellation.{HostPort, PeerMetadata}
+import scala.concurrent.duration._
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
@@ -20,27 +21,27 @@ class Simulation {
 
   def healthy(apis: Seq[APIClient]): Boolean = {
     apis.forall(a => {
-      val res = a.getSync("health", timeoutSeconds = 100).isSuccess
+      val res = a.getSync("health", timeout = 100.seconds).isSuccess
       res
     })
   }
 
   def hasGenesis(apis: Seq[APIClient]): Boolean = {
     apis.forall(a => {
-      val res = a.getSync(s"hasGenesis" , timeoutSeconds = 100).isSuccess
+      val res = a.getSync(s"hasGenesis" , timeout = 100.seconds).isSuccess
       res
     })
   }
 
   def getCheckpointTips(apis: Seq[APIClient]): Seq[Map[String, CheckpointBlock]] = {
     apis.map(a => {
-      a.getBlocking[Map[String, CheckpointBlock]](s"checkpointTips" , timeoutSeconds = 100)
+      a.getBlocking[Map[String, CheckpointBlock]](s"checkpointTips" , timeout = 100.seconds)
     })
   }
 
   def setIdLocal(apis: Seq[APIClient]): Unit = apis.foreach{ a =>
   logger.info(s"Getting id for ${a.hostName}:${a.apiPort}")
-    val id = a.getBlocking[Id]("id", timeoutSeconds = 60)
+    val id = a.getBlocking[Id]("id", timeout = 60.seconds)
     a.id = id
   }
 

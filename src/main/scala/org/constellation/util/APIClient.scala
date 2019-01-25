@@ -68,8 +68,8 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
 
 
   implicit class AddBlocking[T](req: Future[T]) {
-    def blocking(timeoutSeconds: Int = 60): T = {
-      Await.result(req, timeoutSeconds.seconds)
+    def blocking(timeout: Duration = 60.seconds): T = {
+      Await.result(req, timeout)
     }
   }
 
@@ -78,66 +78,66 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
       Map("Remote-Address" -> d.externalHostString, "X-Real-IP" -> d.externalHostString)
   }.getOrElse(Map())
 
-  def httpWithAuth(suffix: String, params: Map[String, String] = Map.empty, timeoutSeconds: Int = 30)(method: Method) = {
+  def httpWithAuth(suffix: String, params: Map[String, String] = Map.empty, timeout: Duration = 5.seconds)(method: Method) = {
     val base = baseUri(suffix)
     val uri = uri"$base?$params"
-    val req = sttp.method(method, uri).readTimeout(timeoutSeconds.seconds).headers(optHeaders)
+    val req = sttp.method(method, uri).readTimeout(timeout).headers(optHeaders)
     if (authEnabled) {
       req.auth.basic(authId, authPassword)
     } else req
   }
 
   def metrics: Map[String, String] = {
-    getBlocking[MetricsResult]("metrics", timeoutSeconds = 5).metrics
+    getBlocking[MetricsResult]("metrics", timeout = 5.seconds).metrics
   }
 
-  def post(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)
+  def post(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)
           (implicit f : Formats = constellation.constellationFormats): Future[Response[String]] = {
     val ser = Serialization.write(b)
     val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
-    httpWithAuth(suffix, timeoutSeconds = timeoutSeconds)(Method.POST)
+    httpWithAuth(suffix, timeout = timeout)(Method.POST)
       .body(gzipped)
       .contentType("application/json")
       .header("Content-Encoding", "gzip")
       .send()
   }
 
-  def put(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)
+  def put(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)
           (implicit f : Formats = constellation.constellationFormats): Future[Response[String]] = {
     val ser = Serialization.write(b)
     val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
-    httpWithAuth(suffix, timeoutSeconds = timeoutSeconds)(Method.PUT)
+    httpWithAuth(suffix, timeout = timeout)(Method.PUT)
       .body(gzipped)
       .contentType("application/json")
       .header("Content-Encoding", "gzip")
       .send()
   }
 
-  def postEmpty(suffix: String, timeoutSeconds: Int = 15)(implicit f : Formats = constellation.constellationFormats)
+  def postEmpty(suffix: String, timeout: Duration = 5.seconds)(implicit f : Formats = constellation.constellationFormats)
   : Response[String] = {
-    httpWithAuth(suffix, timeoutSeconds = timeoutSeconds)(Method.POST).send().blocking()
+    httpWithAuth(suffix, timeout = timeout)(Method.POST).send().blocking()
   }
 
-  def postSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
+  def postSync(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
     implicit f : Formats = constellation.constellationFormats
   ): Response[String] = {
-    post(suffix, b, timeoutSeconds).blocking(timeoutSeconds)
+    post(suffix, b, timeout).blocking(timeout)
   }
 
-  def putSync(suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(
+  def putSync(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
     implicit f : Formats = constellation.constellationFormats
   ): Response[String] = {
-    put(suffix, b, timeoutSeconds).blocking(timeoutSeconds)
+    put(suffix, b, timeout).blocking(timeout)
   }
 
-  def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
-     postNonBlocking(suffix, b, timeoutSeconds).blocking(timeoutSeconds)
+  def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
+     postNonBlocking(suffix, b, timeout).blocking(timeout)
   }
 
-  def postNonBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): Future[T] = {
+  def postNonBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): Future[T] = {
     val ser = Serialization.write(b)
     val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
-    httpWithAuth(suffix, timeoutSeconds = timeoutSeconds)(Method.POST)
+    httpWithAuth(suffix, timeout = timeout)(Method.POST)
       .body(gzipped)
       .contentType("application/json")
       .header("Content-Encoding", "gzip")
@@ -146,38 +146,38 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
       .map(_.unsafeBody)
   }
 
-  def postBlockingEmpty[T <: AnyRef](suffix: String, timeoutSeconds: Int = 5)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
-    val res = postEmpty(suffix, timeoutSeconds)
+  def postBlockingEmpty[T <: AnyRef](suffix: String, timeout: Duration = 5.seconds)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
+    val res = postEmpty(suffix, timeout)
     Serialization.read[T](res.unsafeBody)
   }
 
-  def get(suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5): Future[Response[String]] = {
-    httpWithAuth(suffix, queryParams, timeoutSeconds)(Method.GET).send()
+  def get(suffix: String, queryParams: Map[String,String] = Map(), timeout: Duration = 5.seconds): Future[Response[String]] = {
+    httpWithAuth(suffix, queryParams, timeout)(Method.GET).send()
   }
 
-  def getSync(suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5): Response[String] = {
-    get(suffix, queryParams, timeoutSeconds).blocking(timeoutSeconds)
+  def getSync(suffix: String, queryParams: Map[String,String] = Map(), timeout: Duration = 5.seconds): Response[String] = {
+    get(suffix, queryParams, timeout).blocking(timeout)
   }
 
-  def getBlocking[T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5)
+  def getBlocking[T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeout: Duration = 5.seconds)
                               (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
-    getNonBlocking[T](suffix, queryParams, timeoutSeconds).blocking(timeoutSeconds)
+    getNonBlocking[T](suffix, queryParams, timeout).blocking(timeout)
   }
 
-  def getNonBlocking[T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5)
+  def getNonBlocking[T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeout: Duration = 5.seconds)
                               (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): Future[T] = {
-    httpWithAuth(suffix, queryParams, timeoutSeconds)(Method.GET)
+    httpWithAuth(suffix, queryParams, timeout)(Method.GET)
       .response(asJson[T])
       .send()
       .map(_.unsafeBody)
   }
 
-  def getNonBlockingStr(suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5): Future[String] = {
-    httpWithAuth(suffix, queryParams, timeoutSeconds)(Method.GET).send().map { x => x.unsafeBody }
+  def getNonBlockingStr(suffix: String, queryParams: Map[String,String] = Map(), timeout: Duration = 5.seconds): Future[String] = {
+    httpWithAuth(suffix, queryParams, timeout)(Method.GET).send().map { x => x.unsafeBody }
   }
 
-  def getBlockingBytesKryo[T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeoutSeconds: Int = 5): T = {
-    val resp = httpWithAuth(suffix, queryParams, timeoutSeconds)(Method.GET).response(asByteArray).send().blocking()
+  def getBlockingBytesKryo[T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeout: Duration = 5.seconds): T = {
+    val resp = httpWithAuth(suffix, queryParams, timeout)(Method.GET).response(asByteArray).send().blocking()
     KryoSerializer.deserializeCast[T](resp.unsafeBody)
   }
 

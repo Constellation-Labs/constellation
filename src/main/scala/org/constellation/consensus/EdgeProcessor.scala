@@ -12,6 +12,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, ProductHash}
 
+import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Try
 
@@ -360,7 +361,7 @@ object EdgeProcessor {
       // TODO: Refactor all the error handling on these to include proper status codes etc.
       // See formCheckpoint for better example of error handling
       val res = tryWithMetric(
-        {activePeer.getBlocking[Option[CheckpointCacheData]]("checkpoint/" + hash, timeoutSeconds = 10)},
+        {activePeer.getBlocking[Option[CheckpointCacheData]]("checkpoint/" + hash, timeout = 10.seconds)},
         "downloadCheckpoint"
       )
 
