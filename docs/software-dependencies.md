@@ -25,6 +25,7 @@ For further discussion relating to the dependiecs, see [/docs/design-choices.md]
 
 (todo: plaintext explainations of what we use and short note on alternatives):
 
+* [wiipedia/sbt](https://en.wikipedia.org/wiki/Sbt_(software))]
 * [wikipedia/Docker](https://en.wikipedia.org/wiki/Docker_(software))
 * [wikipedia/Vagrant](https://en.wikipedia.org/wiki/Vagrant_(software))
 * [wikipedia/Google_Cloud_Platform](https://en.wikipedia.org/wiki/Google_Cloud_Platform)
