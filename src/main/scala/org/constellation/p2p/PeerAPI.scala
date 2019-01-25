@@ -14,7 +14,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
-import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest, handleTransaction}
+import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest, SignatureResponseWrapper, handleTransaction}
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -103,16 +103,16 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
         extractClientIP { clientIP =>
           entity(as[PeerRegistrationRequest]) { request =>
             val hostAddress = clientIP.toOption.map{_.getHostAddress}
-            logger.info(s"Received peer registration request $request on $clientIP $hostAddress ${clientIP.toOption} ${clientIP.toIP}")
+            logger.debug(s"Received peer registration request $request on $clientIP $hostAddress ${clientIP.toOption} ${clientIP.toIP}")
             val maybeData = getHostAndPortFromRemoteAddress(clientIP)
             maybeData match {
               case Some(PeerIPData(host, _)) =>
-                logger.info("Parsed host and port, sending peer manager request")
+                logger.debug("Parsed host and port, sending peer manager request")
                 dao.peerManager ! PendingRegistration(host, request)
                 pendingRegistrations = pendingRegistrations.updated(host, request)
                 complete(StatusCodes.OK)
               case None =>
-                logger.info(s"Failed to parse host and port for $request")
+                logger.warn(s"Failed to parse host and port for $request")
                 complete(StatusCodes.BadRequest)
             }
           }
@@ -195,7 +195,9 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
               dao.metricsManager ! IncrementMetric("peerApiRXSignatureRequest")
               onComplete(
                 futureTryWithTimeoutMetric(
-                  EdgeProcessor.handleSignatureRequest(sr), "peerAPIHandleSignatureRequest"
+                  EdgeProcessor.handleSignatureRequest(sr),
+                  "peerAPIHandleSignatureRequest",
+                  60
                 )(dao.signatureExecutionContext, dao)
               ) {
                 result => // ^ Errors captured above
@@ -203,7 +205,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
                   val maybeResponse = result.toOption.flatMap {
                     _.toOption
                   }.map{_.copy(reRegister = !knownHost)}
-                  complete(maybeResponse)
+                  complete(SignatureResponseWrapper(maybeResponse).json)
               }
             }
           }
@@ -263,30 +265,12 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
     }
   }
 
-  val routes: Route = {
-   // rejectBannedIP {
-      signEndpoints ~ commonEndpoints ~  // { //enforceKnownIP
-        getEndpoints ~ postEndpoints ~ mixedEndpoints
-    //  }
-   // } // ~
-    //  faviconRoute ~ jsRequest ~ serveMainPage // <-- Temporary for debugging, control routes disabled.
-
+  val routes: Route = decodeRequest {
+    encodeResponse {
+      // rejectBannedIP {
+      signEndpoints ~ commonEndpoints ~ // { //enforceKnownIP
+      getEndpoints ~ postEndpoints ~ mixedEndpoints
+    }
   }
 
 }
-/*      get {
-        val memPoolPresence = dao.transactionMemPool.exists(_.hash == s)
-        val response = if (memPoolPresence) {
-          TransactionQueryResponse(s, dao.transactionMemPool.collectFirst{case x if x.hash == s => x}, inMemPool = true, inDAG = false, None)
-        } else {
-          dao.dbActor.getTransactionCacheData(s).map {
-            cd =>
-              TransactionQueryResponse(s, Some(cd.transaction), memPoolPresence, cd.inDAG, cd.cbBaseHash)
-          }.getOrElse{
-            TransactionQueryResponse(s, None, inMemPool = false, inDAG = false, None)
-          }
-        }
-
-        complete(response)
-      } ~ complete (StatusCodes.BadRequest)
-    } ~*/

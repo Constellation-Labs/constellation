@@ -11,8 +11,8 @@ import akka.util.Timeout
 import better.files.File
 import com.google.common.hash.Hashing
 import org.constellation.DAO
+import org.constellation.crypto.Base58
 import org.constellation.crypto.KeyUtils.{bytesToPrivateKey, bytesToPublicKey, _}
-import org.constellation.crypto.{Base58, KeyUtils}
 import org.constellation.primitives.IncrementMetric
 import org.constellation.primitives.Schema._
 import org.constellation.util.{EncodedPublicKey, POWExt, POWSignHelp}
@@ -142,7 +142,7 @@ package object constellation extends POWExt
       case Success(x) =>
         dao.metricsManager ! IncrementMetric(metricPrefix + "_success")
       case Failure(e) =>
-        e.printStackTrace()
+        metricPrefix + ": " + e.printStackTrace()
         dao.metricsManager ! IncrementMetric(metricPrefix + "_failure")
     }
     attempt
@@ -167,7 +167,8 @@ package object constellation extends POWExt
     do {
       retries += 1
       done = t
-      Thread.sleep(delay)
+      val normalizedDelay = delay + Random.nextInt((delay * (scala.math.pow(2, retries))).toInt)
+      Thread.sleep(normalizedDelay)
     } while (!done && retries < maxRetries)
     done
   }
@@ -182,7 +183,7 @@ package object constellation extends POWExt
   }
 
   import scala.concurrent.duration._
-  def withTimeoutSecondsAndMetric[T](fut:Future[T], metricPrefix: String, timeoutSeconds: Int = 10)
+  def withTimeoutSecondsAndMetric[T](fut:Future[T], metricPrefix: String, timeoutSeconds: Int = 10, onError: => Unit = ())
                                     (implicit ec:ExecutionContext, dao: DAO): Future[T] = {
     val prom = Promise[T]()
     val after = timeoutSeconds.seconds
@@ -193,6 +194,7 @@ package object constellation extends POWExt
     }
     prom.future.onComplete{
       result =>
+        onError
         if (result.isSuccess) {
           dao.metricsManager ! IncrementMetric(metricPrefix + s"_timeoutAfter${timeoutSeconds}seconds")
         }
@@ -204,7 +206,7 @@ package object constellation extends POWExt
     combinedFut
   }
 
-  def futureTryWithTimeoutMetric[T](t: => T, metricPrefix: String, timeoutSeconds: Int = 10)
+  def futureTryWithTimeoutMetric[T](t: => T, metricPrefix: String, timeoutSeconds: Int = 10, onError: => Unit = ())
                                    (implicit ec:ExecutionContext, dao: DAO): Future[Try[T]] = {
     withTimeoutSecondsAndMetric(
       Future{

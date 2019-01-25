@@ -1,12 +1,11 @@
 package org.constellation.util
 
-import java.net.InetSocketAddress
 import java.security.KeyPair
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import org.constellation.{ConstellationNode, HostPort}
 import org.constellation.crypto.KeyUtils
+import org.constellation.{ConstellationNode, HostPort}
 
 import scala.concurrent.ExecutionContext
 import scala.util.Try
@@ -59,7 +58,8 @@ object TestNode {
       minPeerTimeAddedSeconds = 1,
       snapshotInterval = 5,
       snapshotHeightInterval = 2,
-      snapshotHeightDelayInterval = 1
+      snapshotHeightDelayInterval = 1,
+      roundsPerMessage = 1
     )
 
     node

@@ -2,12 +2,12 @@ package org.constellation.util
 
 import java.util.concurrent.ForkJoinPool
 
+import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.consensus.SnapshotInfo
 import org.constellation.primitives.Schema._
 import org.constellation.{HostPort, PeerMetadata}
-import scalaj.http.HttpResponse
+import scala.concurrent.duration._
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
@@ -21,27 +21,27 @@ class Simulation {
 
   def healthy(apis: Seq[APIClient]): Boolean = {
     apis.forall(a => {
-      val res = a.getSync("health", timeoutSeconds = 100).isSuccess
+      val res = a.getSync("health", timeout = 100.seconds).isSuccess
       res
     })
   }
 
   def hasGenesis(apis: Seq[APIClient]): Boolean = {
     apis.forall(a => {
-      val res = a.getSync(s"hasGenesis" , timeoutSeconds = 100).isSuccess
+      val res = a.getSync(s"hasGenesis" , timeout = 100.seconds).isSuccess
       res
     })
   }
 
   def getCheckpointTips(apis: Seq[APIClient]): Seq[Map[String, CheckpointBlock]] = {
     apis.map(a => {
-      a.getBlocking[Map[String, CheckpointBlock]](s"checkpointTips" , timeoutSeconds = 100)
+      a.getBlocking[Map[String, CheckpointBlock]](s"checkpointTips" , timeout = 100.seconds)
     })
   }
 
   def setIdLocal(apis: Seq[APIClient]): Unit = apis.foreach{ a =>
   logger.info(s"Getting id for ${a.hostName}:${a.apiPort}")
-    val id = a.getBlocking[Id]("id", timeoutSeconds = 60)
+    val id = a.getBlocking[Id]("id", timeout = 60.seconds)
     a.id = id
   }
 
@@ -62,7 +62,7 @@ class Simulation {
 
   def addPeer(
                apis: Seq[APIClient], peer: PeerMetadata
-             )(implicit executionContext: ExecutionContext): Seq[HttpResponse[String]] = {
+             )(implicit executionContext: ExecutionContext): Seq[Response[String]] = {
     apis.map{
       _.postSync("addPeer", peer)
     }
@@ -70,7 +70,7 @@ class Simulation {
 
   def addPeerWithRegistrationFlow(
                apis: Seq[APIClient], peer: HostPort
-             )(implicit executionContext: ExecutionContext): Seq[HttpResponse[String]] = {
+             )(implicit executionContext: ExecutionContext): Seq[Response[String]] = {
     apis.map{
       _.postSync("peer/add", peer)
     }
@@ -104,7 +104,7 @@ class Simulation {
         apis.forall{ a =>
           val maybeObservation = a.getBlocking[Option[GenesisObservation]]("genesis")
           if (maybeObservation.isDefined) {
-            println(s"Genesis stored on ${a.hostName} ${a.apiPort}")
+            logger.info(s"Genesis stored on ${a.hostName} ${a.apiPort}")
           }
           maybeObservation.nonEmpty
         }
@@ -172,7 +172,7 @@ class Simulation {
         apis.forall{ a =>
           val attempt = Try{a.getSync("health").isSuccess}
           if (attempt.isFailure) {
-            println(s"Failure on: ${a.hostName}:${a.apiPort}")
+            logger.warn(s"Failure on: ${a.hostName}:${a.apiPort}")
           }
           attempt.getOrElse(false)
         }
@@ -238,7 +238,7 @@ class Simulation {
     )
   }
 
-  def sendRandomTransaction(apis: Seq[APIClient]): Future[HttpResponse[String]] = {
+  def sendRandomTransaction(apis: Seq[APIClient]): Future[Response[String]] = {
     val src = randomNode(apis)
     val dst = randomOtherNode(src, apis).id.address.address
 
@@ -246,7 +246,7 @@ class Simulation {
     src.post("send", s)
   }
 
-  def triggerRandom(apis: Seq[APIClient]): Seq[HttpResponse[String]] = {
+  def triggerRandom(apis: Seq[APIClient]): Seq[Response[String]] = {
     apis.map(_.postEmpty("random"))
   }
   def setReady(apis: Seq[APIClient]): Unit = {

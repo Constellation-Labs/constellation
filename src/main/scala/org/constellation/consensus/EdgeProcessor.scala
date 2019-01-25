@@ -1,21 +1,22 @@
 package org.constellation.consensus
 
+import java.nio.file.Path
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, ActorLogging, ActorSystem}
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.EdgeProcessor.FinishedCheckpoint
 import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, HeartbeatSubscribe, ProductHash}
+import org.constellation.serializer.KryoSerializer
+import org.constellation.util.{APIClient, ProductHash}
 
+import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 object EdgeProcessor {
 
@@ -43,6 +44,12 @@ object EdgeProcessor {
         dao.metricsManager ! IncrementMetric("heightEmpty")
       } else {
         dao.metricsManager ! IncrementMetric("heightNonEmpty")
+      }
+
+      cb.checkpoint.edge.resolvedObservationEdge.data.get.messages.foreach{ m =>
+        dao.messageService.put(m.signedMessageData.data.channelId, ChannelMessageMetadata(m, Some(cb.baseHash)))
+        dao.messageService.put(m.signedMessageData.signatures.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
+        dao.metricsManager ! IncrementMetric("messageAccepted")
       }
 
       // Accept transactions
@@ -148,10 +155,13 @@ object EdgeProcessor {
                                          )
 
 
-  def createCheckpointBlock(transactions: Seq[Transaction], tips: Seq[SignedObservationEdge])
-                           (implicit keyPair: KeyPair): CheckpointBlock = {
+  def createCheckpointBlock(
+                             transactions: Seq[Transaction],
+                             tips: Seq[SignedObservationEdge],
+                             messages: Seq[ChannelMessage] = Seq()
+                           )(implicit keyPair: KeyPair): CheckpointBlock = {
 
-    val checkpointEdgeData = CheckpointEdgeData(transactions.map{_.hash}.sorted)
+    val checkpointEdgeData = CheckpointEdgeData(transactions.map{_.hash}.sorted, messages)
 
     val observationEdge = ObservationEdge(
       TypedEdgeHash(tips.head.hash, EdgeHashType.CheckpointHash),
@@ -199,12 +209,13 @@ object EdgeProcessor {
   // TODO: Send facilitator selection data (i.e. criteria) as well for verification
 
   case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
+  case class SignatureResponseWrapper(signatureResponse: Option[SignatureResponse] = None)
   case class SignatureResponse(checkpointBlock: CheckpointBlock, facilitators: Set[Id], reRegister: Boolean = false)
   case class FinishedCheckpoint(checkpointCacheData: CheckpointCacheData, facilitators: Set[Id])
   case class FinishedCheckpointResponse(reRegister: Boolean = false)
 
   // TODO: Move to checkpoint formation actor
-  def formCheckpoint()(implicit dao: DAO): Unit = {
+  def formCheckpoint(messages: Seq[ChannelMessage] = Seq())(implicit dao: DAO): Unit = {
 
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
@@ -225,7 +236,7 @@ object EdgeProcessor {
 
       maybeTips.foreach { case (tipSOE, facils) =>
 
-        val checkpointBlock = createCheckpointBlock(transactions, tipSOE)(dao.keyPair)
+        val checkpointBlock = createCheckpointBlock(transactions, tipSOE, messages)(dao.keyPair)
         dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
 
         val finalFacilitators = facils.keySet
@@ -255,7 +266,13 @@ object EdgeProcessor {
 
             val parsed = nonFailedResponses.mapValues(v =>
               tryWithMetric({
-                v.body.x[Option[SignatureResponse]]
+
+                val result = Try{v.unsafeBody.x[Option[SignatureResponseWrapper]].flatMap{_.signatureResponse}}
+                if (result.isFailure) {
+                  logger.error(s"Json response parsing error code: ${v.code} body: ${v.body}")
+                  dao.metricsManager ! IncrementMetric(s"signatureResponseCode_${v.code}")
+                }
+                result.get
               }, "formCheckpointSignatureResponseJsonParsing")
             )
 
@@ -326,8 +343,15 @@ object EdgeProcessor {
           }
 
         }
+        // Cleanup locks
+
+        messages.foreach{ m =>
+          dao.threadSafeMessageMemPool.activeChannels(m.signedMessageData.data.channelId).release()
+        }
+
       }
     }
+    dao.blockFormationInProgress = false
   }
 
 
@@ -362,7 +386,7 @@ object EdgeProcessor {
       // TODO: Refactor all the error handling on these to include proper status codes etc.
       // See formCheckpoint for better example of error handling
       val res = tryWithMetric(
-        {activePeer.getBlocking[Option[CheckpointCacheData]]("checkpoint/" + hash, timeoutSeconds = 10)},
+        {activePeer.getBlocking[Option[CheckpointCacheData]]("checkpoint/" + hash, timeout = 10.seconds)},
         "downloadCheckpoint"
       )
 
@@ -370,7 +394,7 @@ object EdgeProcessor {
 
       if (done) {
         val x = res.get.get
-        if (!dao.checkpointService.lruCache.contains(x.checkpointBlock.get.baseHash)) {
+        if (!dao.checkpointService.contains(x.checkpointBlock.get.baseHash)) {
           dao.metricsManager ! IncrementMetric("resolveAcceptCBCall")
           acceptWithResolveAttempt(x)
         }
@@ -391,7 +415,7 @@ object EdgeProcessor {
     dao.threadSafeTipService.accept(checkpointCacheData)
     val block = checkpointCacheData.checkpointBlock.get
     val parents = block.parentSOEBaseHashes
-    val parentExists = parents.map{h => h -> dao.checkpointService.lruCache.contains(h)}
+    val parentExists = parents.map{h => h -> dao.checkpointService.contains(h)}
     if (parentExists.forall(_._2)) {
       dao.metricsManager ! IncrementMetric("resolveFinishedCheckpointParentsPresent")
     } else {
@@ -413,14 +437,14 @@ object EdgeProcessor {
     futureTryWithTimeoutMetric(
       if (dao.nodeState == NodeState.DownloadCompleteAwaitingFinalSync) {
         dao.threadSafeTipService.syncBufferAccept(fc.checkpointCacheData)
-        Future.successful()
+        Future.successful(Unit)
       } else if (dao.nodeState == NodeState.Ready) {
         if (fc.checkpointCacheData.checkpointBlock.exists {
           _.simpleValidation()
         }) {
           acceptWithResolveAttempt(fc.checkpointCacheData)
-        } else Future.successful()
-      } else Future.successful()
+        } else Future.successful(Unit)
+      } else Future.successful(Unit)
       , "handleFinishedCheckpoint"
     )(dao.finishedExecutionContext, dao)
   }
@@ -448,7 +472,74 @@ case class StoredSnapshot(snapshot: Snapshot, checkpointCache: Seq[CheckpointCac
 
 case class DownloadComplete(latestSnapshot: Snapshot)
 
+import java.nio.file.{Files, Paths}
+
 object Snapshot {
+
+  def writeSnapshot(snapshot: StoredSnapshot)(implicit dao: DAO): Try[Path] = {
+    tryWithMetric({
+      val serialized = KryoSerializer.serializeAnyRef(snapshot)
+      Files.write(Paths.get(dao.snapshotPath.pathAsString, snapshot.snapshot.hash), serialized)
+      //File(dao.snapshotPath, snapshot.snapshot.hash).writeByteArray(serialized)
+    },
+      "writeSnapshot"
+    )
+  }
+
+
+  def loadSnapshot(snapshotHash: String)(implicit dao: DAO): Try[StoredSnapshot] = {
+    tryWithMetric({
+      KryoSerializer.deserializeCast[StoredSnapshot] {
+        val byteArray = Files.readAllBytes(Paths.get(dao.snapshotPath.pathAsString, snapshotHash))
+     //   val f = File(dao.snapshotPath, snapshotHash)
+        byteArray
+      }
+    },
+      "loadSnapshot"
+    )
+  }
+
+  def loadSnapshotBytes(snapshotHash: String)(implicit dao: DAO): Try[Array[Byte]] = {
+    tryWithMetric({
+      {
+        val byteArray = Files.readAllBytes(Paths.get(dao.snapshotPath.pathAsString, snapshotHash))
+     //   val f = File(dao.snapshotPath, snapshotHash)
+        byteArray
+      }
+    },
+      "loadSnapshot"
+    )
+  }
+
+  def snapshotHashes()(implicit dao: DAO): List[String] = {
+    dao.snapshotPath.toJava.listFiles().map{_.getName}.toList
+  }
+
+  def findLatestMessageWithSnapshotHash(
+                                         depth: Int,
+                                         lastMessage: Option[ChannelMessageMetadata],
+                                         maxDepth: Int = 10
+                                       )(implicit dao: DAO): Option[ChannelMessageMetadata] = {
+
+    def findLatestMessageWithSnapshotHashInner(
+                                                depth: Int,
+                                                lastMessage: Option[ChannelMessageMetadata]
+                                              ): Option[ChannelMessageMetadata] = {
+      if (depth > maxDepth) None
+      else {
+        lastMessage.flatMap { m =>
+          if (m.snapshotHash.nonEmpty) Some(m)
+          else {
+            findLatestMessageWithSnapshotHashInner(
+              depth + 1,
+              dao.messageService.get(m.channelMessage.signedMessageData.data.previousMessageDataHash)
+            )
+          }
+        }
+      }
+    }
+    findLatestMessageWithSnapshotHashInner(depth, lastMessage)
+  }
 
   def triggerSnapshot(round: Long)(implicit dao: DAO): Unit = {
     // TODO: Refactor round into InternalHeartbeat
@@ -467,8 +558,26 @@ object Snapshot {
   def acceptSnapshot(snapshot: Snapshot)(implicit dao: DAO): Unit = {
     // dao.dbActor.putSnapshot(snapshot.hash, snapshot)
     val cbData = snapshot.checkpointBlocks.map{dao.checkpointService.get}
+
+
+
     if (cbData.exists{_.isEmpty}) {
       dao.metricsManager ! IncrementMetric("snapshotCBAcceptQueryFailed")
+    }
+
+
+    for (
+      cbOpt <- cbData;
+      cbCache <- cbOpt;
+      cb <- cbCache.checkpointBlock;
+      data <- cb.checkpoint.edge.resolvedObservationEdge.data;
+      message <- data.messages
+    ) {
+      dao.messageService.update(message.signedMessageData.signatures.hash,
+        _.copy(snapshotHash = Some(snapshot.hash)),
+        ChannelMessageMetadata(message, Some(cb.baseHash), Some(snapshot.hash))
+      )
+      dao.metricsManager ! IncrementMetric("messageSnapshotHashUpdated")
     }
 
     for (

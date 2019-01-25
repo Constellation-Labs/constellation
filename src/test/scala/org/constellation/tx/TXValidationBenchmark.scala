@@ -8,6 +8,7 @@ import akka.actor.{ActorSystem, Props}
 import akka.pattern.ask
 import akka.util.Timeout
 import better.files.{File, _}
+import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
@@ -21,6 +22,7 @@ import org.scalatest.FlatSpec
 
 import scala.util.Try
 class TXValidationBenchmark extends FlatSpec {
+  val logger = Logger("TXValidationBenchmark")
 
   val kp: KeyPair = KeyUtils.makeKeyPair()
   val kp1: KeyPair = KeyUtils.makeKeyPair()
@@ -38,7 +40,7 @@ class TXValidationBenchmark extends FlatSpec {
     parSeq.map(_.validSrcSignature)
     val t1 = System.nanoTime()
     val delta = (t1 - t0) / 1e6.toLong
-    println(delta)
+    logger.debug(delta.toString)
    // assert(delta < 30000)
 
 
@@ -59,7 +61,7 @@ class TXValidationBenchmark extends FlatSpec {
     seq2.map(_ => KeyUtils.verifySignature(hashBytes, signatureBytes)(pkey))
     val t1a = System.nanoTime()
     val delta2 = (t1a - t0a) / 1e6.toLong
-    println(delta2)
+    logger.debug(delta2.toString)
   //  assert(delta2 < 30000)
 
   }
@@ -83,7 +85,7 @@ class TXValidationBenchmark extends FlatSpec {
     }
     val t1 = System.nanoTime()
     val delta = (t1 - t0) / 1e6.toLong
-    println(delta)
+    logger.debug(delta.toString)
    // assert(delta < 60000)
 
     Try{File(tmpDir).delete()}
@@ -119,7 +121,7 @@ class TXValidationBenchmark extends FlatSpec {
     }
     val t1 = System.nanoTime()
     val delta = (t1 - t0) / 1e6.toLong
-    println(delta)
+    logger.debug(delta.toString)
     // assert(delta < 60000)
 
     Try{File(tmpDir).delete()}

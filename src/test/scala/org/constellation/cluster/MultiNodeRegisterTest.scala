@@ -1,22 +1,23 @@
 package org.constellation.cluster
 
-import java.net.InetSocketAddress
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ForkJoinPool, TimeUnit}
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import org.constellation.{ConstellationNode, HostPort}
+import com.typesafe.scalalogging.Logger
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.util.TestNode
+import org.constellation.{ConstellationNode, HostPort}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
 import scala.concurrent.ExecutionContext
-import scala.concurrent.forkjoin.ForkJoinPool
 import scala.util.Try
 
 class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
+
+  val logger = Logger("MultiNodeRegisterTest")
 
   val tmpDir = "tmp"
 
@@ -54,7 +55,7 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
 
     val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(createNode())
 
-    nodes.foreach { node => println(node.getIPData) }
+    nodes.foreach { node => logger.debug(node.getIPData.toString) }
 
     nodes.foreach { n =>
       assert(n.ipManager.listKnownIPs.isEmpty)
@@ -69,7 +70,8 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
             ipData.port,
             a.configKeyPair.getPublic.toString
           )
-        a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
+        val res = a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
+        assert(res.isSuccess)
       }
       register(n,m)
       register(m,n)
@@ -78,7 +80,9 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
     Thread.sleep(1000)
 
     // TODO: Assert actual values of knownIPs list
-    nodes.foreach { n => assert(n.ipManager.listKnownIPs.size == 2)}
+    nodes.foreach { n =>
+      logger.debug(s"THING: $n: ${n.ipManager.listKnownIPs.size}")
+      assert(n.ipManager.listKnownIPs.size == 2)}
 
     assert(true)
   }

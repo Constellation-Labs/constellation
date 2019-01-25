@@ -1,23 +1,23 @@
 package org.constellation.primitives
 
-import java.io.File
 import java.util.concurrent.TimeUnit
 
 import akka.actor.Actor
 import akka.pattern.ask
 import akka.util.Timeout
+import better.files.File
 import com.typesafe.scalalogging.Logger
 import constellation._
+import io.kontainers.micrometer.akka.AkkaMetricRegistry
+import io.micrometer.core.instrument.Clock
+import io.micrometer.core.instrument.binder.jvm._
+import io.micrometer.core.instrument.binder.logging._
+import io.micrometer.core.instrument.binder.system._
+import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import org.constellation.DAO
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat}
 import org.constellation.util.HeartbeatSubscribe
 import org.joda.time.DateTime
-import io.kontainers.micrometer.akka.AkkaMetricRegistry
-import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
-import io.micrometer.core.instrument.Clock
-import io.micrometer.core.instrument.binder.jvm._
-import io.micrometer.core.instrument.binder.system._
-import io.micrometer.core.instrument.binder.logging._
 //import io.micrometer.core.instrument.binder.db._
 
 import io.prometheus.client.CollectorRegistry
@@ -49,7 +49,7 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
   new FileDescriptorMetrics().bindTo(prometheusMeterRegistry)
   new LogbackMetrics().bindTo(prometheusMeterRegistry)
   new ClassLoaderMetrics()bindTo((prometheusMeterRegistry))
-  new DiskSpaceMetrics(new File(System.getProperty("user.dir"))).bindTo(prometheusMeterRegistry);
+  new DiskSpaceMetrics(File(System.getProperty("user.dir")).toJava).bindTo(prometheusMeterRegistry);
   // new DatabaseTableMetrics().bindTo(prometheusMeterRegistry)
 
   override def receive: Receive = active(Map("id" -> dao.id.b58))

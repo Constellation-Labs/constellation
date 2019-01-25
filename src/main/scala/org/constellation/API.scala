@@ -1,5 +1,6 @@
 package org.constellation
 
+import java.io.{StringWriter, Writer}
 import java.net.InetSocketAddress
 import java.security.KeyPair
 
@@ -10,28 +11,31 @@ import akka.http.scaladsl.server.Directives.{entity, path, _}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.directives.Credentials
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
-import akka.pattern.ask
+import akka.pattern.{CircuitBreaker, ask}
 import akka.util.Timeout
+import better.files.{File, _}
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
+import com.softwaremill.sttp.Response
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+import io.prometheus.client.CollectorRegistry
+import io.prometheus.client.exporter.common.TextFormat
+import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.crypto.{KeyUtils, SimpleWalletLike}
 import org.constellation.p2p.Download
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, _}
-import org.constellation.util.{CommonEndpoints, ServeUI}
+import org.constellation.serializer.KryoSerializer
+import org.constellation.util.{CommonEndpoints, MerkleTree, ServeUI}
 import org.json4s.native
 import org.json4s.native.Serialization
-import scalaj.http.HttpResponse
 
+import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
-import io.prometheus.client.CollectorRegistry
-import io.prometheus.client.exporter.common.TextFormat
-import java.io.{StringWriter, Writer}
+import scala.util.{Failure, Success, Try}
 
 case class PeerMetadata(
                      host: String,
@@ -49,7 +53,7 @@ case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = Non
 
 case class ProcessingConfig(
                              maxWidth: Int = 10,
-                             minCheckpointFormationThreshold: Int = 100,
+                             minCheckpointFormationThreshold: Int = 50,
                              numFacilitatorPeers: Int = 2,
                              randomTXPerRoundPerPeer: Int = 100,
                              metricCheckInterval: Int = 60,
@@ -59,14 +63,15 @@ case class ProcessingConfig(
                              maxAcceptedCBHashesInMemory: Int = 5000,
                              peerHealthCheckInterval : Int = 30,
                              peerDiscoveryInterval : Int = 60,
-                             snapshotHeightInterval: Int = 5,
-                             snapshotHeightDelayInterval: Int = 15,
+                             snapshotHeightInterval: Int = 2,
+                             snapshotHeightDelayInterval: Int = 5,
                              snapshotInterval: Int = 25,
                              checkpointLRUMaxSize: Int = 4000,
                              transactionLRUMaxSize: Int = 10000,
                              addressLRUMaxSize: Int = 10000,
                              formCheckpointTimeout: Int = 60,
-                             maxFaucetSize: Int = 1000
+                             maxFaucetSize: Int = 1000,
+                             roundsPerMessage: Int = 10
 ) {
 
 }
@@ -98,6 +103,45 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
   val getEndpoints: Route =
     extractClientIP { clientIP =>
       get {
+        path("channels") {
+          complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
+        } ~
+        path ("channel" / Segment) { channelHash =>
+
+
+
+          val res = Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.get(channelHash))
+
+          val proof = res.flatMap{ cmd =>
+
+            cmd.snapshotHash.flatMap{ snapshotHash =>
+
+              tryWithMetric({
+                KryoSerializer.deserializeCast[StoredSnapshot](File(dao.snapshotPath, snapshotHash).byteArray)
+              },
+                "readSnapshotForMessage"
+              ).toOption.map{ storedSnapshot =>
+
+                val blockProof = MerkleTree(storedSnapshot.snapshot.checkpointBlocks.toList).createProof(cmd.blockHash.get)
+                val block = storedSnapshot.checkpointCache.filter {
+                  _.checkpointBlock.get.baseHash == cmd.blockHash.get
+                }.head.checkpointBlock.get
+                val messageProofInput = block.transactions.map{_.hash} ++ block.checkpoint.edge.resolvedObservationEdge.data.get.messages.map{_.signedMessageData.signatures.hash}
+                val messageProof = MerkleTree(messageProofInput.toList).createProof(cmd.channelMessage.signedMessageData.signatures.hash)
+                ChannelProof(
+                  cmd,
+                  blockProof,
+                  messageProof
+                )
+              }
+
+
+            }
+
+          }
+
+          complete(proof)
+        } ~
           path("restart") { // TODO: Revisit / fix
             dao.restartNode()
             System.exit(0)
@@ -189,11 +233,9 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           }
         } ~
         path("add") {
-          entity(as[HostPort]) { case hp @ HostPort(host, port) =>
-            onComplete{
-              PeerManager.attemptRegisterPeer(hp)
-            } { result =>
-
+          entity(as[HostPort]) { hp =>
+            onComplete(PeerManager.attemptRegisterPeer(hp)) { result =>
+              logger.info(s"Add Peer Request: $hp. Result: $result")
               complete(StatusCodes.OK)
             }
 
@@ -230,23 +272,31 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         complete(StatusCodes.OK)
       } ~
       path("peerHealthCheck") {
-        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[HttpResponse[String]]]]
-        val res = response.getOpt().map{
-          idMap =>
+        val resetTimeout = 1.second
+        val breaker = new CircuitBreaker(system.scheduler,
+          maxFailures = 1,
+          callTimeout = 5.seconds,
+          resetTimeout
+        )
 
-            val res = idMap.map{
+        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[Response[String]]]]
+        onCompleteWithBreaker(breaker)(response) {
+          case Success(idMap) =>
+
+            val res = idMap.map {
               case (id, fut) =>
                 val resp = fut.get()
                 id -> resp.isSuccess
-//                val maybeResponse = fut.getOpt()
-//                id -> maybeResponse.exists{_.isSuccess}
+              //                val maybeResponse = fut.getOpt()
+              //                id -> maybeResponse.exists{_.isSuccess}
             }.toSeq
 
             complete(res)
 
-        }.getOrElse(complete(StatusCodes.InternalServerError))
-
-        res
+          case Failure(e) =>
+            logger.warn("Failed to get peer health", e)
+            complete(StatusCodes.InternalServerError)
+        }
       } ~
       pathPrefix("genesis") {
         path("create") {
@@ -291,7 +341,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
               case Array(ip, port) =>
                 ipp = ip
                 externalHostString = ip
-                import better.files._
                 file"external_host_ip".write(ip)
                 new InetSocketAddress(ip, port.toInt)
               case a @ _ => {
@@ -336,7 +385,11 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
     }
 
   private val mainRoutes: Route = cors() {
-    getEndpoints ~ postEndpoints ~ jsRequest ~ commonEndpoints ~ serveMainPage
+    decodeRequest {
+      encodeResponse {
+        getEndpoints ~ postEndpoints ~ jsRequest ~ commonEndpoints ~ serveMainPage
+      }
+    }
   }
 
   private def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
