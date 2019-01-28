@@ -3,13 +3,14 @@ package org.constellation.cluster
 import java.util.concurrent.{ForkJoinPool, TimeUnit}
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.ChannelProof
-import org.constellation.util.{Simulation, TestNode}
-import org.constellation.{ConstellationNode, HostPort}
+import org.constellation.util.{APIClient, Simulation, TestNode}
+import org.constellation.{ConstellationNode, HostPort, UpdatePassword}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
@@ -45,6 +46,15 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
     TestNode(randomizePorts = randomizePorts, portOffset = portOffset, seedHosts = seedHosts)
+  }
+  val updatePasswordReq = UpdatePassword("updatedPassword")
+
+  def updatePasswords(apiClients: Seq[APIClient]): Seq[APIClient] = {
+    apiClients.foreach { client =>
+      client.postSync("password/update", updatePasswordReq)
+      client.authPassword = updatePasswordReq.password
+    }
+    apiClients
   }
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
@@ -96,8 +106,8 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     val allNodes = nodes :+ downloadNode
 
-    val allAPIs = allNodes.map{_.getAPIClient()} //apis :+ downloadAPI
-
+    val allAPIs: Seq[APIClient] = allNodes.map{_.getAPIClient()} //apis :+ downloadAPI
+    assert(updatePasswords(allAPIs).forall(_.authPassword == updatePasswordReq.password))
     // Thread.sleep(1000*1000)
 
     // Stop transactions
@@ -126,7 +136,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     )
 
   }
-
 
 
 }

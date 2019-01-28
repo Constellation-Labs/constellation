@@ -64,7 +64,7 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
 
   private val authEnabled = config.getBoolean("auth.enabled")
   private val authId = config.getString("auth.id")
-  private val authPassword = config.getString("auth.password")
+  var authPassword = config.getString("auth.password")
 
 
   implicit class AddBlocking[T](req: Future[T]) {
