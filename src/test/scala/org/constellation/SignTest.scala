@@ -1,22 +1,27 @@
 package org.constellation
 
 import com.typesafe.scalalogging.Logger
+
 import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.util.{ProductHash, Signed}
+
 import org.scalatest.FlatSpec
 
+// doc
 case class TestSignable(a: String, b: Int) extends ProductHash
+
+// doc
 case class TestSignabledWrapper(testSignable: Signed[TestSignable]) extends RemoteMessage
 
 import constellation._
 
+// doc
 class SignTest extends FlatSpec {
-  
-  val logger = Logger("SignTest")
 
+  val logger = Logger("SignTest")
 
   "Hashing" should "should work on test data" in {
 
@@ -93,8 +98,7 @@ class SignTest extends FlatSpec {
     //assert(hs.handShake.validSignatures)
     logger.debug(hs.handShake.encodedPublicKeys.toString)
 
-
- //   val grp2 = KryoSerializer.serializeGrouped(hs)
+    //   val grp2 = KryoSerializer.serializeGrouped(hs)
     // val res2 = KryoSerializer.deserializeGrouped(grp2.toList).asInstanceOf[HandShakeMessage]
     /*assert(hs == res2)
     assert(hs.handShake.signatures == res2.handShake.signatures)
@@ -102,21 +106,21 @@ class SignTest extends FlatSpec {
     assert(hs.handShake.signInput.toSeq == res2.handShake.signInput.toSeq)
     assert(fromBase64(res2.handShake.signatures.head).toSeq == fromBase64(hs.handShake.signatures.head).toSeq)
 */
-//    println(hs.handShake.data.hash)
+    //    println(hs.handShake.data.hash)
 
     assert(
-      hs.handShake.signatures.zip(hs.handShake.encodedPublicKeys).forall{ case (sig, pubEncoded) =>
-      import hs.handShake.{logger => _, _}
-      val pub = pubEncoded.toPublicKey
-      val validS = verifySignature(data.signInput, fromBase64(sig))(pub) && signatures.nonEmpty && encodedPublicKeys.nonEmpty
-      logger.debug(s"validS $validS")
-      logger.debug(s"hash ${data.hash}")
-      logger.debug(s"sign input ${data.signInput.toSeq}")
-      logger.debug(s"fromb64 ${fromBase64(sig).toSeq}")
-      logger.debug(s"pub $pub")
-      logger.debug(s"json ${data.json}")
-      validS
-    })
+      hs.handShake.signatures.zip(hs.handShake.encodedPublicKeys).forall { case (sig, pubEncoded) =>
+        import hs.handShake.{logger => _, _}
+        val pub = pubEncoded.toPublicKey
+        val validS = verifySignature(data.signInput, fromBase64(sig))(pub) && signatures.nonEmpty && encodedPublicKeys.nonEmpty
+        logger.debug(s"validS $validS")
+        logger.debug(s"hash ${data.hash}")
+        logger.debug(s"sign input ${data.signInput.toSeq}")
+        logger.debug(s"fromb64 ${fromBase64(sig).toSeq}")
+        logger.debug(s"pub $pub")
+        logger.debug(s"json ${data.json}")
+        validS
+      })
 
     /*
 
@@ -132,9 +136,7 @@ class SignTest extends FlatSpec {
 
      */
 
-
-
   }
 
-
 }
+

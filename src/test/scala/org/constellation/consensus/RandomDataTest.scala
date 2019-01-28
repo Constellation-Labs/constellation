@@ -1,26 +1,27 @@
 package org.constellation.consensus
 
 import java.security.KeyPair
-
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.scalalogging.Logger
+
 import constellation._
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.{DAO, Fixtures}
+
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
-
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
 
+// doc
 object RandomData {
 
   val logger = Logger("RandomData")
-  
+
   val keyPairs: Seq[KeyPair] = Seq.fill(10)(makeKeyPair())
 
   val go: GenesisObservation = Genesis.createGenesisAndInitialDistributionDirect(
@@ -33,11 +34,13 @@ object RandomData {
 
   val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
 
+  // doc
   def randomBlock(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): Schema.CheckpointBlock = {
     val txs = Seq.fill(5)(randomTransaction)
     EdgeProcessor.createCheckpointBlock(txs, tips)(startingKeyPair)
   }
 
+  // doc
   def randomTransaction: Transaction = {
     val src = Random.shuffle(keyPairs).head
     createTransaction(
@@ -48,8 +51,10 @@ object RandomData {
     )
   }
 
+  // doc
   def getAddress(keyPair: KeyPair): String = keyPair.address.address
 
+  // doc
   def fill(balances: Map[String, Long])(implicit dao: DAO): Iterable[Transaction] = {
     val txs = balances.map {
       case (address, amount) => createTransaction(keyPairs.head.address.address, address, amount, keyPairs.head)
@@ -63,6 +68,7 @@ object RandomData {
     txs
   }
 
+  // doc
   def setupSnapshot(cb: Seq[CheckpointBlock])(implicit dao: DAO): Seq[CheckpointBlock] = {
     dao.threadSafeTipService.setSnapshot(SnapshotInfo(
       dao.threadSafeTipService.getSnapshotInfo().snapshot,
@@ -77,8 +83,10 @@ object RandomData {
 
     cb
   }
-}
 
+} // end RandomData object
+
+// doc
 class RandomDataTest extends FlatSpec {
 
   import RandomData._
@@ -107,9 +115,7 @@ class RandomDataTest extends FlatSpec {
     var width = 2
     val maxWidth = 50
 
-
     val activeBlocks = TrieMap[SignedObservationEdge, Int]()
-
 
     val maxNumBlocks = 1000
     var blockNum = 0
@@ -124,7 +130,6 @@ class RandomDataTest extends FlatSpec {
 
     val convMap = TrieMap[String, Int]()
 
-
     val snapshotInterval = 10
 
     while (blockNum < maxNumBlocks) {
@@ -134,6 +139,7 @@ class RandomDataTest extends FlatSpec {
 
       tips.foreach { case (tip, numUses) =>
 
+        // doc
         def doRemove(): Unit = activeBlocks.remove(tip)
 
         if (width < maxWidth) {
@@ -159,7 +165,6 @@ class RandomDataTest extends FlatSpec {
       width = activeBlocks.size
 
       block
-
 
     }
 
@@ -190,14 +195,13 @@ class RandomDataTest extends FlatSpec {
 
     //  file"../d3-dag/test/data/dag.json".write(json)
 
-
     //createTransaction()
-
 
   }
 
-}
+} // end RandomDataTest class
 
+// doc
 class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLike with Matchers with BeforeAndAfterEach
   with BeforeAndAfterAll with MockFactory with OneInstancePerTest {
 
@@ -231,6 +235,7 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
     Seq()
   ))
 
+  // doc
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
   }
@@ -429,7 +434,9 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
         val tx2 = createTransaction(getAddress(a), getAddress(c), 75L, a)
         val cb2 = EdgeProcessor.createCheckpointBlock(Seq(tx2), startingTips)(keyPairs.head)
 
-        if (cb1.simpleValidation()) { cb1.transactions.foreach(_.ledgerApply) }
+        if (cb1.simpleValidation()) {
+          cb1.transactions.foreach(_.ledgerApply)
+        }
 
         assert(!cb2.simpleValidation())
       }
@@ -494,4 +501,5 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
       }
     }
   }
-}
+
+} // end ValidationSpec class

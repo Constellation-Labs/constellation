@@ -2,26 +2,30 @@ package org.constellation.consensus
 
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
-
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
+
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.concurrent.ExecutionContextExecutor
 
+// doc
 class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecLike with BeforeAndAfterAll {
 
+  // doc
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
 
   implicit val materializer: ActorMaterializer = ActorMaterializer()
+
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
+  // doc
   trait WithConsensusActor {
     val udpActor = TestProbe()
     implicit val keyPair: KeyPair = KeyUtils.makeKeyPair()
@@ -185,4 +189,4 @@ class ConsensusTest extends TestKit(ActorSystem("ConsensusTest")) with FlatSpecL
   */
   */
 
-}
+} // end ConsensusTest class

@@ -11,6 +11,7 @@ import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
@@ -20,27 +21,41 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{CommonEndpoints, EncodedPublicKey, SingleHashSignature}
+
 import org.json4s.native
 import org.json4s.native.Serialization
-
 import scala.concurrent.{ExecutionContext, Future}
 
+/** Request wrapper. */
 case class PeerAuthSignRequest(salt: Long)
+
+/** Request wrapper. */
 case class PeerRegistrationRequest(host: String, port: Int, key: String) {
-  def id = Id(EncodedPublicKey(key)) // TODO: Just send full Id class
+
+  /** Returns Id.
+    *
+    * @return Id as public key wrapper class.
+    * @todo: Just send full Id class
+    */
+  def id = Id(EncodedPublicKey(key))
+
 }
+
+/** Unrequest wrapper. */
 case class PeerUnregister(host: String, port: Int, key: String)
 
-
+/** Peer Application Programming Interface object. */
 object PeerAPI {
 
+  // doc
   case class EdgeResponse(
-                         soe: Option[SignedObservationEdgeCache] = None,
-                         cb: Option[CheckpointCacheData] = None
+                           soe: Option[SignedObservationEdgeCache] = None,
+                           cb: Option[CheckpointCacheData] = None
                          )
 
 }
 
+/** Peer Application Programming Interface class. */
 class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   extends Json4sSupport with CommonEndpoints with IPEnforcer {
 
@@ -57,15 +72,16 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 
   private var pendingRegistrations = Map[String, PeerRegistrationRequest]()
 
+  // doc
   private def getHostAndPortFromRemoteAddress(clientIP: RemoteAddress) = {
-    clientIP.toOption.map{z => PeerIPData(z.getHostAddress, Some(clientIP.getPort()))}
+    clientIP.toOption.map { z => PeerIPData(z.getHostAddress, Some(clientIP.getPort())) }
   }
 
   private val getEndpoints = {
     get {
       extractClientIP { clientIP =>
         path("ip") {
-          complete(clientIP.toIP.map{z => PeerIPData(z.ip.getCanonicalHostName, z.port)})
+          complete(clientIP.toIP.map { z => PeerIPData(z.ip.getCanonicalHostName, z.port) })
         } /*~
         path("edge" / Segment) { soeHash =>
           val cacheOpt = dao.dbActor.getSignedObservationEdgeCache(soeHash)
@@ -91,33 +107,35 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
           complete(StatusCodes.OK)
         }
       } ~
-      path ("sign") {
-        entity(as[PeerAuthSignRequest]) { e =>
-          val hash = e.salt.toString
+        path("sign") {
+          entity(as[PeerAuthSignRequest]) { e =>
+            val hash = e.salt.toString
 
-          val signature = hashSign(hash, dao.keyPair)
-          complete(SingleHashSignature(hash, signature))
-        }
-      } ~
-      path("register") {
-        extractClientIP { clientIP =>
-          entity(as[PeerRegistrationRequest]) { request =>
-            val hostAddress = clientIP.toOption.map{_.getHostAddress}
-            logger.debug(s"Received peer registration request $request on $clientIP $hostAddress ${clientIP.toOption} ${clientIP.toIP}")
-            val maybeData = getHostAndPortFromRemoteAddress(clientIP)
-            maybeData match {
-              case Some(PeerIPData(host, _)) =>
-                logger.debug("Parsed host and port, sending peer manager request")
-                dao.peerManager ! PendingRegistration(host, request)
-                pendingRegistrations = pendingRegistrations.updated(host, request)
-                complete(StatusCodes.OK)
-              case None =>
-                logger.warn(s"Failed to parse host and port for $request")
-                complete(StatusCodes.BadRequest)
+            val signature = hashSign(hash, dao.keyPair)
+            complete(SingleHashSignature(hash, signature))
+          }
+        } ~
+        path("register") {
+          extractClientIP { clientIP =>
+            entity(as[PeerRegistrationRequest]) { request =>
+              val hostAddress = clientIP.toOption.map {
+                _.getHostAddress
+              }
+              logger.debug(s"Received peer registration request $request on $clientIP $hostAddress ${clientIP.toOption} ${clientIP.toIP}")
+              val maybeData = getHostAndPortFromRemoteAddress(clientIP)
+              maybeData match {
+                case Some(PeerIPData(host, _)) =>
+                  logger.debug("Parsed host and port, sending peer manager request")
+                  dao.peerManager ! PendingRegistration(host, request)
+                  pendingRegistrations = pendingRegistrations.updated(host, request)
+                  complete(StatusCodes.OK)
+                case None =>
+                  logger.warn(s"Failed to parse host and port for $request")
+                  complete(StatusCodes.BadRequest)
+              }
             }
           }
         }
-      }
     } ~
       get {
         pathPrefix("registration") {
@@ -133,7 +151,9 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
         entity(as[SendToAddress]) { sendRequest =>
           // TODO: Add limiting
           if (sendRequest.amountActual < (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor) &&
-            dao.addressService.get(dao.selfAddressStr).map{_.balance}.getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)
+            dao.addressService.get(dao.selfAddressStr).map {
+              _.balance
+            }.getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)
           ) {
             logger.info(s"send transaction to address $sendRequest")
 
@@ -149,100 +169,102 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
           }
         }
       } ~
-      path ("deregister") {
-        extractClientIP { clientIP =>
-          entity(as[PeerUnregister]) { request =>
-            val maybeData = getHostAndPortFromRemoteAddress(clientIP)
-            maybeData match {
-              case Some(PeerIPData(host, portOption)) =>
-                dao.peerManager ! Deregistration(request.host, request.port, request.key)
-                complete(StatusCodes.OK)
-              case None =>
-                complete(StatusCodes.BadRequest)
+        path("deregister") {
+          extractClientIP { clientIP =>
+            entity(as[PeerUnregister]) { request =>
+              val maybeData = getHostAndPortFromRemoteAddress(clientIP)
+              maybeData match {
+                case Some(PeerIPData(host, portOption)) =>
+                  dao.peerManager ! Deregistration(request.host, request.port, request.key)
+                  complete(StatusCodes.OK)
+                case None =>
+                  complete(StatusCodes.BadRequest)
+              }
             }
           }
-      }
-    } ~
-      path("checkpointEdgeVote") {
-        entity(as[Array[Byte]]) { e =>
+        } ~
+        path("checkpointEdgeVote") {
+          entity(as[Array[Byte]]) { e =>
             val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusVote[Consensus.Checkpoint]]
 
             dao.consensus ! message
 
-          complete(StatusCodes.OK)
-        }
-      } ~
-      path("checkpointEdgeProposal") {
-        entity(as[Array[Byte]]) { e =>
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("checkpointEdgeProposal") {
+          entity(as[Array[Byte]]) { e =>
             val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusProposal[Consensus.Checkpoint]]
 
             dao.consensus ! message
 
-          complete(StatusCodes.OK)
-        }
-      } ~
-      pathPrefix("request") {
-        path("signature") {
-          extractClientIP { ip =>
-/*
-            ip.toOption.foreach{inet =>
-              val hp = HostPort(inet.getHostAddress, 9001) // TODO: Change this to non-hardcoded port and send a response telling other node to re-register
-              PeerManager.attemptRegisterPeer(hp)
-            }
-*/
+            complete(StatusCodes.OK)
+          }
+        } ~
+        pathPrefix("request") {
+          path("signature") {
+            extractClientIP { ip =>
+              /*
+                          ip.toOption.foreach{inet =>
+                            val hp = HostPort(inet.getHostAddress, 9001) // TODO: Change this to non-hardcoded port and send a response telling other node to re-register
+                            PeerManager.attemptRegisterPeer(hp)
+                          }
+              */
 
-            entity(as[SignatureRequest]) { sr =>
-              dao.metricsManager ! IncrementMetric("peerApiRXSignatureRequest")
-              onComplete(
-                futureTryWithTimeoutMetric(
-                  EdgeProcessor.handleSignatureRequest(sr),
-                  "peerAPIHandleSignatureRequest",
-                  60
-                )(dao.signatureExecutionContext, dao)
-              ) {
-                result => // ^ Errors captured above
-                  val knownHost = dao.peerInfo.exists(_._2.client.hostName == ip)
-                  val maybeResponse = result.toOption.flatMap {
-                    _.toOption
-                  }.map{_.copy(reRegister = !knownHost)}
-                  complete(SignatureResponseWrapper(maybeResponse).json)
+              entity(as[SignatureRequest]) { sr =>
+                dao.metricsManager ! IncrementMetric("peerApiRXSignatureRequest")
+                onComplete(
+                  futureTryWithTimeoutMetric(
+                    EdgeProcessor.handleSignatureRequest(sr),
+                    "peerAPIHandleSignatureRequest",
+                    60
+                  )(dao.signatureExecutionContext, dao)
+                ) {
+                  result => // ^ Errors captured above
+                    val knownHost = dao.peerInfo.exists(_._2.client.hostName == ip)
+                    val maybeResponse = result.toOption.flatMap {
+                      _.toOption
+                    }.map {
+                      _.copy(reRegister = !knownHost)
+                    }
+                    complete(SignatureResponseWrapper(maybeResponse).json)
+                }
               }
             }
           }
-        }
-      } ~
+        } ~
         pathPrefix("finished") {
-        path ("checkpoint") {
+          path("checkpoint") {
 
-          extractClientIP { ip =>
-/*
-            ip.toOption.foreach { inet =>
-              val hp = HostPort(inet.getHostAddress, 9001) // TODO: Change this to non-hardcoded port and send a response telling other node to re-register
-              PeerManager.attemptRegisterPeer(hp)
-            }
-*/
+            extractClientIP { ip =>
+              /*
+                          ip.toOption.foreach { inet =>
+                            val hp = HostPort(inet.getHostAddress, 9001) // TODO: Change this to non-hardcoded port and send a response telling other node to re-register
+                            PeerManager.attemptRegisterPeer(hp)
+                          }
+              */
 
-            entity(as[FinishedCheckpoint]) { fc =>
-              // TODO: Validation / etc.
-              dao.metricsManager ! IncrementMetric("peerApiRXFinishedCheckpoint")
-              onComplete(
-                EdgeProcessor.handleFinishedCheckpoint(fc)
-              ) {
-                result => // ^ Errors captured above
-                  val maybeResponse = result.toOption.flatMap {
-                    _.toOption
-                  }.map{
-                    _ =>
-                      val knownHost = dao.peerInfo.exists(_._2.client.hostName == ip)
-                      FinishedCheckpointResponse(!knownHost)
-                  }
-                  complete(maybeResponse)
+              entity(as[FinishedCheckpoint]) { fc =>
+                // TODO: Validation / etc.
+                dao.metricsManager ! IncrementMetric("peerApiRXFinishedCheckpoint")
+                onComplete(
+                  EdgeProcessor.handleFinishedCheckpoint(fc)
+                ) {
+                  result => // ^ Errors captured above
+                    val maybeResponse = result.toOption.flatMap {
+                      _.toOption
+                    }.map {
+                      _ =>
+                        val knownHost = dao.peerInfo.exists(_._2.client.hostName == ip)
+                        FinishedCheckpointResponse(!knownHost)
+                    }
+                    complete(maybeResponse)
+                }
               }
             }
           }
         }
-      }
-  }
+    } // end postEndpoints value
 
   private val mixedEndpoints = {
     path("transaction" / Segment) { s =>
@@ -269,8 +291,8 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
     encodeResponse {
       // rejectBannedIP {
       signEndpoints ~ commonEndpoints ~ // { //enforceKnownIP
-      getEndpoints ~ postEndpoints ~ mixedEndpoints
+        getEndpoints ~ postEndpoints ~ mixedEndpoints
     }
   }
 
-}
+} // end PeerAPI

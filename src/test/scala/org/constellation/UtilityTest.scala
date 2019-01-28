@@ -3,24 +3,29 @@ package org.constellation
 import java.security.KeyPair
 
 import org.constellation.crypto.KeyUtils._
-import org.scalatest.FlatSpec
-//case class Test(a: EdgeHashType, b: EdgeHashType)
 
+import org.scalatest.FlatSpec
+
+// case class Test(a: EdgeHashType, b: EdgeHashType) // tmp comment
+
+/** Various utility tests.
+  *
+  * @todo Test CB serializations.
+  * @todo Rewrite/Reenable tests.
+  */
 class UtilityTest extends FlatSpec {
 
-
-  // TODO: Test CB serializations
   "Bundles" should "serialize and deserialize properly with json" in {
-
     implicit val kp: KeyPair = makeKeyPair()
 
-    //assert(b3.json.x[Bundle] == b3)
+    /* // tmp comment
+    assert(b3.json.x[Bundle] == b3)
+    */
   }
 
   "BigInt hash" should "XOR properly as a distance metric" in {
-/*
-
-    // Use bigint hex for dumping key hashes later.
+    /* // tmp comment
+    // Use BigInt hex for dumping key hashes later.
     val hash = Fixtures.transaction3.hash
     val hash2 = Fixtures.transaction4.hash
     println(hash)
@@ -36,17 +41,16 @@ class UtilityTest extends FlatSpec {
 
     val xor2 = bi ^ BigInt(Fixtures.transaction2.hash, 16)
     println(xor > xor2)
-*/
-
+    */
   }
 
   "Case object serialization" should "work" in {
-
-    /*val t = Test(TXHash, AsdfHash)
+    /* // tmp comment
+    val t = Test(TXHash, AsdfHash)
     println(t.j)
     println(t.j.x[Test])
     assert(t.j.x[Test] == t)
-*/
+    */
   }
 
-}
+} // end UtilityTest

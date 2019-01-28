@@ -1,11 +1,11 @@
 package org.constellation.cluster
 
 import java.util.concurrent.{ForkJoinPool, TimeUnit}
-
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
+
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.ChannelProof
 import org.constellation.util.{Simulation, TestNode}
@@ -15,6 +15,7 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
 import scala.util.Try
 
+// doc
 class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
   val tmpDir = "tmp"
@@ -22,6 +23,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
+  // doc
   override def beforeAll(): Unit = {
     // Cleanup DBs
     //Try{File(tmpDir).delete()}
@@ -29,6 +31,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
   }
 
+  // doc
   override def afterAll() {
     // Cleanup DBs
     TestNode.clearNodes()
@@ -36,6 +39,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     Try{File(tmpDir).delete()}
   }
 
+  // doc
   def createNode(
                   randomizePorts: Boolean = true,
                   seedHosts: Seq[HostPort] = Seq(),
@@ -48,7 +52,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   }
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
-
 
   val totalNumNodes = 3
 
@@ -82,6 +85,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     val messageWithinSnapshot = initialAPIs.head.getBlocking[Option[ChannelProof]]("channel/" + messageChannel)
 
+    // doc
     def messageValid() = messageWithinSnapshot.exists{ proof =>
       val m = proof.channelMessageMetadata
       m.snapshotHash.nonEmpty && m.blockHash.nonEmpty && proof.checkpointMessageProof.verify() &&
@@ -103,7 +107,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     // Stop transactions
     sim.triggerRandom(allAPIs)
 
-
     sim.logger.info("Stopping transactions to run parity check")
 
     Thread.sleep(30000)
@@ -112,7 +115,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     // Follow pattern in Simulation.await examples
     assert(allAPIs.map{_.metrics("checkpointAccepted")}.distinct.size == 1)
     assert(allAPIs.map{_.metrics("transactionAccepted")}.distinct.size == 1)
-
 
     val storedSnapshots = allAPIs.map{_.simpleDownload()}
 
@@ -125,8 +127,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
       snaps.size == 1
     )
 
-  }
+  } // end test
 
-
-
-}
+} // end E2ETest class

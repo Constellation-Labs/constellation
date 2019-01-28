@@ -9,6 +9,7 @@ import com.twitter.algebird._
 import scala.collection.immutable
 import scala.util.Random
 
+// doc
 class AlgebirdTest extends FlatSpec {
 
   private val randomTX = Seq.fill(30) {
@@ -35,7 +36,10 @@ class AlgebirdTest extends FlatSpec {
 
   "SketchMap" should "estimate id frequencies per tx hash with HLL values" in {
 
+    // doc
     class HLLOrdering extends Ordering[HLL] {
+
+      // doc
       override def compare(x: HLL, y: HLL): Int = {
         x.approximateSize.estimate.compare(y.approximateSize.estimate)
       }
@@ -52,6 +56,7 @@ class AlgebirdTest extends FlatSpec {
 
     val HEAVY_HITTERS_COUNT = 10
 
+    // doc
     implicit def string2Bytes(i: String): Array[Byte] = i.toCharArray.map(_.toByte)
 
     val PARAMS = SketchMapParams[String](SEED, EPS, DELTA, HEAVY_HITTERS_COUNT)
@@ -127,7 +132,6 @@ class AlgebirdTest extends FlatSpec {
 
     println(hashed.length)
 
-
     val seq = hashed.combinations(2).toSeq
     println(seq.length)
     val bucketIntersections = seq.map {
@@ -141,7 +145,6 @@ class AlgebirdTest extends FlatSpec {
 
     bucketIntersections.foreach{println}
 
-
     assert(bucketIntersections.exists(_._3 > 0))
 
     val bucketGroups = hashed.flatMap{ case (s, m, b) =>
@@ -150,7 +153,8 @@ class AlgebirdTest extends FlatSpec {
 
     assert(bucketGroups.exists{_._2 > 1})
 
-
   }
-}
+
+} // end AlgebirdTest class
 */
+

@@ -1,13 +1,13 @@
 package org.constellation.p2p
 
 import java.net.InetSocketAddress
-
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
+
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.Consensus.RemoteMessage
@@ -17,14 +17,15 @@ import org.constellation.util.{APIClient, Signed}
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Try}
 
+// Don't use this yet. // tmp comment
 
-
-// TODO: Needs to be merged with other peer auth flow and updated substantially
-// Don't use this yet.
+/** @todo Needs to be merged with other peer auth flow and updated substantially. */
 trait PeerAuth {
 
   val data: DAO
+
   import data._
+
   val udpActor: ActorRef
   var requestExternalAddressCheck: Boolean
   val self: ActorRef
@@ -34,6 +35,7 @@ trait PeerAuth {
   implicit val actorMaterializer: ActorMaterializer
   implicit val actorSystem: ActorSystem
 
+  // doc
   def getBroadcastTCP(skipIDs: Seq[Id] = Seq(),
                       idSubset: Seq[Id] = Seq(),
                       route: String): Seq[(InetSocketAddress, Future[Response[String]])] = {
@@ -50,6 +52,7 @@ trait PeerAuth {
     })
   }
 
+  // doc
   def broadcastUDP[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
     getBroadcastPeers(skipIDs, idSubset).map(_.externalAddress).foreach(a => {
       val address = a.get
@@ -57,6 +60,7 @@ trait PeerAuth {
     })
   }
 
+  // doc
   def getBroadcastPeers(skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Seq[Peer] = {
     val peers: Iterable[Id] = if (idSubset.isEmpty) signedPeerIDLookup.keys else idSubset
 
@@ -65,36 +69,42 @@ trait PeerAuth {
     }).toSeq
   }
 
-  def apiBroadcast[T](f: APIClient => T, skipIDs: Seq[Id] = Seq()): Iterable[T]  = {
-    signedPeerIDLookup.keys.filterNot{skipIDs.contains}.flatMap{
+  // doc
+  def apiBroadcast[T](f: APIClient => T, skipIDs: Seq[Id] = Seq()): Iterable[T] = {
+    signedPeerIDLookup.keys.filterNot {
+      skipIDs.contains
+    }.flatMap {
       i =>
-      getOrElseUpdateAPIClient(i).map{
-        a =>
-         // println("API broadcast to " + a.host + " " + a.port)
-          f(a)
-      }
+        getOrElseUpdateAPIClient(i).map {
+          a =>
+            // println("API broadcast to " + a.host + " " + a.port)
+            f(a)
+        }
     }
   }
 
+  // doc
   def broadcast[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
     val dest: Iterable[Id] = if (idSubset.isEmpty) signedPeerIDLookup.keys else idSubset
 
-    dest.foreach{ i =>
+    dest.foreach { i =>
       if (!skipIDs.contains(i)) {
 
         val address = signedPeerIDLookup(i).data.externalAddress
 
-        address.foreach{ a =>
+        address.foreach { a =>
           udpActor ! UDPSend(message, a)
         }
       }
     }
   }
 
+  // doc
   def handShakeInner(peerAddressOrRemote: InetSocketAddress): HandShake = {
-    HandShake(selfPeer, peerAddressOrRemote, peers.toSet,  requestExternalAddressCheck)
+    HandShake(selfPeer, peerAddressOrRemote, peers.toSet, requestExternalAddressCheck)
   }
 
+  // doc
   def initiatePeerHandshake(peerAddress: InetSocketAddress, useRest: Boolean = false): StatusCode = {
     val banList = data.bannedIPs
 
@@ -126,24 +136,28 @@ trait PeerAuth {
     }
   }
 
+  // doc
   def addAuthenticatedPeer(value: Signed[Peer], newPeers: Seq[Signed[Peer]] = Seq()): Unit = {
 
-    value.data.externalAddress.foreach{
+    value.data.externalAddress.foreach {
       a =>
 
-      signedPeerLookup(a) = value
+        signedPeerLookup(a) = value
 
-      value.data.remotes.foreach{ r =>
-        signedPeerLookup(r) = value
-        addressToLastObservedExternalAddress(r) = a
-      }
+        value.data.remotes.foreach { r =>
+          signedPeerLookup(r) = value
+          addressToLastObservedExternalAddress(r) = a
+        }
 
-      logger.debug(s"Peer added, total peers: ${signedPeerIDLookup.keys.size} on ${id.short}")
+        logger.debug(s"Peer added, total peers: ${signedPeerIDLookup.keys.size} on ${id.short}")
 
-      Future { getOrElseUpdateAPIClient(value.id)}
+        Future {
+          getOrElseUpdateAPIClient(value.id)
+        }
     }
   }
 
+  // doc
   def banOn[T](valid: => Boolean, remote: InetSocketAddress)(t: => T): Unit = {
     if (valid) t else {
       logger.debug(s"BANNING - Invalid data from - $remote")
@@ -151,6 +165,7 @@ trait PeerAuth {
     }
   }
 
+  // doc
   def handleHandShake(sh: HandShakeMessage, remote: InetSocketAddress): Unit = {
     val hs = sh.handShake.data
     val address = hs.originPeer.data.externalAddress
@@ -163,7 +178,11 @@ trait PeerAuth {
       logger.debug(s"Got handshake inner from $remote on $externalAddress, " +
         s"sending response to $remote inet: ${pprintInet(remote)} " +
         s"peers externally reported address: ${hs.originPeer.data.externalAddress} inet: " +
-        s"${address.map{pprintInet}}")
+        s"${
+          address.map {
+            pprintInet
+          }
+        }")
 
       val lastExternal = if (address.nonEmpty) None else addressToLastObservedExternalAddress.get(remote)
 
@@ -178,6 +197,7 @@ trait PeerAuth {
     }
   }
 
+  // doc
   def handleHandShakeResponse(sh: HandShakeResponseMessage, remote: InetSocketAddress): Unit = {
     val hsr = sh.handShakeResponse.data
     val address = hsr.response.originPeer.data.externalAddress
@@ -188,8 +208,8 @@ trait PeerAuth {
     }
 
     // For node restart
-    if (externalAddress.isEmpty){
-      hsr.lastObservedExternalAddress.foreach{ e =>
+    if (externalAddress.isEmpty) {
+      hsr.lastObservedExternalAddress.foreach { e =>
         externalAddress = Some(e)
         if (apiAddress.isEmpty) {
           apiAddress = Some(new InetSocketAddress(e.getHostString, e.getPort))
@@ -197,7 +217,8 @@ trait PeerAuth {
       }
     }
 
-    // ^ TODO : Fix validation
+    // ^ TODO : Fix validation // tmp comment
+
     banOn(sh.handShakeResponse.valid, remote) {
       logger.debug(s"Got valid HandShakeResponse from $remote / $address on $externalAddress")
 
@@ -210,6 +231,7 @@ trait PeerAuth {
     }
   }
 
+  // doc
   def addPeerFromLocal(peerAddress: InetSocketAddress, knownId: Option[Id] = None): StatusCode = {
     logger.debug(s"AddPeerFromLocal inet: ${pprintInet(peerAddress)}")
 
@@ -233,6 +255,6 @@ trait PeerAuth {
     }
   }
 
-  // TODO: Send other peers termination message on shutdown.
+  // TODO: Send other peers termination message on shutdown. // tmp comment
 
-}
+} // end PeerAuth trait

@@ -1,43 +1,78 @@
 package org.constellation
 
 import org.scalatest.FlatSpec
-
 // Use H2Profile to connect to an H2 database
+
 import constellation._
+
 import slick.jdbc.H2Profile.api._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
+// doc
 class H2SlickTest extends FlatSpec {
 
-
   // Definition of the SUPPLIERS table
+
+  // doc
   class Suppliers(tag: Tag) extends Table[(Int, String, String, String, String, String)](tag, "SUPPLIERS") {
+
+    // doc
     def id = column[Int]("SUP_ID", O.PrimaryKey) // This is the primary key column
+
+    // doc
     def name = column[String]("SUP_NAME")
+
+    // doc
     def street = column[String]("STREET")
+
+    // doc
     def city = column[String]("CITY")
+
+    // doc
     def state = column[String]("STATE")
+
+    // doc
     def zip = column[String]("ZIP")
+
     // Every table needs a * projection with the same type as the table's type parameter
+
+    // doc
     def * = (id, name, street, city, state, zip)
   }
+
   val suppliers = TableQuery[Suppliers]
 
   // Definition of the COFFEES table
+
+  // doc
   class Coffees(tag: Tag) extends Table[(String, Int, Double, Int, Int)](tag, "COFFEES") {
+
+    // doc
     def name = column[String]("COF_NAME", O.PrimaryKey)
+
+    // doc
     def supID = column[Int]("SUP_ID")
+
+    // doc
     def price = column[Double]("PRICE")
+
+    // doc
     def sales = column[Int]("SALES")
+
+    // doc
     def total = column[Int]("TOTAL")
+
+    // doc
     def * = (name, supID, price, sales, total)
+
     // A reified foreign key relation that can be navigated to create a join
+
+    // doc
     def supplier = foreignKey("SUP_FK", supID, suppliers)(_.id)
   }
+
   val coffees = TableQuery[Coffees]
-
-
 
   "H2" should "initialize" in {
 
@@ -48,18 +83,18 @@ class H2SlickTest extends FlatSpec {
         (suppliers.schema ++ coffees.schema).create,
 
         // Insert some suppliers
-        suppliers += (101, "Acme, Inc.",      "99 Market Street", "Groundsville", "CA", "95199"),
-        suppliers += ( 49, "Superior Coffee", "1 Party Place",    "Mendocino",    "CA", "95460"),
-        suppliers += (150, "The High Ground", "100 Coffee Lane",  "Meadows",      "CA", "93966"),
+        suppliers += (101, "Acme, Inc.", "99 Market Street", "Groundsville", "CA", "95199"),
+        suppliers += (49, "Superior Coffee", "1 Party Place", "Mendocino", "CA", "95460"),
+        suppliers += (150, "The High Ground", "100 Coffee Lane", "Meadows", "CA", "93966"),
         // Equivalent SQL code:
         // insert into SUPPLIERS(SUP_ID, SUP_NAME, STREET, CITY, STATE, ZIP) values (?,?,?,?,?,?)
 
         // Insert some coffees (using JDBC's batch insert feature, if supported by the DB)
         coffees ++= Seq(
-          ("Colombian",         101, 7.99, 0, 0),
-          ("French_Roast",       49, 8.99, 0, 0),
-          ("Espresso",          150, 9.99, 0, 0),
-          ("Colombian_Decaf",   101, 8.99, 0, 0),
+          ("Colombian", 101, 7.99, 0, 0),
+          ("French_Roast", 49, 8.99, 0, 0),
+          ("Espresso", 150, 9.99, 0, 0),
+          ("Colombian_Decaf", 101, 8.99, 0, 0),
           ("French_Roast_Decaf", 49, 9.99, 0, 0)
         )
         // Equivalent SQL code:
@@ -85,4 +120,4 @@ class H2SlickTest extends FlatSpec {
 
   }
 
-}
+} // end H2SlickTest class

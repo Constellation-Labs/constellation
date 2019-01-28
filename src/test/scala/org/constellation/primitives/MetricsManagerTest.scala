@@ -2,15 +2,20 @@ package org.constellation.primitives
 
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import akka.testkit.{TestActorRef, TestKit}
+
 import org.constellation.DAO
+
 import akka.actor.{ActorRef, ActorSystem, Props}
 import com.typesafe.scalalogging.Logger
 import io.prometheus.client.CollectorRegistry
+
 import org.constellation.crypto.KeyUtils
 import org.constellation.util.Heartbeat
+
 import java.util.Collections
 
-class MetricsManagerTest ()
+// doc
+class MetricsManagerTest()
   extends TestKit(ActorSystem("ConstellationTest"))
     with Matchers
     with FlatSpecLike
@@ -19,6 +24,7 @@ class MetricsManagerTest ()
   val logger = Logger("ConstellationTest")
   logger.info("MetricsManagerTest init")
 
+  // doc
   override def afterAll: Unit = {
     logger.info("Shutting down the Actor under test")
     shutdown(system)
@@ -26,7 +32,7 @@ class MetricsManagerTest ()
 
   logger.info("Initializing the DAO actor")
   implicit val dao: DAO = new DAO()
- dao.updateKeyPair(KeyUtils.makeKeyPair())
+  dao.updateKeyPair(KeyUtils.makeKeyPair())
   dao.idDir.createDirectoryIfNotExists(createParents = true)
   dao.preventLocalhostAsPeer = false
   dao.externalHostString = ""
@@ -45,4 +51,5 @@ class MetricsManagerTest ()
     val familySamples = Collections.list(CollectorRegistry.defaultRegistry.metricFamilySamples())
     familySamples.size() should be > 0
   }
-}
+
+} // end MetricsManagerTest class

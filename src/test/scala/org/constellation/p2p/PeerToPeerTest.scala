@@ -14,9 +14,11 @@ import org.scalatest._
 
 import scala.util.Random
 
+// doc
 class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLike
   with ImplicitSender with GivenWhenThen with BeforeAndAfterAll with Matchers {
 
+  // doc
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
@@ -24,6 +26,7 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
   private val address: InetSocketAddress = constellation.addressToSocket("localhost:16180")
   private val address2: InetSocketAddress = constellation.addressToSocket("localhost:16181")
 
+  // doc
   trait WithPeerToPeerActor {
     val keyPair: KeyPair = KeyUtils.makeKeyPair()
 
@@ -104,3 +107,4 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
 */
 
 }
+

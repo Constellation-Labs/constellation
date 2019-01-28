@@ -1,33 +1,43 @@
 package org.constellation.primitives
 
 import java.util.concurrent.TimeUnit
-
 import akka.actor.Actor
 import akka.pattern.ask
 import akka.util.Timeout
 import better.files.File
 import com.typesafe.scalalogging.Logger
+
 import constellation._
+
 import io.kontainers.micrometer.akka.AkkaMetricRegistry
 import io.micrometer.core.instrument.Clock
 import io.micrometer.core.instrument.binder.jvm._
 import io.micrometer.core.instrument.binder.logging._
 import io.micrometer.core.instrument.binder.system._
 import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
+
 import org.constellation.DAO
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat}
 import org.constellation.util.HeartbeatSubscribe
+
 import org.joda.time.DateTime
-//import io.micrometer.core.instrument.binder.db._
+//import io.micrometer.core.instrument.binder.db._ // tmp comment
 
 import io.prometheus.client.CollectorRegistry
 
 case object GetMetrics
 
+/** Metric update wrapper. */
 case class UpdateMetric(key: String, value: String)
 
+/** Metric incrementation wrapper. */
 case class IncrementMetric(key: String)
 
+/** Metric manager class as actor.
+  *
+  * @param dao ... Data access object.
+  * @todo See comment in the active method body.
+  */
 class MetricsManager()(implicit dao: DAO) extends Actor {
 
   val logger = Logger("Metrics")
@@ -48,20 +58,29 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
   new ProcessorMetrics().bindTo(prometheusMeterRegistry)
   new FileDescriptorMetrics().bindTo(prometheusMeterRegistry)
   new LogbackMetrics().bindTo(prometheusMeterRegistry)
-  new ClassLoaderMetrics()bindTo((prometheusMeterRegistry))
+  new ClassLoaderMetrics() bindTo ((prometheusMeterRegistry))
   new DiskSpaceMetrics(File(System.getProperty("user.dir")).toJava).bindTo(prometheusMeterRegistry);
-  // new DatabaseTableMetrics().bindTo(prometheusMeterRegistry)
 
+  // new DatabaseTableMetrics().bindTo(prometheusMeterRegistry) // tmp comment
+
+  /** Receive method of the actor. */
   override def receive: Receive = active(Map("id" -> dao.id.b58))
 
+  /** Active method of the actor.
+    *
+    * @param metrics ... ??.
+    * @todo See comment in the method body.
+    */
   def active(metrics: Map[String, String]): Receive = {
     case GetMetrics => sender() ! metrics
 
     case UpdateMetric(key, value) => context become active(metrics + (key -> value))
 
     case IncrementMetric(key) =>
-      // Why are the values strings if we're just going to convert back and forth from longs?
-      val updatedMap = metrics + (key -> metrics.get(key).map{z => (z.toLong + 1).toString}.getOrElse("1"))
+
+      // Why are the values strings if we're just going to convert back and forth from longs? // tmp comment
+
+      val updatedMap = metrics + (key -> metrics.get(key).map { z => (z.toLong + 1).toString }.getOrElse("1"))
       context become active(updatedMap)
 
     case InternalHeartbeat(round) =>
@@ -70,31 +89,38 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
 
         val peers = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
 
-        val allAddresses = peers.map{_._1.address.address} :+ dao.selfAddressStr
+        val allAddresses = peers.map {
+          _._1.address.address
+        } :+ dao.selfAddressStr
 
-        val balancesBySnapshotMetrics = allAddresses.map{a =>
-          val balance = dao.addressService.get(a).map{_.balanceByLatestSnapshot}.getOrElse(0L)
+        val balancesBySnapshotMetrics = allAddresses.map { a =>
+          val balance = dao.addressService.get(a).map {
+            _.balanceByLatestSnapshot
+          }.getOrElse(0L)
           a.slice(0, 8) + " " + balance
         }.sorted.mkString(", ")
 
-
-        val balancesMetrics = allAddresses.map{a =>
-          val balance = dao.addressService.get(a).map{_.balance}.getOrElse(0L)
+        val balancesMetrics = allAddresses.map { a =>
+          val balance = dao.addressService.get(a).map {
+            _.balance
+          }.getOrElse(0L)
           a.slice(0, 8) + " " + balance
         }.sorted.mkString(", ")
 
+        //   logger.info("Metrics: " + metrics) // tmp comment
 
-     //   logger.info("Metrics: " + metrics)
         val countAll = metrics.getOrElse("transactionAccepted", "0").toLong - dao.transactionAcceptedAfterDownload
-        val startTime = dao.downloadFinishedTime // metrics.getOrElse("nodeStartTimeMS", "1").toLong
+        val startTime = dao.downloadFinishedTime // metrics.getOrElse("nodeStartTimeMS", "1").toLong // tmp comment
         val deltaStart = System.currentTimeMillis() - startTime
         val tpsAll = countAll.toDouble * 1000 / deltaStart
 
         val delta = System.currentTimeMillis() - lastCheckTime
         val deltaTX = countAll - lastTXCount
         val tps = deltaTX.toDouble * 1000 / delta
+
         lastTXCount = countAll
         lastCheckTime = System.currentTimeMillis()
+
         context become active(
           metrics + (
             "TPS_last_" + dao.processingConfig.metricCheckInterval + "_seconds" -> tps.toString,
@@ -105,7 +131,9 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
             "nodeCurrentDate" -> new DateTime().toString()
           )
         )
-      }
 
-  }
-}
+      } // end if
+
+  } // end def active
+
+} // end class MetricsManager

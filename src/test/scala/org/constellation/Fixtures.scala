@@ -8,10 +8,10 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.{Id, Peer, SendToAddress}
 import org.constellation.util.Signed
 
-
+// doc
 object Fixtures {
 
-//  lazy val testNode =  TestNode(heartbeatEnabled = true, randomizePorts = false)
+  //  lazy val testNode =  TestNode(heartbeatEnabled = true, randomizePorts = false)
 
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()
@@ -46,9 +46,10 @@ object Fixtures {
   val idSet4B = Set(id1, id2, id3, id5)
   val idSet5 = Set(id1, id2, id3, id4, id5)
 
+  // doc
   def dummyTx(data: DAO, amt: Long = 1L) = {
     val sendRequest = SendToAddress(id.address.address, amt)
     createTransaction(data.selfAddressStr, sendRequest.dst, sendRequest.amountActual, data.keyPair)
   }
 
-}
+} // end Fixtures object

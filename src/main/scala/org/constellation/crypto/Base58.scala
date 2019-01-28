@@ -1,22 +1,22 @@
 package org.constellation.crypto
 
-
 import java.math.BigInteger
-
 import scala.annotation.tailrec
 
-// From https://github.com/ACINQ/bitcoin-lib/blob/master/src/main/scala/fr/acinq/bitcoin/Base58.scala
-
+/** Base58 conversion tools.
+  *
+  * @see [[https://github.com/ACINQ/bitcoin-lib/blob/master/src/main/scala/fr/acinq/bitcoin/Base58.scala github.com/ACINQ/bitcoin-lib]]
+  */
 object Base58 {
 
   val alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-  // char -> value
+  // char -> value // tmp comment
   val map: Map[Char, Int] = alphabet.zipWithIndex.toMap
 
-  /**
+  /** Ecodes byte array.
     *
-    * @param input binary data
-    * @return the base-58 representation of input
+    * @param input ... binary data
+    * @return The base-58 representation of input
     */
   def encode(input: Seq[Byte]): String = {
     if (input.isEmpty) ""
@@ -24,6 +24,7 @@ object Base58 {
       val big = new BigInteger(1, input.toArray)
       val builder = new StringBuilder
 
+      // doc
       @tailrec
       def encode1(current: BigInteger): Unit = current match {
         case BigInteger.ZERO => ()
@@ -39,9 +40,9 @@ object Base58 {
     }
   }
 
-  /**
+  /** Decodes byte array.
     *
-    * @param input base-58 encoded data
+    * @param input ... base-58 encoded data
     * @return the decoded data
     */
   def decode(input: String): Array[Byte] = {
@@ -50,4 +51,5 @@ object Base58 {
     val decoded = trim.foldLeft(BigInteger.ZERO)((a, b) => a.multiply(BigInteger.valueOf(58L)).add(BigInteger.valueOf(map(b))))
     if (trim.isEmpty) zeroes else zeroes ++ decoded.toByteArray.dropWhile(_ == 0) // BigInteger.toByteArray may add a leading 0x00
   }
-}
+
+} // end Base58 object

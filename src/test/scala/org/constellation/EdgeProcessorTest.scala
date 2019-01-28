@@ -1,21 +1,22 @@
 package org.constellation
 
 import java.security.KeyPair
-
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestProbe
+
 import org.constellation.Fixtures.{addPeerRequest, dummyTx, id}
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.APIClient
+
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FlatSpec, OneInstancePerTest}
-
 import scala.concurrent.ExecutionContextExecutor
 
+// doc
 class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTest {
   implicit val system: ActorSystem = ActorSystem("TransactionProcessorTest")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
@@ -25,27 +26,29 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
   val peerData = PeerData(addPeerRequest, getAPIClient("", 1))
   val peerManager = TestProbe()
   val metricsManager = TestProbe()
-/*  val dbActor = TestProbe()
+  /*  val dbActor = TestProbe()
 
-  dbActor.setAutoPilot(new TestActor.AutoPilot {
-    def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
-      case DBGet(`srcHash`) =>
-        sender ! Some(AddressCacheData(100000000000000000L, 100000000000000000L, None))
-        TestActor.KeepRunning
+    dbActor.setAutoPilot(new TestActor.AutoPilot {
+      // doc
+      def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
+        case DBGet(`srcHash`) =>
+          sender ! Some(AddressCacheData(100000000000000000L, 100000000000000000L, None))
+          TestActor.KeepRunning
 
-      case DBGet(`txHash`) =>
-        sender ! Some(TransactionCacheData(tx, false))
-        TestActor.KeepRunning
+        case DBGet(`txHash`) =>
+          sender ! Some(TransactionCacheData(tx, false))
+          TestActor.KeepRunning
 
-      case DBGet(`invalidSpendHash`) =>
-        sender ! Some(TransactionCacheData(tx, true))
-        TestActor.KeepRunning
-    }
-  })*/
+        case DBGet(`invalidSpendHash`) =>
+          sender ! Some(TransactionCacheData(tx, true))
+          TestActor.KeepRunning
+      }
+    })*/
 
   val mockData = new DAO
   mockData.updateKeyPair(keyPair)
 
+  // doc
   def makeDao(mockData: DAO, peerManager: TestProbe = peerManager, metricsManager: TestProbe = metricsManager) = {
     mockData.actorMaterializer = materialize
     mockData.metricsManager = metricsManager.testActor
@@ -66,8 +69,9 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
   (mockLvlDB.getAddressCacheData _).when(srcHash).returns(Some(AddressCacheData(100000000000000000L, 100000000000000000L, None)))
   (mockLvlDB.getTransactionCacheData _).when(txHash).returns(Some(TransactionCacheData(tx, false)))
   (mockLvlDB.getTransactionCacheData _).when(invalidSpendHash).returns(Some(TransactionCacheData(tx, true)))
- // data.dbActor = mockLvlDB
+  // data.dbActor = mockLvlDB
 
+  // doc
   def getAPIClient(hostName: String, httpPort: Int) = {
     val api = APIClient(host = hostName, port = httpPort)
     api.id = id
@@ -75,32 +79,32 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
   }
 
   "Incoming transactions" should "be signed and returned if valid" in {
-  //  val validatorResponse = Validation.validateTransaction(data.dbActor, tx)
-  //  assert(validatorResponse.transaction === tx)
+    //  val validatorResponse = Validation.validateTransaction(data.dbActor, tx)
+    //  assert(validatorResponse.transaction === tx)
   }
 
   // This test isn't quite working right. It already wasn't -- just wasn't clear because of future's hiding the result.
-/*  "Incoming transactions" should " be signed if already signed by this keyPair" in {
-    val validatorResponse = Validation.validateTransaction(data.dbActor, tx)
-    val keyPair: KeyPair = KeyUtils.makeKeyPair()
-    val thing = new DAO
-    thing.updateKeyPair(keyPair)
-    val dummyDao = makeDao(thing)
+  /*  "Incoming transactions" should " be signed if already signed by this keyPair" in {
+      val validatorResponse = Validation.validateTransaction(data.dbActor, tx)
+      val keyPair: KeyPair = KeyUtils.makeKeyPair()
+      val thing = new DAO
+      thing.updateKeyPair(keyPair)
+      val dummyDao = makeDao(thing)
 
-      peerManager.expectMsg(APIBroadcast(_.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", validatorResponse)))
-      //val signedTransaction = EdgeProcessor.updateWithSelfSignatureEmit(tx, dummyDao)
-      //assert(signedTransaction.signatures.exists(_.publicKey == dummyDao.keyPair.getPublic))
-    }
-  */
+        peerManager.expectMsg(APIBroadcast(_.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", validatorResponse)))
+        //val signedTransaction = EdgeProcessor.updateWithSelfSignatureEmit(tx, dummyDao)
+        //assert(signedTransaction.signatures.exists(_.publicKey == dummyDao.keyPair.getPublic))
+      }
+    */
 
   "Incoming transactions" should "not be signed if already signed by this keyPair" in {
-   // val signedTransaction = EdgeProcessor.updateWithSelfSignatureEmit(tx, data)
-  //  assert(signedTransaction == tx)
+    // val signedTransaction = EdgeProcessor.updateWithSelfSignatureEmit(tx, data)
+    //  assert(signedTransaction == tx)
   }
 
   "Incoming transactions" should "throw exception if invalid" in {
-   // val bogusTransactionValidationStatus = TransactionValidationStatus(tx, Some(TransactionCacheData(tx, true)), None)
-  //  EdgeProcessor.reportInvalidTransaction(data, bogusTransactionValidationStatus)
+    // val bogusTransactionValidationStatus = TransactionValidationStatus(tx, Some(TransactionCacheData(tx, true)), None)
+    //  EdgeProcessor.reportInvalidTransaction(data, bogusTransactionValidationStatus)
     // TODO: Fix ordering - tets failure,
     /*metricsManager.expectMsg(IncrementMetric("invalidTransactions"))
     metricsManager.expectMsg(IncrementMetric("hashDuplicateTransactions"))
@@ -120,5 +124,5 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
     data.transactionMemPoolMultiWitness(tx.hash) = tx
     assert(data.transactionMemPoolMultiWitness(tx.hash) == updated)*/
   }
-}
 
+} // end EdgeProcessorTest class

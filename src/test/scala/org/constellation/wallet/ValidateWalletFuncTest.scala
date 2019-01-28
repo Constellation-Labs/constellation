@@ -1,15 +1,17 @@
 package org.constellation.wallet
 
-
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import constellation._
 import org.constellation.crypto.KeyUtils._
+
 import org.json4s.native.Serialization
 import org.scalatest.FlatSpec
 
+// doc
 case class SetSerialize(s: Set[String])
 
+// doc
 class ValidateWalletFuncTest  extends FlatSpec {
 
   val kp: KeyPair = makeKeyPair()
@@ -22,7 +24,8 @@ class ValidateWalletFuncTest  extends FlatSpec {
 
   }
 
-/*  "Wallet KeyStore" should "build a keystore properly" in {
+/*
+  "Wallet KeyStore" should "build a keystore properly" in {
 
     val file = new File("keystoretest.p12")
     val file2 = new File("keystoretest.bks")
@@ -47,7 +50,8 @@ class ValidateWalletFuncTest  extends FlatSpec {
 
     // Put more tests in here.
 
-  }*/
+  }
+*/
 
   "KeyGen" should "make proper keys" in {
     val privK = kp.getPrivate.toString
@@ -61,8 +65,8 @@ class ValidateWalletFuncTest  extends FlatSpec {
   }
 
   "KeyPair JSON" should "serialize to json4s using custom serializer" in {
-  //  implicit val formats: Formats = DefaultFormats +
-//      new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer
+  // implicit val formats: Formats = DefaultFormats + // tmp comment
+  // new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer
     val ser = Serialization.write(kp.getPublic)
     val deser = Serialization.read[PublicKey](ser)
     assert(deser == kp.getPublic)
@@ -96,6 +100,7 @@ class ValidateWalletFuncTest  extends FlatSpec {
 
   "Key Size" should "verify byte array lengths for encoded keys" in {
 
+    // doc
     def fill(thunk: => Array[Byte]) =
       Seq.fill(50){thunk}.map{_.length}.distinct
 
@@ -127,4 +132,5 @@ class ValidateWalletFuncTest  extends FlatSpec {
     assert(priv1.getEncoded.sameElements(priv2.getEncoded))
   }
 
-}
+} // end ValidateWalletFuncTest class
+

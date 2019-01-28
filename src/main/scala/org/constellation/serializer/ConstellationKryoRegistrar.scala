@@ -2,6 +2,7 @@ package org.constellation.serializer
 
 import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
+
 import org.constellation.consensus.Consensus.{VoteData => _, _}
 import org.constellation.consensus._
 import org.constellation.p2p.SerializedUDPMessage
@@ -9,11 +10,15 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives.{ChannelMessage, ChannelMessageData, SignedData}
 import org.constellation.util.{EncodedPublicKey, HashSignature, SignatureBatch, Signed}
 
+/** Kryo registrar. */
 class ConstellationKryoRegistrar extends IKryoRegistrar {
+
+  /** Apply method. */
   override def apply(kryo: Kryo): Unit = {
     this.registerClasses(kryo)
   }
 
+  /** Register. */
   def registerClasses(kryo: Kryo): Unit = {
 
     kryo.register(classOf[ChannelMessageData])
@@ -44,7 +49,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[ObservationEdge])
     kryo.register(classOf[CheckpointBlock])
     kryo.register(classOf[TypedEdgeHash])
-  //  kryo.register(classOf[EdgeHashType])
+    //  kryo.register(classOf[EdgeHashType]) // tmp comment
     kryo.register(classOf[Enumeration#Value])
     kryo.register(classOf[TransactionEdgeData])
     kryo.register(classOf[CheckpointEdgeData])
@@ -101,5 +106,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(Class.forName("scala.collection.immutable.Nil$"))
     kryo.register(Class.forName("scala.collection.immutable.Map$EmptyMap$"))
 
-  }
-}
+  } // end registerClasses
+
+} // end class ConstellationKryoRegistrar

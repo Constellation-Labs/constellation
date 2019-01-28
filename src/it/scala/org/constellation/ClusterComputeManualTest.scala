@@ -4,20 +4,22 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import better.files._
+
 import org.constellation.crypto.KeyUtils
 import org.constellation.util.{APIClient, Simulation}
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
+import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.Try
 
-
-
+/** Compute test utilities.
+  *
+  * For custom deployments to non-GCP instances.
+  * When deploy script is better this can go away. Was used for testing on home computer.
+  */
 object ComputeTestUtil {
 
-
-  // For custom deployments to non-GCP instances
-  // When deploy script is better this can go away. Was used for testing on home computer
+  // doc
   def getAuxiliaryNodes(startMultiNodeMachines: Boolean = false)
                        (implicit as: ActorSystem, mat: ActorMaterializer, ec: ExecutionContextExecutor): (Seq[String], Seq[APIClient]) = {
 
@@ -35,13 +37,15 @@ object ComputeTestUtil {
       APIClient(split.head, port = offset + 1, peerHTTPPort = offset + 2, internalPeerHost = split(3))
     }
 
-    val auxMultiAPIs = Try{file"aux-multi-host.txt".lines.toSeq}.getOrElse(Seq()).flatMap{ ip =>
+    val auxMultiAPIs = Try {
+      file"aux-multi-host.txt".lines.toSeq
+    }.getOrElse(Seq()).flatMap { ip =>
       val split = ip.split(":")
       val host = split.head
       val str = host + ":" + split(1)
       val offset = split(2).toInt + 2
-      Seq.tabulate(3){i =>
-        val adjustedOffset = offset + i*2
+      Seq.tabulate(3) { i =>
+        val adjustedOffset = offset + i * 2
         println(s"Initializing API to $str offset: $adjustedOffset")
         if (startMultiNodeMachines) {
           import scala.sys.process._
@@ -57,24 +61,22 @@ object ComputeTestUtil {
 
     ignoreIPs -> (auxAPIs ++ auxMultiAPIs)
 
-  }
+  } // end getAuxiliaryNodes
 
-}
+} // end ComputeTestUtil
 
-/**
-  * Main integration test / node initializer / cluster startup script
+/** Main integration test / node initializer / cluster startup script.
   *
-  * Several API calls in here should be part of the regular node initialization, so this
-  * test should do less
+  * Several API calls in here should be part of the regular node initialization, so this test should do less.
   *
   * We also can't make this a main method in the main folder (for the regular init API calls as opposed to the test calls)
   * so this needs to be split up at some point. Putting another main in the regular classpath causes an issue with
   * sbt docker image, needs to be fixed and then portions of this can be split into separate mains for init methods
-  * vs actual test
-  *
+  * vs actual test.
   */
 class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
+  // doc
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
@@ -100,7 +102,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
     sim.logger.info(ips.toString)
 
-    val apis = ips.map{ ip =>
+    val apis = ips.map { ip =>
       val split = ip.split(":")
       val portOffset = if (split.length == 1) 8999 else split(1).toInt
       val a = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
@@ -110,21 +112,18 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
     sim.logger.info("Num APIs " + apis.size)
 
-
     assert(sim.checkHealthy(apis))
 
     sim.setIdLocal(apis)
 
-    val addPeerRequests = apis.map{ a =>
+    val addPeerRequests = apis.map { a =>
       val aux = if (auxAPIs.contains(a)) a.internalPeerHost else ""
       PeerMetadata(a.hostName, a.udpPort, a.peerHTTPPort, a.id, auxHost = aux)
     }
 
     sim.run(apis, addPeerRequests, attemptSetExternalIP = true, useRegistrationFlow = true)
 
-
-    // For debugging / adjusting options after compile
-    /*
+    /* For debugging / adjusting options after compile // tmp comment
         println(apis.map{
           _.postSync(
             "config/update",
@@ -133,7 +132,6 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
         })
     */
 
+  } // end test
 
-  }
-
-}
+} // end ClusterComputeManualTest

@@ -1,14 +1,13 @@
 package org.constellation.tx
 
-
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
-
 import akka.actor.{ActorSystem, Props}
 import akka.pattern.ask
 import akka.util.Timeout
 import better.files.{File, _}
 import com.typesafe.scalalogging.Logger
+
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
@@ -21,6 +20,8 @@ import org.constellation.{DAO, LevelDBActor}
 import org.scalatest.FlatSpec
 
 import scala.util.Try
+
+// doc
 class TXValidationBenchmark extends FlatSpec {
   val logger = Logger("TXValidationBenchmark")
 
@@ -41,8 +42,7 @@ class TXValidationBenchmark extends FlatSpec {
     val t1 = System.nanoTime()
     val delta = (t1 - t0) / 1e6.toLong
     logger.debug(delta.toString)
-   // assert(delta < 30000)
-
+    // assert(delta < 30000)
 
   }
 
@@ -62,7 +62,7 @@ class TXValidationBenchmark extends FlatSpec {
     val t1a = System.nanoTime()
     val delta2 = (t1a - t0a) / 1e6.toLong
     logger.debug(delta2.toString)
-  //  assert(delta2 < 30000)
+    //  assert(delta2 < 30000)
 
   }
 
@@ -70,7 +70,9 @@ class TXValidationBenchmark extends FlatSpec {
 
     val tmpDir = "tmp"
     val ldbFile = file"tmp/db"
-    Try{File(tmpDir).delete()}
+    Try {
+      File(tmpDir).delete()
+    }
 
     val seq = Seq.fill(batchSize)(tx)
 
@@ -80,15 +82,17 @@ class TXValidationBenchmark extends FlatSpec {
 
     val parSeq = seq.par
     val t0 = System.nanoTime()
-    parSeq.map{t =>
+    parSeq.map { t =>
       t.validSrcSignature && ldb.kryoGet(t.src.address).asInstanceOf[Option[AddressCacheData]].get.balance >= t.amount
     }
     val t1 = System.nanoTime()
     val delta = (t1 - t0) / 1e6.toLong
     logger.debug(delta.toString)
-   // assert(delta < 60000)
+    // assert(delta < 60000)
 
-    Try{File(tmpDir).delete()}
+    Try {
+      File(tmpDir).delete()
+    }
 
   }
 
@@ -96,7 +100,9 @@ class TXValidationBenchmark extends FlatSpec {
 
     val tmpDir = "tmp"
     val ldbFile = file"tmp/db"
-    Try{File(tmpDir).delete()}
+    Try {
+      File(tmpDir).delete()
+    }
 
     val seq = Seq.fill(batchSize)(tx)
 
@@ -116,7 +122,7 @@ class TXValidationBenchmark extends FlatSpec {
 
     val parSeq = seq.par
     val t0 = System.nanoTime()
-    parSeq.map{t =>
+    parSeq.map { t =>
       t.validSrcSignature && (ldb ? DBGet(t.src.address)).mapTo[Option[AddressCacheData]].get().get.balance >= t.amount
     }
     val t1 = System.nanoTime()
@@ -124,12 +130,9 @@ class TXValidationBenchmark extends FlatSpec {
     logger.debug(delta.toString)
     // assert(delta < 60000)
 
-    Try{File(tmpDir).delete()}
-
-    /*
-
-    */
-
+    Try {
+      File(tmpDir).delete()
+    }
   }
 
-}
+} // end TXValidationBenchmark class

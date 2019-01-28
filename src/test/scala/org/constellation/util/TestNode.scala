@@ -1,28 +1,30 @@
 package org.constellation.util
 
 import java.security.KeyPair
-
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+
 import org.constellation.crypto.KeyUtils
 import org.constellation.{ConstellationNode, HostPort}
 
 import scala.concurrent.ExecutionContext
 import scala.util.Try
 
+// doc
 object TestNode {
 
   private var nodes = Seq[ConstellationNode]()
 
+  // doc
   def apply(seedHosts: Seq[HostPort] = Seq(),
             keyPair: KeyPair = KeyUtils.makeKeyPair(),
             randomizePorts: Boolean = true,
             portOffset: Int = 0
            )(
-    implicit system: ActorSystem,
-    materializer: ActorMaterializer,
-    executionContext: ExecutionContext
-  ): ConstellationNode = {
+             implicit system: ActorSystem,
+             materializer: ActorMaterializer,
+             executionContext: ExecutionContext
+           ): ConstellationNode = {
 
     val randomPort =
       if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9000 + portOffset
@@ -65,6 +67,7 @@ object TestNode {
     node
   }
 
+  // doc
   def clearNodes(): Unit = {
     Try {
       nodes.foreach { node => node.shutdown() }
@@ -72,4 +75,4 @@ object TestNode {
     }
   }
 
-}
+} // end TestNode object

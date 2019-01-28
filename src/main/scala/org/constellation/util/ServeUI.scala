@@ -5,45 +5,50 @@ import akka.http.scaladsl.server.Directives.{complete, extractUnmatchedPath, get
 import akka.http.scaladsl.server.Route
 import com.typesafe.scalalogging.Logger
 
+// doc
 trait ServeUI {
 
   val logger: Logger
 
+  /** @return ??. */
   def jsRequest: Route = {
     pathPrefix("ui") {
       get {
         extractUnmatchedPath { path =>
           logger.info(s"UI Request $path")
-            val resPath = "ui/ui" + path
-            logger.debug(s"Loading resource from $resPath")
-            getFromResource(resPath)
+          val resPath = "ui/ui" + path
+          logger.debug(s"Loading resource from $resPath")
+          getFromResource(resPath)
         }
       }
     }
   }
 
+  /** @return ??. */
   def serveMainPage: Route = get {
-    path("")  {
+    path("") {
       logger.debug(s"Serve main page")
 
       val bodyText = ""
 
-      val html = s"""<!DOCTYPE html>
-                      |<html lang="en">
-                      |<head>
-                      |    <meta charset="UTF-8">
-                      |    <title>Constellation</title>
-                      |</head>
-                      |<body>
-                      |$bodyText
-                      |<script src="ui-opt.js" type="text/javascript"></script>
-                      |<script type="text/javascript">
-                      |org.constellation.ui.App().main()
-                      |</script>
-                      |</body>
-                      |</html>""".stripMargin.replaceAll("\n", "")
+      val html =
+        s"""<!DOCTYPE html>
+           |<html lang="en">
+           |<head>
+           |    <meta charset="UTF-8">
+           |    <title>Constellation</title>
+           |</head>
+           |<body>
+           |$bodyText
+           |<script src="ui-opt.js" type="text/javascript"></script>
+           |<script type="text/javascript">
+           |org.constellation.ui.App().main()
+           |</script>
+           |</body>
+           |</html>""".stripMargin.replaceAll("\n", "")
 
       val entity = HttpEntity(ContentTypes.`text/html(UTF-8)`, html)
+
       complete(entity)
     }
   }
@@ -54,4 +59,4 @@ trait ServeUI {
     }
   }
 
-}
+} // end trait ServeUI

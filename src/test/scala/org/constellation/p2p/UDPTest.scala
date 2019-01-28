@@ -2,21 +2,27 @@ package org.constellation.p2p
 
 import java.security.PublicKey
 import java.util.concurrent.TimeUnit
-
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestKit}
 import akka.util.Timeout
+
 import org.constellation.primitives.Schema.Id
+
 import org.scalatest._
 
+// doc
 case class AnotherPublicKey(c: Id, seq: Seq[PublicKey])
+
+// doc
 case class TestManyPublicKeys(a: PublicKey, b: Seq[PublicKey], d: AnotherPublicKey)
 
+// doc
 class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
   with ImplicitSender with GivenWhenThen with BeforeAndAfterAll with Matchers {
 
   implicit val timeout: Timeout = Timeout(30, TimeUnit.SECONDS)
 
+  // doc
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
@@ -219,5 +225,4 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
   }
 */
 
-}
-
+} // end UDPTest class

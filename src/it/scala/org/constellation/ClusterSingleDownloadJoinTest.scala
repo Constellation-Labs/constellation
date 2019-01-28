@@ -4,16 +4,18 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import better.files._
-import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
+
+import org.constellation.consensus.{SnapshotInfo, StoredSnapshot} // currently unused // tmp comment
 import org.constellation.crypto.KeyUtils
 import org.constellation.util.{APIClient, Simulation}
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
+import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 import scala.concurrent.ExecutionContextExecutor
 
-
+// doc
 class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
+  // doc
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
@@ -39,7 +41,7 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
 
     sim.logger.info(ips.toString)
 
-    val apis = ips.map{ ip =>
+    val apis = ips.map { ip =>
       val split = ip.split(":")
       val portOffset = if (split.length == 1) 8999 else split(1).toInt
       val a = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
@@ -49,20 +51,20 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
 
     sim.logger.info("Num APIs " + apis.size)
 
-
     assert(sim.checkHealthy(apis))
 
     sim.setExternalIP(apis)
 
-    apis.foreach{
+    apis.foreach {
       a =>
         println(a.postSync("peer/add", HostPort("104.198.7.226", 9001)))
         println("starting download on: " + a.hostName)
-        Thread.sleep(20*1000)
+        Thread.sleep(20 * 1000)
         println(a.postEmpty("download/start"))
-        Thread.sleep(120*1000)
+        Thread.sleep(120 * 1000)
     }
 
-  }
+  } // end test
 
-}
+} // end ClusterSingleDownloadJoinTest class
+

@@ -6,6 +6,7 @@ import akka.actor.{Actor, ActorSystem}
 import akka.http.scaladsl.model.RemoteAddress
 import akka.stream.ActorMaterializer
 import com.typesafe.scalalogging.Logger
+
 import constellation.futureTryWithTimeoutMetric
 import org.constellation.p2p.{Download, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
@@ -16,14 +17,22 @@ import org.constellation.{DAO, HostPort, PeerMetadata, RemovePeerRequest}
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
+/** Node status class
+  *
+  * @param id         ... Id in the form of the public key class instance.
+  * @param nodeStatus ... State as enumeration data.
+  */
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
+
 import constellation._
 
 import scala.collection.Set
 import scala.util.{Failure, Success}
 
+/** Peer interaction. */
 object PeerManager {
 
+  /** Initiate peers. @todo: Documentation */
   def initiatePeerReload()(implicit dao: DAO, ec: ExecutionContextExecutor): Unit = {
 
     tryWithMetric(
@@ -59,26 +68,24 @@ object PeerManager {
     )
 
     // TODO: Instead wait until peer discovery phase complete
-    Thread.sleep(15*1000)
-
+    Thread.sleep(15 * 1000)
 
     Download.download()
 
+  } // end initiatePeerReload
 
-  }
-
+  /** Posts the node state. */
   def broadcastNodeState()(implicit dao: DAO): Unit = {
     dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
   }
 
-
-
   val logger = Logger(s"PeerManagerObj")
 
+  /** Register self. */
   def attemptRegisterSelfWithPeer(hp: HostPort)(implicit dao: DAO): Future[Any] = {
 
     implicit val ec: ExecutionContextExecutor = dao.apiClientExecutionContext
-    // if (!dao.peerInfo.exists(_._2.client.hostName == hp.host)) {
+    // if (!dao.peerInfo.exists(_._2.client.hostName == hp.host)) {  // tmp comment
 
     futureTryWithTimeoutMetric({
       logger.info(s"Attempting to register with $hp")
@@ -90,13 +97,12 @@ object PeerManager {
     },
       "addPeerWithRegistration"
     )
-    //} else {
-    // Future.successful(
-    //        ()
-    //    )
-    //    }
+    //} else { // tmp comment
+    //   Future.successful( () )
+    // }
   }
 
+  /** Register. */
   def attemptRegisterPeer(hp: HostPort)(implicit dao: DAO): Future[Any] = {
 
     implicit val ec: ExecutionContextExecutor = dao.apiClientExecutionContext
@@ -108,20 +114,20 @@ object PeerManager {
       val client = APIClient(hp.host, hp.port)(dao.apiClientExecutionContext, dao)
 
       client.getNonBlocking[PeerRegistrationRequest]("registration/request")
-          .map { registrationRequest =>
-            dao.peerManager ! PendingRegistration(hp.host, registrationRequest)
-            client.post("register", dao.peerRegistrationRequest)
-          }
-          .recover { case e: Throwable =>
-            logger.error("registration request failed", e)
-            dao.metricsManager ! IncrementMetric("peerGetRegistrationRequestFailed")
-            throw e
-          }(dao.apiClientExecutionContext)
-      }, "addPeerWithRegistrationSymmetric")
+        .map { registrationRequest =>
+          dao.peerManager ! PendingRegistration(hp.host, registrationRequest)
+          client.post("register", dao.peerRegistrationRequest)
+        }
+        .recover { case e: Throwable =>
+          logger.error("registration request failed", e)
+          dao.metricsManager ! IncrementMetric("peerGetRegistrationRequestFailed")
+          throw e
+        }(dao.apiClientExecutionContext)
+    }, "addPeerWithRegistrationSymmetric")
 
   }
 
-
+  /** @todo: documentation */
   def peerDiscovery(client: APIClient)(implicit dao: DAO): Unit = {
     client.getNonBlocking[Seq[PeerMetadata]]("peers").onComplete {
       case Success(pmd) =>
@@ -144,44 +150,60 @@ object PeerManager {
     }(dao.apiClientExecutionContext)
   }
 
+  /** @return Whether ??. */
   def validWithLoopbackGuard(host: String)(implicit dao: DAO): Boolean =
     (host != dao.externalHostString && host != "127.0.0.1") || !dao.preventLocalhostAsPeer
 
+  /** @return Whether ??. */
   def validPeerAddition(hp: HostPort, peerInfo: Map[Id, PeerData])(implicit dao: DAO): Boolean = {
     val hostAlreadyExists = peerInfo.exists { case (_, data) =>
       data.client.hostName == hp.host && data.client.apiPort == hp.port
     }
-    validWithLoopbackGuard(hp.host) && ! hostAlreadyExists
+    validWithLoopbackGuard(hp.host) && !hostAlreadyExists
   }
 
-}
+} // end object PeerManager
 
+/** PeerMetadata wrapper together with API client. */
 case class PeerData(
                      peerMetadata: PeerMetadata,
                      client: APIClient
                    )
 
+/** Class encapsulating a broadcast function. */
 case class APIBroadcast[T](func: APIClient => T, skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
 
+/** Account status. */
 case class PeerHealthCheck(status: Map[Id, Boolean])
+
+/** Registration wrapper. */
 case class PendingRegistration(ip: String, request: PeerRegistrationRequest)
+
+/** De-registration wrapper. */
 case class Deregistration(ip: String, port: Int, key: String)
 
+/** Peer into getter. */
 case object GetPeerInfo
 
+/** Peer into update. */
 case class UpdatePeerInfo(peerData: PeerData)
 
+/** Peer interaction. */
 class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMaterializer, dao: DAO) extends Actor {
 
   val logger = Logger(s"PeerManager")
 
+  /** Actors receive function. */
   override def receive: Receive = active(Map.empty)
 
   implicit val system: ActorSystem = context.system
 
   dao.heartbeatActor ! HeartbeatSubscribe
 
-
+  /** Data update call.
+    *
+    * @param updatedPeerInfo ... Map from accounts to peer data.
+    */
   private def updateMetricsAndDAO(updatedPeerInfo: Map[Id, PeerData]): Unit = {
     dao.metricsManager ! UpdateMetric(
       "peers",
@@ -192,11 +214,18 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
     )
     dao.peerInfo = updatedPeerInfo
 
-    dao.peersInfoPath.write(updatedPeerInfo.values.toSeq.map{_.peerMetadata}.json)
+    dao.peersInfoPath.write(updatedPeerInfo.values.toSeq.map {
+      _.peerMetadata
+    }.json)
 
     context become active(updatedPeerInfo)
   }
 
+  /** Peer update call.
+    *
+    * @param updatedPeerInfo ... Map from accounts to peer data.
+    * @param peerData        ... ??.
+    */
   private def updatePeerInfo(peerInfo: Map[Id, PeerData], peerData: PeerData) = {
     val updatedPeerInfo = peerInfo + (peerData.client.id -> peerData)
 
@@ -208,14 +237,19 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
     updatedPeerInfo
   }
 
+  /** Actors active call.
+    *
+    * @param peerInfo ... Map from accounts to peer data.
+    * @todo: See TODO item in method body.
+    */
   def active(peerInfo: Map[Id, PeerData]): Receive = {
 
     case InternalHeartbeat(round) =>
 
       if (round % dao.processingConfig.peerHealthCheckInterval == 0) {
-        peerInfo.values.foreach{
+        peerInfo.values.foreach {
           d =>
-            d.client.get("health").onComplete{
+            d.client.get("health").onComplete {
               case Success(x) if x.isSuccess =>
                 dao.metricsManager ! IncrementMetric("peerHealthCheckPassed")
               case _ =>
@@ -227,18 +261,17 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
       if (round % dao.processingConfig.peerDiscoveryInterval == 0) {
 
-        peerInfo.values.foreach{ d =>
+        peerInfo.values.foreach { d =>
           PeerManager.peerDiscovery(d.client)
         }
 
       }
 
-
-    case hp @ HostPort(host, port) =>
+    case hp@HostPort(host, port) =>
 
       if (
-        !peerInfo.exists{case (_, data) => data.peerMetadata.host == host && data.peerMetadata.httpPort == port} &&
-        PeerManager.validWithLoopbackGuard(host)
+        !peerInfo.exists { case (_, data) => data.peerMetadata.host == host && data.peerMetadata.httpPort == port } &&
+          PeerManager.validWithLoopbackGuard(host)
       ) {
         PeerManager.attemptRegisterPeer(hp)
       }
@@ -263,14 +296,14 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
     case SetNodeStatus(id, nodeStatus) =>
 
-      val updated = peerInfo.get(id).map{
+      val updated = peerInfo.get(id).map {
         pd =>
           peerInfo + (id -> pd.copy(peerMetadata = pd.peerMetadata.copy(nodeState = nodeStatus)))
       }.getOrElse(peerInfo)
 
       updateMetricsAndDAO(updated)
 
-    case a @ PeerMetadata(host, udpPort, port, id, ns, time, auxHost) =>
+    case a@PeerMetadata(host, udpPort, port, id, ns, time, auxHost) =>
 
       val validHost = (host != dao.externalHostString && host != "127.0.0.1") || !dao.preventLocalhostAsPeer
 
@@ -305,13 +338,13 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
       val replyTo = sender()
       replyTo ! peerInfo
 
-
-    case pr @ PendingRegistration(ip, request) =>
+    case pr@PendingRegistration(ip, request) =>
 
       logger.debug(s"Pending Registration request: $pr")
 
-      // TODO: Refactor and add metrics
+      // TODO: Refactor and add metrics // tmp comment
       // Also should attempt to allow peers to re-register to potentially update their status or ID? Or handle elsewhere.
+
       val validExternalHost = PeerManager.validWithLoopbackGuard(request.host)
       val hostAlreadyExists = peerInfo.exists { case (_, data) =>
         data.client.hostName == request.host && data.client.apiPort == request.port
@@ -363,14 +396,14 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
           PeerManager.peerDiscovery(client)
 
-
         }
       }
 
     case Deregistration(ip, port, key) =>
 
-    // Do we need to validate this? Or just remove from knownIPs?
+    // TODO: Do we need to validate this? Or just remove from knownIPs? // tmp comment
 
-  }
-}
+  } // end active
+
+} // end class PeerManager
 

@@ -1,21 +1,27 @@
 package org.constellation.consensus
 
 import java.util.concurrent.TimeUnit
-
 import akka.pattern.ask
 import akka.util.Timeout
+
 import org.constellation.DAO
 import org.constellation.primitives.APIBroadcast
 import org.constellation.primitives.Schema.CheckpointBlock
 
 import scala.concurrent.{ExecutionContext, Future}
 
+/** Resolver.
+  *
+  * @todo: documentation.
+  * @todo: Need to include signatories ABOVE this checkpoint block later in the case.
+  * @todo: of signature decay.
+  * @todo: WIP in function body.
+  * */
 object Resolve {
 
   implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-  // TODO: Need to include signatories ABOVE this checkpoint block later in the case
-  // of signature decay.
+  // doc
   def attemptResolveIndividual(dao: DAO, cb: CheckpointBlock, h: String) = {
     cb.signatures.map {
       _.toId
@@ -27,8 +33,8 @@ object Resolve {
     })
   }
 
-  // WIP
-/*
+/* // Work in progress // tmp comment
+  // doc
   def resolveCheckpoint(dao: DAO, cb: CheckpointBlock)(implicit ec: ExecutionContext): Future[Boolean] = {
 
     // Step 1 - Find out if both parents are resolved.
@@ -57,8 +63,7 @@ object Resolve {
       // (due to status info requirements) may ? need to have a check here to reflect that.
 
       parentsResolved
-    }
-
+    } // end resolveCheckpoint
 */
 
-}
+} // end Resolve object

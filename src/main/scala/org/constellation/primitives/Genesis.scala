@@ -7,21 +7,23 @@ import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 
-
-
+// doc
 object Genesis {
 
   val CoinBaseHash = "coinbase"
 
+  // doc
   def createDistribution(
                           selfAddressStr: String, ids: Seq[Id], genesisSOE: SignedObservationEdge, keyPair: KeyPair
                         ): CheckpointBlock = {
 
-    val distr = ids.map{ id =>
+    val distr = ids.map { id =>
       createTransaction(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
     }
 
-    val distrCB = CheckpointEdgeData(distr.map{_.edge.signedObservationEdge.signatureBatch.hash})
+    val distrCB = CheckpointEdgeData(distr.map {
+      _.edge.signedObservationEdge.signatureBatch.hash
+    })
 
     val distrOE = ObservationEdge(
       TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash),
@@ -38,12 +40,15 @@ object Genesis {
     val distrCBO = CheckpointBlock(distr, CheckpointEdge(distrRED))
 
     distrCBO
-  }
 
-  /**
-    * Build genesis tips and example distribution among initial nodes
-    * @param ids: Initial node public keys
-    * @return : Resolved edges for state update
+  } // end createDistribution
+
+  /** Build genesis tips and example distribution among initial nodes.
+    *
+    * @param selfAddressStr ... ??.
+    * @param ids            ... Initial node public keys
+    * @param keyPair        ... ??.
+    * @return ... Resolved edges for state update
     */
   def createGenesisAndInitialDistributionDirect(selfAddressStr: String, ids: Set[Id], keyPair: KeyPair): GenesisObservation = {
 
@@ -74,21 +79,30 @@ object Genesis {
     val genesisCBO = CheckpointBlock(Seq(redTXGenesisResolved), CheckpointEdge(redGenesis))
 
     val distr1CBO = createDistribution(selfAddressStr, ids.toSeq, soe, keyPair)
+
     val distr2CBO = createDistribution(selfAddressStr, ids.toSeq, soe, keyPair)
 
     GenesisObservation(genesisCBO, distr1CBO, distr2CBO)
-  }
 
-}
+  } // end createGenesisAndInitialDistributionDirect
+
+} // end Genesis object
 
 import org.constellation.primitives.Genesis._
 
+// doc
 trait Genesis extends NodeData with EdgeDAO {
 
+  // doc
   def createGenesisAndInitialDistribution(ids: Set[Id]): GenesisObservation = {
     createGenesisAndInitialDistributionDirect(selfAddressStr, ids, keyPair)
   }
 
+  /** ??.
+    *
+    * @todo Documentation.
+    * @todo Remove the manny tmp comment's in the mehtod body.
+    */
   def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = false)(implicit dao: DAO): Unit = {
     // Store hashes for the edges
 
@@ -107,40 +121,43 @@ trait Genesis extends NodeData with EdgeDAO {
     )
 
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
-    go.genesis.transactions.foreach{
+    go.genesis.transactions.foreach {
       rtx =>
-        val bal = rtx.amount - (go.initialDistribution.transactions.map {_.amount}.sum * 2)
+        val bal = rtx.amount - (go.initialDistribution.transactions.map {
+          _.amount
+        }.sum * 2)
         dao.addressService.put(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal))
     }
 
     // Store the balance for the initial distribution addresses along with starting rep score.
-    go.initialDistribution.transactions.foreach{ t =>
+    go.initialDistribution.transactions.foreach { t =>
       val bal = t.amount * 2
       dao.addressService.put(t.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal))
     }
 
     val numTX = (1 + go.initialDistribution.transactions.size * 2).toString
-  //  metricsManager ! UpdateMetric("validTransactions", numTX)
-  //  metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
+    //  metricsManager ! UpdateMetric("validTransactions", numTX)
+    //  metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
 
     genesisObservation = Some(go)
-/*
+    /*
+        // Dumb way to set these as active tips, won't pass a double validation but no big deal.
+        checkpointMemPool(go.initialDistribution.baseHash) = go.initialDistribution
+        checkpointMemPool(go.initialDistribution2.baseHash) = go.initialDistribution2
+        checkpointMemPoolThresholdMet(go.initialDistribution.baseHash) = go.initialDistribution -> 0
+        checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = go.initialDistribution2 -> 0
+    */
 
-    // Dumb way to set these as active tips, won't pass a double validation but no big deal.
-    checkpointMemPool(go.initialDistribution.baseHash) = go.initialDistribution
-    checkpointMemPool(go.initialDistribution2.baseHash) = go.initialDistribution2
-    checkpointMemPoolThresholdMet(go.initialDistribution.baseHash) = go.initialDistribution -> 0
-    checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = go.initialDistribution2 -> 0
-*/
-
-   // metricsManager ! UpdateMetric("activeTips", "2")
+    // metricsManager ! UpdateMetric("activeTips", "2")
     metricsManager ! UpdateMetric("genesisAccepted", "true")
- //   metricsManager ! UpdateMetric("z_genesisBlock", go.json)
+    // metricsManager ! UpdateMetric("z_genesisBlock", go.json)
     if (setAsTips) {
       dao.threadSafeTipService.acceptGenesis(go)
     }
 
-   // println(s"accept genesis = ", go)
-  }
+    // println(s"accept genesis = ", go)
 
-}
+  } // end acceptGenesis
+
+} // end trait Genesis
+
