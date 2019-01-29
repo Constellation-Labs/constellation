@@ -53,7 +53,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
     apiClients.map { client =>
       val response = client.postSync("password/update", updatePasswordReq)
-      client.authPassword = updatePasswordReq.password
+      client.setPassword(updatePasswordReq.password)
       response
     }
 
@@ -161,7 +161,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     val updatePasswordResponses = updatePasswords(allAPIs)
     assert(updatePasswordResponses.forall(_.code == StatusCodes.Ok))
     assert(sim.healthy(allAPIs))
-    assert(allAPIs.forall(_.authPassword == updatePasswordReq.password))
     // Thread.sleep(1000*1000)
 
     // Stop transactions
