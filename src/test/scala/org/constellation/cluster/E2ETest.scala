@@ -3,11 +3,10 @@ package org.constellation.cluster
 import java.util.concurrent.{ForkJoinPool, TimeUnit}
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import com.softwaremill.sttp.Response
+import com.softwaremill.sttp.{Response, StatusCodes}
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.ChannelProof
 import org.constellation.util.{APIClient, Simulation, TestNode}
@@ -48,7 +47,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     TestNode(randomizePorts = randomizePorts, portOffset = portOffset, seedHosts = seedHosts)
   }
-  val updatePasswordReq = UpdatePassword("updatedPassword")
+  val updatePasswordReq = UpdatePassword(Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword"))
 
   def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
     apiClients.map { client =>
@@ -108,7 +107,8 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     val allAPIs: Seq[APIClient] = allNodes.map{_.getAPIClient()} //apis :+ downloadAPI
     val updatePasswordResponses = updatePasswords(allAPIs)
-    assert(updatePasswordResponses.forall(_.isSuccess))
+    assert(updatePasswordResponses.forall(_.code == StatusCodes.Ok))
+    assert(sim.healthy(allAPIs))
     assert(allAPIs.forall(_.authPassword == updatePasswordReq.password))
     // Thread.sleep(1000*1000)
 
