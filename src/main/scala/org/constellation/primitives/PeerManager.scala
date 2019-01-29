@@ -28,7 +28,7 @@ object PeerManager {
 
     tryWithMetric(
       {
-        if (dao.peersInfoPath.exists) {
+        if (dao.peersInfoPath.nonEmpty) {
           dao.peersInfoPath.lines.mkString.x[Seq[PeerMetadata]].foreach {
             pmd =>
               dao.peerManager ! pmd
@@ -40,7 +40,7 @@ object PeerManager {
 
     tryWithMetric(
       {
-        if (dao.seedsPath.exists) {
+        if (dao.seedsPath.nonEmpty) {
           dao.seedsPath.lines.foreach {
             line =>
               line.split(":") match {

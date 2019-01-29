@@ -744,6 +744,10 @@ object Schema {
       this.copy(checkpoint = checkpoint.plus(other.checkpoint))
     }
 
+    def +(other: CheckpointBlock): CheckpointBlock = {
+      this.copy(checkpoint = checkpoint.plus(other.checkpoint))
+    }
+
     def resolvedOE: ResolvedObservationEdge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData] =
       checkpoint.edge.resolvedObservationEdge
 
