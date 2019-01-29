@@ -3,6 +3,7 @@ package org.constellation.consensus
 import java.nio.file.Path
 import java.security.KeyPair
 
+import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
@@ -11,15 +12,10 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{APIClient, ProductHash}
-import cats.implicits._
 
 import scala.async.Async.{async, await}
 import scala.concurrent.duration._
-import scala.concurrent.{
-  ExecutionContext,
-  ExecutionContextExecutor,
-  Future
-}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Try
 
 object EdgeProcessor {
@@ -301,7 +297,6 @@ object EdgeProcessor {
 
           val cpBlocksOpt = cpBlocksOptList.sequence
 
-
           if (cpBlocksOpt.isEmpty) {
             // log debug map
             val m = t.mapValues(_.get())
@@ -334,7 +329,6 @@ object EdgeProcessor {
             }
           }
 
-
           // Cleanup locks
 
           messages.foreach { m =>
@@ -366,44 +360,45 @@ object EdgeProcessor {
     // } else None
   }
 
-  def simpleResolveCheckpoint(hash: String)(implicit dao: DAO): Boolean = {
+  def simpleResolveCheckpoint(hash: String)(implicit dao: DAO): Future[Boolean] = {
 
-    var activePeer = dao.peerInfo.values.head.client
-    var remainingPeers: Seq[APIClient] =
-      dao.peerInfo.values.map { _.client }.filterNot(_ == activePeer).toSeq
+    implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
-    var done = false
-
-    while (!done && remainingPeers.nonEmpty) {
-
-      // TODO: Refactor all the error handling on these to include proper status codes etc.
-      // See formCheckpoint for better example of error handling
-      val res = tryWithMetric(
-        {
-          activePeer.getBlocking[Option[CheckpointCacheData]](
-            "checkpoint/" + hash,
+    def innerResolve(peers: List[APIClient])(
+        implicit ec: ExecutionContext): Future[CheckpointCacheData] = {
+      peers match {
+        case activePeer :: rest =>
+          val resp = activePeer.getNonBlocking[Option[CheckpointCacheData]](
+            s"checkpoint/$hash",
             timeout = 10.seconds)
-        },
-        "downloadCheckpoint"
-      )
+          resp.flatMap {
+            case Some(ccd) => Future.successful(ccd)
+            case None =>
+              dao.metricsManager ! IncrementMetric("resolvePeerIncrement")
+              innerResolve(rest)
+          }
 
-      done = res.toOption.exists(_.nonEmpty)
+        case Nil =>
+          Future.failed(
+            new RuntimeException(s"Unable to resolve checkpoint hash $hash"))
 
-      if (done) {
-        val x = res.get.get
-        if (!dao.checkpointService.contains(x.checkpointBlock.get.baseHash)) {
-          dao.metricsManager ! IncrementMetric("resolveAcceptCBCall")
-          acceptWithResolveAttempt(x)
-        }
-      } else {
-        if (remainingPeers.nonEmpty) {
-          dao.metricsManager ! IncrementMetric("resolvePeerIncrement")
-          activePeer = remainingPeers.head
-          remainingPeers = remainingPeers.filterNot(_ == activePeer)
-        }
       }
     }
-    done
+
+    val resolved = wrapFutureWithMetric(
+      innerResolve(dao.peerInfo.values.map(_.client).toList)(
+        dao.edgeExecutionContext),
+      "simpleResolveCheckpoint"
+    )
+
+    resolved.map { checkpointCacheData =>
+      if (!dao.checkpointService.contains(
+            checkpointCacheData.checkpointBlock.get.baseHash)) {
+        dao.metricsManager ! IncrementMetric("resolveAcceptCBCall")
+        acceptWithResolveAttempt(checkpointCacheData)
+      }
+      true
+    }
 
   }
 
@@ -424,30 +419,27 @@ object EdgeProcessor {
         "resolveFinishedCheckpointParentMissing")
       parentExists.filterNot(_._2).foreach {
         case (h, _) =>
-          futureTryWithTimeoutMetric(
+          wrapFutureWithMetric(
             simpleResolveCheckpoint(h),
-            "resolveCheckpoint",
-            timeoutSeconds = 30
-          )(dao.edgeExecutionContext, dao)
+            "resolveCheckpoint"
+          )(dao, dao.edgeExecutionContext)
       }
 
     }
 
   }
 
-  def handleFinishedCheckpoint(fc: FinishedCheckpoint)(
-      implicit dao: DAO): Future[Try[Any]] = {
+  def handleFinishedCheckpoint(fc: FinishedCheckpoint)(implicit dao: DAO) = {
     futureTryWithTimeoutMetric(
       if (dao.nodeState == NodeState.DownloadCompleteAwaitingFinalSync) {
         dao.threadSafeTipService.syncBufferAccept(fc.checkpointCacheData)
-        Future.successful(Unit)
       } else if (dao.nodeState == NodeState.Ready) {
         if (fc.checkpointCacheData.checkpointBlock.exists {
               _.simpleValidation()
             }) {
           acceptWithResolveAttempt(fc.checkpointCacheData)
-        } else Future.successful(Unit)
-      } else Future.successful(Unit),
+        }
+      },
       "handleFinishedCheckpoint"
     )(dao.finishedExecutionContext, dao)
   }
