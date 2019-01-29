@@ -99,7 +99,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
 
   private val authEnabled = config.getBoolean("auth.enabled")
   private val authId: String = config.getString("auth.id")
-  var authPassword: String = config.getString("auth.password")
+  private var authPassword: String = config.getString("auth.password")
 
   val getEndpoints: Route =
     extractClientIP { clientIP =>
