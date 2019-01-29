@@ -6,10 +6,11 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
+import com.softwaremill.sttp.{Response, StatusCodes}
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.ChannelProof
-import org.constellation.util.{Simulation, TestNode}
-import org.constellation.{ConstellationNode, HostPort}
+import org.constellation.util.{APIClient, Simulation, TestNode}
+import org.constellation.{ConstellationNode, HostPort, UpdatePassword}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
@@ -46,6 +47,14 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     TestNode(randomizePorts = randomizePorts, portOffset = portOffset, seedHosts = seedHosts)
   }
+  val updatePasswordReq = UpdatePassword(Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword"))
+
+  def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
+    apiClients.map { client =>
+      val response = client.postSync("password/update", updatePasswordReq)
+      client.authPassword = updatePasswordReq.password
+      response
+    }
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
 
@@ -96,8 +105,11 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     val allNodes = nodes :+ downloadNode
 
-    val allAPIs = allNodes.map{_.getAPIClient()} //apis :+ downloadAPI
-
+    val allAPIs: Seq[APIClient] = allNodes.map{_.getAPIClient()} //apis :+ downloadAPI
+    val updatePasswordResponses = updatePasswords(allAPIs)
+    assert(updatePasswordResponses.forall(_.code == StatusCodes.Ok))
+    assert(sim.healthy(allAPIs))
+    assert(allAPIs.forall(_.authPassword == updatePasswordReq.password))
     // Thread.sleep(1000*1000)
 
     // Stop transactions
@@ -126,7 +138,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     )
 
   }
-
 
 
 }
