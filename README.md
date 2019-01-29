@@ -6,12 +6,14 @@ programming language. We build a horizontally scalable
 protocol that you can build upon and interface with using common software standards.
 
 ### :books: Resources
-Visit the repository
-[**wiki**](https://github.com/Constellation-Labs/constellation/wiki) 
-for developer tools and documentation and consult the 
-[**/docs**](https://github.com/Constellation-Labs/constellation/tree/dev/docs).
-for an explainer of the protocol archetecture or an extended overview of the 
-[project structure](https://github.com/Constellation-Labs/constellation/blob/dev/docs/directory-tree.md).
+For developer tools and documentation and consult the 
+[**/docs**](https://github.com/Constellation-Labs/constellation/tree/dev/docs) 
+or the
+[**/docs-gh-pages**](https://github.com/Constellation-Labs/constellation/tree/dev/docs-gh-pages)
+hosted on our
+[docs website](https://constellation-labs.github.io/constellation/).
+For motivations and explanations of the project in context of the crypto space, visit the
+[**wiki**](https://github.com/Constellation-Labs/constellation/wiki).
 
 ```scala
 src
@@ -45,7 +47,9 @@ For questions and contributions, can find links to the community outlets and mor
 [**resource list**](https://github.com/Constellation-Labs/awesome-constellation). 
 Our knowledge- and news-outlet is the 
 [**Orion**](https://orion.constellationlabs.io/) 
-Discourse forum. To quickly reach out, join our [Discord](https://discordapp.com/invite/KMSmXbV) server for a chat:
+Discourse forum. To quickly reach out, join our 
+[Discord](https://discordapp.com/invite/KMSmXbV) 
+server for a chat:
 
   <a href="https://discordapp.com/invite/KMSmXbV">
 	  <img src="https://img.shields.io/badge/chat-discord-brightgreen.svg"/>

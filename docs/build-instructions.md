@@ -1,25 +1,7 @@
 ## Build instructions
-### Running a node in the Cloud
-Most operators host the node in the 
-[Google Cloud Platform](https://cloud.google.com/) 
-(GCP) *compute engine* using a Ubuntu or Debian machine. Make sure the relevant ports are open / not firewalled. 
-
-**Minimal specs**
-```haskell
-    CPU:       2-core minimum
-    Memory:    3 GB or higher
-    Disk:      50-200 GB available
-    Software:  Java 8.x
-```
-
-You find the 
-[**documentation** (website)](https://constellation-labs.github.io/constellation/running-a-node/).
-This variant uses the latest JAR file from the 
-[constellation/releases](https://github.com/Constellation-Labs/constellation/releases)
-page. 
-More is coming, as well as more support for docker and terraform.
-
-(TODO: make these as well as the webpage docs read their content from a common file)
+### Prerequisites
+Depending on the way you want to run the node, you may only need to install Java 8.x, the latest Scala and a build tool.
+See [/docs/dependencies](https://github.com/Constellation-Labs/constellation/blob/dev/docs/dependencies.md).
 
 ### :computer: On Linux and Mac
 1. Check out the repository
@@ -46,31 +28,11 @@ By default this is `http://localhost:9000`. Look at the file _API.scala_ for end
 
 ### :whale2: Docker execution 
 
-Note: *For now this installation is not covered here in detail. We will publish the corresponding images to dockerhub soon.*
+1. Install [docker](https://en.wikipedia.org/wiki/Docker_(software)) and docker-compose. See the Docker section in [/docs/dependencies.md](https://github.com/Constellation-Labs/constellation/blob/dev/docs/dependencies).
 
-1. Install `docker` and `docker-compose`.
+2. Follow directions for building for development. 
 
-* Docker > 18.0 [docker](https://www.docker.com/), ([install](https://docs.docker.com/install/))
-
-Performed from the command line, this should look like this:
-
-```bash
-sudo rm /var/lib/apt/lists/*
-sudo apt-get update
-curl -fsSL https://get.docker.com/ | sudo sh
-docker info
-```
-
-* Docker-compose ([install](https://docs.docker.com/compose/install/))
-
-Performed from the command line, this should look like this:
-
-```bash
-curl -L https://github.com/docker/compose/releases/download/1.21.2/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
-sudo docker-compose --version
-
-2. Follow directions for building for development.
+(TODO) Note: *For now this installation is not covered here in detail. We will publish the corresponding images to dockerhub soon.*
 
 3. Run the [sbt](https://en.wikipedia.org/wiki/Sbt_(software)) docker command
 

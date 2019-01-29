@@ -1,14 +1,19 @@
 These docs provide technical information to understand, build and run the code base
 developed in this repository. 
+The bulk of the docs are in 
+[/docs-gh-pages](https://github.com/Constellation-Labs/constellation/tree/dev/docs-gh-pages)
+and hosted on our
+[docs website](https://constellation-labs.github.io/constellation/).
 
 ## Table of contents
 Here's quick-links to the markdown files in this folder:
 
 * [Annotated project folder tree](https://github.com/Constellation-Labs/constellation/blob/dev/docs/directory-tree.md)
-* [Architecture diagrams](https://github.com/Constellation-Labs/constellation/blob/dev/docs/architecture.md)
+* [Architecture diagrams](https://github.com/Constellation-Labs/constellation/blob/dev/docs-gh-pages/architecture.md)
 * [Build instructions and pointers on how to run a node](https://github.com/Constellation-Labs/constellation/blob/dev/docs/build-instructions.md)
-* [Discussion of design choices](https://github.com/Constellation-Labs/constellation/blob/dev/docs/design-choices.md)
-* [Software dependencies and recommended tools and frameworks](https://github.com/Constellation-Labs/constellation/blob/dev/docs/software-dependencies.md)
+* [Discussion of design choices](https://github.com/Constellation-Labs/constellation/blob/dev/docs-gh-pages/design-choices.md)
+* [Software dependencies and recommended tools and frameworks](https://github.com/Constellation-Labs/constellation/blob/dev/docs/dependencies.md)
+* [Running a node](https://github.com/Constellation-Labs/constellation/blob/dev/docs-gh-pages/design-choices.md)
 
 Much of the content here can be viewed at the 
 [documentation web page](https://constellation-labs.github.io/constellation/).
