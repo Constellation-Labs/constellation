@@ -7,6 +7,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
+import com.softwaremill.sttp.Response
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.ChannelProof
 import org.constellation.util.{APIClient, Simulation, TestNode}
@@ -49,14 +50,12 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   }
   val updatePasswordReq = UpdatePassword("updatedPassword")
 
-  def updatePasswords(apiClients: Seq[APIClient]): Seq[APIClient] = {
-    apiClients.foreach { client =>
+  def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
+    apiClients.map { client =>
       val response = client.postSync("password/update", updatePasswordReq)
-      assert(response.isSuccess)
       client.authPassword = updatePasswordReq.password
+      response
     }
-    apiClients
-  }
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
 
@@ -108,7 +107,9 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     val allNodes = nodes :+ downloadNode
 
     val allAPIs: Seq[APIClient] = allNodes.map{_.getAPIClient()} //apis :+ downloadAPI
-    assert(updatePasswords(allAPIs).forall(_.authPassword == updatePasswordReq.password))
+    val updatePasswordResponses = updatePasswords(allAPIs)
+    assert(updatePasswordResponses.forall(_.isSuccess))
+    assert(allAPIs.forall(_.authPassword == updatePasswordReq.password))
     // Thread.sleep(1000*1000)
 
     // Stop transactions
