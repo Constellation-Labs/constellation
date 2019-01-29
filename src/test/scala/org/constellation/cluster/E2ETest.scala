@@ -131,16 +131,18 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     val messageChannel = initialAPIs.head.getBlocking[Seq[String]]("channels").filterNot{_ == channelId}.head
 
     val messageWithinSnapshot = initialAPIs.head.getBlocking[Option[ChannelProof]]("channel/" + messageChannel)
+    assert(messageWithinSnapshot.nonEmpty)
 
-    def messageValid() = messageWithinSnapshot.exists{ proof =>
+    def messageValid(): Unit = messageWithinSnapshot.foreach{ proof =>
       val m = proof.channelMessageMetadata
-      m.snapshotHash.nonEmpty && m.blockHash.nonEmpty && proof.checkpointMessageProof.verify() &&
-      proof.checkpointProof.verify() &&
-      m.blockHash.contains{proof.checkpointProof.input} &&
-      m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
+      assert(m.snapshotHash.nonEmpty)
+      assert(m.blockHash.nonEmpty)
+      assert(proof.checkpointMessageProof.verify())
+      assert(proof.checkpointProof.verify())
+      assert(m.blockHash.contains{proof.checkpointProof.input})
+      assert(m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input)
     }
-    // messageValid()
-    assert(messageValid())
+    messageValid()
 
     Thread.sleep(20*1000)
 
@@ -174,6 +176,9 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
         val relevantMessages = block.checkpoint.edge.resolvedObservationEdge.data.get.messages
           .filter{expectedMessages.contains}
           //.filter{_.signedMessageData.data.channelId == channelId}.filterNot{_ == genesisChannel}
+        val messageParent = relevantMessages.map{_.signedMessageData.data.previousMessageDataHash}.headOption
+        val messageHash = relevantMessages.map{_.signedMessageData.hash}.headOption
+
         val valid = relevantMessages.map{m =>
           val isValid = SensorData.validate(
             m.signedMessageData.data.message
@@ -181,25 +186,33 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
           if (!isValid) numInvalid += 1
           isValid
         }.headOption
-        (block.soeHash, block.parentSOEHashes, valid)
+        (block.soeHash, block.parentSOEHashes, valid, messageParent, messageHash)
       }
     }
 
-    // TODO: Duplicate messages appearing?
+    // TODO: Duplicate messages appearing sometimes but not others?
     println(s"Num invalid $numInvalid")
 
     val ids = messagesInChannelWithBlocks.map{_._1}.zipWithIndex.toMap
+    val msgToBlock = messagesInChannelWithBlocks.flatMap{z => z._5.map{_ -> z._1}}.toMap
 
     import constellation._
     val rendered = messagesInChannelWithBlocks.map{
-      case (hash, parents, isValid) =>
+      case (hash, parents, isValid, msgParent, msgHash) =>
+
+        val msgParentId = msgParent.flatMap{
+          parent =>
+            msgToBlock.get(parent).flatMap{ids.get}.map{Seq(_)}
+        }.getOrElse(Seq())
+
         val id = ids(hash)
-        val parentsId = parents.flatMap{ids.get}
+        val parentsId = parents.flatMap{ids.get} ++ msgParentId
         val color = isValid.map{ b =>  if (b) "green" else "red"}.getOrElse("blue")
         Map("id" -> id, "parentIds" -> parentsId, "color" -> color)
     }.json
     println(rendered)
 
+    // TODO: This is flaky and fails randomly sometimes
     val snaps = storedSnapshots.toSet
       .map{x : Seq[StoredSnapshot] =>
         x.map{_.checkpointCache.flatMap{_.checkpointBlock}}.toSet
