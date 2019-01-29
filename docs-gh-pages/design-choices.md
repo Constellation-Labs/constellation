@@ -1,6 +1,6 @@
 ### Design choices
 
-This file summarizes current resoning for our approach and design decissions, 
+This file summarizes current resoning for our approach and design decisions, 
 reviews and references. 
 
 Many decissions can be traced back to the fundamental goal to provide and
