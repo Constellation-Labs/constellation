@@ -29,6 +29,8 @@ object EdgeProcessor {
 
       val cb = checkpointCacheData.checkpointBlock.get
 
+      cb.storeSOE()
+
       val height = cb.calculateHeight()
 
       val fallbackHeight = if (height.isEmpty) checkpointCacheData.height else height
@@ -39,7 +41,7 @@ object EdgeProcessor {
         dao.metricsManager ! IncrementMetric("heightNonEmpty")
       }
 
-      cb.checkpoint.edge.resolvedObservationEdge.data.get.messages.foreach{ m =>
+      cb.checkpoint.edge.data.messages.foreach{ m =>
         dao.messageService.put(m.signedMessageData.data.channelId, ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.messageService.put(m.signedMessageData.signatures.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.metricsManager ! IncrementMetric("messageAccepted")
@@ -71,65 +73,6 @@ object EdgeProcessor {
     }
   }
 
-  /**
-    * Main transaction processing cell
-    * This is triggered upon external receipt of a transaction. Assume that the transaction being processed
-    * came from a peer, not an internal operation.
-    * @param tx : Transaction with all data
-    * @param dao : Data access object for referencing memPool and other actors
-    * @param executionContext : Threadpool to execute transaction processing against. Should be separate
-    *                         from other pools for processing different operations.
-    */
-  def handleTransaction(
-                         tx: Transaction, skipValidation: Boolean = true
-                       )(implicit executionContext: ExecutionContext, dao: DAO): Unit = {
-
-    // TODO: Store TX in DB immediately rather than waiting
-    // ^ Requires TX hash partitioning or conflict stuff later + gossiping tx's to wider reach
-
-    dao.metricsManager ! IncrementMetric("transactionMessagesReceived")
-    // Validate transaction TODO : This can be more efficient, calls get repeated several times
-    // in event where a new signature is being made by another peer it's most likely still valid, should
-    // cache the results of this somewhere.
-
-    // TODO: Move memPool update logic to actor and send response back to EdgeProcessor
-    //if (!memPool.transactions.contains(tx)) {
-    if (dao.threadSafeTXMemPool.put(tx)) {
-
-      //val pool = memPool.copy(transactions = memPool.transactions + tx)
-      //dao.metricsManager ! UpdateMetric("transactionMemPool", pool.transactions.size.toString)
-      //dao.threadSafeMemPool.put(transaction)
-
-      dao.metricsManager ! UpdateMetric("transactionMemPool", dao.threadSafeTXMemPool.unsafeCount.toString)
-      dao.metricsManager ! IncrementMetric("transactionValidMessages")
-      formCheckpoint() // TODO: Send to checkpoint formation actor instead
-    } else {
-      dao.metricsManager ! IncrementMetric("transactionValidMemPoolDuplicateMessages")
-      //memPool
-    }
-
-    /*    val finished = Validation.validateTransaction(dao.dbActor, tx)
-
-
-
-        finished match {
-          // TODO : Increment metrics here for each case
-          case t : TransactionValidationStatus if t.validByCurrentStateMemPool =>
-
-
-            // TODO : Store something here for status queries. Make sure it doesn't cause a conflict
-
-          case t : TransactionValidationStatus =>
-
-            // TODO : Add info somewhere so node can find out transaction was invalid on a callback
-            reportInvalidTransaction(dao: DAO, t: TransactionValidationStatus)
-            memPool
-        }
-
-        */
-
-  }
-
   case class CreateCheckpointEdgeResponse(
                                            checkpointEdge: CheckpointEdge,
                                            transactionsUsed: Set[String],
@@ -147,49 +90,21 @@ object EdgeProcessor {
     val checkpointEdgeData = CheckpointEdgeData(transactions.map{_.hash}.sorted, messages)
 
     val observationEdge = ObservationEdge(
-      TypedEdgeHash(tips.head.hash, EdgeHashType.CheckpointHash),
-      TypedEdgeHash(tips(1).hash, EdgeHashType.CheckpointHash),
-      data = Some(TypedEdgeHash(checkpointEdgeData.hash, EdgeHashType.CheckpointDataHash))
+      Seq(
+        TypedEdgeHash(tips.head.hash, EdgeHashType.CheckpointHash),
+        TypedEdgeHash(tips(1).hash, EdgeHashType.CheckpointHash)
+      ),
+      data = TypedEdgeHash(checkpointEdgeData.hash, EdgeHashType.CheckpointDataHash)
     )
 
     val soe = signedObservationEdge(observationEdge)(keyPair)
 
     val checkpointEdge = CheckpointEdge(
-      Edge(observationEdge, soe, ResolvedObservationEdge(tips.head, tips(1), Some(checkpointEdgeData)))
+      Edge(observationEdge, soe, checkpointEdgeData)
     )
 
     CheckpointBlock(transactions, checkpointEdge)
   }
-
-  def createCheckpointEdgeProposal(
-                                    transactionMemPoolThresholdMet: Set[String],
-                                    minCheckpointFormationThreshold: Int,
-                                    tips: Seq[SignedObservationEdge],
-                                  )(implicit keyPair: KeyPair): CreateCheckpointEdgeResponse = {
-
-    val transactionsUsed = transactionMemPoolThresholdMet.take(minCheckpointFormationThreshold)
-    val updatedTransactionMemPoolThresholdMet = transactionMemPoolThresholdMet -- transactionsUsed
-
-    val checkpointEdgeData = CheckpointEdgeData(transactionsUsed.toSeq.sorted)
-
-    //val tips = validationTips.take(2)
-    //val filteredValidationTips = validationTips.filterNot(tips.contains)
-
-    val observationEdge = ObservationEdge(
-      TypedEdgeHash(tips.head.hash, EdgeHashType.CheckpointHash),
-      TypedEdgeHash(tips(1).hash, EdgeHashType.CheckpointHash),
-      data = Some(TypedEdgeHash(checkpointEdgeData.hash, EdgeHashType.CheckpointDataHash))
-    )
-
-    val soe = signedObservationEdge(observationEdge)(keyPair)
-
-    val checkpointEdge = CheckpointEdge(Edge(observationEdge, soe, ResolvedObservationEdge(tips.head, tips(1), Some(checkpointEdgeData))))
-
-    CreateCheckpointEdgeResponse(checkpointEdge, transactionsUsed,
-      //filteredValidationTips,
-      updatedTransactionMemPoolThresholdMet)
-  }
-  // TODO: Send facilitator selection data (i.e. criteria) as well for verification
 
   case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
   case class SignatureResponseWrapper(signatureResponse: Option[SignatureResponse] = None)
@@ -553,8 +468,7 @@ object Snapshot {
       cbOpt <- cbData;
       cbCache <- cbOpt;
       cb <- cbCache.checkpointBlock;
-      data <- cb.checkpoint.edge.resolvedObservationEdge.data;
-      message <- data.messages
+      message <- cb.checkpoint.edge.data.messages
     ) {
       dao.messageService.update(message.signedMessageData.signatures.hash,
         _.copy(snapshotHash = Some(snapshot.hash)),

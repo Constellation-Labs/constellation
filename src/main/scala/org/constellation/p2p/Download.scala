@@ -21,7 +21,6 @@ import scala.util.{Failure, Try}
 object Download {
 
   val logger = Logger(s"Download")
-  implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
   // Add warning for empty peers
   def downloadActual()(implicit dao: DAO, ec: ExecutionContext): Unit = {

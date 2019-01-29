@@ -7,7 +7,7 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.crypto.Base58
 import org.constellation.crypto.KeyUtils._
-import org.constellation.primitives.Schema
+import org.constellation.primitives.{Edge, Schema, Transaction}
 import org.constellation.primitives.Schema._
 
 object POW extends POWExt
@@ -205,17 +205,18 @@ trait POWSignHelp {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
     val txData = TransactionEdgeData(amountToUse)
-    val dataHash = Some(TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash))
 
     val oe = ObservationEdge(
-      TypedEdgeHash(src, EdgeHashType.AddressHash),
-      TypedEdgeHash(dst, EdgeHashType.AddressHash),
-      data = dataHash
+      Seq(
+        TypedEdgeHash(src, EdgeHashType.AddressHash),
+        TypedEdgeHash(dst, EdgeHashType.AddressHash)
+      ),
+      TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
     )
 
     val soe = signedObservationEdge(oe)(keyPair)
 
-    Transaction(Edge(oe, soe, ResolvedObservationEdge(Address(src), Address(dst), Some(txData))))
+    Transaction(Edge(oe, soe, txData))
   }
 
 }

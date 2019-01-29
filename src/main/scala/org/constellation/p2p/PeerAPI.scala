@@ -13,7 +13,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
-import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest, SignatureResponseWrapper, handleTransaction}
+import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest, SignatureResponseWrapper}
 import org.constellation.consensus.{EdgeProcessor}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -233,13 +233,6 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
             dao.metricsManager ! IncrementMetric("transactionRXByAPI")
             // TDOO: Change to ask later for status info
             //   dao.edgeProcessor ! HandleTransaction(tx)
-
-            Future {
-              if (dao.nodeState == NodeState.Ready) {
-                handleTransaction(tx)
-              }
-            }(dao.edgeExecutionContext)
-
             complete(StatusCodes.OK)
         }
       }

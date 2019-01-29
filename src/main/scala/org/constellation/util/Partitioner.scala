@@ -1,6 +1,7 @@
 package org.constellation.util
 
-import org.constellation.primitives.Schema.{Id, Transaction}
+import org.constellation.primitives.Schema.Id
+import org.constellation.primitives.Transaction
 
 object Partitioner {
 

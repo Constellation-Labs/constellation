@@ -26,7 +26,7 @@ class TXValidationBenchmark extends FlatSpec {
 
   val kp: KeyPair = KeyUtils.makeKeyPair()
   val kp1: KeyPair = KeyUtils.makeKeyPair()
-  val tx: Schema.Transaction = SignHelp.createTransaction(kp.address.address, kp1.address.address, 1L, kp)
+  val tx = SignHelp.createTransaction(kp.address.address, kp1.address.address, 1L, kp)
 
   val batchSize = 100
 
@@ -105,8 +105,6 @@ class TXValidationBenchmark extends FlatSpec {
     val dao = new DAO()
 
     dao.keyPair = kp
-
-    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
     val ldb = as.actorOf(Props(new LevelDBActor(dao)), "db")
 

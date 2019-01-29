@@ -40,9 +40,15 @@ object KeyUtils {
   }
 
   val provider: BouncyCastleProvider = insertProvider()
-  val secureRandom: SecureRandom = SecureRandom.getInstance("NativePRNGNonBlocking")
-  val secp256k = "secp256k1"
-  val DefaultSignFunc = "SHA512withECDSA"
+
+  private val ECDSA = "ECDsA"
+  private val secureRandom: SecureRandom = SecureRandom.getInstance("NativePRNGNonBlocking")
+  private val secp256k = "secp256k1"
+  private val DefaultSignFunc = "SHA512withECDSA"
+  private val PublicKeyHexPrefix: String = "3056301006072a8648ce3d020106052b8104000a03420004"
+  private val PublicKeyHexPrefixLength: Int = PublicKeyHexPrefix.length
+  private val PrivateKeyHexPrefix: String = "30818d020100301006072a8648ce3d020106052b8104000a047630740201010420"
+  private val PrivateKeyHexPrefixLength: Int = PrivateKeyHexPrefix.length
 
   /**
     * Simple Bitcoin like wallet grabbed from some stackoverflow post
@@ -51,7 +57,7 @@ object KeyUtils {
     * @return : Private / Public keys following BTC implementation
     */
   def makeKeyPair(): KeyPair = {
-    val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance("ECDsA", provider)
+    val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance(ECDSA, provider)
     val ecSpec = new ECGenParameterSpec(secp256k)
     keyGen.initialize(ecSpec, secureRandom)
     keyGen.generateKeyPair
@@ -128,13 +134,13 @@ object KeyUtils {
   // https://stackoverflow.com/questions/42651856/how-to-decode-rsa-public-keyin-java-from-a-text-view-in-android-studio
   def bytesToPublicKey(encodedBytes: Array[Byte]): PublicKey = {
     val spec = new X509EncodedKeySpec(encodedBytes)
-    val kf = KeyFactory.getInstance("ECDsA", provider)
+    val kf = KeyFactory.getInstance(ECDSA, provider)
     kf.generatePublic(spec)
   }
 
   def bytesToPrivateKey(encodedBytes: Array[Byte]): PrivateKey = {
     val spec = new PKCS8EncodedKeySpec(encodedBytes)
-    val kf = KeyFactory.getInstance("ECDsA", provider)
+    val kf = KeyFactory.getInstance(ECDSA, provider)
     kf.generatePrivate(spec)
   }
 
@@ -154,9 +160,25 @@ object KeyUtils {
       case None =>  bytes.map("%02x".format(_)).mkString
       case _ =>  bytes.map("%02x".format(_)).mkString(sep.get)
     }
-    // bytes.foreach(println)
   }
 
+  def publicKeyToHex(publicKey: PublicKey): String ={
+    val hex = bytes2hex(publicKey.getEncoded)
+    hex.slice(PublicKeyHexPrefixLength, hex.length)
+  }
+
+  def hexToPublicKey(hex: String): PublicKey = {
+    bytesToPublicKey(hex2bytes(PublicKeyHexPrefix + hex))
+  }
+
+  def privateKeyToHex(privateKey: PrivateKey): String ={
+    val hex = bytes2hex(privateKey.getEncoded)
+    hex.slice(PrivateKeyHexPrefixLength, hex.length)
+  }
+
+  def hexToPrivateKey(hex: String): PrivateKey = {
+    bytesToPrivateKey(hex2bytes(PrivateKeyHexPrefix + hex))
+  }
 
   // convert normal string to hex bytes string
   def string2hex(str: String): String = {
@@ -175,7 +197,6 @@ object KeyUtils {
     val sum = ints.sum
     val par = sum % 9
     val res2 = "DAG" + par + end
-//    println(s"res2 $res2 end ints $ints digits: $validInt endSum: $sum divmod9 $par ${res2.length}")
     res2
   }
 

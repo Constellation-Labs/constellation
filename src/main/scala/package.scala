@@ -130,7 +130,6 @@ package object constellation extends POWExt
 
   implicit class ActorQuery(a: ActorRef) {
     import akka.pattern.ask
-    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
     def query[T: ClassTag](m: Any): T = (a ? m).mapTo[T].get()
   }
 
@@ -287,6 +286,7 @@ package object constellation extends POWExt
     //  def address: Address = pubKeyToAddress(publicKey)
     def encoded: EncodedPublicKey = EncodedPublicKey(Base58.encode(publicKey.getEncoded))
     def toId: Id = encoded.toId
+    def hex: String = bytes2hex(publicKey.getEncoded)
   }
 
 

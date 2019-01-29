@@ -152,7 +152,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
                         val udpInterface: String = "0.0.0.0",
                         val udpPort: Int = 16180,
                         val hostName: String = "127.0.0.1",
-                        val timeoutSeconds: Int = 480,
+                        val timeoutSeconds: Int = 10,
                         val requestExternalAddressCheck : Boolean = false,
                         val autoSetExternalAddress: Boolean = false,
                         val peerHttpPort: Int = 9001,
@@ -196,7 +196,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   logger.info(s"Node init with API $httpInterface $httpPort peerPort: $peerHttpPort")
 
-  implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
+  constellation.StandardTimeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
 
   val udpAddressString: String = hostName + ":" + udpPort
   lazy val hostPort = HostPort(hostName, httpPort)

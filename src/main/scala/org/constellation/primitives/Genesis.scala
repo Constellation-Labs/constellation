@@ -24,16 +24,16 @@ object Genesis {
     val distrCB = CheckpointEdgeData(distr.map{_.edge.signedObservationEdge.signatureBatch.hash})
 
     val distrOE = ObservationEdge(
-      TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash),
-      TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash),
-      data = Some(TypedEdgeHash(distrCB.hash, EdgeHashType.CheckpointDataHash))
+      Seq(
+        TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash),
+        TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash)
+      ),
+      TypedEdgeHash(distrCB.hash, EdgeHashType.CheckpointDataHash)
     )
 
     val distrSOE = signedObservationEdge(distrOE)(keyPair)
 
-    val distrROE = ResolvedObservationEdge(genesisSOE, genesisSOE, Some(distrCB))
-
-    val distrRED = Edge(distrOE, distrSOE, distrROE)
+    val distrRED = Edge(distrOE, distrSOE, distrCB)
 
     val distrCBO = CheckpointBlock(distr, CheckpointEdge(distrRED))
 
@@ -56,20 +56,16 @@ object Genesis {
     val cb = CheckpointEdgeData(Seq(genTXHash))
 
     val oe = ObservationEdge(
-      TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
-      TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
-      data = Some(TypedEdgeHash(cb.hash, EdgeHashType.CheckpointDataHash))
+      Seq(
+        TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
+        TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash)
+      ),
+      TypedEdgeHash(cb.hash, EdgeHashType.CheckpointDataHash)
     )
 
     val soe = signedObservationEdge(oe)(keyPair)
 
-    val roe = ResolvedObservationEdge(
-      null.asInstanceOf[SignedObservationEdge],
-      null.asInstanceOf[SignedObservationEdge],
-      Some(cb)
-    )
-
-    val redGenesis = Edge(oe, soe, roe)
+    val redGenesis = Edge(oe, soe, cb)
 
     val genesisCBO = CheckpointBlock(Seq(redTXGenesisResolved), CheckpointEdge(redGenesis))
 
@@ -105,6 +101,10 @@ trait Genesis extends NodeData with EdgeDAO {
       CheckpointCacheData(Some(go.initialDistribution2), height = Some(Height(1, 1)))
 
     )
+
+    go.genesis.storeSOE()
+    go.initialDistribution.storeSOE()
+    go.initialDistribution2.storeSOE()
 
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
     go.genesis.transactions.foreach{

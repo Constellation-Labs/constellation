@@ -135,6 +135,7 @@ class ThreadSafeTipService() {
       h =>
         dao.metricsManager ! IncrementMetric("checkpointAccepted")
         dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
+        h.checkpointBlock.get.storeSOE()
         h.checkpointBlock.get.transactions.foreach{
           _ =>
             dao.metricsManager ! IncrementMetric("transactionAccepted")
@@ -144,6 +145,7 @@ class ThreadSafeTipService() {
     latestSnapshotInfo.acceptedCBSinceSnapshotCache.foreach{
       h =>
         dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
+        h.checkpointBlock.get.storeSOE()
         dao.metricsManager ! IncrementMetric("checkpointAccepted")
         h.checkpointBlock.get.transactions.foreach{
           _ =>
@@ -475,6 +477,8 @@ class StorageService[T](size: Int = 50000) {
 
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
 class CheckpointService(size: Int = 50000) extends StorageService[CheckpointCacheData](size)
+class SOEService(size: Int = 50000) extends StorageService[SignedObservationEdgeCache](size)
+
 class MessageService(size: Int = 50000) extends StorageService[ChannelMessageMetadata](size)
 class TransactionService(size: Int = 50000) extends StorageService[TransactionCacheData](size) {
   private val queue = mutable.Queue[TransactionSerialized]()
@@ -509,6 +513,7 @@ trait EdgeDAO {
   val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
   val addressService = new AddressService(processingConfig.addressLRUMaxSize)
   val messageService = new MessageService()
+  val soeService = new SOEService()
 
   val threadSafeTXMemPool = new ThreadSafeTXMemPool()
   val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()

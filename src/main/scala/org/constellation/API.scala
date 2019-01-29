@@ -127,7 +127,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
                 val block = storedSnapshot.checkpointCache.filter {
                   _.checkpointBlock.get.baseHash == cmd.blockHash.get
                 }.head.checkpointBlock.get
-                val messageProofInput = block.transactions.map{_.hash} ++ block.checkpoint.edge.resolvedObservationEdge.data.get.messages.map{_.signedMessageData.signatures.hash}
+                val messageProofInput = block.transactions.map{_.hash} ++ block.checkpoint.edge.data.messages.map{_.signedMessageData.signatures.hash}
                 val messageProof = MerkleTree(messageProofInput.toList).createProof(cmd.channelMessage.signedMessageData.signatures.hash)
                 ChannelProof(
                   cmd,
@@ -163,7 +163,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           } ~
           path("metrics") {
             val response = MetricsResult(
-              (dao.metricsManager ? GetMetrics).mapTo[Map[String, String]].getOpt().getOrElse(Map())
+              (dao.metricsManager ? GetMetrics)(StandardTimeout).mapTo[Map[String, String]].getOpt().getOrElse(Map())
             )
             complete(response)
           } ~
@@ -288,7 +288,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           resetTimeout
         )
 
-        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[Response[String]]]]
+        val response = (peerManager ? APIBroadcast(_.get("health")))(StandardTimeout).mapTo[Map[Id, Future[Response[String]]]]
         onCompleteWithBreaker(breaker)(response) {
           case Success(idMap) =>
 

@@ -90,9 +90,7 @@ trait PeerAuth {
     }
   }
 
-  def handShakeInner(peerAddressOrRemote: InetSocketAddress): HandShake = {
-    HandShake(selfPeer, peerAddressOrRemote, peers.toSet,  requestExternalAddressCheck)
-  }
+
 
   def initiatePeerHandshake(peerAddress: InetSocketAddress, useRest: Boolean = false): StatusCode = {
     val banList = data.bannedIPs
@@ -111,7 +109,7 @@ trait PeerAuth {
         logger.debug(s"Sending handshake from $externalAddress to $peerAddress with ${peers.size} known peers")
 
         //Introduce ourselves
-        val message = HandShakeMessage(handShakeInner(peerAddress).signed())
+        val message = "" // TODO: Refactor later if necessary using signature auth pattern from REST examples.
 
         udpActor ! UDPSend(message, peerAddress)
 
@@ -147,65 +145,6 @@ trait PeerAuth {
     if (valid) t else {
       logger.debug(s"BANNING - Invalid data from - $remote")
       udpActor ! Ban(remote)
-    }
-  }
-
-  def handleHandShake(sh: HandShakeMessage, remote: InetSocketAddress): Unit = {
-    val hs = sh.handShake.data
-    val address = hs.originPeer.data.externalAddress
-    val responseAddr = if (hs.requestExternalAddressCheck) remote else address.getOrElse(remote)
-
-    logger.debug(s"Got handshake from $remote on $externalAddress, sending response to $responseAddr")
-
-    banOn(sh.handShake.valid, remote) {
-
-      logger.debug(s"Got handshake inner from $remote on $externalAddress, " +
-        s"sending response to $remote inet: ${pprintInet(remote)} " +
-        s"peers externally reported address: ${hs.originPeer.data.externalAddress} inet: " +
-        s"${address.map{pprintInet}}")
-
-      val lastExternal = if (address.nonEmpty) None else addressToLastObservedExternalAddress.get(remote)
-
-      val response = HandShakeResponseMessage(
-        HandShakeResponse(sh.handShake, handShakeInner(remote), lastExternal).signed()
-      )
-
-      udpActor ! UDPSend(response, remote)
-
-      //Tell our existing peers
-      initiatePeerHandshake(responseAddr)
-    }
-  }
-
-  def handleHandShakeResponse(sh: HandShakeResponseMessage, remote: InetSocketAddress): Unit = {
-    val hsr = sh.handShakeResponse.data
-    val address = hsr.response.originPeer.data.externalAddress
-
-    if (requestExternalAddressCheck) {
-      externalAddress = Some(hsr.response.destination)
-      requestExternalAddressCheck = false
-    }
-
-    // For node restart
-    if (externalAddress.isEmpty){
-      hsr.lastObservedExternalAddress.foreach{ e =>
-        externalAddress = Some(e)
-        if (apiAddress.isEmpty) {
-          apiAddress = Some(new InetSocketAddress(e.getHostString, e.getPort))
-        }
-      }
-    }
-
-    // ^ TODO : Fix validation
-    banOn(sh.handShakeResponse.valid, remote) {
-      logger.debug(s"Got valid HandShakeResponse from $remote / $address on $externalAddress")
-
-      val value = hsr.response.originPeer
-      val newPeers = Seq()
-
-      addAuthenticatedPeer(value, newPeers)
-
-      signedPeerLookup(remote) = value
     }
   }
 

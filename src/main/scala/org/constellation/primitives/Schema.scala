@@ -165,14 +165,12 @@ object Schema {
   /**
     * Basic edge format for linking two hashes with an optional piece of data attached. Similar to GraphX format.
     * Left is topologically ordered before right
-    * @param left : First parent reference in order
-    * @param right : Second parent reference
+    * @param parents: HyperEdge parent references
     * @param data : Optional hash reference to attached information
     */
-  case class ObservationEdge(
-                              left: TypedEdgeHash,
-                              right: TypedEdgeHash,
-                              data: Option[TypedEdgeHash] = None
+  case class ObservationEdge( // TODO: Consider renaming to ObservationHyperEdge or leave as is?
+                              parents: Seq[TypedEdgeHash],
+                              data: TypedEdgeHash
                             ) extends ProductHash
 
   /**
@@ -201,131 +199,8 @@ object Schema {
     */
   case class CheckpointEdgeData(hashes: Seq[String], messages: Seq[ChannelMessage] = Seq()) extends ProductHash
 
-  case class ResolvedObservationEdge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
-  (left: L, right: R, data: Option[D] = None)
-
-  case class Transaction(edge: Edge[Address, Address, TransactionEdgeData]) {
-
-    def store(cache: TransactionCacheData)(implicit dao: DAO): Unit = {
-      //edge.storeTransactionCacheData({originalCache: TransactionCacheData => cache.plus(originalCache)}, cache)
-      dao.transactionService.put(this.hash, cache)
-    }
-
-    /*def ledgerApplyMemPool(dbActor: Datastore): Unit = {
-      dbActor.updateAddressCacheData(
-        src.hash,
-        { a: AddressCacheData => a.copy(memPoolBalance = a.memPoolBalance - amount)},
-        AddressCacheData(0L, 0L) // unused since this address should already exist here
-      )
-      dbActor.updateAddressCacheData(
-        dst.hash,
-        { a: AddressCacheData => a.copy(memPoolBalance = a.memPoolBalance + amount)},
-        AddressCacheData(0L, 0L) // unused since this address should already exist here
-      )
-    }*/
-
-    def ledgerApply()(implicit dao: DAO): Unit = {
-      dao.addressService.update(
-        src.hash,
-        { a: AddressCacheData => a.copy(balance = a.balance - amount)},
-        AddressCacheData(0L, 0L) // unused since this address should already exist here
-      )
-      dao.addressService.update(
-        dst.hash,
-        { a: AddressCacheData => a.copy(balance = a.balance + amount)},
-        AddressCacheData(amount, 0L) // unused since this address should already exist here
-      )
-    }
-
-    def ledgerApplySnapshot()(implicit dao: DAO): Unit = {
-      dao.addressService.update(
-        src.hash,
-        { a: AddressCacheData => a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - amount)},
-        AddressCacheData(0L, 0L) // unused since this address should already exist here
-      )
-      dao.addressService.update(
-        dst.hash,
-        { a: AddressCacheData => a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + amount)},
-        AddressCacheData(amount, 0L) // unused since this address should already exist here
-      )
-    }
-
-    def src: Address = edge.resolvedObservationEdge.left
-    def dst: Address = edge.resolvedObservationEdge.right
-
-    def signatures: Seq[HashSignature] = edge.signedObservationEdge.signatureBatch.signatures
-
-    // TODO: Add proper exception on empty option
-    def amount : Long = edge.resolvedObservationEdge.data.get.amount
-    def baseHash: String = edge.signedObservationEdge.baseHash
-    def hash: String = edge.signedObservationEdge.hash
-    def plus(other: Transaction): Transaction = this.copy(
-      edge = edge.plus(other.edge)
-    )
-    def plus(keyPair: KeyPair): Transaction = this.copy(
-      edge = edge.plus(keyPair)
-    )
-
-    def valid: Boolean = validSrcSignature &&
-      dst.address.nonEmpty &&
-      dst.address.length > 30 &&
-      dst.address.startsWith("DAG") &&
-      amount > 0
-
-    def validSrcSignature: Boolean = {
-      edge.signedObservationEdge.signatureBatch.signatures.exists{ hs =>
-        hs.publicKey.address == src.address && hs.valid(edge.signedObservationEdge.signatureBatch.hash)
-      }
-    }
-
-  }
-
-  case class CheckpointEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData]) {
+  case class CheckpointEdge(edge: Edge[CheckpointEdgeData]) {
     def plus(other: CheckpointEdge) = this.copy(edge = edge.plus(other.edge))
-  }
-  case class ValidationEdge(edge: Edge[SignedObservationEdge, SignedObservationEdge, Nothing])
-
-  case class Edge[L <: ProductHash, R <: ProductHash, +D <: ProductHash]
-  (
-    observationEdge: ObservationEdge,
-    signedObservationEdge: SignedObservationEdge,
-    resolvedObservationEdge: ResolvedObservationEdge[L,R,D]
-  ) {
-
-    def baseHash: String = signedObservationEdge.signatureBatch.hash
-    def parentHashes = Seq(observationEdge.left.hash, observationEdge.right.hash)
-    def parents = Seq(observationEdge.left, observationEdge.right)
-
-    def storeTransactionCacheData(db: Datastore, update: TransactionCacheData => TransactionCacheData, empty: TransactionCacheData, resolved: Boolean = false): Unit = {
-      db.updateTransactionCacheData(signedObservationEdge.baseHash, update, empty)
-      db.putSignedObservationEdgeCache(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
-      resolvedObservationEdge.data.foreach {
-        data =>
-          db.putTransactionEdgeData(data.hash, data.asInstanceOf[TransactionEdgeData])
-      }
-    }
-
-    def storeCheckpointData(db: Datastore, update: CheckpointCacheData => CheckpointCacheData, empty: CheckpointCacheData, resolved: Boolean = false): Unit = {
-      db.updateCheckpointCacheData(signedObservationEdge.baseHash, update, empty)
-      db.putSignedObservationEdgeCache(signedObservationEdge.hash, SignedObservationEdgeCache(signedObservationEdge, resolved))
-      resolvedObservationEdge.data.foreach {
-        data =>
-          db.putCheckpointEdgeData(data.hash, data.asInstanceOf[CheckpointEdgeData])
-      }
-    }
-
-    def plus(keyPair: KeyPair): Edge[L, R, D] = {
-      this.copy(signedObservationEdge = signedObservationEdge.plus(keyPair))
-    }
-
-    def plus(hs: HashSignature): Edge[L, R, D] = {
-      this.copy(signedObservationEdge = signedObservationEdge.plus(hs))
-    }
-
-    def plus(other: Edge[_,_,_]): Edge[L, R, D] = {
-      this.copy(signedObservationEdge = signedObservationEdge.plus(other.signedObservationEdge))
-    }
-
   }
 
   case class Address(address: String) extends ProductHash {
@@ -630,6 +505,10 @@ object Schema {
     checkpoint: CheckpointEdge
   ) {
 
+    def storeSOE()(implicit dao: DAO): Unit = {
+      dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true))
+    }
+
     def calculateHeight()(implicit dao: DAO): Option[Height] = {
 
       val parents = parentSOEBaseHashes.map {
@@ -743,13 +622,11 @@ object Schema {
       this.copy(checkpoint = checkpoint.plus(other.checkpoint))
     }
 
-    def resolvedOE: ResolvedObservationEdge[SignedObservationEdge, SignedObservationEdge, CheckpointEdgeData] =
-      checkpoint.edge.resolvedObservationEdge
+    def parentSOE: Seq[TypedEdgeHash] = checkpoint.edge.parents
+    def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
 
-    def parentSOE = Seq(resolvedOE.left, resolvedOE.right)
-    def parentSOEHashes = Seq(resolvedOE.left.hash, resolvedOE.right.hash)
-
-    def parentSOEBaseHashes: Seq[String] = parentSOE.map(h => if (h == null) "" else h.baseHash)
+    def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
+      parentSOEHashes.flatMap{dao.soeService.get}.map{_.signedObservationEdge.baseHash}
 
     def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
@@ -817,24 +694,6 @@ object Schema {
     def id: PublicKey = encodedId.toPublicKey
   }
 
-  case class HandShake(
-                        originPeer: Signed[Peer],
-                        destination: InetSocketAddress,
-                        peers: Set[Signed[Peer]] = Set(),
-                        requestExternalAddressCheck: Boolean = false
-                      ) extends ProductHash
-
-  // These exist because type erasure messes up pattern matching on Signed[T] such that
-  // you need a wrapper case class like this
-  case class HandShakeMessage(handShake: Signed[HandShake])
-  case class HandShakeResponseMessage(handShakeResponse: Signed[HandShakeResponse])
-
-  case class HandShakeResponse(
-                                original: Signed[HandShake],
-                                response: HandShake,
-                                lastObservedExternalAddress: Option[InetSocketAddress] = None
-                              ) extends ProductHash
-
   case class Peer(
                    id: Id,
                    externalAddress: Option[InetSocketAddress],
@@ -851,27 +710,8 @@ object Schema {
                             apiClient: APIClient
                           )
 
-  // Experimental below
 
-  case class CounterPartyTXRequest(
-                                    dst: AddressMetaData,
-                                    counterParty: AddressMetaData,
-                                    counterPartyAccount: Option[EncodedPublicKey]
-                                  ) extends ProductHash
-
-
-  final case class ConflictDetectedData(detectedOn: Transaction, conflicts: Seq[Transaction]) extends ProductHash
-
-  final case class ConflictDetected(conflict: Signed[ConflictDetectedData]) extends ProductHash with GossipMessage
-
-  final case class VoteData(accept: Seq[Transaction], reject: Seq[Transaction]) extends ProductHash {
-    // used to determine what voting round we are talking about
-    def voteRoundHash: String = {
-      accept.++(reject).sortBy(t => t.hashCode()).map(f => f.hash).mkString("-")
-    }
-  }
-
-  final case class Vote(vote: Signed[VoteData]) extends ProductHash with Fiber
+  case class Node(address: String, host: String, port: Int)
 
   case class TransactionSerialized(hash: String, sender: String, receiver: String, amount: Long, signers: Set[String], time: Long)
   object TransactionSerialized {
@@ -879,7 +719,5 @@ object Schema {
       new TransactionSerialized(tx.hash, tx.src.address, tx.dst.address, tx.amount,
         tx.signatures.map(_.address).toSet, Instant.now.getEpochSecond)
   }
-
-  case class Node(address: String, host: String, port: Int)
 
 }
