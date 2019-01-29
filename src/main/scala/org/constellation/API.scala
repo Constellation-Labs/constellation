@@ -106,9 +106,10 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         path("channels") {
           complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
         } ~
+        path("messageService" / Segment){ channelId =>
+          complete(dao.messageService.get(channelId))
+        } ~
         path ("channel" / Segment) { channelHash =>
-
-
 
           val res = Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.get(channelHash))
 
@@ -225,6 +226,19 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
 
   private val postEndpoints =
     post {
+      pathPrefix("channel") {
+        path("open") {
+          entity(as[ChannelOpenRequest]) { request =>
+            ChannelMessage.createGenesis(request)
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("send") {
+          entity(as[ChannelSendRequest]) { send =>
+            complete(ChannelMessage.createMessages(send))
+          }
+        }
+      } ~
       pathPrefix("peer") {
         path("remove") {
           entity(as[RemovePeerRequest]) { e =>

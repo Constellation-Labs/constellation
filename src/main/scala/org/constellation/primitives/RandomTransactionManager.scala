@@ -32,7 +32,7 @@ object RandomTransactionManager {
         } else None
       }
       cm.foreach{ c =>
-        dao.threadSafeMessageMemPool.put(c)
+        dao.threadSafeMessageMemPool.put(Seq(c))
         dao.metricsManager ! UpdateMetric("messageMemPoolSize", dao.threadSafeMessageMemPool.unsafeCount.toString)
       }
   }
