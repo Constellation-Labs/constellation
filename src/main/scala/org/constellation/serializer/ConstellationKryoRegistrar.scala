@@ -2,7 +2,6 @@ package org.constellation.serializer
 
 import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
-import org.constellation.consensus.Consensus.{VoteData => _, _}
 import org.constellation.consensus._
 import org.constellation.p2p.SerializedUDPMessage
 import org.constellation.primitives.Schema._
@@ -82,13 +81,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Signed[Vote]])
     kryo.register(classOf[Signed[BundleBlock]])
     kryo.register(classOf[Signed[BundleData]])
-
-    kryo.register(classOf[ConsensusVote[Consensus.Checkpoint]])
-    kryo.register(classOf[CheckpointVote])
-    kryo.register(classOf[RoundHash[Consensus.Checkpoint]])
-    kryo.register(classOf[ConsensusProposal[Consensus.Checkpoint]])
-    kryo.register(classOf[CheckpointProposal])
-
     kryo.register(classOf[AddressMetaData])
 
     kryo.register(Class.forName("org.constellation.primitives.Schema$EdgeHashType$"))

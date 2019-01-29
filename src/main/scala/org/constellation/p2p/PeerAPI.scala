@@ -13,9 +13,8 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
-import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
 import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest, SignatureResponseWrapper, handleTransaction}
-import org.constellation.consensus.{Consensus, EdgeProcessor}
+import org.constellation.consensus.{EdgeProcessor}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
@@ -163,24 +162,6 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
           }
       }
     } ~
-      path("checkpointEdgeVote") {
-        entity(as[Array[Byte]]) { e =>
-            val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusVote[Consensus.Checkpoint]]
-
-            dao.consensus ! message
-
-          complete(StatusCodes.OK)
-        }
-      } ~
-      path("checkpointEdgeProposal") {
-        entity(as[Array[Byte]]) { e =>
-            val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusProposal[Consensus.Checkpoint]]
-
-            dao.consensus ! message
-
-          complete(StatusCodes.OK)
-        }
-      } ~
       pathPrefix("request") {
         path("signature") {
           extractClientIP { ip =>

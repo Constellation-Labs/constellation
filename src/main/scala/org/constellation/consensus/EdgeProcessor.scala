@@ -8,7 +8,6 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.Validation.TransactionValidationStatus
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
@@ -20,13 +19,7 @@ import scala.util.Try
 
 object EdgeProcessor {
 
-  case class HandleTransaction(tx: Transaction)
-  case class HandleCheckpoint(checkpointBlock: CheckpointBlock)
-  case class HandleSignatureRequest(checkpointBlock: CheckpointBlock)
-
   val logger = Logger(s"EdgeProcessor")
-  implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
-
 
   def acceptCheckpoint(checkpointCacheData: CheckpointCacheData)(implicit dao: DAO): Unit = {
 
@@ -135,16 +128,6 @@ object EdgeProcessor {
 
         */
 
-  }
-
-  def reportInvalidTransaction(dao: DAO, t: TransactionValidationStatus): Unit = {
-    dao.metricsManager ! IncrementMetric("invalidTransactions")
-    if (t.isDuplicateHash) {
-      dao.metricsManager ! IncrementMetric("hashDuplicateTransactions")
-    }
-    if (!t.sufficientBalance) {
-      dao.metricsManager ! IncrementMetric("insufficientBalanceTransactions")
-    }
   }
 
   case class CreateCheckpointEdgeResponse(

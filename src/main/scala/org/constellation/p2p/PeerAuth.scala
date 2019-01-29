@@ -10,7 +10,6 @@ import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.primitives.Schema._
 import org.constellation.util.{APIClient, Signed}
 
@@ -50,7 +49,7 @@ trait PeerAuth {
     })
   }
 
-  def broadcastUDP[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
+  def broadcastUDP[T](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
     getBroadcastPeers(skipIDs, idSubset).map(_.externalAddress).foreach(a => {
       val address = a.get
       udpActor ! UDPSend(message, address)
@@ -76,7 +75,7 @@ trait PeerAuth {
     }
   }
 
-  def broadcast[T <: RemoteMessage](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
+  def broadcast[T](message: T, skipIDs: Seq[Id] = Seq(), idSubset: Seq[Id] = Seq()): Unit = {
     val dest: Iterable[Id] = if (idSubset.isEmpty) signedPeerIDLookup.keys else idSubset
 
     dest.foreach{ i =>

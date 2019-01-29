@@ -29,6 +29,8 @@ import scala.util.{Failure, Random, Success, Try}
 package object constellation extends POWExt
   with POWSignHelp {
 
+  implicit var StandardTimeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+
   val minimumTime : Long = 1518898908367L
 
   implicit class EasyFutureBlock[T](f: Future[T]) {

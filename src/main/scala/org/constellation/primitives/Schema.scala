@@ -8,7 +8,6 @@ import cats.data._
 import cats.implicits._
 import constellation.pubKeyToAddress
 import org.constellation.DAO
-import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
@@ -130,8 +129,8 @@ object Schema {
   case class HashRequest(hash: String) extends GossipMessage
   case class BatchHashRequest(hashes: Set[String]) extends GossipMessage
 
-  case class BatchBundleHashRequest(hashes: Set[String]) extends GossipMessage with RemoteMessage
-  case class BatchTXHashRequest(hashes: Set[String]) extends GossipMessage with RemoteMessage
+  case class BatchBundleHashRequest(hashes: Set[String]) extends GossipMessage
+  case class BatchTXHashRequest(hashes: Set[String]) extends GossipMessage
 
   case class UnknownParentHashSyncInfo(
                                         firstRequestTime: Long,
@@ -798,11 +797,11 @@ object Schema {
 
   trait DownloadMessage
 
-  case class DownloadRequest(time: Long = System.currentTimeMillis()) extends DownloadMessage with RemoteMessage
+  case class DownloadRequest(time: Long = System.currentTimeMillis()) extends DownloadMessage
 
-  final case class SyncData(validTX: Set[Transaction], memPoolTX: Set[Transaction]) extends GossipMessage with RemoteMessage
+  final case class SyncData(validTX: Set[Transaction], memPoolTX: Set[Transaction]) extends GossipMessage
 
-  final case class RequestTXProof(txHash: String) extends GossipMessage with RemoteMessage
+  final case class RequestTXProof(txHash: String) extends GossipMessage
 
   case class MetricsResult(metrics: Map[String, String])
 
@@ -827,14 +826,14 @@ object Schema {
 
   // These exist because type erasure messes up pattern matching on Signed[T] such that
   // you need a wrapper case class like this
-  case class HandShakeMessage(handShake: Signed[HandShake]) extends RemoteMessage
-  case class HandShakeResponseMessage(handShakeResponse: Signed[HandShakeResponse]) extends RemoteMessage
+  case class HandShakeMessage(handShake: Signed[HandShake])
+  case class HandShakeResponseMessage(handShakeResponse: Signed[HandShakeResponse])
 
   case class HandShakeResponse(
                                 original: Signed[HandShake],
                                 response: HandShake,
                                 lastObservedExternalAddress: Option[InetSocketAddress] = None
-                              ) extends ProductHash with RemoteMessage
+                              ) extends ProductHash
 
   case class Peer(
                    id: Id,

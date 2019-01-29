@@ -1,7 +1,6 @@
 package org.constellation
 
 import com.typesafe.scalalogging.Logger
-import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
@@ -9,7 +8,7 @@ import org.constellation.util.{ProductHash, Signed}
 import org.scalatest.FlatSpec
 
 case class TestSignable(a: String, b: Int) extends ProductHash
-case class TestSignabledWrapper(testSignable: Signed[TestSignable]) extends RemoteMessage
+case class TestSignabledWrapper(testSignable: Signed[TestSignable])
 
 import constellation._
 

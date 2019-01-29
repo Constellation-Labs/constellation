@@ -2,7 +2,6 @@ package org.constellation.serializer
 
 import akka.util.ByteString
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
-import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.p2p.SerializedUDPMessage
 
 import scala.util.Random
@@ -20,7 +19,7 @@ object KryoSerializer {
       .withRegistrar(new ConstellationKryoRegistrar())
     , 32, 1024*1024*100)
 
-  def serializeGrouped[T <: RemoteMessage](data: T, groupSize: Int = 45000): Seq[SerializedUDPMessage] = {
+  def serializeGrouped[T](data: T, groupSize: Int = 45000): Seq[SerializedUDPMessage] = {
 
     val bytes: Array[Byte] = kryoPool.toBytesWithClass(data)
 
@@ -40,7 +39,7 @@ object KryoSerializer {
     deserialize(sortedBytes)
   }
 
-  def serialize[T <: RemoteMessage](data: T): Array[Byte] = {
+  def serialize[T](data: T): Array[Byte] = {
     kryoPool.toBytesWithClass(data)
   }
 
