@@ -231,7 +231,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         path("open") {
           entity(as[ChannelOpenRequest]) { request =>
             ChannelMessage.createGenesis(request)
-            complete(StatusCodes.OK)
+            complete(StatusCodes.Created)
           }
         } ~
         path("send") {

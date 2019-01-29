@@ -47,7 +47,7 @@ object ChannelMessage {
     if (
       dao.messageService.get(channelOpenRequest.channelId).isEmpty &&
       !dao.threadSafeMessageMemPool.activeChannels.contains(channelOpenRequest.channelId)
-    ) Some {
+    ) {
 
       val genesisMessageStr = ChannelOpen(channelOpenRequest.jsonSchema, channelOpenRequest.acceptInvalid).json
       val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.channelId)
@@ -55,7 +55,7 @@ object ChannelMessage {
       dao.threadSafeMessageMemPool.activeChannels(channelOpenRequest.channelId) = semaphore
       semaphore.acquire()
       dao.threadSafeMessageMemPool.put(Seq(msg), overrideLimit = true)
-      msg
+      Some(msg)
     } else None
   }
 

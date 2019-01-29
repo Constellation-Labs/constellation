@@ -27,7 +27,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   override def beforeAll(): Unit = {
     // Cleanup DBs
     //Try{File(tmpDir).delete()}
-    Try{new java.io.File(tmpDir).mkdirs()}
+    Try{File(tmpDir).createDirectories()}
 
   }
 
@@ -198,19 +198,19 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
           if (!isValid) numInvalid += 1
           isValid
         }.headOption
-        (block.soeHash, block.parentSOEHashes, valid, messageParent, messageHash)
+        BlockDumpOutput(block.soeHash, block.parentSOEHashes, valid, messageParent, messageHash)
       }
     }
 
     // TODO: Duplicate messages appearing sometimes but not others?
     println(s"Num invalid $numInvalid")
 
-    val ids = messagesInChannelWithBlocks.map{_._1}.zipWithIndex.toMap
-    val msgToBlock = messagesInChannelWithBlocks.flatMap{z => z._5.map{_ -> z._1}}.toMap
+    val ids = messagesInChannelWithBlocks.map{_.blockSoeHash}.zipWithIndex.toMap
+    val msgToBlock = messagesInChannelWithBlocks.flatMap{z => z.messageHash.map{_ -> z.blockSoeHash}}.toMap
 
     import constellation._
     val rendered = messagesInChannelWithBlocks.map{
-      case (hash, parents, isValid, msgParent, msgHash) =>
+      case BlockDumpOutput(hash, parents, isValid, msgParent, msgHash) =>
 
         val msgParentId = msgParent.flatMap{
           parent =>
@@ -238,3 +238,11 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
 
 }
+
+case class BlockDumpOutput(
+                          blockSoeHash: String,
+                          blockParentSOEHashes: Seq[String],
+                          blockMessageValid: Option[Boolean],
+                          messageParent: Option[String],
+                          messageHash: Option[String]
+                          )
