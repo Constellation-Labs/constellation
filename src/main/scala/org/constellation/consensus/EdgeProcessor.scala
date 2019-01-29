@@ -229,8 +229,6 @@ object EdgeProcessor {
 
   case class SignatureRequest(checkpointBlock: CheckpointBlock,
                               facilitators: Set[Id])
-  case class SignatureResponseWrapper(
-      signatureResponse: Option[SignatureResponse] = None)
   case class SignatureResponse(checkpointBlock: CheckpointBlock,
                                facilitators: Set[Id],
                                reRegister: Boolean = false)
@@ -272,13 +270,13 @@ object EdgeProcessor {
           val t = facils.mapValues { data =>
             async {
               val resp = await(
-                data.client.postNonBlocking[SignatureResponseWrapper](
+                data.client.postNonBlocking[Option[SignatureResponse]](
                   "request/signature",
                   SignatureRequest(checkpointBlock, finalFacilitators + dao.id),
                   10.seconds
                 ))
 
-              val sigRespOpt = resp.signatureResponse
+              val sigRespOpt = resp
               sigRespOpt.foreach { sr =>
                 if (sr.reRegister) {
                   // PeerManager.attemptRegisterPeer() TODO : Finish

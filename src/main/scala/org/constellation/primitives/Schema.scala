@@ -525,8 +525,7 @@ object Schema {
       if (s.nonEmpty) s.toList.validNel else EmptySignatures().invalidNel
 
     def validateSourceAddressBalances(
-      t: Iterable[Transaction],
-      balanceAccessFunction: AddressCacheData => Long,
+      t: Iterable[Transaction]
     )(implicit dao: DAO): ValidationResult[List[Transaction]] = {
       def lookup(key: String) = dao.addressService
         .get(key)
@@ -607,15 +606,14 @@ object Schema {
       }
 
     def validateCheckpointBlock(
-      cb: CheckpointBlock,
-      balanceAccessFunction: AddressCacheData => Long,
+      cb: CheckpointBlock
     )(implicit dao: DAO): ValidationResult[CheckpointBlock] = {
       val preTreeResult =
       validateEmptySignatures(cb.signatures)
         .product(validateSignatures(cb.signatures, cb.baseHash))
         .product(validateTransactions(cb.transactions))
         .product(validateDuplicatedTransactions(cb.transactions))
-        .product(validateSourceAddressBalances(cb.transactions, balanceAccessFunction))
+        .product(validateSourceAddressBalances(cb.transactions))
 
       val postTreeIgnoreEmptySnapshot = if (dao.threadSafeTipService.lastSnapshotHeight == 0) preTreeResult
       else preTreeResult.product(validateCheckpointBlockTree(cb))
@@ -677,13 +675,10 @@ object Schema {
     def transactionsValid: Boolean = transactions.nonEmpty && transactions.forall(_.valid)
 
     // TODO: Return checkpoint validation status for more info rather than just a boolean
-    def simpleValidation(
-      balanceAccessFunction: AddressCacheData => Long = (a: AddressCacheData) => a.balance
-    )(implicit dao: DAO): Boolean = {
+    def simpleValidation()(implicit dao: DAO): Boolean = {
 
       val validation = CheckpointBlockValidatorNel.validateCheckpointBlock(
-        CheckpointBlock(transactions, checkpoint),
-        balanceAccessFunction
+        CheckpointBlock(transactions, checkpoint)
       )
 
       if (validation.isValid) {

@@ -143,7 +143,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 
             complete(Some(tx.hash))
           } else {
-            logger.info(s"Invalid faucet request $sendRequest")
+            logger.warn(s"Invalid faucet request $sendRequest")
             dao.metricsManager ! IncrementMetric("faucetInvalidRequest")
             complete(None)
           }
@@ -206,7 +206,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
                   val maybeResponse = result.toOption.flatMap {
                     _.toOption
                   }.map{_.copy(reRegister = !knownHost)}
-                  complete(SignatureResponseWrapper(maybeResponse).json)
+                  complete(maybeResponse)
               }
             }
           }
