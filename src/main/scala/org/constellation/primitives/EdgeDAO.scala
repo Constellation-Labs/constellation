@@ -509,6 +509,11 @@ trait EdgeDAO {
   @volatile var blockFormationInProgress: Boolean = false
 
 
+  val publicReputation: TrieMap[Id, Double] = TrieMap()
+  val secretReputation: TrieMap[Id, Double] = TrieMap()
+
+  val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
+
   val checkpointService = new CheckpointService(processingConfig.checkpointLRUMaxSize)
   val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
   val addressService = new AddressService(processingConfig.addressLRUMaxSize)

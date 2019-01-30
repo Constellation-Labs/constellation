@@ -64,7 +64,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
     case Udp.Received(data, remote) =>
 
 
-      if (dao.bannedIPs.contains(remote)) {
+      if (true) { //dao.bannedIPs.contains(remote)) {
         println(s"BANNED MESSAGE DETECTED FROM $remote")
       } else {
 
@@ -118,7 +118,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
     case RegisterNextActor(next) => nextActor = Some(next)
 
     case Ban(remote) => {
-      dao.bannedIPs = {dao.bannedIPs ++ Seq(remote)}.distinct
+    //  dao.bannedIPs = {dao.bannedIPs ++ Seq(remote)}.distinct
     }
 
     case GetUDPSocketRef => sender() ! udpSocket

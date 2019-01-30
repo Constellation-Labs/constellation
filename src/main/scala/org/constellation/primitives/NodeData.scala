@@ -9,7 +9,7 @@ import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
-import org.constellation.util.Signed
+import org.constellation.util.{Metrics, Signed}
 
 trait NodeData {
 
@@ -17,6 +17,7 @@ trait NodeData {
   var peerManager: ActorRef = _
   var consensus: ActorRef = _
   var metricsManager: ActorRef = _
+  var metrics: Metrics = _
   var edgeProcessor: ActorRef = _
   var memPoolManager: ActorRef = _
   var heartbeatActor: ActorRef = _

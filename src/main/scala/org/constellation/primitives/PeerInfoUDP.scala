@@ -10,6 +10,8 @@ import org.constellation.util.{APIClient, Signed}
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContextExecutor
 
+
+// When UDP is re-enable this needs to be revisited, otherwise ignore for now
 @deprecated
 trait PeerInfoUDP {
 

@@ -2,7 +2,6 @@ package org.constellation.util
 
 import java.util.concurrent._
 
-import akka.util.Timeout
 import better.files.File
 import com.typesafe.scalalogging.Logger
 import io.kontainers.micrometer.akka.AkkaMetricRegistry
@@ -13,13 +12,14 @@ import io.micrometer.core.instrument.binder.system.{FileDescriptorMetrics, Proce
 import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import io.prometheus.client.CollectorRegistry
 import constellation._
-import org.constellation.DAO
-import org.constellation.primitives.PeerData
-import org.constellation.primitives.Schema.Id
+import org.constellation.{ConstellationNode, DAO}
 import org.joda.time.DateTime
 
 import scala.collection.concurrent.TrieMap
 
+/**
+  * For Grafana usage
+  */
 object Metrics {
 
   def prometheusSetup(keyHash: String): Unit = {
@@ -40,13 +40,21 @@ object Metrics {
 
 }
 
-
+/**
+  * TPS reports
+  * @param dao: Data access object
+  */
 class TransactionRateTracker()(implicit dao: DAO){
 
   private var lastTXCount: Long = 0
   private var lastCheckTime: Long = System.currentTimeMillis()
 
-  def getMetrics(transactionAccepted: Long): Map[String, String] = {
+  /**
+    * Determine transaction per second (TPS) rates for last N seconds and all time
+    * @param transactionAccepted: Current number of transactions accepted from stored metrics
+    * @return TPS all time and TPS last n seconds in metrics form
+    */
+  def calculate(transactionAccepted: Long): Map[String, String] = {
     val countAll = transactionAccepted - dao.transactionAcceptedAfterDownload
     val startTime = dao.downloadFinishedTime // metrics.getOrElse("nodeStartTimeMS", "1").toLong
     val deltaStart = System.currentTimeMillis() - startTime
@@ -64,6 +72,11 @@ class TransactionRateTracker()(implicit dao: DAO){
 
 }
 
+/**
+  * TrieMap backed metrics store for string values and counters
+  * @param periodSeconds: How often to recalculate moving window metrics (e.g. TPS)
+  * @param dao: Data access object
+  */
 class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) {
 
   val logger = Logger("Metrics")
@@ -77,7 +90,15 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) {
 
   val rateCounter = new TransactionRateTracker()
 
+  // Init
   updateMetric("id", dao.id.b58)
+  Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
+  updateMetric("nodeState", dao.nodeState.toString)
+  updateMetric("address", dao.selfAddressStr)
+  updateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
+  updateMetric("nodeStartDate", new DateTime(System.currentTimeMillis()).toString)
+  updateMetric("externalHost", dao.externalHostString)
+  updateMetric("version", ConstellationNode.ConstellationVersion)
 
   def updateMetric(key: String, value: String): Unit = {
     stringMetrics(key) = value
@@ -91,12 +112,12 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) {
     countMetrics(key) = countMetrics.getOrElse(key, 0L) + 1
   }
 
-  Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
-
-  def checkInterval[T](f: => T): Unit = {
-    if (round % dao.processingConfig.metricCheckInterval == 0) {
-      f
-    }
+  /**
+    * Converts counter metrics to string for export / display
+    * @return : Key value map of all metrics
+    */
+  def getMetrics: Map[String, String] = {
+    stringMetrics.toMap ++ countMetrics.toMap.mapValues(_.toString)
   }
 
   // Temporary, for debugging only. Would cause a problem with many peers
@@ -121,23 +142,26 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) {
 
   }
 
+  /**
+    * Recalculates window based / periodic metrics
+    */
   private val task = new Runnable {
     def run(): Unit = {
       round += 1
-      checkInterval{
-        Thread.currentThread().setName("Metrics")
-        updateBalanceMetrics()
-        rateCounter.getMetrics(countMetrics.getOrElse("transactionAccepted", 0L)).foreach{
-          case (k,v) => updateMetric(k,v)
-        }
-
-        updateMetric("nodeCurrentTimeMS", System.currentTimeMillis().toString)
-        updateMetric("nodeCurrentDate", new DateTime().toString())
-
+      Thread.currentThread().setName("Metrics")
+      updateBalanceMetrics()
+      rateCounter.calculate(countMetrics.getOrElse("transactionAccepted", 0L)).foreach{
+        case (k,v) => updateMetric(k,v)
       }
+
+      updateMetric("nodeCurrentTimeMS", System.currentTimeMillis().toString)
+      updateMetric("nodeCurrentDate", new DateTime().toString())
+      updateMetric("metricsRound", round.toString)
+
     }
   }
 
+  // We may get rid of Akka so using this instead of the context scheduler
   private val scheduledFuture = executor.scheduleAtFixedRate(task, 1, periodSeconds, TimeUnit.SECONDS)
 
   def shutdown(): Boolean = scheduledFuture.cancel(false)

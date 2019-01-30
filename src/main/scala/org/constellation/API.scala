@@ -163,7 +163,8 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           } ~
           path("metrics") {
             val response = MetricsResult(
-              (dao.metricsManager ? GetMetrics)(StandardTimeout).mapTo[Map[String, String]].getOpt().getOrElse(Map())
+              (dao.metricsManager ? GetMetrics)(StandardTimeout).mapTo[Map[String, String]].getOpt().getOrElse(Map()) ++
+              dao.metrics.getMetrics
             )
             complete(response)
           } ~
@@ -192,11 +193,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           } ~
           path("nodeKeyPair") {
             complete(keyPair)
-          } ~
-          path("peerids") {
-            complete(peers.map {
-              _.data
-            })
           } ~
           path("hasGenesis") {
             if (dao.genesisObservation.isDefined) {
@@ -367,16 +363,14 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
       } ~
       path("reputation") {
         entity(as[Seq[UpdateReputation]]) { ur =>
-          secretReputation = ur.flatMap { r =>
-            r.secretReputation.map {
-              id -> _
+          ur.foreach{ r =>
+            r.secretReputation.foreach {
+              dao.secretReputation(r.id) == _
             }
-          }.toMap
-          publicReputation = ur.flatMap { r =>
-            r.publicReputation.map {
-              id -> _
+            r.publicReputation.foreach{
+              dao.publicReputation(r.id) == _
             }
-          }.toMap
+          }
           complete(StatusCodes.OK)
         }
       }

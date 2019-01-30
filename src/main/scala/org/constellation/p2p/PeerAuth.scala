@@ -20,6 +20,7 @@ import scala.util.{Failure, Try}
 
 // TODO: Needs to be merged with other peer auth flow and updated substantially
 // Don't use this yet.
+/*
 trait PeerAuth {
 
   val data: DAO
@@ -174,3 +175,4 @@ trait PeerAuth {
   // TODO: Send other peers termination message on shutdown.
 
 }
+*/

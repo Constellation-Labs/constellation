@@ -20,14 +20,13 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, Heartbeat}
-import org.joda.time.DateTime
-
+import org.constellation.util.{APIClient, Heartbeat, Metrics}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object ConstellationNode {
-import scala.concurrent.ExecutionContext
+
+  val ConstellationVersion = "1.0.10"
 
   def main(args: Array[String]): Unit = {
     val logger = Logger("ConstellationNode")
@@ -128,7 +127,8 @@ import scala.concurrent.ExecutionContext
         requestExternalAddressCheck = requestExternalAddressCheck,
         peerHttpPort = peerHttpPort,
         attemptDownload = true,
-        allowLocalhostPeers = false
+        allowLocalhostPeers = false,
+        nodeConfig = NodeConfig()
       )
     } match {
       case Failure(e) => e.printStackTrace()
@@ -146,6 +146,10 @@ import scala.concurrent.ExecutionContext
 
 }
 
+case class NodeConfig(
+                     metricIntervalSeconds: Int = 60
+                     )
+
 class ConstellationNode(val configKeyPair: KeyPair,
                         val seedPeers: Seq[HostPort],
                         val httpInterface: String,
@@ -159,14 +163,15 @@ class ConstellationNode(val configKeyPair: KeyPair,
                         val peerHttpPort: Int = 9001,
                         val peerTCPPort: Int = 9002,
                         val attemptDownload: Boolean = false,
-                        val allowLocalhostPeers: Boolean = false
+                        val allowLocalhostPeers: Boolean = false,
+                        nodeConfig: NodeConfig = NodeConfig()
                        )(
                          implicit val system: ActorSystem,
                          implicit val materialize: ActorMaterializer,
                          implicit val executionContext: ExecutionContext
                        ){
 
-  implicit val dao: DAO = new DAO()
+  implicit val dao: DAO = new DAO(nodeConfig)
   dao.updateKeyPair(configKeyPair)
   dao.idDir.createDirectoryIfNotExists(createParents = true)
 
@@ -175,6 +180,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
   dao.externlPeerHTTPPort = peerHttpPort
 
   import dao._
+
+  val metrics_ = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
+  dao.metrics = metrics_
 
   val heartBeat: ActorRef = system.actorOf(
     Props(new Heartbeat()), s"Heartbeat_$publicKeyHash"
@@ -292,12 +300,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
   }
 
   logger.info("Node started")
-  dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
-  metricsManager ! UpdateMetric("address", dao.selfAddressStr)
-  metricsManager ! UpdateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
-  metricsManager ! UpdateMetric("nodeStartDate", new DateTime(System.currentTimeMillis()).toString)
-  dao.metricsManager ! UpdateMetric("externalHost", dao.externalHostString)
-  dao.metricsManager ! UpdateMetric("version", "1.0.9")
 
   if (attemptDownload) {
     seedPeers.foreach{
