@@ -87,8 +87,6 @@ class APIClient private(host: String = "127.0.0.1", port: Int, val peerHTTPPort:
 
   private var authPassword = config.getString("auth.password")
 
-  private val authPassword = config.getString("auth.password")
-
   // doc
   implicit class AddBlocking[T](req: Future[T]) {
 
