@@ -39,7 +39,7 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
   dao.heartbeatActor ! HeartbeatSubscribe
 
   val prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT, CollectorRegistry.defaultRegistry, Clock.SYSTEM)
-  prometheusMeterRegistry.config().commonTags("application", s"Constellation_${dao.keyPair.getPublic().hash}")
+  prometheusMeterRegistry.config().commonTags("application", s"Constellation_${ dao.keyPair.getPublic.hash}")
   AkkaMetricRegistry.setRegistry(prometheusMeterRegistry)
   new JvmMemoryMetrics().bindTo(prometheusMeterRegistry)
   new JvmGcMetrics().bindTo(prometheusMeterRegistry)
@@ -48,8 +48,8 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
   new ProcessorMetrics().bindTo(prometheusMeterRegistry)
   new FileDescriptorMetrics().bindTo(prometheusMeterRegistry)
   new LogbackMetrics().bindTo(prometheusMeterRegistry)
-  new ClassLoaderMetrics()bindTo((prometheusMeterRegistry))
-  new DiskSpaceMetrics(File(System.getProperty("user.dir")).toJava).bindTo(prometheusMeterRegistry);
+  new ClassLoaderMetrics()bindTo prometheusMeterRegistry
+  new DiskSpaceMetrics(File(System.getProperty("user.dir")).toJava).bindTo(prometheusMeterRegistry)
   // new DatabaseTableMetrics().bindTo(prometheusMeterRegistry)
 
   override def receive: Receive = active(Map("id" -> dao.id.b58))

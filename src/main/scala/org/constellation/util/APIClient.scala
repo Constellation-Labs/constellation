@@ -57,6 +57,8 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
     uri
   }
 
+  def setPassword(newPassword: String) = authPassword = newPassword
+
   def base(suffix: String) = s"$baseURI/$suffix"
   private def baseUri(suffix: String) = s"$baseURI/$suffix"
 
@@ -64,12 +66,12 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
 
   private val authEnabled = config.getBoolean("auth.enabled")
   private val authId = config.getString("auth.id")
-  var authPassword = config.getString("auth.password")
+  private var authPassword = config.getString("auth.password")
 
 
   implicit class AddBlocking[T](req: Future[T]) {
     def blocking(timeout: Duration = 60.seconds): T = {
-      Await.result(req, timeout)
+      Await.result(req, timeout + 100.millis)
     }
   }
 

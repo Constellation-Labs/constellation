@@ -7,6 +7,7 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import com.softwaremill.sttp.{Response, StatusCodes}
+import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.ChannelProof
 import org.constellation.util.{APIClient, Simulation, TestNode}
@@ -17,6 +18,8 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
 import scala.util.Try
 
 class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
+
+  val logger = Logger("E2ETest")
 
   val tmpDir = "tmp"
 
@@ -52,7 +55,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
     apiClients.map { client =>
       val response = client.postSync("password/update", updatePasswordReq)
-      client.authPassword = updatePasswordReq.password
+      client.setPassword(updatePasswordReq.password)
       response
     }
 
@@ -77,14 +80,14 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
   "E2E Run" should "demonstrate full flow" in {
 
-    println("API Ports: " + apis.map{_.apiPort})
+    logger.info("API Ports: " + apis.map{_.apiPort})
 
     assert(sim.run(initialAPIs, addPeerRequests, snapshotCount = 5))
 
     val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)), randomizePorts = false, portOffset = 50)
 
     val downloadAPI = downloadNode.getAPIClient()
-    println(s"DownloadNode API Port: ${downloadAPI.apiPort}")
+    logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
     assert(sim.checkReady(Seq(downloadAPI)))
 
     val messageChannel = initialAPIs.head.getBlocking[Seq[String]]("channels").head
@@ -109,7 +112,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     val updatePasswordResponses = updatePasswords(allAPIs)
     assert(updatePasswordResponses.forall(_.code == StatusCodes.Ok))
     assert(sim.healthy(allAPIs))
-    assert(allAPIs.forall(_.authPassword == updatePasswordReq.password))
     // Thread.sleep(1000*1000)
 
     // Stop transactions
