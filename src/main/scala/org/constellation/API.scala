@@ -53,6 +53,7 @@ case class HostPort(host: String, port: Int)
 
 /** A request for a peer to be removed. */
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
+case class UpdatePassword(password: String)
 
 /** Various processing configuration data. */
 case class ProcessingConfig(
@@ -111,7 +112,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
 
   private val authEnabled = config.getBoolean("auth.enabled")
   private val authId: String = config.getString("auth.id")
-  private val authPassword: String = config.getString("auth.password")
+  private var authPassword: String = config.getString("auth.password")
 
   val getEndpoints: Route =
     extractClientIP { clientIP =>
@@ -270,54 +271,62 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
               dao.processingConfig = cu
               complete(StatusCodes.OK)
             }
+        }
+      } ~
+        pathPrefix("password") {
+          path("update") {
+            entity(as[UpdatePassword]) { pu =>
+              authPassword = pu.password
+              complete(StatusCodes.OK)
+            }
           }
         } ~
-        path("ready") { // Temp
-          if (dao.nodeState != NodeState.Ready) {
-            dao.nodeState = NodeState.Ready
-          } else {
-            dao.nodeState = NodeState.PendingDownload
-          }
-          dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
-          dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
-          complete(StatusCodes.OK)
-        } ~
-        path("random") { // Temporary
-          dao.generateRandomTX = !dao.generateRandomTX
-          dao.metricsManager ! UpdateMetric("generateRandomTX", dao.generateRandomTX.toString)
-          complete(StatusCodes.OK)
-        } ~
-        path("peerHealthCheck") {
-          val resetTimeout = 1.second
-          val breaker = new CircuitBreaker(system.scheduler,
-            maxFailures = 1,
-            callTimeout = 5.seconds,
-            resetTimeout
-          )
+      path("ready") { // Temp
+        if (dao.nodeState != NodeState.Ready) {
+          dao.nodeState = NodeState.Ready
+        } else {
+          dao.nodeState = NodeState.PendingDownload
+        }
+        dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
+        dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
+        complete(StatusCodes.OK)
+      } ~
+      path("random") { // Temporary
+        dao.generateRandomTX = !dao.generateRandomTX
+        dao.metricsManager ! UpdateMetric("generateRandomTX", dao.generateRandomTX.toString)
+        complete(StatusCodes.OK)
+      } ~
+      path("peerHealthCheck") {
+        val resetTimeout = 1.second
+        val breaker = new CircuitBreaker(system.scheduler,
+          maxFailures = 1,
+          callTimeout = 5.seconds,
+          resetTimeout
+        )
 
-          val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[Response[String]]]]
-          onCompleteWithBreaker(breaker)(response) {
-            case Success(idMap) =>
+        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[Response[String]]]]
+        onCompleteWithBreaker(breaker)(response) {
+          case Success(idMap) =>
 
-              val res = idMap.map {
-                case (id, fut) =>
-                  val resp = fut.get()
-                  id -> resp.isSuccess
-                //                val maybeResponse = fut.getOpt()
-                //                id -> maybeResponse.exists{_.isSuccess}
-              }.toSeq
+            val res = idMap.map {
+              case (id, fut) =>
+                val resp = fut.get()
+                id -> resp.isSuccess
+              //                val maybeResponse = fut.getOpt()
+              //                id -> maybeResponse.exists{_.isSuccess}
+            }.toSeq
 
-              complete(res)
+            complete(res)
 
-            case Failure(e) =>
-              logger.warn("Failed to get peer health", e)
-              complete(StatusCodes.InternalServerError)
-          }
-        } ~
-        pathPrefix("genesis") {
-          path("create") {
-            entity(as[Set[Id]]) { ids =>
-              complete(createGenesisAndInitialDistribution(ids))
+          case Failure(e) =>
+            logger.warn("Failed to get peer health", e)
+            complete(StatusCodes.InternalServerError)
+        }
+      } ~
+      pathPrefix("genesis") {
+        path("create") {
+          entity(as[Set[Id]]) { ids =>
+            complete(createGenesisAndInitialDistribution(ids))
             }
           } ~
             path("accept") {
@@ -433,4 +442,3 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
   }
 
 } // end class API
-

@@ -67,6 +67,9 @@ class APIClient private(host: String = "127.0.0.1", port: Int, val peerHTTPPort:
     uri
   }
 
+  /** Sets the password. */
+  def setPassword(newPassword: String) = authPassword = newPassword
+
   /** @return baseURI string ??. */
   def base(suffix: String) = s"$baseURI/$suffix"
 
@@ -81,6 +84,8 @@ class APIClient private(host: String = "127.0.0.1", port: Int, val peerHTTPPort:
   private val authEnabled = config.getBoolean("auth.enabled")
 
   private val authId = config.getString("auth.id")
+
+  private var authPassword = config.getString("auth.password")
 
   private val authPassword = config.getString("auth.password")
 
