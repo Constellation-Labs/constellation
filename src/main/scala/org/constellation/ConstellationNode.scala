@@ -4,7 +4,7 @@ import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{ActorRef, ActorSystem, Props, TypedActor}
+import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.RemoteAddress
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LoggingMagnet}
@@ -17,7 +17,6 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.crypto.KeyUtils
-import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
@@ -79,28 +78,30 @@ import scala.concurrent.ExecutionContext
 
       val hostName = Try{File("external_host_ip").lines.mkString}.getOrElse("127.0.0.1")
 
-
-      val keyPairPath = ".dag/key"
-      val localKeyPair = Try{File(keyPairPath).lines.mkString.x[KeyPair]}
-
-      localKeyPair match {
-        case Failure(e) =>
-          e.printStackTrace()
-        case _ =>
-      }
-
-
       // TODO: update to take from config
-      logger.info("pre Key pair")
-      val keyPair = {
-        localKeyPair.getOrElse {
-          logger.info(s"Key pair not found in $keyPairPath - Generating new key pair")
-          val kp = KeyUtils.makeKeyPair()
-          File(keyPairPath).write(kp.json)
-          kp
+    val keyPairFile = File(".dag/key")
+      val keyPair: KeyPair =
+      if (keyPairFile.notExists) {
+        logger.warn(
+          s"Key pair not found in $keyPairFile - Generating new key pair"
+        )
+        val kp = KeyUtils.makeKeyPair()
+        keyPairFile.write(kp.json)
+        kp
+      } else {
+
+        try {
+          keyPairFile.lines.mkString.x[KeyPair]
+        } catch {
+          case e: Exception =>
+            logger.error(
+              s"Keypair stored in $keyPairFile is invalid. Please delete it and rerun to create a new one.",
+              e
+            )
+          throw e
         }
       }
-      logger.info("post key pair")
+
 
 
       val portOffset = args.headOption.map{_.toInt}
@@ -199,7 +200,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
 
   val udpAddressString: String = hostName + ":" + udpPort
-  lazy val hostPort = HostPort(hostName, httpPort)
+  lazy val peerHostPort = HostPort(hostName, peerHttpPort)
   val udpAddress = new InetSocketAddress(hostName, udpPort)
 
   if (autoSetExternalAddress) {

@@ -57,13 +57,10 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
     val node1 = TestNode()
     val node2 = TestNode()
 
-    val node1Path = node1.hostPort
-    val node2Path = node2.hostPort
-
     val rpc1 = APIClient(node1.hostName, port=node1.httpPort)
     val rpc2 = APIClient(node2.hostName, port=node2.httpPort)
 
-    val addPeerResponse = rpc2.postSync("peer/add", node1Path)
+    val addPeerResponse = rpc2.postSync("peer/add", node1.peerHostPort)
 
     assert(addPeerResponse.isSuccess)
     // TODO: Change this to AddPeerFromLocal request on REST

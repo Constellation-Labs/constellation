@@ -58,6 +58,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val coreDependencies = Seq(
+  "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   "com.github.pathikrit" %% "better-files" % "3.7.0" withSources() withJavadoc(),
   "com.roundeights" %% "hasher" % "1.2.0",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0",
@@ -81,6 +82,7 @@ lazy val coreDependencies = Seq(
   "com.twitter" %% "chill" % "0.9.3",
   "com.twitter" %% "algebird-core" % "0.13.4",
   "org.typelevel" %% "cats-core" % "1.3.1",
+  "org.typelevel" %% "alleycats-core" % "0.2.0",
   "net.glxn" % "qrgen" % "1.4",
   "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.typesafe.slick" %% "slick" % "3.2.3",
