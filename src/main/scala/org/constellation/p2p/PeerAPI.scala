@@ -14,7 +14,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
 import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
-import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest, SignatureResponseWrapper, handleTransaction}
+import org.constellation.consensus.EdgeProcessor._
 import org.constellation.consensus.{Consensus, EdgeProcessor}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -143,7 +143,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 
             complete(Some(tx.hash))
           } else {
-            logger.info(s"Invalid faucet request $sendRequest")
+            logger.warn(s"Invalid faucet request $sendRequest")
             dao.metricsManager ! IncrementMetric("faucetInvalidRequest")
             complete(None)
           }
@@ -201,11 +201,12 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
                 )(dao.signatureExecutionContext, dao)
               ) {
                 result => // ^ Errors captured above
-                  val knownHost = dao.peerInfo.exists(_._2.client.hostName == ip)
+                  val maybeData = getHostAndPortFromRemoteAddress(ip)
+                  val knownHost = maybeData.exists(i => dao.peerInfo.exists(_._2.client.hostName == i.canonicalHostName))
                   val maybeResponse = result.toOption.flatMap {
                     _.toOption
                   }.map{_.copy(reRegister = !knownHost)}
-                  complete(SignatureResponseWrapper(maybeResponse).json)
+                  complete(maybeResponse)
               }
             }
           }
@@ -229,14 +230,13 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
                 EdgeProcessor.handleFinishedCheckpoint(fc)
               ) {
                 result => // ^ Errors captured above
-                  val maybeResponse = result.toOption.flatMap {
-                    _.toOption
-                  }.map{
-                    _ =>
-                      val knownHost = dao.peerInfo.exists(_._2.client.hostName == ip)
-                      FinishedCheckpointResponse(!knownHost)
-                  }
-                  complete(maybeResponse)
+                val maybeResponse = result.flatten.map {
+                  _ =>
+                    val maybeData = getHostAndPortFromRemoteAddress(ip)
+                    val knownHost = maybeData.exists(i => dao.peerInfo.exists(_._2.client.hostName == i.canonicalHostName))
+                    FinishedCheckpointResponse(!knownHost)
+                }.toOption
+                complete(maybeResponse)
               }
             }
           }

@@ -134,6 +134,17 @@ package object constellation extends POWExt
 
   def signHashWithKeyB64(hash: String, privateKey: PrivateKey): String = base64(signData(hash.getBytes())(privateKey))
 
+  def wrapFutureWithMetric[T](t: Future[T], metricPrefix: String)(implicit dao: DAO, ec: ExecutionContext): Future[T] = {
+    t.onComplete {
+      case Success(_) =>
+        dao.metricsManager ! IncrementMetric(metricPrefix + "_success")
+      case Failure(e) =>
+        metricPrefix + ": " + e.printStackTrace()
+        dao.metricsManager ! IncrementMetric(metricPrefix + "_failure")
+    }
+    t
+  }
+
   def tryWithMetric[T](t : => T, metricPrefix: String)(implicit dao: DAO): Try[T] = {
     val attempt = Try{
       t
