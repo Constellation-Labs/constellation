@@ -138,13 +138,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
       snaps.size == 1
     )
 
-<<<<<<< HEAD
   } // end test
 
 } // end E2ETest class
-=======
-  }
-
-
-}
->>>>>>> origin
