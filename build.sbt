@@ -53,10 +53,12 @@ lazy val commonSettings = Seq(
     """-DakkaActorSystemName="$AKKA_ACTOR_SYSTEM_NAME""""
   ),
   resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases",
-  resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/"
+  resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
+  resolvers += "jitpack" at "https://jitpack.io"
 )
 
 lazy val coreDependencies = Seq(
+  "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   "com.github.pathikrit" %% "better-files" % "3.7.0" withSources() withJavadoc(),
   "com.roundeights" %% "hasher" % "1.2.0",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0",
@@ -65,7 +67,10 @@ lazy val coreDependencies = Seq(
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
   "ch.megard" %% "akka-http-cors" % versions.akkaHttpCors,
   "de.heikoseeberger" %% "akka-http-json4s" % "1.16.1",
-  "org.json4s" %% "json4s-native" % "3.6.3",
+  "org.json4s" %% "json4s-native" % "3.6.2",
+  "org.json4s" %% "json4s-ext" % "3.6.2",
+  "org.json4s" %% "json4s-jackson" % "3.6.2",
+  "org.json4s" %% "json4s-ast" % "3.6.2",
   "com.madgag.spongycastle" % "core" % versions.spongyCastle,
   "com.madgag.spongycastle" % "prov" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
@@ -74,10 +79,10 @@ lazy val coreDependencies = Seq(
   "org.bouncycastle" % "bcprov-jdk15on" % "1.51",
   "org.iq80.leveldb"            % "leveldb"          % "0.10" withSources() withJavadoc(),
   "com.codahale" % "shamir" % "0.6.0" withSources() withJavadoc(),
-  "org.json4s" %% "json4s-ext" % "3.6.3",
   "com.twitter" %% "chill" % "0.9.3",
   "com.twitter" %% "algebird-core" % "0.13.4",
   "org.typelevel" %% "cats-core" % "1.3.1",
+  "org.typelevel" %% "alleycats-core" % "0.2.0",
   "net.glxn" % "qrgen" % "1.4",
   "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.typesafe.slick" %% "slick" % "3.2.3",
@@ -87,7 +92,8 @@ lazy val coreDependencies = Seq(
   "io.kontainers" %% "micrometer-akka" % "0.9.1",
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
   "io.prometheus" % "simpleclient" % versions.prometheus,
-  "io.prometheus" % "simpleclient_common" % versions.prometheus
+  "io.prometheus" % "simpleclient_common" % versions.prometheus,
+  "com.github.java-json-tools" % "json-schema-validator" % "2.2.10"
 ) ++ sttpDependencies
 
 //Test dependencies

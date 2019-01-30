@@ -10,14 +10,8 @@ import org.constellation.primitives.Schema.{Id, NodeState, SendToAddress}
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
-/** Random transaction manager object. */
 object RandomTransactionManager {
 
-  /** Generator.
-    *
-    * @param round ... Integer to be factored by roundsPerMessage.
-    * @param dao   ... Data access object.
-    */
   def generateRandomMessages(round: Long)(implicit dao: DAO): Unit =
     if (round % dao.processingConfig.roundsPerMessage == 0) {
       val cm = if (
@@ -37,17 +31,12 @@ object RandomTransactionManager {
           }
         } else None
       }
-      cm.foreach { c =>
-        dao.threadSafeMessageMemPool.put(c)
+      cm.foreach{ c =>
+        dao.threadSafeMessageMemPool.put(Seq(c))
         dao.metricsManager ! UpdateMetric("messageMemPoolSize", dao.threadSafeMessageMemPool.unsafeCount.toString)
       }
-    }
+  }
 
-  /** Trigger.
-    *
-    * @param round ... Integer to be factored by roundsPerMessage in generateRandomMessages call.
-    * @param dao   ... Data access object.
-    */
   def trigger(round: Long)(implicit dao: DAO): Future[Try[Unit]] = {
 
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
@@ -76,7 +65,6 @@ object RandomTransactionManager {
               // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
               // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
 
-              // doc
               def getRandomPeer: (Id, PeerData) = peerIds(Random.nextInt(peerIds.size))
 
               val sendRequest = SendToAddress(getRandomPeer._1.address.address, Random.nextInt(1000).toLong + 1L, normalized = false)
@@ -86,12 +74,11 @@ object RandomTransactionManager {
               dao.metricsManager ! IncrementMetric("sentTransactions")
 
               dao.threadSafeTXMemPool.put(tx)
-
-              /* // TODO: Change to transport layer call // tmp comment
-                dao.peerManager ! APIBroadcast(
-                  _.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx), peerSubset = Set(getRandomPeer._1)
-                )
-              */
+              /*            // TODO: Change to transport layer call
+      dao.peerManager ! APIBroadcast(
+        _.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx),
+        peerSubset = Set(getRandomPeer._1)
+      )*/
             }
           }
 
@@ -119,12 +106,10 @@ object RandomTransactionManager {
           }
           dao.metricsManager ! UpdateMetric("blockFormationInProgress", dao.blockFormationInProgress.toString)
 
-        } // end if
+        }
+      }
 
-      } // end if
 
-    }, "randomTransactionLoop") // end futureTryWithTimeoutMetric
-
-  } // end trigger
-
-} // end object RandomTransactionManager
+    }, "randomTransactionLoop")
+  }
+}

@@ -3,6 +3,7 @@ package org.constellation
 import java.io.{StringWriter, Writer}
 import java.net.InetSocketAddress
 import java.security.KeyPair
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
@@ -21,7 +22,6 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
-
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.crypto.{KeyUtils, SimpleWalletLike}
 import org.constellation.p2p.Download
@@ -30,32 +30,28 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, _}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{CommonEndpoints, MerkleTree, ServeUI}
-
 import org.json4s.native
 import org.json4s.native.Serialization
+
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-/** Various peer meta data. */
 case class PeerMetadata(
-                         host: String,
-                         udpPort: Int,
-                         httpPort: Int,
-                         id: Id,
-                         nodeState: NodeState = NodeState.Ready,
-                         timeAdded: Long = System.currentTimeMillis(),
-                         auxHost: String = ""
-                       )
+                     host: String,
+                     udpPort: Int,
+                     httpPort: Int,
+                     id: Id,
+                     nodeState: NodeState = NodeState.Ready,
+                     timeAdded: Long = System.currentTimeMillis(),
+                     auxHost: String = ""
+                   )
 
-/** Host port with name and port information. */
+
 case class HostPort(host: String, port: Int)
-
-/** A request for a peer to be removed. */
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
 case class UpdatePassword(password: String)
 
-/** Various processing configuration data. */
 case class ProcessingConfig(
                              maxWidth: Int = 10,
                              minCheckpointFormationThreshold: Int = 50,
@@ -66,8 +62,8 @@ case class ProcessingConfig(
                              minPeerTimeAddedSeconds: Int = 30,
                              maxActiveTipsAllowedInMemory: Int = 1000,
                              maxAcceptedCBHashesInMemory: Int = 5000,
-                             peerHealthCheckInterval: Int = 30,
-                             peerDiscoveryInterval: Int = 60,
+                             peerHealthCheckInterval : Int = 30,
+                             peerDiscoveryInterval : Int = 60,
                              snapshotHeightInterval: Int = 2,
                              snapshotHeightDelayInterval: Int = 5,
                              snapshotInterval: Int = 25,
@@ -77,19 +73,11 @@ case class ProcessingConfig(
                              formCheckpointTimeout: Int = 60,
                              maxFaucetSize: Int = 1000,
                              roundsPerMessage: Int = 10
-                           ) {
+) {
 
 }
 
-/** API class.
-  *
-  * @param udpAddress ... USP protocol address ??.
-  * @param system     ... Actor system ??.
-  * @param timeout    ... Timeout ??.
-  * @param dao        ... Data access object.
-  * @todo: See TODO comments in the class body, see "setKeyPair", "restart", "noAuthRoutes", etc.
-  * @todo: Document construction of getEndpoints and postEndpoints.
-  */
+
 class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   extends Json4sSupport
     with SimpleWalletLike
@@ -105,7 +93,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
 
   implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-dispatcher")
 
-  // Set up logger instance.
   val logger = Logger(s"APIInterface")
 
   val config: Config = ConfigFactory.load()
@@ -120,43 +107,43 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         path("channels") {
           complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
         } ~
-          path("channel" / Segment) { channelHash =>
+        path("messageService" / Segment){ channelId =>
+          complete(dao.messageService.get(channelId))
+        } ~
+        path ("channel" / Segment) { channelHash =>
 
-            val res = Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.get(channelHash))
+          val res = Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.get(channelHash))
 
-            val proof = res.flatMap { cmd =>
+          val proof = res.flatMap{ cmd =>
 
-              cmd.snapshotHash.flatMap { snapshotHash =>
+            cmd.snapshotHash.flatMap{ snapshotHash =>
 
-                tryWithMetric({
-                  KryoSerializer.deserializeCast[StoredSnapshot](File(dao.snapshotPath, snapshotHash).byteArray)
-                },
-                  "readSnapshotForMessage"
-                ).toOption.map { storedSnapshot =>
+              tryWithMetric({
+                KryoSerializer.deserializeCast[StoredSnapshot](File(dao.snapshotPath, snapshotHash).byteArray)
+              },
+                "readSnapshotForMessage"
+              ).toOption.map{ storedSnapshot =>
 
-                  val blockProof = MerkleTree(storedSnapshot.snapshot.checkpointBlocks.toList).createProof(cmd.blockHash.get)
-                  val block = storedSnapshot.checkpointCache.filter {
-                    _.checkpointBlock.get.baseHash == cmd.blockHash.get
-                  }.head.checkpointBlock.get
-                  val messageProofInput = block.transactions.map {
-                    _.hash
-                  } ++ block.checkpoint.edge.resolvedObservationEdge.data.get.messages.map {
-                    _.signedMessageData.signatures.hash
-                  }
-                  val messageProof = MerkleTree(messageProofInput.toList).createProof(cmd.channelMessage.signedMessageData.signatures.hash)
-                  ChannelProof(
-                    cmd,
-                    blockProof,
-                    messageProof
-                  )
-                }
-
+                val blockProof = MerkleTree(storedSnapshot.snapshot.checkpointBlocks.toList).createProof(cmd.blockHash.get)
+                val block = storedSnapshot.checkpointCache.filter {
+                  _.checkpointBlock.get.baseHash == cmd.blockHash.get
+                }.head.checkpointBlock.get
+                val messageProofInput = block.transactions.map{_.hash} ++ block.checkpoint.edge.resolvedObservationEdge.data.get.messages.map{_.signedMessageData.signatures.hash}
+                val messageProof = MerkleTree(messageProofInput.toList).createProof(cmd.channelMessage.signedMessageData.signatures.hash)
+                ChannelProof(
+                  cmd,
+                  blockProof,
+                  messageProof
+                )
               }
+
 
             }
 
-            complete(proof)
-          } ~
+          }
+
+          complete(proof)
+        } ~
           path("restart") { // TODO: Revisit / fix
             dao.restartNode()
             System.exit(0)
@@ -225,7 +212,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
               selfPeer.data.externalAddress.map(_.getHostName).getOrElse(""),
               selfPeer.data.externalAddress.map(_.getPort).getOrElse(0))
             val peerMap = dao.peerInfo.toSeq.map {
-              case (id, pd) => Node(id.address.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
+              case (id,pd) => Node(id.address.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
             } :+ self
 
             complete(
@@ -240,6 +227,19 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
 
   private val postEndpoints =
     post {
+      pathPrefix("channel") {
+        path("open") {
+          entity(as[ChannelOpenRequest]) { request =>
+            ChannelMessage.createGenesis(request)
+            complete(StatusCodes.Created)
+          }
+        } ~
+        path("send") {
+          entity(as[ChannelSendRequest]) { send =>
+            complete(ChannelMessage.createMessages(send))
+          }
+        }
+      } ~
       pathPrefix("peer") {
         path("remove") {
           entity(as[RemovePeerRequest]) { e =>
@@ -247,30 +247,28 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
             complete(StatusCodes.OK)
           }
         } ~
-          path("add") {
-            entity(as[HostPort]) { hp =>
-              onComplete(PeerManager.attemptRegisterPeer(hp)) { result =>
-                logger.info(s"Add Peer Request: $hp. Result: $result")
-                complete(StatusCodes.OK)
-              }
-
+        path("add") {
+          entity(as[HostPort]) { hp =>
+            onSuccess(PeerManager.attemptRegisterPeer(hp)) { result =>
+              logger.info(s"Add Peer Request: $hp. Result: $result")
+              complete(StatusCode.int2StatusCode(result.code))
             }
+
           }
+        }
       } ~
-        pathPrefix("download") {
-          path("start") {
-            Future {
-              Download.download()
-            }(dao.edgeExecutionContext)
+      pathPrefix("download") {
+        path("start") {
+          Future{Download.download()}(dao.edgeExecutionContext)
+          complete(StatusCodes.OK)
+        }
+      } ~
+      pathPrefix("config") {
+        path("update") {
+          entity(as[ProcessingConfig]) { cu =>
+            dao.processingConfig = cu
             complete(StatusCodes.OK)
           }
-        } ~
-        pathPrefix("config") {
-          path("update") {
-            entity(as[ProcessingConfig]) { cu =>
-              dao.processingConfig = cu
-              complete(StatusCodes.OK)
-            }
         }
       } ~
         pathPrefix("password") {
@@ -327,75 +325,75 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         path("create") {
           entity(as[Set[Id]]) { ids =>
             complete(createGenesisAndInitialDistribution(ids))
-            }
-          } ~
-            path("accept") {
-              entity(as[GenesisObservation]) { go =>
-                dao.acceptGenesis(go, setAsTips = true)
-                // TODO: Report errors and add validity check
-                complete(StatusCodes.OK)
-              }
-            }
-        } ~
-        path("send") {
-          entity(as[SendToAddress]) { sendRequest =>
-
-            logger.info(s"send transaction to address $sendRequest")
-
-            val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amountActual, dao.keyPair, normalized = false)
-            dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
-
-            complete(tx.hash)
           }
         } ~
-        path("addPeer") {
-          entity(as[PeerMetadata]) { e =>
-
-            Future {
-              peerManager ! e
-            }
-
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("ip") {
-          entity(as[String]) { externalIp =>
-            var ipp: String = ""
-            val addr =
-              externalIp.replaceAll('"'.toString, "").split(":") match {
-                case Array(ip, port) =>
-                  ipp = ip
-                  externalHostString = ip
-                  file"external_host_ip".write(ip)
-                  new InetSocketAddress(ip, port.toInt)
-                case a@_ => {
-                  logger.debug(s"Unmatched Array: $a")
-                  throw new RuntimeException(s"Bad Match: $a")
-                }
-              }
-            logger.debug(s"Set external IP RPC request $externalIp $addr")
-            dao.externalAddress = Some(addr)
-            dao.metricsManager ! UpdateMetric("externalHost", dao.externalHostString)
-            if (ipp.nonEmpty)
-              dao.apiAddress = Some(new InetSocketAddress(ipp, 9000))
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("reputation") {
-          entity(as[Seq[UpdateReputation]]) { ur =>
-            secretReputation = ur.flatMap { r =>
-              r.secretReputation.map {
-                id -> _
-              }
-            }.toMap
-            publicReputation = ur.flatMap { r =>
-              r.publicReputation.map {
-                id -> _
-              }
-            }.toMap
+        path("accept") {
+          entity(as[GenesisObservation]) { go =>
+            dao.acceptGenesis(go, setAsTips = true)
+            // TODO: Report errors and add validity check
             complete(StatusCodes.OK)
           }
         }
+      } ~
+      path("send"){
+        entity(as[SendToAddress]) { sendRequest =>
+
+          logger.info(s"send transaction to address $sendRequest")
+
+          val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amountActual, dao.keyPair, normalized = false)
+          dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
+
+          complete(tx.hash)
+        }
+      } ~
+      path("addPeer"){
+        entity(as[PeerMetadata]) { e =>
+
+          Future {
+            peerManager ! e
+          }
+
+          complete(StatusCodes.OK)
+        }
+      } ~
+      path("ip") {
+        entity(as[String]) { externalIp =>
+          var ipp: String = ""
+          val addr =
+            externalIp.replaceAll('"'.toString, "").split(":") match {
+              case Array(ip, port) =>
+                ipp = ip
+                externalHostString = ip
+                file"external_host_ip".write(ip)
+                new InetSocketAddress(ip, port.toInt)
+              case a @ _ => {
+                logger.debug(s"Unmatched Array: $a")
+                throw new RuntimeException(s"Bad Match: $a")
+              }
+            }
+          logger.debug(s"Set external IP RPC request $externalIp $addr")
+          dao.externalAddress = Some(addr)
+          dao.metricsManager ! UpdateMetric("externalHost", dao.externalHostString)
+          if (ipp.nonEmpty)
+            dao.apiAddress = Some(new InetSocketAddress(ipp, 9000))
+          complete(StatusCodes.OK)
+        }
+      } ~
+      path("reputation") {
+        entity(as[Seq[UpdateReputation]]) { ur =>
+          secretReputation = ur.flatMap { r =>
+            r.secretReputation.map {
+              id -> _
+            }
+          }.toMap
+          publicReputation = ur.flatMap { r =>
+            r.publicReputation.map {
+              id -> _
+            }
+          }.toMap
+          complete(StatusCodes.OK)
+        }
+      }
     }
 
   private val noAuthRoutes =
@@ -404,9 +402,9 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
       path("health") {
         complete(StatusCodes.OK)
       } ~
-        path("favicon.ico") {
-          getFromResource("favicon.ico")
-        }
+      path("favicon.ico") {
+        getFromResource("favicon.ico")
+      }
     }
 
   private val mainRoutes: Route = cors() {
@@ -417,14 +415,9 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
     }
   }
 
-  /** Returns authentificated id ??.
-    *
-    * @param credentials ... The credentials ??.
-    * @return Authentificated id as String option or None.
-    */
   private def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
     credentials match {
-      case p@Credentials.Provided(id)
+      case p @ Credentials.Provided(id)
         if id == authId && p.verify(authPassword) =>
         Some(id)
       case _ => None
@@ -441,4 +434,4 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
     noAuthRoutes ~ mainRoutes
   }
 
-} // end class API
+}
