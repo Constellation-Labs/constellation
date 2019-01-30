@@ -34,7 +34,6 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
 
   var lastCheckTime: Long = System.currentTimeMillis()
   var lastTXCount: Long = 0
-  implicit val timeout: Timeout = Timeout(15, TimeUnit.SECONDS)
 
   dao.heartbeatActor ! HeartbeatSubscribe
 
