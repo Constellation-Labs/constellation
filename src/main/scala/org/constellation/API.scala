@@ -50,6 +50,7 @@ case class PeerMetadata(
 
 case class HostPort(host: String, port: Int)
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
+case class UpdatePassword(password: String)
 
 case class ProcessingConfig(
                              maxWidth: Int = 10,
@@ -98,7 +99,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
 
   private val authEnabled = config.getBoolean("auth.enabled")
   private val authId: String = config.getString("auth.id")
-  private val authPassword: String = config.getString("auth.password")
+  private var authPassword: String = config.getString("auth.password")
 
   val getEndpoints: Route =
     extractClientIP { clientIP =>
@@ -256,6 +257,14 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           }
         }
       } ~
+        pathPrefix("password") {
+          path("update") {
+            entity(as[UpdatePassword]) { pu =>
+              authPassword = pu.password
+              complete(StatusCodes.OK)
+            }
+          }
+        } ~
       path("ready") { // Temp
         if (dao.nodeState != NodeState.Ready) {
           dao.nodeState = NodeState.Ready
