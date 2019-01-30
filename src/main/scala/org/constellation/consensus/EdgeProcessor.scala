@@ -25,7 +25,7 @@ object EdgeProcessor {
       implicit dao: DAO): Unit = {
 
     if (checkpointCacheData.checkpointBlock.isEmpty) {
-      dao.metricsManager ! IncrementMetric("acceptCheckpointCalledWithEmptyCB")
+      dao.metrics.incrementMetric("acceptCheckpointCalledWithEmptyCB")
     } else {
 
       val cb = checkpointCacheData.checkpointBlock.get
@@ -38,9 +38,9 @@ object EdgeProcessor {
         if (height.isEmpty) checkpointCacheData.height else height
 
       if (fallbackHeight.isEmpty) {
-        dao.metricsManager ! IncrementMetric("heightEmpty")
+        dao.metrics.incrementMetric("heightEmpty")
       } else {
-        dao.metricsManager ! IncrementMetric("heightNonEmpty")
+        dao.metrics.incrementMetric("heightNonEmpty")
       }
 
       cb.checkpoint.edge.data.messages.foreach {
@@ -49,12 +49,12 @@ object EdgeProcessor {
                                  ChannelMessageMetadata(m, Some(cb.baseHash)))
           dao.messageService.put(m.signedMessageData.signatures.hash,
                                  ChannelMessageMetadata(m, Some(cb.baseHash)))
-          dao.metricsManager ! IncrementMetric("messageAccepted")
+          dao.metrics.incrementMetric("messageAccepted")
       }
 
       // Accept transactions
       cb.transactions.foreach { t =>
-        dao.metricsManager ! IncrementMetric("transactionAccepted")
+        dao.metrics.incrementMetric("transactionAccepted")
         t.store(
           TransactionCacheData(
             t,
@@ -67,7 +67,7 @@ object EdgeProcessor {
           ))
         t.ledgerApply()
       }
-      dao.metricsManager ! IncrementMetric("checkpointAccepted")
+      dao.metrics.incrementMetric("checkpointAccepted")
       cb.store(
         CheckpointCacheData(
           Some(cb),
@@ -125,25 +125,23 @@ object EdgeProcessor {
     val maybeTransactions =
       dao.threadSafeTXMemPool.pull(dao.minCheckpointFormationThreshold)
 
-    dao.metricsManager ! IncrementMetric("attemptFormCheckpointCalls")
+    dao.metrics.incrementMetric("attemptFormCheckpointCalls")
 
     if (maybeTransactions.isEmpty) {
-      dao.metricsManager ! IncrementMetric(
-        "attemptFormCheckpointInsufficientTX")
+      dao.metrics.incrementMetric("attemptFormCheckpointInsufficientTX")
     }
 
     maybeTransactions.foreach { transactions =>
       val maybeTips = dao.threadSafeTipService.pull()
       if (maybeTips.isEmpty) {
-        dao.metricsManager ! IncrementMetric(
-          "attemptFormCheckpointInsufficientTipsOrFacilitators")
+        dao.metrics.incrementMetric("attemptFormCheckpointInsufficientTipsOrFacilitators")
       }
 
       maybeTips.foreach {
         case (tipSOE, facils) =>
           val checkpointBlock =
             createCheckpointBlock(transactions, tipSOE, messages)(dao.keyPair)
-          dao.metricsManager ! IncrementMetric("checkpointBlocksCreated")
+          dao.metrics.incrementMetric("checkpointBlocksCreated")
 
           val finalFacilitators = facils.keySet
 
@@ -180,8 +178,7 @@ object EdgeProcessor {
             val m = t.mapValues(_.get())
             logger.warn(s"At least one signature request failed", m)
 
-            dao.metricsManager ! IncrementMetric(
-              "formCheckpointSignatureResponseEmpty")
+            dao.metrics.incrementMetric("formCheckpointSignatureResponseEmpty")
           }
           cpBlocksOpt.foreach { cpBlocks =>
             val finalCB = cpBlocks.reduce(_ + _) + checkpointBlock
@@ -252,7 +249,7 @@ object EdgeProcessor {
           resp.flatMap {
             case Some(ccd) => Future.successful(ccd)
             case None =>
-              dao.metricsManager ! IncrementMetric("resolvePeerIncrement")
+              dao.metrics.incrementMetric("resolvePeerIncrement")
               innerResolve(rest)
           }
 
@@ -272,7 +269,7 @@ object EdgeProcessor {
     resolved.map { checkpointCacheData =>
       if (!dao.checkpointService.contains(
             checkpointCacheData.checkpointBlock.get.baseHash)) {
-        dao.metricsManager ! IncrementMetric("resolveAcceptCBCall")
+        dao.metrics.incrementMetric("resolveAcceptCBCall")
         acceptWithResolveAttempt(checkpointCacheData)
       }
       true
@@ -290,11 +287,9 @@ object EdgeProcessor {
       h -> dao.checkpointService.contains(h)
     }
     if (parentExists.forall(_._2)) {
-      dao.metricsManager ! IncrementMetric(
-        "resolveFinishedCheckpointParentsPresent")
+      dao.metrics.incrementMetric("resolveFinishedCheckpointParentsPresent")
     } else {
-      dao.metricsManager ! IncrementMetric(
-        "resolveFinishedCheckpointParentMissing")
+      dao.metrics.incrementMetric("resolveFinishedCheckpointParentMissing")
       parentExists.filterNot(_._2).foreach {
         case (h, _) =>
           wrapFutureWithMetric(
@@ -442,7 +437,7 @@ object Snapshot {
     val cbData = snapshot.checkpointBlocks.map { dao.checkpointService.get }
 
     if (cbData.exists { _.isEmpty }) {
-      dao.metricsManager ! IncrementMetric("snapshotCBAcceptQueryFailed")
+      dao.metrics.incrementMetric("snapshotCBAcceptQueryFailed")
     }
 
 
@@ -456,7 +451,7 @@ object Snapshot {
         _.copy(snapshotHash = Some(snapshot.hash)),
         ChannelMessageMetadata(message, Some(cb.baseHash), Some(snapshot.hash))
       )
-      dao.metricsManager ! IncrementMetric("messageSnapshotHashUpdated")
+      dao.metrics.incrementMetric("messageSnapshotHashUpdated")
     }
 
     for (cbOpt <- cbData;
@@ -467,7 +462,7 @@ object Snapshot {
       // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
       tx.ledgerApplySnapshot()
       dao.transactionService.delete(Set(tx.hash))
-      dao.metricsManager ! IncrementMetric("snapshotAppliedBalance")
+      dao.metrics.incrementMetric("snapshotAppliedBalance")
     }
   }
 

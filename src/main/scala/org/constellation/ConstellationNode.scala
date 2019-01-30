@@ -20,7 +20,7 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, Heartbeat, Metrics}
+import org.constellation.util.{APIClient, Metrics}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -184,18 +184,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   val metrics_ = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
   dao.metrics = metrics_
 
-  val heartBeat: ActorRef = system.actorOf(
-    Props(new Heartbeat()), s"Heartbeat_$publicKeyHash"
-  )
-
-  dao.heartbeatActor = heartBeat
-  // Setup actors
-  val metricsManager: ActorRef = system.actorOf(
-    Props(new MetricsManager()), s"MetricsManager_$publicKeyHash"
-  )
-
-  dao.metricsManager = metricsManager
-
+  val randomTXManager = new RandomTransactionManager()
 
   val ipManager = IPManager()
 

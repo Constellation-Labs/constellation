@@ -98,7 +98,7 @@ class ThreadSafeTipService() {
 
   private var thresholdMetCheckpoints: Map[String, TipData] = Map()
   var acceptedCBSinceSnapshot: Seq[String] = Seq()
-  private var facilitators: Map[Id, PeerData] = Map()
+  var facilitators: Map[Id, PeerData] = Map()
   private var snapshot: Snapshot = Snapshot.snapshotZero
 
   def tips: Map[String, TipData] = thresholdMetCheckpoints
@@ -133,12 +133,12 @@ class ThreadSafeTipService() {
 
     latestSnapshotInfo.snapshotCache.foreach{
       h =>
-        dao.metricsManager ! IncrementMetric("checkpointAccepted")
+        dao.metrics.incrementMetric("checkpointAccepted")
         dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
         h.checkpointBlock.get.storeSOE()
         h.checkpointBlock.get.transactions.foreach{
           _ =>
-            dao.metricsManager ! IncrementMetric("transactionAccepted")
+            dao.metrics.incrementMetric("transactionAccepted")
         }
     }
 
@@ -146,18 +146,14 @@ class ThreadSafeTipService() {
       h =>
         dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
         h.checkpointBlock.get.storeSOE()
-        dao.metricsManager ! IncrementMetric("checkpointAccepted")
+        dao.metrics.incrementMetric("checkpointAccepted")
         h.checkpointBlock.get.transactions.foreach{
           _ =>
-          dao.metricsManager ! IncrementMetric("transactionAccepted")
+          dao.metrics.incrementMetric("transactionAccepted")
         }
     }
 
-    dao.metricsManager ! UpdateMetric(
-      "acceptCBCacheMatchesAcceptedSize",
-      (latestSnapshotInfo.acceptedCBSinceSnapshot.size ==
-        latestSnapshotInfo.acceptedCBSinceSnapshotCache.size).toString
-    )
+    dao.metrics.updateMetric("acceptCBCacheMatchesAcceptedSize", (latestSnapshotInfo.acceptedCBSinceSnapshot.size == latestSnapshotInfo.acceptedCBSinceSnapshotCache.size).toString)
 
 
   }
@@ -179,7 +175,7 @@ class ThreadSafeTipService() {
 
   def syncBufferAccept(cb: CheckpointCacheData)(implicit dao: DAO): Unit = {
     syncBuffer :+= cb
-    dao.metricsManager ! UpdateMetric("syncBufferSize", syncBuffer.size.toString)
+    dao.metrics.updateMetric("syncBufferSize", syncBuffer.size.toString)
   }
 
   def attemptSnapshot()(implicit dao: DAO): Unit = this.synchronized{
@@ -187,13 +183,13 @@ class ThreadSafeTipService() {
     // Sanity check memory protection
     if (thresholdMetCheckpoints.size > dao.processingConfig.maxActiveTipsAllowedInMemory) {
       thresholdMetCheckpoints = thresholdMetCheckpoints.slice(0, 100)
-      dao.metricsManager ! IncrementMetric("memoryExceeded_thresholdMetCheckpoints")
-      dao.metricsManager ! UpdateMetric("activeTips", thresholdMetCheckpoints.size.toString)
+      dao.metrics.incrementMetric("memoryExceeded_thresholdMetCheckpoints")
+      dao.metrics.updateMetric("activeTips", thresholdMetCheckpoints.size.toString)
     }
     if (acceptedCBSinceSnapshot.size > dao.processingConfig.maxAcceptedCBHashesInMemory) {
       acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.slice(0, 100)
-      dao.metricsManager ! IncrementMetric("memoryExceeded_acceptedCBSinceSnapshot")
-      dao.metricsManager ! UpdateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
+      dao.metrics.incrementMetric("memoryExceeded_acceptedCBSinceSnapshot")
+      dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
     }
 
 
@@ -207,13 +203,13 @@ class ThreadSafeTipService() {
     if (dao.nodeState == NodeState.Ready && acceptedCBSinceSnapshot.nonEmpty) {
 
       val minTipHeight = getMinTipHeight()
-      dao.metricsManager ! UpdateMetric("minTipHeight", minTipHeight.toString)
+      dao.metrics.updateMetric("minTipHeight", minTipHeight.toString)
 
       val nextHeightInterval = lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval
 
       val canSnapshot = minTipHeight > (nextHeightInterval + dao.processingConfig.snapshotHeightDelayInterval)
       if (!canSnapshot) {
-        dao.metricsManager ! IncrementMetric("snapshotHeightIntervalConditionNotMet")
+        dao.metrics.incrementMetric("snapshotHeightIntervalConditionNotMet")
       } else {
 
         val maybeDatas = acceptedCBSinceSnapshot.map(dao.checkpointService.get)
@@ -225,7 +221,7 @@ class ThreadSafeTipService() {
         }
 
         if (blocksWithinHeightInterval.isEmpty) {
-          dao.metricsManager ! IncrementMetric("snapshotNoBlocksWithinHeightInterval")
+          dao.metrics.incrementMetric("snapshotNoBlocksWithinHeightInterval")
         } else {
 
           val blockCaches = blocksWithinHeightInterval.map {
@@ -240,7 +236,7 @@ class ThreadSafeTipService() {
           // TODO: Make this a future and have it not break the unit test
           // Also make the db puts blocking, may help for different issue
           if (snapshot != Snapshot.snapshotZero) {
-            dao.metricsManager ! IncrementMetric("snapshotCount")
+            dao.metrics.incrementMetric("snapshotCount")
 
             // Write snapshot to file
             tryWithMetric({
@@ -249,7 +245,7 @@ class ThreadSafeTipService() {
               }
               if (maybeBlocks.exists(_.exists(_.checkpointBlock.isEmpty))) {
                 // TODO : This should never happen, if it does we need to reset the node state and redownload
-                dao.metricsManager ! IncrementMetric("snapshotWriteToDiskMissingData")
+                dao.metrics.incrementMetric("snapshotWriteToDiskMissingData")
               }
               val flatten = maybeBlocks.flatten.sortBy(_.checkpointBlock.map {
                 _.baseHash
@@ -265,8 +261,8 @@ class ThreadSafeTipService() {
 
 
             totalNumCBsInShapshots += snapshot.checkpointBlocks.size
-            dao.metricsManager ! UpdateMetric("totalNumCBsInShapshots", totalNumCBsInShapshots.toString)
-            dao.metricsManager ! UpdateMetric("lastSnapshotHash", snapshot.hash)
+            dao.metrics.updateMetric("totalNumCBsInShapshots", totalNumCBsInShapshots.toString)
+            dao.metrics.updateMetric("lastSnapshotHash", snapshot.hash)
           }
 
           // TODO: Verify from file
@@ -275,17 +271,17 @@ class ThreadSafeTipService() {
 
           val lastSnapshotVerification = File(dao.snapshotPath, snapshot.lastSnapshot).read
           if (lastSnapshotVerification.isEmpty) {
-            dao.metricsManager ! IncrementMetric("snapshotVerificationFailed")
+            dao.metrics.incrementMetric("snapshotVerificationFailed")
           } else {
-            dao.metricsManager ! IncrementMetric("snapshotVerificationCount")
+            dao.metrics.incrementMetric("snapshotVerificationCount")
             if (
               !lastSnapshotVerification.get.checkpointBlocks.map {
                 dao.checkpointService.get
               }.forall(_.exists(_.checkpointBlock.nonEmpty))
             ) {
-              dao.metricsManager ! IncrementMetric("snapshotCBVerificationFailed")
+              dao.metrics.incrementMetric("snapshotCBVerificationFailed")
             } else {
-              dao.metricsManager ! IncrementMetric("snapshotCBVerificationCount")
+              dao.metrics.incrementMetric("snapshotCBVerificationCount")
             }
 
           }
@@ -295,9 +291,9 @@ class ThreadSafeTipService() {
           lastSnapshotHeight = nextHeightInterval
           snapshot = nextSnapshot
           acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.filterNot(hashesForNextSnapshot.contains)
-          dao.metricsManager ! UpdateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
-          dao.metricsManager ! UpdateMetric("lastSnapshotHeight", lastSnapshotHeight.toString)
-          dao.metricsManager ! UpdateMetric("nextSnapshotHeight", (lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval).toString)
+          dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
+          dao.metrics.updateMetric("lastSnapshotHeight", lastSnapshotHeight.toString)
+          dao.metrics.updateMetric("nextSnapshotHeight", (lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval).toString)
         }
       }
     }
@@ -326,7 +322,7 @@ class ThreadSafeTipService() {
         sortedFacils(_)
       }
       val finalFacilitators = selectedFacils.toMap
-      dao.metricsManager ! UpdateMetric("activeTips", thresholdMetCheckpoints.size.toString)
+      dao.metrics.updateMetric("activeTips", thresholdMetCheckpoints.size.toString)
 
       Some(tipSOE -> finalFacilitators)
     } else None
@@ -340,7 +336,7 @@ class ThreadSafeTipService() {
       _.baseHash
     }.getOrElse(""))) {
 
-      dao.metricsManager ! IncrementMetric("checkpointAcceptBlockAlreadyStored")
+      dao.metrics.incrementMetric("checkpointAcceptBlockAlreadyStored")
 
     } else {
 
@@ -356,7 +352,7 @@ class ThreadSafeTipService() {
               case TipData(block, numUses) =>
 
                 def doRemove(): Option[String] = {
-                  dao.metricsManager ! IncrementMetric("checkpointTipsRemoved")
+                  dao.metrics.incrementMetric("checkpointTipsRemoved")
                   Some(block.baseHash)
                 }
 
@@ -378,7 +374,7 @@ class ThreadSafeTipService() {
               case TipData(block, numUses) =>
 
                 def doUpdate(): Option[(String, TipData)] = {
-                  dao.metricsManager ! IncrementMetric("checkpointTipsIncremented")
+                  dao.metrics.incrementMetric("checkpointTipsIncremented")
                   Some(block.baseHash -> TipData(block, numUses + 1))
                 }
 
@@ -394,10 +390,10 @@ class ThreadSafeTipService() {
           keysToRemove
 
         if (acceptedCBSinceSnapshot.contains(checkpointBlock.baseHash)) {
-          dao.metricsManager ! IncrementMetric("checkpointAcceptedButAlreadyInAcceptedCBSinceSnapshot")
+          dao.metrics.incrementMetric("checkpointAcceptedButAlreadyInAcceptedCBSinceSnapshot")
         } else {
           acceptedCBSinceSnapshot = acceptedCBSinceSnapshot :+ checkpointBlock.baseHash
-          dao.metricsManager ! UpdateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
+          dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
         }
 
       }

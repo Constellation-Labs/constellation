@@ -16,6 +16,8 @@ import org.constellation.{ConstellationNode, DAO}
 import org.joda.time.DateTime
 
 import scala.collection.concurrent.TrieMap
+import scala.concurrent.Future
+import scala.util.Try
 
 /**
   * For Grafana usage
@@ -77,13 +79,10 @@ class TransactionRateTracker()(implicit dao: DAO){
   * @param periodSeconds: How often to recalculate moving window metrics (e.g. TPS)
   * @param dao: Data access object
   */
-class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) {
+class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
+  extends Periodic("Metrics", periodSeconds) {
 
   val logger = Logger("Metrics")
-
-  private val executor = new ScheduledThreadPoolExecutor(1)
-
-  private var round: Long = 0L
 
   private val stringMetrics : TrieMap[String, String] = TrieMap()
   private val countMetrics : TrieMap[String, Long] = TrieMap()
@@ -141,29 +140,17 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) {
     updateMetric("balances", balancesMetrics)
 
   }
-
   /**
     * Recalculates window based / periodic metrics
     */
-  private val task = new Runnable {
-    def run(): Unit = {
-      round += 1
-      Thread.currentThread().setName("Metrics")
-      updateBalanceMetrics()
-      rateCounter.calculate(countMetrics.getOrElse("transactionAccepted", 0L)).foreach{
-        case (k,v) => updateMetric(k,v)
-      }
-
-      updateMetric("nodeCurrentTimeMS", System.currentTimeMillis().toString)
-      updateMetric("nodeCurrentDate", new DateTime().toString())
-      updateMetric("metricsRound", round.toString)
-
+  override def trigger(): concurrent.Future[Any] = Future {
+    updateBalanceMetrics()
+    rateCounter.calculate(countMetrics.getOrElse("transactionAccepted", 0L)).foreach {
+      case (k, v) => updateMetric(k, v)
     }
-  }
-
-  // We may get rid of Akka so using this instead of the context scheduler
-  private val scheduledFuture = executor.scheduleAtFixedRate(task, 1, periodSeconds, TimeUnit.SECONDS)
-
-  def shutdown(): Boolean = scheduledFuture.cancel(false)
+    updateMetric("nodeCurrentTimeMS", System.currentTimeMillis().toString)
+    updateMetric("nodeCurrentDate", new DateTime().toString())
+    updateMetric("metricsRound", round.toString)
+  }(scala.concurrent.ExecutionContext.global)
 
 }

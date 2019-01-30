@@ -4,6 +4,7 @@ import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedK
 import java.security.{KeyFactory, SecureRandom, _}
 import java.util.Base64
 
+import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.Logger
 import constellation.SHA256Ext
 import org.spongycastle.jce.provider.BouncyCastleProvider
@@ -206,15 +207,8 @@ object KeyUtils {
   def publicKeyToAddressString(
                                 key: PublicKey
                               ): String = {
-    val res = Base58.encode(base64(key.getEncoded).sha256.sha256.getBytes())
-    keyHashToAddress(res)
-  }
-
-  def publicKeysToAddressString(
-                                 key: Seq[PublicKey]
-                               ): String = {
-    val res = Base58.encode(key.map{z => base64(z.getEncoded)}.mkString.sha256.sha256.getBytes())
-    keyHashToAddress(res)
+    val keyHash = Hashing.sha256().hashBytes(key.getEncoded).toString
+    keyHashToAddress(keyHash)
   }
 
 

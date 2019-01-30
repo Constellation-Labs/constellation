@@ -16,11 +16,9 @@ trait NodeData {
   // var dbActor : SwayDBDatastore = _
   var peerManager: ActorRef = _
   var consensus: ActorRef = _
-  var metricsManager: ActorRef = _
   var metrics: Metrics = _
   var edgeProcessor: ActorRef = _
   var memPoolManager: ActorRef = _
-  var heartbeatActor: ActorRef = _
   var cpSigner: ActorRef = _
 
   @volatile var downloadMode: Boolean = true

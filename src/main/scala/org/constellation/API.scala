@@ -163,7 +163,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           } ~
           path("metrics") {
             val response = MetricsResult(
-              (dao.metricsManager ? GetMetrics)(StandardTimeout).mapTo[Map[String, String]].getOpt().getOrElse(Map()) ++
               dao.metrics.getMetrics
             )
             complete(response)
@@ -268,12 +267,12 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           dao.nodeState = NodeState.PendingDownload
         }
         dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
-        dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
+        dao.metrics.updateMetric("nodeState", dao.nodeState.toString)
         complete(StatusCodes.OK)
       } ~
       path("random") { // Temporary
         dao.generateRandomTX = !dao.generateRandomTX
-        dao.metricsManager ! UpdateMetric("generateRandomTX", dao.generateRandomTX.toString)
+        dao.metrics.updateMetric("generateRandomTX", dao.generateRandomTX.toString)
         complete(StatusCodes.OK)
       } ~
       path("peerHealthCheck") {
@@ -355,7 +354,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
             }
           logger.debug(s"Set external IP RPC request $externalIp $addr")
           dao.externalAddress = Some(addr)
-          dao.metricsManager ! UpdateMetric("externalHost", dao.externalHostString)
+          dao.metrics.updateMetric("externalHost", dao.externalHostString)
           if (ipp.nonEmpty)
             dao.apiAddress = Some(new InetSocketAddress(ipp, 9000))
           complete(StatusCodes.OK)

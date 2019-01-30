@@ -208,11 +208,7 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
 
   (dao.id _).when().returns(Fixtures.id)
 
-  val hbProbe = TestProbe.apply("hearthbeat")
-  dao.heartbeatActor = hbProbe.ref
-
   val metricsProbe = TestProbe.apply("metricsManager")
-  dao.metricsManager = metricsProbe.ref
 
   val peerProbe = TestProbe.apply("peerManager")
   dao.peerManager = peerProbe.ref

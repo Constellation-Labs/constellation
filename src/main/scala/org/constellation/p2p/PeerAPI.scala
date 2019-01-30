@@ -138,12 +138,12 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 
             val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amountActual, dao.keyPair, normalized = false)
             dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
-            dao.metricsManager ! IncrementMetric("faucetRequest")
+            dao.metrics.incrementMetric("faucetRequest")
 
             complete(Some(tx.hash))
           } else {
             logger.warn(s"Invalid faucet request $sendRequest")
-            dao.metricsManager ! IncrementMetric("faucetInvalidRequest")
+            dao.metrics.incrementMetric("faucetInvalidRequest")
             complete(None)
           }
         }
@@ -173,7 +173,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 */
 
             entity(as[SignatureRequest]) { sr =>
-              dao.metricsManager ! IncrementMetric("peerApiRXSignatureRequest")
+              dao.metrics.incrementMetric("peerApiRXSignatureRequest")
               onComplete(
                 futureTryWithTimeoutMetric(
                   EdgeProcessor.handleSignatureRequest(sr),
@@ -206,7 +206,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 
             entity(as[FinishedCheckpoint]) { fc =>
               // TODO: Validation / etc.
-              dao.metricsManager ! IncrementMetric("peerApiRXFinishedCheckpoint")
+              dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
               onComplete(
                 EdgeProcessor.handleFinishedCheckpoint(fc)
               ) {
@@ -230,7 +230,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
       put {
         entity(as[Transaction]) {
           tx =>
-            dao.metricsManager ! IncrementMetric("transactionRXByAPI")
+            dao.metrics.incrementMetric("transactionRXByAPI")
             // TDOO: Change to ask later for status info
             //   dao.edgeProcessor ! HandleTransaction(tx)
             complete(StatusCodes.OK)

@@ -5,7 +5,7 @@ import java.security.KeyPair
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import org.constellation.crypto.KeyUtils
-import org.constellation.{ConstellationNode, HostPort}
+import org.constellation.{ConstellationNode, HostPort, NodeConfig}
 
 import scala.concurrent.ExecutionContext
 import scala.util.Try
@@ -43,7 +43,8 @@ object TestNode {
       peerHttpPort = randomPeerPort,
       peerTCPPort = randomPeerTCPPort,
       attemptDownload = seedHosts.nonEmpty,
-      allowLocalhostPeers = true
+      allowLocalhostPeers = true,
+      nodeConfig = NodeConfig(10)
     )
 
     nodes = nodes :+ node

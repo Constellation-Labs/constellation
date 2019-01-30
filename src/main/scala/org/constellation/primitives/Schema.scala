@@ -560,9 +560,9 @@ object Schema {
       )
 
       if (validation.isValid) {
-        dao.metricsManager ! IncrementMetric("checkpointValidationSuccess")
+        dao.metrics.incrementMetric("checkpointValidationSuccess")
       } else {
-        dao.metricsManager ! IncrementMetric("checkpointValidationFailure")
+        dao.metrics.incrementMetric("checkpointValidationFailure")
       }
 
       // TODO: Return Validation instead of Boolean

@@ -111,7 +111,6 @@ package object constellation extends POWExt
   }
 
   implicit def pubKeyToAddress(key: PublicKey): AddressMetaData =  AddressMetaData(publicKeyToAddressString(key))
-  implicit def pubKeysToAddress(key: Seq[PublicKey]): AddressMetaData =  AddressMetaData(publicKeysToAddressString(key))
 
   implicit class KeyPairFix(kp: KeyPair) {
 
@@ -138,10 +137,10 @@ package object constellation extends POWExt
   def wrapFutureWithMetric[T](t: Future[T], metricPrefix: String)(implicit dao: DAO, ec: ExecutionContext): Future[T] = {
     t.onComplete {
       case Success(_) =>
-        dao.metricsManager ! IncrementMetric(metricPrefix + "_success")
+        dao.metrics.incrementMetric(metricPrefix + "_success")
       case Failure(e) =>
         metricPrefix + ": " + e.printStackTrace()
-        dao.metricsManager ! IncrementMetric(metricPrefix + "_failure")
+        dao.metrics.incrementMetric(metricPrefix + "_failure")
     }
     t
   }
@@ -152,10 +151,10 @@ package object constellation extends POWExt
     }
     attempt match {
       case Success(x) =>
-        dao.metricsManager ! IncrementMetric(metricPrefix + "_success")
+        dao.metrics.incrementMetric(metricPrefix + "_success")
       case Failure(e) =>
         metricPrefix + ": " + e.printStackTrace()
-        dao.metricsManager ! IncrementMetric(metricPrefix + "_failure")
+        dao.metrics.incrementMetric(metricPrefix + "_failure")
     }
     attempt
   }
@@ -163,10 +162,10 @@ package object constellation extends POWExt
   def tryToMetric[T](attempt : Try[T], metricPrefix: String)(implicit dao: DAO): Try[T] = {
     attempt match {
       case Success(x) =>
-        dao.metricsManager ! IncrementMetric(metricPrefix + "_success")
+        dao.metrics.incrementMetric(metricPrefix + "_success")
       case Failure(e) =>
         e.printStackTrace()
-        dao.metricsManager ! IncrementMetric(metricPrefix + "_failure")
+        dao.metrics.incrementMetric(metricPrefix + "_failure")
     }
     attempt
   }
@@ -208,10 +207,10 @@ package object constellation extends POWExt
       result =>
         onError
         if (result.isSuccess) {
-          dao.metricsManager ! IncrementMetric(metricPrefix + s"_timeoutAfter${timeoutSeconds}seconds")
+          dao.metrics.incrementMetric(metricPrefix + s"_timeoutAfter${timeoutSeconds}seconds")
         }
         if (result.isFailure) {
-          dao.metricsManager ! IncrementMetric(metricPrefix + s"_timeoutFAILUREDEBUGAfter${timeoutSeconds}seconds")
+          dao.metrics.incrementMetric(metricPrefix + s"_timeoutFAILUREDEBUGAfter${timeoutSeconds}seconds")
         }
     }
 
