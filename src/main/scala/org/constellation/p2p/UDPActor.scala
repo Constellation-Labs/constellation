@@ -11,6 +11,11 @@ import org.constellation.serializer.KryoSerializer._
 
 import scala.collection.concurrent.TrieMap
 
+/**
+  * None of this code is used right now
+  * We will revisit it in the future as alternative to REST/TCP
+  */
+
 // Consider adding ID to all UDP messages? Possibly easier.
 case class UDPMessage(data: Any, remote: InetSocketAddress)
 case class GetUDPSocketRef()

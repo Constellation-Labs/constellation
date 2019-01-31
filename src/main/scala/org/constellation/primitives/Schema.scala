@@ -4,8 +4,6 @@ import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 import java.time.Instant
 
-import cats.data._
-import cats.implicits._
 import constellation.pubKeyToAddress
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
@@ -78,71 +76,6 @@ object Schema {
                             ) extends Signable {
     def normalizedBalance: Long = balance / NormalizationFactor
   }
-
-  sealed trait Fiber
-
-  case class TransactionData(
-                              src: String,
-                              dst: String,
-                              amount: Long,
-                              salt: Long = Random.nextLong() // To ensure hash uniqueness.
-                            ) extends Signable with GossipMessage {
-    def hashType = "TransactionData"
-    def inverseAmount: Long = -1*amount
-    def normalizedAmount: Long = amount / NormalizationFactor
-    def pretty: String = s"TX: $short FROM: ${src.slice(0, 8)} " +
-      s"TO: ${dst.slice(0, 8)} " +
-      s"AMOUNT: $normalizedAmount"
-
-    def srcLedgerBalance(ledger: TrieMap[String, Long]): Long = {
-      ledger.getOrElse(src, 0)
-    }
-
-    def ledgerValid(ledger: TrieMap[String, Long]): Boolean = {
-      srcLedgerBalance(ledger) >= amount
-    }
-
-    def updateLedger(ledger: TrieMap[String, Long]): Unit = {
-      if (ledger.contains(src)) ledger(src) = ledger(src) - amount
-
-      if (ledger.contains(dst)) ledger(dst) = ledger(dst) + amount
-      else ledger(dst) = amount
-    }
-
-  }
-
-  sealed trait GossipMessage
-
-  // Participants are notarized via signatures.
-  final case class BundleBlock(
-                                parentHash: String,
-                                height: Long,
-                                txHash: Seq[String]
-                              ) extends Signable with Fiber
-
-  final case class BundleHash(hash: String) extends Fiber
-  final case class TransactionHash(txHash: String) extends Fiber
-  final case class ParentBundleHash(pbHash: String) extends Fiber
-
-  // TODO: Make another bundle data with additional metadata for depth etc.
-  final case class BundleData(bundles: Seq[Fiber]) extends Signable
-
-  case class RequestBundleData(hash: String) extends GossipMessage
-  case class HashRequest(hash: String) extends GossipMessage
-  case class BatchHashRequest(hashes: Set[String]) extends GossipMessage
-
-  case class BatchBundleHashRequest(hashes: Set[String]) extends GossipMessage
-  case class BatchTXHashRequest(hashes: Set[String]) extends GossipMessage
-
-  case class UnknownParentHashSyncInfo(
-                                        firstRequestTime: Long,
-                                        lastRequestTime: Long,
-                                        numRequests: Int
-                                      )
-
-
-
-
 
   /**
     * Our basic set of allowed edge hash types
@@ -292,215 +225,6 @@ object Schema {
 
   case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
 
-  sealed trait CheckpointBlockValidation {
-    def errorMessage: String
-  }
-
-  case class EmptySignatures() extends CheckpointBlockValidation {
-    def errorMessage: String = "CheckpointBlock has no signatures"
-  }
-
-
-  case class InvalidSignature(signature: String) extends CheckpointBlockValidation {
-    def errorMessage: String = s"CheckpointBlock includes signature=$signature which is invalid"
-  }
-
-  object InvalidSignature {
-    def apply(s: HashSignature) = new InvalidSignature(s.signature)
-  }
-
-
-  case class InvalidTransaction(txHash: String) extends CheckpointBlockValidation {
-    def errorMessage: String = s"CheckpointBlock includes transaction=$txHash which is invalid"
-  }
-
-  object InvalidTransaction {
-    def apply(t: Transaction) = new InvalidTransaction(t.hash)
-  }
-
-
-  case class DuplicatedTransaction(txHash: String) extends CheckpointBlockValidation {
-    def errorMessage: String = s"CheckpointBlock includes duplicated transaction=$txHash"
-  }
-
-  object DuplicatedTransaction {
-    def apply(t: Transaction) = new DuplicatedTransaction(t.hash)
-  }
-
-
-  case class NoAddressCacheFound(txHash: String) extends CheckpointBlockValidation {
-    def errorMessage: String = s"CheckpointBlock includes transaction=$txHash which has no address cache"
-  }
-
-  object NoAddressCacheFound {
-    def apply(t: Transaction) = new NoAddressCacheFound(t.hash)
-  }
-
-
-  case class InsufficientBalance(address: String) extends CheckpointBlockValidation {
-    def errorMessage: String = s"CheckpointBlock includes transaction from address=$address which has insufficient balance"
-  }
-
-  object InsufficientBalance {
-    def apply(t: Transaction) = new InsufficientBalance(t.src.address)
-  }
-
-
-  // TODO: pass also a transaction metadata
-  case class InternalInconsistency(cbHash: String) extends CheckpointBlockValidation {
-    def errorMessage: String = s"CheckpointBlock=$cbHash includes transaction/s which has insufficient balance"
-  }
-
-  object InternalInconsistency {
-    def apply(cb: CheckpointBlock) = new InternalInconsistency(cb.baseHash)
-  }
-
-  sealed trait CheckpointBlockValidatorNel {
-
-    type ValidationResult[A] = ValidatedNel[CheckpointBlockValidation, A]
-
-    def validateTransactionIntegrity(t: Transaction): ValidationResult[Transaction] =
-      if (t.valid) t.validNel else InvalidTransaction(t).invalidNel
-
-    def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
-      dao.addressService
-        .get(t.src.address)
-        .fold[ValidationResult[Transaction]](NoAddressCacheFound(t).invalidNel)(_ => t.validNel)
-
-    def validateTransaction(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
-      validateTransactionIntegrity(t)
-        .product(validateSourceAddressCache(t))
-        .map(_ => t)
-
-    def validateTransactions(t: Iterable[Transaction])(implicit dao: DAO): ValidationResult[List[Transaction]] =
-      t.toList.map(validateTransaction(_).map(List(_))).combineAll
-
-    def validateDuplicatedTransactions(t: Iterable[Transaction]): ValidationResult[List[Transaction]] = {
-      val diff = t.toList.diff(t.toSet.toList)
-
-      if (diff.isEmpty) {
-        t.toList.validNel
-      } else {
-        def toError(t: Transaction): ValidationResult[Transaction] = DuplicatedTransaction(t).invalidNel
-
-        diff.map(toError(_).map(List(_))).combineAll
-      }
-    }
-
-    def validateSignatureIntegrity(s: HashSignature, baseHash: String): ValidationResult[HashSignature] =
-      if (s.valid(baseHash)) s.validNel else InvalidSignature(s).invalidNel
-
-    def validateSignature(s: HashSignature, baseHash: String): ValidationResult[HashSignature] =
-      validateSignatureIntegrity(s, baseHash)
-        .map(_ => s)
-
-    def validateSignatures(s: Iterable[HashSignature], baseHash: String): ValidationResult[List[HashSignature]] =
-      s.toList.map(validateSignature(_, baseHash).map(List(_))).combineAll
-
-    def validateEmptySignatures(s: Iterable[HashSignature]): ValidationResult[List[HashSignature]] =
-      if (s.nonEmpty) s.toList.validNel else EmptySignatures().invalidNel
-
-    def validateSourceAddressBalances(
-      t: Iterable[Transaction]
-    )(implicit dao: DAO): ValidationResult[List[Transaction]] = {
-      def lookup(key: String) = dao.addressService
-        .get(key)
-        .map(_.balance)
-        .getOrElse(0L)
-
-      def validateBalance(address: String, t: Iterable[Transaction]): ValidationResult[List[Transaction]] = {
-        val diff = lookup(address) - t.map(_.amount).sum
-
-        if (diff >= 0L) t.toList.validNel else InsufficientBalance(address).invalidNel
-      }
-
-      t.toList
-        .groupBy(_.src.address)
-        .map(a => validateBalance(a._1, a._2))
-        .toList
-        .combineAll
-    }
-
-    type AddressBalance = Map[String, Long]
-
-    def getParents(c: CheckpointBlock)(implicit dao: DAO): List[CheckpointBlock] =
-      c.parentSOEBaseHashes
-        .toList
-        .map(dao.checkpointService.get)
-        .map(_.flatMap(_.checkpointBlock))
-        .sequence[Option, CheckpointBlock]
-        .getOrElse(List())
-
-    def isInSnapshot(c: CheckpointBlock)(implicit dao: DAO): Boolean =
-      dao.threadSafeTipService
-        .acceptedCBSinceSnapshot
-        .contains(c.baseHash)
-
-    def getSummaryBalance(c: CheckpointBlock)(implicit dao: DAO): AddressBalance = {
-      val spend = c.transactions
-        .groupBy(_.src.address)
-        .mapValues(_.map(-_.amount).sum)
-
-      val received = c.transactions
-        .groupBy(_.dst.address)
-        .mapValues(_.map(_.amount).sum)
-
-      spend |+| received
-    }
-
-/*
-    def getSnapshotBalances(implicit dao: DAO): AddressBalance =
-      dao.threadSafeTipService
-        .getSnapshotInfo()
-        .addressCacheData
-        .mapValues(_.balanceByLatestSnapshot)
-*/
-
-    def validateDiff(a: (String, Long))(implicit dao: DAO): Boolean = a match {
-      case (hash, diff) => dao.addressService.get(hash).map{_.balanceByLatestSnapshot}.getOrElse(0L) + diff >= 0
-    }
-
-    def validateCheckpointBlockTree(cb: CheckpointBlock)(implicit dao: DAO): Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance] =
-      if (isInSnapshot(cb)) Map.empty[String, Long].rightIor
-      else
-        getParents(cb)
-          .map(validateCheckpointBlockTree)
-          .foldLeft(Map.empty[String, Long].rightIor[NonEmptyList[CheckpointBlockValidation]])((result, d) =>
-            result.combine(d))
-          .map(getSummaryBalance(cb) |+| _)
-          .flatMap(diffs =>
-            if (diffs.forall(validateDiff))
-              diffs.rightIor
-            else
-              Ior.both(NonEmptyList.of(InternalInconsistency(cb)), diffs))
-
-    implicit def validateTreeToValidated(v: Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance]): ValidationResult[AddressBalance] =
-      v match {
-        case Ior.Right(a) => a.validNel
-        case Ior.Left(a) => a.invalid
-        case Ior.Both(a, _) => a.invalid
-      }
-
-    def validateCheckpointBlock(
-      cb: CheckpointBlock
-    )(implicit dao: DAO): ValidationResult[CheckpointBlock] = {
-      val preTreeResult =
-      validateEmptySignatures(cb.signatures)
-        .product(validateSignatures(cb.signatures, cb.baseHash))
-        .product(validateTransactions(cb.transactions))
-        .product(validateDuplicatedTransactions(cb.transactions))
-        .product(validateSourceAddressBalances(cb.transactions))
-
-      val postTreeIgnoreEmptySnapshot = if (dao.threadSafeTipService.lastSnapshotHeight == 0) preTreeResult
-      else preTreeResult.product(validateCheckpointBlockTree(cb))
-
-      postTreeIgnoreEmptySnapshot.map(_ => cb)
-    }
-  }
-
-  object CheckpointBlockValidatorNel extends CheckpointBlockValidatorNel
-
-
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
   case class ValidPeerIPData(canonicalHostName: String, port: Int)
 
@@ -516,44 +240,10 @@ object Schema {
 
   }
 
-
-
-  // case class UnresolvedEdge(edge: )
-
-  // TODO: Change options to ResolvedBundleMetaData
-
-
-  // TODO: Move other messages here.
-  sealed trait InternalCommand
-
-  final case object GetPeersID extends InternalCommand
-  final case object GetPeersData extends InternalCommand
-  final case object GetUTXO extends InternalCommand
-  final case object GetValidTX extends InternalCommand
-  final case object GetMemPoolUTXO extends InternalCommand
-  final case object ToggleHeartbeat extends InternalCommand
-
-  // TODO: Add round to internalheartbeat, would be better than replicating it all over the place
-
+  @deprecated("Needs to be removed after peer manager changes", "january")
   case class InternalHeartbeat(round: Long = 0L)
 
-  final case object InternalBundleHeartbeat extends InternalCommand
-
-  final case class ValidateTransaction(tx: Transaction) extends InternalCommand
-
-  trait DownloadMessage
-
-  case class DownloadRequest(time: Long = System.currentTimeMillis()) extends DownloadMessage
-
-  final case class SyncData(validTX: Set[Transaction], memPoolTX: Set[Transaction]) extends GossipMessage
-
-  final case class RequestTXProof(txHash: String) extends GossipMessage
-
   case class MetricsResult(metrics: Map[String, String])
-
-  final case class AddPeerFromLocal(address: InetSocketAddress) extends InternalCommand
-
-  case class Peers(peers: Seq[InetSocketAddress])
 
   case class Id(hex: String) {
     def short: String = hex.toString.slice(0, 5)
@@ -561,23 +251,6 @@ object Schema {
     def address: String = KeyUtils.publicKeyToAddressString(toPublicKey)
     def toPublicKey: PublicKey = hexToPublicKey(hex)
   }
-
-  case class Peer(
-                   id: Id,
-                   externalAddress: Option[InetSocketAddress],
-                   apiAddress: Option[InetSocketAddress],
-                   remotes: Seq[InetSocketAddress] = Seq(),
-                   externalHostString: String
-                 ) extends Signable
-
-  case class LocalPeerData(
-                            // initialAddAddress: String
-                            //    mostRecentSignedPeer: Signed[Peer],
-                            //    updatedPeer: Peer,
-                            //    lastRXTime: Long = System.currentTimeMillis(),
-                            apiClient: APIClient
-                          )
-
 
   case class Node(address: String, host: String, port: Int)
 

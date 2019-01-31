@@ -5,6 +5,9 @@ import java.net.InetSocketAddress
 import akka.actor.{Actor, Props}
 import akka.io.{IO, Tcp}
 
+ // TODO: Complete as additional transport layer to REST PeerAPI
+ // Consider using just a java socket server instead of akka
+
 class SimplisticHandler extends Actor {
   import Tcp._
   def receive: PartialFunction[Any, Unit] = {

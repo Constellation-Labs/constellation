@@ -45,18 +45,11 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[CheckpointEdgeData])
     kryo.register(classOf[Snapshot])
 
-    kryo.register(classOf[DownloadRequest])
-    kryo.register(classOf[ParentBundleHash])
-    kryo.register(classOf[TransactionHash])
-    kryo.register(classOf[BatchTXHashRequest])
-    kryo.register(classOf[BatchBundleHashRequest])
+
     kryo.register(classOf[Set[String]])
 
     kryo.register(classOf[SerializedUDPMessage])
     kryo.register(classOf[Id])
-    kryo.register(classOf[Peer])
-    kryo.register(classOf[BundleData])
-    kryo.register(classOf[TransactionData])
 
     kryo.register(classOf[Array[Byte]])
 

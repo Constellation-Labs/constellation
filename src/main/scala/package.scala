@@ -63,8 +63,11 @@ package object constellation extends POWExt
   ))
 
   implicit val constellationFormats: Formats = DefaultFormats +
-    new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer + new InetSocketAddressSerializer +
-    ShortTypeHints(List(classOf[TransactionHash], classOf[ParentBundleHash])) + new EnumNameSerializer(EdgeHashType) +
+    new PublicKeySerializer +
+    new PrivateKeySerializer +
+    new KeyPairSerializer +
+    new InetSocketAddressSerializer +
+    new EnumNameSerializer(EdgeHashType) +
     new EnumNameSerializer(NodeState)
 
   def caseClassToJson(message: Any): String = {
