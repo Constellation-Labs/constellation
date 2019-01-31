@@ -8,6 +8,8 @@ import cats.data._
 import cats.implicits._
 import constellation.pubKeyToAddress
 import org.constellation.DAO
+import org.constellation.crypto.KeyUtils
+import org.constellation.crypto.KeyUtils.hexToPublicKey
 import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
@@ -73,7 +75,7 @@ object Schema {
                               txHashOverflowPointer: Option[String] = None,
                               oneTimeUse: Boolean = false,
                               depth: Int = 0
-                            ) extends ProductHash {
+                            ) extends Signable {
     def normalizedBalance: Long = balance / NormalizationFactor
   }
 
@@ -84,7 +86,7 @@ object Schema {
                               dst: String,
                               amount: Long,
                               salt: Long = Random.nextLong() // To ensure hash uniqueness.
-                            ) extends ProductHash with GossipMessage {
+                            ) extends Signable with GossipMessage {
     def hashType = "TransactionData"
     def inverseAmount: Long = -1*amount
     def normalizedAmount: Long = amount / NormalizationFactor
@@ -116,14 +118,14 @@ object Schema {
                                 parentHash: String,
                                 height: Long,
                                 txHash: Seq[String]
-                              ) extends ProductHash with Fiber
+                              ) extends Signable with Fiber
 
   final case class BundleHash(hash: String) extends Fiber
   final case class TransactionHash(txHash: String) extends Fiber
   final case class ParentBundleHash(pbHash: String) extends Fiber
 
   // TODO: Make another bundle data with additional metadata for depth etc.
-  final case class BundleData(bundles: Seq[Fiber]) extends ProductHash
+  final case class BundleData(bundles: Seq[Fiber]) extends Signable
 
   case class RequestBundleData(hash: String) extends GossipMessage
   case class HashRequest(hash: String) extends GossipMessage
@@ -171,13 +173,13 @@ object Schema {
   case class ObservationEdge( // TODO: Consider renaming to ObservationHyperEdge or leave as is?
                               parents: Seq[TypedEdgeHash],
                               data: TypedEdgeHash
-                            ) extends ProductHash
+                            ) extends Signable
 
   /**
     * Encapsulation for all witness information about a given observation edge.
     * @param signatureBatch : Collection of validation signatures about the edge.
     */
-  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends ProductHash {
+  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends Signable {
     def plus(keyPair: KeyPair): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(keyPair))
     def plus(hs: HashSignature): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(hs))
     def plus(other: SignatureBatch): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other))
@@ -191,19 +193,19 @@ object Schema {
     * @param amount : Quantity to be transferred
     * @param salt : Ensure hash uniqueness
     */
-  case class TransactionEdgeData(amount: Long, salt: Long = Random.nextLong()) extends ProductHash
+  case class TransactionEdgeData(amount: Long, salt: Long = Random.nextLong()) extends Signable
 
   /**
     * Collection of references to transaction hashes
     * @param hashes : TX edge hashes
     */
-  case class CheckpointEdgeData(hashes: Seq[String], messages: Seq[ChannelMessage] = Seq()) extends ProductHash
+  case class CheckpointEdgeData(hashes: Seq[String], messages: Seq[ChannelMessage] = Seq()) extends Signable
 
   case class CheckpointEdge(edge: Edge[CheckpointEdgeData]) {
     def plus(other: CheckpointEdge) = this.copy(edge = edge.plus(other.edge))
   }
 
-  case class Address(address: String) extends ProductHash {
+  case class Address(address: String) extends Signable {
     override def hash: String = address
   }
 
@@ -498,138 +500,6 @@ object Schema {
 
   object CheckpointBlockValidatorNel extends CheckpointBlockValidatorNel
 
-  case class CheckpointBlock(
-    transactions: Seq[Transaction],
-    checkpoint: CheckpointEdge
-  ) {
-
-    def storeSOE()(implicit dao: DAO): Unit = {
-      dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true))
-    }
-
-    def calculateHeight()(implicit dao: DAO): Option[Height] = {
-
-      val parents = parentSOEBaseHashes.map {
-        dao.checkpointService.get
-      }
-
-      val maxHeight = if (parents.exists(_.isEmpty)) {
-        None
-      } else {
-
-        val parents2 = parents.map {_.get}
-        val heights = parents2.map {_.height.map{_.max}}
-
-        val nonEmptyHeights = heights.flatten
-        if (nonEmptyHeights.isEmpty) None else {
-          Some(nonEmptyHeights.max + 1)
-        }
-      }
-
-      val minHeight = if (parents.exists(_.isEmpty)) {
-        None
-      } else {
-
-        val parents2 = parents.map {_.get}
-        val heights = parents2.map {_.height.map{_.min}}
-
-        val nonEmptyHeights = heights.flatten
-        if (nonEmptyHeights.isEmpty) None else {
-          Some(nonEmptyHeights.min + 1)
-        }
-      }
-
-      val height = maxHeight.flatMap{ max =>
-        minHeight.map{
-          min =>
-            Height(min, max)
-        }
-      }
-
-      height
-
-    }
-
-    def transactionsValid: Boolean = transactions.nonEmpty && transactions.forall(_.valid)
-
-    // TODO: Return checkpoint validation status for more info rather than just a boolean
-    def simpleValidation()(implicit dao: DAO): Boolean = {
-
-      val validation = CheckpointBlockValidatorNel.validateCheckpointBlock(
-        CheckpointBlock(transactions, checkpoint)
-      )
-
-      if (validation.isValid) {
-        dao.metrics.incrementMetric("checkpointValidationSuccess")
-      } else {
-        dao.metrics.incrementMetric("checkpointValidationFailure")
-      }
-
-      // TODO: Return Validation instead of Boolean
-      validation.isValid
-    }
-
-    def uniqueSignatures: Boolean = signatures.groupBy(_.b58EncodedPublicKey).forall(_._2.size == 1)
-
-    def signedBy(id: Id) : Boolean = witnessIds.contains(id)
-
-    def hashSignaturesOf(id: Id) : Seq[HashSignature] = signatures.filter(_.toId == id)
-
-    def signatureConflict(other: CheckpointBlock): Boolean = {
-      signatures.exists{s =>
-        other.signatures.exists{ s2 =>
-          s.signature != s2.signature && s.b58EncodedPublicKey == s2.b58EncodedPublicKey
-        }
-      }
-    }
-
-    def witnessIds: Seq[Id] = signatures.map{_.toId}
-
-    def signatures: Seq[HashSignature] = checkpoint.edge.signedObservationEdge.signatureBatch.signatures
-
-    def baseHash: String = checkpoint.edge.baseHash
-
-    def validSignatures: Boolean = signatures.forall(_.valid(baseHash))
-
-    // TODO: Optimize call, should store this value instead of recalculating every time.
-    def soeHash: String = checkpoint.edge.signedObservationEdge.hash
-
-    def store(cache: CheckpointCacheData)(implicit dao: DAO): Unit = {
-      /*
-            transactions.foreach { rt =>
-              rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))
-            }
-      */
-     // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
-      dao.checkpointService.put(baseHash, cache)
-
-    }
-
-    def plus(keyPair: KeyPair): CheckpointBlock = {
-      this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.plus(keyPair)))
-    }
-
-    def plus(hs: HashSignature): CheckpointBlock = {
-      this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.plus(hs)))
-    }
-
-    def plus(other: CheckpointBlock): CheckpointBlock = {
-      this.copy(checkpoint = checkpoint.plus(other.checkpoint))
-    }
-
-    def +(other: CheckpointBlock): CheckpointBlock = {
-      this.copy(checkpoint = checkpoint.plus(other.checkpoint))
-    }
-
-    def parentSOE: Seq[TypedEdgeHash] = checkpoint.edge.parents
-    def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
-
-    def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
-      parentSOEHashes.flatMap{dao.soeService.get}.map{_.signedObservationEdge.baseHash}
-
-    def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
-
-  }
 
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
   case class ValidPeerIPData(canonicalHostName: String, port: Int)
@@ -685,12 +555,11 @@ object Schema {
 
   case class Peers(peers: Seq[InetSocketAddress])
 
-  case class Id(encodedId: EncodedPublicKey) {
-    def short: String = id.toString.slice(15, 20)
-    def medium: String = id.toString.slice(15, 25).replaceAll(":", "")
-    def address: AddressMetaData = pubKeyToAddress(id)
-    def b58: String = encodedId.b58Encoded
-    def id: PublicKey = encodedId.toPublicKey
+  case class Id(hex: String) {
+    def short: String = hex.toString.slice(0, 5)
+    def medium: String = hex.toString.slice(0, 10)
+    def address: String = KeyUtils.publicKeyToAddressString(toPublicKey)
+    def toPublicKey: PublicKey = hexToPublicKey(hex)
   }
 
   case class Peer(
@@ -699,7 +568,7 @@ object Schema {
                    apiAddress: Option[InetSocketAddress],
                    remotes: Seq[InetSocketAddress] = Seq(),
                    externalHostString: String
-                 ) extends ProductHash
+                 ) extends Signable
 
   case class LocalPeerData(
                             // initialAddAddress: String

@@ -17,10 +17,12 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.crypto.KeyUtils
+import org.constellation.datastore.SnapshotTrigger
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Metrics}
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -29,11 +31,10 @@ object ConstellationNode {
   val ConstellationVersion = "1.0.10"
 
   def main(args: Array[String]): Unit = {
-    val logger = Logger("ConstellationNode")
+    val logger = Logger("ConstellationNodeMain")
     logger.info("Main init")
-
-    logger.info("Config load")
     val config = ConfigFactory.load()
+    logger.info("Config loaded")
 
     Try {
 
@@ -147,7 +148,8 @@ object ConstellationNode {
 }
 
 case class NodeConfig(
-                     metricIntervalSeconds: Int = 60
+                     metricIntervalSeconds: Int = 60,
+                     isGenesisNode: Boolean = false
                      )
 
 class ConstellationNode(val configKeyPair: KeyPair,
@@ -185,6 +187,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
   dao.metrics = metrics_
 
   val randomTXManager = new RandomTransactionManager()
+
+  val snapshotTrigger = new SnapshotTrigger()
 
   val ipManager = IPManager()
 
@@ -296,5 +300,10 @@ class ConstellationNode(val configKeyPair: KeyPair,
     }
     PeerManager.initiatePeerReload()(dao, dao.edgeExecutionContext)
   }
+
+  if (nodeConfig.isGenesisNode) {
+    Genesis.start()
+  }
+
 
 }

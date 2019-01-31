@@ -4,11 +4,10 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
-import org.constellation.util.{ProductHash, Signed}
+import org.constellation.util.{Signable}
 import org.scalatest.FlatSpec
 
-case class TestSignable(a: String, b: Int) extends ProductHash
-case class TestSignabledWrapper(testSignable: Signed[TestSignable])
+case class TestSignable(a: String, b: Int) extends Signable
 
 import constellation._
 
@@ -35,16 +34,8 @@ class SignTest extends FlatSpec {
     val kp = KeyUtils.makeKeyPair()
     val data = TestSignable("a", 1)
     (0 to 2).foreach { d =>
-      val powSigned = signPairs(data, Seq(kp), d)
-      assert(powSigned.data == data)
-      // println(powSigned.nonce)
-      assert(powSigned.validSignatures)
-      // assert(powSigned.validPOW)
-      assert(powSigned.valid)
-    }
 
-    val signed = data.signed()(kp)
-    assert(signed.validSignatures)
+    }
 
     /* TODO
     val tx = createTransactionSafe("a", "b", 1L, kp)

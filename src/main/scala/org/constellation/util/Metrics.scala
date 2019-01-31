@@ -67,7 +67,7 @@ class TransactionRateTracker()(implicit dao: DAO){
     lastTXCount = countAll
     lastCheckTime = System.currentTimeMillis()
     Map(
-      "TPS_last_" + dao.processingConfig.metricCheckInterval + "_seconds" -> tps.toString,
+      "TPS_last_" + dao.nodeConfig.metricIntervalSeconds + "_seconds" -> tps.toString,
       "TPS_all" -> tpsAll.toString
     )
   }
@@ -90,7 +90,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   val rateCounter = new TransactionRateTracker()
 
   // Init
-  updateMetric("id", dao.id.b58)
+  updateMetric("id", dao.id.hex)
   Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
   updateMetric("nodeState", dao.nodeState.toString)
   updateMetric("address", dao.selfAddressStr)
@@ -124,7 +124,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
 
     val peers = dao.peerInfo.toSeq
 
-    val allAddresses = peers.map{_._1.address.address} :+ dao.selfAddressStr
+    val allAddresses = peers.map{_._1.address} :+ dao.selfAddressStr
 
     val balancesBySnapshotMetrics = allAddresses.map{a =>
       val balance = dao.addressService.get(a).map{_.balanceByLatestSnapshot}.getOrElse(0L)

@@ -18,17 +18,15 @@ import org.constellation.consensus.{EdgeProcessor}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{CommonEndpoints, EncodedPublicKey, SingleHashSignature}
+import org.constellation.util.{CommonEndpoints, SingleHashSignature}
 import org.json4s.native
 import org.json4s.native.Serialization
 
 import scala.concurrent.{ExecutionContext, Future}
 
 case class PeerAuthSignRequest(salt: Long)
-case class PeerRegistrationRequest(host: String, port: Int, key: String) {
-  def id = Id(EncodedPublicKey(key)) // TODO: Just send full Id class
-}
-case class PeerUnregister(host: String, port: Int, key: String)
+case class PeerRegistrationRequest(host: String, port: Int, id: Id)
+case class PeerUnregister(host: String, port: Int, id: Id)
 
 
 object PeerAPI {
@@ -154,7 +152,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
             val maybeData = getHostAndPortFromRemoteAddress(clientIP)
             maybeData match {
               case Some(PeerIPData(host, portOption)) =>
-                dao.peerManager ! Deregistration(request.host, request.port, request.key)
+                dao.peerManager ! Deregistration(request.host, request.port, request.id)
                 complete(StatusCodes.OK)
               case None =>
                 complete(StatusCodes.BadRequest)

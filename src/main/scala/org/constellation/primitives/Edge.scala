@@ -4,9 +4,9 @@ import java.security.KeyPair
 
 import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema._
-import org.constellation.util.{HashSignature, ProductHash}
+import org.constellation.util.{HashSignature, Signable}
 
-case class Edge[+D <: ProductHash]
+case class Edge[+D <: Signable]
 (
   observationEdge: ObservationEdge,
   signedObservationEdge: SignedObservationEdge,

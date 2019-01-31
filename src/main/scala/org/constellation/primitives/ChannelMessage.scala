@@ -2,18 +2,18 @@ package org.constellation.primitives
 
 import constellation._
 import org.constellation.DAO
-import org.constellation.util.{MerkleProof, ProductHash, SignatureBatch}
+import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
 
 case class ChannelMessageData(
                                message: String,
                                previousMessageDataHash: String,
                                channelId: String
-                             ) extends ProductHash
+                             ) extends Signable
 
-case class SignedData[+D <: ProductHash](
+case class SignedData[+D <: Signable](
                                           data: D,
                                           signatures: SignatureBatch
-                                        ) extends ProductHash
+                                        ) extends Signable
 
 case class ChannelMessageMetadata(
                                  channelMessage: ChannelMessage,

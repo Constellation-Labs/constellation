@@ -22,8 +22,6 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
     }
     Thread.currentThread().setName("RandomTransactionManager")
 
-    Snapshot.triggerSnapshot(round)
-
     generateLoop()
 
   }
@@ -82,7 +80,7 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
 
             def getRandomPeer: (Id, PeerData) = peerIds(Random.nextInt(peerIds.size))
 
-            val sendRequest = SendToAddress(getRandomPeer._1.address.address, Random.nextInt(1000).toLong + 1L, normalized = false)
+            val sendRequest = SendToAddress(getRandomPeer._1.address, Random.nextInt(1000).toLong + 1L, normalized = false)
             val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair, normalized = false)
             dao.metrics.incrementMetric("signaturesPerformed")
             dao.metrics.incrementMetric("randomTransactionsGenerated")

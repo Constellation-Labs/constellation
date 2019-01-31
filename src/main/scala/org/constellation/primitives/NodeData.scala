@@ -31,23 +31,21 @@ trait NodeData {
   @volatile implicit var keyPair: KeyPair = _
 
   def publicKeyHash: Int = keyPair.getPublic.hashCode()
-  def id: Id = Id(keyPair.getPublic.encoded)
-  def selfAddress: AddressMetaData = id.address
-  def selfAddressStr: String = selfAddress.address
+  def id: Id = keyPair.getPublic.toId
+  def selfAddressStr: String = id.address
 
   @volatile var nodeState: NodeState = NodeState.PendingDownload
 
   var externalHostString: String = "127.0.0.1"
   var externlPeerHTTPPort: Int = 9001
 
-  def peerRegistrationRequest = PeerRegistrationRequest(externalHostString, externlPeerHTTPPort, id.b58)
+  def peerRegistrationRequest = PeerRegistrationRequest(externalHostString, externlPeerHTTPPort, id)
 
   @volatile var externalAddress: Option[InetSocketAddress] = None
   @volatile var apiAddress: Option[InetSocketAddress] = None
   @volatile var tcpAddress: Option[InetSocketAddress] = None
 
   var remotes: Seq[InetSocketAddress] = Seq()
-  def selfPeer: Signed[Peer] = Peer(id, externalAddress, apiAddress, remotes, externalHostString).signed()
 
   def updateKeyPair(kp: KeyPair): Unit = {
     keyPair = kp

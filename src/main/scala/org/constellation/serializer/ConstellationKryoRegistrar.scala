@@ -6,7 +6,7 @@ import org.constellation.consensus._
 import org.constellation.p2p.SerializedUDPMessage
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.{EncodedPublicKey, HashSignature, SignatureBatch, Signed}
+import org.constellation.util.{HashSignature, SignatureBatch}
 
 class ConstellationKryoRegistrar extends IKryoRegistrar {
   override def apply(kryo: Kryo): Unit = {
@@ -58,13 +58,8 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[BundleData])
     kryo.register(classOf[TransactionData])
 
-    kryo.register(classOf[EncodedPublicKey])
     kryo.register(classOf[Array[Byte]])
 
-    kryo.register(classOf[Signed[AddressMetaData]])
-    kryo.register(classOf[Signed[TransactionData]])
-    kryo.register(classOf[Signed[BundleBlock]])
-    kryo.register(classOf[Signed[BundleData]])
     kryo.register(classOf[AddressMetaData])
 
     kryo.register(Class.forName("org.constellation.primitives.Schema$EdgeHashType$"))

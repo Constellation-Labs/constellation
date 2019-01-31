@@ -202,11 +202,13 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           } ~
           path("dashboard") {
             val txs = dao.transactionService.getLast20TX
-            val self = Node(selfAddress.address,
-              selfPeer.data.externalAddress.map(_.getHostName).getOrElse(""),
-              selfPeer.data.externalAddress.map(_.getPort).getOrElse(0))
+            val self = Node(
+              dao.selfAddressStr,
+              dao.externalHostString,
+              dao.externlPeerHTTPPort
+            )
             val peerMap = dao.peerInfo.toSeq.map {
-              case (id,pd) => Node(id.address.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
+              case (id,pd) => Node(id.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
             } :+ self
 
             complete(

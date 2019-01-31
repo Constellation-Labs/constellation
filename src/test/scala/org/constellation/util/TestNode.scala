@@ -17,7 +17,8 @@ object TestNode {
   def apply(seedHosts: Seq[HostPort] = Seq(),
             keyPair: KeyPair = KeyUtils.makeKeyPair(),
             randomizePorts: Boolean = true,
-            portOffset: Int = 0
+            portOffset: Int = 0,
+            isGenesisNode: Boolean = false
            )(
     implicit system: ActorSystem,
     materializer: ActorMaterializer,
@@ -44,7 +45,7 @@ object TestNode {
       peerTCPPort = randomPeerTCPPort,
       attemptDownload = seedHosts.nonEmpty,
       allowLocalhostPeers = true,
-      nodeConfig = NodeConfig(10)
+      nodeConfig = NodeConfig(10, isGenesisNode = isGenesisNode)
     )
 
     nodes = nodes :+ node

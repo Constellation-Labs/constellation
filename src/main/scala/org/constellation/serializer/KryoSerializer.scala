@@ -43,6 +43,7 @@ object KryoSerializer {
     kryoPool.toBytesWithClass(data)
   }
 
+  // Use this one
   def serializeAnyRef(anyRef: AnyRef): Array[Byte] = {
     kryoPool.toBytesWithClass(anyRef)
   }
@@ -51,6 +52,7 @@ object KryoSerializer {
     kryoPool.fromBytes(message)
   }
 
+  // Use this one
   def deserializeCast[T](message: Array[Byte]): T = {
     kryoPool.fromBytes(message).asInstanceOf[T]
   }

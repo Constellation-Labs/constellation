@@ -26,13 +26,12 @@ object Fixtures {
   val publicKey4: PublicKey = tempKey4.getPublic
   val publicKey5: PublicKey = tempKey5.getPublic
   val address = new InetSocketAddress("127.0.0.1", 16180)
-  val id = Id(publicKey.encoded)
-  val id1 = Id(publicKey1.encoded)
-  val id2 = Id(publicKey2.encoded)
-  val id3 = Id(publicKey3.encoded)
-  val id4 = Id(publicKey4.encoded)
-  val id5 = Id(publicKey5.encoded)
-  val signedPeer: Signed[Peer] = Peer(id, Some(address), Some(address), Seq(), "").signed()(tempKey)
+  val id = publicKey.toId
+  val id1 = publicKey1.toId
+  val id2 = publicKey2.toId
+  val id3 = publicKey3.toId
+  val id4 = publicKey4.toId
+  val id5 = publicKey5.toId
 
   val address1: InetSocketAddress = constellation.addressToSocket("localhost:16181")
   val address2: InetSocketAddress = constellation.addressToSocket("localhost:16182")
@@ -47,7 +46,7 @@ object Fixtures {
   val idSet5 = Set(id1, id2, id3, id4, id5)
 
   def dummyTx(data: DAO, amt: Long = 1L) = {
-    val sendRequest = SendToAddress(id.address.address, amt)
+    val sendRequest = SendToAddress(id.address, amt)
     createTransaction(data.selfAddressStr, sendRequest.dst, sendRequest.amountActual, data.keyPair)
   }
 

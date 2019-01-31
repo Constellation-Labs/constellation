@@ -4,12 +4,24 @@ import java.security.KeyPair
 
 import constellation._
 import org.constellation.DAO
+import org.constellation.consensus.EdgeProcessor
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 
 
 
 object Genesis {
+
+
+  def createGenesisBlock = {
+    //CheckpointBlock.createCheckpointBlock()
+  }
+
+  def start()(implicit dao: DAO) = {
+
+
+
+  }
 
   val CoinBaseHash = "coinbase"
 
@@ -18,7 +30,7 @@ object Genesis {
                         ): CheckpointBlock = {
 
     val distr = ids.map{ id =>
-      createTransaction(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
+      createTransaction(selfAddressStr, id.address, 1e6.toLong, keyPair)
     }
 
     val distrCB = CheckpointEdgeData(distr.map{_.edge.signedObservationEdge.signatureBatch.hash})

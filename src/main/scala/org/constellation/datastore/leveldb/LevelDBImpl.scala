@@ -3,7 +3,6 @@ import better.files._
 import com.typesafe.scalalogging.Logger
 import org.constellation.DAO
 import org.constellation.datastore.KVDB
-import org.constellation.primitives.IncrementMetric
 import org.constellation.serializer.KryoSerializer
 
 import scala.util.Try

@@ -43,12 +43,18 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   def createNode(
                   randomizePorts: Boolean = true,
                   seedHosts: Seq[HostPort] = Seq(),
-                  portOffset: Int = 0
+                  portOffset: Int = 0,
+                  isGenesisNode: Boolean = false
                 ): ConstellationNode = {
     implicit val executionContext: ExecutionContextExecutorService =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
-    TestNode(randomizePorts = randomizePorts, portOffset = portOffset, seedHosts = seedHosts)
+    TestNode(
+      randomizePorts = randomizePorts,
+      portOffset = portOffset,
+      seedHosts = seedHosts,
+      isGenesisNode = isGenesisNode
+    )
   }
   val updatePasswordReq = UpdatePassword(Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword"))
 

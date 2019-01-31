@@ -317,7 +317,7 @@ class ThreadSafeTipService() {
       val totalNumFacil = facilitators.size
       // TODO: Use XOR distance instead as it handles peer data mismatch cases better
       val facilitatorIndex = (BigInt(mergedTipHash, 16) % totalNumFacil).toInt
-      val sortedFacils = facilitators.toSeq.sortBy(_._1.encodedId.b58Encoded)
+      val sortedFacils = facilitators.toSeq.sortBy(_._1.hex)
       val selectedFacils = Seq.tabulate(dao.processingConfig.numFacilitatorPeers) { i => (i + facilitatorIndex) % totalNumFacil }.map {
         sortedFacils(_)
       }

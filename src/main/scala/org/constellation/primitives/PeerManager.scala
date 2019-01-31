@@ -186,7 +186,7 @@ case class APIBroadcast[T](func: APIClient => T,
 
 case class PeerHealthCheck(status: Map[Id, Boolean])
 case class PendingRegistration(ip: String, request: PeerRegistrationRequest)
-case class Deregistration(ip: String, port: Int, key: String)
+case class Deregistration(ip: String, port: Int, id: Id)
 
 case object GetPeerInfo
 
@@ -376,9 +376,9 @@ class PeerManager(ipManager: IPManager)(
         }
 
         req.foreach { sig =>
-          if (sig.hashSignature.b58EncodedPublicKey != request.key) {
+          if (sig.hashSignature.id != request.id) {
             logger.warn(
-              s"keys should be the same: ${sig.hashSignature.b58EncodedPublicKey} != ${request.key}"
+              s"keys should be the same: ${sig.hashSignature.id} != ${request.id}"
             )
             dao.metrics.incrementMetric("peerKeyMismatch")
           }
@@ -400,7 +400,7 @@ class PeerManager(ipManager: IPManager)(
 
           stateF.map { s =>
             val state = s.nodeState
-            val id = Id(EncodedPublicKey(sig.hashSignature.b58EncodedPublicKey))
+            val id = sig.hashSignature.id
             val add =
               PeerMetadata(request.host,
                            16180,

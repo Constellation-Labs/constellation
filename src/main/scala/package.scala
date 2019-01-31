@@ -13,9 +13,9 @@ import com.google.common.hash.Hashing
 import org.constellation.DAO
 import org.constellation.crypto.Base58
 import org.constellation.crypto.KeyUtils.{bytesToPrivateKey, bytesToPublicKey, _}
-import org.constellation.primitives.IncrementMetric
 import org.constellation.primitives.Schema._
-import org.constellation.util.{EncodedPublicKey, POWExt, POWSignHelp}
+import org.constellation.serializer.KryoSerializer
+import org.constellation.util.{KeySerializeJSON, POWExt, SignHelpExt}
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.ext.EnumNameSerializer
 import org.json4s.native.{Serialization, parseJsonOpt}
@@ -27,7 +27,8 @@ import scala.reflect.ClassTag
 import scala.util.{Failure, Random, Success, Try}
 
 package object constellation extends POWExt
-  with POWSignHelp {
+  with SignHelpExt
+  with KeySerializeJSON {
 
   implicit var StandardTimeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
@@ -82,6 +83,10 @@ package object constellation extends POWExt
     def jsonSave(f: String): Unit = File(f).writeText(json)
   }
 
+  implicit class KryoSerExt(anyRef: AnyRef) {
+    def kryo: Array[Byte] = KryoSerializer.serializeAnyRef(anyRef)
+  }
+
   implicit class ParseExt(input: String) {
     def jValue: JValue = parse4s(input)
     def jv: JValue = jValue
@@ -90,6 +95,11 @@ package object constellation extends POWExt
 
   implicit class SHA256Ext(s: String) {
     def sha256: String = Hashing.sha256().hashBytes(s.getBytes()).toString
+  }
+
+  implicit class SHA256ByteExt(arr: Array[Byte]) {
+    def sha256: String = Hashing.sha256().hashBytes(arr).toString
+    def sha256Bytes: Array[Byte] = Hashing.sha256().hashBytes(arr).asBytes()
   }
 
 
@@ -132,7 +142,7 @@ package object constellation extends POWExt
     def query[T: ClassTag](m: Any): T = (a ? m).mapTo[T].get()
   }
 
-  def signHashWithKeyB64(hash: String, privateKey: PrivateKey): String = base64(signData(hash.getBytes())(privateKey))
+  def signHashWithKey(hash: String, privateKey: PrivateKey): String = bytes2hex(signData(hash.getBytes())(privateKey))
 
   def wrapFutureWithMetric[T](t: Future[T], metricPrefix: String)(implicit dao: DAO, ec: ExecutionContext): Future[T] = {
     t.onComplete {
@@ -253,50 +263,9 @@ package object constellation extends POWExt
   }
 
 
-
-  class PrivateKeySerializer extends CustomSerializer[PrivateKey](format => ( {
-    case jObj: JObject =>
-     // implicit val f: Formats = format
-      bytesToPrivateKey(Base58.decode((jObj \ "key").extract[String]))
-  }, {
-    case key: PrivateKey =>
-      JObject("key" -> JString(Base58.encode(key.getEncoded)))
-  }
-  ))
-
-  class PublicKeySerializer extends CustomSerializer[PublicKey](format => ( {
-    case jstr: JObject =>
-     // implicit val f: Formats = format
-      bytesToPublicKey(Base58.decode((jstr \ "key").extract[String]))
-  }, {
-    case key: PublicKey =>
-      JObject("key" -> JString(Base58.encode(key.getEncoded)))
-  }
-  ))
-
-  class KeyPairSerializer extends CustomSerializer[KeyPair](format => ( {
-    case jObj: JObject =>
-    //  implicit val f: Formats = format
-      val pubKey = (jObj \ "publicKey").extract[PublicKey]
-      val privKey = (jObj \ "privateKey").extract[PrivateKey]
-      val kp = new KeyPair(pubKey, privKey)
-      kp
-  }, {
-    case key: KeyPair =>
-    //  implicit val f: Formats = format
-      JObject(
-        "publicKey" -> JObject("key" -> JString(Base58.encode(key.getPublic.getEncoded))),
-        "privateKey" -> JObject("key" -> JString(Base58.encode(key.getPrivate.getEncoded)))
-      )
-  }
-  ))
-
   implicit class PublicKeyExt(publicKey: PublicKey) {
-    // Conflict with old schema, add later
-    //  def address: Address = pubKeyToAddress(publicKey)
-    def encoded: EncodedPublicKey = EncodedPublicKey(Base58.encode(publicKey.getEncoded))
-    def toId: Id = encoded.toId
-    def hex: String = bytes2hex(publicKey.getEncoded)
+    def toId: Id = Id(hex)
+    def hex: String = publicKeyToHex(publicKey)
   }
 
 
