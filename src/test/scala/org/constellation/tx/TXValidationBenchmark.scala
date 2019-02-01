@@ -27,7 +27,7 @@ class TXValidationBenchmark extends FlatSpec {
 
   val kp: KeyPair = KeyUtils.makeKeyPair()
   val kp1: KeyPair = KeyUtils.makeKeyPair()
-  val tx: Schema.Transaction = SignHelp.createTransaction(kp.address.address, kp1.address.address, 1L, kp)
+  val tx = SignHelp.createTransaction(kp.address.address, kp1.address.address, 1L, kp)
 
   val batchSize = 100
 
@@ -53,7 +53,7 @@ class TXValidationBenchmark extends FlatSpec {
     val pkey = sig.publicKey
 
     val hashBytes = batch.hash.getBytes()
-    val signatureBytes = fromBase64(sig.signature)
+    val signatureBytes = hex2bytes(sig.signature)
     assert(KeyUtils.verifySignature(hashBytes, signatureBytes)(pkey))
 
     val seq2 = Seq.fill(batchSize)(0).par
@@ -111,8 +111,6 @@ class TXValidationBenchmark extends FlatSpec {
     val dao = new DAO()
 
     dao.keyPair = kp
-
-    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
     val ldb = as.actorOf(Props(new LevelDBActor(dao)), "db")
 

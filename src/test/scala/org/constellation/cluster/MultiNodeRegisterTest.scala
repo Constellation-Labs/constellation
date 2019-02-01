@@ -12,6 +12,7 @@ import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.util.TestNode
 import org.constellation.{ConstellationNode, HostPort}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
+import constellation._
 
 import scala.concurrent.ExecutionContext
 import scala.util.Try
@@ -77,7 +78,7 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
           PeerRegistrationRequest(
             ipData.canonicalHostName,
             ipData.port,
-            a.configKeyPair.getPublic.toString
+            a.configKeyPair.getPublic.toId
           )
         val res = a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
         assert(res.isSuccess)

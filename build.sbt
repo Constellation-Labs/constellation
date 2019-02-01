@@ -7,7 +7,7 @@ scalacOptions := Seq("-unchecked", "-deprecation")
 
 logBuffered in Test := false
 
-lazy val _version = "1.0.1"
+lazy val _version = "1.0.10"
 
 lazy val versions = new {
   val akka = "2.5.19"

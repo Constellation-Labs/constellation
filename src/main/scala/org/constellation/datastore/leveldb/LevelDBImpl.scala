@@ -5,7 +5,6 @@ import com.typesafe.scalalogging.Logger
 
 import org.constellation.DAO
 import org.constellation.datastore.KVDB
-import org.constellation.primitives.IncrementMetric
 import org.constellation.serializer.KryoSerializer
 
 import scala.util.Try
@@ -27,11 +26,11 @@ class LevelDBImpl(dao: DAO) extends KVDB {
 
   /** Put method. */
   override def put(key: String, obj: AnyRef): Boolean = {
-    dao.metricsManager ! IncrementMetric("DBPut")
+    dao.metrics.incrementMetric("DBPut")
     val bytes = KryoSerializer.serializeAnyRef(obj)
     val success = db.putBytes(key, bytes)
     if (!success) {
-      dao.metricsManager ! IncrementMetric("DBPutFailure")
+      dao.metrics.incrementMetric("DBPutFailure")
       logger.error("DB PUT FAILED")
     }
     success

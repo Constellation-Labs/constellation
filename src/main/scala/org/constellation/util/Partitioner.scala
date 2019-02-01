@@ -1,25 +1,33 @@
 package org.constellation.util
 
-import org.constellation.primitives.Schema.{Id, Transaction}
+import org.constellation.primitives.Schema.Id
+import org.constellation.primitives.Transaction
 
-/** Partitioner object.
-  *
-  * @todo Use XOR for random partition assignment later. Needs accompanying test to validate even splits.
-  * @todo define bestFacilitator.
-  */
 object Partitioner {
 
-  /** Measures distance of a transaction from of a group of ids.
-    *
-    * @param ids ... Sequence of ID's.
-    * @param tx  ... A transaction.
-    * @return Min XOR distance of tx hash to any id in ids.
-    */
+
+  // TODO:  Use XOR for random partition assignment later.
+  // Needs accompanying test to validate even splits
   def minDistance(ids: Seq[Id], tx: Transaction): Id = ids.minBy { id =>
-    val bi = BigInt(id.id.getEncoded)
+    val bi = BigInt(id.toPublicKey.getEncoded)
     val bi2 = BigInt(tx.hash, 16)
     val xor = bi ^ bi2
-    xor
+
+    import com.google.common.hash.Hashing
+
+    val test = ids.map { id =>
+      val idHash = Hashing.sha256.hashBytes(id.toPublicKey.getEncoded).asBytes()
+      val addressHash = Hashing.sha256.hashBytes(tx.src.address.getBytes()).asBytes()
+      val idInt = BigInt(idHash)
+      val addressInt = BigInt(addressHash)
+      val txHash = Hashing.sha256.hashBytes(tx.hash.getBytes()).asBytes()
+      val txInt = BigInt(txHash)
+      (idInt ^ addressInt) + (idInt ^ txInt)
+    }
   }
+
+
+
+  // def bestFacilitator
 
 }

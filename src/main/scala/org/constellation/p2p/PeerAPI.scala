@@ -13,23 +13,20 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
-import org.constellation.consensus.Consensus.{ConsensusProposal, ConsensusVote}
-import org.constellation.consensus.EdgeProcessor._
-import org.constellation.consensus.{Consensus, EdgeProcessor}
+import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest}
+import org.constellation.consensus.{EdgeProcessor}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{CommonEndpoints, EncodedPublicKey, SingleHashSignature}
+import org.constellation.util.{CommonEndpoints, SingleHashSignature}
 import org.json4s.native
 import org.json4s.native.Serialization
 
 import scala.concurrent.{ExecutionContext, Future}
 
 case class PeerAuthSignRequest(salt: Long)
-case class PeerRegistrationRequest(host: String, port: Int, key: String) {
-  def id = Id(EncodedPublicKey(key)) // TODO: Just send full Id class
-}
-case class PeerUnregister(host: String, port: Int, key: String)
+case class PeerRegistrationRequest(host: String, port: Int, id: Id)
+case class PeerUnregister(host: String, port: Int, id: Id)
 
 
 object PeerAPI {
@@ -139,12 +136,12 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 
             val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amountActual, dao.keyPair, normalized = false)
             dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
-            dao.metricsManager ! IncrementMetric("faucetRequest")
+            dao.metrics.incrementMetric("faucetRequest")
 
             complete(Some(tx.hash))
           } else {
             logger.warn(s"Invalid faucet request $sendRequest")
-            dao.metricsManager ! IncrementMetric("faucetInvalidRequest")
+            dao.metrics.incrementMetric("faucetInvalidRequest")
             complete(None)
           }
         }
@@ -155,7 +152,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
             val maybeData = getHostAndPortFromRemoteAddress(clientIP)
             maybeData match {
               case Some(PeerIPData(host, portOption)) =>
-                dao.peerManager ! Deregistration(request.host, request.port, request.key)
+                dao.peerManager ! Deregistration(request.host, request.port, request.id)
                 complete(StatusCodes.OK)
               case None =>
                 complete(StatusCodes.BadRequest)
@@ -163,24 +160,6 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
           }
       }
     } ~
-      path("checkpointEdgeVote") {
-        entity(as[Array[Byte]]) { e =>
-            val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusVote[Consensus.Checkpoint]]
-
-            dao.consensus ! message
-
-          complete(StatusCodes.OK)
-        }
-      } ~
-      path("checkpointEdgeProposal") {
-        entity(as[Array[Byte]]) { e =>
-            val message = KryoSerializer.deserialize(e).asInstanceOf[ConsensusProposal[Consensus.Checkpoint]]
-
-            dao.consensus ! message
-
-          complete(StatusCodes.OK)
-        }
-      } ~
       pathPrefix("request") {
         path("signature") {
           extractClientIP { ip =>
@@ -192,7 +171,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 */
 
             entity(as[SignatureRequest]) { sr =>
-              dao.metricsManager ! IncrementMetric("peerApiRXSignatureRequest")
+              dao.metrics.incrementMetric("peerApiRXSignatureRequest")
               onComplete(
                 futureTryWithTimeoutMetric(
                   EdgeProcessor.handleSignatureRequest(sr),
@@ -225,7 +204,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 
             entity(as[FinishedCheckpoint]) { fc =>
               // TODO: Validation / etc.
-              dao.metricsManager ! IncrementMetric("peerApiRXFinishedCheckpoint")
+              dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
               onComplete(
                 EdgeProcessor.handleFinishedCheckpoint(fc)
               ) {
@@ -249,16 +228,9 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
       put {
         entity(as[Transaction]) {
           tx =>
-            dao.metricsManager ! IncrementMetric("transactionRXByAPI")
+            dao.metrics.incrementMetric("transactionRXByAPI")
             // TDOO: Change to ask later for status info
             //   dao.edgeProcessor ! HandleTransaction(tx)
-
-            Future {
-              if (dao.nodeState == NodeState.Ready) {
-                handleTransaction(tx)
-              }
-            }(dao.edgeExecutionContext)
-
             complete(StatusCodes.OK)
         }
       }
