@@ -193,7 +193,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     val messagesInChannelWithBlocks = storedSnapshots.head.flatMap{ s =>
       s.checkpointCache.map{ cache =>
         val block = cache.checkpointBlock.get
-        val relevantMessages = block.checkpoint.edge.resolvedObservationEdge.data.get.messages
+        val relevantMessages = block.checkpoint.edge.data.messages
           .filter{expectedMessages.contains}
           //.filter{_.signedMessageData.data.channelId == channelId}.filterNot{_ == genesisChannel}
         val messageParent = relevantMessages.map{_.signedMessageData.data.previousMessageDataHash}.headOption
