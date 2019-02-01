@@ -4,11 +4,11 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
-import com.typesafe.scalalogging.Logger
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
@@ -42,7 +42,7 @@ object PeerAPI {
 }
 
 class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
-  extends Json4sSupport with CommonEndpoints with IPEnforcer {
+  extends Json4sSupport with CommonEndpoints with IPEnforcer with StrictLogging {
 
   implicit val serialization: Serialization.type = native.Serialization
 
@@ -50,8 +50,6 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
-
-  private val logger = Logger(s"PeerAPI")
 
   private val config: Config = ConfigFactory.load()
 
@@ -82,6 +80,15 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
       }
     }
   }
+
+   def exceptionHandler: ExceptionHandler =
+    ExceptionHandler {
+      case e: Exception =>
+        extractUri { uri =>
+          logger.error(s"Request to $uri could not be handled normally", e)
+          complete(HttpResponse(StatusCodes.InternalServerError))
+        }
+    }
 
   private val signEndpoints =
     post {
@@ -192,21 +199,18 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 */
 
             entity(as[SignatureRequest]) { sr =>
-              dao.metricsManager ! IncrementMetric("peerApiRXSignatureRequest")
-              onComplete(
-                futureTryWithTimeoutMetric(
-                  EdgeProcessor.handleSignatureRequest(sr),
-                  "peerAPIHandleSignatureRequest",
-                  60
-                )(dao.signatureExecutionContext, dao)
-              ) {
-                result => // ^ Errors captured above
-                  val maybeData = getHostAndPortFromRemoteAddress(ip)
-                  val knownHost = maybeData.exists(i => dao.peerInfo.exists(_._2.client.hostName == i.canonicalHostName))
-                  val maybeResponse = result.toOption.flatMap {
-                    _.toOption
-                  }.map{_.copy(reRegister = !knownHost)}
-                  complete(maybeResponse)
+              handleExceptions(exceptionHandler) {
+                dao.metricsManager ! IncrementMetric("peerApiRXSignatureRequest")
+
+                val maybeData = getHostAndPortFromRemoteAddress(ip)
+                val knownHost = maybeData.exists(
+        i => dao.peerInfo.exists(_._2.client.hostName == i.canonicalHostName)
+      )
+
+                val signatureRequest =
+                  EdgeProcessor.handleSignatureRequest(sr).copy(reRegister = !knownHost)
+
+                complete(signatureRequest)
               }
             }
           }

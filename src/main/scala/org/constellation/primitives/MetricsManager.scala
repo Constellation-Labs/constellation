@@ -6,9 +6,8 @@ import akka.actor.Actor
 import akka.pattern.ask
 import akka.util.Timeout
 import better.files.File
-import com.typesafe.scalalogging.Logger
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import io.kontainers.micrometer.akka.AkkaMetricRegistry
 import io.micrometer.core.instrument.Clock
 import io.micrometer.core.instrument.binder.jvm._
 import io.micrometer.core.instrument.binder.logging._
@@ -28,10 +27,8 @@ case class UpdateMetric(key: String, value: String)
 
 case class IncrementMetric(key: String)
 
-class MetricsManager()(implicit dao: DAO) extends Actor {
-
-  val logger = Logger("Metrics")
-
+class MetricsManager()(implicit dao: DAO) extends Actor with StrictLogging {
+  
   var lastCheckTime: Long = System.currentTimeMillis()
   var lastTXCount: Long = 0
   implicit val timeout: Timeout = Timeout(15, TimeUnit.SECONDS)
@@ -40,7 +37,6 @@ class MetricsManager()(implicit dao: DAO) extends Actor {
 
   val prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT, CollectorRegistry.defaultRegistry, Clock.SYSTEM)
   prometheusMeterRegistry.config().commonTags("application", s"Constellation_${ dao.keyPair.getPublic.hash}")
-  AkkaMetricRegistry.setRegistry(prometheusMeterRegistry)
   new JvmMemoryMetrics().bindTo(prometheusMeterRegistry)
   new JvmGcMetrics().bindTo(prometheusMeterRegistry)
   new JvmThreadMetrics().bindTo(prometheusMeterRegistry)

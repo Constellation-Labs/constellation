@@ -2,17 +2,16 @@ package org.constellation
 
 import akka.stream.ActorMaterializer
 import better.files.File
-import com.typesafe.scalalogging.Logger
+import com.typesafe.scalalogging.StrictLogging
 import org.constellation.primitives._
 
 class DAO extends NodeData
   with Reputation
   with PeerInfoUDP
   with Genesis
-  with EdgeDAO {
-
-  val logger = Logger(s"Data")
-
+  with EdgeDAO
+  with StrictLogging {
+  
   var actorMaterializer: ActorMaterializer = _
 
   var confirmWindow : Int = 30

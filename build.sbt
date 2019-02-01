@@ -1,22 +1,23 @@
 import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 
 enablePlugins(JavaAppPackaging)
-addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
+//addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 
-scalacOptions := Seq("-unchecked", "-deprecation")
+scalacOptions := Seq("-Ypartial-unification", "-unchecked", "-deprecation")
 
 logBuffered in Test := false
 
 lazy val _version = "1.0.1"
 
 lazy val versions = new {
-  val akka = "2.5.19"
+  val akka = "2.5.20"
   val akkaHttp = "10.1.7"
   val akkaHttpCors = "0.3.4"
   val spongyCastle = "1.58.0.0"
   val micrometer = "1.1.2"
   val prometheus  = "0.6.0"
-  val sttp = "1.5.7"
+  val sttp = "1.5.8"
+  val cats = "1.5.0"
 }
 
 lazy val sttpDependencies = Seq(
@@ -27,7 +28,7 @@ lazy val sttpDependencies = Seq(
 
 lazy val commonSettings = Seq(
   version := _version,
-  scalaVersion := "2.12.7",
+  scalaVersion := "2.12.8",
   organization := "org.constellation",
   name := "constellation",
   mainClass := Some("org.constellation.ConstellationNode"),
@@ -60,7 +61,7 @@ lazy val coreDependencies = Seq(
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   "com.github.pathikrit" %% "better-files" % "3.7.0" withSources() withJavadoc(),
   "com.roundeights" %% "hasher" % "1.2.0",
-  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0",
+  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
@@ -73,20 +74,17 @@ lazy val coreDependencies = Seq(
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
   "org.bouncycastle" % "bcprov-jdk15on" % "1.51",
-  "org.iq80.leveldb"            % "leveldb"          % "0.10" withSources() withJavadoc(),
+  "org.iq80.leveldb" % "leveldb" % "0.10" withSources() withJavadoc(),
   "com.codahale" % "shamir" % "0.6.0" withSources() withJavadoc(),
   "org.json4s" %% "json4s-ext" % "3.6.3",
   "com.twitter" %% "chill" % "0.9.3",
   "com.twitter" %% "algebird-core" % "0.13.4",
-  "org.typelevel" %% "cats-core" % "1.3.1",
-  "org.typelevel" %% "alleycats-core" % "0.2.0",
+  "org.typelevel" %% "cats-core" % versions.cats withSources() withJavadoc(),
+//  "org.typelevel" %% "alleycats-core" % versions.cats withSources() withJavadoc(),
   "net.glxn" % "qrgen" % "1.4",
-  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
-  "com.typesafe.slick" %% "slick" % "3.2.3",
-  "com.h2database" % "h2" % "1.4.197",
+//  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.twitter" %% "storehaus-cache" % "0.15.0",
   "io.swaydb" %% "swaydb" % "0.6",
-  "io.kontainers" %% "micrometer-akka" % "0.9.1",
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus
@@ -99,12 +97,21 @@ lazy val testDependencies = Seq(
   "org.scalactic" %% "scalactic" % "3.0.5",
   "org.scalamock" %% "scalamock" % "4.1.0",
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
-  "com.typesafe.akka" %% "akka-testkit" % versions.akka
+  "com.typesafe.akka" %% "akka-testkit" % versions.akka,
+  "com.typesafe.slick" %% "slick" % "3.2.3",
+  "com.h2database" % "h2" % "1.4.197",
 ).map(_ % "it,test" )
 
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
 
 test in assembly := {}
+
+assemblyMergeStrategy in assembly := {
+  case "logback.xml" => MergeStrategy.first
+  case x =>
+    val oldStrategy = (assemblyMergeStrategy in assembly).value
+    oldStrategy(x)
+}
 
 lazy val root = (project in file("."))
   .configs(IntegrationTest)

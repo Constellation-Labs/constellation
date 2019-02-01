@@ -40,6 +40,10 @@ package object constellation extends POWExt
       import scala.concurrent.duration._
       Try{Await.result(f, t.seconds)}.toOption
     }
+    def getTry(t: Int = 30): Try[T] = {
+      import scala.concurrent.duration._
+      Try{Await.result(f, t.seconds)}
+    }
   }
 
   implicit def addressToSocket(peerAddress: String): InetSocketAddress =
@@ -139,7 +143,6 @@ package object constellation extends POWExt
       case Success(_) =>
         dao.metricsManager ! IncrementMetric(metricPrefix + "_success")
       case Failure(e) =>
-        metricPrefix + ": " + e.printStackTrace()
         dao.metricsManager ! IncrementMetric(metricPrefix + "_failure")
     }
     t

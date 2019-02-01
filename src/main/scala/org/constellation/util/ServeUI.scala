@@ -1,13 +1,13 @@
 package org.constellation.util
 
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpResponse}
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.http.scaladsl.server.Directives.{complete, extractUnmatchedPath, get, getFromResource, pathPrefix, _}
 import akka.http.scaladsl.server.Route
 import com.typesafe.scalalogging.Logger
 
 trait ServeUI {
 
-  val logger: Logger
+  protected val logger: Logger
 
   def jsRequest: Route = {
     pathPrefix("ui") {

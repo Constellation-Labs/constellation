@@ -6,7 +6,7 @@ import akka.actor.{Actor, ActorSystem}
 import akka.http.scaladsl.model.RemoteAddress
 import akka.stream.ActorMaterializer
 import com.softwaremill.sttp.Response
-import com.typesafe.scalalogging.Logger
+import com.typesafe.scalalogging.StrictLogging
 import constellation.futureTryWithTimeoutMetric
 import org.constellation.p2p.{Download, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
@@ -23,7 +23,7 @@ import constellation._
 import scala.collection.Set
 import scala.util.{Failure, Success}
 
-object PeerManager {
+object PeerManager extends StrictLogging {
 
   def initiatePeerReload()(implicit dao: DAO,
                            ec: ExecutionContextExecutor): Unit = {
@@ -73,8 +73,6 @@ object PeerManager {
     dao.peerManager ! APIBroadcast(
       _.post("status", SetNodeStatus(dao.id, dao.nodeState)))
   }
-
-  val logger = Logger(s"PeerManagerObj")
 
   def attemptRegisterSelfWithPeer(hp: HostPort)(
       implicit dao: DAO): Future[Any] = {
@@ -197,9 +195,8 @@ case class UpdatePeerInfo(peerData: PeerData)
 class PeerManager(ipManager: IPManager)(
     implicit val materialize: ActorMaterializer,
     dao: DAO)
-    extends Actor {
-
-  val logger = Logger(s"PeerManager")
+    extends Actor
+    with StrictLogging {
 
   override def receive: Receive = active(Map.empty)
 

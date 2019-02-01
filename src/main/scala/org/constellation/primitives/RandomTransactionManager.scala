@@ -23,7 +23,7 @@ object RandomTransactionManager {
       } else {
         if (dao.threadSafeMessageMemPool.unsafeCount < 3) {
           val channels = dao.threadSafeMessageMemPool.activeChannels
-          val (channel, lock) = Random.shuffle(channels).head
+          val (channel, lock) = channels.toList(Random.nextInt(channels.size))
           dao.messageService.get(channel).flatMap { data =>
             if (lock.tryAcquire()) {
               Some(ChannelMessage.create(Random.nextInt(1000).toString, data.channelMessage.signedMessageData.signatures.hash, channel))
@@ -93,7 +93,7 @@ object RandomTransactionManager {
 
             val messages = dao.threadSafeMessageMemPool.pull(1).getOrElse(Seq())
             futureTryWithTimeoutMetric(
-              EdgeProcessor.formCheckpoint(messages),
+              EdgeProcessor.formCheckpoint(messages).getTry(60),
               "formCheckpointFromRandomTXManager",
               timeoutSeconds = dao.processingConfig.formCheckpointTimeout,
               {

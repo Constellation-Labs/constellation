@@ -130,7 +130,7 @@ class RandomDataTest extends FlatSpec {
     while (blockNum < maxNumBlocks) {
 
       blockNum += 1
-      val tips = Random.shuffle(activeBlocks).take(2)
+      val tips = Random.shuffle(activeBlocks.toList).take(2)
 
       tips.foreach { case (tip, numUses) =>
 
