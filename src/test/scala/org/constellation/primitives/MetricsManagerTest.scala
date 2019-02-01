@@ -25,15 +25,19 @@ class MetricsManagerTest ()
   }
 
   logger.info("Initializing the DAO actor")
+
   implicit val dao: DAO = new DAO()
- dao.updateKeyPair(KeyUtils.makeKeyPair())
+
+  dao.updateKeyPair(KeyUtils.makeKeyPair())
   dao.idDir.createDirectoryIfNotExists(createParents = true)
   dao.preventLocalhostAsPeer = false
   dao.externalHostString = ""
   dao.externlPeerHTTPPort = 0
+
   val heartBeat: ActorRef = system.actorOf(
     Props(new Heartbeat()), "Heartbeat_Test"
   )
+
   dao.heartbeatActor = heartBeat
   logger.info("DAO actor initialized")
 
