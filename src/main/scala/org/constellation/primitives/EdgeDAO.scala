@@ -53,24 +53,26 @@ class ThreadSafeTXMemPool() {
 
 class ThreadSafeMessageMemPool() {
 
-  private var messages = Seq[ChannelMessage]()
+  private var messages = Seq[Seq[ChannelMessage]]()
 
   val activeChannels: TrieMap[String, Semaphore] = TrieMap()
+
+  val messageHashToSendRequest: TrieMap[String, ChannelSendRequest] = TrieMap()
 
   def pull(minCount: Int): Option[Seq[ChannelMessage]] = this.synchronized{
     if (messages.size > minCount) {
       val (left, right) = messages.splitAt(minCount)
       messages = right
-      Some(left)
+      Some(left.flatten)
     } else None
   }
 
   def batchPutDebug(messagesToAdd: Seq[ChannelMessage]) : Boolean = this.synchronized{
-    messages ++= messagesToAdd
+    //messages ++= messagesToAdd
     true
   }
 
-  def put(message: ChannelMessage, overrideLimit: Boolean = false)(implicit dao: DAO): Boolean = this.synchronized{
+  def put(message: Seq[ChannelMessage], overrideLimit: Boolean = false)(implicit dao: DAO): Boolean = this.synchronized{
     val notContained = !messages.contains(message)
 
     if (notContained) {

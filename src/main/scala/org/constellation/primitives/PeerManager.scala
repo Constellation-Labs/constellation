@@ -162,7 +162,7 @@ object PeerManager {
   }
 
   def validWithLoopbackGuard(host: String)(implicit dao: DAO): Boolean =
-    (host != dao.externalHostString && host != "127.0.0.1") || !dao.preventLocalhostAsPeer
+    (host != dao.externalHostString && host != "127.0.0.1" && host != "localhost") || !dao.preventLocalhostAsPeer
 
   def validPeerAddition(hp: HostPort, peerInfo: Map[Id, PeerData])(
       implicit dao: DAO): Boolean = {

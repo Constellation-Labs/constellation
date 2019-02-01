@@ -46,7 +46,7 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
         } else None
       }
       cm.foreach{ c =>
-        dao.threadSafeMessageMemPool.put(c)
+        dao.threadSafeMessageMemPool.put(Seq(c))
         dao.metrics.updateMetric("messageMemPoolSize", dao.threadSafeMessageMemPool.unsafeCount.toString)
       }
     }
