@@ -53,7 +53,7 @@ class TXValidationBenchmark extends FlatSpec {
     val pkey = sig.publicKey
 
     val hashBytes = batch.hash.getBytes()
-    val signatureBytes = fromBase64(sig.signature)
+    val signatureBytes = hex2bytes(sig.signature)
     assert(KeyUtils.verifySignature(hashBytes, signatureBytes)(pkey))
 
     val seq2 = Seq.fill(batchSize)(0).par

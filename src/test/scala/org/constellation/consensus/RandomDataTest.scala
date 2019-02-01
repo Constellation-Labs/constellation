@@ -7,9 +7,11 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.scalalogging.Logger
 import constellation._
+import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
@@ -208,8 +210,8 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
 
   (dao.id _).when().returns(Fixtures.id)
 
-  val metricsProbe = TestProbe.apply("metricsManager")
-
+  dao.keyPair = KeyUtils.makeKeyPair()
+  dao.metrics = new Metrics()
   val peerProbe = TestProbe.apply("peerManager")
   dao.peerManager = peerProbe.ref
 
@@ -484,7 +486,10 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
         val cb7 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))(keyPairs.head)
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
-          .foreach(cb => cb.store(CheckpointCacheData(Some(cb))))
+          .foreach { cb =>
+            cb.store(CheckpointCacheData(Some(cb)))
+            cb.storeSOE()
+          }
 
         assert(!cb7.simpleValidation())
       }

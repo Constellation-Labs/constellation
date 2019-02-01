@@ -5,8 +5,7 @@ import java.security.{KeyPair, PublicKey}
 
 import constellation._
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.Schema.{Id, Peer, SendToAddress}
-import org.constellation.util.Signed
+import org.constellation.primitives.Schema.{Id, SendToAddress}
 
 
 object Fixtures {

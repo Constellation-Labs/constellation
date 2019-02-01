@@ -70,7 +70,10 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
 
         val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
         dao.metrics.updateMetric("transactionMemPoolSize", memPoolCount.toString)
-        if (memPoolCount < dao.processingConfig.maxMemPoolSize) {
+
+        val haveBalance = dao.addressService.get(dao.selfAddressStr).exists(_.balanceByLatestSnapshot > 10000000)
+
+        if (memPoolCount < dao.processingConfig.maxMemPoolSize && haveBalance) {
 
           val numTX = (dao.processingConfig.randomTXPerRoundPerPeer / peerIds.size) + 1
           Seq.fill(numTX)(0).foreach { _ =>

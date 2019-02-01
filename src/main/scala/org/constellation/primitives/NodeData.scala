@@ -5,21 +5,16 @@ import java.security.KeyPair
 
 import akka.actor.ActorRef
 import constellation._
-import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
-import org.constellation.util.{Metrics, Signed}
+import org.constellation.util.Metrics
 
 trait NodeData {
 
   // var dbActor : SwayDBDatastore = _
   var peerManager: ActorRef = _
-  var consensus: ActorRef = _
   var metrics: Metrics = _
-  var edgeProcessor: ActorRef = _
-  var memPoolManager: ActorRef = _
-  var cpSigner: ActorRef = _
 
   @volatile var downloadMode: Boolean = true
   @volatile var downloadInProgress: Boolean = false

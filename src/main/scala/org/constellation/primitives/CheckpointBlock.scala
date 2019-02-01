@@ -165,7 +165,7 @@ object CheckpointBlock {
       CheckpointEdgeData(transactions.map { _.hash }.sorted, messages)
 
     val observationEdge = ObservationEdge(
-      tips,
+      tips.toList,
       TypedEdgeHash(checkpointEdgeData.hash, EdgeHashType.CheckpointDataHash)
     )
 

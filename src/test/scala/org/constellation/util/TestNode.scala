@@ -58,7 +58,7 @@ object TestNode {
       maxWidth = 3,
       maxMemPoolSize = 15,
       minPeerTimeAddedSeconds = 1,
-      snapshotInterval = 5,
+      snapshotInterval = 2,
       snapshotHeightInterval = 2,
       snapshotHeightDelayInterval = 1,
       roundsPerMessage = 1
