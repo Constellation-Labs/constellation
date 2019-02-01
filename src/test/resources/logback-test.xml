@@ -13,7 +13,7 @@
 </encoder>
     </appender>
 
-<logger level="info" name="APIClient">
+<logger level="info" name="APIClient" additivity="false">
 <appender-ref ref="apiclient" />
 </logger>
 
