@@ -7,6 +7,7 @@ import scala.annotation.tailrec
 
 // From https://github.com/ACINQ/bitcoin-lib/blob/master/src/main/scala/fr/acinq/bitcoin/Base58.scala
 
+// For addresses
 object Base58 {
 
   val alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"

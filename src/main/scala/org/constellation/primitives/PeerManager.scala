@@ -122,8 +122,7 @@ object PeerManager {
           .recover {
             case e: Throwable =>
               logger.error("registration request failed", e)
-              dao.metricsManager ! IncrementMetric(
-                "peerGetRegistrationRequestFailed")
+              dao.metrics.incrementMetric("peerGetRegistrationRequestFailed")
               throw e
           }
       },
@@ -152,13 +151,12 @@ object PeerManager {
                                                           registrationRequest)
                     client.post("register", dao.peerRegistrationRequest)
                   case Failure(e) =>
-                    dao.metricsManager ! IncrementMetric(
-                      "peerGetRegistrationRequestFailed")
+                    dao.metrics.incrementMetric("peerGetRegistrationRequestFailed")
                 }(dao.apiClientExecutionContext)
             }
           }
         case Failure(e) =>
-          dao.metricsManager ! IncrementMetric("peerDiscoveryQueryFailed")
+          dao.metrics.incrementMetric("peerDiscoveryQueryFailed")
 
       }(dao.apiClientExecutionContext)
   }
@@ -188,7 +186,7 @@ case class APIBroadcast[T](func: APIClient => T,
 
 case class PeerHealthCheck(status: Map[Id, Boolean])
 case class PendingRegistration(ip: String, request: PeerRegistrationRequest)
-case class Deregistration(ip: String, port: Int, key: String)
+case class Deregistration(ip: String, port: Int, id: Id)
 
 case object GetPeerInfo
 
@@ -205,10 +203,8 @@ class PeerManager(ipManager: IPManager)(
 
   implicit val system: ActorSystem = context.system
 
-  dao.heartbeatActor ! HeartbeatSubscribe
-
   private def updateMetricsAndDAO(updatedPeerInfo: Map[Id, PeerData]): Unit = {
-    dao.metricsManager ! UpdateMetric(
+    dao.metrics.updateMetric(
       "peers",
       updatedPeerInfo
         .map {
@@ -249,9 +245,9 @@ class PeerManager(ipManager: IPManager)(
             .get("health")
             .onComplete {
               case Success(x) if x.isSuccess =>
-                dao.metricsManager ! IncrementMetric("peerHealthCheckPassed")
+                dao.metrics.incrementMetric("peerHealthCheckPassed")
               case _ =>
-                dao.metricsManager ! IncrementMetric("peerHealthCheckFailed")
+                dao.metrics.incrementMetric("peerHealthCheckFailed")
                 self ! RemovePeerRequest(
                   Some(HostPort(d.peerMetadata.host, d.peerMetadata.httpPort)))
             }(dao.apiClientExecutionContext)
@@ -290,7 +286,7 @@ class PeerManager(ipManager: IPManager)(
       }
 
       if (peerInfo != updatedPeerInfo) {
-        dao.metricsManager ! IncrementMetric("peerRemoved")
+        dao.metrics.incrementMetric("peerRemoved")
       }
 
       updateMetricsAndDAO(updatedPeerInfo)
@@ -359,7 +355,7 @@ class PeerManager(ipManager: IPManager)(
       val badAttempt = isSelfId || !validHost
 
       if (badAttempt) {
-        dao.metricsManager ! IncrementMetric("duplicatePeerAdditionAttempt")
+        dao.metrics.incrementMetric("duplicatePeerAdditionAttempt")
       } else {
         implicit val ec: ExecutionContextExecutor =
           dao.apiClientExecutionContext
@@ -376,25 +372,24 @@ class PeerManager(ipManager: IPManager)(
           logger.warn(
             s"Sign request to ${request.host}:${request.port} failed.",
             t)
-          dao.metricsManager ! IncrementMetric("peerSignatureRequestFailed")
+          dao.metrics.incrementMetric("peerSignatureRequestFailed")
         }
 
         req.foreach { sig =>
-          if (sig.hashSignature.b58EncodedPublicKey != request.key) {
+          if (sig.hashSignature.id != request.id) {
             logger.warn(
-              s"keys should be the same: ${sig.hashSignature.b58EncodedPublicKey} != ${request.key}"
+              s"keys should be the same: ${sig.hashSignature.id} != ${request.id}"
             )
-            dao.metricsManager ! IncrementMetric("peerKeyMismatch")
+            dao.metrics.incrementMetric("peerKeyMismatch")
           }
 
           if (!sig.valid) {
             logger.warn(
               s"Invalid peer signature $request $authSignRequest $sig")
-            dao.metricsManager ! IncrementMetric(
-              "invalidPeerRegistrationSignature")
+            dao.metrics.incrementMetric("invalidPeerRegistrationSignature")
           }
 
-          dao.metricsManager ! IncrementMetric("peerAddedFromRegistrationFlow")
+          dao.metrics.incrementMetric("peerAddedFromRegistrationFlow")
 
           logger.debug(s"Valid peer signature $request $authSignRequest $sig")
 
@@ -405,7 +400,7 @@ class PeerManager(ipManager: IPManager)(
 
           stateF.map { s =>
             val state = s.nodeState
-            val id = Id(EncodedPublicKey(sig.hashSignature.b58EncodedPublicKey))
+            val id = sig.hashSignature.id
             val add =
               PeerMetadata(request.host,
                            16180,
