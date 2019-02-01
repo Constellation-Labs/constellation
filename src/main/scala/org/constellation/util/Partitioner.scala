@@ -1,19 +1,25 @@
 package org.constellation.util
 
-import org.constellation.primitives.Schema.{Id, Transaction}
+import com.google.common.hash.Hashing
+import org.constellation.primitives.Schema.{CheckpointBlock, Id, Transaction}
 
 object Partitioner {
 
-
-  // TODO:  Use XOR for random partition assignment later.
-  // Needs accompanying test to validate even splits
-  def minDistance(ids: Seq[Id], tx: Transaction): Id = ids.minBy{ id =>
-      val bi = BigInt(id.id.getEncoded)
-      val bi2 = BigInt(tx.hash, 16)
-      val xor = bi ^ bi2
-      xor
+  def numeric256(hash: Array[Byte]) = {
+    val sha256 = Hashing.sha256.hashBytes(hash).asBytes()
+    BigInt(sha256)
   }
 
-  // def bestFacilitator
+  def selectTxFacilitator(ids: Seq[Id], tx: Transaction): Id = {
+    val sortedIds = ids.map(id => (id, numeric256(id.id.getEncoded))).sorted
+    val (facilitatorId, _) = sortedIds.minBy{ case (id, idBi) =>
+      val txBi = numeric256(tx.hash.getBytes())
+      val srcBi = numeric256(tx.src.address.getBytes())
+      val xorIdTx = idBi ^ txBi
+      val xorIdSrc = idBi ^ srcBi
 
+      xorIdTx + xorIdSrc
+    }
+    facilitatorId
+  }
 }
