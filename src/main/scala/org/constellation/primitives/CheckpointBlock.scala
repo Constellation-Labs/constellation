@@ -119,11 +119,11 @@ case class CheckpointBlock(
   }
 
   def plus(keyPair: KeyPair): CheckpointBlock = {
-    this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.plus(keyPair)))
+    this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.withSignatureFrom(keyPair)))
   }
 
   def plus(hs: HashSignature): CheckpointBlock = {
-    this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.plus(hs)))
+    this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.withSignature(hs)))
   }
 
   def plus(other: CheckpointBlock): CheckpointBlock = {

@@ -285,7 +285,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           resetTimeout
         )
 
-        val response = (peerManager ? APIBroadcast(_.get("health")))(StandardTimeout).mapTo[Map[Id, Future[Response[String]]]]
+        val response = (peerManager ? APIBroadcast(_.get("health")))(standardTimeout).mapTo[Map[Id, Future[Response[String]]]]
         onCompleteWithBreaker(breaker)(response) {
           case Success(idMap) =>
 

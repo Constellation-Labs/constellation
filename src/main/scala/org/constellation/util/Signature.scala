@@ -10,7 +10,7 @@ import org.constellation.primitives.{Edge, Schema, Transaction}
 import org.constellation.primitives.Schema._
 
 
-trait Signable extends AnyRef {
+trait Signable {
 
   def signInput: Array[Byte] = hash.getBytes()
   def hash: String = this.kryo.sha256
@@ -53,8 +53,8 @@ case class SignatureBatch(
   override def combine(x: SignatureBatch, y: SignatureBatch): SignatureBatch =
     x.copy(signatures = (x.signatures ++ y.signatures).distinct.sorted)
 
-  def plus(other: KeyPair): SignatureBatch = {
-    plus(hashSign(hash, other))
+  def withSignatureFrom(other: KeyPair): SignatureBatch = {
+    withSignature(hashSign(hash, other))
   }
 
   def plus(other: SignatureBatch): SignatureBatch = {
@@ -65,7 +65,7 @@ case class SignatureBatch(
       signatures = unique
     )
   }
-  def plus(hs: HashSignature): SignatureBatch = {
+  def withSignature(hs: HashSignature): SignatureBatch = {
     val toAdd = Seq(hs)
     val newSignatures = (signatures ++ toAdd).distinct
     val unique = newSignatures.groupBy(_.id).map{_._2.maxBy(_.signature)}.toSeq.sorted

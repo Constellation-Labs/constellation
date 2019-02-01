@@ -49,11 +49,9 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
   def amount : Long = edge.data.amount
   def baseHash: String = edge.signedObservationEdge.baseHash
   def hash: String = edge.signedObservationEdge.hash
-  def plus(other: Transaction): Transaction = this.copy(
-    edge = edge.plus(other.edge)
-  )
-  def plus(keyPair: KeyPair): Transaction = this.copy(
-    edge = edge.plus(keyPair)
+
+  def withSignatureFrom(keyPair: KeyPair): Transaction = this.copy(
+    edge = edge.withSignatureFrom(keyPair)
   )
 
   def valid: Boolean = validSrcSignature &&

@@ -113,8 +113,8 @@ object Schema {
     * @param signatureBatch : Collection of validation signatures about the edge.
     */
   case class SignedObservationEdge(signatureBatch: SignatureBatch) extends Signable {
-    def plus(keyPair: KeyPair): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(keyPair))
-    def plus(hs: HashSignature): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(hs))
+    def withSignatureFrom(keyPair: KeyPair): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.withSignatureFrom(keyPair))
+    def withSignature(hs: HashSignature): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.withSignature(hs))
     def plus(other: SignatureBatch): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other))
     def plus(other: SignedObservationEdge): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
     def baseHash: String = signatureBatch.hash

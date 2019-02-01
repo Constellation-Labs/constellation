@@ -29,12 +29,12 @@ case class Edge[+D <: Signable]
     db.putCheckpointEdgeData(data.hash, data.asInstanceOf[CheckpointEdgeData])
   }
 
-  def plus(keyPair: KeyPair): Edge[D] = {
-    this.copy(signedObservationEdge = signedObservationEdge.plus(keyPair))
+  def withSignatureFrom(keyPair: KeyPair): Edge[D] = {
+    this.copy(signedObservationEdge = signedObservationEdge.withSignatureFrom(keyPair))
   }
 
-  def plus(hs: HashSignature): Edge[D] = {
-    this.copy(signedObservationEdge = signedObservationEdge.plus(hs))
+  def withSignature(hs: HashSignature): Edge[D] = {
+    this.copy(signedObservationEdge = signedObservationEdge.withSignature(hs))
   }
 
   def plus(other: Edge[_]): Edge[D] = {

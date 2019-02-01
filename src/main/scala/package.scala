@@ -30,9 +30,9 @@ package object constellation extends POWExt
   with SignHelpExt
   with KeySerializeJSON {
 
-  implicit var StandardTimeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+  implicit var standardTimeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-  val minimumTime : Long = 1518898908367L
+  final val MinimumTime : Long = 1518898908367L
 
   implicit class EasyFutureBlock[T](f: Future[T]) {
     def get(t: Int = 30): T = {
