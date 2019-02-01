@@ -68,8 +68,6 @@ package object constellation extends POWExt
     compactRender(Extraction.decompose(message))
   }
 
-  def decompose(message: Any): JValue = Extraction.decompose(message)
-
   def parse4s(msg: String) : JValue = parseJsonOpt(msg).get
 
   def compactRender(msg: JValue): String = Serialization.write(msg)

@@ -9,14 +9,13 @@ import better.files.File
 import com.softwaremill.sttp.{Response, StatusCodes}
 import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.StoredSnapshot
-import org.constellation.primitives._
 import org.constellation.primitives.ChannelProof
 import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.constellation.{ConstellationNode, HostPort, UpdatePassword}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
-import scala.util.{Random, Try}
+import scala.util.Try
 
 class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
@@ -30,7 +29,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   override def beforeAll(): Unit = {
     // Cleanup DBs
     //Try{File(tmpDir).delete()}
-    Try{File(tmpDir).createDirectories()}
+    //Try{new java.io.File(tmpDir).mkdirs()}
 
   }
 
@@ -79,60 +78,11 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
   private val initialAPIs = apis
 
-  private val schemaStr = SensorData.jsonSchema
-
   "E2E Run" should "demonstrate full flow" in {
 
     logger.info("API Ports: " + apis.map{_.apiPort})
 
     assert(sim.run(initialAPIs, addPeerRequests, snapshotCount = 5))
-
-    val channelId = "test"
-
-    apis.head.postSync("channel/open", ChannelOpenRequest(channelId, jsonSchema = Some(schemaStr)))
-    sim.awaitConditionMet(
-      "Test channel genesis not stored",
-      apis.forall{
-        _.getBlocking[Option[ChannelMessageMetadata]]("messageService/" + channelId).exists(_.blockHash.nonEmpty)
-      }
-    )
-
-    val genesisChannel = apis.head.getBlocking[Option[ChannelMessageMetadata]]("messageService/" + channelId).get.channelMessage
-
-    val validNameChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map{_.toString}.toSeq
-    val invalidNameChars = validNameChars.map{_.toLowerCase}
-
-    val expectedMessages = (0 until 10).flatMap{ batchNumber =>
-      import constellation._
-
-      val validMessages = Seq.fill(batchNumber % 2) {
-        SensorData(
-          Random.nextInt(100),
-          Seq.fill(5){Random.shuffle(validNameChars).head}.mkString
-        )
-      }
-      val invalidMessages = Seq.fill((batchNumber + 1) % 2) {
-        SensorData(
-          Random.nextInt(100) + 500,
-          Seq.fill(5){Random.shuffle(invalidNameChars).head}.mkString
-        )
-      }
-      val serializedMessages = (validMessages ++ invalidMessages).map{_.json}
-      val messages = apis.head.postBlocking[Seq[ChannelMessage]](
-        "channel/send",
-        ChannelSendRequest(channelId, serializedMessages)
-      )
-      sim.awaitConditionMet(
-        s"Message batch $batchNumber not stored",
-        apis.forall{
-          _.getBlocking[Option[ChannelMessageMetadata]](
-            "messageService/" + messages.head.signedMessageData.signatures.hash
-          ).exists(_.blockHash.nonEmpty)
-        }
-      )
-      sim.logger.info(s"Message batch $batchNumber complete, sent ${serializedMessages.size} messages")
-      messages
-    }
 
     val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)), randomizePorts = false, portOffset = 50)
 
@@ -140,21 +90,19 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
     assert(sim.checkReady(Seq(downloadAPI)))
 
-    val messageChannel = initialAPIs.head.getBlocking[Seq[String]]("channels").filterNot{_ == channelId}.head
+    val messageChannel = initialAPIs.head.getBlocking[Seq[String]]("channels").head
 
     val messageWithinSnapshot = initialAPIs.head.getBlocking[Option[ChannelProof]]("channel/" + messageChannel)
-    assert(messageWithinSnapshot.nonEmpty)
 
-    def messageValid(): Unit = messageWithinSnapshot.foreach{ proof =>
+    def messageValid() = messageWithinSnapshot.exists{ proof =>
       val m = proof.channelMessageMetadata
-      assert(m.snapshotHash.nonEmpty)
-      assert(m.blockHash.nonEmpty)
-      assert(proof.checkpointMessageProof.verify())
-      assert(proof.checkpointProof.verify())
-      assert(m.blockHash.contains{proof.checkpointProof.input})
-      assert(m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input)
+      m.snapshotHash.nonEmpty && m.blockHash.nonEmpty && proof.checkpointMessageProof.verify() &&
+      proof.checkpointProof.verify() &&
+      m.blockHash.contains{proof.checkpointProof.input} &&
+      m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
     }
-    messageValid()
+    // messageValid()
+    assert(messageValid())
 
     Thread.sleep(20*1000)
 
@@ -182,51 +130,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     val storedSnapshots = allAPIs.map{_.simpleDownload()}
 
-    var numInvalid = 0
-
-    val messagesInChannelWithBlocks = storedSnapshots.head.flatMap{ s =>
-      s.checkpointCache.map{ cache =>
-        val block = cache.checkpointBlock.get
-        val relevantMessages = block.checkpoint.edge.resolvedObservationEdge.data.get.messages
-          .filter{expectedMessages.contains}
-          //.filter{_.signedMessageData.data.channelId == channelId}.filterNot{_ == genesisChannel}
-        val messageParent = relevantMessages.map{_.signedMessageData.data.previousMessageDataHash}.headOption
-        val messageHash = relevantMessages.map{_.signedMessageData.hash}.headOption
-
-        val valid = relevantMessages.map{m =>
-          val isValid = SensorData.validate(
-            m.signedMessageData.data.message
-          ).isSuccess
-          if (!isValid) numInvalid += 1
-          isValid
-        }.headOption
-        BlockDumpOutput(block.soeHash, block.parentSOEHashes, valid, messageParent, messageHash)
-      }
-    }
-
-    // TODO: Duplicate messages appearing sometimes but not others?
-    println(s"Num invalid $numInvalid")
-
-    val ids = messagesInChannelWithBlocks.map{_.blockSoeHash}.zipWithIndex.toMap
-    val msgToBlock = messagesInChannelWithBlocks.flatMap{z => z.messageHash.map{_ -> z.blockSoeHash}}.toMap
-
-    import constellation._
-    val rendered = messagesInChannelWithBlocks.map{
-      case BlockDumpOutput(hash, parents, isValid, msgParent, msgHash) =>
-
-        val msgParentId = msgParent.flatMap{
-          parent =>
-            msgToBlock.get(parent).flatMap{ids.get}.map{Seq(_)}
-        }.getOrElse(Seq())
-
-        val id = ids(hash)
-        val parentsId = parents.flatMap{ids.get} ++ msgParentId
-        val color = isValid.map{ b =>  if (b) "green" else "red"}.getOrElse("blue")
-        Map("id" -> id, "parentIds" -> parentsId, "color" -> color)
-    }.json
-    println(rendered)
-
-    // TODO: This is flaky and fails randomly sometimes
     val snaps = storedSnapshots.toSet
       .map{x : Seq[StoredSnapshot] =>
         x.map{_.checkpointCache.flatMap{_.checkpointBlock}}.toSet
@@ -240,11 +143,3 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
 
 }
-
-case class BlockDumpOutput(
-                          blockSoeHash: String,
-                          blockParentSOEHashes: Seq[String],
-                          blockMessageValid: Option[Boolean],
-                          messageParent: Option[String],
-                          messageHash: Option[String]
-                          )
