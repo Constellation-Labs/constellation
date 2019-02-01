@@ -7,7 +7,7 @@ import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.{JsonSchemaFactory, JsonValidator}
 import constellation._
 import org.constellation.DAO
-import org.constellation.util.{MerkleProof, ProductHash, SignatureBatch}
+import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
 import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
 
 // Should channelId be associated with a unique keyPair or not?
@@ -15,17 +15,17 @@ case class ChannelMessageData(
                                message: String,
                                previousMessageDataHash: String,
                                channelId: String
-                             ) extends ProductHash
+                             ) extends Signable
 
 case class ChannelOpen(
                       jsonSchema: Option[String] = None,
                       allowInvalid: Boolean = true
                       )
 
-case class SignedData[+D <: ProductHash](
+case class SignedData[+D <: Signable](
                                           data: D,
                                           signatures: SignatureBatch
-                                        ) extends ProductHash
+                                        ) extends Signable
 
 case class ChannelMessageMetadata(
                                  channelMessage: ChannelMessage,

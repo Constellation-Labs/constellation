@@ -4,7 +4,7 @@ import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{ActorRef, ActorSystem, Props, TypedActor}
+import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.RemoteAddress
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LoggingMagnet}
@@ -17,25 +17,24 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.crypto.KeyUtils
-import org.constellation.datastore.swaydb.SwayDBDatastore
+import org.constellation.datastore.SnapshotTrigger
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, Heartbeat}
-import org.joda.time.DateTime
+import org.constellation.util.{APIClient, Metrics}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object ConstellationNode {
-import scala.concurrent.ExecutionContext
+
+  val ConstellationVersion = "1.0.10"
 
   def main(args: Array[String]): Unit = {
-    val logger = Logger("ConstellationNode")
+    val logger = Logger("ConstellationNodeMain")
     logger.info("Main init")
-
-    logger.info("Config load")
     val config = ConfigFactory.load()
+    logger.info("Config loaded")
 
     Try {
 
@@ -79,28 +78,30 @@ import scala.concurrent.ExecutionContext
 
       val hostName = Try{File("external_host_ip").lines.mkString}.getOrElse("127.0.0.1")
 
-
-      val keyPairPath = ".dag/key"
-      val localKeyPair = Try{File(keyPairPath).lines.mkString.x[KeyPair]}
-
-      localKeyPair match {
-        case Failure(e) =>
-          e.printStackTrace()
-        case _ =>
-      }
-
-
       // TODO: update to take from config
-      logger.info("pre Key pair")
-      val keyPair = {
-        localKeyPair.getOrElse {
-          logger.info(s"Key pair not found in $keyPairPath - Generating new key pair")
-          val kp = KeyUtils.makeKeyPair()
-          File(keyPairPath).write(kp.json)
-          kp
+    val keyPairFile = File(".dag/key")
+      val keyPair: KeyPair =
+      if (keyPairFile.notExists) {
+        logger.warn(
+          s"Key pair not found in $keyPairFile - Generating new key pair"
+        )
+        val kp = KeyUtils.makeKeyPair()
+        keyPairFile.write(kp.json)
+        kp
+      } else {
+
+        try {
+          keyPairFile.lines.mkString.x[KeyPair]
+        } catch {
+          case e: Exception =>
+            logger.error(
+              s"Keypair stored in $keyPairFile is invalid. Please delete it and rerun to create a new one.",
+              e
+            )
+          throw e
         }
       }
-      logger.info("post key pair")
+
 
 
       val portOffset = args.headOption.map{_.toInt}
@@ -127,7 +128,8 @@ import scala.concurrent.ExecutionContext
         requestExternalAddressCheck = requestExternalAddressCheck,
         peerHttpPort = peerHttpPort,
         attemptDownload = true,
-        allowLocalhostPeers = false
+        allowLocalhostPeers = false,
+        nodeConfig = NodeConfig()
       )
     } match {
       case Failure(e) => e.printStackTrace()
@@ -145,6 +147,11 @@ import scala.concurrent.ExecutionContext
 
 }
 
+case class NodeConfig(
+                     metricIntervalSeconds: Int = 60,
+                     isGenesisNode: Boolean = false
+                     )
+
 class ConstellationNode(val configKeyPair: KeyPair,
                         val seedPeers: Seq[HostPort],
                         val httpInterface: String,
@@ -152,20 +159,21 @@ class ConstellationNode(val configKeyPair: KeyPair,
                         val udpInterface: String = "0.0.0.0",
                         val udpPort: Int = 16180,
                         val hostName: String = "127.0.0.1",
-                        val timeoutSeconds: Int = 480,
+                        val timeoutSeconds: Int = 10,
                         val requestExternalAddressCheck : Boolean = false,
                         val autoSetExternalAddress: Boolean = false,
                         val peerHttpPort: Int = 9001,
                         val peerTCPPort: Int = 9002,
                         val attemptDownload: Boolean = false,
-                        val allowLocalhostPeers: Boolean = false
+                        val allowLocalhostPeers: Boolean = false,
+                        nodeConfig: NodeConfig = NodeConfig()
                        )(
                          implicit val system: ActorSystem,
                          implicit val materialize: ActorMaterializer,
                          implicit val executionContext: ExecutionContext
                        ){
 
-  implicit val dao: DAO = new DAO()
+  implicit val dao: DAO = new DAO(nodeConfig)
   dao.updateKeyPair(configKeyPair)
   dao.idDir.createDirectoryIfNotExists(createParents = true)
 
@@ -175,18 +183,12 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   import dao._
 
-  val heartBeat: ActorRef = system.actorOf(
-    Props(new Heartbeat()), s"Heartbeat_$publicKeyHash"
-  )
+  val metrics_ = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
+  dao.metrics = metrics_
 
-  dao.heartbeatActor = heartBeat
-  // Setup actors
-  val metricsManager: ActorRef = system.actorOf(
-    Props(new MetricsManager()), s"MetricsManager_$publicKeyHash"
-  )
+  val randomTXManager = new RandomTransactionManager()
 
-  dao.metricsManager = metricsManager
-
+  val snapshotTrigger = new SnapshotTrigger()
 
   val ipManager = IPManager()
 
@@ -196,10 +198,10 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   logger.info(s"Node init with API $httpInterface $httpPort peerPort: $peerHttpPort")
 
-  implicit val timeout: Timeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
+  constellation.standardTimeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
 
   val udpAddressString: String = hostName + ":" + udpPort
-  lazy val hostPort = HostPort(hostName, httpPort)
+  lazy val peerHostPort = HostPort(hostName, peerHttpPort)
   val udpAddress = new InetSocketAddress(hostName, udpPort)
 
   if (autoSetExternalAddress) {
@@ -291,12 +293,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
   }
 
   logger.info("Node started")
-  dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
-  metricsManager ! UpdateMetric("address", dao.selfAddressStr)
-  metricsManager ! UpdateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
-  metricsManager ! UpdateMetric("nodeStartDate", new DateTime(System.currentTimeMillis()).toString)
-  dao.metricsManager ! UpdateMetric("externalHost", dao.externalHostString)
-  dao.metricsManager ! UpdateMetric("version", "1.0.9")
 
   if (attemptDownload) {
     seedPeers.foreach{
@@ -304,5 +300,10 @@ class ConstellationNode(val configKeyPair: KeyPair,
     }
     PeerManager.initiatePeerReload()(dao, dao.edgeExecutionContext)
   }
+
+  if (nodeConfig.isGenesisNode) {
+    Genesis.start()
+  }
+
 
 }

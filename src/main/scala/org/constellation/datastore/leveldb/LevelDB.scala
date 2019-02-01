@@ -2,7 +2,7 @@ package org.constellation.datastore.leveldb
 import better.files._
 import constellation._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.ProductHash
+import org.constellation.util.Signable
 import org.iq80.leveldb.impl.Iq80DBFactory.{asString, bytes, factory}
 import org.iq80.leveldb.{DB, Options}
 
@@ -20,7 +20,7 @@ class LevelDB(val file: File) {
     Option(db.get(bytes(s))).filter(_.nonEmpty)
   def put(k: String, v: Array[Byte]) = Try { db.put(bytes(k), v) }
   def contains(s: String): Boolean = getBytes(s).nonEmpty
-  def contains[T <: ProductHash](t: T): Boolean = getBytes(t.hash).nonEmpty
+  def contains[T <: Signable](t: T): Boolean = getBytes(t.hash).nonEmpty
   def putStr(k: String, v: String) = Try { db.put(bytes(k), bytes(v)) }
   def putBytes(k: String, v: Array[Byte]): Boolean = {
 
@@ -37,21 +37,21 @@ class LevelDB(val file: File) {
     done
   }
   def put(k: String, v: String) = Try { db.put(bytes(k), bytes(v)) }
-  def putHash[T <: ProductHash, Q <: ProductHash](t: T, q: Q): Try[Unit] =
+  def putHash[T <: Signable, Q <: Signable](t: T, q: Q): Try[Unit] =
     put(t.hash, q.hash)
 
   // JSON
   def getAsJson[T](s: String)(implicit m: Manifest[T]): Option[T] = get(s).map {
     _.x[T]
   }
-  def getHashAsJson[T](s: ProductHash)(implicit m: Manifest[T]): Option[T] =
+  def getHashAsJson[T](s: Signable)(implicit m: Manifest[T]): Option[T] =
     get(s.hash).map { _.x[T] }
   def getRaw(s: String): String = asString(db.get(bytes(s)))
   def getSafe(s: String): Try[String] = Try { asString(db.get(bytes(s))) }
-  def putJson[T <: ProductHash, Q <: AnyRef](t: T, q: Q): Try[Unit] =
+  def putJson[T <: Signable, Q <: AnyRef](t: T, q: Q): Try[Unit] =
     put(t.hash, q.json)
   def putJson(k: String, t: AnyRef): Try[Unit] = put(k, t.json)
-  def putJson[T <: ProductHash](t: T): Try[Unit] = put(t.hash, t.json)
+  def putJson[T <: Signable](t: T): Try[Unit] = put(t.hash, t.json)
 
   def kryoGet(key: String): Option[AnyRef] =
     Try { getBytes(key).map { KryoSerializer.deserialize } }.toOption.flatten

@@ -4,12 +4,24 @@ import java.security.KeyPair
 
 import constellation._
 import org.constellation.DAO
+import org.constellation.consensus.EdgeProcessor
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 
 
 
 object Genesis {
+
+
+  def createGenesisBlock = {
+    //CheckpointBlock.createCheckpointBlock()
+  }
+
+  def start()(implicit dao: DAO) = {
+
+
+
+  }
 
   val CoinBaseHash = "coinbase"
 
@@ -18,22 +30,22 @@ object Genesis {
                         ): CheckpointBlock = {
 
     val distr = ids.map{ id =>
-      createTransaction(selfAddressStr, id.address.address, 1e6.toLong, keyPair)
+      createTransaction(selfAddressStr, id.address, 1e6.toLong, keyPair)
     }
 
     val distrCB = CheckpointEdgeData(distr.map{_.edge.signedObservationEdge.signatureBatch.hash})
 
     val distrOE = ObservationEdge(
-      TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash),
-      TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash),
-      data = Some(TypedEdgeHash(distrCB.hash, EdgeHashType.CheckpointDataHash))
+      Seq(
+        TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash),
+        TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash)
+      ),
+      TypedEdgeHash(distrCB.hash, EdgeHashType.CheckpointDataHash)
     )
 
     val distrSOE = signedObservationEdge(distrOE)(keyPair)
 
-    val distrROE = ResolvedObservationEdge(genesisSOE, genesisSOE, Some(distrCB))
-
-    val distrRED = Edge(distrOE, distrSOE, distrROE)
+    val distrRED = Edge(distrOE, distrSOE, distrCB)
 
     val distrCBO = CheckpointBlock(distr, CheckpointEdge(distrRED))
 
@@ -56,20 +68,16 @@ object Genesis {
     val cb = CheckpointEdgeData(Seq(genTXHash))
 
     val oe = ObservationEdge(
-      TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
-      TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
-      data = Some(TypedEdgeHash(cb.hash, EdgeHashType.CheckpointDataHash))
+      Seq(
+        TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
+        TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash)
+      ),
+      TypedEdgeHash(cb.hash, EdgeHashType.CheckpointDataHash)
     )
 
     val soe = signedObservationEdge(oe)(keyPair)
 
-    val roe = ResolvedObservationEdge(
-      null.asInstanceOf[SignedObservationEdge],
-      null.asInstanceOf[SignedObservationEdge],
-      Some(cb)
-    )
-
-    val redGenesis = Edge(oe, soe, roe)
+    val redGenesis = Edge(oe, soe, cb)
 
     val genesisCBO = CheckpointBlock(Seq(redTXGenesisResolved), CheckpointEdge(redGenesis))
 
@@ -106,6 +114,10 @@ trait Genesis extends NodeData with EdgeDAO {
 
     )
 
+    go.genesis.storeSOE()
+    go.initialDistribution.storeSOE()
+    go.initialDistribution2.storeSOE()
+
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
     go.genesis.transactions.foreach{
       rtx =>
@@ -134,7 +146,7 @@ trait Genesis extends NodeData with EdgeDAO {
 */
 
    // metricsManager ! UpdateMetric("activeTips", "2")
-    metricsManager ! UpdateMetric("genesisAccepted", "true")
+    dao.metrics.updateMetric("genesisAccepted", "true")
  //   metricsManager ! UpdateMetric("z_genesisBlock", go.json)
     if (setAsTips) {
       dao.threadSafeTipService.acceptGenesis(go)

@@ -7,7 +7,6 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import com.typesafe.scalalogging.Logger
 import io.prometheus.client.CollectorRegistry
 import org.constellation.crypto.KeyUtils
-import org.constellation.util.Heartbeat
 import java.util.Collections
 
 class MetricsManagerTest ()
@@ -31,14 +30,9 @@ class MetricsManagerTest ()
   dao.preventLocalhostAsPeer = false
   dao.externalHostString = ""
   dao.externlPeerHTTPPort = 0
-  val heartBeat: ActorRef = system.actorOf(
-    Props(new Heartbeat()), "Heartbeat_Test"
-  )
-  dao.heartbeatActor = heartBeat
   logger.info("DAO actor initialized")
 
-  val metricsManager = TestActorRef(Props(new MetricsManager()), "MetricsManager_Test")
-  dao.metricsManager = metricsManager
+
   logger.info("MetricsManager actor initialized")
 
   "MetricsManager" should "report micrometer metrics" in {

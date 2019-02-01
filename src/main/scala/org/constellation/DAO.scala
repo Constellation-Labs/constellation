@@ -5,9 +5,7 @@ import better.files.File
 import com.typesafe.scalalogging.Logger
 import org.constellation.primitives._
 
-class DAO extends NodeData
-  with Reputation
-  with PeerInfoUDP
+class DAO(val nodeConfig: NodeConfig = NodeConfig()) extends NodeData
   with Genesis
   with EdgeDAO {
 
@@ -53,10 +51,6 @@ class DAO extends NodeData
 
   def restartNode(): Unit = {
     downloadMode = true
-    signedPeerLookup.clear()
-    peersAwaitingAuthenticationToNumAttempts.clear()
-    signedPeerLookup.clear()
-    deadPeers = Seq()
   }
 
 }

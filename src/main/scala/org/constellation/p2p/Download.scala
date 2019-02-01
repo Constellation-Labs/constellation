@@ -21,7 +21,6 @@ import scala.util.{Failure, Try}
 object Download {
 
   val logger = Logger(s"Download")
-  implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
   // Add warning for empty peers
   def downloadActual()(implicit dao: DAO, ec: ExecutionContext): Unit = {
@@ -46,7 +45,7 @@ object Download {
     }.head
     dao.acceptGenesis(genesis)
 
-    dao.metricsManager ! UpdateMetric("downloadedGenesis", "true")
+    dao.metrics.updateMetric("downloadedGenesis", "true")
 
     val peerData = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().filter{_._2.peerMetadata.nodeState == NodeState.Ready}
 
@@ -56,43 +55,43 @@ object Download {
 
     val snapshotInfo = snapshotClient.getBlockingBytesKryo[SnapshotInfo]("info", timeout = 300.seconds)
 
-    dao.metricsManager ! UpdateMetric("downloadExpectedNumSnapshotsIncludingPreExisting", snapshotInfo.snapshotHashes.size.toString)
+    dao.metrics.updateMetric("downloadExpectedNumSnapshotsIncludingPreExisting", snapshotInfo.snapshotHashes.size.toString)
 
     val preExistingSnapshots = dao.snapshotPath.list.toSeq.map{_.name}
 
     val snapshotHashes = snapshotInfo.snapshotHashes.filterNot(preExistingSnapshots.contains)
 
-    dao.metricsManager ! UpdateMetric("downloadExpectedNumSnapshots", snapshotHashes.size.toString)
+    dao.metrics.updateMetric("downloadExpectedNumSnapshots", snapshotHashes.size.toString)
 
     val groupSize = (snapshotHashes.size / peerData.size) + 1
 
-    dao.metricsManager ! UpdateMetric("downloadGroupSize", groupSize.toString)
+    dao.metrics.updateMetric("downloadGroupSize", groupSize.toString)
 
     val groupedHashes = snapshotHashes.grouped(groupSize).toSeq
 
-    dao.metricsManager ! UpdateMetric("downloadGroupedHashesSize", groupedHashes.size.toString)
+    dao.metrics.updateMetric("downloadGroupedHashesSize", groupedHashes.size.toString)
 
     val grouped = groupedHashes.zip(peerData.values)
-    dao.metricsManager ! UpdateMetric("downloadGroupedZipSize", grouped.size.toString)
+    dao.metrics.updateMetric("downloadGroupedZipSize", grouped.size.toString)
 
-    dao.metricsManager ! UpdateMetric("downloadGroupCheckSize", grouped.flatMap(_._1).size.toString)
+    dao.metrics.updateMetric("downloadGroupCheckSize", grouped.flatMap(_._1).size.toString)
 
     // TODO: Move elsewhere unify with other code.
     def acceptSnapshot(r: StoredSnapshot) = {
       r.checkpointCache.foreach{
         c =>
-          dao.metricsManager ! IncrementMetric("downloadedBlocks")
+          dao.metrics.incrementMetric("downloadedBlocks")
           // Bypasses tip update / accumulating acceptedSinceCB
 
           // TODO: Rebuild ledger and verify, turning off for debug
-          dao.metricsManager ! IncrementMetric("checkpointAccepted")
+          dao.metrics.incrementMetric("checkpointAccepted")
 
           //tryWithMetric(acceptCheckpoint(c), "acceptCheckpoint")
           c.checkpointBlock.foreach{
             _.transactions.foreach{
               tx =>
                 //     tx.ledgerApplySnapshot()
-                dao.metricsManager ! IncrementMetric("transactionAccepted")
+                dao.metrics.incrementMetric("transactionAccepted")
               // dao.transactionService.delete(Set(tx.hash))
             }
           }
@@ -119,12 +118,12 @@ object Download {
         }
         res.toOption.foreach{
           r =>
-            dao.metricsManager ! IncrementMetric("downloadedSnapshots")
-            dao.metricsManager ! IncrementMetric("snapshotCount")
+            dao.metrics.incrementMetric("downloadedSnapshots")
+            dao.metrics.incrementMetric("snapshotCount")
             acceptSnapshot(r)
         }
         if (res.isFailure) {
-          dao.metricsManager ! IncrementMetric("downloadSnapshotDataFailed")
+          dao.metrics.incrementMetric("downloadSnapshotDataFailed")
         }
         done = res.isSuccess
 
@@ -146,9 +145,9 @@ object Download {
     }
 
     downloadRes.flatten.toList
-    dao.metricsManager ! UpdateMetric("downloadFirstPassComplete", "true")
+    dao.metrics.updateMetric("downloadFirstPassComplete", "true")
     dao.nodeState = NodeState.DownloadCompleteAwaitingFinalSync
-    dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
+    dao.metrics.updateMetric("nodeState", dao.nodeState.toString)
 
     // Thread.sleep(10*1000)
 
@@ -158,7 +157,7 @@ object Download {
       .filterNot(preExistingSnapshots.contains)
       .filterNot(snapshotHashes.contains)
 
-    dao.metricsManager ! UpdateMetric("downloadExpectedNumSnapshotsSecondPass", snapshotHashes2.size.toString)
+    dao.metrics.updateMetric("downloadExpectedNumSnapshotsSecondPass", snapshotHashes2.size.toString)
 
 
     val groupSize2Original = snapshotHashes2.size / peerData.size
@@ -173,7 +172,7 @@ object Download {
     }
 
     downloadRes2.flatten.toList
-    dao.metricsManager ! UpdateMetric("downloadSecondPassComplete", "true")
+    dao.metrics.updateMetric("downloadSecondPassComplete", "true")
 
     logger.debug("First pass download finished")
 
@@ -184,24 +183,23 @@ object Download {
     dao.threadSafeTipService.syncBuffer.foreach{ h =>
 
       if (!snapshotInfo2.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo2.snapshotCache.contains(h)) {
-        dao.metricsManager ! IncrementMetric("syncBufferCBAccepted")
+        dao.metrics.incrementMetric("syncBufferCBAccepted")
         dao.threadSafeTipService.accept(h)
-        /*        dao.metricsManager ! IncrementMetric("checkpointAccepted")
+        /*        dao.metrics.incrementMetric("checkpointAccepted")
                 dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
                 h.checkpointBlock.get.transactions.foreach {
                   _ =>
-                    dao.metricsManager ! IncrementMetric("transactionAccepted")
+                    dao.metrics.incrementMetric("transactionAccepted")
                 }*/
       }
     }
 
     dao.threadSafeTipService.syncBuffer = Seq()
 
-    dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
+    dao.metrics.updateMetric("nodeState", dao.nodeState.toString)
     dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, NodeState.Ready)))
     dao.downloadFinishedTime = System.currentTimeMillis()
-    dao.transactionAcceptedAfterDownload = (dao.metricsManager ? GetMetrics)
-      .mapTo[Map[String, String]].get().get("transactionAccepted").map{_.toLong}.getOrElse(0L)
+    dao.transactionAcceptedAfterDownload = dao.metrics.getMetrics.get("transactionAccepted").map{_.toLong}.getOrElse(0L)
 
 
   }

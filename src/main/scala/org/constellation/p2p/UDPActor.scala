@@ -7,15 +7,19 @@ import akka.actor.{Actor, ActorRef}
 import akka.io.{IO, Udp}
 import akka.util.{ByteString, Timeout}
 import org.constellation.DAO
-import org.constellation.consensus.Consensus.RemoteMessage
 import org.constellation.serializer.KryoSerializer._
 
 import scala.collection.concurrent.TrieMap
 
+/**
+  * None of this code is used right now
+  * We will revisit it in the future as alternative to REST/TCP
+  */
+
 // Consider adding ID to all UDP messages? Possibly easier.
 case class UDPMessage(data: Any, remote: InetSocketAddress)
 case class GetUDPSocketRef()
-case class UDPSend[T <: RemoteMessage](data: T, remote: InetSocketAddress)
+case class UDPSend[T](data: T, remote: InetSocketAddress)
 case class RegisterNextActor(nextActor: ActorRef)
 case class GetSelfAddress()
 case class Ban(address: InetSocketAddress)
@@ -65,7 +69,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
     case Udp.Received(data, remote) =>
 
 
-      if (dao.bannedIPs.contains(remote)) {
+      if (true) { //dao.bannedIPs.contains(remote)) {
         println(s"BANNED MESSAGE DETECTED FROM $remote")
       } else {
 
@@ -119,7 +123,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
     case RegisterNextActor(next) => nextActor = Some(next)
 
     case Ban(remote) => {
-      dao.bannedIPs = {dao.bannedIPs ++ Seq(remote)}.distinct
+    //  dao.bannedIPs = {dao.bannedIPs ++ Seq(remote)}.distinct
     }
 
     case GetUDPSocketRef => sender() ! udpSocket
@@ -137,4 +141,4 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 case class SerializedUDPMessage(data: ByteString,
                                 packetGroup: Long,
                                 packetGroupSize: Long,
-                                packetGroupId: Int) extends RemoteMessage
+                                packetGroupId: Int)
