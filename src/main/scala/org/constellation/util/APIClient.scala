@@ -92,7 +92,7 @@ class APIClient private(host: String = "127.0.0.1", port: Int, val peerHTTPPort:
 
     /** @return ??. */
     def blocking(timeout: Duration = 60.seconds): T = {
-      Await.result(req, timeout)
+      Await.result(req, timeout + 100.millis)
     }
 
   }
