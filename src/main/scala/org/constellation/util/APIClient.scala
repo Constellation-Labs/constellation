@@ -51,11 +51,9 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
 
   implicit val hostPortForLogging = HostPort(host, port)
 
-  val logger = Logger.takingImplicit[HostPort]("APIClient")
-  implicit val loggerImplicit = logger
+  implicit val logger = Logger.takingImplicit[HostPort]("APIClient")
 
-  val backend = new LoggingSttpBackend[Future, Nothing](PrometheusBackend[Future, Nothing](OkHttpFutureBackend()))
-  implicit val backend2 = backend
+  implicit val backend = new LoggingSttpBackend[Future, Nothing](PrometheusBackend[Future, Nothing](OkHttpFutureBackend()))
   implicit val serialization = native.Serialization
 
   val daoOpt = Option(dao)
