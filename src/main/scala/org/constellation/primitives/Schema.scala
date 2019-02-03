@@ -15,7 +15,7 @@ import org.constellation.util._
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
 
-// This can't be a trait due to serialization issues
+// This can't be a trait due to serialization issues.
 object Schema {
 
   case class TreeVisual(
