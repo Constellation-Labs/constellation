@@ -2,9 +2,9 @@ package org.constellation.consensus
 
 import java.nio.file.Path
 import java.security.KeyPair
-
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
+
 import constellation._
 import org.constellation.DAO
 import org.constellation.primitives.Schema._

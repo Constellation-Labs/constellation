@@ -7,8 +7,8 @@ import org.constellation.DAO
 import org.constellation.consensus.{EdgeProcessor, Snapshot}
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState, SendToAddress}
 import org.constellation.util.Periodic
-import org.joda.time.DateTime
 
+import org.joda.time.DateTime
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 

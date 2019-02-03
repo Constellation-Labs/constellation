@@ -3,10 +3,11 @@ package org.constellation.crypto
 import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
 import java.security.{KeyFactory, SecureRandom, _}
 import java.util.Base64
-
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.Logger
+
 import constellation.SHA256Ext
+
 import org.spongycastle.jce.provider.BouncyCastleProvider
 
 /**

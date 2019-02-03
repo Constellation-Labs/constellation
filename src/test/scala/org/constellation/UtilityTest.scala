@@ -3,7 +3,9 @@ package org.constellation
 import java.security.KeyPair
 
 import org.constellation.crypto.KeyUtils._
+
 import org.scalatest.FlatSpec
+
 //case class Test(a: EdgeHashType, b: EdgeHashType)
 
 /** Documentation. */

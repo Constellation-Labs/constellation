@@ -3,10 +3,12 @@ package org.constellation.util
 import akka.http.scaladsl.coding.Gzip
 import akka.util.ByteString
 import com.typesafe.config.ConfigFactory
+
 import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.primitives.Schema.{Id, MetricsResult}
 import org.constellation.serializer.KryoSerializer
+
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import com.softwaremill.sttp._
@@ -14,7 +16,6 @@ import com.softwaremill.sttp.json4s._
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.typesafe.scalalogging.Logger
-
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 

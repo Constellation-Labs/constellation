@@ -4,8 +4,8 @@ import constellation._
 import org.constellation.DAO
 import org.constellation.datastore.{KVDB, KVDBDatastoreImpl}
 import org.constellation.serializer.KryoSerializer
-import swaydb.data.config.MMAP
 
+import swaydb.data.config.MMAP
 import scala.concurrent.ExecutionContextExecutor
 
 /** Documentation. */

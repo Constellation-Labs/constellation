@@ -1,6 +1,6 @@
 package org.constellation.primitives
-import akka.http.scaladsl.model.RemoteAddress
 
+import akka.http.scaladsl.model.RemoteAddress
 import scala.collection.{Set, concurrent}
 
 /** Documentation. */

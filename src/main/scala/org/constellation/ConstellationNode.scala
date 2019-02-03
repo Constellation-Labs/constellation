@@ -3,7 +3,6 @@ package org.constellation
 import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
-
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.RemoteAddress
@@ -15,6 +14,7 @@ import better.files._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import constellation._
+
 import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.SnapshotTrigger

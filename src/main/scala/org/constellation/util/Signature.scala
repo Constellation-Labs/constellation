@@ -1,8 +1,8 @@
 package org.constellation.util
 
 import java.security.{KeyPair, PublicKey}
-
 import cats.kernel.Monoid
+
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._

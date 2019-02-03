@@ -1,6 +1,9 @@
 package org.constellation.datastore.proxy
+
 import better.files.File
+
 import constellation._
+
 import org.constellation.datastore.KVDB
 
 /** Documentation. */

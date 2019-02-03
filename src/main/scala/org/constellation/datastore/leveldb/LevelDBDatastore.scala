@@ -1,4 +1,5 @@
 package org.constellation.datastore.leveldb
+
 import org.constellation.DAO
 import org.constellation.datastore.KVDBDatastoreImpl
 

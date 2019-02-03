@@ -1,10 +1,10 @@
 package org.constellation.p2p
 
 import java.util.concurrent.TimeUnit
-
 import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.scalalogging.Logger
+
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus._
@@ -12,8 +12,8 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.APIClient
-import scala.concurrent.duration._
 
+import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Try}
 

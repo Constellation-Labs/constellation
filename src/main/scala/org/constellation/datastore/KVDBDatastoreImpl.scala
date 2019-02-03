@@ -1,4 +1,5 @@
 package org.constellation.datastore
+
 import org.constellation.consensus
 import org.constellation.primitives.Schema._
 

@@ -2,10 +2,11 @@
 package org.constellation
 
 import org.scalatest.FlatSpec
+
 import constellation._
 import org.constellation.primitives.Schema.{TX, TXData}
-import com.twitter.algebird._
 
+import com.twitter.algebird._
 import scala.collection.immutable
 import scala.util.Random
 

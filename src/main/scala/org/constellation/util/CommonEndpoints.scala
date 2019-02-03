@@ -1,21 +1,23 @@
 package org.constellation.util
 
 import java.util.concurrent.TimeUnit
-
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model.{HttpEntity, HttpResponse, MediaTypes, StatusCodes}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.FromEntityUnmarshaller
 import akka.util.{ByteString, Timeout}
+
 import constellation._
+
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+
 import org.constellation.DAO
 import org.constellation.consensus.Snapshot
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.serializer.KryoSerializer
-import org.json4s.native.Serialization
 
+import org.json4s.native.Serialization
 import scala.concurrent.Future
 
 /** Documentation. */

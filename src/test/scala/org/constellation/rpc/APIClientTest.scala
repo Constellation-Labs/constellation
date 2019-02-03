@@ -2,12 +2,13 @@ package org.constellation.rpc
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.{APIClient, TestNode}
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
 
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
 import scala.concurrent.ExecutionContextExecutor
 
 /** Documentation. */

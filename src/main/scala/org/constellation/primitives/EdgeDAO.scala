@@ -1,9 +1,9 @@
 package org.constellation.primitives
 
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
-
 import akka.util.Timeout
 import com.twitter.storehaus.cache.MutableLRUCache
+
 import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._

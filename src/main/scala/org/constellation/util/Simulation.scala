@@ -1,9 +1,9 @@
 package org.constellation.util
 
 import java.util.concurrent.ForkJoinPool
-
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
+
 import constellation._
 import org.constellation.primitives.CheckpointBlock
 import org.constellation.primitives.Schema._

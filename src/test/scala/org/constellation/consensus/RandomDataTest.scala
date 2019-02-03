@@ -1,11 +1,11 @@
 package org.constellation.consensus
 
 import java.security.KeyPair
-
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.scalalogging.Logger
+
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
@@ -13,9 +13,9 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures}
+
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
-
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
 

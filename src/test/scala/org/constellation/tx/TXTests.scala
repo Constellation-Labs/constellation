@@ -1,6 +1,7 @@
 package org.constellation.tx
 
 import org.constellation.primitives.Schema.SendToAddress
+
 import org.scalatest.FlatSpec
 
 /** Documentation. */

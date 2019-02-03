@@ -1,7 +1,6 @@
  package org.constellation.p2p
 
 import java.net.InetSocketAddress
-
 import akka.actor.{Actor, Props}
 import akka.io.{IO, Tcp}
 

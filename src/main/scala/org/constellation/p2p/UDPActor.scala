@@ -2,10 +2,10 @@ package org.constellation.p2p
 
 import java.net.InetSocketAddress
 import java.util.concurrent.TimeUnit
-
 import akka.actor.{Actor, ActorRef}
 import akka.io.{IO, Udp}
 import akka.util.{ByteString, Timeout}
+
 import org.constellation.DAO
 import org.constellation.serializer.KryoSerializer._
 

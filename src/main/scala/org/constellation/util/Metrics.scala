@@ -1,7 +1,6 @@
 package org.constellation.util
 
 import java.util.concurrent._
-
 import better.files.File
 import com.typesafe.scalalogging.Logger
 import io.kontainers.micrometer.akka.AkkaMetricRegistry
@@ -11,10 +10,11 @@ import io.micrometer.core.instrument.binder.logging.LogbackMetrics
 import io.micrometer.core.instrument.binder.system.{FileDescriptorMetrics, ProcessorMetrics, UptimeMetrics}
 import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import io.prometheus.client.CollectorRegistry
+
 import constellation._
+
 import org.constellation.{ConstellationNode, DAO}
 import org.joda.time.DateTime
-
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.Future
 import scala.util.Try

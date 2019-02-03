@@ -1,13 +1,14 @@
 package org.constellation.primitives
 
 import java.net.InetSocketAddress
-
 import akka.actor.{Actor, ActorSystem}
 import akka.http.scaladsl.model.RemoteAddress
 import akka.stream.ActorMaterializer
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
+
 import constellation.futureTryWithTimeoutMetric
+
 import org.constellation.p2p.{Download, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat}
