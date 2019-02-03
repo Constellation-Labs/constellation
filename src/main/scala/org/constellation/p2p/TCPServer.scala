@@ -8,14 +8,18 @@ import akka.io.{IO, Tcp}
  // TODO: Complete as additional transport layer to REST PeerAPI
  // Consider using just a java socket server instead of akka
 
+/** Documentation. */
 class SimplisticHandler extends Actor {
   import Tcp._
+
+  /** Documentation. */
   def receive: PartialFunction[Any, Unit] = {
     case Received(data) => sender() ! Write(data)
     case PeerClosed     => context stop self
   }
 }
 
+/** Documentation. */
 class TCPServer(hostInterface: String, port: Int) extends Actor {
 
   import akka.io.Tcp._
@@ -23,6 +27,7 @@ class TCPServer(hostInterface: String, port: Int) extends Actor {
 
   IO(Tcp) ! Bind(self, new InetSocketAddress(hostInterface, port))
 
+  /** Documentation. */
   def receive: PartialFunction[Any, Unit] = {
     case b @ Bound(localAddress) =>
       context.parent ! b

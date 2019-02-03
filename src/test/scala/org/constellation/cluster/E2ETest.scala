@@ -18,6 +18,7 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
 import scala.util.{Random, Try}
 
+/** Documentation. */
 class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
   val logger = Logger("E2ETest")
@@ -27,6 +28,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
+  /** Documentation. */
   override def beforeAll(): Unit = {
     // Cleanup DBs
     //Try{File(tmpDir).delete()}
@@ -34,6 +36,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
   }
 
+  /** Documentation. */
   override def afterAll() {
     // Cleanup DBs
     TestNode.clearNodes()
@@ -41,6 +44,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     Try{File(tmpDir).delete()}
   }
 
+  /** Documentation. */
   def createNode(
                   randomizePorts: Boolean = true,
                   seedHosts: Seq[HostPort] = Seq(),
@@ -59,6 +63,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   }
   val updatePasswordReq = UpdatePassword(Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword"))
 
+  /** Documentation. */
   def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
     apiClients.map { client =>
       val response = client.postSync("password/update", updatePasswordReq)
@@ -67,7 +72,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     }
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
-
 
   val totalNumNodes = 3
 
@@ -151,6 +155,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     val messageWithinSnapshot = initialAPIs.head.getBlocking[Option[ChannelProof]]("channel/" + messageChannel)
     assert(messageWithinSnapshot.nonEmpty)
 
+    /** Documentation. */
     def messageValid(): Unit = messageWithinSnapshot.foreach{ proof =>
       val m = proof.channelMessageMetadata
       assert(m.snapshotHash.nonEmpty)
@@ -175,7 +180,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     // Stop transactions
     sim.triggerRandom(allAPIs)
 
-
     sim.logger.info("Stopping transactions to run parity check")
 
     Thread.sleep(30000)
@@ -184,7 +188,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     // Follow pattern in Simulation.await examples
     assert(allAPIs.map{_.metrics("checkpointAccepted")}.distinct.size == 1)
     assert(allAPIs.map{_.metrics("transactionAccepted")}.distinct.size == 1)
-
 
     val storedSnapshots = allAPIs.map{_.simpleDownload()}
 
@@ -244,9 +247,9 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
   }
 
-
 }
 
+/** Documentation. */
 case class BlockDumpOutput(
                           blockSoeHash: String,
                           blockParentSOEHashes: Seq[String],

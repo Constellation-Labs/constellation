@@ -6,10 +6,12 @@ import org.constellation.crypto.KeyUtils.{hexToPrivateKey, hexToPublicKey, priva
 import org.json4s.{CustomSerializer, Formats, JObject}
 import org.json4s.JsonAST.JString
 
+/** Documentation. */
 trait KeySerializeJSON {
 
   implicit val constellationFormats: Formats
 
+  /** Documentation. */
   class PrivateKeySerializer extends CustomSerializer[PrivateKey](format => ( {
     case jObj: JObject =>
       // implicit val f: Formats = format
@@ -20,6 +22,7 @@ trait KeySerializeJSON {
   }
   ))
 
+  /** Documentation. */
   class PublicKeySerializer extends CustomSerializer[PublicKey](format => ( {
     case jstr: JObject =>
       // implicit val f: Formats = format
@@ -30,6 +33,7 @@ trait KeySerializeJSON {
   }
   ))
 
+  /** Documentation. */
   class KeyPairSerializer extends CustomSerializer[KeyPair](format => ( {
     case jObj: JObject =>
       //  implicit val f: Formats = format
@@ -48,3 +52,4 @@ trait KeySerializeJSON {
   ))
 
 }
+

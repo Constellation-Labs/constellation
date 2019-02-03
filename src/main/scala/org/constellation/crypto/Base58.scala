@@ -1,6 +1,5 @@
 package org.constellation.crypto
 
-
 import java.math.BigInteger
 
 import scala.annotation.tailrec
@@ -8,13 +7,15 @@ import scala.annotation.tailrec
 // From https://github.com/ACINQ/bitcoin-lib/blob/master/src/main/scala/fr/acinq/bitcoin/Base58.scala
 
 // For addresses
+
+/** Documentation. */
 object Base58 {
 
   val alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
   // char -> value
   val map: Map[Char, Int] = alphabet.zipWithIndex.toMap
 
-  /**
+  /** Documentation.
     *
     * @param input binary data
     * @return the base-58 representation of input
@@ -25,6 +26,7 @@ object Base58 {
       val big = new BigInteger(1, input.toArray)
       val builder = new StringBuilder
 
+      /** Documentation. */
       @tailrec
       def encode1(current: BigInteger): Unit = current match {
         case BigInteger.ZERO => ()
@@ -40,7 +42,7 @@ object Base58 {
     }
   }
 
-  /**
+  /** Documentation.
     *
     * @param input base-58 encoded data
     * @return the decoded data

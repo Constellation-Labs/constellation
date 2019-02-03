@@ -18,8 +18,10 @@ import com.typesafe.scalalogging.Logger
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
+/** Documentation. */
 object APIClient {
 
+  /** Documentation. */
   def apply(host: String = "127.0.0.1", port: Int, peerHTTPPort: Int = 9001, internalPeerHost: String = "")
            (
              implicit executionContext: ExecutionContext,
@@ -29,6 +31,7 @@ object APIClient {
   }
 }
 
+/** Documentation. */
 class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort: Int = 9001, val internalPeerHost: String = "")(
  // implicit val system: ActorSystem,
  implicit val executionContext: ExecutionContext,
@@ -48,18 +51,25 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
   val udpPort: Int = 16180
   val apiPort: Int = port
 
+  /** Documentation. */
   def udpAddress: String = hostName + ":" + udpPort
 
+  /** Documentation. */
   def setExternalIP(): Boolean = postSync("ip", hostName + ":" + udpPort).isSuccess
 
+  /** Documentation. */
   private def baseURI: String = {
     val uri = s"http://$hostName:$apiPort"
     uri
   }
 
+  /** Documentation. */
   def setPassword(newPassword: String) = authPassword = newPassword
 
+  /** Documentation. */
   def base(suffix: String) = s"$baseURI/$suffix"
+
+  /** Documentation. */
   private def baseUri(suffix: String) = s"$baseURI/$suffix"
 
   private val config = ConfigFactory.load()
@@ -68,18 +78,22 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
   private val authId = config.getString("auth.id")
   private var authPassword = config.getString("auth.password")
 
-
+  /** Documentation. */
   implicit class AddBlocking[T](req: Future[T]) {
+
+    /** Documentation. */
     def blocking(timeout: Duration = 60.seconds): T = {
       Await.result(req, timeout + 100.millis)
     }
   }
 
+  /** Documentation. */
   def optHeaders: Map[String, String] = daoOpt.map{
     d =>
       Map("Remote-Address" -> d.externalHostString, "X-Real-IP" -> d.externalHostString)
   }.getOrElse(Map())
 
+  /** Documentation. */
   def httpWithAuth(suffix: String, params: Map[String, String] = Map.empty, timeout: Duration = 5.seconds)(method: Method) = {
     val base = baseUri(suffix)
     val uri = uri"$base?$params"
@@ -89,10 +103,12 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
     } else req
   }
 
+  /** Documentation. */
   def metrics: Map[String, String] = {
     getBlocking[MetricsResult]("metrics", timeout = 5.seconds).metrics
   }
 
+  /** Documentation. */
   def post(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)
           (implicit f : Formats = constellation.constellationFormats): Future[Response[String]] = {
     val ser = Serialization.write(b)
@@ -104,6 +120,7 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
       .send()
   }
 
+  /** Documentation. */
   def put(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)
           (implicit f : Formats = constellation.constellationFormats): Future[Response[String]] = {
     val ser = Serialization.write(b)
@@ -115,27 +132,32 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
       .send()
   }
 
+  /** Documentation. */
   def postEmpty(suffix: String, timeout: Duration = 5.seconds)(implicit f : Formats = constellation.constellationFormats)
   : Response[String] = {
     httpWithAuth(suffix, timeout = timeout)(Method.POST).send().blocking()
   }
 
+  /** Documentation. */
   def postSync(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
     implicit f : Formats = constellation.constellationFormats
   ): Response[String] = {
     post(suffix, b, timeout).blocking(timeout)
   }
 
+  /** Documentation. */
   def putSync(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
     implicit f : Formats = constellation.constellationFormats
   ): Response[String] = {
     put(suffix, b, timeout).blocking(timeout)
   }
 
+  /** Documentation. */
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
      postNonBlocking(suffix, b, timeout).blocking(timeout)
   }
 
+  /** Documentation. */
   def postNonBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): Future[T] = {
     val ser = Serialization.write(b)
     val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
@@ -148,24 +170,29 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
       .map(_.unsafeBody)
   }
 
+  /** Documentation. */
   def postBlockingEmpty[T <: AnyRef](suffix: String, timeout: Duration = 5.seconds)(implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
     val res = postEmpty(suffix, timeout)
     Serialization.read[T](res.unsafeBody)
   }
 
+  /** Documentation. */
   def get(suffix: String, queryParams: Map[String,String] = Map(), timeout: Duration = 5.seconds): Future[Response[String]] = {
     httpWithAuth(suffix, queryParams, timeout)(Method.GET).send()
   }
 
+  /** Documentation. */
   def getSync(suffix: String, queryParams: Map[String,String] = Map(), timeout: Duration = 5.seconds): Response[String] = {
     get(suffix, queryParams, timeout).blocking(timeout)
   }
 
+  /** Documentation. */
   def getBlocking[T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeout: Duration = 5.seconds)
                               (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): T = {
     getNonBlocking[T](suffix, queryParams, timeout).blocking(timeout)
   }
 
+  /** Documentation. */
   def getNonBlocking[T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeout: Duration = 5.seconds)
                               (implicit m : Manifest[T], f : Formats = constellation.constellationFormats): Future[T] = {
     httpWithAuth(suffix, queryParams, timeout)(Method.GET)
@@ -174,24 +201,28 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
       .map(_.unsafeBody)
   }
 
+  /** Documentation. */
   def getNonBlockingStr(suffix: String, queryParams: Map[String,String] = Map(), timeout: Duration = 5.seconds): Future[String] = {
     httpWithAuth(suffix, queryParams, timeout)(Method.GET).send().map { x => x.unsafeBody }
   }
 
+  /** Documentation. */
   def getBlockingBytesKryo[T <: AnyRef](suffix: String, queryParams: Map[String,String] = Map(), timeout: Duration = 5.seconds): T = {
     val resp = httpWithAuth(suffix, queryParams, timeout)(Method.GET).response(asByteArray).send().blocking()
     KryoSerializer.deserializeCast[T](resp.unsafeBody)
   }
 
+  /** Documentation. */
   def getSnapshotInfo(): SnapshotInfo = getBlocking[SnapshotInfo]("info")
 
-
+  /** Documentation. */
   def getSnapshots(): Seq[Snapshot] = {
 
     val snapshotInfo = getSnapshotInfo()
 
     val startingSnapshot = snapshotInfo.snapshot
 
+    /** Documentation. */
     def getSnapshots(hash: String, snapshots: Seq[Snapshot] = Seq()): Seq[Snapshot] = {
       val sn = getBlocking[Option[Snapshot]]("snapshot/" + hash)
       sn match {
@@ -211,7 +242,7 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
     snapshots
   }
 
-
+  /** Documentation. */
   def simpleDownload(): Seq[StoredSnapshot] = {
 
     val hashes = getBlocking[Seq[String]]("snapshotHashes")
@@ -223,3 +254,4 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
   }
 
 }
+

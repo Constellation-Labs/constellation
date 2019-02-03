@@ -8,11 +8,15 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.{HashSignature, SignatureBatch}
 
+/** Documentation. */
 class ConstellationKryoRegistrar extends IKryoRegistrar {
+
+  /** Documentation. */
   override def apply(kryo: Kryo): Unit = {
     this.registerClasses(kryo)
   }
 
+  /** Documentation. */
   def registerClasses(kryo: Kryo): Unit = {
 
     kryo.register(classOf[ChannelMessageData])
@@ -45,7 +49,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[CheckpointEdgeData])
     kryo.register(classOf[Snapshot])
 
-
     kryo.register(classOf[Set[String]])
 
     kryo.register(classOf[SerializedUDPMessage])
@@ -67,3 +70,4 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
 
   }
 }
+

@@ -11,9 +11,10 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.concurrent.ExecutionContextExecutor
 
-
+/** Documentation. */
 class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
+  /** Documentation. */
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
@@ -49,7 +50,6 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
 
     sim.logger.info("Num APIs " + apis.size)
 
-
     assert(sim.checkHealthy(apis))
 
     sim.setExternalIP(apis)
@@ -66,3 +66,4 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
   }
 
 }
+

@@ -1,15 +1,22 @@
 package org.constellation.util
 
-
+/** Documentation. */
 case class MerkleNode(hash: String, leftChild: String, rightChild: String) {
+
+  /** Documentation. */
   def children = Seq(leftChild, rightChild)
+
+  /** Documentation. */
   def isParentOf(other: String): Boolean = children.contains(other)
+
+  /** Documentation. */
   def valid: Boolean = MerkleTree.merkleHashFunc(leftChild, rightChild) == hash
 }
 
-
+/** Documentation. */
 case class MerkleProof(input: String, nodes: Seq[MerkleNode], root: String) {
 
+  /** Documentation. */
   def verify(): Boolean = {
     val childToParent = MerkleTree.childToParent(nodes)
     val parents = MerkleTree.collectParents(Seq(), childToParent(input), childToParent)
@@ -17,8 +24,10 @@ case class MerkleProof(input: String, nodes: Seq[MerkleNode], root: String) {
   }
 }
 
+/** Documentation. */
 case class MerkleResult(inputs: Seq[String], nodes: Seq[MerkleNode]) {
 
+  /** Documentation. */
   def createProof(startingPoint: String): MerkleProof = {
     val parentMap = MerkleTree.childToParent(nodes)
     val firstParent = parentMap(startingPoint)
@@ -29,21 +38,23 @@ case class MerkleResult(inputs: Seq[String], nodes: Seq[MerkleNode]) {
 import com.typesafe.scalalogging.Logger
 import constellation.SHA256Ext
 
-
 // This should be changed to an actual tree structure in memory. Just skipping that for now
 // Either that or replace this with a pre-existing implementation
 // Couldn't find any libs that were easy drop ins so just doing this for now
+
+/** Documentation. */
 object MerkleTree {
 
   val logger = Logger("MerkleTree")
 
-
+  /** Documentation. */
   def childToParent(nodes: Seq[MerkleNode]): Map[String, MerkleNode] = nodes.flatMap{ n =>
     n.children.map{
       _ -> n
     }
   }.toMap
 
+  /** Documentation. */
   def collectParents(
                        parents: Seq[MerkleNode],
                        activeNode: MerkleNode,
@@ -59,6 +70,7 @@ object MerkleTree {
     }
   }
 
+  /** Documentation. */
   def apply(hashes: List[String]): MerkleResult = {
 
     if (hashes.isEmpty) {
@@ -71,10 +83,12 @@ object MerkleTree {
     MerkleResult(hashes, merkleIteration(Seq(), zero))
   }
 
+  /** Documentation. */
   def merkleHashFunc(left: String, right: String): String = {
     (left + right).sha256
   }
 
+  /** Documentation. */
   def applyRound(level: Seq[String]): Seq[MerkleNode] = {
     logger.debug(s"Applying Merkle round on ${level.length} level length")
     level.grouped(2).toSeq.map{
@@ -85,6 +99,7 @@ object MerkleTree {
     }
   }
 
+  /** Documentation. */
   def merkleIteration(agg: Seq[MerkleNode], currentLevel: Seq[MerkleNode]): Seq[MerkleNode] = {
     if (currentLevel.size == 1) {
       agg ++ currentLevel

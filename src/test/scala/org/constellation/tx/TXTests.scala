@@ -3,6 +3,7 @@ package org.constellation.tx
 import org.constellation.primitives.Schema.SendToAddress
 import org.scalatest.FlatSpec
 
+/** Documentation. */
 class TXTests extends FlatSpec {
 
   "TX hashes" should "split evenly" in {
@@ -20,9 +21,7 @@ class TXTests extends FlatSpec {
         SendToAddress("asdf", 1, normalized = false)
     )
 
-
-
   }
 
-
 }
+

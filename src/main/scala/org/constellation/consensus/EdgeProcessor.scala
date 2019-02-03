@@ -17,10 +17,12 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Try
 
+/** Documentation. */
 object EdgeProcessor {
 
   val logger = Logger(s"EdgeProcessor")
 
+  /** Documentation. */
   def acceptCheckpoint(checkpointCacheData: CheckpointCacheData)(
     implicit dao: DAO): Unit = {
 
@@ -78,6 +80,7 @@ object EdgeProcessor {
     }
   }
 
+  /** Documentation. */
   case class CreateCheckpointEdgeResponse(
                                            checkpointEdge: CheckpointEdge,
                                            transactionsUsed: Set[String],
@@ -85,14 +88,21 @@ object EdgeProcessor {
                                            updatedTransactionMemPoolThresholdMet: Set[String]
                                          )
 
-
-
+  /** Documentation. */
   case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
+
+  /** Documentation. */
   case class  SignatureResponse(checkpointBlock: CheckpointBlock, facilitators: Set[Id], reRegister: Boolean = false)
+
+  /** Documentation. */
   case class FinishedCheckpoint(checkpointCacheData: CheckpointCacheData, facilitators: Set[Id])
+
+  /** Documentation. */
   case class FinishedCheckpointResponse(reRegister: Boolean = false)
 
   // TODO: Move to checkpoint formation actor
+
+  /** Documentation. */
   def formCheckpoint(messages: Seq[ChannelMessage] = Seq())(
     implicit dao: DAO): Unit = {
 
@@ -197,6 +207,8 @@ object EdgeProcessor {
   }
 
   // Temporary for testing join/leave logic.
+
+  /** Documentation. */
   def handleSignatureRequest(sr: SignatureRequest)(
     implicit dao: DAO): SignatureResponse = {
     //if (sr.facilitators.contains(dao.id)) {
@@ -214,10 +226,12 @@ object EdgeProcessor {
     // } else None
   }
 
+  /** Documentation. */
   def simpleResolveCheckpoint(hash: String)(implicit dao: DAO): Future[Boolean] = {
 
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
+    /** Documentation. */
     def innerResolve(peers: List[APIClient])(
       implicit ec: ExecutionContext): Future[CheckpointCacheData] = {
       peers match {
@@ -256,6 +270,7 @@ object EdgeProcessor {
 
   }
 
+  /** Documentation. */
   def acceptWithResolveAttempt(checkpointCacheData: CheckpointCacheData)(
     implicit dao: DAO): Unit = {
 
@@ -281,6 +296,7 @@ object EdgeProcessor {
 
   }
 
+  /** Documentation. */
   def handleFinishedCheckpoint(fc: FinishedCheckpoint)(implicit dao: DAO) = {
     futureTryWithTimeoutMetric(
       if (dao.nodeState == NodeState.DownloadCompleteAwaitingFinalSync) {
@@ -298,8 +314,10 @@ object EdgeProcessor {
 
 }
 
+/** Documentation. */
 case class TipData(checkpointBlock: CheckpointBlock, numUses: Int)
 
+/** Documentation. */
 case class SnapshotInfo(
                          snapshot: Snapshot,
                          acceptedCBSinceSnapshot: Seq[String] = Seq(),
@@ -313,17 +331,23 @@ case class SnapshotInfo(
 
 case object GetMemPool
 
+/** Documentation. */
 case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String])
   extends Signable
+
+/** Documentation. */
 case class StoredSnapshot(snapshot: Snapshot,
                           checkpointCache: Seq[CheckpointCacheData])
 
+/** Documentation. */
 case class DownloadComplete(latestSnapshot: Snapshot)
 
 import java.nio.file.{Files, Paths}
 
+/** Documentation. */
 object Snapshot {
 
+  /** Documentation. */
   def writeSnapshot(snapshot: StoredSnapshot)(implicit dao: DAO): Try[Path] = {
     tryWithMetric(
       {
@@ -337,6 +361,7 @@ object Snapshot {
     )
   }
 
+  /** Documentation. */
   def loadSnapshot(snapshotHash: String)(
     implicit dao: DAO): Try[StoredSnapshot] = {
     tryWithMetric(
@@ -352,6 +377,7 @@ object Snapshot {
     )
   }
 
+  /** Documentation. */
   def loadSnapshotBytes(snapshotHash: String)(
     implicit dao: DAO): Try[Array[Byte]] = {
     tryWithMetric(
@@ -367,16 +393,19 @@ object Snapshot {
     )
   }
 
+  /** Documentation. */
   def snapshotHashes()(implicit dao: DAO): List[String] = {
     dao.snapshotPath.toJava.listFiles().map { _.getName }.toList
   }
 
+  /** Documentation. */
   def findLatestMessageWithSnapshotHash(
                                          depth: Int,
                                          lastMessage: Option[ChannelMessageMetadata],
                                          maxDepth: Int = 10
                                        )(implicit dao: DAO): Option[ChannelMessageMetadata] = {
 
+    /** Documentation. */
     def findLatestMessageWithSnapshotHashInner(
                                                 depth: Int,
                                                 lastMessage: Option[ChannelMessageMetadata]
@@ -398,6 +427,7 @@ object Snapshot {
     findLatestMessageWithSnapshotHashInner(depth, lastMessage)
   }
 
+  /** Documentation. */
   def triggerSnapshot(round: Long)(implicit dao: DAO): Future[Try[Unit]] = {
     // TODO: Refactor round into InternalHeartbeat
     if (round % dao.processingConfig.snapshotInterval == 0 && dao.nodeState == NodeState.Ready) {
@@ -411,6 +441,7 @@ object Snapshot {
   val snapshotZero = Snapshot("", Seq())
   val snapshotZeroHash: String = Snapshot("", Seq()).hash
 
+  /** Documentation. */
   def acceptSnapshot(snapshot: Snapshot)(implicit dao: DAO): Unit = {
     // dao.dbActor.putSnapshot(snapshot.hash, snapshot)
     val cbData = snapshot.checkpointBlocks.map { dao.checkpointService.get }
@@ -418,7 +449,6 @@ object Snapshot {
     if (cbData.exists { _.isEmpty }) {
       dao.metrics.incrementMetric("snapshotCBAcceptQueryFailed")
     }
-
 
     for (
       cbOpt <- cbData;
@@ -446,3 +476,4 @@ object Snapshot {
   }
 
 }
+

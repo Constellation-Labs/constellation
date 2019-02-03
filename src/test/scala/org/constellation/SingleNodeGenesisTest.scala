@@ -12,8 +12,8 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
 import scala.util.Try
 
+/** Documentation. */
 class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
-
 
   val logger = Logger("SingleNodeGenesisTest")
 
@@ -22,12 +22,14 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
   implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
+  /** Documentation. */
   override def beforeAll(): Unit = {
     // Cleanup DBs
     //Try{File(tmpDir).delete()}
     //Try{new java.io.File(tmpDir).mkdirs()}
   }
 
+  /** Documentation. */
   override def afterAll() {
     // Cleanup DBs
     TestNode.clearNodes()
@@ -35,6 +37,7 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
     Try{File(tmpDir).delete()}
   }
 
+  /** Documentation. */
   def createNode(
                   randomizePorts: Boolean = false,
                   portOffset: Int = 0,
@@ -54,10 +57,9 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
   private val node = createNode(isGenesisNode = true)
   private val api = node.getAPIClient()
 
-
   "Genesis created" should "verify the node has created genesis" in {
-
 
   }
 
 }
+

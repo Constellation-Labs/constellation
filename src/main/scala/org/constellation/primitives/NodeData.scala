@@ -10,6 +10,7 @@ import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.util.Metrics
 
+/** Documentation. */
 trait NodeData {
 
   // var dbActor : SwayDBDatastore = _
@@ -25,8 +26,13 @@ trait NodeData {
 
   @volatile implicit var keyPair: KeyPair = _
 
+  /** Documentation. */
   def publicKeyHash: Int = keyPair.getPublic.hashCode()
+
+  /** Documentation. */
   def id: Id = keyPair.getPublic.toId
+
+  /** Documentation. */
   def selfAddressStr: String = id.address
 
   @volatile var nodeState: NodeState = NodeState.PendingDownload
@@ -34,6 +40,7 @@ trait NodeData {
   var externalHostString: String = "127.0.0.1"
   var externlPeerHTTPPort: Int = 9001
 
+  /** Documentation. */
   def peerRegistrationRequest = PeerRegistrationRequest(externalHostString, externlPeerHTTPPort, id)
 
   @volatile var externalAddress: Option[InetSocketAddress] = None
@@ -42,8 +49,10 @@ trait NodeData {
 
   var remotes: Seq[InetSocketAddress] = Seq()
 
+  /** Documentation. */
   def updateKeyPair(kp: KeyPair): Unit = {
     keyPair = kp
   }
 
 }
+

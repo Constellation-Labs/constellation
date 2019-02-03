@@ -8,6 +8,7 @@ import swaydb.data.config.MMAP
 
 import scala.concurrent.ExecutionContextExecutor
 
+/** Documentation. */
 class SwayDBImpl(dao: DAO) extends KVDB {
 
   implicit val d: DAO = dao
@@ -17,7 +18,6 @@ class SwayDBImpl(dao: DAO) extends KVDB {
 
   private implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
-
   //Create a persistent database. If the directories do not exist, they will be created.
   private val db = SwayDB.persistent[String, Array[Byte]](
     dir = (dao.dbPath / "disk1").path,
@@ -26,6 +26,7 @@ class SwayDBImpl(dao: DAO) extends KVDB {
     mmapAppendix = false
   ).get
 
+  /** Documentation. */
   override def put(key: String, obj: AnyRef): Boolean = {
     val triedMeter = db.put(key, KryoSerializer.serializeAnyRef(obj))
     tryToMetric(triedMeter, "dbPutAttempt")
@@ -38,6 +39,7 @@ class SwayDBImpl(dao: DAO) extends KVDB {
     triedMeter.isSuccess
   }
 
+  /** Documentation. */
   override def get[T <: AnyRef](key: String): Option[T] = {
     val triedMaybeBytes = db.get(key)
     tryToMetric(triedMaybeBytes, "dbGetAttempt")
@@ -47,6 +49,7 @@ class SwayDBImpl(dao: DAO) extends KVDB {
     }
   }
 
+  /** Documentation. */
   override def update[T <: AnyRef](key: String, updateF: T => T, empty: T): T = {
     val res = get(key).map{updateF}
     if (res.isEmpty) {
@@ -59,25 +62,34 @@ class SwayDBImpl(dao: DAO) extends KVDB {
     }
   }
 
+  /** Documentation. */
   override def delete(key: String): Boolean = {
     db.remove(key).isSuccess
   }
 
+  /** Documentation. */
   override def restart(): Unit = {
 
   }
 }
 
+/** Documentation. */
 object SwayDBImpl {
+
+  /** Documentation. */
   def apply(dao: DAO): SwayDBImpl = new SwayDBImpl(dao)
 }
 
+/** Documentation. */
 class SwayDBDatastore(dao: DAO) extends KVDBDatastoreImpl {
   //val kvdb = KVDBAuditProxy(SwayDBImpl(dao))
   val kvdb = SwayDBImpl(dao)
 }
 
+/** Documentation. */
 object SwayDBDatastore {
+
+  /** Documentation. */
   def apply(dao: DAO): SwayDBDatastore = new SwayDBDatastore(dao)
 }
 

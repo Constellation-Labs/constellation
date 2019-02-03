@@ -5,6 +5,7 @@ import better.files.File
 import com.typesafe.scalalogging.Logger
 import org.constellation.primitives._
 
+/** Documentation. */
 class DAO(val nodeConfig: NodeConfig = NodeConfig()) extends NodeData
   with Genesis
   with EdgeDAO {
@@ -20,37 +21,44 @@ class DAO(val nodeConfig: NodeConfig = NodeConfig()) extends NodeData
 
   var preventLocalhostAsPeer: Boolean = true
 
+  /** Documentation. */
   def idDir = File(s"tmp/${id.medium}")
 
+  /** Documentation. */
   def dbPath: File = {
     val f = File(s"tmp/${id.medium}/db")
     f.createDirectoryIfNotExists()
     f
   }
 
+  /** Documentation. */
   def snapshotPath: File = {
     val f = File(s"tmp/${id.medium}/snapshots")
     f.createDirectoryIfNotExists()
     f
   }
 
+  /** Documentation. */
   def snapshotHashes: Seq[String] = {
     snapshotPath.list.toSeq.map{_.name}
   }
 
+  /** Documentation. */
   def peersInfoPath: File = {
     val f = File(s"tmp/${id.medium}/peers")
     f
   }
 
+  /** Documentation. */
   def seedsPath: File = {
     val f = File(s"tmp/${id.medium}/seeds")
     f
   }
 
-
+  /** Documentation. */
   def restartNode(): Unit = {
     downloadMode = true
   }
 
 }
+

@@ -10,16 +10,17 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
 
+/** Documentation. */
 class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with BeforeAndAfterAll {
 
   implicit val system: ActorSystem = ActorSystem("BlockChain")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
+  /** Documentation. */
   override def afterEach(): Unit = {
     TestNode.clearNodes()
   }
-
 
   "GET to /peers" should "get the correct connected peers" in {
 
@@ -52,7 +53,6 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
     assert(keyPair.getPublic.toId == id)
   }
 
-
   "POST to /peer" should "add the peer correctly" in {
     val node1 = TestNode()
     val node2 = TestNode()
@@ -82,6 +82,7 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
 
   }
 
+  /** Documentation. */
   override def afterAll() {
     system.terminate()
   }

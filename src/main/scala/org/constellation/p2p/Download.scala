@@ -18,11 +18,15 @@ import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Try}
 
 /// New download code
+
+/** Documentation. */
 object Download {
 
   val logger = Logger(s"Download")
 
   // Add warning for empty peers
+
+  /** Documentation. */
   def downloadActual()(implicit dao: DAO, ec: ExecutionContext): Unit = {
     logger.info("Download started")
     dao.nodeState = NodeState.DownloadInProgress
@@ -34,8 +38,6 @@ object Download {
 
     val res = (dao.peerManager ? APIBroadcast(_.getBlocking[Option[GenesisObservation]]("genesis")))
       .mapTo[Map[Id, Option[GenesisObservation]]].get()
-
-
 
     // TODO: Error handling and verification
     val genesis = res.filter {
@@ -77,6 +79,8 @@ object Download {
     dao.metrics.updateMetric("downloadGroupCheckSize", grouped.flatMap(_._1).size.toString)
 
     // TODO: Move elsewhere unify with other code.
+
+    /** Documentation. */
     def acceptSnapshot(r: StoredSnapshot) = {
       r.checkpointCache.foreach{
         c =>
@@ -102,6 +106,7 @@ object Download {
       File(dao.snapshotPath, r.snapshot.hash).writeByteArray(KryoSerializer.serializeAnyRef(r))
     }
 
+    /** Documentation. */
     def processSnapshotHash(peer: APIClient, hash: String): Boolean = {
 
       var activePeer = peer
@@ -159,7 +164,6 @@ object Download {
 
     dao.metrics.updateMetric("downloadExpectedNumSnapshotsSecondPass", snapshotHashes2.size.toString)
 
-
     val groupSize2Original = snapshotHashes2.size / peerData.size
     val groupSize2 = Math.max(groupSize2Original, 1)
     val grouped2 = snapshotHashes2.grouped(groupSize2).toSeq.zip(peerData.values)
@@ -201,11 +205,10 @@ object Download {
     dao.downloadFinishedTime = System.currentTimeMillis()
     dao.transactionAcceptedAfterDownload = dao.metrics.getMetrics.get("transactionAccepted").map{_.toLong}.getOrElse(0L)
 
-
   }
 
+  /** Documentation. */
   def download()(implicit dao: DAO, ec: ExecutionContext): Unit = {
-
 
     tryWithMetric(downloadActual(), "download")
     /*val maxRetries = 5
@@ -221,8 +224,6 @@ object Download {
     }
 */
 
-
   }
-
 
 }

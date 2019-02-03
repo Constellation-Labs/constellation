@@ -9,10 +9,14 @@ import com.google.common.util.concurrent.RateLimiter
 import com.typesafe.scalalogging.Logger
 import org.constellation.primitives.IPManager
 
+/** Documentation. */
 object CustomDirectives {
 
+  /** Documentation. */
   object Limiters {
     private var rateLimiter: Option[RateLimiter] = None
+
+    /** Documentation. */
     def getInstance(tps: Double): RateLimiter = rateLimiter match {
       case Some(rateLimiter) ⇒ rateLimiter
       case None ⇒
@@ -21,7 +25,10 @@ object CustomDirectives {
     }
   }
 
+  /** Documentation. */
   trait Throttle {
+
+    /** Documentation. */
     def throttle(tps: Double): Directive0 =
       extractClientIP flatMap { ip =>
         val rateLimiter = Limiters.getInstance(tps)
@@ -33,11 +40,12 @@ object CustomDirectives {
       }
   }
 
+  /** Documentation. */
   trait IPEnforcer {
 
     val ipManager: IPManager
 
-
+    /** Documentation. */
     def rejectBannedIP: Directive0 = {
       extractClientIP flatMap { ip =>
 
@@ -50,6 +58,7 @@ object CustomDirectives {
       }
     }
 
+    /** Documentation. */
     def enforceKnownIP: Directive0 = {
       extractClientIP flatMap { ip =>
         if (ipManager.knownIP(ip)) {
@@ -61,6 +70,7 @@ object CustomDirectives {
     }
   }
 
+  /** Documentation. */
   def wrapper(logger: Logger, requestTimestamp: Long)(req: HttpRequest)(res: RouteResult) = res match {
     case Complete(resp) =>
       val responseTimestamp: Long = System.nanoTime
@@ -72,6 +82,7 @@ object CustomDirectives {
       logger.info(s"Rejected Reason: ${reason.mkString(",")}")
   }
 
+  /** Documentation. */
   def printResponseTime(logger: Logger)(log: LoggingAdapter) = {
     val requestTimestamp = System.nanoTime
 
@@ -79,3 +90,4 @@ object CustomDirectives {
   }
 
 }
+

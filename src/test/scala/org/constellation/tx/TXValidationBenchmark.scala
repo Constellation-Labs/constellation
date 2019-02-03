@@ -1,6 +1,5 @@
 package org.constellation.tx
 
-
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
@@ -21,6 +20,8 @@ import org.constellation.{DAO, LevelDBActor}
 import org.scalatest.FlatSpec
 
 import scala.util.Try
+
+/** Documentation. */
 class TXValidationBenchmark extends FlatSpec {
   val logger = Logger("TXValidationBenchmark")
 
@@ -42,7 +43,6 @@ class TXValidationBenchmark extends FlatSpec {
     val delta = (t1 - t0) / 1e6.toLong
     logger.debug(delta.toString)
    // assert(delta < 30000)
-
 
   }
 
@@ -131,3 +131,4 @@ class TXValidationBenchmark extends FlatSpec {
   }
 
 }
+

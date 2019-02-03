@@ -8,36 +8,66 @@ import slick.jdbc.H2Profile.api._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
+/** Documentation. */
 class H2SlickTest extends FlatSpec {
 
-
   // Definition of the SUPPLIERS table
+
+  /** Documentation. */
   class Suppliers(tag: Tag) extends Table[(Int, String, String, String, String, String)](tag, "SUPPLIERS") {
+
+    /** Documentation. */
     def id = column[Int]("SUP_ID", O.PrimaryKey) // This is the primary key column
+
+    /** Documentation. */
     def name = column[String]("SUP_NAME")
+
+    /** Documentation. */
     def street = column[String]("STREET")
+
+    /** Documentation. */
     def city = column[String]("CITY")
+
+    /** Documentation. */
     def state = column[String]("STATE")
+
+    /** Documentation. */
     def zip = column[String]("ZIP")
     // Every table needs a * projection with the same type as the table's type parameter
+
+    /** Documentation. */
     def * = (id, name, street, city, state, zip)
   }
   val suppliers = TableQuery[Suppliers]
 
   // Definition of the COFFEES table
+
+  /** Documentation. */
   class Coffees(tag: Tag) extends Table[(String, Int, Double, Int, Int)](tag, "COFFEES") {
+
+    /** Documentation. */
     def name = column[String]("COF_NAME", O.PrimaryKey)
+
+    /** Documentation. */
     def supID = column[Int]("SUP_ID")
+
+    /** Documentation. */
     def price = column[Double]("PRICE")
+
+    /** Documentation. */
     def sales = column[Int]("SALES")
+
+    /** Documentation. */
     def total = column[Int]("TOTAL")
+
+    /** Documentation. */
     def * = (name, supID, price, sales, total)
     // A reified foreign key relation that can be navigated to create a join
+
+    /** Documentation. */
     def supplier = foreignKey("SUP_FK", supID, suppliers)(_.id)
   }
   val coffees = TableQuery[Coffees]
-
-
 
   "H2" should "initialize" in {
 
@@ -86,3 +116,4 @@ class H2SlickTest extends FlatSpec {
   }
 
 }
+

@@ -6,11 +6,11 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import constellation._
 
+/** Documentation. */
 class SchemaValidation extends FlatSpec {
 
   private val schema = SensorData.schema
   private val validator = SensorData.validator
-
 
   "Sample schema" should "validate" in {
 
@@ -24,7 +24,6 @@ class SchemaValidation extends FlatSpec {
     val invalidExample = SensorData(500, "asdfg")
     assert(!validator.validate(schema, asJsonNode(decompose(invalidExample))).isSuccess)
 
-
-
   }
 }
+

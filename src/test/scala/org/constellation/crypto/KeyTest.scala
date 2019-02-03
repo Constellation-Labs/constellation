@@ -2,6 +2,7 @@ package org.constellation.crypto
 
 import org.scalatest.FlatSpec
 
+/** Documentation. */
 class KeyTest extends FlatSpec {
 
   private val testKeys = Seq.fill(20){KeyUtils.makeKeyPair()}
@@ -23,5 +24,5 @@ class KeyTest extends FlatSpec {
 
   }
 
-
 }
+

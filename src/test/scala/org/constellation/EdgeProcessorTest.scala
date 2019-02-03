@@ -16,6 +16,7 @@ import org.scalatest.{FlatSpec, OneInstancePerTest}
 
 import scala.concurrent.ExecutionContextExecutor
 
+/** Documentation. */
 class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTest {
   implicit val system: ActorSystem = ActorSystem("TransactionProcessorTest")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
@@ -28,6 +29,8 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
 /*  val dbActor = TestProbe()
 
   dbActor.setAutoPilot(new TestActor.AutoPilot {
+
+    /** Documentation. */
     def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
       case DBGet(`srcHash`) =>
         sender ! Some(AddressCacheData(100000000000000000L, 100000000000000000L, None))
@@ -46,6 +49,7 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
   val mockData = new DAO
   mockData.updateKeyPair(keyPair)
 
+  /** Documentation. */
   def makeDao(mockData: DAO, peerManager: TestProbe = peerManager, metricsManager: TestProbe = metricsManager) = {
     mockData.actorMaterializer = materialize
     mockData.peerManager = peerManager.testActor
@@ -67,6 +71,7 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
   (mockLvlDB.getTransactionCacheData _).when(invalidSpendHash).returns(Some(TransactionCacheData(tx, true)))
  // data.dbActor = mockLvlDB
 
+  /** Documentation. */
   def getAPIClient(hostName: String, httpPort: Int) = {
     val api = APIClient(host = hostName, port = httpPort)
     api.id = id

@@ -19,10 +19,11 @@ import org.scalatest._
 import scala.collection.concurrent.TrieMap
 import scala.util.Random
 
+/** Documentation. */
 object RandomData {
 
   val logger = Logger("RandomData")
-  
+
   val keyPairs: Seq[KeyPair] = Seq.fill(10)(makeKeyPair())
 
   val go: GenesisObservation = Genesis.createGenesisAndInitialDistributionDirect(
@@ -35,11 +36,13 @@ object RandomData {
 
   val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
 
+  /** Documentation. */
   def randomBlock(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): CheckpointBlock = {
     val txs = Seq.fill(5)(randomTransaction)
     CheckpointBlock.createCheckpointBlock(txs, tips.map{s => TypedEdgeHash(s.hash, EdgeHashType.CheckpointHash)})(startingKeyPair)
   }
 
+  /** Documentation. */
   def randomTransaction: Transaction = {
     val src = Random.shuffle(keyPairs).head
     createTransaction(
@@ -50,8 +53,10 @@ object RandomData {
     )
   }
 
+  /** Documentation. */
   def getAddress(keyPair: KeyPair): String = keyPair.address.address
 
+  /** Documentation. */
   def fill(balances: Map[String, Long])(implicit dao: DAO): Iterable[Transaction] = {
     val txs = balances.map {
       case (address, amount) => createTransaction(keyPairs.head.address.address, address, amount, keyPairs.head)
@@ -65,6 +70,7 @@ object RandomData {
     txs
   }
 
+  /** Documentation. */
   def setupSnapshot(cb: Seq[CheckpointBlock])(implicit dao: DAO): Seq[CheckpointBlock] = {
     dao.threadSafeTipService.setSnapshot(SnapshotInfo(
       dao.threadSafeTipService.getSnapshotInfo().snapshot,
@@ -81,6 +87,7 @@ object RandomData {
   }
 }
 
+/** Documentation. */
 class RandomDataTest extends FlatSpec {
 
   import RandomData._
@@ -109,9 +116,7 @@ class RandomDataTest extends FlatSpec {
     var width = 2
     val maxWidth = 50
 
-
     val activeBlocks = TrieMap[SignedObservationEdge, Int]()
-
 
     val maxNumBlocks = 1000
     var blockNum = 0
@@ -126,7 +131,6 @@ class RandomDataTest extends FlatSpec {
 
     val convMap = TrieMap[String, Int]()
 
-
     val snapshotInterval = 10
 
     while (blockNum < maxNumBlocks) {
@@ -136,6 +140,7 @@ class RandomDataTest extends FlatSpec {
 
       tips.foreach { case (tip, numUses) =>
 
+        /** Documentation. */
         def doRemove(): Unit = activeBlocks.remove(tip)
 
         if (width < maxWidth) {
@@ -161,7 +166,6 @@ class RandomDataTest extends FlatSpec {
       width = activeBlocks.size
 
       block
-
 
     }
 
@@ -192,14 +196,13 @@ class RandomDataTest extends FlatSpec {
 
     //  file"../d3-dag/test/data/dag.json".write(json)
 
-
     //createTransaction()
-
 
   }
 
 }
 
+/** Documentation. */
 class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLike with Matchers with BeforeAndAfterEach
   with BeforeAndAfterAll with MockFactory with OneInstancePerTest {
 
@@ -229,6 +232,7 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
     Seq()
   ))
 
+  /** Documentation. */
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
   }
@@ -496,3 +500,4 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
     }
   }
 }
+

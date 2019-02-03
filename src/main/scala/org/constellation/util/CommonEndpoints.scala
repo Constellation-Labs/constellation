@@ -18,9 +18,10 @@ import org.json4s.native.Serialization
 
 import scala.concurrent.Future
 
-
+/** Documentation. */
 case class NodeStateInfo(nodeState: NodeState)
 
+/** Documentation. */
 trait CommonEndpoints extends Json4sSupport {
 
   implicit val serialization: Serialization.type
@@ -103,3 +104,4 @@ trait CommonEndpoints extends Json4sSupport {
 
   }
 }
+

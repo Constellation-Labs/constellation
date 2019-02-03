@@ -10,6 +10,7 @@ import org.constellation.serializer.KryoSerializer
 
 import scala.util.Try
 
+/** Documentation. */
 class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem)
     extends Actor {
 
@@ -18,11 +19,16 @@ class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem)
 
   val logger = Logger("LevelDB")
 
+  /** Documentation. */
   def tmpDirId = file"tmp/${dao.id.medium}/db"
+
+  /** Documentation. */
   def mkDB: LevelDB = LevelDB(tmpDirId)
 
+  /** Documentation. */
   override def receive: Receive = active(mkDB)
 
+  /** Documentation. */
   def active(db: LevelDB): Receive = {
 
     case RestartDB =>
@@ -54,8 +60,5 @@ class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem)
 
 }
 
-
-
 // Only need to implement kryo get / put
-
 

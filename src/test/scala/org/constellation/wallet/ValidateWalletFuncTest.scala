@@ -1,6 +1,5 @@
 package org.constellation.wallet
 
-
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import constellation._
@@ -8,8 +7,10 @@ import org.constellation.crypto.KeyUtils._
 import org.json4s.native.Serialization
 import org.scalatest.FlatSpec
 
+/** Documentation. */
 case class SetSerialize(s: Set[String])
 
+/** Documentation. */
 class ValidateWalletFuncTest  extends FlatSpec {
 
   val kp: KeyPair = makeKeyPair()
@@ -96,6 +97,7 @@ class ValidateWalletFuncTest  extends FlatSpec {
 
   "Key Size" should "verify byte array lengths for encoded keys" in {
 
+    /** Documentation. */
     def fill(thunk: => Array[Byte]) =
       Seq.fill(50){thunk}.map{_.length}.distinct
 
@@ -128,3 +130,4 @@ class ValidateWalletFuncTest  extends FlatSpec {
   }
 
 }
+

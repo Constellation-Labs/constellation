@@ -8,13 +8,14 @@ import org.scalatest.FlatSpec
 
 import scala.collection.JavaConverters._
 
+/** Documentation. */
 case class ShamirOutput(fileName: String, part: Int, hex: String)
 
+/** Documentation. */
 class ShamirETHTest extends FlatSpec {
 
   val encodedStore = File(System.getenv("HOME"), "yourfile.txt")
   val ethKeyStore = File(System.getenv("HOME"), "Library/Ethereum/keystore")
-
 
   "Shamir java" should "work" in {
 
@@ -65,7 +66,7 @@ class ShamirETHTest extends FlatSpec {
         file.writeText(output)
     }
 
-
   }
 
 }
+

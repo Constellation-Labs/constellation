@@ -6,8 +6,8 @@ import org.constellation.crypto.KeyUtils._
 import org.scalatest.FlatSpec
 //case class Test(a: EdgeHashType, b: EdgeHashType)
 
+/** Documentation. */
 class UtilityTest extends FlatSpec {
-
 
   // TODO: Test CB serializations
   "Bundles" should "serialize and deserialize properly with json" in {

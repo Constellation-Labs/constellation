@@ -8,23 +8,22 @@ import org.constellation.consensus.EdgeProcessor
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 
-
-
+/** Documentation. */
 object Genesis {
 
-
+  /** Documentation. */
   def createGenesisBlock = {
     //CheckpointBlock.createCheckpointBlock()
   }
 
+  /** Documentation. */
   def start()(implicit dao: DAO) = {
-
-
 
   }
 
   val CoinBaseHash = "coinbase"
 
+  /** Documentation. */
   def createDistribution(
                           selfAddressStr: String, ids: Seq[Id], genesisSOE: SignedObservationEdge, keyPair: KeyPair
                         ): CheckpointBlock = {
@@ -57,6 +56,8 @@ object Genesis {
     * @param ids: Initial node public keys
     * @return : Resolved edges for state update
     */
+
+  /** Documentation. */
   def createGenesisAndInitialDistributionDirect(selfAddressStr: String, ids: Set[Id], keyPair: KeyPair): GenesisObservation = {
 
     val debtAddress = KeyUtils.makeKeyPair().address.address
@@ -91,12 +92,15 @@ object Genesis {
 
 import org.constellation.primitives.Genesis._
 
+/** Documentation. */
 trait Genesis extends NodeData with EdgeDAO {
 
+  /** Documentation. */
   def createGenesisAndInitialDistribution(ids: Set[Id]): GenesisObservation = {
     createGenesisAndInitialDistributionDirect(selfAddressStr, ids, keyPair)
   }
 
+  /** Documentation. */
   def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = false)(implicit dao: DAO): Unit = {
     // Store hashes for the edges
 
@@ -156,3 +160,4 @@ trait Genesis extends NodeData with EdgeDAO {
   }
 
 }
+

@@ -9,6 +9,7 @@ import io.prometheus.client.CollectorRegistry
 import org.constellation.crypto.KeyUtils
 import java.util.Collections
 
+/** Documentation. */
 class MetricsManagerTest ()
   extends TestKit(ActorSystem("ConstellationTest"))
     with Matchers
@@ -18,6 +19,7 @@ class MetricsManagerTest ()
   val logger = Logger("ConstellationTest")
   logger.info("MetricsManagerTest init")
 
+  /** Documentation. */
   override def afterAll: Unit = {
     logger.info("Shutting down the Actor under test")
     shutdown(system)
@@ -31,7 +33,6 @@ class MetricsManagerTest ()
   dao.externalHostString = ""
   dao.externlPeerHTTPPort = 0
   logger.info("DAO actor initialized")
-
 
   logger.info("MetricsManager actor initialized")
 

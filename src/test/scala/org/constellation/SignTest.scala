@@ -7,14 +7,15 @@ import org.constellation.primitives.Schema._
 import org.constellation.util.{Signable}
 import org.scalatest.FlatSpec
 
+/** Documentation. */
 case class TestSignable(a: String, b: Int) extends Signable
 
 import constellation._
 
+/** Documentation. */
 class SignTest extends FlatSpec {
-  
-  val logger = Logger("SignTest")
 
+  val logger = Logger("SignTest")
 
   "Hashing" should "should work on test data" in {
 
@@ -47,3 +48,4 @@ class SignTest extends FlatSpec {
   }
 
 }
+

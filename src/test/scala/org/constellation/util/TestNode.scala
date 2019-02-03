@@ -10,10 +10,12 @@ import org.constellation.{ConstellationNode, HostPort, NodeConfig}
 import scala.concurrent.ExecutionContext
 import scala.util.Try
 
+/** Documentation. */
 object TestNode {
 
   private var nodes = Seq[ConstellationNode]()
 
+  /** Documentation. */
   def apply(seedHosts: Seq[HostPort] = Seq(),
             keyPair: KeyPair = KeyUtils.makeKeyPair(),
             randomizePorts: Boolean = true,
@@ -67,6 +69,7 @@ object TestNode {
     node
   }
 
+  /** Documentation. */
   def clearNodes(): Unit = {
     Try {
       nodes.foreach { node => node.shutdown() }
@@ -75,3 +78,4 @@ object TestNode {
   }
 
 }
+

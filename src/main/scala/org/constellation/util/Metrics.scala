@@ -22,8 +22,11 @@ import scala.util.Try
 /**
   * For Grafana usage
   */
+
+/** Documentation. */
 object Metrics {
 
+  /** Documentation. */
   def prometheusSetup(keyHash: String): Unit = {
     val prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT, CollectorRegistry.defaultRegistry, Clock.SYSTEM)
     prometheusMeterRegistry.config().commonTags("application", s"Constellation_$keyHash")
@@ -46,6 +49,8 @@ object Metrics {
   * TPS reports
   * @param dao: Data access object
   */
+
+/** Documentation. */
 class TransactionRateTracker()(implicit dao: DAO){
 
   private var lastTXCount: Long = 0
@@ -56,6 +61,8 @@ class TransactionRateTracker()(implicit dao: DAO){
     * @param transactionAccepted: Current number of transactions accepted from stored metrics
     * @return TPS all time and TPS last n seconds in metrics form
     */
+
+  /** Documentation. */
   def calculate(transactionAccepted: Long): Map[String, String] = {
     val countAll = transactionAccepted - dao.transactionAcceptedAfterDownload
     val startTime = dao.downloadFinishedTime // metrics.getOrElse("nodeStartTimeMS", "1").toLong
@@ -79,6 +86,8 @@ class TransactionRateTracker()(implicit dao: DAO){
   * @param periodSeconds: How often to recalculate moving window metrics (e.g. TPS)
   * @param dao: Data access object
   */
+
+/** Documentation. */
 class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   extends Periodic("Metrics", periodSeconds) {
 
@@ -99,14 +108,17 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   updateMetric("externalHost", dao.externalHostString)
   updateMetric("version", ConstellationNode.ConstellationVersion)
 
+  /** Documentation. */
   def updateMetric(key: String, value: String): Unit = {
     stringMetrics(key) = value
   }
 
+  /** Documentation. */
   def updateMetric(key: String, value: Int): Unit = {
     countMetrics(key) = value
   }
 
+  /** Documentation. */
   def incrementMetric(key: String): Unit = {
     countMetrics(key) = countMetrics.getOrElse(key, 0L) + 1
   }
@@ -115,11 +127,15 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
     * Converts counter metrics to string for export / display
     * @return : Key value map of all metrics
     */
+
+  /** Documentation. */
   def getMetrics: Map[String, String] = {
     stringMetrics.toMap ++ countMetrics.toMap.mapValues(_.toString)
   }
 
   // Temporary, for debugging only. Would cause a problem with many peers
+
+  /** Documentation. */
   def updateBalanceMetrics(): Unit = {
 
     val peers = dao.peerInfo.toSeq
@@ -143,6 +159,8 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   /**
     * Recalculates window based / periodic metrics
     */
+
+  /** Documentation. */
   override def trigger(): concurrent.Future[Any] = Future {
     updateBalanceMetrics()
     rateCounter.calculate(countMetrics.getOrElse("transactionAccepted", 0L)).foreach {

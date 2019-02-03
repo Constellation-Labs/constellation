@@ -2,6 +2,7 @@ package org.constellation.util
 
 import org.scalatest.FlatSpec
 
+/** Documentation. */
 class KryoSerializerTest extends FlatSpec {
 
   /*
@@ -36,3 +37,4 @@ class KryoSerializerTest extends FlatSpec {
   */
 
 }
+

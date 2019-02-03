@@ -1,14 +1,13 @@
 package org.constellation
 
-
 import better.files.File
 import org.constellation.datastore.leveldb.LevelDB
 import org.iq80.leveldb._
 import org.iq80.leveldb.impl.Iq80DBFactory._
 import org.scalatest.FlatSpec
 
+/** Documentation. */
 class LevelDBTest extends FlatSpec {
-
 
   "LevelDB" should "create a database and run some queries and delete it" in {
     val options = new Options()
@@ -53,7 +52,6 @@ class LevelDBTest extends FlatSpec {
 
   "Type serialization" should "test tx and bundle storage" in {
 
-
     val file = File("tmp" , "example")
     file.createIfNotExists(true, true)
 
@@ -87,3 +85,4 @@ class LevelDBTest extends FlatSpec {
   }
 
 }
+
