@@ -34,9 +34,8 @@ object ClusterTest {
     }
   }
 
-  @deprecated("Use node IPs for now -- this was for previous tests but may be useful later.", "a few months")
-
   /** Documentation. */
+  @deprecated("Use node IPs for now -- this was for previous tests but may be useful later.", "a few months")
   def getServiceIPs: List[KubeIPs] = {
     val cmd = kubectl ++ Seq("--output=json", "get", "services")
     val result = cmd.!!
@@ -163,4 +162,3 @@ class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike 
   }
 
 }
-

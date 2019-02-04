@@ -257,4 +257,3 @@ case class BlockDumpOutput(
                           messageParent: Option[String],
                           messageHash: Option[String]
                           )
-

@@ -45,4 +45,3 @@ class MetricsManagerTest ()
     familySamples.size() should be > 0
   }
 }
-

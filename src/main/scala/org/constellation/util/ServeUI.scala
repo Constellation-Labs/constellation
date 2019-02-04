@@ -58,4 +58,3 @@ trait ServeUI {
   }
 
 }
-

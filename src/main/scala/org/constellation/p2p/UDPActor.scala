@@ -164,4 +164,3 @@ case class SerializedUDPMessage(data: ByteString,
                                 packetGroup: Long,
                                 packetGroupSize: Long,
                                 packetGroupId: Int)
-

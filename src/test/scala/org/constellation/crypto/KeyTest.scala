@@ -25,4 +25,3 @@ class KeyTest extends FlatSpec {
   }
 
 }
-

@@ -97,4 +97,3 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
   }
 
 }
-

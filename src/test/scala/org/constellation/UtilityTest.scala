@@ -52,4 +52,3 @@ class UtilityTest extends FlatSpec {
   }
 
 }
-

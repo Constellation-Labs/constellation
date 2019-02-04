@@ -19,11 +19,8 @@ import scala.collection.concurrent.TrieMap
 import scala.concurrent.Future
 import scala.util.Try
 
-/**
-  * For Grafana usage
+/** For Grafana usage.
   */
-
-/** Documentation. */
 object Metrics {
 
   /** Documentation. */
@@ -49,8 +46,6 @@ object Metrics {
   * TPS reports
   * @param dao: Data access object
   */
-
-/** Documentation. */
 class TransactionRateTracker()(implicit dao: DAO){
 
   private var lastTXCount: Long = 0
@@ -61,8 +56,6 @@ class TransactionRateTracker()(implicit dao: DAO){
     * @param transactionAccepted: Current number of transactions accepted from stored metrics
     * @return TPS all time and TPS last n seconds in metrics form
     */
-
-  /** Documentation. */
   def calculate(transactionAccepted: Long): Map[String, String] = {
     val countAll = transactionAccepted - dao.transactionAcceptedAfterDownload
     val startTime = dao.downloadFinishedTime // metrics.getOrElse("nodeStartTimeMS", "1").toLong
@@ -86,8 +79,6 @@ class TransactionRateTracker()(implicit dao: DAO){
   * @param periodSeconds: How often to recalculate moving window metrics (e.g. TPS)
   * @param dao: Data access object
   */
-
-/** Documentation. */
 class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   extends Periodic("Metrics", periodSeconds) {
 
@@ -127,8 +118,6 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
     * Converts counter metrics to string for export / display
     * @return : Key value map of all metrics
     */
-
-  /** Documentation. */
   def getMetrics: Map[String, String] = {
     stringMetrics.toMap ++ countMetrics.toMap.mapValues(_.toString)
   }
@@ -156,11 +145,10 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
     updateMetric("balances", balancesMetrics)
 
   }
+
   /**
     * Recalculates window based / periodic metrics
     */
-
-  /** Documentation. */
   override def trigger(): concurrent.Future[Any] = Future {
     updateBalanceMetrics()
     rateCounter.calculate(countMetrics.getOrElse("transactionAccepted", 0L)).foreach {
@@ -172,4 +160,3 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   }(scala.concurrent.ExecutionContext.global)
 
 }
-

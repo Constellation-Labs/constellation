@@ -25,4 +25,3 @@ class TXTests extends FlatSpec {
   }
 
 }
-

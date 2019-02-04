@@ -478,4 +478,3 @@ sealed trait CheckpointBlockValidatorNel {
 
 /** Documentation. */
 object CheckpointBlockValidatorNel extends CheckpointBlockValidatorNel
-

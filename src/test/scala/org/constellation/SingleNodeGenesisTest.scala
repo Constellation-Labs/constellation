@@ -62,4 +62,3 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
   }
 
 }
-

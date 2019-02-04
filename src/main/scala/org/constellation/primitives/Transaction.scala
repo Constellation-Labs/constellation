@@ -85,4 +85,3 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
   }
 
 }
-

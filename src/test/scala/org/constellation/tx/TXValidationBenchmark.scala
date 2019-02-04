@@ -131,4 +131,3 @@ class TXValidationBenchmark extends FlatSpec {
   }
 
 }
-

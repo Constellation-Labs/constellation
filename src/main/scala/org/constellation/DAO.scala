@@ -62,4 +62,3 @@ class DAO(val nodeConfig: NodeConfig = NodeConfig()) extends NodeData
   }
 
 }
-

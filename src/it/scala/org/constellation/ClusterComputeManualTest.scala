@@ -133,4 +133,3 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
   }
 
 }
-

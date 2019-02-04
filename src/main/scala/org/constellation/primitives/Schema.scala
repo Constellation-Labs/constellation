@@ -115,8 +115,6 @@ object Schema {
     * @param hash : String of hashed value
     * @param hashType : Strictly typed from set of allowed edge formats
     */
-
-  /** Documentation. */
   case class TypedEdgeHash(hash: String, hashType: EdgeHashType)
 
   /**
@@ -125,8 +123,6 @@ object Schema {
     * @param parents: HyperEdge parent references
     * @param data : Optional hash reference to attached information
     */
-
-  /** Documentation. */
   case class ObservationEdge( // TODO: Consider renaming to ObservationHyperEdge or leave as is?
                               parents: Seq[TypedEdgeHash],
                               data: TypedEdgeHash
@@ -162,16 +158,12 @@ object Schema {
     * @param amount : Quantity to be transferred
     * @param salt : Ensure hash uniqueness
     */
-
-  /** Documentation. */
   case class TransactionEdgeData(amount: Long, salt: Long = Random.nextLong()) extends Signable
 
   /**
     * Collection of references to transaction hashes
     * @param hashes : TX edge hashes
     */
-
-  /** Documentation. */
   case class CheckpointEdgeData(hashes: Seq[String], messages: Seq[ChannelMessage] = Seq()) extends Signable
 
   /** Documentation. */
@@ -212,6 +204,7 @@ object Schema {
     }
 
   }
+
   // Instead of one balance we need a Map from soe hash to balance and reputation
   // These values should be removed automatically by eviction
   // We can maintain some kind of automatic LRU cache for keeping track of what we want to remove
@@ -341,4 +334,3 @@ object Schema {
   }
 
 }
-

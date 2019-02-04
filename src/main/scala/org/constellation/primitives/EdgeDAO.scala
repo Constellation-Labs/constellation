@@ -592,4 +592,3 @@ trait EdgeDAO {
   def readyPeers: Map[Id, PeerData] = peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
 
 }
-

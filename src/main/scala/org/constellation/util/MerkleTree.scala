@@ -110,4 +110,3 @@ object MerkleTree {
   }
 
 }
-

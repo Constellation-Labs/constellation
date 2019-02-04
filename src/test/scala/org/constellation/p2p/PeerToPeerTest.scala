@@ -108,4 +108,3 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
 */
 
 }
-

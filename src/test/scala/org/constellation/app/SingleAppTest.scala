@@ -21,4 +21,3 @@ class SingleAppTest extends FlatSpec with BeforeAndAfterAll {
   }
 
 }
-

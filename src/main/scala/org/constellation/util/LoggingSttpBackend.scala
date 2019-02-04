@@ -29,4 +29,3 @@ class LoggingSttpBackend[R[_], S](delegate: SttpBackend[R, S]) extends SttpBacke
   /** Documentation. */
   override def responseMonad: MonadError[R] = delegate.responseMonad
 }
-

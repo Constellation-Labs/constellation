@@ -226,4 +226,3 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 */
 
 }
-

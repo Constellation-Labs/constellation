@@ -130,8 +130,6 @@ trait SignHelpExt {
     * @param normalized : Whether quantity is normalized by NormalizationFactor (1e-8)
     * @return : Resolved transaction in edge format
     */
-
-  /** Documentation. */
   def createTransaction(src: String,
                         dst: String,
                         amount: Long,
@@ -159,4 +157,3 @@ trait SignHelpExt {
 
 /** Documentation. */
 object SignHelp extends SignHelpExt
-

@@ -106,4 +106,3 @@ trait CommonEndpoints extends Json4sSupport {
 
   }
 }
-

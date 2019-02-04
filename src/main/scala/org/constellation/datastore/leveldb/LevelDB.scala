@@ -118,8 +118,6 @@ class LevelDB(val file: File) {
     def put[T <: ProductHash](t: T): Try[Unit] = putBytes(t.hash, t.kryoWrite)
    */
 
-  // Util
-
   /** Documentation. */
   def delete(k: String) = Try { db.delete(bytes(k)) }
 

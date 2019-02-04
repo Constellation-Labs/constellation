@@ -125,4 +125,3 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
     assert(data.transactionMemPoolMultiWitness(tx.hash) == updated)*/
   }
 }
-

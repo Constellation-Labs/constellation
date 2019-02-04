@@ -1,14 +1,13 @@
 package org.constellation.primitives
 
-import java.util.concurrent.{ScheduledThreadPoolExecutor, Semaphore, TimeUnit}
+import java.util.concurrent.Semaphore
 
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.{EdgeProcessor, Snapshot}
+import org.constellation.consensus.EdgeProcessor
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState, SendToAddress}
 import org.constellation.util.Periodic
 
-import org.joda.time.DateTime
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
@@ -130,4 +129,3 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
     }, "randomTransactionLoop")
   }
 }
-

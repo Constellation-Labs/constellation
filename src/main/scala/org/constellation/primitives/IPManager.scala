@@ -46,4 +46,3 @@ object IPManager {
   /** Documentation. */
   def apply() = new IPManager()
 }
-

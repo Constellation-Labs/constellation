@@ -91,4 +91,3 @@ trait Datastore {
   /** Documentation. */
   def getCheckpointEdgeData(key: String): Option[CheckpointEdgeData]
 }
-

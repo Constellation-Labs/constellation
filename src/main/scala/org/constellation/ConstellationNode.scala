@@ -311,4 +311,3 @@ class ConstellationNode(val configKeyPair: KeyPair,
   }
 
 }
-

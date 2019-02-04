@@ -123,4 +123,3 @@ trait KVDBDatastoreImpl extends Datastore {
   override def getCheckpointEdgeData(key: String): Option[CheckpointEdgeData] =
     get[CheckpointEdgeData](key)
 }
-

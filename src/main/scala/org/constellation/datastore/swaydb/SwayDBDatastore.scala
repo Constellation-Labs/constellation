@@ -92,4 +92,3 @@ object SwayDBDatastore {
   /** Documentation. */
   def apply(dao: DAO): SwayDBDatastore = new SwayDBDatastore(dao)
 }
-

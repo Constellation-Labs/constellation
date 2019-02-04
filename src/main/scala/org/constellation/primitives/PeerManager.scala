@@ -446,4 +446,3 @@ class PeerManager(ipManager: IPManager)(
 
   }
 }
-

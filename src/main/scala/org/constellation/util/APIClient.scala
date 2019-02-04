@@ -255,4 +255,3 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
   }
 
 }
-

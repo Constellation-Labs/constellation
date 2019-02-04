@@ -29,4 +29,3 @@ trait SimpleWalletLike {
   def addressToKeyPair: Map[String, KeyPair] = wallet.map{ w => w.address.address -> w}.toMap
 
 }
-

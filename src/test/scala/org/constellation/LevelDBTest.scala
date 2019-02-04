@@ -87,4 +87,3 @@ class LevelDBTest extends FlatSpec {
   }
 
 }
-

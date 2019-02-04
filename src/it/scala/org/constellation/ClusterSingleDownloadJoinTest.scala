@@ -67,4 +67,3 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
   }
 
 }
-

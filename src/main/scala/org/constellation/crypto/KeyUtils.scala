@@ -61,8 +61,6 @@ object KeyUtils {
     * Source: https://stackoverflow.com/questions/29778852/how-to-create-ecdsa-keypair-256bit-for-bitcoin-curve-secp256k1-using-spongy
     * @return : Private / Public keys following BTC implementation
     */
-
-  /** Documentation. */
   def makeKeyPair(): KeyPair = {
     val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance(ECDSA, provider)
     val ecSpec = new ECGenParameterSpec(secp256k)

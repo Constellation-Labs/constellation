@@ -50,4 +50,3 @@ class SimpleKVDBImpl extends KVDB {
 class SimpleKVDatastore(dao: DAO) extends KVDBDatastoreImpl {
   override val kvdb: KVDB = new SimpleKVDBImpl()
 }
-

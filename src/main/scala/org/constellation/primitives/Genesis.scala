@@ -56,8 +56,6 @@ object Genesis {
     * @param ids: Initial node public keys
     * @return : Resolved edges for state update
     */
-
-  /** Documentation. */
   def createGenesisAndInitialDistributionDirect(selfAddressStr: String, ids: Set[Id], keyPair: KeyPair): GenesisObservation = {
 
     val debtAddress = KeyUtils.makeKeyPair().address.address
@@ -160,4 +158,3 @@ trait Genesis extends NodeData with EdgeDAO {
   }
 
 }
-

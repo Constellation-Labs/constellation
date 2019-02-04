@@ -36,4 +36,3 @@ trait POWExt {
 
 /** Documentation. */
 object POW extends POWExt
-

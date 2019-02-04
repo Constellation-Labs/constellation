@@ -31,4 +31,3 @@ object Partitioner {
   // def bestFacilitator
 
 }
-

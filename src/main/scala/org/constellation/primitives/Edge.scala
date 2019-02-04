@@ -53,4 +53,3 @@ case class Edge[+D <: Signable]
   }
 
 }
-

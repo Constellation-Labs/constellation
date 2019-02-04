@@ -27,4 +27,3 @@ class PubKeyKryoSerializer extends Serializer[PublicKey] {
     KeyUtils.bytesToPublicKey(enc.pubKeyEncoded)
   }
 }
-

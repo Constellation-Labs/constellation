@@ -65,4 +65,3 @@ object KVDBAuditProxy {
   /** Documentation. */
   def apply(kvdb: KVDB): KVDBAuditProxy = new KVDBAuditProxy(kvdb)
 }
-

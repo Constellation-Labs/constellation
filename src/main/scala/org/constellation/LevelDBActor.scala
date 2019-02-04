@@ -62,4 +62,3 @@ class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem)
 }
 
 // Only need to implement kryo get / put
-

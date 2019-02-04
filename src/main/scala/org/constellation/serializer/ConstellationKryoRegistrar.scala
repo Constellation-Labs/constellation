@@ -70,4 +70,3 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
 
   }
 }
-

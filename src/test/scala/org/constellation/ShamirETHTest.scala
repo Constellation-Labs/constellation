@@ -70,4 +70,3 @@ class ShamirETHTest extends FlatSpec {
   }
 
 }
-

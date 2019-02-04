@@ -66,4 +66,3 @@ class LevelDBImpl(dao: DAO) extends KVDB {
     db.getBytes(key).map(bytes => KryoSerializer.deserialize(bytes))
   }
 }
-
