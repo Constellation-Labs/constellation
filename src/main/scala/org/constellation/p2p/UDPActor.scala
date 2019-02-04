@@ -39,6 +39,7 @@ case class Ban(address: InetSocketAddress)
 /** Documentation. */
 case class GetBanList()
 
+/** Documentation. */
 case object GetPacketGroups
 
 // Need to catch alert messages to detect socket closure.

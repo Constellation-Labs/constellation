@@ -172,3 +172,4 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   }(scala.concurrent.ExecutionContext.global)
 
 }
+

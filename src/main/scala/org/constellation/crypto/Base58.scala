@@ -52,3 +52,4 @@ object Base58 {
     if (trim.isEmpty) zeroes else zeroes ++ decoded.toByteArray.dropWhile(_ == 0) // BigInteger.toByteArray may add a leading 0x00
   }
 }
+

@@ -89,3 +89,4 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
   }
 
 }
+

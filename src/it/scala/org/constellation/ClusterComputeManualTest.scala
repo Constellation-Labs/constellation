@@ -15,7 +15,6 @@ import scala.util.Try
 /** Documentation. */
 object ComputeTestUtil {
 
-
   // For custom deployments to non-GCP instances
   // When deploy script is better this can go away. Was used for testing on home computer
   def getAuxiliaryNodes(startMultiNodeMachines: Boolean = false)
@@ -110,7 +109,6 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
     sim.logger.info("Num APIs " + apis.size)
 
-
     assert(sim.checkHealthy(apis))
 
     sim.setIdLocal(apis)
@@ -122,7 +120,6 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
     sim.run(apis, addPeerRequests, attemptSetExternalIP = true, useRegistrationFlow = true)
 
-
     // For debugging / adjusting options after compile
     /*
         println(apis.map{
@@ -133,7 +130,7 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
         })
     */
 
-
   }
 
 }
+

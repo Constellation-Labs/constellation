@@ -130,3 +130,4 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
     }, "randomTransactionLoop")
   }
 }
+

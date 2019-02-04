@@ -329,6 +329,7 @@ case class SnapshotInfo(
                          snapshotCache: Seq[CheckpointCacheData] = Seq()
                        )
 
+/** Documentation. */
 case object GetMemPool
 
 /** Documentation. */

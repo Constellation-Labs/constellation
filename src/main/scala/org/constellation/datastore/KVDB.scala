@@ -18,3 +18,4 @@ trait KVDB {
   /** Documentation. */
   def restart(): Unit
 }
+

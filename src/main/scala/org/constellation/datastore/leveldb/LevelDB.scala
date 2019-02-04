@@ -137,6 +137,7 @@ class LevelDB(val file: File) {
 /** Documentation. */
 object LevelDB {
 
+  /** Documentation. */
   case object RestartDB
 
   /** Documentation. */
@@ -157,3 +158,4 @@ object LevelDB {
   }
 
 }
+

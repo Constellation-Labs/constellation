@@ -205,6 +205,7 @@ case class PendingRegistration(ip: String, request: PeerRegistrationRequest)
 /** Documentation. */
 case class Deregistration(ip: String, port: Int, id: Id)
 
+/** Documentation. */
 case object GetPeerInfo
 
 /** Documentation. */

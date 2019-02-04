@@ -159,3 +159,4 @@ trait SignHelpExt {
 
 /** Documentation. */
 object SignHelp extends SignHelpExt
+
