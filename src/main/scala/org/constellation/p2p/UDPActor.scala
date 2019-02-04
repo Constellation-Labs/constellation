@@ -5,11 +5,10 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{Actor, ActorRef}
 import akka.io.{IO, Udp}
 import akka.util.{ByteString, Timeout}
+import scala.collection.concurrent.TrieMap
 
 import org.constellation.DAO
 import org.constellation.serializer.KryoSerializer._
-
-import scala.collection.concurrent.TrieMap
 
 /**
   * None of this code is used right now

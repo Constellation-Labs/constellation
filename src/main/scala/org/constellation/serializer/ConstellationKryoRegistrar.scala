@@ -2,6 +2,7 @@ package org.constellation.serializer
 
 import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
+
 import org.constellation.consensus._
 import org.constellation.p2p.SerializedUDPMessage
 import org.constellation.primitives.Schema._

@@ -1,13 +1,11 @@
 package org.constellation
 
 import org.scalatest.FlatSpec
+import slick.jdbc.H2Profile.api._
+import scala.concurrent.ExecutionContext.Implicits.global
 // Use H2Profile to connect to an H2 database
 
 import constellation._
-
-import slick.jdbc.H2Profile.api._
-
-import scala.concurrent.ExecutionContext.Implicits.global
 
 /** Documentation. */
 class H2SlickTest extends FlatSpec {

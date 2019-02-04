@@ -7,13 +7,11 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import akka.util.Timeout
+import org.scalatest._
+import scala.util.Random
 
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
-
-import org.scalatest._
-
-import scala.util.Random
 
 /** Documentation. */
 class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLike

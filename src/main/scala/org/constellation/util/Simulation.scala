@@ -3,15 +3,14 @@ package org.constellation.util
 import java.util.concurrent.ForkJoinPool
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
+import scala.util.{Random, Try}
 
 import constellation._
 import org.constellation.primitives.CheckpointBlock
 import org.constellation.primitives.Schema._
 import org.constellation.{HostPort, PeerMetadata}
-
-import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
-import scala.util.{Random, Try}
 
 /** Documentation. */
 class Simulation {

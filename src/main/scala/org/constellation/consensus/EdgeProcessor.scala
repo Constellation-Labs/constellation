@@ -4,6 +4,10 @@ import java.nio.file.Path
 import java.security.KeyPair
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
+import scala.async.Async.{async, await}
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.util.Try
 
 import constellation._
 import org.constellation.DAO
@@ -11,11 +15,6 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{APIClient, Signable}
-
-import scala.async.Async.{async, await}
-import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.Try
 
 /** Documentation. */
 object EdgeProcessor {

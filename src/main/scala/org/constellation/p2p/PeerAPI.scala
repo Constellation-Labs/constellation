@@ -9,11 +9,12 @@ import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromE
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
+import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+import org.json4s.native
+import org.json4s.native.Serialization
+import scala.concurrent.{ExecutionContext, Future}
 
 import constellation._
-
-import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
 import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest}
@@ -22,11 +23,6 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{CommonEndpoints, SingleHashSignature}
-
-import org.json4s.native
-import org.json4s.native.Serialization
-
-import scala.concurrent.{ExecutionContext, Future}
 
 /** Documentation. */
 case class PeerAuthSignRequest(salt: Long)

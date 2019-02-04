@@ -7,18 +7,15 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.FromEntityUnmarshaller
 import akka.util.{ByteString, Timeout}
+import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+import org.json4s.native.Serialization
+import scala.concurrent.Future
 
 import constellation._
-
-import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-
 import org.constellation.DAO
 import org.constellation.consensus.Snapshot
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.serializer.KryoSerializer
-
-import org.json4s.native.Serialization
-import scala.concurrent.Future
 
 /** Documentation. */
 case class NodeStateInfo(nodeState: NodeState)

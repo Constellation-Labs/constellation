@@ -13,8 +13,10 @@ import akka.util.Timeout
 import better.files._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
-import constellation._
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
+import constellation._
 import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.SnapshotTrigger
@@ -22,9 +24,6 @@ import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Metrics}
-
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
 
 /** Documentation. */
 object ConstellationNode {

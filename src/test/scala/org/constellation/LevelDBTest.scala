@@ -1,12 +1,11 @@
 package org.constellation
 
 import better.files.File
-
-import org.constellation.datastore.leveldb.LevelDB
-
 import org.iq80.leveldb._
 import org.iq80.leveldb.impl.Iq80DBFactory._
 import org.scalatest.FlatSpec
+
+import org.constellation.datastore.leveldb.LevelDB
 
 /** Documentation. */
 class LevelDBTest extends FlatSpec {

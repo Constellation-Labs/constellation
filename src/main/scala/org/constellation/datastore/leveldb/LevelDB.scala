@@ -1,14 +1,13 @@
 package org.constellation.datastore.leveldb
 
 import better.files._
+import org.iq80.leveldb.impl.Iq80DBFactory.{asString, bytes, factory}
+import org.iq80.leveldb.{DB, Options}
+import scala.util.{Failure, Try}
 
 import constellation._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Signable
-
-import org.iq80.leveldb.impl.Iq80DBFactory.{asString, bytes, factory}
-import org.iq80.leveldb.{DB, Options}
-import scala.util.{Failure, Try}
 
 /** Documentation. */
 class LevelDB(val file: File) {

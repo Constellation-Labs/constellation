@@ -5,10 +5,9 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestKit}
 import akka.util.Timeout
+import org.scalatest._
 
 import org.constellation.primitives.Schema.Id
-
-import org.scalatest._
 
 /** Documentation. */
 case class AnotherPublicKey(c: Id, seq: Seq[PublicKey])

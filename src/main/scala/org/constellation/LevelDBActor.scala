@@ -4,12 +4,11 @@ import akka.actor.{Actor, ActorSystem}
 import akka.util.Timeout
 import better.files._
 import com.typesafe.scalalogging.Logger
+import scala.util.Try
 
 import org.constellation.datastore.leveldb.LevelDB
 import org.constellation.datastore.leveldb.LevelDB._
 import org.constellation.serializer.KryoSerializer
-
-import scala.util.Try
 
 /** Documentation. */
 class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem)

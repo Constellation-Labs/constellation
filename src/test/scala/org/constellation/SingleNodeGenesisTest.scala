@@ -5,12 +5,11 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import better.files.File
 import com.typesafe.scalalogging.Logger
-
-import org.constellation.util.TestNode
-
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
 import scala.util.Try
+
+import org.constellation.util.TestNode
 
 /** Documentation. */
 class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {

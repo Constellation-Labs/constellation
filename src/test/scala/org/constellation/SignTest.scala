@@ -1,13 +1,10 @@
 package org.constellation
 
 import com.typesafe.scalalogging.Logger
+import org.scalatest.FlatSpec
 
 import org.constellation.crypto.KeyUtils
-import org.constellation.crypto.KeyUtils._
-import org.constellation.primitives.Schema._
 import org.constellation.util.{Signable}
-
-import org.scalatest.FlatSpec
 
 /** Documentation. */
 case class TestSignable(a: String, b: Int) extends Signable

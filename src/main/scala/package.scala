@@ -9,14 +9,6 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import com.google.common.hash.Hashing
-
-import org.constellation.DAO
-import org.constellation.crypto.Base58
-import org.constellation.crypto.KeyUtils.{bytesToPrivateKey, bytesToPublicKey, _}
-import org.constellation.primitives.Schema._
-import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{KeySerializeJSON, POWExt, SignHelpExt}
-
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.ext.EnumNameSerializer
 import org.json4s.native.{Serialization, parseJsonOpt}
@@ -25,6 +17,13 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.reflect.ClassTag
 import scala.util.{Failure, Random, Success, Try}
+
+import org.constellation.DAO
+import org.constellation.crypto.Base58
+import org.constellation.crypto.KeyUtils.{bytesToPrivateKey, bytesToPublicKey, _}
+import org.constellation.primitives.Schema._
+import org.constellation.serializer.KryoSerializer
+import org.constellation.util.{KeySerializeJSON, POWExt, SignHelpExt}
 
 package object constellation extends POWExt
   with SignHelpExt

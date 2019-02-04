@@ -7,6 +7,8 @@ import akka.pattern.ask
 import akka.util.Timeout
 import better.files.{File, _}
 import com.typesafe.scalalogging.Logger
+import org.scalatest.FlatSpec
+import scala.util.Try
 
 import constellation._
 import org.constellation.crypto.KeyUtils
@@ -17,9 +19,6 @@ import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.AddressCacheData
 import org.constellation.util.SignHelp
 import org.constellation.{DAO, LevelDBActor}
-
-import org.scalatest.FlatSpec
-import scala.util.Try
 
 /** Documentation. */
 class TXValidationBenchmark extends FlatSpec {

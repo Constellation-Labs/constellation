@@ -4,6 +4,9 @@ import java.security.KeyPair
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestProbe
+import org.scalamock.scalatest.MockFactory
+import org.scalatest.{FlatSpec, OneInstancePerTest}
+import scala.concurrent.ExecutionContextExecutor
 
 import org.constellation.Fixtures.{addPeerRequest, dummyTx, id}
 import org.constellation.crypto.KeyUtils
@@ -11,10 +14,6 @@ import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.APIClient
-
-import org.scalamock.scalatest.MockFactory
-import org.scalatest.{FlatSpec, OneInstancePerTest}
-import scala.concurrent.ExecutionContextExecutor
 
 /** Documentation. */
 class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTest {

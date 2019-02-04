@@ -2,10 +2,9 @@ package org.constellation.serializer
 
 import akka.util.ByteString
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
+import scala.util.Random
 
 import org.constellation.p2p.SerializedUDPMessage
-
-import scala.util.Random
 
 /** Documentation. */
 object KryoSerializer {

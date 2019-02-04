@@ -1,12 +1,11 @@
 package org.constellation.wallet
 
 import java.security.{KeyPair, PrivateKey, PublicKey}
-
-import constellation._
-
-import org.constellation.crypto.KeyUtils._
 import org.json4s.native.Serialization
 import org.scalatest.FlatSpec
+
+import constellation._
+import org.constellation.crypto.KeyUtils._
 
 /** Documentation. */
 case class SetSerialize(s: Set[String])

@@ -3,16 +3,15 @@ package org.constellation.primitives
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 import akka.util.Timeout
 import com.twitter.storehaus.cache.MutableLRUCache
+import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.util.Random
 
 import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.{DAO, ProcessingConfig}
-
-import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
-import scala.util.Random
 
 /** Documentation. */
 class ThreadSafeTXMemPool() {

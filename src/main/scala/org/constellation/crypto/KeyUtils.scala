@@ -5,10 +5,9 @@ import java.security.{KeyFactory, SecureRandom, _}
 import java.util.Base64
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.Logger
+import org.spongycastle.jce.provider.BouncyCastleProvider
 
 import constellation.SHA256Ext
-
-import org.spongycastle.jce.provider.BouncyCastleProvider
 
 /**
   * Need to compare this to:

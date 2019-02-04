@@ -4,12 +4,11 @@ import java.util.concurrent.Semaphore
 import com.fasterxml.jackson.databind.JsonNode
 import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.{JsonSchemaFactory, JsonValidator}
+import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
 
 import constellation._
 import org.constellation.DAO
 import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
-
-import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
 
 // Should channelId be associated with a unique keyPair or not?
 

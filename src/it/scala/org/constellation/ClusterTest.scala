@@ -3,16 +3,15 @@ package org.constellation
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
-
-import constellation._
-import org.constellation.crypto.KeyUtils
-import org.constellation.util.{APIClient, Simulation}
-
 import org.json4s.JsonAST.JArray
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 import scala.concurrent.ExecutionContextExecutor
 import scala.sys.process._
 import scala.util.Try
+
+import constellation._
+import org.constellation.crypto.KeyUtils
+import org.constellation.util.{APIClient, Simulation}
 
 /** Documentation. */
 object ClusterTest {
