@@ -33,7 +33,8 @@ object ClusterTest {
     }
   }
 
-  /** Documentation. */
+  // todo: Add documentation.
+
   @deprecated("Use node IPs for now -- this was for previous tests but may be useful later.", "a few months")
   def getServiceIPs: List[KubeIPs] = {
     val cmd = kubectl ++ Seq("--output=json", "get", "services")
