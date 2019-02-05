@@ -1,12 +1,12 @@
 package org.constellation.datastore.swaydb
 
+import swaydb.data.config.MMAP
+import scala.concurrent.ExecutionContextExecutor
+
 import constellation._
 import org.constellation.DAO
 import org.constellation.datastore.{KVDB, KVDBDatastoreImpl}
 import org.constellation.serializer.KryoSerializer
-import swaydb.data.config.MMAP
-
-import scala.concurrent.ExecutionContextExecutor
 
 class SwayDBImpl(dao: DAO) extends KVDB {
 
@@ -16,7 +16,6 @@ class SwayDBImpl(dao: DAO) extends KVDB {
   import swaydb.serializers.Default._ //import default serializers
 
   private implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
-
 
   //Create a persistent database. If the directories do not exist, they will be created.
   private val db = SwayDB.persistent[String, Array[Byte]](
@@ -69,6 +68,7 @@ class SwayDBImpl(dao: DAO) extends KVDB {
 }
 
 object SwayDBImpl {
+
   def apply(dao: DAO): SwayDBImpl = new SwayDBImpl(dao)
 }
 
@@ -78,6 +78,6 @@ class SwayDBDatastore(dao: DAO) extends KVDBDatastoreImpl {
 }
 
 object SwayDBDatastore {
+
   def apply(dao: DAO): SwayDBDatastore = new SwayDBDatastore(dao)
 }
-

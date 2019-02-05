@@ -1,20 +1,17 @@
 package org.constellation.primitives
 
-import java.util.concurrent.{ScheduledThreadPoolExecutor, Semaphore, TimeUnit}
-
-import constellation._
-import org.constellation.DAO
-import org.constellation.consensus.{EdgeProcessor, Snapshot}
-import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState, SendToAddress}
-import org.constellation.util.Periodic
-import org.joda.time.DateTime
-
+import java.util.concurrent.{ScheduledThreadPoolExecutor, Semaphore, TimeUnit} // ScheduledThreadPoolExecutor and TimeUnit unused
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
+import constellation._
+import org.constellation.DAO
+import org.constellation.consensus.{EdgeProcessor, Snapshot} // Snapshot unused
+import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState, SendToAddress}
+import org.constellation.util.Periodic
+
 class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
   extends Periodic("RandomTransactionManager", periodSeconds) {
-
 
   def trigger(): Future[Any] = {
     Option(dao.peerManager).foreach{

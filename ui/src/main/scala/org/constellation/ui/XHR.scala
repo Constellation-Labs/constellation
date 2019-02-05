@@ -3,7 +3,6 @@ package org.constellation.ui
 import org.scalajs.dom._
 import org.scalajs.dom.raw.XMLHttpRequest
 
-
 object XHR {
 
   def post[W: upickle.Writer, R: upickle.Reader]
@@ -54,3 +53,4 @@ object XHR {
     xhr.send()
   }
 }
+

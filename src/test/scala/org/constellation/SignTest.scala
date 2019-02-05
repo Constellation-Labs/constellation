@@ -1,20 +1,18 @@
 package org.constellation
 
 import com.typesafe.scalalogging.Logger
-import org.constellation.crypto.KeyUtils
-import org.constellation.crypto.KeyUtils._
-import org.constellation.primitives.Schema._
-import org.constellation.util.{Signable}
 import org.scalatest.FlatSpec
+
+import org.constellation.crypto.KeyUtils
+import org.constellation.util.{Signable}
 
 case class TestSignable(a: String, b: Int) extends Signable
 
 import constellation._
 
 class SignTest extends FlatSpec {
-  
-  val logger = Logger("SignTest")
 
+  val logger = Logger("SignTest")
 
   "Hashing" should "should work on test data" in {
 

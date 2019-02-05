@@ -1,4 +1,5 @@
 package org.constellation.datastore
+
 import org.constellation.consensus
 import org.constellation.primitives.Schema._
 
@@ -9,6 +10,7 @@ trait KVDBDatastoreImpl extends Datastore {
   import kvdb._
 
   override def restart(): Unit = restart()
+
   override def delete(key: String): Boolean = delete(key)
 
   override def putSnapshot(key: String, snapshot: consensus.Snapshot): Unit = put(key, snapshot)
@@ -24,6 +26,7 @@ trait KVDBDatastoreImpl extends Datastore {
   override def putTransactionCacheData(s: String,
                                        t: TransactionCacheData): Unit =
     put(s, t)
+
   override def getTransactionCacheData(
     s: String
   ): Option[TransactionCacheData] = get[TransactionCacheData](s)
@@ -70,6 +73,7 @@ trait KVDBDatastoreImpl extends Datastore {
     key: String
   ): Option[SignedObservationEdgeCache] =
     get[SignedObservationEdgeCache](key)
+
   override def putTransactionEdgeData(key: String,
                                       t: TransactionEdgeData): Unit =
     put(key, t)

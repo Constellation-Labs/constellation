@@ -1,35 +1,38 @@
 package org.constellation.util
 
 import java.security.{KeyPair, PublicKey}
-
 import cats.kernel.Monoid
+
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.{Edge, Schema, Transaction}
 import org.constellation.primitives.Schema._
 
-
 trait Signable {
 
   def signInput: Array[Byte] = hash.getBytes()
+
   def hash: String = this.kryo.sha256
+
   def short: String = hash.slice(0, 5)
 
 }
 
-
 case class SingleHashSignature(hash: String, hashSignature: HashSignature) {
+
   def valid: Boolean = hashSignature.valid(hash)
 }
-
 
 case class HashSignature(
                           signature: String,
                           id: Id
                         ) extends Ordered[HashSignature] {
+
   def publicKey: PublicKey = id.toPublicKey
+
   def address: String = publicKey.address
+
   def valid(hash: String): Boolean =
     verifySignature(hash.getBytes(), KeyUtils.hex2bytes(signature))(publicKey)
 
@@ -50,6 +53,7 @@ case class SignatureBatch(
   override def empty: SignatureBatch = SignatureBatch(hash, Seq())
 
   // This is unsafe
+
   override def combine(x: SignatureBatch, y: SignatureBatch): SignatureBatch =
     x.copy(signatures = (x.signatures ++ y.signatures).distinct.sorted)
 
@@ -65,6 +69,7 @@ case class SignatureBatch(
       signatures = unique
     )
   }
+
   def withSignature(hs: HashSignature): SignatureBatch = {
     val toAdd = Seq(hs)
     val newSignatures = (signatures ++ toAdd).distinct
@@ -74,9 +79,7 @@ case class SignatureBatch(
     )
   }
 
-
 }
-
 
 trait SignHelpExt {
 

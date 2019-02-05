@@ -1,20 +1,19 @@
 package org.constellation.cluster
 
 import java.util.concurrent.{ForkJoinPool, TimeUnit}
-
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import com.typesafe.scalalogging.Logger
+import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
+import scala.concurrent.ExecutionContext
+import scala.util.Try
+
+import constellation._
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.util.TestNode
 import org.constellation.{ConstellationNode, HostPort}
-import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
-import constellation._
-
-import scala.concurrent.ExecutionContext
-import scala.util.Try
 
 class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
@@ -63,6 +62,7 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
     }
 
     nodes.combinations(2).foreach { case Seq(n,m) =>
+
       def register(a: ConstellationNode, b: ConstellationNode): Unit = {
         val ipData = a.getIPData
         val peerRegistrationRequest =

@@ -40,14 +40,19 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
   }
 
   // Unsafe
+
   def src: Address = Address(edge.parents.head.hash)
+
   def dst: Address = Address(edge.parents.last.hash)
 
   def signatures: Seq[HashSignature] = edge.signedObservationEdge.signatureBatch.signatures
 
   // TODO: Add proper exception on empty option
+
   def amount : Long = edge.data.amount
+
   def baseHash: String = edge.signedObservationEdge.baseHash
+
   def hash: String = edge.signedObservationEdge.hash
 
   def withSignatureFrom(keyPair: KeyPair): Transaction = this.copy(

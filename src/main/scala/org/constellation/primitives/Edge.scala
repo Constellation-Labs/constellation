@@ -14,7 +14,9 @@ case class Edge[+D <: Signable]
 ) {
 
   def baseHash: String = signedObservationEdge.signatureBatch.hash
+
   def parentHashes: Seq[String] = observationEdge.parents.map(_.hash)
+
   def parents: Seq[TypedEdgeHash] = observationEdge.parents
 
   def storeTransactionCacheData(db: Datastore, update: TransactionCacheData => TransactionCacheData, empty: TransactionCacheData, resolved: Boolean = false): Unit = {

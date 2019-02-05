@@ -20,6 +20,8 @@ class LoggingSttpBackend[R[_], S](delegate: SttpBackend[R, S]) extends SttpBacke
       response
     }
   }
+
   override def close(): Unit = delegate.close()
+
   override def responseMonad: MonadError[R] = delegate.responseMonad
 }

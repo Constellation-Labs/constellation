@@ -3,7 +3,6 @@ package org.constellation
 import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
-
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.RemoteAddress
@@ -14,6 +13,9 @@ import akka.util.Timeout
 import better.files._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
+
 import constellation._
 import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.crypto.KeyUtils
@@ -22,9 +24,6 @@ import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Metrics}
-
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
 
 object ConstellationNode {
 
@@ -43,7 +42,6 @@ object ConstellationNode {
       implicit val executionContext: ExecutionContext = system.dispatchers.lookup("main-dispatcher")
 
       val rpcTimeout = config.getInt("rpc.timeout")
-
 
       // TODO: Add scopt to support cmdline args.
       val seeds: Seq[HostPort] =
@@ -102,8 +100,6 @@ object ConstellationNode {
         }
       }
 
-
-
       val portOffset = args.headOption.map{_.toInt}
       val httpPortFromArg = portOffset.map{_ + 1}
       val peerHttpPortFromArg = portOffset.map{_ + 2}
@@ -142,8 +138,6 @@ object ConstellationNode {
     }
 
   }
-
-
 
 }
 
@@ -228,7 +222,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   logger.info("API Binding")
 
-
   // Setup http server for internal API
   private val bindingFuture: Future[Http.ServerBinding] = Http().bindAndHandle(routes, httpInterface, httpPort)
 
@@ -253,7 +246,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
     new InetSocketAddress(this.hostName, this.peerHttpPort)
   }
 
-
   // Setup http server for peer API
   private val peerBindingFuture = Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)
 
@@ -275,6 +267,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
   // TODO : Move to separate test class - these are within jvm only but won't hurt anything
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
+
   def getAPIClient(host: String = hostName, port: Int = httpPort, udpPort: Int = udpPort): APIClient = {
     val api = APIClient(host, port, udpPort)
     api.id = id
@@ -308,6 +301,5 @@ class ConstellationNode(val configKeyPair: KeyPair,
     dao.setNodeState(NodeState.Ready)
     dao.generateRandomTX = true
   }
-
 
 }

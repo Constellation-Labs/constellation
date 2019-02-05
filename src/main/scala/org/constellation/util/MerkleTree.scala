@@ -1,12 +1,13 @@
 package org.constellation.util
 
-
 case class MerkleNode(hash: String, leftChild: String, rightChild: String) {
+
   def children = Seq(leftChild, rightChild)
+
   def isParentOf(other: String): Boolean = children.contains(other)
+
   def valid: Boolean = MerkleTree.merkleHashFunc(leftChild, rightChild) == hash
 }
-
 
 case class MerkleProof(input: String, nodes: Seq[MerkleNode], root: String) {
 
@@ -29,14 +30,13 @@ case class MerkleResult(inputs: Seq[String], nodes: Seq[MerkleNode]) {
 import com.typesafe.scalalogging.Logger
 import constellation.SHA256Ext
 
-
 // This should be changed to an actual tree structure in memory. Just skipping that for now
 // Either that or replace this with a pre-existing implementation
 // Couldn't find any libs that were easy drop ins so just doing this for now
+
 object MerkleTree {
 
   val logger = Logger("MerkleTree")
-
 
   def childToParent(nodes: Seq[MerkleNode]): Map[String, MerkleNode] = nodes.flatMap{ n =>
     n.children.map{

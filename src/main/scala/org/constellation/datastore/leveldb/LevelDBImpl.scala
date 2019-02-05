@@ -1,16 +1,18 @@
 package org.constellation.datastore.leveldb
+
 import better.files._
 import com.typesafe.scalalogging.Logger
+import scala.util.Try
+
 import org.constellation.DAO
 import org.constellation.datastore.KVDB
 import org.constellation.serializer.KryoSerializer
-
-import scala.util.Try
 
 class LevelDBImpl(dao: DAO) extends KVDB {
   private val logger = Logger("KVDB")
 
   private def tmpDirId = file"tmp/${dao.id.medium}/db"
+
   private def mkDB: LevelDB = LevelDB(tmpDirId)
 
   private var db = mkDB

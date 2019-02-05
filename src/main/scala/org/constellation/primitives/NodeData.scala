@@ -2,8 +2,8 @@ package org.constellation.primitives
 
 import java.net.InetSocketAddress
 import java.security.KeyPair
-
 import akka.actor.ActorRef
+
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerRegistrationRequest
@@ -27,7 +27,9 @@ trait NodeData {
   @volatile implicit var keyPair: KeyPair = _
 
   def publicKeyHash: Int = keyPair.getPublic.hashCode()
+
   def id: Id = keyPair.getPublic.toId
+
   def selfAddressStr: String = id.address
 
   val dummyAddress: String = KeyUtils.makeKeyPair().getPublic.toId.address

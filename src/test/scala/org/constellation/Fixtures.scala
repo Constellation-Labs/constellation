@@ -7,7 +7,6 @@ import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.{Id, SendToAddress}
 
-
 object Fixtures {
 
 //  lazy val testNode =  TestNode(heartbeatEnabled = true, randomizePorts = false)

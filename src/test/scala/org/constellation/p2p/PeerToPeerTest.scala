@@ -3,16 +3,15 @@ package org.constellation.p2p
 import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
-
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import akka.util.Timeout
+import org.scalatest._
+import scala.util.Random
+
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
-import org.scalatest._
-
-import scala.util.Random
 
 class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLike
   with ImplicitSender with GivenWhenThen with BeforeAndAfterAll with Matchers {

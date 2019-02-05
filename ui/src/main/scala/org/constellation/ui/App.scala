@@ -15,6 +15,7 @@ case class Metrics(metrics: Map[String, String])
 object App extends JSApp {
 
   @JSExport
+
   def main(): Unit = {
 
     import scalatags.JsDom.all._
@@ -100,3 +101,4 @@ object App extends JSApp {
   }
 
 }
+

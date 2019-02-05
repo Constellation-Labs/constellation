@@ -13,6 +13,7 @@ trait SimpleWalletLike {
   @volatile var wallet : Seq[KeyPair] = Seq()
 
   // For generating additional keyPairs, maybe make this just regular API call instead.
+
   def walletPair: KeyPair = {
     val pair = KeyUtils.makeKeyPair()
     wallet :+= pair

@@ -2,6 +2,7 @@ package org.constellation.serializer
 
 import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
+
 import org.constellation.consensus._
 import org.constellation.p2p.SerializedUDPMessage
 import org.constellation.primitives.Schema._
@@ -9,6 +10,7 @@ import org.constellation.primitives._
 import org.constellation.util.{HashSignature, SignatureBatch}
 
 class ConstellationKryoRegistrar extends IKryoRegistrar {
+
   override def apply(kryo: Kryo): Unit = {
     this.registerClasses(kryo)
   }
@@ -44,7 +46,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[TransactionEdgeData])
     kryo.register(classOf[CheckpointEdgeData])
     kryo.register(classOf[Snapshot])
-
 
     kryo.register(classOf[Set[String]])
 

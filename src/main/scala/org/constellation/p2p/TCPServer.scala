@@ -1,7 +1,6 @@
  package org.constellation.p2p
 
 import java.net.InetSocketAddress
-
 import akka.actor.{Actor, Props}
 import akka.io.{IO, Tcp}
 
@@ -10,6 +9,7 @@ import akka.io.{IO, Tcp}
 
 class SimplisticHandler extends Actor {
   import Tcp._
+
   def receive: PartialFunction[Any, Unit] = {
     case Received(data) => sender() ! Write(data)
     case PeerClosed     => context stop self

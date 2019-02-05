@@ -5,9 +5,9 @@ import org.constellation.primitives.Transaction
 
 object Partitioner {
 
-
   // TODO:  Use XOR for random partition assignment later.
   // Needs accompanying test to validate even splits
+
   def minDistance(ids: Seq[Id], tx: Transaction): Id = ids.minBy { id =>
     val bi = BigInt(id.toPublicKey.getEncoded)
     val bi2 = BigInt(tx.hash, 16)
@@ -25,8 +25,6 @@ object Partitioner {
       (idInt ^ addressInt) + (idInt ^ txInt)
     }
   }
-
-
 
   // def bestFacilitator
 
