@@ -2,7 +2,6 @@ package org.constellation.primitives
 
 import java.security.{KeyPair, PublicKey}
 import java.time.Instant
-import scala.util.Random
 
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.hexToPublicKey
@@ -10,6 +9,7 @@ import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 
 // This can't be a trait due to serialization issues.
+import scala.util.Random
 
 object Schema {
 

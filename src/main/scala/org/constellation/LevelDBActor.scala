@@ -3,20 +3,18 @@ package org.constellation
 import akka.actor.{Actor, ActorSystem}
 import akka.util.Timeout
 import better.files._
-import com.typesafe.scalalogging.Logger
-import scala.util.Try
-
+import com.typesafe.scalalogging.StrictLogging
 import org.constellation.datastore.leveldb.LevelDB
 import org.constellation.datastore.leveldb.LevelDB._
 import org.constellation.serializer.KryoSerializer
 
+import scala.util.Try
+
 class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem)
-    extends Actor {
+    extends Actor with StrictLogging {
 
  // implicit val executionContext: ExecutionContext =
  //   system.dispatchers.lookup("db-io-dispatcher")
-
-  val logger = Logger("LevelDB")
 
   def tmpDirId = file"tmp/${dao.id.medium}/db"
 

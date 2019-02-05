@@ -1,11 +1,10 @@
 package org.constellation.primitives
 
 import java.security.KeyPair
-import cats.data.{Ior, NonEmptyList, ValidatedNel}
-import constellation.signedObservationEdge
-import cats.data._
-import cats.implicits._
 
+import cats.data.{Ior, NonEmptyList, ValidatedNel}
+import cats.implicits._
+import constellation.signedObservationEdge
 import org.constellation.DAO
 import org.constellation.primitives.Schema._
 import org.constellation.util.HashSignature
