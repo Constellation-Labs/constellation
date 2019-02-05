@@ -2,12 +2,12 @@
 package org.constellation
 
 import org.scalatest.FlatSpec
-import constellation._
-import org.constellation.primitives.Schema.{TX, TXData}
 import com.twitter.algebird._
-
 import scala.collection.immutable
 import scala.util.Random
+
+import constellation._
+import org.constellation.primitives.Schema.{TX, TXData}
 
 class AlgebirdTest extends FlatSpec {
 
@@ -36,6 +36,7 @@ class AlgebirdTest extends FlatSpec {
   "SketchMap" should "estimate id frequencies per tx hash with HLL values" in {
 
     class HLLOrdering extends Ordering[HLL] {
+
       override def compare(x: HLL, y: HLL): Int = {
         x.approximateSize.estimate.compare(y.approximateSize.estimate)
       }
@@ -127,7 +128,6 @@ class AlgebirdTest extends FlatSpec {
 
     println(hashed.length)
 
-
     val seq = hashed.combinations(2).toSeq
     println(seq.length)
     val bucketIntersections = seq.map {
@@ -141,7 +141,6 @@ class AlgebirdTest extends FlatSpec {
 
     bucketIntersections.foreach{println}
 
-
     assert(bucketIntersections.exists(_._3 > 0))
 
     val bucketGroups = hashed.flatMap{ case (s, m, b) =>
@@ -149,7 +148,6 @@ class AlgebirdTest extends FlatSpec {
       }.groupBy{_._1}.map{ case (k, vs) => k -> vs.map{_._2}.size}
 
     assert(bucketGroups.exists{_._2 > 1})
-
 
   }
 }

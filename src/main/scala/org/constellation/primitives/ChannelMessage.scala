@@ -1,16 +1,17 @@
 package org.constellation.primitives
 
 import java.util.concurrent.Semaphore
-
 import com.fasterxml.jackson.databind.JsonNode
 import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.{JsonSchemaFactory, JsonValidator}
+import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
+
 import constellation._
 import org.constellation.DAO
 import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
-import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
 
 // Should channelId be associated with a unique keyPair or not?
+
 case class ChannelMessageData(
                                message: String,
                                previousMessageDataHash: String,
@@ -36,6 +37,7 @@ case class ChannelMessageMetadata(
 case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 
 object ChannelMessage {
+
   def create(message: String, previous: String, channelId: String)(implicit dao: DAO): ChannelMessage = {
     val data = ChannelMessageData(message, previous, channelId)
     ChannelMessage(
@@ -79,7 +81,6 @@ case class ChannelProof(
                        checkpointMessageProof: MerkleProof
                        )
 
-
 case class ChannelOpenRequest(
                              channelId: String,
                              jsonSchema: Option[String] = None,
@@ -117,8 +118,8 @@ object SensorData {
 
   val schema: JsonNode = asJsonNode(parse(jsonSchema))
   val validator: JsonValidator = JsonSchemaFactory.byDefault().getValidator
-  def validate(input: String): ProcessingReport = validator.validate(schema, asJsonNode(parse(input)))
 
+  def validate(input: String): ProcessingReport = validator.validate(schema, asJsonNode(parse(input)))
 
   //def validate()
 
@@ -130,6 +131,7 @@ object SensorData {
 case class ChannelMessage(
                          oeWithValues: SignedData[ChannelMessageData]
                          )
+
 object ChannelMessage {
 
   def apply(

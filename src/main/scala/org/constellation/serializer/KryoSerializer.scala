@@ -2,9 +2,9 @@ package org.constellation.serializer
 
 import akka.util.ByteString
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
-import org.constellation.p2p.SerializedUDPMessage
-
 import scala.util.Random
+
+import org.constellation.p2p.SerializedUDPMessage
 
 object KryoSerializer {
 
@@ -44,6 +44,7 @@ object KryoSerializer {
   }
 
   // Use this one
+
   def serializeAnyRef(anyRef: AnyRef): Array[Byte] = {
     kryoPool.toBytesWithClass(anyRef)
   }
@@ -53,14 +54,17 @@ object KryoSerializer {
   }
 
   // Use this one
+
   def deserializeCast[T](message: Array[Byte]): T = {
     kryoPool.fromBytes(message).asInstanceOf[T]
   }
 /*
+
   def deserializeT[T : ClassTag](message: Array[Byte]): AnyRef= {
 
     val clz = {
       import scala.reflect._
+
       classTag[T].runtimeClass.asInstanceOf[Class[T]]
     }
     kryoPool.fromBytes(message, clz)

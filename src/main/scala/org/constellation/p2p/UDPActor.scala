@@ -2,14 +2,13 @@ package org.constellation.p2p
 
 import java.net.InetSocketAddress
 import java.util.concurrent.TimeUnit
-
 import akka.actor.{Actor, ActorRef}
 import akka.io.{IO, Udp}
 import akka.util.{ByteString, Timeout}
+import scala.collection.concurrent.TrieMap
+
 import org.constellation.DAO
 import org.constellation.serializer.KryoSerializer._
-
-import scala.collection.concurrent.TrieMap
 
 /**
   * None of this code is used right now
@@ -17,17 +16,25 @@ import scala.collection.concurrent.TrieMap
   */
 
 // Consider adding ID to all UDP messages? Possibly easier.
+
 case class UDPMessage(data: Any, remote: InetSocketAddress)
+
 case class GetUDPSocketRef()
+
 case class UDPSend[T](data: T, remote: InetSocketAddress)
+
 case class RegisterNextActor(nextActor: ActorRef)
+
 case class GetSelfAddress()
+
 case class Ban(address: InetSocketAddress)
+
 case class GetBanList()
 
 case object GetPacketGroups
 
 // Need to catch alert messages to detect socket closure.
+
 class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
                port: Int = 16180,
                bindInterface: String = "0.0.0.0",
@@ -67,7 +74,6 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
     case GetPacketGroups => sender() ! packetGroups
 
     case Udp.Received(data, remote) =>
-
 
       if (true) { //dao.bannedIPs.contains(remote)) {
         println(s"BANNED MESSAGE DETECTED FROM $remote")
@@ -138,6 +144,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 }
 
 // Change packetGroup to UUID
+
 case class SerializedUDPMessage(data: ByteString,
                                 packetGroup: Long,
                                 packetGroupSize: Long,

@@ -1,7 +1,9 @@
 package org.constellation.datastore.proxy
+
 import better.files.File
-import constellation._
 import org.constellation.datastore.KVDB
+
+import constellation._
 
 class KVDBAuditProxy(kvdb: KVDB) extends KVDB {
 
@@ -48,6 +50,8 @@ class KVDBAuditProxy(kvdb: KVDB) extends KVDB {
     kvdb.restart()
   }
 }
+
 object KVDBAuditProxy {
+
   def apply(kvdb: KVDB): KVDBAuditProxy = new KVDBAuditProxy(kvdb)
 }

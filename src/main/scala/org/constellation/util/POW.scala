@@ -3,6 +3,7 @@ package org.constellation.util
 import constellation._
 
 // Toy example for anti-spam request throttling
+
 trait POWExt {
 
   def proofOfWork(input: String, difficulty: Option[Int]): String = {

@@ -2,11 +2,11 @@ package org.constellation
 
 import better.files.File
 import com.codahale.shamir.Scheme
+import org.scalatest.FlatSpec
+import scala.collection.JavaConverters._
+
 import constellation._
 import org.constellation.crypto.KeyUtils._
-import org.scalatest.FlatSpec
-
-import scala.collection.JavaConverters._
 
 case class ShamirOutput(fileName: String, part: Int, hex: String)
 
@@ -14,7 +14,6 @@ class ShamirETHTest extends FlatSpec {
 
   val encodedStore = File(System.getenv("HOME"), "yourfile.txt")
   val ethKeyStore = File(System.getenv("HOME"), "Library/Ethereum/keystore")
-
 
   "Shamir java" should "work" in {
 
@@ -64,7 +63,6 @@ class ShamirETHTest extends FlatSpec {
         val file = File(ethKeyStore, fileName)
         file.writeText(output)
     }
-
 
   }
 

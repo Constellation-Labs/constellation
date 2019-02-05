@@ -1,15 +1,14 @@
 package org.constellation.primitives
 
 import java.security.KeyPair
-
 import cats.data.{Ior, NonEmptyList, ValidatedNel}
 import constellation.signedObservationEdge
+import cats.data._
+import cats.implicits._
+
 import org.constellation.DAO
 import org.constellation.primitives.Schema._
 import org.constellation.util.HashSignature
-
-import cats.data._
-import cats.implicits._
 
 case class CheckpointBlock(
                             transactions: Seq[Transaction],
@@ -66,6 +65,7 @@ case class CheckpointBlock(
   def transactionsValid: Boolean = transactions.nonEmpty && transactions.forall(_.valid)
 
   // TODO: Return checkpoint validation status for more info rather than just a boolean
+
   def simpleValidation()(implicit dao: DAO): Boolean = {
 
     val validation = CheckpointBlockValidatorNel.validateCheckpointBlock(
@@ -105,6 +105,7 @@ case class CheckpointBlock(
   def validSignatures: Boolean = signatures.forall(_.valid(baseHash))
 
   // TODO: Optimize call, should store this value instead of recalculating every time.
+
   def soeHash: String = checkpoint.edge.signedObservationEdge.hash
 
   def store(cache: CheckpointCacheData)(implicit dao: DAO): Unit = {
@@ -135,6 +136,7 @@ case class CheckpointBlock(
   }
 
   def parentSOE: Seq[TypedEdgeHash] = checkpoint.edge.parents
+
   def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
 
   def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
@@ -143,7 +145,6 @@ case class CheckpointBlock(
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
 }
-
 
 object CheckpointBlock {
 
@@ -180,67 +181,75 @@ object CheckpointBlock {
 
 }
 
-
 sealed trait CheckpointBlockValidation {
+
   def errorMessage: String
 }
 
 case class EmptySignatures() extends CheckpointBlockValidation {
+
   def errorMessage: String = "CheckpointBlock has no signatures"
 }
 
-
 case class InvalidSignature(signature: String) extends CheckpointBlockValidation {
+
   def errorMessage: String = s"CheckpointBlock includes signature=$signature which is invalid"
 }
 
 object InvalidSignature {
+
   def apply(s: HashSignature) = new InvalidSignature(s.signature)
 }
 
-
 case class InvalidTransaction(txHash: String) extends CheckpointBlockValidation {
+
   def errorMessage: String = s"CheckpointBlock includes transaction=$txHash which is invalid"
 }
 
 object InvalidTransaction {
+
   def apply(t: Transaction) = new InvalidTransaction(t.hash)
 }
 
-
 case class DuplicatedTransaction(txHash: String) extends CheckpointBlockValidation {
+
   def errorMessage: String = s"CheckpointBlock includes duplicated transaction=$txHash"
 }
 
 object DuplicatedTransaction {
+
   def apply(t: Transaction) = new DuplicatedTransaction(t.hash)
 }
 
-
 case class NoAddressCacheFound(txHash: String) extends CheckpointBlockValidation {
+
   def errorMessage: String = s"CheckpointBlock includes transaction=$txHash which has no address cache"
 }
 
 object NoAddressCacheFound {
+
   def apply(t: Transaction) = new NoAddressCacheFound(t.hash)
 }
 
-
 case class InsufficientBalance(address: String) extends CheckpointBlockValidation {
+
   def errorMessage: String = s"CheckpointBlock includes transaction from address=$address which has insufficient balance"
 }
 
 object InsufficientBalance {
+
   def apply(t: Transaction) = new InsufficientBalance(t.src.address)
 }
 
-
 // TODO: pass also a transaction metadata
+
 case class InternalInconsistency(cbHash: String) extends CheckpointBlockValidation {
+
   def errorMessage: String = s"CheckpointBlock=$cbHash includes transaction/s which has insufficient balance"
 }
 
 object InternalInconsistency {
+
   def apply(cb: CheckpointBlock) = new InternalInconsistency(cb.baseHash)
 }
 
@@ -270,6 +279,7 @@ sealed trait CheckpointBlockValidatorNel {
     if (diff.isEmpty) {
       t.toList.validNel
     } else {
+
       def toError(t: Transaction): ValidationResult[Transaction] = DuplicatedTransaction(t).invalidNel
 
       diff.map(toError(_).map(List(_))).combineAll
@@ -292,6 +302,7 @@ sealed trait CheckpointBlockValidatorNel {
   def validateSourceAddressBalances(
                                      t: Iterable[Transaction]
                                    )(implicit dao: DAO): ValidationResult[List[Transaction]] = {
+
     def lookup(key: String) = dao.addressService
       .get(key)
       .map(_.balance)
@@ -338,6 +349,7 @@ sealed trait CheckpointBlockValidatorNel {
   }
 
   /*
+
       def getSnapshotBalances(implicit dao: DAO): AddressBalance =
         dao.threadSafeTipService
           .getSnapshotInfo()

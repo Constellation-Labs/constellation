@@ -1,19 +1,17 @@
 package org.constellation
 
 import java.util.concurrent.ForkJoinPool
-
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import better.files.File
 import com.typesafe.scalalogging.Logger
-import org.constellation.util.TestNode
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
-
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
 import scala.util.Try
 
-class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
+import org.constellation.util.TestNode
 
+class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
 
   val logger = Logger("SingleNodeGenesisTest")
 
@@ -54,9 +52,7 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
   private val node = createNode(isGenesisNode = true)
   private val api = node.getAPIClient()
 
-
   "Genesis created" should "verify the node has created genesis" in {
-
 
   }
 

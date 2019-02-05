@@ -3,11 +3,11 @@ package org.constellation.crypto
 import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
 import java.security.{KeyFactory, SecureRandom, _}
 import java.util.Base64
-
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.Logger
-import constellation.SHA256Ext
 import org.spongycastle.jce.provider.BouncyCastleProvider
+
+import constellation.SHA256Ext
 
 /**
   * Need to compare this to:
@@ -28,6 +28,7 @@ import org.spongycastle.jce.provider.BouncyCastleProvider
   * for security policy implications.
   *
   */
+
 object KeyUtils {
 
   private val logger = Logger("KeyUtils")
@@ -66,8 +67,11 @@ object KeyUtils {
 
   // Utilities for getting around conversion errors / passing around parameters
   // through strange APIs that might take issue with your strings
+
   def base64(bytes: Array[Byte]): String = Base64.getEncoder.encodeToString(bytes)
+
   def fromBase64(b64Str: String): Array[Byte] = Base64.getDecoder.decode(b64Str)
+
   def base64FromBytes(bytes: Array[Byte]): String = new String(bytes)
 
   /**
@@ -85,6 +89,7 @@ object KeyUtils {
     *         This can be checked by anyone to be equal to the input text with
     *         access only to the public key paired to the input private key! Fun
     */
+
   def signData(
                 bytes: Array[Byte],
                 signFunc: String = DefaultSignFunc
@@ -120,6 +125,7 @@ object KeyUtils {
     * @return : True if the signature / transaction is legitimate.
     *         False means dishonest signer / fake transaction
     */
+
   def verifySignature(
                        originalInput: Array[Byte],
                        signedOutput: Array[Byte],
@@ -133,6 +139,7 @@ object KeyUtils {
   }
 
   // https://stackoverflow.com/questions/42651856/how-to-decode-rsa-public-keyin-java-from-a-text-view-in-android-studio
+
   def bytesToPublicKey(encodedBytes: Array[Byte]): PublicKey = {
     val spec = new X509EncodedKeySpec(encodedBytes)
     val kf = KeyFactory.getInstance(ECDSA, provider)
@@ -144,7 +151,6 @@ object KeyUtils {
     val kf = KeyFactory.getInstance(ECDSA, provider)
     kf.generatePrivate(spec)
   }
-
 
   def hex2bytes(hex: String): Array[Byte] = {
     if(hex.contains(" ")){
@@ -182,11 +188,13 @@ object KeyUtils {
   }
 
   // convert normal string to hex bytes string
+
   def string2hex(str: String): String = {
     str.toList.map(_.toInt.toHexString).mkString
   }
 
   // convert hex bytes string to normal string
+
   def hex2string(hex: String): String = {
     hex.sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toChar).mkString
   }
@@ -204,6 +212,7 @@ object KeyUtils {
   // TODO : Use a more secure address function.
   // Couldn't find a quick dependency for this, TBI
   // https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses
+
   def publicKeyToAddressString(
                                 key: PublicKey
                               ): String = {
@@ -211,13 +220,11 @@ object KeyUtils {
     keyHashToAddress(keyHash)
   }
 
-
 }
 
 /*
 
 object WalletKeyStore {
-
 
   def makeWalletKeyStore(
                           validityInDays: Int = 500000,
@@ -310,7 +317,7 @@ object WalletKeyStore {
     ks -> bks
   }
 
-
 }
 
 */
+

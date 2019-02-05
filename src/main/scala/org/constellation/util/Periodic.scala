@@ -1,9 +1,8 @@
 package org.constellation.util
 
 import java.util.concurrent.{ScheduledThreadPoolExecutor, TimeUnit}
-
 import scala.concurrent.Future
-import scala.util.Try
+import scala.util.Try // Try unused
 
 abstract class Periodic(threadName: String, periodSeconds: Int = 1) {
 
@@ -18,6 +17,7 @@ abstract class Periodic(threadName: String, periodSeconds: Int = 1) {
     * Recalculates window based / periodic metrics
     */
   private val task = new Runnable {
+
     def run(): Unit = {
       round += 1
       Thread.currentThread().setName(threadName)

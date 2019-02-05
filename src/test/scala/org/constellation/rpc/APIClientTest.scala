@@ -2,13 +2,13 @@ package org.constellation.rpc
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
+import scala.concurrent.ExecutionContextExecutor
+
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.{APIClient, TestNode}
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
-
-import scala.concurrent.ExecutionContextExecutor
 
 class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with BeforeAndAfterAll {
 
@@ -19,7 +19,6 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
   override def afterEach(): Unit = {
     TestNode.clearNodes()
   }
-
 
   "GET to /peers" should "get the correct connected peers" in {
 
@@ -51,7 +50,6 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
 
     assert(keyPair.getPublic.toId == id)
   }
-
 
   "POST to /peer" should "add the peer correctly" in {
     val node1 = TestNode()

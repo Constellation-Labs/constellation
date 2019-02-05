@@ -1,17 +1,16 @@
 package org.constellation.util
 
 import java.util.concurrent.ForkJoinPool
-
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
+import scala.util.{Random, Try}
+
 import constellation._
 import org.constellation.primitives.CheckpointBlock
 import org.constellation.primitives.Schema._
 import org.constellation.{HostPort, PeerMetadata}
-
-import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
-import scala.util.{Random, Try}
 
 class Simulation {
 
@@ -161,7 +160,6 @@ class Simulation {
     )
   }
 
-
   def checkHealthy(
                     apis: Seq[APIClient],
                     maxRetries: Int = 30,
@@ -181,7 +179,6 @@ class Simulation {
     )
   }
 
-
   def checkSnapshot(
                      apis: Seq[APIClient],
                      num: Int = 2,
@@ -198,8 +195,6 @@ class Simulation {
       }, maxRetries, delay
     )
   }
-
-
 
   def awaitConditionMet(
                          err: String,
@@ -250,6 +245,7 @@ class Simulation {
   def triggerRandom(apis: Seq[APIClient]): Seq[Response[String]] = {
     apis.map(_.postEmpty("random"))
   }
+
   def setReady(apis: Seq[APIClient]): Unit = {
     apis.foreach(_.postEmpty("ready"))
   }
@@ -301,7 +297,6 @@ class Simulation {
     }
 
     logger.info("Adding peers manually")
-
 
     if (useRegistrationFlow) {
       addPeersFromRegistrationRequest(apis, addPeerRequests)

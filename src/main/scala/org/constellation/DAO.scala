@@ -3,6 +3,7 @@ package org.constellation
 import akka.stream.ActorMaterializer
 import better.files.File
 import com.typesafe.scalalogging.Logger
+
 import org.constellation.primitives._
 
 class DAO(val nodeConfig: NodeConfig = NodeConfig()) extends NodeData
@@ -47,7 +48,6 @@ class DAO(val nodeConfig: NodeConfig = NodeConfig()) extends NodeData
     val f = File(s"tmp/${id.medium}/seeds")
     f
   }
-
 
   def restartNode(): Unit = {
     downloadMode = true

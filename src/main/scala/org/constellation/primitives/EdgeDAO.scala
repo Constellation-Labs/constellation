@@ -1,19 +1,17 @@
 package org.constellation.primitives
 
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
-
 import akka.util.Timeout
 import com.twitter.storehaus.cache.MutableLRUCache
-import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
-import org.constellation.consensus._
-import org.constellation.primitives.Schema._
-import org.constellation.{DAO, ProcessingConfig}
-
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 import scala.util.Random
 
+import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
+import org.constellation.consensus._
+import org.constellation.primitives.Schema._
+import org.constellation.{DAO, ProcessingConfig}
 
 class ThreadSafeTXMemPool() {
 
@@ -97,7 +95,6 @@ class ThreadSafeTipService() {
 
   implicit val timeout: Timeout = Timeout(15, TimeUnit.SECONDS)
 
-
   private var thresholdMetCheckpoints: Map[String, TipData] = Map()
   var acceptedCBSinceSnapshot: Seq[String] = Seq()
   var facilitators: Map[Id, PeerData] = Map()
@@ -117,10 +114,10 @@ class ThreadSafeTipService() {
     )
   )
 
-
   var totalNumCBsInShapshots = 0L
 
   // ONLY TO BE USED BY DOWNLOAD COMPLETION CALLER
+
   def setSnapshot(latestSnapshotInfo: SnapshotInfo)(implicit dao: DAO): Unit = this.synchronized{
     snapshot = latestSnapshotInfo.snapshot
     lastSnapshotHeight = latestSnapshotInfo.lastSnapshotHeight
@@ -157,7 +154,6 @@ class ThreadSafeTipService() {
 
     dao.metrics.updateMetric("acceptCBCacheMatchesAcceptedSize", (latestSnapshotInfo.acceptedCBSinceSnapshot.size == latestSnapshotInfo.acceptedCBSinceSnapshotCache.size).toString)
 
-
   }
 
   // TODO: Read from lastSnapshot in DB optionally, assign elsewhere
@@ -193,7 +189,6 @@ class ThreadSafeTipService() {
       dao.metrics.incrementMetric("memoryExceeded_acceptedCBSinceSnapshot")
       dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
     }
-
 
     val peerIds = dao.peerInfo //(dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
     val facilMap = peerIds.filter{case (_, pd) =>
@@ -260,7 +255,6 @@ class ThreadSafeTipService() {
 
             Snapshot.acceptSnapshot(snapshot)
             dao.checkpointService.delete(snapshot.checkpointBlocks.toSet)
-
 
             totalNumCBsInShapshots += snapshot.checkpointBlocks.size
             dao.metrics.updateMetric("totalNumCBsInShapshots", totalNumCBsInShapshots.toString)
@@ -330,8 +324,8 @@ class ThreadSafeTipService() {
     } else None
   }
 
-
   // TODO: Synchronize only on values modified by this, same for other functions
+
   def accept(checkpointCacheData: CheckpointCacheData)(implicit dao: DAO): Unit = this.synchronized {
 
     if (dao.checkpointService.contains(checkpointCacheData.checkpointBlock.map {
@@ -404,11 +398,9 @@ class ThreadSafeTipService() {
 
 }
 
-
 // TODO: Use atomicReference increment pattern instead of synchronized
 
 class StorageService[T](size: Int = 50000) {
-
 
   private val lruCache: MutableLRUCache[String, T] = {
     import com.twitter.storehaus.cache._
@@ -426,6 +418,7 @@ class StorageService[T](size: Int = 50000) {
   // mutexStore.getOrElseUpdate(hash)
   // Map[Address, AtomicUpdater] // computeIfAbsent getOrElseUpdate
 /*  class AtomicUpdater {
+
     def update(
                 key: String,
                 updateFunc: T => T,
@@ -469,18 +462,20 @@ class StorageService[T](size: Int = 50000) {
     lruCache.iterator.toMap
   }
 
-
 }
 
-
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
+
 class CheckpointService(size: Int = 50000) extends StorageService[CheckpointCacheData](size)
+
 class SOEService(size: Int = 50000) extends StorageService[SignedObservationEdgeCache](size)
 
 class MessageService(size: Int = 50000) extends StorageService[ChannelMessageMetadata](size)
+
 class TransactionService(size: Int = 50000) extends StorageService[TransactionCacheData](size) {
   private val queue = mutable.Queue[TransactionSerialized]()
   private val maxQueueSize = 20
+
   override def put(
     key: String,
     cache: TransactionCacheData
@@ -498,6 +493,7 @@ class TransactionService(size: Int = 50000) extends StorageService[TransactionCa
 
   def getLast20TX = queue.reverse
 }
+
 class AddressService(size: Int = 50000) extends StorageService[AddressCacheData](size)
 
 trait EdgeDAO {
@@ -505,7 +501,6 @@ trait EdgeDAO {
   var processingConfig = ProcessingConfig()
 
   @volatile var blockFormationInProgress: Boolean = false
-
 
   val publicReputation: TrieMap[Id, Double] = TrieMap()
   val secretReputation: TrieMap[Id, Double] = TrieMap()
@@ -523,10 +518,12 @@ trait EdgeDAO {
   val threadSafeTipService = new ThreadSafeTipService()
 
   var genesisObservation: Option[GenesisObservation] = None
-  def maxWidth: Int = processingConfig.maxWidth
-  def minCheckpointFormationThreshold: Int = processingConfig.minCheckpointFormationThreshold
-  def minCBSignatureThreshold: Int = processingConfig.numFacilitatorPeers
 
+  def maxWidth: Int = processingConfig.maxWidth
+
+  def minCheckpointFormationThreshold: Int = processingConfig.minCheckpointFormationThreshold
+
+  def minCBSignatureThreshold: Int = processingConfig.numFacilitatorPeers
 
   val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
 
@@ -549,6 +546,5 @@ trait EdgeDAO {
   @volatile var peerInfo: Map[Id, PeerData] = Map()
 
   def readyPeers: Map[Id, PeerData] = peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
-
 
 }

@@ -1,21 +1,16 @@
 package org.constellation.primitives
 
-import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 import java.time.Instant
+import scala.util.Random
 
-import constellation.pubKeyToAddress
-import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.hexToPublicKey
-import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 
-import scala.collection.concurrent.TrieMap
-import scala.util.Random
+// This can't be a trait due to serialization issues.
 
-// This can't be a trait due to serialization issues
 object Schema {
 
   case class TreeVisual(
@@ -32,8 +27,6 @@ object Schema {
                                        cbEdgeHash: Option[String]
                                      )
 
-
-
   object NodeState extends Enumeration {
     type NodeState = Value
     val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, Ready = Value
@@ -42,8 +35,11 @@ object Schema {
   sealed trait ValidationStatus
 
   final case object Valid extends ValidationStatus
+
   final case object MempoolValid extends ValidationStatus
+
   final case object Unknown extends ValidationStatus
+
   final case object DoubleSpend extends ValidationStatus
 
   sealed trait ConfigUpdate
@@ -60,11 +56,13 @@ object Schema {
                             amount: Long,
                             normalized: Boolean = true
                           ) {
+
     def amountActual: Long = if (normalized) amount * NormalizationFactor else amount
   }
 
   // TODO: We also need a hash pointer to represent the post-tx counter party signing data, add later
   // TX should still be accepted even if metadata is incorrect, it just serves to help validation rounds.
+
   case class AddressMetaData(
                               address: String,
                               balance: Long = 0L,
@@ -74,12 +72,11 @@ object Schema {
                               oneTimeUse: Boolean = false,
                               depth: Int = 0
                             ) extends Signable {
+
     def normalizedBalance: Long = balance / NormalizationFactor
   }
 
-  /**
-    * Our basic set of allowed edge hash types
-    */
+  /** Our basic set of allowed edge hash types */
   object EdgeHashType extends Enumeration {
     type EdgeHashType = Value
     val AddressHash,
@@ -112,11 +109,17 @@ object Schema {
     * Encapsulation for all witness information about a given observation edge.
     * @param signatureBatch : Collection of validation signatures about the edge.
     */
+
   case class SignedObservationEdge(signatureBatch: SignatureBatch) extends Signable {
+
     def withSignatureFrom(keyPair: KeyPair): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.withSignatureFrom(keyPair))
+
     def withSignature(hs: HashSignature): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.withSignature(hs))
+
     def plus(other: SignatureBatch): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other))
+
     def plus(other: SignedObservationEdge): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
+
     def baseHash: String = signatureBatch.hash
   }
 
@@ -135,10 +138,12 @@ object Schema {
   case class CheckpointEdgeData(hashes: Seq[String], messages: Seq[ChannelMessage] = Seq()) extends Signable
 
   case class CheckpointEdge(edge: Edge[CheckpointEdgeData]) {
+
     def plus(other: CheckpointEdge) = this.copy(edge = edge.plus(other.edge))
   }
 
   case class Address(address: String) extends Signable {
+
     override def hash: String = address
   }
 
@@ -164,6 +169,7 @@ object Schema {
     }
 
   }
+
   // Instead of one balance we need a Map from soe hash to balance and reputation
   // These values should be removed automatically by eviction
   // We can maintain some kind of automatic LRU cache for keeping track of what we want to remove
@@ -182,6 +188,7 @@ object Schema {
                                    signatureForks : Set[Transaction] = Set(),
                                    rxTime: Long = System.currentTimeMillis()
                                  ) {
+
     def plus(previous: TransactionCacheData): TransactionCacheData = {
       this.copy(
         inDAGByAncestor = inDAGByAncestor ++ previous.inDAGByAncestor.filterKeys(k => !inDAGByAncestor.contains(k)),
@@ -205,6 +212,7 @@ object Schema {
                            )
 
   // TODO: Separate cache with metadata vs what is stored in snapshot.
+
   case class CheckpointCacheData(
                                   checkpointBlock: Option[CheckpointBlock] = None,
                          //         metadata: CommonMetadata = CommonMetadata(),
@@ -226,6 +234,7 @@ object Schema {
   case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
 
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
+
   case class ValidPeerIPData(canonicalHostName: String, port: Int)
 
   case class GenesisObservation(
@@ -246,16 +255,22 @@ object Schema {
   case class MetricsResult(metrics: Map[String, String])
 
   case class Id(hex: String) {
+
     def short: String = hex.toString.slice(0, 5)
+
     def medium: String = hex.toString.slice(0, 10)
+
     def address: String = KeyUtils.publicKeyToAddressString(toPublicKey)
+
     def toPublicKey: PublicKey = hexToPublicKey(hex)
   }
 
   case class Node(address: String, host: String, port: Int)
 
   case class TransactionSerialized(hash: String, sender: String, receiver: String, amount: Long, signers: Set[String], time: Long)
+
   object TransactionSerialized {
+
     def apply(tx: Transaction): TransactionSerialized =
       new TransactionSerialized(tx.hash, tx.src.address, tx.dst.address, tx.amount,
         tx.signatures.map(_.address).toSet, Instant.now.getEpochSecond)

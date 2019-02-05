@@ -1,11 +1,15 @@
 package org.constellation.consensus
 
 import java.security.KeyPair
-
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.scalalogging.Logger
+import org.scalamock.scalatest.MockFactory
+import org.scalatest._
+import scala.collection.concurrent.TrieMap
+import scala.util.Random
+
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
@@ -13,16 +17,11 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures}
-import org.scalamock.scalatest.MockFactory
-import org.scalatest._
-
-import scala.collection.concurrent.TrieMap
-import scala.util.Random
 
 object RandomData {
 
   val logger = Logger("RandomData")
-  
+
   val keyPairs: Seq[KeyPair] = Seq.fill(10)(makeKeyPair())
 
   val go: GenesisObservation = Genesis.createGenesisAndInitialDistributionDirect(
@@ -109,9 +108,7 @@ class RandomDataTest extends FlatSpec {
     var width = 2
     val maxWidth = 50
 
-
     val activeBlocks = TrieMap[SignedObservationEdge, Int]()
-
 
     val maxNumBlocks = 1000
     var blockNum = 0
@@ -125,7 +122,6 @@ class RandomDataTest extends FlatSpec {
     var blockId = 3
 
     val convMap = TrieMap[String, Int]()
-
 
     val snapshotInterval = 10
 
@@ -162,7 +158,6 @@ class RandomDataTest extends FlatSpec {
 
       block
 
-
     }
 
     logger.debug(cbIndex.size.toString)
@@ -192,9 +187,7 @@ class RandomDataTest extends FlatSpec {
 
     //  file"../d3-dag/test/data/dag.json".write(json)
 
-
     //createTransaction()
-
 
   }
 

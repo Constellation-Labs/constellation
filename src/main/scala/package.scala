@@ -2,7 +2,6 @@ import java.net.InetSocketAddress
 import java.nio.{ByteBuffer, ByteOrder}
 import java.security.{KeyPair, PrivateKey, PublicKey}
 import java.util.concurrent.TimeUnit
-
 import akka.actor.ActorRef
 import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.unmarshalling.Unmarshal
@@ -10,21 +9,21 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import com.google.common.hash.Hashing
+import org.json4s.JsonAST.{JInt, JString}
+import org.json4s.ext.EnumNameSerializer
+import org.json4s.native.{Serialization, parseJsonOpt}
+import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, ShortTypeHints}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
+import scala.reflect.ClassTag
+import scala.util.{Failure, Random, Success, Try}
+
 import org.constellation.DAO
 import org.constellation.crypto.Base58
 import org.constellation.crypto.KeyUtils.{bytesToPrivateKey, bytesToPublicKey, _}
 import org.constellation.primitives.Schema._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{KeySerializeJSON, POWExt, SignHelpExt}
-import org.json4s.JsonAST.{JInt, JString}
-import org.json4s.ext.EnumNameSerializer
-import org.json4s.native.{Serialization, parseJsonOpt}
-import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, ShortTypeHints}
-
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext, Future, Promise}
-import scala.reflect.ClassTag
-import scala.util.{Failure, Random, Success, Try}
 
 package object constellation extends POWExt
   with SignHelpExt
@@ -35,10 +34,12 @@ package object constellation extends POWExt
   final val MinimumTime : Long = 1518898908367L
 
   implicit class EasyFutureBlock[T](f: Future[T]) {
+
     def get(t: Int = 30): T = {
       import scala.concurrent.duration._
       Await.result(f, t.seconds)
     }
+
     def getOpt(t: Int = 30): Option[T] = {
       import scala.concurrent.duration._
       Try{Await.result(f, t.seconds)}.toOption
@@ -81,32 +82,43 @@ package object constellation extends POWExt
   def compactRender(msg: JValue): String = Serialization.write(msg)
 
   implicit class SerExt(jsonSerializable: Any) {
+
     def json: String = caseClassToJson(jsonSerializable)
+
     def prettyJson: String = Serialization.writePretty(Extraction.decompose(jsonSerializable))
+
     def tryJson: Try[String] = Try{caseClassToJson(jsonSerializable)}
+
     def j: String = json
+
     def jsonSave(f: String): Unit = File(f).writeText(json)
   }
 
   implicit class KryoSerExt(anyRef: AnyRef) {
+
     def kryo: Array[Byte] = KryoSerializer.serializeAnyRef(anyRef)
   }
 
   implicit class ParseExt(input: String) {
+
     def jValue: JValue = parse4s(input)
+
     def jv: JValue = jValue
+
     def x[T](implicit m: Manifest[T]): T = jv.extract[T](constellationFormats, m)
   }
 
   implicit class SHA256Ext(s: String) {
+
     def sha256: String = Hashing.sha256().hashBytes(s.getBytes()).toString
   }
 
   implicit class SHA256ByteExt(arr: Array[Byte]) {
+
     def sha256: String = Hashing.sha256().hashBytes(arr).toString
+
     def sha256Bytes: Array[Byte] = Hashing.sha256().hashBytes(arr).asBytes()
   }
-
 
   def intToByte(myInteger: Int): Array[Byte] =
     ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(myInteger).array
@@ -114,9 +126,9 @@ package object constellation extends POWExt
   def byteToInt(byteBarray: Array[Byte]): Int =
     ByteBuffer.wrap(byteBarray).order(ByteOrder.BIG_ENDIAN).getInt
 
-
   implicit class HTTPHelp(httpResponse: HttpResponse)
                          (implicit val materialize: ActorMaterializer) {
+
     def unmarshal: Future[String] = Unmarshal(httpResponse.entity).to[String]
   }
 
@@ -141,9 +153,9 @@ package object constellation extends POWExt
 
   }
 
-
   implicit class ActorQuery(a: ActorRef) {
     import akka.pattern.ask
+
     def query[T: ClassTag](m: Any): T = (a ? m).mapTo[T].get()
   }
 
@@ -199,7 +211,6 @@ package object constellation extends POWExt
     done
   }
 
-
   def withTimeout[T](fut:Future[T])(implicit ec:ExecutionContext, after:Duration): Future[T] = {
     val prom = Promise[T]()
     val timeout = TimeoutScheduler.scheduleTimeout(prom, after)
@@ -209,6 +220,7 @@ package object constellation extends POWExt
   }
 
   import scala.concurrent.duration._
+
   def withTimeoutSecondsAndMetric[T](fut:Future[T], metricPrefix: String, timeoutSeconds: Int = 10, onError: => Unit = ())
                                     (implicit ec:ExecutionContext, dao: DAO): Future[T] = {
     val prom = Promise[T]()
@@ -248,7 +260,6 @@ package object constellation extends POWExt
     )
   }
 
-
   def withRetries(
                          err: String,
                          t : => Boolean,
@@ -267,12 +278,12 @@ package object constellation extends POWExt
     done
   }
 
-
   implicit class PublicKeyExt(publicKey: PublicKey) {
+
     def toId: Id = Id(hex)
+
     def hex: String = publicKeyToHex(publicKey)
   }
-
 
 }
 
@@ -286,8 +297,10 @@ object TimeoutScheduler{
   import scala.concurrent.duration.Duration
 
   val timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
+
   def scheduleTimeout(promise:Promise[_], after:Duration) = {
     timer.newTimeout(new TimerTask{
+
       def run(timeout:Timeout){
         promise.failure(new TimeoutException("Operation timed out after " + after.toMillis + " millis"))
       }

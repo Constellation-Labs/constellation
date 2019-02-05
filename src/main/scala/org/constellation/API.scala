@@ -3,7 +3,6 @@ package org.constellation
 import java.io.{StringWriter, Writer}
 import java.net.InetSocketAddress
 import java.security.KeyPair
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
@@ -22,6 +21,12 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
+import org.json4s.native
+import org.json4s.native.Serialization
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
+
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.crypto.{KeyUtils, SimpleWalletLike}
 import org.constellation.p2p.Download
@@ -30,12 +35,6 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, _}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{CommonEndpoints, MerkleTree, ServeUI}
-import org.json4s.native
-import org.json4s.native.Serialization
-
-import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
 
 case class PeerMetadata(
                      host: String,
@@ -47,9 +46,10 @@ case class PeerMetadata(
                      auxHost: String = ""
                    )
 
-
 case class HostPort(host: String, port: Int)
+
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
+
 case class UpdatePassword(password: String)
 
 case class ProcessingConfig(
@@ -76,7 +76,6 @@ case class ProcessingConfig(
 ) {
 
 }
-
 
 class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   extends Json4sSupport
@@ -136,7 +135,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
                   messageProof
                 )
               }
-
 
             }
 

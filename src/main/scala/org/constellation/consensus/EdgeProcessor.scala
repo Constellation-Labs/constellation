@@ -2,20 +2,19 @@ package org.constellation.consensus
 
 import java.nio.file.Path
 import java.security.KeyPair
-
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
+import scala.async.Async.{async, await}
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.util.Try
+
 import constellation._
 import org.constellation.DAO
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{APIClient, Signable}
-
-import scala.async.Async.{async, await}
-import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.Try
 
 object EdgeProcessor {
 
@@ -85,14 +84,16 @@ object EdgeProcessor {
                                            updatedTransactionMemPoolThresholdMet: Set[String]
                                          )
 
-
-
   case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
+
   case class  SignatureResponse(checkpointBlock: CheckpointBlock, facilitators: Set[Id], reRegister: Boolean = false)
+
   case class FinishedCheckpoint(checkpointCacheData: CheckpointCacheData, facilitators: Set[Id])
+
   case class FinishedCheckpointResponse(reRegister: Boolean = false)
 
   // TODO: Move to checkpoint formation actor
+
   def formCheckpoint(messages: Seq[ChannelMessage] = Seq())(
     implicit dao: DAO): Unit = {
 
@@ -197,6 +198,7 @@ object EdgeProcessor {
   }
 
   // Temporary for testing join/leave logic.
+
   def handleSignatureRequest(sr: SignatureRequest)(
     implicit dao: DAO): SignatureResponse = {
     //if (sr.facilitators.contains(dao.id)) {
@@ -315,6 +317,7 @@ case object GetMemPool
 
 case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String])
   extends Signable
+
 case class StoredSnapshot(snapshot: Snapshot,
                           checkpointCache: Seq[CheckpointCacheData])
 
@@ -419,7 +422,6 @@ object Snapshot {
       dao.metrics.incrementMetric("snapshotCBAcceptQueryFailed")
     }
 
-
     for (
       cbOpt <- cbData;
       cbCache <- cbOpt;
@@ -446,3 +448,4 @@ object Snapshot {
   }
 
 }
+
