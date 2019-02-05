@@ -1,14 +1,13 @@
 package org.constellation.primitives
 
-import java.util.Collections
-
-import akka.actor.ActorSystem
-import akka.testkit.TestKit
+import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import akka.testkit.{TestActorRef, TestKit}
+import org.constellation.DAO
+import akka.actor.{ActorRef, ActorSystem, Props}
 import com.typesafe.scalalogging.Logger
 import io.prometheus.client.CollectorRegistry
-import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import java.util.Collections
 
 class MetricsManagerTest ()
   extends TestKit(ActorSystem("ConstellationTest"))

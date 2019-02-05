@@ -1,6 +1,5 @@
 package org.constellation
 
-import com.typesafe.scalalogging.Logger
 import org.scalatest.FlatSpec
 
 // Use H2Profile to connect to an H2 database
@@ -10,8 +9,6 @@ import slick.jdbc.H2Profile.api._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 class H2SlickTest extends FlatSpec {
-
-  val logger = Logger("H2SlickTest")
 
 
   // Definition of the SUPPLIERS table
@@ -74,10 +71,10 @@ class H2SlickTest extends FlatSpec {
       setupFuture.get()
 
       // Read all coffees and print them to the console
-      logger.debug("Coffees:")
+      println("Coffees:")
       db.run(coffees.result).map(_.foreach {
         case (name, supID, price, sales, total) =>
-          logger.debug("  " + name + "\t" + supID + "\t" + price + "\t" + sales + "\t" + total)
+          println("  " + name + "\t" + supID + "\t" + price + "\t" + sales + "\t" + total)
       })
       // Equivalent SQL code:
       // select COF_NAME, SUP_ID, PRICE, SALES, TOTAL from COFFEES

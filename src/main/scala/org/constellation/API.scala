@@ -17,7 +17,7 @@ import better.files.{File, _}
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 import com.softwaremill.sttp.Response
 import com.typesafe.config.{Config, ConfigFactory}
-import com.typesafe.scalalogging.StrictLogging
+import com.typesafe.scalalogging.Logger
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
@@ -82,8 +82,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
   extends Json4sSupport
     with SimpleWalletLike
     with ServeUI
-    with CommonEndpoints
-    with StrictLogging {
+    with CommonEndpoints {
 
   import dao._
 
@@ -93,6 +92,8 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
   implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-dispatcher")
+
+  val logger = Logger(s"APIInterface")
 
   val config: Config = ConfigFactory.load()
 

@@ -1,19 +1,23 @@
 package org.constellation.util
 
+import java.util.concurrent._
+
 import better.files.File
 import com.typesafe.scalalogging.Logger
-import constellation._
+import io.kontainers.micrometer.akka.AkkaMetricRegistry
 import io.micrometer.core.instrument.Clock
 import io.micrometer.core.instrument.binder.jvm._
 import io.micrometer.core.instrument.binder.logging.LogbackMetrics
 import io.micrometer.core.instrument.binder.system.{FileDescriptorMetrics, ProcessorMetrics, UptimeMetrics}
 import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import io.prometheus.client.CollectorRegistry
+import constellation._
 import org.constellation.{ConstellationNode, DAO}
 import org.joda.time.DateTime
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.Future
+import scala.util.Try
 
 /**
   * For Grafana usage
@@ -23,6 +27,7 @@ object Metrics {
   def prometheusSetup(keyHash: String): Unit = {
     val prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT, CollectorRegistry.defaultRegistry, Clock.SYSTEM)
     prometheusMeterRegistry.config().commonTags("application", s"Constellation_$keyHash")
+    AkkaMetricRegistry.setRegistry(prometheusMeterRegistry)
     new JvmMemoryMetrics().bindTo(prometheusMeterRegistry)
     new JvmGcMetrics().bindTo(prometheusMeterRegistry)
     new JvmThreadMetrics().bindTo(prometheusMeterRegistry)

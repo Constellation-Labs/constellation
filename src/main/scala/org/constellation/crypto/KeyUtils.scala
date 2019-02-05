@@ -5,7 +5,8 @@ import java.security.{KeyFactory, SecureRandom, _}
 import java.util.Base64
 
 import com.google.common.hash.Hashing
-import com.typesafe.scalalogging.StrictLogging
+import com.typesafe.scalalogging.Logger
+import constellation.SHA256Ext
 import org.spongycastle.jce.provider.BouncyCastleProvider
 
 /**
@@ -27,7 +28,9 @@ import org.spongycastle.jce.provider.BouncyCastleProvider
   * for security policy implications.
   *
   */
-object KeyUtils extends StrictLogging {
+object KeyUtils {
+
+  private val logger = Logger("KeyUtils")
 
   def insertProvider(): BouncyCastleProvider = {
     import java.security.Security

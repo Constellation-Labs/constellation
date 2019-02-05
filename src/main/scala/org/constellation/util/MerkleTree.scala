@@ -26,14 +26,17 @@ case class MerkleResult(inputs: Seq[String], nodes: Seq[MerkleNode]) {
   }
 }
 
-import com.typesafe.scalalogging.StrictLogging
+import com.typesafe.scalalogging.Logger
 import constellation.SHA256Ext
 
 
 // This should be changed to an actual tree structure in memory. Just skipping that for now
 // Either that or replace this with a pre-existing implementation
 // Couldn't find any libs that were easy drop ins so just doing this for now
-object MerkleTree extends StrictLogging {
+object MerkleTree {
+
+  val logger = Logger("MerkleTree")
+
 
   def childToParent(nodes: Seq[MerkleNode]): Map[String, MerkleNode] = nodes.flatMap{ n =>
     n.children.map{

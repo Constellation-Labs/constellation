@@ -3,8 +3,8 @@ package org.constellation.util
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import org.constellation.crypto.KeyUtils.{hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex}
-import org.json4s.JsonAST.JString
 import org.json4s.{CustomSerializer, Formats, JObject}
+import org.json4s.JsonAST.JString
 
 trait KeySerializeJSON {
 

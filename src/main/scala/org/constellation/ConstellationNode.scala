@@ -13,7 +13,7 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files._
 import com.typesafe.config.ConfigFactory
-import com.typesafe.scalalogging.{Logger, StrictLogging}
+import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.crypto.KeyUtils
@@ -26,11 +26,12 @@ import org.constellation.util.{APIClient, Metrics}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-object ConstellationNode extends StrictLogging {
+object ConstellationNode {
 
   val ConstellationVersion = "1.0.10"
 
   def main(args: Array[String]): Unit = {
+    val logger = Logger("ConstellationNodeMain")
     logger.info("Main init")
     val config = ConfigFactory.load()
     logger.info("Config loaded")
