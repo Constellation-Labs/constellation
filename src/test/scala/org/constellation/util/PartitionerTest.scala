@@ -1,43 +1,57 @@
 package org.constellation.util
 
-import constellation.SHA256Ext
+import java.security.KeyPair
+
+import constellation.{SHA256Ext, createTransaction}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
-import org.constellation.Fixtures._
+import org.constellation.Fixtures.{dummyTx, _}
 import Partitioner._
-import com.google.common.hash.Hashing
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
+import org.constellation.primitives.Schema
+import org.constellation.primitives.Schema.SendToAddress
+
+import scala.util.Random
 
 class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
-  implicit val dao: DAO = new DAO()
+//  implicit val dao: DAO = new DAO()
+//
+//  dao.updateKeyPair(KeyUtils.makeKeyPair())
+//  dao.idDir.createDirectoryIfNotExists(createParents = true)
+//  dao.preventLocalhostAsPeer = false
+//  dao.externalHostString = ""
+//  dao.externlPeerHTTPPort = 0
 
-  dao.updateKeyPair(KeyUtils.makeKeyPair())
-  dao.idDir.createDirectoryIfNotExists(createParents = true)
-  dao.preventLocalhostAsPeer = false
-  dao.externalHostString = ""
-  dao.externlPeerHTTPPort = 0
+  val random = new java.util.Random()
 
-  val tx = dummyTx(dao)
-  val tx2 = dummyTx(dao, src = id2)
-  val ids = idSet5.toSeq
+  val randomTxs: Set[Schema.Transaction] = idSet5.flatMap{ id =>
+    val destinationAddresses = idSet5.map(_.address.address)
+    destinationAddresses.map(destStr => makeTransaction(id.address.address, destStr, random.nextLong(), getRandomElement(tempKeySet, random)))
+  }
+
+  val ids = idSet5.toList
 
   "Facilitator selection" should "be deterministic" in {
-    val facilitator = selectTxFacilitator(ids, tx)
-    val facilitatorDup = selectTxFacilitator(ids, tx)
+    val facilitator = selectTxFacilitator(ids, randomTxs.head)
+    val facilitatorDup = selectTxFacilitator(ids, randomTxs.head)
     assert(facilitator === facilitatorDup)
   }
 
   "Facilitators" should "not facilitate their own transactions" in {
-    val facilitator = selectTxFacilitator(ids, tx)
-    assert(facilitator.address.address != tx.src.address)
+    val facilitator = selectTxFacilitator(ids, randomTxs.head)
+    assert(facilitator.address.address != randomTxs.head.src.address)
   }
 
   "Facilitator selection" should "be relatively balanced" in {
-    val txs = idSet5.map(srcId => dummyTx(dao, src = srcId))
-    val facilitators = txs.map(tx => selectTxFacilitator(ids, tx))
-    assert(facilitators.nonEmpty)//Todo, need to balance bucketing
+    val facilitators = randomTxs.map(tx => selectTxFacilitator(ids, tx))
+    assert(facilitators.size == 5)
   }
 
+  "The gossip path" should "always be shorter then the total set of node ids" in {
+    val pathLengths = randomTxs.map(gossipPath(ids, _).size)
+    pathLengths.foreach(println)
+    assert(pathLengths.forall(_ < ids.size))
+  }
 
 }

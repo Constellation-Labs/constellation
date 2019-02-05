@@ -212,6 +212,8 @@ object Schema {
       dao.transactionService.put(this.hash, cache)
     }
 
+    var facilitators: List[Id] = Nil
+
     /*def ledgerApplyMemPool(dbActor: Datastore): Unit = {
       dbActor.updateAddressCacheData(
         src.hash,
