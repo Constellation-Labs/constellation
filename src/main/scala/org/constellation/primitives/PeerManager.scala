@@ -1,27 +1,26 @@
 package org.constellation.primitives
 
 import java.net.InetSocketAddress
+
 import akka.actor.{Actor, ActorSystem}
 import akka.http.scaladsl.model.RemoteAddress
 import akka.stream.ActorMaterializer
 import com.softwaremill.sttp.Response
-import com.typesafe.scalalogging.Logger
-import scala.concurrent.{ExecutionContextExecutor, Future}
-import scala.util.{Random, Try}
-import scala.collection.Set
-import scala.util.{Failure, Success}
-
-import constellation._
-import constellation.futureTryWithTimeoutMetric
+import com.typesafe.scalalogging.StrictLogging
+import constellation.{futureTryWithTimeoutMetric, _}
 import org.constellation.p2p.{Download, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat}
 import org.constellation.util._
 import org.constellation.{DAO, HostPort, PeerMetadata, RemovePeerRequest}
 
+import scala.collection.Set
+import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.util.{Failure, Random, Success, Try}
+
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 
-object PeerManager {
+object PeerManager extends StrictLogging {
 
   def initiatePeerReload()(implicit dao: DAO,
                            ec: ExecutionContextExecutor): Unit = {
@@ -71,8 +70,6 @@ object PeerManager {
     dao.peerManager ! APIBroadcast(
       _.post("status", SetNodeStatus(dao.id, dao.nodeState)))
   }
-
-  val logger = Logger(s"PeerManagerObj")
 
   def attemptRegisterSelfWithPeer(hp: HostPort)(
       implicit dao: DAO): Future[Any] = {
@@ -178,7 +175,7 @@ case class PeerData(
     client: APIClient
 )
 
-case class APIBroadcast[T](func: APIClient => T,
+case class APIBroadcast[T](func: APIClient => Future[T],
                            skipIds: Set[Id] = Set(),
                            peerSubset: Set[Id] = Set())
 
@@ -195,9 +192,8 @@ case class UpdatePeerInfo(peerData: PeerData)
 class PeerManager(ipManager: IPManager)(
     implicit val materialize: ActorMaterializer,
     dao: DAO)
-    extends Actor {
-
-  val logger = Logger(s"PeerManager")
+    extends Actor
+    with StrictLogging {
 
   override def receive: Receive = active(Map.empty)
 

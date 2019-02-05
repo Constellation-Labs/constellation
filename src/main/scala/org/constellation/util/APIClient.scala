@@ -2,21 +2,22 @@ package org.constellation.util
 
 import akka.http.scaladsl.coding.Gzip
 import akka.util.ByteString
-import com.typesafe.config.ConfigFactory
-import org.json4s.native.Serialization
-import org.json4s.{Formats, native}
 import com.softwaremill.sttp._
 import com.softwaremill.sttp.json4s._
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
-import com.typesafe.scalalogging.Logger
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
-
-import org.constellation.DAO
+import com.typesafe.config.ConfigFactory
+import com.typesafe.scalalogging.{CanLog, Logger}
+import org.constellation.{DAO, HostPort}
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.primitives.Schema.{Id, MetricsResult}
 import org.constellation.serializer.KryoSerializer
+import org.json4s.native.Serialization
+import org.json4s.{Formats, native}
+import org.slf4j.MDC
+
+import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 object APIClient {
 
@@ -35,10 +36,25 @@ class APIClient private (host: String = "127.0.0.1", port: Int, val peerHTTPPort
  dao: DAO = null
   ) {
 
+  implicit case object CanLogCorrelationId extends CanLog[HostPort] {
+    override def logMessage(originalMsg: String, a: HostPort): String = {
+      MDC.put("host", a.host)
+      MDC.put("port", a.port.toString)
+      originalMsg
+    }
+
+    override def afterLog(a: HostPort): Unit = {
+      MDC.remove("host")
+      MDC.remove("port")
+    }
+  }
+
+  implicit val hostPortForLogging = HostPort(host, port)
+
+  implicit val logger = Logger.takingImplicit[HostPort]("APIClient")
+
   implicit val backend = new LoggingSttpBackend[Future, Nothing](PrometheusBackend[Future, Nothing](OkHttpFutureBackend()))
   implicit val serialization = native.Serialization
-
-  val logger = Logger(s"APIClient(host=$host, port=$port)")
 
   val daoOpt = Option(dao)
 
