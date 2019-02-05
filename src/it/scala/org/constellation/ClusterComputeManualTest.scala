@@ -59,16 +59,15 @@ object ComputeTestUtil {
 }
 
 /**
-  * Main integration test / node initializer / cluster startup script
+  * Main integration test / node initializer / cluster startup script.
   *
   * Several API calls in here should be part of the regular node initialization, so this
-  * test should do less
+  * test should do less.
   *
   * We also can't make this a main method in the main folder (for the regular init API calls as opposed to the test calls)
   * so this needs to be split up at some point. Putting another main in the regular classpath causes an issue with
   * sbt docker image, needs to be fixed and then portions of this can be split into separate mains for init methods
-  * vs actual test
-  *
+  * vs actual test.
   */
 class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
