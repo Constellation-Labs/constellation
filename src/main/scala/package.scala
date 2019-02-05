@@ -11,15 +11,14 @@ import akka.util.Timeout
 import better.files.File
 import com.google.common.hash.Hashing
 import org.constellation.DAO
-import org.constellation.crypto.Base58
-import org.constellation.crypto.KeyUtils.{bytesToPrivateKey, bytesToPublicKey, _}
+import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{KeySerializeJSON, POWExt, SignHelpExt}
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.ext.EnumNameSerializer
 import org.json4s.native.{Serialization, parseJsonOpt}
-import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, ShortTypeHints}
+import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
@@ -42,6 +41,10 @@ package object constellation extends POWExt
     def getOpt(t: Int = 30): Option[T] = {
       import scala.concurrent.duration._
       Try{Await.result(f, t.seconds)}.toOption
+    }
+    def getTry(t: Int = 30): Try[T] = {
+      import scala.concurrent.duration._
+      Try{Await.result(f, t.seconds)}
     }
   }
 
@@ -154,7 +157,6 @@ package object constellation extends POWExt
       case Success(_) =>
         dao.metrics.incrementMetric(metricPrefix + "_success")
       case Failure(e) =>
-        metricPrefix + ": " + e.printStackTrace()
         dao.metrics.incrementMetric(metricPrefix + "_failure")
     }
     t

@@ -7,11 +7,11 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import com.typesafe.scalalogging.Logger
+import constellation._
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.util.TestNode
 import org.constellation.{ConstellationNode, HostPort}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
-import constellation._
 
 import scala.concurrent.ExecutionContext
 import scala.util.Try

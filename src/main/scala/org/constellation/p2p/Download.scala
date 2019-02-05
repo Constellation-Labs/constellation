@@ -1,10 +1,7 @@
 package org.constellation.p2p
 
-import java.util.concurrent.TimeUnit
-
 import akka.pattern.ask
-import akka.util.Timeout
-import com.typesafe.scalalogging.Logger
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus._
@@ -12,15 +9,13 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.APIClient
-import scala.concurrent.duration._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Try}
 
 /// New download code
-object Download {
-
-  val logger = Logger(s"Download")
+object Download extends StrictLogging {
 
   // Add warning for empty peers
   def downloadActual()(implicit dao: DAO, ec: ExecutionContext): Unit = {
@@ -32,18 +27,17 @@ object Download {
       _.post("faucet", SendToAddress(dao.selfAddressStr, 500L))
     }
 
-    val res = (dao.peerManager ? APIBroadcast(_.getBlocking[Option[GenesisObservation]]("genesis")))
-      .mapTo[Map[Id, Option[GenesisObservation]]].get()
-
-
-
     // TODO: Error handling and verification
-    val genesis = res.filter {
-      _._2.nonEmpty
-    }.map {
-      _._2.get
-    }.head
+    val res = (dao.peerManager ? APIBroadcast(_.getNonBlocking[Option[GenesisObservation]]("genesis")))
+      .mapTo[Map[Id, Future[Option[GenesisObservation]]]]
+
+    val genF = res.flatMap { m =>
+      Future.find(m.values.toList)(_.nonEmpty).map(_.flatten.get)
+    }
+
+    val genesis = genF.get()
     dao.acceptGenesis(genesis)
+
 
     dao.metrics.updateMetric("downloadedGenesis", "true")
 

@@ -1,18 +1,13 @@
 package org.constellation.primitives
 
-import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 import java.time.Instant
 
-import constellation.pubKeyToAddress
-import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.hexToPublicKey
-import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 
-import scala.collection.concurrent.TrieMap
 import scala.util.Random
 
 // This can't be a trait due to serialization issues

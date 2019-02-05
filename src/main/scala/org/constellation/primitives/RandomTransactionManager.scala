@@ -1,13 +1,12 @@
 package org.constellation.primitives
 
-import java.util.concurrent.{ScheduledThreadPoolExecutor, Semaphore, TimeUnit}
+import java.util.concurrent.Semaphore
 
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.{EdgeProcessor, Snapshot}
+import org.constellation.consensus.EdgeProcessor
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState, SendToAddress}
 import org.constellation.util.Periodic
-import org.joda.time.DateTime
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
@@ -37,7 +36,7 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
       } else {
         if (dao.threadSafeMessageMemPool.unsafeCount < 3) {
           val channels = dao.threadSafeMessageMemPool.activeChannels
-          val (channel, lock) = Random.shuffle(channels).head
+          val (channel, lock) = channels.toList(Random.nextInt(channels.size))
           dao.messageService.get(channel).flatMap { data =>
             if (lock.tryAcquire()) {
               Some(ChannelMessage.create(Random.nextInt(1000).toString, data.channelMessage.signedMessageData.signatures.hash, channel))
@@ -109,7 +108,7 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
 
           val messages = dao.threadSafeMessageMemPool.pull(1).getOrElse(Seq())
           futureTryWithTimeoutMetric(
-            EdgeProcessor.formCheckpoint(messages),
+            EdgeProcessor.formCheckpoint(messages).getTry(60),
             "formCheckpointFromRandomTXManager",
             timeoutSeconds = dao.processingConfig.formCheckpointTimeout,
             {
