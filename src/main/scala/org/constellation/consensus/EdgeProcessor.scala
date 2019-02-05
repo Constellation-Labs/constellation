@@ -130,7 +130,7 @@ object EdgeProcessor extends StrictLogging {
           // PeerManager.attemptRegisterPeer() TODO : Finish
         }
 
-        sigResp.checkpointBlock
+        sigResp.signature
       }
     }
     def processSignedBlock(
@@ -163,9 +163,9 @@ object EdgeProcessor extends StrictLogging {
           if (maybeTips.isEmpty) {
             dao.metrics.incrementMetric("attemptFormCheckpointNoGenesisTips")
           }
-          maybeTips.foreach{ case (tipSOE, _) =>
+          maybeTips.foreach { case (tipSOE, _) =>
             val checkpointBlock =
-              CheckpointBlock.createCheckpointBlock(transactions, tipSOE.map{
+              CheckpointBlock.createCheckpointBlock(transactions, tipSOE.map {
                 soe =>
                   TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)
               }, messages)(dao.keyPair)
@@ -185,43 +185,48 @@ object EdgeProcessor extends StrictLogging {
 
       }
 
-
-      maybeTips.foreach {
+      maybeTips.map {
         case (tipSOE, facils) =>
           // Change to method on TipsReturned // abstract for reuse.
-          val checkpointBlock = CheckpointBlock.createCheckpointBlock(transactions, tipSOE.map{ soe =>
-                TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)
-            }, messages)(dao.keyPair)
-            dao.metrics.incrementMetric("checkpointBlocksCreated")
+          val checkpointBlock = CheckpointBlock.createCheckpointBlock(transactions, tipSOE.map { soe =>
+            TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)
+          }, messages)(dao.keyPair)
+          dao.metrics.incrementMetric("checkpointBlocksCreated")
 
           val finalFacilitators = facils.keySet
 
-          val blockResults = facils.values.toList
+          val signatureResults = facils.values.toList
             .traverse { peerData =>
               requestBlockSignature(checkpointBlock,
-                                    finalFacilitators,
-                                    peerData).toValidatedNel
+                finalFacilitators,
+                peerData).toValidatedNel
             }
-            .flatMap { blockResultsList =>
-              blockResultsList.sequence
-                .map { cpBlocks =>
-                  cpBlocks.reduce(_ + _) + checkpointBlock
+            .flatMap { signatureResultList =>
+              signatureResultList.sequence
+                .map { signatures =>
+                  // Unsafe flatten -- revisit during consensus updates
+                  signatures.flatten.foldLeft(checkpointBlock) {
+                    case (cb, hs) =>
+                      cb.plus(hs)
+                  }
                 }
                 .ensure(NonEmptyList.one(new Throwable(
                   "Invalid CheckpointBlock")))(_.simpleValidation())
                 .traverse { finalCB =>
                   val cache = CheckpointCacheData(finalCB.some,
-                                                  height =
-                                                    finalCB.calculateHeight())
+                    height =
+                      finalCB.calculateHeight())
                   dao.threadSafeTipService.accept(cache)
                   processSignedBlock(cache, finalFacilitators)
                 }
-                .map { _.andThen(identity) }
+                .map {
+                  _.andThen(identity)
+                }
             }
 
-          wrapFutureWithMetric(blockResults, "checkpointBlockFormation")
+          wrapFutureWithMetric(signatureResults, "checkpointBlockFormation")
 
-          blockResults.foreach {
+          signatureResults.foreach {
             case Valid(_) =>
             case Invalid(failures) =>
               failures.toList.foreach { e =>
@@ -235,14 +240,13 @@ object EdgeProcessor extends StrictLogging {
 
           // using transform kind of like a finally for Future.
           // I want to ensure the locks get cleaned up
-          blockResults.transform { res =>
+          signatureResults.transform { res =>
             // Cleanup locks
 
-          dao.threadSafeMessageMemPool.release(messages)
-          res.map(_ => true)
-
-
+            dao.threadSafeMessageMemPool.release(messages)
+            res.map(_ => true)
           }
+      }
     }
     dao.blockFormationInProgress = false
     result.sequence
