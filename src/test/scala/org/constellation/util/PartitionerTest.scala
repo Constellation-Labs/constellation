@@ -25,11 +25,13 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
 
   val random = new java.util.Random()
 
-  val randomTxs: Set[Schema.Transaction] = idSet5.flatMap{ id =>
+  def getRandomTxs(factor: Int = 5): Set[Schema.Transaction] = idSet5.flatMap{ id =>
     val destinationAddresses = idSet5.map(_.address.address)
-    destinationAddresses.map(destStr => makeTransaction(id.address.address, destStr, random.nextLong(), getRandomElement(tempKeySet, random)))
+    val destinationAddressDups = (0 to factor).flatMap(_ => destinationAddresses)
+    destinationAddressDups.map(destStr => makeTransaction(id.address.address, destStr, random.nextLong(), getRandomElement(tempKeySet, random)))
   }
-
+  val randomTxs = getRandomTxs()
+  val acceptableFacilBalance = 0.8
   val ids = idSet5.toList
 
   "Facilitator selection" should "be deterministic" in {
@@ -45,13 +47,18 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
 
   "Facilitator selection" should "be relatively balanced" in {
     val facilitators = randomTxs.map(tx => selectTxFacilitator(ids, tx))
-    assert(facilitators.size == 5)
+    assert(facilitators.size == 5)//todo this is non deterministic
   }
 
   "The gossip path" should "always be shorter then the total set of node ids" in {
     val pathLengths = randomTxs.map(gossipPath(ids, _).size)
     pathLengths.foreach(println)
     assert(pathLengths.forall(_ < ids.size))
+  }
+
+  "A full round of gossip" should "be notarized on a transaction" in {
+
+    assert(true)
   }
 
 }

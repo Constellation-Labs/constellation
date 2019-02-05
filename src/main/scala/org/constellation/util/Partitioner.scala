@@ -44,7 +44,7 @@ object Partitioner {
   }
 
   def selectTxFacilitator(ids: Seq[Id], tx: Transaction): Id = {
-    val neighbors = ids.filterNot(_.address == tx.src)
+    val neighbors = ids.filterNot(_.address.address == tx.src.address)
     val sortedNeighbors: Seq[(Id, BigInt)] = neighbors.map(id => (id, numeric256(id.id.getEncoded))).sortBy(_._2)
     val (facilitatorId, _) = sortedNeighbors.minBy{ case (id, idBi) =>
       val txBi = numeric256(tx.hash.getBytes())
