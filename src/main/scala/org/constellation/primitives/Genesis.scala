@@ -4,6 +4,7 @@ import java.security.KeyPair
 
 import constellation._
 import org.constellation.DAO
+import org.constellation.consensus.EdgeProcessor
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 

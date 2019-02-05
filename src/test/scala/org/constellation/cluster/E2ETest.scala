@@ -7,9 +7,10 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import com.softwaremill.sttp.{Response, StatusCodes}
-import com.typesafe.scalalogging.StrictLogging
+import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.StoredSnapshot
-import org.constellation.primitives.{ChannelProof, _}
+import org.constellation.primitives._
+import org.constellation.primitives.ChannelProof
 import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.constellation.{ConstellationNode, HostPort, UpdatePassword}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
@@ -17,7 +18,9 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
 import scala.util.{Random, Try}
 
-class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach with StrictLogging {
+class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
+
+  val logger = Logger("E2ETest")
 
   val tmpDir = "tmp"
 
@@ -173,7 +176,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     sim.triggerRandom(allAPIs)
 
 
-    logger.info("Stopping transactions to run parity check")
+    sim.logger.info("Stopping transactions to run parity check")
 
     Thread.sleep(30000)
 

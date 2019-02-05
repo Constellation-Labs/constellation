@@ -2,10 +2,10 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
-import constellation._
 import org.constellation.DAO
 import org.constellation.primitives.Schema.{Address, AddressCacheData, TransactionCacheData, TransactionEdgeData}
 import org.constellation.util.HashSignature
+import constellation._
 
 case class Transaction(edge: Edge[TransactionEdgeData]) {
 

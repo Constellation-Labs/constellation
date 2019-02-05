@@ -3,6 +3,7 @@ package org.constellation.util
 import java.util.concurrent.{ScheduledThreadPoolExecutor, TimeUnit}
 
 import scala.concurrent.Future
+import scala.util.Try
 
 abstract class Periodic(threadName: String, periodSeconds: Int = 1) {
 
