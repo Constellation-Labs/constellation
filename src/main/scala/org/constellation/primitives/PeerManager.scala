@@ -19,13 +19,10 @@ import org.constellation.primitives.Schema.{Id, InternalHeartbeat}
 import org.constellation.util._
 import org.constellation.{DAO, HostPort, PeerMetadata, RemovePeerRequest}
 
-/** Documentation. */
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 
-/** Documentation. */
 object PeerManager {
 
-  /** Documentation. */
   def initiatePeerReload()(implicit dao: DAO,
                            ec: ExecutionContextExecutor): Unit = {
 
@@ -70,7 +67,6 @@ object PeerManager {
 
   }
 
-  /** Documentation. */
   def broadcastNodeState()(implicit dao: DAO): Unit = {
     dao.peerManager ! APIBroadcast(
       _.post("status", SetNodeStatus(dao.id, dao.nodeState)))
@@ -78,7 +74,6 @@ object PeerManager {
 
   val logger = Logger(s"PeerManagerObj")
 
-  /** Documentation. */
   def attemptRegisterSelfWithPeer(hp: HostPort)(
       implicit dao: DAO): Future[Any] = {
 
@@ -103,7 +98,6 @@ object PeerManager {
     //    }
   }
 
-  /** Documentation. */
   def attemptRegisterPeer(hp: HostPort)(
       implicit dao: DAO): Future[Response[String]] = {
 
@@ -135,7 +129,6 @@ object PeerManager {
 
   }
 
-  /** Documentation. */
   def peerDiscovery(client: APIClient)(implicit dao: DAO): Unit = {
     client
       .getNonBlocking[Seq[PeerMetadata]]("peers")
@@ -166,11 +159,9 @@ object PeerManager {
       }(dao.apiClientExecutionContext)
   }
 
-  /** Documentation. */
   def validWithLoopbackGuard(host: String)(implicit dao: DAO): Boolean =
     (host != dao.externalHostString && host != "127.0.0.1" && host != "localhost") || !dao.preventLocalhostAsPeer
 
-  /** Documentation. */
   def validPeerAddition(hp: HostPort, peerInfo: Map[Id, PeerData])(
       implicit dao: DAO): Boolean = {
     val hostAlreadyExists = peerInfo.exists {
@@ -182,33 +173,25 @@ object PeerManager {
 
 }
 
-/** Documentation. */
 case class PeerData(
     peerMetadata: PeerMetadata,
     client: APIClient
 )
 
-/** Documentation. */
 case class APIBroadcast[T](func: APIClient => T,
                            skipIds: Set[Id] = Set(),
                            peerSubset: Set[Id] = Set())
 
-/** Documentation. */
 case class PeerHealthCheck(status: Map[Id, Boolean])
 
-/** Documentation. */
 case class PendingRegistration(ip: String, request: PeerRegistrationRequest)
 
-/** Documentation. */
 case class Deregistration(ip: String, port: Int, id: Id)
 
-/** Documentation. */
 case object GetPeerInfo
 
-/** Documentation. */
 case class UpdatePeerInfo(peerData: PeerData)
 
-/** Documentation. */
 class PeerManager(ipManager: IPManager)(
     implicit val materialize: ActorMaterializer,
     dao: DAO)
@@ -216,12 +199,10 @@ class PeerManager(ipManager: IPManager)(
 
   val logger = Logger(s"PeerManager")
 
-  /** Documentation. */
   override def receive: Receive = active(Map.empty)
 
   implicit val system: ActorSystem = context.system
 
-  /** Documentation. */
   private def updateMetricsAndDAO(updatedPeerInfo: Map[Id, PeerData]): Unit = {
     dao.metrics.updateMetric(
       "peers",
@@ -242,7 +223,6 @@ class PeerManager(ipManager: IPManager)(
     context become active(updatedPeerInfo)
   }
 
-  /** Documentation. */
   private def updatePeerInfo(peerInfo: Map[Id, PeerData],
                              peerData: PeerData) = {
     val updatedPeerInfo = peerInfo + (peerData.client.id -> peerData)
@@ -256,7 +236,6 @@ class PeerManager(ipManager: IPManager)(
     updatedPeerInfo
   }
 
-  /** Documentation. */
   def active(peerInfo: Map[Id, PeerData]): Receive = {
 
     case InternalHeartbeat(round) =>

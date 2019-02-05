@@ -9,7 +9,6 @@ import scala.util.Random
 import constellation._
 import org.constellation.primitives.Schema.{TX, TXData}
 
-/** Documentation. */
 class AlgebirdTest extends FlatSpec {
 
   private val randomTX = Seq.fill(30) {
@@ -36,10 +35,8 @@ class AlgebirdTest extends FlatSpec {
 
   "SketchMap" should "estimate id frequencies per tx hash with HLL values" in {
 
-    /** Documentation. */
     class HLLOrdering extends Ordering[HLL] {
 
-      /** Documentation. */
       override def compare(x: HLL, y: HLL): Int = {
         x.approximateSize.estimate.compare(y.approximateSize.estimate)
       }
@@ -56,7 +53,6 @@ class AlgebirdTest extends FlatSpec {
 
     val HEAVY_HITTERS_COUNT = 10
 
-    /** Documentation. */
     implicit def string2Bytes(i: String): Array[Byte] = i.toCharArray.map(_.toByte)
 
     val PARAMS = SketchMapParams[String](SEED, EPS, DELTA, HEAVY_HITTERS_COUNT)

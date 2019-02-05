@@ -10,7 +10,6 @@ import java.util.Collections
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 
-/** Documentation. */
 class MetricsManagerTest ()
   extends TestKit(ActorSystem("ConstellationTest"))
     with Matchers
@@ -20,7 +19,6 @@ class MetricsManagerTest ()
   val logger = Logger("ConstellationTest")
   logger.info("MetricsManagerTest init")
 
-  /** Documentation. */
   override def afterAll: Unit = {
     logger.info("Shutting down the Actor under test")
     shutdown(system)

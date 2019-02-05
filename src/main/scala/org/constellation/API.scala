@@ -36,7 +36,6 @@ import org.constellation.primitives.{APIBroadcast, _}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{CommonEndpoints, MerkleTree, ServeUI}
 
-/** Documentation. */
 case class PeerMetadata(
                      host: String,
                      udpPort: Int,
@@ -47,16 +46,12 @@ case class PeerMetadata(
                      auxHost: String = ""
                    )
 
-/** Documentation. */
 case class HostPort(host: String, port: Int)
 
-/** Documentation. */
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
 
-/** Documentation. */
 case class UpdatePassword(password: String)
 
-/** Documentation. */
 case class ProcessingConfig(
                              maxWidth: Int = 10,
                              minCheckpointFormationThreshold: Int = 50,
@@ -82,7 +77,6 @@ case class ProcessingConfig(
 
 }
 
-/** Documentation. */
 class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   extends Json4sSupport
     with SimpleWalletLike
@@ -414,7 +408,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
     }
   }
 
-  /** Documentation. */
   private def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
     credentials match {
       case p @ Credentials.Provided(id)

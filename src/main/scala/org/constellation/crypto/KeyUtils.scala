@@ -29,12 +29,10 @@ import constellation.SHA256Ext
   *
   */
 
-/** Documentation. */
 object KeyUtils {
 
   private val logger = Logger("KeyUtils")
 
-  /** Documentation. */
   def insertProvider(): BouncyCastleProvider = {
     import java.security.Security
     val provider = new org.spongycastle.jce.provider.BouncyCastleProvider()
@@ -70,13 +68,10 @@ object KeyUtils {
   // Utilities for getting around conversion errors / passing around parameters
   // through strange APIs that might take issue with your strings
 
-  /** Documentation. */
   def base64(bytes: Array[Byte]): String = Base64.getEncoder.encodeToString(bytes)
 
-  /** Documentation. */
   def fromBase64(b64Str: String): Array[Byte] = Base64.getDecoder.decode(b64Str)
 
-  /** Documentation. */
   def base64FromBytes(bytes: Array[Byte]): String = new String(bytes)
 
   /**
@@ -95,7 +90,6 @@ object KeyUtils {
     *         access only to the public key paired to the input private key! Fun
     */
 
-  /** Documentation. */
   def signData(
                 bytes: Array[Byte],
                 signFunc: String = DefaultSignFunc
@@ -132,7 +126,6 @@ object KeyUtils {
     *         False means dishonest signer / fake transaction
     */
 
-  /** Documentation. */
   def verifySignature(
                        originalInput: Array[Byte],
                        signedOutput: Array[Byte],
@@ -147,21 +140,18 @@ object KeyUtils {
 
   // https://stackoverflow.com/questions/42651856/how-to-decode-rsa-public-keyin-java-from-a-text-view-in-android-studio
 
-  /** Documentation. */
   def bytesToPublicKey(encodedBytes: Array[Byte]): PublicKey = {
     val spec = new X509EncodedKeySpec(encodedBytes)
     val kf = KeyFactory.getInstance(ECDSA, provider)
     kf.generatePublic(spec)
   }
 
-  /** Documentation. */
   def bytesToPrivateKey(encodedBytes: Array[Byte]): PrivateKey = {
     val spec = new PKCS8EncodedKeySpec(encodedBytes)
     val kf = KeyFactory.getInstance(ECDSA, provider)
     kf.generatePrivate(spec)
   }
 
-  /** Documentation. */
   def hex2bytes(hex: String): Array[Byte] = {
     if(hex.contains(" ")){
       hex.split(" ").map(Integer.parseInt(_, 16).toByte)
@@ -172,7 +162,6 @@ object KeyUtils {
     }
   }
 
-  /** Documentation. */
   def bytes2hex(bytes: Array[Byte], sep: Option[String] = None): String = {
     sep match {
       case None =>  bytes.map("%02x".format(_)).mkString
@@ -180,43 +169,36 @@ object KeyUtils {
     }
   }
 
-  /** Documentation. */
   def publicKeyToHex(publicKey: PublicKey): String ={
     val hex = bytes2hex(publicKey.getEncoded)
     hex.slice(PublicKeyHexPrefixLength, hex.length)
   }
 
-  /** Documentation. */
   def hexToPublicKey(hex: String): PublicKey = {
     bytesToPublicKey(hex2bytes(PublicKeyHexPrefix + hex))
   }
 
-  /** Documentation. */
   def privateKeyToHex(privateKey: PrivateKey): String ={
     val hex = bytes2hex(privateKey.getEncoded)
     hex.slice(PrivateKeyHexPrefixLength, hex.length)
   }
 
-  /** Documentation. */
   def hexToPrivateKey(hex: String): PrivateKey = {
     bytesToPrivateKey(hex2bytes(PrivateKeyHexPrefix + hex))
   }
 
   // convert normal string to hex bytes string
 
-  /** Documentation. */
   def string2hex(str: String): String = {
     str.toList.map(_.toInt.toHexString).mkString
   }
 
   // convert hex bytes string to normal string
 
-  /** Documentation. */
   def hex2string(hex: String): String = {
     hex.sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toChar).mkString
   }
 
-  /** Documentation. */
   def keyHashToAddress(hash: String): String = {
     val end = hash.slice(hash.length - 36, hash.length)
     val validInt = end.filter {Character.isDigit}
@@ -231,7 +213,6 @@ object KeyUtils {
   // Couldn't find a quick dependency for this, TBI
   // https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses
 
-  /** Documentation. */
   def publicKeyToAddressString(
                                 key: PublicKey
                               ): String = {
@@ -243,10 +224,8 @@ object KeyUtils {
 
 /*
 
-/** Documentation. */
 object WalletKeyStore {
 
-  /** Documentation. */
   def makeWalletKeyStore(
                           validityInDays: Int = 500000,
                           orgName: String = "test",

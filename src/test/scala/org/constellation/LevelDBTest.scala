@@ -7,7 +7,6 @@ import org.scalatest.FlatSpec
 
 import org.constellation.datastore.leveldb.LevelDB
 
-/** Documentation. */
 class LevelDBTest extends FlatSpec {
 
   "LevelDB" should "create a database and run some queries and delete it" in {

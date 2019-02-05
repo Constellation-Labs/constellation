@@ -2,7 +2,6 @@ package org.constellation.app
 
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
-/** Documentation. */
 class SingleAppTest extends FlatSpec with BeforeAndAfterAll {
 
   "Single app" should "create a single app node through the regular main method" in {
@@ -15,7 +14,6 @@ class SingleAppTest extends FlatSpec with BeforeAndAfterAll {
 
   }
 
-  /** Documentation. */
   override def afterAll() {
   //  ConstellationNode.system.terminate()
   }

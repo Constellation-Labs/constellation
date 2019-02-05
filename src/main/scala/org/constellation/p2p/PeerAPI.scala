@@ -24,19 +24,14 @@ import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{CommonEndpoints, SingleHashSignature}
 
-/** Documentation. */
 case class PeerAuthSignRequest(salt: Long)
 
-/** Documentation. */
 case class PeerRegistrationRequest(host: String, port: Int, id: Id)
 
-/** Documentation. */
 case class PeerUnregister(host: String, port: Int, id: Id)
 
-/** Documentation. */
 object PeerAPI {
 
-  /** Documentation. */
   case class EdgeResponse(
                          soe: Option[SignedObservationEdgeCache] = None,
                          cb: Option[CheckpointCacheData] = None
@@ -44,7 +39,6 @@ object PeerAPI {
 
 }
 
-/** Documentation. */
 class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   extends Json4sSupport with CommonEndpoints with IPEnforcer {
 
@@ -61,7 +55,6 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem, v
 
   private var pendingRegistrations = Map[String, PeerRegistrationRequest]()
 
-  /** Documentation. */
   private def getHostAndPortFromRemoteAddress(clientIP: RemoteAddress) = {
     clientIP.toOption.map{z => PeerIPData(z.getHostAddress, Some(clientIP.getPort()))}
   }

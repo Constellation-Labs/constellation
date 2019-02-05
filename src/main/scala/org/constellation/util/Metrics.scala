@@ -19,7 +19,6 @@ import org.constellation.{ConstellationNode, DAO}
 /** For Grafana usage. */
 object Metrics {
 
-  /** Documentation. */
   def prometheusSetup(keyHash: String): Unit = {
     val prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT, CollectorRegistry.defaultRegistry, Clock.SYSTEM)
     prometheusMeterRegistry.config().commonTags("application", s"Constellation_$keyHash")
@@ -95,17 +94,14 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   updateMetric("externalHost", dao.externalHostString)
   updateMetric("version", ConstellationNode.ConstellationVersion)
 
-  /** Documentation. */
   def updateMetric(key: String, value: String): Unit = {
     stringMetrics(key) = value
   }
 
-  /** Documentation. */
   def updateMetric(key: String, value: Int): Unit = {
     countMetrics(key) = value
   }
 
-  /** Documentation. */
   def incrementMetric(key: String): Unit = {
     countMetrics(key) = countMetrics.getOrElse(key, 0L) + 1
   }
@@ -120,7 +116,6 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
 
   // Temporary, for debugging only. Would cause a problem with many peers
 
-  /** Documentation. */
   def updateBalanceMetrics(): Unit = {
 
     val peers = dao.peerInfo.toSeq

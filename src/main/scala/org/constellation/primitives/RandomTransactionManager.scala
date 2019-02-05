@@ -10,11 +10,9 @@ import org.constellation.consensus.{EdgeProcessor, Snapshot} // Snapshot unused
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState, SendToAddress}
 import org.constellation.util.Periodic
 
-/** Documentation. */
 class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
   extends Periodic("RandomTransactionManager", periodSeconds) {
 
-  /** Documentation. */
   def trigger(): Future[Any] = {
     Option(dao.peerManager).foreach{
       _ ! InternalHeartbeat(round)
@@ -25,7 +23,6 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
 
   }
 
-  /** Documentation. */
   def generateRandomMessages(): Unit =
     if (round % dao.processingConfig.roundsPerMessage == 0) {
       val cm = if (
@@ -51,7 +48,6 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
       }
     }
 
-  /** Documentation. */
   def generateLoop(): Future[Try[Unit]] = {
 
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
@@ -82,7 +78,6 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
             // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
             // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
 
-            /** Documentation. */
             def getRandomPeer: (Id, PeerData) = peerIds(Random.nextInt(peerIds.size))
 
             val sendRequest = SendToAddress(getRandomPeer._1.address, Random.nextInt(1000).toLong + 1L, normalized = false)

@@ -10,14 +10,12 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.{APIClient, TestNode}
 
-/** Documentation. */
 class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with BeforeAndAfterAll {
 
   implicit val system: ActorSystem = ActorSystem("BlockChain")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-  /** Documentation. */
   override def afterEach(): Unit = {
     TestNode.clearNodes()
   }
@@ -82,7 +80,6 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
 
   }
 
-  /** Documentation. */
   override def afterAll() {
     system.terminate()
   }

@@ -7,15 +7,12 @@ import org.constellation.primitives.Schema.{Address, AddressCacheData, Transacti
 import org.constellation.util.HashSignature
 import constellation._
 
-/** Documentation. */
 case class Transaction(edge: Edge[TransactionEdgeData]) {
 
-  /** Documentation. */
   def store(cache: TransactionCacheData)(implicit dao: DAO): Unit = {
     dao.transactionService.put(this.hash, cache)
   }
 
-  /** Documentation. */
   def ledgerApply()(implicit dao: DAO): Unit = {
     dao.addressService.update(
       src.hash,
@@ -29,7 +26,6 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
     )
   }
 
-  /** Documentation. */
   def ledgerApplySnapshot()(implicit dao: DAO): Unit = {
     dao.addressService.update(
       src.hash,
@@ -45,39 +41,30 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
 
   // Unsafe
 
-  /** Documentation. */
   def src: Address = Address(edge.parents.head.hash)
 
-  /** Documentation. */
   def dst: Address = Address(edge.parents.last.hash)
 
-  /** Documentation. */
   def signatures: Seq[HashSignature] = edge.signedObservationEdge.signatureBatch.signatures
 
   // TODO: Add proper exception on empty option
 
-  /** Documentation. */
   def amount : Long = edge.data.amount
 
-  /** Documentation. */
   def baseHash: String = edge.signedObservationEdge.baseHash
 
-  /** Documentation. */
   def hash: String = edge.signedObservationEdge.hash
 
-  /** Documentation. */
   def withSignatureFrom(keyPair: KeyPair): Transaction = this.copy(
     edge = edge.withSignatureFrom(keyPair)
   )
 
-  /** Documentation. */
   def valid: Boolean = validSrcSignature &&
     dst.address.nonEmpty &&
     dst.address.length > 30 &&
     dst.address.startsWith("DAG") &&
     amount > 0
 
-  /** Documentation. */
   def validSrcSignature: Boolean = {
     edge.signedObservationEdge.signatureBatch.signatures.exists{ hs =>
       hs.publicKey.address == src.address && hs.valid(edge.signedObservationEdge.signatureBatch.hash)

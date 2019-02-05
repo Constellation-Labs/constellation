@@ -15,7 +15,6 @@ import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.util.TestNode
 import org.constellation.{ConstellationNode, HostPort}
 
-/** Documentation. */
 class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
   val logger = Logger("MultiNodeRegisterTest")
@@ -25,13 +24,11 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
   implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
-  /** Documentation. */
   override def beforeEach(): Unit = {
     // Cleanup DBs
     Try{File(tmpDir).delete()}
   }
 
-  /** Documentation. */
   override def afterEach() {
     // Cleanup DBs
     File(tmpDir).delete()
@@ -39,7 +36,6 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
     system.terminate()
   }
 
-  /** Documentation. */
   def createNode(randomizePorts: Boolean = true, seedHosts: Seq[HostPort] = Seq()): ConstellationNode = {
     implicit val executionContext: ExecutionContext =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
@@ -67,7 +63,6 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
 
     nodes.combinations(2).foreach { case Seq(n,m) =>
 
-      /** Documentation. */
       def register(a: ConstellationNode, b: ConstellationNode): Unit = {
         val ipData = a.getIPData
         val peerRegistrationRequest =

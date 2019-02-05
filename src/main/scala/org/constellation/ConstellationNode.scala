@@ -25,12 +25,10 @@ import org.constellation.primitives.Schema.ValidPeerIPData
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Metrics}
 
-/** Documentation. */
 object ConstellationNode {
 
   val ConstellationVersion = "1.0.10"
 
-  /** Documentation. */
   def main(args: Array[String]): Unit = {
     val logger = Logger("ConstellationNodeMain")
     logger.info("Main init")
@@ -143,13 +141,11 @@ object ConstellationNode {
 
 }
 
-/** Documentation. */
 case class NodeConfig(
                      metricIntervalSeconds: Int = 60,
                      isGenesisNode: Boolean = false
                      )
 
-/** Documentation. */
 class ConstellationNode(val configKeyPair: KeyPair,
                         val seedPeers: Seq[HostPort],
                         val httpInterface: String,
@@ -237,18 +233,15 @@ class ConstellationNode(val configKeyPair: KeyPair,
     peer => ipManager.addKnownIP(RemoteAddress(peer))
   }*/
 
-  /** Documentation. */
   def addAddressToKnownIPs(addr: ValidPeerIPData): Unit = {
     val remoteAddr = RemoteAddress(new InetSocketAddress(addr.canonicalHostName, addr.port))
     ipManager.addKnownIP(remoteAddr)
   }
 
-  /** Documentation. */
   def getIPData: ValidPeerIPData = {
     ValidPeerIPData(this.hostName, this.peerHttpPort)
   }
 
-  /** Documentation. */
   def getInetSocketAddress: InetSocketAddress = {
     new InetSocketAddress(this.hostName, this.peerHttpPort)
   }
@@ -256,7 +249,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
   // Setup http server for peer API
   private val peerBindingFuture = Http().bindAndHandle(peerRoutes, httpInterface, peerHttpPort)
 
-  /** Documentation. */
   def shutdown(): Unit = {
 
     bindingFuture
@@ -276,19 +268,16 @@ class ConstellationNode(val configKeyPair: KeyPair,
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
 
-  /** Documentation. */
   def getAPIClient(host: String = hostName, port: Int = httpPort, udpPort: Int = udpPort): APIClient = {
     val api = APIClient(host, port, udpPort)
     api.id = id
     api
   }
 
-  /** Documentation. */
   def getAddPeerRequest: PeerMetadata = {
     PeerMetadata(hostName, udpPort, peerHttpPort, dao.id)
   }
 
-  /** Documentation. */
   def getAPIClientForNode(node: ConstellationNode): APIClient = {
     val ipData = node.getIPData
     val api = APIClient(host = ipData.canonicalHostName, port = ipData.port)

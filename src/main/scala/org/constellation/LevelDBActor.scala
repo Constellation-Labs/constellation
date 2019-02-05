@@ -10,7 +10,6 @@ import org.constellation.datastore.leveldb.LevelDB
 import org.constellation.datastore.leveldb.LevelDB._
 import org.constellation.serializer.KryoSerializer
 
-/** Documentation. */
 class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem)
     extends Actor {
 
@@ -19,16 +18,12 @@ class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem)
 
   val logger = Logger("LevelDB")
 
-  /** Documentation. */
   def tmpDirId = file"tmp/${dao.id.medium}/db"
 
-  /** Documentation. */
   def mkDB: LevelDB = LevelDB(tmpDirId)
 
-  /** Documentation. */
   override def receive: Receive = active(mkDB)
 
-  /** Documentation. */
   def active(db: LevelDB): Receive = {
 
     case RestartDB =>

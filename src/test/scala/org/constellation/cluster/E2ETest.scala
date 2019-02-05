@@ -17,7 +17,6 @@ import org.constellation.primitives.ChannelProof
 import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.constellation.{ConstellationNode, HostPort, UpdatePassword}
 
-/** Documentation. */
 class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
   val logger = Logger("E2ETest")
@@ -27,7 +26,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
-  /** Documentation. */
   override def beforeAll(): Unit = {
     // Cleanup DBs
     //Try{File(tmpDir).delete()}
@@ -35,7 +33,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
   }
 
-  /** Documentation. */
   override def afterAll() {
     // Cleanup DBs
     TestNode.clearNodes()
@@ -43,7 +40,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     Try{File(tmpDir).delete()}
   }
 
-  /** Documentation. */
   def createNode(
                   randomizePorts: Boolean = true,
                   seedHosts: Seq[HostPort] = Seq(),
@@ -62,7 +58,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   }
   val updatePasswordReq = UpdatePassword(Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword"))
 
-  /** Documentation. */
   def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
     apiClients.map { client =>
       val response = client.postSync("password/update", updatePasswordReq)
@@ -154,7 +149,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     val messageWithinSnapshot = initialAPIs.head.getBlocking[Option[ChannelProof]]("channel/" + messageChannel)
     assert(messageWithinSnapshot.nonEmpty)
 
-    /** Documentation. */
     def messageValid(): Unit = messageWithinSnapshot.foreach{ proof =>
       val m = proof.channelMessageMetadata
       assert(m.snapshotHash.nonEmpty)
@@ -248,7 +242,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
 }
 
-/** Documentation. */
 case class BlockDumpOutput(
                           blockSoeHash: String,
                           blockParentSOEHashes: Seq[String],

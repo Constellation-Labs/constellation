@@ -8,10 +8,8 @@ import scala.collection.JavaConverters._
 import constellation._
 import org.constellation.crypto.KeyUtils._
 
-/** Documentation. */
 case class ShamirOutput(fileName: String, part: Int, hex: String)
 
-/** Documentation. */
 class ShamirETHTest extends FlatSpec {
 
   val encodedStore = File(System.getenv("HOME"), "yourfile.txt")

@@ -9,19 +9,15 @@ import org.scalatest._
 
 import org.constellation.primitives.Schema.Id
 
-/** Documentation. */
 case class AnotherPublicKey(c: Id, seq: Seq[PublicKey])
 
-/** Documentation. */
 case class TestManyPublicKeys(a: PublicKey, b: Seq[PublicKey], d: AnotherPublicKey)
 
-/** Documentation. */
 class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
   with ImplicitSender with GivenWhenThen with BeforeAndAfterAll with Matchers {
 
   implicit val timeout: Timeout = Timeout(30, TimeUnit.SECONDS)
 
-  /** Documentation. */
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }

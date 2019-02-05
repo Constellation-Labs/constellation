@@ -17,10 +17,8 @@ import org.constellation.consensus.Snapshot
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.serializer.KryoSerializer
 
-/** Documentation. */
 case class NodeStateInfo(nodeState: NodeState)
 
-/** Documentation. */
 trait CommonEndpoints extends Json4sSupport {
 
   implicit val serialization: Serialization.type

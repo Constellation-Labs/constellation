@@ -3,13 +3,11 @@ package org.constellation.util
 import org.constellation.primitives.Schema.Id
 import org.constellation.primitives.Transaction
 
-/** Documentation. */
 object Partitioner {
 
   // TODO:  Use XOR for random partition assignment later.
   // Needs accompanying test to validate even splits
 
-  /** Documentation. */
   def minDistance(ids: Seq[Id], tx: Transaction): Id = ids.minBy { id =>
     val bi = BigInt(id.toPublicKey.getEncoded)
     val bi2 = BigInt(tx.hash, 16)

@@ -6,7 +6,6 @@ import org.json4s.jackson.JsonMethods._
 
 import constellation._
 
-/** Documentation. */
 class SchemaValidation extends FlatSpec {
 
   private val schema = SensorData.schema

@@ -4,7 +4,6 @@ import org.scalatest.FlatSpec
 
 import org.constellation.primitives.Schema.SendToAddress
 
-/** Documentation. */
 class TXTests extends FlatSpec {
 
   "TX hashes" should "split evenly" in {

@@ -17,33 +17,24 @@ import org.constellation.serializer.KryoSerializer._
 
 // Consider adding ID to all UDP messages? Possibly easier.
 
-/** Documentation. */
 case class UDPMessage(data: Any, remote: InetSocketAddress)
 
-/** Documentation. */
 case class GetUDPSocketRef()
 
-/** Documentation. */
 case class UDPSend[T](data: T, remote: InetSocketAddress)
 
-/** Documentation. */
 case class RegisterNextActor(nextActor: ActorRef)
 
-/** Documentation. */
 case class GetSelfAddress()
 
-/** Documentation. */
 case class Ban(address: InetSocketAddress)
 
-/** Documentation. */
 case class GetBanList()
 
-/** Documentation. */
 case object GetPacketGroups
 
 // Need to catch alert messages to detect socket closure.
 
-/** Documentation. */
 class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
                port: Int = 16180,
                bindInterface: String = "0.0.0.0",
@@ -65,7 +56,6 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
   private val packetGroups = TrieMap[Long, TrieMap[Int, SerializedUDPMessage]]()
 
-  /** Documentation. */
   def receive: PartialFunction[Any, Unit] = {
     case Udp.Bound(_) =>
       val ref = sender()
@@ -75,12 +65,10 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
       nextActor = Some(next)
   }
 
-  /** Documentation. */
   def processMessage(d: Any, remote: InetSocketAddress): Unit = {
     nextActor.foreach { n => n ! UDPMessage(d, remote) }
   }
 
-  /** Documentation. */
   def ready(socket: ActorRef): Receive = {
 
     case GetPacketGroups => sender() ! packetGroups
@@ -97,7 +85,6 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
         val pg = serMsg.packetGroup
 
-        /** Documentation. */
         def updatePacketGroup(serMsg: SerializedUDPMessage, messages: TrieMap[Int, SerializedUDPMessage]): Unit = {
 
           // make sure this is not a duplicate packet first
@@ -158,7 +145,6 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
 // Change packetGroup to UUID
 
-/** Documentation. */
 case class SerializedUDPMessage(data: ByteString,
                                 packetGroup: Long,
                                 packetGroupSize: Long,

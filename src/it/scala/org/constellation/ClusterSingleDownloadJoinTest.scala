@@ -11,10 +11,8 @@ import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
 import org.constellation.crypto.KeyUtils
 import org.constellation.util.{APIClient, Simulation}
 
-/** Documentation. */
 class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
-  /** Documentation. */
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }

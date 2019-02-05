@@ -20,7 +20,6 @@ import org.constellation.primitives.Schema.AddressCacheData
 import org.constellation.util.SignHelp
 import org.constellation.{DAO, LevelDBActor}
 
-/** Documentation. */
 class TXValidationBenchmark extends FlatSpec {
   val logger = Logger("TXValidationBenchmark")
 

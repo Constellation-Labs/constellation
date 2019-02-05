@@ -7,10 +7,8 @@ import org.scalatest.FlatSpec
 import constellation._
 import org.constellation.crypto.KeyUtils._
 
-/** Documentation. */
 case class SetSerialize(s: Set[String])
 
-/** Documentation. */
 class ValidateWalletFuncTest  extends FlatSpec {
 
   val kp: KeyPair = makeKeyPair()
@@ -97,7 +95,6 @@ class ValidateWalletFuncTest  extends FlatSpec {
 
   "Key Size" should "verify byte array lengths for encoded keys" in {
 
-    /** Documentation. */
     def fill(thunk: => Array[Byte]) =
       Seq.fill(50){thunk}.map{_.length}.distinct
 

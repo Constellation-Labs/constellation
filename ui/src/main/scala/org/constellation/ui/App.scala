@@ -10,15 +10,12 @@ import scala.scalajs.js.annotation.JSExport
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
-/** Documentation. */
 case class Metrics(metrics: Map[String, String])
 
-/** Documentation. */
 object App extends JSApp {
 
   @JSExport
 
-  /** Documentation. */
   def main(): Unit = {
 
     import scalatags.JsDom.all._

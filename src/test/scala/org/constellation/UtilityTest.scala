@@ -7,7 +7,6 @@ import org.constellation.crypto.KeyUtils._
 
 //case class Test(a: EdgeHashType, b: EdgeHashType)
 
-/** Documentation. */
 class UtilityTest extends FlatSpec {
 
   // TODO: Test CB serializations

@@ -18,7 +18,6 @@ import org.constellation.primitives._
 import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures}
 
-/** Documentation. */
 object RandomData {
 
   val logger = Logger("RandomData")
@@ -35,13 +34,11 @@ object RandomData {
 
   val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
 
-  /** Documentation. */
   def randomBlock(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): CheckpointBlock = {
     val txs = Seq.fill(5)(randomTransaction)
     CheckpointBlock.createCheckpointBlock(txs, tips.map{s => TypedEdgeHash(s.hash, EdgeHashType.CheckpointHash)})(startingKeyPair)
   }
 
-  /** Documentation. */
   def randomTransaction: Transaction = {
     val src = Random.shuffle(keyPairs).head
     createTransaction(
@@ -52,10 +49,8 @@ object RandomData {
     )
   }
 
-  /** Documentation. */
   def getAddress(keyPair: KeyPair): String = keyPair.address.address
 
-  /** Documentation. */
   def fill(balances: Map[String, Long])(implicit dao: DAO): Iterable[Transaction] = {
     val txs = balances.map {
       case (address, amount) => createTransaction(keyPairs.head.address.address, address, amount, keyPairs.head)
@@ -69,7 +64,6 @@ object RandomData {
     txs
   }
 
-  /** Documentation. */
   def setupSnapshot(cb: Seq[CheckpointBlock])(implicit dao: DAO): Seq[CheckpointBlock] = {
     dao.threadSafeTipService.setSnapshot(SnapshotInfo(
       dao.threadSafeTipService.getSnapshotInfo().snapshot,
@@ -86,7 +80,6 @@ object RandomData {
   }
 }
 
-/** Documentation. */
 class RandomDataTest extends FlatSpec {
 
   import RandomData._
@@ -139,7 +132,6 @@ class RandomDataTest extends FlatSpec {
 
       tips.foreach { case (tip, numUses) =>
 
-        /** Documentation. */
         def doRemove(): Unit = activeBlocks.remove(tip)
 
         if (width < maxWidth) {
@@ -201,7 +193,6 @@ class RandomDataTest extends FlatSpec {
 
 }
 
-/** Documentation. */
 class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLike with Matchers with BeforeAndAfterEach
   with BeforeAndAfterAll with MockFactory with OneInstancePerTest {
 
@@ -231,7 +222,6 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
     Seq()
   ))
 
-  /** Documentation. */
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
   }

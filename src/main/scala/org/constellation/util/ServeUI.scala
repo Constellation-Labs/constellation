@@ -5,12 +5,10 @@ import akka.http.scaladsl.server.Directives.{complete, extractUnmatchedPath, get
 import akka.http.scaladsl.server.Route
 import com.typesafe.scalalogging.Logger
 
-/** Documentation. */
 trait ServeUI {
 
   val logger: Logger
 
-  /** Documentation. */
   def jsRequest: Route = {
     pathPrefix("ui") {
       get {
@@ -24,7 +22,6 @@ trait ServeUI {
     }
   }
 
-  /** Documentation. */
   def serveMainPage: Route = get {
     path("")  {
       logger.debug(s"Serve main page")

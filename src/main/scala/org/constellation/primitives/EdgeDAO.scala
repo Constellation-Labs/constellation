@@ -13,12 +13,10 @@ import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.{DAO, ProcessingConfig}
 
-/** Documentation. */
 class ThreadSafeTXMemPool() {
 
   private var transactions = Seq[Transaction]()
 
-  /** Documentation. */
   def pull(minCount: Int): Option[Seq[Transaction]] = this.synchronized{
     if (transactions.size > minCount) {
       val (left, right) = transactions.splitAt(minCount)
@@ -27,13 +25,11 @@ class ThreadSafeTXMemPool() {
     } else None
   }
 
-  /** Documentation. */
   def batchPutDebug(txs: Seq[Transaction]) : Boolean = this.synchronized{
     transactions ++= txs
     true
   }
 
-  /** Documentation. */
   def put(transaction: Transaction, overrideLimit: Boolean = false)(implicit dao: DAO): Boolean = this.synchronized{
     val notContained = !transactions.contains(transaction)
 
@@ -49,12 +45,10 @@ class ThreadSafeTXMemPool() {
     notContained
   }
 
-  /** Documentation. */
   def unsafeCount: Int = transactions.size
 
 }
 
-/** Documentation. */
 class ThreadSafeMessageMemPool() {
 
   private var messages = Seq[Seq[ChannelMessage]]()
@@ -63,7 +57,6 @@ class ThreadSafeMessageMemPool() {
 
   val messageHashToSendRequest: TrieMap[String, ChannelSendRequest] = TrieMap()
 
-  /** Documentation. */
   def pull(minCount: Int): Option[Seq[ChannelMessage]] = this.synchronized{
     if (messages.size > minCount) {
       val (left, right) = messages.splitAt(minCount)
@@ -72,13 +65,11 @@ class ThreadSafeMessageMemPool() {
     } else None
   }
 
-  /** Documentation. */
   def batchPutDebug(messagesToAdd: Seq[ChannelMessage]) : Boolean = this.synchronized{
     //messages ++= messagesToAdd
     true
   }
 
-  /** Documentation. */
   def put(message: Seq[ChannelMessage], overrideLimit: Boolean = false)(implicit dao: DAO): Boolean = this.synchronized{
     val notContained = !messages.contains(message)
 
@@ -94,14 +85,12 @@ class ThreadSafeMessageMemPool() {
     notContained
   }
 
-  /** Documentation. */
   def unsafeCount: Int = messages.size
 
 }
 
 import constellation._
 
-/** Documentation. */
 class ThreadSafeTipService() {
 
   implicit val timeout: Timeout = Timeout(15, TimeUnit.SECONDS)
@@ -111,10 +100,8 @@ class ThreadSafeTipService() {
   var facilitators: Map[Id, PeerData] = Map()
   private var snapshot: Snapshot = Snapshot.snapshotZero
 
-  /** Documentation. */
   def tips: Map[String, TipData] = thresholdMetCheckpoints
 
-  /** Documentation. */
   def getSnapshotInfo()(implicit dao: DAO): SnapshotInfo = this.synchronized(
     SnapshotInfo(
       snapshot,
@@ -131,7 +118,6 @@ class ThreadSafeTipService() {
 
   // ONLY TO BE USED BY DOWNLOAD COMPLETION CALLER
 
-  /** Documentation. */
   def setSnapshot(latestSnapshotInfo: SnapshotInfo)(implicit dao: DAO): Unit = this.synchronized{
     snapshot = latestSnapshotInfo.snapshot
     lastSnapshotHeight = latestSnapshotInfo.lastSnapshotHeight
@@ -173,7 +159,6 @@ class ThreadSafeTipService() {
   // TODO: Read from lastSnapshot in DB optionally, assign elsewhere
   var lastSnapshotHeight = 0
 
-  /** Documentation. */
   def getMinTipHeight()(implicit dao: DAO) = thresholdMetCheckpoints.keys.map {
     dao.checkpointService.get
   }.flatMap {
@@ -186,13 +171,11 @@ class ThreadSafeTipService() {
 
   var syncBuffer : Seq[CheckpointCacheData] = Seq()
 
-  /** Documentation. */
   def syncBufferAccept(cb: CheckpointCacheData)(implicit dao: DAO): Unit = {
     syncBuffer :+= cb
     dao.metrics.updateMetric("syncBufferSize", syncBuffer.size.toString)
   }
 
-  /** Documentation. */
   def attemptSnapshot()(implicit dao: DAO): Unit = this.synchronized{
 
     // Sanity check memory protection
@@ -312,13 +295,11 @@ class ThreadSafeTipService() {
     }
   }
 
-  /** Documentation. */
   def acceptGenesis(genesisObservation: GenesisObservation): Unit = this.synchronized{
     thresholdMetCheckpoints += genesisObservation.initialDistribution.baseHash -> TipData(genesisObservation.initialDistribution, 0)
     thresholdMetCheckpoints += genesisObservation.initialDistribution2.baseHash -> TipData(genesisObservation.initialDistribution2, 0)
   }
 
-  /** Documentation. */
   def pull()(implicit dao: DAO): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = this.synchronized{
     if (thresholdMetCheckpoints.size >= 2 && facilitators.nonEmpty) {
       val tips = Random.shuffle(thresholdMetCheckpoints.toSeq).take(2)
@@ -345,7 +326,6 @@ class ThreadSafeTipService() {
 
   // TODO: Synchronize only on values modified by this, same for other functions
 
-  /** Documentation. */
   def accept(checkpointCacheData: CheckpointCacheData)(implicit dao: DAO): Unit = this.synchronized {
 
     if (dao.checkpointService.contains(checkpointCacheData.checkpointBlock.map {
@@ -358,7 +338,6 @@ class ThreadSafeTipService() {
 
       tryWithMetric(acceptCheckpoint(checkpointCacheData), "acceptCheckpoint")
 
-      /** Documentation. */
       def reuseTips: Boolean = thresholdMetCheckpoints.size < dao.maxWidth
 
       checkpointCacheData.checkpointBlock.foreach { checkpointBlock =>
@@ -368,7 +347,6 @@ class ThreadSafeTipService() {
             thresholdMetCheckpoints.get(h).flatMap {
               case TipData(block, numUses) =>
 
-                /** Documentation. */
                 def doRemove(): Option[String] = {
                   dao.metrics.incrementMetric("checkpointTipsRemoved")
                   Some(block.baseHash)
@@ -391,7 +369,6 @@ class ThreadSafeTipService() {
             thresholdMetCheckpoints.get(h).flatMap {
               case TipData(block, numUses) =>
 
-                /** Documentation. */
                 def doUpdate(): Option[(String, TipData)] = {
                   dao.metrics.incrementMetric("checkpointTipsIncremented")
                   Some(block.baseHash -> TipData(block, numUses + 1))
@@ -423,7 +400,6 @@ class ThreadSafeTipService() {
 
 // TODO: Use atomicReference increment pattern instead of synchronized
 
-/** Documentation. */
 class StorageService[T](size: Int = 50000) {
 
   private val lruCache: MutableLRUCache[String, T] = {
@@ -443,7 +419,6 @@ class StorageService[T](size: Int = 50000) {
   // Map[Address, AtomicUpdater] // computeIfAbsent getOrElseUpdate
 /*  class AtomicUpdater {
 
-    /** Documentation. */
     def update(
                 key: String,
                 updateFunc: T => T,
@@ -456,27 +431,22 @@ class StorageService[T](size: Int = 50000) {
       }
   }*/
 
-  /** Documentation. */
   def delete(keys: Set[String]) = this.synchronized{
     lruCache.multiRemove(keys)
   }
 
-  /** Documentation. */
   def contains(key: String): Boolean = this.synchronized{
     lruCache.contains(key)
   }
 
-  /** Documentation. */
   def get(key: String): Option[T] = this.synchronized{
     lruCache.get(key)
   }
 
-  /** Documentation. */
   def put(key: String, cache: T): Unit = this.synchronized{
     lruCache.+=((key, cache))
   }
 
-  /** Documentation. */
   def update(
               key: String,
               updateFunc: T => T,
@@ -488,7 +458,6 @@ class StorageService[T](size: Int = 50000) {
       data
     }
 
-  /** Documentation. */
   def toMap(): Map[String, T] = this.synchronized {
     lruCache.iterator.toMap
   }
@@ -497,21 +466,16 @@ class StorageService[T](size: Int = 50000) {
 
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
 
-/** Documentation. */
 class CheckpointService(size: Int = 50000) extends StorageService[CheckpointCacheData](size)
 
-/** Documentation. */
 class SOEService(size: Int = 50000) extends StorageService[SignedObservationEdgeCache](size)
 
-/** Documentation. */
 class MessageService(size: Int = 50000) extends StorageService[ChannelMessageMetadata](size)
 
-/** Documentation. */
 class TransactionService(size: Int = 50000) extends StorageService[TransactionCacheData](size) {
   private val queue = mutable.Queue[TransactionSerialized]()
   private val maxQueueSize = 20
 
-  /** Documentation. */
   override def put(
     key: String,
     cache: TransactionCacheData
@@ -527,14 +491,11 @@ class TransactionService(size: Int = 50000) extends StorageService[TransactionCa
     }
   }
 
-  /** Documentation. */
   def getLast20TX = queue.reverse
 }
 
-/** Documentation. */
 class AddressService(size: Int = 50000) extends StorageService[AddressCacheData](size)
 
-/** Documentation. */
 trait EdgeDAO {
 
   var processingConfig = ProcessingConfig()
@@ -558,13 +519,10 @@ trait EdgeDAO {
 
   var genesisObservation: Option[GenesisObservation] = None
 
-  /** Documentation. */
   def maxWidth: Int = processingConfig.maxWidth
 
-  /** Documentation. */
   def minCheckpointFormationThreshold: Int = processingConfig.minCheckpointFormationThreshold
 
-  /** Documentation. */
   def minCBSignatureThreshold: Int = processingConfig.numFacilitatorPeers
 
   val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
@@ -587,7 +545,6 @@ trait EdgeDAO {
   // Temporary to get peer data for tx hash partitioning
   @volatile var peerInfo: Map[Id, PeerData] = Map()
 
-  /** Documentation. */
   def readyPeers: Map[Id, PeerData] = peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
 
 }

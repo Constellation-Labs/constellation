@@ -16,14 +16,12 @@ import org.constellation.util.APIClient
 
 /// New download code
 
-/** Documentation. */
 object Download {
 
   val logger = Logger(s"Download")
 
   // Add warning for empty peers
 
-  /** Documentation. */
   def downloadActual()(implicit dao: DAO, ec: ExecutionContext): Unit = {
     logger.info("Download started")
     dao.nodeState = NodeState.DownloadInProgress
@@ -77,7 +75,6 @@ object Download {
 
     // TODO: Move elsewhere unify with other code.
 
-    /** Documentation. */
     def acceptSnapshot(r: StoredSnapshot) = {
       r.checkpointCache.foreach{
         c =>
@@ -103,7 +100,6 @@ object Download {
       File(dao.snapshotPath, r.snapshot.hash).writeByteArray(KryoSerializer.serializeAnyRef(r))
     }
 
-    /** Documentation. */
     def processSnapshotHash(peer: APIClient, hash: String): Boolean = {
 
       var activePeer = peer
@@ -204,7 +200,6 @@ object Download {
 
   }
 
-  /** Documentation. */
   def download()(implicit dao: DAO, ec: ExecutionContext): Unit = {
 
     tryWithMetric(downloadActual(), "download")

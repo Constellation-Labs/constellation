@@ -11,7 +11,6 @@ import scala.util.Try
 
 import org.constellation.util.TestNode
 
-/** Documentation. */
 class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
 
   val logger = Logger("SingleNodeGenesisTest")
@@ -21,14 +20,12 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
   implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
-  /** Documentation. */
   override def beforeAll(): Unit = {
     // Cleanup DBs
     //Try{File(tmpDir).delete()}
     //Try{new java.io.File(tmpDir).mkdirs()}
   }
 
-  /** Documentation. */
   override def afterAll() {
     // Cleanup DBs
     TestNode.clearNodes()
@@ -36,7 +33,6 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
     Try{File(tmpDir).delete()}
   }
 
-  /** Documentation. */
   def createNode(
                   randomizePorts: Boolean = false,
                   portOffset: Int = 0,

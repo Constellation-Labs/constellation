@@ -11,7 +11,6 @@ import scala.util.Try
 import org.constellation.crypto.KeyUtils
 import org.constellation.util.{APIClient, Simulation}
 
-/** Documentation. */
 object ComputeTestUtil {
 
   // For custom deployments to non-GCP instances

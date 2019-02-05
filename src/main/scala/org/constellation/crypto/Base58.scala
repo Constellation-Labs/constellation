@@ -6,7 +6,6 @@ import scala.annotation.tailrec
 // From https://github.com/ACINQ/bitcoin-lib/blob/master/src/main/scala/fr/acinq/bitcoin/Base58.scala
 // For addresses
 
-/** Documentation. */
 object Base58 {
 
   val alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -24,7 +23,6 @@ object Base58 {
       val big = new BigInteger(1, input.toArray)
       val builder = new StringBuilder
 
-      /** Documentation. */
       @tailrec
       def encode1(current: BigInteger): Unit = current match {
         case BigInteger.ZERO => ()

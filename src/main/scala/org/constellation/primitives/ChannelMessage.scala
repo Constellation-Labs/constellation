@@ -12,39 +12,32 @@ import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
 
 // Should channelId be associated with a unique keyPair or not?
 
-/** Documentation. */
 case class ChannelMessageData(
                                message: String,
                                previousMessageDataHash: String,
                                channelId: String
                              ) extends Signable
 
-/** Documentation. */
 case class ChannelOpen(
                       jsonSchema: Option[String] = None,
                       allowInvalid: Boolean = true
                       )
 
-/** Documentation. */
 case class SignedData[+D <: Signable](
                                           data: D,
                                           signatures: SignatureBatch
                                         ) extends Signable
 
-/** Documentation. */
 case class ChannelMessageMetadata(
                                  channelMessage: ChannelMessage,
                                  blockHash: Option[String] = None,
                                  snapshotHash: Option[String] = None
                                  )
 
-/** Documentation. */
 case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 
-/** Documentation. */
 object ChannelMessage {
 
-  /** Documentation. */
   def create(message: String, previous: String, channelId: String)(implicit dao: DAO): ChannelMessage = {
     val data = ChannelMessageData(message, previous, channelId)
     ChannelMessage(
@@ -52,7 +45,6 @@ object ChannelMessage {
     )
   }
 
-  /** Documentation. */
   def createGenesis(channelOpenRequest: ChannelOpenRequest)(implicit dao: DAO): Option[ChannelMessage] = {
     if (
       dao.messageService.get(channelOpenRequest.channelId).isEmpty &&
@@ -69,7 +61,6 @@ object ChannelMessage {
     } else None
   }
 
-  /** Documentation. */
   def createMessages(channelSendRequest: ChannelSendRequest)(implicit dao: DAO): Seq[ChannelMessage] = {
     // Ignores locking right now
     val previous = dao.messageService.get(channelSendRequest.channelId).get.channelMessage.signedMessageData.hash
@@ -83,7 +74,6 @@ object ChannelMessage {
   }
 }
 
-/** Documentation. */
 case class ChannelProof(
                        channelMessageMetadata: ChannelMessageMetadata,
                        // snapshotProof: MerkleProof,
@@ -91,26 +81,22 @@ case class ChannelProof(
                        checkpointMessageProof: MerkleProof
                        )
 
-/** Documentation. */
 case class ChannelOpenRequest(
                              channelId: String,
                              jsonSchema: Option[String] = None,
                              acceptInvalid: Boolean = true
                              )
 
-/** Documentation. */
 case class ChannelSendRequest(
                              channelId: String,
                              messages: Seq[String]
                              )
 
-/** Documentation. */
 case class SensorData(
                          temperature: Int,
                          name: String
                        )
 
-/** Documentation. */
 object SensorData {
 
   val jsonSchema: String = """{
@@ -133,7 +119,6 @@ object SensorData {
   val schema: JsonNode = asJsonNode(parse(jsonSchema))
   val validator: JsonValidator = JsonSchemaFactory.byDefault().getValidator
 
-  /** Documentation. */
   def validate(input: String): ProcessingReport = validator.validate(schema, asJsonNode(parse(input)))
 
   //def validate()
@@ -143,15 +128,12 @@ object SensorData {
 // TODO: Switch to Parent references?
 /*
 
-/** Documentation. */
 case class ChannelMessage(
                          oeWithValues: SignedData[ChannelMessageData]
                          )
 
-/** Documentation. */
 object ChannelMessage {
 
-  /** Documentation. */
   def apply(
              message: String, previous: String, channelId: String, parents: Seq[TypedEdgeHash]
            )(implicit kp: KeyPair): ChannelMessage = {

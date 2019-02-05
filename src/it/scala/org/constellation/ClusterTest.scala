@@ -13,21 +13,16 @@ import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.util.{APIClient, Simulation}
 
-/** Documentation. */
 object ClusterTest {
 
   private val ipRegex = "\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b".r
 
-  /** Documentation. */
   private def isCircle = System.getenv("CIRCLE_SHA1") != null
 
-  /** Documentation. */
   def kubectl: Seq[String] = if (isCircle) Seq("sudo", "/opt/google-cloud-sdk/bin/kubectl") else Seq("kubectl")
 
-  /** Documentation. */
   case class KubeIPs(id: Int, rpcIP: String, udpIP: String) {
 
-    /** Documentation. */
     def valid: Boolean =  {
       ipRegex.findAllIn(rpcIP).nonEmpty && ipRegex.findAllIn(udpIP).nonEmpty
     }
@@ -56,10 +51,8 @@ object ClusterTest {
     }.toList
   }
 
-  /** Documentation. */
   case class NodeIPs(internalIP: String, externalIP: String)
 
-  /** Documentation. */
   def getNodeIPs: Seq[NodeIPs] = {
     val result = {kubectl ++ Seq("get", "-o", "json", "nodes")}.!!
     val items = (result.jValue \ "items").extract[JArray]
@@ -81,10 +74,8 @@ object ClusterTest {
     res
   }
 
-  /** Documentation. */
   case class PodIPName(podAppName: String, internalIP: String, externalIP: String)
 
-  /** Documentation. */
   def getPodMappings(namePrefix: String): List[PodIPName] = {
 
     val pods = ((kubectl ++ Seq("get", "-o", "json", "pods")).!!.jValue \ "items").extract[JArray]
@@ -109,10 +100,8 @@ object ClusterTest {
 
 // TODO: Re-enable after doing kubernetes entropy / haveged fix
 
-/** Documentation. */
 class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
-  /** Documentation. */
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
