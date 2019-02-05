@@ -207,7 +207,7 @@ object KeyUtils {
   def publicKeyToAddressString(
                                 key: PublicKey
                               ): String = {
-    val keyHash = Hashing.sha256().hashBytes(key.getEncoded).toString
+    val keyHash = Base58.encode(Hashing.sha256().hashBytes(key.getEncoded).asBytes())
     keyHashToAddress(keyHash)
   }
 

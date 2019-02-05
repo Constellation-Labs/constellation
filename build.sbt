@@ -93,7 +93,8 @@ lazy val coreDependencies = Seq(
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus,
-  "com.github.java-json-tools" % "json-schema-validator" % "2.2.10"
+  "com.github.java-json-tools" % "json-schema-validator" % "2.2.10",
+  "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.3"
 ) ++ sttpDependencies
 
 //Test dependencies

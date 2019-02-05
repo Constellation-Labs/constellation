@@ -59,6 +59,13 @@ class ThreadSafeMessageMemPool() {
 
   val messageHashToSendRequest: TrieMap[String, ChannelSendRequest] = TrieMap()
 
+  def release(messages: Seq[ChannelMessage]): Unit = {
+    messages.foreach { m =>
+        activeChannels(m.signedMessageData.data.channelId)
+        .release()
+    }
+  }
+
   def pull(minCount: Int): Option[Seq[ChannelMessage]] = this.synchronized{
     if (messages.size > minCount) {
       val (left, right) = messages.splitAt(minCount)
@@ -306,8 +313,8 @@ class ThreadSafeTipService() {
     thresholdMetCheckpoints += genesisObservation.initialDistribution2.baseHash -> TipData(genesisObservation.initialDistribution2, 0)
   }
 
-  def pull()(implicit dao: DAO): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = this.synchronized{
-    if (thresholdMetCheckpoints.size >= 2 && facilitators.nonEmpty) {
+  def pull(allowEmptyFacilitators: Boolean = false)(implicit dao: DAO): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = this.synchronized{
+    val res = if (thresholdMetCheckpoints.size >= 2 && (facilitators.nonEmpty || allowEmptyFacilitators)) {
       val tips = Random.shuffle(thresholdMetCheckpoints.toSeq).take(2)
 
       val tipSOE = tips.map {
@@ -317,17 +324,25 @@ class ThreadSafeTipService() {
       val mergedTipHash = tipSOE.map {_.hash}.mkString("")
 
       val totalNumFacil = facilitators.size
-      // TODO: Use XOR distance instead as it handles peer data mismatch cases better
-      val facilitatorIndex = (BigInt(mergedTipHash, 16) % totalNumFacil).toInt
-      val sortedFacils = facilitators.toSeq.sortBy(_._1.hex)
-      val selectedFacils = Seq.tabulate(dao.processingConfig.numFacilitatorPeers) { i => (i + facilitatorIndex) % totalNumFacil }.map {
-        sortedFacils(_)
+
+      val finalFacilitators = if (totalNumFacil > 0) {
+        // TODO: Use XOR distance instead as it handles peer data mismatch cases better
+        val facilitatorIndex = (BigInt(mergedTipHash, 16) % totalNumFacil).toInt
+        val sortedFacils = facilitators.toSeq.sortBy(_._1.hex)
+        val selectedFacils = Seq.tabulate(dao.processingConfig.numFacilitatorPeers) { i => (i + facilitatorIndex) % totalNumFacil }.map {
+          sortedFacils(_)
+        }
+        selectedFacils.toMap
+      } else {
+        Map[Id, PeerData]()
       }
-      val finalFacilitators = selectedFacils.toMap
-      dao.metrics.updateMetric("activeTips", thresholdMetCheckpoints.size.toString)
+
 
       Some(tipSOE -> finalFacilitators)
     } else None
+
+    dao.metrics.updateMetric("activeTips", thresholdMetCheckpoints.size.toString)
+    res
   }
 
 
@@ -522,6 +537,7 @@ trait EdgeDAO {
   val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
   val threadSafeTipService = new ThreadSafeTipService()
 
+  var genesisBlock: Option[CheckpointBlock] = None
   var genesisObservation: Option[GenesisObservation] = None
   def maxWidth: Int = processingConfig.maxWidth
   def minCheckpointFormationThreshold: Int = processingConfig.minCheckpointFormationThreshold

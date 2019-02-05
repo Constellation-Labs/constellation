@@ -85,15 +85,80 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
   private val initialAPIs = apis
 
-  private val schemaStr = SensorData.jsonSchema
+  private val messageSim = new MessageTestingSim(sim)
 
   "E2E Run" should "demonstrate full flow" in {
 
     logger.info("API Ports: " + apis.map{_.apiPort})
 
-    assert(sim.run(initialAPIs, addPeerRequests, snapshotCount = 5))
+    assert(sim.run(initialAPIs, addPeerRequests))
 
-    val channelId = "test"
+    // messageSim.openChannel(apis)
+
+    val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)), randomizePorts = false, portOffset = 50)
+
+    val downloadAPI = downloadNode.getAPIClient()
+    logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
+    assert(sim.checkReady(Seq(downloadAPI)))
+
+    // messageSim.postDownload(apis.head)
+
+    Thread.sleep(20*1000)
+
+    val allNodes = nodes :+ downloadNode
+
+    val allAPIs: Seq[APIClient] = allNodes.map{_.getAPIClient()} //apis :+ downloadAPI
+    val updatePasswordResponses = updatePasswords(allAPIs)
+    assert(updatePasswordResponses.forall(_.code == StatusCodes.Ok))
+    assert(sim.healthy(allAPIs))
+    // Thread.sleep(1000*1000)
+
+    // Stop transactions
+    sim.triggerRandom(allAPIs)
+
+
+    sim.logger.info("Stopping transactions to run parity check")
+
+    Thread.sleep(30000)
+
+    // TODO: Change assertions to check several times instead of just waiting ^ with sleep
+    // Follow pattern in Simulation.await examples
+    assert(allAPIs.map{_.metrics("checkpointAccepted")}.distinct.size == 1)
+    assert(allAPIs.map{_.metrics("transactionAccepted")}.distinct.size == 1)
+
+
+    val storedSnapshots = allAPIs.map{_.simpleDownload()}
+
+    // messageSim.dumpJson(storedSnapshots)
+
+    // TODO: Move to separate test
+
+    // TODO: This is flaky and fails randomly sometimes
+    val snaps = storedSnapshots.toSet
+      .map{x : Seq[StoredSnapshot] =>
+        x.map{_.checkpointCache.flatMap{_.checkpointBlock}}.toSet
+      }
+
+    assert(
+      snaps.size == 1
+    )
+
+  }
+
+
+}
+
+
+class MessageTestingSim(sim: Simulation) {
+
+  private val schemaStr = SensorData.jsonSchema
+
+  private val channelId = "test"
+
+  var genesisChannel: ChannelMessage = _
+  var expectedMessages : Seq[ChannelMessage] = _
+
+  def openChannel(apis: Seq[APIClient]): Unit = {
 
     apis.head.postSync("channel/open", ChannelOpenRequest(channelId, jsonSchema = Some(schemaStr)))
     sim.awaitConditionMet(
@@ -103,12 +168,12 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
       }
     )
 
-    val genesisChannel = apis.head.getBlocking[Option[ChannelMessageMetadata]]("messageService/" + channelId).get.channelMessage
+    genesisChannel = apis.head.getBlocking[Option[ChannelMessageMetadata]]("messageService/" + channelId).get.channelMessage
 
     val validNameChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map{_.toString}.toSeq
     val invalidNameChars = validNameChars.map{_.toLowerCase}
 
-    val expectedMessages = (0 until 10).flatMap{ batchNumber =>
+    expectedMessages = (0 until 10).flatMap{ batchNumber =>
       import constellation._
 
       val validMessages = Seq.fill(batchNumber % 2) {
@@ -140,15 +205,13 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
       messages
     }
 
-    val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)), randomizePorts = false, portOffset = 50)
+  }
 
-    val downloadAPI = downloadNode.getAPIClient()
-    logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
-    assert(sim.checkReady(Seq(downloadAPI)))
+  def postDownload(firstAPI : APIClient) = {
 
-    val messageChannel = initialAPIs.head.getBlocking[Seq[String]]("channels").filterNot{_ == channelId}.head
+    val messageChannel = firstAPI.getBlocking[Seq[String]]("channels").filterNot{_ == channelId}.head
 
-    val messageWithinSnapshot = initialAPIs.head.getBlocking[Option[ChannelProof]]("channel/" + messageChannel)
+    val messageWithinSnapshot = firstAPI.getBlocking[Option[ChannelProof]]("channel/" + messageChannel)
     assert(messageWithinSnapshot.nonEmpty)
 
     def messageValid(): Unit = messageWithinSnapshot.foreach{ proof =>
@@ -160,33 +223,12 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
       assert(m.blockHash.contains{proof.checkpointProof.input})
       assert(m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input)
     }
-    messageValid()
+    // messageValid()
+  }
 
-    Thread.sleep(20*1000)
-
-    val allNodes = nodes :+ downloadNode
-
-    val allAPIs: Seq[APIClient] = allNodes.map{_.getAPIClient()} //apis :+ downloadAPI
-    val updatePasswordResponses = updatePasswords(allAPIs)
-    assert(updatePasswordResponses.forall(_.code == StatusCodes.Ok))
-    assert(sim.healthy(allAPIs))
-    // Thread.sleep(1000*1000)
-
-    // Stop transactions
-    sim.triggerRandom(allAPIs)
-
-
-    sim.logger.info("Stopping transactions to run parity check")
-
-    Thread.sleep(30000)
-
-    // TODO: Change assertions to check several times instead of just waiting ^ with sleep
-    // Follow pattern in Simulation.await examples
-    assert(allAPIs.map{_.metrics("checkpointAccepted")}.distinct.size == 1)
-    assert(allAPIs.map{_.metrics("transactionAccepted")}.distinct.size == 1)
-
-
-    val storedSnapshots = allAPIs.map{_.simpleDownload()}
+  def dumpJson(
+                storedSnapshots: Seq[Seq[StoredSnapshot]]
+              ): Unit = {
 
     var numInvalid = 0
 
@@ -195,7 +237,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
         val block = cache.checkpointBlock.get
         val relevantMessages = block.checkpoint.edge.data.messages
           .filter{expectedMessages.contains}
-          //.filter{_.signedMessageData.data.channelId == channelId}.filterNot{_ == genesisChannel}
+        //.filter{_.signedMessageData.data.channelId == channelId}.filterNot{_ == genesisChannel}
         val messageParent = relevantMessages.map{_.signedMessageData.data.previousMessageDataHash}.headOption
         val messageHash = relevantMessages.map{_.signedMessageData.hash}.headOption
 
@@ -232,25 +274,13 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     }.json
     println(rendered)
 
-    // TODO: This is flaky and fails randomly sometimes
-    val snaps = storedSnapshots.toSet
-      .map{x : Seq[StoredSnapshot] =>
-        x.map{_.checkpointCache.flatMap{_.checkpointBlock}}.toSet
-      }
-
-    assert(
-      snaps.size == 1
-    )
-
   }
-
-
 }
 
 case class BlockDumpOutput(
-                          blockSoeHash: String,
-                          blockParentSOEHashes: Seq[String],
-                          blockMessageValid: Option[Boolean],
-                          messageParent: Option[String],
-                          messageHash: Option[String]
+                            blockSoeHash: String,
+                            blockParentSOEHashes: Seq[String],
+                            blockMessageValid: Option[Boolean],
+                            messageParent: Option[String],
+                            messageHash: Option[String]
                           )

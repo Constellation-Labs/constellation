@@ -57,6 +57,7 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
 
   "Genesis created" should "verify the node has created genesis" in {
 
+    Thread.sleep(600*1000)
 
   }
 
