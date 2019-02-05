@@ -3,11 +3,10 @@ package org.constellation.crypto
 import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
 import java.security.{KeyFactory, SecureRandom, _}
 import java.util.Base64
-import com.google.common.hash.Hashing
-import com.typesafe.scalalogging.Logger
-import org.spongycastle.jce.provider.BouncyCastleProvider
 
-import constellation.SHA256Ext
+import com.google.common.hash.Hashing
+import com.typesafe.scalalogging.StrictLogging
+import org.spongycastle.jce.provider.BouncyCastleProvider
 
 /**
   * Need to compare this to:
@@ -29,9 +28,7 @@ import constellation.SHA256Ext
   *
   */
 
-object KeyUtils {
-
-  private val logger = Logger("KeyUtils")
+object KeyUtils extends StrictLogging {
 
   def insertProvider(): BouncyCastleProvider = {
     import java.security.Security

@@ -3,6 +3,7 @@ package org.constellation
 import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.util.concurrent.TimeUnit
+
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.RemoteAddress
@@ -12,10 +13,7 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files._
 import com.typesafe.config.ConfigFactory
-import com.typesafe.scalalogging.Logger
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
-
+import com.typesafe.scalalogging.{Logger, StrictLogging}
 import constellation._
 import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.crypto.KeyUtils
@@ -25,12 +23,14 @@ import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Metrics}
 
-object ConstellationNode {
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
+
+object ConstellationNode extends StrictLogging {
 
   val ConstellationVersion = "1.0.10"
 
   def main(args: Array[String]): Unit = {
-    val logger = Logger("ConstellationNodeMain")
     logger.info("Main init")
     val config = ConfigFactory.load()
     logger.info("Config loaded")
