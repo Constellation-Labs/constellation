@@ -2,11 +2,9 @@ package org.constellation.tx
 
 
 import java.security.KeyPair
-import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorSystem, Props}
 import akka.pattern.ask
-import akka.util.Timeout
 import better.files.{File, _}
 import com.typesafe.scalalogging.Logger
 import constellation._
@@ -14,7 +12,6 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
 import org.constellation.datastore.leveldb.LevelDB
 import org.constellation.datastore.leveldb.LevelDB.{DBGet, DBPut}
-import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.AddressCacheData
 import org.constellation.util.SignHelp
 import org.constellation.{DAO, LevelDBActor}
@@ -26,7 +23,7 @@ class TXValidationBenchmark extends FlatSpec {
 
   val kp: KeyPair = KeyUtils.makeKeyPair()
   val kp1: KeyPair = KeyUtils.makeKeyPair()
-  val tx: Schema.Transaction = SignHelp.createTransaction(kp.address.address, kp1.address.address, 1L, kp)
+  val tx = SignHelp.createTransaction(kp.address.address, kp1.address.address, 1L, kp)
 
   val batchSize = 100
 
@@ -53,7 +50,7 @@ class TXValidationBenchmark extends FlatSpec {
     val pkey = sig.publicKey
 
     val hashBytes = batch.hash.getBytes()
-    val signatureBytes = fromBase64(sig.signature)
+    val signatureBytes = hex2bytes(sig.signature)
     assert(KeyUtils.verifySignature(hashBytes, signatureBytes)(pkey))
 
     val seq2 = Seq.fill(batchSize)(0).par
@@ -105,8 +102,6 @@ class TXValidationBenchmark extends FlatSpec {
     val dao = new DAO()
 
     dao.keyPair = kp
-
-    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
     val ldb = as.actorOf(Props(new LevelDBActor(dao)), "db")
 

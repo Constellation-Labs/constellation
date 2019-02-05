@@ -106,9 +106,10 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
         path("channels") {
           complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
         } ~
+        path("messageService" / Segment){ channelId =>
+          complete(dao.messageService.get(channelId))
+        } ~
         path ("channel" / Segment) { channelHash =>
-
-
 
           val res = Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.get(channelHash))
 
@@ -126,7 +127,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
                 val block = storedSnapshot.checkpointCache.filter {
                   _.checkpointBlock.get.baseHash == cmd.blockHash.get
                 }.head.checkpointBlock.get
-                val messageProofInput = block.transactions.map{_.hash} ++ block.checkpoint.edge.resolvedObservationEdge.data.get.messages.map{_.signedMessageData.signatures.hash}
+                val messageProofInput = block.transactions.map{_.hash} ++ block.checkpoint.edge.data.messages.map{_.signedMessageData.signatures.hash}
                 val messageProof = MerkleTree(messageProofInput.toList).createProof(cmd.channelMessage.signedMessageData.signatures.hash)
                 ChannelProof(
                   cmd,
@@ -162,7 +163,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           } ~
           path("metrics") {
             val response = MetricsResult(
-              (dao.metricsManager ? GetMetrics).mapTo[Map[String, String]].getOpt().getOrElse(Map())
+              dao.metrics.getMetrics
             )
             complete(response)
           } ~
@@ -192,11 +193,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           path("nodeKeyPair") {
             complete(keyPair)
           } ~
-          path("peerids") {
-            complete(peers.map {
-              _.data
-            })
-          } ~
           path("hasGenesis") {
             if (dao.genesisObservation.isDefined) {
               complete(StatusCodes.OK)
@@ -206,11 +202,13 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           } ~
           path("dashboard") {
             val txs = dao.transactionService.getLast20TX
-            val self = Node(selfAddress.address,
-              selfPeer.data.externalAddress.map(_.getHostName).getOrElse(""),
-              selfPeer.data.externalAddress.map(_.getPort).getOrElse(0))
+            val self = Node(
+              dao.selfAddressStr,
+              dao.externalHostString,
+              dao.externlPeerHTTPPort
+            )
             val peerMap = dao.peerInfo.toSeq.map {
-              case (id,pd) => Node(id.address.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
+              case (id,pd) => Node(id.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
             } :+ self
 
             complete(
@@ -225,6 +223,19 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
 
   private val postEndpoints =
     post {
+      pathPrefix("channel") {
+        path("open") {
+          entity(as[ChannelOpenRequest]) { request =>
+            ChannelMessage.createGenesis(request)
+            complete(StatusCodes.Created)
+          }
+        } ~
+        path("send") {
+          entity(as[ChannelSendRequest]) { send =>
+            complete(ChannelMessage.createMessages(send))
+          }
+        }
+      } ~
       pathPrefix("peer") {
         path("remove") {
           entity(as[RemovePeerRequest]) { e =>
@@ -271,12 +282,12 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           dao.nodeState = NodeState.PendingDownload
         }
         dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
-        dao.metricsManager ! UpdateMetric("nodeState", dao.nodeState.toString)
+        dao.metrics.updateMetric("nodeState", dao.nodeState.toString)
         complete(StatusCodes.OK)
       } ~
       path("random") { // Temporary
         dao.generateRandomTX = !dao.generateRandomTX
-        dao.metricsManager ! UpdateMetric("generateRandomTX", dao.generateRandomTX.toString)
+        dao.metrics.updateMetric("generateRandomTX", dao.generateRandomTX.toString)
         complete(StatusCodes.OK)
       } ~
       path("peerHealthCheck") {
@@ -287,7 +298,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
           resetTimeout
         )
 
-        val response = (peerManager ? APIBroadcast(_.get("health"))).mapTo[Map[Id, Future[Response[String]]]]
+        val response = (peerManager ? APIBroadcast(_.get("health")))(standardTimeout).mapTo[Map[Id, Future[Response[String]]]]
         onCompleteWithBreaker(breaker)(response) {
           case Success(idMap) =>
 
@@ -358,7 +369,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
             }
           logger.debug(s"Set external IP RPC request $externalIp $addr")
           dao.externalAddress = Some(addr)
-          dao.metricsManager ! UpdateMetric("externalHost", dao.externalHostString)
+          dao.metrics.updateMetric("externalHost", dao.externalHostString)
           if (ipp.nonEmpty)
             dao.apiAddress = Some(new InetSocketAddress(ipp, 9000))
           complete(StatusCodes.OK)
@@ -366,16 +377,14 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem, val timeo
       } ~
       path("reputation") {
         entity(as[Seq[UpdateReputation]]) { ur =>
-          secretReputation = ur.flatMap { r =>
-            r.secretReputation.map {
-              id -> _
+          ur.foreach{ r =>
+            r.secretReputation.foreach {
+              dao.secretReputation(r.id) == _
             }
-          }.toMap
-          publicReputation = ur.flatMap { r =>
-            r.publicReputation.map {
-              id -> _
+            r.publicReputation.foreach{
+              dao.publicReputation(r.id) == _
             }
-          }.toMap
+          }
           complete(StatusCodes.OK)
         }
       }

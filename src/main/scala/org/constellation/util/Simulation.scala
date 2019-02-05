@@ -3,8 +3,9 @@ package org.constellation.util
 import java.util.concurrent.ForkJoinPool
 
 import com.softwaremill.sttp.Response
-import com.typesafe.scalalogging.{Logger, StrictLogging}
+import com.typesafe.scalalogging.Logger
 import constellation._
+import org.constellation.primitives.CheckpointBlock
 import org.constellation.primitives.Schema._
 import org.constellation.{HostPort, PeerMetadata}
 import org.slf4j.LoggerFactory
@@ -241,7 +242,7 @@ class Simulation {
 
   def sendRandomTransaction(apis: Seq[APIClient]): Future[Response[String]] = {
     val src = randomNode(apis)
-    val dst = randomOtherNode(src, apis).id.address.address
+    val dst = randomOtherNode(src, apis).id.address
 
     val s = SendToAddress(dst, Random.nextInt(1000).toLong)
     src.post("send", s)

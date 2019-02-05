@@ -5,7 +5,7 @@ import java.security.KeyPair
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import org.constellation.crypto.KeyUtils
-import org.constellation.{ConstellationNode, HostPort}
+import org.constellation.{ConstellationNode, HostPort, NodeConfig}
 
 import scala.concurrent.ExecutionContext
 import scala.util.Try
@@ -17,7 +17,8 @@ object TestNode {
   def apply(seedHosts: Seq[HostPort] = Seq(),
             keyPair: KeyPair = KeyUtils.makeKeyPair(),
             randomizePorts: Boolean = true,
-            portOffset: Int = 0
+            portOffset: Int = 0,
+            isGenesisNode: Boolean = false
            )(
     implicit system: ActorSystem,
     materializer: ActorMaterializer,
@@ -43,7 +44,8 @@ object TestNode {
       peerHttpPort = randomPeerPort,
       peerTCPPort = randomPeerTCPPort,
       attemptDownload = seedHosts.nonEmpty,
-      allowLocalhostPeers = true
+      allowLocalhostPeers = true,
+      nodeConfig = NodeConfig(10, isGenesisNode = isGenesisNode)
     )
 
     nodes = nodes :+ node
@@ -51,12 +53,12 @@ object TestNode {
     node.dao.processingConfig = node.dao.processingConfig.copy(
       numFacilitatorPeers = 2,
       minCheckpointFormationThreshold = 3,
-      randomTXPerRoundPerPeer = 1,
+      randomTXPerRoundPerPeer = 2,
       metricCheckInterval = 10,
-      maxWidth = 3,
+      maxWidth = 4,
       maxMemPoolSize = 15,
       minPeerTimeAddedSeconds = 1,
-      snapshotInterval = 5,
+      snapshotInterval = 2,
       snapshotHeightInterval = 2,
       snapshotHeightDelayInterval = 1,
       roundsPerMessage = 1
