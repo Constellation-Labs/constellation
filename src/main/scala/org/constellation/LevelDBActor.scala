@@ -11,10 +11,11 @@ import org.constellation.serializer.KryoSerializer
 import scala.util.Try
 
 class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem)
-    extends Actor with StrictLogging {
+    extends Actor
+    with StrictLogging {
 
- // implicit val executionContext: ExecutionContext =
- //   system.dispatchers.lookup("db-io-dispatcher")
+  // implicit val executionContext: ExecutionContext =
+  //   system.dispatchers.lookup("db-io-dispatcher")
 
   def tmpDirId = file"tmp/${dao.id.medium}/db"
 

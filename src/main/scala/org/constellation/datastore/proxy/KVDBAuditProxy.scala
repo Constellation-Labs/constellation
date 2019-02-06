@@ -30,9 +30,7 @@ class KVDBAuditProxy(kvdb: KVDB) extends KVDB {
     res
   }
 
-  override def update[T <: AnyRef](key: String,
-                                   updateF: T => T,
-                                   empty: T): T = {
+  override def update[T <: AnyRef](key: String, updateF: T => T, empty: T): T = {
     val (before, t1) = timer { kvdb.get(key) }
     val (res, time) = timer { kvdb.update(key, updateF, empty) }
     f.appendLine(s"UPDATE $key ${res.json} ${time}ms (BEFORE UPDATE: ${before.json} ${t1}ms)")

@@ -40,41 +40,43 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.threadSafeTipService.tips)
       } ~
       path("heights") {
-        val maybeHeights = dao.threadSafeTipService.tips
-          .flatMap { case (k, v) => dao.checkpointService.get(k).flatMap {_.height}}.toSeq
+        val maybeHeights = dao.threadSafeTipService.tips.flatMap {
+          case (k, v) => dao.checkpointService.get(k).flatMap { _.height }
+        }.toSeq
         complete(maybeHeights)
       } ~
-    path("snapshotHashes") {
-      complete(Snapshot.snapshotHashes())
-    } ~
+      path("snapshotHashes") {
+        complete(Snapshot.snapshotHashes())
+      } ~
       path("info") {
         val info = dao.threadSafeTipService.getSnapshotInfo
         val res =
           KryoSerializer.serializeAnyRef(
-            info.copy(acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.get})
+            info.copy(acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshot.flatMap {
+              dao.checkpointService.get
+            })
           )
         complete(res)
       } ~
 /*      path("snapshot" / Segment) {s =>
         complete(dao.dbActor.getSnapshot(s))
       } ~*/
-      path("storedSnapshot" / Segment) {s =>
-        onComplete{
-          Future{
+      path("storedSnapshot" / Segment) { s =>
+        onComplete {
+          Future {
             Snapshot.loadSnapshotBytes(s)
           }(dao.edgeExecutionContext)
-        } {
-          res =>
-            val byteArray = res.toOption.flatMap {_.toOption}.getOrElse(Array[Byte]())
+        } { res =>
+          val byteArray = res.toOption.flatMap { _.toOption }.getOrElse(Array[Byte]())
 
-            val body = ByteString(byteArray)
+          val body = ByteString(byteArray)
 
-            val entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, body)
+          val entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, body)
 
-            val httpResponse = HttpResponse(entity = entity)
+          val httpResponse = HttpResponse(entity = entity)
 
-            complete(httpResponse)
-            //complete(bytes)
+          complete(httpResponse)
+        //complete(bytes)
         }
 
       } ~
@@ -85,19 +87,20 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.addressService.get(a))
       } ~
       pathPrefix("balance" / Segment) { a =>
-        complete(dao.addressService.get(a).map{_.balanceByLatestSnapshot})
+        complete(dao.addressService.get(a).map { _.balanceByLatestSnapshot })
       } ~
-    path("state") {
-      complete(NodeStateInfo(dao.nodeState))
-    } ~
-    path("peers") {
-      complete(dao.peerInfo.map{_._2.peerMetadata}.toSeq)
-    } ~
-    path("transaction" / Segment) {
-      h =>
+      path("state") {
+        complete(NodeStateInfo(dao.nodeState))
+      } ~
+      path("peers") {
+        complete(dao.peerInfo.map { _._2.peerMetadata }.toSeq)
+      } ~
+      path("transaction" / Segment) { h =>
         complete(dao.transactionService.get(h))
-    } ~
-    path("checkpoint" / Segment) { h => complete(dao.checkpointService.get(h))}
+      } ~
+      path("checkpoint" / Segment) { h =>
+        complete(dao.checkpointService.get(h))
+      }
 
   }
 }

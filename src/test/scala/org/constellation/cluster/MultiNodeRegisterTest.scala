@@ -16,7 +16,11 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, 
 import scala.concurrent.ExecutionContext
 import scala.util.Try
 
-class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
+class MultiNodeRegisterTest
+    extends AsyncFlatSpecLike
+    with Matchers
+    with BeforeAndAfterAll
+    with BeforeAndAfterEach {
 
   val logger = Logger("MultiNodeRegisterTest")
 
@@ -27,7 +31,7 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
 
   override def beforeEach(): Unit = {
     // Cleanup DBs
-    Try{File(tmpDir).delete()}
+    Try { File(tmpDir).delete() }
   }
 
   override def afterEach() {
@@ -37,7 +41,8 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
     system.terminate()
   }
 
-  def createNode(randomizePorts: Boolean = true, seedHosts: Seq[HostPort] = Seq()): ConstellationNode = {
+  def createNode(randomizePorts: Boolean = true,
+                 seedHosts: Seq[HostPort] = Seq()): ConstellationNode = {
     implicit val executionContext: ExecutionContext =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
@@ -54,29 +59,31 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
 
     val addr = n1.getInetSocketAddress
 
-    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes-1)(createNode())
+    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes - 1)(createNode())
 
-    nodes.foreach { node => logger.debug(node.getIPData.toString) }
+    nodes.foreach { node =>
+      logger.debug(node.getIPData.toString)
+    }
 
     nodes.foreach { n =>
       assert(n.ipManager.listKnownIPs.isEmpty)
     }
 
-    nodes.combinations(2).foreach { case Seq(n,m) =>
-
-      def register(a: ConstellationNode, b: ConstellationNode): Unit = {
-        val ipData = a.getIPData
-        val peerRegistrationRequest =
-          PeerRegistrationRequest(
-            ipData.canonicalHostName,
-            ipData.port,
-            a.configKeyPair.getPublic.toId
-          )
-        val res = a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
-        assert(res.isSuccess)
-      }
-      register(n,m)
-      register(m,n)
+    nodes.combinations(2).foreach {
+      case Seq(n, m) =>
+        def register(a: ConstellationNode, b: ConstellationNode): Unit = {
+          val ipData = a.getIPData
+          val peerRegistrationRequest =
+            PeerRegistrationRequest(
+              ipData.canonicalHostName,
+              ipData.port,
+              a.configKeyPair.getPublic.toId
+            )
+          val res = a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
+          assert(res.isSuccess)
+        }
+        register(n, m)
+        register(m, n)
     }
 
     Thread.sleep(1000)
@@ -84,7 +91,8 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
     // TODO: Assert actual values of knownIPs list
     nodes.foreach { n =>
       logger.debug(s"THING: $n: ${n.ipManager.listKnownIPs.size}")
-      assert(n.ipManager.listKnownIPs.size == 2)}
+      assert(n.ipManager.listKnownIPs.size == 2)
+    }
 
     assert(true)
   }

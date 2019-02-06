@@ -33,6 +33,6 @@ class KryoSerializerTest extends FlatSpec {
 
     assert(deserializedSorted.event.valid)
   }
-  */
+ */
 
 }

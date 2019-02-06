@@ -18,7 +18,7 @@ class UtilityTest extends FlatSpec {
   }
 
   "BigInt hash" should "XOR properly as a distance metric" in {
-/*
+    /*
 
     // Use bigint hex for dumping key hashes later.
     val hash = Fixtures.transaction3.hash
@@ -36,7 +36,7 @@ class UtilityTest extends FlatSpec {
 
     val xor2 = bi ^ BigInt(Fixtures.transaction2.hash, 16)
     println(xor > xor2)
-*/
+   */
 
   }
 
@@ -46,7 +46,7 @@ class UtilityTest extends FlatSpec {
     println(t.j)
     println(t.j.x[Test])
     assert(t.j.x[Test] == t)
-*/
+   */
   }
 
 }

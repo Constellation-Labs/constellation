@@ -15,7 +15,6 @@ case class Metrics(metrics: Map[String, String])
 object App extends JSApp {
 
   @JSExport
-
   def main(): Unit = {
 
     import scalatags.JsDom.all._
@@ -30,18 +29,24 @@ object App extends JSApp {
         action := "/setKeyPair",
         "Set node KeyPair:  ",
         input(
-          `type` := "text", name := "keyPair", value := ""
+          `type` := "text",
+          name := "keyPair",
+          value := ""
         )
       ),
       form(
         action := "/submitTX",
         "Submit transaction - address:  ",
         input(
-          `type` := "text", name := "address", value := ""
+          `type` := "text",
+          name := "address",
+          value := ""
         ),
         "amount:  ",
         input(
-          `type` := "text", name := "amount", value := ""
+          `type` := "text",
+          name := "amount",
+          value := ""
         ),
         button(
           `type` := "submit",
@@ -50,7 +55,9 @@ object App extends JSApp {
       )
     )
 
-    formsSeq.foreach{ f => forms.appendChild(f.render)}
+    formsSeq.foreach { f =>
+      forms.appendChild(f.render)
+    }
 
     val metricsDiv = dash.appendChild(div(id := "metrics").render).asInstanceOf[HTMLDivElement]
 
@@ -58,47 +65,54 @@ object App extends JSApp {
 
     val heartBeat = Timer(3000.millis)
 
-    heartBeat.foreach( _ => {
-      XHR.get[Metrics]({zo: Metrics =>
-        metricsDiv.innerHTML = ""
-        val zmt = zo.metrics.toSeq.map{
-          case ("address", v) =>
-            "address" -> Seq(a(href := s"/address/$v", v))
-          case ("peers", v) =>
-            val vs = v.split(" --- ").map{
-              pr =>
-                val fullStr = pr.split("API: ")
-                val address = fullStr.last.split(" ").head
-                div(fullStr.head,  a(href := address, address))
-            }.toSeq
-            "peers" -> vs
-          case ("last10TXHash", v) =>
-            "last10TXHash" -> v.split(",").map{ addr =>
-              div(a(href := s"/txHash/$addr", addr))
-            }.toSeq
-          case (k,v) => k -> Seq(div(v))
-        }
-        val mets = zmt.sortBy(_._1).map{
-          case (k,v) =>
-            tr(
-              td(k),
-              td(v)
-            )
-        }
-        val tbl = table(
-          tr(
-            th("Metric Name"),
-            th("Metric Value")
-          ),
-          mets
-        ).render
-        metricsDiv.appendChild(tbl)
-        //  println(z)
-      }, "/metrics")
-    }
-    )
+    heartBeat.foreach(_ => {
+      XHR.get[Metrics](
+        {
+          zo: Metrics =>
+            metricsDiv.innerHTML = ""
+            val zmt = zo.metrics.toSeq.map {
+              case ("address", v) =>
+                "address" -> Seq(a(href := s"/address/$v", v))
+              case ("peers", v) =>
+                val vs = v
+                  .split(" --- ")
+                  .map { pr =>
+                    val fullStr = pr.split("API: ")
+                    val address = fullStr.last.split(" ").head
+                    div(fullStr.head, a(href := address, address))
+                  }
+                  .toSeq
+                "peers" -> vs
+              case ("last10TXHash", v) =>
+                "last10TXHash" -> v
+                  .split(",")
+                  .map { addr =>
+                    div(a(href := s"/txHash/$addr", addr))
+                  }
+                  .toSeq
+              case (k, v) => k -> Seq(div(v))
+            }
+            val mets = zmt.sortBy(_._1).map {
+              case (k, v) =>
+                tr(
+                  td(k),
+                  td(v)
+                )
+            }
+            val tbl = table(
+              tr(
+                th("Metric Name"),
+                th("Metric Value")
+              ),
+              mets
+            ).render
+            metricsDiv.appendChild(tbl)
+          //  println(z)
+        },
+        "/metrics"
+      )
+    })
 
   }
 
 }
-

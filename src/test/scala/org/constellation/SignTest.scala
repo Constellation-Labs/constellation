@@ -31,15 +31,14 @@ class SignTest extends FlatSpec {
     val kp = KeyUtils.makeKeyPair()
     val data = TestSignable("a", 1)
     (0 to 2).foreach { d =>
-
-    }
+      }
 
     /* TODO
     val tx = createTransactionSafe("a", "b", 1L, kp)
     val grp = KryoSerializer.serializeGrouped(tx)
     val res = KryoSerializer.deserializeGrouped(grp.toList).asInstanceOf[Transaction]
     assert(res.txData.validSignatures)
-    */
+   */
 
   }
 

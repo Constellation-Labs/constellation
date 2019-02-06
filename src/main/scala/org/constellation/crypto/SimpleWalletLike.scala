@@ -10,7 +10,7 @@ trait SimpleWalletLike {
   val dao: DAO
 
   // TODO: Not this.
-  @volatile var wallet : Seq[KeyPair] = Seq()
+  @volatile var wallet: Seq[KeyPair] = Seq()
 
   // For generating additional keyPairs, maybe make this just regular API call instead.
 
@@ -20,8 +20,11 @@ trait SimpleWalletLike {
     pair
   }
 
-  def addresses: Seq[String] = wallet.map{_.address.address}
+  def addresses: Seq[String] = wallet.map { _.address.address }
 
-  def addressToKeyPair: Map[String, KeyPair] = wallet.map{ w => w.address.address -> w}.toMap
+  def addressToKeyPair: Map[String, KeyPair] =
+    wallet.map { w =>
+      w.address.address -> w
+    }.toMap
 
 }

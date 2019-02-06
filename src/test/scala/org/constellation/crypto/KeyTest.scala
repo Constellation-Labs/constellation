@@ -4,7 +4,7 @@ import org.scalatest.FlatSpec
 
 class KeyTest extends FlatSpec {
 
-  private val testKeys = Seq.fill(20){KeyUtils.makeKeyPair()}
+  private val testKeys = Seq.fill(20) { KeyUtils.makeKeyPair() }
 
   "Hex encodings public" should "strip prefix and decode public keys properly" in {
 
@@ -16,7 +16,7 @@ class KeyTest extends FlatSpec {
 
   "Hex encodings private" should "strip prefix and decode private keys properly" in {
 
-    testKeys.foreach{ kp =>
+    testKeys.foreach { kp =>
       val hex = KeyUtils.privateKeyToHex(kp.getPrivate)
       assert(KeyUtils.hexToPrivateKey(hex) == kp.getPrivate)
     }

@@ -13,45 +13,48 @@ import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
 // Should channelId be associated with a unique keyPair or not?
 
 case class ChannelMessageData(
-                               message: String,
-                               previousMessageDataHash: String,
-                               channelId: String
-                             ) extends Signable
+  message: String,
+  previousMessageDataHash: String,
+  channelId: String
+) extends Signable
 
 case class ChannelOpen(
-                      jsonSchema: Option[String] = None,
-                      allowInvalid: Boolean = true
-                      )
+  jsonSchema: Option[String] = None,
+  allowInvalid: Boolean = true
+)
 
 case class SignedData[+D <: Signable](
-                                          data: D,
-                                          signatures: SignatureBatch
-                                        ) extends Signable
+  data: D,
+  signatures: SignatureBatch
+) extends Signable
 
 case class ChannelMessageMetadata(
-                                 channelMessage: ChannelMessage,
-                                 blockHash: Option[String] = None,
-                                 snapshotHash: Option[String] = None
-                                 )
+  channelMessage: ChannelMessage,
+  blockHash: Option[String] = None,
+  snapshotHash: Option[String] = None
+)
 
 case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 
 object ChannelMessage {
 
-  def create(message: String, previous: String, channelId: String)(implicit dao: DAO): ChannelMessage = {
+  def create(message: String, previous: String, channelId: String)(
+    implicit dao: DAO
+  ): ChannelMessage = {
     val data = ChannelMessageData(message, previous, channelId)
     ChannelMessage(
       SignedData(data, hashSignBatchZeroTyped(data, dao.keyPair))
     )
   }
 
-  def createGenesis(channelOpenRequest: ChannelOpenRequest)(implicit dao: DAO): Option[ChannelMessage] = {
-    if (
-      dao.messageService.get(channelOpenRequest.channelId).isEmpty &&
-      !dao.threadSafeMessageMemPool.activeChannels.contains(channelOpenRequest.channelId)
-    ) {
+  def createGenesis(
+    channelOpenRequest: ChannelOpenRequest
+  )(implicit dao: DAO): Option[ChannelMessage] = {
+    if (dao.messageService.get(channelOpenRequest.channelId).isEmpty &&
+        !dao.threadSafeMessageMemPool.activeChannels.contains(channelOpenRequest.channelId)) {
 
-      val genesisMessageStr = ChannelOpen(channelOpenRequest.jsonSchema, channelOpenRequest.acceptInvalid).json
+      val genesisMessageStr =
+        ChannelOpen(channelOpenRequest.jsonSchema, channelOpenRequest.acceptInvalid).json
       val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.channelId)
       val semaphore = new Semaphore(1)
       dao.threadSafeMessageMemPool.activeChannels(channelOpenRequest.channelId) = semaphore
@@ -61,41 +64,46 @@ object ChannelMessage {
     } else None
   }
 
-  def createMessages(channelSendRequest: ChannelSendRequest)(implicit dao: DAO): Seq[ChannelMessage] = {
+  def createMessages(
+    channelSendRequest: ChannelSendRequest
+  )(implicit dao: DAO): Seq[ChannelMessage] = {
     // Ignores locking right now
-    val previous = dao.messageService.get(channelSendRequest.channelId).get.channelMessage.signedMessageData.hash
-    val messages = channelSendRequest.messages.foldLeft(previous -> Seq[ChannelMessage]()){
-      case ((prvHash, signedMessages), nextMessage) =>
-        val nextSigned = create(nextMessage, previous, channelSendRequest.channelId)
-        nextSigned.signedMessageData.hash -> (signedMessages :+ nextSigned)
-    }._2
+    val previous =
+      dao.messageService.get(channelSendRequest.channelId).get.channelMessage.signedMessageData.hash
+    val messages = channelSendRequest.messages
+      .foldLeft(previous -> Seq[ChannelMessage]()) {
+        case ((prvHash, signedMessages), nextMessage) =>
+          val nextSigned = create(nextMessage, previous, channelSendRequest.channelId)
+          nextSigned.signedMessageData.hash -> (signedMessages :+ nextSigned)
+      }
+      ._2
     dao.threadSafeMessageMemPool.put(messages, overrideLimit = true)
     messages
   }
 }
 
 case class ChannelProof(
-                       channelMessageMetadata: ChannelMessageMetadata,
-                       // snapshotProof: MerkleProof,
-                       checkpointProof: MerkleProof,
-                       checkpointMessageProof: MerkleProof
-                       )
+  channelMessageMetadata: ChannelMessageMetadata,
+  // snapshotProof: MerkleProof,
+  checkpointProof: MerkleProof,
+  checkpointMessageProof: MerkleProof
+)
 
 case class ChannelOpenRequest(
-                             channelId: String,
-                             jsonSchema: Option[String] = None,
-                             acceptInvalid: Boolean = true
-                             )
+  channelId: String,
+  jsonSchema: Option[String] = None,
+  acceptInvalid: Boolean = true
+)
 
 case class ChannelSendRequest(
-                             channelId: String,
-                             messages: Seq[String]
-                             )
+  channelId: String,
+  messages: Seq[String]
+)
 
 case class SensorData(
-                         temperature: Int,
-                         name: String
-                       )
+  temperature: Int,
+  name: String
+)
 
 object SensorData {
 
@@ -119,7 +127,8 @@ object SensorData {
   val schema: JsonNode = asJsonNode(parse(jsonSchema))
   val validator: JsonValidator = JsonSchemaFactory.byDefault().getValidator
 
-  def validate(input: String): ProcessingReport = validator.validate(schema, asJsonNode(parse(input)))
+  def validate(input: String): ProcessingReport =
+    validator.validate(schema, asJsonNode(parse(input)))
 
   //def validate()
 
@@ -148,4 +157,4 @@ object ChannelMessage {
   }
 
 }
-*/
+ */

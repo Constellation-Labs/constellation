@@ -37,8 +37,8 @@ trait NodeData {
   @volatile var nodeState: NodeState = NodeState.PendingDownload
 
   def setNodeState(
-                  nodeState_ : NodeState
-                  ): Unit = {
+    nodeState_ : NodeState
+  ): Unit = {
     nodeState = nodeState_
     metrics.updateMetric("nodeState", nodeState.toString)
   }

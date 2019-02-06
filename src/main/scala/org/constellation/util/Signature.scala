@@ -25,9 +25,9 @@ case class SingleHashSignature(hash: String, hashSignature: HashSignature) {
 }
 
 case class HashSignature(
-                          signature: String,
-                          id: Id
-                        ) extends Ordered[HashSignature] {
+  signature: String,
+  id: Id
+) extends Ordered[HashSignature] {
 
   def publicKey: PublicKey = id.toPublicKey
 
@@ -42,9 +42,9 @@ case class HashSignature(
 }
 
 case class SignatureBatch(
-                           hash: String,
-                           signatures: Seq[HashSignature]
-                         ) extends Monoid[SignatureBatch] {
+  hash: String,
+  signatures: Seq[HashSignature]
+) extends Monoid[SignatureBatch] {
 
   def valid: Boolean = {
     signatures.forall(_.valid(hash))
@@ -64,7 +64,7 @@ case class SignatureBatch(
   def plus(other: SignatureBatch): SignatureBatch = {
     val toAdd = other.signatures
     val newSignatures = (signatures ++ toAdd).distinct
-    val unique = newSignatures.groupBy(_.id).map{_._2.maxBy(_.signature)}.toSeq.sorted
+    val unique = newSignatures.groupBy(_.id).map { _._2.maxBy(_.signature) }.toSeq.sorted
     this.copy(
       signatures = unique
     )
@@ -73,7 +73,7 @@ case class SignatureBatch(
   def withSignature(hs: HashSignature): SignatureBatch = {
     val toAdd = Seq(hs)
     val newSignatures = (signatures ++ toAdd).distinct
-    val unique = newSignatures.groupBy(_.id).map{_._2.maxBy(_.signature)}.toSeq.sorted
+    val unique = newSignatures.groupBy(_.id).map { _._2.maxBy(_.signature) }.toSeq.sorted
     this.copy(
       signatures = unique
     )
@@ -112,8 +112,7 @@ trait SignHelpExt {
                         dst: String,
                         amount: Long,
                         keyPair: KeyPair,
-                        normalized: Boolean = true
-                       ): Transaction = {
+                        normalized: Boolean = true): Transaction = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
     val txData = TransactionEdgeData(amountToUse)
