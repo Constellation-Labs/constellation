@@ -2,6 +2,7 @@ package org.constellation
 
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
+import java.util.Random
 
 import constellation._
 import org.constellation.crypto.KeyUtils
@@ -39,13 +40,22 @@ object Fixtures {
 
   val addPeerRequest = PeerMetadata("host:", 1, 1, id: Id)
 
+  val tempKeySet = Seq(tempKey, tempKey2, tempKey3, tempKey4, tempKey5)
+
   val idSet4 = Set(id1, id2, id3, id4)
   val idSet4B = Set(id1, id2, id3, id5)
   val idSet5 = Set(id1, id2, id3, id4, id5)
 
-  def dummyTx(data: DAO, amt: Long = 1L) = {
-    val sendRequest = SendToAddress(id.address, amt)
+  def getRandomElement[T](list: Seq[T], random: Random): T = list(random.nextInt(list.length))
+
+  def dummyTx(data: DAO, amt: Long = 1L, src: Id = id) = {
+    val sendRequest = SendToAddress(src.address, amt)
     createTransaction(data.selfAddressStr, sendRequest.dst, sendRequest.amountActual, data.keyPair)
+  }
+
+  def makeTransaction(srcAddressString: String, destinationAddressString: String, amt: Long, keyPair: KeyPair) = {
+    val sendRequest = SendToAddress(destinationAddressString, amt)
+    createTransaction(srcAddressString, sendRequest.dst, sendRequest.amountActual, keyPair)
   }
 
 }
