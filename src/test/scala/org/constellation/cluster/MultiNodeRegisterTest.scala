@@ -7,6 +7,7 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import com.typesafe.scalalogging.Logger
+import constellation._
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.util.TestNode
 import org.constellation.{ConstellationNode, HostPort}
@@ -62,13 +63,14 @@ class MultiNodeRegisterTest extends AsyncFlatSpecLike with Matchers with BeforeA
     }
 
     nodes.combinations(2).foreach { case Seq(n,m) =>
+
       def register(a: ConstellationNode, b: ConstellationNode): Unit = {
         val ipData = a.getIPData
         val peerRegistrationRequest =
           PeerRegistrationRequest(
             ipData.canonicalHostName,
             ipData.port,
-            a.configKeyPair.getPublic.toString
+            a.configKeyPair.getPublic.toId
           )
         val res = a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
         assert(res.isSuccess)

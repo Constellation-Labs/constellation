@@ -1,14 +1,14 @@
 package org.constellation.primitives
 
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
-import akka.testkit.{TestActorRef, TestKit}
-import org.constellation.DAO
-import akka.actor.{ActorRef, ActorSystem, Props}
+import java.util.Collections
+
+import akka.actor.ActorSystem
+import akka.testkit.TestKit
 import com.typesafe.scalalogging.Logger
 import io.prometheus.client.CollectorRegistry
+import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
-import org.constellation.util.Heartbeat
-import java.util.Collections
+import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 
 class MetricsManagerTest ()
   extends TestKit(ActorSystem("ConstellationTest"))
@@ -33,16 +33,12 @@ class MetricsManagerTest ()
   dao.preventLocalhostAsPeer = false
   dao.externalHostString = ""
   dao.externlPeerHTTPPort = 0
-
   val heartBeat: ActorRef = system.actorOf(
     Props(new Heartbeat()), "Heartbeat_Test"
   )
-
   dao.heartbeatActor = heartBeat
   logger.info("DAO actor initialized")
 
-  val metricsManager = TestActorRef(Props(new MetricsManager()), "MetricsManager_Test")
-  dao.metricsManager = metricsManager
   logger.info("MetricsManager actor initialized")
 
   "MetricsManager" should "report micrometer metrics" in {

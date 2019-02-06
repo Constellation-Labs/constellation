@@ -1,7 +1,8 @@
 package org.constellation.tx
 
-import org.constellation.primitives.Schema.SendToAddress
 import org.scalatest.FlatSpec
+
+import org.constellation.primitives.Schema.SendToAddress
 
 class TXTests extends FlatSpec {
 
@@ -20,9 +21,6 @@ class TXTests extends FlatSpec {
         SendToAddress("asdf", 1, normalized = false)
     )
 
-
-
   }
-
 
 }

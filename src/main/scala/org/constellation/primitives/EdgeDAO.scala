@@ -1,19 +1,17 @@
 package org.constellation.primitives
 
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
-
 import akka.util.Timeout
 import com.twitter.storehaus.cache.MutableLRUCache
-import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
-import org.constellation.consensus._
-import org.constellation.primitives.Schema._
-import org.constellation.{DAO, ProcessingConfig}
-
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 import scala.util.Random
 
+import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
+import org.constellation.consensus._
+import org.constellation.primitives.Schema._
+import org.constellation.{DAO, ProcessingConfig}
 
 class ThreadSafeTXMemPool() {
 
@@ -53,24 +51,33 @@ class ThreadSafeTXMemPool() {
 
 class ThreadSafeMessageMemPool() {
 
-  private var messages = Seq[ChannelMessage]()
+  private var messages = Seq[Seq[ChannelMessage]]()
 
   val activeChannels: TrieMap[String, Semaphore] = TrieMap()
+
+  val messageHashToSendRequest: TrieMap[String, ChannelSendRequest] = TrieMap()
+
+  def release(messages: Seq[ChannelMessage]): Unit = {
+    messages.foreach { m =>
+        activeChannels(m.signedMessageData.data.channelId)
+        .release()
+    }
+  }
 
   def pull(minCount: Int): Option[Seq[ChannelMessage]] = this.synchronized{
     if (messages.size > minCount) {
       val (left, right) = messages.splitAt(minCount)
       messages = right
-      Some(left)
+      Some(left.flatten)
     } else None
   }
 
   def batchPutDebug(messagesToAdd: Seq[ChannelMessage]) : Boolean = this.synchronized{
-    messages ++= messagesToAdd
+    //messages ++= messagesToAdd
     true
   }
 
-  def put(message: ChannelMessage, overrideLimit: Boolean = false)(implicit dao: DAO): Boolean = this.synchronized{
+  def put(message: Seq[ChannelMessage], overrideLimit: Boolean = false)(implicit dao: DAO): Boolean = this.synchronized{
     val notContained = !messages.contains(message)
 
     if (notContained) {
@@ -95,10 +102,9 @@ class ThreadSafeTipService() {
 
   implicit val timeout: Timeout = Timeout(15, TimeUnit.SECONDS)
 
-
   private var thresholdMetCheckpoints: Map[String, TipData] = Map()
   var acceptedCBSinceSnapshot: Seq[String] = Seq()
-  private var facilitators: Map[Id, PeerData] = Map()
+  var facilitators: Map[Id, PeerData] = Map()
   private var snapshot: Snapshot = Snapshot.snapshotZero
 
   def tips: Map[String, TipData] = thresholdMetCheckpoints
@@ -115,10 +121,10 @@ class ThreadSafeTipService() {
     )
   )
 
-
   var totalNumCBsInShapshots = 0L
 
   // ONLY TO BE USED BY DOWNLOAD COMPLETION CALLER
+
   def setSnapshot(latestSnapshotInfo: SnapshotInfo)(implicit dao: DAO): Unit = this.synchronized{
     snapshot = latestSnapshotInfo.snapshot
     lastSnapshotHeight = latestSnapshotInfo.lastSnapshotHeight
@@ -133,30 +139,27 @@ class ThreadSafeTipService() {
 
     latestSnapshotInfo.snapshotCache.foreach{
       h =>
-        dao.metricsManager ! IncrementMetric("checkpointAccepted")
+        dao.metrics.incrementMetric("checkpointAccepted")
         dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
+        h.checkpointBlock.get.storeSOE()
         h.checkpointBlock.get.transactions.foreach{
           _ =>
-            dao.metricsManager ! IncrementMetric("transactionAccepted")
+            dao.metrics.incrementMetric("transactionAccepted")
         }
     }
 
     latestSnapshotInfo.acceptedCBSinceSnapshotCache.foreach{
       h =>
         dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
-        dao.metricsManager ! IncrementMetric("checkpointAccepted")
+        h.checkpointBlock.get.storeSOE()
+        dao.metrics.incrementMetric("checkpointAccepted")
         h.checkpointBlock.get.transactions.foreach{
           _ =>
-          dao.metricsManager ! IncrementMetric("transactionAccepted")
+          dao.metrics.incrementMetric("transactionAccepted")
         }
     }
 
-    dao.metricsManager ! UpdateMetric(
-      "acceptCBCacheMatchesAcceptedSize",
-      (latestSnapshotInfo.acceptedCBSinceSnapshot.size ==
-        latestSnapshotInfo.acceptedCBSinceSnapshotCache.size).toString
-    )
-
+    dao.metrics.updateMetric("acceptCBCacheMatchesAcceptedSize", (latestSnapshotInfo.acceptedCBSinceSnapshot.size == latestSnapshotInfo.acceptedCBSinceSnapshotCache.size).toString)
 
   }
 
@@ -177,7 +180,7 @@ class ThreadSafeTipService() {
 
   def syncBufferAccept(cb: CheckpointCacheData)(implicit dao: DAO): Unit = {
     syncBuffer :+= cb
-    dao.metricsManager ! UpdateMetric("syncBufferSize", syncBuffer.size.toString)
+    dao.metrics.updateMetric("syncBufferSize", syncBuffer.size.toString)
   }
 
   def attemptSnapshot()(implicit dao: DAO): Unit = this.synchronized{
@@ -185,15 +188,14 @@ class ThreadSafeTipService() {
     // Sanity check memory protection
     if (thresholdMetCheckpoints.size > dao.processingConfig.maxActiveTipsAllowedInMemory) {
       thresholdMetCheckpoints = thresholdMetCheckpoints.slice(0, 100)
-      dao.metricsManager ! IncrementMetric("memoryExceeded_thresholdMetCheckpoints")
-      dao.metricsManager ! UpdateMetric("activeTips", thresholdMetCheckpoints.size.toString)
+      dao.metrics.incrementMetric("memoryExceeded_thresholdMetCheckpoints")
+      dao.metrics.updateMetric("activeTips", thresholdMetCheckpoints.size.toString)
     }
     if (acceptedCBSinceSnapshot.size > dao.processingConfig.maxAcceptedCBHashesInMemory) {
       acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.slice(0, 100)
-      dao.metricsManager ! IncrementMetric("memoryExceeded_acceptedCBSinceSnapshot")
-      dao.metricsManager ! UpdateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
+      dao.metrics.incrementMetric("memoryExceeded_acceptedCBSinceSnapshot")
+      dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
     }
-
 
     val peerIds = dao.peerInfo //(dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
     val facilMap = peerIds.filter{case (_, pd) =>
@@ -205,13 +207,13 @@ class ThreadSafeTipService() {
     if (dao.nodeState == NodeState.Ready && acceptedCBSinceSnapshot.nonEmpty) {
 
       val minTipHeight = getMinTipHeight()
-      dao.metricsManager ! UpdateMetric("minTipHeight", minTipHeight.toString)
+      dao.metrics.updateMetric("minTipHeight", minTipHeight.toString)
 
       val nextHeightInterval = lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval
 
       val canSnapshot = minTipHeight > (nextHeightInterval + dao.processingConfig.snapshotHeightDelayInterval)
       if (!canSnapshot) {
-        dao.metricsManager ! IncrementMetric("snapshotHeightIntervalConditionNotMet")
+        dao.metrics.incrementMetric("snapshotHeightIntervalConditionNotMet")
       } else {
 
         val maybeDatas = acceptedCBSinceSnapshot.map(dao.checkpointService.get)
@@ -223,7 +225,7 @@ class ThreadSafeTipService() {
         }
 
         if (blocksWithinHeightInterval.isEmpty) {
-          dao.metricsManager ! IncrementMetric("snapshotNoBlocksWithinHeightInterval")
+          dao.metrics.incrementMetric("snapshotNoBlocksWithinHeightInterval")
         } else {
 
           val blockCaches = blocksWithinHeightInterval.map {
@@ -238,7 +240,7 @@ class ThreadSafeTipService() {
           // TODO: Make this a future and have it not break the unit test
           // Also make the db puts blocking, may help for different issue
           if (snapshot != Snapshot.snapshotZero) {
-            dao.metricsManager ! IncrementMetric("snapshotCount")
+            dao.metrics.incrementMetric("snapshotCount")
 
             // Write snapshot to file
             tryWithMetric({
@@ -247,7 +249,7 @@ class ThreadSafeTipService() {
               }
               if (maybeBlocks.exists(_.exists(_.checkpointBlock.isEmpty))) {
                 // TODO : This should never happen, if it does we need to reset the node state and redownload
-                dao.metricsManager ! IncrementMetric("snapshotWriteToDiskMissingData")
+                dao.metrics.incrementMetric("snapshotWriteToDiskMissingData")
               }
               val flatten = maybeBlocks.flatten.sortBy(_.checkpointBlock.map {
                 _.baseHash
@@ -261,10 +263,9 @@ class ThreadSafeTipService() {
             Snapshot.acceptSnapshot(snapshot)
             dao.checkpointService.delete(snapshot.checkpointBlocks.toSet)
 
-
             totalNumCBsInShapshots += snapshot.checkpointBlocks.size
-            dao.metricsManager ! UpdateMetric("totalNumCBsInShapshots", totalNumCBsInShapshots.toString)
-            dao.metricsManager ! UpdateMetric("lastSnapshotHash", snapshot.hash)
+            dao.metrics.updateMetric("totalNumCBsInShapshots", totalNumCBsInShapshots.toString)
+            dao.metrics.updateMetric("lastSnapshotHash", snapshot.hash)
           }
 
           // TODO: Verify from file
@@ -273,17 +274,17 @@ class ThreadSafeTipService() {
 
           val lastSnapshotVerification = File(dao.snapshotPath, snapshot.lastSnapshot).read
           if (lastSnapshotVerification.isEmpty) {
-            dao.metricsManager ! IncrementMetric("snapshotVerificationFailed")
+            dao.metrics.incrementMetric("snapshotVerificationFailed")
           } else {
-            dao.metricsManager ! IncrementMetric("snapshotVerificationCount")
+            dao.metrics.incrementMetric("snapshotVerificationCount")
             if (
               !lastSnapshotVerification.get.checkpointBlocks.map {
                 dao.checkpointService.get
               }.forall(_.exists(_.checkpointBlock.nonEmpty))
             ) {
-              dao.metricsManager ! IncrementMetric("snapshotCBVerificationFailed")
+              dao.metrics.incrementMetric("snapshotCBVerificationFailed")
             } else {
-              dao.metricsManager ! IncrementMetric("snapshotCBVerificationCount")
+              dao.metrics.incrementMetric("snapshotCBVerificationCount")
             }
 
           }
@@ -293,9 +294,9 @@ class ThreadSafeTipService() {
           lastSnapshotHeight = nextHeightInterval
           snapshot = nextSnapshot
           acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.filterNot(hashesForNextSnapshot.contains)
-          dao.metricsManager ! UpdateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
-          dao.metricsManager ! UpdateMetric("lastSnapshotHeight", lastSnapshotHeight.toString)
-          dao.metricsManager ! UpdateMetric("nextSnapshotHeight", (lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval).toString)
+          dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
+          dao.metrics.updateMetric("lastSnapshotHeight", lastSnapshotHeight.toString)
+          dao.metrics.updateMetric("nextSnapshotHeight", (lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval).toString)
         }
       }
     }
@@ -306,8 +307,8 @@ class ThreadSafeTipService() {
     thresholdMetCheckpoints += genesisObservation.initialDistribution2.baseHash -> TipData(genesisObservation.initialDistribution2, 0)
   }
 
-  def pull()(implicit dao: DAO): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = this.synchronized{
-    if (thresholdMetCheckpoints.size >= 2 && facilitators.nonEmpty) {
+  def pull(allowEmptyFacilitators: Boolean = false)(implicit dao: DAO): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = this.synchronized{
+    val res = if (thresholdMetCheckpoints.size >= 2 && (facilitators.nonEmpty || allowEmptyFacilitators)) {
       val tips = Random.shuffle(thresholdMetCheckpoints.toSeq).take(2)
 
       val tipSOE = tips.map {
@@ -317,28 +318,36 @@ class ThreadSafeTipService() {
       val mergedTipHash = tipSOE.map {_.hash}.mkString("")
 
       val totalNumFacil = facilitators.size
-      // TODO: Use XOR distance instead as it handles peer data mismatch cases better
-      val facilitatorIndex = (BigInt(mergedTipHash, 16) % totalNumFacil).toInt
-      val sortedFacils = facilitators.toSeq.sortBy(_._1.encodedId.b58Encoded)
-      val selectedFacils = Seq.tabulate(dao.processingConfig.numFacilitatorPeers) { i => (i + facilitatorIndex) % totalNumFacil }.map {
-        sortedFacils(_)
+
+      val finalFacilitators = if (totalNumFacil > 0) {
+        // TODO: Use XOR distance instead as it handles peer data mismatch cases better
+        val facilitatorIndex = (BigInt(mergedTipHash, 16) % totalNumFacil).toInt
+        val sortedFacils = facilitators.toSeq.sortBy(_._1.hex)
+        val selectedFacils = Seq.tabulate(dao.processingConfig.numFacilitatorPeers) { i => (i + facilitatorIndex) % totalNumFacil }.map {
+          sortedFacils(_)
+        }
+        selectedFacils.toMap
+      } else {
+        Map[Id, PeerData]()
       }
-      val finalFacilitators = selectedFacils.toMap
-      dao.metricsManager ! UpdateMetric("activeTips", thresholdMetCheckpoints.size.toString)
+
 
       Some(tipSOE -> finalFacilitators)
     } else None
+
+    dao.metrics.updateMetric("activeTips", thresholdMetCheckpoints.size.toString)
+    res
   }
 
-
   // TODO: Synchronize only on values modified by this, same for other functions
+
   def accept(checkpointCacheData: CheckpointCacheData)(implicit dao: DAO): Unit = this.synchronized {
 
     if (dao.checkpointService.contains(checkpointCacheData.checkpointBlock.map {
       _.baseHash
     }.getOrElse(""))) {
 
-      dao.metricsManager ! IncrementMetric("checkpointAcceptBlockAlreadyStored")
+      dao.metrics.incrementMetric("checkpointAcceptBlockAlreadyStored")
 
     } else {
 
@@ -354,7 +363,7 @@ class ThreadSafeTipService() {
               case TipData(block, numUses) =>
 
                 def doRemove(): Option[String] = {
-                  dao.metricsManager ! IncrementMetric("checkpointTipsRemoved")
+                  dao.metrics.incrementMetric("checkpointTipsRemoved")
                   Some(block.baseHash)
                 }
 
@@ -376,7 +385,7 @@ class ThreadSafeTipService() {
               case TipData(block, numUses) =>
 
                 def doUpdate(): Option[(String, TipData)] = {
-                  dao.metricsManager ! IncrementMetric("checkpointTipsIncremented")
+                  dao.metrics.incrementMetric("checkpointTipsIncremented")
                   Some(block.baseHash -> TipData(block, numUses + 1))
                 }
 
@@ -392,10 +401,10 @@ class ThreadSafeTipService() {
           keysToRemove
 
         if (acceptedCBSinceSnapshot.contains(checkpointBlock.baseHash)) {
-          dao.metricsManager ! IncrementMetric("checkpointAcceptedButAlreadyInAcceptedCBSinceSnapshot")
+          dao.metrics.incrementMetric("checkpointAcceptedButAlreadyInAcceptedCBSinceSnapshot")
         } else {
           acceptedCBSinceSnapshot = acceptedCBSinceSnapshot :+ checkpointBlock.baseHash
-          dao.metricsManager ! UpdateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
+          dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
         }
 
       }
@@ -404,11 +413,9 @@ class ThreadSafeTipService() {
 
 }
 
-
 // TODO: Use atomicReference increment pattern instead of synchronized
 
 class StorageService[T](size: Int = 50000) {
-
 
   private val lruCache: MutableLRUCache[String, T] = {
     import com.twitter.storehaus.cache._
@@ -426,6 +433,7 @@ class StorageService[T](size: Int = 50000) {
   // mutexStore.getOrElseUpdate(hash)
   // Map[Address, AtomicUpdater] // computeIfAbsent getOrElseUpdate
 /*  class AtomicUpdater {
+
     def update(
                 key: String,
                 updateFunc: T => T,
@@ -469,16 +477,20 @@ class StorageService[T](size: Int = 50000) {
     lruCache.iterator.toMap
   }
 
-
 }
 
-
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
+
 class CheckpointService(size: Int = 50000) extends StorageService[CheckpointCacheData](size)
+
+class SOEService(size: Int = 50000) extends StorageService[SignedObservationEdgeCache](size)
+
 class MessageService(size: Int = 50000) extends StorageService[ChannelMessageMetadata](size)
+
 class TransactionService(size: Int = 50000) extends StorageService[TransactionCacheData](size) {
   private val queue = mutable.Queue[TransactionSerialized]()
   private val maxQueueSize = 20
+
   override def put(
     key: String,
     cache: TransactionCacheData
@@ -496,6 +508,7 @@ class TransactionService(size: Int = 50000) extends StorageService[TransactionCa
 
   def getLast20TX = queue.reverse
 }
+
 class AddressService(size: Int = 50000) extends StorageService[AddressCacheData](size)
 
 trait EdgeDAO {
@@ -504,21 +517,29 @@ trait EdgeDAO {
 
   @volatile var blockFormationInProgress: Boolean = false
 
+  val publicReputation: TrieMap[Id, Double] = TrieMap()
+  val secretReputation: TrieMap[Id, Double] = TrieMap()
+
+  val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
   val checkpointService = new CheckpointService(processingConfig.checkpointLRUMaxSize)
   val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
   val addressService = new AddressService(processingConfig.addressLRUMaxSize)
   val messageService = new MessageService()
+  val soeService = new SOEService()
 
   val threadSafeTXMemPool = new ThreadSafeTXMemPool()
   val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
   val threadSafeTipService = new ThreadSafeTipService()
 
+  var genesisBlock: Option[CheckpointBlock] = None
   var genesisObservation: Option[GenesisObservation] = None
-  def maxWidth: Int = processingConfig.maxWidth
-  def minCheckpointFormationThreshold: Int = processingConfig.minCheckpointFormationThreshold
-  def minCBSignatureThreshold: Int = processingConfig.numFacilitatorPeers
 
+  def maxWidth: Int = processingConfig.maxWidth
+
+  def minCheckpointFormationThreshold: Int = processingConfig.minCheckpointFormationThreshold
+
+  def minCBSignatureThreshold: Int = processingConfig.numFacilitatorPeers
 
   val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
 
@@ -541,6 +562,5 @@ trait EdgeDAO {
   @volatile var peerInfo: Map[Id, PeerData] = Map()
 
   def readyPeers: Map[Id, PeerData] = peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
-
 
 }

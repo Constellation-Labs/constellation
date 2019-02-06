@@ -7,9 +7,11 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.scalalogging.Logger
 import constellation._
+import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
@@ -20,7 +22,7 @@ import scala.util.Random
 object RandomData {
 
   val logger = Logger("RandomData")
-  
+
   val keyPairs: Seq[KeyPair] = Seq.fill(10)(makeKeyPair())
 
   val go: GenesisObservation = Genesis.createGenesisAndInitialDistributionDirect(
@@ -33,9 +35,9 @@ object RandomData {
 
   val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
 
-  def randomBlock(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): Schema.CheckpointBlock = {
+  def randomBlock(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): CheckpointBlock = {
     val txs = Seq.fill(5)(randomTransaction)
-    EdgeProcessor.createCheckpointBlock(txs, tips)(startingKeyPair)
+    CheckpointBlock.createCheckpointBlock(txs, tips.map{s => TypedEdgeHash(s.hash, EdgeHashType.CheckpointHash)})(startingKeyPair)
   }
 
   def randomTransaction: Transaction = {
@@ -107,9 +109,7 @@ class RandomDataTest extends FlatSpec {
     var width = 2
     val maxWidth = 50
 
-
     val activeBlocks = TrieMap[SignedObservationEdge, Int]()
-
 
     val maxNumBlocks = 1000
     var blockNum = 0
@@ -124,13 +124,12 @@ class RandomDataTest extends FlatSpec {
 
     val convMap = TrieMap[String, Int]()
 
-
     val snapshotInterval = 10
 
     while (blockNum < maxNumBlocks) {
 
       blockNum += 1
-      val tips = Random.shuffle(activeBlocks).take(2)
+      val tips = Random.shuffle(activeBlocks.toList).take(2)
 
       tips.foreach { case (tip, numUses) =>
 
@@ -159,7 +158,6 @@ class RandomDataTest extends FlatSpec {
       width = activeBlocks.size
 
       block
-
 
     }
 
@@ -190,9 +188,7 @@ class RandomDataTest extends FlatSpec {
 
     //  file"../d3-dag/test/data/dag.json".write(json)
 
-
     //createTransaction()
-
 
   }
 
@@ -208,12 +204,8 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
 
   (dao.id _).when().returns(Fixtures.id)
 
-  val hbProbe = TestProbe.apply("hearthbeat")
-  dao.heartbeatActor = hbProbe.ref
-
-  val metricsProbe = TestProbe.apply("metricsManager")
-  dao.metricsManager = metricsProbe.ref
-
+  dao.keyPair = KeyUtils.makeKeyPair()
+  dao.metrics = new Metrics()
   val peerProbe = TestProbe.apply("peerManager")
   dao.peerManager = peerProbe.ref
 
@@ -252,8 +244,8 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
           getAddress(e) -> 0L
         ))
 
-        val cbInit1 = EdgeProcessor.createCheckpointBlock(txs1.toSeq, startingTips)(keyPairs.head)
-        val cbInit2 = EdgeProcessor.createCheckpointBlock(txs2.toSeq, startingTips)(keyPairs.head)
+        val cbInit1 = CheckpointBlock.createCheckpointBlockSOE(txs1.toSeq, startingTips)(keyPairs.head)
+        val cbInit2 = CheckpointBlock.createCheckpointBlockSOE(txs2.toSeq, startingTips)(keyPairs.head)
 
         cbInit1.store(CheckpointCacheData(Some(cbInit1)))
         cbInit2.store(CheckpointCacheData(Some(cbInit2)))
@@ -264,27 +256,27 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
 
         // First group
         val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
-        val cb1 = EdgeProcessor.createCheckpointBlock(Seq(tx1), tips)(keyPairs.head)
+        val cb1 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx1), tips)(keyPairs.head)
 
         val tx2 = createTransaction(getAddress(a), getAddress(b), 75L, a)
-        val cb2 = EdgeProcessor.createCheckpointBlock(Seq(tx2), tips)(keyPairs.head)
+        val cb2 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx2), tips)(keyPairs.head)
 
         val tx3 = createTransaction(getAddress(d), getAddress(e), 5L, d)
-        val cb3 = EdgeProcessor.createCheckpointBlock(Seq(tx3), Seq(cb1.soe, cb2.soe))(keyPairs.head)
+        val cb3 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx3), Seq(cb1.soe, cb2.soe))(keyPairs.head)
 
         // Second group
         val tx4 = createTransaction(getAddress(c), getAddress(a), 75L, c)
-        val cb4 = EdgeProcessor.createCheckpointBlock(Seq(tx4), tips)(keyPairs.head)
+        val cb4 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx4), tips)(keyPairs.head)
 
         val tx5 = createTransaction(getAddress(c), getAddress(a), 75L, c)
-        val cb5 = EdgeProcessor.createCheckpointBlock(Seq(tx5), tips)(keyPairs.head)
+        val cb5 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx5), tips)(keyPairs.head)
 
         val tx6 = createTransaction(getAddress(d), getAddress(e), 5L, d)
-        val cb6 = EdgeProcessor.createCheckpointBlock(Seq(tx6), Seq(cb4.soe, cb5.soe))(keyPairs.head)
+        val cb6 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx6), Seq(cb4.soe, cb5.soe))(keyPairs.head)
 
         // Tip
         val tx7 = createTransaction(getAddress(d), getAddress(e), 5L, d)
-        val cb7 = EdgeProcessor.createCheckpointBlock(Seq(tx7), Seq(cb3.soe, cb6.soe))(keyPairs.head)
+        val cb7 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))(keyPairs.head)
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
           .foreach(cb => cb.store(CheckpointCacheData(Some(cb))))
@@ -303,7 +295,7 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
           createTransaction(getAddress(c), getAddress(b), 75L, c)
         )
 
-        val cb = EdgeProcessor.createCheckpointBlock(txs, startingTips)(keyPairs.head)
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)(keyPairs.head)
 
         fill(Map(
           getAddress(a) -> 74L,
@@ -322,7 +314,7 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
         val tx = createTransaction(getAddress(a), getAddress(b), 75L, a)
         val txs = Seq(tx, tx)
 
-        val cb = EdgeProcessor.createCheckpointBlock(txs, startingTips)(keyPairs.head)
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)(keyPairs.head)
 
         fill(Map(
           getAddress(a) -> 150L
@@ -342,7 +334,7 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
           createTransaction(getAddress(b), getAddress(c), -5L, b)
         )
 
-        val cb = EdgeProcessor.createCheckpointBlock(txs, startingTips)(keyPairs.head)
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)(keyPairs.head)
 
         fill(Map(
           getAddress(a) -> 75L,
@@ -363,7 +355,7 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
           createTransaction(getAddress(b), getAddress(c), 0L, b)
         )
 
-        val cb = EdgeProcessor.createCheckpointBlock(txs, startingTips)(keyPairs.head)
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)(keyPairs.head)
 
         fill(Map(
           getAddress(a) -> 75L,
@@ -384,7 +376,7 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
           createTransaction(getAddress(a), getAddress(c), 75L, a),
         )
 
-        val cb = EdgeProcessor.createCheckpointBlock(txs, startingTips)(keyPairs.head)
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)(keyPairs.head)
 
         assert(!cb.simpleValidation())
       }
@@ -400,7 +392,7 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
           createTransaction(getAddress(a), getAddress(c), 75L, a),
         )
 
-        val cb = EdgeProcessor.createCheckpointBlock(txs, startingTips)(keyPairs.head)
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)(keyPairs.head)
 
         fill(Map(
           getAddress(a) -> 100L
@@ -424,10 +416,10 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
         ))
 
         val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
-        val cb1 = EdgeProcessor.createCheckpointBlock(Seq(tx1), startingTips)(keyPairs.head)
+        val cb1 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx1), startingTips)(keyPairs.head)
 
         val tx2 = createTransaction(getAddress(a), getAddress(c), 75L, a)
-        val cb2 = EdgeProcessor.createCheckpointBlock(Seq(tx2), startingTips)(keyPairs.head)
+        val cb2 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx2), startingTips)(keyPairs.head)
 
         if (cb1.simpleValidation()) { cb1.transactions.foreach(_.ledgerApply) }
 
@@ -453,8 +445,8 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
           getAddress(e) -> 0L
         ))
 
-        val cbInit1 = EdgeProcessor.createCheckpointBlock(txs1.toSeq, startingTips)(keyPairs.head)
-        val cbInit2 = EdgeProcessor.createCheckpointBlock(txs2.toSeq, startingTips)(keyPairs.head)
+        val cbInit1 = CheckpointBlock.createCheckpointBlockSOE(txs1.toSeq, startingTips)(keyPairs.head)
+        val cbInit2 = CheckpointBlock.createCheckpointBlockSOE(txs2.toSeq, startingTips)(keyPairs.head)
 
         cbInit1.store(CheckpointCacheData(Some(cbInit1)))
         cbInit2.store(CheckpointCacheData(Some(cbInit2)))
@@ -465,30 +457,33 @@ class ValidationSpec extends TestKit(ActorSystem("Validation")) with WordSpecLik
 
         // First group
         val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
-        val cb1 = EdgeProcessor.createCheckpointBlock(Seq(tx1), tips)(keyPairs.head)
+        val cb1 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx1), tips)(keyPairs.head)
 
         val tx2 = createTransaction(getAddress(a), getAddress(b), 75L, a)
-        val cb2 = EdgeProcessor.createCheckpointBlock(Seq(tx2), tips)(keyPairs.head)
+        val cb2 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx2), tips)(keyPairs.head)
 
         val tx3 = createTransaction(getAddress(d), getAddress(e), 5L, d)
-        val cb3 = EdgeProcessor.createCheckpointBlock(Seq(tx3), Seq(cb1.soe, cb2.soe))(keyPairs.head)
+        val cb3 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx3), Seq(cb1.soe, cb2.soe))(keyPairs.head)
 
         // Second group
         val tx4 = createTransaction(getAddress(c), getAddress(a), 75L, c)
-        val cb4 = EdgeProcessor.createCheckpointBlock(Seq(tx4), tips)(keyPairs.head)
+        val cb4 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx4), tips)(keyPairs.head)
 
         val tx5 = createTransaction(getAddress(c), getAddress(a), 75L, c)
-        val cb5 = EdgeProcessor.createCheckpointBlock(Seq(tx5), tips)(keyPairs.head)
+        val cb5 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx5), tips)(keyPairs.head)
 
         val tx6 = createTransaction(getAddress(d), getAddress(e), 5L, d)
-        val cb6 = EdgeProcessor.createCheckpointBlock(Seq(tx6), Seq(cb4.soe, cb5.soe))(keyPairs.head)
+        val cb6 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx6), Seq(cb4.soe, cb5.soe))(keyPairs.head)
 
         // Tip
         val tx7 = createTransaction(getAddress(d), getAddress(e), 5L, d)
-        val cb7 = EdgeProcessor.createCheckpointBlock(Seq(tx7), Seq(cb3.soe, cb6.soe))(keyPairs.head)
+        val cb7 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))(keyPairs.head)
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
-          .foreach(cb => cb.store(CheckpointCacheData(Some(cb))))
+          .foreach { cb =>
+            cb.store(CheckpointCacheData(Some(cb)))
+            cb.storeSOE()
+          }
 
         assert(!cb7.simpleValidation())
       }

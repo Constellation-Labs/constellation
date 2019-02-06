@@ -1,20 +1,19 @@
 package org.constellation
 
 import java.security.KeyPair
-
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestProbe
+import org.scalamock.scalatest.MockFactory
+import org.scalatest.{FlatSpec, OneInstancePerTest}
+import scala.concurrent.ExecutionContextExecutor
+
 import org.constellation.Fixtures.{addPeerRequest, dummyTx, id}
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.APIClient
-import org.scalamock.scalatest.MockFactory
-import org.scalatest.{FlatSpec, OneInstancePerTest}
-
-import scala.concurrent.ExecutionContextExecutor
 
 class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTest {
   implicit val system: ActorSystem = ActorSystem("TransactionProcessorTest")
@@ -28,6 +27,7 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
 /*  val dbActor = TestProbe()
 
   dbActor.setAutoPilot(new TestActor.AutoPilot {
+
     def run(sender: ActorRef, msg: Any): TestActor.AutoPilot = msg match {
       case DBGet(`srcHash`) =>
         sender ! Some(AddressCacheData(100000000000000000L, 100000000000000000L, None))
@@ -48,7 +48,6 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
 
   def makeDao(mockData: DAO, peerManager: TestProbe = peerManager, metricsManager: TestProbe = metricsManager) = {
     mockData.actorMaterializer = materialize
-    mockData.metricsManager = metricsManager.testActor
     mockData.peerManager = peerManager.testActor
     mockData
   }
@@ -121,4 +120,3 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
     assert(data.transactionMemPoolMultiWitness(tx.hash) == updated)*/
   }
 }
-

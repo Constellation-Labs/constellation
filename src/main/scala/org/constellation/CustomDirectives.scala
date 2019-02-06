@@ -7,12 +7,14 @@ import akka.http.scaladsl.server.RouteResult.{Complete, Rejected}
 import akka.http.scaladsl.server.{Directive0, RouteResult}
 import com.google.common.util.concurrent.RateLimiter
 import com.typesafe.scalalogging.Logger
+
 import org.constellation.primitives.IPManager
 
 object CustomDirectives {
 
   object Limiters {
     private var rateLimiter: Option[RateLimiter] = None
+
     def getInstance(tps: Double): RateLimiter = rateLimiter match {
       case Some(rateLimiter) ⇒ rateLimiter
       case None ⇒
@@ -22,6 +24,7 @@ object CustomDirectives {
   }
 
   trait Throttle {
+
     def throttle(tps: Double): Directive0 =
       extractClientIP flatMap { ip =>
         val rateLimiter = Limiters.getInstance(tps)
@@ -36,7 +39,6 @@ object CustomDirectives {
   trait IPEnforcer {
 
     val ipManager: IPManager
-
 
     def rejectBannedIP: Directive0 = {
       extractClientIP flatMap { ip =>

@@ -1,10 +1,10 @@
 package org.constellation.datastore
 
-import org.constellation.DAO
-import org.constellation.serializer.KryoSerializer
-
 import scala.collection.concurrent.TrieMap
 import scala.util.Try
+
+import org.constellation.DAO
+import org.constellation.serializer.KryoSerializer
 
 class SimpleKVDBImpl extends KVDB {
 
@@ -39,7 +39,6 @@ class SimpleKVDBImpl extends KVDB {
     store.clear()
   }
 }
-
 
 class SimpleKVDatastore(dao: DAO) extends KVDBDatastoreImpl {
   override val kvdb: KVDB = new SimpleKVDBImpl()

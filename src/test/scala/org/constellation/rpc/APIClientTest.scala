@@ -2,13 +2,13 @@ package org.constellation.rpc
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
+import scala.concurrent.ExecutionContextExecutor
+
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.{APIClient, TestNode}
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
-
-import scala.concurrent.ExecutionContextExecutor
 
 class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with BeforeAndAfterAll {
 
@@ -19,7 +19,6 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
   override def afterEach(): Unit = {
     TestNode.clearNodes()
   }
-
 
   "GET to /peers" should "get the correct connected peers" in {
 
@@ -49,21 +48,17 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
     val rpc = APIClient(port=appNode.httpPort)
     val id = rpc.getBlocking[Id]("id")
 
-    assert(Id(keyPair.getPublic.encoded) == id)
+    assert(keyPair.getPublic.toId == id)
   }
-
 
   "POST to /peer" should "add the peer correctly" in {
     val node1 = TestNode()
     val node2 = TestNode()
 
-    val node1Path = node1.hostPort
-    val node2Path = node2.hostPort
-
     val rpc1 = APIClient(node1.hostName, port=node1.httpPort)
     val rpc2 = APIClient(node2.hostName, port=node2.httpPort)
 
-    val addPeerResponse = rpc2.postSync("peer/add", node1Path)
+    val addPeerResponse = rpc2.postSync("peer/add", node1.peerHostPort)
 
     assert(addPeerResponse.isSuccess)
     // TODO: Change this to AddPeerFromLocal request on REST

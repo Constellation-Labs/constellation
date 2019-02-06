@@ -5,16 +5,18 @@ import java.util.concurrent.ForkJoinPool
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
 import constellation._
+import org.constellation.primitives.CheckpointBlock
 import org.constellation.primitives.Schema._
 import org.constellation.{HostPort, PeerMetadata}
-import scala.concurrent.duration._
+import org.slf4j.LoggerFactory
 
+import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
 
 class Simulation {
 
-  val logger = Logger(s"Simulation")
+  val logger = Logger(LoggerFactory.getLogger(getClass.getName))
 
   implicit val ec: ExecutionContextExecutorService =
     ExecutionContext.fromExecutorService(new ForkJoinPool(100))
@@ -160,7 +162,6 @@ class Simulation {
     )
   }
 
-
   def checkHealthy(
                     apis: Seq[APIClient],
                     maxRetries: Int = 30,
@@ -180,7 +181,6 @@ class Simulation {
     )
   }
 
-
   def checkSnapshot(
                      apis: Seq[APIClient],
                      num: Int = 2,
@@ -197,8 +197,6 @@ class Simulation {
       }, maxRetries, delay
     )
   }
-
-
 
   def awaitConditionMet(
                          err: String,
@@ -240,7 +238,7 @@ class Simulation {
 
   def sendRandomTransaction(apis: Seq[APIClient]): Future[Response[String]] = {
     val src = randomNode(apis)
-    val dst = randomOtherNode(src, apis).id.address.address
+    val dst = randomOtherNode(src, apis).id.address
 
     val s = SendToAddress(dst, Random.nextInt(1000).toLong)
     src.post("send", s)
@@ -249,6 +247,7 @@ class Simulation {
   def triggerRandom(apis: Seq[APIClient]): Seq[Response[String]] = {
     apis.map(_.postEmpty("random"))
   }
+
   def setReady(apis: Seq[APIClient]): Unit = {
     apis.foreach(_.postEmpty("ready"))
   }
@@ -300,7 +299,6 @@ class Simulation {
     }
 
     logger.info("Adding peers manually")
-
 
     if (useRegistrationFlow) {
       addPeersFromRegistrationRequest(apis, addPeerRequests)

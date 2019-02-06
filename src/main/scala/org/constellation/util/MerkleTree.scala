@@ -1,12 +1,13 @@
 package org.constellation.util
 
-
 case class MerkleNode(hash: String, leftChild: String, rightChild: String) {
+
   def children = Seq(leftChild, rightChild)
+
   def isParentOf(other: String): Boolean = children.contains(other)
+
   def valid: Boolean = MerkleTree.merkleHashFunc(leftChild, rightChild) == hash
 }
-
 
 case class MerkleProof(input: String, nodes: Seq[MerkleNode], root: String) {
 
@@ -26,15 +27,14 @@ case class MerkleResult(inputs: Seq[String], nodes: Seq[MerkleNode]) {
   }
 }
 
+import com.typesafe.scalalogging.StrictLogging
 import constellation.SHA256Ext
-
 
 // This should be changed to an actual tree structure in memory. Just skipping that for now
 // Either that or replace this with a pre-existing implementation
 // Couldn't find any libs that were easy drop ins so just doing this for now
-object MerkleTree {
 
-
+object MerkleTree extends StrictLogging {
   def childToParent(nodes: Seq[MerkleNode]): Map[String, MerkleNode] = nodes.flatMap{ n =>
     n.children.map{
       _ -> n
@@ -62,7 +62,7 @@ object MerkleTree {
       throw new Exception("Merkle function call on empty collection of hashes")
     }
     val even = if (hashes.size % 2 != 0) hashes :+ hashes.last else hashes
-    println(s"Creating Merkle tree on ${even.length} hashes")
+    logger.debug(s"Creating Merkle tree on ${even.length} hashes")
 
     val zero = applyRound(even)
     MerkleResult(hashes, merkleIteration(Seq(), zero))
@@ -73,7 +73,7 @@ object MerkleTree {
   }
 
   def applyRound(level: Seq[String]): Seq[MerkleNode] = {
-    println(s"Applying Merkle round on ${level.length} level length")
+    logger.debug(s"Applying Merkle round on ${level.length} level length")
     level.grouped(2).toSeq.map{
       case Seq(l, r) =>
         MerkleNode(merkleHashFunc(l,r), l, r)

@@ -4,8 +4,8 @@ import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedK
 import java.security.{KeyFactory, SecureRandom, _}
 import java.util.Base64
 
-import com.typesafe.scalalogging.Logger
-import constellation.SHA256Ext
+import com.google.common.hash.Hashing
+import com.typesafe.scalalogging.StrictLogging
 import org.spongycastle.jce.provider.BouncyCastleProvider
 
 /**
@@ -27,9 +27,8 @@ import org.spongycastle.jce.provider.BouncyCastleProvider
   * for security policy implications.
   *
   */
-object KeyUtils {
 
-  private val logger = Logger("KeyUtils")
+object KeyUtils extends StrictLogging {
 
   def insertProvider(): BouncyCastleProvider = {
     import java.security.Security
@@ -40,9 +39,15 @@ object KeyUtils {
   }
 
   val provider: BouncyCastleProvider = insertProvider()
-  val secureRandom: SecureRandom = SecureRandom.getInstance("NativePRNGNonBlocking")
-  val secp256k = "secp256k1"
-  val DefaultSignFunc = "SHA512withECDSA"
+
+  private val ECDSA = "ECDsA"
+  private val secureRandom: SecureRandom = SecureRandom.getInstance("NativePRNGNonBlocking")
+  private val secp256k = "secp256k1"
+  private val DefaultSignFunc = "SHA512withECDSA"
+  private val PublicKeyHexPrefix: String = "3056301006072a8648ce3d020106052b8104000a03420004"
+  private val PublicKeyHexPrefixLength: Int = PublicKeyHexPrefix.length
+  private val PrivateKeyHexPrefix: String = "30818d020100301006072a8648ce3d020106052b8104000a047630740201010420"
+  private val PrivateKeyHexPrefixLength: Int = PrivateKeyHexPrefix.length
 
   /**
     * Simple Bitcoin like wallet grabbed from some stackoverflow post
@@ -51,7 +56,7 @@ object KeyUtils {
     * @return : Private / Public keys following BTC implementation
     */
   def makeKeyPair(): KeyPair = {
-    val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance("ECDsA", provider)
+    val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance(ECDSA, provider)
     val ecSpec = new ECGenParameterSpec(secp256k)
     keyGen.initialize(ecSpec, secureRandom)
     keyGen.generateKeyPair
@@ -59,8 +64,11 @@ object KeyUtils {
 
   // Utilities for getting around conversion errors / passing around parameters
   // through strange APIs that might take issue with your strings
+
   def base64(bytes: Array[Byte]): String = Base64.getEncoder.encodeToString(bytes)
+
   def fromBase64(b64Str: String): Array[Byte] = Base64.getDecoder.decode(b64Str)
+
   def base64FromBytes(bytes: Array[Byte]): String = new String(bytes)
 
   /**
@@ -78,6 +86,7 @@ object KeyUtils {
     *         This can be checked by anyone to be equal to the input text with
     *         access only to the public key paired to the input private key! Fun
     */
+
   def signData(
                 bytes: Array[Byte],
                 signFunc: String = DefaultSignFunc
@@ -113,6 +122,7 @@ object KeyUtils {
     * @return : True if the signature / transaction is legitimate.
     *         False means dishonest signer / fake transaction
     */
+
   def verifySignature(
                        originalInput: Array[Byte],
                        signedOutput: Array[Byte],
@@ -126,18 +136,18 @@ object KeyUtils {
   }
 
   // https://stackoverflow.com/questions/42651856/how-to-decode-rsa-public-keyin-java-from-a-text-view-in-android-studio
+
   def bytesToPublicKey(encodedBytes: Array[Byte]): PublicKey = {
     val spec = new X509EncodedKeySpec(encodedBytes)
-    val kf = KeyFactory.getInstance("ECDsA", provider)
+    val kf = KeyFactory.getInstance(ECDSA, provider)
     kf.generatePublic(spec)
   }
 
   def bytesToPrivateKey(encodedBytes: Array[Byte]): PrivateKey = {
     val spec = new PKCS8EncodedKeySpec(encodedBytes)
-    val kf = KeyFactory.getInstance("ECDsA", provider)
+    val kf = KeyFactory.getInstance(ECDSA, provider)
     kf.generatePrivate(spec)
   }
-
 
   def hex2bytes(hex: String): Array[Byte] = {
     if(hex.contains(" ")){
@@ -154,16 +164,34 @@ object KeyUtils {
       case None =>  bytes.map("%02x".format(_)).mkString
       case _ =>  bytes.map("%02x".format(_)).mkString(sep.get)
     }
-    // bytes.foreach(println)
   }
 
+  def publicKeyToHex(publicKey: PublicKey): String ={
+    val hex = bytes2hex(publicKey.getEncoded)
+    hex.slice(PublicKeyHexPrefixLength, hex.length)
+  }
+
+  def hexToPublicKey(hex: String): PublicKey = {
+    bytesToPublicKey(hex2bytes(PublicKeyHexPrefix + hex))
+  }
+
+  def privateKeyToHex(privateKey: PrivateKey): String ={
+    val hex = bytes2hex(privateKey.getEncoded)
+    hex.slice(PrivateKeyHexPrefixLength, hex.length)
+  }
+
+  def hexToPrivateKey(hex: String): PrivateKey = {
+    bytesToPrivateKey(hex2bytes(PrivateKeyHexPrefix + hex))
+  }
 
   // convert normal string to hex bytes string
+
   def string2hex(str: String): String = {
     str.toList.map(_.toInt.toHexString).mkString
   }
 
   // convert hex bytes string to normal string
+
   def hex2string(hex: String): String = {
     hex.sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toChar).mkString
   }
@@ -175,34 +203,25 @@ object KeyUtils {
     val sum = ints.sum
     val par = sum % 9
     val res2 = "DAG" + par + end
-//    println(s"res2 $res2 end ints $ints digits: $validInt endSum: $sum divmod9 $par ${res2.length}")
     res2
   }
 
   // TODO : Use a more secure address function.
   // Couldn't find a quick dependency for this, TBI
   // https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses
+
   def publicKeyToAddressString(
                                 key: PublicKey
                               ): String = {
-    val res = Base58.encode(base64(key.getEncoded).sha256.sha256.getBytes())
-    keyHashToAddress(res)
+    val keyHash = Base58.encode(Hashing.sha256().hashBytes(key.getEncoded).asBytes())
+    keyHashToAddress(keyHash)
   }
-
-  def publicKeysToAddressString(
-                                 key: Seq[PublicKey]
-                               ): String = {
-    val res = Base58.encode(key.map{z => base64(z.getEncoded)}.mkString.sha256.sha256.getBytes())
-    keyHashToAddress(res)
-  }
-
 
 }
 
 /*
 
 object WalletKeyStore {
-
 
   def makeWalletKeyStore(
                           validityInDays: Int = 500000,
@@ -295,7 +314,7 @@ object WalletKeyStore {
     ks -> bks
   }
 
-
 }
 
 */
+

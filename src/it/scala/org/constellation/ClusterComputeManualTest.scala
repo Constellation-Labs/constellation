@@ -4,17 +4,14 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import better.files._
-import org.constellation.crypto.KeyUtils
-import org.constellation.util.{APIClient, Simulation}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
-
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.Try
 
-
+import org.constellation.crypto.KeyUtils
+import org.constellation.util.{APIClient, Simulation}
 
 object ComputeTestUtil {
-
 
   // For custom deployments to non-GCP instances
   // When deploy script is better this can go away. Was used for testing on home computer
@@ -62,16 +59,15 @@ object ComputeTestUtil {
 }
 
 /**
-  * Main integration test / node initializer / cluster startup script
+  * Main integration test / node initializer / cluster startup script.
   *
   * Several API calls in here should be part of the regular node initialization, so this
-  * test should do less
+  * test should do less.
   *
   * We also can't make this a main method in the main folder (for the regular init API calls as opposed to the test calls)
   * so this needs to be split up at some point. Putting another main in the regular classpath causes an issue with
   * sbt docker image, needs to be fixed and then portions of this can be split into separate mains for init methods
-  * vs actual test
-  *
+  * vs actual test.
   */
 class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
@@ -110,7 +106,6 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
     sim.logger.info("Num APIs " + apis.size)
 
-
     assert(sim.checkHealthy(apis))
 
     sim.setIdLocal(apis)
@@ -122,7 +117,6 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
 
     sim.run(apis, addPeerRequests, attemptSetExternalIP = true, useRegistrationFlow = true)
 
-
     // For debugging / adjusting options after compile
     /*
         println(apis.map{
@@ -132,7 +126,6 @@ class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with 
           )
         })
     */
-
 
   }
 

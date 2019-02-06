@@ -1,33 +1,36 @@
 package org.constellation
 
-
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
-import constellation._
-import org.constellation.crypto.KeyUtils
-import org.constellation.util.{APIClient, Simulation}
 import org.json4s.JsonAST.JArray
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
-
 import scala.concurrent.ExecutionContextExecutor
 import scala.sys.process._
 import scala.util.Try
 
+import constellation._
+import org.constellation.crypto.KeyUtils
+import org.constellation.util.{APIClient, Simulation}
+
 object ClusterTest {
 
   private val ipRegex = "\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b".r
+
   private def isCircle = System.getenv("CIRCLE_SHA1") != null
+
   def kubectl: Seq[String] = if (isCircle) Seq("sudo", "/opt/google-cloud-sdk/bin/kubectl") else Seq("kubectl")
 
   case class KubeIPs(id: Int, rpcIP: String, udpIP: String) {
+
     def valid: Boolean =  {
       ipRegex.findAllIn(rpcIP).nonEmpty && ipRegex.findAllIn(udpIP).nonEmpty
     }
   }
 
-  // Use node IPs for now -- this was for previous tests but may be useful later.
-  @deprecated
+  // todo: Add documentation.
+
+  @deprecated("Use node IPs for now -- this was for previous tests but may be useful later.", "a few months")
   def getServiceIPs: List[KubeIPs] = {
     val cmd = kubectl ++ Seq("--output=json", "get", "services")
     val result = cmd.!!
@@ -96,6 +99,7 @@ object ClusterTest {
 }
 
 // TODO: Re-enable after doing kubernetes entropy / haveged fix
+
 class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
   override def afterAll {

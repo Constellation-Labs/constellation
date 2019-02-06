@@ -7,16 +7,17 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import com.softwaremill.sttp.{Response, StatusCodes}
+import com.typesafe.scalalogging.StrictLogging
 import org.constellation.consensus.StoredSnapshot
-import org.constellation.primitives.ChannelProof
+import org.constellation.primitives.{ChannelProof, _}
 import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.constellation.{ConstellationNode, HostPort, UpdatePassword}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
-import scala.util.Try
+import scala.util.{Random, Try}
 
-class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
+class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach with StrictLogging {
 
   val tmpDir = "tmp"
 
@@ -26,7 +27,7 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   override def beforeAll(): Unit = {
     // Cleanup DBs
     //Try{File(tmpDir).delete()}
-    //Try{new java.io.File(tmpDir).mkdirs()}
+    Try{File(tmpDir).createDirectories()}
 
   }
 
@@ -40,12 +41,18 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
   def createNode(
                   randomizePorts: Boolean = true,
                   seedHosts: Seq[HostPort] = Seq(),
-                  portOffset: Int = 0
+                  portOffset: Int = 0,
+                  isGenesisNode: Boolean = false
                 ): ConstellationNode = {
     implicit val executionContext: ExecutionContextExecutorService =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
-    TestNode(randomizePorts = randomizePorts, portOffset = portOffset, seedHosts = seedHosts)
+    TestNode(
+      randomizePorts = randomizePorts,
+      portOffset = portOffset,
+      seedHosts = seedHosts,
+      isGenesisNode = isGenesisNode
+    )
   }
   val updatePasswordReq = UpdatePassword(Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword"))
 
@@ -57,7 +64,6 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
     }
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
-
 
   val totalNumNodes = 3
 
@@ -75,31 +81,23 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
   private val initialAPIs = apis
 
+  private val messageSim = new MessageTestingSim(sim)
+
   "E2E Run" should "demonstrate full flow" in {
 
-    println("API Ports: " + apis.map{_.apiPort})
+    logger.info("API Ports: " + apis.map{_.apiPort})
 
-    assert(sim.run(initialAPIs, addPeerRequests, snapshotCount = 5))
+    assert(sim.run(initialAPIs, addPeerRequests))
+
+    // messageSim.openChannel(apis)
 
     val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)), randomizePorts = false, portOffset = 50)
 
     val downloadAPI = downloadNode.getAPIClient()
-    println(s"DownloadNode API Port: ${downloadAPI.apiPort}")
+    logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
     assert(sim.checkReady(Seq(downloadAPI)))
 
-    val messageChannel = initialAPIs.head.getBlocking[Seq[String]]("channels").head
-
-    val messageWithinSnapshot = initialAPIs.head.getBlocking[Option[ChannelProof]]("channel/" + messageChannel)
-
-    def messageValid() = messageWithinSnapshot.exists{ proof =>
-      val m = proof.channelMessageMetadata
-      m.snapshotHash.nonEmpty && m.blockHash.nonEmpty && proof.checkpointMessageProof.verify() &&
-      proof.checkpointProof.verify() &&
-      m.blockHash.contains{proof.checkpointProof.input} &&
-      m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
-    }
-    // messageValid()
-    assert(messageValid())
+    // messageSim.postDownload(apis.head)
 
     Thread.sleep(20*1000)
 
@@ -127,6 +125,11 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
     val storedSnapshots = allAPIs.map{_.simpleDownload()}
 
+    // messageSim.dumpJson(storedSnapshots)
+
+    // TODO: Move to separate test
+
+    // TODO: This is flaky and fails randomly sometimes
     val snaps = storedSnapshots.toSet
       .map{x : Seq[StoredSnapshot] =>
         x.map{_.checkpointCache.flatMap{_.checkpointBlock}}.toSet
@@ -140,3 +143,142 @@ class E2ETest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll wit
 
 
 }
+
+
+class MessageTestingSim(sim: Simulation) {
+
+  private val schemaStr = SensorData.jsonSchema
+
+  private val channelId = "test"
+
+  var genesisChannel: ChannelMessage = _
+  var expectedMessages : Seq[ChannelMessage] = _
+
+  def openChannel(apis: Seq[APIClient]): Unit = {
+
+    apis.head.postSync("channel/open", ChannelOpenRequest(channelId, jsonSchema = Some(schemaStr)))
+    sim.awaitConditionMet(
+      "Test channel genesis not stored",
+      apis.forall{
+        _.getBlocking[Option[ChannelMessageMetadata]]("messageService/" + channelId).exists(_.blockHash.nonEmpty)
+      }
+    )
+
+    genesisChannel = apis.head.getBlocking[Option[ChannelMessageMetadata]]("messageService/" + channelId).get.channelMessage
+
+    val validNameChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map{_.toString}.toSeq
+    val invalidNameChars = validNameChars.map{_.toLowerCase}
+
+    expectedMessages = (0 until 10).flatMap{ batchNumber =>
+      import constellation._
+
+      val validMessages = Seq.fill(batchNumber % 2) {
+        SensorData(
+          Random.nextInt(100),
+          Seq.fill(5){Random.shuffle(validNameChars).head}.mkString
+        )
+      }
+      val invalidMessages = Seq.fill((batchNumber + 1) % 2) {
+        SensorData(
+          Random.nextInt(100) + 500,
+          Seq.fill(5){Random.shuffle(invalidNameChars).head}.mkString
+        )
+      }
+      val serializedMessages = (validMessages ++ invalidMessages).map{_.json}
+      val messages = apis.head.postBlocking[Seq[ChannelMessage]](
+        "channel/send",
+        ChannelSendRequest(channelId, serializedMessages)
+      )
+      sim.awaitConditionMet(
+        s"Message batch $batchNumber not stored",
+        apis.forall{
+          _.getBlocking[Option[ChannelMessageMetadata]](
+            "messageService/" + messages.head.signedMessageData.signatures.hash
+          ).exists(_.blockHash.nonEmpty)
+        }
+      )
+      sim.logger.info(s"Message batch $batchNumber complete, sent ${serializedMessages.size} messages")
+      messages
+    }
+
+  }
+
+  def postDownload(firstAPI : APIClient) = {
+
+    val messageChannel = firstAPI.getBlocking[Seq[String]]("channels").filterNot{_ == channelId}.head
+
+    val messageWithinSnapshot = firstAPI.getBlocking[Option[ChannelProof]]("channel/" + messageChannel)
+    assert(messageWithinSnapshot.nonEmpty)
+
+    def messageValid(): Unit = messageWithinSnapshot.foreach{ proof =>
+      val m = proof.channelMessageMetadata
+      assert(m.snapshotHash.nonEmpty)
+      assert(m.blockHash.nonEmpty)
+      assert(proof.checkpointMessageProof.verify())
+      assert(proof.checkpointProof.verify())
+      assert(m.blockHash.contains{proof.checkpointProof.input})
+      assert(m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input)
+    }
+    // messageValid()
+  }
+
+  def dumpJson(
+                storedSnapshots: Seq[Seq[StoredSnapshot]]
+              ): Unit = {
+
+    var numInvalid = 0
+
+    val messagesInChannelWithBlocks = storedSnapshots.head.flatMap{ s =>
+      s.checkpointCache.map{ cache =>
+        val block = cache.checkpointBlock.get
+        val relevantMessages = block.checkpoint.edge.data.messages
+          .filter{expectedMessages.contains}
+        //.filter{_.signedMessageData.data.channelId == channelId}.filterNot{_ == genesisChannel}
+        val messageParent = relevantMessages.map{_.signedMessageData.data.previousMessageDataHash}.headOption
+        val messageHash = relevantMessages.map{_.signedMessageData.hash}.headOption
+
+        val valid = relevantMessages.map{m =>
+          val isValid = SensorData.validate(
+            m.signedMessageData.data.message
+          ).isSuccess
+          if (!isValid) numInvalid += 1
+          isValid
+        }.headOption
+        BlockDumpOutput(block.soeHash, block.parentSOEHashes, valid, messageParent, messageHash)
+      }
+    }
+
+    // TODO: Duplicate messages appearing sometimes but not others?
+    println(s"Num invalid $numInvalid")
+
+    val ids = messagesInChannelWithBlocks.map{_.blockSoeHash}.zipWithIndex.toMap
+    val msgToBlock = messagesInChannelWithBlocks.flatMap{z => z.messageHash.map{_ -> z.blockSoeHash}}.toMap
+
+    import constellation._
+    val rendered = messagesInChannelWithBlocks.map{
+      case BlockDumpOutput(hash, parents, isValid, msgParent, msgHash) =>
+
+        val msgParentId = msgParent.flatMap{
+          parent =>
+            msgToBlock.get(parent).flatMap{ids.get}.map{Seq(_)}
+        }.getOrElse(Seq())
+
+        val id = ids(hash)
+        val parentsId = parents.flatMap{ids.get} ++ msgParentId
+        val color = isValid.map{ b =>  if (b) "green" else "red"}.getOrElse("blue")
+        Map("id" -> id, "parentIds" -> parentsId, "color" -> color)
+    }.json
+    println(rendered)
+
+  }
+
+
+}
+
+case class BlockDumpOutput(
+                            blockSoeHash: String,
+                            blockParentSOEHashes: Seq[String],
+                            blockMessageValid: Option[Boolean],
+                            messageParent: Option[String],
+                            messageHash: Option[String]
+                          )
