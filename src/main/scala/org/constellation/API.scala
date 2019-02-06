@@ -57,7 +57,7 @@ case class ProcessingConfig(
                              maxWidth: Int = 10,
                              minCheckpointFormationThreshold: Int = 50,
                              numFacilitatorPeers: Int = 2,
-                             randomTXPerRoundPerPeer: Int = 100,
+                             randomTXPerRoundPerPeer: Int = 30,
                              metricCheckInterval: Int = 60,
                              maxMemPoolSize: Int = 2000,
                              minPeerTimeAddedSeconds: Int = 30,
