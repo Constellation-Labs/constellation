@@ -15,14 +15,6 @@ import scala.util.Random
 
 class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
-//  implicit val dao: DAO = new DAO()
-//
-//  dao.updateKeyPair(KeyUtils.makeKeyPair())
-//  dao.idDir.createDirectoryIfNotExists(createParents = true)
-//  dao.preventLocalhostAsPeer = false
-//  dao.externalHostString = ""
-//  dao.externlPeerHTTPPort = 0
-
   val random = new java.util.Random()
 
   def getRandomTxs(factor: Int = 5): Set[Schema.Transaction] = idSet5.flatMap{ id =>
@@ -47,7 +39,7 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
 
   "Facilitator selection" should "be relatively balanced" in {
     val facilitators = randomTxs.map(tx => selectTxFacilitator(ids, tx))
-    assert(facilitators.size == 5)//todo this is non deterministic
+    assert(facilitators.size == 5)
   }
 
   "The gossip path" should "always be shorter then the total set of node ids" in {
@@ -55,10 +47,4 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
     pathLengths.foreach(println)
     assert(pathLengths.forall(_ < ids.size))
   }
-
-  "A full round of gossip" should "be notarized on a transaction" in {
-
-    assert(true)
-  }
-
 }

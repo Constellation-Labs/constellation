@@ -3,31 +3,24 @@ package org.constellation.util
 import com.google.common.hash.Hashing
 import org.constellation.primitives.Schema.{Id, Transaction}
 
-import scala.annotation.tailrec
-
+/**
+  * First pass at facilitator selection. Need to impl proper epidemic model. For checkpoint blocks, in lieu of min-cut,
+  * choose facilitator based on who is responsible for the majority of txs in the cpb.
+  */
 object Partitioner {
 
   /*
-  for checkpoint blocks, choose facilitator based on who is responsible for the majority of txs in the cpb.
-   */
-  //def selectCpFacilitator
-
-  /*
-  approx for exponential drop off
+  simple approx for exponential drop off
    */
   def log2(num: Int) = scala.math.log(num) / scala.math.log(2)
 
-  /*
-  dumb log2 approximation
-   */
   def gossipPath(ids: List[Id], tx: Transaction) = {
     val gossipRounds = log2(ids.size).toInt
     propagationPath(ids, tx)(gossipRounds)
   }
 
   /*
-  this should be called once each time it is received by a node, to determine if it has been passed accouring to correct path
-  //todo merge with selectTxFacilitator as a takeWhile and add implicit ordering for tuples
+  todo merge with selectTxFacilitator as a takeWhile and add implicit ordering for tuples
    */
   def propagationPath(ids: Seq[Id], tx: Transaction)(depth: Int): List[Id] = ids match {
     case head :: tail if depth > 0 =>
