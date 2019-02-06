@@ -53,7 +53,10 @@ object Fixtures {
     createTransaction(data.selfAddressStr, sendRequest.dst, sendRequest.amountActual, data.keyPair)
   }
 
-  def makeTransaction(srcAddressString: String, destinationAddressString: String, amt: Long, keyPair: KeyPair) = {
+  def makeTransaction(srcAddressString: String,
+                      destinationAddressString: String,
+                      amt: Long,
+                      keyPair: KeyPair) = {
     val sendRequest = SendToAddress(destinationAddressString, amt)
     createTransaction(srcAddressString, sendRequest.dst, sendRequest.amountActual, keyPair)
   }
