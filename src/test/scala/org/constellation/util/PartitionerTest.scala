@@ -8,7 +8,7 @@ import org.constellation.Fixtures.{dummyTx, _}
 import Partitioner._
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.Schema
+import org.constellation.primitives.{Schema, Transaction}
 import org.constellation.primitives.Schema.SendToAddress
 
 import scala.util.Random
@@ -17,10 +17,10 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
 
   val random = new java.util.Random()
 
-  def getRandomTxs(factor: Int = 5): Set[Schema.Transaction] = idSet5.flatMap{ id =>
-    val destinationAddresses = idSet5.map(_.address.address)
+  def getRandomTxs(factor: Int = 5): Set[Transaction] = idSet5.flatMap{ id =>
+    val destinationAddresses = idSet5.map(_.address)
     val destinationAddressDups = (0 to factor).flatMap(_ => destinationAddresses)
-    destinationAddressDups.map(destStr => makeTransaction(id.address.address, destStr, random.nextLong(), getRandomElement(tempKeySet, random)))
+    destinationAddressDups.map(destStr => makeTransaction(id.address, destStr, random.nextLong(), getRandomElement(tempKeySet, random)))
   }
   val randomTxs = getRandomTxs()
   val acceptableFacilBalance = 0.8
@@ -34,7 +34,7 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
 
   "Facilitators" should "not facilitate their own transactions" in {
     val facilitator = selectTxFacilitator(ids, randomTxs.head)
-    assert(facilitator.address.address != randomTxs.head.src.address)
+    assert(facilitator.address != randomTxs.head.src.address)
   }
 
   "Facilitator selection" should "be relatively balanced" in {

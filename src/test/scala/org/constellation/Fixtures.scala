@@ -2,6 +2,7 @@ package org.constellation
 
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
+import java.util.Random
 
 import constellation._
 import org.constellation.crypto.KeyUtils
@@ -48,7 +49,7 @@ object Fixtures {
   def getRandomElement[T](list: Seq[T], random: Random): T = list(random.nextInt(list.length))
 
   def dummyTx(data: DAO, amt: Long = 1L, src: Id = id) = {
-    val sendRequest = SendToAddress(src.address.address, amt)
+    val sendRequest = SendToAddress(src.address, amt)
     createTransaction(data.selfAddressStr, sendRequest.dst, sendRequest.amountActual, data.keyPair)
   }
 

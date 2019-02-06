@@ -1,7 +1,8 @@
 package org.constellation.util
 
 import com.google.common.hash.Hashing
-import org.constellation.primitives.Schema.{Id, Transaction}
+import org.constellation.primitives.Schema.Id
+import org.constellation.primitives.Transaction
 
 /**
   * First pass at facilitator selection. Need to impl proper epidemic model. For checkpoint blocks, in lieu of min-cut,
@@ -37,8 +38,8 @@ object Partitioner {
   }
 
   def selectTxFacilitator(ids: Seq[Id], tx: Transaction): Id = {
-    val neighbors = ids.filterNot(_.address.address == tx.src.address)
-    val sortedNeighbors: Seq[(Id, BigInt)] = neighbors.map(id => (id, numeric256(id.id.getEncoded))).sortBy(_._2)
+    val neighbors = ids.filterNot(_.address == tx.src.address)
+    val sortedNeighbors: Seq[(Id, BigInt)] = neighbors.map(id => (id, numeric256(id.toPublicKey.getEncoded))).sortBy(_._2)
     val (facilitatorId, _) = sortedNeighbors.minBy{ case (id, idBi) =>
       val txBi = numeric256(tx.hash.getBytes())
       val srcBi = numeric256(tx.src.address.getBytes())
