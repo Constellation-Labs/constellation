@@ -116,8 +116,9 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
             val proof = res.flatMap { cmd =>
               cmd.snapshotHash.flatMap { snapshotHash =>
                 tryWithMetric({
-                  KryoSerializer.deserializeCast[StoredSnapshot](File(dao.snapshotPath,
-                                                                      snapshotHash).byteArray)
+                  KryoSerializer.deserializeCast[StoredSnapshot](
+                    File(dao.snapshotPath, snapshotHash).byteArray
+                  )
                 }, "readSnapshotForMessage").toOption.map { storedSnapshot =>
                   val blockProof = MerkleTree(storedSnapshot.snapshot.checkpointBlocks.toList)
                     .createProof(cmd.blockHash.get)
@@ -217,7 +218,8 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
               Map(
                 "peers" -> peerMap,
                 "transactions" -> txs
-              ))
+              )
+            )
 
           }
       }

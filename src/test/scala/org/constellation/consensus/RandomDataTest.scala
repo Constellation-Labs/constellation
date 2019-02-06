@@ -81,7 +81,8 @@ object RandomData {
         Map.empty,
         Map.empty,
         Seq()
-      ))
+      )
+    )
 
     cb
   }
@@ -236,7 +237,8 @@ class ValidationSpec
       Map.empty,
       Map.empty,
       Seq()
-    ))
+    )
+  )
 
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
@@ -253,13 +255,15 @@ class ValidationSpec
             getAddress(a) -> 150L,
             getAddress(b) -> 0L,
             getAddress(c) -> 150L
-          ))
+          )
+        )
 
         val txs2 = fill(
           Map(
             getAddress(d) -> 15L,
             getAddress(e) -> 0L
-          ))
+          )
+        )
 
         val cbInit1 =
           CheckpointBlock.createCheckpointBlockSOE(txs1.toSeq, startingTips)(keyPairs.head)
@@ -323,7 +327,8 @@ class ValidationSpec
           Map(
             getAddress(a) -> 74L,
             getAddress(c) -> 75L
-          ))
+          )
+        )
 
         assert(!cb.simpleValidation())
       }
@@ -342,7 +347,8 @@ class ValidationSpec
         fill(
           Map(
             getAddress(a) -> 150L
-          ))
+          )
+        )
 
         assert(!cb.simpleValidation())
       }
@@ -364,7 +370,8 @@ class ValidationSpec
           Map(
             getAddress(a) -> 75L,
             getAddress(b) -> 75L
-          ))
+          )
+        )
 
         assert(!cb.simpleValidation())
       }
@@ -386,7 +393,8 @@ class ValidationSpec
           Map(
             getAddress(a) -> 75L,
             getAddress(b) -> 75L
-          ))
+          )
+        )
 
         assert(!cb.simpleValidation())
       }
@@ -423,7 +431,8 @@ class ValidationSpec
         fill(
           Map(
             getAddress(a) -> 100L
-          ))
+          )
+        )
 
         assert(!cb.simpleValidation())
       }
@@ -441,7 +450,8 @@ class ValidationSpec
             getAddress(a) -> 100L,
             getAddress(b) -> 0L,
             getAddress(c) -> 0L
-          ))
+          )
+        )
 
         val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
         val cb1 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx1), startingTips)(keyPairs.head)
@@ -467,13 +477,15 @@ class ValidationSpec
             getAddress(a) -> 100L,
             getAddress(b) -> 0L,
             getAddress(c) -> 150L
-          ))
+          )
+        )
 
         val txs2 = fill(
           Map(
             getAddress(d) -> 15L,
             getAddress(e) -> 0L
-          ))
+          )
+        )
 
         val cbInit1 =
           CheckpointBlock.createCheckpointBlockSOE(txs1.toSeq, startingTips)(keyPairs.head)

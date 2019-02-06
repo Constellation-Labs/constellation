@@ -210,7 +210,8 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
     val updatedPeerInfo = peerInfo + (peerData.client.id -> peerData)
 
     val remoteAddr = RemoteAddress(
-      new InetSocketAddress(peerData.client.hostName, peerData.client.apiPort))
+      new InetSocketAddress(peerData.client.hostName, peerData.client.apiPort)
+    )
     ipManager.addKnownIP(remoteAddr)
     logger.info(s"Added $remoteAddr to known peers.")
 
@@ -231,7 +232,8 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
               case _ =>
                 dao.metrics.incrementMetric("peerHealthCheckFailed")
                 self ! RemovePeerRequest(
-                  Some(HostPort(d.peerMetadata.host, d.peerMetadata.httpPort)))
+                  Some(HostPort(d.peerMetadata.host, d.peerMetadata.httpPort))
+                )
             }(dao.apiClientExecutionContext)
         }
       }

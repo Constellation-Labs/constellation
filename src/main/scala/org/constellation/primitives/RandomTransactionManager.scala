@@ -32,7 +32,8 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
           dao.threadSafeMessageMemPool.activeChannels(newChannelId) = new Semaphore(1)
           Some(
             ChannelMessage
-              .create(Random.nextInt(1000).toString, Genesis.CoinBaseHash, newChannelId))
+              .create(Random.nextInt(1000).toString, Genesis.CoinBaseHash, newChannelId)
+          )
         } else {
           if (dao.threadSafeMessageMemPool.unsafeCount < 3) {
             val channels = dao.threadSafeMessageMemPool.activeChannels
@@ -42,7 +43,8 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
                 Some(
                   ChannelMessage.create(Random.nextInt(1000).toString,
                                         data.channelMessage.signedMessageData.signatures.hash,
-                                        channel))
+                                        channel)
+                )
               } else None
             }
           } else None

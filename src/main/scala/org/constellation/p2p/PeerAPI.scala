@@ -122,7 +122,8 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
             entity(as[PeerRegistrationRequest]) { request =>
               val hostAddress = clientIP.toOption.map { _.getHostAddress }
               logger.debug(
-                s"Received peer registration request $request on $clientIP $hostAddress ${clientIP.toOption} ${clientIP.toIP}")
+                s"Received peer registration request $request on $clientIP $hostAddress ${clientIP.toOption} ${clientIP.toIP}"
+              )
               val maybeData = getHostAndPortFromRemoteAddress(clientIP)
               maybeData match {
                 case Some(PeerIPData(host, _)) =>
@@ -235,8 +236,9 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
                 ) { result => // ^ Errors captured above
                   val maybeResponse = result.flatten.map { _ =>
                     val maybeData = getHostAndPortFromRemoteAddress(ip)
-                    val knownHost = maybeData.exists(i =>
-                      dao.peerInfo.exists(_._2.client.hostName == i.canonicalHostName))
+                    val knownHost = maybeData.exists(
+                      i => dao.peerInfo.exists(_._2.client.hostName == i.canonicalHostName)
+                    )
                     FinishedCheckpointResponse(!knownHost)
                   }.toOption
                   complete(maybeResponse)

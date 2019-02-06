@@ -289,7 +289,8 @@ class Simulation {
               else add.copy(auxHost = "")
             assert(
               addPeerWithRegistrationFlow(Seq(a), HostPort(addAdjusted.host, addAdjusted.httpPort))
-                .forall(_.isSuccess))
+                .forall(_.isSuccess)
+            )
           }
       }
     }

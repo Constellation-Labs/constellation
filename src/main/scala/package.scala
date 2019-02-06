@@ -55,16 +55,18 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     peerAddress.getHostString + ":" + peerAddress.getPort
 
   class InetSocketAddressSerializer
-      extends CustomSerializer[InetSocketAddress](format =>
-        ({
-          case jstr: JObject =>
-            val host = (jstr \ "host").extract[String]
-            val port = (jstr \ "port").extract[Int]
-            new InetSocketAddress(host, port)
-        }, {
-          case key: InetSocketAddress =>
-            JObject("host" -> JString(key.getHostString), "port" -> JInt(key.getPort))
-        }))
+      extends CustomSerializer[InetSocketAddress](
+        format =>
+          ({
+            case jstr: JObject =>
+              val host = (jstr \ "host").extract[String]
+              val port = (jstr \ "port").extract[Int]
+              new InetSocketAddress(host, port)
+          }, {
+            case key: InetSocketAddress =>
+              JObject("host" -> JString(key.getHostString), "port" -> JInt(key.getPort))
+          })
+      )
 
   implicit val constellationFormats: Formats = DefaultFormats +
     new PublicKeySerializer +
@@ -165,9 +167,10 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   def signHashWithKey(hash: String, privateKey: PrivateKey): String =
     bytes2hex(signData(hash.getBytes())(privateKey))
 
-  def wrapFutureWithMetric[T](t: Future[T], metricPrefix: String)(
-    implicit dao: DAO,
-    ec: ExecutionContext): Future[T] = {
+  def wrapFutureWithMetric[T](
+    t: Future[T],
+    metricPrefix: String
+  )(implicit dao: DAO, ec: ExecutionContext): Future[T] = {
     t.onComplete {
       case Success(_) =>
         dao.metrics.incrementMetric(metricPrefix + "_success")
@@ -230,7 +233,8 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     fut: Future[T],
     metricPrefix: String,
     timeoutSeconds: Int = 10,
-    onError: => Unit = ())(implicit ec: ExecutionContext, dao: DAO): Future[T] = {
+    onError: => Unit = ()
+  )(implicit ec: ExecutionContext, dao: DAO): Future[T] = {
     val prom = Promise[T]()
     val after = timeoutSeconds.seconds
     val timeout = TimeoutScheduler.scheduleTimeout(prom, after)
@@ -245,7 +249,8 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
       }
       if (result.isFailure) {
         dao.metrics.incrementMetric(
-          metricPrefix + s"_timeoutFAILUREDEBUGAfter${timeoutSeconds}seconds")
+          metricPrefix + s"_timeoutFAILUREDEBUGAfter${timeoutSeconds}seconds"
+        )
       }
     }
 
@@ -256,7 +261,8 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     t: => T,
     metricPrefix: String,
     timeoutSeconds: Int = 10,
-    onError: => Unit = ())(implicit ec: ExecutionContext, dao: DAO): Future[Try[T]] = {
+    onError: => Unit = ()
+  )(implicit ec: ExecutionContext, dao: DAO): Future[Try[T]] = {
     withTimeoutSecondsAndMetric(
       Future {
         val originalName = Thread.currentThread().getName
@@ -315,7 +321,8 @@ object TimeoutScheduler {
 
         def run(timeout: Timeout) {
           promise.failure(
-            new TimeoutException("Operation timed out after " + after.toMillis + " millis"))
+            new TimeoutException("Operation timed out after " + after.toMillis + " millis")
+          )
         }
       },
       after.toNanos,

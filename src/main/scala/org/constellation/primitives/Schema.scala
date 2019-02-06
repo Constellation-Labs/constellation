@@ -164,11 +164,12 @@ object Schema {
     def plus(previous: AddressCacheData): AddressCacheData = {
       this.copy(
         ancestorBalances =
-          ancestorBalances ++ previous.ancestorBalances.filterKeys(k =>
-            !ancestorBalances.contains(k)),
+          ancestorBalances ++ previous.ancestorBalances
+            .filterKeys(k => !ancestorBalances.contains(k)),
         ancestorReputations =
-          ancestorReputations ++ previous.ancestorReputations.filterKeys(k =>
-            !ancestorReputations.contains(k))
+          ancestorReputations ++ previous.ancestorReputations.filterKeys(
+            k => !ancestorReputations.contains(k)
+          )
         //recentTransactions =
         //  recentTransactions ++ previous.recentTransactions.filter(k => !recentTransactions.contains(k))
       )
@@ -197,8 +198,8 @@ object Schema {
 
     def plus(previous: TransactionCacheData): TransactionCacheData = {
       this.copy(
-        inDAGByAncestor = inDAGByAncestor ++ previous.inDAGByAncestor.filterKeys(k =>
-          !inDAGByAncestor.contains(k)),
+        inDAGByAncestor = inDAGByAncestor ++ previous.inDAGByAncestor
+          .filterKeys(k => !inDAGByAncestor.contains(k)),
         cbForkBaseHashes = (cbForkBaseHashes ++ previous.cbForkBaseHashes) -- cbBaseHash
           .map { s =>
             Set(s)

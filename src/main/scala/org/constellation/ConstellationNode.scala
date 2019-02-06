@@ -108,14 +108,16 @@ object ConstellationNode extends StrictLogging {
           .map {
             _.toInt
           }
-          .getOrElse(config.getInt("http.port")))
+          .getOrElse(config.getInt("http.port"))
+      )
 
       val peerHttpPort = peerHttpPortFromArg.getOrElse(
         Option(System.getenv("DAG_PEER_HTTP_PORT"))
           .map {
             _.toInt
           }
-          .getOrElse(9001))
+          .getOrElse(9001)
+      )
 
       val node = new ConstellationNode(
         keyPair,

@@ -78,7 +78,8 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
   def validSrcSignature: Boolean = {
     edge.signedObservationEdge.signatureBatch.signatures.exists { hs =>
       hs.publicKey.address == src.address && hs.valid(
-        edge.signedObservationEdge.signatureBatch.hash)
+        edge.signedObservationEdge.signatureBatch.hash
+      )
     }
   }
 

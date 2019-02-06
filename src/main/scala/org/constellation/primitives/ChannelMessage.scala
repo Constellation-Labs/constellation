@@ -39,15 +39,17 @@ case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 object ChannelMessage {
 
   def create(message: String, previous: String, channelId: String)(
-    implicit dao: DAO): ChannelMessage = {
+    implicit dao: DAO
+  ): ChannelMessage = {
     val data = ChannelMessageData(message, previous, channelId)
     ChannelMessage(
       SignedData(data, hashSignBatchZeroTyped(data, dao.keyPair))
     )
   }
 
-  def createGenesis(channelOpenRequest: ChannelOpenRequest)(
-    implicit dao: DAO): Option[ChannelMessage] = {
+  def createGenesis(
+    channelOpenRequest: ChannelOpenRequest
+  )(implicit dao: DAO): Option[ChannelMessage] = {
     if (dao.messageService.get(channelOpenRequest.channelId).isEmpty &&
         !dao.threadSafeMessageMemPool.activeChannels.contains(channelOpenRequest.channelId)) {
 
@@ -62,8 +64,9 @@ object ChannelMessage {
     } else None
   }
 
-  def createMessages(channelSendRequest: ChannelSendRequest)(
-    implicit dao: DAO): Seq[ChannelMessage] = {
+  def createMessages(
+    channelSendRequest: ChannelSendRequest
+  )(implicit dao: DAO): Seq[ChannelMessage] = {
     // Ignores locking right now
     val previous =
       dao.messageService.get(channelSendRequest.channelId).get.channelMessage.signedMessageData.hash

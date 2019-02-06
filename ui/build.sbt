@@ -15,7 +15,8 @@ resolvers ++= Seq("mvnrepository" at "http://mvnrepository.com/artifact/")
 resolvers ++= Seq("scala-js-releases" at "http://dl.bintray.com/content/scala-js/scala-js-releases")
 
 resolvers ++= Seq(
-  "Rhinofly Internal Repository" at "http://maven-repository.rhinofly.net:8081/artifactory/libs-release-local")
+  "Rhinofly Internal Repository" at "http://maven-repository.rhinofly.net:8081/artifactory/libs-release-local"
+)
 
 resolvers += Resolver.sonatypeRepo("snapshots")
 

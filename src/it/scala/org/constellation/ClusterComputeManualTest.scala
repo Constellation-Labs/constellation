@@ -18,7 +18,8 @@ object ComputeTestUtil {
   def getAuxiliaryNodes(startMultiNodeMachines: Boolean = false)(
     implicit as: ActorSystem,
     mat: ActorMaterializer,
-    ec: ExecutionContextExecutor): (Seq[String], Seq[APIClient]) = {
+    ec: ExecutionContextExecutor
+  ): (Seq[String], Seq[APIClient]) = {
 
     var ignoreIPs = Seq[String]()
 

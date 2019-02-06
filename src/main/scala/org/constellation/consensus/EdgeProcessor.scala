@@ -62,7 +62,8 @@ object EdgeProcessor extends StrictLogging {
             Map(cb.baseHash -> true),
             resolved = true,
             cbBaseHash = Some(cb.baseHash)
-          ))
+          )
+        )
         t.ledgerApply()
       }
       dao.metrics.incrementMetric("checkpointAccepted")
@@ -207,7 +208,8 @@ object EdgeProcessor extends StrictLogging {
                   }
                 }
                 .ensure(NonEmptyList.one(new Throwable("Invalid CheckpointBlock")))(
-                  _.simpleValidation())
+                  _.simpleValidation()
+                )
                 .traverse { finalCB =>
                   val cache = CheckpointCacheData(finalCB.some, height = finalCB.calculateHeight())
                   dao.threadSafeTipService.accept(cache)
@@ -268,8 +270,9 @@ object EdgeProcessor extends StrictLogging {
 
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
-    def innerResolve(peers: List[APIClient])(
-      implicit ec: ExecutionContext): Future[CheckpointCacheData] = {
+    def innerResolve(
+      peers: List[APIClient]
+    )(implicit ec: ExecutionContext): Future[CheckpointCacheData] = {
       peers match {
         case activePeer :: rest =>
           val resp = activePeer
@@ -302,8 +305,9 @@ object EdgeProcessor extends StrictLogging {
 
   }
 
-  def acceptWithResolveAttempt(checkpointCacheData: CheckpointCacheData)(
-    implicit dao: DAO): Unit = {
+  def acceptWithResolveAttempt(
+    checkpointCacheData: CheckpointCacheData
+  )(implicit dao: DAO): Unit = {
 
     dao.threadSafeTipService.accept(checkpointCacheData)
     val block = checkpointCacheData.checkpointBlock.get
@@ -428,7 +432,8 @@ object Snapshot {
             findLatestMessageWithSnapshotHashInner(
               depth + 1,
               dao.messageService.get(
-                m.channelMessage.signedMessageData.data.previousMessageDataHash)
+                m.channelMessage.signedMessageData.data.previousMessageDataHash
+              )
             )
           }
         }

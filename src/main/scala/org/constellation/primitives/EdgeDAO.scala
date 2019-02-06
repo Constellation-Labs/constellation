@@ -78,8 +78,8 @@ class ThreadSafeMessageMemPool() {
     true
   }
 
-  def put(message: Seq[ChannelMessage], overrideLimit: Boolean = false)(
-    implicit dao: DAO): Boolean = this.synchronized {
+  def put(message: Seq[ChannelMessage],
+          overrideLimit: Boolean = false)(implicit dao: DAO): Boolean = this.synchronized {
     val notContained = !messages.contains(message)
 
     if (notContained) {
@@ -159,7 +159,8 @@ class ThreadSafeTipService() {
 
     dao.metrics.updateMetric(
       "acceptCBCacheMatchesAcceptedSize",
-      (latestSnapshotInfo.acceptedCBSinceSnapshot.size == latestSnapshotInfo.acceptedCBSinceSnapshotCache.size).toString)
+      (latestSnapshotInfo.acceptedCBSinceSnapshot.size == latestSnapshotInfo.acceptedCBSinceSnapshotCache.size).toString
+    )
 
   }
 
@@ -306,7 +307,8 @@ class ThreadSafeTipService() {
           dao.metrics.updateMetric("lastSnapshotHeight", lastSnapshotHeight.toString)
           dao.metrics.updateMetric(
             "nextSnapshotHeight",
-            (lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval).toString)
+            (lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval).toString
+          )
         }
       }
     }
@@ -315,14 +317,17 @@ class ThreadSafeTipService() {
   def acceptGenesis(genesisObservation: GenesisObservation): Unit = this.synchronized {
     thresholdMetCheckpoints += genesisObservation.initialDistribution.baseHash -> TipData(
       genesisObservation.initialDistribution,
-      0)
+      0
+    )
     thresholdMetCheckpoints += genesisObservation.initialDistribution2.baseHash -> TipData(
       genesisObservation.initialDistribution2,
-      0)
+      0
+    )
   }
 
-  def pull(allowEmptyFacilitators: Boolean = false)(
-    implicit dao: DAO): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] =
+  def pull(
+    allowEmptyFacilitators: Boolean = false
+  )(implicit dao: DAO): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] =
     this.synchronized {
       val res =
         if (thresholdMetCheckpoints.size >= 2 && (facilitators.nonEmpty || allowEmptyFacilitators)) {
@@ -366,11 +371,13 @@ class ThreadSafeTipService() {
   def accept(checkpointCacheData: CheckpointCacheData)(implicit dao: DAO): Unit =
     this.synchronized {
 
-      if (dao.checkpointService.contains(checkpointCacheData.checkpointBlock
-            .map {
-              _.baseHash
-            }
-            .getOrElse(""))) {
+      if (dao.checkpointService.contains(
+            checkpointCacheData.checkpointBlock
+              .map {
+                _.baseHash
+              }
+              .getOrElse("")
+          )) {
 
         dao.metrics.incrementMetric("checkpointAcceptBlockAlreadyStored")
 

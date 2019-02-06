@@ -59,7 +59,8 @@ class APIClient private (host: String = "127.0.0.1",
   implicit val logger = Logger.takingImplicit[HostPort]("APIClient")
 
   implicit val backend = new LoggingSttpBackend[Future, Nothing](
-    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()))
+    PrometheusBackend[Future, Nothing](OkHttpFutureBackend())
+  )
   implicit val serialization = native.Serialization
 
   val daoOpt = Option(dao)
@@ -121,7 +122,8 @@ class APIClient private (host: String = "127.0.0.1",
   }
 
   def post(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
-    implicit f: Formats = constellation.constellationFormats): Future[Response[String]] = {
+    implicit f: Formats = constellation.constellationFormats
+  ): Future[Response[String]] = {
     val ser = Serialization.write(b)
     val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
     httpWithAuth(suffix, timeout = timeout)(Method.POST)
@@ -132,7 +134,8 @@ class APIClient private (host: String = "127.0.0.1",
   }
 
   def put(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
-    implicit f: Formats = constellation.constellationFormats): Future[Response[String]] = {
+    implicit f: Formats = constellation.constellationFormats
+  ): Future[Response[String]] = {
     val ser = Serialization.write(b)
     val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
     httpWithAuth(suffix, timeout = timeout)(Method.PUT)
@@ -143,7 +146,8 @@ class APIClient private (host: String = "127.0.0.1",
   }
 
   def postEmpty(suffix: String, timeout: Duration = 5.seconds)(
-    implicit f: Formats = constellation.constellationFormats): Response[String] = {
+    implicit f: Formats = constellation.constellationFormats
+  ): Response[String] = {
     httpWithAuth(suffix, timeout = timeout)(Method.POST).send().blocking()
   }
 
@@ -161,13 +165,15 @@ class APIClient private (host: String = "127.0.0.1",
 
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
     implicit m: Manifest[T],
-    f: Formats = constellation.constellationFormats): T = {
+    f: Formats = constellation.constellationFormats
+  ): T = {
     postNonBlocking(suffix, b, timeout).blocking(timeout)
   }
 
   def postNonBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
     implicit m: Manifest[T],
-    f: Formats = constellation.constellationFormats): Future[T] = {
+    f: Formats = constellation.constellationFormats
+  ): Future[T] = {
     val ser = Serialization.write(b)
     val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
     httpWithAuth(suffix, timeout = timeout)(Method.POST)
@@ -179,9 +185,10 @@ class APIClient private (host: String = "127.0.0.1",
       .map(_.unsafeBody)
   }
 
-  def postBlockingEmpty[T <: AnyRef](suffix: String, timeout: Duration = 5.seconds)(
-    implicit m: Manifest[T],
-    f: Formats = constellation.constellationFormats): T = {
+  def postBlockingEmpty[T <: AnyRef](
+    suffix: String,
+    timeout: Duration = 5.seconds
+  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): T = {
     val res = postEmpty(suffix, timeout)
     Serialization.read[T](res.unsafeBody)
   }
@@ -198,19 +205,19 @@ class APIClient private (host: String = "127.0.0.1",
     get(suffix, queryParams, timeout).blocking(timeout)
   }
 
-  def getBlocking[T <: AnyRef](suffix: String,
-                               queryParams: Map[String, String] = Map(),
-                               timeout: Duration = 5.seconds)(
-    implicit m: Manifest[T],
-    f: Formats = constellation.constellationFormats): T = {
+  def getBlocking[T <: AnyRef](
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 5.seconds
+  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): T = {
     getNonBlocking[T](suffix, queryParams, timeout).blocking(timeout)
   }
 
-  def getNonBlocking[T <: AnyRef](suffix: String,
-                                  queryParams: Map[String, String] = Map(),
-                                  timeout: Duration = 5.seconds)(
-    implicit m: Manifest[T],
-    f: Formats = constellation.constellationFormats): Future[T] = {
+  def getNonBlocking[T <: AnyRef](
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 5.seconds
+  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): Future[T] = {
     httpWithAuth(suffix, queryParams, timeout)(Method.GET)
       .response(asJson[T])
       .send()

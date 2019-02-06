@@ -58,7 +58,8 @@ object CustomDirectives {
           pass
         } else {
           complete(
-            StatusCodes.custom(403, "ip unknown. Need to register using the /register endpoint."))
+            StatusCodes.custom(403, "ip unknown. Need to register using the /register endpoint.")
+          )
         }
       }
     }

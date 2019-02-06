@@ -23,7 +23,8 @@ object Genesis {
 
   def createGenesisBlock(keyPair: KeyPair): CheckpointBlock = {
     CheckpointBlock.createCheckpointBlock(Seq(createGenesisTransaction(keyPair)), GenesisTips)(
-      keyPair)
+      keyPair
+    )
   }
 
   def start()(implicit dao: DAO): Unit = {

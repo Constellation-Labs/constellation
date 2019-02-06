@@ -6,8 +6,8 @@ import org.constellation.HostPort
 
 class LoggingSttpBackend[R[_], S](delegate: SttpBackend[R, S])(
   implicit val apiLogger: LoggerTakingImplicit[HostPort],
-  hp: HostPort)
-    extends SttpBackend[R, S]
+  hp: HostPort
+) extends SttpBackend[R, S]
     with StrictLogging {
 
   override def send[T](request: Request[T, S]): R[Response[T]] = {

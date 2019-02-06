@@ -60,7 +60,8 @@ class E2ETest
     )
   }
   val updatePasswordReq = UpdatePassword(
-    Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword"))
+    Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
+  )
 
   def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
     apiClients.map { client =>
@@ -77,8 +78,9 @@ class E2ETest
 
   //private val address1 = n1.getInetSocketAddress
 
-  private val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes - 1)(i =>
-    createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)) // seedHosts = Seq(address1)
+  private val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes - 1)(
+    i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
+  ) // seedHosts = Seq(address1)
 
   private val apis = nodes.map { _.getAPIClient() }
 
@@ -207,7 +209,8 @@ class MessageTestingSim(sim: Simulation) {
         }
       )
       sim.logger.info(
-        s"Message batch $batchNumber complete, sent ${serializedMessages.size} messages")
+        s"Message batch $batchNumber complete, sent ${serializedMessages.size} messages"
+      )
       messages
     }
 
@@ -230,7 +233,8 @@ class MessageTestingSim(sim: Simulation) {
       assert(proof.checkpointProof.verify())
       assert(m.blockHash.contains { proof.checkpointProof.input })
       assert(
-        m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input)
+        m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
+      )
     }
     // messageValid()
   }

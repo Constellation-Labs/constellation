@@ -276,12 +276,14 @@ sealed trait CheckpointBlockValidatorNel {
       .product(validateSourceAddressCache(t))
       .map(_ => t)
 
-  def validateTransactions(t: Iterable[Transaction])(
-    implicit dao: DAO): ValidationResult[List[Transaction]] =
+  def validateTransactions(
+    t: Iterable[Transaction]
+  )(implicit dao: DAO): ValidationResult[List[Transaction]] =
     t.toList.map(validateTransaction(_).map(List(_))).combineAll
 
   def validateDuplicatedTransactions(
-    t: Iterable[Transaction]): ValidationResult[List[Transaction]] = {
+    t: Iterable[Transaction]
+  ): ValidationResult[List[Transaction]] = {
     val diff = t.toList.diff(t.toSet.toList)
 
     if (diff.isEmpty) {
@@ -373,25 +375,28 @@ sealed trait CheckpointBlockValidatorNel {
       dao.addressService.get(hash).map { _.balanceByLatestSnapshot }.getOrElse(0L) + diff >= 0
   }
 
-  def validateCheckpointBlockTree(cb: CheckpointBlock)(
-    implicit dao: DAO): Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance] =
+  def validateCheckpointBlockTree(
+    cb: CheckpointBlock
+  )(implicit dao: DAO): Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance] =
     if (isInSnapshot(cb)) Map.empty[String, Long].rightIor
     else
       getParents(cb)
         .map(validateCheckpointBlockTree)
         .foldLeft(Map.empty[String, Long].rightIor[NonEmptyList[CheckpointBlockValidation]])(
-          (result, d) => result.combine(d))
+          (result, d) => result.combine(d)
+        )
         .map(getSummaryBalance(cb) |+| _)
         .flatMap(
           diffs =>
             if (diffs.forall(validateDiff))
               diffs.rightIor
             else
-              Ior.both(NonEmptyList.of(InternalInconsistency(cb)), diffs))
+              Ior.both(NonEmptyList.of(InternalInconsistency(cb)), diffs)
+        )
 
   implicit def validateTreeToValidated(
-    v: Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance])
-    : ValidationResult[AddressBalance] =
+    v: Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance]
+  ): ValidationResult[AddressBalance] =
     v match {
       case Ior.Right(a)   => a.validNel
       case Ior.Left(a)    => a.invalid
