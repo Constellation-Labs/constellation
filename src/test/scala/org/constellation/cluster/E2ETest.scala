@@ -1,64 +1,17 @@
 package org.constellation.cluster
 
-import java.util.concurrent.{ForkJoinPool, TimeUnit}
+import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorSystem
-import akka.stream.ActorMaterializer
 import akka.util.Timeout
-import better.files.File
 import com.softwaremill.sttp.{Response, StatusCodes}
-import com.typesafe.scalalogging.StrictLogging
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.{ChannelProof, _}
-import org.constellation.util.{APIClient, Simulation, TestNode}
-import org.constellation.{ConstellationNode, HostPort, UpdatePassword}
-import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
+import org.constellation.util.{APIClient, Simulation}
+import org.constellation.{E2E, HostPort, UpdatePassword}
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
-import scala.util.{Random, Try}
+import scala.util.Random
 
-class E2ETest
-    extends AsyncFlatSpecLike
-    with Matchers
-    with BeforeAndAfterAll
-    with BeforeAndAfterEach
-    with StrictLogging {
-
-  val tmpDir = "tmp"
-
-  implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
-  implicit val materializer: ActorMaterializer = ActorMaterializer()
-
-  override def beforeAll(): Unit = {
-    // Cleanup DBs
-    //Try{File(tmpDir).delete()}
-    Try { File(tmpDir).createDirectories() }
-
-  }
-
-  override def afterAll() {
-    // Cleanup DBs
-    TestNode.clearNodes()
-    system.terminate()
-    Try { File(tmpDir).delete() }
-  }
-
-  def createNode(
-    randomizePorts: Boolean = true,
-    seedHosts: Seq[HostPort] = Seq(),
-    portOffset: Int = 0,
-    isGenesisNode: Boolean = false
-  ): ConstellationNode = {
-    implicit val executionContext: ExecutionContextExecutorService =
-      ExecutionContext.fromExecutorService(new ForkJoinPool(100))
-
-    TestNode(
-      randomizePorts = randomizePorts,
-      portOffset = portOffset,
-      seedHosts = seedHosts,
-      isGenesisNode = isGenesisNode
-    )
-  }
+class E2ETest extends E2E {
   val updatePasswordReq = UpdatePassword(
     Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
   )
