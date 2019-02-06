@@ -1,22 +1,21 @@
 package org.constellation.primitives
 
 import java.net.InetSocketAddress
-
 import akka.actor.{Actor, ActorSystem}
 import akka.http.scaladsl.model.RemoteAddress
 import akka.stream.ActorMaterializer
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.StrictLogging
+import scala.collection.Set
+import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.util.{Failure, Random, Success, Try}
+
 import constellation.{futureTryWithTimeoutMetric, _}
 import org.constellation.p2p.{Download, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat}
 import org.constellation.util._
 import org.constellation.{DAO, HostPort, PeerMetadata, RemovePeerRequest}
-
-import scala.collection.Set
-import scala.concurrent.{ExecutionContextExecutor, Future}
-import scala.util.{Failure, Random, Success, Try}
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 

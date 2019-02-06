@@ -1,21 +1,20 @@
 package org.constellation.cluster
 
 import java.util.concurrent.{ForkJoinPool, TimeUnit}
-
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import com.softwaremill.sttp.{Response, StatusCodes}
+import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
+import scala.util.{Random, Try}
+
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.{ChannelProof, _}
 import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.constellation.{ConstellationNode, HostPort, UpdatePassword}
-import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
-
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
-import scala.util.{Random, Try}
 
 class E2ETest
     extends AsyncFlatSpecLike

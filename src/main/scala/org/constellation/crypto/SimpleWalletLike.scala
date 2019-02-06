@@ -1,9 +1,9 @@
 package org.constellation.crypto
 
 import java.security.KeyPair
+import org.constellation.DAO
 
 import constellation._
-import org.constellation.DAO
 
 trait SimpleWalletLike {
 

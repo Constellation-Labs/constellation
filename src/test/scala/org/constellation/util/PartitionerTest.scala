@@ -1,17 +1,16 @@
 package org.constellation.util
 
 import java.security.KeyPair
-
-import constellation.{SHA256Ext, createTransaction}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 import org.constellation.Fixtures.{dummyTx, _}
 import Partitioner._
+import scala.util.Random
+
+import constellation.{SHA256Ext, createTransaction}
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.{Schema, Transaction}
 import org.constellation.primitives.Schema.SendToAddress
-
-import scala.util.Random
 
 class PartitionerTest
     extends AsyncFlatSpecLike

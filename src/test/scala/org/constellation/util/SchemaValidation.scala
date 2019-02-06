@@ -1,9 +1,10 @@
 package org.constellation.util
 
-import constellation._
-import org.constellation.primitives.SensorData
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.FlatSpec
+
+import constellation._
+import org.constellation.primitives.SensorData
 
 class SchemaValidation extends FlatSpec {
 

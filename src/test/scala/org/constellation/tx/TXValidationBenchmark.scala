@@ -6,6 +6,8 @@ import akka.actor.{ActorSystem, Props}
 import akka.pattern.ask
 import better.files.{File, _}
 import com.typesafe.scalalogging.Logger
+import scala.util.Try
+
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
@@ -15,8 +17,6 @@ import org.constellation.primitives.Schema.AddressCacheData
 import org.constellation.util.SignHelp
 import org.constellation.{DAO, LevelDBActor}
 import org.scalatest.FlatSpec
-
-import scala.util.Try
 
 class TXValidationBenchmark extends FlatSpec {
   val logger = Logger("TXValidationBenchmark")

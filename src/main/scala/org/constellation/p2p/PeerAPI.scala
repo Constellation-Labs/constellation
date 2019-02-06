@@ -9,8 +9,12 @@ import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromE
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
-import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+import org.json4s.native
+import org.json4s.native.Serialization
+import scala.concurrent.ExecutionContext
+
+import constellation._
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
 import org.constellation.consensus.EdgeProcessor
@@ -22,10 +26,6 @@ import org.constellation.consensus.EdgeProcessor.{
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.{CommonEndpoints, SingleHashSignature}
-import org.json4s.native
-import org.json4s.native.Serialization
-
-import scala.concurrent.ExecutionContext
 
 case class PeerAuthSignRequest(salt: Long)
 

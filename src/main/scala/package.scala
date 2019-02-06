@@ -2,7 +2,6 @@ import java.net.InetSocketAddress
 import java.nio.{ByteBuffer, ByteOrder}
 import java.security.{KeyPair, PrivateKey, PublicKey}
 import java.util.concurrent.TimeUnit
-
 import akka.actor.ActorRef
 import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.unmarshalling.Unmarshal
@@ -10,20 +9,20 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import com.google.common.hash.Hashing
+import org.json4s.JsonAST.{JInt, JString}
+import org.json4s.ext.EnumNameSerializer
+import org.json4s.native.{Serialization, parseJsonOpt}
+import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
+import scala.reflect.ClassTag
+import scala.util.{Failure, Random, Success, Try}
+
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{KeySerializeJSON, POWExt, SignHelpExt}
-import org.json4s.JsonAST.{JInt, JString}
-import org.json4s.ext.EnumNameSerializer
-import org.json4s.native.{Serialization, parseJsonOpt}
-import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue}
-
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext, Future, Promise}
-import scala.reflect.ClassTag
-import scala.util.{Failure, Random, Success, Try}
 
 package object constellation extends POWExt with SignHelpExt with KeySerializeJSON {
 

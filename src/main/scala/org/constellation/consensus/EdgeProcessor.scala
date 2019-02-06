@@ -1,11 +1,15 @@
 package org.constellation.consensus
 
 import java.nio.file.Path
-
 import cats.data.NonEmptyList
 import cats.data.Validated.{Invalid, Valid}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
+import scala.async.Async.{async, await}
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.util.Try
+
 import constellation._
 import org.constellation.DAO
 import org.constellation.primitives.Schema._
@@ -13,11 +17,6 @@ import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Validation.EnrichedFuture
 import org.constellation.util.{APIClient, HashSignature, Signable}
-
-import scala.async.Async.{async, await}
-import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.Try
 
 object EdgeProcessor extends StrictLogging {
 

@@ -3,7 +3,6 @@ package org.constellation
 import com.typesafe.scalalogging.Logger
 import org.scalatest.FlatSpec
 import slick.jdbc.H2Profile.api._
-
 import scala.concurrent.ExecutionContext.Implicits.global
 // Use H2Profile to connect to an H2 database
 

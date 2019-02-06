@@ -2,6 +2,10 @@ package org.constellation.p2p
 
 import akka.pattern.ask
 import com.typesafe.scalalogging.StrictLogging
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Try}
+
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus._
@@ -9,10 +13,6 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.APIClient
-
-import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Try}
 
 /// New download code
 

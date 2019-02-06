@@ -8,16 +8,16 @@ import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{CanLog, Logger}
+import org.json4s.native.Serialization
+import org.json4s.{Formats, native}
+import org.slf4j.MDC
+import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext, Future}
+
 import org.constellation.{DAO, HostPort}
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.primitives.Schema.{Id, MetricsResult}
 import org.constellation.serializer.KryoSerializer
-import org.json4s.native.Serialization
-import org.json4s.{Formats, native}
-import org.slf4j.MDC
-
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
 
 object APIClient {
 

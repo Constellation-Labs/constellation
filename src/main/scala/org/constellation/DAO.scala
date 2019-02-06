@@ -3,6 +3,7 @@ package org.constellation
 import akka.stream.ActorMaterializer
 import better.files.File
 import com.typesafe.scalalogging.StrictLogging
+
 import org.constellation.primitives._
 
 class DAO(val nodeConfig: NodeConfig = NodeConfig())
