@@ -174,7 +174,7 @@ object Download extends StrictLogging {
 
     dao.threadSafeTipService.setSnapshot(snapshotInfo2)
     dao.generateRandomTX = true
-    dao.nodeState = NodeState.Ready
+    dao.setNodeState(NodeState.Ready)
 
     dao.threadSafeTipService.syncBuffer.foreach{ h =>
 
@@ -192,7 +192,6 @@ object Download extends StrictLogging {
 
     dao.threadSafeTipService.syncBuffer = Seq()
 
-    dao.metrics.updateMetric("nodeState", dao.nodeState.toString)
     dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, NodeState.Ready)))
     dao.downloadFinishedTime = System.currentTimeMillis()
     dao.transactionAcceptedAfterDownload = dao.metrics.getMetrics.get("transactionAccepted").map{_.toLong}.getOrElse(0L)

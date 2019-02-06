@@ -19,7 +19,7 @@ import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.p2p.PeerAPI
-import org.constellation.primitives.Schema.ValidPeerIPData
+import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Metrics}
 
@@ -295,7 +295,11 @@ class ConstellationNode(val configKeyPair: KeyPair,
   }
 
   if (nodeConfig.isGenesisNode) {
+    logger.info("Creating genesis block")
     Genesis.start()
+    logger.info(s"Genesis block hash ${dao.genesisBlock.map{_.soeHash}.getOrElse("")}")
+    dao.setNodeState(NodeState.Ready)
+    dao.generateRandomTX = true
   }
 
 }

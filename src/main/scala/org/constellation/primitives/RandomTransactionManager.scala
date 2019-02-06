@@ -62,7 +62,7 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
       dao.metrics.updateMetric("numPeersOnDAO", dao.peerInfo.size.toString)
       dao.metrics.updateMetric("numPeersOnDAOThatAreReady", peerIds.size.toString)
 
-      if (peerIds.nonEmpty && dao.nodeState == NodeState.Ready && dao.generateRandomTX) {
+      if ((peerIds.nonEmpty || dao.nodeConfig.isGenesisNode) && dao.nodeState == NodeState.Ready && dao.generateRandomTX) {
 
         generateRandomMessages()
 
@@ -73,15 +73,21 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
 
         if (memPoolCount < dao.processingConfig.maxMemPoolSize && haveBalance) {
 
-          val numTX = (dao.processingConfig.randomTXPerRoundPerPeer / peerIds.size) + 1
+          val numTX = (dao.processingConfig.randomTXPerRoundPerPeer / (peerIds.size + 1)) + 1
           Seq.fill(numTX)(0).foreach { _ =>
 
             // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
             // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
 
-            def getRandomPeer: (Id, PeerData) = peerIds(Random.nextInt(peerIds.size))
+            def getRandomPeerAddress: String = {
+              if (dao.nodeConfig.isGenesisNode && peerIds.isEmpty) {
+                dao.dummyAddress
+              } else {
+                peerIds(Random.nextInt(peerIds.size))._1.address
+              }
+            }
 
-            val sendRequest = SendToAddress(getRandomPeer._1.address, Random.nextInt(1000).toLong + 1L, normalized = false)
+            val sendRequest = SendToAddress(getRandomPeerAddress, Random.nextInt(1000).toLong + 1L, normalized = false)
             val tx = createTransaction(dao.selfAddressStr, sendRequest.dst, sendRequest.amount, dao.keyPair, normalized = false)
             dao.metrics.incrementMetric("signaturesPerformed")
             dao.metrics.incrementMetric("randomTransactionsGenerated")

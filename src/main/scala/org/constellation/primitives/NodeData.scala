@@ -5,6 +5,7 @@ import java.security.KeyPair
 import akka.actor.ActorRef
 
 import constellation._
+import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
@@ -31,7 +32,16 @@ trait NodeData {
 
   def selfAddressStr: String = id.address
 
+  val dummyAddress: String = KeyUtils.makeKeyPair().getPublic.toId.address
+
   @volatile var nodeState: NodeState = NodeState.PendingDownload
+
+  def setNodeState(
+                  nodeState_ : NodeState
+                  ): Unit = {
+    nodeState = nodeState_
+    metrics.updateMetric("nodeState", nodeState.toString)
+  }
 
   var externalHostString: String = "127.0.0.1"
   var externlPeerHTTPPort: Int = 9001

@@ -9,16 +9,32 @@ import org.constellation.primitives.Schema._
 
 object Genesis {
 
-  def createGenesisBlock = {
-    //CheckpointBlock.createCheckpointBlock()
+  final val CoinBaseHash = "coinbase"
+
+  private final val GenesisTips = Seq(
+    TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
+    TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash)
+  )
+
+  def createGenesisTransaction(keyPair: KeyPair): Transaction = {
+    val debtAddress = KeyUtils.makeKeyPair().address.address
+    createTransaction(debtAddress, keyPair.getPublic.toId.address, 4e9.toLong, keyPair)
   }
 
-  def start()(implicit dao: DAO) = {
+  def createGenesisBlock(keyPair: KeyPair): CheckpointBlock = {
+    CheckpointBlock.createCheckpointBlock(Seq(createGenesisTransaction(keyPair)), GenesisTips)(keyPair)
+  }
+
+  def start()(implicit dao: DAO): Unit = {
+    // TODO: Remove initial distribution
+    //val genesis = createGenesisBlock(dao.keyPair)
+    val fakeIdToGenerateTips = KeyUtils.makeKeyPair().getPublic.toId
+    val go = createGenesisAndInitialDistributionDirect(dao.selfAddressStr, Set(fakeIdToGenerateTips), dao.keyPair)
+    dao.acceptGenesis(go, setAsTips = true)
 
   }
 
-  val CoinBaseHash = "coinbase"
-
+  // TODO: Get rid of this, need to add edge case for handling tips at beginning to avoid this
   def createDistribution(
                           selfAddressStr: String, ids: Seq[Id], genesisSOE: SignedObservationEdge, keyPair: KeyPair
                         ): CheckpointBlock = {
@@ -27,23 +43,14 @@ object Genesis {
       createTransaction(selfAddressStr, id.address, 1e6.toLong, keyPair)
     }
 
-    val distrCB = CheckpointEdgeData(distr.map{_.edge.signedObservationEdge.signatureBatch.hash})
-
-    val distrOE = ObservationEdge(
+    CheckpointBlock.createCheckpointBlock(
+      distr,
       Seq(
         TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash),
         TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash)
       ),
-      TypedEdgeHash(distrCB.hash, EdgeHashType.CheckpointDataHash)
-    )
+    )(keyPair)
 
-    val distrSOE = signedObservationEdge(distrOE)(keyPair)
-
-    val distrRED = Edge(distrOE, distrSOE, distrCB)
-
-    val distrCBO = CheckpointBlock(distr, CheckpointEdge(distrRED))
-
-    distrCBO
   }
 
   /**
@@ -53,27 +60,8 @@ object Genesis {
     */
   def createGenesisAndInitialDistributionDirect(selfAddressStr: String, ids: Set[Id], keyPair: KeyPair): GenesisObservation = {
 
-    val debtAddress = KeyUtils.makeKeyPair().address.address
-
-    val redTXGenesisResolved = createTransaction(debtAddress, selfAddressStr, 4e9.toLong, keyPair)
-
-    val genTXHash = redTXGenesisResolved.edge.signedObservationEdge.signatureBatch.hash
-
-    val cb = CheckpointEdgeData(Seq(genTXHash))
-
-    val oe = ObservationEdge(
-      Seq(
-        TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
-        TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash)
-      ),
-      TypedEdgeHash(cb.hash, EdgeHashType.CheckpointDataHash)
-    )
-
-    val soe = signedObservationEdge(oe)(keyPair)
-
-    val redGenesis = Edge(oe, soe, cb)
-
-    val genesisCBO = CheckpointBlock(Seq(redTXGenesisResolved), CheckpointEdge(redGenesis))
+    val genesisCBO = createGenesisBlock(keyPair)
+    val soe = genesisCBO.soe
 
     val distr1CBO = createDistribution(selfAddressStr, ids.toSeq, soe, keyPair)
     val distr2CBO = createDistribution(selfAddressStr, ids.toSeq, soe, keyPair)
@@ -130,6 +118,7 @@ trait Genesis extends NodeData with EdgeDAO {
   //  metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
 
     genesisObservation = Some(go)
+    genesisBlock = Some(go.genesis)
 /*
 
     // Dumb way to set these as active tips, won't pass a double validation but no big deal.
@@ -145,8 +134,10 @@ trait Genesis extends NodeData with EdgeDAO {
     if (setAsTips) {
       dao.threadSafeTipService.acceptGenesis(go)
     }
+    dao.metrics.updateMetric("genesisHash", go.genesis.soeHash)
 
-   // println(s"accept genesis = ", go)
+
+    // println(s"accept genesis = ", go)
   }
 
 }
