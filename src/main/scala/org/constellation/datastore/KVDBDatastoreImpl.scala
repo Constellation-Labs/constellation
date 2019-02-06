@@ -23,8 +23,7 @@ trait KVDBDatastoreImpl extends Datastore {
   override def getCheckpointCacheData(s: String): Option[CheckpointCacheData] =
     get[CheckpointCacheData](s)
 
-  override def putTransactionCacheData(s: String,
-                                       t: TransactionCacheData): Unit =
+  override def putTransactionCacheData(s: String, t: TransactionCacheData): Unit =
     put(s, t)
 
   override def getTransactionCacheData(
@@ -74,8 +73,7 @@ trait KVDBDatastoreImpl extends Datastore {
   ): Option[SignedObservationEdgeCache] =
     get[SignedObservationEdgeCache](key)
 
-  override def putTransactionEdgeData(key: String,
-                                      t: TransactionEdgeData): Unit =
+  override def putTransactionEdgeData(key: String, t: TransactionEdgeData): Unit =
     put(key, t)
 
   override def updateTransactionEdgeData(

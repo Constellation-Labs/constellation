@@ -6,9 +6,7 @@ import org.constellation.primitives.Schema.SendToAddress
 
 class TXTests extends FlatSpec {
 
-  "TX hashes" should "split evenly" in {
-
-  }
+  "TX hashes" should "split evenly" in {}
 
   "Send json request" should "parse correctly" in {
 

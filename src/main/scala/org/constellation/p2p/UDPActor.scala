@@ -14,7 +14,6 @@ import org.constellation.serializer.KryoSerializer._
   * None of this code is used right now
   * We will revisit it in the future as alternative to REST/TCP
   */
-
 // Consider adding ID to all UDP messages? Possibly easier.
 
 case class UDPMessage(data: Any, remote: InetSocketAddress)
@@ -38,17 +37,18 @@ case object GetPacketGroups
 class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
                port: Int = 16180,
                bindInterface: String = "0.0.0.0",
-               dao: DAO) extends Actor {
+               dao: DAO)
+    extends Actor {
 
   import context.system
 
   private val address = new InetSocketAddress(bindInterface, port)
 
-  IO(Udp) ! Udp.Bind(self, address, List(
-    Udp.SO.ReceiveBufferSize(1024 * 1024 * 20),
-    Udp.SO.SendBufferSize(1024 * 1024 * 20),
-    Udp.SO.ReuseAddress.apply(true))
-  )
+  IO(Udp) ! Udp.Bind(self,
+                     address,
+                     List(Udp.SO.ReceiveBufferSize(1024 * 1024 * 20),
+                          Udp.SO.SendBufferSize(1024 * 1024 * 20),
+                          Udp.SO.ReuseAddress.apply(true)))
 
   @volatile var udpSocket: ActorRef = _
 
@@ -66,7 +66,9 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
   }
 
   def processMessage(d: Any, remote: InetSocketAddress): Unit = {
-    nextActor.foreach { n => n ! UDPMessage(d, remote) }
+    nextActor.foreach { n =>
+      n ! UDPMessage(d, remote)
+    }
   }
 
   def ready(socket: ActorRef): Receive = {
@@ -74,7 +76,6 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
     case GetPacketGroups => sender() ! packetGroups
 
     case Udp.Received(data, remote) =>
-
       if (true) { //dao.bannedIPs.contains(remote)) {
         println(s"BANNED MESSAGE DETECTED FROM $remote")
       } else {
@@ -85,7 +86,8 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
         val pg = serMsg.packetGroup
 
-        def updatePacketGroup(serMsg: SerializedUDPMessage, messages: TrieMap[Int, SerializedUDPMessage]): Unit = {
+        def updatePacketGroup(serMsg: SerializedUDPMessage,
+                              messages: TrieMap[Int, SerializedUDPMessage]): Unit = {
 
           // make sure this is not a duplicate packet first
           if (!messages.isDefinedAt(serMsg.packetGroupId)) {
@@ -121,15 +123,17 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
     case UDPSend(data, remote) =>
       val ser: Seq[SerializedUDPMessage] = serializeGrouped(data)
 
-      ser.foreach{ s: SerializedUDPMessage => {
-        val byteString = ByteString(serialize(s))
-        socket ! Udp.Send(byteString, remote)
-      }}
+      ser.foreach { s: SerializedUDPMessage =>
+        {
+          val byteString = ByteString(serialize(s))
+          socket ! Udp.Send(byteString, remote)
+        }
+      }
 
     case RegisterNextActor(next) => nextActor = Some(next)
 
     case Ban(remote) => {
-    //  dao.bannedIPs = {dao.bannedIPs ++ Seq(remote)}.distinct
+      //  dao.bannedIPs = {dao.bannedIPs ++ Seq(remote)}.distinct
     }
 
     case GetUDPSocketRef => sender() ! udpSocket

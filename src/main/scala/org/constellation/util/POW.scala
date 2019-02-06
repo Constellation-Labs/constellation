@@ -25,7 +25,9 @@ trait POWExt {
 
   def verifyPOW(input: String, nonce: String, difficulty: Option[Int]): Boolean = {
     val sha = hashNonce(input, nonce)
-    difficulty.exists{d => sha.startsWith("0"*d)}
+    difficulty.exists { d =>
+      sha.startsWith("0" * d)
+    }
   }
 
 }

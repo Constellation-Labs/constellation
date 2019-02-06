@@ -25,13 +25,11 @@ import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.reflect.ClassTag
 import scala.util.{Failure, Random, Success, Try}
 
-package object constellation extends POWExt
-  with SignHelpExt
-  with KeySerializeJSON {
+package object constellation extends POWExt with SignHelpExt with KeySerializeJSON {
 
   implicit var standardTimeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-  final val MinimumTime : Long = 1518898908367L
+  final val MinimumTime: Long = 1518898908367L
 
   implicit class EasyFutureBlock[T](f: Future[T]) {
 
@@ -42,30 +40,33 @@ package object constellation extends POWExt
 
     def getOpt(t: Int = 30): Option[T] = {
       import scala.concurrent.duration._
-      Try{Await.result(f, t.seconds)}.toOption
+      Try { Await.result(f, t.seconds) }.toOption
     }
     def getTry(t: Int = 30): Try[T] = {
       import scala.concurrent.duration._
-      Try{Await.result(f, t.seconds)}
+      Try { Await.result(f, t.seconds) }
     }
   }
 
   implicit def addressToSocket(peerAddress: String): InetSocketAddress =
-    peerAddress.split(":") match { case Array(ip, port) => new InetSocketAddress(ip, port.toInt)}
+    peerAddress.split(":") match { case Array(ip, port) => new InetSocketAddress(ip, port.toInt) }
 
   implicit def socketToAddress(peerAddress: InetSocketAddress): String =
     peerAddress.getHostString + ":" + peerAddress.getPort
 
-  class InetSocketAddressSerializer extends CustomSerializer[InetSocketAddress](format => ( {
-    case jstr: JObject =>
-      val host = (jstr \ "host").extract[String]
-      val port = (jstr \ "port").extract[Int]
-      new InetSocketAddress(host, port)
-  }, {
-    case key: InetSocketAddress =>
-      JObject("host" -> JString(key.getHostString), "port" -> JInt(key.getPort))
-  }
-  ))
+  class InetSocketAddressSerializer
+      extends CustomSerializer[InetSocketAddress](
+        format =>
+          ({
+            case jstr: JObject =>
+              val host = (jstr \ "host").extract[String]
+              val port = (jstr \ "port").extract[Int]
+              new InetSocketAddress(host, port)
+          }, {
+            case key: InetSocketAddress =>
+              JObject("host" -> JString(key.getHostString), "port" -> JInt(key.getPort))
+          })
+      )
 
   implicit val constellationFormats: Formats = DefaultFormats +
     new PublicKeySerializer +
@@ -81,7 +82,7 @@ package object constellation extends POWExt
 
   def decompose(message: Any): JValue = Extraction.decompose(message)
 
-  def parse4s(msg: String) : JValue = parseJsonOpt(msg).get
+  def parse4s(msg: String): JValue = parseJsonOpt(msg).get
 
   def compactRender(msg: JValue): String = Serialization.write(msg)
 
@@ -91,7 +92,7 @@ package object constellation extends POWExt
 
     def prettyJson: String = Serialization.writePretty(Extraction.decompose(jsonSerializable))
 
-    def tryJson: Try[String] = Try{caseClassToJson(jsonSerializable)}
+    def tryJson: Try[String] = Try { caseClassToJson(jsonSerializable) }
 
     def j: String = json
 
@@ -130,8 +131,7 @@ package object constellation extends POWExt
   def byteToInt(byteBarray: Array[Byte]): Int =
     ByteBuffer.wrap(byteBarray).order(ByteOrder.BIG_ENDIAN).getInt
 
-  implicit class HTTPHelp(httpResponse: HttpResponse)
-                         (implicit val materialize: ActorMaterializer) {
+  implicit class HTTPHelp(httpResponse: HttpResponse)(implicit val materialize: ActorMaterializer) {
 
     def unmarshal: Future[String] = Unmarshal(httpResponse.entity).to[String]
   }
@@ -141,7 +141,8 @@ package object constellation extends POWExt
       s"hostString: ${inetSocketAddress.getHostString}, port: ${inetSocketAddress.getPort}"
   }
 
-  implicit def pubKeyToAddress(key: PublicKey): AddressMetaData =  AddressMetaData(publicKeyToAddressString(key))
+  implicit def pubKeyToAddress(key: PublicKey): AddressMetaData =
+    AddressMetaData(publicKeyToAddressString(key))
 
   implicit class KeyPairFix(kp: KeyPair) {
 
@@ -150,7 +151,7 @@ package object constellation extends POWExt
 
     def dataEqual(other: KeyPair): Boolean = {
       kp.getPrivate == other.getPrivate &&
-        kp.getPublic == other.getPublic
+      kp.getPublic == other.getPublic
     }
 
     def address: AddressMetaData = pubKeyToAddress(kp.getPublic)
@@ -163,9 +164,13 @@ package object constellation extends POWExt
     def query[T: ClassTag](m: Any): T = (a ? m).mapTo[T].get()
   }
 
-  def signHashWithKey(hash: String, privateKey: PrivateKey): String = bytes2hex(signData(hash.getBytes())(privateKey))
+  def signHashWithKey(hash: String, privateKey: PrivateKey): String =
+    bytes2hex(signData(hash.getBytes())(privateKey))
 
-  def wrapFutureWithMetric[T](t: Future[T], metricPrefix: String)(implicit dao: DAO, ec: ExecutionContext): Future[T] = {
+  def wrapFutureWithMetric[T](
+    t: Future[T],
+    metricPrefix: String
+  )(implicit dao: DAO, ec: ExecutionContext): Future[T] = {
     t.onComplete {
       case Success(_) =>
         dao.metrics.incrementMetric(metricPrefix + "_success")
@@ -175,8 +180,8 @@ package object constellation extends POWExt
     t
   }
 
-  def tryWithMetric[T](t : => T, metricPrefix: String)(implicit dao: DAO): Try[T] = {
-    val attempt = Try{
+  def tryWithMetric[T](t: => T, metricPrefix: String)(implicit dao: DAO): Try[T] = {
+    val attempt = Try {
       t
     }
     attempt match {
@@ -189,7 +194,7 @@ package object constellation extends POWExt
     attempt
   }
 
-  def tryToMetric[T](attempt : Try[T], metricPrefix: String)(implicit dao: DAO): Try[T] = {
+  def tryToMetric[T](attempt: Try[T], metricPrefix: String)(implicit dao: DAO): Try[T] = {
     attempt match {
       case Success(x) =>
         dao.metrics.incrementMetric(metricPrefix + "_success")
@@ -200,7 +205,7 @@ package object constellation extends POWExt
     attempt
   }
 
-  def attemptWithRetry(t : => Boolean, maxRetries: Int = 10, delay: Long = 2000): Boolean = {
+  def attemptWithRetry(t: => Boolean, maxRetries: Int = 10, delay: Long = 2000): Boolean = {
 
     var retries = 0
     var done = false
@@ -214,43 +219,52 @@ package object constellation extends POWExt
     done
   }
 
-  def withTimeout[T](fut:Future[T])(implicit ec:ExecutionContext, after:Duration): Future[T] = {
+  def withTimeout[T](fut: Future[T])(implicit ec: ExecutionContext, after: Duration): Future[T] = {
     val prom = Promise[T]()
     val timeout = TimeoutScheduler.scheduleTimeout(prom, after)
     val combinedFut = Future.firstCompletedOf(List(fut, prom.future))
-    fut onComplete{case result => timeout.cancel()}
+    fut onComplete { case result => timeout.cancel() }
     combinedFut
   }
 
   import scala.concurrent.duration._
 
-  def withTimeoutSecondsAndMetric[T](fut:Future[T], metricPrefix: String, timeoutSeconds: Int = 10, onError: => Unit = ())
-                                    (implicit ec:ExecutionContext, dao: DAO): Future[T] = {
+  def withTimeoutSecondsAndMetric[T](
+    fut: Future[T],
+    metricPrefix: String,
+    timeoutSeconds: Int = 10,
+    onError: => Unit = ()
+  )(implicit ec: ExecutionContext, dao: DAO): Future[T] = {
     val prom = Promise[T]()
     val after = timeoutSeconds.seconds
     val timeout = TimeoutScheduler.scheduleTimeout(prom, after)
     val combinedFut = Future.firstCompletedOf(List(fut, prom.future))
-    fut onComplete{ _ =>
+    fut onComplete { _ =>
       timeout.cancel()
     }
-    prom.future.onComplete{
-      result =>
-        onError
-        if (result.isSuccess) {
-          dao.metrics.incrementMetric(metricPrefix + s"_timeoutAfter${timeoutSeconds}seconds")
-        }
-        if (result.isFailure) {
-          dao.metrics.incrementMetric(metricPrefix + s"_timeoutFAILUREDEBUGAfter${timeoutSeconds}seconds")
-        }
+    prom.future.onComplete { result =>
+      onError
+      if (result.isSuccess) {
+        dao.metrics.incrementMetric(metricPrefix + s"_timeoutAfter${timeoutSeconds}seconds")
+      }
+      if (result.isFailure) {
+        dao.metrics.incrementMetric(
+          metricPrefix + s"_timeoutFAILUREDEBUGAfter${timeoutSeconds}seconds"
+        )
+      }
     }
 
     combinedFut
   }
 
-  def futureTryWithTimeoutMetric[T](t: => T, metricPrefix: String, timeoutSeconds: Int = 10, onError: => Unit = ())
-                                   (implicit ec:ExecutionContext, dao: DAO): Future[Try[T]] = {
+  def futureTryWithTimeoutMetric[T](
+    t: => T,
+    metricPrefix: String,
+    timeoutSeconds: Int = 10,
+    onError: => Unit = ()
+  )(implicit ec: ExecutionContext, dao: DAO): Future[Try[T]] = {
     withTimeoutSecondsAndMetric(
-      Future{
+      Future {
         val originalName = Thread.currentThread().getName
         Thread.currentThread().setName(metricPrefix + Random.nextInt(10000))
         val attempt = tryWithMetric(t, metricPrefix) // This is an inner try as opposed to an onComplete so we can
@@ -264,11 +278,11 @@ package object constellation extends POWExt
   }
 
   def withRetries(
-                         err: String,
-                         t : => Boolean,
-                         maxRetries: Int = 10,
-                         delay: Long = 10000
-                       ): Boolean = {
+    err: String,
+    t: => Boolean,
+    maxRetries: Int = 10,
+    delay: Long = 10000
+  ): Boolean = {
 
     var retries = 0
     var done = false
@@ -290,7 +304,7 @@ package object constellation extends POWExt
 
 }
 
-object TimeoutScheduler{
+object TimeoutScheduler {
 
   import java.util.concurrent.{TimeUnit, TimeoutException}
 
@@ -301,12 +315,18 @@ object TimeoutScheduler{
 
   val timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
 
-  def scheduleTimeout(promise:Promise[_], after:Duration) = {
-    timer.newTimeout(new TimerTask{
+  def scheduleTimeout(promise: Promise[_], after: Duration) = {
+    timer.newTimeout(
+      new TimerTask {
 
-      def run(timeout:Timeout){
-        promise.failure(new TimeoutException("Operation timed out after " + after.toMillis + " millis"))
-      }
-    }, after.toNanos, TimeUnit.NANOSECONDS)
+        def run(timeout: Timeout) {
+          promise.failure(
+            new TimeoutException("Operation timed out after " + after.toMillis + " millis")
+          )
+        }
+      },
+      after.toNanos,
+      TimeUnit.NANOSECONDS
+    )
   }
 }

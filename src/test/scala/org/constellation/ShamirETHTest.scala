@@ -29,40 +29,50 @@ class ShamirETHTest extends FlatSpec {
 
   "Shamir" should "work" ignore {
 
-    val files = ethKeyStore.list.filter {
-      _.name != ".DS_Store"
-    }.flatMap{
-        f =>
-          val scheme = Scheme.of(3, 2)
-          val secret = f.byteArray
-          val parts = scheme.split(secret)
-          val done = parts.asScala.map{ case (index, bytes) =>
-            ShamirOutput(f.name, index, bytes2hex(bytes))
-          }.toSeq
-          done.foreach{z => println(z.json)}
-          done
+    val files = ethKeyStore.list
+      .filter {
+        _.name != ".DS_Store"
       }
-    encodedStore.writeText(files.map{_.json}.mkString("\n"))
+      .flatMap { f =>
+        val scheme = Scheme.of(3, 2)
+        val secret = f.byteArray
+        val parts = scheme.split(secret)
+        val done = parts.asScala.map {
+          case (index, bytes) =>
+            ShamirOutput(f.name, index, bytes2hex(bytes))
+        }.toSeq
+        done.foreach { z =>
+          println(z.json)
+        }
+        done
+      }
+    encodedStore.writeText(files.map { _.json }.mkString("\n"))
   }
 
   "Shamir read in" should "work" ignore {
 
-    val data = encodedStore.lines.map{_.x[ShamirOutput]}
+    val data = encodedStore.lines.map { _.x[ShamirOutput] }
 
     val scheme = Scheme.of(3, 2)
 
-    data.groupBy(
-      _.fileName
-    ).foreach{
-      case (fileName, parts) =>
-
-        val partsOut = parts.map{p => p.part.asInstanceOf[Integer] -> hex2bytes(p.hex)}.toMap.asJava
-        val recovered = scheme.join(partsOut)
-        val output = new String(recovered)
-        println(output)
-        val file = File(ethKeyStore, fileName)
-        file.writeText(output)
-    }
+    data
+      .groupBy(
+        _.fileName
+      )
+      .foreach {
+        case (fileName, parts) =>
+          val partsOut = parts
+            .map { p =>
+              p.part.asInstanceOf[Integer] -> hex2bytes(p.hex)
+            }
+            .toMap
+            .asJava
+          val recovered = scheme.join(partsOut)
+          val output = new String(recovered)
+          println(output)
+          val file = File(ethKeyStore, fileName)
+          file.writeText(output)
+      }
 
   }
 

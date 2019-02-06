@@ -4,7 +4,12 @@ import java.security.KeyPair
 
 import constellation._
 import org.constellation.DAO
-import org.constellation.primitives.Schema.{Address, AddressCacheData, TransactionCacheData, TransactionEdgeData}
+import org.constellation.primitives.Schema.{
+  Address,
+  AddressCacheData,
+  TransactionCacheData,
+  TransactionEdgeData
+}
 import org.constellation.util.HashSignature
 
 case class Transaction(edge: Edge[TransactionEdgeData]) {
@@ -15,26 +20,30 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
 
   def ledgerApply()(implicit dao: DAO): Unit = {
     dao.addressService.update(
-      src.hash,
-      { a: AddressCacheData => a.copy(balance = a.balance - amount)},
+      src.hash, { a: AddressCacheData =>
+        a.copy(balance = a.balance - amount)
+      },
       AddressCacheData(0L, 0L) // unused since this address should already exist here
     )
     dao.addressService.update(
-      dst.hash,
-      { a: AddressCacheData => a.copy(balance = a.balance + amount)},
+      dst.hash, { a: AddressCacheData =>
+        a.copy(balance = a.balance + amount)
+      },
       AddressCacheData(amount, 0L) // unused since this address should already exist here
     )
   }
 
   def ledgerApplySnapshot()(implicit dao: DAO): Unit = {
     dao.addressService.update(
-      src.hash,
-      { a: AddressCacheData => a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - amount)},
+      src.hash, { a: AddressCacheData =>
+        a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - amount)
+      },
       AddressCacheData(0L, 0L) // unused since this address should already exist here
     )
     dao.addressService.update(
-      dst.hash,
-      { a: AddressCacheData => a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + amount)},
+      dst.hash, { a: AddressCacheData =>
+        a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + amount)
+      },
       AddressCacheData(amount, 0L) // unused since this address should already exist here
     )
   }
@@ -49,7 +58,7 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
 
   // TODO: Add proper exception on empty option
 
-  def amount : Long = edge.data.amount
+  def amount: Long = edge.data.amount
 
   def baseHash: String = edge.signedObservationEdge.baseHash
 
@@ -59,15 +68,18 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
     edge = edge.withSignatureFrom(keyPair)
   )
 
-  def valid: Boolean = validSrcSignature &&
-    dst.address.nonEmpty &&
-    dst.address.length > 30 &&
-    dst.address.startsWith("DAG") &&
-    amount > 0
+  def valid: Boolean =
+    validSrcSignature &&
+      dst.address.nonEmpty &&
+      dst.address.length > 30 &&
+      dst.address.startsWith("DAG") &&
+      amount > 0
 
   def validSrcSignature: Boolean = {
-    edge.signedObservationEdge.signatureBatch.signatures.exists{ hs =>
-      hs.publicKey.address == src.address && hs.valid(edge.signedObservationEdge.signatureBatch.hash)
+    edge.signedObservationEdge.signatureBatch.signatures.exists { hs =>
+      hs.publicKey.address == src.address && hs.valid(
+        edge.signedObservationEdge.signatureBatch.hash
+      )
     }
   }
 

@@ -15,7 +15,7 @@ class SingleAppTest extends FlatSpec with BeforeAndAfterAll {
   }
 
   override def afterAll() {
-  //  ConstellationNode.system.terminate()
+    //  ConstellationNode.system.terminate()
   }
 
 }

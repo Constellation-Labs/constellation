@@ -13,10 +13,10 @@ class H2SlickTest extends FlatSpec {
 
   val logger = Logger("H2SlickTest")
 
-
   // Definition of the SUPPLIERS table
 
-  class Suppliers(tag: Tag) extends Table[(Int, String, String, String, String, String)](tag, "SUPPLIERS") {
+  class Suppliers(tag: Tag)
+      extends Table[(Int, String, String, String, String, String)](tag, "SUPPLIERS") {
 
     def id = column[Int]("SUP_ID", O.PrimaryKey) // This is the primary key column
 
@@ -63,20 +63,19 @@ class H2SlickTest extends FlatSpec {
       val setup = DBIO.seq(
         // Create the tables, including primary and foreign keys
         (suppliers.schema ++ coffees.schema).create,
-
         // Insert some suppliers
-        suppliers += (101, "Acme, Inc.",      "99 Market Street", "Groundsville", "CA", "95199"),
-        suppliers += ( 49, "Superior Coffee", "1 Party Place",    "Mendocino",    "CA", "95460"),
-        suppliers += (150, "The High Ground", "100 Coffee Lane",  "Meadows",      "CA", "93966"),
+        suppliers += (101, "Acme, Inc.", "99 Market Street", "Groundsville", "CA", "95199"),
+        suppliers += (49, "Superior Coffee", "1 Party Place", "Mendocino", "CA", "95460"),
+        suppliers += (150, "The High Ground", "100 Coffee Lane", "Meadows", "CA", "93966"),
         // Equivalent SQL code:
         // insert into SUPPLIERS(SUP_ID, SUP_NAME, STREET, CITY, STATE, ZIP) values (?,?,?,?,?,?)
 
         // Insert some coffees (using JDBC's batch insert feature, if supported by the DB)
         coffees ++= Seq(
-          ("Colombian",         101, 7.99, 0, 0),
-          ("French_Roast",       49, 8.99, 0, 0),
-          ("Espresso",          150, 9.99, 0, 0),
-          ("Colombian_Decaf",   101, 8.99, 0, 0),
+          ("Colombian", 101, 7.99, 0, 0),
+          ("French_Roast", 49, 8.99, 0, 0),
+          ("Espresso", 150, 9.99, 0, 0),
+          ("Colombian_Decaf", 101, 8.99, 0, 0),
           ("French_Roast_Decaf", 49, 9.99, 0, 0)
         )
         // Equivalent SQL code:
@@ -89,10 +88,11 @@ class H2SlickTest extends FlatSpec {
 
       // Read all coffees and print them to the console
       logger.debug("Coffees:")
-      db.run(coffees.result).map(_.foreach {
-        case (name, supID, price, sales, total) =>
-          logger.debug("  " + name + "\t" + supID + "\t" + price + "\t" + sales + "\t" + total)
-      })
+      db.run(coffees.result)
+        .map(_.foreach {
+          case (name, supID, price, sales, total) =>
+            logger.debug("  " + name + "\t" + supID + "\t" + price + "\t" + sales + "\t" + total)
+        })
       // Equivalent SQL code:
       // select COF_NAME, SUP_ID, PRICE, SALES, TOTAL from COFFEES
 

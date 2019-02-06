@@ -5,8 +5,7 @@ import org.scalajs.dom.raw.XMLHttpRequest
 
 object XHR {
 
-  def post[W: upickle.Writer, R: upickle.Reader]
-  (
+  def post[W: upickle.Writer, R: upickle.Reader](
     payload: W,
     callback: R => Unit,
     path: String,
@@ -33,8 +32,7 @@ object XHR {
     xhr.send(out)
   }
 
-  def get[R: upickle.Reader]
-  (
+  def get[R: upickle.Reader](
     callback: R => Unit,
     path: String
   ): Unit = {
@@ -53,4 +51,3 @@ object XHR {
     xhr.send()
   }
 }
-

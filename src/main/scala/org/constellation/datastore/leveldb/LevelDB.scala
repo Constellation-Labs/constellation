@@ -35,10 +35,10 @@ class LevelDB(val file: File) {
     var retries = 0
     var done = false
     do {
-      val attempt = Try {db.put(bytes(k), v)}
+      val attempt = Try { db.put(bytes(k), v) }
       attempt match {
         case Failure(e) => e.printStackTrace()
-        case _ =>
+        case _          =>
       }
       done = attempt.isSuccess
     } while (!done && retries < 3)
@@ -121,4 +121,3 @@ object LevelDB {
   }
 
 }
-

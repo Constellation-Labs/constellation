@@ -9,7 +9,7 @@ import org.constellation.crypto.KeyUtils._
 
 case class SetSerialize(s: Set[String])
 
-class ValidateWalletFuncTest  extends FlatSpec {
+class ValidateWalletFuncTest extends FlatSpec {
 
   val kp: KeyPair = makeKeyPair()
 
@@ -21,7 +21,7 @@ class ValidateWalletFuncTest  extends FlatSpec {
 
   }
 
-/*  "Wallet KeyStore" should "build a keystore properly" in {
+  /*  "Wallet KeyStore" should "build a keystore properly" in {
 
     val file = new File("keystoretest.p12")
     val file2 = new File("keystoretest.bks")
@@ -60,7 +60,7 @@ class ValidateWalletFuncTest  extends FlatSpec {
   }
 
   "KeyPair JSON" should "serialize to json4s using custom serializer" in {
-  //  implicit val formats: Formats = DefaultFormats +
+    //  implicit val formats: Formats = DefaultFormats +
 //      new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer
     val ser = Serialization.write(kp.getPublic)
     val deser = Serialization.read[PublicKey](ser)
@@ -96,7 +96,7 @@ class ValidateWalletFuncTest  extends FlatSpec {
   "Key Size" should "verify byte array lengths for encoded keys" in {
 
     def fill(thunk: => Array[Byte]) =
-      Seq.fill(50){thunk}.map{_.length}.distinct
+      Seq.fill(50) { thunk }.map { _.length }.distinct
 
     assert(fill(makeKeyPair().getPrivate.getEncoded) == List(144))
     assert(fill(makeKeyPair().getPublic.getEncoded) == List(88))
