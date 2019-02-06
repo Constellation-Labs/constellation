@@ -11,10 +11,11 @@ import org.constellation.serializer.KryoSerializer
 import scala.util.Try
 
 class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem)
-    extends Actor with StrictLogging {
+    extends Actor
+    with StrictLogging {
 
- // implicit val executionContext: ExecutionContext =
- //   system.dispatchers.lookup("db-io-dispatcher")
+  // implicit val executionContext: ExecutionContext =
+  //   system.dispatchers.lookup("db-io-dispatcher")
 
   def tmpDirId = file"tmp/${dao.id.medium}/db"
 
@@ -38,10 +39,10 @@ class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem)
       sender() ! db.putBytes(key, bytes)
 
     case DBUpdate(key, func, empty) =>
-      val res = Try { db.getBytes(key).map { KryoSerializer.deserialize } }.toOption.flatten
+      val res    = Try { db.getBytes(key).map { KryoSerializer.deserialize } }.toOption.flatten
       val option = res.map(func)
-      val obj = option.getOrElse(empty)
-      val bytes = KryoSerializer.serializeAnyRef(obj)
+      val obj    = option.getOrElse(empty)
+      val bytes  = KryoSerializer.serializeAnyRef(obj)
       db.putBytes(key, bytes)
       sender() ! obj
 

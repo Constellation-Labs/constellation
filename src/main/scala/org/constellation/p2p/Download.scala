@@ -25,13 +25,14 @@ object Download extends StrictLogging {
     dao.nodeState = NodeState.DownloadInProgress
     PeerManager.broadcastNodeState()
 
-    dao.peerInfo.map{_._2.client}.foreach{
+    dao.peerInfo.map { _._2.client }.foreach {
       _.post("faucet", SendToAddress(dao.selfAddressStr, 500L))
     }
 
     // TODO: Error handling and verification
-    val res = (dao.peerManager ? APIBroadcast(_.getNonBlocking[Option[GenesisObservation]]("genesis")))
-      .mapTo[Map[Id, Future[Option[GenesisObservation]]]]
+    val res =
+      (dao.peerManager ? APIBroadcast(_.getNonBlocking[Option[GenesisObservation]]("genesis")))
+        .mapTo[Map[Id, Future[Option[GenesisObservation]]]]
 
     val genF = res.flatMap { m =>
       Future.find(m.values.toList)(_.nonEmpty).map(_.flatten.get)
@@ -40,20 +41,23 @@ object Download extends StrictLogging {
     val genesis = genF.get()
     dao.acceptGenesis(genesis)
 
-
     dao.metrics.updateMetric("downloadedGenesis", "true")
 
-    val peerData = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().filter{_._2.peerMetadata.nodeState == NodeState.Ready}
+    val peerData = (dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().filter {
+      _._2.peerMetadata.nodeState == NodeState.Ready
+    }
 
     val snapshotClient = peerData.head._2.client
 
     logger.info(s"Downloading from: ${snapshotClient.hostName}:${snapshotClient.apiPort}")
 
-    val snapshotInfo = snapshotClient.getBlockingBytesKryo[SnapshotInfo]("info", timeout = 300.seconds)
+    val snapshotInfo =
+      snapshotClient.getBlockingBytesKryo[SnapshotInfo]("info", timeout = 300.seconds)
 
-    dao.metrics.updateMetric("downloadExpectedNumSnapshotsIncludingPreExisting", snapshotInfo.snapshotHashes.size.toString)
+    dao.metrics.updateMetric("downloadExpectedNumSnapshotsIncludingPreExisting",
+                             snapshotInfo.snapshotHashes.size.toString)
 
-    val preExistingSnapshots = dao.snapshotPath.list.toSeq.map{_.name}
+    val preExistingSnapshots = dao.snapshotPath.list.toSeq.map { _.name }
 
     val snapshotHashes = snapshotInfo.snapshotHashes.filterNot(preExistingSnapshots.contains)
 
@@ -75,23 +79,21 @@ object Download extends StrictLogging {
     // TODO: Move elsewhere unify with other code.
 
     def acceptSnapshot(r: StoredSnapshot) = {
-      r.checkpointCache.foreach{
-        c =>
-          dao.metrics.incrementMetric("downloadedBlocks")
-          // Bypasses tip update / accumulating acceptedSinceCB
+      r.checkpointCache.foreach { c =>
+        dao.metrics.incrementMetric("downloadedBlocks")
+        // Bypasses tip update / accumulating acceptedSinceCB
 
-          // TODO: Rebuild ledger and verify, turning off for debug
-          dao.metrics.incrementMetric("checkpointAccepted")
+        // TODO: Rebuild ledger and verify, turning off for debug
+        dao.metrics.incrementMetric("checkpointAccepted")
 
-          //tryWithMetric(acceptCheckpoint(c), "acceptCheckpoint")
-          c.checkpointBlock.foreach{
-            _.transactions.foreach{
-              tx =>
-                //     tx.ledgerApplySnapshot()
-                dao.metrics.incrementMetric("transactionAccepted")
-              // dao.transactionService.delete(Set(tx.hash))
-            }
+        //tryWithMetric(acceptCheckpoint(c), "acceptCheckpoint")
+        c.checkpointBlock.foreach {
+          _.transactions.foreach { tx =>
+            //     tx.ledgerApplySnapshot()
+            dao.metrics.incrementMetric("transactionAccepted")
+            // dao.transactionService.delete(Set(tx.hash))
           }
+        }
 
       }
       //dao.dbActor.putSnapshot(r.snapshot.hash, r.snapshot)
@@ -102,22 +104,25 @@ object Download extends StrictLogging {
     def processSnapshotHash(peer: APIClient, hash: String): Boolean = {
 
       var activePeer = peer
-      var remainingPeers : Seq[APIClient] = peerData.values.map{_.client}.filterNot(_ == activePeer).toSeq
+      var remainingPeers: Seq[APIClient] =
+        peerData.values.map { _.client }.filterNot(_ == activePeer).toSeq
 
       var done = false
 
       while (!done && remainingPeers.nonEmpty) {
 
-        val res = Try{activePeer.getBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash, timeout = 100.seconds)}
+        val res = Try {
+          activePeer
+            .getBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash, timeout = 100.seconds)
+        }
         res match {
           case Failure(e) => e.printStackTrace()
-          case _ =>
+          case _          =>
         }
-        res.toOption.foreach{
-          r =>
-            dao.metrics.incrementMetric("downloadedSnapshots")
-            dao.metrics.incrementMetric("snapshotCount")
-            acceptSnapshot(r)
+        res.toOption.foreach { r =>
+          dao.metrics.incrementMetric("downloadedSnapshots")
+          dao.metrics.incrementMetric("snapshotCount")
+          acceptSnapshot(r)
         }
         if (res.isFailure) {
           dao.metrics.incrementMetric("downloadSnapshotDataFailed")
@@ -134,9 +139,9 @@ object Download extends StrictLogging {
       done
     }
 
-    val downloadRes = grouped.par.map{
+    val downloadRes = grouped.par.map {
       case (hashes, peer) =>
-        hashes.par.map{ hash =>
+        hashes.par.map { hash =>
           processSnapshotHash(peer.client, hash)
         }
     }
@@ -148,21 +153,23 @@ object Download extends StrictLogging {
 
     // Thread.sleep(10*1000)
 
-    val snapshotInfo2 = snapshotClient.getBlockingBytesKryo[SnapshotInfo]("info", timeout = 300.seconds)
+    val snapshotInfo2 =
+      snapshotClient.getBlockingBytesKryo[SnapshotInfo]("info", timeout = 300.seconds)
 
     val snapshotHashes2 = snapshotInfo2.snapshotHashes
       .filterNot(preExistingSnapshots.contains)
       .filterNot(snapshotHashes.contains)
 
-    dao.metrics.updateMetric("downloadExpectedNumSnapshotsSecondPass", snapshotHashes2.size.toString)
+    dao.metrics
+      .updateMetric("downloadExpectedNumSnapshotsSecondPass", snapshotHashes2.size.toString)
 
     val groupSize2Original = snapshotHashes2.size / peerData.size
-    val groupSize2 = Math.max(groupSize2Original, 1)
-    val grouped2 = snapshotHashes2.grouped(groupSize2).toSeq.zip(peerData.values)
+    val groupSize2         = Math.max(groupSize2Original, 1)
+    val grouped2           = snapshotHashes2.grouped(groupSize2).toSeq.zip(peerData.values)
 
-    val downloadRes2 = grouped2.par.map{
+    val downloadRes2 = grouped2.par.map {
       case (hashes, peer) =>
-        hashes.par.map{ hash =>
+        hashes.par.map { hash =>
           processSnapshotHash(peer.client, hash)
         }
     }
@@ -176,9 +183,9 @@ object Download extends StrictLogging {
     dao.generateRandomTX = true
     dao.setNodeState(NodeState.Ready)
 
-    dao.threadSafeTipService.syncBuffer.foreach{ h =>
-
-      if (!snapshotInfo2.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo2.snapshotCache.contains(h)) {
+    dao.threadSafeTipService.syncBuffer.foreach { h =>
+      if (!snapshotInfo2.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo2.snapshotCache
+            .contains(h)) {
         dao.metrics.incrementMetric("syncBufferCBAccepted")
         dao.threadSafeTipService.accept(h)
         /*        dao.metrics.incrementMetric("checkpointAccepted")
@@ -194,7 +201,8 @@ object Download extends StrictLogging {
 
     dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, NodeState.Ready)))
     dao.downloadFinishedTime = System.currentTimeMillis()
-    dao.transactionAcceptedAfterDownload = dao.metrics.getMetrics.get("transactionAccepted").map{_.toLong}.getOrElse(0L)
+    dao.transactionAcceptedAfterDownload =
+      dao.metrics.getMetrics.get("transactionAccepted").map { _.toLong }.getOrElse(0L)
 
   }
 
@@ -212,7 +220,7 @@ object Download extends StrictLogging {
       Thread.sleep(5000)
 
     }
-*/
+   */
 
   }
 

@@ -10,9 +10,10 @@ abstract class Periodic(threadName: String, periodSeconds: Int = 1) {
 
   var round: Long = 0L
 
-  private var lastExecution : Future[Any] = Future.successful(())
+  private var lastExecution: Future[Any] = Future.successful(())
 
   def trigger(): Future[Any]
+
   /**
     * Recalculates window based / periodic metrics
     */
@@ -28,7 +29,8 @@ abstract class Periodic(threadName: String, periodSeconds: Int = 1) {
   }
 
   // We may get rid of Akka so using this instead of the context scheduler
-  private val scheduledFuture = executor.scheduleAtFixedRate(task, 1, periodSeconds, TimeUnit.SECONDS)
+  private val scheduledFuture =
+    executor.scheduleAtFixedRate(task, 1, periodSeconds, TimeUnit.SECONDS)
 
   def shutdown(): Boolean = scheduledFuture.cancel(false)
 

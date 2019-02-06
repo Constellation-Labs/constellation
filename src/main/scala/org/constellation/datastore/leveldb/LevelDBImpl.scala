@@ -19,7 +19,7 @@ class LevelDBImpl(dao: DAO) extends KVDB {
 
   override def put(key: String, obj: AnyRef): Boolean = {
     dao.metrics.incrementMetric("DBPut")
-    val bytes = KryoSerializer.serializeAnyRef(obj)
+    val bytes   = KryoSerializer.serializeAnyRef(obj)
     val success = db.putBytes(key, bytes)
     if (!success) {
       dao.metrics.incrementMetric("DBPutFailure")

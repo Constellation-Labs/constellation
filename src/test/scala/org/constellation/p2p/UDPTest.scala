@@ -13,8 +13,13 @@ case class AnotherPublicKey(c: Id, seq: Seq[PublicKey])
 
 case class TestManyPublicKeys(a: PublicKey, b: Seq[PublicKey], d: AnotherPublicKey)
 
-class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
-  with ImplicitSender with GivenWhenThen with BeforeAndAfterAll with Matchers {
+class UDPTest
+    extends TestKit(ActorSystem("UDP"))
+    with FlatSpecLike
+    with ImplicitSender
+    with GivenWhenThen
+    with BeforeAndAfterAll
+    with Matchers {
 
   implicit val timeout: Timeout = Timeout(30, TimeUnit.SECONDS)
 
@@ -58,11 +63,11 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
     listener2 ! Udp.Unbind
 
     Thread.sleep(100)
-    */
+   */
   }
-  */
+   */
 
-/*
+  /*
 
 /*  "UDP Serialize" should "work with regular methods" in {
 
@@ -97,7 +102,7 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 
   }
 
-  */
+   */
 
   "UDP Bulk" should "send UDP packets in groups and decode properly" in {
     val rx1 = TestProbe()
@@ -126,7 +131,7 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
       case (m1, m2) =>
         assert(m1.data.sameElements(m2.data))
     }
-    */
+   */
 
     Thread.sleep(700)
 
@@ -152,10 +157,10 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
     addr.getAddress.getHostAddress shouldEqual "127.0.0.1"
     addr.getAddress.getHostName shouldEqual "localhost"
     addr.toString shouldEqual "localhost/127.0.0.1:5000"
-*/
+   */
   }
 
-  */
+   */
 
   /*
   "Kryo serialize" should "work with keys" in {
@@ -200,9 +205,9 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
     val hm2 = hm.kryoWrite.kryoRead.asInstanceOf[Signed[TestMessage]]
     assert(hm2 == hm)
   }
-  */
+   */
 
-/*
+  /*
   // TODO: GET THIS TO WORK PROPERLY
   "Kryo serialize signed2" should "work with signing data" in {
 
@@ -218,6 +223,6 @@ class UDPTest extends TestKit(ActorSystem("UDP")) with FlatSpecLike
 
     assert(hm2 == hm)
   }
-*/
+ */
 
 }

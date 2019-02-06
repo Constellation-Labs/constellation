@@ -1,11 +1,11 @@
- package org.constellation.p2p
+package org.constellation.p2p
 
 import java.net.InetSocketAddress
 import akka.actor.{Actor, Props}
 import akka.io.{IO, Tcp}
 
- // TODO: Complete as additional transport layer to REST PeerAPI
- // Consider using just a java socket server instead of akka
+// TODO: Complete as additional transport layer to REST PeerAPI
+// Consider using just a java socket server instead of akka
 
 class SimplisticHandler extends Actor {
   import Tcp._
@@ -30,7 +30,7 @@ class TCPServer(hostInterface: String, port: Int) extends Actor {
     case CommandFailed(_: Bind) => context stop self
 
     case c @ Connected(remote, local) =>
-      val handler = context.actorOf(Props[SimplisticHandler])
+      val handler    = context.actorOf(Props[SimplisticHandler])
       val connection = sender()
       connection ! Register(handler)
   }

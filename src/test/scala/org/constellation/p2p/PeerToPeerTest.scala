@@ -13,27 +13,33 @@ import scala.util.Random
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 
-class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLike
-  with ImplicitSender with GivenWhenThen with BeforeAndAfterAll with Matchers {
+class PeerToPeerTest
+    extends TestKit(ActorSystem("BlockChain"))
+    with FlatSpecLike
+    with ImplicitSender
+    with GivenWhenThen
+    with BeforeAndAfterAll
+    with Matchers {
 
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
 
-  private val address: InetSocketAddress = constellation.addressToSocket("localhost:16180")
+  private val address: InetSocketAddress  = constellation.addressToSocket("localhost:16180")
   private val address2: InetSocketAddress = constellation.addressToSocket("localhost:16181")
 
   trait WithPeerToPeerActor {
     val keyPair: KeyPair = KeyUtils.makeKeyPair()
 
-    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+    implicit val timeout: Timeout               = Timeout(5, TimeUnit.SECONDS)
     implicit val materialize: ActorMaterializer = ActorMaterializer()
 
     val consensusActor = TestProbe()
 
     val udpActor: ActorRef =
       system.actorOf(
-        Props(new UDPActor(dao = new DAO())), s"ConstellationUDPActor" + Random.nextInt()
+        Props(new UDPActor(dao = new DAO())),
+        s"ConstellationUDPActor" + Random.nextInt()
       )
 
     /*
@@ -45,16 +51,16 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
       ))
 
     udpActor ! RegisterNextActor(peerToPeerActor)
-*/
+   */
 
   }
 
-/*  "A PeerToPeer actor " should " start with an empty set of peers" in new WithPeerToPeerActor {
+  /*  "A PeerToPeer actor " should " start with an empty set of peers" in new WithPeerToPeerActor {
       peerToPeerActor ! GetPeers
       expectMsg(Peers(Nil))
   }*/
 
-/*  it should "register new peers" in new WithPeerToPeerActor {
+  /*  it should "register new peers" in new WithPeerToPeerActor {
     val probe = TestProbe()
     import akka.pattern.ask
     import constellation._
@@ -63,10 +69,10 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
     val res: Peers = (peerToPeerActor ? GetPeers).mapTo[Peers].get()
     assert(res == Peers(Seq(address2)))
   }
-  */
+   */
 
   // This needs a security check on the peer we're adding. Automatic peer approval is disabled temporarily.
-/*
+  /*
   it should "add us as a peer when we send a handshake" in new WithPeerToPeerActor {
     peerToPeerActor ! UDPMessage(HandShake(Fixtures.signedPeer), address2)
     Thread.sleep(100)
@@ -77,11 +83,11 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
       case Peers(Seq(peer)) => peer shouldEqual address2
     }
   }
-*/
+   */
 
   // TODO: Reimplement -- this test is already covered by multi-node and is much more complex now with UDP
   // Fix later
-/*
+  /*
   it should "handle a list of peers by adding them one by one and broadcasting to the original peers" in new WithPeerToPeerActor {
 
     Given("an initial peer")
@@ -100,6 +106,6 @@ class PeerToPeerTest extends TestKit(ActorSystem("BlockChain")) with FlatSpecLik
     peerProbe.expectMsg(AddPeerFromLocal(probes(1)))
 
   }
-*/
+ */
 
 }

@@ -7,7 +7,7 @@ import org.scalatest.FlatSpec
 
 class SchemaValidation extends FlatSpec {
 
-  private val schema = SensorData.schema
+  private val schema    = SensorData.schema
   private val validator = SensorData.validator
 
   "Sample schema" should "validate" in {

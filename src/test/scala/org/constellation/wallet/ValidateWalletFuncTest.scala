@@ -9,7 +9,7 @@ import org.constellation.crypto.KeyUtils._
 
 case class SetSerialize(s: Set[String])
 
-class ValidateWalletFuncTest  extends FlatSpec {
+class ValidateWalletFuncTest extends FlatSpec {
 
   val kp: KeyPair = makeKeyPair()
 
@@ -21,7 +21,7 @@ class ValidateWalletFuncTest  extends FlatSpec {
 
   }
 
-/*  "Wallet KeyStore" should "build a keystore properly" in {
+  /*  "Wallet KeyStore" should "build a keystore properly" in {
 
     val file = new File("keystoretest.p12")
     val file2 = new File("keystoretest.bks")
@@ -50,7 +50,7 @@ class ValidateWalletFuncTest  extends FlatSpec {
 
   "KeyGen" should "make proper keys" in {
     val privK = kp.getPrivate.toString
-    val pubK = kp.getPublic.toString
+    val pubK  = kp.getPublic.toString
     Seq(privK, pubK).foreach { pk =>
       assert(pk.length > 50)
       assert(pk.contains(":"))
@@ -60,15 +60,15 @@ class ValidateWalletFuncTest  extends FlatSpec {
   }
 
   "KeyPair JSON" should "serialize to json4s using custom serializer" in {
-  //  implicit val formats: Formats = DefaultFormats +
+    //  implicit val formats: Formats = DefaultFormats +
 //      new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer
-    val ser = Serialization.write(kp.getPublic)
+    val ser   = Serialization.write(kp.getPublic)
     val deser = Serialization.read[PublicKey](ser)
     assert(deser == kp.getPublic)
-    val ser2 = Serialization.write(kp.getPrivate)
+    val ser2   = Serialization.write(kp.getPrivate)
     val deser2 = Serialization.read[PrivateKey](ser2)
     assert(deser2 == kp.getPrivate)
-    val ser3 = Serialization.write(kp)
+    val ser3   = Serialization.write(kp)
     val deser3 = Serialization.read[KeyPair](ser3)
     assert(deser3.getPrivate == kp.getPrivate)
     assert(deser3.getPublic == kp.getPublic)
@@ -83,11 +83,11 @@ class ValidateWalletFuncTest  extends FlatSpec {
 
   "Signature" should "sign and verify output" in {
 
-    val text = "Yo this some text"
+    val text       = "Yo this some text"
     val inputBytes = text.getBytes()
 
     val signedOutput = signData(inputBytes)(kp.getPrivate)
-    val isLegit = verifySignature(inputBytes, signedOutput)(kp.getPublic)
+    val isLegit      = verifySignature(inputBytes, signedOutput)(kp.getPublic)
 
     assert(isLegit)
 
@@ -96,7 +96,7 @@ class ValidateWalletFuncTest  extends FlatSpec {
   "Key Size" should "verify byte array lengths for encoded keys" in {
 
     def fill(thunk: => Array[Byte]) =
-      Seq.fill(50){thunk}.map{_.length}.distinct
+      Seq.fill(50) { thunk }.map { _.length }.distinct
 
     assert(fill(makeKeyPair().getPrivate.getEncoded) == List(144))
     assert(fill(makeKeyPair().getPublic.getEncoded) == List(88))
@@ -112,16 +112,16 @@ class ValidateWalletFuncTest  extends FlatSpec {
   }
 
   "Key Encoding" should "verify keys can be encoded and decoded with X509/PKCS8 spec" in {
-    val pub1 = kp.getPublic
+    val pub1  = kp.getPublic
     val priv1 = kp.getPrivate
 
     val encodedBytesPub = pub1.getEncoded
-    val pub2 = bytesToPublicKey(encodedBytesPub)
+    val pub2            = bytesToPublicKey(encodedBytesPub)
     assert(pub1 == pub2)
     assert(pub1.getEncoded.sameElements(pub2.getEncoded))
 
     val encodedBytesPriv = priv1.getEncoded
-    val priv2 = bytesToPrivateKey(encodedBytesPriv)
+    val priv2            = bytesToPrivateKey(encodedBytesPriv)
     assert(priv1 == priv2)
     assert(priv1.getEncoded.sameElements(priv2.getEncoded))
   }

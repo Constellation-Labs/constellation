@@ -5,17 +5,18 @@ import better.files.File
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.primitives._
 
-class DAO(val nodeConfig: NodeConfig = NodeConfig()) extends NodeData
-  with Genesis
-  with EdgeDAO
-  with StrictLogging {
+class DAO(val nodeConfig: NodeConfig = NodeConfig())
+    extends NodeData
+    with Genesis
+    with EdgeDAO
+    with StrictLogging {
 
   var actorMaterializer: ActorMaterializer = _
 
-  var confirmWindow : Int = 30
+  var confirmWindow: Int = 30
 
   var transactionAcceptedAfterDownload: Long = 0L
-  var downloadFinishedTime: Long = System.currentTimeMillis()
+  var downloadFinishedTime: Long             = System.currentTimeMillis()
 
   var preventLocalhostAsPeer: Boolean = true
 
@@ -34,7 +35,7 @@ class DAO(val nodeConfig: NodeConfig = NodeConfig()) extends NodeData
   }
 
   def snapshotHashes: Seq[String] = {
-    snapshotPath.list.toSeq.map{_.name}
+    snapshotPath.list.toSeq.map { _.name }
   }
 
   def peersInfoPath: File = {

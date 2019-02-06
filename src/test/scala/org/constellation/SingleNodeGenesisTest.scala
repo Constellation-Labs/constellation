@@ -17,7 +17,7 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
 
   val tmpDir = "tmp"
 
-  implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
+  implicit val system: ActorSystem             = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
   override def beforeAll(): Unit = {
@@ -30,14 +30,14 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
     // Cleanup DBs
     TestNode.clearNodes()
     system.terminate()
-    Try{File(tmpDir).delete()}
+    Try { File(tmpDir).delete() }
   }
 
   def createNode(
-                  randomizePorts: Boolean = false,
-                  portOffset: Int = 0,
-                  isGenesisNode: Boolean = false
-                ): ConstellationNode = {
+      randomizePorts: Boolean = false,
+      portOffset: Int = 0,
+      isGenesisNode: Boolean = false
+  ): ConstellationNode = {
     implicit val executionContext: ExecutionContextExecutorService =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
@@ -50,7 +50,7 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
   }
 
   private val node = createNode(isGenesisNode = true)
-  private val api = node.getAPIClient()
+  private val api  = node.getAPIClient()
 
   "Genesis created" should "verify the node has created genesis" in {
 

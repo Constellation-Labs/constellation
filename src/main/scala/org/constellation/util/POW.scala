@@ -7,7 +7,7 @@ import constellation._
 trait POWExt {
 
   def proofOfWork(input: String, difficulty: Option[Int]): String = {
-    var done = false
+    var done  = false
     var count = 0L
     while (!done) {
       count += 1
@@ -25,7 +25,9 @@ trait POWExt {
 
   def verifyPOW(input: String, nonce: String, difficulty: Option[Int]): Boolean = {
     val sha = hashNonce(input, nonce)
-    difficulty.exists{d => sha.startsWith("0"*d)}
+    difficulty.exists { d =>
+      sha.startsWith("0" * d)
+    }
   }
 
 }

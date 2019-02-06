@@ -18,18 +18,20 @@ class SwayDBImpl(dao: DAO) extends KVDB {
   private implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
   //Create a persistent database. If the directories do not exist, they will be created.
-  private val db = SwayDB.persistent[String, Array[Byte]](
-    dir = (dao.dbPath / "disk1").path,
-    mmapMaps = false,
-    mmapSegments = MMAP.Disable,
-    mmapAppendix = false
-  ).get
+  private val db = SwayDB
+    .persistent[String, Array[Byte]](
+      dir = (dao.dbPath / "disk1").path,
+      mmapMaps = false,
+      mmapSegments = MMAP.Disable,
+      mmapAppendix = false
+    )
+    .get
 
   override def put(key: String, obj: AnyRef): Boolean = {
     val triedMeter = db.put(key, KryoSerializer.serializeAnyRef(obj))
     tryToMetric(triedMeter, "dbPutAttempt")
 
-/*    val getCheckAttempt = get[AnyRef](key)
+    /*    val getCheckAttempt = get[AnyRef](key)
     if (getCheckAttempt.isEmpty) {
       dao.metricsManager ! IncrementMetric("dbPutVerificationFailed")
     }*/
@@ -41,13 +43,15 @@ class SwayDBImpl(dao: DAO) extends KVDB {
     val triedMaybeBytes = db.get(key)
     tryToMetric(triedMaybeBytes, "dbGetAttempt")
     triedMaybeBytes.toOption.flatMap { a =>
-      a.flatMap { ab => tryWithMetric({KryoSerializer.deserialize(ab).asInstanceOf[T]}, "kryoDeserializeDB").toOption }
+      a.flatMap { ab =>
+        tryWithMetric({ KryoSerializer.deserialize(ab).asInstanceOf[T] }, "kryoDeserializeDB").toOption
+      }
 
     }
   }
 
   override def update[T <: AnyRef](key: String, updateF: T => T, empty: T): T = {
-    val res = get(key).map{updateF}
+    val res = get(key).map { updateF }
     if (res.isEmpty) {
       put(key, empty)
       empty
@@ -62,9 +66,7 @@ class SwayDBImpl(dao: DAO) extends KVDB {
     db.remove(key).isSuccess
   }
 
-  override def restart(): Unit = {
-
-  }
+  override def restart(): Unit = {}
 }
 
 object SwayDBImpl {

@@ -42,8 +42,8 @@ object CustomDirectives {
 
     def rejectBannedIP: Directive0 = {
       extractClientIP flatMap { ip =>
-
-        println(s"Reject banned ip: ${ip.toOption.map{_.getHostAddress}} ${ip.toIP.map{_.ip.getHostAddress}}")
+        println(s"Reject banned ip: ${ip.toOption.map { _.getHostAddress }} ${ip.toIP
+          .map { _.ip.getHostAddress }}")
         if (ipManager.bannedIP(ip)) {
           complete(StatusCodes.Forbidden)
         } else {
@@ -57,22 +57,24 @@ object CustomDirectives {
         if (ipManager.knownIP(ip)) {
           pass
         } else {
-          complete(StatusCodes.custom(403, "ip unknown. Need to register using the /register endpoint."))
+          complete(
+            StatusCodes.custom(403, "ip unknown. Need to register using the /register endpoint."))
         }
       }
     }
   }
 
-  def wrapper(logger: Logger, requestTimestamp: Long)(req: HttpRequest)(res: RouteResult) = res match {
-    case Complete(resp) =>
-      val responseTimestamp: Long = System.nanoTime
-      val elapsedTime: Long = (responseTimestamp - requestTimestamp) / 1000000
-      val loggingString =
-        s"""Logged Request:${req.method}:${req.uri}:${resp.status}:${elapsedTime}ms"""
-      logger.info(loggingString)
-    case Rejected(reason) =>
-      logger.info(s"Rejected Reason: ${reason.mkString(",")}")
-  }
+  def wrapper(logger: Logger, requestTimestamp: Long)(req: HttpRequest)(res: RouteResult) =
+    res match {
+      case Complete(resp) =>
+        val responseTimestamp: Long = System.nanoTime
+        val elapsedTime: Long       = (responseTimestamp - requestTimestamp) / 1000000
+        val loggingString =
+          s"""Logged Request:${req.method}:${req.uri}:${resp.status}:${elapsedTime}ms"""
+        logger.info(loggingString)
+      case Rejected(reason) =>
+        logger.info(s"Rejected Reason: ${reason.mkString(",")}")
+    }
 
   def printResponseTime(logger: Logger)(log: LoggingAdapter) = {
     val requestTimestamp = System.nanoTime

@@ -11,13 +11,16 @@ import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
 import org.constellation.crypto.KeyUtils
 import org.constellation.util.{APIClient, Simulation}
 
-class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
+class ClusterSingleDownloadJoinTest
+    extends TestKit(ActorSystem("ClusterTest"))
+    with FlatSpecLike
+    with BeforeAndAfterAll {
 
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
 
-  implicit val materialize: ActorMaterializer = ActorMaterializer()
+  implicit val materialize: ActorMaterializer             = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   // For fixing some old bug, revisit later if necessary
@@ -38,10 +41,10 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
 
     sim.logger.info(ips.toString)
 
-    val apis = ips.map{ ip =>
-      val split = ip.split(":")
+    val apis = ips.map { ip =>
+      val split      = ip.split(":")
       val portOffset = if (split.length == 1) 8999 else split(1).toInt
-      val a = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
+      val a          = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
       sim.logger.info(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
       a
     } // ++ auxAPIs
@@ -52,13 +55,12 @@ class ClusterSingleDownloadJoinTest extends TestKit(ActorSystem("ClusterTest")) 
 
     sim.setExternalIP(apis)
 
-    apis.foreach{
-      a =>
-        println(a.postSync("peer/add", HostPort("104.198.7.226", 9001)))
-        println("starting download on: " + a.hostName)
-        Thread.sleep(20*1000)
-        println(a.postEmpty("download/start"))
-        Thread.sleep(120*1000)
+    apis.foreach { a =>
+      println(a.postSync("peer/add", HostPort("104.198.7.226", 9001)))
+      println("starting download on: " + a.hostName)
+      Thread.sleep(20 * 1000)
+      println(a.postEmpty("download/start"))
+      Thread.sleep(120 * 1000)
     }
 
   }

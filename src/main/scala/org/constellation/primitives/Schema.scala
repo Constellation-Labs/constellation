@@ -14,18 +14,18 @@ import scala.util.Random
 object Schema {
 
   case class TreeVisual(
-                         name: String,
-                         parent: String,
-                         children: Seq[TreeVisual]
-                       )
+      name: String,
+      parent: String,
+      children: Seq[TreeVisual]
+  )
 
   case class TransactionQueryResponse(
-                                       hash: String,
-                                       transaction: Option[Transaction],
-                                       inMemPool: Boolean,
-                                       inDAG: Boolean,
-                                       cbEdgeHash: Option[String]
-                                     )
+      hash: String,
+      transaction: Option[Transaction],
+      inMemPool: Boolean,
+      inDAG: Boolean,
+      cbEdgeHash: Option[String]
+  )
 
   object NodeState extends Enumeration {
     type NodeState = Value
@@ -46,16 +46,18 @@ object Schema {
 
   final case class ReputationUpdates(updates: Seq[UpdateReputation]) extends ConfigUpdate
 
-  case class UpdateReputation(id: Id, secretReputation: Option[Double], publicReputation: Option[Double])
+  case class UpdateReputation(id: Id,
+                              secretReputation: Option[Double],
+                              publicReputation: Option[Double])
 
   // I.e. equivalent to number of sat per btc
   val NormalizationFactor: Long = 1e8.toLong
 
   case class SendToAddress(
-                            dst: String,
-                            amount: Long,
-                            normalized: Boolean = true
-                          ) {
+      dst: String,
+      amount: Long,
+      normalized: Boolean = true
+  ) {
 
     def amountActual: Long = if (normalized) amount * NormalizationFactor else amount
   }
@@ -64,14 +66,14 @@ object Schema {
   // TX should still be accepted even if metadata is incorrect, it just serves to help validation rounds.
 
   case class AddressMetaData(
-                              address: String,
-                              balance: Long = 0L,
-                              lastValidTransactionHash: Option[String] = None,
-                              txHashPool: Seq[String] = Seq(),
-                              txHashOverflowPointer: Option[String] = None,
-                              oneTimeUse: Boolean = false,
-                              depth: Int = 0
-                            ) extends Signable {
+      address: String,
+      balance: Long = 0L,
+      lastValidTransactionHash: Option[String] = None,
+      txHashPool: Seq[String] = Seq(),
+      txHashOverflowPointer: Option[String] = None,
+      oneTimeUse: Boolean = false,
+      depth: Int = 0
+  ) extends Signable {
 
     def normalizedBalance: Long = balance / NormalizationFactor
   }
@@ -79,9 +81,7 @@ object Schema {
   /** Our basic set of allowed edge hash types */
   object EdgeHashType extends Enumeration {
     type EdgeHashType = Value
-    val AddressHash,
-    CheckpointDataHash, CheckpointHash,
-    TransactionDataHash, TransactionHash,
+    val AddressHash, CheckpointDataHash, CheckpointHash, TransactionDataHash, TransactionHash,
     ValidationHash, BundleDataHash, ChannelMessageDataHash = Value
   }
 
@@ -101,24 +101,27 @@ object Schema {
     * @param data : Optional hash reference to attached information
     */
   case class ObservationEdge( // TODO: Consider renaming to ObservationHyperEdge or leave as is?
-                              parents: Seq[TypedEdgeHash],
-                              data: TypedEdgeHash
-                            ) extends Signable
+                             parents: Seq[TypedEdgeHash],
+                             data: TypedEdgeHash)
+      extends Signable
 
   /**
     * Encapsulation for all witness information about a given observation edge.
     * @param signatureBatch : Collection of validation signatures about the edge.
     */
-
   case class SignedObservationEdge(signatureBatch: SignatureBatch) extends Signable {
 
-    def withSignatureFrom(keyPair: KeyPair): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.withSignatureFrom(keyPair))
+    def withSignatureFrom(keyPair: KeyPair): SignedObservationEdge =
+      this.copy(signatureBatch = signatureBatch.withSignatureFrom(keyPair))
 
-    def withSignature(hs: HashSignature): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.withSignature(hs))
+    def withSignature(hs: HashSignature): SignedObservationEdge =
+      this.copy(signatureBatch = signatureBatch.withSignature(hs))
 
-    def plus(other: SignatureBatch): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other))
+    def plus(other: SignatureBatch): SignedObservationEdge =
+      this.copy(signatureBatch = signatureBatch.plus(other))
 
-    def plus(other: SignedObservationEdge): SignedObservationEdge = this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
+    def plus(other: SignedObservationEdge): SignedObservationEdge =
+      this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
 
     def baseHash: String = signatureBatch.hash
   }
@@ -135,7 +138,8 @@ object Schema {
     * Collection of references to transaction hashes
     * @param hashes : TX edge hashes
     */
-  case class CheckpointEdgeData(hashes: Seq[String], messages: Seq[ChannelMessage] = Seq()) extends Signable
+  case class CheckpointEdgeData(hashes: Seq[String], messages: Seq[ChannelMessage] = Seq())
+      extends Signable
 
   case class CheckpointEdge(edge: Edge[CheckpointEdgeData]) {
 
@@ -148,21 +152,23 @@ object Schema {
   }
 
   case class AddressCacheData(
-                               balance: Long,
-                               memPoolBalance: Long,
-                               reputation: Option[Double] = None,
-                               ancestorBalances: Map[String, Long] = Map(),
-                               ancestorReputations: Map[String, Long] = Map(),
-                               //    recentTransactions: Seq[String] = Seq(),
-                               balanceByLatestSnapshot: Long = 0L
-                             ) {
+      balance: Long,
+      memPoolBalance: Long,
+      reputation: Option[Double] = None,
+      ancestorBalances: Map[String, Long] = Map(),
+      ancestorReputations: Map[String, Long] = Map(),
+      //    recentTransactions: Seq[String] = Seq(),
+      balanceByLatestSnapshot: Long = 0L
+  ) {
 
     def plus(previous: AddressCacheData): AddressCacheData = {
       this.copy(
         ancestorBalances =
-          ancestorBalances ++ previous.ancestorBalances.filterKeys(k => !ancestorBalances.contains(k)),
+          ancestorBalances ++ previous.ancestorBalances.filterKeys(k =>
+            !ancestorBalances.contains(k)),
         ancestorReputations =
-          ancestorReputations ++ previous.ancestorReputations.filterKeys(k => !ancestorReputations.contains(k))
+          ancestorReputations ++ previous.ancestorReputations.filterKeys(k =>
+            !ancestorReputations.contains(k))
         //recentTransactions =
         //  recentTransactions ++ previous.recentTransactions.filter(k => !recentTransactions.contains(k))
       )
@@ -177,22 +183,27 @@ object Schema {
   // We should also mark a given balance / rep as the 'primary' one.
 
   case class TransactionCacheData(
-                                   transaction: Transaction,
-                                   valid: Boolean = false,
-                                   inMemPool: Boolean = false,
-                                   inDAG: Boolean = false,
-                                   inDAGByAncestor: Map[String, Boolean] = Map(),
-                                   resolved: Boolean = false,
-                                   cbBaseHash: Option[String] = None,
-                                   cbForkBaseHashes: Set[String] = Set(),
-                                   signatureForks : Set[Transaction] = Set(),
-                                   rxTime: Long = System.currentTimeMillis()
-                                 ) {
+      transaction: Transaction,
+      valid: Boolean = false,
+      inMemPool: Boolean = false,
+      inDAG: Boolean = false,
+      inDAGByAncestor: Map[String, Boolean] = Map(),
+      resolved: Boolean = false,
+      cbBaseHash: Option[String] = None,
+      cbForkBaseHashes: Set[String] = Set(),
+      signatureForks: Set[Transaction] = Set(),
+      rxTime: Long = System.currentTimeMillis()
+  ) {
 
     def plus(previous: TransactionCacheData): TransactionCacheData = {
       this.copy(
-        inDAGByAncestor = inDAGByAncestor ++ previous.inDAGByAncestor.filterKeys(k => !inDAGByAncestor.contains(k)),
-        cbForkBaseHashes = (cbForkBaseHashes ++ previous.cbForkBaseHashes) -- cbBaseHash.map{ s => Set(s)}.getOrElse(Set()),
+        inDAGByAncestor = inDAGByAncestor ++ previous.inDAGByAncestor.filterKeys(k =>
+          !inDAGByAncestor.contains(k)),
+        cbForkBaseHashes = (cbForkBaseHashes ++ previous.cbForkBaseHashes) -- cbBaseHash
+          .map { s =>
+            Set(s)
+          }
+          .getOrElse(Set()),
         signatureForks = (signatureForks ++ previous.signatureForks) - transaction,
         rxTime = previous.rxTime
       )
@@ -202,24 +213,24 @@ object Schema {
   case class Height(min: Long, max: Long)
 
   case class CommonMetadata(
-                             valid: Boolean = true,
-                             inDAG: Boolean = false,
-                             resolved: Boolean = true,
-                             resolutionInProgress: Boolean = false,
-                             inMemPool: Boolean = false,
-                             lastResolveAttempt: Option[Long] = None,
-                             rxTime: Long = System.currentTimeMillis(), // TODO: Unify common metadata like this
-                           )
+      valid: Boolean = true,
+      inDAG: Boolean = false,
+      resolved: Boolean = true,
+      resolutionInProgress: Boolean = false,
+      inMemPool: Boolean = false,
+      lastResolveAttempt: Option[Long] = None,
+      rxTime: Long = System.currentTimeMillis() // TODO: Unify common metadata like this
+  )
 
   // TODO: Separate cache with metadata vs what is stored in snapshot.
 
   case class CheckpointCacheData(
-                                  checkpointBlock: Option[CheckpointBlock] = None,
-                         //         metadata: CommonMetadata = CommonMetadata(),
-                         //         children: Set[String] = Set(),
-                                  height: Option[Height] = None
-                                ) {
-/*
+      checkpointBlock: Option[CheckpointBlock] = None,
+      //         metadata: CommonMetadata = CommonMetadata(),
+      //         children: Set[String] = Set(),
+      height: Option[Height] = None
+  ) {
+    /*
 
     def plus(previous: CheckpointCacheData): CheckpointCacheData = {
       this.copy(
@@ -227,21 +238,22 @@ object Schema {
         rxTime = previous.rxTime
       )
     }
-*/
+   */
 
   }
 
-  case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
+  case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge,
+                                        resolved: Boolean = false)
 
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
 
   case class ValidPeerIPData(canonicalHostName: String, port: Int)
 
   case class GenesisObservation(
-                                 genesis: CheckpointBlock,
-                                 initialDistribution: CheckpointBlock,
-                                 initialDistribution2: CheckpointBlock
-                               ) {
+      genesis: CheckpointBlock,
+      initialDistribution: CheckpointBlock,
+      initialDistribution2: CheckpointBlock
+  ) {
 
     def notGenesisTips(tips: Seq[CheckpointBlock]): Boolean = {
       !tips.contains(initialDistribution) && !tips.contains(initialDistribution2)
@@ -267,13 +279,22 @@ object Schema {
 
   case class Node(address: String, host: String, port: Int)
 
-  case class TransactionSerialized(hash: String, sender: String, receiver: String, amount: Long, signers: Set[String], time: Long)
+  case class TransactionSerialized(hash: String,
+                                   sender: String,
+                                   receiver: String,
+                                   amount: Long,
+                                   signers: Set[String],
+                                   time: Long)
 
   object TransactionSerialized {
 
     def apply(tx: Transaction): TransactionSerialized =
-      new TransactionSerialized(tx.hash, tx.src.address, tx.dst.address, tx.amount,
-        tx.signatures.map(_.address).toSet, Instant.now.getEpochSecond)
+      new TransactionSerialized(tx.hash,
+                                tx.src.address,
+                                tx.dst.address,
+                                tx.amount,
+                                tx.signatures.map(_.address).toSet,
+                                Instant.now.getEpochSecond)
   }
 
 }

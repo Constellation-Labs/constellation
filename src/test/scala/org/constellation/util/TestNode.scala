@@ -17,11 +17,10 @@ object TestNode {
             keyPair: KeyPair = KeyUtils.makeKeyPair(),
             randomizePorts: Boolean = true,
             portOffset: Int = 0,
-            isGenesisNode: Boolean = false
-           )(
-    implicit system: ActorSystem,
-    materializer: ActorMaterializer,
-    executionContext: ExecutionContext
+            isGenesisNode: Boolean = false)(
+      implicit system: ActorSystem,
+      materializer: ActorMaterializer,
+      executionContext: ExecutionContext
   ): ConstellationNode = {
 
     val randomPort =
@@ -68,7 +67,9 @@ object TestNode {
 
   def clearNodes(): Unit = {
     Try {
-      nodes.foreach { node => node.shutdown() }
+      nodes.foreach { node =>
+        node.shutdown()
+      }
       nodes = Seq()
     }
   }

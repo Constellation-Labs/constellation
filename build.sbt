@@ -10,19 +10,19 @@ logBuffered in Test := false
 lazy val _version = "1.0.10"
 
 lazy val versions = new {
-  val akka = "2.5.20"
-  val akkaHttp = "10.1.7"
+  val akka         = "2.5.20"
+  val akkaHttp     = "10.1.7"
   val akkaHttpCors = "0.3.4"
   val spongyCastle = "1.58.0.0"
-  val micrometer = "1.1.2"
-  val prometheus  = "0.6.0"
-  val sttp = "1.5.8"
-  val cats = "1.5.0"
+  val micrometer   = "1.1.2"
+  val prometheus   = "0.6.0"
+  val sttp         = "1.5.8"
+  val cats         = "1.5.0"
 }
 
 lazy val sttpDependencies = Seq(
-  "com.softwaremill.sttp" %% "okhttp-backend" % versions.sttp,
-  "com.softwaremill.sttp" %% "json4s" % versions.sttp,
+  "com.softwaremill.sttp" %% "okhttp-backend"     % versions.sttp,
+  "com.softwaremill.sttp" %% "json4s"             % versions.sttp,
   "com.softwaremill.sttp" %% "prometheus-backend" % versions.sttp
 )
 
@@ -38,13 +38,18 @@ lazy val commonSettings = Seq(
   dockerExposedUdpPorts := Seq(16180),
   dockerCommands := dockerCommands.value.flatMap {
     case ExecCmd("ENTRYPOINT", args @ _*) => Seq(Cmd("ENTRYPOINT", args.mkString(" ")))
-    case v => Seq(v)
+    case v                                => Seq(v)
   },
-  dockerCommands += Cmd("HEALTHCHECK", "--interval=30s", "--timeout=3s", "CMD", "curl -f http://localhost:9000/health || exit 1"),
+  dockerCommands += Cmd("HEALTHCHECK",
+                        "--interval=30s",
+                        "--timeout=3s",
+                        "CMD",
+                        "curl -f http://localhost:9000/health || exit 1"),
   dockerUsername := Some("constellationlabs"),
-  dockerAlias := DockerAlias(None, Some("constellationlabs"), "constellation",
-    Some(sys.env.getOrElse("CIRCLE_SHA1", _version))
-  ),
+  dockerAlias := DockerAlias(None,
+                             Some("constellationlabs"),
+                             "constellation",
+                             Some(sys.env.getOrElse("CIRCLE_SHA1", _version))),
   // Update the latest tag when publishing
   dockerUpdateLatest := true,
   // These values will be filled in by the k8s StatefulSet and Deployment
@@ -59,53 +64,53 @@ lazy val commonSettings = Seq(
 )
 
 lazy val coreDependencies = Seq(
-  "org.scala-lang.modules" %% "scala-async" % "0.9.7",
-  "com.github.pathikrit" %% "better-files" % "3.7.0" withSources() withJavadoc(),
-  "com.roundeights" %% "hasher" % "1.2.0",
-  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
-  "com.typesafe.akka" %% "akka-remote" % versions.akka,
-  "ch.megard" %% "akka-http-cors" % versions.akkaHttpCors,
-  "de.heikoseeberger" %% "akka-http-json4s" % "1.16.1",
-  "org.json4s" %% "json4s-native" % "3.6.2",
-  "org.json4s" %% "json4s-ext" % "3.6.2",
-  "org.json4s" %% "json4s-jackson" % "3.6.2",
-  "org.json4s" %% "json4s-ast" % "3.6.2",
-  "com.madgag.spongycastle" % "core" % versions.spongyCastle,
-  "com.madgag.spongycastle" % "prov" % versions.spongyCastle,
-  "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
-  "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
-  "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.51",
-  "org.iq80.leveldb" % "leveldb" % "0.10" withSources() withJavadoc(),
-  "com.codahale" % "shamir" % "0.6.0" withSources() withJavadoc(),
-  "com.twitter" %% "chill" % "0.9.3",
-  "com.twitter" %% "algebird-core" % "0.13.4",
-  "org.typelevel" %% "cats-core" % versions.cats withSources() withJavadoc(),
+  "org.scala-lang.modules"     %% "scala-async"      % "0.9.7",
+  "com.github.pathikrit"       %% "better-files"     % "3.7.0" withSources () withJavadoc (),
+  "com.roundeights"            %% "hasher"           % "1.2.0",
+  "com.typesafe.scala-logging" %% "scala-logging"    % "3.9.2",
+  "ch.qos.logback"             % "logback-classic"   % "1.2.3",
+  "com.typesafe.akka"          %% "akka-http"        % versions.akkaHttp,
+  "com.typesafe.akka"          %% "akka-remote"      % versions.akka,
+  "ch.megard"                  %% "akka-http-cors"   % versions.akkaHttpCors,
+  "de.heikoseeberger"          %% "akka-http-json4s" % "1.16.1",
+  "org.json4s"                 %% "json4s-native"    % "3.6.2",
+  "org.json4s"                 %% "json4s-ext"       % "3.6.2",
+  "org.json4s"                 %% "json4s-jackson"   % "3.6.2",
+  "org.json4s"                 %% "json4s-ast"       % "3.6.2",
+  "com.madgag.spongycastle"    % "core"              % versions.spongyCastle,
+  "com.madgag.spongycastle"    % "prov"              % versions.spongyCastle,
+  "com.madgag.spongycastle"    % "bcpkix-jdk15on"    % versions.spongyCastle,
+  "com.madgag.spongycastle"    % "bcpg-jdk15on"      % versions.spongyCastle,
+  "com.madgag.spongycastle"    % "bctls-jdk15on"     % versions.spongyCastle,
+  "org.bouncycastle"           % "bcprov-jdk15on"    % "1.51",
+  "org.iq80.leveldb"           % "leveldb"           % "0.10" withSources () withJavadoc (),
+  "com.codahale"               % "shamir"            % "0.6.0" withSources () withJavadoc (),
+  "com.twitter"                %% "chill"            % "0.9.3",
+  "com.twitter"                %% "algebird-core"    % "0.13.4",
+  "org.typelevel"              %% "cats-core"        % versions.cats withSources () withJavadoc (),
 //  "org.typelevel" %% "alleycats-core" % versions.cats withSources() withJavadoc(),
   "net.glxn" % "qrgen" % "1.4",
 //  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
-  "com.twitter" %% "storehaus-cache" % "0.15.0",
-  "io.swaydb" %% "swaydb" % "0.6",
-  "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
-  "io.prometheus" % "simpleclient" % versions.prometheus,
-  "io.prometheus" % "simpleclient_common" % versions.prometheus,
-  "com.github.java-json-tools" % "json-schema-validator" % "2.2.10",
-  "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.3"
+  "com.twitter"                  %% "storehaus-cache"               % "0.15.0",
+  "io.swaydb"                    %% "swaydb"                        % "0.6",
+  "io.micrometer"                % "micrometer-registry-prometheus" % versions.micrometer,
+  "io.prometheus"                % "simpleclient"                   % versions.prometheus,
+  "io.prometheus"                % "simpleclient_common"            % versions.prometheus,
+  "com.github.java-json-tools"   % "json-schema-validator"          % "2.2.10",
+  "com.github.japgolly.scalacss" %% "ext-scalatags"                 % "0.5.3"
 ) ++ sttpDependencies
 
 //Test dependencies
 lazy val testDependencies = Seq(
-  "org.scalacheck" %% "scalacheck" % "1.14.0",
-  "org.scalatest" %% "scalatest" % "3.0.5",
-  "org.scalactic" %% "scalactic" % "3.0.5",
-  "org.scalamock" %% "scalamock" % "4.1.0",
-  "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
-  "com.typesafe.akka" %% "akka-testkit" % versions.akka,
-  "com.typesafe.slick" %% "slick" % "3.2.3",
-  "com.h2database" % "h2" % "1.4.197",
-).map(_ % "it,test" )
+  "org.scalacheck"     %% "scalacheck"        % "1.14.0",
+  "org.scalatest"      %% "scalatest"         % "3.0.5",
+  "org.scalactic"      %% "scalactic"         % "3.0.5",
+  "org.scalamock"      %% "scalamock"         % "4.1.0",
+  "com.typesafe.akka"  %% "akka-http-testkit" % versions.akkaHttp,
+  "com.typesafe.akka"  %% "akka-testkit"      % versions.akka,
+  "com.typesafe.slick" %% "slick"             % "3.2.3",
+  "com.h2database"     % "h2"                 % "1.4.197",
+).map(_ % "it,test")
 
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
 

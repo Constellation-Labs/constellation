@@ -9,7 +9,7 @@ trait Datastore {
 
   def delete(key: String): Boolean
 
-  def getSnapshot(key: String) : Option[consensus.Snapshot]
+  def getSnapshot(key: String): Option[consensus.Snapshot]
 
   def putSnapshot(key: String, snapshot: consensus.Snapshot): Unit
 
@@ -24,9 +24,9 @@ trait Datastore {
   def putTransactionCacheData(key: String, t: TransactionCacheData): Unit
 
   def updateTransactionCacheData(
-    key: String,
-    f: TransactionCacheData => TransactionCacheData,
-    empty: TransactionCacheData
+      key: String,
+      f: TransactionCacheData => TransactionCacheData,
+      empty: TransactionCacheData
   ): TransactionCacheData
 
   def getTransactionCacheData(key: String): Option[TransactionCacheData]
@@ -39,17 +39,16 @@ trait Datastore {
 
   def getAddressCacheData(key: String): Option[AddressCacheData]
 
-  def putSignedObservationEdgeCache(key: String,
-                                    t: SignedObservationEdgeCache): Unit
+  def putSignedObservationEdgeCache(key: String, t: SignedObservationEdgeCache): Unit
 
   def updateSignedObservationEdgeCache(
-    key: String,
-    f: SignedObservationEdgeCache => SignedObservationEdgeCache,
-    empty: SignedObservationEdgeCache
+      key: String,
+      f: SignedObservationEdgeCache => SignedObservationEdgeCache,
+      empty: SignedObservationEdgeCache
   ): SignedObservationEdgeCache
 
   def getSignedObservationEdgeCache(
-    key: String
+      key: String
   ): Option[SignedObservationEdgeCache]
 
   def putTransactionEdgeData(key: String, t: TransactionEdgeData): Unit

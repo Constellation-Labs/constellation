@@ -10,17 +10,20 @@ class SimpleKVDBImpl extends KVDB {
 
   private val store = TrieMap[String, Array[Byte]]()
 
-  override def put(key: String, obj: AnyRef): Boolean = Try{
-    val bytes = KryoSerializer.serializeAnyRef(obj)
-    store(key) = bytes
-  }.isSuccess
+  override def put(key: String, obj: AnyRef): Boolean =
+    Try {
+      val bytes = KryoSerializer.serializeAnyRef(obj)
+      store(key) = bytes
+    }.isSuccess
 
   override def get[T <: AnyRef](key: String): Option[T] = {
-    store.get(key).map{v => KryoSerializer.deserialize(v).asInstanceOf[T]}
+    store.get(key).map { v =>
+      KryoSerializer.deserialize(v).asInstanceOf[T]
+    }
   }
 
   override def update[T <: AnyRef](key: String, updateF: T => T, empty: T): T = {
-    val res = get(key).map{updateF}
+    val res = get(key).map { updateF }
     if (res.isEmpty) {
       put(key, empty)
       empty
@@ -32,7 +35,7 @@ class SimpleKVDBImpl extends KVDB {
   }
 
   override def delete(key: String): Boolean = {
-    Try{store.remove(key)}.isSuccess
+    Try { store.remove(key) }.isSuccess
   }
 
   override def restart(): Unit = {

@@ -22,8 +22,7 @@ case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 
 object PeerManager extends StrictLogging {
 
-  def initiatePeerReload()(implicit dao: DAO,
-                           ec: ExecutionContextExecutor): Unit = {
+  def initiatePeerReload()(implicit dao: DAO, ec: ExecutionContextExecutor): Unit = {
 
     tryWithMetric(
       {
@@ -60,19 +59,16 @@ object PeerManager extends StrictLogging {
     if (dao.peersInfoPath.nonEmpty || dao.seedsPath.nonEmpty) {
       Download.download()
     } else {
-      logger.warn(
-        "No peers or seeds configured yet. Skipping initial download.")
+      logger.warn("No peers or seeds configured yet. Skipping initial download.")
     }
 
   }
 
   def broadcastNodeState()(implicit dao: DAO): Unit = {
-    dao.peerManager ! APIBroadcast(
-      _.post("status", SetNodeStatus(dao.id, dao.nodeState)))
+    dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
   }
 
-  def attemptRegisterSelfWithPeer(hp: HostPort)(
-      implicit dao: DAO): Future[Any] = {
+  def attemptRegisterSelfWithPeer(hp: HostPort)(implicit dao: DAO): Future[Any] = {
 
     implicit val ec: ExecutionContextExecutor = dao.apiClientExecutionContext
     // if (!dao.peerInfo.exists(_._2.client.hostName == hp.host)) {
@@ -95,8 +91,7 @@ object PeerManager extends StrictLogging {
     //    }
   }
 
-  def attemptRegisterPeer(hp: HostPort)(
-      implicit dao: DAO): Future[Response[String]] = {
+  def attemptRegisterPeer(hp: HostPort)(implicit dao: DAO): Future[Response[String]] = {
 
     implicit val ec: ExecutionContextExecutor = dao.apiClientExecutionContext
     // if (!dao.peerInfo.exists(_._2.client.hostName == hp.host)) {
@@ -132,18 +127,14 @@ object PeerManager extends StrictLogging {
       .onComplete {
         case Success(pmd) =>
           pmd.foreach { md =>
-            if (dao.id != md.id && validPeerAddition(HostPort(md.host,
-                                                              md.httpPort),
-                                                     dao.peerInfo)) {
+            if (dao.id != md.id && validPeerAddition(HostPort(md.host, md.httpPort), dao.peerInfo)) {
               val client =
-                APIClient(md.host, md.httpPort)(dao.apiClientExecutionContext,
-                                                dao)
+                APIClient(md.host, md.httpPort)(dao.apiClientExecutionContext, dao)
               client
                 .getNonBlocking[PeerRegistrationRequest]("registration/request")
                 .onComplete {
                   case Success(registrationRequest) =>
-                    dao.peerManager ! PendingRegistration(md.host,
-                                                          registrationRequest)
+                    dao.peerManager ! PendingRegistration(md.host, registrationRequest)
                     client.post("register", dao.peerRegistrationRequest)
                   case Failure(e) =>
                     dao.metrics.incrementMetric("peerGetRegistrationRequestFailed")
@@ -159,8 +150,7 @@ object PeerManager extends StrictLogging {
   def validWithLoopbackGuard(host: String)(implicit dao: DAO): Boolean =
     (host != dao.externalHostString && host != "127.0.0.1" && host != "localhost") || !dao.preventLocalhostAsPeer
 
-  def validPeerAddition(hp: HostPort, peerInfo: Map[Id, PeerData])(
-      implicit dao: DAO): Boolean = {
+  def validPeerAddition(hp: HostPort, peerInfo: Map[Id, PeerData])(implicit dao: DAO): Boolean = {
     val hostAlreadyExists = peerInfo.exists {
       case (_, data) =>
         data.client.hostName == hp.host && data.client.apiPort == hp.port
@@ -189,9 +179,7 @@ case object GetPeerInfo
 
 case class UpdatePeerInfo(peerData: PeerData)
 
-class PeerManager(ipManager: IPManager)(
-    implicit val materialize: ActorMaterializer,
-    dao: DAO)
+class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMaterializer, dao: DAO)
     extends Actor
     with StrictLogging {
 
@@ -213,14 +201,12 @@ class PeerManager(ipManager: IPManager)(
     )
     dao.peerInfo = updatedPeerInfo
 
-    dao.peersInfoPath.write(
-      updatedPeerInfo.values.toSeq.map { _.peerMetadata }.json)
+    dao.peersInfoPath.write(updatedPeerInfo.values.toSeq.map { _.peerMetadata }.json)
 
     context become active(updatedPeerInfo)
   }
 
-  private def updatePeerInfo(peerInfo: Map[Id, PeerData],
-                             peerData: PeerData) = {
+  private def updatePeerInfo(peerInfo: Map[Id, PeerData], peerData: PeerData) = {
     val updatedPeerInfo = peerInfo + (peerData.client.id -> peerData)
 
     val remoteAddr = RemoteAddress(
@@ -291,8 +277,7 @@ class PeerManager(ipManager: IPManager)(
       val updated = peerInfo
         .get(id)
         .map { pd =>
-          peerInfo + (id -> pd.copy(
-            peerMetadata = pd.peerMetadata.copy(nodeState = nodeStatus)))
+          peerInfo + (id -> pd.copy(peerMetadata = pd.peerMetadata.copy(nodeState = nodeStatus)))
         }
         .getOrElse(peerInfo)
 
@@ -346,7 +331,7 @@ class PeerManager(ipManager: IPManager)(
           data.client.hostName == request.host && data.client.apiPort == request.port
       }
       val validHost = validExternalHost && !hostAlreadyExists
-      val isSelfId = dao.id == request.id
+      val isSelfId  = dao.id == request.id
 
       val badAttempt = isSelfId || !validHost
 
@@ -356,18 +341,14 @@ class PeerManager(ipManager: IPManager)(
         implicit val ec: ExecutionContextExecutor =
           dao.apiClientExecutionContext
 
-        val client = APIClient(request.host, request.port)(
-          dao.apiClientExecutionContext,
-          dao)
+        val client = APIClient(request.host, request.port)(dao.apiClientExecutionContext, dao)
 
         val authSignRequest = PeerAuthSignRequest(Random.nextLong())
         val req =
           client.postNonBlocking[SingleHashSignature]("sign", authSignRequest)
 
         req.failed.foreach { t =>
-          logger.warn(
-            s"Sign request to ${request.host}:${request.port} failed.",
-            t)
+          logger.warn(s"Sign request to ${request.host}:${request.port} failed.", t)
           dao.metrics.incrementMetric("peerSignatureRequestFailed")
         }
 
@@ -380,8 +361,7 @@ class PeerManager(ipManager: IPManager)(
           }
 
           if (!sig.valid) {
-            logger.warn(
-              s"Invalid peer signature $request $authSignRequest $sig")
+            logger.warn(s"Invalid peer signature $request $authSignRequest $sig")
             dao.metrics.incrementMetric("invalidPeerRegistrationSignature")
           }
 
@@ -396,13 +376,9 @@ class PeerManager(ipManager: IPManager)(
 
           stateF.map { s =>
             val state = s.nodeState
-            val id = sig.hashSignature.id
+            val id    = sig.hashSignature.id
             val add =
-              PeerMetadata(request.host,
-                           16180,
-                           request.port,
-                           id,
-                           nodeState = state)
+              PeerMetadata(request.host, 16180, request.port, id, nodeState = state)
             val peerData = PeerData(add, client)
             client.id = id
             self ! UpdatePeerInfo(peerData)
