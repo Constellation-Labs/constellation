@@ -42,15 +42,15 @@ trait KeySerializeJSON {
         ({
           case jObj: JObject =>
             //  implicit val f: Formats = format
-            val pubKey  = (jObj \ "publicKey").extract[PublicKey]
+            val pubKey = (jObj \ "publicKey").extract[PublicKey]
             val privKey = (jObj \ "privateKey").extract[PrivateKey]
-            val kp      = new KeyPair(pubKey, privKey)
+            val kp = new KeyPair(pubKey, privKey)
             kp
         }, {
           case key: KeyPair =>
             //  implicit val f: Formats = format
             JObject(
-              "publicKey"  -> JObject("key" -> JString(publicKeyToHex(key.getPublic))),
+              "publicKey" -> JObject("key" -> JString(publicKeyToHex(key.getPublic))),
               "privateKey" -> JObject("key" -> JString(privateKeyToHex(key.getPrivate)))
             )
         }))

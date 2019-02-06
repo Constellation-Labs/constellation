@@ -166,8 +166,8 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     bytes2hex(signData(hash.getBytes())(privateKey))
 
   def wrapFutureWithMetric[T](t: Future[T], metricPrefix: String)(
-      implicit dao: DAO,
-      ec: ExecutionContext): Future[T] = {
+    implicit dao: DAO,
+    ec: ExecutionContext): Future[T] = {
     t.onComplete {
       case Success(_) =>
         dao.metrics.incrementMetric(metricPrefix + "_success")
@@ -205,7 +205,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   def attemptWithRetry(t: => Boolean, maxRetries: Int = 10, delay: Long = 2000): Boolean = {
 
     var retries = 0
-    var done    = false
+    var done = false
 
     do {
       retries += 1
@@ -217,8 +217,8 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   }
 
   def withTimeout[T](fut: Future[T])(implicit ec: ExecutionContext, after: Duration): Future[T] = {
-    val prom        = Promise[T]()
-    val timeout     = TimeoutScheduler.scheduleTimeout(prom, after)
+    val prom = Promise[T]()
+    val timeout = TimeoutScheduler.scheduleTimeout(prom, after)
     val combinedFut = Future.firstCompletedOf(List(fut, prom.future))
     fut onComplete { case result => timeout.cancel() }
     combinedFut
@@ -227,13 +227,13 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   import scala.concurrent.duration._
 
   def withTimeoutSecondsAndMetric[T](
-      fut: Future[T],
-      metricPrefix: String,
-      timeoutSeconds: Int = 10,
-      onError: => Unit = ())(implicit ec: ExecutionContext, dao: DAO): Future[T] = {
-    val prom        = Promise[T]()
-    val after       = timeoutSeconds.seconds
-    val timeout     = TimeoutScheduler.scheduleTimeout(prom, after)
+    fut: Future[T],
+    metricPrefix: String,
+    timeoutSeconds: Int = 10,
+    onError: => Unit = ())(implicit ec: ExecutionContext, dao: DAO): Future[T] = {
+    val prom = Promise[T]()
+    val after = timeoutSeconds.seconds
+    val timeout = TimeoutScheduler.scheduleTimeout(prom, after)
     val combinedFut = Future.firstCompletedOf(List(fut, prom.future))
     fut onComplete { _ =>
       timeout.cancel()
@@ -253,10 +253,10 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   }
 
   def futureTryWithTimeoutMetric[T](
-      t: => T,
-      metricPrefix: String,
-      timeoutSeconds: Int = 10,
-      onError: => Unit = ())(implicit ec: ExecutionContext, dao: DAO): Future[Try[T]] = {
+    t: => T,
+    metricPrefix: String,
+    timeoutSeconds: Int = 10,
+    onError: => Unit = ())(implicit ec: ExecutionContext, dao: DAO): Future[Try[T]] = {
     withTimeoutSecondsAndMetric(
       Future {
         val originalName = Thread.currentThread().getName
@@ -272,14 +272,14 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   }
 
   def withRetries(
-      err: String,
-      t: => Boolean,
-      maxRetries: Int = 10,
-      delay: Long = 10000
+    err: String,
+    t: => Boolean,
+    maxRetries: Int = 10,
+    delay: Long = 10000
   ): Boolean = {
 
     var retries = 0
-    var done    = false
+    var done = false
 
     do {
       retries += 1

@@ -16,9 +16,9 @@ object ComputeTestUtil {
   // For custom deployments to non-GCP instances
   // When deploy script is better this can go away. Was used for testing on home computer
   def getAuxiliaryNodes(startMultiNodeMachines: Boolean = false)(
-      implicit as: ActorSystem,
-      mat: ActorMaterializer,
-      ec: ExecutionContextExecutor): (Seq[String], Seq[APIClient]) = {
+    implicit as: ActorSystem,
+    mat: ActorMaterializer,
+    ec: ExecutionContextExecutor): (Seq[String], Seq[APIClient]) = {
 
     var ignoreIPs = Seq[String]()
 
@@ -26,8 +26,8 @@ object ComputeTestUtil {
       file"aux-hosts.txt".lines.toSeq
     }.getOrElse(Seq()).map { ip =>
       val split = ip.split(":")
-      val host  = split.head
-      val str   = host + ":" + split(1)
+      val host = split.head
+      val str = host + ":" + split(1)
       ignoreIPs :+= str
       val offset = split(2).toInt
       println(s"Initializing API to $str offset: $offset")
@@ -38,9 +38,9 @@ object ComputeTestUtil {
     }
 
     val auxMultiAPIs = Try { file"aux-multi-host.txt".lines.toSeq }.getOrElse(Seq()).flatMap { ip =>
-      val split  = ip.split(":")
-      val host   = split.head
-      val str    = host + ":" + split(1)
+      val split = ip.split(":")
+      val host = split.head
+      val str = host + ":" + split(1)
       val offset = split(2).toInt + 2
       Seq.tabulate(3) { i =>
         val adjustedOffset = offset + i * 2
@@ -48,7 +48,7 @@ object ComputeTestUtil {
         if (startMultiNodeMachines) {
           import scala.sys.process._
           val javaCmd = s"java -jar ~/dag.jar $adjustedOffset > ~/dag-$i.log 2>&1 &"
-          val sshCmd  = Seq("ssh", host, s"""bash -c '$javaCmd'""")
+          val sshCmd = Seq("ssh", host, s"""bash -c '$javaCmd'""")
           println(sshCmd.mkString(" "))
           println(sshCmd.!!)
         }
@@ -86,7 +86,7 @@ class ClusterComputeManualTest
     TestKit.shutdownActorSystem(system)
   }
 
-  implicit val materialize: ActorMaterializer             = ActorMaterializer()
+  implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   // For fixing some old bug, revisit later if necessary
@@ -108,9 +108,9 @@ class ClusterComputeManualTest
     sim.logger.info(ips.toString)
 
     val apis = ips.map { ip =>
-      val split      = ip.split(":")
+      val split = ip.split(":")
       val portOffset = if (split.length == 1) 8999 else split(1).toInt
-      val a          = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
+      val a = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
       sim.logger.info(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
       a
     } // ++ auxAPIs

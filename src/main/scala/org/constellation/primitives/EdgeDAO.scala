@@ -79,7 +79,7 @@ class ThreadSafeMessageMemPool() {
   }
 
   def put(message: Seq[ChannelMessage], overrideLimit: Boolean = false)(
-      implicit dao: DAO): Boolean = this.synchronized {
+    implicit dao: DAO): Boolean = this.synchronized {
     val notContained = !messages.contains(message)
 
     if (notContained) {
@@ -105,9 +105,9 @@ class ThreadSafeTipService() {
   implicit val timeout: Timeout = Timeout(15, TimeUnit.SECONDS)
 
   private var thresholdMetCheckpoints: Map[String, TipData] = Map()
-  var acceptedCBSinceSnapshot: Seq[String]                  = Seq()
-  var facilitators: Map[Id, PeerData]                       = Map()
-  private var snapshot: Snapshot                            = Snapshot.snapshotZero
+  var acceptedCBSinceSnapshot: Seq[String] = Seq()
+  var facilitators: Map[Id, PeerData] = Map()
+  private var snapshot: Snapshot = Snapshot.snapshotZero
 
   def tips: Map[String, TipData] = thresholdMetCheckpoints
 
@@ -322,7 +322,7 @@ class ThreadSafeTipService() {
   }
 
   def pull(allowEmptyFacilitators: Boolean = false)(
-      implicit dao: DAO): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] =
+    implicit dao: DAO): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] =
     this.synchronized {
       val res =
         if (thresholdMetCheckpoints.size >= 2 && (facilitators.nonEmpty || allowEmptyFacilitators)) {
@@ -341,7 +341,7 @@ class ThreadSafeTipService() {
           val finalFacilitators = if (totalNumFacil > 0) {
             // TODO: Use XOR distance instead as it handles peer data mismatch cases better
             val facilitatorIndex = (BigInt(mergedTipHash, 16) % totalNumFacil).toInt
-            val sortedFacils     = facilitators.toSeq.sortBy(_._1.hex)
+            val sortedFacils = facilitators.toSeq.sortBy(_._1.hex)
             val selectedFacils = Seq
               .tabulate(dao.processingConfig.numFacilitatorPeers) { i =>
                 (i + facilitatorIndex) % totalNumFacil
@@ -484,9 +484,9 @@ class StorageService[T](size: Int = 50000) {
   }
 
   def update(
-      key: String,
-      updateFunc: T => T,
-      empty: => T
+    key: String,
+    updateFunc: T => T,
+    empty: => T
   ): T =
     this.synchronized {
       val data = get(key).map { updateFunc }.getOrElse(empty)
@@ -509,12 +509,12 @@ class SOEService(size: Int = 50000) extends StorageService[SignedObservationEdge
 class MessageService(size: Int = 50000) extends StorageService[ChannelMessageMetadata](size)
 
 class TransactionService(size: Int = 50000) extends StorageService[TransactionCacheData](size) {
-  private val queue        = mutable.Queue[TransactionSerialized]()
+  private val queue = mutable.Queue[TransactionSerialized]()
   private val maxQueueSize = 20
 
   override def put(
-      key: String,
-      cache: TransactionCacheData
+    key: String,
+    cache: TransactionCacheData
   ): Unit = {
     val tx = TransactionSerialized(cache.transaction)
     queue.synchronized {
@@ -543,17 +543,17 @@ trait EdgeDAO {
 
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
-  val checkpointService  = new CheckpointService(processingConfig.checkpointLRUMaxSize)
+  val checkpointService = new CheckpointService(processingConfig.checkpointLRUMaxSize)
   val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
-  val addressService     = new AddressService(processingConfig.addressLRUMaxSize)
-  val messageService     = new MessageService()
-  val soeService         = new SOEService()
+  val addressService = new AddressService(processingConfig.addressLRUMaxSize)
+  val messageService = new MessageService()
+  val soeService = new SOEService()
 
-  val threadSafeTXMemPool      = new ThreadSafeTXMemPool()
+  val threadSafeTXMemPool = new ThreadSafeTXMemPool()
   val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
-  val threadSafeTipService     = new ThreadSafeTipService()
+  val threadSafeTipService = new ThreadSafeTipService()
 
-  var genesisBlock: Option[CheckpointBlock]          = None
+  var genesisBlock: Option[CheckpointBlock] = None
   var genesisObservation: Option[GenesisObservation] = None
 
   def maxWidth: Int = processingConfig.maxWidth

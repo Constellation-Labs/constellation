@@ -7,9 +7,9 @@ import org.constellation.primitives.Schema._
 import org.constellation.util.{HashSignature, Signable}
 
 case class Edge[+D <: Signable](
-    observationEdge: ObservationEdge,
-    signedObservationEdge: SignedObservationEdge,
-    data: D
+  observationEdge: ObservationEdge,
+  signedObservationEdge: SignedObservationEdge,
+  data: D
 ) {
 
   def baseHash: String = signedObservationEdge.signatureBatch.hash

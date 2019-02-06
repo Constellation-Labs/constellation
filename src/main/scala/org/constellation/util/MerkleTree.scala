@@ -13,7 +13,7 @@ case class MerkleProof(input: String, nodes: Seq[MerkleNode], root: String) {
 
   def verify(): Boolean = {
     val childToParent = MerkleTree.childToParent(nodes)
-    val parents       = MerkleTree.collectParents(Seq(), childToParent(input), childToParent)
+    val parents = MerkleTree.collectParents(Seq(), childToParent(input), childToParent)
     parents.last.hash == root && parents.head.isParentOf(input) && parents.forall { _.valid }
   }
 }
@@ -21,7 +21,7 @@ case class MerkleProof(input: String, nodes: Seq[MerkleNode], root: String) {
 case class MerkleResult(inputs: Seq[String], nodes: Seq[MerkleNode]) {
 
   def createProof(startingPoint: String): MerkleProof = {
-    val parentMap   = MerkleTree.childToParent(nodes)
+    val parentMap = MerkleTree.childToParent(nodes)
     val firstParent = parentMap(startingPoint)
     MerkleProof(startingPoint,
                 MerkleTree.collectParents(Seq(), firstParent, parentMap),
@@ -45,9 +45,9 @@ object MerkleTree extends StrictLogging {
     }.toMap
 
   def collectParents(
-      parents: Seq[MerkleNode],
-      activeNode: MerkleNode,
-      childToParent: Map[String, MerkleNode]
+    parents: Seq[MerkleNode],
+    activeNode: MerkleNode,
+    childToParent: Map[String, MerkleNode]
   ): Seq[MerkleNode] = {
 
     val newParents = parents :+ activeNode

@@ -26,7 +26,7 @@ class E2ETest
 
   val tmpDir = "tmp"
 
-  implicit val system: ActorSystem             = ActorSystem("ConstellationTestNode")
+  implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
   override def beforeAll(): Unit = {
@@ -44,10 +44,10 @@ class E2ETest
   }
 
   def createNode(
-      randomizePorts: Boolean = true,
-      seedHosts: Seq[HostPort] = Seq(),
-      portOffset: Int = 0,
-      isGenesisNode: Boolean = false
+    randomizePorts: Boolean = true,
+    seedHosts: Seq[HostPort] = Seq(),
+    portOffset: Int = 0,
+    isGenesisNode: Boolean = false
   ): ConstellationNode = {
     implicit val executionContext: ExecutionContextExecutorService =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
@@ -156,7 +156,7 @@ class MessageTestingSim(sim: Simulation) {
 
   private val channelId = "test"
 
-  var genesisChannel: ChannelMessage        = _
+  var genesisChannel: ChannelMessage = _
   var expectedMessages: Seq[ChannelMessage] = _
 
   def openChannel(apis: Seq[APIClient]): Unit = {
@@ -175,7 +175,7 @@ class MessageTestingSim(sim: Simulation) {
       .get
       .channelMessage
 
-    val validNameChars   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map { _.toString }.toSeq
+    val validNameChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map { _.toString }.toSeq
     val invalidNameChars = validNameChars.map { _.toLowerCase }
 
     expectedMessages = (0 until 10).flatMap { batchNumber =>
@@ -236,7 +236,7 @@ class MessageTestingSim(sim: Simulation) {
   }
 
   def dumpJson(
-      storedSnapshots: Seq[Seq[StoredSnapshot]]
+    storedSnapshots: Seq[Seq[StoredSnapshot]]
   ): Unit = {
 
     var numInvalid = 0
@@ -282,7 +282,7 @@ class MessageTestingSim(sim: Simulation) {
           }
           .getOrElse(Seq())
 
-        val id        = ids(hash)
+        val id = ids(hash)
         val parentsId = parents.flatMap { ids.get } ++ msgParentId
         val color = isValid
           .map { b =>
@@ -298,9 +298,9 @@ class MessageTestingSim(sim: Simulation) {
 }
 
 case class BlockDumpOutput(
-    blockSoeHash: String,
-    blockParentSOEHashes: Seq[String],
-    blockMessageValid: Option[Boolean],
-    messageParent: Option[String],
-    messageHash: Option[String]
+  blockSoeHash: String,
+  blockParentSOEHashes: Seq[String],
+  blockMessageValid: Option[Boolean],
+  messageParent: Option[String],
+  messageHash: Option[String]
 )

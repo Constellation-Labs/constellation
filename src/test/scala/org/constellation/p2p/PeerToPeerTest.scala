@@ -25,13 +25,13 @@ class PeerToPeerTest
     TestKit.shutdownActorSystem(system)
   }
 
-  private val address: InetSocketAddress  = constellation.addressToSocket("localhost:16180")
+  private val address: InetSocketAddress = constellation.addressToSocket("localhost:16180")
   private val address2: InetSocketAddress = constellation.addressToSocket("localhost:16181")
 
   trait WithPeerToPeerActor {
     val keyPair: KeyPair = KeyUtils.makeKeyPair()
 
-    implicit val timeout: Timeout               = Timeout(5, TimeUnit.SECONDS)
+    implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
     implicit val materialize: ActorMaterializer = ActorMaterializer()
 
     val consensusActor = TestProbe()

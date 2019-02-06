@@ -7,7 +7,7 @@ import constellation._
 trait POWExt {
 
   def proofOfWork(input: String, difficulty: Option[Int]): String = {
-    var done  = false
+    var done = false
     var count = 0L
     while (!done) {
       count += 1

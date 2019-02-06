@@ -30,7 +30,7 @@ class TCPServer(hostInterface: String, port: Int) extends Actor {
     case CommandFailed(_: Bind) => context stop self
 
     case c @ Connected(remote, local) =>
-      val handler    = context.actorOf(Props[SimplisticHandler])
+      val handler = context.actorOf(Props[SimplisticHandler])
       val connection = sender()
       connection ! Register(handler)
   }

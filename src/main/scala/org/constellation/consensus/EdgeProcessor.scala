@@ -77,10 +77,10 @@ object EdgeProcessor extends StrictLogging {
   }
 
   case class CreateCheckpointEdgeResponse(
-      checkpointEdge: CheckpointEdge,
-      transactionsUsed: Set[String],
-      // filteredValidationTips: Seq[SignedObservationEdge],
-      updatedTransactionMemPoolThresholdMet: Set[String]
+    checkpointEdge: CheckpointEdge,
+    transactionsUsed: Set[String],
+    // filteredValidationTips: Seq[SignedObservationEdge],
+    updatedTransactionMemPoolThresholdMet: Set[String]
   )
 
   case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
@@ -93,7 +93,7 @@ object EdgeProcessor extends StrictLogging {
   // TODO: Move to checkpoint formation actor
 
   def formCheckpoint(messages: Seq[ChannelMessage] = Seq())(
-      implicit dao: DAO
+    implicit dao: DAO
   ) = {
 
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
@@ -108,11 +108,11 @@ object EdgeProcessor extends StrictLogging {
     }
 
     def requestBlockSignature(
-        checkpointBlock: CheckpointBlock,
-        finalFacilitators: Set[
-          Id
-        ],
-        data: PeerData
+      checkpointBlock: CheckpointBlock,
+      finalFacilitators: Set[
+        Id
+      ],
+      data: PeerData
     ) = {
       async {
         val sigResp = await(
@@ -131,10 +131,10 @@ object EdgeProcessor extends StrictLogging {
       }
     }
     def processSignedBlock(
-        cache: CheckpointCacheData,
-        finalFacilitators: Set[
-          Id
-        ]
+      cache: CheckpointCacheData,
+      finalFacilitators: Set[
+        Id
+      ]
     ) = {
 
       val responses = dao.peerInfo.values.toList.map { peer =>
@@ -269,7 +269,7 @@ object EdgeProcessor extends StrictLogging {
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
     def innerResolve(peers: List[APIClient])(
-        implicit ec: ExecutionContext): Future[CheckpointCacheData] = {
+      implicit ec: ExecutionContext): Future[CheckpointCacheData] = {
       peers match {
         case activePeer :: rest =>
           val resp = activePeer
@@ -303,10 +303,10 @@ object EdgeProcessor extends StrictLogging {
   }
 
   def acceptWithResolveAttempt(checkpointCacheData: CheckpointCacheData)(
-      implicit dao: DAO): Unit = {
+    implicit dao: DAO): Unit = {
 
     dao.threadSafeTipService.accept(checkpointCacheData)
-    val block   = checkpointCacheData.checkpointBlock.get
+    val block = checkpointCacheData.checkpointBlock.get
     val parents = block.parentSOEBaseHashes
     val parentExists = parents.map { h =>
       h -> dao.checkpointService.contains(h)
@@ -347,14 +347,14 @@ object EdgeProcessor extends StrictLogging {
 case class TipData(checkpointBlock: CheckpointBlock, numUses: Int)
 
 case class SnapshotInfo(
-    snapshot: Snapshot,
-    acceptedCBSinceSnapshot: Seq[String] = Seq(),
-    acceptedCBSinceSnapshotCache: Seq[CheckpointCacheData] = Seq(),
-    lastSnapshotHeight: Int = 0,
-    snapshotHashes: Seq[String] = Seq(),
-    addressCacheData: Map[String, AddressCacheData] = Map(),
-    tips: Map[String, TipData] = Map(),
-    snapshotCache: Seq[CheckpointCacheData] = Seq()
+  snapshot: Snapshot,
+  acceptedCBSinceSnapshot: Seq[String] = Seq(),
+  acceptedCBSinceSnapshotCache: Seq[CheckpointCacheData] = Seq(),
+  lastSnapshotHeight: Int = 0,
+  snapshotHashes: Seq[String] = Seq(),
+  addressCacheData: Map[String, AddressCacheData] = Map(),
+  tips: Map[String, TipData] = Map(),
+  snapshotCache: Seq[CheckpointCacheData] = Seq()
 )
 
 case object GetMemPool
@@ -411,14 +411,14 @@ object Snapshot {
   }
 
   def findLatestMessageWithSnapshotHash(
-      depth: Int,
-      lastMessage: Option[ChannelMessageMetadata],
-      maxDepth: Int = 10
+    depth: Int,
+    lastMessage: Option[ChannelMessageMetadata],
+    maxDepth: Int = 10
   )(implicit dao: DAO): Option[ChannelMessageMetadata] = {
 
     def findLatestMessageWithSnapshotHashInner(
-        depth: Int,
-        lastMessage: Option[ChannelMessageMetadata]
+      depth: Int,
+      lastMessage: Option[ChannelMessageMetadata]
     ): Option[ChannelMessageMetadata] = {
       if (depth > maxDepth) None
       else {
@@ -447,7 +447,7 @@ object Snapshot {
     } else Future.successful(Try(()))
   }
 
-  val snapshotZero             = Snapshot("", Seq())
+  val snapshotZero = Snapshot("", Seq())
   val snapshotZeroHash: String = Snapshot("", Seq()).hash
 
   def acceptSnapshot(snapshot: Snapshot)(implicit dao: DAO): Unit = {
@@ -458,9 +458,9 @@ object Snapshot {
       dao.metrics.incrementMetric("snapshotCBAcceptQueryFailed")
     }
 
-    for (cbOpt   <- cbData;
+    for (cbOpt <- cbData;
          cbCache <- cbOpt;
-         cb      <- cbCache.checkpointBlock;
+         cb <- cbCache.checkpointBlock;
          message <- cb.checkpoint.edge.data.messages) {
       dao.messageService.update(
         message.signedMessageData.signatures.hash,
@@ -470,10 +470,10 @@ object Snapshot {
       dao.metrics.incrementMetric("messageSnapshotHashUpdated")
     }
 
-    for (cbOpt   <- cbData;
+    for (cbOpt <- cbData;
          cbCache <- cbOpt;
-         cb      <- cbCache.checkpointBlock;
-         tx      <- cb.transactions) {
+         cb <- cbCache.checkpointBlock;
+         tx <- cb.transactions) {
       // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
       // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
       tx.ledgerApplySnapshot()

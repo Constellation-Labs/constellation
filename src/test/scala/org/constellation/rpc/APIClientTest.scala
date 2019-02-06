@@ -12,8 +12,8 @@ import org.constellation.util.{APIClient, TestNode}
 
 class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with BeforeAndAfterAll {
 
-  implicit val system: ActorSystem                        = ActorSystem("BlockChain")
-  implicit val materialize: ActorMaterializer             = ActorMaterializer()
+  implicit val system: ActorSystem = ActorSystem("BlockChain")
+  implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   override def afterEach(): Unit = {
@@ -45,8 +45,8 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
   "GET to /id" should "get the current nodes public key id" in {
     val keyPair = KeyUtils.makeKeyPair()
     val appNode = TestNode(Seq(), keyPair)
-    val rpc     = APIClient(port = appNode.httpPort)
-    val id      = rpc.getBlocking[Id]("id")
+    val rpc = APIClient(port = appNode.httpPort)
+    val id = rpc.getBlocking[Id]("id")
 
     assert(keyPair.getPublic.toId == id)
   }

@@ -20,7 +20,7 @@ class ClusterSingleDownloadJoinTest
     TestKit.shutdownActorSystem(system)
   }
 
-  implicit val materialize: ActorMaterializer             = ActorMaterializer()
+  implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   // For fixing some old bug, revisit later if necessary
@@ -42,9 +42,9 @@ class ClusterSingleDownloadJoinTest
     sim.logger.info(ips.toString)
 
     val apis = ips.map { ip =>
-      val split      = ip.split(":")
+      val split = ip.split(":")
       val portOffset = if (split.length == 1) 8999 else split(1).toInt
-      val a          = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
+      val a = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
       sim.logger.info(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
       a
     } // ++ auxAPIs

@@ -39,10 +39,10 @@ class LevelDBActor(dao: DAO)(implicit timeoutI: Timeout, system: ActorSystem)
       sender() ! db.putBytes(key, bytes)
 
     case DBUpdate(key, func, empty) =>
-      val res    = Try { db.getBytes(key).map { KryoSerializer.deserialize } }.toOption.flatten
+      val res = Try { db.getBytes(key).map { KryoSerializer.deserialize } }.toOption.flatten
       val option = res.map(func)
-      val obj    = option.getOrElse(empty)
-      val bytes  = KryoSerializer.serializeAnyRef(obj)
+      val obj = option.getOrElse(empty)
+      val bytes = KryoSerializer.serializeAnyRef(obj)
       db.putBytes(key, bytes)
       sender() ! obj
 

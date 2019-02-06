@@ -16,14 +16,14 @@ import org.constellation.primitives._
 import org.constellation.util.APIClient
 
 class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTest {
-  implicit val system: ActorSystem                        = ActorSystem("TransactionProcessorTest")
-  implicit val materialize: ActorMaterializer             = ActorMaterializer()
+  implicit val system: ActorSystem = ActorSystem("TransactionProcessorTest")
+  implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   val keyPair: KeyPair = KeyUtils.makeKeyPair()
-  val peerData         = PeerData(addPeerRequest, getAPIClient("", 1))
-  val peerManager      = TestProbe()
-  val metricsManager   = TestProbe()
+  val peerData = PeerData(addPeerRequest, getAPIClient("", 1))
+  val peerManager = TestProbe()
+  val metricsManager = TestProbe()
   /*  val dbActor = TestProbe()
 
   dbActor.setAutoPilot(new TestActor.AutoPilot {
@@ -54,12 +54,12 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
     mockData
   }
 
-  val data                       = makeDao(mockData)
-  val tx: Transaction            = dummyTx(data)
-  val invalidTx                  = dummyTx(data, -1L)
-  val srcHash                    = tx.src.hash
-  val txHash                     = tx.baseHash
-  val invalidSpendHash           = invalidTx.hash
+  val data = makeDao(mockData)
+  val tx: Transaction = dummyTx(data)
+  val invalidTx = dummyTx(data, -1L)
+  val srcHash = tx.src.hash
+  val txHash = tx.baseHash
+  val invalidSpendHash = invalidTx.hash
   val randomPeer: (Id, PeerData) = (id, peerData)
 
   val mockLvlDB = stub[Datastore]

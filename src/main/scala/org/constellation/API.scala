@@ -38,13 +38,13 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 case class PeerMetadata(
-    host: String,
-    udpPort: Int,
-    httpPort: Int,
-    id: Id,
-    nodeState: NodeState = NodeState.Ready,
-    timeAdded: Long = System.currentTimeMillis(),
-    auxHost: String = ""
+  host: String,
+  udpPort: Int,
+  httpPort: Int,
+  id: Id,
+  nodeState: NodeState = NodeState.Ready,
+  timeAdded: Long = System.currentTimeMillis(),
+  auxHost: String = ""
 )
 
 case class HostPort(host: String, port: Int)
@@ -54,26 +54,26 @@ case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = Non
 case class UpdatePassword(password: String)
 
 case class ProcessingConfig(
-    maxWidth: Int = 10,
-    minCheckpointFormationThreshold: Int = 50,
-    numFacilitatorPeers: Int = 2,
-    randomTXPerRoundPerPeer: Int = 100,
-    metricCheckInterval: Int = 60,
-    maxMemPoolSize: Int = 2000,
-    minPeerTimeAddedSeconds: Int = 30,
-    maxActiveTipsAllowedInMemory: Int = 1000,
-    maxAcceptedCBHashesInMemory: Int = 5000,
-    peerHealthCheckInterval: Int = 30,
-    peerDiscoveryInterval: Int = 60,
-    snapshotHeightInterval: Int = 2,
-    snapshotHeightDelayInterval: Int = 5,
-    snapshotInterval: Int = 25,
-    checkpointLRUMaxSize: Int = 4000,
-    transactionLRUMaxSize: Int = 10000,
-    addressLRUMaxSize: Int = 10000,
-    formCheckpointTimeout: Int = 60,
-    maxFaucetSize: Int = 1000,
-    roundsPerMessage: Int = 10
+  maxWidth: Int = 10,
+  minCheckpointFormationThreshold: Int = 50,
+  numFacilitatorPeers: Int = 2,
+  randomTXPerRoundPerPeer: Int = 100,
+  metricCheckInterval: Int = 60,
+  maxMemPoolSize: Int = 2000,
+  minPeerTimeAddedSeconds: Int = 30,
+  maxActiveTipsAllowedInMemory: Int = 1000,
+  maxAcceptedCBHashesInMemory: Int = 5000,
+  peerHealthCheckInterval: Int = 30,
+  peerDiscoveryInterval: Int = 60,
+  snapshotHeightInterval: Int = 2,
+  snapshotHeightDelayInterval: Int = 5,
+  snapshotInterval: Int = 25,
+  checkpointLRUMaxSize: Int = 4000,
+  transactionLRUMaxSize: Int = 10000,
+  addressLRUMaxSize: Int = 10000,
+  formCheckpointTimeout: Int = 60,
+  maxFaucetSize: Int = 1000,
+  roundsPerMessage: Int = 10
 ) {}
 
 class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
@@ -96,8 +96,8 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
 
   val config: Config = ConfigFactory.load()
 
-  private val authEnabled          = config.getBoolean("auth.enabled")
-  private val authId: String       = config.getString("auth.id")
+  private val authEnabled = config.getBoolean("auth.enabled")
+  private val authId: String = config.getString("auth.id")
   private var authPassword: String = config.getString("auth.password")
 
   val getEndpoints: Route =
@@ -215,7 +215,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
 
             complete(
               Map(
-                "peers"        -> peerMap,
+                "peers" -> peerMap,
                 "transactions" -> txs
               ))
 

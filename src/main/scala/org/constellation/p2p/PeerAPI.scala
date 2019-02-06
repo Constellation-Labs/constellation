@@ -36,8 +36,8 @@ case class PeerUnregister(host: String, port: Int, id: Id)
 object PeerAPI {
 
   case class EdgeResponse(
-      soe: Option[SignedObservationEdgeCache] = None,
-      cb: Option[CheckpointCacheData] = None
+    soe: Option[SignedObservationEdgeCache] = None,
+    cb: Option[CheckpointCacheData] = None
   )
 
 }

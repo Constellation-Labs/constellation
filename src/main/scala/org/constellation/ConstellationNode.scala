@@ -37,8 +37,8 @@ object ConstellationNode extends StrictLogging {
 
     Try {
 
-      implicit val system: ActorSystem                = ActorSystem("Constellation")
-      implicit val materializer: ActorMaterializer    = ActorMaterializer()
+      implicit val system: ActorSystem = ActorSystem("Constellation")
+      implicit val materializer: ActorMaterializer = ActorMaterializer()
       implicit val executionContext: ExecutionContext = system.dispatchers.lookup("main-dispatcher")
 
       val rpcTimeout = config.getInt("rpc.timeout")
@@ -99,8 +99,8 @@ object ConstellationNode extends StrictLogging {
           }
         }
 
-      val portOffset          = args.headOption.map { _.toInt }
-      val httpPortFromArg     = portOffset.map { _ + 1 }
+      val portOffset = args.headOption.map { _.toInt }
+      val httpPortFromArg = portOffset.map { _ + 1 }
       val peerHttpPortFromArg = portOffset.map { _ + 2 }
 
       val httpPort = httpPortFromArg.getOrElse(
@@ -148,8 +148,8 @@ object ConstellationNode extends StrictLogging {
 }
 
 case class NodeConfig(
-    metricIntervalSeconds: Int = 60,
-    isGenesisNode: Boolean = false
+  metricIntervalSeconds: Int = 60,
+  isGenesisNode: Boolean = false
 )
 
 class ConstellationNode(val configKeyPair: KeyPair,
@@ -167,9 +167,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
                         val attemptDownload: Boolean = false,
                         val allowLocalhostPeers: Boolean = false,
                         nodeConfig: NodeConfig = NodeConfig())(
-    implicit val system: ActorSystem,
-    implicit val materialize: ActorMaterializer,
-    implicit val executionContext: ExecutionContext
+  implicit val system: ActorSystem,
+  implicit val materialize: ActorMaterializer,
+  implicit val executionContext: ExecutionContext
 ) {
 
   implicit val dao: DAO = new DAO(nodeConfig)
@@ -200,8 +200,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
   constellation.standardTimeout = Timeout(timeoutSeconds, TimeUnit.SECONDS)
 
   val udpAddressString: String = hostName + ":" + udpPort
-  lazy val peerHostPort        = HostPort(hostName, peerHttpPort)
-  val udpAddress               = new InetSocketAddress(hostName, udpPort)
+  lazy val peerHostPort = HostPort(hostName, peerHttpPort)
+  val udpAddress = new InetSocketAddress(hostName, udpPort)
 
   if (autoSetExternalAddress) {
     dao.externalAddress = Some(udpAddress)
@@ -289,7 +289,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   def getAPIClientForNode(node: ConstellationNode): APIClient = {
     val ipData = node.getIPData
-    val api    = APIClient(host = ipData.canonicalHostName, port = ipData.port)
+    val api = APIClient(host = ipData.canonicalHostName, port = ipData.port)
     api.id = id
     api
   }

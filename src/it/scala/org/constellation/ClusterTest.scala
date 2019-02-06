@@ -34,7 +34,7 @@ object ClusterTest {
   @deprecated("Use node IPs for now -- this was for previous tests but may be useful later.",
               "a few months")
   def getServiceIPs: List[KubeIPs] = {
-    val cmd    = kubectl ++ Seq("--output=json", "get", "services")
+    val cmd = kubectl ++ Seq("--output=json", "get", "services")
     val result = cmd.!!
     // println(s"GetIP Result: $result")
     val items = (result.jValue \ "items").extract[JArray]
@@ -63,7 +63,7 @@ object ClusterTest {
 
   def getNodeIPs: Seq[NodeIPs] = {
     val result = { kubectl ++ Seq("get", "-o", "json", "nodes") }.!!
-    val items  = (result.jValue \ "items").extract[JArray]
+    val items = (result.jValue \ "items").extract[JArray]
     val res = items.arr.flatMap { i =>
       val kind = (i \ "kind").extract[String]
       if (kind == "Node") {
@@ -94,7 +94,7 @@ object ClusterTest {
 
   def getPodMappings(namePrefix: String): List[PodIPName] = {
 
-    val pods  = ((kubectl ++ Seq("get", "-o", "json", "pods")).!!.jValue \ "items").extract[JArray]
+    val pods = ((kubectl ++ Seq("get", "-o", "json", "pods")).!!.jValue \ "items").extract[JArray]
     val nodes = getNodeIPs
 
     val hostIPToName = pods
@@ -129,7 +129,7 @@ class ClusterTest
     TestKit.shutdownActorSystem(system)
   }
 
-  implicit val materialize: ActorMaterializer             = ActorMaterializer()
+  implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   import ClusterTest._

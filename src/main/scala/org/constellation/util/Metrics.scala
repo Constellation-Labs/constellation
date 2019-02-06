@@ -48,7 +48,7 @@ object Metrics {
   */
 class TransactionRateTracker()(implicit dao: DAO) {
 
-  private var lastTXCount: Long   = 0
+  private var lastTXCount: Long = 0
   private var lastCheckTime: Long = System.currentTimeMillis()
 
   /**
@@ -57,18 +57,18 @@ class TransactionRateTracker()(implicit dao: DAO) {
     * @return TPS all time and TPS last n seconds in metrics form
     */
   def calculate(transactionAccepted: Long): Map[String, String] = {
-    val countAll   = transactionAccepted - dao.transactionAcceptedAfterDownload
-    val startTime  = dao.downloadFinishedTime // metrics.getOrElse("nodeStartTimeMS", "1").toLong
+    val countAll = transactionAccepted - dao.transactionAcceptedAfterDownload
+    val startTime = dao.downloadFinishedTime // metrics.getOrElse("nodeStartTimeMS", "1").toLong
     val deltaStart = System.currentTimeMillis() - startTime
-    val tpsAll     = countAll.toDouble * 1000 / deltaStart
-    val delta      = System.currentTimeMillis() - lastCheckTime
-    val deltaTX    = countAll - lastTXCount
-    val tps        = deltaTX.toDouble * 1000 / delta
+    val tpsAll = countAll.toDouble * 1000 / deltaStart
+    val delta = System.currentTimeMillis() - lastCheckTime
+    val deltaTX = countAll - lastTXCount
+    val tps = deltaTX.toDouble * 1000 / delta
     lastTXCount = countAll
     lastCheckTime = System.currentTimeMillis()
     Map(
       "TPS_last_" + dao.nodeConfig.metricIntervalSeconds + "_seconds" -> tps.toString,
-      "TPS_all"                                                       -> tpsAll.toString
+      "TPS_all" -> tpsAll.toString
     )
   }
 
@@ -85,7 +85,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   val logger = Logger("Metrics")
 
   private val stringMetrics: TrieMap[String, String] = TrieMap()
-  private val countMetrics: TrieMap[String, Long]    = TrieMap()
+  private val countMetrics: TrieMap[String, Long] = TrieMap()
 
   val rateCounter = new TransactionRateTracker()
 

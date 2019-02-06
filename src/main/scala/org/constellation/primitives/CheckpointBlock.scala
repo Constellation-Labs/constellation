@@ -10,8 +10,8 @@ import org.constellation.primitives.Schema._
 import org.constellation.util.HashSignature
 
 case class CheckpointBlock(
-    transactions: Seq[Transaction],
-    checkpoint: CheckpointEdge
+  transactions: Seq[Transaction],
+  checkpoint: CheckpointEdge
 ) {
 
   def storeSOE()(implicit dao: DAO): Unit = {
@@ -29,7 +29,7 @@ case class CheckpointBlock(
     } else {
 
       val parents2 = parents.map { _.get }
-      val heights  = parents2.map { _.height.map { _.max } }
+      val heights = parents2.map { _.height.map { _.max } }
 
       val nonEmptyHeights = heights.flatten
       if (nonEmptyHeights.isEmpty) None
@@ -43,7 +43,7 @@ case class CheckpointBlock(
     } else {
 
       val parents2 = parents.map { _.get }
-      val heights  = parents2.map { _.height.map { _.min } }
+      val heights = parents2.map { _.height.map { _.min } }
 
       val nonEmptyHeights = heights.flatten
       if (nonEmptyHeights.isEmpty) None
@@ -150,9 +150,9 @@ case class CheckpointBlock(
 object CheckpointBlock {
 
   def createCheckpointBlockSOE(
-      transactions: Seq[Transaction],
-      tips: Seq[SignedObservationEdge],
-      messages: Seq[ChannelMessage] = Seq()
+    transactions: Seq[Transaction],
+    tips: Seq[SignedObservationEdge],
+    messages: Seq[ChannelMessage] = Seq()
   )(implicit keyPair: KeyPair): CheckpointBlock = {
     createCheckpointBlock(transactions, tips.map { t =>
       TypedEdgeHash(t.hash, EdgeHashType.CheckpointHash)
@@ -160,9 +160,9 @@ object CheckpointBlock {
   }
 
   def createCheckpointBlock(
-      transactions: Seq[Transaction],
-      tips: Seq[TypedEdgeHash],
-      messages: Seq[ChannelMessage] = Seq()
+    transactions: Seq[Transaction],
+    tips: Seq[TypedEdgeHash],
+    messages: Seq[ChannelMessage] = Seq()
   )(implicit keyPair: KeyPair): CheckpointBlock = {
 
     val checkpointEdgeData =
@@ -277,11 +277,11 @@ sealed trait CheckpointBlockValidatorNel {
       .map(_ => t)
 
   def validateTransactions(t: Iterable[Transaction])(
-      implicit dao: DAO): ValidationResult[List[Transaction]] =
+    implicit dao: DAO): ValidationResult[List[Transaction]] =
     t.toList.map(validateTransaction(_).map(List(_))).combineAll
 
   def validateDuplicatedTransactions(
-      t: Iterable[Transaction]): ValidationResult[List[Transaction]] = {
+    t: Iterable[Transaction]): ValidationResult[List[Transaction]] = {
     val diff = t.toList.diff(t.toSet.toList)
 
     if (diff.isEmpty) {
@@ -311,7 +311,7 @@ sealed trait CheckpointBlockValidatorNel {
     if (s.nonEmpty) s.toList.validNel else EmptySignatures().invalidNel
 
   def validateSourceAddressBalances(
-      t: Iterable[Transaction]
+    t: Iterable[Transaction]
   )(implicit dao: DAO): ValidationResult[List[Transaction]] = {
 
     def lookup(key: String) =
@@ -374,7 +374,7 @@ sealed trait CheckpointBlockValidatorNel {
   }
 
   def validateCheckpointBlockTree(cb: CheckpointBlock)(
-      implicit dao: DAO): Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance] =
+    implicit dao: DAO): Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance] =
     if (isInSnapshot(cb)) Map.empty[String, Long].rightIor
     else
       getParents(cb)
@@ -390,7 +390,7 @@ sealed trait CheckpointBlockValidatorNel {
               Ior.both(NonEmptyList.of(InternalInconsistency(cb)), diffs))
 
   implicit def validateTreeToValidated(
-      v: Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance])
+    v: Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance])
     : ValidationResult[AddressBalance] =
     v match {
       case Ior.Right(a)   => a.validNel
@@ -399,7 +399,7 @@ sealed trait CheckpointBlockValidatorNel {
     }
 
   def validateCheckpointBlock(
-      cb: CheckpointBlock
+    cb: CheckpointBlock
   )(implicit dao: DAO): ValidationResult[CheckpointBlock] = {
     val preTreeResult =
       validateEmptySignatures(cb.signatures)

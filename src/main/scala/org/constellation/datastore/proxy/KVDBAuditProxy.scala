@@ -11,8 +11,8 @@ class KVDBAuditProxy(kvdb: KVDB) extends KVDB {
 
   def timer[T](f: => T): (T, Long) = {
     val startTime = System.currentTimeMillis()
-    val res       = f
-    val endTime   = System.currentTimeMillis()
+    val res = f
+    val endTime = System.currentTimeMillis()
     (res, endTime - startTime)
   }
 
@@ -32,7 +32,7 @@ class KVDBAuditProxy(kvdb: KVDB) extends KVDB {
 
   override def update[T <: AnyRef](key: String, updateF: T => T, empty: T): T = {
     val (before, t1) = timer { kvdb.get(key) }
-    val (res, time)  = timer { kvdb.update(key, updateF, empty) }
+    val (res, time) = timer { kvdb.update(key, updateF, empty) }
     f.appendLine(s"UPDATE $key ${res.json} ${time}ms (BEFORE UPDATE: ${before.json} ${t1}ms)")
     res
   }

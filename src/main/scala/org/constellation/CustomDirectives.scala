@@ -68,7 +68,7 @@ object CustomDirectives {
     res match {
       case Complete(resp) =>
         val responseTimestamp: Long = System.nanoTime
-        val elapsedTime: Long       = (responseTimestamp - requestTimestamp) / 1000000
+        val elapsedTime: Long = (responseTimestamp - requestTimestamp) / 1000000
         val loggingString =
           s"""Logged Request:${req.method}:${req.uri}:${resp.status}:${elapsedTime}ms"""
         logger.info(loggingString)

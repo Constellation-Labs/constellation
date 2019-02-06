@@ -161,8 +161,8 @@ object PeerManager extends StrictLogging {
 }
 
 case class PeerData(
-    peerMetadata: PeerMetadata,
-    client: APIClient
+  peerMetadata: PeerMetadata,
+  client: APIClient
 )
 
 case class APIBroadcast[T](func: APIClient => Future[T],
@@ -331,7 +331,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
           data.client.hostName == request.host && data.client.apiPort == request.port
       }
       val validHost = validExternalHost && !hostAlreadyExists
-      val isSelfId  = dao.id == request.id
+      val isSelfId = dao.id == request.id
 
       val badAttempt = isSelfId || !validHost
 
@@ -376,7 +376,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
           stateF.map { s =>
             val state = s.nodeState
-            val id    = sig.hashSignature.id
+            val id = sig.hashSignature.id
             val add =
               PeerMetadata(request.host, 16180, request.port, id, nodeState = state)
             val peerData = PeerData(add, client)

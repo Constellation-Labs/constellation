@@ -32,18 +32,18 @@ object KeyUtils extends StrictLogging {
   def insertProvider(): BouncyCastleProvider = {
     import java.security.Security
     val provider = new org.spongycastle.jce.provider.BouncyCastleProvider()
-    val ret      = Security.insertProviderAt(provider, 1)
+    val ret = Security.insertProviderAt(provider, 1)
     logger.info(s"Insert provider return $ret")
     provider
   }
 
   val provider: BouncyCastleProvider = insertProvider()
 
-  private val ECDSA                         = "ECDsA"
-  private val secureRandom: SecureRandom    = SecureRandom.getInstance("NativePRNGNonBlocking")
-  private val secp256k                      = "secp256k1"
-  private val DefaultSignFunc               = "SHA512withECDSA"
-  private val PublicKeyHexPrefix: String    = "3056301006072a8648ce3d020106052b8104000a03420004"
+  private val ECDSA = "ECDsA"
+  private val secureRandom: SecureRandom = SecureRandom.getInstance("NativePRNGNonBlocking")
+  private val secp256k = "secp256k1"
+  private val DefaultSignFunc = "SHA512withECDSA"
+  private val PublicKeyHexPrefix: String = "3056301006072a8648ce3d020106052b8104000a03420004"
   private val PublicKeyHexPrefixLength: Int = PublicKeyHexPrefix.length
   private val PrivateKeyHexPrefix: String =
     "30818d020100301006072a8648ce3d020106052b8104000a047630740201010420"
@@ -57,7 +57,7 @@ object KeyUtils extends StrictLogging {
     */
   def makeKeyPair(): KeyPair = {
     val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance(ECDSA, provider)
-    val ecSpec                   = new ECGenParameterSpec(secp256k)
+    val ecSpec = new ECGenParameterSpec(secp256k)
     keyGen.initialize(ecSpec, secureRandom)
     keyGen.generateKeyPair
   }
@@ -87,8 +87,8 @@ object KeyUtils extends StrictLogging {
     *         access only to the public key paired to the input private key! Fun
     */
   def signData(
-      bytes: Array[Byte],
-      signFunc: String = DefaultSignFunc
+    bytes: Array[Byte],
+    signFunc: String = DefaultSignFunc
   )(implicit privKey: PrivateKey): Array[Byte] = {
     val signature = Signature.getInstance(signFunc, provider)
     signature.initSign(privKey, secureRandom)
@@ -122,9 +122,9 @@ object KeyUtils extends StrictLogging {
     *         False means dishonest signer / fake transaction
     */
   def verifySignature(
-      originalInput: Array[Byte],
-      signedOutput: Array[Byte],
-      signFunc: String = DefaultSignFunc
+    originalInput: Array[Byte],
+    signedOutput: Array[Byte],
+    signFunc: String = DefaultSignFunc
   )(implicit pubKey: PublicKey): Boolean = {
     val verifyingSignature = Signature.getInstance(signFunc, provider)
     verifyingSignature.initVerify(pubKey)
@@ -137,13 +137,13 @@ object KeyUtils extends StrictLogging {
 
   def bytesToPublicKey(encodedBytes: Array[Byte]): PublicKey = {
     val spec = new X509EncodedKeySpec(encodedBytes)
-    val kf   = KeyFactory.getInstance(ECDSA, provider)
+    val kf = KeyFactory.getInstance(ECDSA, provider)
     kf.generatePublic(spec)
   }
 
   def bytesToPrivateKey(encodedBytes: Array[Byte]): PrivateKey = {
     val spec = new PKCS8EncodedKeySpec(encodedBytes)
-    val kf   = KeyFactory.getInstance(ECDSA, provider)
+    val kf = KeyFactory.getInstance(ECDSA, provider)
     kf.generatePrivate(spec)
   }
 
@@ -195,12 +195,12 @@ object KeyUtils extends StrictLogging {
   }
 
   def keyHashToAddress(hash: String): String = {
-    val end      = hash.slice(hash.length - 36, hash.length)
+    val end = hash.slice(hash.length - 36, hash.length)
     val validInt = end.filter { Character.isDigit }
-    val ints     = validInt.map { _.toString.toInt }
-    val sum      = ints.sum
-    val par      = sum % 9
-    val res2     = "DAG" + par + end
+    val ints = validInt.map { _.toString.toInt }
+    val sum = ints.sum
+    val par = sum % 9
+    val res2 = "DAG" + par + end
     res2
   }
 
@@ -209,7 +209,7 @@ object KeyUtils extends StrictLogging {
   // https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses
 
   def publicKeyToAddressString(
-      key: PublicKey
+    key: PublicKey
   ): String = {
     val keyHash = Base58.encode(Hashing.sha256().hashBytes(key.getEncoded).asBytes())
     keyHashToAddress(keyHash)

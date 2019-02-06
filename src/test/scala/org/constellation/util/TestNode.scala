@@ -18,9 +18,9 @@ object TestNode {
             randomizePorts: Boolean = true,
             portOffset: Int = 0,
             isGenesisNode: Boolean = false)(
-      implicit system: ActorSystem,
-      materializer: ActorMaterializer,
-      executionContext: ExecutionContext
+    implicit system: ActorSystem,
+    materializer: ActorMaterializer,
+    executionContext: ExecutionContext
   ): ConstellationNode = {
 
     val randomPort =

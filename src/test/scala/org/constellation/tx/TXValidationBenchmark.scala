@@ -21,9 +21,9 @@ import scala.util.Try
 class TXValidationBenchmark extends FlatSpec {
   val logger = Logger("TXValidationBenchmark")
 
-  val kp: KeyPair  = KeyUtils.makeKeyPair()
+  val kp: KeyPair = KeyUtils.makeKeyPair()
   val kp1: KeyPair = KeyUtils.makeKeyPair()
-  val tx           = SignHelp.createTransaction(kp.address.address, kp1.address.address, 1L, kp)
+  val tx = SignHelp.createTransaction(kp.address.address, kp1.address.address, 1L, kp)
 
   val batchSize = 100
 
@@ -33,9 +33,9 @@ class TXValidationBenchmark extends FlatSpec {
     val seq = Seq.fill(batchSize)(tx)
 
     val parSeq = seq.par
-    val t0     = System.nanoTime()
+    val t0 = System.nanoTime()
     parSeq.map(_.validSrcSignature)
-    val t1    = System.nanoTime()
+    val t1 = System.nanoTime()
     val delta = (t1 - t0) / 1e6.toLong
     logger.debug(delta.toString)
     // assert(delta < 30000)
@@ -45,17 +45,17 @@ class TXValidationBenchmark extends FlatSpec {
   "Timing tx signature direct" should "validate 10k transaction signatures under 30s from bytes" in {
 
     val batch = tx.edge.signedObservationEdge.signatureBatch
-    val sig   = batch.signatures.head
-    val pkey  = sig.publicKey
+    val sig = batch.signatures.head
+    val pkey = sig.publicKey
 
-    val hashBytes      = batch.hash.getBytes()
+    val hashBytes = batch.hash.getBytes()
     val signatureBytes = hex2bytes(sig.signature)
     assert(KeyUtils.verifySignature(hashBytes, signatureBytes)(pkey))
 
     val seq2 = Seq.fill(batchSize)(0).par
-    val t0a  = System.nanoTime()
+    val t0a = System.nanoTime()
     seq2.map(_ => KeyUtils.verifySignature(hashBytes, signatureBytes)(pkey))
-    val t1a    = System.nanoTime()
+    val t1a = System.nanoTime()
     val delta2 = (t1a - t0a) / 1e6.toLong
     logger.debug(delta2.toString)
     //  assert(delta2 < 30000)
@@ -64,7 +64,7 @@ class TXValidationBenchmark extends FlatSpec {
 
   "Timing tx with direct LDB" should "validate 10k transaction signatures and LDB direct balance calls under 60s" in {
 
-    val tmpDir  = "tmp"
+    val tmpDir = "tmp"
     val ldbFile = file"tmp/db"
     Try { File(tmpDir).delete() }
 
@@ -75,7 +75,7 @@ class TXValidationBenchmark extends FlatSpec {
     ldb.kryoPut(tx.src.address, AddressCacheData(1e15.toLong, 1e15.toLong))
 
     val parSeq = seq.par
-    val t0     = System.nanoTime()
+    val t0 = System.nanoTime()
     parSeq.map { t =>
       t.validSrcSignature && ldb
         .kryoGet(t.src.address)
@@ -83,7 +83,7 @@ class TXValidationBenchmark extends FlatSpec {
         .get
         .balance >= t.amount
     }
-    val t1    = System.nanoTime()
+    val t1 = System.nanoTime()
     val delta = (t1 - t0) / 1e6.toLong
     logger.debug(delta.toString)
     // assert(delta < 60000)
@@ -94,7 +94,7 @@ class TXValidationBenchmark extends FlatSpec {
 
   "Timing tx with actor LDB" should "validate 10k transaction signatures and LDB actor balance calls under 60s" in {
 
-    val tmpDir  = "tmp"
+    val tmpDir = "tmp"
     val ldbFile = file"tmp/db"
     Try { File(tmpDir).delete() }
 
@@ -113,7 +113,7 @@ class TXValidationBenchmark extends FlatSpec {
     Thread.sleep(500)
 
     val parSeq = seq.par
-    val t0     = System.nanoTime()
+    val t0 = System.nanoTime()
     parSeq.map { t =>
       t.validSrcSignature && (ldb ? DBGet(t.src.address))
         .mapTo[Option[AddressCacheData]]
@@ -121,7 +121,7 @@ class TXValidationBenchmark extends FlatSpec {
         .get
         .balance >= t.amount
     }
-    val t1    = System.nanoTime()
+    val t1 = System.nanoTime()
     val delta = (t1 - t0) / 1e6.toLong
     logger.debug(delta.toString)
     // assert(delta < 60000)

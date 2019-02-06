@@ -9,7 +9,7 @@ import org.constellation.p2p.SerializedUDPMessage
 object KryoSerializer {
 
   def guessThreads: Int = {
-    val cores                  = Runtime.getRuntime.availableProcessors
+    val cores = Runtime.getRuntime.availableProcessors
     val GUESS_THREADS_PER_CORE = 4
     GUESS_THREADS_PER_CORE * cores
   }

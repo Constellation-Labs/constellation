@@ -93,7 +93,7 @@ class RandomDataTest extends FlatSpec {
 
   "Signatures combiners" should "be unique" in {
 
-    val cb               = randomBlock(startingTips, keyPairs.head)
+    val cb = randomBlock(startingTips, keyPairs.head)
     val cb2SameSignature = randomBlock(startingTips, keyPairs.head)
 
     //    val bogus = cb.plus(keyPairs.head).signatures
@@ -112,13 +112,13 @@ class RandomDataTest extends FlatSpec {
 
   "Generate random CBs" should "build a graph" in {
 
-    var width    = 2
+    var width = 2
     val maxWidth = 50
 
     val activeBlocks = TrieMap[SignedObservationEdge, Int]()
 
     val maxNumBlocks = 1000
-    var blockNum     = 0
+    var blockNum = 0
 
     activeBlocks(startingTips.head) = 0
     activeBlocks(startingTips.last) = 0
@@ -170,8 +170,8 @@ class RandomDataTest extends FlatSpec {
     logger.debug(cbIndex.size.toString)
 
     val genIdMap = Map(
-      go.genesis.soe.hash              -> 0,
-      go.initialDistribution.soe.hash  -> 1,
+      go.genesis.soe.hash -> 0,
+      go.initialDistribution.soe.hash -> 1,
       go.initialDistribution2.soe.hash -> 2
     )
 
@@ -186,11 +186,11 @@ class RandomDataTest extends FlatSpec {
           conv
         })
     } ++ Seq(
-      Map("id"        -> conv(go.initialDistribution.soe.hash),
+      Map("id" -> conv(go.initialDistribution.soe.hash),
           "parentIds" -> Seq(conv(go.genesis.soe.hash))),
-      Map("id"        -> conv(go.initialDistribution2.soe.hash),
+      Map("id" -> conv(go.initialDistribution2.soe.hash),
           "parentIds" -> Seq(conv(go.genesis.soe.hash))),
-      Map("id"        -> conv(go.genesis.soe.hash), "parentIds" -> Seq[String]())
+      Map("id" -> conv(go.genesis.soe.hash), "parentIds" -> Seq[String]())
     )).json
     logger.debug(json)
 
@@ -213,7 +213,7 @@ class ValidationSpec
 
   import RandomData._
 
-  implicit val dao: DAO                        = stub[DAO]
+  implicit val dao: DAO = stub[DAO]
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
   (dao.id _).when().returns(Fixtures.id)
@@ -245,7 +245,7 @@ class ValidationSpec
   "Checkpoint block validation" when {
     "all transactions are valid" should {
       "pass validation" in {
-        val kp                              = keyPairs.take(6)
+        val kp = keyPairs.take(6)
         val _ :: a :: b :: c :: d :: e :: _ = kp
 
         val txs1 = fill(
@@ -309,7 +309,7 @@ class ValidationSpec
 
     "block is malformed" should {
       "not pass validation" in {
-        val kp                    = keyPairs.take(4)
+        val kp = keyPairs.take(4)
         val _ :: a :: b :: c :: _ = kp
 
         val txs = Seq(
@@ -331,10 +331,10 @@ class ValidationSpec
 
     "at least one transaction is duplicated" should {
       "not pass validation" in {
-        val kp                    = keyPairs.take(4)
+        val kp = keyPairs.take(4)
         val _ :: a :: b :: c :: _ = kp
 
-        val tx  = createTransaction(getAddress(a), getAddress(b), 75L, a)
+        val tx = createTransaction(getAddress(a), getAddress(b), 75L, a)
         val txs = Seq(tx, tx)
 
         val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)(keyPairs.head)
@@ -350,7 +350,7 @@ class ValidationSpec
 
     "at least one transaction has non-positive amount" should {
       "not pass validation" in {
-        val kp                    = keyPairs.take(4)
+        val kp = keyPairs.take(4)
         val _ :: a :: b :: c :: _ = kp
 
         val txs = Seq(
@@ -372,7 +372,7 @@ class ValidationSpec
 
     "at least one transaction has zero amount" should {
       "not pass validation" in {
-        val kp                    = keyPairs.take(4)
+        val kp = keyPairs.take(4)
         val _ :: a :: b :: c :: _ = kp
 
         val txs = Seq(
@@ -394,7 +394,7 @@ class ValidationSpec
 
     "at least one transaction has no address cache stored" should {
       "not pass validation" in {
-        val kp                    = keyPairs.take(4)
+        val kp = keyPairs.take(4)
         val _ :: a :: b :: c :: _ = kp
 
         val txs = Seq(
@@ -410,7 +410,7 @@ class ValidationSpec
 
     "checkpoint block is internally inconsistent" should {
       "not pass validation" in {
-        val kp                    = keyPairs.take(4)
+        val kp = keyPairs.take(4)
         val _ :: a :: b :: c :: _ = kp
 
         val txs = Seq(
@@ -433,7 +433,7 @@ class ValidationSpec
   "two checkpoint blocks has same ancestor" when {
     "combined relative to the snapshot are invalid" should {
       "not pass validation" in {
-        val kp                    = keyPairs.take(4)
+        val kp = keyPairs.take(4)
         val _ :: a :: b :: c :: _ = kp
 
         fill(
@@ -459,7 +459,7 @@ class ValidationSpec
   "two groups of checkpoint blocks lower blocks beyond the snapshot" when {
     "first group is internally inconsistent" should {
       "not pass validation" in {
-        val kp                              = keyPairs.take(6)
+        val kp = keyPairs.take(6)
         val _ :: a :: b :: c :: d :: e :: _ = kp
 
         val txs1 = fill(

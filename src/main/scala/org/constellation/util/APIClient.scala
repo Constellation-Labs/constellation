@@ -25,8 +25,8 @@ object APIClient {
             port: Int,
             peerHTTPPort: Int = 9001,
             internalPeerHost: String = "")(
-      implicit executionContext: ExecutionContext,
-      dao: DAO = null
+    implicit executionContext: ExecutionContext,
+    dao: DAO = null
   ): APIClient = {
     new APIClient(host, port, peerHTTPPort, internalPeerHost)(executionContext, dao)
   }
@@ -36,9 +36,9 @@ class APIClient private (host: String = "127.0.0.1",
                          port: Int,
                          val peerHTTPPort: Int = 9001,
                          val internalPeerHost: String = "")(
-    // implicit val system: ActorSystem,
-    implicit val executionContext: ExecutionContext,
-    dao: DAO = null
+  // implicit val system: ActorSystem,
+  implicit val executionContext: ExecutionContext,
+  dao: DAO = null
 ) {
 
   implicit case object CanLogCorrelationId extends CanLog[HostPort] {
@@ -65,7 +65,7 @@ class APIClient private (host: String = "127.0.0.1",
   val daoOpt = Option(dao)
 
   val hostName: String = host
-  var id: Id           = _
+  var id: Id = _
 
   val udpPort: Int = 16180
   val apiPort: Int = port
@@ -87,8 +87,8 @@ class APIClient private (host: String = "127.0.0.1",
 
   private val config = ConfigFactory.load()
 
-  private val authEnabled  = config.getBoolean("auth.enabled")
-  private val authId       = config.getString("auth.id")
+  private val authEnabled = config.getBoolean("auth.enabled")
+  private val authId = config.getString("auth.id")
   private var authPassword = config.getString("auth.password")
 
   implicit class AddBlocking[T](req: Future[T]) {
@@ -109,8 +109,8 @@ class APIClient private (host: String = "127.0.0.1",
                    params: Map[String, String] = Map.empty,
                    timeout: Duration = 5.seconds)(method: Method) = {
     val base = baseUri(suffix)
-    val uri  = uri"$base?$params"
-    val req  = sttp.method(method, uri).readTimeout(timeout).headers(optHeaders)
+    val uri = uri"$base?$params"
+    val req = sttp.method(method, uri).readTimeout(timeout).headers(optHeaders)
     if (authEnabled) {
       req.auth.basic(authId, authPassword)
     } else req
@@ -121,8 +121,8 @@ class APIClient private (host: String = "127.0.0.1",
   }
 
   def post(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
-      implicit f: Formats = constellation.constellationFormats): Future[Response[String]] = {
-    val ser     = Serialization.write(b)
+    implicit f: Formats = constellation.constellationFormats): Future[Response[String]] = {
+    val ser = Serialization.write(b)
     val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
     httpWithAuth(suffix, timeout = timeout)(Method.POST)
       .body(gzipped)
@@ -132,8 +132,8 @@ class APIClient private (host: String = "127.0.0.1",
   }
 
   def put(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
-      implicit f: Formats = constellation.constellationFormats): Future[Response[String]] = {
-    val ser     = Serialization.write(b)
+    implicit f: Formats = constellation.constellationFormats): Future[Response[String]] = {
+    val ser = Serialization.write(b)
     val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
     httpWithAuth(suffix, timeout = timeout)(Method.PUT)
       .body(gzipped)
@@ -143,32 +143,32 @@ class APIClient private (host: String = "127.0.0.1",
   }
 
   def postEmpty(suffix: String, timeout: Duration = 5.seconds)(
-      implicit f: Formats = constellation.constellationFormats): Response[String] = {
+    implicit f: Formats = constellation.constellationFormats): Response[String] = {
     httpWithAuth(suffix, timeout = timeout)(Method.POST).send().blocking()
   }
 
   def postSync(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
-      implicit f: Formats = constellation.constellationFormats
+    implicit f: Formats = constellation.constellationFormats
   ): Response[String] = {
     post(suffix, b, timeout).blocking(timeout)
   }
 
   def putSync(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
-      implicit f: Formats = constellation.constellationFormats
+    implicit f: Formats = constellation.constellationFormats
   ): Response[String] = {
     put(suffix, b, timeout).blocking(timeout)
   }
 
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
-      implicit m: Manifest[T],
-      f: Formats = constellation.constellationFormats): T = {
+    implicit m: Manifest[T],
+    f: Formats = constellation.constellationFormats): T = {
     postNonBlocking(suffix, b, timeout).blocking(timeout)
   }
 
   def postNonBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
-      implicit m: Manifest[T],
-      f: Formats = constellation.constellationFormats): Future[T] = {
-    val ser     = Serialization.write(b)
+    implicit m: Manifest[T],
+    f: Formats = constellation.constellationFormats): Future[T] = {
+    val ser = Serialization.write(b)
     val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
     httpWithAuth(suffix, timeout = timeout)(Method.POST)
       .body(gzipped)
@@ -180,8 +180,8 @@ class APIClient private (host: String = "127.0.0.1",
   }
 
   def postBlockingEmpty[T <: AnyRef](suffix: String, timeout: Duration = 5.seconds)(
-      implicit m: Manifest[T],
-      f: Formats = constellation.constellationFormats): T = {
+    implicit m: Manifest[T],
+    f: Formats = constellation.constellationFormats): T = {
     val res = postEmpty(suffix, timeout)
     Serialization.read[T](res.unsafeBody)
   }
@@ -201,16 +201,16 @@ class APIClient private (host: String = "127.0.0.1",
   def getBlocking[T <: AnyRef](suffix: String,
                                queryParams: Map[String, String] = Map(),
                                timeout: Duration = 5.seconds)(
-      implicit m: Manifest[T],
-      f: Formats = constellation.constellationFormats): T = {
+    implicit m: Manifest[T],
+    f: Formats = constellation.constellationFormats): T = {
     getNonBlocking[T](suffix, queryParams, timeout).blocking(timeout)
   }
 
   def getNonBlocking[T <: AnyRef](suffix: String,
                                   queryParams: Map[String, String] = Map(),
                                   timeout: Duration = 5.seconds)(
-      implicit m: Manifest[T],
-      f: Formats = constellation.constellationFormats): Future[T] = {
+    implicit m: Manifest[T],
+    f: Formats = constellation.constellationFormats): Future[T] = {
     httpWithAuth(suffix, queryParams, timeout)(Method.GET)
       .response(asJson[T])
       .send()

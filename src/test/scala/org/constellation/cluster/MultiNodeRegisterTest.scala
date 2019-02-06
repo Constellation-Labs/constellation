@@ -26,7 +26,7 @@ class MultiNodeRegisterTest
 
   val tmpDir = "tmp"
 
-  implicit val system: ActorSystem             = ActorSystem("ConstellationTestNode")
+  implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
   override def beforeEach(): Unit = {

@@ -16,7 +16,7 @@ class DAO(val nodeConfig: NodeConfig = NodeConfig())
   var confirmWindow: Int = 30
 
   var transactionAcceptedAfterDownload: Long = 0L
-  var downloadFinishedTime: Long             = System.currentTimeMillis()
+  var downloadFinishedTime: Long = System.currentTimeMillis()
 
   var preventLocalhostAsPeer: Boolean = true
 

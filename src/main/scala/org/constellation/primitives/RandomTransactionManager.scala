@@ -35,7 +35,7 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
               .create(Random.nextInt(1000).toString, Genesis.CoinBaseHash, newChannelId))
         } else {
           if (dao.threadSafeMessageMemPool.unsafeCount < 3) {
-            val channels        = dao.threadSafeMessageMemPool.activeChannels
+            val channels = dao.threadSafeMessageMemPool.activeChannels
             val (channel, lock) = channels.toList(Random.nextInt(channels.size))
             dao.messageService.get(channel).flatMap { data =>
               if (lock.tryAcquire()) {

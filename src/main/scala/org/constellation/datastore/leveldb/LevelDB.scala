@@ -33,7 +33,7 @@ class LevelDB(val file: File) {
   def putBytes(k: String, v: Array[Byte]): Boolean = {
 
     var retries = 0
-    var done    = false
+    var done = false
     do {
       val attempt = Try { db.put(bytes(k), v) }
       attempt match {

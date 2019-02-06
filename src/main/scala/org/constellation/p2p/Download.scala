@@ -164,8 +164,8 @@ object Download extends StrictLogging {
       .updateMetric("downloadExpectedNumSnapshotsSecondPass", snapshotHashes2.size.toString)
 
     val groupSize2Original = snapshotHashes2.size / peerData.size
-    val groupSize2         = Math.max(groupSize2Original, 1)
-    val grouped2           = snapshotHashes2.grouped(groupSize2).toSeq.zip(peerData.values)
+    val groupSize2 = Math.max(groupSize2Original, 1)
+    val grouped2 = snapshotHashes2.grouped(groupSize2).toSeq.zip(peerData.values)
 
     val downloadRes2 = grouped2.par.map {
       case (hashes, peer) =>

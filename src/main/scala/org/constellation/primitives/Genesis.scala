@@ -39,10 +39,10 @@ object Genesis {
 
   // TODO: Get rid of this, need to add edge case for handling tips at beginning to avoid this
   def createDistribution(
-      selfAddressStr: String,
-      ids: Seq[Id],
-      genesisSOE: SignedObservationEdge,
-      keyPair: KeyPair
+    selfAddressStr: String,
+    ids: Seq[Id],
+    genesisSOE: SignedObservationEdge,
+    keyPair: KeyPair
   ): CheckpointBlock = {
 
     val distr = ids.map { id =>
@@ -69,7 +69,7 @@ object Genesis {
                                                 keyPair: KeyPair): GenesisObservation = {
 
     val genesisCBO = createGenesisBlock(keyPair)
-    val soe        = genesisCBO.soe
+    val soe = genesisCBO.soe
 
     val distr1CBO = createDistribution(selfAddressStr, ids.toSeq, soe, keyPair)
     val distr2CBO = createDistribution(selfAddressStr, ids.toSeq, soe, keyPair)

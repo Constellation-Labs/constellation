@@ -6,10 +6,10 @@ import org.scalajs.dom.raw.XMLHttpRequest
 object XHR {
 
   def post[W: upickle.Writer, R: upickle.Reader](
-      payload: W,
-      callback: R => Unit,
-      path: String,
-      printSer: Boolean = false
+    payload: W,
+    callback: R => Unit,
+    path: String,
+    printSer: Boolean = false
   ): Unit = {
     val xhr = new XMLHttpRequest()
     xhr.onreadystatechange = (e: Event) => {
@@ -33,8 +33,8 @@ object XHR {
   }
 
   def get[R: upickle.Reader](
-      callback: R => Unit,
-      path: String
+    callback: R => Unit,
+    path: String
   ): Unit = {
     val xhr = new XMLHttpRequest()
     xhr.onreadystatechange = (e: Event) => {

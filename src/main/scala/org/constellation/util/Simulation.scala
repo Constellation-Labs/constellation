@@ -65,8 +65,8 @@ class Simulation {
   }
 
   def addPeer(
-      apis: Seq[APIClient],
-      peer: PeerMetadata
+    apis: Seq[APIClient],
+    peer: PeerMetadata
   )(implicit executionContext: ExecutionContext): Seq[Response[String]] = {
     apis.map {
       _.postSync("addPeer", peer)
@@ -74,8 +74,8 @@ class Simulation {
   }
 
   def addPeerWithRegistrationFlow(
-      apis: Seq[APIClient],
-      peer: HostPort
+    apis: Seq[APIClient],
+    peer: HostPort
   )(implicit executionContext: ExecutionContext): Seq[Response[String]] = {
     apis.map {
       _.postSync("peer/add", peer)
@@ -83,7 +83,7 @@ class Simulation {
   }
 
   def assignReputations(apis: Seq[APIClient]): Unit = apis.foreach { api =>
-    val others     = apis.filter { _ != api }
+    val others = apis.filter { _ != api }
     val havePublic = Random.nextDouble() > 0.5
     val haveSecret = Random.nextDouble() > 0.5 || havePublic
     api.postSync("reputation", others.map { o =>
@@ -101,9 +101,9 @@ class Simulation {
     apis.filter { _ != not }(Random.nextInt(apis.length - 1))
 
   def checkGenesis(
-      apis: Seq[APIClient],
-      maxRetries: Int = 10,
-      delay: Long = 3000
+    apis: Seq[APIClient],
+    maxRetries: Int = 10,
+    delay: Long = 3000
   ): Boolean = {
     awaitConditionMet(
       s"Genesis not stored", {
@@ -121,9 +121,9 @@ class Simulation {
   }
 
   def checkReady(
-      apis: Seq[APIClient],
-      maxRetries: Int = 20,
-      delay: Long = 3000
+    apis: Seq[APIClient],
+    maxRetries: Int = 20,
+    delay: Long = 3000
   ): Boolean = {
     awaitMetric(
       "Node state not ready",
@@ -135,11 +135,11 @@ class Simulation {
   }
 
   def awaitMetric(
-      err: String,
-      t: Map[String, String] => Boolean,
-      apis: Seq[APIClient],
-      maxRetries: Int = 10,
-      delay: Long = 3000
+    err: String,
+    t: Map[String, String] => Boolean,
+    apis: Seq[APIClient],
+    maxRetries: Int = 10,
+    delay: Long = 3000
   ): Boolean = {
     awaitConditionMet(
       err, {
@@ -154,9 +154,9 @@ class Simulation {
   }
 
   def checkPeersHealthy(
-      apis: Seq[APIClient],
-      maxRetries: Int = 10,
-      delay: Long = 3000
+    apis: Seq[APIClient],
+    maxRetries: Int = 10,
+    delay: Long = 3000
   ): Boolean = {
     awaitConditionMet(
       s"Peer health checks failed", {
@@ -171,9 +171,9 @@ class Simulation {
   }
 
   def checkHealthy(
-      apis: Seq[APIClient],
-      maxRetries: Int = 30,
-      delay: Long = 5000
+    apis: Seq[APIClient],
+    maxRetries: Int = 30,
+    delay: Long = 5000
   ): Boolean = {
     awaitConditionMet(
       s"Unhealthy nodes", {
@@ -191,10 +191,10 @@ class Simulation {
   }
 
   def checkSnapshot(
-      apis: Seq[APIClient],
-      num: Int = 2,
-      maxRetries: Int = 100,
-      delay: Long = 10000
+    apis: Seq[APIClient],
+    num: Int = 2,
+    maxRetries: Int = 100,
+    delay: Long = 10000
   ): Boolean = {
     awaitConditionMet(
       s"Less than $num snapshots", {
@@ -209,14 +209,14 @@ class Simulation {
   }
 
   def awaitConditionMet(
-      err: String,
-      t: => Boolean,
-      maxRetries: Int = 10,
-      delay: Long = 2000
+    err: String,
+    t: => Boolean,
+    maxRetries: Int = 10,
+    delay: Long = 2000
   ): Boolean = {
 
     var retries = 0
-    var done    = false
+    var done = false
 
     do {
       retries += 1
@@ -230,10 +230,10 @@ class Simulation {
   }
 
   def awaitCheckpointsAccepted(
-      apis: Seq[APIClient],
-      numAccepted: Int = 10,
-      maxRetries: Int = 30,
-      delay: Long = 5000
+    apis: Seq[APIClient],
+    numAccepted: Int = 10,
+    maxRetries: Int = 30,
+    delay: Long = 5000
   ): Boolean = {
     awaitConditionMet(
       s"Accepted checkpoints below $numAccepted", {
@@ -296,11 +296,11 @@ class Simulation {
   }
 
   def run(
-      apis: Seq[APIClient],
-      addPeerRequests: Seq[PeerMetadata],
-      attemptSetExternalIP: Boolean = false,
-      useRegistrationFlow: Boolean = false,
-      snapshotCount: Int = 2
+    apis: Seq[APIClient],
+    addPeerRequests: Seq[PeerMetadata],
+    attemptSetExternalIP: Boolean = false,
+    useRegistrationFlow: Boolean = false,
+    snapshotCount: Int = 2
   )(implicit executionContext: ExecutionContext): Boolean = {
 
     assert(checkHealthy(apis))

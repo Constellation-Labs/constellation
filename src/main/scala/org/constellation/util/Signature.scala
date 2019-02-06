@@ -25,8 +25,8 @@ case class SingleHashSignature(hash: String, hashSignature: HashSignature) {
 }
 
 case class HashSignature(
-    signature: String,
-    id: Id
+  signature: String,
+  id: Id
 ) extends Ordered[HashSignature] {
 
   def publicKey: PublicKey = id.toPublicKey
@@ -42,8 +42,8 @@ case class HashSignature(
 }
 
 case class SignatureBatch(
-    hash: String,
-    signatures: Seq[HashSignature]
+  hash: String,
+  signatures: Seq[HashSignature]
 ) extends Monoid[SignatureBatch] {
 
   def valid: Boolean = {
@@ -62,18 +62,18 @@ case class SignatureBatch(
   }
 
   def plus(other: SignatureBatch): SignatureBatch = {
-    val toAdd         = other.signatures
+    val toAdd = other.signatures
     val newSignatures = (signatures ++ toAdd).distinct
-    val unique        = newSignatures.groupBy(_.id).map { _._2.maxBy(_.signature) }.toSeq.sorted
+    val unique = newSignatures.groupBy(_.id).map { _._2.maxBy(_.signature) }.toSeq.sorted
     this.copy(
       signatures = unique
     )
   }
 
   def withSignature(hs: HashSignature): SignatureBatch = {
-    val toAdd         = Seq(hs)
+    val toAdd = Seq(hs)
     val newSignatures = (signatures ++ toAdd).distinct
-    val unique        = newSignatures.groupBy(_.id).map { _._2.maxBy(_.signature) }.toSeq.sorted
+    val unique = newSignatures.groupBy(_.id).map { _._2.maxBy(_.signature) }.toSeq.sorted
     this.copy(
       signatures = unique
     )
