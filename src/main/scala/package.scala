@@ -302,6 +302,11 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     def hex: String = publicKeyToHex(publicKey)
   }
 
+  implicit class BoolToOption(val self: Boolean) extends AnyVal {
+    def toOption[A](value: => A): Option[A] =
+      if (self) Some(value) else None
+  }
+
 }
 
 object TimeoutScheduler {

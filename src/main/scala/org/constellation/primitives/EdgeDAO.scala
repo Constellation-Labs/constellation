@@ -509,13 +509,19 @@ class StorageService[T](size: Int = 50000) {
 
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
 
+// TODO: Remove all of these and change to multi-threaded data access model with periodic cleanups for dead data
+
 class CheckpointService(size: Int = 50000) extends StorageService[CheckpointCacheData](size)
 
 class SOEService(size: Int = 50000) extends StorageService[SignedObservationEdgeCache](size)
 
 class MessageService(size: Int = 50000) extends StorageService[ChannelMessageMetadata](size)
 
-class TransactionService(size: Int = 50000) extends StorageService[TransactionCacheData](size) {
+class TransactionService(size: Int = 2000)  extends StorageService[TransactionCacheData](size)
+
+// TODO: Remove this and rely on recently accepted blocks for determining recent transactions
+// This is used by the dashboard endpoint right now
+class AcceptedTransactionService(size: Int = 50000) extends StorageService[TransactionCacheData](size) {
   private val queue = mutable.Queue[TransactionSerialized]()
   private val maxQueueSize = 20
 
@@ -551,6 +557,7 @@ trait EdgeDAO {
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
   val checkpointService = new CheckpointService(processingConfig.checkpointLRUMaxSize)
+  val acceptedTransactionService = new AcceptedTransactionService(processingConfig.transactionLRUMaxSize)
   val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
   val addressService = new AddressService(processingConfig.addressLRUMaxSize)
   val messageService = new MessageService()
@@ -572,7 +579,7 @@ trait EdgeDAO {
   val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
 
   val edgeExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
   // val peerAPIExecutionContext: ExecutionContextExecutor =
   //   ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
@@ -581,10 +588,10 @@ trait EdgeDAO {
   //  ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
 
   val signatureExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
   val finishedExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
   // Temporary to get peer data for tx hash partitioning
   @volatile var peerInfo: Map[Id, PeerData] = Map()

@@ -20,7 +20,8 @@ object App extends JSApp {
     import scalatags.JsDom.all._
     println("hello world")
 
-    val dash = dom.document.body.appendChild(div(id := "dash").render).asInstanceOf[HTMLDivElement]
+    val mainView = dom.document.getElementById("primary").asInstanceOf[HTMLDivElement]
+    val dash = mainView.appendChild(div(id := "dash").render).asInstanceOf[HTMLDivElement]
 
     val forms = dash.appendChild(div(id := "forms").render).asInstanceOf[HTMLDivElement]
 

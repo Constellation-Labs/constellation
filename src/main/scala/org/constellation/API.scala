@@ -204,7 +204,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
             }
           } ~
           path("dashboard") {
-            val txs = dao.transactionService.getLast20TX
+            val txs = dao.acceptedTransactionService.getLast20TX
             val self = Node(
               dao.selfAddressStr,
               dao.externalHostString,
@@ -401,15 +401,15 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
       path("health") {
         complete(StatusCodes.OK)
       } ~
-        path("favicon.ico") {
-          getFromResource("favicon.ico")
+        path("ui/img/favicon.ico") {
+          getFromResource("ui/img/favicon.ico")
         }
     }
 
   private val mainRoutes: Route = cors() {
     decodeRequest {
       encodeResponse {
-        getEndpoints ~ postEndpoints ~ jsRequest ~ commonEndpoints ~ serveMainPage
+        getEndpoints ~ postEndpoints ~ jsRequest ~ imageRoute ~ commonEndpoints ~ serveMainPage
       }
     }
   }

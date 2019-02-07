@@ -5,7 +5,7 @@ import java.util.concurrent.Semaphore
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.EdgeProcessor
-import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState, SendToAddress}
+import org.constellation.primitives.Schema._
 import org.constellation.util.Periodic
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -111,6 +111,20 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
                 dao.metrics.incrementMetric("sentTransactions")
 
                 dao.threadSafeTXMemPool.put(tx)
+
+                dao.transactionService.put(
+                  tx.hash,
+                  TransactionCacheData(
+                    tx,
+                    valid = true,
+                    inMemPool = true
+                  )
+                )
+                dao.peerInfo.foreach{ case (_, peerData) =>
+                  dao.metrics.incrementMetric("transactionPut")
+                  peerData.client.put("transaction", tx)
+                }
+
                 /*            // TODO: Change to transport layer call
     dao.peerManager ! APIBroadcast(
       _.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx),

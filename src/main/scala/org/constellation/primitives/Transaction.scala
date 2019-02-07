@@ -2,6 +2,10 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
+
+import cats.data.{Ior, NonEmptyList, ValidatedNel}
+import cats.implicits._
+
 import constellation._
 import org.constellation.DAO
 import org.constellation.primitives.Schema.{
@@ -15,7 +19,7 @@ import org.constellation.util.HashSignature
 case class Transaction(edge: Edge[TransactionEdgeData]) {
 
   def store(cache: TransactionCacheData)(implicit dao: DAO): Unit = {
-    dao.transactionService.put(this.hash, cache)
+    dao.acceptedTransactionService.put(this.hash, cache)
   }
 
   def ledgerApply()(implicit dao: DAO): Unit = {
@@ -83,4 +87,31 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
     }
   }
 
+  type ValidationResult[A] = ValidatedNel[TransactionValidation, A]
+
+  def validateSourceSignature(): ValidationResult[Transaction] =
+    validSrcSignature.toOption(this.validNel).getOrElse(InvalidSourceSignature().invalidNel)
+
+  def validateHashDuplicateSnapshot()(implicit dao: DAO): Unit = {
+    dao.transactionHashStore.contains(hash)
+      .traverse(_.toOption(this.validNel))
+      .getOrElse(HashDuplicateFoundInSnapshot().invalidNel)
+  }
+
+}
+
+sealed trait TransactionValidation {
+  def errorMessage: String
+}
+
+case class HashDuplicateFoundInSnapshot() extends TransactionValidation {
+  def errorMessage: String = "Transaction hash already exists in old data"
+}
+
+case class HashDuplicateFoundInRecent() extends TransactionValidation {
+  def errorMessage: String = "Transaction hash already exists in recent data"
+}
+
+case class InvalidSourceSignature() extends TransactionValidation {
+  def errorMessage: String = s"Transaction has invalid source signature"
 }
