@@ -5,7 +5,8 @@ enablePlugins(JavaAppPackaging)
 
 scalacOptions := Seq("-Ypartial-unification", "-unchecked", "-deprecation")
 
-logBuffered in Test := false
+// javacOptions := Seq("-XX:MaxMetaspaceSize=256m")
+
 
 lazy val _version = "1.0.10"
 
@@ -115,6 +116,9 @@ lazy val testDependencies = Seq(
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
 
 test in assembly := {}
+
+Test / fork := true
+Test / logBuffered := false
 
 assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first
