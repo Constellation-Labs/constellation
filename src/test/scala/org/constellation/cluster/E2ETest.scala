@@ -144,9 +144,13 @@ class E2ETest
         x.map { _.checkpointCache.flatMap { _.checkpointBlock } }.toSet
       }
 
-    assert(
-      snaps.size == 1
-    )
+    // Not inlining this for a reason -- the snaps object is quite large,
+    // and scalatest tries to be smart when the assert fails and dumps the object to stdout,
+    // overwhelming the test output.
+    // By extracting to a var I should get sane output on failure.
+    // Obviously figuring out why this randomly fails would be even better, but we're working on that.
+    val sizeEqualOnes = snaps.size == 1
+    assert(sizeEqualOnes)
 
   }
 
