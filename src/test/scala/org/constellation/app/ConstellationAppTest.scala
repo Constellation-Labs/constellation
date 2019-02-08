@@ -1,7 +1,9 @@
 package org.constellation.app
-import org.constellation.E2E
+import org.constellation.{ConstellationApp, E2E}
 
-class ConstellationApp extends E2E {
+class ConstellationAppTest extends E2E {
+
+  val testApp = new ConstellationApp(createNode(randomizePorts = false))
 
   "ConstellationApp" should "successfully launch ConstellationNode" in {
     assert(true)

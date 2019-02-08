@@ -230,12 +230,12 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
       pathPrefix("channel") {
         path("open") {
           entity(as[ChannelOpenRequest]) { request =>
-            ChannelMessage.createGenesis(request)
-            complete(StatusCodes.Created)
+            val res = ChannelMessage.createGenesis(request)
+            complete(res)
           }
         } ~
           path("send") {
-            entity(as[ChannelSendRequest]) { send =>
+            entity(as[ChannelSendRequest]) { send: ChannelSendRequest =>
               complete(ChannelMessage.createMessages(send))
             }
           }

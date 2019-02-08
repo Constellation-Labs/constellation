@@ -34,6 +34,11 @@ case class ChannelMessageMetadata(
   snapshotHash: Option[String] = None
 )
 
+case class GenesisResponse(
+                            genesisMessageStr: String,
+                           channelMsg: ChannelMessage
+                          )
+
 case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 
 object ChannelMessage {
@@ -49,18 +54,18 @@ object ChannelMessage {
 
   def createGenesis(
     channelOpenRequest: ChannelOpenRequest
-  )(implicit dao: DAO): Option[ChannelMessage] = {
+  )(implicit dao: DAO): Option[GenesisResponse] = {
     if (dao.messageService.get(channelOpenRequest.channelId).isEmpty &&
         !dao.threadSafeMessageMemPool.activeChannels.contains(channelOpenRequest.channelId)) {
 
-      val genesisMessageStr =
+      val genesisMessageStr: String =
         ChannelOpen(channelOpenRequest.jsonSchema, channelOpenRequest.acceptInvalid).json
-      val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.channelId)
+      val msg: ChannelMessage = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.channelId)
       val semaphore = new Semaphore(1)
       dao.threadSafeMessageMemPool.activeChannels(channelOpenRequest.channelId) = semaphore
       semaphore.acquire()
       dao.threadSafeMessageMemPool.put(Seq(msg), overrideLimit = true)
-      Some(msg)
+      Some(GenesisResponse(genesisMessageStr, msg))
     } else None
   }
 
