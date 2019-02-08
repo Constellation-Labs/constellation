@@ -27,13 +27,13 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
   def generateRandomMessages(): Unit =
     if (round % dao.processingConfig.roundsPerMessage == 0) {
       val cm =
-        if ((dao.threadSafeMessageMemPool.activeChannels.size + dao.threadSafeMessageMemPool.unsafeCount) < 3) {
-          val newChannelId = dao.selfAddressStr + dao.threadSafeMessageMemPool.activeChannels.size
-          dao.threadSafeMessageMemPool.activeChannels(newChannelId) = new Semaphore(1)
-          Some(
-            ChannelMessage
-              .create(Random.nextInt(1000).toString, Genesis.CoinBaseHash, newChannelId)
-          )
+        if ((dao.threadSafeMessageMemPool.activeChannels.size + dao.threadSafeMessageMemPool.unsafeCount) < 5) {
+          val newChannelName = "channel_ " + dao.threadSafeMessageMemPool.activeChannels.size
+          val genesis = ChannelMessage.create(Random.nextInt(1000).toString, Genesis.CoinBaseHash, newChannelName)
+          dao.threadSafeMessageMemPool.selfChannelIdToName(genesis.signedMessageData.hash) = newChannelName
+          dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(newChannelName) = genesis
+          dao.threadSafeMessageMemPool.activeChannels(genesis.signedMessageData.hash) = new Semaphore(1)
+          Some(genesis)
         } else {
           if (dao.threadSafeMessageMemPool.unsafeCount < 3) {
             val channels = dao.threadSafeMessageMemPool.activeChannels

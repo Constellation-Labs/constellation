@@ -13,7 +13,6 @@ import akka.http.scaladsl.server.directives.Credentials
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.{CircuitBreaker, ask}
 import akka.util.Timeout
-import better.files.{File, _}
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 import com.softwaremill.sttp.Response
 import com.typesafe.config.{Config, ConfigFactory}
@@ -30,7 +29,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, _}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{CommonEndpoints, MerkleTree, ServeUI}
-import org.json4s.native
+import org.json4s.{JValue, native}
 import org.json4s.native.Serialization
 
 import scala.concurrent.duration._
@@ -76,6 +75,8 @@ case class ProcessingConfig(
   roundsPerMessage: Int = 10
 ) {}
 
+case class ChannelUIOutput(channels: Seq[String])
+
 class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
                                          val timeout: Timeout,
                                          val dao: DAO)
@@ -106,6 +107,11 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
         path("channels") {
           complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
         } ~
+        pathPrefix("data") {
+          path("channels") {
+            complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
+          }
+        } ~
           path("messageService" / Segment) { channelId =>
             complete(dao.messageService.get(channelId))
           } ~
@@ -116,6 +122,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
             val proof = res.flatMap { cmd =>
               cmd.snapshotHash.flatMap { snapshotHash =>
                 tryWithMetric({
+                  import better.files._
                   KryoSerializer.deserializeCast[StoredSnapshot](
                     File(dao.snapshotPath, snapshotHash).byteArray
                   )
@@ -229,14 +236,34 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
     post {
       pathPrefix("channel") {
         path("open") {
-          entity(as[ChannelOpenRequest]) { request =>
+          entity(as[ChannelOpen]) { request =>
+          onComplete(
             ChannelMessage.createGenesis(request)
-            complete(StatusCodes.Created)
+          ) { res =>
+            complete(res.getOrElse(ChannelOpenResponse("API Failure")).json)
+          }
+
           }
         } ~
           path("send") {
             entity(as[ChannelSendRequest]) { send =>
-              complete(ChannelMessage.createMessages(send))
+              onComplete(ChannelMessage.createMessages(send)) { res =>
+                complete(res.getOrElse(ChannelOpenResponse("API Failure")).json)
+              }
+            }
+          } ~
+          path("send" / "json") {
+            entity(as[ChannelSendRequestRawJson]) { send: ChannelSendRequestRawJson =>
+
+            import constellation._
+              val amended = ChannelSendRequest(
+                send.channelId,
+                send.messages.x[Seq[JValue]].map{_.json}
+              )
+
+              onComplete(ChannelMessage.createMessages(amended)) { res =>
+                complete(res.getOrElse(ChannelOpenResponse("API Failure")).json)
+              }
             }
           }
       } ~
@@ -364,6 +391,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
               externalIp.replaceAll('"'.toString, "").split(":") match {
                 case Array(ip, port) =>
                   ipp = ip
+                  import better.files._
                   externalHostString = ip
                   file"external_host_ip".write(ip)
                   new InetSocketAddress(ip, port.toInt)

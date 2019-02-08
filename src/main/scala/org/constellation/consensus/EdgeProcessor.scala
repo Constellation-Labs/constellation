@@ -43,10 +43,13 @@ object EdgeProcessor extends StrictLogging {
       }
 
       cb.checkpoint.edge.data.messages.foreach { m =>
-        dao.messageService.put(m.signedMessageData.data.channelId,
-          ChannelMessageMetadata(m, Some(cb.baseHash)))
-        dao.messageService.put(m.signedMessageData.signatures.hash,
-          ChannelMessageMetadata(m, Some(cb.baseHash)))
+
+        if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
+          dao.messageService.put(m.signedMessageData.data.channelId, ChannelMessageMetadata(m, Some(cb.baseHash)))
+        } else {
+          dao.genesisMessageService.put(m.signedMessageData.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
+        }
+        dao.messageService.put(m.signedMessageData.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.metrics.incrementMetric("messageAccepted")
       }
 
@@ -60,7 +63,6 @@ object EdgeProcessor extends StrictLogging {
             inMemPool = false,
             inDAG = true,
             Map(cb.baseHash -> true),
-            resolved = true,
             cbBaseHash = Some(cb.baseHash)
           )
         )
@@ -485,7 +487,7 @@ object Snapshot {
             findLatestMessageWithSnapshotHashInner(
               depth + 1,
               dao.messageService.get(
-                m.channelMessage.signedMessageData.data.previousMessageDataHash
+                m.channelMessage.signedMessageData.data.previousMessageHash
               )
             )
           }

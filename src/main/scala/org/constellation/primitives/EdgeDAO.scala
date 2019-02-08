@@ -56,12 +56,17 @@ class ThreadSafeMessageMemPool() {
 
   val activeChannels: TrieMap[String, Semaphore] = TrieMap()
 
+  val selfChannelNameToGenesisMessage: TrieMap[String, ChannelMessage] = TrieMap()
+  val selfChannelIdToName: TrieMap[String, String] = TrieMap()
+
   val messageHashToSendRequest: TrieMap[String, ChannelSendRequest] = TrieMap()
 
   def release(messages: Seq[ChannelMessage]): Unit = {
     messages.foreach { m =>
-      activeChannels(m.signedMessageData.data.channelId)
-        .release()
+      activeChannels.get(m.signedMessageData.data.channelId).foreach{
+        _.release()
+      }
+
     }
   }
 
@@ -561,6 +566,7 @@ trait EdgeDAO {
   val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
   val addressService = new AddressService(processingConfig.addressLRUMaxSize)
   val messageService = new MessageService()
+  val genesisMessageService = new MessageService()
   val soeService = new SOEService()
 
   val threadSafeTXMemPool = new ThreadSafeTXMemPool()
