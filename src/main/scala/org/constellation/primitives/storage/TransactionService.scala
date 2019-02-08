@@ -10,16 +10,16 @@ class TransactionService(size: Int = 50000) extends StorageService[TransactionCa
 
   override def put(
     key: String,
-    value: TransactionCacheData
+    cache: TransactionCacheData
   ): TransactionCacheData = {
-    val tx = TransactionSerialized(value.transaction)
+    val tx = TransactionSerialized(cache.transaction)
     queue.synchronized {
       if (queue.size == maxQueueSize) {
         queue.dequeue()
       }
 
       queue.enqueue(tx)
-      super.put(key, value)
+      super.put(key, cache)
     }
   }
 
