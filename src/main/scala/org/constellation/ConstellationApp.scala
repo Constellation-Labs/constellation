@@ -7,32 +7,35 @@ import org.constellation.util.APIClient
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class ConstellationApp(val constellationNode: ConstellationNode) {
+class ConstellationApp(
+                        val clientApi: APIClient
+                      ) {
 
-  val clientApi = constellationNode.getAPIClientForNode(constellationNode)
   val channels = scala.collection.mutable.HashMap[String, Channel]()
 
-  def deploy(schemaStr: String, channelId: String = KeyUtils.makeKeyPair().getPublic.hex)(implicit executionContext: ExecutionContext) = {
-    val response: Future[Some[GenesisResponse]] =
-      clientApi.postNonBlocking("channel/open", ChannelOpenRequest(channelId, jsonSchema = Some(schemaStr)))
-    val genesisMessageStr: Future[String] = response.map(resp => resp.value.genesisMessageStr)
-    val channelMsg = response.map(resp => resp.value.channelMsg)
-    for {
-    gnenesisMsg <- genesisMessageStr
-    channelMsg <- channelMsg
-    } yield {
-      channels.update(gnenesisMsg, Channel(channelMsg.signedMessageData.data, gnenesisMsg))
-    }
+  def deploy(schemaStr: String, channelId: String = KeyUtils.makeKeyPair().getPublic.hex) = {
+//    val response: Future[Some[GenesisResponse]] =
+//      clientApi.postNonBlocking("channel/open", ChannelOpenRequest(channelId, jsonSchema = Some(schemaStr)))
+//    val genesisMessageStr: Future[String] = response.map(resp => resp.value.genesisMessageStr)
+//    val channelMsg = response.map(resp => resp.value.channelMsg)
+//    for {
+//    gnenesisMsg <- genesisMessageStr
+//    channelMsg <- channelMsg
+//    } yield {
+//      channels.update(gnenesisMsg, Channel(channelMsg.signedMessageData.data, gnenesisMsg))
+//    }
+    clientApi.postSync("channel/open", ChannelOpenRequest(channelId, jsonSchema = Some(schemaStr)))
+
   }
 
-  def broadcast[T <% ChannelMessageData](messages: Seq[T]) = {
+  def broadcast(messages: Seq[ChannelSendRequest]) = {
     val msgTypes = messages.map(_.channelId).head//channelId is just genesis hash, equivalent to channelID
     //todo handle multiple message types, or throw error
     val serializedMessages = messages.map(_.json)
-    val reqs = clientApi.postNonBlocking[Seq[ChannelMessage]](
+    clientApi.postBlocking[Seq[ChannelMessage]](
       "channel/send",
       ChannelSendRequest(msgTypes, serializedMessages)
-    )
+      )
   }
 
 
