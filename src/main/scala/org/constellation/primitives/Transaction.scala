@@ -19,33 +19,11 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
   }
 
   def ledgerApply()(implicit dao: DAO): Unit = {
-    dao.addressService.update(
-      src.hash, { a: AddressCacheData =>
-        a.copy(balance = a.balance - amount)
-      },
-      AddressCacheData(0L, 0L) // unused since this address should already exist here
-    )
-    dao.addressService.update(
-      dst.hash, { a: AddressCacheData =>
-        a.copy(balance = a.balance + amount)
-      },
-      AddressCacheData(amount, 0L) // unused since this address should already exist here
-    )
+    dao.addressService.transfer(src, dst, amount).unsafeRunSync()
   }
 
   def ledgerApplySnapshot()(implicit dao: DAO): Unit = {
-    dao.addressService.update(
-      src.hash, { a: AddressCacheData =>
-        a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - amount)
-      },
-      AddressCacheData(0L, 0L) // unused since this address should already exist here
-    )
-    dao.addressService.update(
-      dst.hash, { a: AddressCacheData =>
-        a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + amount)
-      },
-      AddressCacheData(amount, 0L) // unused since this address should already exist here
-    )
+    dao.addressService.transferSnapshot(src, dst, amount).unsafeRunSync()
   }
 
   // Unsafe

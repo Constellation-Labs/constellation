@@ -362,7 +362,6 @@ sealed trait CheckpointBlockValidatorNel {
   }
 
   /*
-
       def getSnapshotBalances(implicit dao: DAO): AddressBalance =
         dao.threadSafeTipService
           .getSnapshotInfo()
