@@ -49,7 +49,7 @@ class E2ETest extends E2E {
 
   private val initialAPIs = apis
 
-  private val messageSim = new MessageTestingSim(sim)
+//  private val messageSim = new MessageTestingSim(sim)
 
   val n1App = new ConstellationApp(apis.head)
 
@@ -72,7 +72,7 @@ class E2ETest extends E2E {
     logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
     assert(sim.checkReady(Seq(downloadAPI)))
 
-    messageSim.postDownload(apis.head)
+    constellationAppSim.postDownload(apis.head)
 
     Thread.sleep(20 * 1000)
 
@@ -98,7 +98,7 @@ class E2ETest extends E2E {
 
     val storedSnapshots = allAPIs.map { _.simpleDownload() }
 
-    messageSim.dumpJson(storedSnapshots)
+    constellationAppSim.dumpJson(storedSnapshots)
 
     // TODO: Move to separate test
 
@@ -271,7 +271,7 @@ class MessageTestingSim(sim: Simulation) {
     private val channelId = "test"
 
     var genesisChannel: ChannelMessage = _
-    var expectedMessages: Seq[ChannelMessage] = _
+    var expectedMessages: Seq[ChannelMessage] = Seq.empty[ChannelMessage]
 
     def openChannel(apis: Seq[APIClient]): Unit = {
 
