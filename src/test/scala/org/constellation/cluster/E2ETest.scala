@@ -14,14 +14,13 @@ import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.constellation._
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
 
 class E2ETest extends E2E {
   val updatePasswordReq = UpdatePassword(
     Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
   )
-
   def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
     apiClients.map { client =>
       val response = client.postSync("password/update", updatePasswordReq)
@@ -265,7 +264,9 @@ class MessageTestingSim(sim: Simulation) {
 }
 
 
-  class ConstellationAppSim(sim: Simulation, constellationApp: ConstellationApp){
+  class ConstellationAppSim(sim: Simulation, constellationApp: ConstellationApp)(
+    implicit val executionContext: ExecutionContext
+  ){
     private val schemaStr = SensorData.jsonSchema
 
     private val channelId = "test"
@@ -308,19 +309,26 @@ class MessageTestingSim(sim: Simulation) {
           )
         }
         val serializedMessages = (validMessages ++ invalidMessages).map { _.json }
-        val messages = constellationApp.broadcast(Seq(ChannelSendRequest(channelId, serializedMessages)))
-        sim.awaitConditionMet(
-          s"Message batch $batchNumber not stored",
-          apis.forall {
-            _.getBlocking[Option[ChannelMessageMetadata]](
-              "messageService/" + messages.head.signedMessageData.signatures.hash
-            ).exists(_.blockHash.nonEmpty)
-          }
-        )
+        val messages = Seq(ChannelSendRequest(channelId, serializedMessages))
+        val resp = constellationApp.broadcast(messages)
+        resp.foreach { res: Seq[ChannelMessage] =>
+          sim.awaitConditionMet(
+            s"Message batch $batchNumber not stored",
+            apis.forall {
+              _.getBlocking[Option[ChannelMessageMetadata]](
+                "messageService/" + res.head.signedMessageData.signatures.hash
+              ).exists(_.blockHash.nonEmpty)
+            }
+          )
+        }
+
+
+
+
         sim.logger.info(
           s"Message batch $batchNumber complete, sent ${serializedMessages.size} messages"
         )
-        messages
+        resp.getOpt().get
       }
 
     }

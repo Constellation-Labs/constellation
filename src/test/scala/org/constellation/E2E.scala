@@ -8,7 +8,7 @@ import com.typesafe.scalalogging.StrictLogging
 import org.constellation.util.TestNode
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, ExecutionContextExecutorService}
 import scala.util.Try
 
 trait E2E
