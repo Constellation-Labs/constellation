@@ -16,7 +16,7 @@ case class ChannelMessageData(
   message: String,
   previousMessageDataHash: String,
   channelId: String
-) extends Signable
+) extends Signable with ChannelRequest
 
 case class ChannelOpen(
   jsonSchema: Option[String] = None,
@@ -75,7 +75,7 @@ object ChannelMessage {
     // Ignores locking right now
     val previous =
       dao.messageService.get(channelSendRequest.channelId).get.channelMessage.signedMessageData.hash
-    val messages = channelSendRequest.messages
+    val messages: Seq[ChannelMessage] = channelSendRequest.messages
       .foldLeft(previous -> Seq[ChannelMessage]()) {
         case ((prvHash, signedMessages), nextMessage) =>
           val nextSigned = create(nextMessage, previous, channelSendRequest.channelId)
@@ -107,6 +107,7 @@ case class ChannelSendRequest(
 trait ChannelRequest {
   val channelId: String
 }
+
 case class SensorData(
                        temperature: Int,
                        name: String,

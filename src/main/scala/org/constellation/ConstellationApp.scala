@@ -13,18 +13,18 @@ class ConstellationApp(
 
   val channelIdToChannel = scala.collection.mutable.HashMap[String, Channel]()
 
-  def updateChannels(channelId: String)(chaMsg: Channel) = channelIdToChannel.update(channelId,
-    Channel(chaMsg.genesisMsgChannelData.previousMessageDataHash, chaMsg.genesisMsgChannelData)
-  )
+  def registerChannels(chaMsg: Channel) = channelIdToChannel.update(chaMsg.channelId, chaMsg)
 
+  //todo add auth for redeploy
   def deploy(schemaStr: String, channelId: String = KeyUtils.makeKeyPair().getPublic.hex)(implicit ec: ExecutionContext) = {
     val response = clientApi.postNonBlocking[Some[GenesisResponse]]("channel/open", ChannelOpenRequest(channelId, jsonSchema = Some(schemaStr)))
-    val channelResponse = response.map { resp =>
-      val channelMsg = resp.map(_.channelMsg)
-      channelMsg.map { msg => Channel(msg.signedMessageData.data.previousMessageDataHash, msg.signedMessageData.data) }
+    response.map { resp =>
+      val channelMsg = resp.map(_.channelMsg).map { msg =>
+        Channel(channelId, msg.signedMessageData.data.previousMessageDataHash, msg.signedMessageData.data)
+      }
+      channelMsg.foreach(registerChannels)
+      channelMsg
     }
-    channelResponse.foreach { chRespOpt => chRespOpt.foreach(updateChannels(channelId)(_)) }
-    channelResponse
   }
 
   def broadcast[T <: ChannelRequest](messages: Seq[T])(implicit ec: ExecutionContext) = {
@@ -39,5 +39,5 @@ class ConstellationApp(
 
 }
 
-case class Channel(channelId: String, genesisMsgChannelData: ChannelMessageData)
+case class Channel(channelId: String, parentHash: String, genesisMsgChannelData: ChannelMessageData)
 
