@@ -113,6 +113,23 @@ class E2ETest extends E2E {
 
   }
 
+  "ConstellationApp" should "register a deployed state channel" in {
+    val deployResp = n1App.deploy("schemaString", "channelId")
+    deployResp.foreach { resp =>
+      println(resp.toString)
+      sim.logger.info("deploy response:" + resp.toString)
+      assert(resp.exists(_.channelId == "channelId")) }
+    assert(true)
+  }
+
+  "ConstellationApp" should "broadcast channel messages" in {
+    val randomSerializedMessages = Seq("Random")
+    val messages = Seq(ChannelSendRequest("test", randomSerializedMessages))
+    val broadcastResp = n1App.broadcast(messages)
+    broadcastResp.foreach(resp => assert(resp.nonEmpty))
+    assert(true)
+  }
+
 }
 
 class MessageTestingSim(sim: Simulation) {
@@ -267,16 +284,15 @@ class MessageTestingSim(sim: Simulation) {
   class ConstellationAppSim(sim: Simulation, constellationApp: ConstellationApp)(
     implicit val executionContext: ExecutionContext
   ){
-    private val schemaStr = SensorData.jsonSchema
-
-    private val channelId = "test"
+    val schemaStr = SensorData.jsonSchema
+    val channelId = "test"
 
     var genesisChannel: ChannelMessage = _
     var expectedMessages: Seq[ChannelMessage] = Seq.empty[ChannelMessage]
 
     def openChannel(apis: Seq[APIClient]): Unit = {
 
-      constellationApp.deploy(schemaStr, channelId)
+      val deployResponse = constellationApp.deploy(schemaStr, channelId)
       sim.awaitConditionMet(
         "Test channel genesis not stored",
         apis.forall {

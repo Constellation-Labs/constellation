@@ -14,16 +14,21 @@ class ConstellationApp(
   val channels = scala.collection.mutable.HashMap[String, Channel]()
 
   def deploy(schemaStr: String, channelId: String = KeyUtils.makeKeyPair().getPublic.hex)(implicit ec: ExecutionContext) = {
-    val response: Future[Some[GenesisResponse]] =
-      clientApi.postNonBlocking[Some[GenesisResponse]]("channel/open", ChannelOpenRequest(channelId, jsonSchema = Some(schemaStr)))
-    val genesisMessageStr: Future[String] = response.map(resp => resp.value.genesisMessageStr)
-    val channelMsg = response.map(resp => resp.value.channelMsg)
-    for {
-    gnenesisMsg <- genesisMessageStr
-    channelMsg <- channelMsg
-    } yield {
-      channels.update(gnenesisMsg, Channel(channelMsg.signedMessageData.data, gnenesisMsg))
+    val response = clientApi.postNonBlocking[Some[GenesisResponse]]("channel/open", ChannelOpenRequest(channelId, jsonSchema = Some(schemaStr)))
+    val channelResponse = response.map { resp =>
+      val channelMsg = resp.map(_.channelMsg)
+      channelMsg.map {
+        msg =>
+          Channel(msg.signedMessageData.data.channelId, msg.signedMessageData.data)
+        }
     }
+    channelResponse.foreach { chRespOpt =>
+      chRespOpt.foreach(chaMsg =>
+        channels.update(chaMsg.channelId,
+          Channel(chaMsg.genesisMsgChannelData.previousMessageDataHash, chaMsg.genesisMsgChannelData))
+      )
+    }
+    channelResponse
   }
 
   def broadcast(messages: Seq[ChannelSendRequest])(implicit ec: ExecutionContext) = {
@@ -39,5 +44,5 @@ class ConstellationApp(
 
 }
 
-case class Channel(genesisMsg: ChannelMessageData, channelId: String)
+case class Channel(channelId: String, genesisMsgChannelData: ChannelMessageData)
 
