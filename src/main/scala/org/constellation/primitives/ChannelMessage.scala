@@ -98,17 +98,20 @@ case class ChannelOpenRequest(
   channelId: String,
   jsonSchema: Option[String] = None,
   acceptInvalid: Boolean = true
-)
+) extends ChannelRequest
 
 case class ChannelSendRequest(
-  channelId: String,
-  messages: Seq[String]
-)
-
+                               channelId: String,
+                               messages: Seq[String]
+                             ) extends ChannelRequest
+trait ChannelRequest {
+  val channelId: String
+}
 case class SensorData(
-  temperature: Int,
-  name: String
-)
+                       temperature: Int,
+                       name: String,
+                       channelId: String
+                     ) extends ChannelRequest
 
 object SensorData {
 
