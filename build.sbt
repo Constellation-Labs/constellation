@@ -5,19 +5,21 @@ enablePlugins(JavaAppPackaging)
 
 scalacOptions := Seq("-Ypartial-unification", "-unchecked", "-deprecation")
 
-logBuffered in Test := false
+// javacOptions := Seq("-XX:MaxMetaspaceSize=256m")
+
 
 lazy val _version = "1.0.10"
 
 lazy val versions = new {
-  val akka = "2.5.20"
+  val akka = "2.5.21"
   val akkaHttp = "10.1.7"
   val akkaHttpCors = "0.3.4"
   val spongyCastle = "1.58.0.0"
-  val micrometer = "1.1.2"
+  val micrometer = "1.1.3"
   val prometheus = "0.6.0"
-  val sttp = "1.5.8"
-  val cats = "1.5.0"
+  val sttp = "1.5.11"
+  val cats = "1.6.0"
+  val json4s = "3.6.4"
 }
 
 lazy val sttpDependencies = Seq(
@@ -72,23 +74,24 @@ lazy val coreDependencies = Seq(
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
   "ch.megard" %% "akka-http-cors" % versions.akkaHttpCors,
-  "de.heikoseeberger" %% "akka-http-json4s" % "1.16.1",
-  "org.json4s" %% "json4s-native" % "3.6.2",
-  "org.json4s" %% "json4s-ext" % "3.6.2",
-  "org.json4s" %% "json4s-jackson" % "3.6.2",
-  "org.json4s" %% "json4s-ast" % "3.6.2",
+  "de.heikoseeberger" %% "akka-http-json4s" % "1.25.2",
+  "org.json4s" %% "json4s-native" % versions.json4s,
+  "org.json4s" %% "json4s-ext" % versions.json4s,
+  "org.json4s" %% "json4s-jackson" % versions.json4s,
+  "org.json4s" %% "json4s-ast" % versions.json4s,
   "com.madgag.spongycastle" % "core" % versions.spongyCastle,
   "com.madgag.spongycastle" % "prov" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.51",
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
   "org.iq80.leveldb" % "leveldb" % "0.10" withSources () withJavadoc (),
-  "com.codahale" % "shamir" % "0.6.0" withSources () withJavadoc (),
+  "com.codahale" % "shamir" % "0.6.1" withSources () withJavadoc (),
   "com.twitter" %% "chill" % "0.9.3",
-  "com.twitter" %% "algebird-core" % "0.13.4",
+  "com.twitter" %% "algebird-core" % "0.13.5",
   "org.typelevel" %% "cats-core" % versions.cats withSources () withJavadoc (),
 //  "org.typelevel" %% "alleycats-core" % versions.cats withSources() withJavadoc(),
+  "org.typelevel" %% "cats-effect" % "1.1.0",
   "net.glxn" % "qrgen" % "1.4",
 //  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.twitter" %% "storehaus-cache" % "0.15.0",
@@ -97,7 +100,8 @@ lazy val coreDependencies = Seq(
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus,
   "com.github.java-json-tools" % "json-schema-validator" % "2.2.10",
-  "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.3"
+  "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.5",
+  "org.rogach" %% "scallop" % "3.1.5"
 ) ++ sttpDependencies
 
 //Test dependencies
@@ -108,13 +112,16 @@ lazy val testDependencies = Seq(
   "org.scalamock" %% "scalamock" % "4.1.0",
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka,
-  "com.typesafe.slick" %% "slick" % "3.2.3",
+  "com.typesafe.slick" %% "slick" % "3.3.0",
   "com.h2database" % "h2" % "1.4.197",
 ).map(_ % "it,test")
 
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
 
 test in assembly := {}
+
+Test / fork := true
+Test / logBuffered := false
 
 assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first
