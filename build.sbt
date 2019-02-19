@@ -11,13 +11,13 @@ scalacOptions := Seq("-Ypartial-unification", "-unchecked", "-deprecation")
 lazy val _version = "1.0.10"
 
 lazy val versions = new {
-  val akka = "2.5.20"
+  val akka = "2.5.21"
   val akkaHttp = "10.1.7"
   val akkaHttpCors = "0.3.4"
   val spongyCastle = "1.58.0.0"
-  val micrometer = "1.1.2"
+  val micrometer = "1.1.3"
   val prometheus = "0.6.0"
-  val sttp = "1.5.8"
+  val sttp = "1.5.11"
   val cats = "1.6.0"
   val json4s = "3.6.4"
 }
@@ -84,7 +84,7 @@ lazy val coreDependencies = Seq(
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.60",
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
   "org.iq80.leveldb" % "leveldb" % "0.10" withSources () withJavadoc (),
   "com.codahale" % "shamir" % "0.6.1" withSources () withJavadoc (),
   "com.twitter" %% "chill" % "0.9.3",
