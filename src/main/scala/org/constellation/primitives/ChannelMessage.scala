@@ -32,6 +32,12 @@ case class ChannelMessageMetadata(
                                    snapshotHash: Option[String] = None
                                  )
 
+case class ChannelMetadata(
+                            channelOpen: ChannelOpen,
+                            genesisMessageMetadata: ChannelMessageMetadata,
+                            totalNumMessages: Long = 0L
+                          )
+
 case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 
 object ChannelMessage {
@@ -67,11 +73,11 @@ object ChannelMessage {
       semaphore.acquire()
       Future {
         var retries = 0
-        var metadata: Option[ChannelMessageMetadata] = None
+        var metadata: Option[ChannelMetadata] = None
         while (retries < 10 && metadata.isEmpty) {
           retries += 1
           Thread.sleep(1000)
-          metadata = dao.genesisMessageService.get(genesisHashChannelId)
+          metadata = dao.channelService.get(genesisHashChannelId)
         }
         val response = if (metadata.isEmpty) "Timeout awaiting block acceptance" else {
           "Success"
@@ -83,7 +89,7 @@ object ChannelMessage {
 
   def createMessages(
                       channelSendRequest: ChannelSendRequest
-                    )(implicit dao: DAO)= {
+                    )(implicit dao: DAO): Future[ChannelSendResponse] = {
 
     dao.messageService.get(channelSendRequest.channelId).map{ previousMessage =>
       val previous = previousMessage.channelMessage.signedMessageData.hash

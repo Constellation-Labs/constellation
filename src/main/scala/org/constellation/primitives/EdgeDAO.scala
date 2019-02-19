@@ -522,6 +522,8 @@ class SOEService(size: Int = 50000) extends StorageService[SignedObservationEdge
 
 class MessageService(size: Int = 50000) extends StorageService[ChannelMessageMetadata](size)
 
+class ChannelService(size: Int = 50000) extends StorageService[ChannelMetadata](size)
+
 class TransactionService(size: Int = 2000)  extends StorageService[TransactionCacheData](size)
 
 // TODO: Remove this and rely on recently accepted blocks for determining recent transactions
@@ -566,7 +568,7 @@ trait EdgeDAO {
   val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
   val addressService = new AddressService(processingConfig.addressLRUMaxSize)
   val messageService = new MessageService()
-  val genesisMessageService = new MessageService()
+  val channelService = new ChannelService()
   val soeService = new SOEService()
 
   val threadSafeTXMemPool = new ThreadSafeTXMemPool()

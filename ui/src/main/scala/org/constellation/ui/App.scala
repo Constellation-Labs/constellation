@@ -2,8 +2,8 @@ package org.constellation.ui
 
 import org.scalajs.dom
 import org.scalajs.dom.raw._
-import rx.Obs
-import rx.ops.{DomScheduler, Timer}
+import rx._
+import rx.async.Timer
 
 import scala.scalajs.js
 import scala.scalajs.js.{Date, JSApp}
@@ -12,37 +12,72 @@ import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scalatags.JsDom.all._
 
+import scala.concurrent.duration._
+import upickle.default._
+import upickle.default.{macroRW, ReadWriter => RW}
+
+
 case class Metrics(metrics: Map[String, String])
 
-/**
-  * IntelliJ Darcula
-  */
-object Colors {
-
-  val methodGold = "#FFC66D"
-  val keywordOrange = "#CC7832"
-  val bgGrey = "#2B2B2B"
-  val valPurple = "#9876AA"
-  val lightBlue = "#A9B7C6"
-  val commentGrey = "#808080"
-  val ansiGrey = "#555555"
-  val ansiDarkGrey = "#1F1F1F"
-  val darkGrey = "#424242"
-  val darkerBlackBlue = "#00001a"
-  val blackBlue = "#000033"
-  val commentGreen = "#629755"
-  val commentGreenBright = "#77B767"
-  val superRed = "#FF0000"
-  val xmlOrange = "#E8BF6A"
-  val intBlue = "#6897BB"
-  val annotationYellow = "#BBB529"
-  val brightGreen = "#036B13"
-  val whiteTextDefault = "#A9B7C6"
-
+object Metrics {
+  implicit val rw: RW[Metrics] = macroRW
 }
+
+
+case class ChannelUIOutput(channels: Seq[String])
+
+object ChannelUIOutput {
+  implicit val rw: RW[ChannelUIOutput] = macroRW
+}
+
+case class ChannelOpen(
+name: String,
+jsonSchema: Option[String] = None,
+acceptInvalid: Boolean = true
+)
+
+object ChannelOpen {
+  implicit val rw: RW[ChannelOpen] = macroRW
+}
+
+// uPickle does not like options otherwise this would be Option[String]
+case class ChannelOpenResponse(errorMessage: String = "Success", genesisHash: String = "")
+
+object ChannelOpenResponse {
+  implicit val rw: RW[ChannelOpenResponse] = macroRW
+}
+
+case class ChannelSendRequestRawJson(channelId: String, messages: String)
+
+object ChannelSendRequestRawJson {
+  implicit val rw: RW[ChannelSendRequestRawJson] = macroRW
+}
+
+case class ChannelSendResponse(
+errorMessage: String = "Success", messageHashes: Seq[String]
+)
+
+object ChannelSendResponse {
+  implicit val rw: RW[ChannelSendResponse] = macroRW
+}
+
+import upickle._
+
+
 
 object App extends JSApp {
 
+  import Ctx.Owner.Unsafe._
+
+  val heartBeat = {
+    import rx.async._
+    import rx.async.Platform._
+
+    import scala.concurrent.duration._
+    Timer(3000.millis)
+  }
+
+  val metrics: Var[Metrics] = Var(Metrics(Map()))
 
   def renderMetrics(mainView: HTMLDivElement): Obs = {
 
@@ -87,14 +122,15 @@ object App extends JSApp {
 
     val metricsDiv = dash.appendChild(div(id := "metrics").render).asInstanceOf[HTMLDivElement]
 
-    implicit val scheduler: DomScheduler = new DomScheduler()
+    metrics.foreach{ zo =>
 
-    val heartBeat = Timer(3000.millis)
+  //  }
 
-    heartBeat.foreach(_ => {
-      XHR.get[Metrics](
-        {
-          zo: Metrics =>
+  //  heartBeat.foreach(_ => {
+  //    XHR.get[Metrics](
+  //      {
+    //      zo: Metrics =>
+          //  lastMetrics = Some(zo)
             metricsDiv.innerHTML = ""
             val zmt = zo.metrics.toSeq.map {
               case ("address", v) =>
@@ -134,10 +170,11 @@ object App extends JSApp {
             ).render
             metricsDiv.appendChild(tbl)
           //  println(z)
-        },
-        "/metrics"
-      )
-    })
+//        },
+   //     "/metrics"
+   //   )
+   // })
+    }
 
   }
 
@@ -213,7 +250,11 @@ object App extends JSApp {
 
     create.onclick = (me: MouseEvent) => {
 
-      if (creationFormArea.isEmpty) {
+      if (creationFormArea.nonEmpty) {
+        creationFormArea.get.innerHTML = ""
+        creationFormArea = None
+
+      } else {
 
         creationFormArea = Some(
           createFormHolder.appendChild(
@@ -279,12 +320,14 @@ object App extends JSApp {
 
     XHR.get[ChannelUIOutput](
       { channelUIOutput =>
-        val channelNames = channelUIOutput.channels
-        println(s"Channel names $channelNames")
+        val channelHashes = channelUIOutput.channels
+        println(s"Channel hashes $channelHashes")
         channelInfo.appendChild(
           div(
-            id := "forms",
-            channelNames.mkString(", ")
+            id := "channel-list",
+            channelHashes.map{ hash =>
+              a(href := s"/view/$hash/channel", hash, paddingTop := 15.px, display.block)
+            }
           ).render
         )
       },
@@ -355,8 +398,12 @@ object App extends JSApp {
 
     create.onclick = (me: MouseEvent) => {
 
-      if (creationFormArea.isEmpty) {
 
+      if (creationFormArea.nonEmpty) {
+        creationFormArea.get.innerHTML = ""
+        creationFormArea = None
+
+      } else {
         creationFormArea = Some(
           createFormHolder.appendChild(
             div(
@@ -442,6 +489,18 @@ object App extends JSApp {
   }
 
 
+  def updateMetrics(): Unit = {
+    heartBeat.foreach(_ => {
+      XHR.get[Metrics](
+        {
+          metrics_ : Metrics =>
+          metrics() = metrics_
+        },
+        "/metrics"
+      )
+    })
+  }
+
   @JSExport
   def main(): Unit = {
 
@@ -451,6 +510,38 @@ object App extends JSApp {
 
     val pathName = dom.document.location.pathname
     println(s"Path name: $pathName")
+
+    updateMetrics()
+
+    val navBarTop = dom.document.getElementById("nav").asInstanceOf[HTMLDivElement]
+    import scalatags.JsDom.all._
+    import org.scalajs.dom.raw._
+    import rx._
+    import scalatags.rx.all._
+    import Ctx.Owner.Unsafe._
+
+
+    def navMetric(metricName: String, displayName: String) = {
+      div(
+        display.`inline-block`,
+        padding := 10.px,
+        paddingLeft := 40.px,
+        paddingRight := 25.px,
+        fontSize.`x-large`,
+        Rx{
+            val metricValue = metrics().metrics.getOrElse(metricName, "0")
+            s"$metricValue $displayName"
+          }
+      )
+    }
+
+    navBarTop.appendChild(
+      Seq(
+        navMetric("checkpointAccepted", "blocks"),
+        navMetric("transactionAccepted", "TX")
+      ).render
+    )
+
 
     val splitPath = pathName.split("\\/")
     println(s"Split path ${splitPath.toSeq}")
@@ -473,19 +564,3 @@ object App extends JSApp {
   }
 
 }
-
-case class ChannelUIOutput(channels: Seq[String])
-case class ChannelOpen(
-                        name: String,
-                        jsonSchema: Option[String] = None,
-                        acceptInvalid: Boolean = true
-                      )
-
-// uPickle does not like options otherwise this would be Option[String]
-case class ChannelOpenResponse(errorMessage: String = "Success", genesisHash: String = "")
-
-case class ChannelSendRequestRawJson(channelId: String, messages: String)
-
-case class ChannelSendResponse(
-                                errorMessage: String = "Success", messageHashes: Seq[String]
-                              )

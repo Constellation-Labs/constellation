@@ -47,7 +47,16 @@ object EdgeProcessor extends StrictLogging {
         if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
           dao.messageService.put(m.signedMessageData.data.channelId, ChannelMessageMetadata(m, Some(cb.baseHash)))
         } else {
-          dao.genesisMessageService.put(m.signedMessageData.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
+          import constellation._
+
+
+          dao.channelService.put(
+            m.signedMessageData.hash,
+            ChannelMetadata(
+              m.signedMessageData.data.message.x[ChannelOpen],
+              ChannelMessageMetadata(m, Some(cb.baseHash))
+            )
+          )
         }
         dao.messageService.put(m.signedMessageData.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.metrics.incrementMetric("messageAccepted")
