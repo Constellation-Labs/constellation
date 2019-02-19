@@ -452,6 +452,7 @@ trait EdgeDAO {
 
   @volatile var blockFormationInProgress: Boolean = false
 
+  // TODO: Put on Id keyed datastore (address? potentially) with other metadata
   val publicReputation: TrieMap[Id, Double] = TrieMap()
   val secretReputation: TrieMap[Id, Double] = TrieMap()
 
@@ -459,7 +460,7 @@ trait EdgeDAO {
 
   val checkpointService = new CheckpointService(processingConfig.checkpointLRUMaxSize)
   val acceptedTransactionService = new AcceptedTransactionService(processingConfig.transactionLRUMaxSize)
-  val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
+  val transactionService = new AcceptedTransactionService(processingConfig.transactionLRUMaxSize)
   val addressService = new AddressService(processingConfig.addressLRUMaxSize)
   val messageService = new MessageService()
   val channelService = new ChannelService()
