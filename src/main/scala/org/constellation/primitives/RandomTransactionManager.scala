@@ -133,7 +133,7 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
               timeoutSeconds = dao.processingConfig.formCheckpointTimeout, {
                 messages.foreach { m =>
                   dao.threadSafeMessageMemPool
-                    .activeChannels(m.signedMessageData.data.channelId)
+                    .activeChannels(m.signedMessageData.data.channelName)
                     .release()
                 }
                 dao.blockFormationInProgress = false

@@ -60,7 +60,7 @@ class ThreadSafeMessageMemPool() {
 
   def release(messages: Seq[ChannelMessage]): Unit = {
     messages.foreach { m =>
-      activeChannels(m.signedMessageData.data.channelId)
+      activeChannels(m.signedMessageData.data.channelName)
         .release()
     }
   }

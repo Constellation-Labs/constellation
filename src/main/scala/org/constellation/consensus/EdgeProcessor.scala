@@ -43,7 +43,7 @@ object EdgeProcessor extends StrictLogging {
       }
 
       cb.checkpoint.edge.data.messages.foreach { m =>
-        dao.messageService.put(m.signedMessageData.data.channelId,
+        dao.messageService.put(m.signedMessageData.data.channelName,
                                ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.messageService.put(m.signedMessageData.signatures.hash,
                                ChannelMessageMetadata(m, Some(cb.baseHash)))

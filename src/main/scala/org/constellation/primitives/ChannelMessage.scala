@@ -15,7 +15,7 @@ import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
 case class ChannelMessageData(
   message: String,
   previousMessageDataHash: String,
-  channelId: String
+  channelName: String
 ) extends Signable with ChannelRequest
 
 case class ChannelOpen(
@@ -55,14 +55,14 @@ object ChannelMessage {
   def createGenesis(
     channelOpenRequest: ChannelOpenRequest
   )(implicit dao: DAO): Option[GenesisResponse] = {
-    if (dao.messageService.get(channelOpenRequest.channelId).isEmpty &&
-        !dao.threadSafeMessageMemPool.activeChannels.contains(channelOpenRequest.channelId)) {
+    if (dao.messageService.get(channelOpenRequest.channelName).isEmpty &&
+        !dao.threadSafeMessageMemPool.activeChannels.contains(channelOpenRequest.channelName)) {
 
       val genesisMessageStr: String =
         ChannelOpen(channelOpenRequest.jsonSchema, channelOpenRequest.acceptInvalid).json
-      val msg: ChannelMessage = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.channelId)
+      val msg: ChannelMessage = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.channelName)
       val semaphore = new Semaphore(1)
-      dao.threadSafeMessageMemPool.activeChannels(channelOpenRequest.channelId) = semaphore
+      dao.threadSafeMessageMemPool.activeChannels(channelOpenRequest.channelName) = semaphore
       semaphore.acquire()
       dao.threadSafeMessageMemPool.put(Seq(msg), overrideLimit = true)
       Some(GenesisResponse(genesisMessageStr, msg))
@@ -74,11 +74,11 @@ object ChannelMessage {
   )(implicit dao: DAO): Seq[ChannelMessage] = {
     // Ignores locking right now
     val previous =
-      dao.messageService.get(channelSendRequest.channelId).get.channelMessage.signedMessageData.hash
+      dao.messageService.get(channelSendRequest.channelName).get.channelMessage.signedMessageData.hash
     val messages: Seq[ChannelMessage] = channelSendRequest.messages
       .foldLeft(previous -> Seq[ChannelMessage]()) {
         case ((prvHash, signedMessages), nextMessage) =>
-          val nextSigned = create(nextMessage, previous, channelSendRequest.channelId)
+          val nextSigned = create(nextMessage, previous, channelSendRequest.channelName)
           nextSigned.signedMessageData.hash -> (signedMessages :+ nextSigned)
       }
       ._2
@@ -95,23 +95,23 @@ case class ChannelProof(
 )
 
 case class ChannelOpenRequest(
-  channelId: String,
-  jsonSchema: Option[String] = None,
-  acceptInvalid: Boolean = true
-) extends ChannelRequest
+                               channelName: String,
+                               jsonSchema: Option[String] = None,
+                               acceptInvalid: Boolean = true
+                             ) extends ChannelRequest
 
 case class ChannelSendRequest(
-                               channelId: String,
+                               channelName: String,
                                messages: Seq[String]
                              ) extends ChannelRequest
 trait ChannelRequest {
-  val channelId: String
+  val channelName: String
 }
 
 case class SensorData(
                        temperature: Int,
                        name: String,
-                       channelId: String
+                       channelName: String
                      ) extends ChannelRequest
 
 object SensorData {

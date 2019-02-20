@@ -112,11 +112,12 @@ class E2ETest extends E2E {
   }
 
   "ConstellationApp" should "register a deployed state channel" in {
-    val deployResp = n1App.deploy("schemaString", "channelId")
+    val deployResp = n1App.deploy("schemaString", "channel_1")
     deployResp.foreach { resp: Option[Channel] =>
       sim.logger.info("deploy response:" + resp.toString)
-      assert(resp.exists(_.channelId == "channelId"))
-      assert(n1App.channelIdToChannel.get("channelId").contains(resp.get))
+      assert(resp.exists(r => r.channelName == r.genesisMsgChannelData.hash))
+      assert(resp.exists(_.channelId == "channel_1"))
+      assert(n1App.channelIdToChannel.get("channel_1").contains(resp.get))
     }
     assert(true)
   }
