@@ -22,7 +22,7 @@ class ConstellationApp(
     val response = clientApi.postNonBlocking[Some[GenesisResponse]]("channel/open", ChannelOpenRequest(channelName, jsonSchema = Some(schemaStr)))
     response.map { resp =>
       val channelMsg = resp.map(_.channelMsg).map { msg =>
-        Channel(msg.signedMessageData.hash, channelName, msg.signedMessageData.data)
+        Channel(msg.signedMessageData.hash, channelName, msg.signedMessageData)
       }
       channelMsg.foreach(registerChannels)
       channelMsg
@@ -40,5 +40,5 @@ class ConstellationApp(
 
 }
 
-case class Channel(channelId: String, channelName: String, genesisMsgChannelData: ChannelMessageData)
+case class Channel(channelId: String, channelName: String, genesisMsgChannelData: SignedData[ChannelMessageData])
 

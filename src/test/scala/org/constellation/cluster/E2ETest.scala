@@ -115,9 +115,9 @@ class E2ETest extends E2E {
     val deployResp = n1App.deploy("schemaString", "channel_1")
     deployResp.map { resp: Option[Channel] =>
       sim.logger.info("deploy response:" + resp.toString)
-      assert(resp.exists(r => r.channelName == r.genesisMsgChannelData.hash))
-      assert(resp.exists(_.channelId == "channel_1"))
-      assert(n1App.channelIdToChannel.get("channel_1").contains(resp.get))
+      assert(resp.exists(r => r.channelId == r.genesisMsgChannelData.hash))
+      assert(resp.exists(_.channelName == "channel_1"))
+      assert(resp.forall(r => n1App.channelIdToChannel.get(r.channelId).contains(r)))
     }
   }
 }
