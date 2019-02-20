@@ -26,7 +26,6 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] {
   override def toMap(): Map[String, V] =
     lruCache.iterator.toMap
 
-
   override def getAsync(key: String): IO[Option[V]] =
     IO.pure(get(key))
 
@@ -34,7 +33,8 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] {
     IO.pure(put(key, value))
 
   override def updateAsync(key: String, updateFunc: V => V, empty: => V): IO[V] =
-    getAsync(key).map(_.map(updateFunc).getOrElse(empty))
+    getAsync(key)
+      .map(_.map(updateFunc).getOrElse(empty))
       .flatMap(putAsync(key, _))
 
   override def deleteAsync(keys: Set[String]): IO[Unit] =

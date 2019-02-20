@@ -107,11 +107,11 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
         path("channels") {
           complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
         } ~
-        pathPrefix("data") {
-          path("channels") {
-            complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
-          }
-        } ~
+          pathPrefix("data") {
+            path("channels") {
+              complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
+            }
+          } ~
           path("messageService" / Segment) { channelId =>
             complete(dao.messageService.get(channelId))
           } ~
@@ -237,11 +237,11 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
       pathPrefix("channel") {
         path("open") {
           entity(as[ChannelOpen]) { request =>
-          onComplete(
-            ChannelMessage.createGenesis(request)
-          ) { res =>
-            complete(res.getOrElse(ChannelOpenResponse("API Failure")).json)
-          }
+            onComplete(
+              ChannelMessage.createGenesis(request)
+            ) { res =>
+              complete(res.getOrElse(ChannelOpenResponse("API Failure")).json)
+            }
 
           }
         } ~
@@ -254,11 +254,10 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
           } ~
           path("send" / "json") {
             entity(as[ChannelSendRequestRawJson]) { send: ChannelSendRequestRawJson =>
-
-            import constellation._
+              import constellation._
               val amended = ChannelSendRequest(
                 send.channelId,
-                send.messages.x[Seq[JValue]].map{_.json}
+                send.messages.x[Seq[JValue]].map { _.json }
               )
 
               onComplete(ChannelMessage.createMessages(amended)) { res =>

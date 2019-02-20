@@ -43,12 +43,11 @@ object EdgeProcessor extends StrictLogging {
       }
 
       cb.checkpoint.edge.data.messages.foreach { m =>
-
         if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
-          dao.messageService.put(m.signedMessageData.data.channelId, ChannelMessageMetadata(m, Some(cb.baseHash)))
+          dao.messageService.put(m.signedMessageData.data.channelId,
+                                 ChannelMessageMetadata(m, Some(cb.baseHash)))
         } else {
           import constellation._
-
 
           dao.channelService.put(
             m.signedMessageData.hash,
@@ -58,7 +57,8 @@ object EdgeProcessor extends StrictLogging {
             )
           )
         }
-        dao.messageService.put(m.signedMessageData.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
+        dao.messageService.put(m.signedMessageData.hash,
+                               ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.metrics.incrementMetric("messageAccepted")
       }
 
@@ -89,11 +89,11 @@ object EdgeProcessor extends StrictLogging {
   }
 
   case class CreateCheckpointEdgeResponse(
-                                           checkpointEdge: CheckpointEdge,
-                                           transactionsUsed: Set[String],
-                                           // filteredValidationTips: Seq[SignedObservationEdge],
-                                           updatedTransactionMemPoolThresholdMet: Set[String]
-                                         )
+    checkpointEdge: CheckpointEdge,
+    transactionsUsed: Set[String],
+    // filteredValidationTips: Seq[SignedObservationEdge],
+    updatedTransactionMemPoolThresholdMet: Set[String]
+  )
 
   case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
 
@@ -120,12 +120,12 @@ object EdgeProcessor extends StrictLogging {
     }
 
     def requestBlockSignature(
-                               checkpointBlock: CheckpointBlock,
-                               finalFacilitators: Set[
-                                 Id
-                                 ],
-                               data: PeerData
-                             ) = {
+      checkpointBlock: CheckpointBlock,
+      finalFacilitators: Set[
+        Id
+      ],
+      data: PeerData
+    ) = {
       async {
         val sigResp = await(
           data.client.postNonBlocking[SignatureResponse](
@@ -143,11 +143,11 @@ object EdgeProcessor extends StrictLogging {
       }
     }
     def processSignedBlock(
-                            cache: CheckpointCacheData,
-                            finalFacilitators: Set[
-                              Id
-                              ]
-                          ) = {
+      cache: CheckpointCacheData,
+      finalFacilitators: Set[
+        Id
+      ]
+    ) = {
 
       val responses = dao.peerInfo.values.toList.map { peer =>
         wrapFutureWithMetric(
@@ -259,12 +259,10 @@ object EdgeProcessor extends StrictLogging {
     result.sequence
   }
 
-
-
   def resolveTransactions(
-                           hashes: Seq[String],
-                           priorityPeer: Id
-                         )(implicit dao: DAO): Future[Seq[TransactionCacheData]] = {
+    hashes: Seq[String],
+    priorityPeer: Id
+  )(implicit dao: DAO): Future[Seq[TransactionCacheData]] = {
 
     implicit val exec: ExecutionContextExecutor = dao.signatureExecutionContext
 
@@ -279,35 +277,41 @@ object EdgeProcessor extends StrictLogging {
       }
     }
 
-    def resolveTransaction(hash: String, peers: Seq[APIClient]): Future[Option[TransactionCacheData]] = {
+    def resolveTransaction(hash: String,
+                           peers: Seq[APIClient]): Future[Option[TransactionCacheData]] = {
 
       var remainingPeers = peers.tail
 
-      lookupTransaction(hash, peers.head).transformWith{
+      lookupTransaction(hash, peers.head).transformWith {
         case Success(Some(transactionCacheData)) => Future.successful(Some(transactionCacheData))
         case _ =>
-          remainingPeers.headOption.map{
-            peer =>
+          remainingPeers.headOption
+            .map { peer =>
               remainingPeers = remainingPeers.filterNot(_ == peer)
               lookupTransaction(hash, peer)
-          }.getOrElse(Future.failed(new Exception("Ran out of peers to query for transaction")))
+            }
+            .getOrElse(Future.failed(new Exception("Ran out of peers to query for transaction")))
       }
 
     }
 
     // Change to facilitator ordering
-    val peers = dao.readyPeers.toSeq.sortBy{_._1 != priorityPeer}.map{_._2.client}
-    val results = hashes.map{ hash => resolveTransaction(hash, peers)}
+    val peers = dao.readyPeers.toSeq.sortBy { _._1 != priorityPeer }.map { _._2.client }
+    val results = hashes.map { hash =>
+      resolveTransaction(hash, peers)
+    }
     val seq = Future.sequence(results)
-    seq.transformWith{
-      case  Success(responses) if responses.forall(_.nonEmpty)=> Future.successful(responses.flatten)
+    seq.transformWith {
+      case Success(responses) if responses.forall(_.nonEmpty) =>
+        Future.successful(responses.flatten)
       case _ => Future.failed(new Exception("Failed to resolve transactions"))
     }
 
   }
 
-
-  def handleSignatureRequest(sr: SignatureRequest)(implicit dao: DAO): Future[Try[SignatureResponse]] = {
+  def handleSignatureRequest(
+    sr: SignatureRequest
+  )(implicit dao: DAO): Future[Try[SignatureResponse]] = {
 
     futureTryWithTimeoutMetric(
       {
@@ -315,9 +319,10 @@ object EdgeProcessor extends StrictLogging {
 
         val hashes = sr.checkpointBlock.checkpoint.edge.data.hashes
         dao.metrics.incrementMetric(
-          "signatureRequestAllHashesKnown_" + hashes.forall{h => dao.transactionService.get(h).nonEmpty}
+          "signatureRequestAllHashesKnown_" + hashes.forall { h =>
+            dao.transactionService.get(h).nonEmpty
+          }
         )
-
 
         val updated = if (sr.checkpointBlock.simpleValidation()) {
           Some(hashSign(sr.checkpointBlock.baseHash, dao.keyPair))
@@ -335,8 +340,8 @@ object EdgeProcessor extends StrictLogging {
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
     def innerResolve(
-                      peers: List[APIClient]
-                    )(implicit ec: ExecutionContext): Future[CheckpointCacheData] = {
+      peers: List[APIClient]
+    )(implicit ec: ExecutionContext): Future[CheckpointCacheData] = {
       peers match {
         case activePeer :: rest =>
           val resp = activePeer
@@ -370,8 +375,8 @@ object EdgeProcessor extends StrictLogging {
   }
 
   def acceptWithResolveAttempt(
-                                checkpointCacheData: CheckpointCacheData
-                              )(implicit dao: DAO): Unit = {
+    checkpointCacheData: CheckpointCacheData
+  )(implicit dao: DAO): Unit = {
 
     dao.threadSafeTipService.accept(checkpointCacheData)
     val block = checkpointCacheData.checkpointBlock.get
@@ -401,8 +406,8 @@ object EdgeProcessor extends StrictLogging {
         dao.threadSafeTipService.syncBufferAccept(fc.checkpointCacheData)
       } else if (dao.nodeState == NodeState.Ready) {
         if (fc.checkpointCacheData.checkpointBlock.exists {
-          _.simpleValidation()
-        }) {
+              _.simpleValidation()
+            }) {
           acceptWithResolveAttempt(fc.checkpointCacheData)
         }
       },
@@ -415,15 +420,15 @@ object EdgeProcessor extends StrictLogging {
 case class TipData(checkpointBlock: CheckpointBlock, numUses: Int)
 
 case class SnapshotInfo(
-                         snapshot: Snapshot,
-                         acceptedCBSinceSnapshot: Seq[String] = Seq(),
-                         acceptedCBSinceSnapshotCache: Seq[CheckpointCacheData] = Seq(),
-                         lastSnapshotHeight: Int = 0,
-                         snapshotHashes: Seq[String] = Seq(),
-                         addressCacheData: Map[String, AddressCacheData] = Map(),
-                         tips: Map[String, TipData] = Map(),
-                         snapshotCache: Seq[CheckpointCacheData] = Seq()
-                       )
+  snapshot: Snapshot,
+  acceptedCBSinceSnapshot: Seq[String] = Seq(),
+  acceptedCBSinceSnapshotCache: Seq[CheckpointCacheData] = Seq(),
+  lastSnapshotHeight: Int = 0,
+  snapshotHashes: Seq[String] = Seq(),
+  addressCacheData: Map[String, AddressCacheData] = Map(),
+  tips: Map[String, TipData] = Map(),
+  snapshotCache: Seq[CheckpointCacheData] = Seq()
+)
 
 case object GetMemPool
 
@@ -479,15 +484,15 @@ object Snapshot {
   }
 
   def findLatestMessageWithSnapshotHash(
-                                         depth: Int,
-                                         lastMessage: Option[ChannelMessageMetadata],
-                                         maxDepth: Int = 10
-                                       )(implicit dao: DAO): Option[ChannelMessageMetadata] = {
+    depth: Int,
+    lastMessage: Option[ChannelMessageMetadata],
+    maxDepth: Int = 10
+  )(implicit dao: DAO): Option[ChannelMessageMetadata] = {
 
     def findLatestMessageWithSnapshotHashInner(
-                                                depth: Int,
-                                                lastMessage: Option[ChannelMessageMetadata]
-                                              ): Option[ChannelMessageMetadata] = {
+      depth: Int,
+      lastMessage: Option[ChannelMessageMetadata]
+    ): Option[ChannelMessageMetadata] = {
       if (depth > maxDepth) None
       else {
         lastMessage.flatMap { m =>

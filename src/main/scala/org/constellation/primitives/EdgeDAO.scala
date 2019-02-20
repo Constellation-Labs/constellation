@@ -63,7 +63,7 @@ class ThreadSafeMessageMemPool() {
 
   def release(messages: Seq[ChannelMessage]): Unit = {
     messages.foreach { m =>
-      activeChannels.get(m.signedMessageData.data.channelId).foreach{
+      activeChannels.get(m.signedMessageData.data.channelId).foreach {
         _.release()
       }
 
@@ -459,7 +459,9 @@ trait EdgeDAO {
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
   val checkpointService = new CheckpointService(processingConfig.checkpointLRUMaxSize)
-  val acceptedTransactionService = new AcceptedTransactionService(processingConfig.transactionLRUMaxSize)
+  val acceptedTransactionService = new AcceptedTransactionService(
+    processingConfig.transactionLRUMaxSize
+  )
   val transactionService = new AcceptedTransactionService(processingConfig.transactionLRUMaxSize)
   val addressService = new AddressService(processingConfig.addressLRUMaxSize)
   val messageService = new MessageService()

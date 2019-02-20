@@ -30,10 +30,13 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
         if ((dao.threadSafeMessageMemPool.activeChannels.size + dao.threadSafeMessageMemPool.unsafeCount) < 5) {
           val newChannelName = "channel_ " + dao.threadSafeMessageMemPool.activeChannels.size
           val channelOpen = ChannelOpen(newChannelName)
-          val genesis = ChannelMessage.create(channelOpen.json, Genesis.CoinBaseHash, newChannelName)
-          dao.threadSafeMessageMemPool.selfChannelIdToName(genesis.signedMessageData.hash) = newChannelName
+          val genesis =
+            ChannelMessage.create(channelOpen.json, Genesis.CoinBaseHash, newChannelName)
+          dao.threadSafeMessageMemPool.selfChannelIdToName(genesis.signedMessageData.hash) =
+            newChannelName
           dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(newChannelName) = genesis
-          dao.threadSafeMessageMemPool.activeChannels(genesis.signedMessageData.hash) = new Semaphore(1)
+          dao.threadSafeMessageMemPool.activeChannels(genesis.signedMessageData.hash) =
+            new Semaphore(1)
           Some(genesis)
         } else {
           if (dao.threadSafeMessageMemPool.unsafeCount < 3) {
@@ -121,9 +124,10 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
                     inMemPool = true
                   )
                 )
-                dao.peerInfo.foreach{ case (_, peerData) =>
-                  dao.metrics.incrementMetric("transactionPut")
-                  peerData.client.put("transaction", tx)
+                dao.peerInfo.foreach {
+                  case (_, peerData) =>
+                    dao.metrics.incrementMetric("transactionPut")
+                    peerData.client.put("transaction", tx)
                 }
 
                 /*            // TODO: Change to transport layer call

@@ -1,7 +1,14 @@
 package org.constellation.util
 
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
-import akka.http.scaladsl.server.Directives.{complete, extractUnmatchedPath, get, getFromResource, pathPrefix, _}
+import akka.http.scaladsl.server.Directives.{
+  complete,
+  extractUnmatchedPath,
+  get,
+  getFromResource,
+  pathPrefix,
+  _
+}
 import akka.http.scaladsl.server.{Route, StandardRoute}
 import com.typesafe.scalalogging.Logger
 import org.constellation.DAO
@@ -44,20 +51,19 @@ package object example {
 
 import example.CssSettings._
 
-
 object MyStandalone extends StyleSheet.Standalone {
   import dsl._
 
   "a" - (
     color := Colors.intBlue
-    )
+  )
 
 }
 
 object MyStyles extends StyleSheet.Inline {
   import dsl._
 
-  val hoverDark: StyleA = style("hover-dark") (
+  val hoverDark: StyleA = style("hover-dark")(
     backgroundColor := Colors.ansiGrey,
     &.hover(
       backgroundColor(Color(Colors.ansiDarkGrey))
@@ -95,9 +101,7 @@ object MyStyles extends StyleSheet.Inline {
     paddingBottom(7.px)
   )
 
-
 }
-
 
 trait ServeUI {
 
@@ -126,7 +130,7 @@ trait ServeUI {
         width := "100%",
         div(
           id := "home",
-       //   width := "20%",
+          //   width := "20%",
           display.`inline-block`,
           a(
             href := "/",
@@ -144,8 +148,6 @@ trait ServeUI {
     )
   }
 
-
-
   // TODO: Split these up into separate navBar views when we have enough that it makes more sense.
 
   def leftNav(activePage: String): TypedTag[String] = {
@@ -162,13 +164,13 @@ trait ServeUI {
       float.left,
       width := 150.px,
       height := 100.pct,
-      Seq("Config", "Wallet", "Channels", "Explorer", "Metrics", "Peers").map{ name =>
+      Seq("Config", "Wallet", "Channels", "Explorer", "Metrics", "Peers").map { name =>
         element(name)
       }
     )
   }
 
-  def defaultIndexPage(activePage: String, optPrimary: Option[TypedTag[String]] = None) : String = {
+  def defaultIndexPage(activePage: String, optPrimary: Option[TypedTag[String]] = None): String = {
     html(
       scalatags.Text.all.head(
         scalatags.Text.tags2.title(pageTitle),
@@ -204,8 +206,7 @@ trait ServeUI {
           src := scalaJsSource,
           `type` := "text/javascript"
         ),
-        script(jsApplicationMain,
-          `type` := "text/javascript")
+        script(jsApplicationMain, `type` := "text/javascript")
       )
     ).render
   }
@@ -231,22 +232,27 @@ trait ServeUI {
     complete(entity)
   }
 
-
   val serveMainPage: Route = get {
-    path("view" / Segment) { page => servePage(page)} ~
-      path("view" / Segment / "channel") { _ => servePage("")} ~
+    path("view" / Segment) { page =>
+      servePage(page)
+    } ~
+      path("view" / Segment / "channel") { _ =>
+        servePage("")
+      } ~
       path("view" / Segment / "message") { msgHash =>
         import constellation._
 
         servePage(
           "",
-          Some(div(
-            id := "message-view",
-            dao.messageService.get(msgHash).prettyJson
-          ))
+          Some(
+            div(
+              id := "message-view",
+              dao.messageService.get(msgHash).prettyJson
+            )
+          )
         )
       } ~
-      path("") { servePage("")}
+      path("") { servePage("") }
   }
 
   val imageRoute: Route = get {

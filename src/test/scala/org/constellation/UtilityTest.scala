@@ -28,7 +28,7 @@ class UtilityTest extends FlatSpec {
         |]""".stripMargin
 
     import constellation._
-    println(messageExamples.x[Seq[JValue]].map{_.json})
+    println(messageExamples.x[Seq[JValue]].map { _.json })
 
     //assert(b3.json.x[Bundle] == b3)
   }

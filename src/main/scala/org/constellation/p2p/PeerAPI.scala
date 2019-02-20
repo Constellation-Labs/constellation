@@ -36,16 +36,16 @@ case class PeerUnregister(host: String, port: Int, id: Id)
 object PeerAPI {
 
   case class EdgeResponse(
-                           soe: Option[SignedObservationEdgeCache] = None,
-                           cb: Option[CheckpointCacheData] = None
-                         )
+    soe: Option[SignedObservationEdgeCache] = None,
+    cb: Option[CheckpointCacheData] = None
+  )
 
 }
 
 class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
                                                  val timeout: Timeout,
                                                  val dao: DAO)
-  extends Json4sSupport
+    extends Json4sSupport
     with CommonEndpoints
     with IPEnforcer
     with StrictLogging {
@@ -53,7 +53,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
   implicit val serialization: Serialization.type = native.Serialization
 
   implicit val executionContext
-  : ExecutionContext = dao.edgeExecutionContext // system.dispatchers.lookup("peer-api-dispatcher")
+    : ExecutionContext = dao.edgeExecutionContext // system.dispatchers.lookup("peer-api-dispatcher")
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
@@ -153,17 +153,17 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
         entity(as[SendToAddress]) { sendRequest =>
           // TODO: Add limiting
           if (sendRequest.amountActual < (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor) &&
-            dao.addressService
-              .get(dao.selfAddressStr)
-              .map { _.balance }
-              .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)) {
+              dao.addressService
+                .get(dao.selfAddressStr)
+                .map { _.balance }
+                .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)) {
             logger.info(s"send transaction to address $sendRequest")
 
             val tx = createTransaction(dao.selfAddressStr,
-              sendRequest.dst,
-              sendRequest.amountActual,
-              dao.keyPair,
-              normalized = false)
+                                       sendRequest.dst,
+                                       sendRequest.amountActual,
+                                       dao.keyPair,
+                                       normalized = false)
             dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
             dao.metrics.incrementMetric("faucetRequest")
 
@@ -239,10 +239,9 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
       put {
         entity(as[Transaction]) { tx =>
           dao.metrics.incrementMetric("transactionRXByPeerAPI")
-          dao.transactionService.update(tx.hash,
-            {tcd => tcd},
-            TransactionCacheData(tx)
-          )
+          dao.transactionService.update(tx.hash, { tcd =>
+            tcd
+          }, TransactionCacheData(tx))
           // TODO: Respond with initial tx validation
           complete(StatusCodes.OK)
         }

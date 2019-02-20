@@ -34,10 +34,10 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
   }
 
   def createNode(
-                  randomizePorts: Boolean = false,
-                  portOffset: Int = 0,
-                  isGenesisNode: Boolean = false
-                ): ConstellationNode = {
+    randomizePorts: Boolean = false,
+    portOffset: Int = 0,
+    isGenesisNode: Boolean = false
+  ): ConstellationNode = {
     implicit val executionContext: ExecutionContextExecutorService =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 

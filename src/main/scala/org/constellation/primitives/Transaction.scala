@@ -2,7 +2,6 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
-
 import cats.data.{Ior, NonEmptyList, ValidatedNel}
 import cats.implicits._
 
@@ -71,7 +70,8 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
     validSrcSignature.toOption(this.validNel).getOrElse(InvalidSourceSignature().invalidNel)
 
   def validateHashDuplicateSnapshot()(implicit dao: DAO): Unit = {
-    dao.transactionHashStore.contains(hash)
+    dao.transactionHashStore
+      .contains(hash)
       .traverse(_.toOption(this.validNel))
       .getOrElse(HashDuplicateFoundInSnapshot().invalidNel)
   }

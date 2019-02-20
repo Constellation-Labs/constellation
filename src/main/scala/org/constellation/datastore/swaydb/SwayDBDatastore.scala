@@ -8,7 +8,6 @@ import org.constellation.DAO
 import org.constellation.datastore.{KVDB, KVDBDatastoreImpl}
 import org.constellation.serializer.KryoSerializer
 
-
 class SwayDBImpl(dao: DAO) extends KVDB {
 
   implicit val d: DAO = dao
@@ -89,11 +88,12 @@ object SwayDBDatastore {
 
     SwayDB
       .persistentSet[String](
-      dir = (dao.dbPath / path).path,
-      mmapMaps = false,
-      mmapSegments = MMAP.Disable,
-      mmapAppendix = false
-    ).get
+        dir = (dao.dbPath / path).path,
+        mmapMaps = false,
+        mmapSegments = MMAP.Disable,
+        mmapAppendix = false
+      )
+      .get
   }
 
   def apply(dao: DAO): SwayDBDatastore = new SwayDBDatastore(dao)

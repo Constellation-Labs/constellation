@@ -16,27 +16,27 @@ import scala.concurrent.Future
 // Should channelId be associated with a unique keyPair or not?
 
 case class ChannelMessageData(
-                               message: String,
-                               previousMessageHash: String,
-                               channelId: String
-                             ) extends Signable
+  message: String,
+  previousMessageHash: String,
+  channelId: String
+) extends Signable
 
 case class SignedData[+D <: Signable](
-                                       data: D,
-                                       signatures: SignatureBatch
-                                     ) extends Signable
+  data: D,
+  signatures: SignatureBatch
+) extends Signable
 
 case class ChannelMessageMetadata(
-                                   channelMessage: ChannelMessage,
-                                   blockHash: Option[String] = None,
-                                   snapshotHash: Option[String] = None
-                                 )
+  channelMessage: ChannelMessage,
+  blockHash: Option[String] = None,
+  snapshotHash: Option[String] = None
+)
 
 case class ChannelMetadata(
-                            channelOpen: ChannelOpen,
-                            genesisMessageMetadata: ChannelMessageMetadata,
-                            totalNumMessages: Long = 0L
-                          )
+  channelOpen: ChannelOpen,
+  genesisMessageMetadata: ChannelMessageMetadata,
+  totalNumMessages: Long = 0L
+)
 
 case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 
@@ -54,97 +54,113 @@ object ChannelMessage {
   }
 
   def createGenesis(
-                     channelOpenRequest: ChannelOpen
-                   )(implicit dao: DAO): Future[ChannelOpenResponse] = {
+    channelOpenRequest: ChannelOpen
+  )(implicit dao: DAO): Future[ChannelOpenResponse] = {
 
     logger.info(s"Channel open $channelOpenRequest")
 
-    dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage.get(channelOpenRequest.name).map{ msg =>
-        Future.successful(ChannelOpenResponse("Error: channel name already in use", msg.signedMessageData.hash))
-    }.getOrElse{
-      val genesisMessageStr = channelOpenRequest.json
-      val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)
-      dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.name) = msg
-      val genesisHashChannelId = msg.signedMessageData.hash
-      dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) = channelOpenRequest.name
-      dao.threadSafeMessageMemPool.put(Seq(msg), overrideLimit = true)
-      val semaphore = new Semaphore(1)
-      dao.threadSafeMessageMemPool.activeChannels(genesisHashChannelId) = semaphore
-      semaphore.acquire()
-      Future {
-        var retries = 0
-        var metadata: Option[ChannelMetadata] = None
-        while (retries < 10 && metadata.isEmpty) {
-          retries += 1
-          Thread.sleep(1000)
-          metadata = dao.channelService.get(genesisHashChannelId)
-        }
-        val response = if (metadata.isEmpty) "Timeout awaiting block acceptance" else {
-          "Success"
-        }
-        ChannelOpenResponse(response, genesisHashChannelId)
-      }(dao.edgeExecutionContext)
-    }
+    dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage
+      .get(channelOpenRequest.name)
+      .map { msg =>
+        Future.successful(
+          ChannelOpenResponse("Error: channel name already in use", msg.signedMessageData.hash)
+        )
+      }
+      .getOrElse {
+        val genesisMessageStr = channelOpenRequest.json
+        val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)
+        dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.name) = msg
+        val genesisHashChannelId = msg.signedMessageData.hash
+        dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) =
+          channelOpenRequest.name
+        dao.threadSafeMessageMemPool.put(Seq(msg), overrideLimit = true)
+        val semaphore = new Semaphore(1)
+        dao.threadSafeMessageMemPool.activeChannels(genesisHashChannelId) = semaphore
+        semaphore.acquire()
+        Future {
+          var retries = 0
+          var metadata: Option[ChannelMetadata] = None
+          while (retries < 10 && metadata.isEmpty) {
+            retries += 1
+            Thread.sleep(1000)
+            metadata = dao.channelService.get(genesisHashChannelId)
+          }
+          val response =
+            if (metadata.isEmpty) "Timeout awaiting block acceptance"
+            else {
+              "Success"
+            }
+          ChannelOpenResponse(response, genesisHashChannelId)
+        }(dao.edgeExecutionContext)
+      }
   }
 
   def createMessages(
-                      channelSendRequest: ChannelSendRequest
-                    )(implicit dao: DAO): Future[ChannelSendResponse] = {
+    channelSendRequest: ChannelSendRequest
+  )(implicit dao: DAO): Future[ChannelSendResponse] = {
 
-    dao.messageService.get(channelSendRequest.channelId).map{ previousMessage =>
-      val previous = previousMessage.channelMessage.signedMessageData.hash
+    dao.messageService
+      .get(channelSendRequest.channelId)
+      .map { previousMessage =>
+        val previous = previousMessage.channelMessage.signedMessageData.hash
 
-      val messages = channelSendRequest.messages
-        .foldLeft(previous -> Seq[ChannelMessage]()) {
-          case ((prvHash, signedMessages), nextMessage) =>
-            val nextSigned = create(nextMessage, previous, channelSendRequest.channelId)
-            nextSigned.signedMessageData.hash -> (signedMessages :+ nextSigned)
-        }._2
-      dao.threadSafeMessageMemPool.put(messages, overrideLimit = true)
-      val semaphore = new Semaphore(1)
-      dao.threadSafeMessageMemPool.activeChannels(channelSendRequest.channelId) = semaphore
-      semaphore.acquire()
-      Future.successful(
-        ChannelSendResponse(
-          "Success",  messages.map{_.signedMessageData.hash}
+        val messages = channelSendRequest.messages
+          .foldLeft(previous -> Seq[ChannelMessage]()) {
+            case ((prvHash, signedMessages), nextMessage) =>
+              val nextSigned = create(nextMessage, previous, channelSendRequest.channelId)
+              nextSigned.signedMessageData.hash -> (signedMessages :+ nextSigned)
+          }
+          ._2
+        dao.threadSafeMessageMemPool.put(messages, overrideLimit = true)
+        val semaphore = new Semaphore(1)
+        dao.threadSafeMessageMemPool.activeChannels(channelSendRequest.channelId) = semaphore
+        semaphore.acquire()
+        Future.successful(
+          ChannelSendResponse(
+            "Success",
+            messages.map { _.signedMessageData.hash }
+          )
+        )
+      }
+      .getOrElse(
+        Future.successful(
+          ChannelSendResponse("Channel not found", Seq())
         )
       )
-    }.getOrElse(Future.successful(
-      ChannelSendResponse("Channel not found", Seq())
-    ))
   }
 }
 
 case class ChannelProof(
-                         channelMessageMetadata: ChannelMessageMetadata,
-                         // snapshotProof: MerkleProof,
-                         checkpointProof: MerkleProof,
-                         checkpointMessageProof: MerkleProof
-                       )
+  channelMessageMetadata: ChannelMessageMetadata,
+  // snapshotProof: MerkleProof,
+  checkpointProof: MerkleProof,
+  checkpointMessageProof: MerkleProof
+)
 
 case class ChannelOpen(
-                        name: String,
-                        jsonSchema: Option[String] = None,
-                        acceptInvalid: Boolean = true
-                      )
+  name: String,
+  jsonSchema: Option[String] = None,
+  acceptInvalid: Boolean = true
+)
 
 case class ChannelOpenResponse(errorMessage: String = "Success", genesisHash: String = "")
 
 case class ChannelSendRequest(
-                               channelId: String,
-                               messages: Seq[String]
-                             )
+  channelId: String,
+  messages: Seq[String]
+)
 
 case class ChannelSendRequestRawJson(channelId: String, messages: String)
 
 case class ChannelSendResponse(
-                                errorMessage: String = "Success", messageHashes: Seq[String]
-                              )
+  errorMessage: String = "Success",
+  messageHashes: Seq[String]
+)
 
 case class SensorData(
-                       temperature: Int,
-                       name: String
-                     )
+  temperature: Int,
+  name: String
+)
 
 object SensorData {
 
