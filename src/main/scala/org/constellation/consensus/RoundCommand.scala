@@ -12,7 +12,7 @@ sealed trait RoundCommand {
 
 case class NotifyFacilitators(roundId: RoundId) extends RoundCommand
 case class BlockCreationRoundStarted(roundId: RoundId) extends RoundCommand
-case class SendProposal(roundId: RoundId, cb: CheckpointBlockProposal) extends RoundCommand
+case class BroadcastProposal(roundId: RoundId, cb: CheckpointBlockProposal) extends RoundCommand
 case class ReceivedProposal(roundId: RoundId, cb: CheckpointBlockProposal) extends RoundCommand
 case class BroadcastMajorityUnionedBlock(roundId: RoundId, cb: MajorityUnionedBlock) extends RoundCommand
 case class ReceivedMajorityUnionedBlock(roundId: RoundId, cb: MajorityUnionedBlock) extends RoundCommand

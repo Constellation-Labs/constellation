@@ -7,18 +7,36 @@ class RoundManager extends Actor with ActorLogging {
   val rounds: Map[RoundId, ActorRef] = Map()
 
   override def receive: Receive = {
-    case StartBlockCreationRound => {
-      val id = generateRoundId
-      rounds + (id -> generateRoundActor(id))
-      // TODO: What about facilitators? dao.threadSafeTipService.pull()
-    }
+    case StartBlockCreationRound =>
+      startBlockCreationRound
 
-    case NotifyFacilitators(id) => {
-      // TODO: Verify that parent is node or supervisor
-      context.parent ! NotifyFacilitators(id)
-    }
+    case cmd: NotifyFacilitators =>
+      passToParentActor(cmd)
 
-    case _ => log.info("Received unknown message")
+    case cmd: BroadcastProposal =>
+      passToParentActor(cmd)
+
+    case cmd: ReceivedProposal =>
+      passToRoundActor(cmd)
+
+    case cmd: BroadcastMajorityUnionedBlock =>
+      passToParentActor(cmd)
+
+    case cmd: ReceivedMajorityUnionedBlock =>
+      passToRoundActor(cmd)
+  }
+
+  def startBlockCreationRound: Map[RoundId, ActorRef] = {
+    val id = generateRoundId
+    rounds + (id -> generateRoundActor(id))
+  }
+
+  def passToRoundActor(cmd: RoundCommand): Unit = {
+    rounds.get(cmd.roundId).fold()(_ ! cmd)
+  }
+
+  def passToParentActor(cmd: RoundCommand): Unit = {
+    context.parent ! cmd
   }
 }
 
@@ -28,6 +46,6 @@ object RoundManager {
   def generateRoundId: RoundId =
     RoundId(java.util.UUID.randomUUID().toString)
 
-  def generateRoundActor(roundId: RoundId)(implicit context: ActorContext) =
+  def generateRoundActor(roundId: RoundId)(implicit context: ActorContext): ActorRef =
     context.actorOf(Round.props(roundId))
 }
