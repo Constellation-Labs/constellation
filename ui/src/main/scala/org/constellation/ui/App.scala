@@ -40,6 +40,19 @@ object ChannelOpen {
   implicit val rw: RW[ChannelOpen] = macroRW
 }
 
+
+case class SingleChannelUIOutput(
+                                  channelOpen: ChannelOpen,
+                                  totalNumMessages: Long = 0L,
+                                  last25MessageHashes: Seq[String] = Seq(),
+                                  genesisAddress: String
+                                )
+
+object SingleChannelUIOutput {
+  implicit val rw: RW[SingleChannelUIOutput] = macroRW
+}
+
+
 // uPickle does not like options otherwise this would be Option[String]
 case class ChannelOpenResponse(errorMessage: String = "Success", genesisHash: String = "")
 
@@ -469,22 +482,25 @@ object App extends JSApp {
       println("create channel")
     }
 
+    val channelData: Var[Option[SingleChannelUIOutput]] = Var(None)
 
-    /*
-        XHR.get[ChannelUIOutput](
-          { channelUIOutput =>
-            val channelNames = channelUIOutput.channels
-            println(s"Channel names $channelNames")
-            channelInfo.appendChild(
-              div(
-                id := "forms",
-                channelNames.mkString(", ")
-              ).render
-            )
-          },
-          "/data/channels"
+    mainView.appendChild(
+      div(
+        paddingTop := 100.px,
+        div("Channel Info", display.block),
+        div(
+
         )
-    */
+      )
+    )
+
+    heartBeat.foreach{ _ =>
+      XHR.get[Option[SingleChannelUIOutput]](
+        {cd => channelData() = cd},
+        s"channel/$channelId/info"
+      )
+    }
+
 
   }
 

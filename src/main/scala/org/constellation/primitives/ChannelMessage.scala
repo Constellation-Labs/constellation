@@ -35,8 +35,18 @@ case class ChannelMessageMetadata(
 case class ChannelMetadata(
   channelOpen: ChannelOpen,
   genesisMessageMetadata: ChannelMessageMetadata,
-  totalNumMessages: Long = 0L
+  totalNumMessages: Long = 0L,
+  last25MessageHashes: Seq[String] = Seq()
 )
+
+
+case class SingleChannelUIOutput(
+                                  channelOpen: ChannelOpen,
+                                  totalNumMessages: Long = 0L,
+                                  last25MessageHashes: Seq[String] = Seq(),
+                                  genesisAddress: String
+                                )
+
 
 case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 

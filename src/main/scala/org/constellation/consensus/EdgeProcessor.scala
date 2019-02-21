@@ -44,11 +44,23 @@ object EdgeProcessor extends StrictLogging {
 
       cb.checkpoint.edge.data.messages.foreach { m =>
         if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
-          dao.messageService.put(m.signedMessageData.data.channelId,
-                                 ChannelMessageMetadata(m, Some(cb.baseHash)))
-        } else {
-          import constellation._
-
+          dao.messageService.put(
+            m.signedMessageData.data.channelId,
+            ChannelMessageMetadata(m, Some(cb.baseHash))
+          )
+          dao.channelService.updateOnly(
+            m.signedMessageData.hash,
+            { cmd =>
+              val slicedMessages = if (cmd.last25MessageHashes.size > 25) {
+                cmd.last25MessageHashes.slice(0, 24)
+              } else cmd.last25MessageHashes
+              cmd.copy(
+                totalNumMessages = cmd.totalNumMessages + 1,
+                last25MessageHashes = slicedMessages :+ m.signedMessageData.hash
+              )
+            }
+          )
+        } else { // Unsafe json extract
           dao.channelService.put(
             m.signedMessageData.hash,
             ChannelMetadata(

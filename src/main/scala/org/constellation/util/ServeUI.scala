@@ -109,8 +109,10 @@ trait ServeUI {
 
   implicit val dao: DAO
 
-  private val scalaJsSource = "/ui-opt.js"
-  //private val scalaJsSource = "/ui-fastopt.js" // for debugging
+  // Use for rebuilding UI quicker without a restart
+  private val debugMode = true
+
+  private val scalaJsSource = if (debugMode) "/ui-fastopt.js" else "/ui-opt.js"
 
   private val jsApplicationMain = "org.constellation.ui.App().main()"
 
@@ -218,8 +220,8 @@ trait ServeUI {
           logger.info(s"UI Request $path")
           val resPath = "ui/ui" + path
           logger.debug(s"Loading resource from $resPath")
-          // getFromFile("./ui/target/scala-2.12/ui" + path) // For debugging more quickly
-          getFromResource(resPath)
+          if (debugMode) getFromFile("./ui/target/scala-2.12/ui" + path) // For debugging more quickly
+          else getFromResource(resPath)
         }
       }
     }
