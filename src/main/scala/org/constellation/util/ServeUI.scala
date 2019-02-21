@@ -110,7 +110,7 @@ trait ServeUI {
   implicit val dao: DAO
 
   // Use for rebuilding UI quicker without a restart
-  private val debugMode = true
+  private val debugMode = false
 
   private val scalaJsSource = if (debugMode) "/ui-fastopt.js" else "/ui-opt.js"
 
