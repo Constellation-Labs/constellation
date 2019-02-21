@@ -5,7 +5,7 @@ import java.util.concurrent.Semaphore
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.EdgeProcessor
-import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState, SendToAddress}
+import org.constellation.primitives.Schema._
 import org.constellation.util.Periodic
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -27,13 +27,17 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
   def generateRandomMessages(): Unit =
     if (round % dao.processingConfig.roundsPerMessage == 0) {
       val cm =
-        if ((dao.threadSafeMessageMemPool.activeChannels.size + dao.threadSafeMessageMemPool.unsafeCount) < 3) {
-          val newChannelId = dao.selfAddressStr + dao.threadSafeMessageMemPool.activeChannels.size
-          dao.threadSafeMessageMemPool.activeChannels(newChannelId) = new Semaphore(1)
-          Some(
-            ChannelMessage
-              .create(Random.nextInt(1000).toString, Genesis.CoinBaseHash, newChannelId)
-          )
+        if ((dao.threadSafeMessageMemPool.activeChannels.size + dao.threadSafeMessageMemPool.unsafeCount) < 5) {
+          val newChannelName = "channel_ " + dao.threadSafeMessageMemPool.activeChannels.size
+          val channelOpen = ChannelOpen(newChannelName)
+          val genesis =
+            ChannelMessage.create(channelOpen.json, Genesis.CoinBaseHash, newChannelName)
+          dao.threadSafeMessageMemPool.selfChannelIdToName(genesis.signedMessageData.hash) =
+            newChannelName
+          dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(newChannelName) = genesis
+          dao.threadSafeMessageMemPool.activeChannels(genesis.signedMessageData.hash) =
+            new Semaphore(1)
+          Some(genesis)
         } else {
           if (dao.threadSafeMessageMemPool.unsafeCount < 3) {
             val channels = dao.threadSafeMessageMemPool.activeChannels
@@ -111,6 +115,21 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
                 dao.metrics.incrementMetric("sentTransactions")
 
                 dao.threadSafeTXMemPool.put(tx)
+
+                dao.transactionService.put(
+                  tx.hash,
+                  TransactionCacheData(
+                    tx,
+                    valid = true,
+                    inMemPool = true
+                  )
+                )
+                dao.peerInfo.foreach {
+                  case (_, peerData) =>
+                    dao.metrics.incrementMetric("transactionPut")
+                    peerData.client.put("transaction", tx)
+                }
+
                 /*            // TODO: Change to transport layer call
     dao.peerManager ! APIBroadcast(
       _.put(s"transaction/${tx.edge.signedObservationEdge.signatureBatch.hash}", tx),

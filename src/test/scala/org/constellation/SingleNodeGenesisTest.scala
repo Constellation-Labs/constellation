@@ -49,12 +49,13 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
     )
   }
 
-  private val node = createNode(isGenesisNode = true)
-  private val api = node.getAPIClient()
+  //"Genesis created"
+  ignore should "verify the node has created genesis" in {
 
-  "Genesis created" should "verify the node has created genesis" in {
+    val node = createNode(isGenesisNode = true)
+    val api = node.getAPIClient()
 
-    //Thread.sleep(600*1000)
+    //Thread.sleep(6000*1000)
 
   }
 

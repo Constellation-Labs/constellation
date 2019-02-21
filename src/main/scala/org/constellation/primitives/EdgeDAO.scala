@@ -1,17 +1,17 @@
 package org.constellation.primitives
 
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
-import akka.util.Timeout
-import com.twitter.storehaus.cache.MutableLRUCache
-import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
-import scala.util.Random
 
+import akka.util.Timeout
 import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
+import org.constellation.primitives.storage._
 import org.constellation.{DAO, ProcessingConfig}
+
+import scala.collection.concurrent.TrieMap
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.util.Random
 
 class ThreadSafeTXMemPool() {
 
@@ -56,12 +56,17 @@ class ThreadSafeMessageMemPool() {
 
   val activeChannels: TrieMap[String, Semaphore] = TrieMap()
 
+  val selfChannelNameToGenesisMessage: TrieMap[String, ChannelMessage] = TrieMap()
+  val selfChannelIdToName: TrieMap[String, String] = TrieMap()
+
   val messageHashToSendRequest: TrieMap[String, ChannelSendRequest] = TrieMap()
 
   def release(messages: Seq[ChannelMessage]): Unit = {
     messages.foreach { m =>
-      activeChannels(m.signedMessageData.data.channelName)
-        .release()
+      activeChannels.get(m.signedMessageData.data.channelName).foreach {
+        _.release()
+      }
+
     }
   }
 
@@ -441,119 +446,26 @@ class ThreadSafeTipService() {
 
 }
 
-// TODO: Use atomicReference increment pattern instead of synchronized
-
-class StorageService[T](size: Int = 50000) {
-
-  private val lruCache: MutableLRUCache[String, T] = {
-    import com.twitter.storehaus.cache._
-    MutableLRUCache[String, T](size)
-  }
-
-  // val actualDatastore = ... .update
-
-  // val mutexStore = TrieMap[String, AtomicUpdater]
-
-  // val mutexKeyCache = mutable.Queue()
-
-  // if mutexKeyCache > size :
-  // poll and remove from mutexStore?
-  // mutexStore.getOrElseUpdate(hash)
-  // Map[Address, AtomicUpdater] // computeIfAbsent getOrElseUpdate
-  /*  class AtomicUpdater {
-
-    def update(
-                key: String,
-                updateFunc: T => T,
-                empty: => T
-              ): T =
-      this.synchronized{
-        val data = get(key).map {updateFunc}.getOrElse(empty)
-        put(key, data)
-        data
-      }
-  }*/
-
-  def delete(keys: Set[String]) = this.synchronized {
-    lruCache.multiRemove(keys)
-  }
-
-  def contains(key: String): Boolean = this.synchronized {
-    lruCache.contains(key)
-  }
-
-  def get(key: String): Option[T] = this.synchronized {
-    lruCache.get(key)
-  }
-
-  def put(key: String, cache: T): Unit = this.synchronized {
-    lruCache.+=((key, cache))
-  }
-
-  def update(
-    key: String,
-    updateFunc: T => T,
-    empty: => T
-  ): T =
-    this.synchronized {
-      val data = get(key).map { updateFunc }.getOrElse(empty)
-      put(key, data)
-      data
-    }
-
-  def toMap(): Map[String, T] = this.synchronized {
-    lruCache.iterator.toMap
-  }
-
-}
-
-// TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
-
-class CheckpointService(size: Int = 50000) extends StorageService[CheckpointCacheData](size)
-
-class SOEService(size: Int = 50000) extends StorageService[SignedObservationEdgeCache](size)
-
-class MessageService(size: Int = 50000) extends StorageService[ChannelMessageMetadata](size)
-
-class TransactionService(size: Int = 50000) extends StorageService[TransactionCacheData](size) {
-  private val queue = mutable.Queue[TransactionSerialized]()
-  private val maxQueueSize = 20
-
-  override def put(
-    key: String,
-    cache: TransactionCacheData
-  ): Unit = {
-    val tx = TransactionSerialized(cache.transaction)
-    queue.synchronized {
-      if (queue.size == maxQueueSize) {
-        queue.dequeue()
-      }
-
-      queue.enqueue(tx)
-      super.put(key, cache)
-    }
-  }
-
-  def getLast20TX = queue.reverse
-}
-
-class AddressService(size: Int = 50000) extends StorageService[AddressCacheData](size)
-
 trait EdgeDAO {
 
   var processingConfig = ProcessingConfig()
 
   @volatile var blockFormationInProgress: Boolean = false
 
+  // TODO: Put on Id keyed datastore (address? potentially) with other metadata
   val publicReputation: TrieMap[Id, Double] = TrieMap()
   val secretReputation: TrieMap[Id, Double] = TrieMap()
 
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
   val checkpointService = new CheckpointService(processingConfig.checkpointLRUMaxSize)
-  val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
+  val acceptedTransactionService = new AcceptedTransactionService(
+    processingConfig.transactionLRUMaxSize
+  )
+  val transactionService = new AcceptedTransactionService(processingConfig.transactionLRUMaxSize)
   val addressService = new AddressService(processingConfig.addressLRUMaxSize)
   val messageService = new MessageService()
+  val channelService = new ChannelService()
   val soeService = new SOEService()
 
   val threadSafeTXMemPool = new ThreadSafeTXMemPool()
@@ -572,7 +484,7 @@ trait EdgeDAO {
   val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
 
   val edgeExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
   // val peerAPIExecutionContext: ExecutionContextExecutor =
   //   ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
@@ -581,10 +493,10 @@ trait EdgeDAO {
   //  ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
 
   val signatureExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
   val finishedExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
   // Temporary to get peer data for tx hash partitioning
   @volatile var peerInfo: Map[Id, PeerData] = Map()

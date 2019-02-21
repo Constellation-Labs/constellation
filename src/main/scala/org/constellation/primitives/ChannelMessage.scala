@@ -1,27 +1,25 @@
 package org.constellation.primitives
 
 import java.util.concurrent.Semaphore
+
 import com.fasterxml.jackson.databind.JsonNode
 import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.{JsonSchemaFactory, JsonValidator}
+import com.typesafe.scalalogging.Logger
 import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
-
 import constellation._
 import org.constellation.DAO
 import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
+
+import scala.concurrent.Future
 
 // Should channelId be associated with a unique keyPair or not?
 
 case class ChannelMessageData(
   message: String,
-  previousMessageDataHash: String,
+  previousMessageHash: String,
   channelName: String
 ) extends Signable with ChannelRequest
-
-case class ChannelOpen(
-  jsonSchema: Option[String] = None,
-  allowInvalid: Boolean = true
-)
 
 case class SignedData[+D <: Signable](
   data: D,
@@ -34,14 +32,17 @@ case class ChannelMessageMetadata(
   snapshotHash: Option[String] = None
 )
 
-case class GenesisResponse(
-                            genesisMessageStr: String,
-                           channelMsg: ChannelMessage
-                          )
+case class ChannelMetadata(
+  channelOpen: ChannelOpen,
+  genesisMessageMetadata: ChannelMessageMetadata,
+  totalNumMessages: Long = 0L
+)
 
 case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 
 object ChannelMessage {
+
+  val logger = Logger("ChannelMessage")
 
   def create(message: String, previous: String, channelId: String)(
     implicit dao: DAO
@@ -53,37 +54,79 @@ object ChannelMessage {
   }
 
   def createGenesis(
-    channelOpenRequest: ChannelOpenRequest
-  )(implicit dao: DAO): Option[GenesisResponse] = {
-    if (dao.messageService.get(channelOpenRequest.channelName).isEmpty &&
-        !dao.threadSafeMessageMemPool.activeChannels.contains(channelOpenRequest.channelName)) {
+    channelOpenRequest: ChannelOpen
+  )(implicit dao: DAO): Future[ChannelOpenResponse] = {
 
-      val genesisMessageStr: String =
-        ChannelOpen(channelOpenRequest.jsonSchema, channelOpenRequest.acceptInvalid).json
-      val msg: ChannelMessage = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.channelName)
-      val semaphore = new Semaphore(1)
-      dao.threadSafeMessageMemPool.activeChannels(channelOpenRequest.channelName) = semaphore
-      semaphore.acquire()
-      dao.threadSafeMessageMemPool.put(Seq(msg), overrideLimit = true)
-      Some(GenesisResponse(genesisMessageStr, msg))
-    } else None
+    logger.info(s"Channel open $channelOpenRequest")
+
+    dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage
+      .get(channelOpenRequest.channelName)
+      .map { msg =>
+        Future.successful(
+          ChannelOpenResponse("Error: channel name already in use", msg.signedMessageData.hash)
+        )
+      }
+      .getOrElse {
+        val genesisMessageStr = channelOpenRequest.json
+        val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.channelName)
+        dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.channelName) = msg
+        val genesisHashChannelId = msg.signedMessageData.hash
+        dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) =
+          channelOpenRequest.channelName
+        dao.threadSafeMessageMemPool.put(Seq(msg), overrideLimit = true)
+        val semaphore = new Semaphore(1)
+        dao.threadSafeMessageMemPool.activeChannels(genesisHashChannelId) = semaphore
+        semaphore.acquire()
+        Future {
+          var retries = 0
+          var metadata: Option[ChannelMetadata] = None
+          while (retries < 10 && metadata.isEmpty) {
+            retries += 1
+            Thread.sleep(1000)
+            metadata = dao.channelService.get(genesisHashChannelId)
+          }
+          val response =
+            if (metadata.isEmpty) "Timeout awaiting block acceptance"
+            else {
+              "Success"
+            }
+          ChannelOpenResponse(response, genesisHashChannelId, channelOpenRequest.jsonSchema)
+        }(dao.edgeExecutionContext)
+      }
   }
 
   def createMessages(
     channelSendRequest: ChannelSendRequest
-  )(implicit dao: DAO): Seq[ChannelMessage] = {
-    // Ignores locking right now
-    val previous =
-      dao.messageService.get(channelSendRequest.channelName).get.channelMessage.signedMessageData.hash
-    val messages: Seq[ChannelMessage] = channelSendRequest.messages
-      .foldLeft(previous -> Seq[ChannelMessage]()) {
-        case ((prvHash, signedMessages), nextMessage) =>
-          val nextSigned = create(nextMessage, previous, channelSendRequest.channelName)
-          nextSigned.signedMessageData.hash -> (signedMessages :+ nextSigned)
+  )(implicit dao: DAO): Future[ChannelSendResponse] = {
+
+    dao.messageService
+      .get(channelSendRequest.channelName)
+      .map { previousMessage =>
+        val previous = previousMessage.channelMessage.signedMessageData.hash
+
+        val messages: Seq[ChannelMessage] = channelSendRequest.messages
+          .foldLeft(previous -> Seq[ChannelMessage]()) {
+            case ((prvHash, signedMessages), nextMessage) =>
+              val nextSigned = create(nextMessage, previous, channelSendRequest.channelName)
+              nextSigned.signedMessageData.hash -> (signedMessages :+ nextSigned)
+          }
+          ._2
+        dao.threadSafeMessageMemPool.put(messages, overrideLimit = true)
+        val semaphore = new Semaphore(1)
+        dao.threadSafeMessageMemPool.activeChannels(channelSendRequest.channelName) = semaphore
+        semaphore.acquire()
+        Future.successful(
+          ChannelSendResponse(
+            "Success",
+            messages.map { _.signedMessageData.hash }
+          )
+        )
       }
-      ._2
-    dao.threadSafeMessageMemPool.put(messages, overrideLimit = true)
-    messages
+      .getOrElse(
+        Future.successful(
+          ChannelSendResponse("Channel not found", Seq())
+        )
+      )
   }
 }
 
@@ -99,6 +142,13 @@ case class ChannelOpenRequest(
                                jsonSchema: Option[String] = None,
                                acceptInvalid: Boolean = true
                              ) extends ChannelRequest
+case class ChannelOpen(
+                        channelName: String,
+                        jsonSchema: Option[String] = None,
+                        acceptInvalid: Boolean = true
+                      )extends ChannelRequest
+
+case class ChannelOpenResponse(errorMessage: String = "Success", genesisHash: String = "", jsonSchema: Option[String] = None)
 
 case class ChannelSendRequest(
                                channelName: String,
@@ -107,6 +157,13 @@ case class ChannelSendRequest(
 trait ChannelRequest {
   val channelName: String
 }
+
+case class ChannelSendRequestRawJson(channelId: String, messages: String)
+
+case class ChannelSendResponse(
+  errorMessage: String = "Success",
+  messageHashes: Seq[String]
+)
 
 case class SensorData(
                        temperature: Int,
@@ -117,21 +174,21 @@ case class SensorData(
 object SensorData {
 
   val jsonSchema: String = """{
-                     |  "title":"Sensors data",
-                     |  "type":"object",
-                     |  "properties":{
-                     |    "temperature": {
-                     |      "type": "integer",
-                     |      "minimum": -100,
-                     |      "maximum": 100
-                     |    },
-                     |    "name": {
-                     |      "type": "string",
-                     |      "pattern": "^[A-Z]{4,10}$"
-                     |    }
-                     |  },
-                     |  "required":["temperature", "name"]
-                     |}""".stripMargin
+                             |  "title":"Sensors data",
+                             |  "type":"object",
+                             |  "properties":{
+                             |    "temperature": {
+                             |      "type": "integer",
+                             |      "minimum": -100,
+                             |      "maximum": 100
+                             |    },
+                             |    "name": {
+                             |      "type": "string",
+                             |      "pattern": "^[A-Z]{4,10}$"
+                             |    }
+                             |  },
+                             |  "required":["temperature", "name"]
+                             |}""".stripMargin
 
   val schema: JsonNode = asJsonNode(parse(jsonSchema))
   val validator: JsonValidator = JsonSchemaFactory.byDefault().getValidator

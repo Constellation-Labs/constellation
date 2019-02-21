@@ -1,15 +1,17 @@
 package org.constellation
 import com.softwaremill.sttp.Response
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives._
 import org.constellation.util.APIClient
+import org.scalameta.logger
 
 import scala.concurrent.ExecutionContext
 
 class ConstellationApp(
                         val clientApi: APIClient
-                      )(implicit val ec: ExecutionContext) {
+                      )(implicit val ec: ExecutionContext) extends StrictLogging {
 
   val channelIdToChannel = scala.collection.mutable.HashMap[String, Channel]()
   def registerChannels(chaMsg: Channel) = channelIdToChannel.update(chaMsg.channelId, chaMsg)
@@ -19,10 +21,11 @@ class ConstellationApp(
               schemaStr: String,
               channelName: String = s"channel_${channelIdToChannel.keys.size + 1}"
             )(implicit ec: ExecutionContext) = {
-    val response = clientApi.postNonBlocking[Some[GenesisResponse]]("channel/open", ChannelOpenRequest(channelName, jsonSchema = Some(schemaStr)))
+    val response = clientApi.postNonBlocking[Some[ChannelOpenResponse]]("channel/open", ChannelOpenRequest(channelName, jsonSchema = Some(schemaStr)))
     response.map { resp =>
-      val channelMsg = resp.map(_.channelMsg).map { msg =>
-        Channel(msg.signedMessageData.hash, channelName, msg.signedMessageData)
+      logger.info(s"ChannelOpenResponse: ${resp.toString}")
+      val channelMsg = resp.map { msg =>
+        Channel(msg.genesisHash, channelName, msg)
       }
       channelMsg.foreach(registerChannels)
       channelMsg
@@ -40,5 +43,5 @@ class ConstellationApp(
 
 }
 
-case class Channel(channelId: String, channelName: String, genesisMsgChannelData: SignedData[ChannelMessageData])
+case class Channel(channelId: String, channelName: String, channelOpenRequest: ChannelOpenResponse)
 

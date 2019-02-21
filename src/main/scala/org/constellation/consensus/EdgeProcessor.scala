@@ -17,7 +17,7 @@ import org.constellation.util.{APIClient, HashSignature, Signable}
 import scala.async.Async.{async, await}
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.Try
+import scala.util.{Success, Try}
 
 object EdgeProcessor extends StrictLogging {
 
@@ -43,9 +43,21 @@ object EdgeProcessor extends StrictLogging {
       }
 
       cb.checkpoint.edge.data.messages.foreach { m =>
-        dao.messageService.put(m.signedMessageData.data.channelName,
-                               ChannelMessageMetadata(m, Some(cb.baseHash)))
-        dao.messageService.put(m.signedMessageData.signatures.hash,
+        if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
+          dao.messageService.put(m.signedMessageData.data.channelName,
+                                 ChannelMessageMetadata(m, Some(cb.baseHash)))
+        } else {
+          import constellation._
+
+          dao.channelService.put(
+            m.signedMessageData.hash,
+            ChannelMetadata(
+              m.signedMessageData.data.message.x[ChannelOpen],
+              ChannelMessageMetadata(m, Some(cb.baseHash))
+            )
+          )
+        }
+        dao.messageService.put(m.signedMessageData.hash,
                                ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.metrics.incrementMetric("messageAccepted")
       }
@@ -60,7 +72,6 @@ object EdgeProcessor extends StrictLogging {
             inMemPool = false,
             inDAG = true,
             Map(cb.baseHash -> true),
-            resolved = true,
             cbBaseHash = Some(cb.baseHash)
           )
         )
@@ -248,22 +259,80 @@ object EdgeProcessor extends StrictLogging {
     result.sequence
   }
 
-  // Temporary for testing join/leave logic.
+  def resolveTransactions(
+    hashes: Seq[String],
+    priorityPeer: Id
+  )(implicit dao: DAO): Future[Seq[TransactionCacheData]] = {
 
-  def handleSignatureRequest(sr: SignatureRequest)(implicit dao: DAO): SignatureResponse = {
-    //if (sr.facilitators.contains(dao.id)) {
-    // val replyTo = sr.checkpointBlock.witnessIds.head
-    val updated = if (sr.checkpointBlock.simpleValidation()) {
-      Some(hashSign(sr.checkpointBlock.baseHash, dao.keyPair))
-    } else {
-      None
+    implicit val exec: ExecutionContextExecutor = dao.signatureExecutionContext
+
+    def lookupTransaction(hash: String, client: APIClient): Future[Option[TransactionCacheData]] = {
+      async {
+        await(
+          client.getNonBlocking[Option[TransactionCacheData]](
+            s"transaction/$hash",
+            timeout = 4.seconds
+          )
+        )
+      }
     }
-    SignatureResponse(updated)
-    /*dao.peerManager ! APIBroadcast(
-      _.post(s"response/signature", SignatureResponse(updated, sr.facilitators)),
-      peerSubset = Set(replyTo)
-    )*/
-    // } else None
+
+    def resolveTransaction(hash: String,
+                           peers: Seq[APIClient]): Future[Option[TransactionCacheData]] = {
+
+      var remainingPeers = peers.tail
+
+      lookupTransaction(hash, peers.head).transformWith {
+        case Success(Some(transactionCacheData)) => Future.successful(Some(transactionCacheData))
+        case _ =>
+          remainingPeers.headOption
+            .map { peer =>
+              remainingPeers = remainingPeers.filterNot(_ == peer)
+              lookupTransaction(hash, peer)
+            }
+            .getOrElse(Future.failed(new Exception("Ran out of peers to query for transaction")))
+      }
+
+    }
+
+    // Change to facilitator ordering
+    val peers = dao.readyPeers.toSeq.sortBy { _._1 != priorityPeer }.map { _._2.client }
+    val results = hashes.map { hash =>
+      resolveTransaction(hash, peers)
+    }
+    val seq = Future.sequence(results)
+    seq.transformWith {
+      case Success(responses) if responses.forall(_.nonEmpty) =>
+        Future.successful(responses.flatten)
+      case _ => Future.failed(new Exception("Failed to resolve transactions"))
+    }
+
+  }
+
+  def handleSignatureRequest(
+    sr: SignatureRequest
+  )(implicit dao: DAO): Future[Try[SignatureResponse]] = {
+
+    futureTryWithTimeoutMetric(
+      {
+        dao.metrics.incrementMetric("peerApiRXSignatureRequest")
+
+        val hashes = sr.checkpointBlock.checkpoint.edge.data.hashes
+        dao.metrics.incrementMetric(
+          "signatureRequestAllHashesKnown_" + hashes.forall { h =>
+            dao.transactionService.get(h).nonEmpty
+          }
+        )
+
+        val updated = if (sr.checkpointBlock.simpleValidation()) {
+          Some(hashSign(sr.checkpointBlock.baseHash, dao.keyPair))
+        } else {
+          None
+        }
+        SignatureResponse(updated)
+      },
+      "handleSignatureRequest"
+    )(dao.signatureExecutionContext, dao)
   }
 
   def simpleResolveCheckpoint(hash: String)(implicit dao: DAO): Future[Boolean] = {
@@ -432,13 +501,14 @@ object Snapshot {
             findLatestMessageWithSnapshotHashInner(
               depth + 1,
               dao.messageService.get(
-                m.channelMessage.signedMessageData.data.previousMessageDataHash
+                m.channelMessage.signedMessageData.data.previousMessageHash
               )
             )
           }
         }
       }
     }
+
     findLatestMessageWithSnapshotHashInner(depth, lastMessage)
   }
 
@@ -482,7 +552,7 @@ object Snapshot {
       // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
       // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
       tx.ledgerApplySnapshot()
-      dao.transactionService.delete(Set(tx.hash))
+      dao.acceptedTransactionService.delete(Set(tx.hash))
       dao.metrics.incrementMetric("snapshotAppliedBalance")
     }
   }

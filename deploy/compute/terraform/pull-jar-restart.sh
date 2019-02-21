@@ -10,4 +10,4 @@ echo "Redeploying $HOSTS_FILE"
 cat $HOSTS_FILE
 
 source $DIR/update-jar.sh $HOSTS_FILE $JAR_TAG && \
-source $DIR/service-restart.sh $HOSTS_FILE
+source $DIR/restart.sh $HOSTS_FILE

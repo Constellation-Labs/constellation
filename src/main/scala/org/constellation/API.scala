@@ -13,7 +13,6 @@ import akka.http.scaladsl.server.directives.Credentials
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.{CircuitBreaker, ask}
 import akka.util.Timeout
-import better.files.{File, _}
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 import com.softwaremill.sttp.Response
 import com.typesafe.config.{Config, ConfigFactory}
@@ -30,7 +29,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, _}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{CommonEndpoints, MerkleTree, ServeUI}
-import org.json4s.native
+import org.json4s.{JValue, native}
 import org.json4s.native.Serialization
 
 import scala.concurrent.duration._
@@ -57,7 +56,7 @@ case class ProcessingConfig(
   maxWidth: Int = 10,
   minCheckpointFormationThreshold: Int = 50,
   numFacilitatorPeers: Int = 2,
-  randomTXPerRoundPerPeer: Int = 100,
+  randomTXPerRoundPerPeer: Int = 30,
   metricCheckInterval: Int = 60,
   maxMemPoolSize: Int = 2000,
   minPeerTimeAddedSeconds: Int = 30,
@@ -75,6 +74,8 @@ case class ProcessingConfig(
   maxFaucetSize: Int = 1000,
   roundsPerMessage: Int = 10
 ) {}
+
+case class ChannelUIOutput(channels: Seq[String])
 
 class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
                                          val timeout: Timeout,
@@ -106,6 +107,11 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
         path("channels") {
           complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
         } ~
+          pathPrefix("data") {
+            path("channels") {
+              complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
+            }
+          } ~
           path("messageService" / Segment) { channelId =>
             complete(dao.messageService.get(channelId))
           } ~
@@ -116,6 +122,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
             val proof = res.flatMap { cmd =>
               cmd.snapshotHash.flatMap { snapshotHash =>
                 tryWithMetric({
+                  import better.files._
                   KryoSerializer.deserializeCast[StoredSnapshot](
                     File(dao.snapshotPath, snapshotHash).byteArray
                   )
@@ -204,7 +211,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
             }
           } ~
           path("dashboard") {
-            val txs = dao.transactionService.getLast20TX
+            val txs = dao.acceptedTransactionService.getLast20TX
             val self = Node(
               dao.selfAddressStr,
               dao.externalHostString,
@@ -229,14 +236,33 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
     post {
       pathPrefix("channel") {
         path("open") {
-          entity(as[ChannelOpenRequest]) { request =>
-            val res: Option[GenesisResponse] = ChannelMessage.createGenesis(request)
-            complete(res)
+          entity(as[ChannelOpen]) { request =>
+            onComplete(
+              ChannelMessage.createGenesis(request)
+            ) { res =>
+              complete(res.getOrElse(ChannelOpenResponse("API Failure")))
+            }
+
           }
         } ~
           path("send") {
-            entity(as[ChannelSendRequest]) { send: ChannelSendRequest =>
-              complete(ChannelMessage.createMessages(send))
+            entity(as[ChannelSendRequest]) { send =>
+              onComplete(ChannelMessage.createMessages(send)) { res =>
+                complete(res.getOrElse(ChannelOpenResponse("API Failure")).json)
+              }
+            }
+          } ~
+          path("send" / "json") {
+            entity(as[ChannelSendRequestRawJson]) { send: ChannelSendRequestRawJson =>
+              import constellation._
+              val amended = ChannelSendRequest(
+                send.channelId,
+                send.messages.x[Seq[JValue]].map { _.json }
+              )
+
+              onComplete(ChannelMessage.createMessages(amended)) { res =>
+                complete(res.getOrElse(ChannelOpenResponse("API Failure")).json)
+              }
             }
           }
       } ~
@@ -364,6 +390,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
               externalIp.replaceAll('"'.toString, "").split(":") match {
                 case Array(ip, port) =>
                   ipp = ip
+                  import better.files._
                   externalHostString = ip
                   file"external_host_ip".write(ip)
                   new InetSocketAddress(ip, port.toInt)
@@ -401,15 +428,15 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
       path("health") {
         complete(StatusCodes.OK)
       } ~
-        path("favicon.ico") {
-          getFromResource("favicon.ico")
+        path("ui/img/favicon.ico") {
+          getFromResource("ui/img/favicon.ico")
         }
     }
 
   private val mainRoutes: Route = cors() {
     decodeRequest {
       encodeResponse {
-        getEndpoints ~ postEndpoints ~ jsRequest ~ commonEndpoints ~ serveMainPage
+        getEndpoints ~ postEndpoints ~ jsRequest ~ imageRoute ~ commonEndpoints ~ serveMainPage
       }
     }
   }
