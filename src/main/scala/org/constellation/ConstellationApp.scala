@@ -8,6 +8,7 @@ import org.constellation.util.APIClient
 import org.scalameta.logger
 
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 
 class ConstellationApp(
                         val clientApi: APIClient
@@ -21,7 +22,7 @@ class ConstellationApp(
               schemaStr: String,
               channelName: String = s"channel_${channelIdToChannel.keys.size + 1}"
             )(implicit ec: ExecutionContext) = {
-    val response = clientApi.postNonBlocking[Some[ChannelOpenResponse]]("channel/open", ChannelOpenRequest(channelName, jsonSchema = Some(schemaStr)))
+    val response = clientApi.postNonBlocking[Some[ChannelOpenResponse]]("channel/open", ChannelOpenRequest(channelName, jsonSchema = Some(schemaStr)), timeout = 30 seconds)
     response.map { resp: Option[ChannelOpenResponse] =>
       logger.info(s"ChannelOpenResponse: ${resp.toString}")
       val channelMsg = resp.map { msg =>

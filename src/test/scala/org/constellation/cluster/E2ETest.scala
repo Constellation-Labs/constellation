@@ -116,6 +116,7 @@ class E2ETest extends E2E {
   }
 
   "ConstellationApp" should "register a deployed state channel" in {
+    sim.triggerRandom(apis)
     val deployResp = n1App.deploy(SensorData.jsonSchema, "channel_1")
     deployResp.map { resp: Option[Channel] =>
       sim.logger.info("deploy response:" + resp.toString)
