@@ -110,6 +110,25 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
           pathPrefix("data") {
             path("channels") {
               complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
+            } ~
+            path("channel" / Segment / "info") { channelId =>
+
+              complete(dao.channelService.get(channelId).map{ cmd =>
+                SingleChannelUIOutput(
+                  cmd.channelOpen, cmd.totalNumMessages, cmd.last25MessageHashes,
+                  cmd.genesisMessageMetadata.channelMessage.signedMessageData.signatures.signatures.head.address
+                )
+              })
+            } ~
+            path("channel" / Segment / "schema") { channelId =>
+              complete(
+                dao.channelService.get(channelId).flatMap{ cmd => cmd.channelOpen.jsonSchema}
+                  .map{
+                    schemaStr =>
+                      import org.json4s.native.JsonMethods._
+                      pretty(render(parse(schemaStr)))
+                  }
+              )
             }
           } ~
           path("messageService" / Segment) { channelId =>
@@ -247,7 +266,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
         } ~
           path("send") {
             entity(as[ChannelSendRequest]) { send =>
-              onComplete(ChannelMessage.createMessages(send)) { res =>
+              onComplete(ChannelMessage.createMessages(send)) { res: Try[ChannelSendResponse] =>
                 complete(res.getOrElse(ChannelOpenResponse("API Failure")).json)
               }
             }

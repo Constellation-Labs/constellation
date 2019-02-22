@@ -15,7 +15,10 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] {
   }
 
   override def update(key: String, updateFunc: V => V, empty: => V): V =
-    get(key).map(updateFunc).getOrElse(empty)
+    put(key, get(key).map(updateFunc).getOrElse(empty))
+
+  def updateOnly(key: String, updateFunc: V => V): Option[V] =
+    get(key).map(updateFunc).map{put(key, _)}
 
   override def delete(keys: Set[String]): Unit =
     lruCache.multiRemove(keys)

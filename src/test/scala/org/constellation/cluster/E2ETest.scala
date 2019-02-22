@@ -132,53 +132,69 @@ class E2ETest extends E2E {
     private val schemaStr = SensorData.jsonSchema
     private val channelName = "test"
 
-    private var genesisChannel: ChannelMessage = _
+//    private var channel: Channel = _
     private var broadcastedMessages: Seq[ChannelMessage] = Seq.empty[ChannelMessage]
 
     def openChannel(apis: Seq[APIClient]): Unit = {
-
       val deployResponse = constellationApp.deploy(schemaStr, channelName)
+      deployResponse.foreach { resp =>
+    if (resp.isDefined) {
       sim.awaitConditionMet(
         "Test channel genesis not stored",
         apis.forall {
-          _.getBlocking[Option[ChannelMessageMetadata]]("messageService/" + channelName)
-            .exists(_.blockHash.nonEmpty)
+          _.getBlocking[Option[ChannelMessageMetadata]](
+            "messageService/" + resp.map(_.channelId).getOrElse(channelName)
+          ).exists(_.blockHash.nonEmpty)
         }
       )
+      resp.foreach { channel =>
+        val validNameChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map { _.toString }.toSeq
+        val invalidNameChars = validNameChars.map { _.toLowerCase }
 
-      genesisChannel = constellationApp.clientApi
-        .getBlocking[Option[ChannelMessageMetadata]]("messageService/" + channelName)
-        .get
-        .channelMessage
+        val messagesToBroadcastMessages: Seq[SensorData] = (0 until 10).flatMap { batchNumber =>
+          import constellation._
 
-      val validNameChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map { _.toString }.toSeq
-      val invalidNameChars = validNameChars.map { _.toLowerCase }
+          val validMessages = Seq.fill(batchNumber % 2) {
+            SensorData(
+              Random.nextInt(100),
+              Seq.fill(5) { Random.shuffle(validNameChars).head }.mkString,
+              channel.channelId
+            )
+          }
+          val invalidMessages = Seq.fill((batchNumber + 1) % 2) {
+            SensorData(
+              Random.nextInt(100) + 500,
+              Seq.fill(5) { Random.shuffle(invalidNameChars).head }.mkString,
+              channel.channelId
+            )
+          }
 
-      broadcastedMessages = (0 until 10).flatMap { batchNumber =>
-        import constellation._
-
-        val validMessages = Seq.fill(batchNumber % 2) {
-          SensorData(
-            Random.nextInt(100),
-            Seq.fill(5) { Random.shuffle(validNameChars).head }.mkString,
-            channelName
+          val msgs = validMessages ++ invalidMessages
+          sim.logger.info(
+            s"Message batch $batchNumber complete, sent ${msgs.size} messages"
           )
+          msgs
         }
-        val invalidMessages = Seq.fill((batchNumber + 1) % 2) {
-          SensorData(
-            Random.nextInt(100) + 500,
-            Seq.fill(5) { Random.shuffle(invalidNameChars).head }.mkString,
-            channelName
+        val broadcastResp: Future[Seq[ChannelMessage]] =
+          constellationApp.broadcast(messagesToBroadcastMessages)
+        broadcastResp.foreach { res: Seq[ChannelMessage] =>
+          sim.logger.info(
+            s"broadcastResp is: ${res.toString}"
           )
-        }
-        val messages = validMessages ++ invalidMessages
-        val broadcastResp = constellationApp.broadcast(messages)
 
-        sim.logger.info(
-          s"Message batch $batchNumber complete, sent ${messages.size} messages"
-        )
-        broadcastResp.getOpt().get
+          broadcastedMessages = res
+        }
       }
+    }
+      }
+
+
+//      genesisChannel = constellationApp.clientApi
+//        .getBlocking[Option[ChannelMessageMetadata]]("messageService/" + channelName)
+//        .get
+//        .channelMessage
+
+
 
     }
 
