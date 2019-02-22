@@ -41,7 +41,6 @@ class ConstellationApp(
       ChannelSendRequest(msgType, serializedMessages)
       )
   }
-
 }
 
 case class Channel(channelId: String, channelName: String, channelOpenRequest: ChannelOpenResponse)

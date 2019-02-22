@@ -16,6 +16,7 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, 
 
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
+import scala.concurrent.duration._
 
 class E2ETest extends E2E {
   val updatePasswordReq = UpdatePassword(
@@ -99,7 +100,7 @@ class E2ETest extends E2E {
 
     // TODO: Move to separate test
 
-    // TODO: This is flaky and fails randomly sometimes
+    // TODO: This is flaky and fails randomly sometimhttps://twitter.com/MikeCamel/status/1099018153563058176es
     val snaps = storedSnapshots.toSet
       .map { x: Seq[StoredSnapshot] =>
         x.map { _.checkpointCache.flatMap { _.checkpointBlock } }.toSet
@@ -193,16 +194,18 @@ class E2ETest extends E2E {
 
     def postDownload(firstAPI: APIClient = constellationApp.clientApi, channel: Channel) = {
       sim.logger.info(s"channel ${channel.channelId}")
+      val allChannels = firstAPI.getBlocking[Seq[String]]("channels")
+      sim.logger.info(s"message channel ${allChannels}")
 
-      val messageChannel =
-        firstAPI.getBlocking[Seq[String]]("channels").filterNot { _ == channel.channelId }.head
-      sim.logger.info(s"message channel ${messageChannel}")
-      val messageWithinSnapshot =
-        firstAPI.getBlocking[Option[ChannelProof]]("channel/" + messageChannel)
-      assert(messageWithinSnapshot.nonEmpty)
+      val messageChannels = allChannels.filterNot { _ == channel.channelId }
+      sim.logger.info(s"message channel ${messageChannels}")
+      val messageWithinSnapshot = firstAPI.getBlocking[Option[ChannelProof]]("channel/" + messageChannels.head, timeout = 30 seconds)
+      sim.logger.info(s"messageWithinSnapshot ${messageWithinSnapshot}")
+
+      assert(messageChannels.flatMap(ch => firstAPI.getBlocking[Option[ChannelProof]]("channel/" + ch, timeout = 30 seconds)).nonEmpty)
 
     def messageValid(): Unit = messageWithinSnapshot.foreach { proof =>
-      val m = proof.channelMessageMetadata
+      val m = proof.channelMessageMetadata//d76d5da8f25552639ac3068d004fc892fadb91befc9f8522382d4458cb6a6a4e
       assert(m.snapshotHash.nonEmpty)
       assert(m.blockHash.nonEmpty)
       assert(proof.checkpointMessageProof.verify())
