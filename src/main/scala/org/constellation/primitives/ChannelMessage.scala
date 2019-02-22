@@ -77,6 +77,8 @@ object ChannelMessage {
         )
       }
       .getOrElse {
+        logger.info(s"Channel not in use")
+
         val genesisMessageStr = channelOpenRequest.json
         val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.channelName)
         dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.channelName) = msg

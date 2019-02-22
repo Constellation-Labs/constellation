@@ -14,7 +14,7 @@ import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.constellation._
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
 
 class E2ETest extends E2E {
@@ -59,7 +59,7 @@ class E2ETest extends E2E {
 
     assert(sim.run(initialAPIs, addPeerRequests))
 
-    constellationAppSim.openChannel(apis)
+    val deployResponse = constellationAppSim.openChannel(apis)
 
     val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)),
                                   randomizePorts = false,
@@ -68,8 +68,8 @@ class E2ETest extends E2E {
     val downloadAPI = downloadNode.getAPIClient()
     logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
     assert(sim.checkReady(Seq(downloadAPI)))
+    deployResponse.foreach{ res => res.foreach(constellationAppSim.postDownload(apis.head, _))}
 
-    constellationAppSim.postDownload(apis.head)
 
     Thread.sleep(20 * 1000)
 
@@ -116,7 +116,7 @@ class E2ETest extends E2E {
   }
 
   "ConstellationApp" should "register a deployed state channel" in {
-    val deployResp = n1App.deploy("schemaString", "channel_1")
+    val deployResp = n1App.deploy(SensorData.jsonSchema, "channel_1")
     deployResp.map { resp: Option[Channel] =>
       sim.logger.info("deploy response:" + resp.toString)
       assert(resp.exists(r => r.channelId == r.channelOpenRequest.genesisHash))
@@ -132,11 +132,11 @@ class E2ETest extends E2E {
     private val schemaStr = SensorData.jsonSchema
     private val channelName = "test"
 
-//    private var channel: Channel = _
+//    private var channelRes: Channel = _
     private var broadcastedMessages: Seq[ChannelMessage] = Seq.empty[ChannelMessage]
 
-    def openChannel(apis: Seq[APIClient]): Unit = {
-      val deployResponse = constellationApp.deploy(schemaStr, channelName)
+    def openChannel(apis: Seq[APIClient]): Future[Option[Channel]] = {
+      val deployResponse  = constellationApp.deploy(schemaStr, channelName)
       deployResponse.foreach { resp =>
     if (resp.isDefined) {
       sim.awaitConditionMet(
@@ -147,7 +147,8 @@ class E2ETest extends E2E {
           ).exists(_.blockHash.nonEmpty)
         }
       )
-      resp.foreach { channel =>
+      resp.foreach { channel: Channel =>
+
         val validNameChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map { _.toString }.toSeq
         val invalidNameChars = validNameChars.map { _.toLowerCase }
 
@@ -181,28 +182,20 @@ class E2ETest extends E2E {
           sim.logger.info(
             s"broadcastResp is: ${res.toString}"
           )
-
           broadcastedMessages = res
         }
       }
     }
       }
-
-
-//      genesisChannel = constellationApp.clientApi
-//        .getBlocking[Option[ChannelMessageMetadata]]("messageService/" + channelName)
-//        .get
-//        .channelMessage
-
-
-
+      deployResponse
     }
 
-    def postDownload(firstAPI: APIClient = constellationApp.clientApi) = {
+    def postDownload(firstAPI: APIClient = constellationApp.clientApi, channel: Channel) = {
+      sim.logger.info(s"channel ${channel.channelId}")
 
       val messageChannel =
-        firstAPI.getBlocking[Seq[String]]("channels").filterNot { _ == channelName }.head
-
+        firstAPI.getBlocking[Seq[String]]("channels").filterNot { _ == channel.channelId }.head
+      sim.logger.info(s"message channel ${messageChannel}")
       val messageWithinSnapshot =
         firstAPI.getBlocking[Option[ChannelProof]]("channel/" + messageChannel)
       assert(messageWithinSnapshot.nonEmpty)
