@@ -101,7 +101,7 @@ lazy val coreDependencies = Seq(
   "io.prometheus" % "simpleclient_common" % versions.prometheus,
   "com.github.java-json-tools" % "json-schema-validator" % "2.2.10",
   "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.5",
-  "org.rogach" %% "scallop" % "3.1.5"
+  "com.github.scopt" %% "scopt" % "4.0.0-RC2"
 ) ++ sttpDependencies
 
 //Test dependencies
@@ -132,7 +132,10 @@ assemblyMergeStrategy in assembly := {
 
 lazy val root = (project in file("."))
   .configs(IntegrationTest)
+  .enablePlugins(BuildInfoPlugin)
   .settings(
+    buildInfoKeys := Seq[BuildInfoKey](name, version, scalaVersion, sbtVersion),
+    buildInfoPackage := "org.constellation",
     commonSettings,
     Defaults.itSettings,
     libraryDependencies ++= (coreDependencies ++ testDependencies)

@@ -26,14 +26,59 @@ import org.constellation.util.{APIClient, Metrics}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
+// scopt requires default args for all properties.
+// Make sure to check for null early -- don't propogate nulls anywhere else.
+case class CliConfig(externalIp: java.net.InetAddress = null,
+                     externalPort: Int = 0,
+                     debug: Boolean = false)
+
 object ConstellationNode extends StrictLogging {
 
-  val ConstellationVersion = "1.0.10"
-
+  //noinspection ScalaStyle
   def main(args: Array[String]): Unit = {
     logger.info("Main init")
+
+    import scopt.OParser
+    val builder = OParser.builder[CliConfig]
+    val parser1 = {
+      import builder._
+      OParser.sequence(
+        programName("constellation"),
+        head("constellation", BuildInfo.version),
+        opt[java.net.InetAddress]("ip")
+          .action((x, c) => c.copy(externalIp = x))
+          .valueName("<ip address>")
+          .text("the ip you can be reached from outside"),
+        opt[Int]('p', "port")
+          .action((x, c) => c.copy(externalPort = x))
+          .text("the port you can be reached from outside"),
+        opt[Int]('d', "debug")
+          .action((x, c) => c.copy(externalPort = x))
+          .text("run the node in debug mode"),
+        help("help").text("prints this usage text"),
+        version("version").text(s"Constellation v${BuildInfo.version}"),
+        checkConfig(
+          c =>
+            if (c.externalIp != null && c.externalPort == 0 ||
+                c.externalPort != 0 && c.externalIp == null) {
+              failure("ip and port must either both be set, or neither.")
+            } else success
+        )
+      )
+    }
+
+    // OParser.parse returns Option[Config]
+    val cliConfig: CliConfig = OParser.parse(parser1, args, CliConfig()) match {
+      case Some(c) => c
+      case _       =>
+        // arguments are bad, error message will have been displayed
+        throw new RuntimeException("Invalid set of cli options")
+    }
+
     val config = ConfigFactory.load()
     logger.info("Config loaded")
+
+//    logger.info(s"external ip:port = ${conf.externalIp}:${conf.externalPort}")
 
     Try {
 
@@ -43,7 +88,7 @@ object ConstellationNode extends StrictLogging {
 
       val rpcTimeout = config.getInt("rpc.timeout")
 
-      // TODO: Add scopt to support cmdline args.
+      // TODO: Move to scopt above.
       val seeds: Seq[HostPort] =
         if (config.hasPath("seedPeers")) {
           import scala.collection.JavaConverters._
@@ -73,7 +118,9 @@ object ConstellationNode extends StrictLogging {
 
       val _ = KeyUtils.provider // Ensure initialized
 
-      val hostName = Try { File("external_host_ip").lines.mkString }.getOrElse("127.0.0.1")
+      val hostName = Option(cliConfig.externalIp).map(_.toString).getOrElse {
+        Try { File("external_host_ip").lines.mkString }.getOrElse("127.0.0.1")
+      }
 
       // TODO: update to take from config
       val keyPairFile = File(".dag/key")
@@ -99,9 +146,11 @@ object ConstellationNode extends StrictLogging {
           }
         }
 
-      val portOffset = args.headOption.map { _.toInt }
+      val portOffset = Option(cliConfig.externalPort).filter(_ != 0)
       val httpPortFromArg = portOffset.map { _ + 1 }
       val peerHttpPortFromArg = portOffset.map { _ + 2 }
+
+//      val peerHttpPortFromArg = Option(cliConfig.externalPort).filter(_ != 0)
 
       val httpPort = httpPortFromArg.getOrElse(
         Option(System.getenv("DAG_HTTP_PORT"))
