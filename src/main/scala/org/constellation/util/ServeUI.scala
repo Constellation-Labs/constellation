@@ -176,7 +176,7 @@ trait ServeUI {
     html(
       scalatags.Text.all.head(
         scalatags.Text.tags2.title(pageTitle),
-        link(rel := "icon", href := "/img/favicon.ico"),
+        link(rel := "icon", href := "/favicon.ico"),
         meta(charset := "UTF-8")
       ),
       MyStandalone.render[TypedTag[String]],

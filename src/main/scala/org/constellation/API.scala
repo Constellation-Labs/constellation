@@ -476,7 +476,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
       path("health") {
         complete(StatusCodes.OK)
       } ~
-        path("ui/img/favicon.ico") {
+        path("favicon.ico") {
           getFromResource("ui/img/favicon.ico")
         }
     }
