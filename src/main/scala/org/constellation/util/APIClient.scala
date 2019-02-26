@@ -8,10 +8,10 @@ import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{CanLog, Logger}
-import org.constellation.{DAO, HostPort}
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.primitives.Schema.{Id, MetricsResult}
 import org.constellation.serializer.KryoSerializer
+import org.constellation.{DAO, HostPort}
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import org.slf4j.MDC
@@ -238,6 +238,15 @@ class APIClient private (host: String = "127.0.0.1",
     val resp =
       httpWithAuth(suffix, queryParams, timeout)(Method.GET).response(asByteArray).send().blocking()
     KryoSerializer.deserializeCast[T](resp.unsafeBody)
+  }
+
+  def getNonBlockingBytesKryo[T <: AnyRef](suffix: String,
+                                           queryParams: Map[String, String] = Map(),
+                                           timeout: Duration = 5.seconds): Future[T] = {
+    httpWithAuth(suffix, queryParams, timeout)(Method.GET)
+      .response(asByteArray)
+      .send()
+      .map(resp => KryoSerializer.deserializeCast[T](resp.unsafeBody))
   }
 
   def getSnapshotInfo(): SnapshotInfo = getBlocking[SnapshotInfo]("info")
