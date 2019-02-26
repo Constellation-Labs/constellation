@@ -24,6 +24,24 @@ object Metrics {
 }
 
 
+case class ChannelValidationInfo(channel: String, valid: Boolean)
+
+object ChannelValidationInfo {
+  implicit val rw: RW[ChannelValidationInfo] = macroRW
+}
+
+case class BlockUIOutput(
+                          id: String,
+                          height: Long,
+                          parents: Seq[String],
+                          channels: Seq[ChannelValidationInfo],
+                        )
+
+object BlockUIOutput {
+  implicit val rw: RW[BlockUIOutput] = macroRW
+}
+
+
 case class ChannelUIOutput(channels: Seq[String])
 
 object ChannelUIOutput {
@@ -88,6 +106,14 @@ object App extends JSApp {
 
     import scala.concurrent.duration._
     Timer(3000.millis)
+  }
+
+  val fastHeartbeat = {
+    import rx.async._
+    import rx.async.Platform._
+
+    import scala.concurrent.duration._
+    Timer(1000.millis)
   }
 
   val metrics: Var[Metrics] = Var(Metrics(Map()))
@@ -485,23 +511,134 @@ object App extends JSApp {
     val channelData: Var[Option[SingleChannelUIOutput]] = Var(None)
 
     mainView.appendChild(
+      div(id := "3d-graph", width := 400.px, height := 400.px).render
+    )
+
+    var blockData = Seq[BlockUIOutput]()
+
+
+    import scala.scalajs.js.DynamicImplicits._
+
+
+    val forceScript = script(src := "//unpkg.com/3d-force-graph", `type` := "text/javascript").render
+    forceScript.onload = (_ : Event) => {
+
+      import js.Dynamic.{ global => g, newInstance => jsnew }
+
+      val initNodes = js.Array(
+        js.Dynamic.literal("id" -> 0)
+      )
+      val initLinks = js.Array()
+
+      val initData =  js.Dynamic.literal(
+        "nodes" -> initNodes,
+        "links" -> initLinks
+      )
+
+      val graph = jsnew(g.ForceGraph3D)()(g.document.getElementById("3d-graph"))
+
+      graph.height(500)
+      graph.width(800)
+      graph.linkOpacity(0.20)
+      graph.linkWidth(2)
+
+      val hashToInt = scala.collection.mutable.HashMap[String, Int]()
+      var maxId : Int = 0
+
+      fastHeartbeat.foreach{ _ =>
+        XHR.get[Seq[BlockUIOutput]](
+          {bd =>
+
+            val newBlocks = bd.filterNot(b => blockData.exists{_.id == b.id})
+
+            val removedNodes : Seq[BlockUIOutput] = blockData.slice(0, newBlocks.size)
+
+            blockData = bd
+
+            newBlocks.foreach{ b =>
+              if (!hashToInt.contains(b.id)) {
+                hashToInt(b.id) = maxId
+                maxId += 1
+              }
+            }
+
+            val newNodes = newBlocks.sortBy{b => hashToInt(b.id)}.map{
+              data =>
+              val hasMessageFromThisChannel = data.channels.exists{_.channel == channelId}
+              val color = if (hasMessageFromThisChannel) "green" else "yellow"
+                js.Dynamic.literal("id" -> hashToInt(data.id), "color" -> color, "hash" -> data.id)
+            }
+
+            val newLinks = newBlocks.flatMap{ block =>
+              block.parents.filter{p => hashToInt.contains(p)}.map{p => (p, block.id)}
+            }.sorted
+              .map{ case (srcId, targ) =>
+              js.Dynamic.literal("source" -> hashToInt(srcId), "target" -> hashToInt(targ), "sourceHash" -> srcId)
+            }
+
+            val previousData = graph.graphData()
+
+            val previousNodeData = previousData.nodes.filter(
+              {node: js.Dynamic =>
+                val toRemove = removedNodes.exists{_.id == node.hash.toString}
+                !toRemove
+              }
+            )
+
+            val previousLinksData = previousData.links.filter(
+              {link: js.Dynamic =>
+                val toRemove = removedNodes.exists{_.id == link.sourceHash.toString}
+                !toRemove
+              }
+            )
+
+            removedNodes.foreach{ b =>
+              hashToInt.remove(b.id)
+            }
+
+            val data = js.Dynamic.literal(
+              "nodes" -> previousNodeData.concat(js.Array(newNodes:_*)),
+              "links" -> previousLinksData.concat(js.Array(newLinks:_*))
+            )
+            graph.graphData(data)
+
+
+          },
+          s"/data/blocks"
+        )
+      }
+
+
+    }
+
+    dom.document.head.appendChild(forceScript)
+
+
+    mainView.appendChild(
       div(
         paddingTop := 100.px,
         div("Channel Info", display.block),
         div(
-
+          ""
         )
-      )
+      ).render
     )
 
+/*
     heartBeat.foreach{ _ =>
       XHR.get[Option[SingleChannelUIOutput]](
         {cd => channelData() = cd},
-        s"channel/$channelId/info"
+        s"/data/channel/$channelId/info"
       )
     }
+*/
 
 
+  }
+  // Scala.js code
+  @js.native
+  trait ForceGraph extends js.Object {
+    def graphData(data: js.Dynamic): Unit = js.native
   }
 
 

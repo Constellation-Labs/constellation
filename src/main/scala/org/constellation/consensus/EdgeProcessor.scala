@@ -90,12 +90,15 @@ object EdgeProcessor extends StrictLogging {
         t.ledgerApply()
       }
       dao.metrics.incrementMetric("checkpointAccepted")
-      cb.store(
-        CheckpointCacheData(
-          Some(cb),
-          height = fallbackHeight
-        )
+      val data = CheckpointCacheData(
+        Some(cb),
+        height = fallbackHeight
       )
+      cb.store(
+        data
+      )
+
+      dao.recentBlockTracker.put(data)
 
     }
   }

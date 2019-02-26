@@ -77,6 +77,15 @@ case class ProcessingConfig(
 
 case class ChannelUIOutput(channels: Seq[String])
 
+case class ChannelValidationInfo(channel: String, valid: Boolean)
+
+case class BlockUIOutput(
+                          id: String,
+                          height: Long,
+                          parents: Seq[String],
+                          channels: Seq[ChannelValidationInfo],
+                        )
+
 class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
                                          val timeout: Timeout,
                                          val dao: DAO)
@@ -129,6 +138,26 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
                       pretty(render(parse(schemaStr)))
                   }
               )
+            } ~
+            path("graph") { // Debugging
+              getFromFile("../3d-force-graph/example/datasets/dag.json")
+            } ~
+            path("blocks") {
+
+              val blocks = dao.recentBlockTracker.getAll.toSeq
+                //dao.threadSafeTipService.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.get}
+              complete(blocks.map{ ccd =>
+                val cb = ccd.checkpointBlock.get
+
+                BlockUIOutput(
+                  cb.soeHash, ccd.height.get.min, cb.parentSOEHashes,
+                  cb.checkpoint.edge.data.messages.map{_.signedMessageData.data.channelId}.distinct.map{
+                    channelId =>
+                      ChannelValidationInfo(channelId, true)
+                  }
+
+                )
+              })
             }
           } ~
           path("messageService" / Segment) { channelId =>
