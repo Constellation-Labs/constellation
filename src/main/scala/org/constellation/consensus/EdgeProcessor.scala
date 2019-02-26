@@ -51,9 +51,7 @@ object EdgeProcessor extends StrictLogging {
           dao.channelService.updateOnly(
             m.signedMessageData.hash,
             { cmd =>
-              val slicedMessages = if (cmd.last25MessageHashes.size > 25) {
-                cmd.last25MessageHashes.slice(0, 24)
-              } else cmd.last25MessageHashes
+              val slicedMessages = cmd.last25MessageHashes.slice(0, 25)
               cmd.copy(
                 totalNumMessages = cmd.totalNumMessages + 1,
                 last25MessageHashes = slicedMessages :+ m.signedMessageData.hash

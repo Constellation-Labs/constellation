@@ -259,7 +259,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
             onComplete(
               ChannelMessage.createGenesis(request)
             ) { res =>
-              complete(res.getOrElse(ChannelOpenResponse("API Failure")))
+              complete(res.getOrElse(ChannelOpenResponse("Failed to open channel")))
             }
 
           }
@@ -267,7 +267,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
           path("send") {
             entity(as[ChannelSendRequest]) { send =>
               onComplete(ChannelMessage.createMessages(send)) { res: Try[ChannelSendResponse] =>
-                complete(res.getOrElse(ChannelOpenResponse("API Failure")).json)
+                complete(res.getOrElse(ChannelSendResponse("Failed to create messages", Seq())).json)
               }
             }
           } ~
@@ -280,7 +280,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
               )
 
               onComplete(ChannelMessage.createMessages(amended)) { res =>
-                complete(res.getOrElse(ChannelOpenResponse("API Failure")).json)
+                complete(res.getOrElse(ChannelOpenResponse("Failed to send raw json")).json)
               }
             }
           }
