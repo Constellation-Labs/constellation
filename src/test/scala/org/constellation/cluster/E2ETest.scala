@@ -39,7 +39,7 @@ class E2ETest extends E2E {
 
   private val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes - 1)(
     i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
-  ) // seedHosts = Seq(address1)
+  )
 
   private val apis: Seq[APIClient] = nodes.map { _.getAPIClient() }
 
@@ -48,8 +48,6 @@ class E2ETest extends E2E {
   private val sim = new Simulation()
 
   private val initialAPIs = apis
-
-//  private val messageSim = new MessageTestingSim(sim)
 
   val n1App = new ConstellationApp(apis.head)
 
@@ -134,7 +132,6 @@ class E2ETest extends E2E {
     private val schemaStr = SensorData.jsonSchema
     private val channelName = "test"
 
-//    private var channelRes: Channel = _
     private var broadcastedMessages: Seq[ChannelMessage] = Seq.empty[ChannelMessage]
 
     def openChannel(apis: Seq[APIClient]): Future[Option[Channel]] = {
@@ -214,7 +211,7 @@ class E2ETest extends E2E {
         m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
       )
     }
-    // messageValid()
+     messageValid()
   }
 
     def dumpJson(
@@ -228,7 +225,6 @@ class E2ETest extends E2E {
           val block = cache.checkpointBlock.get
           val relevantMessages = block.checkpoint.edge.data.messages
             .filter { broadcastedMessages.contains }
-          //.filter{_.signedMessageData.data.channelId == channelId}.filterNot{_ == genesisChannel}
           val messageParent = relevantMessages.map {
             _.signedMessageData.data.previousMessageHash
           }.headOption
