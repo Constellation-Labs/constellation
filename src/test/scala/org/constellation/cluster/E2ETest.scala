@@ -195,23 +195,23 @@ class E2ETest extends E2E {
       sim.logger.info(s"message channel ${allChannels}")
 
       val messageChannels = allChannels.filterNot { _ == channel.channelId }
-      val messageWithinSnapshot = firstAPI.getBlocking[Option[ChannelProof]]("channel/" + messageChannels.head, timeout = 30 seconds)
-      sim.logger.info(s"messageWithinSnapshot ${messageWithinSnapshot}")
+      val messagesWithinSnapshot = messageChannels.flatMap(msg => firstAPI.getBlocking[Option[ChannelProof]]("channel/" + msg, timeout = 30 seconds))
+      sim.logger.info(s"messageWithinSnapshot ${messagesWithinSnapshot}")
 
-      assert(messageChannels.flatMap(ch => firstAPI.getBlocking[Option[ChannelProof]]("channel/" + ch, timeout = 30 seconds)).nonEmpty)
+      assert(messagesWithinSnapshot.nonEmpty)
 
-    def messageValid(): Unit = messageWithinSnapshot.foreach { proof =>
-      val m = proof.channelMessageMetadata
-      assert(m.snapshotHash.nonEmpty)
-      assert(m.blockHash.nonEmpty)
-      assert(proof.checkpointMessageProof.verify())
-      assert(proof.checkpointProof.verify())
-      assert(m.blockHash.contains { proof.checkpointProof.input })
-      assert(
-        m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
-      )
-    }
-     messageValid()
+      messagesWithinSnapshot.foreach {
+        proof =>
+          val m = proof.channelMessageMetadata
+          assert(m.snapshotHash.nonEmpty)
+          assert(m.blockHash.nonEmpty)
+          assert(proof.checkpointMessageProof.verify())
+          assert(proof.checkpointProof.verify())
+          assert(m.blockHash.contains { proof.checkpointProof.input })
+          assert(
+            m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
+          )
+      }
   }
 
     def dumpJson(
