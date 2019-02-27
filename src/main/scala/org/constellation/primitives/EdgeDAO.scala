@@ -468,6 +468,8 @@ trait EdgeDAO {
   val channelService = new ChannelService()
   val soeService = new SOEService()
 
+  val recentBlockTracker = new RecentDataTracker[CheckpointCacheData](200)
+
   val threadSafeTXMemPool = new ThreadSafeTXMemPool()
   val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
   val threadSafeTipService = new ThreadSafeTipService()

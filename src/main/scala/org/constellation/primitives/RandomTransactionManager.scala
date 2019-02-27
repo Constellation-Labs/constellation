@@ -24,6 +24,8 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
 
   }
 
+  private var testChannels = Seq[String]()
+
   def generateRandomMessages(): Unit =
     if (round % dao.processingConfig.roundsPerMessage == 0) {
       val cm =
@@ -32,25 +34,29 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
           val channelOpen = ChannelOpen(newChannelName)
           val genesis =
             ChannelMessage.create(channelOpen.json, Genesis.CoinBaseHash, newChannelName)
-          dao.threadSafeMessageMemPool.selfChannelIdToName(genesis.signedMessageData.hash) =
+          val genesisHash = genesis.signedMessageData.hash
+          testChannels :+= genesisHash
+          dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHash) =
             newChannelName
           dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(newChannelName) = genesis
-          dao.threadSafeMessageMemPool.activeChannels(genesis.signedMessageData.hash) =
+          dao.threadSafeMessageMemPool.activeChannels(genesisHash) =
             new Semaphore(1)
           Some(genesis)
         } else {
           if (dao.threadSafeMessageMemPool.unsafeCount < 3) {
-            val channels = dao.threadSafeMessageMemPool.activeChannels
-            val (channel, lock) = channels.toList(Random.nextInt(channels.size))
-            dao.messageService.get(channel).flatMap { data =>
-              if (lock.tryAcquire()) {
-                Some(
-                  ChannelMessage.create(Random.nextInt(1000).toString,
-                                        data.channelMessage.signedMessageData.signatures.hash,
-                                        channel)
-                )
-              } else None
-            }
+            val channels = dao.threadSafeMessageMemPool.activeChannels.filterKeys{testChannels.contains}
+            if (channels.nonEmpty) {
+              val (channel, lock) = channels.toList(Random.nextInt(channels.size))
+              dao.messageService.get(channel).flatMap { data =>
+                if (lock.tryAcquire()) {
+                  Some(
+                    ChannelMessage.create(Random.nextInt(1000).toString,
+                      data.channelMessage.signedMessageData.signatures.hash,
+                      channel)
+                  )
+                } else None
+              }
+            } else None
           } else None
         }
       cm.foreach { c =>

@@ -110,7 +110,7 @@ trait ServeUI {
   implicit val dao: DAO
 
   // Use for rebuilding UI quicker without a restart
-  private val debugMode = false
+  private val debugMode = Option(System.getenv("DAG_DEBUG")).nonEmpty
 
   private val scalaJsSource = if (debugMode) "/ui-fastopt.js" else "/ui-opt.js"
 
@@ -176,7 +176,7 @@ trait ServeUI {
     html(
       scalatags.Text.all.head(
         scalatags.Text.tags2.title(pageTitle),
-        link(rel := "icon", href := "/img/favicon.ico"),
+        link(rel := "icon", href := "/favicon.ico"),
         meta(charset := "UTF-8")
       ),
       MyStandalone.render[TypedTag[String]],

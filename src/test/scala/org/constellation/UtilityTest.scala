@@ -15,6 +15,9 @@ class UtilityTest extends FlatSpec {
 
     implicit val kp: KeyPair = makeKeyPair()
 
+
+    println(Seq(1,2,3,4,5).sortBy{_ != 3})
+    println(Seq(true, false, true, true).sorted)
     //assert(b3.json.x[Bundle] == b3)
   }
 

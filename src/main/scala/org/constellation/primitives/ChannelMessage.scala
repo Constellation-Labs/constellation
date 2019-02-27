@@ -1,12 +1,12 @@
 package org.constellation.primitives
 
 import java.util.concurrent.Semaphore
-
 import com.fasterxml.jackson.databind.JsonNode
 import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.{JsonSchemaFactory, JsonValidator}
-import com.typesafe.scalalogging.Logger
+import com.typesafe.scalalogging.{Logger, StrictLogging}
 import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
+
 import constellation._
 import org.constellation.DAO
 import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
@@ -50,9 +50,8 @@ case class SingleChannelUIOutput(
 
 case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 
-object ChannelMessage {
+object ChannelMessage extends StrictLogging {
 
-  val logger = Logger("ChannelMessage")
 
   def create(message: String, previous: String, channelId: String)(
     implicit dao: DAO

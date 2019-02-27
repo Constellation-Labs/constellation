@@ -22,6 +22,7 @@ class E2ETest extends E2E {
   val updatePasswordReq = UpdatePassword(
     Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
   )
+
   def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
     apiClients.map { client =>
       val response = client.postSync("password/update", updatePasswordReq)
@@ -69,6 +70,7 @@ class E2ETest extends E2E {
     assert(sim.checkReady(Seq(downloadAPI)))
     deployResponse.foreach{ res => res.foreach(constellationAppSim.postDownload(apis.head, _))}
 
+    // messageSim.postDownload(apis.head)
 
     Thread.sleep(20 * 1000)
 
@@ -131,7 +133,6 @@ class E2ETest extends E2E {
   ){
     private val schemaStr = SensorData.jsonSchema
     private val channelName = "test"
-
     private var broadcastedMessages: Seq[ChannelMessage] = Seq.empty[ChannelMessage]
 
     def openChannel(apis: Seq[APIClient]): Future[Option[Channel]] = {
