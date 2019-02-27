@@ -132,7 +132,10 @@ object Schema {
     * @param amount : Quantity to be transferred
     * @param salt : Ensure hash uniqueness
     */
-  case class TransactionEdgeData(amount: Long, salt: Long = Random.nextLong()) extends Signable
+  case class TransactionEdgeData(
+    amount: Long,
+    salt: Long = Random.nextLong()
+  ) extends Signable
 
   /**
     * Collection of references to transaction hashes
@@ -185,14 +188,15 @@ object Schema {
 
   case class TransactionCacheData(
     transaction: Transaction,
-    valid: Boolean = false,
+    valid: Boolean = true,
     inMemPool: Boolean = false,
     inDAG: Boolean = false,
     inDAGByAncestor: Map[String, Boolean] = Map(),
-    resolved: Boolean = false,
+    resolved: Boolean = true,
     cbBaseHash: Option[String] = None,
     cbForkBaseHashes: Set[String] = Set(),
     signatureForks: Set[Transaction] = Set(),
+    knownPeers: Set[Id] = Set(),
     rxTime: Long = System.currentTimeMillis()
   ) {
 

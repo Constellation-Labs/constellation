@@ -5,7 +5,7 @@ import cats.implicits._
 
 import scala.collection.concurrent.TrieMap
 
-class MultiLock[F[_] : Concurrent, K] {
+class MultiLock[F[_]: Concurrent, K] {
 
   import cats.effect.concurrent.Semaphore
 
@@ -32,8 +32,14 @@ class MultiLock[F[_] : Concurrent, K] {
       openLocks.map(_.release).sequence
 
     lockAll()
-      .flatMap(openLocks => thunk
-        .flatMap(result => unlockAll(openLocks)
-          .map(_ => result)))
+      .flatMap(
+        openLocks =>
+          thunk
+            .flatMap(
+              result =>
+                unlockAll(openLocks)
+                  .map(_ => result)
+          )
+      )
   }
 }

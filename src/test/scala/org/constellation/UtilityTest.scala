@@ -1,9 +1,10 @@
 package org.constellation
 
 import java.security.KeyPair
-import org.scalatest.FlatSpec
 
+import org.scalatest.FlatSpec
 import org.constellation.crypto.KeyUtils._
+import org.json4s.JsonAST.JValue
 
 //case class Test(a: EdgeHashType, b: EdgeHashType)
 
@@ -13,6 +14,24 @@ class UtilityTest extends FlatSpec {
   "Bundles" should "serialize and deserialize properly with json" in {
 
     implicit val kp: KeyPair = makeKeyPair()
+
+
+    println(Seq(1,2,3,4,5).sortBy{_ != 3})
+    println(Seq(true, false, true, true).sorted)
+    //assert(b3.json.x[Bundle] == b3)
+  }
+
+  "Json messages" should "parse from UI request" in {
+
+    val messageExamples: String =
+      """[
+        |{"temperature": 20, "name": "SFWEATH"},
+        |{"temperature": 25, "name": "NYWEATH"},
+        |{"temperature": -500, "name": "asdkldzlxkc"}
+        |]""".stripMargin
+
+    import constellation._
+    println(messageExamples.x[Seq[JValue]].map { _.json })
 
     //assert(b3.json.x[Bundle] == b3)
   }

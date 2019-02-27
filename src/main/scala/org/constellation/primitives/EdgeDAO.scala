@@ -56,12 +56,17 @@ class ThreadSafeMessageMemPool() {
 
   val activeChannels: TrieMap[String, Semaphore] = TrieMap()
 
+  val selfChannelNameToGenesisMessage: TrieMap[String, ChannelMessage] = TrieMap()
+  val selfChannelIdToName: TrieMap[String, String] = TrieMap()
+
   val messageHashToSendRequest: TrieMap[String, ChannelSendRequest] = TrieMap()
 
   def release(messages: Seq[ChannelMessage]): Unit = {
     messages.foreach { m =>
-      activeChannels(m.signedMessageData.data.channelId)
-        .release()
+      activeChannels.get(m.signedMessageData.data.channelId).foreach {
+        _.release()
+      }
+
     }
   }
 
@@ -447,16 +452,23 @@ trait EdgeDAO {
 
   @volatile var blockFormationInProgress: Boolean = false
 
+  // TODO: Put on Id keyed datastore (address? potentially) with other metadata
   val publicReputation: TrieMap[Id, Double] = TrieMap()
   val secretReputation: TrieMap[Id, Double] = TrieMap()
 
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
   val checkpointService = new CheckpointService(processingConfig.checkpointLRUMaxSize)
-  val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
+  val acceptedTransactionService = new AcceptedTransactionService(
+    processingConfig.transactionLRUMaxSize
+  )
+  val transactionService = new AcceptedTransactionService(processingConfig.transactionLRUMaxSize)
   val addressService = new AddressService(processingConfig.addressLRUMaxSize)
   val messageService = new MessageService()
+  val channelService = new ChannelService()
   val soeService = new SOEService()
+
+  val recentBlockTracker = new RecentDataTracker[CheckpointCacheData](200)
 
   val threadSafeTXMemPool = new ThreadSafeTXMemPool()
   val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
@@ -474,7 +486,7 @@ trait EdgeDAO {
   val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
 
   val edgeExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
   // val peerAPIExecutionContext: ExecutionContextExecutor =
   //   ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
@@ -483,10 +495,10 @@ trait EdgeDAO {
   //  ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
 
   val signatureExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
   val finishedExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
   // Temporary to get peer data for tx hash partitioning
   @volatile var peerInfo: Map[Id, PeerData] = Map()

@@ -16,6 +16,8 @@ trait NodeData {
   // var dbActor : SwayDBDatastore = _
   var peerManager: ActorRef = _
   var metrics: Metrics = _
+  var transactionHashStore: swaydb.Set[String] = _
+  var checkpointHashStore: swaydb.Set[String] = _
 
   @volatile var downloadMode: Boolean = true
   @volatile var downloadInProgress: Boolean = false

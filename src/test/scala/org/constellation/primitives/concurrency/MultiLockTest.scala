@@ -32,9 +32,7 @@ class MultiLockTest extends WordSpec with Matchers {
         }
       }
 
-      val r = Future.sequence(List(
-        t1.unsafeToFuture(),
-        t2.unsafeToFuture()))
+      val r = Future.sequence(List(t1.unsafeToFuture(), t2.unsafeToFuture()))
 
       r.foreach {
         case a :: b :: Nil =>

@@ -167,7 +167,7 @@ class MessageTestingSim(sim: Simulation) {
 
   def openChannel(apis: Seq[APIClient]): Unit = {
 
-    apis.head.postSync("channel/open", ChannelOpenRequest(channelId, jsonSchema = Some(schemaStr)))
+    apis.head.postSync("channel/open", ChannelOpen(channelId, jsonSchema = Some(schemaStr)))
     sim.awaitConditionMet(
       "Test channel genesis not stored",
       apis.forall {
@@ -256,7 +256,7 @@ class MessageTestingSim(sim: Simulation) {
           .filter { expectedMessages.contains }
         //.filter{_.signedMessageData.data.channelId == channelId}.filterNot{_ == genesisChannel}
         val messageParent = relevantMessages.map {
-          _.signedMessageData.data.previousMessageDataHash
+          _.signedMessageData.data.previousMessageHash
         }.headOption
         val messageHash = relevantMessages.map { _.signedMessageData.hash }.headOption
 

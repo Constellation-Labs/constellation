@@ -1,11 +1,15 @@
 package org.constellation.ui
 
+
 import org.scalajs.dom._
 import org.scalajs.dom.raw.XMLHttpRequest
+import upickle.default._
+
 
 object XHR {
 
-  def post[W: upickle.Writer, R: upickle.Reader](
+  def post[W: Writer, R: Reader]
+  (
     payload: W,
     callback: R => Unit,
     path: String,
@@ -15,7 +19,7 @@ object XHR {
     xhr.onreadystatechange = (e: Event) => {
       if (xhr.readyState == 4 && xhr.status == 200) {
         val text = {
-          import upickle._
+       //   import upickle.legacy._
           //println("Response text", xhr.responseText)
           read[R](xhr.responseText)
         }
@@ -25,14 +29,15 @@ object XHR {
     xhr.open("POST", path)
     xhr.setRequestHeader("Content-Type", "application/json")
     val out = {
-      import upickle._
-      write(payload)
+    //  import upickle.legacy._
+      write[W](payload)
     }
     if (printSer) println("POST", out)
     xhr.send(out)
   }
 
-  def get[R: upickle.Reader](
+  def get[R: Reader]
+  (
     callback: R => Unit,
     path: String
   ): Unit = {
@@ -40,7 +45,7 @@ object XHR {
     xhr.onreadystatechange = (e: Event) => {
       if (xhr.readyState == 4 && xhr.status == 200) {
         val text = {
-          import upickle._
+        //  import upickle.legacy._
           //println("Response text", xhr.responseText)
           read[R](xhr.responseText)
         }

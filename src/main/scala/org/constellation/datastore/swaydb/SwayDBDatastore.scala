@@ -1,8 +1,8 @@
 package org.constellation.datastore.swaydb
 
 import swaydb.data.config.MMAP
-import scala.concurrent.ExecutionContextExecutor
 
+import scala.concurrent.ExecutionContextExecutor
 import constellation._
 import org.constellation.DAO
 import org.constellation.datastore.{KVDB, KVDBDatastoreImpl}
@@ -80,6 +80,21 @@ class SwayDBDatastore(dao: DAO) extends KVDBDatastoreImpl {
 }
 
 object SwayDBDatastore {
+
+  def duplicateCheckStore(dao: DAO, path: String): swaydb.Set[String] = {
+
+    import swaydb._
+    import swaydb.serializers.Default._ //import default serializers
+
+    SwayDB
+      .persistentSet[String](
+        dir = (dao.dbPath / path).path,
+        mmapMaps = false,
+        mmapSegments = MMAP.Disable,
+        mmapAppendix = false
+      )
+      .get
+  }
 
   def apply(dao: DAO): SwayDBDatastore = new SwayDBDatastore(dao)
 }
