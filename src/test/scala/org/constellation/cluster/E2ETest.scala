@@ -11,54 +11,14 @@ import com.typesafe.scalalogging.StrictLogging
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.{ChannelProof, _}
 import org.constellation.util.{APIClient, Simulation, TestNode}
-import org.constellation.{ConstellationNode, HostPort, UpdatePassword}
+import org.constellation._
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
+import scala.concurrent.duration._
 
-class E2ETest
-    extends AsyncFlatSpecLike
-    with Matchers
-    with BeforeAndAfterAll
-    with BeforeAndAfterEach
-    with StrictLogging {
-
-  val tmpDir = "tmp"
-
-  implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
-  implicit val materializer: ActorMaterializer = ActorMaterializer()
-
-  override def beforeAll(): Unit = {
-    // Cleanup DBs
-    //Try{File(tmpDir).delete()}
-    Try { File(tmpDir).createDirectories() }
-
-  }
-
-  override def afterAll() {
-    // Cleanup DBs
-    TestNode.clearNodes()
-    system.terminate()
-    Try { File(tmpDir).delete() }
-  }
-
-  def createNode(
-    randomizePorts: Boolean = true,
-    seedHosts: Seq[HostPort] = Seq(),
-    portOffset: Int = 0,
-    isGenesisNode: Boolean = false
-  ): ConstellationNode = {
-    implicit val executionContext: ExecutionContextExecutorService =
-      ExecutionContext.fromExecutorService(new ForkJoinPool(100))
-
-    TestNode(
-      randomizePorts = randomizePorts,
-      portOffset = portOffset,
-      seedHosts = seedHosts,
-      isGenesisNode = isGenesisNode
-    )
-  }
+class E2ETest extends E2E {
   val updatePasswordReq = UpdatePassword(
     Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
   )
@@ -80,9 +40,9 @@ class E2ETest
 
   private val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes - 1)(
     i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
-  ) // seedHosts = Seq(address1)
+  )
 
-  private val apis = nodes.map { _.getAPIClient() }
+  private val apis: Seq[APIClient] = nodes.map { _.getAPIClient() }
 
   private val addPeerRequests = nodes.map { _.getAddPeerRequest }
 
@@ -90,15 +50,16 @@ class E2ETest
 
   private val initialAPIs = apis
 
-  private val messageSim = new MessageTestingSim(sim)
+  val n1App = new ConstellationApp(apis.head)
+
+  val constellationAppSim = new ConstellationAppSim(sim, n1App)
 
   "E2E Run" should "demonstrate full flow" in {
-
     logger.info("API Ports: " + apis.map { _.apiPort })
 
     assert(sim.run(initialAPIs, addPeerRequests))
 
-    // messageSim.openChannel(apis)
+    val deployResponse = constellationAppSim.openChannel(apis)
 
     val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)),
                                   randomizePorts = false,
@@ -107,6 +68,7 @@ class E2ETest
     val downloadAPI = downloadNode.getAPIClient()
     logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
     assert(sim.checkReady(Seq(downloadAPI)))
+    deployResponse.foreach{ res => res.foreach(constellationAppSim.postDownload(apis.head, _))}
 
     // messageSim.postDownload(apis.head)
 
@@ -134,7 +96,7 @@ class E2ETest
 
     val storedSnapshots = allAPIs.map { _.simpleDownload() }
 
-    // messageSim.dumpJson(storedSnapshots)
+    constellationAppSim.dumpJson(storedSnapshots)
 
     // TODO: Move to separate test
 
@@ -154,111 +116,120 @@ class E2ETest
 
   }
 
+  "ConstellationApp" should "register a deployed state channel" in {
+    sim.triggerRandom(apis)
+    val deployResp = n1App.deploy(SensorData.jsonSchema, "channel_1")
+    deployResp.map { resp: Option[Channel] =>
+      sim.logger.info("deploy response:" + resp.toString)
+      assert(resp.exists(r => r.channelId == r.channelOpenRequest.genesisHash))
+      assert(resp.exists(_.channelName == "channel_1"))
+      assert(resp.forall(r => n1App.channelIdToChannel.get(r.channelId).contains(r)))
+    }
+  }
 }
 
-class MessageTestingSim(sim: Simulation) {
+  class ConstellationAppSim(sim: Simulation, constellationApp: ConstellationApp)(
+    implicit val executionContext: ExecutionContext
+  ){
+    private val schemaStr = SensorData.jsonSchema
+    private val channelName = "test"
+    private var broadcastedMessages: Seq[ChannelMessage] = Seq.empty[ChannelMessage]
 
-  private val schemaStr = SensorData.jsonSchema
-
-  private val channelId = "test"
-
-  var genesisChannel: ChannelMessage = _
-  var expectedMessages: Seq[ChannelMessage] = _
-
-  def openChannel(apis: Seq[APIClient]): Unit = {
-
-    apis.head.postSync("channel/open", ChannelOpen(channelId, jsonSchema = Some(schemaStr)))
-    sim.awaitConditionMet(
-      "Test channel genesis not stored",
-      apis.forall {
-        _.getBlocking[Option[ChannelMessageMetadata]]("messageService/" + channelId)
-          .exists(_.blockHash.nonEmpty)
-      }
-    )
-
-    genesisChannel = apis.head
-      .getBlocking[Option[ChannelMessageMetadata]]("messageService/" + channelId)
-      .get
-      .channelMessage
-
-    val validNameChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map { _.toString }.toSeq
-    val invalidNameChars = validNameChars.map { _.toLowerCase }
-
-    expectedMessages = (0 until 10).flatMap { batchNumber =>
-      import constellation._
-
-      val validMessages = Seq.fill(batchNumber % 2) {
-        SensorData(
-          Random.nextInt(100),
-          Seq.fill(5) { Random.shuffle(validNameChars).head }.mkString
-        )
-      }
-      val invalidMessages = Seq.fill((batchNumber + 1) % 2) {
-        SensorData(
-          Random.nextInt(100) + 500,
-          Seq.fill(5) { Random.shuffle(invalidNameChars).head }.mkString
-        )
-      }
-      val serializedMessages = (validMessages ++ invalidMessages).map { _.json }
-      val messages = apis.head.postBlocking[Seq[ChannelMessage]](
-        "channel/send",
-        ChannelSendRequest(channelId, serializedMessages)
-      )
+    def openChannel(apis: Seq[APIClient]): Future[Option[Channel]] = {
+      val deployResponse  = constellationApp.deploy(schemaStr, channelName)
+      deployResponse.foreach { resp =>
+    if (resp.isDefined) {
       sim.awaitConditionMet(
-        s"Message batch $batchNumber not stored",
+        "Test channel genesis not stored",
         apis.forall {
           _.getBlocking[Option[ChannelMessageMetadata]](
-            "messageService/" + messages.head.signedMessageData.signatures.hash
+            "messageService/" + resp.map(_.channelId).getOrElse(channelName)
           ).exists(_.blockHash.nonEmpty)
         }
       )
-      sim.logger.info(
-        s"Message batch $batchNumber complete, sent ${serializedMessages.size} messages"
-      )
-      messages
+      resp.foreach { channel: Channel =>
+
+        val validNameChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map { _.toString }.toSeq
+        val invalidNameChars = validNameChars.map { _.toLowerCase }
+
+        val messagesToBroadcastMessages: Seq[SensorData] = (0 until 10).flatMap { batchNumber =>
+          import constellation._
+
+          val validMessages = Seq.fill(batchNumber % 2) {
+            SensorData(
+              Random.nextInt(100),
+              Seq.fill(5) { Random.shuffle(validNameChars).head }.mkString,
+              channel.channelId
+            )
+          }
+          val invalidMessages = Seq.fill((batchNumber + 1) % 2) {
+            SensorData(
+              Random.nextInt(100) + 500,
+              Seq.fill(5) { Random.shuffle(invalidNameChars).head }.mkString,
+              channel.channelId
+            )
+          }
+
+          val msgs = validMessages ++ invalidMessages
+          sim.logger.info(
+            s"Message batch $batchNumber complete, sent ${msgs.size} messages"
+          )
+          msgs
+        }
+        val broadcastResp: Future[Seq[ChannelMessage]] =
+          constellationApp.broadcast(messagesToBroadcastMessages)
+        broadcastResp.foreach { res: Seq[ChannelMessage] =>
+          sim.logger.info(
+            s"broadcastResp is: ${res.toString}"
+          )
+          broadcastedMessages = res
+        }
+      }
+    }
+      }
+      deployResponse
     }
 
+    def postDownload(firstAPI: APIClient = constellationApp.clientApi, channel: Channel) = {
+      sim.logger.info(s"channel ${channel.channelId}")
+      val allChannels = firstAPI.getBlocking[Seq[String]]("channels")
+      sim.logger.info(s"message channel ${allChannels}")
+
+      val messageChannels = allChannels.filterNot { _ == channel.channelId }
+      val messagesWithinSnapshot = messageChannels.flatMap(msg => firstAPI.getBlocking[Option[ChannelProof]]("channel/" + msg, timeout = 30 seconds))
+      sim.logger.info(s"messageWithinSnapshot ${messagesWithinSnapshot}")
+
+      assert(messagesWithinSnapshot.nonEmpty)
+
+      messagesWithinSnapshot.foreach {
+        proof =>
+          val m = proof.channelMessageMetadata
+          assert(m.snapshotHash.nonEmpty)
+          assert(m.blockHash.nonEmpty)
+          assert(proof.checkpointMessageProof.verify())
+          assert(proof.checkpointProof.verify())
+          assert(m.blockHash.contains { proof.checkpointProof.input })
+          assert(
+            m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
+          )
+      }
   }
 
-  def postDownload(firstAPI: APIClient) = {
+    def dumpJson(
+                  storedSnapshots: Seq[Seq[StoredSnapshot]]
+                ): Unit = {
 
-    val messageChannel =
-      firstAPI.getBlocking[Seq[String]]("channels").filterNot { _ == channelId }.head
+      var numInvalid = 0
 
-    val messageWithinSnapshot =
-      firstAPI.getBlocking[Option[ChannelProof]]("channel/" + messageChannel)
-    assert(messageWithinSnapshot.nonEmpty)
-
-    def messageValid(): Unit = messageWithinSnapshot.foreach { proof =>
-      val m = proof.channelMessageMetadata
-      assert(m.snapshotHash.nonEmpty)
-      assert(m.blockHash.nonEmpty)
-      assert(proof.checkpointMessageProof.verify())
-      assert(proof.checkpointProof.verify())
-      assert(m.blockHash.contains { proof.checkpointProof.input })
-      assert(
-        m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
-      )
-    }
-    // messageValid()
-  }
-
-  def dumpJson(
-    storedSnapshots: Seq[Seq[StoredSnapshot]]
-  ): Unit = {
-
-    var numInvalid = 0
-
-    val messagesInChannelWithBlocks = storedSnapshots.head.flatMap { s =>
-      s.checkpointCache.map { cache =>
-        val block = cache.checkpointBlock.get
-        val relevantMessages = block.checkpoint.edge.data.messages
-          .filter { expectedMessages.contains }
-        //.filter{_.signedMessageData.data.channelId == channelId}.filterNot{_ == genesisChannel}
-        val messageParent = relevantMessages.map {
-          _.signedMessageData.data.previousMessageHash
-        }.headOption
-        val messageHash = relevantMessages.map { _.signedMessageData.hash }.headOption
+      val messagesInChannelWithBlocks = storedSnapshots.head.flatMap { s =>
+        s.checkpointCache.map { cache =>
+          val block = cache.checkpointBlock.get
+          val relevantMessages = block.checkpoint.edge.data.messages
+            .filter { broadcastedMessages.contains }
+          val messageParent = relevantMessages.map {
+            _.signedMessageData.data.previousMessageHash
+          }.headOption
+          val messageHash = relevantMessages.map { _.signedMessageData.hash }.headOption
 
         val valid = relevantMessages.map { m =>
           val isValid = SensorData
@@ -273,8 +244,8 @@ class MessageTestingSim(sim: Simulation) {
       }
     }
 
-    // TODO: Duplicate messages appearing sometimes but not others?
-    println(s"Num invalid $numInvalid")
+      // TODO: Duplicate messages appearing sometimes but not others?
+      println(s"Num invalid $numInvalid")
 
     val ids = messagesInChannelWithBlocks.map { _.blockSoeHash }.zipWithIndex.toMap
     val msgToBlock = messagesInChannelWithBlocks.flatMap { z =>

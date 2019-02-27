@@ -1,12 +1,12 @@
 package org.constellation.primitives
 
 import java.util.concurrent.Semaphore
-
 import com.fasterxml.jackson.databind.JsonNode
 import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.{JsonSchemaFactory, JsonValidator}
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
+
 import constellation._
 import org.constellation.DAO
 import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
@@ -18,8 +18,8 @@ import scala.concurrent.Future
 case class ChannelMessageData(
   message: String,
   previousMessageHash: String,
-  channelId: String
-) extends Signable
+  channelName: String
+) extends Signable with ChannelRequest
 
 case class SignedData[+D <: Signable](
   data: D,
@@ -69,19 +69,21 @@ object ChannelMessage extends StrictLogging {
     logger.info(s"Channel open $channelOpenRequest")
 
     dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage
-      .get(channelOpenRequest.name)
+      .get(channelOpenRequest.channelName)
       .map { msg =>
         Future.successful(
           ChannelOpenResponse("Error: channel name already in use", msg.signedMessageData.hash)
         )
       }
       .getOrElse {
+        logger.info(s"Channel not in use")
+
         val genesisMessageStr = channelOpenRequest.json
-        val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)
-        dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.name) = msg
+        val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.channelName)
+        dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.channelName) = msg
         val genesisHashChannelId = msg.signedMessageData.hash
         dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) =
-          channelOpenRequest.name
+          channelOpenRequest.channelName
         dao.threadSafeMessageMemPool.put(Seq(msg), overrideLimit = true)
         val semaphore = new Semaphore(1)
         dao.threadSafeMessageMemPool.activeChannels(genesisHashChannelId) = semaphore
@@ -99,7 +101,7 @@ object ChannelMessage extends StrictLogging {
             else {
               "Success"
             }
-          ChannelOpenResponse(response, genesisHashChannelId)
+          ChannelOpenResponse(response, genesisHashChannelId, channelOpenRequest.jsonSchema)
         }(dao.edgeExecutionContext)
       }
   }
@@ -109,20 +111,20 @@ object ChannelMessage extends StrictLogging {
   )(implicit dao: DAO): Future[ChannelSendResponse] = {
 
     dao.messageService
-      .get(channelSendRequest.channelId)
+      .get(channelSendRequest.channelName)
       .map { previousMessage =>
         val previous = previousMessage.channelMessage.signedMessageData.hash
 
-        val messages = channelSendRequest.messages
+        val messages: Seq[ChannelMessage] = channelSendRequest.messages
           .foldLeft(previous -> Seq[ChannelMessage]()) {
             case ((prvHash, signedMessages), nextMessage) =>
-              val nextSigned = create(nextMessage, previous, channelSendRequest.channelId)
+              val nextSigned = create(nextMessage, previous, channelSendRequest.channelName)
               nextSigned.signedMessageData.hash -> (signedMessages :+ nextSigned)
           }
           ._2
         dao.threadSafeMessageMemPool.put(messages, overrideLimit = true)
         val semaphore = new Semaphore(1)
-        dao.threadSafeMessageMemPool.activeChannels(channelSendRequest.channelId) = semaphore
+        dao.threadSafeMessageMemPool.activeChannels(channelSendRequest.channelName) = semaphore
         semaphore.acquire()
         Future.successful(
           ChannelSendResponse(
@@ -146,21 +148,26 @@ case class ChannelProof(
   checkpointMessageProof: MerkleProof
 )
 
+case class ChannelOpenRequest(
+                               channelName: String,
+                               jsonSchema: Option[String] = None,
+                               acceptInvalid: Boolean = true
+                             ) extends ChannelRequest
 case class ChannelOpen(
-  name: String,
-  jsonSchema: Option[String] = None,
-  acceptInvalid: Boolean = true
-)
+                        channelName: String,
+                        jsonSchema: Option[String] = None,
+                        acceptInvalid: Boolean = true
+                      )extends ChannelRequest
 
-case class ChannelOpenResponse(
-                                errorMessage: String = "Success",
-                                genesisHash: String = ""
-                              )
+case class ChannelOpenResponse(errorMessage: String = "Success", genesisHash: String = "", jsonSchema: Option[String] = None)
 
 case class ChannelSendRequest(
-  channelId: String,
-  messages: Seq[String]
-)
+                               channelName: String,
+                               messages: Seq[String]
+                             ) extends ChannelRequest
+trait ChannelRequest {
+  val channelName: String
+}
 
 case class ChannelSendRequestRawJson(channelId: String, messages: String)
 
@@ -170,9 +177,10 @@ case class ChannelSendResponse(
 )
 
 case class SensorData(
-  temperature: Int,
-  name: String
-)
+                       temperature: Int,
+                       name: String,
+                       channelName: String
+                     ) extends ChannelRequest
 
 object SensorData {
 
