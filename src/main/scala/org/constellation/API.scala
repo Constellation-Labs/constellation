@@ -139,8 +139,8 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
                   }
               )
             } ~
-            path("graph") { // Debugging
-              getFromFile("../3d-force-graph/example/datasets/dag.json")
+            path("graph") { // Debugging / mockup for peer graph
+              getFromResource("sample_data/dag.json")
             } ~
             path("blocks") {
 
