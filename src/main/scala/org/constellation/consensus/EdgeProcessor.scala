@@ -281,37 +281,29 @@ object EdgeProcessor extends StrictLogging {
 
     implicit val exec: ExecutionContextExecutor = dao.signatureExecutionContext
 
-    def lookupTransaction(hash: String, client: APIClient): Future[Option[TransactionCacheData]] = {
-      async {
-        await(
-          client.getNonBlocking[Option[TransactionCacheData]](
-            s"transaction/$hash",
-            timeout = 4.seconds
-          )
-        )
-      }
-    }
+    def lookupTransaction(hash: String, client: APIClient): Future[Option[TransactionCacheData]] =
+      client.getNonBlocking[Option[TransactionCacheData]](
+        s"transaction/$hash",
+        timeout = 4.seconds
+      )
 
     def resolveTransaction(hash: String,
                            peers: Seq[APIClient]): Future[Option[TransactionCacheData]] = {
 
       var remainingPeers = peers.tail
 
-      lookupTransaction(hash, peers.head).transformWith {
-        case Success(Some(transactionCacheData)) => Future.successful(Some(transactionCacheData))
-        case _ =>
-          remainingPeers.headOption
-            .map { peer =>
-              remainingPeers = remainingPeers.filterNot(_ == peer)
-              lookupTransaction(hash, peer)
-            }
-            .getOrElse(Future.failed(new Exception("Ran out of peers to query for transaction")))
+      val lookupResult = lookupTransaction(hash, peers.head)
+      lookupResult.recoverWith {
+        // TODO: handle more exceptions here by collecting them all
+        case _ => Future.failed(new Exception("Ran out of peers to query for transaction"))
       }
-
     }
 
     // Change to facilitator ordering
-    val peers = dao.readyPeers.toSeq.sortBy { _._1 != priorityPeer }.map { _._2.client }
+
+    val (priority, nonPriority) = dao.readyPeers.toSeq.partition(_._1 == priorityPeer)
+    val peerData = priority ++ nonPriority
+    val peers = peerData.map { _._2.client }
     val results = hashes.map { hash =>
       resolveTransaction(hash, peers)
     }
