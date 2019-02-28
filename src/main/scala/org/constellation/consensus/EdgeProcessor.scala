@@ -97,7 +97,6 @@ object EdgeProcessor extends StrictLogging {
         data
       )
 
-      dao.recentBlockTracker.put(data)
 
     }
   }
