@@ -175,9 +175,9 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
 
                 BlockUIOutput(
                   cb.soeHash, ccd.height.get.min, cb.parentSOEHashes,
-                  cb.checkpoint.edge.data.messages.map{_.signedMessageData.data.channelName}.distinct.map{
-                    channelName =>
-                      ChannelValidationInfo(channelName, true)
+                  cb.checkpoint.edge.data.messages.map{_.signedMessageData.data.channelId}.distinct.map{
+                    channelId =>
+                      ChannelValidationInfo(channelId, true)
                   }
 
                 )

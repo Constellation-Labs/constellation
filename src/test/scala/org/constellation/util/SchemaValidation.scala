@@ -12,14 +12,14 @@ class SchemaValidation extends FlatSpec {
 
   "Sample schema" should "validate" in {
 
-    val validExample = SensorData(5, "ASDFG", "channelId")
+    val validExample = SensorData(5, "ASDFG")
     assert(validator.validate(schema, asJsonNode(decompose(validExample))).isSuccess)
 
   }
 
   "Sample schema" should "not validate" in {
 
-    val invalidExample = SensorData(500, "asdfg", "channelId")
+    val invalidExample = SensorData(500, "asdfg")
     assert(!validator.validate(schema, asJsonNode(decompose(invalidExample))).isSuccess)
 
   }
