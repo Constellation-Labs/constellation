@@ -125,6 +125,7 @@ Test / logBuffered := false
 
 assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first
+  case PathList(xs @ _*) if xs.last == "module-info.class" => MergeStrategy.first
   case x =>
     val oldStrategy = (assemblyMergeStrategy in assembly).value
     oldStrategy(x)

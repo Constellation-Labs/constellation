@@ -1,19 +1,22 @@
 package org.constellation
-
 import java.util.concurrent.ForkJoinPool
+
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import better.files.File
-import com.typesafe.scalalogging.Logger
-import org.scalatest.{BeforeAndAfterAll, FlatSpec}
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
+import com.typesafe.scalalogging.StrictLogging
+import org.constellation.util.TestNode
+import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
+
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, ExecutionContextExecutorService}
 import scala.util.Try
 
-import org.constellation.util.TestNode
-
-class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
-
-  val logger = Logger("SingleNodeGenesisTest")
+trait E2E
+  extends AsyncFlatSpecLike
+    with Matchers
+    with BeforeAndAfterAll
+    with BeforeAndAfterEach
+    with StrictLogging {
 
   val tmpDir = "tmp"
 
@@ -23,7 +26,8 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
   override def beforeAll(): Unit = {
     // Cleanup DBs
     //Try{File(tmpDir).delete()}
-    //Try{new java.io.File(tmpDir).mkdirs()}
+    Try { File(tmpDir).createDirectories() }
+
   }
 
   override def afterAll() {
@@ -34,29 +38,20 @@ class SingleNodeGenesisTest extends FlatSpec with BeforeAndAfterAll {
   }
 
   def createNode(
-    randomizePorts: Boolean = false,
-    portOffset: Int = 0,
-    isGenesisNode: Boolean = false
-  ): ConstellationNode = {
+                  randomizePorts: Boolean = true,
+                  seedHosts: Seq[HostPort] = Seq(),
+                  portOffset: Int = 0,
+                  isGenesisNode: Boolean = false
+                ): ConstellationNode = {
     implicit val executionContext: ExecutionContextExecutorService =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
     TestNode(
       randomizePorts = randomizePorts,
       portOffset = portOffset,
-      seedHosts = Seq(),
+      seedHosts = seedHosts,
       isGenesisNode = isGenesisNode
     )
-  }
-
-  //"Genesis created"
-  ignore should "verify the node has created genesis" in {
-
-    val node = createNode(isGenesisNode = true)
-    val api = node.getAPIClient()
-
-    //Thread.sleep(6000*1000)
-
   }
 
 }

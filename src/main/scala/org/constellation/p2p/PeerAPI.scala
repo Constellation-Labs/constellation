@@ -192,26 +192,11 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
         pathPrefix("request") {
           path("signature") {
             extractClientIP { ip =>
-              /*
-            ip.toOption.foreach{inet =>
-              val hp = HostPort(inet.getHostAddress, 9001) // TODO: Change this to non-hardcoded port and send a response telling other node to re-register
-              PeerManager.attemptRegisterPeer(hp)
-            }
-               */
-
               entity(as[SignatureRequest]) { sr =>
-                handleExceptions(exceptionHandler) {
-                  dao.metrics.incrementMetric("peerApiRXSignatureRequest")
-
-                  val maybeData = getHostAndPortFromRemoteAddress(ip)
-                  val knownHost = maybeData.exists(
-                    i => dao.peerInfo.exists(_._2.client.hostName == i.canonicalHostName)
-                  )
-
-                  val signatureRequest =
-                    EdgeProcessor.handleSignatureRequest(sr).copy(reRegister = !knownHost)
-
-                  complete(signatureRequest)
+                onComplete(
+                  EdgeProcessor.handleSignatureRequest(sr)
+                ) { result =>
+                  complete(result.toOption.flatMap(_.toOption))
                 }
               }
             }
@@ -250,12 +235,14 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
     }
 
   private val mixedEndpoints = {
-    path("transaction" / Segment) { s =>
+    path("transaction") {
       put {
         entity(as[Transaction]) { tx =>
-          dao.metrics.incrementMetric("transactionRXByAPI")
-          // TDOO: Change to ask later for status info
-          //   dao.edgeProcessor ! HandleTransaction(tx)
+          dao.metrics.incrementMetric("transactionRXByPeerAPI")
+          dao.transactionService.update(tx.hash, { tcd =>
+            tcd
+          }, TransactionCacheData(tx))
+          // TODO: Respond with initial tx validation
           complete(StatusCodes.OK)
         }
       }

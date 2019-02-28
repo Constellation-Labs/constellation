@@ -18,6 +18,7 @@ import constellation._
 import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.SnapshotTrigger
+import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
@@ -238,6 +239,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
   val snapshotTrigger = new SnapshotTrigger()
 
   val ipManager = IPManager()
+
+  dao.transactionHashStore = SwayDBDatastore.duplicateCheckStore(dao, "transaction_hash_store")
+  dao.checkpointHashStore = SwayDBDatastore.duplicateCheckStore(dao, "checkpoint_hash_store")
 
   dao.actorMaterializer = materialize
 

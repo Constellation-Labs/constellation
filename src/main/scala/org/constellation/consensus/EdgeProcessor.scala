@@ -17,7 +17,7 @@ import org.constellation.util.{APIClient, HashSignature, Signable}
 import scala.async.Async.{async, await}
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.Try
+import scala.util.{Success, Try}
 
 object EdgeProcessor extends StrictLogging {
 
@@ -43,9 +43,31 @@ object EdgeProcessor extends StrictLogging {
       }
 
       cb.checkpoint.edge.data.messages.foreach { m =>
-        dao.messageService.put(m.signedMessageData.data.channelId,
-                               ChannelMessageMetadata(m, Some(cb.baseHash)))
-        dao.messageService.put(m.signedMessageData.signatures.hash,
+        if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
+          dao.messageService.put(
+            m.signedMessageData.data.channelId,
+            ChannelMessageMetadata(m, Some(cb.baseHash))
+          )
+          dao.channelService.updateOnly(
+            m.signedMessageData.hash,
+            { cmd =>
+              val slicedMessages = cmd.last25MessageHashes.slice(0, 25)
+              cmd.copy(
+                totalNumMessages = cmd.totalNumMessages + 1,
+                last25MessageHashes = Seq(m.signedMessageData.hash) ++ slicedMessages
+              )
+            }
+          )
+        } else { // Unsafe json extract
+          dao.channelService.put(
+            m.signedMessageData.hash,
+            ChannelMetadata(
+              m.signedMessageData.data.message.x[ChannelOpen],
+              ChannelMessageMetadata(m, Some(cb.baseHash))
+            )
+          )
+        }
+        dao.messageService.put(m.signedMessageData.hash,
                                ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.metrics.incrementMetric("messageAccepted")
       }
@@ -67,12 +89,14 @@ object EdgeProcessor extends StrictLogging {
         t.ledgerApply()
       }
       dao.metrics.incrementMetric("checkpointAccepted")
-      cb.store(
-        CheckpointCacheData(
-          Some(cb),
-          height = fallbackHeight
-        )
+      val data = CheckpointCacheData(
+        Some(cb),
+        height = fallbackHeight
       )
+      cb.store(
+        data
+      )
+
 
     }
   }
@@ -248,22 +272,72 @@ object EdgeProcessor extends StrictLogging {
     result.sequence
   }
 
-  // Temporary for testing join/leave logic.
+  def resolveTransactions(
+    hashes: Seq[String],
+    priorityPeer: Id
+  )(implicit dao: DAO): Future[Seq[TransactionCacheData]] = {
 
-  def handleSignatureRequest(sr: SignatureRequest)(implicit dao: DAO): SignatureResponse = {
-    //if (sr.facilitators.contains(dao.id)) {
-    // val replyTo = sr.checkpointBlock.witnessIds.head
-    val updated = if (sr.checkpointBlock.simpleValidation()) {
-      Some(hashSign(sr.checkpointBlock.baseHash, dao.keyPair))
-    } else {
-      None
+    implicit val exec: ExecutionContextExecutor = dao.signatureExecutionContext
+
+    def lookupTransaction(hash: String, client: APIClient): Future[Option[TransactionCacheData]] =
+      client.getNonBlocking[Option[TransactionCacheData]](
+        s"transaction/$hash",
+        timeout = 4.seconds
+      )
+
+    def resolveTransaction(hash: String,
+                           peers: Seq[APIClient]): Future[Option[TransactionCacheData]] = {
+
+      var remainingPeers = peers.tail
+
+      val lookupResult = lookupTransaction(hash, peers.head)
+      lookupResult.recoverWith {
+        // TODO: handle more exceptions here by collecting them all
+        case _ => Future.failed(new Exception("Ran out of peers to query for transaction"))
+      }
     }
-    SignatureResponse(updated)
-    /*dao.peerManager ! APIBroadcast(
-      _.post(s"response/signature", SignatureResponse(updated, sr.facilitators)),
-      peerSubset = Set(replyTo)
-    )*/
-    // } else None
+
+    // Change to facilitator ordering
+
+    val (priority, nonPriority) = dao.readyPeers.toSeq.partition(_._1 == priorityPeer)
+    val peerData = priority ++ nonPriority
+    val peers = peerData.map { _._2.client }
+    val results = hashes.map { hash =>
+      resolveTransaction(hash, peers)
+    }
+    val seq = Future.sequence(results)
+    seq.transformWith {
+      case Success(responses) if responses.forall(_.nonEmpty) =>
+        Future.successful(responses.flatten)
+      case _ => Future.failed(new Exception("Failed to resolve transactions"))
+    }
+
+  }
+
+  def handleSignatureRequest(
+    sr: SignatureRequest
+  )(implicit dao: DAO): Future[Try[SignatureResponse]] = {
+
+    futureTryWithTimeoutMetric(
+      {
+        dao.metrics.incrementMetric("peerApiRXSignatureRequest")
+
+        val hashes = sr.checkpointBlock.checkpoint.edge.data.hashes
+        dao.metrics.incrementMetric(
+          "signatureRequestAllHashesKnown_" + hashes.forall { h =>
+            dao.transactionService.get(h).nonEmpty
+          }
+        )
+
+        val updated = if (sr.checkpointBlock.simpleValidation()) {
+          Some(hashSign(sr.checkpointBlock.baseHash, dao.keyPair))
+        } else {
+          None
+        }
+        SignatureResponse(updated)
+      },
+      "handleSignatureRequest"
+    )(dao.signatureExecutionContext, dao)
   }
 
   def simpleResolveCheckpoint(hash: String)(implicit dao: DAO): Future[Boolean] = {
@@ -432,7 +506,7 @@ object Snapshot {
             findLatestMessageWithSnapshotHashInner(
               depth + 1,
               dao.messageService.get(
-                m.channelMessage.signedMessageData.data.previousMessageDataHash
+                m.channelMessage.signedMessageData.data.previousMessageHash
               )
             )
           }
@@ -483,7 +557,7 @@ object Snapshot {
       // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
       // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
       tx.ledgerApplySnapshot()
-      dao.transactionService.delete(Set(tx.hash))
+      dao.acceptedTransactionService.delete(Set(tx.hash))
       dao.metrics.incrementMetric("snapshotAppliedBalance")
     }
   }

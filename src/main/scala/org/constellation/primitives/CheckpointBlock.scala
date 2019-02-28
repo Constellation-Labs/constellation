@@ -117,6 +117,7 @@ case class CheckpointBlock(
      */
     // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
     dao.checkpointService.put(baseHash, cache)
+    dao.recentBlockTracker.put(cache)
 
   }
 
