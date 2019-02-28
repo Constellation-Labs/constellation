@@ -50,9 +50,9 @@ class E2ETest extends E2E {
 
   private val initialAPIs = apis
 
-  val n1App = new ConstellationApp(apis.head)
+  // val n1App = new ConstellationApp(apis.head)
 
-  val constellationAppSim = new ConstellationAppSim(sim, n1App)
+  // val constellationAppSim = new ConstellationAppSim(sim, n1App)
 
   "E2E Run" should "demonstrate full flow" in {
     logger.info("API Ports: " + apis.map { _.apiPort })
@@ -116,7 +116,7 @@ class E2ETest extends E2E {
 
   }
 
-  // "ConstellationApp"
+/*  // "ConstellationApp"
   ignore should "register a deployed state channel" in {
     sim.triggerRandom(apis)
     val deployResp = n1App.deploy(SensorData.jsonSchema, "channel_1")
@@ -126,7 +126,7 @@ class E2ETest extends E2E {
       assert(resp.exists(_.channelName == "channel_1"))
       assert(resp.forall(r => n1App.channelIdToChannel.get(r.channelId).contains(r)))
     }
-  }
+  }*/
 }
 
   class ConstellationAppSim(sim: Simulation, constellationApp: ConstellationApp)(
