@@ -6,14 +6,10 @@ import constellation._
 import io.micrometer.core.instrument.Clock
 import io.micrometer.core.instrument.binder.jvm._
 import io.micrometer.core.instrument.binder.logging.LogbackMetrics
-import io.micrometer.core.instrument.binder.system.{
-  FileDescriptorMetrics,
-  ProcessorMetrics,
-  UptimeMetrics
-}
+import io.micrometer.core.instrument.binder.system.{FileDescriptorMetrics, ProcessorMetrics, UptimeMetrics}
 import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import io.prometheus.client.CollectorRegistry
-import org.constellation.{ConstellationNode, DAO}
+import org.constellation.{BuildInfo, ConstellationNode, DAO}
 import org.joda.time.DateTime
 
 import scala.collection.concurrent.TrieMap
@@ -97,7 +93,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   updateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
   updateMetric("nodeStartDate", new DateTime(System.currentTimeMillis()).toString)
   updateMetric("externalHost", dao.externalHostString)
-  updateMetric("version", ConstellationNode.ConstellationVersion)
+  updateMetric("version", BuildInfo.version)
 
   def updateMetric(key: String, value: String): Unit = {
     stringMetrics(key) = value
