@@ -59,8 +59,7 @@ object ConstellationNode extends StrictLogging {
         version("version").text(s"Constellation v${BuildInfo.version}"),
         checkConfig(
           c =>
-            if (c.externalIp != null && c.externalPort == 0 ||
-                c.externalPort != 0 && c.externalIp == null) {
+            if (c.externalIp == null ^ c.externalPort == 0) {
               failure("ip and port must either both be set, or neither.")
             } else success
         )
@@ -149,8 +148,6 @@ object ConstellationNode extends StrictLogging {
       val portOffset = Option(cliConfig.externalPort).filter(_ != 0)
       val httpPortFromArg = portOffset.map { _ + 1 }
       val peerHttpPortFromArg = portOffset.map { _ + 2 }
-
-//      val peerHttpPortFromArg = Option(cliConfig.externalPort).filter(_ != 0)
 
       val httpPort = httpPortFromArg.getOrElse(
         Option(System.getenv("DAG_HTTP_PORT"))
