@@ -59,7 +59,7 @@ class E2ETest extends E2E {
 
     assert(sim.run(initialAPIs, addPeerRequests))
 
-    val deployResponse = constellationAppSim.openChannel(apis)
+    // val deployResponse = constellationAppSim.openChannel(apis)
 
     val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)),
                                   randomizePorts = false,
@@ -68,7 +68,7 @@ class E2ETest extends E2E {
     val downloadAPI = downloadNode.getAPIClient()
     logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
     assert(sim.checkReady(Seq(downloadAPI)))
-    deployResponse.foreach{ res => res.foreach(constellationAppSim.postDownload(apis.head, _))}
+    // deployResponse.foreach{ res => res.foreach(constellationAppSim.postDownload(apis.head, _))}
 
     // messageSim.postDownload(apis.head)
 
@@ -96,7 +96,7 @@ class E2ETest extends E2E {
 
     val storedSnapshots = allAPIs.map { _.simpleDownload() }
 
-    constellationAppSim.dumpJson(storedSnapshots)
+    // constellationAppSim.dumpJson(storedSnapshots)
 
     // TODO: Move to separate test
 
@@ -116,7 +116,8 @@ class E2ETest extends E2E {
 
   }
 
-  "ConstellationApp" should "register a deployed state channel" in {
+  // "ConstellationApp"
+  ignore should "register a deployed state channel" in {
     sim.triggerRandom(apis)
     val deployResp = n1App.deploy(SensorData.jsonSchema, "channel_1")
     deployResp.map { resp: Option[Channel] =>
