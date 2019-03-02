@@ -18,18 +18,17 @@ class SwayDBImpl(dao: DAO) extends KVDB {
   private implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
   //Create a persistent database. If the directories do not exist, they will be created.
-  private val db = SwayDB
-    .persistent[String, Array[Byte]](
-      dir = (dao.dbPath / "disk1").path,
-      mmapMaps = false,
-      mmapSegments = MMAP.Disable,
-      mmapAppendix = false
-    )
-    .get
+    private val db =
+      persistent.Map[String, Array[Byte]](
+        dir = (dao.dbPath / "disk1").path,
+        mmapMaps = false,
+        mmapSegments = MMAP.Disabled,
+        mmapAppendix = false)
+      .get
 
   override def put(key: String, obj: AnyRef): Boolean = {
     val triedMeter = db.put(key, KryoSerializer.serializeAnyRef(obj))
-    tryToMetric(triedMeter, "dbPutAttempt")
+    tryToMetric(triedMeter.toTry, "dbPutAttempt")
 
     /*    val getCheckAttempt = get[AnyRef](key)
     if (getCheckAttempt.isEmpty) {
@@ -41,12 +40,10 @@ class SwayDBImpl(dao: DAO) extends KVDB {
 
   override def get[T <: AnyRef](key: String): Option[T] = {
     val triedMaybeBytes = db.get(key)
-    tryToMetric(triedMaybeBytes, "dbGetAttempt")
-    triedMaybeBytes.toOption.flatMap { a =>
-      a.flatMap { ab =>
-        tryWithMetric({ KryoSerializer.deserialize(ab).asInstanceOf[T] }, "kryoDeserializeDB").toOption
-      }
+    tryToMetric(triedMaybeBytes.toTry, "dbGetAttempt")
 
+    triedMaybeBytes.toOption.flatten.flatMap { ab =>
+      tryWithMetric({ KryoSerializer.deserialize(ab).asInstanceOf[T] }, "kryoDeserializeDB").toOption
     }
   }
 
@@ -86,11 +83,10 @@ object SwayDBDatastore {
     import swaydb._
     import swaydb.serializers.Default._ //import default serializers
 
-    SwayDB
-      .persistentSet[String](
+    persistent.Set[String](
         dir = (dao.dbPath / path).path,
         mmapMaps = false,
-        mmapSegments = MMAP.Disable,
+        mmapSegments = MMAP.Disabled,
         mmapAppendix = false
       )
       .get

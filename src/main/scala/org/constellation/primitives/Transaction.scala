@@ -2,17 +2,11 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
-import cats.data.{Ior, NonEmptyList, ValidatedNel}
+import cats.data.{NonEmptyList, Validated, ValidatedNel}
 import cats.implicits._
-
 import constellation._
 import org.constellation.DAO
-import org.constellation.primitives.Schema.{
-  Address,
-  AddressCacheData,
-  TransactionCacheData,
-  TransactionEdgeData
-}
+import org.constellation.primitives.Schema.{Address, TransactionCacheData, TransactionEdgeData}
 import org.constellation.util.HashSignature
 
 case class Transaction(edge: Edge[TransactionEdgeData]) {
@@ -69,11 +63,10 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
   def validateSourceSignature(): ValidationResult[Transaction] =
     validSrcSignature.toOption(this.validNel).getOrElse(InvalidSourceSignature().invalidNel)
 
-  def validateHashDuplicateSnapshot()(implicit dao: DAO): Unit = {
-    dao.transactionHashStore
-      .contains(hash)
-      .traverse(_.toOption(this.validNel))
-      .getOrElse(HashDuplicateFoundInSnapshot().invalidNel)
+  def validateHashDuplicateSnapshot()(implicit dao: DAO): ValidationResult[Transaction] = {
+    dao.transactionHashStore.contains(hash).map { c =>
+      if (c) this.validNel else HashDuplicateFoundInSnapshot().invalidNel
+    }.get
   }
 
 }
