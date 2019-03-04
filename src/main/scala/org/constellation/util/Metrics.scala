@@ -23,6 +23,8 @@ object Metrics {
                                                               CollectorRegistry.defaultRegistry,
                                                               Clock.SYSTEM)
     prometheusMeterRegistry.config().commonTags("application", s"Constellation_$keyHash")
+    io.micrometer.core.instrument.Metrics.globalRegistry.add(prometheusMeterRegistry)
+
     new JvmMemoryMetrics().bindTo(prometheusMeterRegistry)
     new JvmGcMetrics().bindTo(prometheusMeterRegistry)
     new JvmThreadMetrics().bindTo(prometheusMeterRegistry)

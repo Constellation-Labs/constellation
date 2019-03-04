@@ -28,7 +28,7 @@ import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, _}
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{CommonEndpoints, MerkleTree, ServeUI}
+import org.constellation.util.{CommonEndpoints, MerkleTree, MetricTimerDirective, ServeUI}
 import org.json4s.{JValue, native}
 import org.json4s.native.Serialization
 
@@ -93,7 +93,8 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
     with SimpleWalletLike
     with ServeUI
     with CommonEndpoints
-    with StrictLogging {
+    with StrictLogging
+    with MetricTimerDirective {
 
   import dao._
 
@@ -520,12 +521,14 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
     }
   }
 
-  val routes = if (authEnabled) {
-    noAuthRoutes ~ authenticateBasic(realm = "secure site", myUserPassAuthenticator) { user =>
-      mainRoutes
+  val routes = withTimer("api") {
+    if (authEnabled) {
+      noAuthRoutes ~ authenticateBasic(realm = "secure site", myUserPassAuthenticator) { user =>
+        mainRoutes
+      }
+    } else {
+      noAuthRoutes ~ mainRoutes
     }
-  } else {
-    noAuthRoutes ~ mainRoutes
   }
 
 }
