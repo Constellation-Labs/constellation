@@ -2,6 +2,7 @@ package org.constellation.p2p
 
 import akka.pattern.ask
 import cats.effect.{IO, Timer}
+import cats.implicits._
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
@@ -36,8 +37,9 @@ class DownloadProcess(implicit dao: DAO, ec: ExecutionContext) extends StrictLog
       _ <- waitForPeers()
       peers <- getReadyPeers()
       snapshotClient <- getSnapshotClient(peers)
-      snapshotHashes <- downloadAndProcessSnapshotsFirstPass(snapshotClient, peers)
-      snapshot <- downloadAndProcessSnapshotsSecondPass(snapshotHashes)(snapshotClient, peers)
+      majoritySnapshot <- getMajoritySnapshot(peers)
+      snapshotHashes <- downloadAndProcessSnapshotsFirstPass(majoritySnapshot)(snapshotClient, peers)
+      snapshot <- downloadAndProcessSnapshotsSecondPass(majoritySnapshot, snapshotHashes)(snapshotClient, peers)
       _ <- finishDownload(snapshot)
       _ <- setAcceptedTransactionsAfterDownload
     } yield ()
@@ -47,6 +49,86 @@ class DownloadProcess(implicit dao: DAO, ec: ExecutionContext) extends StrictLog
       .flatMap(_ => setNodeState(NodeState.DownloadInProgress))
       .flatMap(_ => requestForFaucet)
       .map(_ => ())
+
+  private def downloadAndAcceptGenesis: IO[GenesisObservation] =
+    (dao.peerManager ? APIBroadcast(_.getNonBlocking[Option[GenesisObservation]]("genesis")))
+      .mapTo[Map[Schema.Id, Future[Option[GenesisObservation]]]]
+      .flatMap(m => Future.find(m.values.toList)(_.nonEmpty).map(_.flatten.get))
+      .toIO
+      .flatMap(updateMetricAndPass("downloadedGenesis", "true"))
+      .flatMap(genesis => IO(dao.acceptGenesis(genesis)).map(_ => genesis))
+
+  private def waitForPeers(): IO[Unit] =
+    IO(logger.info(s"Waiting ${waitForPeersDelay.toString()} for peers"))
+      .flatMap(_ => IO.sleep(waitForPeersDelay))
+
+  private def getReadyPeers(): IO[Peers] =
+    (dao.peerManager ? GetPeerInfo)
+      .mapTo[Map[Schema.Id, PeerData]]
+      .toIO
+      .map(_.filter(_._2.peerMetadata.nodeState == NodeState.Ready))
+
+  private def getSnapshotClient(peers: Peers) = IO(peers.head._2.client)
+
+  private def getMajoritySnapshot(peers: Peers): IO[SnapshotInfo] =
+    peers.values
+      .map(peerData => peerData.client)
+      .toList
+      .traverse(client =>
+        client
+          .getNonBlockingBytesKryo[SnapshotInfo]("info", timeout = 15.seconds)
+          .toIO
+      )
+        .map(snapshots => snapshots.groupBy(_.snapshot.hash).maxBy(_._2.size)._2.head)
+
+  private def downloadAndProcessSnapshotsFirstPass(snapshotInfo: SnapshotInfo)(
+    implicit snapshotClient: APIClient,
+    peers: Peers
+  ): IO[Seq[String]] = {
+    val snapshotHashes = getSnapshotHashes(snapshotInfo)
+
+    snapshotHashes
+      .flatMap(getGroupedHashes)
+      .flatMap(processSnapshots)
+      .flatMap(_ => updateMetric("downloadFirstPassComplete", "true"))
+      .flatMap(_ => setNodeState(NodeState.DownloadCompleteAwaitingFinalSync))
+      .flatMap(_ => snapshotHashes)
+  }
+
+  private def downloadAndProcessSnapshotsSecondPass(
+    snapshotInfo: SnapshotInfo,
+    hashes: Seq[String]
+  )(implicit snapshotClient: APIClient, peers: Peers): IO[SnapshotInfo] = {
+    val snapshotHashes = getSnapshotHashes(snapshotInfo)
+      .map(_.filterNot(hashes.contains))
+      .flatMap(
+        hashes =>
+          updateMetric("downloadExpectedNumSnapshotsSecondPass", hashes.size.toString)
+            .map(_ => hashes)
+      )
+
+    snapshotHashes
+      .flatMap(getGroupedHashes)
+      .flatMap(processSnapshots)
+      .flatMap(_ => updateMetric("downloadSecondPassComplete", "true"))
+      .map(_ => snapshotInfo)
+  }
+
+  private def finishDownload(snapshot: SnapshotInfo): IO[Unit] = {
+    setSnapshot(snapshot)
+      .flatMap(_ => enableRandomTX)
+      .flatMap(_ => acceptSnapshotCacheData(snapshot))
+      .flatMap(_ => setNodeState(NodeState.Ready))
+      .flatMap(_ => clearSyncBuffer)
+      .flatMap(_ => setDownloadFinishedTime)
+  }
+
+  private def setAcceptedTransactionsAfterDownload: IO[Unit] = IO {
+    dao.transactionAcceptedAfterDownload =
+      dao.metrics.getMetrics.get("transactionAccepted").map(_.toLong).getOrElse(0L)
+  }
+
+  /** **/
 
   private def setNodeState(nodeState: NodeState): IO[Unit] =
     IO(dao.nodeState = nodeState)
@@ -62,25 +144,40 @@ class DownloadProcess(implicit dao: DAO, ec: ExecutionContext) extends StrictLog
       )
       .toIO
 
-  private def downloadAndAcceptGenesis: IO[GenesisObservation] =
-    (dao.peerManager ? APIBroadcast(_.getNonBlocking[Option[GenesisObservation]]("genesis")))
-      .mapTo[Map[Schema.Id, Future[Option[GenesisObservation]]]]
-      .flatMap(m => Future.find(m.values.toList)(_.nonEmpty).map(_.flatten.get))
-      .toIO
-      .flatMap(updateMetricAndPass("downloadedGenesis", "true"))
-      .flatMap(genesis => IO(dao.acceptGenesis(genesis)).map(_ => genesis))
+  private def downloadSnapshotInfo(implicit snapshotClient: APIClient): IO[SnapshotInfo] =
+    IO { logger.info(s"Downloading from: ${snapshotClient.hostName}:${snapshotClient.apiPort}") }
+      .flatMap { _ =>
+        snapshotClient
+          .getNonBlockingBytesKryo[SnapshotInfo]("info", timeout = 15.seconds)
+          .toIO
+      }
+      .flatMap { a =>
+        updateMetric("downloadExpectedNumSnapshotsIncludingPreExisting",
+          a.snapshotHashes.size.toString)
+          .map(_ => a)
+      }
 
-  private def waitForPeers(): IO[Unit] =
-    IO(logger.info(s"Waiting ${waitForPeersDelay.toString()} for peers"))
-        .flatMap(_ => IO.sleep(waitForPeersDelay))
+  private def getSnapshotHashes(snapshotInfo: SnapshotInfo): IO[Seq[String]] = {
+    val preExistingSnapshots = dao.snapshotPath.list.toSeq.map(_.name)
+    val snapshotHashes = snapshotInfo.snapshotHashes.filterNot(preExistingSnapshots.contains)
 
-  private def getReadyPeers(): IO[Peers] =
-    (dao.peerManager ? GetPeerInfo)
-      .mapTo[Map[Schema.Id, PeerData]]
-      .toIO
-      .map(_.filter(_._2.peerMetadata.nodeState == NodeState.Ready))
+    IO.pure(snapshotHashes)
+      .flatMap(updateMetricAndPass("downloadExpectedNumSnapshots", snapshotHashes.size.toString))
+  }
 
-  private def getSnapshotClient(peers: Peers) = IO(peers.head._2.client)
+  private def getGroupedHashes(
+    snapshotHashes: Seq[String]
+  )(implicit peers: Peers): IO[Seq[(Seq[String], PeerData)]] = {
+    val groupSize = (snapshotHashes.size / peers.size) + 1
+    val groupedHashes = snapshotHashes.grouped(groupSize).toSeq
+    val grouped = groupedHashes.zip(peers.values)
+
+    updateMetric("downloadGroupSize", groupSize.toString)
+      .flatMap(_ => updateMetric("downloadGroupedHashesSize", groupedHashes.size.toString))
+      .flatMap(_ => updateMetric("downloadGroupedZipSize", grouped.size.toString))
+      .flatMap(_ => updateMetric("downloadGroupCheckSize", grouped.flatMap(_._1).size.toString))
+      .map(_ => grouped)
+  }
 
   private def processSnapshots(grouped: Seq[(Seq[String], PeerData)])(implicit peers: Peers) = IO {
     grouped.par.map {
@@ -178,101 +275,14 @@ class DownloadProcess(implicit dao: DAO, ec: ExecutionContext) extends StrictLog
     dao.downloadFinishedTime = System.currentTimeMillis()
   }
 
-  private def setAcceptedTransactionsAfterDownload: IO[Unit] = IO {
-    dao.transactionAcceptedAfterDownload =
-      dao.metrics.getMetrics.get("transactionAccepted").map(_.toLong).getOrElse(0L)
-  }
-
-  private def downloadAndProcessSnapshotsFirstPass(
-    implicit snapshotClient: APIClient,
-    peers: Peers
-  ): IO[Seq[String]] = {
-    val snapshotInfo = downloadSnapshotInfo
-
-    val snapshotHashes = snapshotInfo
-      .flatMap(getSnapshotHashes)
-
-    snapshotHashes
-      .flatMap(getGroupedHashes)
-      .flatMap(processSnapshots)
-      .flatMap(_ => updateMetric("downloadFirstPassComplete", "true"))
-      .flatMap(_ => setNodeState(NodeState.DownloadCompleteAwaitingFinalSync))
-      .flatMap(_ => snapshotHashes)
-  }
-
-  private def downloadAndProcessSnapshotsSecondPass(
-    hashes: Seq[String]
-  )(implicit snapshotClient: APIClient, peers: Peers): IO[SnapshotInfo] = {
-    val snapshotInfo = downloadSnapshotInfo
-
-    val snapshotHashes = snapshotInfo
-      .flatMap(getSnapshotHashes)
-      .map(_.filterNot(hashes.contains))
-      .flatMap(
-        hashes =>
-          updateMetric("downloadExpectedNumSnapshotsSecondPass", hashes.size.toString)
-            .map(_ => hashes)
-      )
-
-    snapshotHashes
-      .flatMap(getGroupedHashes)
-      .flatMap(processSnapshots)
-      .flatMap(_ => updateMetric("downloadSecondPassComplete", "true"))
-      .flatMap(_ => snapshotInfo)
-  }
-
-  private def finishDownload(snapshot: SnapshotInfo): IO[Unit] = {
-    setSnapshot(snapshot)
-      .flatMap(_ => enableRandomTX)
-      .flatMap(_ => acceptSnapshotCacheData(snapshot))
-      .flatMap(_ => setNodeState(NodeState.Ready))
-      .flatMap(_ => clearSyncBuffer)
-      .flatMap(_ => setDownloadFinishedTime)
-  }
-
-  private def downloadSnapshotInfo(implicit snapshotClient: APIClient): IO[SnapshotInfo] =
-    IO { logger.info(s"Downloading from: ${snapshotClient.hostName}:${snapshotClient.apiPort}") }
-      .flatMap { _ =>
-        snapshotClient
-          .getNonBlockingBytesKryo[SnapshotInfo]("info", timeout = 15.seconds)
-          .toIO
-      }
-      .flatMap { a =>
-        updateMetric("downloadExpectedNumSnapshotsIncludingPreExisting",
-                     a.snapshotHashes.size.toString)
-          .map(_ => a)
-      }
-
-  private def getSnapshotHashes(snapshotInfo: SnapshotInfo): IO[Seq[String]] = {
-    val preExistingSnapshots = dao.snapshotPath.list.toSeq.map(_.name)
-    val snapshotHashes = snapshotInfo.snapshotHashes.filterNot(preExistingSnapshots.contains)
-
-    IO.pure(snapshotHashes)
-      .flatMap(updateMetricAndPass("downloadExpectedNumSnapshots", snapshotHashes.size.toString))
+  private def updateMetric(key: String, value: String): IO[Unit] = IO {
+    dao.metrics.updateMetric(key, value)
   }
 
   private def updateMetricAndPass[A](key: String, value: String)(a: A): IO[A] =
     IO {
       dao.metrics.updateMetric(key, value)
     }.map(_ => a)
-
-  private def getGroupedHashes(
-    snapshotHashes: Seq[String]
-  )(implicit peers: Peers): IO[Seq[(Seq[String], PeerData)]] = {
-    val groupSize = (snapshotHashes.size / peers.size) + 1
-    val groupedHashes = snapshotHashes.grouped(groupSize).toSeq
-    val grouped = groupedHashes.zip(peers.values)
-
-    updateMetric("downloadGroupSize", groupSize.toString)
-      .flatMap(_ => updateMetric("downloadGroupedHashesSize", groupedHashes.size.toString))
-      .flatMap(_ => updateMetric("downloadGroupedZipSize", grouped.size.toString))
-      .flatMap(_ => updateMetric("downloadGroupCheckSize", grouped.flatMap(_._1).size.toString))
-      .map(_ => grouped)
-  }
-
-  private def updateMetric(key: String, value: String): IO[Unit] = IO {
-    dao.metrics.updateMetric(key, value)
-  }
 }
 
 object Download extends StrictLogging {
