@@ -1,7 +1,7 @@
 package org.constellation.p2p
 
 import akka.pattern.ask
-import cats.effect.IO
+import cats.effect.{IO, Timer}
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
@@ -18,16 +18,22 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Try}
 
 class DownloadProcess(implicit dao: DAO, ec: ExecutionContext) extends StrictLogging {
+
+  type Peers = Map[Schema.Id, PeerData]
+  private implicit val ioTimer: Timer[IO] = IO.timer(ec)
+
   final implicit class FutureOps[+T](f: Future[T]) {
     def toIO: IO[T] = IO.fromFuture(IO(f))
   }
 
-  type Peers = Map[Schema.Id, PeerData]
+  // TODO: get from config
+  private val waitForPeersDelay = 15.seconds
 
   def download(): IO[Unit] =
     for {
       _ <- initDownloadingProcess
       _ <- downloadAndAcceptGenesis
+      _ <- waitForPeers()
       peers <- getReadyPeers()
       snapshotClient <- getSnapshotClient(peers)
       snapshotHashes <- downloadAndProcessSnapshotsFirstPass(snapshotClient, peers)
@@ -63,6 +69,10 @@ class DownloadProcess(implicit dao: DAO, ec: ExecutionContext) extends StrictLog
       .toIO
       .flatMap(updateMetricAndPass("downloadedGenesis", "true"))
       .flatMap(genesis => IO(dao.acceptGenesis(genesis)).map(_ => genesis))
+
+  private def waitForPeers(): IO[Unit] =
+    IO(logger.info(s"Waiting ${waitForPeersDelay.toString()} for peers"))
+        .flatMap(_ => IO.sleep(waitForPeersDelay))
 
   private def getReadyPeers(): IO[Peers] =
     (dao.peerManager ? GetPeerInfo)
