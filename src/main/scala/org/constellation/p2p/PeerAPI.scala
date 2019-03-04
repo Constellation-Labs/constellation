@@ -21,7 +21,7 @@ import org.constellation.consensus.EdgeProcessor.{
 }
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.{CommonEndpoints, SingleHashSignature}
+import org.constellation.util.{CommonEndpoints, SingleHashSignature, MetricTimerDirective}
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -48,7 +48,8 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
     extends Json4sSupport
     with CommonEndpoints
     with IPEnforcer
-    with StrictLogging {
+    with StrictLogging 
+    with MetricTimerDirective {
 
   implicit val serialization: Serialization.type = native.Serialization
 
@@ -249,11 +250,13 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
     }
   }
 
-  val routes: Route = decodeRequest {
-    encodeResponse {
-      // rejectBannedIP {
-      signEndpoints ~ commonEndpoints ~ // { //enforceKnownIP
-        getEndpoints ~ postEndpoints ~ mixedEndpoints
+  val routes: Route = withTimer("peer-api") {
+    decodeRequest {
+      encodeResponse {
+        // rejectBannedIP {
+        signEndpoints ~ commonEndpoints ~ // { //enforceKnownIP
+          getEndpoints ~ postEndpoints ~ mixedEndpoints
+      }
     }
   }
 
