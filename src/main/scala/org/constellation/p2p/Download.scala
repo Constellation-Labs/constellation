@@ -84,44 +84,38 @@ class DownloadProcess(implicit dao: DAO, ec: ExecutionContext) extends StrictLog
   private def downloadAndProcessSnapshotsFirstPass(snapshotInfo: SnapshotInfo)(
     implicit snapshotClient: APIClient,
     peers: Peers
-  ): IO[Seq[String]] = {
-    val snapshotHashes = getSnapshotHashes(snapshotInfo)
-
-    snapshotHashes
-      .flatMap(getGroupedHashes)
-      .flatMap(processSnapshots)
-      .flatMap(_ => updateMetric("downloadFirstPassComplete", "true"))
-      .flatMap(_ => setNodeState(NodeState.DownloadCompleteAwaitingFinalSync))
-      .flatMap(_ => snapshotHashes)
-  }
+  ): IO[Seq[String]] = for {
+    snapshotHashes <- getSnapshotHashes(snapshotInfo)
+    groupedHashes <- getGroupedHashes(snapshotHashes)
+    _ <- processSnapshots(groupedHashes)
+    _ <- updateMetric("downloadFirstPassComplete", "true")
+    _ <- setNodeState(NodeState.DownloadCompleteAwaitingFinalSync)
+  } yield snapshotHashes
 
   private def downloadAndProcessSnapshotsSecondPass(
     snapshotInfo: SnapshotInfo,
     hashes: Seq[String]
-  )(implicit snapshotClient: APIClient, peers: Peers): IO[SnapshotInfo] = {
-    val snapshotHashes = getSnapshotHashes(snapshotInfo)
+  )(implicit snapshotClient: APIClient, peers: Peers): IO[SnapshotInfo] =
+    getSnapshotHashes(snapshotInfo)
       .map(_.filterNot(hashes.contains))
       .flatMap(
         hashes =>
           updateMetric("downloadExpectedNumSnapshotsSecondPass", hashes.size.toString)
             .map(_ => hashes)
       )
-
-    snapshotHashes
       .flatMap(getGroupedHashes)
       .flatMap(processSnapshots)
       .flatMap(_ => updateMetric("downloadSecondPassComplete", "true"))
       .map(_ => snapshotInfo)
-  }
 
-  private def finishDownload(snapshot: SnapshotInfo): IO[Unit] = {
-    setSnapshot(snapshot)
-      .flatMap(_ => enableRandomTX)
-      .flatMap(_ => acceptSnapshotCacheData(snapshot))
-      .flatMap(_ => setNodeState(NodeState.Ready))
-      .flatMap(_ => clearSyncBuffer)
-      .flatMap(_ => setDownloadFinishedTime)
-  }
+  private def finishDownload(snapshot: SnapshotInfo): IO[Unit] = for {
+    _ <- setSnapshot(snapshot)
+    _ <- enableRandomTX
+    _ <- acceptSnapshotCacheData(snapshot)
+    _ <- setNodeState(NodeState.Ready)
+    _ <- clearSyncBuffer
+    _ <- setDownloadFinishedTime
+  } yield ()
 
   private def setAcceptedTransactionsAfterDownload: IO[Unit] = IO {
     dao.transactionAcceptedAfterDownload =
