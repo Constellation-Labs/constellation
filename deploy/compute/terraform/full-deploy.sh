@@ -6,23 +6,6 @@ if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
 JAR_TAG=${1:-dev}
 NODE_COUNT=${2:-3}
 
-pushd ui
-./build.sh
-# Redundant but unclear why issue of not updating exists sometimes
-./copy.sh
-popd
-
-sbt clean assembly
-
-pushd terraform
-
-DEPLOY_FOLDER=./default-$JAR_TAG
-rm -r $DEPLOY_FOLDER
-cp -r ./default $DEPLOY_FOLDER
-
-pushd $DEPLOY_FOLDER
-
-sed -i'.bak' "s/constellation-app/$APP_USER/g" ./deploy/kubernetes/node-deployment-impl.yml
-
-
-#source $DIR/deploy.sh $HOSTS_FILE $JAR_TAG
+source $DIR/../assemble-upload.sh $JAR_TAG && \
+source $DIR/start-cluster.sh $JAR_TAG $NODE_COUNT
+source $DIR/restart.sh ./terraform/default-$JAR_TAG/hosts

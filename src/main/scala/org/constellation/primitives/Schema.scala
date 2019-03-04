@@ -29,7 +29,11 @@ object Schema {
 
   object NodeState extends Enumeration {
     type NodeState = Value
-    val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, Ready = Value
+    val PendingDownload,
+    DownloadInProgress,
+    DownloadCompleteAwaitingFinalSync,
+    Ready,
+    Offline = Value
   }
 
   sealed trait ValidationStatus

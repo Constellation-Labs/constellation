@@ -29,9 +29,12 @@ import scala.util.{Failure, Success, Try}
 
 // scopt requires default args for all properties.
 // Make sure to check for null early -- don't propogate nulls anywhere else.
-case class CliConfig(externalIp: java.net.InetAddress = null,
-                     externalPort: Int = 0,
-                     debug: Boolean = false)
+case class CliConfig(
+                      externalIp: java.net.InetAddress = null,
+                      externalPort: Int = 0,
+                      debug: Boolean = false,
+                      startOfflineMode: Boolean = false
+                    )
 
 object ConstellationNode extends StrictLogging {
 
@@ -53,9 +56,12 @@ object ConstellationNode extends StrictLogging {
         opt[Int]('p', "port")
           .action((x, c) => c.copy(externalPort = x))
           .text("the port you can be reached from outside"),
-        opt[Int]('d', "debug")
-          .action((x, c) => c.copy(externalPort = x))
+        opt[Boolean]('d', "debug")
+          .action((x, c) => c.copy(debug = x))
           .text("run the node in debug mode"),
+        opt[Boolean]('o', "offline")
+          .action((x, c) => c.copy(startOfflineMode = x))
+          .text("Start the node in offline mode. Won't connect automatically"),
         help("help").text("prints this usage text"),
         version("version").text(s"Constellation v${BuildInfo.version}"),
         checkConfig(
@@ -179,7 +185,8 @@ object ConstellationNode extends StrictLogging {
         peerHttpPort = peerHttpPort,
         attemptDownload = true,
         allowLocalhostPeers = false,
-        nodeConfig = NodeConfig()
+        nodeConfig = NodeConfig(),
+        cliConfig = cliConfig
       )
     } match {
       case Failure(e) => e.printStackTrace()
@@ -215,7 +222,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
                         val peerTCPPort: Int = 9002,
                         val attemptDownload: Boolean = false,
                         val allowLocalhostPeers: Boolean = false,
-                        nodeConfig: NodeConfig = NodeConfig())(
+                        nodeConfig: NodeConfig = NodeConfig(),
+                        cliConfig: CliConfig = CliConfig()
+                       )(
   implicit val system: ActorSystem,
   implicit val materialize: ActorMaterializer,
   implicit val executionContext: ExecutionContext
@@ -228,6 +237,10 @@ class ConstellationNode(val configKeyPair: KeyPair,
   dao.preventLocalhostAsPeer = !allowLocalhostPeers
   dao.externalHostString = hostName
   dao.externlPeerHTTPPort = peerHttpPort
+
+  if (cliConfig.startOfflineMode) {
+    dao.nodeState = NodeState.Offline
+  }
 
   import dao._
 
