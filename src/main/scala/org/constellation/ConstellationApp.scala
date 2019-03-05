@@ -5,7 +5,6 @@ import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives._
 import org.constellation.util.APIClient
-import org.scalameta.logger
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
