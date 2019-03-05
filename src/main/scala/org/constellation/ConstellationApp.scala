@@ -23,7 +23,6 @@ class ConstellationApp(
             )(implicit ec: ExecutionContext) = {
     val response = clientApi.postNonBlocking[Some[ChannelOpenResponse]]("channel/open", ChannelOpen(channelName, jsonSchema = Some(schemaStr)), timeout = 15 seconds)
     response.map { resp =>
-//      logger.info(s"ChannelOpenResponse: ${resp.toString}")
       val channelMsg = resp.map { msg =>
         Channel(msg.genesisHash, channelName, msg)
       }
