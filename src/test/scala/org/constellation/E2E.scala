@@ -1,8 +1,9 @@
 package org.constellation
-import java.util.concurrent.ForkJoinPool
+import java.util.concurrent.{ForkJoinPool, TimeUnit}
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+import akka.util.Timeout
 import better.files.File
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.util.TestNode
@@ -22,6 +23,7 @@ trait E2E
 
   implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
+  implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
 
   override def beforeAll(): Unit = {
     // Cleanup DBs
