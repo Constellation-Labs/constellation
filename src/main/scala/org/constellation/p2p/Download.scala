@@ -1,13 +1,15 @@
 package org.constellation.p2p
 
 import akka.pattern.ask
-import cats.effect.{IO, Timer}
+import cats.effect.{ContextShift, IO, Timer}
 import cats.implicits._
 import com.softwaremill.sttp.Response
+import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus._
+import org.constellation.primitives.PeerManager.Peers
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -16,19 +18,78 @@ import org.constellation.util.APIClient
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Try}
+import scala.util.Random
 
-class DownloadProcess(implicit dao: DAO, ec: ExecutionContext) extends StrictLogging {
+trait SnapshotsProcessor {
+  def processSnapshots(hashes: Seq[String])(implicit peers: Peers): IO[Unit]
+}
 
-  type Peers = Map[Schema.Id, PeerData]
+class RandomSnapshotsProcessor(implicit dao: DAO, ec: ExecutionContext) extends SnapshotsProcessor {
+  implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ec)
+
+  val config: Config = ConfigFactory.load()
+  private val getSnapshotTimeout = config.getInt("download.getSnapshotTimeout").seconds
+
+  def processSnapshots(hashes: Seq[String])(implicit peers: Peers): IO[Unit] = {
+    hashes.map(processSnapshot).toList.parSequence.map(_ => ())
+  }
+
+  private def processSnapshot(hash: String)(implicit peers: Peers): IO[Unit] = {
+    val clients = peers.values.toArray.map(_.client)
+
+    downloadSnapshot(hash, clients)
+      .flatTap { _ =>
+        IO {
+          dao.metrics.incrementMetric("downloadedSnapshots")
+          dao.metrics.incrementMetric("snapshotCount")
+        }
+      }
+      .flatMap(acceptSnapshot)
+  }
+
+  private def downloadSnapshot(hash: String, pool: Array[APIClient]): IO[StoredSnapshot] = {
+    val stopAt = Random.nextInt(pool.length)
+
+    def makeAttempt(index: Int): IO[StoredSnapshot] =
+      getSnapshot(hash, pool(index)).handleErrorWith {
+        case e if index == stopAt => IO.raiseError(e)
+        case _                    => makeAttempt((index + 1) % pool.length)
+      }
+
+    makeAttempt((stopAt + 1) % pool.length)
+  }
+
+  private def getSnapshot(hash: String, client: APIClient): IO[StoredSnapshot] = IO.fromFuture {
+    IO {
+      client.getNonBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash, timeout = getSnapshotTimeout)
+    }
+  }
+
+  private def acceptSnapshot(snapshot: StoredSnapshot): IO[Unit] = IO {
+    snapshot.checkpointCache.foreach { c =>
+      dao.metrics.incrementMetric("downloadedBlocks")
+      dao.metrics.incrementMetric("checkpointAccepted")
+
+      c.checkpointBlock.foreach(_.transactions.foreach { _ =>
+        dao.metrics.incrementMetric("transactionAccepted")
+      })
+
+      better.files
+        .File(dao.snapshotPath, snapshot.snapshot.hash)
+        .writeByteArray(KryoSerializer.serializeAnyRef(snapshot))
+    }
+  }
+}
+
+class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO, ec: ExecutionContext) extends StrictLogging {
   private implicit val ioTimer: Timer[IO] = IO.timer(ec)
 
   final implicit class FutureOps[+T](f: Future[T]) {
     def toIO: IO[T] = IO.fromFuture(IO(f))
   }
 
-  // TODO: get from config
-  private val waitForPeersDelay = 15.seconds
+  val config: Config = ConfigFactory.load()
+  private val waitForPeersDelay = config.getInt("download.waitForPeers").seconds
 
   def download(): IO[Unit] =
     for {
@@ -38,8 +99,12 @@ class DownloadProcess(implicit dao: DAO, ec: ExecutionContext) extends StrictLog
       peers <- getReadyPeers()
       snapshotClient <- getSnapshotClient(peers)
       majoritySnapshot <- getMajoritySnapshot(peers)
-      snapshotHashes <- downloadAndProcessSnapshotsFirstPass(majoritySnapshot)(snapshotClient, peers)
-      snapshot <- downloadAndProcessSnapshotsSecondPass(majoritySnapshot, snapshotHashes)(snapshotClient, peers)
+      snapshotHashes <- downloadAndProcessSnapshotsFirstPass(majoritySnapshot)(snapshotClient,
+                                                                               peers)
+      snapshot <- downloadAndProcessSnapshotsSecondPass(majoritySnapshot, snapshotHashes)(
+        snapshotClient,
+        peers
+      )
       _ <- finishDownload(snapshot)
       _ <- setAcceptedTransactionsAfterDownload
     } yield ()
@@ -74,23 +139,24 @@ class DownloadProcess(implicit dao: DAO, ec: ExecutionContext) extends StrictLog
     peers.values
       .map(peerData => peerData.client)
       .toList
-      .traverse(client =>
-        client
-          .getNonBlockingBytesKryo[SnapshotInfo]("info", timeout = 15.seconds)
-          .toIO
+      .traverse(
+        client =>
+          client
+            .getNonBlockingBytesKryo[SnapshotInfo]("info", timeout = 15.seconds)
+            .toIO
       )
-        .map(snapshots => snapshots.groupBy(_.snapshot.hash).maxBy(_._2.size)._2.head)
+      .map(snapshots => snapshots.groupBy(_.snapshot.hash).maxBy(_._2.size)._2.head)
 
   private def downloadAndProcessSnapshotsFirstPass(snapshotInfo: SnapshotInfo)(
     implicit snapshotClient: APIClient,
     peers: Peers
-  ): IO[Seq[String]] = for {
-    snapshotHashes <- getSnapshotHashes(snapshotInfo)
-    groupedHashes <- getGroupedHashes(snapshotHashes)
-    _ <- processSnapshots(groupedHashes)
-    _ <- updateMetric("downloadFirstPassComplete", "true")
-    _ <- setNodeState(NodeState.DownloadCompleteAwaitingFinalSync)
-  } yield snapshotHashes
+  ): IO[Seq[String]] =
+    for {
+      snapshotHashes <- getSnapshotHashes(snapshotInfo)
+      _ <- snapshotsProcessor.processSnapshots(snapshotHashes)
+      _ <- updateMetric("downloadFirstPassComplete", "true")
+      _ <- setNodeState(NodeState.DownloadCompleteAwaitingFinalSync)
+    } yield snapshotHashes
 
   private def downloadAndProcessSnapshotsSecondPass(
     snapshotInfo: SnapshotInfo,
@@ -103,19 +169,19 @@ class DownloadProcess(implicit dao: DAO, ec: ExecutionContext) extends StrictLog
           updateMetric("downloadExpectedNumSnapshotsSecondPass", hashes.size.toString)
             .map(_ => hashes)
       )
-      .flatMap(getGroupedHashes)
-      .flatMap(processSnapshots)
+      .flatMap(snapshotsProcessor.processSnapshots)
       .flatMap(_ => updateMetric("downloadSecondPassComplete", "true"))
       .map(_ => snapshotInfo)
 
-  private def finishDownload(snapshot: SnapshotInfo): IO[Unit] = for {
-    _ <- setSnapshot(snapshot)
-    _ <- enableRandomTX
-    _ <- acceptSnapshotCacheData(snapshot)
-    _ <- setNodeState(NodeState.Ready)
-    _ <- clearSyncBuffer
-    _ <- setDownloadFinishedTime
-  } yield ()
+  private def finishDownload(snapshot: SnapshotInfo): IO[Unit] =
+    for {
+      _ <- setSnapshot(snapshot)
+      _ <- enableRandomTX
+      _ <- acceptSnapshotCacheData(snapshot)
+      _ <- setNodeState(NodeState.Ready)
+      _ <- clearSyncBuffer
+      _ <- setDownloadFinishedTime
+    } yield ()
 
   private def setAcceptedTransactionsAfterDownload: IO[Unit] = IO {
     dao.transactionAcceptedAfterDownload =
@@ -123,7 +189,6 @@ class DownloadProcess(implicit dao: DAO, ec: ExecutionContext) extends StrictLog
   }
 
   /** **/
-
   private def setNodeState(nodeState: NodeState): IO[Unit] =
     IO(dao.nodeState = nodeState)
       .flatMap(updateMetricAndPass("nodeState", nodeState.toString))
@@ -138,109 +203,12 @@ class DownloadProcess(implicit dao: DAO, ec: ExecutionContext) extends StrictLog
       )
       .toIO
 
-  private def downloadSnapshotInfo(implicit snapshotClient: APIClient): IO[SnapshotInfo] =
-    IO { logger.info(s"Downloading from: ${snapshotClient.hostName}:${snapshotClient.apiPort}") }
-      .flatMap { _ =>
-        snapshotClient
-          .getNonBlockingBytesKryo[SnapshotInfo]("info", timeout = 15.seconds)
-          .toIO
-      }
-      .flatMap { a =>
-        updateMetric("downloadExpectedNumSnapshotsIncludingPreExisting",
-          a.snapshotHashes.size.toString)
-          .map(_ => a)
-      }
-
   private def getSnapshotHashes(snapshotInfo: SnapshotInfo): IO[Seq[String]] = {
     val preExistingSnapshots = dao.snapshotPath.list.toSeq.map(_.name)
     val snapshotHashes = snapshotInfo.snapshotHashes.filterNot(preExistingSnapshots.contains)
 
     IO.pure(snapshotHashes)
       .flatMap(updateMetricAndPass("downloadExpectedNumSnapshots", snapshotHashes.size.toString))
-  }
-
-  private def getGroupedHashes(
-    snapshotHashes: Seq[String]
-  )(implicit peers: Peers): IO[Seq[(Seq[String], PeerData)]] = {
-    val groupSize = (snapshotHashes.size / peers.size) + 1
-    val groupedHashes = snapshotHashes.grouped(groupSize).toSeq
-    val grouped = groupedHashes.zip(peers.values)
-
-    updateMetric("downloadGroupSize", groupSize.toString)
-      .flatMap(_ => updateMetric("downloadGroupedHashesSize", groupedHashes.size.toString))
-      .flatMap(_ => updateMetric("downloadGroupedZipSize", grouped.size.toString))
-      .flatMap(_ => updateMetric("downloadGroupCheckSize", grouped.flatMap(_._1).size.toString))
-      .map(_ => grouped)
-  }
-
-  private def processSnapshots(grouped: Seq[(Seq[String], PeerData)])(implicit peers: Peers) = IO {
-    grouped.par.map {
-      case (hashes, peer) =>
-        hashes.par.map { hash =>
-          processSnapshotHash(peers, peer.client, hash)
-        }
-    }
-  }
-
-  // TODO mwadon
-  private def processSnapshotHash(peers: Peers, peer: APIClient, hash: String): Boolean = {
-    var activePeer = peer
-    var remainingPeers: Seq[APIClient] =
-      peers.values.map(_.client).filterNot(_ == activePeer).toSeq
-
-    var done = false
-
-    def acceptSnapshot(r: StoredSnapshot) = {
-      r.checkpointCache.foreach { c =>
-        dao.metrics.incrementMetric("downloadedBlocks")
-        // Bypasses tip update / accumulating acceptedSinceCB
-
-        // TODO: Rebuild ledger and verify, turning off for debug
-        dao.metrics.incrementMetric("checkpointAccepted")
-
-        //tryWithMetric(acceptCheckpoint(c), "acceptCheckpoint")
-        c.checkpointBlock.foreach {
-          _.transactions.foreach { tx =>
-            //     tx.ledgerApplySnapshot()
-            dao.metrics.incrementMetric("transactionAccepted")
-            // dao.transactionService.delete(Set(tx.hash))
-          }
-        }
-
-      }
-      //dao.dbActor.putSnapshot(r.snapshot.hash, r.snapshot)
-      import better.files._
-      File(dao.snapshotPath, r.snapshot.hash).writeByteArray(KryoSerializer.serializeAnyRef(r))
-    }
-
-    while (!done && remainingPeers.nonEmpty) {
-
-      val res = Try {
-        activePeer
-          .getBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash, timeout = 100.seconds)
-      }
-      res match {
-        case Failure(e) => e.printStackTrace()
-        case _          =>
-      }
-      res.toOption.foreach { r =>
-        dao.metrics.incrementMetric("downloadedSnapshots")
-        dao.metrics.incrementMetric("snapshotCount")
-        acceptSnapshot(r)
-      }
-      if (res.isFailure) {
-        dao.metrics.incrementMetric("downloadSnapshotDataFailed")
-      }
-      done = res.isSuccess
-
-      if (!done && remainingPeers.nonEmpty) {
-        activePeer = remainingPeers.head
-        remainingPeers = remainingPeers.filterNot(_ == activePeer)
-      }
-
-    }
-
-    done
   }
 
   private def setSnapshot(snapshotInfo: SnapshotInfo): IO[Unit] = IO {
@@ -279,13 +247,11 @@ class DownloadProcess(implicit dao: DAO, ec: ExecutionContext) extends StrictLog
     }.map(_ => a)
 }
 
-object Download extends StrictLogging {
-
+object Download {
   def download()(implicit dao: DAO, ec: ExecutionContext): Unit =
-    tryWithMetric(downloadActual(), "download")
-
-  def downloadActual()(implicit dao: DAO, ec: ExecutionContext): Unit = {
-    val process = new DownloadProcess()
-    process.download().unsafeRunSync()
-  }
+    tryWithMetric({
+      val snapshotsProcessor = new RandomSnapshotsProcessor()
+      val process = new DownloadProcess(snapshotsProcessor)
+      process.download().unsafeRunSync()
+    }, "download")
 }
