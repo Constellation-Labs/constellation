@@ -6,7 +6,7 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import com.typesafe.scalalogging.StrictLogging
-import org.constellation.util.TestNode
+import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, ExecutionContextExecutorService}
@@ -19,11 +19,20 @@ trait E2E
     with BeforeAndAfterEach
     with StrictLogging {
 
-  val tmpDir = "tmp"
-
   implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
+
+  val tmpDir = "tmp"
+
+  val totalNumNodes = 3
+  val n1 = createNode(randomizePorts = false)
+  val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes - 1)(
+    i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
+  )
+  val apis: Seq[APIClient] = nodes.map { _.getAPIClient() }
+  val addPeerRequests = nodes.map { _.getAddPeerRequest }
+  val sim = new Simulation()
 
   override def beforeAll(): Unit = {
     // Cleanup DBs

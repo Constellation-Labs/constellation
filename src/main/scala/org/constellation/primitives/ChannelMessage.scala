@@ -181,8 +181,8 @@ case class ChannelSendResponse(
 
 case class SensorData(
   temperature: Int,
-  data: String,
-  channelId: String
+  name: String,
+  channelId: String = ""
 ) extends ChannelRequest
 
 object SensorData {

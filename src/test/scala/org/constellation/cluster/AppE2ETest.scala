@@ -4,15 +4,7 @@ import org.constellation.{Channel, ConstellationApp, E2E}
 import org.constellation.util.{APIClient, Simulation}
 
 class AppE2ETest extends E2E {
-  val totalNumNodes = 3
   val numMessages = 5
-  private val n1 = createNode(randomizePorts = false)
-  private val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes - 1)(
-    i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
-  )
-  private val apis: Seq[APIClient] = nodes.map { _.getAPIClient() }
-  private val addPeerRequests = nodes.map { _.getAddPeerRequest }
-  private val sim = new Simulation()
   val testApp = new ConstellationApp(apis.head)
   val constellationAppSim = new ConstellationAppSim(sim, testApp)
 

@@ -20,36 +20,10 @@ class E2ETest extends E2E {
       response
     }
 
-
-  val totalNumNodes = 3
-
-  private val n1 = createNode(randomizePorts = false)
-
-  //private val address1 = n1.getInetSocketAddress
-
-  private val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes - 1)(
-    i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
-  )
-
-  private val apis: Seq[APIClient] = nodes.map { _.getAPIClient() }
-
-  private val addPeerRequests = nodes.map { _.getAddPeerRequest }
-
-  private val sim = new Simulation()
-
-  private val initialAPIs = apis
-
-//   val n1App = new ConstellationApp(apis.head)
-//
-//   val constellationAppSim = new ConstellationAppSim(sim, n1App)
-
   "E2E Run" should "demonstrate full flow" in {
     logger.info("API Ports: " + apis.map { _.apiPort })
 
-    assert(sim.run(initialAPIs, addPeerRequests))
-
-    // val deployResponse = constellationAppSim.openChannel(apis)
-
+    assert(sim.run(apis, addPeerRequests))
     val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)),
                                   randomizePorts = false,
                                   portOffset = 50)
@@ -57,9 +31,7 @@ class E2ETest extends E2E {
     val downloadAPI = downloadNode.getAPIClient()
     logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
     assert(sim.checkReady(Seq(downloadAPI)))
-    // deployResponse.foreach{ res => res.foreach(constellationAppSim.postDownload(apis.head, _))}
 
-    // messageSim.postDownload(apis.head)
 
     Thread.sleep(20 * 1000)
 
@@ -85,7 +57,6 @@ class E2ETest extends E2E {
 
     val storedSnapshots = allAPIs.map { _.simpleDownload() }
 
-    // constellationAppSim.dumpJson(storedSnapshots)
 
     // TODO: Move to separate test
 
