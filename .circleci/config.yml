@@ -37,10 +37,10 @@ jobs:
       - save_cache:
           paths:
             - ~/.m2
-            - ~/.iv2
             - ~/.ivy2
             - lib_managed
             - ~/.sbt
+            - ~/.coursier
           key: v1-dependencies--{{ checksum "build.sbt" }}
         
       # run tests!
@@ -68,6 +68,7 @@ jobs:
         - "~/.ivy2/cache"
         - "~/.sbt"
         - "~/.m2"
+          "~/.coursier"
         - "target/resolution-cache"
         - "target/streams"
         - "project/target/resolution-cache"
