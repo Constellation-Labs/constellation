@@ -15,58 +15,39 @@ class ConstellationAppSim(sim: Simulation, constellationApp: ConstellationApp)(
   private val channelName = "test"
   private var broadcastedMessages: Seq[ChannelMessage] = Seq.empty[ChannelMessage]
 
-  def openChannel(apis: Seq[APIClient]): Future[Option[Channel]] = {
-    val deployResponse  = constellationApp.deploy(schemaStr, channelName)
-    deployResponse.foreach { resp =>
-      if (resp.isDefined) {
-        sim.awaitConditionMet(
-          "Test channel genesis not stored",
-          apis.forall {
-            _.getBlocking[Option[ChannelMessageMetadata]](
-              "messageService/" + resp.map(_.channelId).getOrElse(channelName)
-            ).exists(_.blockHash.nonEmpty)
-          }
-        )
-        resp.foreach { channel: Channel =>
+  def assertGenesisAccepted(apis: Seq[APIClient])(resp: Channel) = {
+    sim.awaitConditionMet(
+      "Test channel genesis not stored",
+      apis.forall {
+        _.getBlocking[Option[ChannelMessageMetadata]](
+          "messageService/" + resp.channelId
+        ).exists(_.blockHash.nonEmpty)
+      }
+    )
+  }
 
+  def generateChannelMessages(channel: Channel, numMessages: Int = 5): Seq[SensorData] = {
           val validNameChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map { _.toString }.toSeq
           val invalidNameChars = validNameChars.map { _.toLowerCase }
-
           val messagesToBroadcastMessages: Seq[SensorData] = (0 until 10).flatMap { batchNumber =>
             import constellation._
-
             val validMessages = Seq.fill(batchNumber % 2) {
               SensorData(
                 Random.nextInt(100),
-                Seq.fill(5) { Random.shuffle(validNameChars).head }.mkString
+                Seq.fill(numMessages) { Random.shuffle(validNameChars).head }.mkString,
+                channel.channelId
               )
             }
             val invalidMessages = Seq.fill((batchNumber + 1) % 2) {
               SensorData(
                 Random.nextInt(100) + 500,
-                Seq.fill(5) { Random.shuffle(invalidNameChars).head }.mkString
+                Seq.fill(numMessages) { Random.shuffle(invalidNameChars).head }.mkString,
+                channel.channelId
               )
             }
-
-            val msgs = validMessages ++ invalidMessages
-            sim.logger.info(
-              s"Message batch $batchNumber complete, sent ${msgs.size} messages"
-            )
-            msgs
+            validMessages ++ invalidMessages
           }
-          // TODO: Fix type bounds after changing schema
-          /*val broadcastResp: Future[Seq[ChannelMessage]] =
-            constellationApp.broadcast(messagesToBroadcastMessages)
-          broadcastResp.foreach { res: Seq[ChannelMessage] =>
-            sim.logger.info(
-              s"broadcastResp is: ${res.toString}"
-            )
-            broadcastedMessages = res
-          }*/
-        }
-      }
-    }
-    deployResponse
+    messagesToBroadcastMessages
   }
 
   def postDownload(firstAPI: APIClient = constellationApp.clientApi, channel: Channel) = {

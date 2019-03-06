@@ -5,6 +5,7 @@ import org.constellation.util.{APIClient, Simulation}
 
 class AppE2ETest extends E2E {
   val totalNumNodes = 3
+  val numMessages = 5
   private val n1 = createNode(randomizePorts = false)
   private val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes - 1)(
     i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
@@ -29,7 +30,11 @@ class AppE2ETest extends E2E {
   sim.setReady(apis)
 
   val deployResp = testApp.deploy(schemaStr)
-
+  val broadcast = deployResp.flatMap { resp =>
+    val r = resp.get
+    val messages = constellationAppSim.generateChannelMessages(r, numMessages)
+    testApp.broadcast[SensorData](messages)
+  }
 
   "API health check" should "return true" in {
     assert(healthCheck)
@@ -53,6 +58,20 @@ class AppE2ETest extends E2E {
       assert(resp.exists(r => r.channelId == r.channelOpenRequest.genesisHash))
       assert(resp.exists(_.channelName == "channel_1"))
       assert(resp.forall(r => testApp.channelIdToChannel.get(r.channelId).contains(r)))
+    }
+  }
+
+  "Deployed state channels" should "get registered by peers" in {
+    deployResp.map { resp: Option[Channel] =>
+    val registered = resp.map(r => constellationAppSim.assertGenesisAccepted(apis)(r))
+      assert(registered.contains(true))
+    }
+  }
+
+  "Channel broadcasts" should "get registered by peers" in {
+    broadcast.map { resp =>
+      assert(resp.errorMessage == "Success")
+      assert(resp.messageHashes.distinct.size == numMessages * 2)
     }
   }
 }

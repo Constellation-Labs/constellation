@@ -34,7 +34,8 @@ class ConstellationApp(
   def broadcast[T <: ChannelRequest](messages: Seq[T])(implicit ec: ExecutionContext) = {
     val msgType = messages.map(_.channelId).head//todo handle multiple message types, or throw error
     val serializedMessages = messages.map(_.json)
-    clientApi.postNonBlocking[Seq[ChannelMessage]](
+    logger.info(s"messages: ${messages} message type: ${msgType}")
+    clientApi.postNonBlocking[ChannelSendResponse](
       "channel/send",
       ChannelSendRequest(msgType, serializedMessages)
       )
