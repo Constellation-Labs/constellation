@@ -22,7 +22,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
-import org.constellation.crypto.{KeyUtils, SimpleWalletLike}
+import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.Download
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
@@ -43,7 +43,8 @@ case class PeerMetadata(
   id: Id,
   nodeState: NodeState = NodeState.Ready,
   timeAdded: Long = System.currentTimeMillis(),
-  auxHost: String = ""
+  auxHost: String = "",
+  auxAddresses: Seq[String] = Seq() // for testing multi key address partitioning
 )
 
 case class HostPort(host: String, port: Int)
@@ -90,7 +91,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
                                          val timeout: Timeout,
                                          val dao: DAO)
     extends Json4sSupport
-    with SimpleWalletLike
     with ServeUI
     with CommonEndpoints
     with StrictLogging

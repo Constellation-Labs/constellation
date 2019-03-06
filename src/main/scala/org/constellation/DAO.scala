@@ -1,14 +1,18 @@
 package org.constellation
 
+import java.security.KeyPair
+
 import akka.stream.ActorMaterializer
 import better.files.File
 import com.typesafe.scalalogging.StrictLogging
+import org.constellation.crypto.{KeyUtils, SimpleWalletLike}
 import org.constellation.primitives._
 
 class DAO(val nodeConfig: NodeConfig = NodeConfig())
     extends NodeData
     with Genesis
     with EdgeDAO
+    with SimpleWalletLike
     with StrictLogging {
 
   var actorMaterializer: ActorMaterializer = _

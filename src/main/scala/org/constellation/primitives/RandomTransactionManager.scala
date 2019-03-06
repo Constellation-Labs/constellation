@@ -1,5 +1,6 @@
 package org.constellation.primitives
 
+import java.security.KeyPair
 import java.util.concurrent.Semaphore
 
 import constellation._
@@ -23,6 +24,9 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
     generateLoop()
 
   }
+
+  // TODO: Config
+  val multiAddressGenerationMode = true
 
   private var testChannels = Seq[String]()
 
@@ -100,22 +104,60 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
                 // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
                 // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
 
-                def getRandomPeerAddress: String = {
+                def getRandomAddress: String = {
                   if (dao.nodeConfig.isGenesisNode && peerIds.isEmpty) {
                     dao.dummyAddress
                   } else {
+
                     peerIds(Random.nextInt(peerIds.size))._1.address
                   }
                 }
 
-                val sendRequest = SendToAddress(getRandomPeerAddress,
-                                                Random.nextInt(1000).toLong + 1L,
-                                                normalized = false)
-                val tx = createTransaction(dao.selfAddressStr,
-                                           sendRequest.dst,
-                                           sendRequest.amount,
-                                           dao.keyPair,
-                                           normalized = false)
+
+                val balancesForAddresses = dao.addresses.map{a => a -> dao.addressService.get(a)}
+                val auxAddressHaveSufficient = balancesForAddresses.forall{_._2.exists(_.balance > 10000000)}
+
+                def simpleTX(src: String, kp: KeyPair = dao.keyPair) = createTransaction(
+                  src,
+                  getRandomAddress,
+                  Random.nextInt(1000).toLong + 1L,
+                  kp,
+                  normalized = false
+                )
+
+                def txWithMultiAddress = if (!auxAddressHaveSufficient) {
+                  val possibleDestinations = balancesForAddresses.filterNot{_._2.exists(_.balance > 10000000)}
+                  val dst = Random.shuffle(possibleDestinations).head._1
+                  createTransaction(
+                    dao.selfAddressStr,
+                    dst,
+                    10,
+                    dao.keyPair
+                  )
+                } else {
+
+                  val historyCheckPassable = balancesForAddresses.forall{
+                    _._2.exists(_.balanceByLatestSnapshot > 10000000)
+                  }
+
+                  val randomSourceAddress = if (historyCheckPassable) {
+                    dao.metrics.incrementMetric("historyCheckPassable")
+                    Random.shuffle(dao.addresses :+ dao.selfAddressStr).head
+                  } else dao.selfAddressStr
+
+                  val srcKPMap = dao.addressToKeyPair + (dao.selfAddressStr -> dao.keyPair)
+
+                  simpleTX(randomSourceAddress, srcKPMap(randomSourceAddress))
+
+                }
+
+                val tx = if (multiAddressGenerationMode) txWithMultiAddress else simpleTX(dao.selfAddressStr)
+
+                // TODO: Unify this as an API call function equivalent
+/*                val sendRequest = SendToAddress(getRandomAddress,
+                                                ,
+                                                normalized = false)*/
+
                 dao.metrics.incrementMetric("signaturesPerformed")
                 dao.metrics.incrementMetric("randomTransactionsGenerated")
                 dao.metrics.incrementMetric("sentTransactions")

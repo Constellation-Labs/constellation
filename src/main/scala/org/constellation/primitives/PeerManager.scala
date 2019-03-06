@@ -285,7 +285,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
       updateMetricsAndDAO(updated)
 
-    case a @ PeerMetadata(host, udpPort, port, id, ns, time, auxHost) =>
+    case a @ PeerMetadata(host, udpPort, port, id, ns, time, auxHost, addresses) =>
       val validHost = (host != dao.externalHostString && host != "127.0.0.1") || !dao.preventLocalhostAsPeer
 
       if (id != dao.id && validHost) {
@@ -380,7 +380,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
             val state = s.nodeState
             val id = sig.hashSignature.id
             val add =
-              PeerMetadata(request.host, 16180, request.port, id, nodeState = state)
+              PeerMetadata(request.host, 16180, request.port, id, nodeState = state, auxAddresses = s.addresses)
             val peerData = PeerData(add, client)
             client.id = id
             self ! UpdatePeerInfo(peerData)

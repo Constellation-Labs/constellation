@@ -27,7 +27,7 @@ object RandomData {
   val keyPairs: Seq[KeyPair] = Seq.fill(10)(makeKeyPair())
 
   val go: GenesisObservation = Genesis.createGenesisAndInitialDistributionDirect(
-    keyPairs.head.address.address,
+    keyPairs.head.address,
     keyPairs.tail.map {
       _.getPublic.toId
     }.toSet,
@@ -48,19 +48,19 @@ object RandomData {
   def randomTransaction: Transaction = {
     val src = Random.shuffle(keyPairs).head
     createTransaction(
-      src.address.address,
-      Random.shuffle(keyPairs).head.address.address,
+      src.address,
+      Random.shuffle(keyPairs).head.address,
       Random.nextInt(500).toLong,
       src
     )
   }
 
-  def getAddress(keyPair: KeyPair): String = keyPair.address.address
+  def getAddress(keyPair: KeyPair): String = keyPair.address
 
   def fill(balances: Map[String, Long])(implicit dao: DAO): Iterable[Transaction] = {
     val txs = balances.map {
       case (address, amount) =>
-        createTransaction(keyPairs.head.address.address, address, amount, keyPairs.head)
+        createTransaction(keyPairs.head.address, address, amount, keyPairs.head)
     }
 
     txs.foreach(tx => {

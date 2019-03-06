@@ -348,8 +348,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
     api
   }
 
+  // TODO: Change E2E to not use this but instead rely on peer discovery, need to send addresses there too
   def getAddPeerRequest: PeerMetadata = {
-    PeerMetadata(hostName, udpPort, peerHttpPort, dao.id)
+    PeerMetadata(hostName, udpPort, peerHttpPort, dao.id, auxAddresses = dao.addresses)
   }
 
   def getAPIClientForNode(node: ConstellationNode): APIClient = {

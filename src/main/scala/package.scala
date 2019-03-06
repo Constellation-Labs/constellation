@@ -154,7 +154,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
       kp.getPublic == other.getPublic
     }
 
-    def address: AddressMetaData = pubKeyToAddress(kp.getPublic)
+    def address: String = publicKeyToAddressString(kp.getPublic)
 
   }
 

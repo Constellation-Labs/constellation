@@ -17,7 +17,7 @@ import org.constellation.consensus.Snapshot
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.serializer.KryoSerializer
 
-case class NodeStateInfo(nodeState: NodeState)
+case class NodeStateInfo(nodeState: NodeState, addresses: Seq[String] = Seq()) // TODO: Refactor, addresses temp for testing
 
 trait CommonEndpoints extends Json4sSupport {
 
@@ -90,7 +90,7 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.addressService.get(a).map { _.balanceByLatestSnapshot })
       } ~
       path("state") {
-        complete(NodeStateInfo(dao.nodeState))
+        complete(NodeStateInfo(dao.nodeState, dao.addresses))
       } ~
       path("peers") {
         complete(dao.peerInfo.map { _._2.peerMetadata }.toSeq)

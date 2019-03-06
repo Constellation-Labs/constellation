@@ -23,7 +23,7 @@ class TXValidationBenchmark extends FlatSpec {
 
   val kp: KeyPair = KeyUtils.makeKeyPair()
   val kp1: KeyPair = KeyUtils.makeKeyPair()
-  val tx = SignHelp.createTransaction(kp.address.address, kp1.address.address, 1L, kp)
+  val tx = SignHelp.createTransaction(kp.address, kp1.address, 1L, kp)
 
   val batchSize = 100
 
