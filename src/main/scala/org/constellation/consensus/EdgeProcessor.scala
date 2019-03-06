@@ -113,8 +113,6 @@ object EdgeProcessor extends StrictLogging {
     }
   }
 
-  // TODO: Move to checkpoint formation actor
-
   private def requestBlockSignature(
     checkpointBlock: CheckpointBlock,
     finalFacilitators: Set[
@@ -235,9 +233,6 @@ object EdgeProcessor extends StrictLogging {
                 val cache = CheckpointCacheData(finalCB.some, height = finalCB.calculateHeight())
                 dao.threadSafeTipService.accept(cache)
                 processSignedBlock(cache, finalFacilitators)
-              }
-              .map {
-                _.andThen(identity)
               }
           }
 

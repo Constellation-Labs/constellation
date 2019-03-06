@@ -30,6 +30,7 @@ class CheckpointFormationManager(periodSeconds: Int = 1, emptyCheckpointThreshol
     val elapsedTime = toFiniteDuration(JDuration.between(lastCheckpoint, LocalDateTime.now))
 
     if ((memPoolCount > 0 || (elapsedTime >= formEmptyCheckpointAfterThreshold)) &&
+      dao.formCheckpoints &&
       dao.nodeState == NodeState.Ready &&
       !dao.blockFormationInProgress) {
 

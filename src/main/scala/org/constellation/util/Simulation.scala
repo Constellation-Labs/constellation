@@ -259,6 +259,10 @@ class Simulation {
     apis.map(_.postEmpty("random"))
   }
 
+  def triggerCheckpointFormation(apis: Seq[APIClient]): Seq[Response[String]] = {
+    apis.map(_.postEmpty("checkpointFormation"))
+  }
+
   def setReady(apis: Seq[APIClient]): Unit = {
     apis.foreach(_.postEmpty("ready"))
   }

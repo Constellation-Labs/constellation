@@ -396,6 +396,11 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
           dao.metrics.updateMetric("generateRandomTX", dao.generateRandomTX.toString)
           complete(StatusCodes.OK)
         } ~
+        path("checkpointFormation") { // Temporary
+          dao.formCheckpoints = !dao.formCheckpoints
+          dao.metrics.updateMetric("checkpointFormation", dao.generateRandomTX.toString)
+          complete(StatusCodes.OK)
+        } ~
         path("peerHealthCheck") {
           val resetTimeout = 1.second
           val breaker = new CircuitBreaker(system.scheduler,

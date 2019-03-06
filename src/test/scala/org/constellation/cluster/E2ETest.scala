@@ -84,6 +84,7 @@ class E2ETest extends E2E {
 
     // Stop transactions
     sim.triggerRandom(allAPIs)
+    sim.triggerCheckpointFormation(allAPIs)
 
     sim.logger.info("Stopping transactions to run parity check")
 

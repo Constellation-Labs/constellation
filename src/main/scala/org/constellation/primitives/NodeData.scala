@@ -22,6 +22,7 @@ trait NodeData {
   @volatile var downloadMode: Boolean = true
   @volatile var downloadInProgress: Boolean = false
   @volatile var generateRandomTX: Boolean = false
+  @volatile var formCheckpoints: Boolean = true
   var heartbeatEnabled: Boolean = true
 
   var lastConfirmationUpdateTime: Long = System.currentTimeMillis()
