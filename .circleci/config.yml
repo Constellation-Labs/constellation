@@ -68,7 +68,7 @@ jobs:
         - "~/.ivy2/cache"
         - "~/.sbt"
         - "~/.m2"
-          "~/.coursier"
+        - "~/.coursier"
         - "target/resolution-cache"
         - "target/streams"
         - "project/target/resolution-cache"
