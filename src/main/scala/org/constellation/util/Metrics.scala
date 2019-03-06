@@ -78,7 +78,7 @@ class TransactionRateTracker()(implicit dao: DAO) {
   * @param dao: Data access object
   */
 class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
-    extends Periodic("Metrics", periodSeconds) {
+    extends Periodic[Unit]("Metrics", periodSeconds) {
 
   val logger = Logger("Metrics")
 
@@ -149,7 +149,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   /**
     * Recalculates window based / periodic metrics
     */
-  override def trigger(): concurrent.Future[Any] =
+  override def trigger(): Future[Unit] =
     Future {
       updateBalanceMetrics()
       rateCounter.calculate(countMetrics.getOrElse("transactionAccepted", 0L)).foreach {

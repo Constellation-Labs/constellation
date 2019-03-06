@@ -4,17 +4,16 @@ import java.util.concurrent.Semaphore
 
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.EdgeProcessor
 import org.constellation.primitives.Schema._
 import org.constellation.util.Periodic
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
-class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
-    extends Periodic("RandomTransactionManager", periodSeconds) {
+class RandomTransactionManager[T](periodSeconds: Int = 1)(implicit dao: DAO)
+    extends Periodic[Try[Unit]]("RandomTransactionManager", periodSeconds) {
 
-  def trigger(): Future[Any] = {
+  def trigger(): Future[Try[Unit]] = {
     Option(dao.peerManager).foreach {
       _ ! InternalHeartbeat(round)
     }
@@ -66,6 +65,14 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
       }
     }
 
+  private def getRandomPeerAddress(peerIds: Seq[(Id, PeerData)]): String = {
+    if (dao.nodeConfig.isGenesisNode && peerIds.isEmpty) {
+      dao.dummyAddress
+    } else {
+      peerIds(Random.nextInt(peerIds.size))._1.address
+    }
+  }
+
   def generateLoop(): Future[Try[Unit]] = {
 
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
@@ -100,15 +107,7 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
                 // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
                 // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
 
-                def getRandomPeerAddress: String = {
-                  if (dao.nodeConfig.isGenesisNode && peerIds.isEmpty) {
-                    dao.dummyAddress
-                  } else {
-                    peerIds(Random.nextInt(peerIds.size))._1.address
-                  }
-                }
-
-                val sendRequest = SendToAddress(getRandomPeerAddress,
+                val sendRequest = SendToAddress(getRandomPeerAddress(peerIds),
                                                 Random.nextInt(1000).toLong + 1L,
                                                 normalized = false)
                 val tx = createTransaction(dao.selfAddressStr,
@@ -143,30 +142,6 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
     )*/
             }
           }
-
-          if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold &&
-              dao.generateRandomTX &&
-              dao.nodeState == NodeState.Ready &&
-              !dao.blockFormationInProgress) {
-
-            dao.blockFormationInProgress = true
-
-            val messages = dao.threadSafeMessageMemPool.pull(1).getOrElse(Seq())
-            futureTryWithTimeoutMetric(
-              EdgeProcessor.formCheckpoint(messages).getTry(60),
-              "formCheckpointFromRandomTXManager",
-              timeoutSeconds = dao.processingConfig.formCheckpointTimeout, {
-                messages.foreach { m =>
-                  dao.threadSafeMessageMemPool
-                    .activeChannels(m.signedMessageData.data.channelId)
-                    .release()
-                }
-                dao.blockFormationInProgress = false
-              }
-            )(dao.edgeExecutionContext, dao)
-          }
-          dao.metrics.updateMetric("blockFormationInProgress",
-                                   dao.blockFormationInProgress.toString)
 
         }
       },

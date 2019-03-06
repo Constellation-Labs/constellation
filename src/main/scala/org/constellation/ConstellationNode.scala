@@ -236,6 +236,8 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   val randomTXManager = new RandomTransactionManager()
 
+  val checkpointFormationManager = new CheckpointFormationManager(dao.processingConfig.checkpointFormationTimeSeconds, dao.processingConfig.formEmptyCheckpointAfterSeconds)
+
   val snapshotTrigger = new SnapshotTrigger()
 
   val ipManager = IPManager()

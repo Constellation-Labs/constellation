@@ -29,8 +29,8 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, _}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{CommonEndpoints, MerkleTree, MetricTimerDirective, ServeUI}
-import org.json4s.{JValue, native}
 import org.json4s.native.Serialization
+import org.json4s.{JValue, native}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -55,9 +55,13 @@ case class UpdatePassword(password: String)
 case class ProcessingConfig(
   maxWidth: Int = 10,
   minCheckpointFormationThreshold: Int = 50,
+  maxTXInBlock: Int = 50,
+  maxMessagesInBlock: Int = 1,
+  checkpointFormationTimeSeconds: Int = 1,
+  formEmptyCheckpointAfterSeconds: Int = 30,
   numFacilitatorPeers: Int = 2,
   randomTXPerRoundPerPeer: Int = 30,
-  metricCheckInterval: Int = 60,
+  metricCheckInterval: Int = 10,
   maxMemPoolSize: Int = 2000,
   minPeerTimeAddedSeconds: Int = 30,
   maxActiveTipsAllowedInMemory: Int = 1000,
@@ -442,6 +446,14 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
                                        dao.keyPair,
                                        normalized = false)
             dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
+
+            dao.transactionService.put(
+              tx.hash,
+              TransactionCacheData(
+                tx,
+                inMemPool = true
+              )
+            )
 
             complete(tx.hash)
           }

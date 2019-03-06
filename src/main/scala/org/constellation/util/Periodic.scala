@@ -4,15 +4,15 @@ import java.util.concurrent.{ScheduledThreadPoolExecutor, TimeUnit}
 import scala.concurrent.Future
 import scala.util.Try // Try unused
 
-abstract class Periodic(threadName: String, periodSeconds: Int = 1) {
+abstract class Periodic[T](threadName: String, periodSeconds: Int = 1) {
 
   private val executor = new ScheduledThreadPoolExecutor(1)
 
   var round: Long = 0L
 
-  private var lastExecution: Future[Any] = Future.successful(())
+  private var lastExecution: Future[T] = Future.failed(new RuntimeException("No executions yet"))
 
-  def trigger(): Future[Any]
+  def trigger(): Future[T]
 
   /**
     * Recalculates window based / periodic metrics
