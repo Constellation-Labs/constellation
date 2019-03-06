@@ -1,5 +1,7 @@
 package org.constellation.util
 
+import java.util.concurrent.atomic.AtomicReference
+
 import better.files.File
 import com.typesafe.scalalogging.Logger
 import constellation._
@@ -83,7 +85,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   val logger = Logger("Metrics")
 
   private val stringMetrics: TrieMap[String, String] = TrieMap()
-  private val countMetrics: TrieMap[String, Long] = TrieMap()
+  private val countMetrics: TrieMap[String, AtomicReference[Long]] = TrieMap()
 
   val rateCounter = new TransactionRateTracker()
 
@@ -102,11 +104,12 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   }
 
   def updateMetric(key: String, value: Int): Unit = {
-    countMetrics(key) = value
+    countMetrics(key) = new AtomicReference[Long](value)
   }
 
   def incrementMetric(key: String): Unit = {
-    countMetrics(key) = countMetrics.getOrElse(key, 0L) + 1
+    countMetrics.getOrElseUpdate(key, new AtomicReference[Long](0L)).getAndUpdate(_ + 1L)
+   // countMetrics(key) = countMetrics.getOrElse(key, 0L) + 1
   }
 
   /**
@@ -152,7 +155,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   override def trigger(): concurrent.Future[Any] =
     Future {
       updateBalanceMetrics()
-      rateCounter.calculate(countMetrics.getOrElse("transactionAccepted", 0L)).foreach {
+      rateCounter.calculate(countMetrics.get("transactionAccepted").map{_.get()}.getOrElse(0L)).foreach {
         case (k, v) => updateMetric(k, v)
       }
       updateMetric("nodeCurrentTimeMS", System.currentTimeMillis().toString)

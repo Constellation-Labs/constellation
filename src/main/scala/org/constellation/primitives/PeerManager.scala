@@ -22,6 +22,8 @@ case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 
 object PeerManager extends StrictLogging {
 
+  type Peers = Map[Schema.Id, PeerData]
+
   def initiatePeerReload()(implicit dao: DAO, ec: ExecutionContextExecutor): Unit = {
 
     tryWithMetric(
