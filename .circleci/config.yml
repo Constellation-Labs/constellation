@@ -40,15 +40,6 @@ jobs:
             - ~/.sbt
             - ~/.cache/coursier
           key: v3-dependencies-{{ checksum "build.sbt" }}-{{ checksum "project/plugins.sbt" }}
-
-      - save_cache:
-          paths:
-            - ~/.m2
-            - ~/.ivy2
-            - lib_managed
-            - ~/.sbt
-            - ~/.cache/coursier
-          key: v3-dependencies-
         
       # run tests!
       - run: cat /dev/null | sbt -no-colors test:test
