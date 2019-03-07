@@ -163,11 +163,11 @@ object PeerManager extends StrictLogging {
     validWithLoopbackGuard(hp.host) && !hostAlreadyExists
   }
 
-  def broadcast[T](func: APIClient => Future[T],
-                   skipIds: Set[Id]= Set.empty,
-                   subset: Set[Id] = Set.empty)
-                  (implicit dao: DAO, ec: ExecutionContext)
-  : Future[Map[Id, ValidatedNel[Throwable, T]]] = {
+  def broadcast[T](
+    func: APIClient => Future[T],
+    skipIds: Set[Id] = Set.empty,
+    subset: Set[Id] = Set.empty
+  )(implicit dao: DAO, ec: ExecutionContext): Future[Map[Id, ValidatedNel[Throwable, T]]] = {
 
     val peerInfo = dao.peerInfo
     val selected =

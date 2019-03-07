@@ -61,7 +61,8 @@ class RandomSnapshotsProcessor(implicit dao: DAO, ec: ExecutionContext) extends 
 
   private def getSnapshot(hash: String, client: APIClient): IO[StoredSnapshot] = IO.fromFuture {
     IO {
-      client.getNonBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash, timeout = getSnapshotTimeout)
+      client.getNonBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash,
+                                                     timeout = getSnapshotTimeout)
     }
   }
 
@@ -81,7 +82,9 @@ class RandomSnapshotsProcessor(implicit dao: DAO, ec: ExecutionContext) extends 
   }
 }
 
-class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO, ec: ExecutionContext) extends StrictLogging {
+class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
+                                                              ec: ExecutionContext)
+    extends StrictLogging {
   private implicit val ioTimer: Timer[IO] = IO.timer(ec)
 
   final implicit class FutureOps[+T](f: Future[T]) {
@@ -116,12 +119,13 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .map(_ => ())
 
   private def downloadAndAcceptGenesis =
-    PeerManager.broadcast(_.getNonBlocking[Option[GenesisObservation]]("genesis"))
-    .map(_.values.flatMap(_.toOption))
-    .map(_.find(_.nonEmpty).flatten.get)
-    .toIO
-    .flatMap(updateMetricAndPass("downloadedGenesis", "true"))
-    .flatMap(genesis => IO(dao.acceptGenesis(genesis)).map(_ => genesis))
+    PeerManager
+      .broadcast(_.getNonBlocking[Option[GenesisObservation]]("genesis"))
+      .map(_.values.flatMap(_.toOption))
+      .map(_.find(_.nonEmpty).flatten.get)
+      .toIO
+      .flatMap(updateMetricAndPass("downloadedGenesis", "true"))
+      .flatMap(genesis => IO(dao.acceptGenesis(genesis)).map(_ => genesis))
 
   private def waitForPeers(): IO[Unit] =
     IO(logger.info(s"Waiting ${waitForPeersDelay.toString()} for peers"))
