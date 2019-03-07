@@ -166,7 +166,8 @@ object PeerManager extends StrictLogging {
   def broadcast[T](func: APIClient => Future[T],
                    skipIds: Set[Id]= Set.empty,
                    subset: Set[Id] = Set.empty)
-                  (implicit dao: DAO, ec: ExecutionContext): Future[Map[Id, ValidatedNel[Throwable, T]]] = {
+                  (implicit dao: DAO, ec: ExecutionContext)
+  : Future[Map[Id, ValidatedNel[Throwable, T]]] = {
 
     val peerInfo = dao.peerInfo
     val selected =
@@ -183,43 +184,6 @@ object PeerManager extends StrictLogging {
       .traverse(_.toValidatedNel)
       .map(values => selectedKeys.zip(values).toMap)
   }
-
-//  def broadcastPost[T](path: String,
-//                        msg: AnyRef,
-//                       skipIds: Set[Id], subset: Set[Id]
-//                      )(implicit dao: DAO): Future[Map[Id, T]] = {
-//
-//    val peerInfo = dao.peerInfo
-//    val keys =
-//      if (subset.nonEmpty) peerInfo.filterKeys(subset.contains)
-//      else {
-//        peerInfo.filterKeys(id => !skipIds.contains(id))
-//      }
-//
-//    keys.map {
-//      case (id, data) => id -> data.client.postNonBlocking(path, msg)
-//    }
-//
-//  }
-
-  /*
-      case APIBroadcast(func, skipIds, subset) =>
-      val replyTo = sender()
-
-      val keys =
-        if (subset.nonEmpty) peerInfo.filterKeys(subset.contains)
-        else {
-          peerInfo.filterKeys(id => !skipIds.contains(id))
-        }
-
-      val result = keys.map {
-        case (id, data) =>
-          id -> func(data.client)
-      }
-
-      replyTo ! result
-   */
-
 }
 
 case class PeerData(

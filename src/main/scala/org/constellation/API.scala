@@ -385,7 +385,12 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
           }
           val res = PeerManager.broadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
           dao.metrics.updateMetric("nodeState", dao.nodeState.toString)
-          complete(StatusCodes.OK)
+          onComplete(res) { t =>
+            t.foreach(_.filter(_._2.isInvalid).foreach {
+              case (id, e) => logger.warn(s"Unable to propogate status to node ID: $id", e) }
+            )
+            complete(StatusCodes.OK)
+          }
         } ~
         path("random") { // Temporary
           dao.generateRandomTX = !dao.generateRandomTX
