@@ -2,7 +2,7 @@
 #
 # Check https://circleci.com/docs/2.0/sample-config/ for more details
 #
-version: 2
+version: 2.0
 jobs:
   build:
     docker:
@@ -15,23 +15,21 @@ jobs:
       # - image: circleci/postgres:9.4
 
     working_directory: ~/constellation
-
-    environment:
-      # Customize the JVM maximum heap limit
-      JVM_OPTS: -Xmx3200m
-      TERM: dumb
     
     steps:
       - checkout
 
+      - run: echo 'export JVM_OPTS=-Xmx3200m' >> $BASH_ENV
+      - run: echo 'export TERM=dumb' >> $BASH_ENV
+
       # Download and cache dependencies
       - restore_cache:
           keys:
-          - v1-dependencies-{{ checksum "build.sbt" }}
+          - v2-dependencies-{{ checksum "build.sbt" }}-{{ checksum "project/plugins.sbt" }}
           # fallback to using the latest cache if no exact match is found
-          - v1-dependencies-
+          - v2-dependencies-
 
-      - run: cat /dev/null | sbt test:compile
+      - run: cat /dev/null | sbt -no-colors clean test:compile
 
       # Update this to use the cache defined in the other step.
       - save_cache:
@@ -41,10 +39,17 @@ jobs:
             - lib_managed
             - ~/.sbt
             - ~/.coursier
-          key: v1-dependencies--{{ checksum "build.sbt" }}
+          key: v2-dependencies-{{ checksum "build.sbt" }}-{{ checksum "project/plugins.sbt" }}
         
       # run tests!
-      - run: cat /dev/null | sbt test:test
+      - run: cat /dev/null | sbt -no-colors test:test
+
+      - store_test_results:
+          path: target/test-results
+
+      - store_artifacts:
+          path: target/test-results
+          destination: test-results
 
   publish:
     machine:
