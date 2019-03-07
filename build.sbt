@@ -85,7 +85,6 @@ lazy val coreDependencies = Seq(
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
   "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
-  "org.iq80.leveldb" % "leveldb" % "0.10" withSources () withJavadoc (),
   "com.codahale" % "shamir" % "0.6.1" withSources () withJavadoc (),
   "com.twitter" %% "chill" % "0.9.3",
   "com.twitter" %% "algebird-core" % "0.13.5",
