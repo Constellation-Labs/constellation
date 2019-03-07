@@ -87,7 +87,7 @@ class E2ETest extends E2E {
 
     sim.logger.info("Stopping transactions to run parity check")
 
-    Thread.sleep(30000)
+    Thread.sleep(50000)
 
     // TODO: Change assertions to check several times instead of just waiting ^ with sleep
     // Follow pattern in Simulation.await examples

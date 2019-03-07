@@ -2,16 +2,17 @@ package org.constellation.primitives
 
 import java.util.concurrent.Semaphore
 
+import akka.actor.ActorRef
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.EdgeProcessor
-import org.constellation.primitives.Schema._
+import org.constellation.consensus.Node.StartNewBlockCreationRound
+import org.constellation.primitives.Schema.{InternalHeartbeat, NodeState, SendToAddress, _}
 import org.constellation.util.Periodic
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
-class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
+class RandomTransactionManager(nodeActor: ActorRef,periodSeconds: Int = 1)(implicit dao: DAO)
     extends Periodic("RandomTransactionManager", periodSeconds) {
 
   def trigger(): Future[Any] = {
@@ -145,29 +146,15 @@ class RandomTransactionManager(periodSeconds: Int = 1)(implicit dao: DAO)
           }
 
           if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold &&
-              dao.generateRandomTX &&
-              dao.nodeState == NodeState.Ready &&
-              !dao.blockFormationInProgress) {
+            dao.generateRandomTX &&
+            dao.nodeState == NodeState.Ready &&
+            !dao.blockFormationInProgress) {
 
-            dao.blockFormationInProgress = true
+            nodeActor ! StartNewBlockCreationRound
+            dao.metrics.updateMetric("blockFormationInProgress",
+              dao.blockFormationInProgress.toString)
 
-            val messages = dao.threadSafeMessageMemPool.pull(1).getOrElse(Seq())
-            futureTryWithTimeoutMetric(
-              EdgeProcessor.formCheckpoint(messages).getTry(60),
-              "formCheckpointFromRandomTXManager",
-              timeoutSeconds = dao.processingConfig.formCheckpointTimeout, {
-                messages.foreach { m =>
-                  dao.threadSafeMessageMemPool
-                    .activeChannels(m.signedMessageData.data.channelId)
-                    .release()
-                }
-                dao.blockFormationInProgress = false
-              }
-            )(dao.edgeExecutionContext, dao)
           }
-          dao.metrics.updateMetric("blockFormationInProgress",
-                                   dao.blockFormationInProgress.toString)
-
         }
       },
       "randomTransactionLoop"

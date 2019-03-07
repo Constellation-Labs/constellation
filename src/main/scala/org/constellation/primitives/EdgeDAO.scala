@@ -506,4 +506,12 @@ trait EdgeDAO {
   def readyPeers: Map[Id, PeerData] =
     peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
 
+  def pullTransactions(minimumCount: Int = minCheckpointFormationThreshold): Option[Seq[Transaction]] =  {
+    threadSafeTXMemPool.pull(minimumCount)
+  }
+
+  def pullMessages(minimumCount: Int): Option[Seq[ChannelMessage]] = {
+    threadSafeMessageMemPool.pull(minimumCount)
+  }
+
 }

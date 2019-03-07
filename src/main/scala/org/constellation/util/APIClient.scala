@@ -185,6 +185,19 @@ class APIClient private (host: String = "127.0.0.1",
       .map(_.unsafeBody)
   }
 
+  def postNonBlockingUnit(suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
+    implicit f: Formats = constellation.constellationFormats
+  ): Future[Response[Unit]] = {
+    val ser = Serialization.write(b)
+    val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
+    httpWithAuth(suffix, timeout = timeout)(Method.POST)
+      .body(gzipped)
+      .contentType("application/json")
+      .header("Content-Encoding", "gzip")
+      .response(ignore)
+      .send()
+  }
+
   def postBlockingEmpty[T <: AnyRef](
     suffix: String,
     timeout: Duration = 5.seconds

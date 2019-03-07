@@ -1,10 +1,51 @@
 package org.constellation.consensus
-import akka.actor.Props
 
-class HTTPNodeRemoteSender extends NodeRemoteSender {
-  override def receive: Receive = ???
-}
+import constellation._
+import org.constellation.{DAO, PeerMetadata}
+import org.constellation.consensus.Node.NotifyFacilitators
+import org.constellation.consensus.Round.{BroadcastTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.p2p.routes.BlockBuildingRoundRoute
+import org.constellation.primitives.Schema.SignedObservationEdge
+import org.constellation.primitives.{ChannelMessage, PeerData, Transaction}
 
-object HTTPNodeRemoteSender {
-  def props: Props = Props(new HTTPNodeRemoteSender)
+
+case class RoundDataRemote(roundId: RoundId,
+  peers: Set[PeerMetadata],
+  facilitatorId: FacilitatorId,
+  transactions: Seq[Transaction],
+  tipsSOE: Seq[SignedObservationEdge],
+  messages: Seq[ChannelMessage])
+
+class HTTPNodeRemoteSender(implicit val  dao: DAO) extends NodeRemoteSender {
+
+  override def notifyFacilitators(cmd: NotifyFacilitators): Unit = {
+    val r = cmd.roundData
+    parallelFireForget(
+      BlockBuildingRoundRoute.newRoundFullPath,
+      cmd.roundData.peers,
+      RoundDataRemote(
+        r.roundId,
+        r.peers.map(p => p.peerMetadata),
+        r.facilitatorId,
+        r.transactions,
+        r.tipsSOE,
+        r.messages
+      )
+    )
+  }
+
+  override def broadcastTransactionProposal(cmd: BroadcastTransactionProposal): Unit = {
+    parallelFireForget(BlockBuildingRoundRoute.proposalFullPath,
+                       cmd.peers,
+                       cmd.transactionsProposal)
+  }
+
+  override def broadcastBlockUnion(cmd: BroadcastUnionBlockProposal): Unit = {
+    parallelFireForget(BlockBuildingRoundRoute.unionFullPath, cmd.peers, cmd.proposal)
+  }
+
+  def parallelFireForget(path: String, peers: Iterable[PeerData], cmd: AnyRef): Unit = {
+    peers.par.foreach(_.client.postNonBlockingUnit(path, cmd))
+  }
+
 }

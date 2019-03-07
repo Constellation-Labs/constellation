@@ -27,7 +27,10 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] {
     lruCache.contains(key)
 
   override def toMap(): Map[String, V] =
-    lruCache.iterator.toMap
+    // TODO: wkoszycki replace with ExtendedLRUCache
+    this.synchronized {
+      lruCache.iterator.toMap
+    }
 
   override def getAsync(key: String): IO[Option[V]] =
     IO.pure(get(key))

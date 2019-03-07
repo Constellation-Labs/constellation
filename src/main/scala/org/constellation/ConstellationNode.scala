@@ -16,6 +16,7 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import constellation._
 import org.constellation.CustomDirectives.printResponseTime
+import org.constellation.consensus.{HTTPNodeRemoteSender, Node, NodeRemoteSender}
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.datastore.swaydb.SwayDBDatastore
@@ -23,6 +24,7 @@ import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Metrics}
+import org.json4s.BuildInfo
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -234,7 +236,6 @@ class ConstellationNode(val configKeyPair: KeyPair,
   val metrics_ = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
   dao.metrics = metrics_
 
-  val randomTXManager = new RandomTransactionManager()
 
   val snapshotTrigger = new SnapshotTrigger()
 
@@ -284,7 +285,10 @@ class ConstellationNode(val configKeyPair: KeyPair,
   private val bindingFuture: Future[Http.ServerBinding] =
     Http().bindAndHandle(routes, httpInterface, httpPort)
 
-  val peerAPI = new PeerAPI(ipManager)
+  val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
+  val nodeActor: ActorRef = system.actorOf(Node.props(remoteSenderActor))
+  val peerAPI = new PeerAPI(ipManager, nodeActor)
+  val randomTXManager = new RandomTransactionManager(nodeActor)
 
   val peerRoutes: Route = peerAPI.routes // logReqResp { }
 

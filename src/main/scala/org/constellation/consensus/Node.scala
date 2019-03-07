@@ -1,11 +1,24 @@
 package org.constellation.consensus
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.pattern.{Backoff, BackoffSupervisor}
-import org.constellation.DAO
+import akka.util.Timeout
+import org.constellation.consensus.Node.{
+    NotifyFacilitators,
+    ParticipateInBlockCreationRound,
+    StartNewBlockCreationRound
+  }
+import org.constellation.consensus.Round._
+import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.duration._
 
-class Node extends Actor with ActorLogging {
+class Node(remoteSenderSupervisor: ActorRef)(implicit dao: DAO) extends Actor with ActorLogging {
+
+  implicit val shortTimeout: Timeout = ConfigUtil.getDurationFromConfig(
+      "constellation.consensus.form-checkpoint-blocks-timeout",
+      60.second
+    )
+
   val roundManagerProps: Props = RoundManager.props
   val roundManagerSupervisor: Props = BackoffSupervisor.props(
     Backoff.onFailure(
@@ -19,42 +32,34 @@ class Node extends Actor with ActorLogging {
   val roundManager: ActorRef =
     context.actorOf(roundManagerSupervisor, name = "round-manager-supervisor")
 
-  val nodeRemoteSender: Props = HTTPNodeRemoteSender.props
-  val nodeRemoteSupervisor: Props = BackoffSupervisor.props(
-    Backoff.onFailure(
-      roundManagerProps,
-      childName = "node-remote",
-      minBackoff = 3.seconds,
-      maxBackoff = 30.seconds,
-      randomFactor = 0.2
-    )
-  )
-  val nodeRemote: ActorRef =
-    context.actorOf(nodeRemoteSupervisor, name = "node-remote-supervisor")
 
   override def receive: Receive = {
-    case StartBlockCreationRound =>
-      roundManager ! StartBlockCreationRound
-
-    case cmd: ReceivedProposal =>
+    case StartNewBlockCreationRound =>
+      roundManager ! StartNewBlockCreationRound
+    case cmd: ParticipateInBlockCreationRound =>
       roundManager ! cmd
-
-    case cmd: ReceivedMajorityUnionedBlock =>
+    case cmd: TransactionsProposal =>
       roundManager ! cmd
-
+    case cmd: UnionBlockProposal =>
+      roundManager ! cmd
+    case cmd: BroadcastTransactionProposal =>
+      remoteSenderSupervisor ! cmd
+    case cmd: BroadcastUnionBlockProposal =>
+      remoteSenderSupervisor ! cmd
     case cmd: NotifyFacilitators =>
-      nodeRemote ! cmd
-
-    case cmd: BroadcastProposal =>
-      nodeRemote ! cmd
-
-    case cmd: BroadcastMajorityUnionedBlock =>
-      nodeRemote ! cmd
-
-    case _                       => log.info("Received unknown message")
+      remoteSenderSupervisor ! cmd
+    case cmd => log.warning(s"Received unknown message $cmd")
   }
+
 }
 
 object Node {
-  def props(implicit dao: DAO): Props = Props(new Node)
+  sealed trait NodeCommand
+
+  case class NotifyFacilitators(roundData: RoundData)
+  case class ParticipateInBlockCreationRound(roundData: RoundData) extends NodeCommand
+  case object StartNewBlockCreationRound extends NodeCommand
+
+  def props(remoteSenderSupervisor: ActorRef)(implicit dao: DAO): Props =
+    Props(new Node(remoteSenderSupervisor))
 }
