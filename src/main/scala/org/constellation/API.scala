@@ -383,7 +383,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
           } else {
             dao.nodeState = NodeState.PendingDownload
           }
-          dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
+          val res = PeerManager.broadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
           dao.metrics.updateMetric("nodeState", dao.nodeState.toString)
           complete(StatusCodes.OK)
         } ~
@@ -399,16 +399,13 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
                                            callTimeout = 5.seconds,
                                            resetTimeout)
 
-          val response = (peerManager ? APIBroadcast(_.get("health")))(standardTimeout)
-            .mapTo[Map[Id, Future[Response[String]]]]
+          val response = PeerManager.broadcast(_.get("health"))
+
           onCompleteWithBreaker(breaker)(response) {
             case Success(idMap) =>
               val res = idMap.map {
-                case (id, fut) =>
-                  val resp = fut.get()
-                  id -> resp.isSuccess
-                //                val maybeResponse = fut.getOpt()
-                //                id -> maybeResponse.exists{_.isSuccess}
+                case (id, validatedResp) =>
+                  id -> validatedResp.exists(_.isSuccess)
               }.toSeq
 
               complete(res)

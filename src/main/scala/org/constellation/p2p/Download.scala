@@ -115,13 +115,19 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .flatMap(_ => requestForFaucet)
       .map(_ => ())
 
-  private def downloadAndAcceptGenesis: IO[GenesisObservation] =
-    (dao.peerManager ? APIBroadcast(_.getNonBlocking[Option[GenesisObservation]]("genesis")))
+  private def downloadAndAcceptGenesis =
+    PeerManager.broadcast(_.getNonBlocking[Option[GenesisObservation]]("genesis"))
+    .map(_.values.flatMap(_.toOption))
+    .map(_.find(_.nonEmpty).flatten.get)
+    .toIO
+    .flatMap(updateMetricAndPass("downloadedGenesis", "true"))
+    .flatMap(genesis => IO(dao.acceptGenesis(genesis)).map(_ => genesis))
+/*    (dao.peerManager ? APIBroadcast()
       .mapTo[Map[Schema.Id, Future[Option[GenesisObservation]]]]
       .flatMap(m => Future.find(m.values.toList)(_.nonEmpty).map(_.flatten.get))
       .toIO
       .flatMap(updateMetricAndPass("downloadedGenesis", "true"))
-      .flatMap(genesis => IO(dao.acceptGenesis(genesis)).map(_ => genesis))
+      .flatMap(genesis => IO(dao.acceptGenesis(genesis)).map(_ => genesis))*/
 
   private def waitForPeers(): IO[Unit] =
     IO(logger.info(s"Waiting ${waitForPeersDelay.toString()} for peers"))
