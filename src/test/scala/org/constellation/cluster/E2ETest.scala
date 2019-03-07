@@ -102,8 +102,8 @@ class E2ETest extends E2E {
 
     // TODO: This is flaky and fails randomly sometimes
     val snaps = storedSnapshots.toSet
-      .map { x: Seq[StoredSnapshot] =>
-        x.map { _.checkpointCache.flatMap { _.checkpointBlock } }.toSet
+      .map { x: Seq[StoredSnapshot] => // Temporarily ignoring messages for partitioning changes.
+        x.map { _.checkpointCache.flatMap { _.checkpointBlock.map{_.copy(messages = Seq())}} }.toSet
       }
 
     // Not inlining this for a reason -- the snaps object is quite large,
@@ -224,7 +224,7 @@ class E2ETest extends E2E {
       val messagesInChannelWithBlocks = storedSnapshots.head.flatMap { s =>
         s.checkpointCache.map { cache =>
           val block = cache.checkpointBlock.get
-          val relevantMessages = block.checkpoint.edge.data.messages
+          val relevantMessages = block.messages
             .filter { broadcastedMessages.contains }
           val messageParent = relevantMessages.map {
             _.signedMessageData.data.previousMessageHash

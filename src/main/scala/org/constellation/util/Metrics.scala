@@ -162,6 +162,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
       updateMetric("nodeCurrentDate", new DateTime().toString())
       updateMetric("metricsRound", round.toString)
       updateMetric("addressCount", dao.addressService.lruCache.m.size)
+      updateMetric("channelCount", dao.threadSafeMessageMemPool.activeChannels.size)
 
     }(scala.concurrent.ExecutionContext.global)
 

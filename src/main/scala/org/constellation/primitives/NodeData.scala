@@ -2,12 +2,13 @@ package org.constellation.primitives
 
 import java.net.InetSocketAddress
 import java.security.KeyPair
-import akka.actor.ActorRef
 
+import akka.actor.ActorRef
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.util.Metrics
 
@@ -16,6 +17,7 @@ trait NodeData {
   // var dbActor : SwayDBDatastore = _
   var peerManager: ActorRef = _
   var metrics: Metrics = _
+  var messageHashStore: swaydb.Set[String] = _
   var transactionHashStore: swaydb.Set[String] = _
   var checkpointHashStore: swaydb.Set[String] = _
 
@@ -37,6 +39,7 @@ trait NodeData {
   val dummyAddress: String = KeyUtils.makeKeyPair().getPublic.toId.address
 
   @volatile var nodeState: NodeState = NodeState.PendingDownload
+  @volatile var nodeType: NodeType = NodeType.Full
 
   def setNodeState(
     nodeState_ : NodeState

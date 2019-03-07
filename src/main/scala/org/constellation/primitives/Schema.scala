@@ -36,6 +36,11 @@ object Schema {
     Offline = Value
   }
 
+  object NodeType extends Enumeration {
+    type NodeType = Value
+    val Full, Light = Value
+  }
+
   sealed trait ValidationStatus
 
   final case object Valid extends ValidationStatus
@@ -145,7 +150,7 @@ object Schema {
     * Collection of references to transaction hashes
     * @param hashes : TX edge hashes
     */
-  case class CheckpointEdgeData(hashes: Seq[String], messages: Seq[ChannelMessage] = Seq())
+  case class CheckpointEdgeData(hashes: Seq[String], messageHashes: Seq[String] = Seq())
       extends Signable
 
   case class CheckpointEdge(edge: Edge[CheckpointEdgeData]) {

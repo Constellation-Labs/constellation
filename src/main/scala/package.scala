@@ -74,7 +74,8 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     new KeyPairSerializer +
     new InetSocketAddressSerializer +
     new EnumNameSerializer(EdgeHashType) +
-    new EnumNameSerializer(NodeState)
+    new EnumNameSerializer(NodeState) +
+    new EnumNameSerializer(NodeType)
 
   def caseClassToJson(message: Any): String = {
     compactRender(Extraction.decompose(message))

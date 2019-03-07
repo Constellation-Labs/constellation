@@ -20,7 +20,7 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.p2p.PeerAPI
-import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
+import org.constellation.primitives.Schema.{NodeState, NodeType, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Metrics}
 
@@ -33,7 +33,8 @@ case class CliConfig(
                       externalIp: java.net.InetAddress = null,
                       externalPort: Int = 0,
                       debug: Boolean = false,
-                      startOfflineMode: Boolean = false
+                      startOfflineMode: Boolean = false,
+                      lightNode: Boolean = false
                     )
 
 object ConstellationNode extends StrictLogging {
@@ -62,6 +63,9 @@ object ConstellationNode extends StrictLogging {
         opt[Boolean]('o', "offline")
           .action((x, c) => c.copy(startOfflineMode = x))
           .text("Start the node in offline mode. Won't connect automatically"),
+        opt[Boolean]('l', "light")
+          .action((x, c) => c.copy(startOfflineMode = x))
+          .text("Start a light node, only validates & stores portions of the graph"),
         help("help").text("prints this usage text"),
         version("version").text(s"Constellation v${BuildInfo.version}"),
         checkConfig(
@@ -241,6 +245,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
   if (cliConfig.startOfflineMode) {
     dao.nodeState = NodeState.Offline
   }
+  if (cliConfig.lightNode) {
+    dao.nodeType = NodeType.Light
+  }
 
   import dao._
 
@@ -253,6 +260,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   val ipManager = IPManager()
 
+  dao.messageHashStore = SwayDBDatastore.duplicateCheckStore(dao, "message_hash_store")
   dao.transactionHashStore = SwayDBDatastore.duplicateCheckStore(dao, "transaction_hash_store")
   dao.checkpointHashStore = SwayDBDatastore.duplicateCheckStore(dao, "checkpoint_hash_store")
 
@@ -350,7 +358,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
 
   // TODO: Change E2E to not use this but instead rely on peer discovery, need to send addresses there too
   def getAddPeerRequest: PeerMetadata = {
-    PeerMetadata(hostName, udpPort, peerHttpPort, dao.id, auxAddresses = dao.addresses)
+    PeerMetadata(hostName, udpPort, peerHttpPort, dao.id, auxAddresses = dao.addresses, nodeType = dao.nodeType)
   }
 
   def getAPIClientForNode(node: ConstellationNode): APIClient = {

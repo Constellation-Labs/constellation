@@ -42,7 +42,7 @@ object EdgeProcessor extends StrictLogging {
         dao.metrics.incrementMetric("heightNonEmpty")
       }
 
-      cb.checkpoint.edge.data.messages.foreach { m =>
+      cb.messages.foreach { m =>
         if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
           dao.messageService.put(
             m.signedMessageData.data.channelId,
@@ -237,7 +237,10 @@ object EdgeProcessor extends StrictLogging {
                 .traverse { finalCB =>
                   val cache = CheckpointCacheData(finalCB.some, height = finalCB.calculateHeight())
                   dao.threadSafeTipService.accept(cache)
-                  processSignedBlock(cache, finalFacilitators)
+                  processSignedBlock(
+                    cache.copy(checkpointBlock = cache.checkpointBlock.map{_.copy(messages = Seq())}),
+                    finalFacilitators
+                  )
                 }
                 .map {
                   _.andThen(identity)
@@ -541,7 +544,7 @@ object Snapshot {
     for (cbOpt <- cbData;
          cbCache <- cbOpt;
          cb <- cbCache.checkpointBlock;
-         message <- cb.checkpoint.edge.data.messages) {
+         message <- cb.messages) {
       dao.messageService.update(
         message.signedMessageData.signatures.hash,
         _.copy(snapshotHash = Some(snapshot.hash)),

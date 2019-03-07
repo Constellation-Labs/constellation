@@ -1,6 +1,7 @@
 package org.constellation.util
 
 import java.util.concurrent.TimeUnit
+
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model.{HttpEntity, HttpResponse, MediaTypes, StatusCodes}
 import akka.http.scaladsl.server.Directives._
@@ -9,15 +10,17 @@ import akka.http.scaladsl.unmarshalling.FromEntityUnmarshaller
 import akka.util.{ByteString, Timeout}
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.json4s.native.Serialization
-import scala.concurrent.Future
 
+import scala.concurrent.Future
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.Snapshot
 import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.NodeType
+import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.serializer.KryoSerializer
 
-case class NodeStateInfo(nodeState: NodeState, addresses: Seq[String] = Seq()) // TODO: Refactor, addresses temp for testing
+case class NodeStateInfo(nodeState: NodeState, addresses: Seq[String] = Seq(), nodeType: NodeType = NodeType.Full) // TODO: Refactor, addresses temp for testing
 
 trait CommonEndpoints extends Json4sSupport {
 
@@ -90,7 +93,7 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.addressService.get(a).map { _.balanceByLatestSnapshot })
       } ~
       path("state") {
-        complete(NodeStateInfo(dao.nodeState, dao.addresses))
+        complete(NodeStateInfo(dao.nodeState, dao.addresses, dao.nodeType))
       } ~
       path("peers") {
         complete(dao.peerInfo.map { _._2.peerMetadata }.toSeq)

@@ -25,6 +25,7 @@ import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.Download
 import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, _}
 import org.constellation.serializer.KryoSerializer
@@ -44,7 +45,8 @@ case class PeerMetadata(
   nodeState: NodeState = NodeState.Ready,
   timeAdded: Long = System.currentTimeMillis(),
   auxHost: String = "",
-  auxAddresses: Seq[String] = Seq() // for testing multi key address partitioning
+  auxAddresses: Seq[String] = Seq(), // for testing multi key address partitioning
+  nodeType: NodeType = NodeType.Full
 )
 
 case class HostPort(host: String, port: Int)
@@ -68,9 +70,9 @@ case class ProcessingConfig(
   snapshotHeightInterval: Int = 2,
   snapshotHeightDelayInterval: Int = 5,
   snapshotInterval: Int = 25,
-  checkpointLRUMaxSize: Int = 4000,
-  transactionLRUMaxSize: Int = 10000,
-  addressLRUMaxSize: Int = 10000,
+  checkpointLRUMaxSize: Int = 2000,
+  transactionLRUMaxSize: Int = 5000,
+  addressLRUMaxSize: Int = 1000,
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,
   roundsPerMessage: Int = 10
@@ -176,7 +178,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
 
                 BlockUIOutput(
                   cb.soeHash, ccd.height.get.min, cb.parentSOEHashes,
-                  cb.checkpoint.edge.data.messages.map{_.signedMessageData.data.channelId}.distinct.map{
+                  cb.messages.map{_.signedMessageData.data.channelId}.distinct.map{
                     channelId =>
                       ChannelValidationInfo(channelId, true)
                   }
@@ -209,7 +211,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
                     .head
                     .checkpointBlock
                     .get
-                  val messageProofInput = block.transactions.map { _.hash } ++ block.checkpoint.edge.data.messages
+                  val messageProofInput = block.transactions.map { _.hash } ++ block.messages
                     .map { _.signedMessageData.signatures.hash }
                   val messageProof = MerkleTree(messageProofInput.toList)
                     .createProof(cmd.channelMessage.signedMessageData.signatures.hash)
