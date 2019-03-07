@@ -205,8 +205,6 @@ case object GetPeerInfo
 
 case class UpdatePeerInfo(peerData: PeerData)
 
-class NewPeerManager
-
 class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMaterializer, dao: DAO)
     extends Actor
     with StrictLogging {
