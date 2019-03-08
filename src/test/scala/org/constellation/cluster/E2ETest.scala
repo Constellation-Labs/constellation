@@ -86,12 +86,17 @@ class E2ETest extends E2E {
 
     Simulation.logger.info("Stopping transactions to run parity check")
 
-    Thread.sleep(50000)
 
-    // TODO: Change assertions to check several times instead of just waiting ^ with sleep
-    // Follow pattern in Simulation.await examples
-    assert(allAPIs.map { _.metrics("checkpointAccepted") }.distinct.size == 1)
-    assert(allAPIs.map { _.metrics("transactionAccepted") }.distinct.size == 1)
+    Simulation.awaitConditionMet("Accepted checkpoint blocks number differs across the nodes",
+      allAPIs.map { _.metrics("checkpointAccepted") }.distinct.size == 1,
+      maxRetries = 6,
+      delay = 10000
+    )
+    Simulation.awaitConditionMet("Accepted transactions number differs across the nodes",
+      allAPIs.map { _.metrics("transactionAccepted") }.distinct.size == 1,
+      maxRetries = 6,
+      delay = 10000
+    )
 
     val storedSnapshots = allAPIs.map { _.simpleDownload() }
 
