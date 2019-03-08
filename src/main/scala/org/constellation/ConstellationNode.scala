@@ -16,7 +16,7 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import constellation._
 import org.constellation.CustomDirectives.printResponseTime
-import org.constellation.consensus.{HTTPNodeRemoteSender, Node, NodeRemoteSender}
+import org.constellation.consensus.{HTTPNodeRemoteSender, CrossTalkConsensus, NodeRemoteSender}
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.datastore.swaydb.SwayDBDatastore
@@ -286,7 +286,7 @@ class ConstellationNode(val configKeyPair: KeyPair,
     Http().bindAndHandle(routes, httpInterface, httpPort)
 
   val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
-  val nodeActor: ActorRef = system.actorOf(Node.props(remoteSenderActor))
+  val nodeActor: ActorRef = system.actorOf(CrossTalkConsensus.props(remoteSenderActor))
   val peerAPI = new PeerAPI(ipManager, nodeActor)
   val randomTXManager = new RandomTransactionManager(nodeActor)
 

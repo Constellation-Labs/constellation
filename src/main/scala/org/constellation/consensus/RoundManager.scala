@@ -1,7 +1,8 @@
 package org.constellation.consensus
 import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, Props}
-import org.constellation.consensus.Node.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
+import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
+import org.constellation.primitives.PeerData
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.collection.mutable
@@ -11,8 +12,8 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
   import RoundManager._
 
-  // TODO: wkoszycki: shall I use dao execution context
   implicit val ec: ExecutionContextExecutor = ExecutionContext.global
+
   val roundTimeout: FiniteDuration = ConfigUtil.getDurationFromConfig(
     "constellation.consensus.form-checkpoint-blocks-timeout",
     60.second
@@ -102,10 +103,15 @@ class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
 }
 
 object RoundManager {
+  def props(implicit dao: DAO): Props = Props(new RoundManager)
+
   case class RoundInfo(roundActor: ActorRef,
                        timeoutScheduler: Cancellable,
                        startedByThisNode: Boolean = false)
-  def props(implicit dao: DAO): Props = Props(new RoundManager)
+
+  case class BroadcastTransactionProposal(peers: Set[PeerData],
+    transactionsProposal: TransactionsProposal)
+  case class BroadcastUnionBlockProposal(peers: Set[PeerData], proposal: UnionBlockProposal)
 
   def generateRoundId: RoundId =
     RoundId(java.util.UUID.randomUUID().toString)

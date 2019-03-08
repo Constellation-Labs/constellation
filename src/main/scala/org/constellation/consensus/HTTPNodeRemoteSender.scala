@@ -2,8 +2,8 @@ package org.constellation.consensus
 
 import constellation._
 import org.constellation.{DAO, PeerMetadata}
-import org.constellation.consensus.Node.NotifyFacilitators
-import org.constellation.consensus.Round.{BroadcastTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.consensus.CrossTalkConsensus.NotifyFacilitators
+import org.constellation.consensus.RoundManager.{BroadcastTransactionProposal, BroadcastUnionBlockProposal}
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema.SignedObservationEdge
 import org.constellation.primitives.{ChannelMessage, PeerData, Transaction}

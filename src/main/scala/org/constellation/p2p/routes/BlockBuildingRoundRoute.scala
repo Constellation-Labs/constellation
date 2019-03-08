@@ -6,7 +6,7 @@ import akka.http.scaladsl.server.Directives.{extractRequestContext, path, _}
 import akka.http.scaladsl.server.{RequestContext, Route}
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.consensus.Node.ParticipateInBlockCreationRound
+import org.constellation.consensus.CrossTalkConsensus.ParticipateInBlockCreationRound
 import org.constellation.consensus.Round.{RoundData, TransactionsProposal, UnionBlockProposal}
 import org.constellation.consensus.RoundDataRemote
 import org.constellation.primitives.PeerData

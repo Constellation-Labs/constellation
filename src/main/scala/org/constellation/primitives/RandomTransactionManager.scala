@@ -5,7 +5,7 @@ import java.util.concurrent.Semaphore
 import akka.actor.ActorRef
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.Node.StartNewBlockCreationRound
+import org.constellation.consensus.CrossTalkConsensus.StartNewBlockCreationRound
 import org.constellation.primitives.Schema.{InternalHeartbeat, NodeState, SendToAddress, _}
 import org.constellation.util.Periodic
 

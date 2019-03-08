@@ -2,22 +2,15 @@ package org.constellation.consensus
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.pattern.{Backoff, BackoffSupervisor}
 import akka.util.Timeout
-import org.constellation.consensus.Node.{
-    NotifyFacilitators,
-    ParticipateInBlockCreationRound,
-    StartNewBlockCreationRound
-  }
+import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
+import org.constellation.consensus.RoundManager.{BroadcastTransactionProposal, BroadcastUnionBlockProposal}
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.duration._
 
-class Node(remoteSenderSupervisor: ActorRef)(implicit dao: DAO) extends Actor with ActorLogging {
+class CrossTalkConsensus(remoteSenderSupervisor: ActorRef)(implicit dao: DAO) extends Actor with ActorLogging {
 
-  implicit val shortTimeout: Timeout = ConfigUtil.getDurationFromConfig(
-      "constellation.consensus.form-checkpoint-blocks-timeout",
-      60.second
-    )
 
   val roundManagerProps: Props = RoundManager.props
   val roundManagerSupervisor: Props = BackoffSupervisor.props(
@@ -53,7 +46,7 @@ class Node(remoteSenderSupervisor: ActorRef)(implicit dao: DAO) extends Actor wi
 
 }
 
-object Node {
+object CrossTalkConsensus {
   sealed trait NodeCommand
 
   case class NotifyFacilitators(roundData: RoundData)
@@ -61,5 +54,5 @@ object Node {
   case object StartNewBlockCreationRound extends NodeCommand
 
   def props(remoteSenderSupervisor: ActorRef)(implicit dao: DAO): Props =
-    Props(new Node(remoteSenderSupervisor))
+    Props(new CrossTalkConsensus(remoteSenderSupervisor))
 }

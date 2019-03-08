@@ -2,9 +2,10 @@ package org.constellation.primitives.storage
 
 import cats.effect.IO
 import com.twitter.storehaus.cache.MutableLRUCache
+import scala.collection.JavaConverters._
 
 class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] {
-  val lruCache: MutableLRUCache[String, V] = MutableLRUCache[String, V](size)
+  val lruCache: ExtendedMutableLRUCache[String, V] = new ExtendedMutableLRUCache[String, V](size)
 
   override def get(key: String): Option[V] =
     lruCache.get(key)
@@ -27,10 +28,7 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] {
     lruCache.contains(key)
 
   override def toMap(): Map[String, V] =
-    // TODO: wkoszycki replace with ExtendedLRUCache
-    this.synchronized {
-      lruCache.iterator.toMap
-    }
+    lruCache.asImmutableMap()
 
   override def getAsync(key: String): IO[Option[V]] =
     IO.pure(get(key))
@@ -52,3 +50,11 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] {
   override def toMapAsync(): IO[Map[String, V]] =
     IO.pure(lruCache.iterator.toMap)
 }
+
+class ExtendedMutableLRUCache[K, V](capacity: Int) extends MutableLRUCache[K, V](capacity) {
+
+    def asImmutableMap(): Map[K, V] = {
+      m.asScala.toMap
+    }
+
+  }
