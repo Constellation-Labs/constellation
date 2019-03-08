@@ -14,7 +14,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Random, Try}
 
-class Simulation {
+object Simulation {
 
   val logger = Logger(LoggerFactory.getLogger(getClass.getName))
 

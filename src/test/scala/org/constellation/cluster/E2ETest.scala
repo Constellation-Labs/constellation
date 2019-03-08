@@ -46,7 +46,6 @@ class E2ETest extends E2E {
 
   private val addPeerRequests = nodes.map { _.getAddPeerRequest }
 
-  private val sim = new Simulation()
 
   private val initialAPIs = apis
 
@@ -57,7 +56,7 @@ class E2ETest extends E2E {
   "E2E Run" should "demonstrate full flow" in {
     logger.info("API Ports: " + apis.map { _.apiPort })
 
-    assert(sim.run(initialAPIs, addPeerRequests))
+    assert(Simulation.run(initialAPIs, addPeerRequests))
 
     // val deployResponse = constellationAppSim.openChannel(apis)
 
@@ -67,7 +66,7 @@ class E2ETest extends E2E {
 
     val downloadAPI = downloadNode.getAPIClient()
     logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
-    assert(sim.checkReady(Seq(downloadAPI)))
+    assert(Simulation.checkReady(Seq(downloadAPI)))
     // deployResponse.foreach{ res => res.foreach(constellationAppSim.postDownload(apis.head, _))}
 
     // messageSim.postDownload(apis.head)
@@ -79,13 +78,13 @@ class E2ETest extends E2E {
     val allAPIs: Seq[APIClient] = allNodes.map { _.getAPIClient() } //apis :+ downloadAPI
     val updatePasswordResponses = updatePasswords(allAPIs)
     assert(updatePasswordResponses.forall(_.code == StatusCodes.Ok))
-    assert(sim.healthy(allAPIs))
+    assert(Simulation.healthy(allAPIs))
   //  Thread.sleep(1000*1000)
 
     // Stop transactions
-    sim.triggerRandom(allAPIs)
+    Simulation.triggerRandom(allAPIs)
 
-    sim.logger.info("Stopping transactions to run parity check")
+    Simulation.logger.info("Stopping transactions to run parity check")
 
     Thread.sleep(50000)
 
@@ -129,7 +128,7 @@ class E2ETest extends E2E {
   }*/
 }
 
-  class ConstellationAppSim(sim: Simulation, constellationApp: ConstellationApp)(
+  class ConstellationAppSim(constellationApp: ConstellationApp)(
     implicit val executionContext: ExecutionContext
   ){
     private val schemaStr = SensorData.jsonSchema
@@ -140,7 +139,7 @@ class E2ETest extends E2E {
       val deployResponse  = constellationApp.deploy(schemaStr, channelName)
       deployResponse.foreach { resp =>
     if (resp.isDefined) {
-      sim.awaitConditionMet(
+      Simulation.awaitConditionMet(
         "Test channel genesis not stored",
         apis.forall {
           _.getBlocking[Option[ChannelMessageMetadata]](
@@ -170,7 +169,7 @@ class E2ETest extends E2E {
           }
 
           val msgs = validMessages ++ invalidMessages
-          sim.logger.info(
+          Simulation.logger.info(
             s"Message batch $batchNumber complete, sent ${msgs.size} messages"
           )
           msgs
@@ -191,13 +190,13 @@ class E2ETest extends E2E {
     }
 
     def postDownload(firstAPI: APIClient = constellationApp.clientApi, channel: Channel) = {
-      sim.logger.info(s"channel ${channel.channelId}")
+      Simulation.logger.info(s"channel ${channel.channelId}")
       val allChannels = firstAPI.getBlocking[Seq[String]]("channels")
-      sim.logger.info(s"message channel ${allChannels}")
+      Simulation.logger.info(s"message channel ${allChannels}")
 
       val messageChannels = allChannels.filterNot { _ == channel.channelId }
       val messagesWithinSnapshot = messageChannels.flatMap(msg => firstAPI.getBlocking[Option[ChannelProof]]("channel/" + msg, timeout = 30 seconds))
-      sim.logger.info(s"messageWithinSnapshot ${messagesWithinSnapshot}")
+      Simulation.logger.info(s"messageWithinSnapshot ${messagesWithinSnapshot}")
 
       assert(messagesWithinSnapshot.nonEmpty)
 
