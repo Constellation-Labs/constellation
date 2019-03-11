@@ -2,6 +2,7 @@ package org.constellation.cluster
 import org.constellation.primitives.{ChannelProof, ChannelSendResponse, SensorData}
 import org.constellation.{Channel, ConstellationApp, E2E}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class AppE2ETest extends E2E {
@@ -13,40 +14,36 @@ class AppE2ETest extends E2E {
   val schemaStr = SensorData.jsonSchema
   val testChannelName = "testChannelName"
 
-  val healthCheck = sim.checkHealthy(apis)
-  sim.setIdLocal(apis)
-  sim.addPeersFromRequest(apis, addPeerRequests)
-
-  val goe = sim.genesis(apis)
-  apis.foreach { _.post("genesis/accept", goe) }
-
-  sim.triggerRandom(apis)
-  sim.setReady(apis)
-
-  val deployResp = testApp.deploy(schemaStr, testChannelName)
-  val broadcast = deployResp.flatMap { resp =>
-    val r = resp.get
-    val messages = constellationAppSim.generateChannelMessages(r, numMessages)
-    testApp.broadcast[SensorData](messages)
-  }
 
   "API health check" should "return true" in {
+    val healthCheck = sim.checkHealthy(apis)
+    sim.setIdLocal(apis)
     assert(healthCheck)
   }
 
   "Peer health check" should "return true" in {
+    sim.addPeersFromRequest(apis, addPeerRequests)
     assert(sim.checkPeersHealthy(apis))
   }
 
   "Genesis observation" should "be accepted by all nodes" in {
+    val goe = sim.genesis(apis)
+    apis.foreach { _.post("genesis/accept", goe) }
     assert(sim.checkGenesis(apis))
   }
 
   "Checkpoints" should "get accepted" in {
+    sim.triggerRandom(apis)
+    sim.setReady(apis)
     assert(sim.awaitCheckpointsAccepted(apis))
   }
 
+
+  var deployResp: Future[Option[Channel]] = null
+  var broadcast: Future[ChannelSendResponse] = null
+
   "ConstellationApp" should "register a deployed state channel" in {
+    deployResp = testApp.deploy(schemaStr, testChannelName)
     deployResp.map { resp: Option[Channel] =>
       sim.logger.info("deploy response:" + resp.toString)
       assert(resp.exists(r => r.channelId == r.channelOpenRequest.genesisHash))
@@ -63,6 +60,11 @@ class AppE2ETest extends E2E {
   }
 
   "Channel broadcasts" should "successfully broadcast all messages" in {
+    broadcast = deployResp.flatMap { resp =>
+      val r = resp.get
+      val messages = constellationAppSim.generateChannelMessages(r, numMessages)
+      testApp.broadcast[SensorData](messages)
+    }
     broadcast.map { resp =>
       assert(resp.errorMessage == "Success")
       assert(resp.messageHashes.distinct.size == numMessages * 2)
