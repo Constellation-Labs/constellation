@@ -1,11 +1,10 @@
 package org.constellation.consensus
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.pattern.{Backoff, BackoffSupervisor}
-import akka.util.Timeout
+import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{BroadcastTransactionProposal, BroadcastUnionBlockProposal}
-import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.duration._
 

@@ -53,7 +53,9 @@ class DAO(val nodeConfig: NodeConfig = NodeConfig())
     downloadMode = true
   }
 
-  def pullTips(allowEmptyFacilitators: Boolean = false): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = {
+  def pullTips(
+    allowEmptyFacilitators: Boolean = false
+  ): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = {
     threadSafeTipService.pull(allowEmptyFacilitators)(this)
   }
 

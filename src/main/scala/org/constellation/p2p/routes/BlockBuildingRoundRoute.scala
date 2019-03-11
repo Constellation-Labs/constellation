@@ -17,8 +17,8 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import scala.concurrent.ExecutionContext
 
-object BlockBuildingRoundRoute{
-  val pathPrefix =  "block-round"
+object BlockBuildingRoundRoute {
+  val pathPrefix = "block-round"
   val proposalPath = "proposal"
   val proposalFullPath = s"$pathPrefix/$proposalPath"
   val unionPath = "union"
@@ -38,7 +38,8 @@ object BlockBuildingRoundRoute{
   }
 }
 
-class BlockBuildingRoundRoute(nodeActor: ActorRef)(implicit system: ActorSystem, executionContext: ExecutionContext)
+class BlockBuildingRoundRoute(nodeActor: ActorRef)(implicit system: ActorSystem,
+                                                   executionContext: ExecutionContext)
     extends Json4sSupport {
 
   val logger: Logger = LoggerFactory.getLogger(getClass)
@@ -47,7 +48,7 @@ class BlockBuildingRoundRoute(nodeActor: ActorRef)(implicit system: ActorSystem,
 
   def createBlockBuildingRoundRoutes(): Route = extractRequestContext { ctx =>
     participateInNewRound(ctx) ~
-    addTransactionsProposal(ctx) ~
+      addTransactionsProposal(ctx) ~
       addUnionBlock(ctx)
   }
 

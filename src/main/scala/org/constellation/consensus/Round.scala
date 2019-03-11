@@ -1,29 +1,34 @@
 package org.constellation.consensus
 import akka.actor.{Actor, ActorLogging, Cancellable, Props}
 import cats.implicits._
-import com.typesafe.scalalogging.Logger
 import constellation.{wrapFutureWithMetric, _}
 import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{BroadcastTransactionProposal, BroadcastUnionBlockProposal}
-import org.constellation.primitives.Schema.{CheckpointCacheData, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.consensus.RoundManager.{
+  BroadcastTransactionProposal,
+  BroadcastUnionBlockProposal
+}
+import org.constellation.primitives.Schema.{
+  CheckpointCacheData,
+  EdgeHashType,
+  SignedObservationEdge,
+  TypedEdgeHash
+}
 import org.constellation.primitives._
 import org.constellation.{ConfigUtil, DAO}
-import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
 
   implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
-
   val transactionProposals: mutable.Map[FacilitatorId, TransactionsProposal] =
-      mutable.Map()
+    mutable.Map()
   val checkpointBlockProposals: mutable.Map[FacilitatorId, CheckpointBlock] =
-      mutable.Map()
+    mutable.Map()
 
   protected var unionTransactionProposalsTikTok: Cancellable = _
 
@@ -65,7 +70,7 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
   def unionProposals(): Unit = {
     val cb = CheckpointBlock.createCheckpointBlock(
       transactionProposals
-    .flatMap(_._2.transactions)
+        .flatMap(_._2.transactions)
         .toSet
         .union(roundData.transactions.toSet)
         .toSeq,
@@ -78,48 +83,52 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
   }
 
   def resolveMajorityCheckpointBlock(): Unit = {
-      implicit val shadedDao: DAO = dao
+    implicit val shadedDao: DAO = dao
 
-      if (checkpointBlockProposals.nonEmpty) {
-        val sameBlocks = checkpointBlockProposals
-          .groupBy(_._2.baseHash)
-          .maxBy(_._2.size)
-          ._2
+    if (checkpointBlockProposals.nonEmpty) {
+      val sameBlocks = checkpointBlockProposals
+        .groupBy(_._2.baseHash)
+        .maxBy(_._2.size)
+        ._2
 
-        val majorityCheckpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
+      val majorityCheckpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
 
-        val finalFacilitators = checkpointBlockProposals.keySet.map(_.id).toSet
-        val cache = CheckpointCacheData(Some(majorityCheckpointBlock),
-                                        height = majorityCheckpointBlock.calculateHeight())
-        broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, finalFacilitators))
+      val finalFacilitators = checkpointBlockProposals.keySet.map(_.id).toSet
+      val cache = CheckpointCacheData(Some(majorityCheckpointBlock),
+                                      height = majorityCheckpointBlock.calculateHeight())
+      broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, finalFacilitators))
 
-        dao.threadSafeTipService.accept(cache)
-      }
-      context.parent ! StopBlockCreationRound(roundData.roundId)
-      context.stop(self)
+      dao.threadSafeTipService.accept(cache)
     }
+    context.parent ! StopBlockCreationRound(roundData.roundId)
+    context.stop(self)
+  }
 
-  def broadcastSignedBlockToNonFacilitators(finishedCheckpoint: FinishedCheckpoint): Future[List[Option[FinishedCheckpointResponse]]] = {
+  def broadcastSignedBlockToNonFacilitators(
+    finishedCheckpoint: FinishedCheckpoint
+  ): Future[List[Option[FinishedCheckpointResponse]]] = {
     val allFacilitators = roundData.peers.map(p => p.peerMetadata.id -> p).toMap
-    val signatureResponses = Future.sequence(dao.peerInfo.values.toList
-      .filterNot(pd => allFacilitators.contains(pd.peerMetadata.id))
-      .map { peer =>
-        wrapFutureWithMetric(
-          peer.client.postNonBlocking[Option[FinishedCheckpointResponse]](
-            "finished/checkpoint",
-            finishedCheckpoint,
-            timeout = 20.seconds
-          ),
-          "finishedCheckpointBroadcast",
-        )(dao, ec).recoverWith {
-          case e: Throwable =>
-            log.warning("Failure gathering signature", e)
-            dao.metrics.incrementMetric(
-              "formCheckpointSignatureResponseError"
-            )
-            Future.failed(e)
+    val signatureResponses = Future.sequence(
+      dao.peerInfo.values.toList
+        .filterNot(pd => allFacilitators.contains(pd.peerMetadata.id))
+        .map { peer =>
+          wrapFutureWithMetric(
+            peer.client.postNonBlocking[Option[FinishedCheckpointResponse]](
+              "finished/checkpoint",
+              finishedCheckpoint,
+              timeout = 20.seconds
+            ),
+            "finishedCheckpointBroadcast",
+          )(dao, ec).recoverWith {
+            case e: Throwable =>
+              log.warning("Failure gathering signature", e)
+              dao.metrics.incrementMetric(
+                "formCheckpointSignatureResponseError"
+              )
+              Future.failed(e)
+          }
         }
-      })
+    )
 
     wrapFutureWithMetric(signatureResponses, "checkpointBlockFormation")(dao, ec)
   }

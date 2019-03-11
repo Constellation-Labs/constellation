@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
-import akka.http.scaladsl.server.{ExceptionHandler, RequestContext, Route}
+import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
@@ -14,11 +14,15 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
 import org.constellation.consensus.EdgeProcessor
-import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest}
+import org.constellation.consensus.EdgeProcessor.{
+  FinishedCheckpoint,
+  FinishedCheckpointResponse,
+  SignatureRequest
+}
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.{CommonEndpoints, SingleHashSignature, MetricTimerDirective}
+import org.constellation.util.{CommonEndpoints, MetricTimerDirective, SingleHashSignature}
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -39,10 +43,9 @@ object PeerAPI {
 
 }
 
-class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
-  implicit system: ActorSystem,
-                                                 val timeout: Timeout,
-                                                 val dao: DAO)
+class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit system: ActorSystem,
+                                                                      val timeout: Timeout,
+                                                                      val dao: DAO)
     extends Json4sSupport
     with CommonEndpoints
     with IPEnforcer
@@ -234,7 +237,9 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
     }
 
   private val blockBuildingRoundRoute =
-    createRoute(BlockBuildingRoundRoute.pathPrefix)(() => new BlockBuildingRoundRoute(nodeActor).createBlockBuildingRoundRoutes())
+    createRoute(BlockBuildingRoundRoute.pathPrefix)(
+      () => new BlockBuildingRoundRoute(nodeActor).createBlockBuildingRoundRoutes()
+    )
 
   private def createRoute(path: String)(routeFactory: () => Route): Route = {
     pathPrefix(path) {
@@ -243,8 +248,6 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
       }
     }
   }
-
-
 
   private val mixedEndpoints = {
     path("transaction") {

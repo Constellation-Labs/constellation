@@ -3,7 +3,10 @@ package org.constellation.consensus
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit, TestProbe}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{BroadcastTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{
+  BroadcastTransactionProposal,
+  BroadcastUnionBlockProposal
+}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.{EdgeHashType, Id, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives.{CheckpointBlock, PeerData, Transaction}
@@ -14,8 +17,13 @@ import org.scalatest.{BeforeAndAfter, FunSpecLike, Matchers}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
-class RoundTest extends TestKit(ActorSystem("RoundTest"))
-  with FunSpecLike with Matchers with BeforeAndAfter with ImplicitSender with MockFactory {
+class RoundTest
+    extends TestKit(ActorSystem("RoundTest"))
+    with FunSpecLike
+    with Matchers
+    with BeforeAndAfter
+    with ImplicitSender
+    with MockFactory {
 
   private implicit var fakeDao: DAO = _
 
@@ -28,8 +36,9 @@ class RoundTest extends TestKit(ActorSystem("RoundTest"))
   val roundManagerActor = TestProbe("round-manager")
 
   var sampleTransactions: Seq[Transaction] = _
-  val tips: Seq[SignedObservationEdge] = Seq(SignedObservationEdge(SignatureBatch("1", Seq(HashSignature("1", Id("1"))))))
-
+  val tips: Seq[SignedObservationEdge] = Seq(
+    SignedObservationEdge(SignatureBatch("1", Seq(HashSignature("1", Id("1")))))
+  )
 
   def initBefore = {
     fakeDao = stub[DAO]
@@ -84,7 +93,8 @@ class RoundTest extends TestKit(ActorSystem("RoundTest"))
       )
 
       roundProbe.underlyingActor.transactionProposals.size shouldBe 3
-      val unionBlockProposal = roundManagerActor.expectMsgClass(classOf[BroadcastUnionBlockProposal])
+      val unionBlockProposal =
+        roundManagerActor.expectMsgClass(classOf[BroadcastUnionBlockProposal])
       unionBlockProposal.peers shouldBe Set(peerA, peerB)
       unionBlockProposal.proposal.roundId shouldBe roundData.roundId
       unionBlockProposal.proposal.facilitatorId shouldBe roundData.facilitatorId
@@ -100,7 +110,8 @@ class RoundTest extends TestKit(ActorSystem("RoundTest"))
         roundData.messages
       )(fakeDao.keyPair)
 
-      roundProbe.underlyingActor.checkpointBlockProposals.put(roundData.facilitatorId, checkpointBlock)
+      roundProbe.underlyingActor.checkpointBlockProposals.put(roundData.facilitatorId,
+                                                              checkpointBlock)
       roundProbe ! ResolveMajorityCheckpointBlock(roundData.roundId)
 
       roundManagerActor.expectMsg(StopBlockCreationRound(roundData.roundId))

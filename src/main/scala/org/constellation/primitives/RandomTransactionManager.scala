@@ -12,7 +12,7 @@ import org.constellation.util.Periodic
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
-class RandomTransactionManager(nodeActor: ActorRef,periodSeconds: Int = 1)(implicit dao: DAO)
+class RandomTransactionManager(nodeActor: ActorRef, periodSeconds: Int = 1)(implicit dao: DAO)
     extends Periodic("RandomTransactionManager", periodSeconds) {
 
   def trigger(): Future[Any] = {
@@ -37,23 +37,23 @@ class RandomTransactionManager(nodeActor: ActorRef,periodSeconds: Int = 1)(impli
             ChannelMessage.create(channelOpen.json, Genesis.CoinBaseHash, newChannelName)
           val genesisHash = genesis.signedMessageData.hash
           testChannels :+= genesisHash
-          dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHash) =
-            newChannelName
+          dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHash) = newChannelName
           dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(newChannelName) = genesis
-          dao.threadSafeMessageMemPool.activeChannels(genesisHash) =
-            new Semaphore(1)
+          dao.threadSafeMessageMemPool.activeChannels(genesisHash) = new Semaphore(1)
           Some(genesis)
         } else {
           if (dao.threadSafeMessageMemPool.unsafeCount < 3) {
-            val channels = dao.threadSafeMessageMemPool.activeChannels.filterKeys{testChannels.contains}
+            val channels = dao.threadSafeMessageMemPool.activeChannels.filterKeys {
+              testChannels.contains
+            }
             if (channels.nonEmpty) {
               val (channel, lock) = channels.toList(Random.nextInt(channels.size))
               dao.messageService.get(channel).flatMap { data =>
                 if (lock.tryAcquire()) {
                   Some(
                     ChannelMessage.create(Random.nextInt(1000).toString,
-                      data.channelMessage.signedMessageData.signatures.hash,
-                      channel)
+                                          data.channelMessage.signedMessageData.signatures.hash,
+                                          channel)
                   )
                 } else None
               }
@@ -146,13 +146,13 @@ class RandomTransactionManager(nodeActor: ActorRef,periodSeconds: Int = 1)(impli
           }
 
           if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold &&
-            dao.generateRandomTX &&
-            dao.nodeState == NodeState.Ready &&
-            !dao.blockFormationInProgress) {
+              dao.generateRandomTX &&
+              dao.nodeState == NodeState.Ready &&
+              !dao.blockFormationInProgress) {
 
             nodeActor ! StartNewBlockCreationRound
             dao.metrics.updateMetric("blockFormationInProgress",
-              dao.blockFormationInProgress.toString)
+                                     dao.blockFormationInProgress.toString)
 
           }
         }
