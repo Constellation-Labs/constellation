@@ -1,6 +1,7 @@
 package org.constellation.cluster
 import org.constellation.{Channel, ConstellationApp}
 import org.constellation.consensus.StoredSnapshot
+import org.constellation.primitives.Schema.Id
 import org.constellation.primitives.{ChannelMessage, ChannelMessageMetadata, ChannelProof, SensorData}
 import org.constellation.util.{APIClient, Simulation}
 
@@ -23,6 +24,43 @@ class ConstellationAppSim(sim: Simulation, constellationApp: ConstellationApp)(
           "messageService/" + resp.channelId
         ).exists(_.blockHash.nonEmpty)
       }
+    )
+  }
+
+  def messagesInSnapshots(
+                                  channelId: String,
+                                  apis: Seq[APIClient],
+                                  maxRetries: Int = 30,
+                                  delay: Long = 3000
+                                ): Boolean = {
+    sim.awaitConditionMet(
+      s"Peer health checks failed", {
+        apis.forall { a =>
+          val res = a.getBlocking[Option[ChannelProof]]("channel/" + channelId, timeout = 30 seconds)
+          res.nonEmpty
+        }
+      },
+      maxRetries,
+      delay
+    )
+  }
+
+  def messagesReceived(
+                        channelId: String,
+                        apis: Seq[APIClient],
+                        maxRetries: Int = 10,
+                        delay: Long = 3000
+                      ): Boolean = {
+    sim.awaitConditionMet(
+      s"Peer health checks failed", {
+        apis.forall { a =>
+          val res = a.getBlocking[Option[ChannelMessageMetadata]]("messageService/" + channelId, timeout = 30 seconds)
+//          res.map(_.channelMessageMetadata.channelMessage.signedMessageData.data)
+          res.nonEmpty
+        }
+      },
+      maxRetries,
+      delay
     )
   }
 
@@ -54,7 +92,6 @@ class ConstellationAppSim(sim: Simulation, constellationApp: ConstellationApp)(
     sim.logger.info(s"channel ${channel.channelId}")
     val allChannels = firstAPI.getBlocking[Seq[String]]("channels")
     sim.logger.info(s"message channel ${allChannels}")
-
     val messageChannels = allChannels.filterNot { _ == channel.channelId }
     val messagesWithinSnapshot = messageChannels.flatMap(msg => firstAPI.getBlocking[Option[ChannelProof]]("channel/" + msg, timeout = 30 seconds))
     sim.logger.info(s"messageWithinSnapshot ${messagesWithinSnapshot}")
@@ -73,6 +110,16 @@ class ConstellationAppSim(sim: Simulation, constellationApp: ConstellationApp)(
           m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
         )
     }
+  }
+  def messagesValid(proof: ChannelProof) = {
+      val m = proof.channelMessageMetadata
+      val hasSnapshotHash = m.snapshotHash.nonEmpty
+      val hasBlockHash = m.blockHash.nonEmpty
+      val checkpointMessageProofVerified = proof.checkpointMessageProof.verify()
+      val checkpointProofVerified = proof.checkpointProof.verify()
+      val blockhashContainsCheckpointProof = m.blockHash.contains { proof.checkpointProof.input }
+      val hashesSame = m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
+      hasSnapshotHash && hasBlockHash && checkpointMessageProofVerified && checkpointProofVerified && blockhashContainsCheckpointProof && hashesSame
   }
 
   def dumpJson(

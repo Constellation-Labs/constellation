@@ -491,6 +491,7 @@ object Snapshot {
   def findLatestMessageWithSnapshotHash(
     depth: Int,
     lastMessage: Option[ChannelMessageMetadata],
+    channelHash: String,
     maxDepth: Int = 10
   )(implicit dao: DAO): Option[ChannelMessageMetadata] = {
 
@@ -501,13 +502,17 @@ object Snapshot {
       if (depth > maxDepth) None
       else {
         lastMessage.flatMap { m =>
-          if (m.snapshotHash.nonEmpty) Some(m)
+        val parent = dao.messageService.get(
+          m.channelMessage.signedMessageData.data.previousMessageHash
+        )
+        println(s"parent: $parent")
+          println(s"m.snapshotHash.nonEmpty: ${m.snapshotHash}")
+          if (m.snapshotHash.nonEmpty) Some(m)//todo bug here, snapshotHash is empty, not getting updated?
           else {
+            println(s"lastMessage: $m")
             findLatestMessageWithSnapshotHashInner(
               depth + 1,
-              dao.messageService.get(
-                m.channelMessage.signedMessageData.data.previousMessageHash
-              )
+              parent
             )
           }
         }
@@ -542,15 +547,22 @@ object Snapshot {
          cbCache <- cbOpt;
          cb <- cbCache.checkpointBlock;
          message <- cb.checkpoint.edge.data.messages) {
+      println(s"Snapshot message: ${message}")
+      val channelId = message.signedMessageData.data.channelId//todu use this?
       dao.messageService.update(
         message.signedMessageData.signatures.hash,
         _.copy(snapshotHash = Some(snapshot.hash)),
         ChannelMessageMetadata(message, Some(cb.baseHash), Some(snapshot.hash))
       )
+//      println(s"message.signedMessageData.signatures.hash: ${message.signedMessageData.signatures.hash} for message ${message}")
+//      println(s"Snapshot {dao.messageService.get(message.signedMessageData.signatures.hash) ${message.signedMessageData.signatures.hash}: ${dao.messageService.get(message.signedMessageData.signatures.hash)}  for message ${message}")
+//      println(s"Snapshot {dao.messageService.get(message.signedMessageData.signatures.hash).get.snapshotHash ${message.signedMessageData.signatures.hash}:  ${dao.messageService.get(message.signedMessageData.signatures.hash).get.snapshotHash}  for message ${message}")
+//      val updated = dao.messageService.get(message.signedMessageData.signatures.hash)
+//      println(s"dap updated resp for ${message.signedMessageData.signatures.hash} = updated: ${updated}  for message ${message}")
       dao.metrics.incrementMetric("messageSnapshotHashUpdated")
     }
 
-    for (cbOpt <- cbData;
+    for (cbOpt <- cbData;//683ee260eb594d14c996856afbb729718c69d3c464b663fa08f5160772ef23aa
          cbCache <- cbOpt;
          cb <- cbCache.checkpointBlock;
          tx <- cb.transactions) {

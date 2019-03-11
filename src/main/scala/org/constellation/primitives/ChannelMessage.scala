@@ -111,7 +111,7 @@ object ChannelMessage extends StrictLogging {
   )(implicit dao: DAO): Future[ChannelSendResponse] = {
 
     dao.messageService
-      .get(channelSendRequest.channelId)
+      .get(channelSendRequest.channelId)//todo here
       .map { previousMessage =>
         val previous = previousMessage.channelMessage.signedMessageData.hash
 
@@ -129,13 +129,14 @@ object ChannelMessage extends StrictLogging {
         Future.successful(
           ChannelSendResponse(
             "Success",
-            messages.map { _.signedMessageData.hash }
+            messages.map { _.signedMessageData.hash },
+            channelSendRequest.channelId
           )
         )
       }
       .getOrElse(
         Future.successful(
-          ChannelSendResponse("Channel not found", Seq())
+          ChannelSendResponse("Channel not found", Seq(), channelSendRequest.channelId)
         )
       )
   }
@@ -176,7 +177,8 @@ case class ChannelSendRequestRawJson(channelId: String, messages: String)
 
 case class ChannelSendResponse(
   errorMessage: String = "Success",
-  messageHashes: Seq[String]
+  messageHashes: Seq[String],
+  channelId: String
 )
 
 case class SensorData(

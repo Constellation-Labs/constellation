@@ -186,12 +186,17 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
             }
           } ~
           path("messageService" / Segment) { channelId =>
+            val messageService = dao.messageService.get(channelId)
+            logger.info(s"messageService resp: $messageService")
             complete(dao.messageService.get(channelId))
           } ~
           path("channel" / Segment) { channelHash =>
-            val res =
-              Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.get(channelHash))
+          val storedMsg: Option[ChannelMessageMetadata] = dao.messageService.get(channelHash)
+            logger.info(s"for channelHash $channelHash at ${dao.id}the storedMsg: ${storedMsg}")
 
+            val res =
+              Snapshot.findLatestMessageWithSnapshotHash(0, storedMsg, channelHash)
+              logger.info(s"Snapshot.findLatestMessageWithSnapshotHash: ${res}")
             val proof = res.flatMap { cmd =>
               cmd.snapshotHash.flatMap { snapshotHash =>
                 tryWithMetric({
@@ -320,7 +325,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
           path("send") {
             entity(as[ChannelSendRequest]) { send =>
               onComplete(ChannelMessage.createMessages(send)) { res =>
-                complete(res.getOrElse(ChannelSendResponse("Failed to create messages", Seq())).json)
+                complete(res.getOrElse(ChannelSendResponse("Failed to create messages", Seq(), send.channelId)).json)
               }
             }
           } ~

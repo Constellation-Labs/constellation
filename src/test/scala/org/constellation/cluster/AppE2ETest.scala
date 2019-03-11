@@ -1,14 +1,16 @@
 package org.constellation.cluster
-import org.constellation.primitives.SensorData
+import org.constellation.primitives.{ChannelProof, ChannelSendResponse, SensorData}
 import org.constellation.{Channel, ConstellationApp, E2E}
-import org.constellation.util.{APIClient, Simulation}
+
+import scala.concurrent.duration._
 
 class AppE2ETest extends E2E {
   val numMessages = 5
-  val testApp = new ConstellationApp(apis.head)
+  val testNode = apis.head
+  val testApp = new ConstellationApp(testNode)
   val constellationAppSim = new ConstellationAppSim(sim, testApp)
 
-  private val schemaStr = SensorData.jsonSchema
+  val schemaStr = SensorData.jsonSchema
   val testChannelName = "testChannelName"
 
   val healthCheck = sim.checkHealthy(apis)
@@ -21,7 +23,7 @@ class AppE2ETest extends E2E {
   sim.triggerRandom(apis)
   sim.setReady(apis)
 
-  val deployResp = testApp.deploy(schemaStr)
+  val deployResp = testApp.deploy(schemaStr, testChannelName)
   val broadcast = deployResp.flatMap { resp =>
     val r = resp.get
     val messages = constellationAppSim.generateChannelMessages(r, numMessages)
@@ -48,8 +50,8 @@ class AppE2ETest extends E2E {
     deployResp.map { resp: Option[Channel] =>
       sim.logger.info("deploy response:" + resp.toString)
       assert(resp.exists(r => r.channelId == r.channelOpenRequest.genesisHash))
-      assert(resp.exists(_.channelName == "channel_1"))
-      assert(resp.forall(r => testApp.channelIdToChannel.get(r.channelId).contains(r)))
+      assert(resp.exists(_.name == testChannelName))
+      assert(resp.forall(r => testApp.channelNameToId.get(r.name).contains(r)))
     }
   }
 
@@ -60,10 +62,38 @@ class AppE2ETest extends E2E {
     }
   }
 
-  "Channel broadcasts" should "get registered by peers" in {
+  "Channel broadcasts" should "successfully broadcast all messages" in {
     broadcast.map { resp =>
       assert(resp.errorMessage == "Success")
       assert(resp.messageHashes.distinct.size == numMessages * 2)
+      assert(constellationAppSim.messagesReceived(resp.channelId, apis))
     }
   }
+
+  "Broadcasted channel data" should "be accepted into all peers' snapshots" in {
+    //todo should take sucessful res of snapshot created begin checking for new inclusion
+    broadcast.map { resp: ChannelSendResponse =>
+    val msg = resp.messageHashes.head
+      sim.logger.info(s"Broadcasted channel msg $msg")
+      sim.logger.info(s"messageHashes ${resp.messageHashes}")
+      val channelIdToChannelTest = testApp.channelNameToId(testChannelName)
+      println(s"channelIdToChannelTest $channelIdToChannelTest")
+      assert(constellationAppSim.messagesInSnapshots(msg, apis))
+    }
+  }
+
+//  "Broadcasted channel data" should "be accepted into snapshots" in {
+//    shapshotAcceptance.map { snapshottedMessages =>
+//      val allMessagesValid = snapshottedMessages.forall(constellationAppSim.messagesValid)
+//      assert(snapshottedMessages.nonEmpty)
+//      assert(allMessagesValid)
+//    }
+//  }
+
+  // deployResponse.foreach{ res => res.foreach(constellationAppSim.postDownload(apis.head, _))}
+
+  // messageSim.postDownload(apis.head)
+
+  // constellationAppSim.dumpJson(storedSnapshots)
+
 }

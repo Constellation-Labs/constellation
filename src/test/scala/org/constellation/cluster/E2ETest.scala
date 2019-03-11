@@ -46,6 +46,14 @@ class E2ETest extends E2E {
     // Stop transactions
     sim.triggerRandom(allAPIs)
 
+    //todo message checks here
+    // deployResponse.foreach{ res => res.foreach(constellationAppSim.postDownload(apis.head, _))}
+
+    // messageSim.postDownload(apis.head)
+
+    // constellationAppSim.dumpJson(storedSnapshots)
+
+
     sim.logger.info("Stopping transactions to run parity check")
 
     Thread.sleep(30000)

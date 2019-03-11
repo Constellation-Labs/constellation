@@ -138,7 +138,7 @@ class Simulation {
     err: String,
     t: Map[String, String] => Boolean,
     apis: Seq[APIClient],
-    maxRetries: Int = 10,
+    maxRetries: Int = 20,
     delay: Long = 3000
   ): Boolean = {
     awaitConditionMet(

@@ -272,7 +272,7 @@ class ThreadSafeTipService() {
               },
               "snapshotWriteToDisk"
             )
-
+            println(s" $snapshot")
             Snapshot.acceptSnapshot(snapshot)
             dao.checkpointService.delete(snapshot.checkpointBlocks.toSet)
 
