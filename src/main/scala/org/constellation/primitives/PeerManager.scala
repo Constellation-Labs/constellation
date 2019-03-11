@@ -2,9 +2,11 @@ package org.constellation.primitives
 
 import java.net.InetSocketAddress
 
+import cats.implicits._
 import akka.actor.{Actor, ActorSystem}
 import akka.http.scaladsl.model.RemoteAddress
 import akka.stream.ActorMaterializer
+import cats.data.ValidatedNel
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.StrictLogging
 import constellation.{futureTryWithTimeoutMetric, _}
@@ -15,8 +17,9 @@ import org.constellation.util._
 import org.constellation.{DAO, HostPort, PeerMetadata, RemovePeerRequest}
 
 import scala.collection.Set
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Failure, Random, Success, Try}
+import Validation._
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 
@@ -66,8 +69,8 @@ object PeerManager extends StrictLogging {
 
   }
 
-  def broadcastNodeState()(implicit dao: DAO): Unit = {
-    dao.peerManager ! APIBroadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
+  def broadcastNodeState()(implicit dao: DAO, ec: ExecutionContext): Unit = {
+    broadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
   }
 
   def attemptRegisterSelfWithPeer(hp: HostPort)(implicit dao: DAO): Future[Any] = {
@@ -160,6 +163,27 @@ object PeerManager extends StrictLogging {
     validWithLoopbackGuard(hp.host) && !hostAlreadyExists
   }
 
+  def broadcast[T](
+    func: APIClient => Future[T],
+    skipIds: Set[Id] = Set.empty,
+    subset: Set[Id] = Set.empty
+  )(implicit dao: DAO, ec: ExecutionContext): Future[Map[Id, ValidatedNel[Throwable, T]]] = {
+
+    val peerInfo = dao.peerInfo
+    val selected =
+      if (subset.nonEmpty) peerInfo.filterKeys(subset.contains)
+      else {
+        peerInfo.filterKeys(id => !skipIds.contains(id))
+      }
+
+    val (selectedKeys, selectedValues) = selected.toList.unzip
+
+    selectedValues
+      .map(_.client)
+      .map(func)
+      .traverse(_.toValidatedNel)
+      .map(values => selectedKeys.zip(values).toMap)
+  }
 }
 
 case class PeerData(
