@@ -238,7 +238,7 @@ object EdgeProcessor extends StrictLogging {
                   val cache = CheckpointCacheData(finalCB.some, height = finalCB.calculateHeight())
                   dao.threadSafeTipService.accept(cache)
                   processSignedBlock(
-                    cache.copy(checkpointBlock = cache.checkpointBlock.map{_.copy(messages = Seq())}),
+                    cache,
                     finalFacilitators
                   )
                 }

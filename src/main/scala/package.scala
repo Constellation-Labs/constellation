@@ -157,6 +157,8 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
 
     def address: String = publicKeyToAddressString(kp.getPublic)
 
+    def toId: Id = kp.getPublic.toId
+
   }
 
   implicit class ActorQuery(a: ActorRef) {

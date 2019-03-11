@@ -85,8 +85,6 @@ lazy val coreDependencies = Seq(
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
   "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
-  "org.iq80.leveldb" % "leveldb" % "0.10" withSources () withJavadoc (),
-  "com.codahale" % "shamir" % "0.6.1" withSources () withJavadoc (),
   "com.twitter" %% "chill" % "0.9.3",
   "com.twitter" %% "algebird-core" % "0.13.5",
   "org.typelevel" %% "cats-core" % versions.cats withSources () withJavadoc (),
@@ -111,9 +109,7 @@ lazy val testDependencies = Seq(
   "org.scalactic" %% "scalactic" % "3.0.5",
   "org.scalamock" %% "scalamock" % "4.1.0",
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
-  "com.typesafe.akka" %% "akka-testkit" % versions.akka,
-  "com.typesafe.slick" %% "slick" % "3.3.0",
-  "com.h2database" % "h2" % "1.4.197",
+  "com.typesafe.akka" %% "akka-testkit" % versions.akka
 ).map(_ % "it,test")
 
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))

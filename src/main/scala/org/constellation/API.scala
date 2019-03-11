@@ -39,7 +39,6 @@ import scala.util.{Failure, Success, Try}
 
 case class PeerMetadata(
   host: String,
-  udpPort: Int,
   httpPort: Int,
   id: Id,
   nodeState: NodeState = NodeState.Ready,
@@ -89,7 +88,7 @@ case class BlockUIOutput(
                           channels: Seq[ChannelValidationInfo],
                         )
 
-class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
+class API()(implicit system: ActorSystem,
                                          val timeout: Timeout,
                                          val dao: DAO)
     extends Json4sSupport
@@ -229,7 +228,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
             complete(proof)
           } ~
           path("restart") { // TODO: Revisit / fix
-            dao.restartNode()
             System.exit(0)
             complete(StatusCodes.OK)
           } ~
@@ -466,7 +464,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
                   ipp = ip
                   import better.files._
                   externalHostString = ip
-                  file"external_host_ip".write(ip)
+                  file"${ConstellationNode.LocalConfigFile}".write(LocalNodeConfig(ip).json)
                   new InetSocketAddress(ip, port.toInt)
                 case a @ _ => {
                   logger.debug(s"Unmatched Array: $a")
@@ -474,10 +472,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
                 }
               }
             logger.debug(s"Set external IP RPC request $externalIp $addr")
-            dao.externalAddress = Some(addr)
             dao.metrics.updateMetric("externalHost", dao.externalHostString)
-            if (ipp.nonEmpty)
-              dao.apiAddress = Some(new InetSocketAddress(ipp, 9000))
             complete(StatusCodes.OK)
           }
         } ~

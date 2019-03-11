@@ -6,6 +6,7 @@ import akka.actor.{Actor, ActorSystem}
 import akka.http.scaladsl.model.RemoteAddress
 import akka.stream.ActorMaterializer
 import com.softwaremill.sttp.Response
+import com.typesafe.config.Config
 import com.typesafe.scalalogging.StrictLogging
 import constellation.{futureTryWithTimeoutMetric, _}
 import org.constellation.p2p.{Download, PeerAuthSignRequest, PeerRegistrationRequest}
@@ -23,6 +24,16 @@ case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 object PeerManager extends StrictLogging {
 
   type Peers = Map[Schema.Id, PeerData]
+
+
+  def loadSeedsFromConfig(config: Config): Seq[HostPort] =
+    if (config.hasPath("seedPeers")) {
+      import scala.collection.JavaConverters._
+      val peersList = config.getStringList("seedPeers")
+      peersList.asScala
+        .map(_.split(":"))
+        .map(arr => HostPort(arr(0), arr(1).toInt))
+    } else Seq()
 
   def initiatePeerReload()(implicit dao: DAO, ec: ExecutionContextExecutor): Unit = {
 
@@ -287,7 +298,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
       updateMetricsAndDAO(updated)
 
-    case a @ PeerMetadata(host, udpPort, port, id, ns, time, auxHost, addresses, _) =>
+    case a @ PeerMetadata(host, port, id, ns, time, auxHost, addresses, _) =>
       val validHost = (host != dao.externalHostString && host != "127.0.0.1") || !dao.preventLocalhostAsPeer
 
       if (id != dao.id && validHost) {
@@ -382,7 +393,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
             val state = s.nodeState
             val id = sig.hashSignature.id
             val add =
-              PeerMetadata(request.host, 16180, request.port, id, nodeState = state, auxAddresses = s.addresses)
+              PeerMetadata(request.host, request.port, id, nodeState = state, auxAddresses = s.addresses)
             val peerData = PeerData(add, client)
             client.id = id
             self ! UpdatePeerInfo(peerData)

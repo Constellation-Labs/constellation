@@ -102,8 +102,8 @@ class E2ETest extends E2E {
 
     // TODO: This is flaky and fails randomly sometimes
     val snaps = storedSnapshots.toSet
-      .map { x: Seq[StoredSnapshot] => // Temporarily ignoring messages for partitioning changes.
-        x.map { _.checkpointCache.flatMap { _.checkpointBlock.map{_.copy(messages = Seq())}} }.toSet
+      .map { x: Seq[StoredSnapshot] => // May need to temporarily ignore messages for partitioning changes?
+        x.map { _.checkpointCache.flatMap { _.checkpointBlock} }.toSet
       }
 
     // Not inlining this for a reason -- the snaps object is quite large,
