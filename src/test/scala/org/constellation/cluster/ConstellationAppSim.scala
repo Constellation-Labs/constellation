@@ -13,7 +13,6 @@ class ConstellationAppSim(sim: Simulation, constellationApp: ConstellationApp)(
   implicit val executionContext: ExecutionContext
 ){
   private val schemaStr = SensorData.jsonSchema
-  private val channelName = "test"
   private var broadcastedMessages: Seq[ChannelMessage] = Seq.empty[ChannelMessage]
 
   def assertGenesisAccepted(apis: Seq[APIClient])(resp: Channel) = {
@@ -30,11 +29,11 @@ class ConstellationAppSim(sim: Simulation, constellationApp: ConstellationApp)(
   def messagesInSnapshots(
                                   channelId: String,
                                   apis: Seq[APIClient],
-                                  maxRetries: Int = 30,
+                                  maxRetries: Int = 300,
                                   delay: Long = 3000
                                 ): Boolean = {
     sim.awaitConditionMet(
-      s"Peer health checks failed", {
+      s"Messages not found in snapshot", {
         apis.forall { a =>
           val res = a.getBlocking[Option[ChannelProof]]("channel/" + channelId, timeout = 30 seconds)
           res.nonEmpty
@@ -64,10 +63,10 @@ class ConstellationAppSim(sim: Simulation, constellationApp: ConstellationApp)(
     )
   }
 
-  def generateChannelMessages(channel: Channel, numMessages: Int = 5): Seq[SensorData] = {
+  def generateChannelMessages(channel: Channel, numMessages: Int = 1): Seq[SensorData] = {
           val validNameChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map { _.toString }.toSeq
           val invalidNameChars = validNameChars.map { _.toLowerCase }
-          val messagesToBroadcastMessages: Seq[SensorData] = (0 until 10).flatMap { batchNumber =>
+          val messagesToBroadcastMessages: Seq[SensorData] = (0 until 5).flatMap { batchNumber =>
             import constellation._
             val validMessages = Seq.fill(batchNumber % 2) {
               SensorData(

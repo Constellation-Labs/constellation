@@ -19,11 +19,12 @@ class ConstellationApp(
   //todo add auth for redeploy
   def deploy(
               schemaStr: String,
-              channelName: String = s"channel_${ channelNameToId.keys.size + 1}"
+              channelName: String = s"test_channel_${ channelNameToId.keys.size + 1}"
             )(implicit ec: ExecutionContext) = {
     val response = clientApi.postNonBlocking[Some[ChannelOpenResponse]]("channel/open", ChannelOpen(channelName, jsonSchema = Some(schemaStr)), timeout = 15 seconds)
     response.map { resp =>
       val channelMsg = resp.map { msg =>
+        assert(msg.errorMessage == "Success")
         Channel(msg.genesisHash, channelName, msg)
       }
       channelMsg.foreach(registerChannels)
