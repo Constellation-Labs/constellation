@@ -19,7 +19,6 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
 
   implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
-  val logger = Logger(LoggerFactory.getLogger(getClass.getName))
 
   val transactionProposals: mutable.Map[FacilitatorId, TransactionsProposal] =
       mutable.Map()
@@ -84,7 +83,7 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
       if (checkpointBlockProposals.nonEmpty) {
         val sameBlocks = checkpointBlockProposals
           .groupBy(_._2.baseHash)
-          .maxBy(u => u._2.size)
+          .maxBy(_._2.size)
           ._2
 
         val majorityCheckpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
@@ -114,7 +113,7 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
           "finishedCheckpointBroadcast",
         )(dao, ec).recoverWith {
           case e: Throwable =>
-            logger.warn("Failure gathering signature", e)
+            log.warning("Failure gathering signature", e)
             dao.metrics.incrementMetric(
               "formCheckpointSignatureResponseError"
             )

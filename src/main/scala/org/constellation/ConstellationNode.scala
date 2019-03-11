@@ -286,9 +286,9 @@ class ConstellationNode(val configKeyPair: KeyPair,
     Http().bindAndHandle(routes, httpInterface, httpPort)
 
   val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
-  val nodeActor: ActorRef = system.actorOf(CrossTalkConsensus.props(remoteSenderActor))
-  val peerAPI = new PeerAPI(ipManager, nodeActor)
-  val randomTXManager = new RandomTransactionManager(nodeActor)
+  val crossTalkConsensusActor: ActorRef = system.actorOf(CrossTalkConsensus.props(remoteSenderActor))
+  val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
+  val randomTXManager = new RandomTransactionManager(crossTalkConsensusActor)
 
   val peerRoutes: Route = peerAPI.routes // logReqResp { }
 

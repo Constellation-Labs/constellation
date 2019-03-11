@@ -47,11 +47,11 @@ class CrossTalkConsensus(remoteSenderSupervisor: ActorRef)(implicit dao: DAO) ex
 }
 
 object CrossTalkConsensus {
-  sealed trait NodeCommand
+  sealed trait CrossTalkConsensusCommand
 
   case class NotifyFacilitators(roundData: RoundData)
-  case class ParticipateInBlockCreationRound(roundData: RoundData) extends NodeCommand
-  case object StartNewBlockCreationRound extends NodeCommand
+  case class ParticipateInBlockCreationRound(roundData: RoundData) extends CrossTalkConsensusCommand
+  case object StartNewBlockCreationRound extends CrossTalkConsensusCommand
 
   def props(remoteSenderSupervisor: ActorRef)(implicit dao: DAO): Props =
     Props(new CrossTalkConsensus(remoteSenderSupervisor))
