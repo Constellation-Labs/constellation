@@ -8,10 +8,14 @@ import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.{Id, SendToAddress}
 import org.constellation.primitives.Transaction
+import org.constellation.util.SignHelp
 
 object Fixtures {
 
-//  lazy val testNode =  TestNode(heartbeatEnabled = true, randomizePorts = false)
+
+  val kp: KeyPair = KeyUtils.makeKeyPair()
+  val kp1: KeyPair = KeyUtils.makeKeyPair()
+  val tx: Transaction = SignHelp.createTransaction(kp.address, kp1.address, 1L, kp)
 
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()
@@ -39,7 +43,7 @@ object Fixtures {
   val address4: InetSocketAddress = constellation.addressToSocket("localhost:16184")
   val address5: InetSocketAddress = constellation.addressToSocket("localhost:16185")
 
-  val addPeerRequest = PeerMetadata("host:", 1, 1, id: Id)
+  val addPeerRequest = PeerMetadata("host:", 1, id: Id)
 
   val tempKeySet = Seq(tempKey, tempKey2, tempKey3, tempKey4, tempKey5)
 

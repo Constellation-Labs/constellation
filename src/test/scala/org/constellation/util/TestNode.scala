@@ -7,7 +7,7 @@ import scala.concurrent.ExecutionContext
 import scala.util.Try
 
 import org.constellation.crypto.KeyUtils
-import org.constellation.{ConstellationNode, HostPort, NodeConfig}
+import org.constellation.{ConstellationNode, HostPort, NodeInitializationConfig}
 
 object TestNode {
 
@@ -27,23 +27,18 @@ object TestNode {
       if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9000 + portOffset
     val randomPeerPort =
       if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9001 + portOffset
-    val randomPeerTCPPort =
-      if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9002 + portOffset
-    val randomUDPPort =
-      if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 16180 + portOffset
 
     val node = new ConstellationNode(
-      keyPair,
-      seedHosts,
-      "0.0.0.0",
-      randomPort,
-      udpPort = randomUDPPort,
-      autoSetExternalAddress = true,
-      peerHttpPort = randomPeerPort,
-      peerTCPPort = randomPeerTCPPort,
-      attemptDownload = seedHosts.nonEmpty,
-      allowLocalhostPeers = true,
-      nodeConfig = NodeConfig(10, isGenesisNode = isGenesisNode)
+      NodeInitializationConfig(
+        seeds = seedHosts,
+        primaryKeyPair = keyPair,
+        metricIntervalSeconds =  10,
+        isGenesisNode = isGenesisNode,
+        httpPort = randomPort,
+        peerHttpPort = randomPeerPort,
+        attemptDownload = seedHosts.nonEmpty,
+        allowLocalhostPeers = true
+      )
     )
 
     nodes = nodes :+ node

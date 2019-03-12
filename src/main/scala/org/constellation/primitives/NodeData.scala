@@ -2,20 +2,29 @@ package org.constellation.primitives
 
 import java.net.InetSocketAddress
 import java.security.KeyPair
-import akka.actor.ActorRef
 
+import akka.actor.ActorRef
 import constellation._
+import org.constellation.NodeInitializationConfig
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.util.Metrics
 
+
+case class LocalNodeConfig(
+                            externalIP: String
+                          )
+
 trait NodeData {
 
+  val nodeConfig: NodeInitializationConfig
   // var dbActor : SwayDBDatastore = _
   var peerManager: ActorRef = _
   var metrics: Metrics = _
+  var messageHashStore: swaydb.Set[String] = _
   var transactionHashStore: swaydb.Set[String] = _
   var checkpointHashStore: swaydb.Set[String] = _
 
@@ -26,7 +35,7 @@ trait NodeData {
 
   var lastConfirmationUpdateTime: Long = System.currentTimeMillis()
 
-  @volatile implicit var keyPair: KeyPair = _
+  @volatile implicit var keyPair: KeyPair = nodeConfig.primaryKeyPair
 
   def publicKeyHash: Int = keyPair.getPublic.hashCode()
 
@@ -36,7 +45,13 @@ trait NodeData {
 
   val dummyAddress: String = KeyUtils.makeKeyPair().getPublic.toId.address
 
-  @volatile var nodeState: NodeState = NodeState.PendingDownload
+  @volatile var nodeState: NodeState = if (nodeConfig.cliConfig.startOfflineMode) {
+    NodeState.Offline
+  } else NodeState.PendingDownload
+
+  @volatile var nodeType: NodeType = if (nodeConfig.cliConfig.lightNode) {
+    NodeType.Light
+  } else NodeType.Full
 
   def setNodeState(
     nodeState_ : NodeState
@@ -45,14 +60,10 @@ trait NodeData {
     metrics.updateMetric("nodeState", nodeState.toString)
   }
 
-  var externalHostString: String = "127.0.0.1"
-  var externlPeerHTTPPort: Int = 9001
+  var externalHostString: String = nodeConfig.hostName
+  var externlPeerHTTPPort: Int = nodeConfig.peerHttpPort
 
   def peerRegistrationRequest = PeerRegistrationRequest(externalHostString, externlPeerHTTPPort, id)
-
-  @volatile var externalAddress: Option[InetSocketAddress] = None
-  @volatile var apiAddress: Option[InetSocketAddress] = None
-  @volatile var tcpAddress: Option[InetSocketAddress] = None
 
   var remotes: Seq[InetSocketAddress] = Seq()
 

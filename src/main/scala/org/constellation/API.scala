@@ -22,9 +22,10 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
-import org.constellation.crypto.{KeyUtils, SimpleWalletLike}
+import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.Download
 import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{APIBroadcast, _}
 import org.constellation.serializer.KryoSerializer
@@ -38,12 +39,13 @@ import scala.util.{Failure, Success, Try}
 
 case class PeerMetadata(
   host: String,
-  udpPort: Int,
   httpPort: Int,
   id: Id,
   nodeState: NodeState = NodeState.Ready,
   timeAdded: Long = System.currentTimeMillis(),
-  auxHost: String = ""
+  auxHost: String = "",
+  auxAddresses: Seq[String] = Seq(), // for testing multi key address partitioning
+  nodeType: NodeType = NodeType.Full
 )
 
 case class HostPort(host: String, port: Int)
@@ -67,9 +69,9 @@ case class ProcessingConfig(
   snapshotHeightInterval: Int = 2,
   snapshotHeightDelayInterval: Int = 5,
   snapshotInterval: Int = 25,
-  checkpointLRUMaxSize: Int = 4000,
-  transactionLRUMaxSize: Int = 10000,
-  addressLRUMaxSize: Int = 10000,
+  checkpointLRUMaxSize: Int = 2000,
+  transactionLRUMaxSize: Int = 5000,
+  addressLRUMaxSize: Int = 1000,
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,
   roundsPerMessage: Int = 10
@@ -86,11 +88,10 @@ case class BlockUIOutput(
                           channels: Seq[ChannelValidationInfo],
                         )
 
-class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
+class API()(implicit system: ActorSystem,
                                          val timeout: Timeout,
                                          val dao: DAO)
     extends Json4sSupport
-    with SimpleWalletLike
     with ServeUI
     with CommonEndpoints
     with StrictLogging
@@ -176,7 +177,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
 
                 BlockUIOutput(
                   cb.soeHash, ccd.height.get.min, cb.parentSOEHashes,
-                  cb.checkpoint.edge.data.messages.map{_.signedMessageData.data.channelId}.distinct.map{
+                  cb.messages.map{_.signedMessageData.data.channelId}.distinct.map{
                     channelId =>
                       ChannelValidationInfo(channelId, true)
                   }
@@ -191,11 +192,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
             complete(dao.messageService.get(channelId))
           } ~
           path("channel" / Segment) { channelHash =>
-          val storedMsg: Option[ChannelMessageMetadata] = dao.messageService.get(channelHash)
-            logger.info(s"for channelHash $channelHash at ${dao.id}the storedMsg: ${storedMsg}")
-
-            val res =
-              Snapshot.findLatestMessageWithSnapshotHash(0, storedMsg, channelHash)
+            val res = Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.get(channelHash))
               logger.info(s"Snapshot.findLatestMessageWithSnapshotHash: ${res}")
             val proof = res.flatMap { cmd =>
               cmd.snapshotHash.flatMap { snapshotHash =>
@@ -214,7 +211,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
                     .head
                     .checkpointBlock
                     .get
-                  val messageProofInput = block.transactions.map { _.hash } ++ block.checkpoint.edge.data.messages
+                  val messageProofInput = block.transactions.map { _.hash } ++ block.messages
                     .map { _.signedMessageData.signatures.hash }
                   val messageProof = MerkleTree(messageProofInput.toList)
                     .createProof(cmd.channelMessage.signedMessageData.signatures.hash)
@@ -232,7 +229,6 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
             complete(proof)
           } ~
           path("restart") { // TODO: Revisit / fix
-            dao.restartNode()
             System.exit(0)
             complete(StatusCodes.OK)
           } ~
@@ -325,7 +321,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
           path("send") {
             entity(as[ChannelSendRequest]) { send =>
               onComplete(ChannelMessage.createMessages(send)) { res =>
-                complete(res.getOrElse(ChannelSendResponse("Failed to create messages", Seq(), send.channelId)).json)
+                complete(res.getOrElse(ChannelSendResponse("Failed to create messages", Seq())).json)//todo removed send.channelId
               }
             }
           } ~
@@ -471,7 +467,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
                   ipp = ip
                   import better.files._
                   externalHostString = ip
-                  file"external_host_ip".write(ip)
+                  file"${ConstellationNode.LocalConfigFile}".write(LocalNodeConfig(ip).json)
                   new InetSocketAddress(ip, port.toInt)
                 case a @ _ => {
                   logger.debug(s"Unmatched Array: $a")
@@ -479,10 +475,7 @@ class API(udpAddress: InetSocketAddress)(implicit system: ActorSystem,
                 }
               }
             logger.debug(s"Set external IP RPC request $externalIp $addr")
-            dao.externalAddress = Some(addr)
             dao.metrics.updateMetric("externalHost", dao.externalHostString)
-            if (ipp.nonEmpty)
-              dao.apiAddress = Some(new InetSocketAddress(ipp, 9000))
             complete(StatusCodes.OK)
           }
         } ~

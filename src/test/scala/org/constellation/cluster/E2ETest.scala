@@ -52,6 +52,14 @@ class E2ETest extends E2E {
 
     assert(Simulation.run(initialAPIs, addPeerRequests))
 
+    val channelOpenResponse = apis.head.postNonBlocking[Option[ChannelOpenResponse]](
+      "channel/open",
+      ChannelOpen("debug", jsonSchema = Some(SensorData.jsonSchema)), timeout = 90.seconds
+    )
+    channelOpenResponse.map{ res => assert(res.exists(_.errorMessage == "Success"))}
+//    assert(channelOpenResponse.exists(_.errorMessage == "Success"))
+
+
     // val deployResponse = constellationAppSim.openChannel(apis)
 
     val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)),
@@ -65,6 +73,7 @@ class E2ETest extends E2E {
 
     // messageSim.postDownload(apis.head)
 
+    // TODO: Change to wait for the download node to participate in several blocks.
     Thread.sleep(20 * 1000)
 
     val allNodes = nodes :+ downloadNode
@@ -99,8 +108,8 @@ class E2ETest extends E2E {
 
     // TODO: This is flaky and fails randomly sometimes
     val snaps = storedSnapshots.toSet
-      .map { x: Seq[StoredSnapshot] =>
-        x.map { _.checkpointCache.flatMap { _.checkpointBlock } }.toSet
+      .map { x: Seq[StoredSnapshot] => // May need to temporarily ignore messages for partitioning changes?
+        x.map { _.checkpointCache.flatMap { _.checkpointBlock} }.toSet
       }
 
     // Not inlining this for a reason -- the snaps object is quite large,
@@ -126,150 +135,150 @@ class E2ETest extends E2E {
   }*/
 }
 
-class ConstellationAppSim(constellationApp: ConstellationApp)(
-  implicit val executionContext: ExecutionContext
-) {
-  private val schemaStr = SensorData.jsonSchema
-  private val channelName = "test"
-  private var broadcastedMessages: Seq[ChannelMessage] = Seq.empty[ChannelMessage]
-
-  def openChannel(apis: Seq[APIClient]): Future[Option[Channel]] = {
-    val deployResponse = constellationApp.deploy(schemaStr, channelName)
-    deployResponse.foreach { resp =>
-      if (resp.isDefined) {
-        Simulation.awaitConditionMet(
-          "Test channel genesis not stored",
-          apis.forall {
-            _.getBlocking[Option[ChannelMessageMetadata]](
-              "messageService/" + resp.map(_.channelId).getOrElse(channelName)
-            ).exists(_.blockHash.nonEmpty)
-          }
-        )
-        resp.foreach { channel: Channel =>
-          val validNameChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map { _.toString }.toSeq
-          val invalidNameChars = validNameChars.map { _.toLowerCase }
-
-          val messagesToBroadcastMessages: Seq[SensorData] = (0 until 10).flatMap { batchNumber =>
-            val validMessages = Seq.fill(batchNumber % 2) {
-              SensorData(
-                Random.nextInt(100),
-                Seq.fill(5) { Random.shuffle(validNameChars).head }.mkString
-              )
-            }
-            val invalidMessages = Seq.fill((batchNumber + 1) % 2) {
-              SensorData(
-                Random.nextInt(100) + 500,
-                Seq.fill(5) { Random.shuffle(invalidNameChars).head }.mkString
-              )
-            }
-
-            val msgs = validMessages ++ invalidMessages
-            Simulation.logger.info(
-              s"Message batch $batchNumber complete, sent ${msgs.size} messages"
-            )
-            msgs
-          }
-        // TODO: Fix type bounds after changing schema
-        /*val broadcastResp: Future[Seq[ChannelMessage]] =
-          constellationApp.broadcast(messagesToBroadcastMessages)
-        broadcastResp.foreach { res: Seq[ChannelMessage] =>
-          sim.logger.info(
-            s"broadcastResp is: ${res.toString}"
-          )
-          broadcastedMessages = res
-        }*/
-        }
-      }
-    }
-    deployResponse
-  }
-
-  def postDownload(firstAPI: APIClient = constellationApp.clientApi, channel: Channel) = {
-    Simulation.logger.info(s"channel ${channel.channelId}")
-    val allChannels = firstAPI.getBlocking[Seq[String]]("channels")
-    Simulation.logger.info(s"message channel ${allChannels}")
-
-    val messageChannels = allChannels.filterNot { _ == channel.channelId }
-    val messagesWithinSnapshot = messageChannels.flatMap(
-      msg => firstAPI.getBlocking[Option[ChannelProof]]("channel/" + msg, timeout = 30 seconds)
-    )
-    Simulation.logger.info(s"messageWithinSnapshot ${messagesWithinSnapshot}")
-
-    assert(messagesWithinSnapshot.nonEmpty)
-
-    messagesWithinSnapshot.foreach { proof =>
-      val m = proof.channelMessageMetadata
-      assert(m.snapshotHash.nonEmpty)
-      assert(m.blockHash.nonEmpty)
-      assert(proof.checkpointMessageProof.verify())
-      assert(proof.checkpointProof.verify())
-      assert(m.blockHash.contains { proof.checkpointProof.input })
-      assert(
-        m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
-      )
-    }
-  }
-
-  def dumpJson(
-    storedSnapshots: Seq[Seq[StoredSnapshot]]
-  ): Unit = {
-
-    var numInvalid = 0
-
-    val messagesInChannelWithBlocks = storedSnapshots.head.flatMap { s =>
-      s.checkpointCache.map { cache =>
-        val block = cache.checkpointBlock.get
-        val relevantMessages = block.checkpoint.edge.data.messages
-          .filter { broadcastedMessages.contains }
-        val messageParent = relevantMessages.map {
-          _.signedMessageData.data.previousMessageHash
-        }.headOption
-        val messageHash = relevantMessages.map { _.signedMessageData.hash }.headOption
-
-        val valid = relevantMessages.map { m =>
-          val isValid = SensorData
-            .validate(
-              m.signedMessageData.data.message
-            )
-            .isSuccess
-          if (!isValid) numInvalid += 1
-          isValid
-        }.headOption
-        BlockDumpOutput(block.soeHash, block.parentSOEHashes, valid, messageParent, messageHash)
-      }
-    }
-
-    // TODO: Duplicate messages appearing sometimes but not others?
-    println(s"Num invalid $numInvalid")
-
-    val ids = messagesInChannelWithBlocks.map { _.blockSoeHash }.zipWithIndex.toMap
-    val msgToBlock = messagesInChannelWithBlocks.flatMap { z =>
-      z.messageHash.map { _ -> z.blockSoeHash }
-    }.toMap
-
-    import constellation._
-    val rendered = messagesInChannelWithBlocks.map {
-      case BlockDumpOutput(hash, parents, isValid, msgParent, msgHash) =>
-        val msgParentId = msgParent
-          .flatMap { parent =>
-            msgToBlock.get(parent).flatMap { ids.get }.map { Seq(_) }
-          }
-          .getOrElse(Seq())
-
-        val id = ids(hash)
-        val parentsId = parents.flatMap { ids.get } ++ msgParentId
-        val color = isValid
-          .map { b =>
-            if (b) "green" else "red"
-          }
-          .getOrElse("blue")
-        Map("id" -> id, "parentIds" -> parentsId, "color" -> color)
-    }.json
-    println(rendered)
-
-  }
-
-}
+//class ConstellationAppSim(constellationApp: ConstellationApp)(
+//  implicit val executionContext: ExecutionContext
+//) {
+//  private val schemaStr = SensorData.jsonSchema
+//  private val channelName = "test"
+//  private var broadcastedMessages: Seq[ChannelMessage] = Seq.empty[ChannelMessage]
+//
+//  def openChannel(apis: Seq[APIClient]): Future[Option[Channel]] = {
+//    val deployResponse = constellationApp.deploy(schemaStr, channelName)
+//    deployResponse.foreach { resp =>
+//      if (resp.isDefined) {
+//        Simulation.awaitConditionMet(
+//          "Test channel genesis not stored",
+//          apis.forall {
+//            _.getBlocking[Option[ChannelMessageMetadata]](
+//              "messageService/" + resp.map(_.channelId).getOrElse(channelName)
+//            ).exists(_.blockHash.nonEmpty)
+//          }
+//        )
+//        resp.foreach { channel: Channel =>
+//          val validNameChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map { _.toString }.toSeq
+//          val invalidNameChars = validNameChars.map { _.toLowerCase }
+//
+//          val messagesToBroadcastMessages: Seq[SensorData] = (0 until 10).flatMap { batchNumber =>
+//            val validMessages = Seq.fill(batchNumber % 2) {
+//              SensorData(
+//                Random.nextInt(100),
+//                Seq.fill(5) { Random.shuffle(validNameChars).head }.mkString
+//              )
+//            }
+//            val invalidMessages = Seq.fill((batchNumber + 1) % 2) {
+//              SensorData(
+//                Random.nextInt(100) + 500,
+//                Seq.fill(5) { Random.shuffle(invalidNameChars).head }.mkString
+//              )
+//            }
+//
+//            val msgs = validMessages ++ invalidMessages
+//            Simulation.logger.info(
+//              s"Message batch $batchNumber complete, sent ${msgs.size} messages"
+//            )
+//            msgs
+//          }
+//        // TODO: Fix type bounds after changing schema
+//        /*val broadcastResp: Future[Seq[ChannelMessage]] =
+//          constellationApp.broadcast(messagesToBroadcastMessages)
+//        broadcastResp.foreach { res: Seq[ChannelMessage] =>
+//          sim.logger.info(
+//            s"broadcastResp is: ${res.toString}"
+//          )
+//          broadcastedMessages = res
+//        }*/
+//        }
+//      }
+//    }
+//    deployResponse
+//  }
+//
+//  def postDownload(firstAPI: APIClient = constellationApp.clientApi, channel: Channel) = {
+//    Simulation.logger.info(s"channel ${channel.channelId}")
+//    val allChannels = firstAPI.getBlocking[Seq[String]]("channels")
+//    Simulation.logger.info(s"message channel ${allChannels}")
+//
+//    val messageChannels = allChannels.filterNot { _ == channel.channelId }
+//    val messagesWithinSnapshot = messageChannels.flatMap(
+//      msg => firstAPI.getBlocking[Option[ChannelProof]]("channel/" + msg, timeout = 30 seconds)
+//    )
+//    Simulation.logger.info(s"messageWithinSnapshot ${messagesWithinSnapshot}")
+//
+//    assert(messagesWithinSnapshot.nonEmpty)
+//
+//    messagesWithinSnapshot.foreach { proof =>
+//      val m = proof.channelMessageMetadata
+//      assert(m.snapshotHash.nonEmpty)
+//      assert(m.blockHash.nonEmpty)
+//      assert(proof.checkpointMessageProof.verify())
+//      assert(proof.checkpointProof.verify())
+//      assert(m.blockHash.contains { proof.checkpointProof.input })
+//      assert(
+//        m.channelMessage.signedMessageData.signatures.hash == proof.checkpointMessageProof.input
+//      )
+//    }
+//  }
+//
+//  def dumpJson(
+//    storedSnapshots: Seq[Seq[StoredSnapshot]]
+//  ): Unit = {
+//
+//    var numInvalid = 0
+//
+//    val messagesInChannelWithBlocks = storedSnapshots.head.flatMap { s =>
+//      s.checkpointCache.map { cache =>
+//        val block = cache.checkpointBlock.get
+//        val relevantMessages = block.messages
+//          .filter { broadcastedMessages.contains }
+//        val messageParent = relevantMessages.map {
+//          _.signedMessageData.data.previousMessageHash
+//        }.headOption
+//        val messageHash = relevantMessages.map { _.signedMessageData.hash }.headOption
+//
+//        val valid = relevantMessages.map { m =>
+//          val isValid = SensorData
+//            .validate(
+//              m.signedMessageData.data.message
+//            )
+//            .isSuccess
+//          if (!isValid) numInvalid += 1
+//          isValid
+//        }.headOption
+//        BlockDumpOutput(block.soeHash, block.parentSOEHashes, valid, messageParent, messageHash)
+//      }
+//    }
+//
+//    // TODO: Duplicate messages appearing sometimes but not others?
+//    println(s"Num invalid $numInvalid")
+//
+//    val ids = messagesInChannelWithBlocks.map { _.blockSoeHash }.zipWithIndex.toMap
+//    val msgToBlock = messagesInChannelWithBlocks.flatMap { z =>
+//      z.messageHash.map { _ -> z.blockSoeHash }
+//    }.toMap
+//
+//    import constellation._
+//    val rendered = messagesInChannelWithBlocks.map {
+//      case BlockDumpOutput(hash, parents, isValid, msgParent, msgHash) =>
+//        val msgParentId = msgParent
+//          .flatMap { parent =>
+//            msgToBlock.get(parent).flatMap { ids.get }.map { Seq(_) }
+//          }
+//          .getOrElse(Seq())
+//
+//        val id = ids(hash)
+//        val parentsId = parents.flatMap { ids.get } ++ msgParentId
+//        val color = isValid
+//          .map { b =>
+//            if (b) "green" else "red"
+//          }
+//          .getOrElse("blue")
+//        Map("id" -> id, "parentIds" -> parentsId, "color" -> color)
+//    }.json
+//    println(rendered)
+//
+//  }
+//
+//}
 
 case class BlockDumpOutput(
   blockSoeHash: String,

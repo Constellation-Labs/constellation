@@ -91,7 +91,7 @@ object ChannelMessage extends StrictLogging {
         Future {
           var retries = 0
           var metadata: Option[ChannelMetadata] = None
-          while (retries < 10 && metadata.isEmpty) {
+          while (retries < 30 && metadata.isEmpty) {
             retries += 1
             Thread.sleep(1000)
             metadata = dao.channelService.get(genesisHashChannelId)
@@ -129,14 +129,13 @@ object ChannelMessage extends StrictLogging {
         Future.successful(
           ChannelSendResponse(
             "Success",
-            messages.map { _.signedMessageData.hash },
-            channelSendRequest.channelId
+            messages.map { _.signedMessageData.hash }//todo removed ,channelSendRequest.channelId
           )
         )
       }
       .getOrElse(
         Future.successful(
-          ChannelSendResponse("Channel not found", Seq(), channelSendRequest.channelId)
+          ChannelSendResponse("Channel not found", Seq())//todo removed , channelSendRequest.channelId
         )
       )
   }
@@ -149,11 +148,11 @@ case class ChannelProof(
   checkpointMessageProof: MerkleProof
 )
 
-case class ChannelOpenRequest(
-                               channelId: String,
-                               jsonSchema: Option[String] = None,
-                               acceptInvalid: Boolean = true
-                             ) extends ChannelRequest
+//case class ChannelOpenRequest(
+//                               channelId: String,
+//                               jsonSchema: Option[String] = None,
+//                               acceptInvalid: Boolean = true
+//                             ) //extends ChannelRequest
 case class ChannelOpen(
   name: String,
   jsonSchema: Option[String] = None,
@@ -168,7 +167,7 @@ case class ChannelOpenResponse(
 case class ChannelSendRequest(
                                channelId: String,
                                messages: Seq[String]
-                             ) extends ChannelRequest
+                             ) //extends ChannelRequest
 trait ChannelRequest {
   val channelId: String
 }
@@ -177,15 +176,15 @@ case class ChannelSendRequestRawJson(channelId: String, messages: String)
 
 case class ChannelSendResponse(
   errorMessage: String = "Success",
-  messageHashes: Seq[String],
-  channelId: String
+  messageHashes: Seq[String]
+//  channelId: String
 )
 
 case class SensorData(
   temperature: Int,
   name: String,
   channelId: String = ""
-) extends ChannelRequest
+) //extends ChannelRequest
 
 object SensorData {
 

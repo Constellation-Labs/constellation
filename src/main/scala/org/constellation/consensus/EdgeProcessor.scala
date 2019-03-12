@@ -42,7 +42,7 @@ object EdgeProcessor extends StrictLogging {
         dao.metrics.incrementMetric("heightNonEmpty")
       }
 
-      cb.checkpoint.edge.data.messages.foreach { m =>
+      cb.messages.foreach { m =>
         if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
           dao.messageService.put(
             m.signedMessageData.data.channelId,
@@ -237,7 +237,10 @@ object EdgeProcessor extends StrictLogging {
                 .traverse { finalCB =>
                   val cache = CheckpointCacheData(finalCB.some, height = finalCB.calculateHeight())
                   dao.threadSafeTipService.accept(cache)
-                  processSignedBlock(cache, finalFacilitators)
+                  processSignedBlock(
+                    cache,
+                    finalFacilitators
+                  )
                 }
                 .map {
                   _.andThen(identity)
@@ -491,7 +494,6 @@ object Snapshot {
   def findLatestMessageWithSnapshotHash(
     depth: Int,
     lastMessage: Option[ChannelMessageMetadata],
-    channelHash: String,
     maxDepth: Int = 10
   )(implicit dao: DAO): Option[ChannelMessageMetadata] = {
 
@@ -502,17 +504,13 @@ object Snapshot {
       if (depth > maxDepth) None
       else {
         lastMessage.flatMap { m =>
-        val parent = dao.messageService.get(
-          m.channelMessage.signedMessageData.data.previousMessageHash
-        )
-        println(s"parent: $parent")
-          println(s"m.snapshotHash.nonEmpty: ${m.snapshotHash}")
-          if (m.snapshotHash.nonEmpty) Some(m)//todo bug here, snapshotHash is empty, not getting updated?
+          if (m.snapshotHash.nonEmpty) Some(m)
           else {
-            println(s"lastMessage: $m")
             findLatestMessageWithSnapshotHashInner(
               depth + 1,
-              parent
+              dao.messageService.get(
+                m.channelMessage.signedMessageData.data.previousMessageHash
+              )
             )
           }
         }
@@ -546,23 +544,16 @@ object Snapshot {
     for (cbOpt <- cbData;
          cbCache <- cbOpt;
          cb <- cbCache.checkpointBlock;
-         message <- cb.checkpoint.edge.data.messages) {
-      println(s"Snapshot message: ${message}")
-      val channelId = message.signedMessageData.data.channelId//todu use this?
+         message <- cb.messages) {
       dao.messageService.update(
         message.signedMessageData.signatures.hash,
         _.copy(snapshotHash = Some(snapshot.hash)),
         ChannelMessageMetadata(message, Some(cb.baseHash), Some(snapshot.hash))
       )
-//      println(s"message.signedMessageData.signatures.hash: ${message.signedMessageData.signatures.hash} for message ${message}")
-//      println(s"Snapshot {dao.messageService.get(message.signedMessageData.signatures.hash) ${message.signedMessageData.signatures.hash}: ${dao.messageService.get(message.signedMessageData.signatures.hash)}  for message ${message}")
-//      println(s"Snapshot {dao.messageService.get(message.signedMessageData.signatures.hash).get.snapshotHash ${message.signedMessageData.signatures.hash}:  ${dao.messageService.get(message.signedMessageData.signatures.hash).get.snapshotHash}  for message ${message}")
-//      val updated = dao.messageService.get(message.signedMessageData.signatures.hash)
-//      println(s"dap updated resp for ${message.signedMessageData.signatures.hash} = updated: ${updated}  for message ${message}")
       dao.metrics.incrementMetric("messageSnapshotHashUpdated")
     }
 
-    for (cbOpt <- cbData;//683ee260eb594d14c996856afbb729718c69d3c464b663fa08f5160772ef23aa
+    for (cbOpt <- cbData;
          cbCache <- cbOpt;
          cb <- cbCache.checkpointBlock;
          tx <- cb.transactions) {

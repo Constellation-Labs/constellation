@@ -123,7 +123,7 @@ class ClusterComputeManualTest
 
     val addPeerRequests = apis.map { a =>
       val aux = if (auxAPIs.contains(a)) a.internalPeerHost else ""
-      PeerMetadata(a.hostName, a.udpPort, a.peerHTTPPort, a.id, auxHost = aux)
+      PeerMetadata(a.hostName, a.peerHTTPPort, a.id, auxHost = aux)
     }
 
     Simulation.run(apis, addPeerRequests, attemptSetExternalIP = true, useRegistrationFlow = true)
