@@ -1,6 +1,6 @@
 package org.constellation.p2p
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
@@ -19,9 +19,10 @@ import org.constellation.consensus.EdgeProcessor.{
   FinishedCheckpointResponse,
   SignatureRequest
 }
+import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.{CommonEndpoints, SingleHashSignature, MetricTimerDirective}
+import org.constellation.util.{CommonEndpoints, MetricTimerDirective, SingleHashSignature}
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -42,13 +43,13 @@ object PeerAPI {
 
 }
 
-class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
-                                                 val timeout: Timeout,
-                                                 val dao: DAO)
+class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit system: ActorSystem,
+                                                                      val timeout: Timeout,
+                                                                      val dao: DAO)
     extends Json4sSupport
     with CommonEndpoints
     with IPEnforcer
-    with StrictLogging 
+    with StrictLogging
     with MetricTimerDirective {
 
   implicit val serialization: Serialization.type = native.Serialization
@@ -235,6 +236,19 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
         }
     }
 
+  private val blockBuildingRoundRoute =
+    createRoute(BlockBuildingRoundRoute.pathPrefix)(
+      () => new BlockBuildingRoundRoute(nodeActor).createBlockBuildingRoundRoutes()
+    )
+
+  private def createRoute(path: String)(routeFactory: () => Route): Route = {
+    pathPrefix(path) {
+      handleExceptions(exceptionHandler) {
+        routeFactory()
+      }
+    }
+  }
+
   private val mixedEndpoints = {
     path("transaction") {
       put {
@@ -254,7 +268,7 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
     decodeRequest {
       encodeResponse {
         // rejectBannedIP {
-        signEndpoints ~ commonEndpoints ~ // { //enforceKnownIP
+        signEndpoints ~ commonEndpoints ~ blockBuildingRoundRoute ~ // { //enforceKnownIP
           getEndpoints ~ postEndpoints ~ mixedEndpoints
       }
     }

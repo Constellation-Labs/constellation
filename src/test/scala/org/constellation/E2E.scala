@@ -21,18 +21,9 @@ trait E2E
 
   implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
-  implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
+//  implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
 
   val tmpDir = "tmp"
-
-  val totalNumNodes = 3
-  val n1 = createNode(randomizePorts = false)
-  val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes - 1)(
-    i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
-  )
-  val apis: Seq[APIClient] = nodes.map { _.getAPIClient() }
-  val addPeerRequests = nodes.map { _.getAddPeerRequest }
-  val sim = new Simulation()
 
   override def beforeAll(): Unit = {
     // Cleanup DBs

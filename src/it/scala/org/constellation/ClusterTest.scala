@@ -168,7 +168,6 @@ class ClusterTest
       APIClient(ip, 9001)
     }
 
-    val sim = new Simulation()
     // sim.run(apis = apis, peerApis = peerAPIs, attemptSetExternalIP = true)
 
   }
