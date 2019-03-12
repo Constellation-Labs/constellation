@@ -65,4 +65,10 @@ class DAO(
   checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
 
+  def pullTips(
+    allowEmptyFacilitators: Boolean = false
+  ): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = {
+    threadSafeTipService.pull(allowEmptyFacilitators)(this)
+  }
+
 }

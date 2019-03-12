@@ -17,12 +17,14 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import constellation._
 import org.constellation.CustomDirectives.printResponseTime
+import org.constellation.consensus.{HTTPNodeRemoteSender, CrossTalkConsensus, NodeRemoteSender}
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Metrics}
+import org.json4s.BuildInfo
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -200,7 +202,6 @@ class ConstellationNode(
   val metrics_ = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
   dao.metrics = metrics_
 
-  val randomTXManager = new RandomTransactionManager()
 
   val snapshotTrigger = new SnapshotTrigger()
 
@@ -239,7 +240,10 @@ class ConstellationNode(
   private val bindingFuture: Future[Http.ServerBinding] =
     Http().bindAndHandle(routes, httpInterface, httpPort)
 
-  val peerAPI = new PeerAPI(ipManager)
+  val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
+  val crossTalkConsensusActor: ActorRef = system.actorOf(CrossTalkConsensus.props(remoteSenderActor))
+  val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
+  val randomTXManager = new RandomTransactionManager(crossTalkConsensusActor)
 
   /*  seedPeers.foreach {
     peer => ipManager.addKnownIP(RemoteAddress(peer))

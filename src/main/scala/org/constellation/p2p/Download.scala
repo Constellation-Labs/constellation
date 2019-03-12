@@ -61,7 +61,8 @@ class RandomSnapshotsProcessor(implicit dao: DAO, ec: ExecutionContext) extends 
 
   private def getSnapshot(hash: String, client: APIClient): IO[StoredSnapshot] = IO.fromFuture {
     IO {
-      client.getNonBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash, timeout = getSnapshotTimeout)
+      client.getNonBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash,
+                                                     timeout = getSnapshotTimeout)
     }
   }
 
@@ -81,7 +82,9 @@ class RandomSnapshotsProcessor(implicit dao: DAO, ec: ExecutionContext) extends 
   }
 }
 
-class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO, ec: ExecutionContext) extends StrictLogging {
+class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
+                                                              ec: ExecutionContext)
+    extends StrictLogging {
   private implicit val ioTimer: Timer[IO] = IO.timer(ec)
 
   final implicit class FutureOps[+T](f: Future[T]) {
@@ -115,10 +118,11 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .flatMap(_ => requestForFaucet)
       .map(_ => ())
 
-  private def downloadAndAcceptGenesis: IO[GenesisObservation] =
-    (dao.peerManager ? APIBroadcast(_.getNonBlocking[Option[GenesisObservation]]("genesis")))
-      .mapTo[Map[Schema.Id, Future[Option[GenesisObservation]]]]
-      .flatMap(m => Future.find(m.values.toList)(_.nonEmpty).map(_.flatten.get))
+  private def downloadAndAcceptGenesis =
+    PeerManager
+      .broadcast(_.getNonBlocking[Option[GenesisObservation]]("genesis"))
+      .map(_.values.flatMap(_.toOption))
+      .map(_.find(_.nonEmpty).flatten.get)
       .toIO
       .flatMap(updateMetricAndPass("downloadedGenesis", "true"))
       .flatMap(genesis => IO(dao.acceptGenesis(genesis)).map(_ => genesis))
@@ -127,11 +131,8 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
     IO(logger.info(s"Waiting ${waitForPeersDelay.toString()} for peers"))
       .flatMap(_ => IO.sleep(waitForPeersDelay))
 
-  private def getReadyPeers(): IO[Peers] =
-    (dao.peerManager ? GetPeerInfo)
-      .mapTo[Map[Schema.Id, PeerData]]
-      .toIO
-      .map(_.filter(_._2.peerMetadata.nodeState == NodeState.Ready))
+  private def getReadyPeers() =
+    IO.pure(dao.peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready))
 
   private def getSnapshotClient(peers: Peers) = IO(peers.head._2.client)
 

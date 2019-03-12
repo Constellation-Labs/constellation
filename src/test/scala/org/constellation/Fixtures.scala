@@ -53,7 +53,7 @@ object Fixtures {
 
   def getRandomElement[T](list: Seq[T], random: Random): T = list(random.nextInt(list.length))
 
-  def dummyTx(data: DAO, amt: Long = 1L, src: Id = id) = {
+  def dummyTx(data: DAO, amt: Long = 1L, src: Id = id): Transaction = {
     val sendRequest = SendToAddress(src.address, amt)
     createTransaction(data.selfAddressStr, sendRequest.dst, sendRequest.amountActual, data.keyPair)
   }
