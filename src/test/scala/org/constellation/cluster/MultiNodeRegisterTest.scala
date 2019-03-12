@@ -79,7 +79,7 @@ class MultiNodeRegisterTest
             PeerRegistrationRequest(
               ipData.canonicalHostName,
               ipData.port,
-              a.configKeyPair.getPublic.toId
+              a.dao.keyPair.getPublic.toId
             )
           val res = a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
           assert(res.isSuccess)

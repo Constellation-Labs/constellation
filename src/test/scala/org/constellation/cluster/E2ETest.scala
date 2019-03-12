@@ -52,6 +52,15 @@ class E2ETest extends E2E {
 
     assert(Simulation.run(initialAPIs, addPeerRequests))
 
+
+    val channelOpenResponse = apis.head.postBlocking[Option[ChannelOpenResponse]](
+      "channel/open",
+      ChannelOpen("debug", jsonSchema = Some(SensorData.jsonSchema)), timeout = 60.seconds
+    )
+
+    assert(channelOpenResponse.exists(_.errorMessage == "Success"))
+
+
     // val deployResponse = constellationAppSim.openChannel(apis)
 
     val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)),
@@ -65,6 +74,7 @@ class E2ETest extends E2E {
 
     // messageSim.postDownload(apis.head)
 
+    // TODO: Change to wait for the download node to participate in several blocks.
     Thread.sleep(20 * 1000)
 
     val allNodes = nodes :+ downloadNode
@@ -99,8 +109,8 @@ class E2ETest extends E2E {
 
     // TODO: This is flaky and fails randomly sometimes
     val snaps = storedSnapshots.toSet
-      .map { x: Seq[StoredSnapshot] =>
-        x.map { _.checkpointCache.flatMap { _.checkpointBlock } }.toSet
+      .map { x: Seq[StoredSnapshot] => // May need to temporarily ignore messages for partitioning changes?
+        x.map { _.checkpointCache.flatMap { _.checkpointBlock} }.toSet
       }
 
     // Not inlining this for a reason -- the snaps object is quite large,
@@ -219,7 +229,7 @@ class ConstellationAppSim(constellationApp: ConstellationApp)(
     val messagesInChannelWithBlocks = storedSnapshots.head.flatMap { s =>
       s.checkpointCache.map { cache =>
         val block = cache.checkpointBlock.get
-        val relevantMessages = block.checkpoint.edge.data.messages
+        val relevantMessages = block.messages
           .filter { broadcastedMessages.contains }
         val messageParent = relevantMessages.map {
           _.signedMessageData.data.previousMessageHash

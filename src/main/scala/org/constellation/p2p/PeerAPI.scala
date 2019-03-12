@@ -1,5 +1,7 @@
 package org.constellation.p2p
 
+import java.net.InetSocketAddress
+
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
@@ -14,11 +16,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
 import org.constellation.consensus.EdgeProcessor
-import org.constellation.consensus.EdgeProcessor.{
-  FinishedCheckpoint,
-  FinishedCheckpointResponse,
-  SignatureRequest
-}
+import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest}
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -70,26 +68,10 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
     }
   }
 
-  private val getEndpoints = {
+  private def getEndpoints(address: InetSocketAddress) = {
     get {
-      extractClientIP { clientIP =>
-        path("ip") {
-          complete(clientIP.toIP.map { z =>
-            PeerIPData(z.ip.getCanonicalHostName, z.port)
-          })
-        } /*~
-        path("edge" / Segment) { soeHash =>
-          val cacheOpt = dao.dbActor.getSignedObservationEdgeCache(soeHash)
-
-          val cbOpt = cacheOpt.flatMap { c =>
-            dao.dbActor.getCheckpointCacheData(c.signedObservationEdge.baseHash)
-              .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
-          }
-
-          val resWithCBOpt = EdgeResponse(cacheOpt, cbOpt)
-
-          complete(resWithCBOpt)
-        }*/
+      path("ip") {
+        complete(address)
       }
     }
   }
@@ -264,12 +246,13 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
     }
   }
 
-  val routes: Route = withTimer("peer-api") {
+
+  def routes(address : InetSocketAddress): Route = withTimer("peer-api") {
     decodeRequest {
       encodeResponse {
         // rejectBannedIP {
         signEndpoints ~ commonEndpoints ~ blockBuildingRoundRoute ~ // { //enforceKnownIP
-          getEndpoints ~ postEndpoints ~ mixedEndpoints
+          getEndpoints(address) ~ postEndpoints ~ mixedEndpoints
       }
     }
   }

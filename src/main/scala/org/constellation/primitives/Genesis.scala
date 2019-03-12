@@ -17,7 +17,7 @@ object Genesis {
   )
 
   def createGenesisTransaction(keyPair: KeyPair): Transaction = {
-    val debtAddress = KeyUtils.makeKeyPair().address.address
+    val debtAddress = KeyUtils.makeKeyPair().address
     createTransaction(debtAddress, keyPair.getPublic.toId.address, 4e9.toLong, keyPair)
   }
 

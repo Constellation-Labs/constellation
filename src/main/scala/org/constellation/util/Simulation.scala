@@ -231,7 +231,7 @@ object Simulation {
 
   def awaitCheckpointsAccepted(
     apis: Seq[APIClient],
-    numAccepted: Int = 10,
+    numAccepted: Int = 5,
     maxRetries: Int = 30,
     delay: Long = 5000
   ): Boolean = {

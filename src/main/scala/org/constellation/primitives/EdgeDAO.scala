@@ -462,7 +462,7 @@ trait EdgeDAO {
   val acceptedTransactionService = new AcceptedTransactionService(
     processingConfig.transactionLRUMaxSize
   )
-  val transactionService = new AcceptedTransactionService(processingConfig.transactionLRUMaxSize)
+  val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
   val addressService = new AddressService(processingConfig.addressLRUMaxSize)
   val messageService = new MessageService()
   val channelService = new ChannelService()

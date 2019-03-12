@@ -29,7 +29,16 @@ object Schema {
 
   object NodeState extends Enumeration {
     type NodeState = Value
-    val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, Ready = Value
+    val PendingDownload,
+    DownloadInProgress,
+    DownloadCompleteAwaitingFinalSync,
+    Ready,
+    Offline = Value
+  }
+
+  object NodeType extends Enumeration {
+    type NodeType = Value
+    val Full, Light = Value
   }
 
   sealed trait ValidationStatus
@@ -141,7 +150,7 @@ object Schema {
     * Collection of references to transaction hashes
     * @param hashes : TX edge hashes
     */
-  case class CheckpointEdgeData(hashes: Seq[String], messages: Seq[ChannelMessage] = Seq())
+  case class CheckpointEdgeData(hashes: Seq[String], messageHashes: Seq[String] = Seq())
       extends Signable
 
   case class CheckpointEdge(edge: Edge[CheckpointEdgeData]) {

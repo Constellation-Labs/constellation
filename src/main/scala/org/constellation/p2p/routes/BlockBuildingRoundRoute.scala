@@ -29,7 +29,7 @@ object BlockBuildingRoundRoute {
   def convert(r: RoundDataRemote)(implicit executionContext: ExecutionContext): RoundData = {
     RoundData(
       r.roundId,
-      r.peers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort, p.udpPort))),
+      r.peers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort))),
       r.facilitatorId,
       r.transactions,
       r.tipsSOE,

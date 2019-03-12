@@ -20,32 +20,11 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
     TestNode.clearNodes()
   }
 
-  "GET to /peers" should "get the correct connected peers" in {
-
-    val node1 = TestNode()
-
-    val node1Path = node1.udpAddress
-
-    val expectedPeers = Seq(node1Path)
-
-    val node2 = TestNode() //expectedPeers)
-
-    // TODO: Change to new peer add function
-    /*    val rpc = APIClient(port = node2.httpPort)
-
-    Thread.sleep(2000)
-
-    val actualPeers = rpc.getBlocking[Peers]("peers")
-
-    println(actualPeers)
-
-    assert(actualPeers.peers.contains(node1Path))*/
-  }
 
   "GET to /id" should "get the current nodes public key id" in {
     val keyPair = KeyUtils.makeKeyPair()
     val appNode = TestNode(Seq(), keyPair)
-    val rpc = APIClient(port = appNode.httpPort)
+    val rpc = APIClient(port = appNode.nodeConfig.httpPort)
     val id = rpc.getBlocking[Id]("id")
 
     assert(keyPair.getPublic.toId == id)
@@ -55,8 +34,8 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
     val node1 = TestNode()
     val node2 = TestNode()
 
-    val rpc1 = APIClient(node1.hostName, port = node1.httpPort)
-    val rpc2 = APIClient(node2.hostName, port = node2.httpPort)
+    val rpc1 = APIClient(node1.nodeConfig.hostName, port = node1.nodeConfig.httpPort)
+    val rpc2 = APIClient(node2.nodeConfig.hostName, port = node2.nodeConfig.httpPort)
 
     val addPeerResponse = rpc2.postSync("peer/add", node1.peerHostPort)
 

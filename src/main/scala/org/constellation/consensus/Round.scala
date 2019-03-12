@@ -35,7 +35,10 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
   override def receive: Receive = {
     case StartTransactionProposal(_) =>
       dao.pullTransactions(1).foreach { transactions =>
-        val proposal = TransactionsProposal(roundData.roundId, FacilitatorId(dao.id), transactions)
+        val proposal = TransactionsProposal(
+          roundData.roundId, FacilitatorId(dao.id), transactions,
+          dao.threadSafeMessageMemPool.pull(1).getOrElse(Seq())
+        )
         context.parent ! BroadcastTransactionProposal(
           roundData.peers,
           proposal
@@ -68,14 +71,23 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
     )
 
   def unionProposals(): Unit = {
+
+    val transactions = transactionProposals
+      .flatMap(_._2.transactions)
+      .toSet
+      .union(roundData.transactions.toSet)
+      .toSeq
+
+    val messages = transactionProposals
+      .flatMap(_._2.messages)
+      .toSet
+      .union(roundData.messages.toSet)
+      .toSeq
+
     val cb = CheckpointBlock.createCheckpointBlock(
-      transactionProposals
-        .flatMap(_._2.transactions)
-        .toSet
-        .union(roundData.transactions.toSet)
-        .toSeq,
+      transactions,
       roundData.tipsSOE.map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)),
-      roundData.messages
+      messages
     )(dao.keyPair)
     val blockProposal = UnionBlockProposal(roundData.roundId, FacilitatorId(dao.id), cb)
     context.parent ! BroadcastUnionBlockProposal(roundData.peers, blockProposal)
@@ -149,7 +161,9 @@ object Round {
 
   case class TransactionsProposal(roundId: RoundId,
                                   facilitatorId: FacilitatorId,
-                                  transactions: Seq[Transaction])
+                                  transactions: Seq[Transaction],
+                                  messages: Seq[ChannelMessage] = Seq()
+                                 )
       extends RoundCommand
 
   case class UnionBlockProposal(roundId: RoundId,
