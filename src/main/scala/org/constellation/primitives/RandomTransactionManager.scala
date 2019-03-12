@@ -1,16 +1,19 @@
 package org.constellation.primitives
 
+import java.security.KeyPair
 import java.util.concurrent.Semaphore
 
+import akka.actor.ActorRef
 import constellation._
 import org.constellation.DAO
-import org.constellation.primitives.Schema._
+import org.constellation.consensus.CrossTalkConsensus.StartNewBlockCreationRound
+import org.constellation.primitives.Schema.{InternalHeartbeat, NodeState, _}
 import org.constellation.util.Periodic
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
-class RandomTransactionManager[T](periodSeconds: Int = 1)(implicit dao: DAO)
+class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(implicit dao: DAO)
     extends Periodic[Try[Unit]]("RandomTransactionManager", periodSeconds) {
 
   def trigger(): Future[Try[Unit]] = {
@@ -22,6 +25,9 @@ class RandomTransactionManager[T](periodSeconds: Int = 1)(implicit dao: DAO)
     generateLoop()
 
   }
+
+  // TODO: Config
+  val multiAddressGenerationMode = true
 
   private var testChannels = Seq[String]()
 
@@ -35,23 +41,23 @@ class RandomTransactionManager[T](periodSeconds: Int = 1)(implicit dao: DAO)
             ChannelMessage.create(channelOpen.json, Genesis.CoinBaseHash, newChannelName)
           val genesisHash = genesis.signedMessageData.hash
           testChannels :+= genesisHash
-          dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHash) =
-            newChannelName
+          dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHash) = newChannelName
           dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(newChannelName) = genesis
-          dao.threadSafeMessageMemPool.activeChannels(genesisHash) =
-            new Semaphore(1)
+          dao.threadSafeMessageMemPool.activeChannels(genesisHash) = new Semaphore(1)
           Some(genesis)
         } else {
           if (dao.threadSafeMessageMemPool.unsafeCount < 3) {
-            val channels = dao.threadSafeMessageMemPool.activeChannels.filterKeys{testChannels.contains}
+            val channels = dao.threadSafeMessageMemPool.activeChannels.filterKeys {
+              testChannels.contains
+            }
             if (channels.nonEmpty) {
               val (channel, lock) = channels.toList(Random.nextInt(channels.size))
               dao.messageService.get(channel).flatMap { data =>
                 if (lock.tryAcquire()) {
                   Some(
                     ChannelMessage.create(Random.nextInt(1000).toString,
-                      data.channelMessage.signedMessageData.signatures.hash,
-                      channel)
+                                          data.channelMessage.signedMessageData.signatures.hash,
+                                          channel)
                   )
                 } else None
               }
@@ -64,14 +70,6 @@ class RandomTransactionManager[T](periodSeconds: Int = 1)(implicit dao: DAO)
                                  dao.threadSafeMessageMemPool.unsafeCount.toString)
       }
     }
-
-  private def getRandomPeerAddress(peerIds: Seq[(Id, PeerData)]): String = {
-    if (dao.nodeConfig.isGenesisNode && peerIds.isEmpty) {
-      dao.dummyAddress
-    } else {
-      peerIds(Random.nextInt(peerIds.size))._1.address
-    }
-  }
 
   def generateLoop(): Future[Try[Unit]] = {
 
@@ -107,14 +105,60 @@ class RandomTransactionManager[T](periodSeconds: Int = 1)(implicit dao: DAO)
                 // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
                 // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
 
-                val sendRequest = SendToAddress(getRandomPeerAddress(peerIds),
-                                                Random.nextInt(1000).toLong + 1L,
-                                                normalized = false)
-                val tx = createTransaction(dao.selfAddressStr,
-                                           sendRequest.dst,
-                                           sendRequest.amount,
-                                           dao.keyPair,
-                                           normalized = false)
+                def getRandomAddress: String = {
+                  if (dao.nodeConfig.isGenesisNode && peerIds.isEmpty) {
+                    dao.dummyAddress
+                  } else {
+
+                    peerIds(Random.nextInt(peerIds.size))._1.address
+                  }
+                }
+
+
+                val balancesForAddresses = dao.addresses.map{a => a -> dao.addressService.get(a)}
+                val auxAddressHaveSufficient = balancesForAddresses.forall{_._2.exists(_.balance > 10000000)}
+
+                def simpleTX(src: String, kp: KeyPair = dao.keyPair) = createTransaction(
+                  src,
+                  getRandomAddress,
+                  Random.nextInt(1000).toLong + 1L,
+                  kp,
+                  normalized = false
+                )
+
+                def txWithMultiAddress = if (!auxAddressHaveSufficient) {
+                  val possibleDestinations = balancesForAddresses.filterNot{_._2.exists(_.balance > 10000000)}
+                  val dst = Random.shuffle(possibleDestinations).head._1
+                  createTransaction(
+                    dao.selfAddressStr,
+                    dst,
+                    10,
+                    dao.keyPair
+                  )
+                } else {
+
+                  val historyCheckPassable = balancesForAddresses.forall{
+                    _._2.exists(_.balanceByLatestSnapshot > 10000000)
+                  }
+
+                  val randomSourceAddress = if (historyCheckPassable) {
+                    dao.metrics.incrementMetric("historyCheckPassable")
+                    Random.shuffle(dao.addresses :+ dao.selfAddressStr).head
+                  } else dao.selfAddressStr
+
+                  val srcKPMap = dao.addressToKeyPair + (dao.selfAddressStr -> dao.keyPair)
+
+                  simpleTX(randomSourceAddress, srcKPMap(randomSourceAddress))
+
+                }
+
+                val tx = if (multiAddressGenerationMode) txWithMultiAddress else simpleTX(dao.selfAddressStr)
+
+                // TODO: Unify this as an API call function equivalent
+/*                val sendRequest = SendToAddress(getRandomAddress,
+                                                ,
+                                                normalized = false)*/
+
                 dao.metrics.incrementMetric("signaturesPerformed")
                 dao.metrics.incrementMetric("randomTransactionsGenerated")
                 dao.metrics.incrementMetric("sentTransactions")
@@ -143,6 +187,16 @@ class RandomTransactionManager[T](periodSeconds: Int = 1)(implicit dao: DAO)
             }
           }
 
+          if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold &&
+              dao.generateRandomTX &&
+              dao.nodeState == NodeState.Ready &&
+              !dao.blockFormationInProgress) {
+
+            nodeActor ! StartNewBlockCreationRound
+            dao.metrics.updateMetric("blockFormationInProgress",
+                                     dao.blockFormationInProgress.toString)
+
+          }
         }
       },
       "randomTransactionLoop"

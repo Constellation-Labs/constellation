@@ -74,7 +74,8 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     new KeyPairSerializer +
     new InetSocketAddressSerializer +
     new EnumNameSerializer(EdgeHashType) +
-    new EnumNameSerializer(NodeState)
+    new EnumNameSerializer(NodeState) +
+    new EnumNameSerializer(NodeType)
 
   def caseClassToJson(message: Any): String = {
     compactRender(Extraction.decompose(message))
@@ -154,7 +155,9 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
       kp.getPublic == other.getPublic
     }
 
-    def address: AddressMetaData = pubKeyToAddress(kp.getPublic)
+    def address: String = publicKeyToAddressString(kp.getPublic)
+
+    def toId: Id = kp.getPublic.toId
 
   }
 

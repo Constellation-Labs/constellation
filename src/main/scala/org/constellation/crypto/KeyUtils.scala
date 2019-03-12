@@ -4,6 +4,7 @@ import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedK
 import java.security.{KeyFactory, SecureRandom, _}
 import java.util.Base64
 
+import better.files.File
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.StrictLogging
 import org.spongycastle.jce.provider.BouncyCastleProvider
@@ -214,6 +215,35 @@ object KeyUtils extends StrictLogging {
     val keyHash = Base58.encode(Hashing.sha256().hashBytes(key.getEncoded).asBytes())
     keyHashToAddress(keyHash)
   }
+
+
+  // TODO: Update to use encrypted wallet see below
+  def loadDefaultKeyPair(): KeyPair = {
+    import constellation._
+    val keyPairFile = File(".dag/key")
+    val keyPair: KeyPair =
+      if (keyPairFile.notExists) {
+        logger.warn(
+          s"Key pair not found in $keyPairFile - Generating new key pair"
+        )
+        val kp = makeKeyPair()
+        keyPairFile.write(kp.json)
+        kp
+      } else {
+        try {
+          keyPairFile.lines.mkString.x[KeyPair]
+        } catch {
+          case e: Exception =>
+            logger.error(
+              s"Keypair stored in $keyPairFile is invalid. Please delete it and rerun to create a new one.",
+              e
+            )
+            throw e
+        }
+      }
+    keyPair
+  }
+
 
 }
 

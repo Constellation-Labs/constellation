@@ -1,6 +1,8 @@
 package org.constellation.p2p
 
-import akka.actor.ActorSystem
+import java.net.InetSocketAddress
+
+import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
@@ -14,6 +16,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
 import org.constellation.consensus.{EdgeProcessor, FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest}
+import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.{CommonEndpoints, MetricTimerDirective, SingleHashSignature}
@@ -37,13 +40,13 @@ object PeerAPI {
 
 }
 
-class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
-                                                 val timeout: Timeout,
-                                                 val dao: DAO)
+class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit system: ActorSystem,
+                                                                      val timeout: Timeout,
+                                                                      val dao: DAO)
     extends Json4sSupport
     with CommonEndpoints
     with IPEnforcer
-    with StrictLogging 
+    with StrictLogging
     with MetricTimerDirective {
 
   implicit val serialization: Serialization.type = native.Serialization
@@ -64,26 +67,10 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
     }
   }
 
-  private val getEndpoints = {
+  private def getEndpoints(address: InetSocketAddress) = {
     get {
-      extractClientIP { clientIP =>
-        path("ip") {
-          complete(clientIP.toIP.map { z =>
-            PeerIPData(z.ip.getCanonicalHostName, z.port)
-          })
-        } /*~
-        path("edge" / Segment) { soeHash =>
-          val cacheOpt = dao.dbActor.getSignedObservationEdgeCache(soeHash)
-
-          val cbOpt = cacheOpt.flatMap { c =>
-            dao.dbActor.getCheckpointCacheData(c.signedObservationEdge.baseHash)
-              .filter{_.checkpointBlock.checkpoint.edge.signedObservationEdge == c.signedObservationEdge}
-          }
-
-          val resWithCBOpt = EdgeResponse(cacheOpt, cbOpt)
-
-          complete(resWithCBOpt)
-        }*/
+      path("ip") {
+        complete(address)
       }
     }
   }
@@ -230,6 +217,19 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
         }
     }
 
+  private val blockBuildingRoundRoute =
+    createRoute(BlockBuildingRoundRoute.pathPrefix)(
+      () => new BlockBuildingRoundRoute(nodeActor).createBlockBuildingRoundRoutes()
+    )
+
+  private def createRoute(path: String)(routeFactory: () => Route): Route = {
+    pathPrefix(path) {
+      handleExceptions(exceptionHandler) {
+        routeFactory()
+      }
+    }
+  }
+
   private val mixedEndpoints = {
     path("transaction") {
       put {
@@ -245,12 +245,13 @@ class PeerAPI(override val ipManager: IPManager)(implicit system: ActorSystem,
     }
   }
 
-  val routes: Route = withTimer("peer-api") {
+
+  def routes(address : InetSocketAddress): Route = withTimer("peer-api") {
     decodeRequest {
       encodeResponse {
         // rejectBannedIP {
-        signEndpoints ~ commonEndpoints ~ // { //enforceKnownIP
-          getEndpoints ~ postEndpoints ~ mixedEndpoints
+        signEndpoints ~ commonEndpoints ~ blockBuildingRoundRoute ~ // { //enforceKnownIP
+          getEndpoints(address) ~ postEndpoints ~ mixedEndpoints
       }
     }
   }

@@ -7,13 +7,12 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.consensus.RandomData.keyPairs
+import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.Metrics
-import org.constellation.{DAO, Fixtures}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 
@@ -27,7 +26,7 @@ object RandomData {
   val keyPairs: Seq[KeyPair] = Seq.fill(10)(makeKeyPair())
 
   val go: GenesisObservation = Genesis.createGenesisAndInitialDistributionDirect(
-    keyPairs.head.address.address,
+    keyPairs.head.address,
     keyPairs.tail.map {
       _.getPublic.toId
     }.toSet,
@@ -48,19 +47,19 @@ object RandomData {
   def randomTransaction: Transaction = {
     val src = Random.shuffle(keyPairs).head
     createTransaction(
-      src.address.address,
-      Random.shuffle(keyPairs).head.address.address,
+      src.address,
+      Random.shuffle(keyPairs).head.address,
       Random.nextInt(500).toLong,
       src
     )
   }
 
-  def getAddress(keyPair: KeyPair): String = keyPair.address.address
+  def getAddress(keyPair: KeyPair): String = keyPair.address
 
   def fill(balances: Map[String, Long])(implicit dao: DAO): Iterable[Transaction] = {
     val txs = balances.map {
       case (address, amount) =>
-        createTransaction(keyPairs.head.address.address, address, amount, keyPairs.head)
+        createTransaction(keyPairs.head.address, address, amount, keyPairs.head)
     }
 
     txs.foreach(tx => {
@@ -72,9 +71,11 @@ object RandomData {
   }
 
   def setupSnapshot(cb: Seq[CheckpointBlock])(implicit dao: DAO): Seq[CheckpointBlock] = {
+    // Get snapshot uses iterator while set snapshot updates underlying map causing ConcurrentModificationException
+    val snapshot = dao.threadSafeTipService.getSnapshotInfo().snapshot
     dao.threadSafeTipService.setSnapshot(
       SnapshotInfo(
-        dao.threadSafeTipService.getSnapshotInfo().snapshot,
+        snapshot,
         cb.map(_.baseHash),
         Seq(),
         1,
@@ -215,11 +216,11 @@ class ValidationSpec
 
   import RandomData._
 
-  implicit val dao: DAO = stub[DAO]
+  implicit val dao: DAO = new DAO() // stub[DAO]
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val keyPair: KeyPair = keyPairs.head
 
-  (dao.id _).when().returns(Fixtures.id)
+ // (dao.id _).when().returns(Fixtures.id)
 
   dao.keyPair = KeyUtils.makeKeyPair()
   dao.metrics = new Metrics()

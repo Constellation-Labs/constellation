@@ -11,7 +11,8 @@ import org.constellation.util.HashSignature
 
 case class CheckpointBlock(
   transactions: Seq[Transaction],
-  checkpoint: CheckpointEdge
+  checkpoint: CheckpointEdge,
+  messages: Seq[ChannelMessage] = Seq()
 ) {
 
   def storeSOE()(implicit dao: DAO): Unit = {
@@ -167,7 +168,7 @@ object CheckpointBlock {
   )(implicit keyPair: KeyPair): CheckpointBlock = {
 
     val checkpointEdgeData =
-      CheckpointEdgeData(transactions.map { _.hash }.sorted, messages)
+      CheckpointEdgeData(transactions.map { _.hash }.sorted, messages.map{_.signedMessageData.hash})
 
     val observationEdge = ObservationEdge(
       tips.toList,
@@ -180,7 +181,7 @@ object CheckpointBlock {
       Edge(observationEdge, soe, checkpointEdgeData)
     )
 
-    CheckpointBlock(transactions, checkpointEdge)
+    CheckpointBlock(transactions, checkpointEdge, messages)
   }
 
 }

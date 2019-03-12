@@ -1,15 +1,15 @@
 package org.constellation.primitives
 
 import java.util.concurrent.Semaphore
+
 import com.fasterxml.jackson.databind.JsonNode
 import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.{JsonSchemaFactory, JsonValidator}
-import com.typesafe.scalalogging.{Logger, StrictLogging}
-import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
-
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.DAO
 import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
+import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
 
 import scala.concurrent.Future
 
@@ -91,7 +91,7 @@ object ChannelMessage extends StrictLogging {
         Future {
           var retries = 0
           var metadata: Option[ChannelMetadata] = None
-          while (retries < 10 && metadata.isEmpty) {
+          while (retries < 30 && metadata.isEmpty) {
             retries += 1
             Thread.sleep(1000)
             metadata = dao.channelService.get(genesisHashChannelId)

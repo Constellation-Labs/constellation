@@ -3,14 +3,12 @@ package org.constellation.crypto
 import java.security.KeyPair
 
 import constellation._
-import org.constellation.DAO
 
 trait SimpleWalletLike {
 
-  val dao: DAO
 
   // TODO: Not this.
-  @volatile var wallet: Seq[KeyPair] = Seq()
+  @volatile var wallet: Seq[KeyPair] = Seq.fill(10){ KeyUtils.makeKeyPair()}
 
   // For generating additional keyPairs, maybe make this just regular API call instead.
 
@@ -20,11 +18,11 @@ trait SimpleWalletLike {
     pair
   }
 
-  def addresses: Seq[String] = wallet.map { _.address.address }
+  def addresses: Seq[String] = wallet.map { _.address }
 
   def addressToKeyPair: Map[String, KeyPair] =
     wallet.map { w =>
-      w.address.address -> w
+      w.address -> w
     }.toMap
 
 }

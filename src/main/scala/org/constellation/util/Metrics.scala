@@ -11,7 +11,7 @@ import io.micrometer.core.instrument.binder.logging.LogbackMetrics
 import io.micrometer.core.instrument.binder.system.{FileDescriptorMetrics, ProcessorMetrics, UptimeMetrics}
 import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import io.prometheus.client.CollectorRegistry
-import org.constellation.{BuildInfo, ConstellationNode, DAO}
+import org.constellation.{BuildInfo, DAO}
 import org.joda.time.DateTime
 
 import scala.collection.concurrent.TrieMap
@@ -161,6 +161,9 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
       updateMetric("nodeCurrentTimeMS", System.currentTimeMillis().toString)
       updateMetric("nodeCurrentDate", new DateTime().toString())
       updateMetric("metricsRound", round.toString)
+      updateMetric("addressCount", dao.addressService.lruCache.m.size)
+      updateMetric("channelCount", dao.threadSafeMessageMemPool.activeChannels.size)
+
     }(scala.concurrent.ExecutionContext.global)
 
 }

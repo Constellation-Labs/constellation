@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 pushd ui
-sbt clean fullOptJS
+./build.sh
+# Redundant but unclear why issue of not updating exists sometimes
+./copy.sh
 popd
-mkdir -p src/main/resources/ui/
-cp ui/target/scala-2.11/*js* src/main/resources/ui/
 sbt assembly
