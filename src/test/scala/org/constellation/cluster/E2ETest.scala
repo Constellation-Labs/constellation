@@ -59,6 +59,13 @@ class E2ETest extends E2E {
 
     assert(sim.run(initialAPIs, addPeerRequests))
 
+    val channelOpenResponse = apis.head.postBlocking[Option[ChannelOpenResponse]](
+      "channel/open",
+      ChannelOpen("debug", jsonSchema = Some(SensorData.jsonSchema)), timeout = 15.seconds
+    )
+
+    assert(channelOpenResponse.exists(_.errorMessage == "Success"))
+
     // val deployResponse = constellationAppSim.openChannel(apis)
 
     val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)),
