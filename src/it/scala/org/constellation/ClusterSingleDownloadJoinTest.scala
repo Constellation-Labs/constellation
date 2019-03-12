@@ -28,32 +28,31 @@ class ClusterSingleDownloadJoinTest
 
   "Cluster integration" should "ping a cluster, check health, go through genesis flow" in {
 
-    val sim = new Simulation()
 
     // Unused for standard tests, only for custom ones
     val (ignoreIPs, auxAPIs) = ComputeTestUtil.getAuxiliaryNodes()
 
     val primaryHostsFile = System.getenv().getOrDefault("HOSTS_FILE", "hosts-3.txt")
 
-    sim.logger.info(s"Using primary hosts file: $primaryHostsFile")
+    Simulation.logger.info(s"Using primary hosts file: $primaryHostsFile")
 
     val ips = file"$primaryHostsFile".lines.toSeq.filterNot(ignoreIPs.contains)
 
-    sim.logger.info(ips.toString)
+    Simulation.logger.info(ips.toString)
 
     val apis = ips.map { ip =>
       val split = ip.split(":")
       val portOffset = if (split.length == 1) 8999 else split(1).toInt
       val a = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
-      sim.logger.info(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
+      Simulation.logger.info(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
       a
     } // ++ auxAPIs
 
-    sim.logger.info("Num APIs " + apis.size)
+    Simulation.logger.info("Num APIs " + apis.size)
 
-    assert(sim.checkHealthy(apis))
+    assert(Simulation.checkHealthy(apis))
 
-    sim.setExternalIP(apis)
+    Simulation.setExternalIP(apis)
 
     apis.foreach { a =>
       println(a.postSync("peer/add", HostPort("104.198.7.226", 9001)))

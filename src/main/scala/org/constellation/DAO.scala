@@ -3,6 +3,7 @@ package org.constellation
 import akka.stream.ActorMaterializer
 import better.files.File
 import com.typesafe.scalalogging.StrictLogging
+import org.constellation.primitives.Schema.{Id, SignedObservationEdge}
 import org.constellation.primitives._
 
 class DAO(val nodeConfig: NodeConfig = NodeConfig())
@@ -50,6 +51,12 @@ class DAO(val nodeConfig: NodeConfig = NodeConfig())
 
   def restartNode(): Unit = {
     downloadMode = true
+  }
+
+  def pullTips(
+    allowEmptyFacilitators: Boolean = false
+  ): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = {
+    threadSafeTipService.pull(allowEmptyFacilitators)(this)
   }
 
 }

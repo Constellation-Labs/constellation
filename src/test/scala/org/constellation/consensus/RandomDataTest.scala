@@ -72,9 +72,11 @@ object RandomData {
   }
 
   def setupSnapshot(cb: Seq[CheckpointBlock])(implicit dao: DAO): Seq[CheckpointBlock] = {
+    // Get snapshot uses iterator while set snapshot updates underlying map causing ConcurrentModificationException
+    val snapshot = dao.threadSafeTipService.getSnapshotInfo().snapshot
     dao.threadSafeTipService.setSnapshot(
       SnapshotInfo(
-        dao.threadSafeTipService.getSnapshotInfo().snapshot,
+        snapshot,
         cb.map(_.baseHash),
         Seq(),
         1,
