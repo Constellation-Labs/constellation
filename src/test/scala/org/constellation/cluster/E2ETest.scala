@@ -41,7 +41,7 @@ class E2ETest extends E2E {
     val updatePasswordResponses = updatePasswords(allAPIs)
     assert(updatePasswordResponses.forall(_.code == StatusCodes.Ok))
     assert(sim.healthy(allAPIs))
-    // Thread.sleep(1000*1000)
+  //  Thread.sleep(1000*1000)
 
     // Stop transactions
     sim.triggerRandom(allAPIs)
