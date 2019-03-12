@@ -31,6 +31,7 @@ object TestNode {
     val node = new ConstellationNode(
       NodeInitializationConfig(
         seeds = seedHosts,
+        primaryKeyPair = keyPair,
         metricIntervalSeconds =  10,
         isGenesisNode = isGenesisNode,
         httpPort = randomPort,
