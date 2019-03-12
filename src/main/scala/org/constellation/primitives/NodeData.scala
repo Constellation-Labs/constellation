@@ -5,7 +5,7 @@ import java.security.KeyPair
 
 import akka.actor.ActorRef
 import constellation._
-import org.constellation.NodeInitializationConfig
+import org.constellation.NodeConfig
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.primitives.Schema.NodeState.NodeState
@@ -20,7 +20,7 @@ case class LocalNodeConfig(
 
 trait NodeData {
 
-  val nodeConfig: NodeInitializationConfig
+  @volatile var nodeConfig: NodeConfig
   // var dbActor : SwayDBDatastore = _
   var peerManager: ActorRef = _
   var metrics: Metrics = _
@@ -35,7 +35,7 @@ trait NodeData {
 
   var lastConfirmationUpdateTime: Long = System.currentTimeMillis()
 
-  @volatile implicit var keyPair: KeyPair = nodeConfig.primaryKeyPair
+  def keyPair: KeyPair = nodeConfig.primaryKeyPair
 
   def publicKeyHash: Int = keyPair.getPublic.hashCode()
 
@@ -45,30 +45,15 @@ trait NodeData {
 
   val dummyAddress: String = KeyUtils.makeKeyPair().getPublic.toId.address
 
-  @volatile var nodeState: NodeState = if (nodeConfig.cliConfig.startOfflineMode) {
-    NodeState.Offline
-  } else NodeState.PendingDownload
-
-  @volatile var nodeType: NodeType = if (nodeConfig.cliConfig.lightNode) {
-    NodeType.Light
-  } else NodeType.Full
-
-  def setNodeState(
-    nodeState_ : NodeState
-  ): Unit = {
-    nodeState = nodeState_
-    metrics.updateMetric("nodeState", nodeState.toString)
-  }
-
-  var externalHostString: String = nodeConfig.hostName
-  var externlPeerHTTPPort: Int = nodeConfig.peerHttpPort
+  def externalHostString: String = nodeConfig.hostName
+  def externlPeerHTTPPort: Int = nodeConfig.peerHttpPort
 
   def peerRegistrationRequest = PeerRegistrationRequest(externalHostString, externlPeerHTTPPort, id)
 
   var remotes: Seq[InetSocketAddress] = Seq()
 
   def updateKeyPair(kp: KeyPair): Unit = {
-    keyPair = kp
+    nodeConfig = nodeConfig.copy(primaryKeyPair = kp)
   }
 
 }

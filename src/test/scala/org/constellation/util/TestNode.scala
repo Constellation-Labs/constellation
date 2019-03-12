@@ -1,13 +1,14 @@
 package org.constellation.util
 
 import java.security.KeyPair
+
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+
 import scala.concurrent.ExecutionContext
 import scala.util.Try
-
 import org.constellation.crypto.KeyUtils
-import org.constellation.{ConstellationNode, HostPort, NodeInitializationConfig}
+import org.constellation.{ConstellationNode, HostPort, NodeConfig, ProcessingConfig}
 
 object TestNode {
 
@@ -29,7 +30,7 @@ object TestNode {
       if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9001 + portOffset
 
     val node = new ConstellationNode(
-      NodeInitializationConfig(
+      NodeConfig(
         seeds = seedHosts,
         primaryKeyPair = keyPair,
         metricIntervalSeconds =  10,
@@ -37,26 +38,24 @@ object TestNode {
         httpPort = randomPort,
         peerHttpPort = randomPeerPort,
         attemptDownload = seedHosts.nonEmpty,
-        allowLocalhostPeers = true
+        allowLocalhostPeers = true,
+        processingConfig = ProcessingConfig(
+          numFacilitatorPeers = 2,
+          minCheckpointFormationThreshold = 3,
+          randomTXPerRoundPerPeer = 2,
+          metricCheckInterval = 10,
+          maxWidth = 4,
+          maxMemPoolSize = 15,
+          minPeerTimeAddedSeconds = 1,
+          snapshotInterval = 2,
+          snapshotHeightInterval = 2,
+          snapshotHeightDelayInterval = 1,
+          roundsPerMessage = 1
+        )
       )
     )
 
     nodes = nodes :+ node
-
-    node.dao.processingConfig = node.dao.processingConfig.copy(
-      numFacilitatorPeers = 2,
-      minCheckpointFormationThreshold = 3,
-      randomTXPerRoundPerPeer = 2,
-      metricCheckInterval = 10,
-      maxWidth = 4,
-      maxMemPoolSize = 15,
-      minPeerTimeAddedSeconds = 1,
-      snapshotInterval = 2,
-      snapshotHeightInterval = 2,
-      snapshotHeightDelayInterval = 1,
-      roundsPerMessage = 1
-    )
-
     node
   }
 

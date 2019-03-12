@@ -7,7 +7,7 @@ import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.storage._
-import org.constellation.{DAO, ProcessingConfig}
+import org.constellation.{DAO, NodeConfig, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
@@ -448,7 +448,9 @@ class ThreadSafeTipService() {
 
 trait EdgeDAO {
 
-  var processingConfig = ProcessingConfig()
+  @volatile var nodeConfig : NodeConfig
+
+  def processingConfig: ProcessingConfig = nodeConfig.processingConfig
 
   @volatile var blockFormationInProgress: Boolean = false
 

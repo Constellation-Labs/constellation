@@ -8,7 +8,7 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.{EdgeHashType, Id, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives.{CheckpointBlock, PeerData, Transaction}
 import org.constellation.util.{APIClient, HashSignature, Metrics, SignatureBatch}
-import org.constellation.{DAO, Fixtures, NodeInitializationConfig, PeerMetadata}
+import org.constellation.{DAO, Fixtures, NodeConfig, PeerMetadata}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{BeforeAndAfter, FunSpecLike, Matchers, OneInstancePerTest}
 
@@ -42,8 +42,8 @@ class RoundTest
   def initBefore = {
     fakeDao = stub[DAO]
     (fakeDao.id _).when().returns(Fixtures.id)
-    (fakeDao.nodeConfig _).when().returns(NodeInitializationConfig())
-    fakeDao.keyPair = KeyUtils.makeKeyPair()
+    (fakeDao.nodeConfig _).when().returns(NodeConfig())
+    //fakeDao.keyPair = KeyUtils.makeKeyPair()
     fakeDao.metrics = new Metrics()
     val peerProbe = TestProbe.apply("peerManager")
     fakeDao.peerManager = peerProbe.ref
