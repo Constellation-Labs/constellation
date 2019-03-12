@@ -55,7 +55,7 @@ class E2ETest extends E2E {
 
     val channelOpenResponse = apis.head.postBlocking[Option[ChannelOpenResponse]](
       "channel/open",
-      ChannelOpen("debug", jsonSchema = Some(SensorData.jsonSchema)), timeout = 15.seconds
+      ChannelOpen("debug", jsonSchema = Some(SensorData.jsonSchema)), timeout = 60.seconds
     )
 
     assert(channelOpenResponse.exists(_.errorMessage == "Success"))
