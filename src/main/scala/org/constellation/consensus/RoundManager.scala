@@ -35,7 +35,7 @@ class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
         startRound(roundData, startedByThisNode = true)
         context.parent ! NotifyFacilitators(roundData)
         passToRoundActor(
-          TransactionsProposal(roundData.roundId, FacilitatorId(dao.id), roundData.transactions)
+          TransactionsProposal(roundData.roundId, FacilitatorId(dao.id), roundData.transactions, roundData.messages)
         )
         log.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}")
         dao.blockFormationInProgress = true

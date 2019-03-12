@@ -30,7 +30,7 @@ class RoundTest
   private var roundProbe: TestActorRef[Round] = _
 
   val peerA =
-    PeerData(PeerMetadata("localhost", 0, 0, Id("peer-A")), APIClient.apply(port = 9999))
+    PeerData(PeerMetadata("localhost", 0, Id("peer-A")), APIClient.apply(port = 9999))
   val peerB = PeerData(peerA.peerMetadata.copy(id = Id("peer-B")), APIClient.apply(port = 9999))
   var roundData: RoundData = _
   val roundManagerActor = TestProbe("round-manager")

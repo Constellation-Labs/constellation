@@ -52,12 +52,14 @@ class E2ETest extends E2E {
 
     assert(Simulation.run(initialAPIs, addPeerRequests))
 
+
     val channelOpenResponse = apis.head.postBlocking[Option[ChannelOpenResponse]](
       "channel/open",
       ChannelOpen("debug", jsonSchema = Some(SensorData.jsonSchema)), timeout = 15.seconds
     )
 
     assert(channelOpenResponse.exists(_.errorMessage == "Success"))
+
 
     // val deployResponse = constellationAppSim.openChannel(apis)
 
@@ -72,6 +74,7 @@ class E2ETest extends E2E {
 
     // messageSim.postDownload(apis.head)
 
+    // TODO: Change to wait for the download node to participate in several blocks.
     Thread.sleep(20 * 1000)
 
     val allNodes = nodes :+ downloadNode

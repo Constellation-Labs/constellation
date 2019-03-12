@@ -6,7 +6,7 @@ import akka.stream.ActorMaterializer
 import better.files.File
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.crypto.{KeyUtils, SimpleWalletLike}
-import org.constellation.primitives.Schema.Id
+import org.constellation.primitives.Schema.{Id, SignedObservationEdge}
 import org.constellation.primitives._
 import constellation._
 import org.constellation.datastore.swaydb.SwayDBDatastore

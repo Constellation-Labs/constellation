@@ -91,7 +91,7 @@ object ChannelMessage extends StrictLogging {
         Future {
           var retries = 0
           var metadata: Option[ChannelMetadata] = None
-          while (retries < 10 && metadata.isEmpty) {
+          while (retries < 30 && metadata.isEmpty) {
             retries += 1
             Thread.sleep(1000)
             metadata = dao.channelService.get(genesisHashChannelId)
