@@ -217,11 +217,11 @@ class ValidationSpec
 
   import RandomData._
 
-  implicit val dao: DAO = stub[DAO]
+  implicit val dao: DAO = new DAO() // stub[DAO]
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val keyPair: KeyPair = keyPairs.head
 
-  (dao.id _).when().returns(Fixtures.id)
+ // (dao.id _).when().returns(Fixtures.id)
 
   dao.keyPair = KeyUtils.makeKeyPair()
   dao.metrics = new Metrics()
