@@ -96,9 +96,9 @@ class DAO()
 
 
   def pullTips(
-    allowEmptyFacilitators: Boolean = false
+    readyFacilitators: Map[Id, PeerData]
   ): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = {
-    threadSafeTipService.pull(allowEmptyFacilitators)(this)
+    concurrentTipService.pull(readyFacilitators)(this.metrics)
   }
 
 }

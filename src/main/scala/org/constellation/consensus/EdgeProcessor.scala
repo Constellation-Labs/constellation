@@ -172,12 +172,12 @@ object EdgeProcessor extends StrictLogging {
     if (transactions.isEmpty) {
       dao.metrics.incrementMetric("attemptFormCheckpointNoTX")
     }
+    val readyFacilitators = dao.readyFacilitators()
 
-    val maybeTips = dao.threadSafeTipService.pull()
-    if (maybeTips.isEmpty) {
+    if (readyFacilitators.isEmpty) {
       dao.metrics.incrementMetric("attemptFormCheckpointInsufficientTipsOrFacilitators")
       if (dao.nodeConfig.isGenesisNode) {
-        val maybeTips = dao.threadSafeTipService.pull(allowEmptyFacilitators = true)
+        val maybeTips = dao.concurrentTipService.pull(Map.empty)(dao.metrics)
         if (maybeTips.isEmpty) {
           dao.metrics.incrementMetric("attemptFormCheckpointNoGenesisTips")
         }
@@ -202,7 +202,7 @@ object EdgeProcessor extends StrictLogging {
 
     }
 
-    val result = maybeTips.map {
+    val result = dao.concurrentTipService.pull(readyFacilitators)(dao.metrics).map {
       case (tipSOE, facils) =>
         // Change to method on TipsReturned // abstract for reuse.
         val checkpointBlock = CheckpointBlock.createCheckpointBlock(transactions, tipSOE.map {
