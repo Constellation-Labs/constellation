@@ -1,35 +1,33 @@
 package org.constellation.primitives
 
-import akka.http.scaladsl.model.RemoteAddress
-import scala.collection.{Set, concurrent}
+import scala.collection.Set
 
 class IPManager {
   // Keep these private to allow for change of implementation later.
-  private var bannedIPs: concurrent.Map[RemoteAddress, String] =
-    concurrent.TrieMap[RemoteAddress, String]()
+  private var bannedIPs: Set[String] = Set.empty[String]
   //    val knownIPs: concurrent.Map[RemoteAddress, String] =
   //      concurrent.TrieMap[RemoteAddress, String]()
-  private var knownIPs: Set[RemoteAddress] = Set()
+  private var knownIPs: Set[String] = Set.empty[String]
 
-  def knownIP(addr: RemoteAddress): Boolean = {
+  def knownIP(addr: String): Boolean = {
     knownIPs.contains(addr)
   }
 
-  def bannedIP(addr: RemoteAddress): Boolean = {
+  def bannedIP(addr: String): Boolean = {
     bannedIPs.contains(addr)
   }
 
-  def listBannedIPs = bannedIPs
+  def listBannedIPs: Set[String] = bannedIPs
 
-  def addKnownIP(addr: RemoteAddress) = {
+  def addKnownIP(addr: String): Unit = {
     knownIPs = knownIPs + addr
   }
 
-  def removeKnownIP(addr: RemoteAddress) = {
+  def removeKnownIP(addr: String): Unit = {
     knownIPs = knownIPs - addr
   }
 
-  def listKnownIPs = knownIPs
+  def listKnownIPs: Set[String] = knownIPs
 
 }
 

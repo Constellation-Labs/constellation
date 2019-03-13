@@ -2,16 +2,13 @@ package org.constellation
 
 import java.net.InetSocketAddress
 import java.security.KeyPair
-import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.RemoteAddress
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LoggingMagnet}
 import akka.http.scaladsl.server.{Directive0, Route}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
-import akka.util.Timeout
 import better.files._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{Logger, StrictLogging}
@@ -141,8 +138,10 @@ object ConstellationNode extends StrictLogging {
       implicit val materializer: ActorMaterializer = ActorMaterializer()
       implicit val executionContext: ExecutionContext = ExecutionContext.global
 
+      val constellationConfig = config.getConfig("constellation")
+
       new ConstellationNode(
-        NodeInitializationConfig(
+        NodeConfig(
           seeds = seedsFromConfig,
           primaryKeyPair = keyPair,
           isGenesisNode = cliConfig.startOfflineMode,
@@ -152,7 +151,11 @@ object ConstellationNode extends StrictLogging {
           peerHttpPort = peerHttpPort,
           defaultTimeoutSeconds = config.getInt("default-timeout-seconds"),
           attemptDownload = true,
-          cliConfig = cliConfig
+          cliConfig = cliConfig,
+          processingConfig = ProcessingConfig(
+            maxWidth = constellationConfig.getInt("max-width")
+            // TODO: Finish porting configs from application conf
+          )
         )
       )
     } match {
@@ -171,7 +174,7 @@ object ConstellationNode extends StrictLogging {
 
 }
 
-case class NodeInitializationConfig(
+case class NodeConfig(
                                      seeds: Seq[HostPort] = Seq(),
                                      primaryKeyPair: KeyPair = KeyUtils.makeKeyPair(),
                                      isGenesisNode: Boolean = false,
@@ -183,24 +186,26 @@ case class NodeInitializationConfig(
                                      defaultTimeoutSeconds: Int = 10,
                                      attemptDownload: Boolean = false,
                                      allowLocalhostPeers: Boolean = false,
-                                     cliConfig: CliConfig = CliConfig()
+                                     cliConfig: CliConfig = CliConfig(),
+                                     processingConfig: ProcessingConfig = ProcessingConfig()
                                    )
 
 class ConstellationNode(
-                        val nodeConfig: NodeInitializationConfig = NodeInitializationConfig()
+                        val nodeConfig: NodeConfig = NodeConfig()
                        )(
   implicit val system: ActorSystem,
   implicit val materialize: ActorMaterializer,
   implicit val executionContext: ExecutionContext
 ) {
 
-  implicit val dao: DAO = new DAO(nodeConfig)
-  import nodeConfig._
-  import dao._
+  implicit val dao: DAO = new DAO()
+  dao.initialize(nodeConfig)
 
-  val metrics_ = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
-  dao.metrics = metrics_
+  val logger = Logger(s"ConstellationNode_${dao.publicKeyHash}")
 
+  logger.info(s"Node init with API ${nodeConfig.httpInterface} ${nodeConfig.httpPort} peerPort: ${nodeConfig.peerHttpPort}")
+
+  dao.metrics = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
 
   val checkpointFormationManager = new CheckpointFormationManager(dao.processingConfig.checkpointFormationTimeSeconds, dao.processingConfig.formEmptyCheckpointAfterSeconds)
 
@@ -208,26 +213,17 @@ class ConstellationNode(
 
   val ipManager = IPManager()
 
-  dao.actorMaterializer = materialize
+  nodeConfig.seeds.foreach {
+    peer => ipManager.addKnownIP(peer.host)
+  }
 
-  val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
-  logger.info(s"Node init with API $httpInterface $httpPort peerPort: $peerHttpPort")
-
-  constellation.standardTimeout = Timeout(defaultTimeoutSeconds, TimeUnit.SECONDS)
-
-  lazy val peerHostPort = HostPort(hostName, peerHttpPort)
-
-  val peerManager: ActorRef = system.actorOf(
+  dao.peerManager = system.actorOf(
     Props(new PeerManager(ipManager)),
-    s"PeerManager_$publicKeyHash"
+    s"PeerManager_${dao.publicKeyHash}"
   )
 
-  // val dbActor = SwayDBDatastore(dao)
-
-//  dao.dbActor = dbActor
-  dao.peerManager = peerManager
-
+  // TODO: Unused, can be used for timing information but adds a lot to logs
   private val logReqResp: Directive0 = DebuggingDirectives.logRequestResult(
     LoggingMagnet(printResponseTime(logger))
   )
@@ -235,36 +231,32 @@ class ConstellationNode(
   // If we are exposing rpc then create routes
   val routes: Route = new API().routes // logReqResp { }
 
-  logger.info("API Binding")
+  logger.info("Binding API")
 
   // Setup http server for internal API
   private val bindingFuture: Future[Http.ServerBinding] =
-    Http().bindAndHandle(routes, httpInterface, httpPort)
+    Http().bindAndHandle(routes, nodeConfig.httpInterface, nodeConfig.httpPort)
 
   val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
   val crossTalkConsensusActor: ActorRef = system.actorOf(CrossTalkConsensus.props(remoteSenderActor))
   val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
   val randomTXManager = new RandomTransactionManager(crossTalkConsensusActor)
 
-  /*  seedPeers.foreach {
-    peer => ipManager.addKnownIP(RemoteAddress(peer))
-  }*/
-
   def addAddressToKnownIPs(addr: ValidPeerIPData): Unit = {
-    val remoteAddr = RemoteAddress(new InetSocketAddress(addr.canonicalHostName, addr.port))
-    ipManager.addKnownIP(remoteAddr)
+    ipManager.addKnownIP(addr.canonicalHostName)
   }
 
   def getIPData: ValidPeerIPData = {
-    ValidPeerIPData(hostName, peerHttpPort)
+    ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)
   }
 
   def getInetSocketAddress: InetSocketAddress = {
-    new InetSocketAddress(hostName, peerHttpPort)
+    new InetSocketAddress(nodeConfig.hostName, nodeConfig.peerHttpPort)
   }
 
   // Setup http server for peer API
-  private val peerBindingFuture = Http().bind(nodeConfig.httpInterface, nodeConfig.peerHttpPort)
+  // TODO: Add shutdown mechanism
+  Http().bind(nodeConfig.httpInterface, nodeConfig.peerHttpPort)
     .runWith(Sink foreach { conn =>
     val address =  conn.remoteAddress
     conn.handleWith(peerAPI.routes(address))
@@ -278,7 +270,6 @@ class ConstellationNode(
     // TODO: we should add this back but it currently causes issues in the integration test
     //.onComplete(_ => system.terminate())
 
-    //TypedActor(system).stop(dbActor)
   }
 
   //////////////
@@ -287,28 +278,28 @@ class ConstellationNode(
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
 
-  def getAPIClient(host: String = hostName,
-                   port: Int = httpPort): APIClient = {
+  def getAPIClient(host: String = nodeConfig.hostName,
+                   port: Int = nodeConfig.httpPort): APIClient = {
     val api = APIClient(host, port)
-    api.id = id
+    api.id = dao.id
     api
   }
 
   // TODO: Change E2E to not use this but instead rely on peer discovery, need to send addresses there too
   def getAddPeerRequest: PeerMetadata = {
-    PeerMetadata(hostName, peerHttpPort, dao.id, auxAddresses = dao.addresses, nodeType = dao.nodeType)
+    PeerMetadata(nodeConfig.hostName, nodeConfig.peerHttpPort, dao.id, auxAddresses = dao.addresses, nodeType = dao.nodeType)
   }
 
   def getAPIClientForNode(node: ConstellationNode): APIClient = {
     val ipData = node.getIPData
     val api = APIClient(host = ipData.canonicalHostName, port = ipData.port)
-    api.id = id
+    api.id = dao.id
     api
   }
 
   logger.info("Node started")
 
-  if (attemptDownload) {
+  if (nodeConfig.attemptDownload) {
     nodeConfig.seeds.foreach {
       dao.peerManager ! _
     }

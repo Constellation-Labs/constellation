@@ -7,12 +7,11 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.DAO
-import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.Metrics
+import org.constellation.{DAO, NodeConfig}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 
@@ -217,12 +216,13 @@ class ValidationSpec
   import RandomData._
 
   implicit val dao: DAO = new DAO() // stub[DAO]
+  dao.initialize(NodeConfig())
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val keyPair: KeyPair = keyPairs.head
 
  // (dao.id _).when().returns(Fixtures.id)
 
-  dao.keyPair = KeyUtils.makeKeyPair()
+  // dao.keyPair = KeyUtils.makeKeyPair()
   dao.metrics = new Metrics()
   val peerProbe = TestProbe.apply("peerManager")
   dao.peerManager = peerProbe.ref

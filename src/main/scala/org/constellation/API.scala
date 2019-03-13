@@ -367,7 +367,7 @@ class API()(implicit system: ActorSystem,
         pathPrefix("config") {
           path("update") {
             entity(as[ProcessingConfig]) { cu =>
-              dao.processingConfig = cu
+              dao.nodeConfig = dao.nodeConfig.copy(processingConfig = cu)
               complete(StatusCodes.OK)
             }
           }
@@ -481,7 +481,7 @@ class API()(implicit system: ActorSystem,
                 case Array(ip, port) =>
                   ipp = ip
                   import better.files._
-                  externalHostString = ip
+                  nodeConfig = nodeConfig.copy(hostName = ip)
                   file"${ConstellationNode.LocalConfigFile}".write(LocalNodeConfig(ip).json)
                   new InetSocketAddress(ip, port.toInt)
                 case a @ _ => {

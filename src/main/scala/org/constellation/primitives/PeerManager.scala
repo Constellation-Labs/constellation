@@ -1,9 +1,6 @@
 package org.constellation.primitives
 
-import java.net.InetSocketAddress
-
 import akka.actor.{Actor, ActorSystem}
-import akka.http.scaladsl.model.RemoteAddress
 import akka.stream.ActorMaterializer
 import cats.data.ValidatedNel
 import cats.implicits._
@@ -246,11 +243,9 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
   private def updatePeerInfo(peerInfo: Map[Id, PeerData], peerData: PeerData) = {
     val updatedPeerInfo = peerInfo + (peerData.client.id -> peerData)
 
-    val remoteAddr = RemoteAddress(
-      new InetSocketAddress(peerData.client.hostName, peerData.client.apiPort)
-    )
-    ipManager.addKnownIP(remoteAddr)
-    logger.info(s"Added $remoteAddr to known peers.")
+    val ip = peerData.client.hostName
+    ipManager.addKnownIP(ip)
+    logger.info(s"Added $ip to known peers.")
 
     updateMetricsAndDAO(updatedPeerInfo)
     updatedPeerInfo
