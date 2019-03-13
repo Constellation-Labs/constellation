@@ -457,7 +457,6 @@ trait EdgeDAO {
 
   var metrics: Metrics
 
-  var processingConfig = ProcessingConfig()
   @volatile var nodeConfig : NodeConfig
 
   def processingConfig: ProcessingConfig = nodeConfig.processingConfig
