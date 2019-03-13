@@ -21,7 +21,7 @@ class ConstellationApp(
               schemaStr: String,
               channelName: String = s"test_channel_${ channelNameToId.keys.size + 1}"
             )(implicit ec: ExecutionContext) = {
-    val response = clientApi.postNonBlocking[Option[ChannelOpenResponse]]("channel/open", ChannelOpen(channelName, jsonSchema = Some(schemaStr)), timeout = 90.seconds)
+    val response = clientApi.postNonBlocking[Option[ChannelOpenResponse]]("channel/open", ChannelOpen(channelName, jsonSchema = Some(schemaStr)), timeout = 120.seconds)
     response.map { resp =>
       val channelMsg = resp.map { msg =>
         assert(msg.errorMessage == "Success")
@@ -32,8 +32,8 @@ class ConstellationApp(
     }
   }
 
-  def broadcast[T <: ChannelRequest](messages: Seq[T])(implicit ec: ExecutionContext) = {
-    val msgType = messages.map(_.channelId).head//todo handle multiple message types, or throw error
+  def broadcast[T](messages: Seq[T], msgType: String)(implicit ec: ExecutionContext) = {
+//    val msgType: String = messages.map(_.channelId).head//todo handle multiple message types, or throw error
     val serializedMessages = messages.map(_.json)
     logger.info(s"messages: ${messages} message type: ${msgType}")
     clientApi.postNonBlocking[ChannelSendResponse](

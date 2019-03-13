@@ -40,13 +40,16 @@ class AppE2ETest extends E2E {
   constellationAppSim.sim.triggerRandom(apis)
   constellationAppSim.sim.setReady(apis)
 
-  val channelOpenResponse = testNodeApi.postNonBlocking[Option[ChannelOpenResponse]](
-    "channel/open",
-    ChannelOpen("debug", jsonSchema = Some(SensorData.jsonSchema)), timeout = 120.seconds
-  )
+  val channelOpenResponse = testApp.deploy(testChannelName, schemaStr)
+
+  val broadcast: Future[ChannelSendResponse] = channelOpenResponse.flatMap { resp =>
+    val r = resp.get
+    val messages = constellationAppSim.generateChannelMessages(r, numMessages)
+    constellationAppSim.sim.logger.info(s"Broadcasted channel msg $resp")
+    testApp.broadcast[SensorData](messages, r.channelId)
+  }
 
   "API health check" should "return true" in {
-
     assert(healthCheck)
   }
 
@@ -55,12 +58,10 @@ class AppE2ETest extends E2E {
   }
 
   "Genesis observation" should "be accepted by all nodes" in {
-
     assert(constellationAppSim.sim.checkGenesis(apis))
   }
 
   "Checkpoints" should "get accepted" in {
-
     assert(constellationAppSim.sim.awaitCheckpointsAccepted(apis))
   }
 
@@ -68,13 +69,8 @@ class AppE2ETest extends E2E {
     assert(constellationAppSim.sim.checkSnapshot(apis))
   }
 
-
-//  var deployResp: Future[Option[Channel]] = testApp.deploy(schemaStr, "futures suck")
-  var broadcast: Future[ChannelSendResponse] = null
-
   "ConstellationApp" should "register a deployed state channel" in {
-
-    channelOpenResponse.map{ res => assert(res.exists(_.errorMessage == "Success"))}
+    channelOpenResponse.map{ res => assert(res.exists(_.channelOpenRequest.errorMessage == "Success"))}
 //    assert(channelOpenResponse.exists(_.errorMessage == "Success"))
 //    response.map { resp: Option[Channel] =>
 //      constellationAppSim.sim.logger.info("deploy response:" + resp.toString)
@@ -84,35 +80,30 @@ class AppE2ETest extends E2E {
 //    }
   }
 
-//  "Deployed state channels" should "get registered by peers" in {
-//    deployResp.map { resp: Option[Channel] =>
-//    val registered = resp.map(r => constellationAppSim.assertGenesisAccepted(apis)(r))
-//      assert(registered.contains(true))
-//    }
-//  }
+  "Deployed state channels" should "get registered by peers" in {
+    channelOpenResponse.map { resp: Option[Channel] =>
+    val registered = resp.map(r => constellationAppSim.assertGenesisAccepted(apis)(r))
+      assert(registered.contains(true))
+    }
+  }
 
-//  "Channel broadcasts" should "successfully broadcast all messages" in {
-//    broadcast = deployResp.flatMap { resp =>
-//      val r = resp.get
-//      val messages = constellationAppSim.generateChannelMessages(r, numMessages)
-//      testApp.broadcast[SensorData](messages)
-//    }
-//    broadcast.map { resp =>
-//      assert(resp.errorMessage == "Success")
-//      // assert(resp.messageHashes.distinct.size == numMessages * 2)
-////      assert(constellationAppSim.messagesReceived(resp.channelId, apis))
-//    }
-//  }
+  "Channel broadcasts" should "successfully broadcast all messages" in {
+    broadcast.map { resp =>
+      assert(resp.errorMessage == "Success")
+      // assert(resp.messageHashes.distinct.size == numMessages * 2)
+//      assert(constellationAppSim.messagesReceived(resp.channelId, apis))
+    }
+  }
 
 //  "Broadcasted channel data" should "be accepted into all peers' snapshots" in {
 //    //todo should take sucessful res of snapshot created begin checking for new inclusion
-//    broadcast.map { resp: ChannelSendResponse =>
-//    val msg = resp.channelId
-//      sim.logger.info(s"Broadcasted channel msg $msg")
-//      sim.logger.info(s"messageHashes ${resp.messageHashes}")
+//    broadcast.map { resp =>
+//      constellationAppSim.sim.logger.info(s"Broadcasted channel msg $resp")
+//      constellationAppSim.sim.logger.info(s"messageHashes ${resp.messageHashes}")
 //      val channelIdToChannelTest = testApp.channelNameToId(testChannelName)
 //      println(s"channelIdToChannelTest $channelIdToChannelTest")
-//      assert(constellationAppSim.messagesInSnapshots(msg, apis))
+////      assert(constellationAppSim.messagesInSnapshots(resp, apis))
+//      assert(resp.errorMessage == "Success")
 //    }
 //  }
 
