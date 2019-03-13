@@ -40,7 +40,7 @@ class AppE2ETest extends E2E {
   constellationAppSim.sim.triggerRandom(apis)
   constellationAppSim.sim.setReady(apis)
 
-  val channelOpenResponse = testApp.deploy(testChannelName, schemaStr)
+  val channelOpenResponse = testApp.deploy(schemaStr, testChannelName)
 
   val broadcast: Future[ChannelSendResponse] = channelOpenResponse.flatMap { resp =>
     val r = resp.get
@@ -91,7 +91,8 @@ class AppE2ETest extends E2E {
     broadcast.map { resp =>
       assert(resp.errorMessage == "Success")
       // assert(resp.messageHashes.distinct.size == numMessages * 2)
-//      assert(constellationAppSim.messagesReceived(resp.channelId, apis))
+      val channel = testApp.channelNameToId(testChannelName)
+      assert(constellationAppSim.messagesReceived(channel.channelId, apis))
     }
   }
 
