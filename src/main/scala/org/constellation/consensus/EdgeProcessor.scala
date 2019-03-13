@@ -494,7 +494,7 @@ object Snapshot {
   def findLatestMessageWithSnapshotHash(
     depth: Int,
     lastMessage: Option[ChannelMessageMetadata],
-    maxDepth: Int = 10
+    maxDepth: Int = 100
   )(implicit dao: DAO): Option[ChannelMessageMetadata] = {
 
     def findLatestMessageWithSnapshotHashInner(

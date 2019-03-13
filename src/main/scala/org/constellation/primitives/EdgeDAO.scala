@@ -460,12 +460,18 @@ trait EdgeDAO {
 
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
-  val checkpointService = new CheckpointService(processingConfig.checkpointLRUMaxSize)
+  val checkpointService = new CheckpointService(2000) // TODO: Move to initialize off of configs
   val acceptedTransactionService = new AcceptedTransactionService(
-    processingConfig.transactionLRUMaxSize
+    5000 //processingConfig.transactionLRUMaxSize
   )
-  val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
-  val addressService = new AddressService(processingConfig.addressLRUMaxSize)
+  val transactionService = new TransactionService(
+    5000
+  //  processingConfig.transactionLRUMaxSize
+  )
+  val addressService = new AddressService(
+    5000
+    // processingConfig.addressLRUMaxSize
+  )
   val messageService = new MessageService()
   val channelService = new ChannelService()
   val soeService = new SOEService()

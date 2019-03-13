@@ -74,11 +74,11 @@ class DAO()
   def peerHostPort = HostPort(nodeConfig.hostName, nodeConfig.peerHttpPort)
 
 
-  def initialize(nodeConfig_ : NodeConfig = NodeConfig())(implicit materialize: ActorMaterializer = null): Unit = {
-    initialNodeConfig = nodeConfig_
-    nodeConfig = nodeConfig_
+  def initialize(nodeConfigInit : NodeConfig = NodeConfig())(implicit materialize: ActorMaterializer = null): Unit = {
+    initialNodeConfig = nodeConfigInit
+    nodeConfig = nodeConfigInit
     actorMaterializer = materialize
-    standardTimeout = Timeout(nodeConfig_.defaultTimeoutSeconds, TimeUnit.SECONDS)
+    standardTimeout = Timeout(nodeConfig.defaultTimeoutSeconds, TimeUnit.SECONDS)
 
     if (nodeConfig.cliConfig.startOfflineMode) {
       nodeState = NodeState.Offline

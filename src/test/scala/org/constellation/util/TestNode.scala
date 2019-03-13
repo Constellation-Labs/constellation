@@ -29,30 +29,31 @@ object TestNode {
     val randomPeerPort =
       if (randomizePorts) scala.util.Random.nextInt(50000) + 5000 else 9001 + portOffset
 
-    val node = new ConstellationNode(
-      NodeConfig(
-        seeds = seedHosts,
-        primaryKeyPair = keyPair,
-        metricIntervalSeconds =  10,
-        isGenesisNode = isGenesisNode,
-        httpPort = randomPort,
-        peerHttpPort = randomPeerPort,
-        attemptDownload = seedHosts.nonEmpty,
-        allowLocalhostPeers = true,
-        processingConfig = ProcessingConfig(
-          numFacilitatorPeers = 2,
-          minCheckpointFormationThreshold = 3,
-          randomTXPerRoundPerPeer = 2,
-          metricCheckInterval = 10,
-          maxWidth = 4,
-          maxMemPoolSize = 15,
-          minPeerTimeAddedSeconds = 1,
-          snapshotInterval = 2,
-          snapshotHeightInterval = 2,
-          snapshotHeightDelayInterval = 1,
-          roundsPerMessage = 1
-        )
+    val config = NodeConfig(
+      seeds = seedHosts,
+      primaryKeyPair = keyPair,
+      metricIntervalSeconds = 10,
+      isGenesisNode = isGenesisNode,
+      httpPort = randomPort,
+      peerHttpPort = randomPeerPort,
+      attemptDownload = seedHosts.nonEmpty,
+      allowLocalhostPeers = true,
+      processingConfig = ProcessingConfig(
+        numFacilitatorPeers = 2,
+        minCheckpointFormationThreshold = 3,
+        randomTXPerRoundPerPeer = 2,
+        metricCheckInterval = 10,
+        maxWidth = 4,
+        maxMemPoolSize = 15,
+        minPeerTimeAddedSeconds = 1,
+        snapshotInterval = 2,
+        snapshotHeightInterval = 2,
+        snapshotHeightDelayInterval = 1,
+        roundsPerMessage = 1
       )
+    )
+    val node = new ConstellationNode(
+      config
     )
 
     nodes = nodes :+ node

@@ -201,10 +201,10 @@ class ConstellationNode(
 
   implicit val dao: DAO = new DAO()
   dao.initialize(nodeConfig)
-  import dao._
-  import nodeConfig._
 
-  logger.info(s"Node init with API $httpInterface $httpPort peerPort: $peerHttpPort")
+  val logger = Logger(s"ConstellationNode_${dao.publicKeyHash}")
+
+  logger.info(s"Node init with API ${nodeConfig.httpInterface} ${nodeConfig.httpPort} peerPort: ${nodeConfig.peerHttpPort}")
 
   dao.metrics = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
 
@@ -216,11 +216,10 @@ class ConstellationNode(
     peer => ipManager.addKnownIP(peer.host)
   }
 
-  val logger = Logger(s"ConstellationNode_$publicKeyHash")
 
   dao.peerManager = system.actorOf(
     Props(new PeerManager(ipManager)),
-    s"PeerManager_$publicKeyHash"
+    s"PeerManager_${dao.publicKeyHash}"
   )
 
   // TODO: Unused, can be used for timing information but adds a lot to logs
@@ -235,7 +234,7 @@ class ConstellationNode(
 
   // Setup http server for internal API
   private val bindingFuture: Future[Http.ServerBinding] =
-    Http().bindAndHandle(routes, httpInterface, httpPort)
+    Http().bindAndHandle(routes, nodeConfig.httpInterface, nodeConfig.httpPort)
 
   val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
   val crossTalkConsensusActor: ActorRef = system.actorOf(CrossTalkConsensus.props(remoteSenderActor))
@@ -247,11 +246,11 @@ class ConstellationNode(
   }
 
   def getIPData: ValidPeerIPData = {
-    ValidPeerIPData(hostName, peerHttpPort)
+    ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)
   }
 
   def getInetSocketAddress: InetSocketAddress = {
-    new InetSocketAddress(hostName, peerHttpPort)
+    new InetSocketAddress(nodeConfig.hostName, nodeConfig.peerHttpPort)
   }
 
   // Setup http server for peer API
@@ -278,28 +277,28 @@ class ConstellationNode(
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
 
-  def getAPIClient(host: String = hostName,
-                   port: Int = httpPort): APIClient = {
+  def getAPIClient(host: String = nodeConfig.hostName,
+                   port: Int = nodeConfig.httpPort): APIClient = {
     val api = APIClient(host, port)
-    api.id = id
+    api.id = dao.id
     api
   }
 
   // TODO: Change E2E to not use this but instead rely on peer discovery, need to send addresses there too
   def getAddPeerRequest: PeerMetadata = {
-    PeerMetadata(hostName, peerHttpPort, dao.id, auxAddresses = dao.addresses, nodeType = dao.nodeType)
+    PeerMetadata(nodeConfig.hostName, nodeConfig.peerHttpPort, dao.id, auxAddresses = dao.addresses, nodeType = dao.nodeType)
   }
 
   def getAPIClientForNode(node: ConstellationNode): APIClient = {
     val ipData = node.getIPData
     val api = APIClient(host = ipData.canonicalHostName, port = ipData.port)
-    api.id = id
+    api.id = dao.id
     api
   }
 
   logger.info("Node started")
 
-  if (attemptDownload) {
+  if (nodeConfig.attemptDownload) {
     nodeConfig.seeds.foreach {
       dao.peerManager ! _
     }
