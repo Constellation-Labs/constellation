@@ -7,7 +7,7 @@ import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.storage._
-import org.constellation.{DAO, ProcessingConfig}
+import org.constellation.{DAO, NodeConfig, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
@@ -448,7 +448,9 @@ class ThreadSafeTipService() {
 
 trait EdgeDAO {
 
-  var processingConfig = ProcessingConfig()
+  @volatile var nodeConfig : NodeConfig
+
+  def processingConfig: ProcessingConfig = nodeConfig.processingConfig
 
   @volatile var blockFormationInProgress: Boolean = false
 
@@ -458,12 +460,18 @@ trait EdgeDAO {
 
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
-  val checkpointService = new CheckpointService(processingConfig.checkpointLRUMaxSize)
+  val checkpointService = new CheckpointService(2000) // TODO: Move to initialize off of configs
   val acceptedTransactionService = new AcceptedTransactionService(
-    processingConfig.transactionLRUMaxSize
+    5000 //processingConfig.transactionLRUMaxSize
   )
-  val transactionService = new TransactionService(processingConfig.transactionLRUMaxSize)
-  val addressService = new AddressService(processingConfig.addressLRUMaxSize)
+  val transactionService = new TransactionService(
+    5000
+  //  processingConfig.transactionLRUMaxSize
+  )
+  val addressService = new AddressService(
+    5000
+    // processingConfig.addressLRUMaxSize
+  )
   val messageService = new MessageService()
   val channelService = new ChannelService()
   val soeService = new SOEService()

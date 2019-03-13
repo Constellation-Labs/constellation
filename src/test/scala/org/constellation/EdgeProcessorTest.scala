@@ -43,7 +43,9 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
     }
   })*/
 
-  val mockData = new DAO
+  val mockData = new DAO()
+  mockData.initialize()
+
   mockData.updateKeyPair(keyPair)
 
   def makeDao(mockData: DAO,

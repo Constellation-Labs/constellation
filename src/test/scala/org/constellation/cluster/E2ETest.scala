@@ -52,14 +52,22 @@ class E2ETest extends E2E {
 
     assert(Simulation.run(initialAPIs, addPeerRequests))
 
+    val firstAPI = apis.head
+    val allChannels = firstAPI.getBlocking[Seq[String]]("channels")
+
+/*
+    val channelProof = allChannels.map{ channelId =>
+      firstAPI.getBlocking[Option[ChannelProof]]("channel/" + channelId, timeout = 90.seconds)
+    }
+    assert(channelProof.exists{_.nonEmpty})
 
     val channelOpenResponse = apis.head.postBlocking[Option[ChannelOpenResponse]](
       "channel/open",
-      ChannelOpen("debug", jsonSchema = Some(SensorData.jsonSchema)), timeout = 60.seconds
+      ChannelOpen("debug", jsonSchema = Some(SensorData.jsonSchema)), timeout = 90.seconds
     )
 
     assert(channelOpenResponse.exists(_.errorMessage == "Success"))
-
+*/
 
     // val deployResponse = constellationAppSim.openChannel(apis)
 
