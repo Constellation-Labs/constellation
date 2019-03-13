@@ -12,7 +12,7 @@ import org.constellation.util.HashSignature
 case class Transaction(edge: Edge[TransactionEdgeData]) {
 
   def store(cache: TransactionCacheData)(implicit dao: DAO): Unit = {
-    dao.acceptedTransactionService.put(this.hash, cache)
+    dao.acceptedTransactionService.putSync(this.hash, cache)
   }
 
   def ledgerApply()(implicit dao: DAO): Unit = {
