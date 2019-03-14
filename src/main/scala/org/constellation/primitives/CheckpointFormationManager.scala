@@ -23,13 +23,14 @@ class CheckpointFormationManager(periodSeconds: Int = 1, emptyCheckpointThreshol
 
   private var formEmptyCheckpointAfterThreshold: FiniteDuration = emptyCheckpointThresholdSeconds.seconds
 
-  private var lastCheckpoint = LocalDateTime.now
+  @volatile private var lastCheckpoint = LocalDateTime.now
 
   override def trigger() = {
     val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
     val elapsedTime = toFiniteDuration(JDuration.between(lastCheckpoint, LocalDateTime.now))
 
-    if ((memPoolCount > 0 || (elapsedTime >= formEmptyCheckpointAfterThreshold)) &&
+    val minTXInBlock = 49
+    if ((memPoolCount > minTXInBlock || (elapsedTime >= formEmptyCheckpointAfterThreshold)) &&
       dao.formCheckpoints &&
       dao.nodeState == NodeState.Ready &&
       !dao.blockFormationInProgress) {
