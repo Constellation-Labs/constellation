@@ -84,7 +84,7 @@ class DAO()
       nodeState = NodeState.Offline
     }
 
-    if (nodeConfig.cliConfig.lightNode) {
+    if (nodeConfig.isLightNode) {
       nodeType = NodeType.Light
     }
 

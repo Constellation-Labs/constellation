@@ -18,7 +18,9 @@ object TestNode {
             keyPair: KeyPair = KeyUtils.makeKeyPair(),
             randomizePorts: Boolean = true,
             portOffset: Int = 0,
-            isGenesisNode: Boolean = false)(
+            isGenesisNode: Boolean = false,
+            isLightNode: Boolean = false
+           )(
     implicit system: ActorSystem,
     materializer: ActorMaterializer,
     executionContext: ExecutionContext
@@ -34,6 +36,7 @@ object TestNode {
       primaryKeyPair = keyPair,
       metricIntervalSeconds = 10,
       isGenesisNode = isGenesisNode,
+      isLightNode = isLightNode,
       httpPort = randomPort,
       peerHttpPort = randomPeerPort,
       attemptDownload = seedHosts.nonEmpty,
@@ -43,7 +46,7 @@ object TestNode {
         minCheckpointFormationThreshold = 3,
         randomTXPerRoundPerPeer = 2,
         metricCheckInterval = 10,
-        maxWidth = 4,
+        maxWidth = 2,
         maxMemPoolSize = 15,
         minPeerTimeAddedSeconds = 1,
         snapshotInterval = 2,

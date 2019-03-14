@@ -1,12 +1,13 @@
 package org.constellation.primitives
 
+import java.security.KeyPair
 import java.util.concurrent.Semaphore
+
 import com.fasterxml.jackson.databind.JsonNode
 import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.{JsonSchemaFactory, JsonValidator}
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
-
 import constellation._
 import org.constellation.DAO
 import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
@@ -37,7 +38,9 @@ case class ChannelMetadata(
   genesisMessageMetadata: ChannelMessageMetadata,
   totalNumMessages: Long = 0L,
   last25MessageHashes: Seq[String] = Seq()
-)
+) {
+  def channelId = genesisMessageMetadata.channelMessage.signedMessageData.hash
+}
 
 
 case class SingleChannelUIOutput(
@@ -54,11 +57,11 @@ object ChannelMessage extends StrictLogging {
 
 
   def create(message: String, previous: String, channelId: String)(
-    implicit dao: DAO
+    implicit keyPair: KeyPair
   ): ChannelMessage = {
     val data = ChannelMessageData(message, previous, channelId)
     ChannelMessage(
-      SignedData(data, hashSignBatchZeroTyped(data, dao.keyPair))
+      SignedData(data, hashSignBatchZeroTyped(data, keyPair))
     )
   }
 
@@ -79,7 +82,7 @@ object ChannelMessage extends StrictLogging {
         logger.info(s"Channel not in use")
 
         val genesisMessageStr = channelOpenRequest.json
-        val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)
+        val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)(dao.keyPair)
         dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.name) = msg
         val genesisHashChannelId = msg.signedMessageData.hash
         dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) =
@@ -118,7 +121,7 @@ object ChannelMessage extends StrictLogging {
         val messages: Seq[ChannelMessage] = channelSendRequest.messages
           .foldLeft(previous -> Seq[ChannelMessage]()) {
             case ((prvHash, signedMessages), nextMessage) =>
-              val nextSigned = create(nextMessage, previous, channelSendRequest.channelId)
+              val nextSigned = create(nextMessage, previous, channelSendRequest.channelId)(dao.keyPair)
               nextSigned.signedMessageData.hash -> (signedMessages :+ nextSigned)
           }
           ._2

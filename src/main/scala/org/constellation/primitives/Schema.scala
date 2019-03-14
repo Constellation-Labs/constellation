@@ -289,6 +289,11 @@ object Schema {
     def address: String = KeyUtils.publicKeyToAddressString(toPublicKey)
 
     def toPublicKey: PublicKey = hexToPublicKey(hex)
+
+    def bytes: Array[Byte] = KeyUtils.hex2bytes(hex)
+
+    def bigInt: BigInt = BigInt(bytes)
+
   }
 
   case class Node(address: String, host: String, port: Int)

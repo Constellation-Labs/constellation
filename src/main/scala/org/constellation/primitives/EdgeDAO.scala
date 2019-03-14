@@ -207,11 +207,10 @@ class ThreadSafeTipService() {
       dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
     }
 
-    val peerIds = dao.peerInfo //(dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
-    val facilMap = peerIds.filter {
+    val facilMap = dao.readyFullPeers.filter {
       case (_, pd) =>
-        pd.peerMetadata.timeAdded < (System
-          .currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000) && pd.peerMetadata.nodeState == NodeState.Ready
+        // TODO: Is this still necessary?
+        pd.peerMetadata.timeAdded < (System.currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000)
     }
 
     facilitators = facilMap
@@ -513,6 +512,8 @@ trait EdgeDAO {
 
   def readyPeers: Map[Id, PeerData] =
     peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
+
+  def readyFullPeers: Map[Id, PeerData] = readyPeers.filter{_._2.peerMetadata.nodeType == NodeType.Full}
 
   def pullTransactions(minimumCount: Int = minCheckpointFormationThreshold): Option[Seq[Transaction]] =  {
     threadSafeTXMemPool.pull(minimumCount)

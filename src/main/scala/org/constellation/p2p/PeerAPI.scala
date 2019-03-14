@@ -133,6 +133,17 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
 
   private val postEndpoints =
     post {
+      pathPrefix("channel") {
+        path("neighborhood") {
+          entity(as[Id]) { peerId =>
+            val distanceSorted = dao.channelService.lruCache.asImmutableMap().toSeq.sortBy {
+              case (channelId, meta) =>
+                BigInt(channelId.getBytes()) ^ peerId.bigInt
+            } // TODO: Determine appropriate fraction to respond with.
+            complete(Seq(distanceSorted.head._2))
+          }
+        }
+      } ~
       path("faucet") {
         entity(as[SendToAddress]) { sendRequest =>
           // TODO: Add limiting
