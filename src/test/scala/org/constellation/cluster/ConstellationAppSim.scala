@@ -33,12 +33,12 @@ class ConstellationAppSim(constellationApp: ConstellationApp)(
                                   channelId: String,
                                   apis: Seq[APIClient],
                                   maxRetries: Int = 300,
-                                  delay: Long = 3000
+                                  delay: Long = 120000
                                 ): Boolean = {
     sim.awaitConditionMet(
-      s"Messages not found in snapshot", {
+      s"Messages for ${channelId} not found in snapshot", {
         apis.forall { a =>
-          val res = a.getBlocking[Option[ChannelProof]]("channel/" + channelId, timeout = 30 seconds)
+          val res = a.getBlocking[Option[ChannelProof]]("channel/" + channelId, timeout = 120.seconds)
           res.nonEmpty
         }
       },

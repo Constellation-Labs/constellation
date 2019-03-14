@@ -96,17 +96,22 @@ class AppE2ETest extends E2E {
     }
   }
 
-//  "Broadcasted channel data" should "be accepted into all peers' snapshots" in {
-//    //todo should take sucessful res of snapshot created begin checking for new inclusion
-//    broadcast.map { resp =>
-//      constellationAppSim.sim.logger.info(s"Broadcasted channel msg $resp")
-//      constellationAppSim.sim.logger.info(s"messageHashes ${resp.messageHashes}")
-//      val channelIdToChannelTest = testApp.channelNameToId(testChannelName)
-//      println(s"channelIdToChannelTest $channelIdToChannelTest")
-////      assert(constellationAppSim.messagesInSnapshots(resp, apis))
-//      assert(resp.errorMessage == "Success")
-//    }
-//  }
+  "Broadcasted channel data" should "be accepted into all peers' snapshots" in {
+    //todo should take sucessful res of snapshot created begin checking for new inclusion
+    broadcast.map { resp =>
+      constellationAppSim.sim.logger.info(s"Broadcasted channel msg $resp")
+      constellationAppSim.sim.logger.info(s"messageHashes ${resp.messageHashes}")
+      val channel = testApp.channelNameToId(testChannelName)
+      println(s"channelIdToChannelTest $channel")//message.signedMessageData.data.channelId: testChannelName db60de054f0e450629928776f482aacfb53bd3beb6dc4ed92fbdc8061488691c
+//      val test = apis.forall { a =>
+//        val res = a.getBlocking[Option[ChannelProof]]("channel/" + channel.channelId, timeout = 120.seconds)
+//        res.nonEmpty
+//      }
+//      logger.info(s"Broadcasted channel data test: ${test}")
+      assert(constellationAppSim.messagesInSnapshots(channel.channelId, apis))
+      assert(resp.errorMessage == "Success")
+    }
+  }
 
 //  "Broadcasted channel data" should "be accepted into snapshots" in {
 //    shapshotAcceptance.map { snapshottedMessages =>

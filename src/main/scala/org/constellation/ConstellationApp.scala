@@ -38,7 +38,7 @@ class ConstellationApp(
     logger.info(s"messages: ${messages} message type: ${msgType}")
     clientApi.postNonBlocking[ChannelSendResponse](
       "channel/send",
-      ChannelSendRequest(msgType, serializedMessages)
+      ChannelSendRequest(msgType, serializedMessages), timeout = 120.seconds
       )
   }
 }

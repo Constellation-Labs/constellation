@@ -192,7 +192,9 @@ class API()(implicit system: ActorSystem,
             complete(dao.messageService.get(channelId))
           } ~
           path("channel" / Segment) { channelHash =>
-            val res = Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.get(channelHash))
+            val channelmd = dao.messageService.get(channelHash)
+            logger.info(s"channel/channelId: dao.messageService.get(channelHash) ${channelHash} ${dao.messageService.get(channelHash)}")
+            val res = Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.get(channelmd.get.channelMessage.signedMessageData.hash))
               logger.info(s"Snapshot.findLatestMessageWithSnapshotHash: ${res}")
             val proof = res.flatMap { cmd =>
               cmd.snapshotHash.flatMap { snapshotHash =>

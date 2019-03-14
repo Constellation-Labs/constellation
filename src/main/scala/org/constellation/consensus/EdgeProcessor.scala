@@ -44,10 +44,12 @@ object EdgeProcessor extends StrictLogging {
 
       cb.messages.foreach { m =>
         if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
+          logger.info(s"m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash: ${m.signedMessageData.data.channelId} ${m}")
           dao.messageService.put(
             m.signedMessageData.data.channelId,
             ChannelMessageMetadata(m, Some(cb.baseHash))
           )
+          logger.info(s"message in checkpoint: ${m.signedMessageData.data.channelId} ${dao.messageService.get(m.signedMessageData.hash)}")
           dao.channelService.updateOnly(
             m.signedMessageData.hash,
             { cmd =>
@@ -58,7 +60,9 @@ object EdgeProcessor extends StrictLogging {
               )
             }
           )
+          logger.info(s"message channelService: ${dao.channelService.get(m.signedMessageData.hash)}")
         } else { // Unsafe json extract
+          logger.info(s"m.signedMessageData.data.previousMessageHash == Genesis.CoinBaseHash: ${m.signedMessageData.hash} ${m}")
           dao.channelService.put(
             m.signedMessageData.hash,
             ChannelMetadata(
@@ -66,9 +70,13 @@ object EdgeProcessor extends StrictLogging {
               ChannelMessageMetadata(m, Some(cb.baseHash))
             )
           )
+          logger.info(s"message channelService: ${dao.channelService.get(m.signedMessageData.hash)}")
+
         }
         dao.messageService.put(m.signedMessageData.hash,
                                ChannelMessageMetadata(m, Some(cb.baseHash)))
+        logger.info(s"message in checkpoint: ${dao.messageService.get(m.signedMessageData.hash)}")
+
         dao.metrics.incrementMetric("messageAccepted")
       }
 
@@ -550,6 +558,11 @@ object Snapshot {
         _.copy(snapshotHash = Some(snapshot.hash)),
         ChannelMessageMetadata(message, Some(cb.baseHash), Some(snapshot.hash))
       )
+      println(s"message.signedMessageData.data.channelId: ${message.signedMessageData.data.channelId} ${message.signedMessageData.signatures.hash}")
+      println(s"message.signedMessageData.signatures.hash: ${message.signedMessageData.signatures.hash}")
+      println(s"dao.messageService.get: ${message.signedMessageData.signatures.hash} ${dao.messageService.get(message.signedMessageData.signatures.hash)}")
+      println(s"dao.messageService.get.snapshot: ${dao.messageService.get(message.signedMessageData.signatures.hash).map(_.snapshotHash)}")
+
       dao.metrics.incrementMetric("messageSnapshotHashUpdated")
     }
 
