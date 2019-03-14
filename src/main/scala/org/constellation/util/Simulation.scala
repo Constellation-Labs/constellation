@@ -224,8 +224,7 @@ object Simulation {
       logger.info(s"$err Waiting ${delay / 1000} sec. Num attempts: $retries out of $maxRetries")
       Thread.sleep(delay)
     } while (!done && retries < maxRetries)
-    if (!done) logger.error(s"$err TIME EXCEEDED")
-    assert(done)
+    assert(done, s"$err TIME EXCEEDED")
     done
   }
 
