@@ -180,7 +180,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               path("blocks") {
 
                 val blocks = dao.recentBlockTracker.getAll.toSeq
-                //dao.threadSafeTipService.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.get}
+                //dao.threadSafeSnapshotService.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.get}
                 complete(blocks.map { ccd =>
                   val cb = ccd.checkpointBlock.get
 

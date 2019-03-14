@@ -194,7 +194,7 @@ object EdgeProcessor extends StrictLogging {
                 height = checkpointBlock.calculateHeight()
               )
 
-            dao.threadSafeTipService.accept(cache)
+            dao.threadSafeSnapshotService.accept(cache)
             dao.threadSafeMessageMemPool.release(messages)
 
         }
@@ -231,7 +231,7 @@ object EdgeProcessor extends StrictLogging {
               )
               .traverse { finalCB =>
                 val cache = CheckpointCacheData(finalCB.some, height = finalCB.calculateHeight())
-                dao.threadSafeTipService.accept(cache)
+                dao.threadSafeSnapshotService.accept(cache)
                 processSignedBlock(
                     cache,
                     finalFacilitators
@@ -376,7 +376,7 @@ object EdgeProcessor extends StrictLogging {
     checkpointCacheData: CheckpointCacheData
   )(implicit dao: DAO): Unit = {
 
-    dao.threadSafeTipService.accept(checkpointCacheData)
+    dao.threadSafeSnapshotService.accept(checkpointCacheData)
     val block = checkpointCacheData.checkpointBlock.get
     val parents = block.parentSOEBaseHashes
     val parentExists = parents.map { h =>
@@ -401,7 +401,7 @@ object EdgeProcessor extends StrictLogging {
   def handleFinishedCheckpoint(fc: FinishedCheckpoint)(implicit dao: DAO) = {
     futureTryWithTimeoutMetric(
       if (dao.nodeState == NodeState.DownloadCompleteAwaitingFinalSync) {
-        dao.threadSafeTipService.syncBufferAccept(fc.checkpointCacheData)
+        dao.threadSafeSnapshotService.syncBufferAccept(fc.checkpointCacheData)
       } else if (dao.nodeState == NodeState.Ready) {
         if (fc.checkpointCacheData.checkpointBlock.exists {
               _.simpleValidation()
@@ -514,7 +514,7 @@ object Snapshot {
     // TODO: Refactor round into InternalHeartbeat
     if (round % dao.processingConfig.snapshotInterval == 0 && dao.nodeState == NodeState.Ready) {
       futureTryWithTimeoutMetric(
-        dao.threadSafeTipService.attemptSnapshot(),
+        dao.threadSafeSnapshotService.attemptSnapshot(),
         "snapshotAttempt"
       )(dao.edgeExecutionContext, dao)
     } else Future.successful(Try(()))

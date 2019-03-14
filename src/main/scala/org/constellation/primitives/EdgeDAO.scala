@@ -111,7 +111,7 @@ class ThreadSafeMessageMemPool() {
 
 import constellation._
 
-class ThreadSafeTipService(concurrentTipService: ConcurrentTipService) {
+class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
   implicit val timeout: Timeout = Timeout(15, TimeUnit.SECONDS)
 
@@ -385,7 +385,7 @@ trait EdgeDAO {
                                                      processingConfig.minPeerTimeAddedSeconds)
 
   val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
-  lazy val threadSafeTipService = new ThreadSafeTipService(concurrentTipService)
+  lazy val threadSafeSnapshotService = new ThreadSafeSnapshotService(concurrentTipService)
 
   var genesisBlock: Option[CheckpointBlock] = None
   var genesisObservation: Option[GenesisObservation] = None

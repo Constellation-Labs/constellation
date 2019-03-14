@@ -71,8 +71,8 @@ object RandomData {
 
   def setupSnapshot(cb: Seq[CheckpointBlock])(implicit dao: DAO): Seq[CheckpointBlock] = {
     // Get snapshot uses iterator while set snapshot updates underlying map causing ConcurrentModificationException
-    val snapshot = dao.threadSafeTipService.getSnapshotInfo().snapshot
-    dao.threadSafeTipService.setSnapshot(
+    val snapshot = dao.threadSafeSnapshotService.getSnapshotInfo().snapshot
+    dao.threadSafeSnapshotService.setSnapshot(
       SnapshotInfo(
         snapshot,
         cb.map(_.baseHash),
@@ -230,7 +230,7 @@ class ValidationSpec
   go.genesis.store(CheckpointCacheData(Some(go.genesis)))
   go.initialDistribution.store(CheckpointCacheData(Some(go.initialDistribution)))
   go.initialDistribution2.store(CheckpointCacheData(Some(go.initialDistribution2)))
-  dao.threadSafeTipService.setSnapshot(
+  dao.threadSafeSnapshotService.setSnapshot(
     SnapshotInfo(
       Snapshot.snapshotZero,
       Seq(go.genesis.baseHash, go.initialDistribution.baseHash, go.initialDistribution2.baseHash),
