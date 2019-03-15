@@ -30,8 +30,8 @@ class CheckpointFormationManager(periodSeconds: Int = 1,
     val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
     val elapsedTime = toFiniteDuration(JDuration.between(lastCheckpoint, LocalDateTime.now))
 
-    val minTXInBlock = 49
-    if ((memPoolCount > minTXInBlock || (elapsedTime >= formEmptyCheckpointAfterThreshold)) &&
+    val minTXInBlock = dao.processingConfig.minCheckpointFormationThreshold
+    if ((memPoolCount >= minTXInBlock || (elapsedTime >= formEmptyCheckpointAfterThreshold)) &&
         dao.formCheckpoints &&
         dao.nodeState == NodeState.Ready &&
         !dao.blockFormationInProgress) {
