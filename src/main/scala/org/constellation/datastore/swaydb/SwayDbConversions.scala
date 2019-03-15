@@ -1,7 +1,8 @@
 package org.constellation.datastore.swaydb
 import cats.effect.IO
 import org.constellation.consensus.Snapshot
-import org.constellation.primitives.Schema.{CheckpointCacheData, TransactionCacheData}
+import org.constellation.primitives.Schema.CheckpointCacheData
+import org.constellation.primitives.TransactionCacheData
 import org.constellation.serializer.KryoSerializer
 import swaydb.data.slice.Slice
 import swaydb.serializers.Serializer

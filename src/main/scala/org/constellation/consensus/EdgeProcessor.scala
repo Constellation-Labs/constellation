@@ -89,22 +89,8 @@ object EdgeProcessor extends StrictLogging {
       }
 
       // Accept transactions
-      cb.transactions.foreach { t =>
-        dao.metrics.incrementMetric("transactionAccepted")
-        val cacheData = TransactionCacheData(
-          t,
-          valid = true,
-          inMemPool = false,
-          inDAG = true,
-          Map(cb.baseHash -> true),
-          resolved = true,
-          cbBaseHash = Some(cb.baseHash)
-        )
+      acceptTransactions(cb).unsafeRunSync()
 
-        dao.transactionService.midDb.put(t.baseHash, cacheData)
-        t.store(cacheData)
-        t.ledgerApply()
-      }
       dao.metrics.incrementMetric("checkpointAccepted")
       val data = CheckpointCacheData(
         Some(cb),
@@ -115,6 +101,30 @@ object EdgeProcessor extends StrictLogging {
       )
 
     }
+  }
+
+  private def acceptTransactions(cb: CheckpointBlock)(implicit dao: DAO): IO[Unit] = {
+    def toCacheData(tx: Transaction) = TransactionCacheData(
+      tx,
+      valid = true,
+      inMemPool = false,
+      inDAG = true,
+      Map(cb.baseHash -> true),
+      resolved = true,
+      cbBaseHash = Some(cb.baseHash)
+    )
+
+    cb.transactions
+      .toList
+      .map(tx ⇒ (tx, toCacheData(tx)))
+      .map {
+        case (tx, txMetadata) ⇒ dao.transactionService.memPool.remove(tx.baseHash)
+        .flatMap(_ ⇒ dao.transactionService.midDb.put(tx.baseHash, txMetadata))
+        .flatMap(_ ⇒ dao.metrics.incrementMetricAsync("transactionAccepted"))
+        .flatMap(_ ⇒ dao.addressService.transfer(tx))
+      }
+      .sequence[IO, AddressCacheData]
+      .map(_ ⇒ ())
   }
 
   private def requestBlockSignature(
@@ -322,7 +332,7 @@ object EdgeProcessor extends StrictLogging {
         val hashes = sr.checkpointBlock.checkpoint.edge.data.hashes
         dao.metrics.incrementMetric(
           "signatureRequestAllHashesKnown_" + hashes.forall { h =>
-            dao.transactionService.memPool.getSync(h).nonEmpty
+            dao.transactionService.lookup(h).map(_.nonEmpty).unsafeRunSync()
           }
         )
 
@@ -553,9 +563,10 @@ object Snapshot {
          tx <- cb.transactions) {
       // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
       // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
-      tx.ledgerApplySnapshot()
-      dao.acceptedTransactionService.removeSync(Set(tx.hash))
-      dao.metrics.incrementMetric("snapshotAppliedBalance")
+      dao.addressService.transferSnapshot(tx)
+        .flatMap(_ ⇒ dao.acceptedTransactionService.remove(Set(tx.hash)))
+        .flatTap(_ ⇒ dao.metrics.incrementMetricAsync("snapshotAppliedBalance"))
+        .unsafeRunSync()
     }
   }
 

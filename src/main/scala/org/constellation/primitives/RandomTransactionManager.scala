@@ -173,6 +173,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                     inMemPool = true
                   )
                 )
+
                 dao.peerInfo.foreach {
                   case (_, peerData) =>
                     dao.metrics.incrementMetric("transactionPut")

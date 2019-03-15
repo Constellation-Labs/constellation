@@ -15,7 +15,7 @@ object CheckpointBlocksOld {
 }
 
 class CheckpointBlocksOld(path: File)(implicit ec: ExecutionContextExecutor)
-  extends DbStorage[String, CheckpointCacheData](dbPath = (path / "disk1" / "checkpoints_old").path) {}
+  extends DbStorage[String, CheckpointCacheData](dbPath = (path / "disk1" / "checkpoints_old").path)
 
 object CheckpointBlocksMid {
   val midCapacity = 1
@@ -24,7 +24,7 @@ object CheckpointBlocksMid {
 }
 
 class CheckpointBlocksMid(path: File, midCapacity: Int)(implicit ec: ExecutionContextExecutor)
-  extends MidDbStorage[String, CheckpointCacheData](dbPath = (path / "disk1" / "checkpoints_mid").path, midCapacity) {}
+  extends MidDbStorage[String, CheckpointCacheData](dbPath = (path / "disk1" / "checkpoints_mid").path, midCapacity)
 
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
 // mwadon: /\ is still relevant?
