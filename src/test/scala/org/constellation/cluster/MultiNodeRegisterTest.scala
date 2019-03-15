@@ -11,13 +11,13 @@ import constellation._
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.util.TestNode
 import org.constellation.{ConstellationNode, HostPort}
-import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
+import org.scalatest._
 
 import scala.concurrent.ExecutionContext
 import scala.util.Try
 
 class MultiNodeRegisterTest
-    extends AsyncFlatSpecLike
+    extends FunSpecLike
     with Matchers
     with BeforeAndAfterAll
     with BeforeAndAfterEach {
@@ -51,52 +51,43 @@ class MultiNodeRegisterTest
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
 
-  // TODO: Find out if this is causing circleCI to fail
-  // "E2E Multiple Nodes Register Test"
-  ignore should "add register peers to each other successfully" in {
 
-    val totalNumNodes = 3
+  describe("E2E Multiple Nodes Register Test") {
+    it("add register peers to each other successfully") {
 
-    val n1 = createNode(randomizePorts = false)
+      val otherNodesSize = 2
 
-    val addr = n1.getInetSocketAddress
+      val n1 = createNode(randomizePorts = false)
 
-    val nodes = Seq(n1) ++ Seq.fill(totalNumNodes - 1)(createNode())
+      val nodes = Seq(n1) ++ Seq.fill(otherNodesSize)(createNode())
 
-    nodes.foreach { node =>
-      logger.debug(node.getIPData.toString)
+      nodes.foreach { n =>
+        assert(n.dao.peerInfo.isEmpty)
+        assert(n.ipManager.listKnownIPs.isEmpty)
+      }
+
+      nodes.combinations(otherNodesSize).foreach {
+        case Seq(n, m) =>
+          def register(a: ConstellationNode, b: ConstellationNode): Unit = {
+            val ipData = a.getIPData
+            val peerRegistrationRequest =
+              PeerRegistrationRequest(
+                ipData.canonicalHostName,
+                ipData.port,
+                a.dao.keyPair.getPublic.toId
+              )
+            val res = a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
+            assert(res.isSuccess)
+          }
+          register(n, m)
+          register(m, n)
+      }
+      Thread.sleep(1000)
+      nodes.foreach { n =>
+        assert(n.dao.peerInfo.size == otherNodesSize)
+      }
+
     }
 
-    nodes.foreach { n =>
-      assert(n.ipManager.listKnownIPs.isEmpty)
-    }
-
-    nodes.combinations(2).foreach {
-      case Seq(n, m) =>
-        def register(a: ConstellationNode, b: ConstellationNode): Unit = {
-          val ipData = a.getIPData
-          val peerRegistrationRequest =
-            PeerRegistrationRequest(
-              ipData.canonicalHostName,
-              ipData.port,
-              a.dao.keyPair.getPublic.toId
-            )
-          val res = a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
-          assert(res.isSuccess)
-        }
-        register(n, m)
-        register(m, n)
-    }
-
-    Thread.sleep(1000)
-
-    // TODO: Assert actual values of knownIPs list
-    nodes.foreach { n =>
-      logger.debug(s"THING: $n: ${n.ipManager.listKnownIPs.size}")
-      assert(n.ipManager.listKnownIPs.size == 2)
-    }
-
-    assert(true)
   }
-
 }

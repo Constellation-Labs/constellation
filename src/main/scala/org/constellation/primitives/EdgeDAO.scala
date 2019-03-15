@@ -531,11 +531,6 @@ trait EdgeDAO {
   val finishedExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
-  // Temporary to get peer data for tx hash partitioning
-  @volatile var peerInfo: Map[Id, PeerData] = Map()
-
-  def readyPeers: Map[Id, PeerData] =
-    peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
 
   def pullTransactions(minimumCount: Int = minCheckpointFormationThreshold): Option[Seq[Transaction]] =  {
     threadSafeTXMemPool.pull(minimumCount)

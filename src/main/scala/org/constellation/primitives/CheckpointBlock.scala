@@ -5,14 +5,15 @@ import java.security.KeyPair
 import cats.data.{Ior, NonEmptyList, ValidatedNel}
 import cats.implicits._
 import constellation.signedObservationEdge
-import org.constellation.DAO
 import org.constellation.primitives.Schema._
 import org.constellation.util.HashSignature
+import org.constellation.{DAO, PeerMetadata}
 
 case class CheckpointBlock(
   transactions: Seq[Transaction],
   checkpoint: CheckpointEdge,
-  messages: Seq[ChannelMessage] = Seq()
+  messages: Seq[ChannelMessage] = Seq(),
+  notifications: Seq[PeerNotification] = Seq()
 ) {
 
   def storeSOE()(implicit dao: DAO): Unit = {
@@ -154,21 +155,25 @@ object CheckpointBlock {
   def createCheckpointBlockSOE(
     transactions: Seq[Transaction],
     tips: Seq[SignedObservationEdge],
-    messages: Seq[ChannelMessage] = Seq()
+    messages: Seq[ChannelMessage] = Seq.empty,
+    peers: Seq[PeerNotification] = Seq.empty
   )(implicit keyPair: KeyPair): CheckpointBlock = {
     createCheckpointBlock(transactions, tips.map { t =>
       TypedEdgeHash(t.hash, EdgeHashType.CheckpointHash)
-    }, messages)
+    }, messages, peers)
   }
 
   def createCheckpointBlock(
     transactions: Seq[Transaction],
     tips: Seq[TypedEdgeHash],
-    messages: Seq[ChannelMessage] = Seq()
+    messages: Seq[ChannelMessage] = Seq.empty,
+    peers: Seq[PeerNotification] = Seq.empty
   )(implicit keyPair: KeyPair): CheckpointBlock = {
 
     val checkpointEdgeData =
-      CheckpointEdgeData(transactions.map { _.hash }.sorted, messages.map{_.signedMessageData.hash})
+      CheckpointEdgeData(transactions.map { _.hash }.sorted, messages.map {
+        _.signedMessageData.hash
+      })
 
     val observationEdge = ObservationEdge(
       tips.toList,
@@ -181,7 +186,7 @@ object CheckpointBlock {
       Edge(observationEdge, soe, checkpointEdgeData)
     )
 
-    CheckpointBlock(transactions, checkpointEdge, messages)
+    CheckpointBlock(transactions, checkpointEdge, messages, peers)
   }
 
 }
