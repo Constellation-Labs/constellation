@@ -1,17 +1,18 @@
 package org.constellation.primitives
 
 import java.util.concurrent.Semaphore
+
 import com.fasterxml.jackson.databind.JsonNode
 import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.{JsonSchemaFactory, JsonValidator}
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
-
 import constellation._
 import org.constellation.DAO
 import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
 
 import scala.concurrent.Future
+import scala.util.Random
 
 // Should channelId be associated with a unique keyPair or not?
 
@@ -91,8 +92,9 @@ object ChannelMessage extends StrictLogging {
         Future {
           var retries = 0
           var metadata: Option[ChannelMetadata] = None
-          while (retries < 30 && metadata.isEmpty) {
+          while (retries < 100 && metadata.isEmpty) {
             retries += 1
+            logger.info(s"Polling genesis creation attempt $retries for $genesisHashChannelId")
             Thread.sleep(1000)
             metadata = dao.channelService.get(genesisHashChannelId)
           }
@@ -118,10 +120,11 @@ object ChannelMessage extends StrictLogging {
         val messages: Seq[ChannelMessage] = channelSendRequest.messages
           .foldLeft(previous -> Seq[ChannelMessage]()) {
             case ((prvHash, signedMessages), nextMessage) =>
-              val nextSigned = create(nextMessage, previous, channelSendRequest.channelId)
+              val nextSigned = create(nextMessage, prvHash, channelSendRequest.channelId)
               nextSigned.signedMessageData.hash -> (signedMessages :+ nextSigned)
           }
           ._2
+
         dao.threadSafeMessageMemPool.put(messages, overrideLimit = true)
         val semaphore = new Semaphore(1)
         dao.threadSafeMessageMemPool.activeChannels(channelSendRequest.channelId) = semaphore
@@ -185,6 +188,14 @@ case class SensorData(
 )
 
 object SensorData {
+
+  val validNameChars: Seq[String] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map { _.toString }.toSeq
+  val invalidNameChars: Seq[String] = validNameChars.map { _.toLowerCase }
+
+  def generateRandomValidMessage() = SensorData(
+    Random.nextInt(100),
+    Seq.fill(5) { Random.shuffle(validNameChars).head }.mkString
+  )
 
   val jsonSchema: String = """{
                              |  "title":"Sensors data",

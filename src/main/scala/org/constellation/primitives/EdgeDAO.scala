@@ -70,12 +70,16 @@ class ThreadSafeMessageMemPool() {
     }
   }
 
-  def pull(minCount: Int): Option[Seq[ChannelMessage]] = this.synchronized {
-    if (messages.size > minCount) {
+  // TODO: Fix
+  def pull(minCount: Int = 1): Option[Seq[ChannelMessage]] = this.synchronized {
+    /*if (messages.size >= minCount) {
       val (left, right) = messages.splitAt(minCount)
       messages = right
       Some(left.flatten)
-    } else None
+    } else None*/
+    val flat = messages.flatten
+    messages = Seq()
+    if (flat.isEmpty) None else Some(flat)
   }
 
   def batchPutDebug(messagesToAdd: Seq[ChannelMessage]): Boolean = this.synchronized {

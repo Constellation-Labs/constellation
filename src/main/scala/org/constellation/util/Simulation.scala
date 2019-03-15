@@ -5,7 +5,7 @@ import java.util.concurrent.ForkJoinPool
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.primitives.CheckpointBlock
+import org.constellation.primitives._
 import org.constellation.primitives.Schema._
 import org.constellation.{HostPort, PeerMetadata}
 import org.slf4j.LoggerFactory
@@ -335,11 +335,38 @@ object Simulation {
 
     setReady(apis)
 
-    assert(awaitCheckpointsAccepted(apis))
+    assert(awaitCheckpointsAccepted(apis, numAccepted = 3))
 
     logger.info("Checkpoint validation passed")
 
+    val debugChannelName = "debug"
+
+    constellation.standardTimeout = 1000.seconds
+
+    val channelOpenResponse = apis.head.postBlocking[ChannelOpenResponse](
+      "channel/open",
+      ChannelOpen(debugChannelName, jsonSchema = Some(SensorData.jsonSchema)), timeout = 1000.seconds
+    )
+
+    assert(channelOpenResponse.errorMessage == "Success")
+
+    val channelId = channelOpenResponse.genesisHash
+
+    logger.info(s"Channel opened with hash $channelId")
+
+    val csr = apis.head.postBlocking[ChannelSendResponse](
+      "channel/send",
+      ChannelSendRequest(channelId, Seq.fill(2){SensorData.generateRandomValidMessage().json})
+    )
+
+    assert(csr.errorMessage == "Success")
+
+    assert(awaitCheckpointsAccepted(apis))
+
     assert(checkSnapshot(apis, num = snapshotCount))
+
+    val channelProof = apis.head.getBlocking[Option[ChannelProof]]("channel/" + channelId, timeout = 90.seconds)
+    assert(channelProof.nonEmpty)
 
     logger.info("Snapshot validation passed")
 

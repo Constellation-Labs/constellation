@@ -89,7 +89,7 @@ class RandomTransactionManager(nodeActor: ActorRef, periodSeconds: Int = 1)(impl
 
         if ((peerIds.nonEmpty || dao.nodeConfig.isGenesisNode) && dao.nodeState == NodeState.Ready && dao.generateRandomTX) {
 
-          generateRandomMessages()
+         //generateRandomMessages()
 
           val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
           dao.metrics.updateMetric("transactionMemPoolSize", memPoolCount.toString)

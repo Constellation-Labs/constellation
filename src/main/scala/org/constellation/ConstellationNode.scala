@@ -184,7 +184,7 @@ case class NodeConfig(
                                      httpInterface: String = "0.0.0.0",
                                      httpPort: Int = 9000,
                                      peerHttpPort: Int = 9001,
-                                     defaultTimeoutSeconds: Int = 10,
+                                     defaultTimeoutSeconds: Int = 90,
                                      attemptDownload: Boolean = false,
                                      allowLocalhostPeers: Boolean = false,
                                      cliConfig: CliConfig = CliConfig(),
@@ -228,7 +228,7 @@ class ConstellationNode(
   )
 
   // If we are exposing rpc then create routes
-  val routes: Route = new API().routes // logReqResp { }
+  val routes: Route = new API()(system, constellation.standardTimeout, dao).routes // logReqResp { }
 
   logger.info("Binding API")
 
