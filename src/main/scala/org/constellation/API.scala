@@ -59,7 +59,7 @@ case class ProcessingConfig(
   maxTXInBlock: Int = 50,
   maxMessagesInBlock: Int = 1,
   checkpointFormationTimeSeconds: Int = 1,
-  formEmptyCheckpointAfterSeconds: Int = 30,
+  formUndersizedCheckpointAfterSeconds: Int = 30,
   numFacilitatorPeers: Int = 2,
   randomTXPerRoundPerPeer: Int = 30,
   metricCheckInterval: Int = 10,
@@ -85,15 +85,13 @@ case class ChannelUIOutput(channels: Seq[String])
 case class ChannelValidationInfo(channel: String, valid: Boolean)
 
 case class BlockUIOutput(
-                          id: String,
-                          height: Long,
-                          parents: Seq[String],
-                          channels: Seq[ChannelValidationInfo],
-                        )
+  id: String,
+  height: Long,
+  parents: Seq[String],
+  channels: Seq[ChannelValidationInfo],
+)
 
-class API()(implicit system: ActorSystem,
-                                         val timeout: Timeout,
-                                         val dao: DAO)
+class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
     extends Json4sSupport
     with ServeUI
     with CommonEndpoints
@@ -125,69 +123,78 @@ class API()(implicit system: ActorSystem,
             path("channels") {
               complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
             } ~
-            path("channel" / Segment / "info") { channelId =>
-
-              complete(dao.channelService.get(channelId).map{ cmd =>
-                SingleChannelUIOutput(
-                  cmd.channelOpen, cmd.totalNumMessages, cmd.last25MessageHashes,
-                  cmd.genesisMessageMetadata.channelMessage.signedMessageData.signatures.signatures.head.address
-                )
-              })
-            } ~
-            path("channel" / Segment / "schema") { channelId =>
-              complete(
-                dao.channelService.get(channelId).flatMap{ cmd => cmd.channelOpen.jsonSchema}
-                  .map{
-                    schemaStr =>
+              path("channel" / Segment / "info") { channelId =>
+                complete(dao.channelService.get(channelId).map { cmd =>
+                  SingleChannelUIOutput(
+                    cmd.channelOpen,
+                    cmd.totalNumMessages,
+                    cmd.last25MessageHashes,
+                    cmd.genesisMessageMetadata.channelMessage.signedMessageData.signatures.signatures.head.address
+                  )
+                })
+              } ~
+              path("channel" / Segment / "schema") { channelId =>
+                complete(
+                  dao.channelService
+                    .get(channelId)
+                    .flatMap { cmd =>
+                      cmd.channelOpen.jsonSchema
+                    }
+                    .map { schemaStr =>
                       import org.json4s.native.JsonMethods._
                       pretty(render(parse(schemaStr)))
-                  }
-              )
-            }
+                    }
+                )
+              }
           } ~
           pathPrefix("data") {
             path("channels") {
               complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
             } ~
-            path("channel" / Segment / "info") { channelId =>
-
-              complete(dao.channelService.get(channelId).map{ cmd =>
-                SingleChannelUIOutput(
-                  cmd.channelOpen, cmd.totalNumMessages, cmd.last25MessageHashes,
-                  cmd.genesisMessageMetadata.channelMessage.signedMessageData.signatures.signatures.head.address
-                )
-              })
-            } ~
-            path("channel" / Segment / "schema") { channelId =>
-              complete(
-                dao.channelService.get(channelId).flatMap{ cmd => cmd.channelOpen.jsonSchema}
-                  .map{
-                    schemaStr =>
+              path("channel" / Segment / "info") { channelId =>
+                complete(dao.channelService.get(channelId).map { cmd =>
+                  SingleChannelUIOutput(
+                    cmd.channelOpen,
+                    cmd.totalNumMessages,
+                    cmd.last25MessageHashes,
+                    cmd.genesisMessageMetadata.channelMessage.signedMessageData.signatures.signatures.head.address
+                  )
+                })
+              } ~
+              path("channel" / Segment / "schema") { channelId =>
+                complete(
+                  dao.channelService
+                    .get(channelId)
+                    .flatMap { cmd =>
+                      cmd.channelOpen.jsonSchema
+                    }
+                    .map { schemaStr =>
                       import org.json4s.native.JsonMethods._
                       pretty(render(parse(schemaStr)))
-                  }
-              )
-            } ~
-            path("graph") { // Debugging / mockup for peer graph
-              getFromResource("sample_data/dag.json")
-            } ~
-            path("blocks") {
-
-              val blocks = dao.recentBlockTracker.getAll.toSeq
-                //dao.threadSafeTipService.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.get}
-              complete(blocks.map{ ccd =>
-                val cb = ccd.checkpointBlock.get
-
-                BlockUIOutput(
-                  cb.soeHash, ccd.height.get.min, cb.parentSOEHashes,
-                  cb.messages.map{_.signedMessageData.data.channelId}.distinct.map{
-                    channelId =>
-                      ChannelValidationInfo(channelId, true)
-                  }
-
+                    }
                 )
-              })
-            }
+              } ~
+              path("graph") { // Debugging / mockup for peer graph
+                getFromResource("sample_data/dag.json")
+              } ~
+              path("blocks") {
+
+                val blocks = dao.recentBlockTracker.getAll.toSeq
+                //dao.threadSafeTipService.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.get}
+                complete(blocks.map { ccd =>
+                  val cb = ccd.checkpointBlock.get
+
+                  BlockUIOutput(
+                    cb.soeHash,
+                    ccd.height.get.min,
+                    cb.parentSOEHashes,
+                    cb.messages.map { _.signedMessageData.data.channelId }.distinct.map {
+                      channelId =>
+                        ChannelValidationInfo(channelId, true)
+                    }
+                  )
+                })
+              }
           } ~
           path("messageService" / Segment) { channelId =>
             complete(dao.messageService.get(channelId))
@@ -323,7 +330,9 @@ class API()(implicit system: ActorSystem,
           path("send") {
             entity(as[ChannelSendRequest]) { send =>
               onComplete(ChannelMessage.createMessages(send)) { res =>
-                complete(res.getOrElse(ChannelSendResponse("Failed to create messages", Seq())).json)
+                complete(
+                  res.getOrElse(ChannelSendResponse("Failed to create messages", Seq())).json
+                )
               }
             }
           } ~
@@ -390,8 +399,8 @@ class API()(implicit system: ActorSystem,
           dao.metrics.updateMetric("nodeState", dao.nodeState.toString)
           onComplete(res) { t =>
             t.foreach(_.filter(_._2.isInvalid).foreach {
-              case (id, e) => logger.warn(s"Unable to propogate status to node ID: $id", e) }
-            )
+              case (id, e) => logger.warn(s"Unable to propogate status to node ID: $id", e)
+            })
             complete(StatusCodes.OK)
           }
         } ~

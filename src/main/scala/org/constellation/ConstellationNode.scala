@@ -28,13 +28,13 @@ import scala.util.{Failure, Success, Try}
 // scopt requires default args for all properties.
 // Make sure to check for null early -- don't propogate nulls anywhere else.
 case class CliConfig(
-                      externalIp: java.net.InetAddress = null,
-                      externalPort: Int = 0,
-                      debug: Boolean = false,
-                      startOfflineMode: Boolean = false,
-                      lightNode: Boolean = false,
-                      genesisNode: Boolean = false
-                    )
+  externalIp: java.net.InetAddress = null,
+  externalPort: Int = 0,
+  debug: Boolean = false,
+  startOfflineMode: Boolean = false,
+  lightNode: Boolean = false,
+  genesisNode: Boolean = false
+)
 
 /**
   * Main entry point for starting a node
@@ -95,7 +95,6 @@ object ConstellationNode extends StrictLogging {
     val config = ConfigFactory.load()
     logger.info("Config loaded")
 
-
     Try {
 
       // TODO: Move to scopt above.
@@ -105,7 +104,8 @@ object ConstellationNode extends StrictLogging {
 
       // TODO: This should be unified as a single conf file
       val hostName = Option(cliConfig.externalIp).map(_.toString).getOrElse {
-        Try { File(LocalConfigFile).lines.mkString.x[LocalNodeConfig].externalIP }.getOrElse("127.0.0.1")
+        Try { File(LocalConfigFile).lines.mkString.x[LocalNodeConfig].externalIP }
+          .getOrElse("127.0.0.1")
       }
 
       val preferencesPath = File(".dag")
@@ -175,24 +175,24 @@ object ConstellationNode extends StrictLogging {
 }
 
 case class NodeConfig(
-                                     seeds: Seq[HostPort] = Seq(),
-                                     primaryKeyPair: KeyPair = KeyUtils.makeKeyPair(),
-                                     isGenesisNode: Boolean = false,
-                                     metricIntervalSeconds: Int = 60,
-                                     hostName: String = "127.0.0.1",
-                                     httpInterface: String = "0.0.0.0",
-                                     httpPort: Int = 9000,
-                                     peerHttpPort: Int = 9001,
-                                     defaultTimeoutSeconds: Int = 10,
-                                     attemptDownload: Boolean = false,
-                                     allowLocalhostPeers: Boolean = false,
-                                     cliConfig: CliConfig = CliConfig(),
-                                     processingConfig: ProcessingConfig = ProcessingConfig()
-                                   )
+  seeds: Seq[HostPort] = Seq(),
+  primaryKeyPair: KeyPair = KeyUtils.makeKeyPair(),
+  isGenesisNode: Boolean = false,
+  metricIntervalSeconds: Int = 60,
+  hostName: String = "127.0.0.1",
+  httpInterface: String = "0.0.0.0",
+  httpPort: Int = 9000,
+  peerHttpPort: Int = 9001,
+  defaultTimeoutSeconds: Int = 10,
+  attemptDownload: Boolean = false,
+  allowLocalhostPeers: Boolean = false,
+  cliConfig: CliConfig = CliConfig(),
+  processingConfig: ProcessingConfig = ProcessingConfig()
+)
 
 class ConstellationNode(
-                        val nodeConfig: NodeConfig = NodeConfig()
-                       )(
+  val nodeConfig: NodeConfig = NodeConfig()
+)(
   implicit val system: ActorSystem,
   implicit val materialize: ActorMaterializer,
   implicit val executionContext: ExecutionContext
@@ -203,20 +203,24 @@ class ConstellationNode(
 
   val logger = Logger(s"ConstellationNode_${dao.publicKeyHash}")
 
-  logger.info(s"Node init with API ${nodeConfig.httpInterface} ${nodeConfig.httpPort} peerPort: ${nodeConfig.peerHttpPort}")
+  logger.info(
+    s"Node init with API ${nodeConfig.httpInterface} ${nodeConfig.httpPort} peerPort: ${nodeConfig.peerHttpPort}"
+  )
 
   dao.metrics = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
 
-  val checkpointFormationManager = new CheckpointFormationManager(dao.processingConfig.checkpointFormationTimeSeconds, dao.processingConfig.formEmptyCheckpointAfterSeconds)
+  val checkpointFormationManager = new CheckpointFormationManager(
+    dao.processingConfig.checkpointFormationTimeSeconds,
+    dao.processingConfig.formUndersizedCheckpointAfterSeconds
+  )
 
   val snapshotTrigger = new SnapshotTrigger()
 
   val ipManager = IPManager()
 
-  nodeConfig.seeds.foreach {
-    peer => ipManager.addKnownIP(peer.host)
+  nodeConfig.seeds.foreach { peer =>
+    ipManager.addKnownIP(peer.host)
   }
-
 
   dao.peerManager = system.actorOf(
     Props(new PeerManager(ipManager)),
@@ -238,7 +242,8 @@ class ConstellationNode(
     Http().bindAndHandle(routes, nodeConfig.httpInterface, nodeConfig.httpPort)
 
   val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
-  val crossTalkConsensusActor: ActorRef = system.actorOf(CrossTalkConsensus.props(remoteSenderActor))
+  val crossTalkConsensusActor: ActorRef =
+    system.actorOf(CrossTalkConsensus.props(remoteSenderActor))
   val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
   val randomTXManager = new RandomTransactionManager(crossTalkConsensusActor)
 
@@ -256,11 +261,12 @@ class ConstellationNode(
 
   // Setup http server for peer API
   // TODO: Add shutdown mechanism
-  Http().bind(nodeConfig.httpInterface, nodeConfig.peerHttpPort)
+  Http()
+    .bind(nodeConfig.httpInterface, nodeConfig.peerHttpPort)
     .runWith(Sink foreach { conn =>
-    val address =  conn.remoteAddress
-    conn.handleWith(peerAPI.routes(address))
-  })
+      val address = conn.remoteAddress
+      conn.handleWith(peerAPI.routes(address))
+    })
 
   def shutdown(): Unit = {
 
@@ -287,7 +293,11 @@ class ConstellationNode(
 
   // TODO: Change E2E to not use this but instead rely on peer discovery, need to send addresses there too
   def getAddPeerRequest: PeerMetadata = {
-    PeerMetadata(nodeConfig.hostName, nodeConfig.peerHttpPort, dao.id, auxAddresses = dao.addresses, nodeType = dao.nodeType)
+    PeerMetadata(nodeConfig.hostName,
+                 nodeConfig.peerHttpPort,
+                 dao.id,
+                 auxAddresses = dao.addresses,
+                 nodeType = dao.nodeType)
   }
 
   def getAPIClientForNode(node: ConstellationNode): APIClient = {
