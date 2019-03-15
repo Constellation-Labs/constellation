@@ -7,6 +7,7 @@ import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.storage._
+import org.constellation.util.Metrics
 import org.constellation.{DAO, NodeConfig, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
@@ -23,6 +24,12 @@ class ThreadSafeTXMemPool() {
       transactions = right
       Some(left)
     } else None
+  }
+
+  def pullUpTo(minCount: Int): Seq[Transaction] = this.synchronized {
+    val (left, right) = transactions.splitAt(minCount)
+    transactions = right
+    left
   }
 
   def batchPutDebug(txs: Seq[Transaction]): Boolean = this.synchronized {
@@ -448,11 +455,22 @@ class ThreadSafeTipService() {
 
 trait EdgeDAO {
 
+  var metrics: Metrics
+
   @volatile var nodeConfig : NodeConfig
 
   def processingConfig: ProcessingConfig = nodeConfig.processingConfig
 
-  @volatile var blockFormationInProgress: Boolean = false
+  private val blockFormationLock: Any = new Object()
+
+  private[this] var _blockFormationInProgress: Boolean = false
+
+  def blockFormationInProgress: Boolean = blockFormationLock.synchronized { _blockFormationInProgress }
+
+  def blockFormationInProgress_=(value: Boolean): Unit = blockFormationLock.synchronized {
+    _blockFormationInProgress = value
+    metrics.updateMetric("blockFormationInProgress", blockFormationInProgress.toString)
+  }
 
   // TODO: Put on Id keyed datastore (address? potentially) with other metadata
   val publicReputation: TrieMap[Id, Double] = TrieMap()
@@ -488,6 +506,7 @@ trait EdgeDAO {
   def maxWidth: Int = processingConfig.maxWidth
 
   def minCheckpointFormationThreshold: Int = processingConfig.minCheckpointFormationThreshold
+  def maxTXInBlock: Int = processingConfig.maxTXInBlock
 
   def minCBSignatureThreshold: Int = processingConfig.numFacilitatorPeers
 

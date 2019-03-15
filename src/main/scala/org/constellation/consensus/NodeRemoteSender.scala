@@ -2,10 +2,7 @@ package org.constellation.consensus
 
 import akka.actor.{Actor, Props}
 import org.constellation.consensus.CrossTalkConsensus.NotifyFacilitators
-import org.constellation.consensus.RoundManager.{
-  BroadcastTransactionProposal,
-  BroadcastUnionBlockProposal
-}
+import org.constellation.consensus.RoundManager.{BroadcastTransactionProposal, BroadcastUnionBlockProposal}
 
 object NodeRemoteSender {
 

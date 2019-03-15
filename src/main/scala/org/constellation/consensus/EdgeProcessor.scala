@@ -19,6 +19,20 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Success, Try}
 
+case class CreateCheckpointEdgeResponse(
+  checkpointEdge: CheckpointEdge,
+  transactionsUsed: Set[String],
+  // filteredValidationTips: Seq[SignedObservationEdge],
+  updatedTransactionMemPoolThresholdMet: Set[String]
+)
+
+case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
+
+case class SignatureResponse(signature: Option[HashSignature], reRegister: Boolean = false)
+case class FinishedCheckpoint(checkpointCacheData: CheckpointCacheData, facilitators: Set[Id])
+
+case class FinishedCheckpointResponse(reRegister: Boolean = false)
+
 object EdgeProcessor extends StrictLogging {
 
   def acceptCheckpoint(checkpointCacheData: CheckpointCacheData)(implicit dao: DAO): Unit = {
@@ -49,8 +63,7 @@ object EdgeProcessor extends StrictLogging {
             ChannelMessageMetadata(m, Some(cb.baseHash))
           )
           dao.channelService.updateOnly(
-            m.signedMessageData.hash,
-            { cmd =>
+            m.signedMessageData.hash, { cmd =>
               val slicedMessages = cmd.last25MessageHashes.slice(0, 25)
               cmd.copy(
                 totalNumMessages = cmd.totalNumMessages + 1,
@@ -97,25 +110,53 @@ object EdgeProcessor extends StrictLogging {
         data
       )
 
-
     }
   }
 
-  case class CreateCheckpointEdgeResponse(
-    checkpointEdge: CheckpointEdge,
-    transactionsUsed: Set[String],
-    // filteredValidationTips: Seq[SignedObservationEdge],
-    updatedTransactionMemPoolThresholdMet: Set[String]
-  )
+  private def requestBlockSignature(
+    checkpointBlock: CheckpointBlock,
+    finalFacilitators: Set[
+      Id
+    ],
+    data: PeerData
+  )(implicit dao: DAO, ec: ExecutionContext) = {
+    async {
+      val sigResp = await(
+        data.client.postNonBlocking[SignatureResponse](
+          "request/signature",
+          SignatureRequest(checkpointBlock, finalFacilitators + dao.id),
+          15.seconds
+        )
+      )
 
-  case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
+      if (sigResp.reRegister) {
+        // PeerManager.attemptRegisterPeer() TODO : Finish
+      }
 
-  case class SignatureResponse(signature: Option[HashSignature], reRegister: Boolean = false)
-  case class FinishedCheckpoint(checkpointCacheData: CheckpointCacheData, facilitators: Set[Id])
+      sigResp.signature
+    }
+  }
 
-  case class FinishedCheckpointResponse(reRegister: Boolean = false)
+  private def processSignedBlock(
+    cache: CheckpointCacheData,
+    finalFacilitators: Set[
+      Id
+    ]
+  )(implicit dao: DAO, ec: ExecutionContext) = {
 
-  // TODO: Move to checkpoint formation actor
+    val responses = dao.peerInfo.values.toList.map { peer =>
+      wrapFutureWithMetric(
+        peer.client.postNonBlocking[Option[FinishedCheckpointResponse]](
+          "finished/checkpoint",
+          FinishedCheckpoint(cache, finalFacilitators),
+          timeout = 20.seconds
+        ),
+        "finishedCheckpointBroadcast",
+      )
+    }
+
+    responses.traverse(_.toValidatedNel).map(_.sequence)
+  }
 
   def formCheckpoint(messages: Seq[ChannelMessage] = Seq())(
     implicit dao: DAO
@@ -123,155 +164,104 @@ object EdgeProcessor extends StrictLogging {
 
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
-    val maybeTransactions =
-      dao.threadSafeTXMemPool.pull(dao.minCheckpointFormationThreshold)
+    val transactions =
+      dao.threadSafeTXMemPool.pullUpTo(dao.maxTXInBlock)
 
     dao.metrics.incrementMetric("attemptFormCheckpointCalls")
 
-    if (maybeTransactions.isEmpty) {
-      dao.metrics.incrementMetric("attemptFormCheckpointInsufficientTX")
+    if (transactions.isEmpty) {
+      dao.metrics.incrementMetric("attemptFormCheckpointNoTX")
     }
 
-    def requestBlockSignature(
-      checkpointBlock: CheckpointBlock,
-      finalFacilitators: Set[
-        Id
-      ],
-      data: PeerData
-    ) = {
-      async {
-        val sigResp = await(
-          data.client.postNonBlocking[SignatureResponse](
-            "request/signature",
-            SignatureRequest(checkpointBlock, finalFacilitators + dao.id),
-            15.seconds
-          )
-        )
-
-        if (sigResp.reRegister) {
-          // PeerManager.attemptRegisterPeer() TODO : Finish
+    val maybeTips = dao.threadSafeTipService.pull()
+    if (maybeTips.isEmpty) {
+      dao.metrics.incrementMetric("attemptFormCheckpointInsufficientTipsOrFacilitators")
+      if (dao.nodeConfig.isGenesisNode) {
+        val maybeTips = dao.threadSafeTipService.pull(allowEmptyFacilitators = true)
+        if (maybeTips.isEmpty) {
+          dao.metrics.incrementMetric("attemptFormCheckpointNoGenesisTips")
         }
+        maybeTips.foreach {
+          case (tipSOE, _) =>
+            val checkpointBlock =
+              CheckpointBlock.createCheckpointBlock(transactions, tipSOE.map { soe =>
+                TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)
+              }, messages)(dao.keyPair)
 
-        sigResp.signature
-      }
-    }
-    def processSignedBlock(
-      cache: CheckpointCacheData,
-      finalFacilitators: Set[
-        Id
-      ]
-    ) = {
+            val cache =
+              CheckpointCacheData(
+                Some(checkpointBlock),
+                height = checkpointBlock.calculateHeight()
+              )
 
-      val responses = dao.peerInfo.values.toList.map { peer =>
-        wrapFutureWithMetric(
-          peer.client.postNonBlocking[Option[FinishedCheckpointResponse]](
-            "finished/checkpoint",
-            FinishedCheckpoint(cache, finalFacilitators),
-            timeout = 20.seconds
-          ),
-          "finishedCheckpointBroadcast",
-        )
-      }
+            dao.threadSafeTipService.accept(cache)
+            dao.threadSafeMessageMemPool.release(messages)
 
-      responses.traverse(_.toValidatedNel).map(_.sequence)
-    }
-
-    val result = maybeTransactions.flatMap { transactions =>
-      val maybeTips = dao.threadSafeTipService.pull()
-      if (maybeTips.isEmpty) {
-        dao.metrics.incrementMetric("attemptFormCheckpointInsufficientTipsOrFacilitators")
-        if (dao.nodeConfig.isGenesisNode) {
-          val maybeTips = dao.threadSafeTipService.pull(allowEmptyFacilitators = true)
-          if (maybeTips.isEmpty) {
-            dao.metrics.incrementMetric("attemptFormCheckpointNoGenesisTips")
-          }
-          maybeTips.foreach {
-            case (tipSOE, _) =>
-              val checkpointBlock =
-                CheckpointBlock.createCheckpointBlock(transactions, tipSOE.map { soe =>
-                  TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)
-                }, messages)(dao.keyPair)
-
-              val cache =
-                CheckpointCacheData(
-                  Some(checkpointBlock),
-                  height = checkpointBlock.calculateHeight()
-                )
-
-              dao.threadSafeTipService.accept(cache)
-              dao.threadSafeMessageMemPool.release(messages)
-
-          }
-          dao.blockFormationInProgress = false
         }
-
       }
 
-      maybeTips.map {
-        case (tipSOE, facils) =>
-          // Change to method on TipsReturned // abstract for reuse.
-          val checkpointBlock = CheckpointBlock.createCheckpointBlock(transactions, tipSOE.map {
-            soe =>
-              TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)
-          }, messages)(dao.keyPair)
-          dao.metrics.incrementMetric("checkpointBlocksCreated")
+    }
 
-          val finalFacilitators = facils.keySet
+    val result = maybeTips.map {
+      case (tipSOE, facils) =>
+        // Change to method on TipsReturned // abstract for reuse.
+        val checkpointBlock = CheckpointBlock.createCheckpointBlock(transactions, tipSOE.map {
+          soe =>
+            TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)
+        }, messages)(dao.keyPair)
+        dao.metrics.incrementMetric("checkpointBlocksCreated")
 
-          val signatureResults = facils.values.toList
-            .traverse { peerData =>
-              requestBlockSignature(checkpointBlock, finalFacilitators, peerData).toValidatedNel
-            }
-            .flatMap { signatureResultList =>
-              signatureResultList.sequence
-                .map { signatures =>
-                  // Unsafe flatten -- revisit during consensus updates
-                  signatures.flatten.foldLeft(checkpointBlock) {
-                    case (cb, hs) =>
-                      cb.plus(hs)
-                  }
+        val finalFacilitators = facils.keySet
+
+        val signatureResults = facils.values.toList
+          .traverse { peerData =>
+            requestBlockSignature(checkpointBlock, finalFacilitators, peerData).toValidatedNel
+          }
+          .flatMap { signatureResultList =>
+            signatureResultList.sequence
+              .map { signatures =>
+                // Unsafe flatten -- revisit during consensus updates
+                signatures.flatten.foldLeft(checkpointBlock) {
+                  case (cb, hs) =>
+                    cb.plus(hs)
                 }
-                .ensure(NonEmptyList.one(new Throwable("Invalid CheckpointBlock")))(
-                  _.simpleValidation()
-                )
-                .traverse { finalCB =>
-                  val cache = CheckpointCacheData(finalCB.some, height = finalCB.calculateHeight())
-                  dao.threadSafeTipService.accept(cache)
-                  processSignedBlock(
+              }
+              .ensure(NonEmptyList.one(new Throwable("Invalid CheckpointBlock")))(
+                _.simpleValidation()
+              )
+              .traverse { finalCB =>
+                val cache = CheckpointCacheData(finalCB.some, height = finalCB.calculateHeight())
+                dao.threadSafeTipService.accept(cache)
+                processSignedBlock(
                     cache,
                     finalFacilitators
                   )
-                }
-                .map {
-                  _.andThen(identity)
-                }
+              }
+          }
+
+        wrapFutureWithMetric(signatureResults, "checkpointBlockFormation")
+
+        signatureResults.foreach {
+          case Valid(_) =>
+          case Invalid(failures) =>
+            failures.toList.foreach { e =>
+              dao.metrics.incrementMetric(
+                "formCheckpointSignatureResponseError"
+              )
+              logger.warn("Failure gathering signature", e)
             }
 
-          wrapFutureWithMetric(signatureResults, "checkpointBlockFormation")
+        }
 
-          signatureResults.foreach {
-            case Valid(_) =>
-            case Invalid(failures) =>
-              failures.toList.foreach { e =>
-                dao.metrics.incrementMetric(
-                  "formCheckpointSignatureResponseError"
-                )
-                logger.warn("Failure gathering signature", e)
-              }
+        // using transform kind of like a finally for Future.
+        // I want to ensure the locks get cleaned up
+        signatureResults.transform { res =>
+          // Cleanup locks
 
-          }
-
-          // using transform kind of like a finally for Future.
-          // I want to ensure the locks get cleaned up
-          signatureResults.transform { res =>
-            // Cleanup locks
-
-            dao.threadSafeMessageMemPool.release(messages)
-            res.map(_ => true)
-          }
-      }
+          dao.threadSafeMessageMemPool.release(messages)
+          res.map(_ => true)
+        }
     }
-    dao.blockFormationInProgress = false
     result.sequence
   }
 

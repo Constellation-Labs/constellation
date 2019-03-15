@@ -1,6 +1,6 @@
 package org.constellation.primitives
 
-import scala.collection.{Set, concurrent}
+import scala.collection.Set
 
 class IPManager {
   // Keep these private to allow for change of implementation later.

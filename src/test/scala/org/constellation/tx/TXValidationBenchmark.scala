@@ -1,12 +1,9 @@
 package org.constellation.tx
 
-import java.security.KeyPair
-
 import com.typesafe.scalalogging.Logger
 import org.constellation.Fixtures._
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
-import org.constellation.util.SignHelp
 import org.scalatest.FlatSpec
 
 class TXValidationBenchmark extends FlatSpec {

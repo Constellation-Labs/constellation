@@ -2,13 +2,13 @@ package org.constellation.rpc
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
-import scala.concurrent.ExecutionContextExecutor
-
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.{APIClient, TestNode}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
+
+import scala.concurrent.ExecutionContextExecutor
 
 class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with BeforeAndAfterAll {
 

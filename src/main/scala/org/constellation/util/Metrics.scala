@@ -11,7 +11,7 @@ import io.micrometer.core.instrument.binder.logging.LogbackMetrics
 import io.micrometer.core.instrument.binder.system.{FileDescriptorMetrics, ProcessorMetrics, UptimeMetrics}
 import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import io.prometheus.client.CollectorRegistry
-import org.constellation.{BuildInfo, ConstellationNode, DAO}
+import org.constellation.{BuildInfo, DAO}
 import org.joda.time.DateTime
 
 import scala.collection.concurrent.TrieMap
@@ -80,7 +80,7 @@ class TransactionRateTracker()(implicit dao: DAO) {
   * @param dao: Data access object
   */
 class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
-    extends Periodic("Metrics", periodSeconds) {
+    extends Periodic[Unit]("Metrics", periodSeconds) {
 
   val logger = Logger("Metrics")
 
@@ -152,7 +152,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   /**
     * Recalculates window based / periodic metrics
     */
-  override def trigger(): concurrent.Future[Any] =
+  override def trigger(): Future[Unit] =
     Future {
       updateBalanceMetrics()
       rateCounter.calculate(countMetrics.get("transactionAccepted").map{_.get()}.getOrElse(0L)).foreach {

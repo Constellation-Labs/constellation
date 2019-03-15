@@ -2,18 +2,9 @@ package org.constellation.consensus
 import akka.actor.{Actor, ActorLogging, Cancellable, Props}
 import cats.implicits._
 import constellation.{wrapFutureWithMetric, _}
-import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{
-  BroadcastTransactionProposal,
-  BroadcastUnionBlockProposal
-}
-import org.constellation.primitives.Schema.{
-  CheckpointCacheData,
-  EdgeHashType,
-  SignedObservationEdge,
-  TypedEdgeHash
-}
+import org.constellation.consensus.RoundManager.{BroadcastTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.primitives.Schema.{CheckpointCacheData, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
 import org.constellation.{ConfigUtil, DAO}
 

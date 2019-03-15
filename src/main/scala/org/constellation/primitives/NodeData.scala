@@ -8,8 +8,6 @@ import constellation._
 import org.constellation.NodeConfig
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerRegistrationRequest
-import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.util.Metrics
 
@@ -31,6 +29,7 @@ trait NodeData {
   @volatile var downloadMode: Boolean = true
   @volatile var downloadInProgress: Boolean = false
   @volatile var generateRandomTX: Boolean = false
+  @volatile var formCheckpoints: Boolean = true
   var heartbeatEnabled: Boolean = true
 
   var lastConfirmationUpdateTime: Long = System.currentTimeMillis()

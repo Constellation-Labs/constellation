@@ -7,16 +7,16 @@ import akka.actor.ActorRef
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.StartNewBlockCreationRound
-import org.constellation.primitives.Schema.{InternalHeartbeat, NodeState, SendToAddress, _}
+import org.constellation.primitives.Schema.{InternalHeartbeat, NodeState, _}
 import org.constellation.util.Periodic
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
-class RandomTransactionManager(nodeActor: ActorRef, periodSeconds: Int = 1)(implicit dao: DAO)
-    extends Periodic("RandomTransactionManager", periodSeconds) {
+class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(implicit dao: DAO)
+    extends Periodic[Try[Unit]]("RandomTransactionManager", periodSeconds) {
 
-  def trigger(): Future[Any] = {
+  def trigger(): Future[Try[Unit]] = {
     Option(dao.peerManager).foreach {
       _ ! InternalHeartbeat(round)
     }
