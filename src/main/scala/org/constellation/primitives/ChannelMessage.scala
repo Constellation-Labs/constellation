@@ -94,7 +94,7 @@ object ChannelMessage extends StrictLogging {
           while (retries < 30 && metadata.isEmpty) {
             retries += 1
             Thread.sleep(1000)
-            metadata = dao.channelService.get(genesisHashChannelId)
+            metadata = dao.channelService.getSync(genesisHashChannelId)
           }
           val response =
             if (metadata.isEmpty) "Timeout awaiting block acceptance"
@@ -111,7 +111,7 @@ object ChannelMessage extends StrictLogging {
   )(implicit dao: DAO): Future[ChannelSendResponse] = {
 
     dao.messageService
-      .get(channelSendRequest.channelId)
+      .getSync(channelSendRequest.channelId)
       .map { previousMessage =>
         val previous = previousMessage.channelMessage.signedMessageData.hash
 

@@ -124,7 +124,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
             } ~
               path("channel" / Segment / "info") { channelId =>
-                complete(dao.channelService.get(channelId).map { cmd =>
+                complete(dao.channelService.getSync(channelId).map { cmd =>
                   SingleChannelUIOutput(
                     cmd.channelOpen,
                     cmd.totalNumMessages,
@@ -136,7 +136,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               path("channel" / Segment / "schema") { channelId =>
                 complete(
                   dao.channelService
-                    .get(channelId)
+                    .getSync(channelId)
                     .flatMap { cmd =>
                       cmd.channelOpen.jsonSchema
                     }
@@ -152,7 +152,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
             } ~
               path("channel" / Segment / "info") { channelId =>
-                complete(dao.channelService.get(channelId).map { cmd =>
+                complete(dao.channelService.getSync(channelId).map { cmd =>
                   SingleChannelUIOutput(
                     cmd.channelOpen,
                     cmd.totalNumMessages,
@@ -164,7 +164,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               path("channel" / Segment / "schema") { channelId =>
                 complete(
                   dao.channelService
-                    .get(channelId)
+                    .getSync(channelId)
                     .flatMap { cmd =>
                       cmd.channelOpen.jsonSchema
                     }
@@ -180,7 +180,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               path("blocks") {
 
                 val blocks = dao.recentBlockTracker.getAll.toSeq
-                //dao.threadSafeTipService.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.get}
+                //dao.threadSafeTipService.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.getSync}
                 complete(blocks.map { ccd =>
                   val cb = ccd.checkpointBlock.get
 
@@ -197,11 +197,11 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               }
           } ~
           path("messageService" / Segment) { channelId =>
-            complete(dao.messageService.get(channelId))
+            complete(dao.messageService.getSync(channelId))
           } ~
           path("channel" / Segment) { channelHash =>
             val res =
-              Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.get(channelHash))
+              Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.getSync(channelHash))
 
             val proof = res.flatMap { cmd =>
               cmd.snapshotHash.flatMap { snapshotHash =>
@@ -462,7 +462,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                                        normalized = false)
             dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
 
-            dao.transactionService.put(
+            dao.transactionService.memPool.putSync(
               tx.hash,
               TransactionCacheData(
                 tx,

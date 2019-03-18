@@ -2,6 +2,7 @@ package org.constellation.primitives
 
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 
+import cats.implicits._
 import akka.util.Timeout
 import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
@@ -9,6 +10,8 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives.storage._
 import org.constellation.util.Metrics
 import org.constellation.{DAO, NodeConfig, ProcessingConfig}
+import org.constellation.primitives.storage.{SnapshotsMidDbStorage, _}
+import org.constellation.{DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
@@ -129,7 +132,7 @@ class ThreadSafeTipService() {
       acceptedCBSinceSnapshot,
       lastSnapshotHeight = lastSnapshotHeight,
       snapshotHashes = dao.snapshotHashes,
-      addressCacheData = dao.addressService.toMap(),
+      addressCacheData = dao.addressService.toMapSync(),
       tips = thresholdMetCheckpoints,
       snapshotCache = snapshot.checkpointBlocks.flatMap { dao.checkpointService.get }
     )
@@ -148,12 +151,12 @@ class ThreadSafeTipService() {
     acceptedCBSinceSnapshot = latestSnapshotInfo.acceptedCBSinceSnapshot
     latestSnapshotInfo.addressCacheData.foreach {
       case (k, v) =>
-        dao.addressService.put(k, v)
+        dao.addressService.putSync(k, v)
     }
 
     latestSnapshotInfo.snapshotCache.foreach { h =>
       dao.metrics.incrementMetric("checkpointAccepted")
-      dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
+      dao.checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h)
       h.checkpointBlock.get.storeSOE()
       h.checkpointBlock.get.transactions.foreach { _ =>
         dao.metrics.incrementMetric("transactionAccepted")
@@ -161,7 +164,7 @@ class ThreadSafeTipService() {
     }
 
     latestSnapshotInfo.acceptedCBSinceSnapshotCache.foreach { h =>
-      dao.checkpointService.put(h.checkpointBlock.get.baseHash, h)
+      dao.checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h)
       h.checkpointBlock.get.storeSOE()
       dao.metrics.incrementMetric("checkpointAccepted")
       h.checkpointBlock.get.transactions.foreach { _ =>
@@ -281,7 +284,8 @@ class ThreadSafeTipService() {
             )
 
             Snapshot.acceptSnapshot(snapshot)
-            dao.checkpointService.delete(snapshot.checkpointBlocks.toSet)
+            dao.snapshotService.midDb.put(snapshot.hash, snapshot)
+            dao.checkpointService.memPool.remove(snapshot.checkpointBlocks.toSet)
 
             totalNumCBsInShapshots += snapshot.checkpointBlocks.size
             dao.metrics.updateMetric("totalNumCBsInShapshots", totalNumCBsInShapshots.toString)
@@ -299,7 +303,7 @@ class ThreadSafeTipService() {
             dao.metrics.incrementMetric("snapshotVerificationCount")
             if (
               !lastSnapshotVerification.get.checkpointBlocks.map {
-                dao.checkpointService.get
+                dao.checkpointService.memPool.getSync
               }.forall(_.exists(_.checkpointBlock.nonEmpty))
             ) {
               dao.metrics.incrementMetric("snapshotCBVerificationFailed")
@@ -478,14 +482,14 @@ trait EdgeDAO {
 
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
-  val checkpointService = new CheckpointService(2000) // TODO: Move to initialize off of configs
+  var transactionService: TransactionService = _
+  var checkpointService: CheckpointService = _
+  var snapshotService: SnapshotService = _
+
   val acceptedTransactionService = new AcceptedTransactionService(
     5000 //processingConfig.transactionLRUMaxSize
   )
-  val transactionService = new TransactionService(
-    5000
-  //  processingConfig.transactionLRUMaxSize
-  )
+
   val addressService = new AddressService(
     5000
     // processingConfig.addressLRUMaxSize

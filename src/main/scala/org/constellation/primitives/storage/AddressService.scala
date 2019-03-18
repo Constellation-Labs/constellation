@@ -8,12 +8,12 @@ import org.constellation.primitives.concurrency.MultiLock
 class AddressService(size: Int) extends StorageService[AddressCacheData](size) {
   def transfer(src: Address, dst: Address, amount: Long): IO[AddressCacheData] =
     AddressService.locks.acquire(List(src.hash, dst.hash)) {
-      updateAsync(src.hash, { a =>
+      update(src.hash, { a =>
         a.copy(balance = a.balance - amount)
       }, AddressCacheData(0L, 0L))
         .flatMap(
           _ =>
-            updateAsync(dst.hash, { a =>
+            update(dst.hash, { a =>
               a.copy(balance = a.balance + amount)
             }, AddressCacheData(amount, 0L))
         )
@@ -21,12 +21,12 @@ class AddressService(size: Int) extends StorageService[AddressCacheData](size) {
 
   def transferSnapshot(src: Address, dst: Address, amount: Long): IO[AddressCacheData] =
     AddressService.locks.acquire(List(src.hash, dst.hash)) {
-      updateAsync(src.hash, { a =>
+      update(src.hash, { a =>
         a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - amount)
       }, AddressCacheData(0L, 0L))
         .flatMap(
           _ =>
-            updateAsync(dst.hash, { a =>
+            update(dst.hash, { a =>
               a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + amount)
             }, AddressCacheData(amount, 0L))
         )

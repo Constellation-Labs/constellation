@@ -130,7 +130,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
 
     val balancesBySnapshotMetrics = allAddresses
       .map { a =>
-        val balance = dao.addressService.get(a).map { _.balanceByLatestSnapshot }.getOrElse(0L)
+        val balance = dao.addressService.getSync(a).map { _.balanceByLatestSnapshot }.getOrElse(0L)
         a.slice(0, 8) + " " + balance
       }
       .sorted
@@ -138,7 +138,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
 
     val balancesMetrics = allAddresses
       .map { a =>
-        val balance = dao.addressService.get(a).map { _.balance }.getOrElse(0L)
+        val balance = dao.addressService.getSync(a).map { _.balance }.getOrElse(0L)
         a.slice(0, 8) + " " + balance
       }
       .sorted

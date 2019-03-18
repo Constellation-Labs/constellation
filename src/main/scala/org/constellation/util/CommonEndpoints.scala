@@ -87,10 +87,10 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.genesisObservation)
       } ~
       pathPrefix("address" / Segment) { a =>
-        complete(dao.addressService.get(a))
+        complete(dao.addressService.getSync(a))
       } ~
       pathPrefix("balance" / Segment) { a =>
-        complete(dao.addressService.get(a).map { _.balanceByLatestSnapshot })
+        complete(dao.addressService.getSync(a).map { _.balanceByLatestSnapshot })
       } ~
       path("state") {
         complete(NodeStateInfo(dao.nodeState, dao.addresses, dao.nodeType))
@@ -99,10 +99,10 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.peerInfo.map { _._2.peerMetadata }.toSeq)
       } ~
       path("transaction" / Segment) { h =>
-        complete(dao.transactionService.get(h))
+        complete(dao.transactionService.lookup(h).unsafeRunSync())
       } ~
       path("checkpoint" / Segment) { h =>
-        complete(dao.checkpointService.get(h))
+        complete(dao.checkpointService.lookup(h).unsafeRunSync())
       }
 
   }
