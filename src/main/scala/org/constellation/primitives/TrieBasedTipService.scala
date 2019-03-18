@@ -51,7 +51,6 @@ class TrieBasedTipService(sizeLimit: Int,
   def remove(key: String)(implicit metrics: Metrics): Unit = {
     tips -= key
     metrics.incrementMetric("checkpointTipsRemoved")
-    metrics.incrementMetric("checkpointTipsRemoved")
   }
 
   def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): Unit = {
@@ -118,7 +117,7 @@ class TrieBasedTipService(sizeLimit: Int,
 
   private def calculateTipsSOE(): Seq[SignedObservationEdge] = {
     Random
-      .shuffle(this.tips.toSeq)
+      .shuffle(if (size > 50) tips.slice(0, 50).toSeq else tips.toSeq)
       .take(2)
       .map {
         _._2.checkpointBlock.checkpoint.edge.signedObservationEdge
