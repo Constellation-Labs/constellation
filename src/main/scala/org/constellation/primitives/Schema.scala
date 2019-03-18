@@ -1,7 +1,6 @@
 package org.constellation.primitives
 
 import java.security.{KeyPair, PublicKey}
-import java.time.Instant
 
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.hexToPublicKey
@@ -195,35 +194,6 @@ object Schema {
   // override evict method, and clean up data.
   // We should also mark a given balance / rep as the 'primary' one.
 
-  case class TransactionCacheData(
-    transaction: Transaction,
-    valid: Boolean = true,
-    inMemPool: Boolean = false,
-    inDAG: Boolean = false,
-    inDAGByAncestor: Map[String, Boolean] = Map(),
-    resolved: Boolean = true,
-    cbBaseHash: Option[String] = None,
-    cbForkBaseHashes: Set[String] = Set(),
-    signatureForks: Set[Transaction] = Set(),
-    knownPeers: Set[Id] = Set(),
-    rxTime: Long = System.currentTimeMillis()
-  ) {
-
-    def plus(previous: TransactionCacheData): TransactionCacheData = {
-      this.copy(
-        inDAGByAncestor = inDAGByAncestor ++ previous.inDAGByAncestor
-          .filterKeys(k => !inDAGByAncestor.contains(k)),
-        cbForkBaseHashes = (cbForkBaseHashes ++ previous.cbForkBaseHashes) -- cbBaseHash
-          .map { s =>
-            Set(s)
-          }
-          .getOrElse(Set()),
-        signatureForks = (signatureForks ++ previous.signatureForks) - transaction,
-        rxTime = previous.rxTime
-      )
-    }
-  }
-
   case class Height(min: Long, max: Long)
 
   case class CommonMetadata(
@@ -292,23 +262,5 @@ object Schema {
   }
 
   case class Node(address: String, host: String, port: Int)
-
-  case class TransactionSerialized(hash: String,
-                                   sender: String,
-                                   receiver: String,
-                                   amount: Long,
-                                   signers: Set[String],
-                                   time: Long)
-
-  object TransactionSerialized {
-
-    def apply(tx: Transaction): TransactionSerialized =
-      new TransactionSerialized(tx.hash,
-                                tx.src.address,
-                                tx.dst.address,
-                                tx.amount,
-                                tx.signatures.map(_.address).toSet,
-                                Instant.now.getEpochSecond)
-  }
 
 }

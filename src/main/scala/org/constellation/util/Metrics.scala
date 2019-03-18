@@ -3,6 +3,7 @@ package org.constellation.util
 import java.util.concurrent.atomic.AtomicReference
 
 import better.files.File
+import cats.effect.IO
 import com.typesafe.scalalogging.Logger
 import constellation._
 import io.micrometer.core.instrument.Clock
@@ -111,6 +112,10 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
     countMetrics.getOrElseUpdate(key, new AtomicReference[Long](0L)).getAndUpdate(_ + 1L)
    // countMetrics(key) = countMetrics.getOrElse(key, 0L) + 1
   }
+
+  def updateMetricAsync(key: String, value: String): IO[Unit] = IO(updateMetric(key, value))
+  def updateMetricAsync(key: String, value: Int): IO[Unit] = IO(updateMetric(key, value))
+  def incrementMetricAsync(key: String): IO[Unit] = IO(incrementMetric(key))
 
   /**
     * Converts counter metrics to string for export / display

@@ -5,7 +5,7 @@ import cats.effect.IO
 import cats.implicits._
 import org.constellation.DAO
 import org.constellation.datastore.swaydb.SwayDbConversions._
-import org.constellation.primitives.Schema.TransactionCacheData
+import org.constellation.primitives.TransactionCacheData
 import swaydb.serializers.Default.StringSerializer
 
 import scala.concurrent.ExecutionContextExecutor
@@ -15,7 +15,7 @@ object TransactionsOld {
 }
 
 class TransactionsOld(path: File)(implicit ec: ExecutionContextExecutor)
-  extends DbStorage[String, TransactionCacheData](dbPath = (path / "disk1" / "transactions_old").path) {}
+  extends DbStorage[String, TransactionCacheData](dbPath = (path / "disk1" / "transactions_old").path)
 
 object TransactionsMid {
   val midCapacity = 1
@@ -24,7 +24,7 @@ object TransactionsMid {
 }
 
 class TransactionsMid(path: File, midCapacity: Int)(implicit ec: ExecutionContextExecutor)
-  extends MidDbStorage[String, TransactionCacheData](dbPath = (path / "disk1" / "transactions_mid").path, midCapacity) {}
+  extends MidDbStorage[String, TransactionCacheData](dbPath = (path / "disk1" / "transactions_mid").path, midCapacity)
 
 
 class TransactionMemPool(size: Int = 50000) extends StorageService[TransactionCacheData](size)

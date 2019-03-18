@@ -1,6 +1,6 @@
 package org.constellation.primitives.storage
 
-import org.constellation.primitives.Schema.{TransactionCacheData, TransactionSerialized}
+import org.constellation.primitives.{TransactionCacheData, TransactionSerialized}
 
 import scala.collection.mutable
 

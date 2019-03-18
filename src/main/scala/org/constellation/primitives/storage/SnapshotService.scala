@@ -15,7 +15,7 @@ object SnapshotsOldDbStorage {
 }
 
 class SnapshotsOldDbStorage(path: File)(implicit ec: ExecutionContextExecutor)
-  extends DbStorage[String, Snapshot](dbPath = (path / "disk1" / "snapshots_old").path) {}
+  extends DbStorage[String, Snapshot](dbPath = (path / "disk1" / "snapshots_old").path)
 
 object SnapshotsMidDbStorage {
   val midCapacity = 1
@@ -24,7 +24,7 @@ object SnapshotsMidDbStorage {
 }
 
 class SnapshotsMidDbStorage(path: File, midCapacity: Int)(implicit ec: ExecutionContextExecutor)
-    extends MidDbStorage[String, Snapshot](dbPath = (path / "disk1" / "snapshots_mid").path, 1) {}
+    extends MidDbStorage[String, Snapshot](dbPath = (path / "disk1" / "snapshots_mid").path, 1)
 
 object SnapshotService {
   def apply(implicit dao: DAO) = new SnapshotService()
