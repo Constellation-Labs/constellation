@@ -225,7 +225,7 @@ case class PeerNotification(id: Id,
 
 object PeerState extends Enumeration {
   type PeerState = Value
-  val LEAVE, JOIN = Value
+  val Leave, Join = Value
 }
 case class UpdatePeerNotifications(notifications: Seq[PeerNotification])
 
@@ -423,7 +423,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
       peers.get(key).foreach { peer =>
         ipManager.removeKnownIP(ip)
         self ! UpdatePeerInfo(
-          peer.copy(notification = peer.notification ++ Seq(PeerNotification(key, PeerState.LEAVE)))
+          peer.copy(notification = peer.notification ++ Seq(PeerNotification(key, PeerState.Leave)))
         )
       }
   }
