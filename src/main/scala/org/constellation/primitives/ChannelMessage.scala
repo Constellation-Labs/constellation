@@ -5,11 +5,11 @@ import java.util.concurrent.Semaphore
 import com.fasterxml.jackson.databind.JsonNode
 import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.{JsonSchemaFactory, JsonValidator}
-import com.typesafe.scalalogging.{Logger, StrictLogging}
-import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.DAO
 import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
+import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
 
 import scala.concurrent.Future
 import scala.util.Random
@@ -96,7 +96,7 @@ object ChannelMessage extends StrictLogging {
             retries += 1
             logger.info(s"Polling genesis creation attempt $retries for $genesisHashChannelId")
             Thread.sleep(1000)
-            metadata = dao.channelService.get(genesisHashChannelId)
+            metadata = dao.channelService.getSync(genesisHashChannelId)
           }
           val response =
             if (metadata.isEmpty) "Timeout awaiting block acceptance"
@@ -113,7 +113,7 @@ object ChannelMessage extends StrictLogging {
   )(implicit dao: DAO): Future[ChannelSendResponse] = {
 
     dao.messageService
-      .get(channelSendRequest.channelId)
+      .getSync(channelSendRequest.channelId)
       .map { previousMessage =>
         val previous = previousMessage.channelMessage.signedMessageData.hash
 

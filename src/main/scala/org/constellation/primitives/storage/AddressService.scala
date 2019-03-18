@@ -2,33 +2,35 @@ package org.constellation.primitives.storage
 
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
-import org.constellation.primitives.Schema.{Address, AddressCacheData}
+import org.constellation.primitives.Schema.AddressCacheData
+import org.constellation.primitives.Transaction
 import org.constellation.primitives.concurrency.MultiLock
 
 class AddressService(size: Int) extends StorageService[AddressCacheData](size) {
-  def transfer(src: Address, dst: Address, amount: Long): IO[AddressCacheData] =
-    AddressService.locks.acquire(List(src.hash, dst.hash)) {
-      updateAsync(src.hash, { a =>
-        a.copy(balance = a.balance - amount)
+
+  def transfer(tx: Transaction): IO[AddressCacheData] =
+    AddressService.locks.acquire(List(tx.src.hash, tx.dst.hash)) {
+      update(tx.src.hash, { a =>
+        a.copy(balance = a.balance - tx.amount)
       }, AddressCacheData(0L, 0L))
         .flatMap(
           _ =>
-            updateAsync(dst.hash, { a =>
-              a.copy(balance = a.balance + amount)
-            }, AddressCacheData(amount, 0L))
+            update(tx.dst.hash, { a =>
+              a.copy(balance = a.balance + tx.amount)
+            }, AddressCacheData(tx.amount, 0L))
         )
     }
 
-  def transferSnapshot(src: Address, dst: Address, amount: Long): IO[AddressCacheData] =
-    AddressService.locks.acquire(List(src.hash, dst.hash)) {
-      updateAsync(src.hash, { a =>
-        a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - amount)
+  def transferSnapshot(tx: Transaction): IO[AddressCacheData] =
+    AddressService.locks.acquire(List(tx.src.hash, tx.dst.hash)) {
+      update(tx.src.hash, { a =>
+        a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - tx.amount)
       }, AddressCacheData(0L, 0L))
         .flatMap(
           _ =>
-            updateAsync(dst.hash, { a =>
-              a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + amount)
-            }, AddressCacheData(amount, 0L))
+            update(tx.dst.hash, { a =>
+              a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + tx.amount)
+            }, AddressCacheData(tx.amount, 0L))
         )
     }
 }

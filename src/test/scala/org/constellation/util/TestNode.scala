@@ -4,11 +4,11 @@ import java.security.KeyPair
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+import org.constellation.crypto.KeyUtils
+import org.constellation.{ConstellationNode, HostPort, NodeConfig, ProcessingConfig}
 
 import scala.concurrent.ExecutionContext
 import scala.util.Try
-import org.constellation.crypto.KeyUtils
-import org.constellation.{ConstellationNode, HostPort, NodeConfig, ProcessingConfig}
 
 object TestNode {
 

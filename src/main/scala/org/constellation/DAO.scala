@@ -1,19 +1,19 @@
 package org.constellation
 
-import java.security.KeyPair
 import java.util.concurrent.TimeUnit
 
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import com.typesafe.scalalogging.StrictLogging
-import org.constellation.crypto.{KeyUtils, SimpleWalletLike}
-import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObservationEdge}
-import org.constellation.primitives._
 import constellation._
+import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
+import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObservationEdge}
+import org.constellation.primitives.storage._
+import org.constellation.primitives._
 
 class DAO()
     extends NodeData
@@ -93,6 +93,9 @@ class DAO()
     transactionHashStore = SwayDBDatastore.duplicateCheckStore(this, "transaction_hash_store")
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
+    transactionService = TransactionService(this, processingConfig.transactionLRUMaxSize)
+    checkpointService = CheckpointService(this, processingConfig.checkpointLRUMaxSize)
+    snapshotService = SnapshotService(this)
   }
 
 

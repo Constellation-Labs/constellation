@@ -16,7 +16,7 @@ case class CheckpointBlock(
 ) {
 
   def storeSOE()(implicit dao: DAO): Unit = {
-    dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true))
+    dao.soeService.putSync(soeHash, SignedObservationEdgeCache(soe, resolved = true))
   }
 
   def calculateHeight()(implicit dao: DAO): Option[Height] = {
@@ -117,7 +117,7 @@ case class CheckpointBlock(
           }
      */
     // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
-    dao.checkpointService.put(baseHash, cache)
+    dao.checkpointService.memPool.put(baseHash, cache)
     dao.recentBlockTracker.put(cache)
 
   }
@@ -143,7 +143,7 @@ case class CheckpointBlock(
   def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
 
   def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
-    parentSOEHashes.flatMap { dao.soeService.get }.map { _.signedObservationEdge.baseHash }
+    parentSOEHashes.flatMap { dao.soeService.getSync }.map { _.signedObservationEdge.baseHash }
 
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
@@ -270,7 +270,7 @@ sealed trait CheckpointBlockValidatorNel {
 
   def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
     dao.addressService
-      .get(t.src.address)
+      .getSync(t.src.address)
       .fold[ValidationResult[Transaction]](NoAddressCacheFound(t).invalidNel)(_ => t.validNel)
 
   def validateTransaction(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
@@ -320,7 +320,7 @@ sealed trait CheckpointBlockValidatorNel {
 
     def lookup(key: String) =
       dao.addressService
-        .get(key)
+        .getSync(key)
         .map(_.balance)
         .getOrElse(0L)
 
@@ -373,7 +373,7 @@ sealed trait CheckpointBlockValidatorNel {
 
   def validateDiff(a: (String, Long))(implicit dao: DAO): Boolean = a match {
     case (hash, diff) =>
-      dao.addressService.get(hash).map { _.balanceByLatestSnapshot }.getOrElse(0L) + diff >= 0
+      dao.addressService.getSync(hash).map { _.balanceByLatestSnapshot }.getOrElse(0L) + diff >= 0
   }
 
   def validateCheckpointBlockTree(

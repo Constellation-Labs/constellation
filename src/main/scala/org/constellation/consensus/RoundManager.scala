@@ -1,10 +1,6 @@
 package org.constellation.consensus
 import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, Props}
-import org.constellation.consensus.CrossTalkConsensus.{
-  NotifyFacilitators,
-  ParticipateInBlockCreationRound,
-  StartNewBlockCreationRound
-}
+import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
 import org.constellation.primitives.PeerData
 import org.constellation.{ConfigUtil, DAO}

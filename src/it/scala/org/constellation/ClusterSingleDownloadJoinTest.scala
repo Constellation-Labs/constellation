@@ -4,12 +4,11 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import better.files._
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
-import scala.concurrent.ExecutionContextExecutor
-
-import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
 import org.constellation.crypto.KeyUtils
 import org.constellation.util.{APIClient, Simulation}
+import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
+
+import scala.concurrent.ExecutionContextExecutor
 
 class ClusterSingleDownloadJoinTest
     extends TestKit(ActorSystem("ClusterTest"))

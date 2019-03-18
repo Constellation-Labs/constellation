@@ -7,13 +7,13 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.consensus.RandomData.keyPairs
-import org.constellation.crypto.KeyUtils
+import cats.implicits._
+import cats.effect.IO
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.Metrics
-import org.constellation.{DAO, Fixtures, NodeConfig}
+import org.constellation.{DAO, NodeConfig}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 
@@ -63,10 +63,14 @@ object RandomData {
         createTransaction(keyPairs.head.address, address, amount, keyPairs.head)
     }
 
-    txs.foreach(tx => {
-      tx.ledgerApply()
-      tx.ledgerApplySnapshot()
-    })
+    txs
+      .toList
+      .map(tx ⇒ IO.pure(tx)
+        .flatTap(dao.addressService.transfer)
+        .flatTap(dao.addressService.transferSnapshot)
+      )
+      .sequence[IO, Transaction]
+      .unsafeRunSync()
 
     txs
   }
@@ -464,7 +468,12 @@ class ValidationSpec
         val tx2 = createTransaction(getAddress(a), getAddress(c), 75L, a)
         val cb2 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx2), startingTips)
 
-        if (cb1.simpleValidation()) { cb1.transactions.foreach(_.ledgerApply) }
+        if (cb1.simpleValidation()) {
+          cb1.transactions.toList
+              .map(dao.addressService.transfer)
+              .sequence[IO, AddressCacheData]
+              .unsafeRunSync()
+        }
 
         assert(!cb2.simpleValidation())
       }

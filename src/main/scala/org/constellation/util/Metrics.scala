@@ -3,6 +3,7 @@ package org.constellation.util
 import java.util.concurrent.atomic.AtomicReference
 
 import better.files.File
+import cats.effect.IO
 import com.typesafe.scalalogging.Logger
 import constellation._
 import io.micrometer.core.instrument.Clock
@@ -11,7 +12,7 @@ import io.micrometer.core.instrument.binder.logging.LogbackMetrics
 import io.micrometer.core.instrument.binder.system.{FileDescriptorMetrics, ProcessorMetrics, UptimeMetrics}
 import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import io.prometheus.client.CollectorRegistry
-import org.constellation.{BuildInfo, ConstellationNode, DAO}
+import org.constellation.{BuildInfo, DAO}
 import org.joda.time.DateTime
 
 import scala.collection.concurrent.TrieMap
@@ -80,7 +81,7 @@ class TransactionRateTracker()(implicit dao: DAO) {
   * @param dao: Data access object
   */
 class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
-    extends Periodic("Metrics", periodSeconds) {
+    extends Periodic[Unit]("Metrics", periodSeconds) {
 
   val logger = Logger("Metrics")
 
@@ -112,6 +113,10 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
    // countMetrics(key) = countMetrics.getOrElse(key, 0L) + 1
   }
 
+  def updateMetricAsync(key: String, value: String): IO[Unit] = IO(updateMetric(key, value))
+  def updateMetricAsync(key: String, value: Int): IO[Unit] = IO(updateMetric(key, value))
+  def incrementMetricAsync(key: String): IO[Unit] = IO(incrementMetric(key))
+
   /**
     * Converts counter metrics to string for export / display
     * @return : Key value map of all metrics
@@ -130,7 +135,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
 
     val balancesBySnapshotMetrics = allAddresses
       .map { a =>
-        val balance = dao.addressService.get(a).map { _.balanceByLatestSnapshot }.getOrElse(0L)
+        val balance = dao.addressService.getSync(a).map { _.balanceByLatestSnapshot }.getOrElse(0L)
         a.slice(0, 8) + " " + balance
       }
       .sorted
@@ -138,7 +143,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
 
     val balancesMetrics = allAddresses
       .map { a =>
-        val balance = dao.addressService.get(a).map { _.balance }.getOrElse(0L)
+        val balance = dao.addressService.getSync(a).map { _.balance }.getOrElse(0L)
         a.slice(0, 8) + " " + balance
       }
       .sorted
@@ -152,7 +157,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   /**
     * Recalculates window based / periodic metrics
     */
-  override def trigger(): concurrent.Future[Any] =
+  override def trigger(): Future[Unit] =
     Future {
       updateBalanceMetrics()
       rateCounter.calculate(countMetrics.get("transactionAccepted").map{_.get()}.getOrElse(0L)).foreach {

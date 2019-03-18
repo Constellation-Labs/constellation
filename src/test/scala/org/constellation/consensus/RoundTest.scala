@@ -4,7 +4,6 @@ import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit, TestProbe}
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{BroadcastTransactionProposal, BroadcastUnionBlockProposal}
-import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.{EdgeHashType, Id, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives.{CheckpointBlock, PeerData, Transaction}
 import org.constellation.util.{APIClient, HashSignature, Metrics, SignatureBatch}
