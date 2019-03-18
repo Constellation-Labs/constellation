@@ -189,7 +189,7 @@ case class SensorData(
 
 object SensorData {
 
-  val validNameChars: Seq[String] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map { _.toString }.toSeq
+  val validNameChars: Seq[String] = ('A' to 'Z').map { _.toString }
   val invalidNameChars: Seq[String] = validNameChars.map { _.toLowerCase }
 
   def generateRandomValidMessage() = SensorData(
