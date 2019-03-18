@@ -56,7 +56,7 @@ class RandomTransactionManager(nodeActor: ActorRef, periodSeconds: Int = 1)(impl
                 if (lock.tryAcquire()) {
                   Some(
                     ChannelMessage.create(Random.nextInt(1000).toString,
-                                          data.channelMessage.signedMessageData.signatures.hash,
+                                          data.channelMessage.signedMessageData.hash,
                                           channel)
                   )
                 } else None

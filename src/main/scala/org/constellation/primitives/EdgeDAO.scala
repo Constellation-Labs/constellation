@@ -3,6 +3,7 @@ package org.constellation.primitives
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 
 import akka.util.Timeout
+import com.typesafe.scalalogging.StrictLogging
 import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
@@ -50,7 +51,7 @@ class ThreadSafeTXMemPool() {
 
 }
 
-class ThreadSafeMessageMemPool() {
+class ThreadSafeMessageMemPool() extends StrictLogging {
 
   private var messages = Seq[Seq[ChannelMessage]]()
 
@@ -79,7 +80,10 @@ class ThreadSafeMessageMemPool() {
     } else None*/
     val flat = messages.flatten
     messages = Seq()
-    if (flat.isEmpty) None else Some(flat)
+    if (flat.isEmpty) None else {
+      logger.info(s"Pulled messages from mempool: ${flat.map{_.signedMessageData.hash}}")
+      Some(flat)
+    }
   }
 
   def batchPutDebug(messagesToAdd: Seq[ChannelMessage]): Boolean = this.synchronized {

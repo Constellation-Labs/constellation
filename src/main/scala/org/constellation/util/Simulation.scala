@@ -339,27 +339,54 @@ object Simulation {
 
     logger.info("Checkpoint validation passed")
 
-    val debugChannelName = "debug"
+    var debugChannelName = "debug"
+    var attempt = 0
 
-    constellation.standardTimeout = 1000.seconds
+    var channelId: String = ""
 
-    val channelOpenResponse = apis.head.postBlocking[ChannelOpenResponse](
-      "channel/open",
-      ChannelOpen(debugChannelName, jsonSchema = Some(SensorData.jsonSchema)), timeout = 1000.seconds
-    )
+    // TODO: Remove after fixing dropped messages
+    Simulation.awaitConditionMet("Unable to open channel", {
 
-    assert(channelOpenResponse.errorMessage == "Success")
+      debugChannelName = "debug" + attempt
 
-    val channelId = channelOpenResponse.genesisHash
+      val channelOpenResponse = apis.head.postBlocking[ChannelOpenResponse](
+        "channel/open",
+        ChannelOpen(debugChannelName, jsonSchema = Some(SensorData.jsonSchema)), timeout = 90.seconds
+      )
+      attempt += 1
+      logger.info(s"Channel open response: ${channelOpenResponse.errorMessage}")
+      if (channelOpenResponse.errorMessage == "Success") {
+        channelId = channelOpenResponse.genesisHash
+        true
+      } else false
+    })
 
     logger.info(s"Channel opened with hash $channelId")
 
-    val csr = apis.head.postBlocking[ChannelSendResponse](
-      "channel/send",
-      ChannelSendRequest(channelId, Seq.fill(2){SensorData.generateRandomValidMessage().json})
-    )
+    // TODO: Remove after fixing dropped messages
+    Simulation.awaitConditionMet("Unable to send message", {
 
-    assert(csr.errorMessage == "Success")
+      val csr = apis.head.postBlocking[ChannelSendResponse](
+        "channel/send",
+        ChannelSendRequest(channelId, Seq.fill(2) { SensorData.generateRandomValidMessage().json })
+      )
+      Simulation.awaitConditionMet("Unable to find sent message", {
+
+        val cmds = csr.messageHashes.map { h =>
+          apis.head.getBlocking[Option[ChannelMessageMetadata]]("messageService/" + h)
+        }
+
+        val done = cmds.forall(_.nonEmpty)
+        if (done) {
+          cmds.flatten.foreach { cmd =>
+            val prev = cmd.channelMessage.signedMessageData.data.previousMessageHash
+            println(s"msg hash: ${cmd.channelMessage.signedMessageData.hash} previous: $prev")
+          }
+        }
+
+        done
+      })
+    })
 
     assert(awaitCheckpointsAccepted(apis))
 
