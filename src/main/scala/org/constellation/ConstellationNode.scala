@@ -247,9 +247,6 @@ class ConstellationNode(
   val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
   val randomTXManager = new RandomTransactionManager(crossTalkConsensusActor)
 
-  def addAddressToKnownIPs(addr: ValidPeerIPData): Unit = {
-    ipManager.addKnownIP(addr.canonicalHostName)
-  }
 
   def getIPData: ValidPeerIPData = {
     ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)

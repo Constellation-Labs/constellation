@@ -1,5 +1,6 @@
 package org.constellation
 
+import akka.pattern.ask
 import java.util.concurrent.TimeUnit
 
 import akka.stream.ActorMaterializer
@@ -11,6 +12,8 @@ import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
+import scala.concurrent.duration._
+import scala.concurrent.Await
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObservationEdge}
 import org.constellation.primitives.storage._
 import org.constellation.primitives._
@@ -104,5 +107,13 @@ class DAO()
   ): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = {
     threadSafeTipService.pull(allowEmptyFacilitators)(this)
   }
+  def peerInfo: Map[Id, PeerData] = {
+    // TODO: fix it to be Future
+    Await.result((peerManager ? GetPeerInfo).mapTo[Map[Id,PeerData]], 3 seconds)
+  }
+
+  def readyPeers: Map[Id, PeerData] =
+    peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
+
 
 }
