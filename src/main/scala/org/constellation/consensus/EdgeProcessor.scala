@@ -550,7 +550,7 @@ object Snapshot {
          cb <- cbCache.checkpointBlock;
          message <- cb.messages) {
       dao.messageService.updateSync(
-        message.signedMessageData.signatures.hash,
+        message.signedMessageData.hash,
         _.copy(snapshotHash = Some(snapshot.hash)),
         ChannelMessageMetadata(message, Some(cb.baseHash), Some(snapshot.hash))
       )

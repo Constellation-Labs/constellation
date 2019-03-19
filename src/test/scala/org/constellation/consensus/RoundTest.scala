@@ -113,7 +113,7 @@ class RoundTest
                                                               checkpointBlock)
       roundProbe ! ResolveMajorityCheckpointBlock(roundData.roundId)
 
-      roundManagerActor.expectMsg(StopBlockCreationRound(roundData.roundId))
+      roundManagerActor.expectMsg(StopBlockCreationRound(roundData.roundId, None))
 
       val watcher = TestProbe()
       watcher watch roundProbe

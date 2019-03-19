@@ -4,6 +4,7 @@ import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 
 import cats.implicits._
 import akka.util.Timeout
+import com.typesafe.scalalogging.StrictLogging
 import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
@@ -59,7 +60,7 @@ class ThreadSafeTXMemPool() {
 
 }
 
-class ThreadSafeMessageMemPool() {
+class ThreadSafeMessageMemPool() extends StrictLogging {
 
   private var messages = Seq[Seq[ChannelMessage]]()
 
@@ -79,12 +80,19 @@ class ThreadSafeMessageMemPool() {
     }
   }
 
-  def pull(minCount: Int): Option[Seq[ChannelMessage]] = this.synchronized {
-    if (messages.size > minCount) {
+  // TODO: Fix
+  def pull(minCount: Int = 1): Option[Seq[ChannelMessage]] = this.synchronized {
+    /*if (messages.size >= minCount) {
       val (left, right) = messages.splitAt(minCount)
       messages = right
       Some(left.flatten)
-    } else None
+    } else None*/
+    val flat = messages.flatten
+    messages = Seq()
+    if (flat.isEmpty) None else {
+      logger.info(s"Pulled messages from mempool: ${flat.map{_.signedMessageData.hash}}")
+      Some(flat)
+    }
   }
 
   def batchPutDebug(messagesToAdd: Seq[ChannelMessage]): Boolean = this.synchronized {
@@ -418,11 +426,6 @@ trait EdgeDAO {
   val finishedExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
-  // Temporary to get peer data for tx hash partitioning
-  @volatile var peerInfo: Map[Id, PeerData] = Map()
-
-  def readyPeers: Map[Id, PeerData] =
-    peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
 
   def readyFacilitators(): Map[Id, PeerData] = peerInfo.filter {
     case (_, pd) =>

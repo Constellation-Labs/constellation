@@ -27,8 +27,11 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
     case StartTransactionProposal(_) =>
       dao.pullTransactions(1).foreach { transactions =>
         val proposal = TransactionsProposal(
-          roundData.roundId, FacilitatorId(dao.id), transactions,
-          dao.threadSafeMessageMemPool.pull(1).getOrElse(Seq())
+          roundData.roundId,
+          FacilitatorId(dao.id),
+          transactions,
+          dao.threadSafeMessageMemPool.pull(1).getOrElse(Seq()),
+          dao.peerInfo.flatMap(_._2.notification).toSeq
         )
         context.parent ! BroadcastTransactionProposal(
           roundData.peers,
@@ -75,10 +78,17 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
       .union(roundData.messages.toSet)
       .toSeq
 
+    val notifications = transactionProposals
+      .flatMap(_._2.notifications)
+      .toSet
+      .union(roundData.peers.flatMap(_.notification))
+      .toSeq
+
     val cb = CheckpointBlock.createCheckpointBlock(
       transactions,
       roundData.tipsSOE.map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)),
-      messages
+      messages,
+      notifications
     )(dao.keyPair)
     val blockProposal = UnionBlockProposal(roundData.roundId, FacilitatorId(dao.id), cb)
     context.parent ! BroadcastUnionBlockProposal(roundData.peers, blockProposal)
@@ -88,7 +98,7 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
   def resolveMajorityCheckpointBlock(): Unit = {
     implicit val shadedDao: DAO = dao
 
-    if (checkpointBlockProposals.nonEmpty) {
+    val acceptedBlock = if (checkpointBlockProposals.nonEmpty) {
       val sameBlocks = checkpointBlockProposals
         .groupBy(_._2.baseHash)
         .maxBy(_._2.size)
@@ -102,8 +112,9 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
       broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, finalFacilitators))
 
       dao.threadSafeSnapshotService.accept(cache)
-    }
-    context.parent ! StopBlockCreationRound(roundData.roundId)
+      Some(majorityCheckpointBlock)
+    } else None
+    context.parent ! StopBlockCreationRound(roundData.roundId, acceptedBlock)
     context.stop(self)
   }
 
@@ -153,8 +164,8 @@ object Round {
   case class TransactionsProposal(roundId: RoundId,
                                   facilitatorId: FacilitatorId,
                                   transactions: Seq[Transaction],
-                                  messages: Seq[ChannelMessage] = Seq()
-                                 )
+                                  messages: Seq[ChannelMessage] = Seq.empty,
+                                  notifications: Seq[PeerNotification] = Seq.empty)
       extends RoundCommand
 
   case class UnionBlockProposal(roundId: RoundId,
@@ -169,7 +180,7 @@ object Round {
                        tipsSOE: Seq[SignedObservationEdge],
                        messages: Seq[ChannelMessage])
 
-  case class StopBlockCreationRound(roundId: RoundId) extends RoundCommand
+  case class StopBlockCreationRound(roundId: RoundId, maybeCB: Option[CheckpointBlock]) extends RoundCommand
 
   def props(roundData: RoundData, dao: DAO): Props = Props(new Round(roundData, dao))
 }

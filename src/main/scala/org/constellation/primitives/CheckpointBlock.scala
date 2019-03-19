@@ -5,14 +5,15 @@ import java.security.KeyPair
 import cats.data.{Ior, NonEmptyList, ValidatedNel}
 import cats.implicits._
 import constellation.signedObservationEdge
-import org.constellation.DAO
 import org.constellation.primitives.Schema._
 import org.constellation.util.HashSignature
+import org.constellation.{DAO, PeerMetadata}
 
 case class CheckpointBlock(
   transactions: Seq[Transaction],
   checkpoint: CheckpointEdge,
-  messages: Seq[ChannelMessage] = Seq()
+  messages: Seq[ChannelMessage] = Seq(),
+  notifications: Seq[PeerNotification] = Seq()
 ) {
 
   def storeSOE()(implicit dao: DAO): Unit = {
@@ -63,7 +64,7 @@ case class CheckpointBlock(
 
   }
 
-  def transactionsValid: Boolean = transactions.nonEmpty && transactions.forall(_.valid)
+  def transactionsValid(implicit dao: DAO): Boolean = transactions.nonEmpty && transactions.forall(_.valid)
 
   // TODO: Return checkpoint validation status for more info rather than just a boolean
 
@@ -154,21 +155,25 @@ object CheckpointBlock {
   def createCheckpointBlockSOE(
     transactions: Seq[Transaction],
     tips: Seq[SignedObservationEdge],
-    messages: Seq[ChannelMessage] = Seq()
+    messages: Seq[ChannelMessage] = Seq.empty,
+    peers: Seq[PeerNotification] = Seq.empty
   )(implicit keyPair: KeyPair): CheckpointBlock = {
     createCheckpointBlock(transactions, tips.map { t =>
       TypedEdgeHash(t.hash, EdgeHashType.CheckpointHash)
-    }, messages)
+    }, messages, peers)
   }
 
   def createCheckpointBlock(
     transactions: Seq[Transaction],
     tips: Seq[TypedEdgeHash],
-    messages: Seq[ChannelMessage] = Seq()
+    messages: Seq[ChannelMessage] = Seq.empty,
+    peers: Seq[PeerNotification] = Seq.empty
   )(implicit keyPair: KeyPair): CheckpointBlock = {
 
     val checkpointEdgeData =
-      CheckpointEdgeData(transactions.map { _.hash }.sorted, messages.map{_.signedMessageData.hash})
+      CheckpointEdgeData(transactions.map { _.hash }.sorted, messages.map {
+        _.signedMessageData.hash
+      })
 
     val observationEdge = ObservationEdge(
       tips.toList,
@@ -181,7 +186,7 @@ object CheckpointBlock {
       Edge(observationEdge, soe, checkpointEdgeData)
     )
 
-    CheckpointBlock(transactions, checkpointEdge, messages)
+    CheckpointBlock(transactions, checkpointEdge, messages, peers)
   }
 
 }
@@ -265,7 +270,7 @@ sealed trait CheckpointBlockValidatorNel {
 
   type ValidationResult[A] = ValidatedNel[CheckpointBlockValidation, A]
 
-  def validateTransactionIntegrity(t: Transaction): ValidationResult[Transaction] =
+  def validateTransactionIntegrity(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
     if (t.valid) t.validNel else InvalidTransaction(t).invalidNel
 
   def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
@@ -362,14 +367,6 @@ sealed trait CheckpointBlockValidatorNel {
 
     spend |+| received
   }
-
-  /*
-      def getSnapshotBalances(implicit dao: DAO): AddressBalance =
-        dao.threadSafeSnapshotService
-          .getSnapshotInfo()
-          .addressCacheData
-          .mapValues(_.balanceByLatestSnapshot)
-   */
 
   def validateDiff(a: (String, Long))(implicit dao: DAO): Boolean = a match {
     case (hash, diff) =>

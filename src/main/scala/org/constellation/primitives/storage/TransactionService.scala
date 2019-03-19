@@ -46,5 +46,8 @@ class TransactionService(dao: DAO, size: Int = 50000) {
 
   def lookup: String => IO[Option[TransactionCacheData]] =
     DbStorage.extendedLookup[String, TransactionCacheData](List(memPool, midDb, oldDb))
+
+  def contains: String ⇒ IO[Boolean] =
+    DbStorage.extendedContains[String, TransactionCacheData](List(memPool, midDb, oldDb))
 }
 
