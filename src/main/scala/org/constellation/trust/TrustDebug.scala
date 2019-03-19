@@ -11,61 +11,160 @@ object TrustDebug {
   val sqrt2: Double = Math.sqrt(2)
 
   // Simple way to simulate modularity of connections / generate a topology different from random
-  case class TrustNode(id: Int, xCoordinate: Double, yCoordinate: Double, edgeLabels: Seq[TrustEdge] = Seq()) {
+  case class TrustNode(id: Int, xCoordinate: Double, yCoordinate: Double, edges: Seq[TrustEdge] = Seq()) {
     def distance(other: TrustNode): Double = Math.sqrt{
       Math.pow(xCoordinate - other.xCoordinate, 2) +
       Math.pow(yCoordinate - other.yCoordinate, 2)
     } / sqrt2
   }
 
+
+  def exploreOutwardsDebug(nodes: Seq[TrustNode], depth: Int = 1) = {
+
+    val nodeMap = nodes.map{n => n.id -> n}.toMap
+
+    val updatedNodes = nodes.map{ n =>
+
+      //println(s"Number of edges ${n.edges.size}")
+      //    nodes.map{ n =>
+
+      val (positive, negative) = n.edges.partition(_.trust > 0)
+
+      //println(s"Number of positive edges ${positive.size}")
+      //println(s"Positive edge scores ${positive.map{_.trust}}")
+      val visited = positive.map{_.dst}
+
+
+      val posTransitives = positive.map{ pn =>
+
+        val degreeNormalizedTrust = pn.trust / positive.size
+        val neighborNode = nodeMap(pn.dst)
+        val unvisited = neighborNode.edges.filterNot(nn => visited.contains(nn.dst))
+
+        //println(s"Positive edge to: ${pn.dst} with trust: ${pn.trust} normalized: $degreeNormalizedTrust " +
+        //s"and transitive edges: ${neighborNode.edges.size} unvisited: ${unvisited.size}")
+
+        val neighborDegree = neighborNode.edges.size
+        /*        neighborNode.edges.foreach{ edge =>
+
+                  val transitiveTrust = degreeNormalizedTrust * edge.trust / neighborDegree
+                  println(s"Transitive edge to: ${edge.dst} with transitive trust: $transitiveTrust")
+                }*/
+
+        val transitives = neighborNode.edges.filterNot(
+          neighborEdge => neighborEdge.dst == n.id || neighborEdge.dst == neighborNode.id
+        ).map{ edge =>
+          val transitiveTrust = degreeNormalizedTrust * edge.trust / neighborDegree
+          edge.dst -> transitiveTrust
+        }.toMap
+
+        transitives
+      }
+
+      import cats.implicits._
+
+      val sumTransitives = if (posTransitives.isEmpty) Map.empty[Int, Double] else posTransitives.reduce(_ |+| _)
+
+      sumTransitives.toSeq.sortBy{_._1}.foreach{ case (id, trust) =>
+        val original = n.edges.find{_.dst == id}
+        val pctTrustDiff = original.map{o => 100*trust / o.trust }
+        println(s"Sum transitive id: $id trust: $trust original trust: ${original.map{_.trust}.getOrElse("NA")} " +
+          s"pct change: ${pctTrustDiff.getOrElse("NA")}")
+      }
+
+      val updatedNode = n.copy(edges = n.edges.map{ edge =>
+        edge.copy(trust = edge.trust + sumTransitives.getOrElse(edge.dst, 0D))
+      } ++ sumTransitives.filterNot(n.edges.map{_.dst}.contains).map{case (id, trust) => TrustEdge(n.id, id, trust)} )
+
+      updatedNode
+    }
+
+    updatedNodes
+  }
+
+
+  def exploreOutwardsDebug(nodes: Seq[TrustNode], depth: Int = 1) = {
+
+    val nodeMap = nodes.map{n => n.id -> n}.toMap
+
+    val updatedNodes = nodes.map{ n =>
+
+      //println(s"Number of edges ${n.edges.size}")
+      //    nodes.map{ n =>
+
+      val (positive, negative) = n.edges.partition(_.trust > 0)
+
+      //println(s"Number of positive edges ${positive.size}")
+      //println(s"Positive edge scores ${positive.map{_.trust}}")
+      val visited = positive.map{_.dst}
+
+
+      val posTransitives = positive.map{ pn =>
+
+        val degreeNormalizedTrust = pn.trust / positive.size
+        val neighborNode = nodeMap(pn.dst)
+        val unvisited = neighborNode.edges.filterNot(nn => visited.contains(nn.dst))
+
+        //println(s"Positive edge to: ${pn.dst} with trust: ${pn.trust} normalized: $degreeNormalizedTrust " +
+        //s"and transitive edges: ${neighborNode.edges.size} unvisited: ${unvisited.size}")
+
+        val neighborDegree = neighborNode.edges.size
+        /*        neighborNode.edges.foreach{ edge =>
+
+                  val transitiveTrust = degreeNormalizedTrust * edge.trust / neighborDegree
+                  println(s"Transitive edge to: ${edge.dst} with transitive trust: $transitiveTrust")
+                }*/
+
+        val transitives = neighborNode.edges.filterNot(
+          neighborEdge => neighborEdge.dst == n.id || neighborEdge.dst == neighborNode.id
+        ).map{ edge =>
+          val transitiveTrust = degreeNormalizedTrust * edge.trust / neighborDegree
+          edge.dst -> transitiveTrust
+        }.toMap
+
+        transitives
+      }
+
+      import cats.implicits._
+
+      val sumTransitives = if (posTransitives.isEmpty) Map.empty[Int, Double] else posTransitives.reduce(_ |+| _)
+
+      sumTransitives.toSeq.sortBy{_._1}.foreach{ case (id, trust) =>
+        val original = n.edges.find{_.dst == id}
+        val pctTrustDiff = original.map{o => 100*trust / o.trust }
+        println(s"Sum transitive id: $id trust: $trust original trust: ${original.map{_.trust}.getOrElse("NA")} " +
+          s"pct change: ${pctTrustDiff.getOrElse("NA")}")
+      }
+
+      val updatedNode = n.copy(edges = n.edges.map{ edge =>
+        edge.copy(trust = edge.trust + sumTransitives.getOrElse(edge.dst, 0D))
+      } ++ sumTransitives.filterNot(n.edges.map{_.dst}.contains).map{case (id, trust) => TrustEdge(n.id, id, trust)} )
+
+      updatedNode
+    }
+
+    updatedNodes
+  }
+
+
   def main(args: Array[String]): Unit = {
 
-    var nodes = (0 until 100).toList.map{ id =>
+    val nodes = (0 until 30).toList.map{ id =>
       TrustNode(id, Random.nextDouble(), Random.nextDouble())
     }
 
-    nodes = nodes.map{ n =>
+    val nodesWithEdges = nodes.map{ n =>
       val edges = nodes.filterNot(_.id == n.id).flatMap{ n2 =>
-        if (Random.nextDouble() > n.distance(n2) && Random.nextDouble() < 0.3) {
-          Some(TrustEdge(n.id, n2.id, 2*(Random.nextDouble() - 0.5)))
+        if (Random.nextDouble() > n.distance(n2) && Random.nextDouble() < 0.5) {
+          val trustZeroToOne = Random.nextDouble()
+          Some(TrustEdge(n.id, n2.id, 2*(trustZeroToOne - 0.5)))
         } else None
       }
       println(s"Num edges ${edges.length}")
-      n.copy(edgeLabels = edges)
+      n.copy(edges = edges)
     }
 
-    var nodeMap = nodes.map{n => n.id -> n}.toMap
-
-
-    val n = nodes.head
-
-    println(s"Number of edges ${n.edgeLabels.size}")
-//    nodes.map{ n =>
-
-    val (positive, negative) = n.edgeLabels.partition(_.trust > 0)
-
-    println(s"Number of positive edges ${positive.size}")
-    println(s"Positive edge scores ${positive.map{_.trust}}")
-    val visited = positive.map{_.dst}
-
-
-    positive.foreach{ pn =>
-
-      val degreeNormalizedTrust = pn.trust / positive.size
-      val neighborNode = nodeMap(pn.dst)
-
-      val neighborDegree = neighborNode.edgeLabels.size
-      neighborNode.edgeLabels.foreach{ edge =>
-        val transitiveTrust = degreeNormalizedTrust * edge.trust / neighborDegree
-        println(s"Transitive edge to: ${edge.dst} with transitive trust: $transitiveTrust")
-      }
-
-      val unvisited = neighborNode.edgeLabels.filterNot(nn => visited.contains(nn.dst))
-
-      println(s"Positive edge to: ${pn.dst} with trust: ${pn.trust} normalized: $degreeNormalizedTrust " +
-        s"and transitive edges: ${neighborNode.edgeLabels.size} unvisited: ${unvisited.size}")
-
-    }
+    val depthOneNodes = exploreOutwardsDebug(nodesWithEdges)
 
 
     /*
