@@ -115,5 +115,10 @@ class DAO()
   def readyPeers: Map[Id, PeerData] =
     peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
 
+  def readyFacilitators(): Map[Id, PeerData] = peerInfo.filter {
+    case (_, pd) =>
+      pd.peerMetadata.timeAdded < (System
+        .currentTimeMillis() - processingConfig.minPeerTimeAddedSeconds * 1000) && pd.peerMetadata.nodeState == NodeState.Ready
+  }
 
 }

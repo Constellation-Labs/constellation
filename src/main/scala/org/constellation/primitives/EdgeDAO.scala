@@ -427,12 +427,6 @@ trait EdgeDAO {
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
 
-  def readyFacilitators(): Map[Id, PeerData] = peerInfo.filter {
-    case (_, pd) =>
-      pd.peerMetadata.timeAdded < (System
-        .currentTimeMillis() - processingConfig.minPeerTimeAddedSeconds * 1000) && pd.peerMetadata.nodeState == NodeState.Ready
-  }
-
   def pullTransactions(minimumCount: Int = minCheckpointFormationThreshold): Option[Seq[Transaction]] =  {
     threadSafeTXMemPool.pull(minimumCount)
   }
