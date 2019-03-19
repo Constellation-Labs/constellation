@@ -14,7 +14,7 @@ lazy val _version = "1.0.12"
 lazy val versions = new {
   val akka = "2.5.21"
   val akkaHttp = "10.1.7"
-  val akkaHttpCors = "0.3.4"
+  val akkaHttpCors = "0.4.0"
   val spongyCastle = "1.58.0.0"
   val micrometer = "1.1.3"
   val prometheus = "0.6.0"
@@ -96,7 +96,7 @@ lazy val coreDependencies = Seq(
   "net.glxn" % "qrgen" % "1.4",
 //  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.twitter" %% "storehaus-cache" % "0.15.0",
-  "io.swaydb" %% "swaydb" % "0.7",
+  "io.swaydb" %% "swaydb" % "0.7.1",
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus,
@@ -108,8 +108,8 @@ lazy val coreDependencies = Seq(
 //Test dependencies
 lazy val testDependencies = Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.0",
-  "org.scalatest" %% "scalatest" % "3.0.6",
-  "org.scalactic" %% "scalactic" % "3.0.6",
+  "org.scalatest" %% "scalatest" % "3.0.7",
+  "org.scalactic" %% "scalactic" % "3.0.7",
   "org.scalamock" %% "scalamock" % "4.1.0",
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
@@ -143,7 +143,7 @@ lazy val protobuf = (project in file("proto"))
 
 
 lazy val root = (project in file("."))
-  .aggregate(protobuf)
+  .dependsOn(protobuf)
   .disablePlugins(plugins.JUnitXmlReportPlugin)
   .configs(IntegrationTest)
   .enablePlugins(BuildInfoPlugin)
