@@ -179,6 +179,7 @@ case class NodeConfig(
   seeds: Seq[HostPort] = Seq(),
   primaryKeyPair: KeyPair = KeyUtils.makeKeyPair(),
   isGenesisNode: Boolean = false,
+  isLightNode: Boolean = false,
   metricIntervalSeconds: Int = 60,
   hostName: String = "127.0.0.1",
   httpInterface: String = "0.0.0.0",
@@ -189,7 +190,7 @@ case class NodeConfig(
   allowLocalhostPeers: Boolean = false,
   cliConfig: CliConfig = CliConfig(),
   processingConfig: ProcessingConfig = ProcessingConfig()
-)
+                     )
 
 class ConstellationNode(
   val nodeConfig: NodeConfig = NodeConfig()
@@ -285,6 +286,12 @@ class ConstellationNode(
   def getAPIClient(host: String = nodeConfig.hostName,
                    port: Int = nodeConfig.httpPort): APIClient = {
     val api = APIClient(host, port)
+    api.id = dao.id
+    api
+  }
+
+  def getPeerAPIClient: APIClient = {
+    val api = APIClient(dao.nodeConfig.hostName, dao.nodeConfig.peerHttpPort)
     api.id = dao.id
     api
   }

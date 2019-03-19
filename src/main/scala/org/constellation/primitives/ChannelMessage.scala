@@ -1,5 +1,6 @@
 package org.constellation.primitives
 
+import java.security.KeyPair
 import java.util.concurrent.Semaphore
 
 import com.fasterxml.jackson.databind.JsonNode
