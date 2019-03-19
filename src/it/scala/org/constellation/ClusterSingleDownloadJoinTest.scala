@@ -5,7 +5,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import better.files._
 import org.constellation.crypto.KeyUtils
-import org.constellation.util.{APIClient, Simulation}
+import org.constellation.util.{EnhancedAPIClient, HostPort, Simulation}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
 import scala.concurrent.ExecutionContextExecutor
@@ -42,7 +42,7 @@ class ClusterSingleDownloadJoinTest
     val apis = ips.map { ip =>
       val split = ip.split(":")
       val portOffset = if (split.length == 1) 8999 else split(1).toInt
-      val a = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
+      val a = EnhancedAPIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
       Simulation.logger.info(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
       a
     } // ++ auxAPIs

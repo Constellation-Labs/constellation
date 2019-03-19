@@ -5,7 +5,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import constellation._
 import org.constellation.crypto.KeyUtils
-import org.constellation.util.APIClient
+import org.constellation.util.EnhancedAPIClient
 import org.json4s.JsonAST.JArray
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
@@ -149,7 +149,7 @@ class ClusterTest
     val ips = mappings.map { _.externalIP }
 
     val apis = ips.map { ip =>
-      APIClient(ip, 9000)
+      EnhancedAPIClient(ip, 9000)
     }
 
     /*
@@ -165,7 +165,7 @@ class ClusterTest
      */
 
     val peerAPIs = ips.map { ip =>
-      APIClient(ip, 9001)
+      EnhancedAPIClient(ip, 9001)
     }
 
     // sim.run(apis = apis, peerApis = peerAPIs, attemptSetExternalIP = true)

@@ -10,7 +10,7 @@ import org.constellation.consensus.CrossTalkConsensus.ParticipateInBlockCreation
 import org.constellation.consensus.Round.{RoundData, TransactionsProposal, UnionBlockProposal}
 import org.constellation.consensus.RoundDataRemote
 import org.constellation.primitives.PeerData
-import org.constellation.util.APIClient
+import org.constellation.util.EnhancedAPIClient
 import org.json4s.native
 import org.json4s.native.Serialization
 import org.slf4j.{Logger, LoggerFactory}
@@ -29,7 +29,7 @@ object BlockBuildingRoundRoute {
   def convert(r: RoundDataRemote)(implicit executionContext: ExecutionContext): RoundData = {
     RoundData(
       r.roundId,
-      r.peers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort))),
+      r.peers.map(p => PeerData(p, EnhancedAPIClient.apply(p.host, p.httpPort))),
       r.facilitatorId,
       r.transactions,
       r.tipsSOE,

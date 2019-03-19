@@ -4,13 +4,13 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives._
-import org.constellation.util.APIClient
+import org.constellation.util.EnhancedAPIClient
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 class ConstellationApp(
-                        val clientApi: APIClient
+                        val clientApi: EnhancedAPIClient
                       )(implicit val ec: ExecutionContext) extends StrictLogging {
 
   val channelIdToChannel = scala.collection.mutable.HashMap[String, Channel]()

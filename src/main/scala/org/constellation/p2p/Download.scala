@@ -14,7 +14,7 @@ import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.APIClient
+import org.constellation.util.EnhancedAPIClient
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -47,7 +47,7 @@ class RandomSnapshotsProcessor(implicit dao: DAO, ec: ExecutionContext) extends 
       .flatMap(acceptSnapshot)
   }
 
-  private def downloadSnapshot(hash: String, pool: Array[APIClient]): IO[StoredSnapshot] = {
+  private def downloadSnapshot(hash: String, pool: Array[EnhancedAPIClient]): IO[StoredSnapshot] = {
     val stopAt = Random.nextInt(pool.length)
 
     def makeAttempt(index: Int): IO[StoredSnapshot] =
@@ -59,7 +59,7 @@ class RandomSnapshotsProcessor(implicit dao: DAO, ec: ExecutionContext) extends 
     makeAttempt((stopAt + 1) % pool.length)
   }
 
-  private def getSnapshot(hash: String, client: APIClient): IO[StoredSnapshot] = IO.fromFuture {
+  private def getSnapshot(hash: String, client: EnhancedAPIClient): IO[StoredSnapshot] = IO.fromFuture {
     IO {
       client.getNonBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash,
                                                      timeout = getSnapshotTimeout)
@@ -149,7 +149,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .map(snapshots => snapshots.groupBy(_.snapshot.hash).maxBy(_._2.size)._2.head)
 
   private def downloadAndProcessSnapshotsFirstPass(snapshotInfo: SnapshotInfo)(
-    implicit snapshotClient: APIClient,
+    implicit snapshotClient: EnhancedAPIClient,
     peers: Peers
   ): IO[Seq[String]] =
     for {
@@ -162,7 +162,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   private def downloadAndProcessSnapshotsSecondPass(
     snapshotInfo: SnapshotInfo,
     hashes: Seq[String]
-  )(implicit snapshotClient: APIClient, peers: Peers): IO[SnapshotInfo] =
+  )(implicit snapshotClient: EnhancedAPIClient, peers: Peers): IO[SnapshotInfo] =
     getSnapshotHashes(snapshotInfo)
       .map(_.filterNot(hashes.contains))
       .flatMap(

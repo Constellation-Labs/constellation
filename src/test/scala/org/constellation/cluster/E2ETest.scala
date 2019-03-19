@@ -7,7 +7,7 @@ import com.softwaremill.sttp.{Response, StatusCodes}
 import org.constellation._
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.{ChannelProof, _}
-import org.constellation.util.{APIClient, Simulation}
+import org.constellation.util.{EnhancedAPIClient, HostPort, Simulation}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -18,7 +18,7 @@ class E2ETest extends E2E {
     Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
   )
 
-  def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
+  def updatePasswords(apiClients: Seq[EnhancedAPIClient]): Seq[Response[String]] =
     apiClients.map { client =>
       val response = client.postSync("password/update", updatePasswordReq)
       client.setPassword(updatePasswordReq.password)
@@ -37,7 +37,7 @@ class E2ETest extends E2E {
     i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
   )
 
-  private val apis: Seq[APIClient] = nodes.map { _.getAPIClient() }
+  private val apis: Seq[EnhancedAPIClient] = nodes.map { _.getAPIClient() }
 
   private val addPeerRequests = nodes.map { _.getAddPeerRequest }
 
@@ -87,7 +87,7 @@ class E2ETest extends E2E {
 
     val allNodes = nodes :+ downloadNode
 
-    val allAPIs: Seq[APIClient] = allNodes.map { _.getAPIClient() } //apis :+ downloadAPI
+    val allAPIs: Seq[EnhancedAPIClient] = allNodes.map { _.getAPIClient() } //apis :+ downloadAPI
     val updatePasswordResponses = updatePasswords(allAPIs)
     assert(updatePasswordResponses.forall(_.code == StatusCodes.Ok))
     assert(Simulation.healthy(allAPIs))
@@ -152,7 +152,7 @@ class ConstellationAppSim(constellationApp: ConstellationApp)(
   private val channelName = "test"
   private var broadcastedMessages: Seq[ChannelMessage] = Seq.empty[ChannelMessage]
 
-  def openChannel(apis: Seq[APIClient]): Future[Option[Channel]] = {
+  def openChannel(apis: Seq[EnhancedAPIClient]): Future[Option[Channel]] = {
     val deployResponse = constellationApp.deploy(schemaStr, channelName)
     deployResponse.foreach { resp =>
       if (resp.isDefined) {
@@ -203,7 +203,7 @@ class ConstellationAppSim(constellationApp: ConstellationApp)(
     deployResponse
   }
 
-  def postDownload(firstAPI: APIClient = constellationApp.clientApi, channel: Channel) = {
+  def postDownload(firstAPI: EnhancedAPIClient = constellationApp.clientApi, channel: Channel) = {
     Simulation.logger.info(s"channel ${channel.channelId}")
     val allChannels = firstAPI.getBlocking[Seq[String]]("channels")
     Simulation.logger.info(s"message channel ${allChannels}")

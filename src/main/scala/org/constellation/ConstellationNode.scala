@@ -20,7 +20,7 @@ import org.constellation.datastore.SnapshotTrigger
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, Metrics}
+import org.constellation.util.{EnhancedAPIClient, HostPort, Metrics}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -282,8 +282,8 @@ class ConstellationNode(
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
 
   def getAPIClient(host: String = nodeConfig.hostName,
-                   port: Int = nodeConfig.httpPort): APIClient = {
-    val api = APIClient(host, port)
+                   port: Int = nodeConfig.httpPort): EnhancedAPIClient = {
+    val api = EnhancedAPIClient(host, port)
     api.id = dao.id
     api
   }
@@ -297,9 +297,9 @@ class ConstellationNode(
                  nodeType = dao.nodeType)
   }
 
-  def getAPIClientForNode(node: ConstellationNode): APIClient = {
+  def getAPIClientForNode(node: ConstellationNode): EnhancedAPIClient = {
     val ipData = node.getIPData
-    val api = APIClient(host = ipData.canonicalHostName, port = ipData.port)
+    val api = EnhancedAPIClient(host = ipData.canonicalHostName, port = ipData.port)
     api.id = dao.id
     api
   }

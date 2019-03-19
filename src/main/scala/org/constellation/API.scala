@@ -28,7 +28,7 @@ import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{CommonEndpoints, MerkleTree, MetricTimerDirective, ServeUI}
+import org.constellation.util.{CommonEndpoints, HostPort, MerkleTree, MetricTimerDirective, ServeUI}
 import org.json4s.native.Serialization
 import org.json4s.{JValue, native}
 
@@ -46,8 +46,6 @@ case class PeerMetadata(
   auxAddresses: Seq[String] = Seq(), // for testing multi key address partitioning
   nodeType: NodeType = NodeType.Full
 )
-
-case class HostPort(host: String, port: Int)
 
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
 
@@ -421,7 +419,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                                            callTimeout = 5.seconds,
                                            resetTimeout)
 
-          val response = PeerManager.broadcast(_.get("health"))
+          val response = PeerManager.broadcast(_.getString("health"))
 
           onCompleteWithBreaker(breaker)(response) {
             case Success(idMap) =>

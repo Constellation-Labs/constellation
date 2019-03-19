@@ -7,7 +7,7 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.primitives.CheckpointBlock
 import org.constellation.primitives.Schema._
-import org.constellation.{HostPort, PeerMetadata}
+import org.constellation.{PeerMetadata}
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration._
@@ -21,51 +21,51 @@ object Simulation {
   implicit val ec: ExecutionContextExecutorService =
     ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
-  def healthy(apis: Seq[APIClient]): Boolean = {
+  def healthy(apis: Seq[EnhancedAPIClient]): Boolean = {
     apis.forall(a => {
       val res = a.getSync("health", timeout = 100.seconds).isSuccess
       res
     })
   }
 
-  def hasGenesis(apis: Seq[APIClient]): Boolean = {
+  def hasGenesis(apis: Seq[EnhancedAPIClient]): Boolean = {
     apis.forall(a => {
       val res = a.getSync(s"hasGenesis", timeout = 100.seconds).isSuccess
       res
     })
   }
 
-  def getCheckpointTips(apis: Seq[APIClient]): Seq[Map[String, CheckpointBlock]] = {
+  def getCheckpointTips(apis: Seq[EnhancedAPIClient]): Seq[Map[String, CheckpointBlock]] = {
     apis.map(a => {
       a.getBlocking[Map[String, CheckpointBlock]](s"checkpointTips", timeout = 100.seconds)
     })
   }
 
-  def setIdLocal(apis: Seq[APIClient]): Unit = apis.foreach { a =>
+  def setIdLocal(apis: Seq[EnhancedAPIClient]): Unit = apis.foreach { a =>
     logger.info(s"Getting id for ${a.hostName}:${a.apiPort}")
     val id = a.getBlocking[Id]("id", timeout = 60.seconds)
     a.id = id
   }
 
-  def setExternalIP(apis: Seq[APIClient]): Boolean =
+  def setExternalIP(apis: Seq[EnhancedAPIClient]): Boolean =
     apis.forall { a =>
       a.postSync("ip", a.hostName + ":" + a.udpPort).isSuccess
     }
 
-  def verifyGenesisReceived(apis: Seq[APIClient]): Boolean = {
+  def verifyGenesisReceived(apis: Seq[EnhancedAPIClient]): Boolean = {
     apis.forall { a =>
       val gbmd = a.getBlocking[MetricsResult]("metrics")
       gbmd.metrics("numValidBundles").toInt >= 1
     }
   }
 
-  def genesis(apis: Seq[APIClient]): GenesisObservation = {
+  def genesis(apis: Seq[EnhancedAPIClient]): GenesisObservation = {
     val ids = apis.map { _.id }
     apis.head.postBlocking[GenesisObservation]("genesis/create", ids.tail.toSet)
   }
 
   def addPeer(
-    apis: Seq[APIClient],
+    apis: Seq[EnhancedAPIClient],
     peer: PeerMetadata
   )(implicit executionContext: ExecutionContext): Seq[Response[String]] = {
     apis.map {
@@ -74,7 +74,7 @@ object Simulation {
   }
 
   def addPeerWithRegistrationFlow(
-    apis: Seq[APIClient],
+    apis: Seq[EnhancedAPIClient],
     peer: HostPort
   )(implicit executionContext: ExecutionContext): Seq[Response[String]] = {
     apis.map {
@@ -82,7 +82,7 @@ object Simulation {
     }
   }
 
-  def assignReputations(apis: Seq[APIClient]): Unit = apis.foreach { api =>
+  def assignReputations(apis: Seq[EnhancedAPIClient]): Unit = apis.foreach { api =>
     val others = apis.filter { _ != api }
     val havePublic = Random.nextDouble() > 0.5
     val haveSecret = Random.nextDouble() > 0.5 || havePublic
@@ -95,13 +95,13 @@ object Simulation {
     })
   }
 
-  def randomNode(apis: Seq[APIClient]) = apis(Random.nextInt(apis.length))
+  def randomNode(apis: Seq[EnhancedAPIClient]) = apis(Random.nextInt(apis.length))
 
-  def randomOtherNode(not: APIClient, apis: Seq[APIClient]): APIClient =
+  def randomOtherNode(not: EnhancedAPIClient, apis: Seq[EnhancedAPIClient]): EnhancedAPIClient =
     apis.filter { _ != not }(Random.nextInt(apis.length - 1))
 
   def checkGenesis(
-    apis: Seq[APIClient],
+    apis: Seq[EnhancedAPIClient],
     maxRetries: Int = 10,
     delay: Long = 3000
   ): Boolean = {
@@ -121,7 +121,7 @@ object Simulation {
   }
 
   def checkReady(
-    apis: Seq[APIClient],
+    apis: Seq[EnhancedAPIClient],
     maxRetries: Int = 20,
     delay: Long = 3000
   ): Boolean = {
@@ -137,7 +137,7 @@ object Simulation {
   def awaitMetric(
     err: String,
     t: Map[String, String] => Boolean,
-    apis: Seq[APIClient],
+    apis: Seq[EnhancedAPIClient],
     maxRetries: Int = 10,
     delay: Long = 3000
   ): Boolean = {
@@ -154,7 +154,7 @@ object Simulation {
   }
 
   def checkPeersHealthy(
-    apis: Seq[APIClient],
+    apis: Seq[EnhancedAPIClient],
     maxRetries: Int = 10,
     delay: Long = 3000
   ): Boolean = {
@@ -171,7 +171,7 @@ object Simulation {
   }
 
   def checkHealthy(
-    apis: Seq[APIClient],
+    apis: Seq[EnhancedAPIClient],
     maxRetries: Int = 30,
     delay: Long = 5000
   ): Boolean = {
@@ -191,7 +191,7 @@ object Simulation {
   }
 
   def checkSnapshot(
-    apis: Seq[APIClient],
+    apis: Seq[EnhancedAPIClient],
     num: Int = 2,
     maxRetries: Int = 100,
     delay: Long = 10000
@@ -229,7 +229,7 @@ object Simulation {
   }
 
   def awaitCheckpointsAccepted(
-    apis: Seq[APIClient],
+    apis: Seq[EnhancedAPIClient],
     numAccepted: Int = 5,
     maxRetries: Int = 30,
     delay: Long = 5000
@@ -246,7 +246,7 @@ object Simulation {
     )
   }
 
-  def sendRandomTransaction(apis: Seq[APIClient]): Future[Response[String]] = {
+  def sendRandomTransaction(apis: Seq[EnhancedAPIClient]): Future[Response[String]] = {
     val src = randomNode(apis)
     val dst = randomOtherNode(src, apis).id.address
 
@@ -254,19 +254,19 @@ object Simulation {
     src.post("send", s)
   }
 
-  def triggerRandom(apis: Seq[APIClient]): Seq[Response[String]] = {
+  def triggerRandom(apis: Seq[EnhancedAPIClient]): Seq[Response[String]] = {
     apis.map(_.postEmpty("random"))
   }
 
-  def triggerCheckpointFormation(apis: Seq[APIClient]): Seq[Response[String]] = {
+  def triggerCheckpointFormation(apis: Seq[EnhancedAPIClient]): Seq[Response[String]] = {
     apis.map(_.postEmpty("checkpointFormation"))
   }
 
-  def setReady(apis: Seq[APIClient]): Unit = {
+  def setReady(apis: Seq[EnhancedAPIClient]): Unit = {
     apis.foreach(_.postEmpty("ready"))
   }
 
-  def addPeersFromRequest(apis: Seq[APIClient], addPeerRequests: Seq[PeerMetadata]): Unit = {
+  def addPeersFromRequest(apis: Seq[EnhancedAPIClient], addPeerRequests: Seq[PeerMetadata]): Unit = {
     apis.foreach { a =>
       addPeerRequests.zip(apis).foreach {
         case (add, a2) =>
@@ -281,7 +281,7 @@ object Simulation {
     }
   }
 
-  def addPeersFromRegistrationRequest(apis: Seq[APIClient],
+  def addPeersFromRegistrationRequest(apis: Seq[EnhancedAPIClient],
                                       addPeerRequests: Seq[PeerMetadata]): Unit = {
     apis.foreach { a =>
       addPeerRequests.zip(apis).foreach {
@@ -300,7 +300,7 @@ object Simulation {
   }
 
   def run(
-    apis: Seq[APIClient],
+    apis: Seq[EnhancedAPIClient],
     addPeerRequests: Seq[PeerMetadata],
     attemptSetExternalIP: Boolean = false,
     useRegistrationFlow: Boolean = false,

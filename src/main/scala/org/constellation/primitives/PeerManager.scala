@@ -16,7 +16,7 @@ import org.constellation.util.Validation._
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState}
 import org.constellation.util.Validation._
 import org.constellation.util._
-import org.constellation.{DAO, HostPort, PeerMetadata, RemovePeerRequest}
+import org.constellation.{DAO, PeerMetadata, RemovePeerRequest}
 import org.joda.time.LocalDateTime
 
 import scala.collection.Set
@@ -93,7 +93,7 @@ object PeerManager extends StrictLogging {
       {
         logger.info(s"Attempting to register with $hp")
 
-        APIClient(hp.host, hp.port).postSync(
+        EnhancedAPIClient(hp.host, hp.port).postSync(
           "register",
           dao.peerRegistrationRequest
         )
@@ -117,7 +117,7 @@ object PeerManager extends StrictLogging {
         logger.info(s"Attempting to register with $hp")
 
         val client =
-          APIClient(hp.host, hp.port)(dao.apiClientExecutionContext, dao)
+          EnhancedAPIClient(hp.host, hp.port)(dao.apiClientExecutionContext, dao)
 
         client
           .getNonBlocking[PeerRegistrationRequest]("registration/request")
@@ -137,7 +137,7 @@ object PeerManager extends StrictLogging {
 
   }
 
-  def peerDiscovery(client: APIClient)(implicit dao: DAO): Unit = {
+  def peerDiscovery(client: EnhancedAPIClient)(implicit dao: DAO): Unit = {
     client
       .getNonBlocking[Seq[PeerMetadata]]("peers")
       .onComplete {
@@ -145,7 +145,7 @@ object PeerManager extends StrictLogging {
           pmd.foreach { md =>
             if (dao.id != md.id && validPeerAddition(HostPort(md.host, md.httpPort), dao.peerInfo)) {
               val client =
-                APIClient(md.host, md.httpPort)(dao.apiClientExecutionContext, dao)
+                EnhancedAPIClient(md.host, md.httpPort)(dao.apiClientExecutionContext, dao)
               client
                 .getNonBlocking[PeerRegistrationRequest]("registration/request")
                 .onComplete {
@@ -175,7 +175,7 @@ object PeerManager extends StrictLogging {
   }
 
   def broadcast[T](
-    func: APIClient => Future[T],
+    func: EnhancedAPIClient => Future[T],
     skipIds: Set[Id] = Set.empty,
     subset: Set[Id] = Set.empty
   )(implicit dao: DAO, ec: ExecutionContext): Future[Map[Id, ValidatedNel[Throwable, T]]] = {
@@ -199,11 +199,11 @@ object PeerManager extends StrictLogging {
 
 case class PeerData(
   peerMetadata: PeerMetadata,
-  client: APIClient,
+  client: EnhancedAPIClient,
   notification: Seq[PeerNotification] = Seq.empty
 )
 
-case class APIBroadcast[T](func: APIClient => Future[T],
+case class APIBroadcast[T](func: EnhancedAPIClient => Future[T],
                            skipIds: Set[Id] = Set(),
                            peerSubset: Set[Id] = Set())
 
@@ -243,7 +243,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
       if (round % dao.processingConfig.peerHealthCheckInterval == 0) {
         peers.values.foreach { d =>
           d.client
-            .get("health")
+            .getString("health")
             .onComplete {
               case Success(x) if x.isSuccess =>
                 dao.metrics.incrementMetric("peerHealthCheckPassed")
@@ -315,7 +315,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
         val adjustedHost = if (auxHost.nonEmpty) auxHost else host
         val client =
-          APIClient(adjustedHost, port)(dao.apiClientExecutionContext, dao)
+          EnhancedAPIClient(adjustedHost, port)(dao.apiClientExecutionContext, dao)
         client.id = id
 
         PeerManager.peerDiscovery(client)
@@ -366,7 +366,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
         implicit val ec: ExecutionContextExecutor =
           dao.apiClientExecutionContext
 
-        val client = APIClient(request.host, request.port)(dao.apiClientExecutionContext, dao)
+        val client = EnhancedAPIClient(request.host, request.port)(dao.apiClientExecutionContext, dao)
 
         val authSignRequest = PeerAuthSignRequest(Random.nextLong())
         val req =

@@ -9,8 +9,8 @@ import better.files.File
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.p2p.PeerRegistrationRequest
-import org.constellation.util.TestNode
-import org.constellation.{ConstellationNode, HostPort}
+import org.constellation.util.{HostPort, TestNode}
+import org.constellation.{ConstellationNode}
 import org.scalatest._
 
 import scala.concurrent.ExecutionContext

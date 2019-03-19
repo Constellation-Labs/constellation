@@ -13,7 +13,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Validation.EnrichedFuture
-import org.constellation.util.{APIClient, HashSignature, Signable}
+import org.constellation.util.{EnhancedAPIClient, HashSignature, Signable}
 
 import scala.async.Async.{async, await}
 import scala.concurrent.duration._
@@ -286,14 +286,14 @@ object EdgeProcessor extends StrictLogging {
 
     implicit val exec: ExecutionContextExecutor = dao.signatureExecutionContext
 
-    def lookupTransaction(hash: String, client: APIClient): Future[Option[TransactionCacheData]] =
+    def lookupTransaction(hash: String, client: EnhancedAPIClient): Future[Option[TransactionCacheData]] =
       client.getNonBlocking[Option[TransactionCacheData]](
         s"transaction/$hash",
         timeout = 4.seconds
       )
 
     def resolveTransaction(hash: String,
-                           peers: Seq[APIClient]): Future[Option[TransactionCacheData]] = {
+                           peers: Seq[EnhancedAPIClient]): Future[Option[TransactionCacheData]] = {
 
       var remainingPeers = peers.tail
 
@@ -352,7 +352,7 @@ object EdgeProcessor extends StrictLogging {
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
     def innerResolve(
-      peers: List[APIClient]
+      peers: List[EnhancedAPIClient]
     )(implicit ec: ExecutionContext): Future[CheckpointCacheData] = {
       peers match {
         case activePeer :: rest =>
