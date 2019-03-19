@@ -1,4 +1,5 @@
 package org.constellation.consensus
+
 import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, Props}
 import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
@@ -26,26 +27,30 @@ class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
       log.debug(
         s"Unable to initiate new round another round: ${rounds.filter(_._2.startedByThisNode)} is in progress"
       )
+
     case StartNewBlockCreationRound if !rounds.exists(_._2.startedByThisNode) =>
       createRoundData(dao).foreach { roundData =>
         startRound(roundData, startedByThisNode = true)
         context.parent ! NotifyFacilitators(roundData)
         passToRoundActor(
-          TransactionsProposal(roundData.roundId,
-                               FacilitatorId(dao.id),
-                               roundData.transactions,
-                               roundData.messages,
-                               roundData.peers.flatMap(_.notification).toSeq)
-        )
+          LightTransactionsProposal(
+            roundData.roundId,
+            FacilitatorId(dao.id),
+            roundData.transactions.map(_.hash),
+            roundData.messages.map(_.signedMessageData.hash),
+            roundData.peers.flatMap(_.notification).toSeq))
         log.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}")
         dao.blockFormationInProgress = true
       }
+
     case cmd: ParticipateInBlockCreationRound =>
       log.debug(s"node: ${dao.id.short} participating in round: ${cmd.roundData.roundId}")
       startRound(adjustPeers(cmd.roundData))
       passToRoundActor(StartTransactionProposal(cmd.roundData.roundId))
-    case cmd: TransactionsProposal =>
+
+    case cmd: LightTransactionsProposal =>
       passToRoundActor(cmd)
+
     case cmd: StopBlockCreationRound =>
       rounds.get(cmd.roundId).foreach(_.timeoutScheduler.cancel())
       rounds.remove(cmd.roundId)
@@ -57,17 +62,22 @@ class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
       cmd.maybeCB.foreach(cb => dao.peerManager ! UpdatePeerNotifications(cb.notifications))
 
       dao.blockFormationInProgress = false
-    case cmd: BroadcastTransactionProposal =>
+
+    case cmd: BroadcastLightTransactionProposal =>
       passToParentActor(cmd)
+
     case cmd: BroadcastUnionBlockProposal =>
       passToParentActor(cmd)
+
     case cmd: UnionBlockProposal =>
       passToRoundActor(cmd)
+
     case cmd: ResolveMajorityCheckpointBlock =>
       log.debug(
         s"node ${dao.id.short} Block formation timeout occurred for ${cmd.roundId} resolving majority CheckpointBlock"
       )
       passToRoundActor(cmd)
+
     case msg => log.info(s"Received unknown message: $msg")
 
   }
@@ -115,8 +125,11 @@ object RoundManager {
                        timeoutScheduler: Cancellable,
                        startedByThisNode: Boolean = false)
 
-  case class BroadcastTransactionProposal(peers: Set[PeerData],
-                                          transactionsProposal: TransactionsProposal)
+  case class BroadcastLightTransactionProposal(
+    peers: Set[PeerData],
+    transactionsProposal: LightTransactionsProposal
+  )
+
   case class BroadcastUnionBlockProposal(peers: Set[PeerData], proposal: UnionBlockProposal)
 
   def generateRoundId: RoundId =
