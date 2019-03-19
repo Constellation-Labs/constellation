@@ -132,7 +132,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .flatMap(_ => IO.sleep(waitForPeersDelay))
 
   private def getReadyPeers() =
-    IO.pure(dao.peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready))
+    IO.pure(dao.readyFullPeers)
 
   private def getSnapshotClient(peers: Peers) = IO(peers.head._2.client)
 
@@ -250,9 +250,28 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
 
 object Download {
   def download()(implicit dao: DAO, ec: ExecutionContext): Unit =
-    tryWithMetric({
-      val snapshotsProcessor = new RandomSnapshotsProcessor()
-      val process = new DownloadProcess(snapshotsProcessor)
-      process.download().unsafeRunSync()
-    }, "download")
+
+    if (dao.nodeType == NodeType.Full) {
+      tryWithMetric({
+        val snapshotsProcessor = new RandomSnapshotsProcessor()
+        val process = new DownloadProcess(snapshotsProcessor)
+        process.download().unsafeRunSync()
+      }, "download")
+    } else {
+
+      // TODO: Move to .lightDownload() from above process, testing separately for now
+      // Debug
+      val peer = dao.readyFullPeers.head._2.client
+
+      val nearbyChannels = peer.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", dao.id)
+
+      dao.metrics.updateMetric("downloadedNearbyChannels", nearbyChannels.size.toString)
+
+      nearbyChannels.foreach{ cmd =>
+        dao.channelService.put(cmd.channelId, cmd)
+      }
+
+      dao.setNodeState(NodeState.Ready)
+
+    }
 }

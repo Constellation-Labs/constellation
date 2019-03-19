@@ -38,7 +38,9 @@ case class ChannelMetadata(
   genesisMessageMetadata: ChannelMessageMetadata,
   totalNumMessages: Long = 0L,
   last25MessageHashes: Seq[String] = Seq()
-)
+) {
+  def channelId = genesisMessageMetadata.channelMessage.signedMessageData.hash
+}
 
 
 case class SingleChannelUIOutput(
@@ -55,11 +57,11 @@ object ChannelMessage extends StrictLogging {
 
 
   def create(message: String, previous: String, channelId: String)(
-    implicit dao: DAO
+    implicit keyPair: KeyPair
   ): ChannelMessage = {
     val data = ChannelMessageData(message, previous, channelId)
     ChannelMessage(
-      SignedData(data, hashSignBatchZeroTyped(data, dao.keyPair))
+      SignedData(data, hashSignBatchZeroTyped(data, keyPair))
     )
   }
 
@@ -80,7 +82,7 @@ object ChannelMessage extends StrictLogging {
         logger.info(s"Channel not in use")
 
         val genesisMessageStr = channelOpenRequest.json
-        val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)
+        val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)(dao.keyPair)
         dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.name) = msg
         val genesisHashChannelId = msg.signedMessageData.hash
         dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) =
@@ -120,7 +122,7 @@ object ChannelMessage extends StrictLogging {
         val messages: Seq[ChannelMessage] = channelSendRequest.messages
           .foldLeft(previous -> Seq[ChannelMessage]()) {
             case ((prvHash, signedMessages), nextMessage) =>
-              val nextSigned = create(nextMessage, prvHash, channelSendRequest.channelId)
+              val nextSigned = create(nextMessage, prvHash, channelSendRequest.channelId)(dao.keyPair)
               nextSigned.signedMessageData.hash -> (signedMessages :+ nextSigned)
           }
           ._2

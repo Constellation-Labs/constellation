@@ -145,6 +145,7 @@ object ConstellationNode extends StrictLogging {
           seeds = seedsFromConfig,
           primaryKeyPair = keyPair,
           isGenesisNode = cliConfig.startOfflineMode,
+          isLightNode = cliConfig.lightNode,
           hostName = hostName,
           httpInterface = config.getString("http.interface"),
           httpPort = httpPort,

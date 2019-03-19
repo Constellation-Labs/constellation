@@ -38,7 +38,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
           val newChannelName = "channel_ " + dao.threadSafeMessageMemPool.activeChannels.size
           val channelOpen = ChannelOpen(newChannelName)
           val genesis =
-            ChannelMessage.create(channelOpen.json, Genesis.CoinBaseHash, newChannelName)
+            ChannelMessage.create(channelOpen.json, Genesis.CoinBaseHash, newChannelName)(dao.keyPair)
           val genesisHash = genesis.signedMessageData.hash
           testChannels :+= genesisHash
           dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHash) = newChannelName
@@ -57,7 +57,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                   Some(
                     ChannelMessage.create(Random.nextInt(1000).toString,
                                           data.channelMessage.signedMessageData.hash,
-                                          channel)
+                                          channel)(dao.keyPair)
                   )
                 } else None
               }
