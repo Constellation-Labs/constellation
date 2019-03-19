@@ -43,14 +43,35 @@ class E2ETest extends E2E {
 
   private val initialAPIs = apis
 
-  // val n1App = new ConstellationApp(apis.head)
-
-  // val constellationAppSim = new ConstellationAppSim(sim, n1App)
 
   "E2E Run" should "demonstrate full flow" in {
     logger.info("API Ports: " + apis.map { _.apiPort })
 
     assert(Simulation.run(initialAPIs, addPeerRequests))
+
+    val metadatas = n1.getPeerAPIClient.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", n1.dao.id)
+
+    println(s"Metadata: $metadatas")
+
+    assert(
+      metadatas.nonEmpty,
+      "channel neighborhood empty"
+    )
+
+    val lightNode = createNode(
+      seedHosts = Seq(HostPort("localhost", 9001)),
+      portOffset = 20,
+      randomizePorts = false,
+      isLightNode = true
+    )
+
+    val lightNodeAPI = lightNode.getAPIClient()
+
+    Simulation.awaitConditionMet(
+      "Light node has no data",
+      lightNodeAPI.getBlocking[Seq[String]]("channelKeys").nonEmpty
+    )
+
 
     val firstAPI = apis.head
     val allChannels = firstAPI.getBlocking[Seq[String]]("channels")

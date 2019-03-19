@@ -202,11 +202,10 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
       dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
     }
 
-    val peerIds = dao.peerInfo //(dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
-    val facilMap = peerIds.filter {
+    val facilMap = dao.readyFullPeers.filter {
       case (_, pd) =>
-        pd.peerMetadata.timeAdded < (System
-          .currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000) && pd.peerMetadata.nodeState == NodeState.Ready
+        // TODO: Is this still necessary?
+        pd.peerMetadata.timeAdded < (System.currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000)
     }
 
     if (dao.nodeState == NodeState.Ready && acceptedCBSinceSnapshot.nonEmpty) {
@@ -425,6 +424,7 @@ trait EdgeDAO {
 
   val finishedExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
+
 
 
   def pullTransactions(minimumCount: Int = minCheckpointFormationThreshold): Option[Seq[Transaction]] =  {

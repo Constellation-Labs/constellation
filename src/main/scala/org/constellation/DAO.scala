@@ -87,7 +87,7 @@ class DAO()
       nodeState = NodeState.Offline
     }
 
-    if (nodeConfig.cliConfig.lightNode) {
+    if (nodeConfig.isLightNode) {
       nodeType = NodeType.Light
     }
 
@@ -115,10 +115,12 @@ class DAO()
   def readyPeers: Map[Id, PeerData] =
     peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
 
-  def readyFacilitators(): Map[Id, PeerData] = peerInfo.filter {
+  def readyFullPeers: Map[Id, PeerData] = readyPeers.filter{_._2.peerMetadata.nodeType == NodeType.Full}
+
+  def readyFacilitators(): Map[Id, PeerData] = readyFullPeers.filter {
     case (_, pd) =>
       pd.peerMetadata.timeAdded < (System
-        .currentTimeMillis() - processingConfig.minPeerTimeAddedSeconds * 1000) && pd.peerMetadata.nodeState == NodeState.Ready
+        .currentTimeMillis() - processingConfig.minPeerTimeAddedSeconds * 1000)
   }
 
 }

@@ -199,6 +199,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           path("messageService" / Segment) { channelId =>
             complete(dao.messageService.getSync(channelId))
           } ~
+          path ("channelKeys") {
+            complete(dao.channelService.lruCache.asImmutableMap().keys.toSeq)
+          } ~
+          path ("channel" / "genesis" / Segment) { channelId =>
+            complete(dao.channelService.get(channelId))
+          } ~
           path("channel" / Segment) { channelHash =>
             val res =
               Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.getSync(channelHash))
