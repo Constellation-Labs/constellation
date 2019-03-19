@@ -111,7 +111,7 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
                                       height = majorityCheckpointBlock.calculateHeight())
       broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, finalFacilitators))
 
-      dao.threadSafeTipService.accept(cache)
+      dao.threadSafeSnapshotService.accept(cache)
       Some(majorityCheckpointBlock)
     } else None
     context.parent ! StopBlockCreationRound(roundData.roundId, acceptedBlock)

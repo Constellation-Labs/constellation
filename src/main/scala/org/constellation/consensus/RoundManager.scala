@@ -130,7 +130,7 @@ object RoundManager {
     dao
       .pullTransactions(dao.minCheckpointFormationThreshold)
       .flatMap { transactions =>
-        dao.pullTips(true).map { tips =>
+        dao.pullTips(dao.readyFacilitators()).map { tips =>
           RoundData(generateRoundId,
                     tips._2.values.toSet,
                     FacilitatorId(dao.id),

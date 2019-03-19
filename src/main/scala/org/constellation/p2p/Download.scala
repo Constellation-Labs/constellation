@@ -213,7 +213,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   }
 
   private def setSnapshot(snapshotInfo: SnapshotInfo): IO[Unit] = IO {
-    dao.threadSafeTipService.setSnapshot(snapshotInfo)
+    dao.threadSafeSnapshotService.setSnapshot(snapshotInfo)
   }
 
   private def enableRandomTX: IO[Unit] = IO {
@@ -221,17 +221,17 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   }
 
   private def acceptSnapshotCacheData(snapshotInfo: SnapshotInfo): IO[Unit] = IO {
-    dao.threadSafeTipService.syncBuffer.foreach { h =>
+    dao.threadSafeSnapshotService.syncBuffer.foreach { h =>
       if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache
             .contains(h)) {
         dao.metrics.incrementMetric("syncBufferCBAccepted")
-        dao.threadSafeTipService.accept(h)
+        dao.threadSafeSnapshotService.accept(h)
       }
     }
   }
 
   private def clearSyncBuffer: IO[Unit] = IO {
-    dao.threadSafeTipService.syncBuffer = Seq()
+    dao.threadSafeSnapshotService.syncBuffer = Seq()
   }
 
   private def setDownloadFinishedTime: IO[Unit] = IO {

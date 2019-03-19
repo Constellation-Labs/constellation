@@ -103,9 +103,9 @@ class DAO()
 
 
   def pullTips(
-    allowEmptyFacilitators: Boolean = false
+    readyFacilitators: Map[Id, PeerData]
   ): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = {
-    threadSafeTipService.pull(allowEmptyFacilitators)(this)
+    concurrentTipService.pull(readyFacilitators)(this.metrics)
   }
   def peerInfo: Map[Id, PeerData] = {
     // TODO: fix it to be Future
@@ -115,5 +115,10 @@ class DAO()
   def readyPeers: Map[Id, PeerData] =
     peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
 
+  def readyFacilitators(): Map[Id, PeerData] = peerInfo.filter {
+    case (_, pd) =>
+      pd.peerMetadata.timeAdded < (System
+        .currentTimeMillis() - processingConfig.minPeerTimeAddedSeconds * 1000) && pd.peerMetadata.nodeState == NodeState.Ready
+  }
 
 }

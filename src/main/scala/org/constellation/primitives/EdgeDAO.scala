@@ -16,7 +16,6 @@ import org.constellation.{DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
-import scala.util.Random
 
 class ThreadSafeTXMemPool() {
 
@@ -123,16 +122,14 @@ class ThreadSafeMessageMemPool() extends StrictLogging {
 
 import constellation._
 
-class ThreadSafeTipService() {
+class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
   implicit val timeout: Timeout = Timeout(15, TimeUnit.SECONDS)
 
-  private var thresholdMetCheckpoints: Map[String, TipData] = Map()
   var acceptedCBSinceSnapshot: Seq[String] = Seq()
-  var facilitators: Map[Id, PeerData] = Map()
   private var snapshot: Snapshot = Snapshot.snapshotZero
 
-  def tips: Map[String, TipData] = thresholdMetCheckpoints
+  def tips: Map[String, TipData] = concurrentTipService.toMap
 
   def getSnapshotInfo()(implicit dao: DAO): SnapshotInfo = this.synchronized(
     SnapshotInfo(
@@ -141,7 +138,7 @@ class ThreadSafeTipService() {
       lastSnapshotHeight = lastSnapshotHeight,
       snapshotHashes = dao.snapshotHashes,
       addressCacheData = dao.addressService.toMapSync(),
-      tips = thresholdMetCheckpoints,
+      tips = concurrentTipService.toMap,
       snapshotCache = snapshot.checkpointBlocks.flatMap { dao.checkpointService.get }
     )
   )
@@ -153,7 +150,7 @@ class ThreadSafeTipService() {
   def setSnapshot(latestSnapshotInfo: SnapshotInfo)(implicit dao: DAO): Unit = this.synchronized {
     snapshot = latestSnapshotInfo.snapshot
     lastSnapshotHeight = latestSnapshotInfo.lastSnapshotHeight
-    thresholdMetCheckpoints = latestSnapshotInfo.tips
+    concurrentTipService.set(latestSnapshotInfo.tips)
 
     // Below may not be necessary, just a sanity check
     acceptedCBSinceSnapshot = latestSnapshotInfo.acceptedCBSinceSnapshot
@@ -190,20 +187,6 @@ class ThreadSafeTipService() {
   // TODO: Read from lastSnapshot in DB optionally, assign elsewhere
   var lastSnapshotHeight = 0
 
-  def getMinTipHeight()(implicit dao: DAO) =
-    thresholdMetCheckpoints.keys
-      .map {
-        dao.checkpointService.get
-      }
-      .flatMap {
-        _.flatMap {
-          _.height.map {
-            _.min
-          }
-        }
-      }
-      .min
-
   var syncBuffer: Seq[CheckpointCacheData] = Seq()
 
   def syncBufferAccept(cb: CheckpointCacheData)(implicit dao: DAO): Unit = {
@@ -213,12 +196,6 @@ class ThreadSafeTipService() {
 
   def attemptSnapshot()(implicit dao: DAO): Unit = this.synchronized {
 
-    // Sanity check memory protection
-    if (thresholdMetCheckpoints.size > dao.processingConfig.maxActiveTipsAllowedInMemory) {
-      thresholdMetCheckpoints = thresholdMetCheckpoints.slice(0, 100)
-      dao.metrics.incrementMetric("memoryExceeded_thresholdMetCheckpoints")
-      dao.metrics.updateMetric("activeTips", thresholdMetCheckpoints.size.toString)
-    }
     if (acceptedCBSinceSnapshot.size > dao.processingConfig.maxAcceptedCBHashesInMemory) {
       acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.slice(0, 100)
       dao.metrics.incrementMetric("memoryExceeded_acceptedCBSinceSnapshot")
@@ -232,11 +209,9 @@ class ThreadSafeTipService() {
           .currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000) && pd.peerMetadata.nodeState == NodeState.Ready
     }
 
-    facilitators = facilMap
-
     if (dao.nodeState == NodeState.Ready && acceptedCBSinceSnapshot.nonEmpty) {
 
-      val minTipHeight = getMinTipHeight()
+      val minTipHeight = concurrentTipService.getMinTipHeight()
       dao.metrics.updateMetric("minTipHeight", minTipHeight.toString)
 
       val nextHeightInterval = lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval
@@ -338,58 +313,6 @@ class ThreadSafeTipService() {
     }
   }
 
-  def acceptGenesis(genesisObservation: GenesisObservation): Unit = this.synchronized {
-    thresholdMetCheckpoints += genesisObservation.initialDistribution.baseHash -> TipData(
-      genesisObservation.initialDistribution,
-      0
-    )
-    thresholdMetCheckpoints += genesisObservation.initialDistribution2.baseHash -> TipData(
-      genesisObservation.initialDistribution2,
-      0
-    )
-  }
-
-  def pull(
-    allowEmptyFacilitators: Boolean = false
-  )(implicit dao: DAO): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] =
-    this.synchronized {
-      val res =
-        if (thresholdMetCheckpoints.size >= 2 && (facilitators.nonEmpty || allowEmptyFacilitators)) {
-          val tips = Random.shuffle(thresholdMetCheckpoints.toSeq).take(2)
-
-          val tipSOE = tips
-            .map {
-              _._2.checkpointBlock.checkpoint.edge.signedObservationEdge
-            }
-            .sortBy(_.hash)
-
-          val mergedTipHash = tipSOE.map { _.hash }.mkString("")
-
-          val totalNumFacil = facilitators.size
-
-          val finalFacilitators = if (totalNumFacil > 0) {
-            // TODO: Use XOR distance instead as it handles peer data mismatch cases better
-            val facilitatorIndex = (BigInt(mergedTipHash, 16) % totalNumFacil).toInt
-            val sortedFacils = facilitators.toSeq.sortBy(_._1.hex)
-            val selectedFacils = Seq
-              .tabulate(dao.processingConfig.numFacilitatorPeers) { i =>
-                (i + facilitatorIndex) % totalNumFacil
-              }
-              .map {
-                sortedFacils(_)
-              }
-            selectedFacils.toMap
-          } else {
-            Map[Id, PeerData]()
-          }
-
-          Some(tipSOE -> finalFacilitators)
-        } else None
-
-      dao.metrics.updateMetric("activeTips", thresholdMetCheckpoints.size.toString)
-      res
-    }
-
   // TODO: Synchronize only on values modified by this, same for other functions
 
   def accept(checkpointCacheData: CheckpointCacheData)(implicit dao: DAO): Unit =
@@ -408,49 +331,8 @@ class ThreadSafeTipService() {
       } else {
 
         tryWithMetric(acceptCheckpoint(checkpointCacheData), "acceptCheckpoint")
-
-        def reuseTips: Boolean = thresholdMetCheckpoints.size < dao.maxWidth
-
         checkpointCacheData.checkpointBlock.foreach { checkpointBlock =>
-          val keysToRemove = checkpointBlock.parentSOEBaseHashes.flatMap { h =>
-            thresholdMetCheckpoints.get(h).flatMap {
-              case TipData(block, numUses) =>
-                def doRemove(): Option[String] = {
-                  dao.metrics.incrementMetric("checkpointTipsRemoved")
-                  Some(block.baseHash)
-                }
-
-                if (reuseTips) {
-                  if (numUses >= 2) {
-                    doRemove()
-                  } else {
-                    None
-                  }
-                } else {
-                  doRemove()
-                }
-            }
-          }
-
-          val keysToUpdate = checkpointBlock.parentSOEBaseHashes.flatMap { h =>
-            thresholdMetCheckpoints.get(h).flatMap {
-              case TipData(block, numUses) =>
-                def doUpdate(): Option[(String, TipData)] = {
-                  dao.metrics.incrementMetric("checkpointTipsIncremented")
-                  Some(block.baseHash -> TipData(block, numUses + 1))
-                }
-
-                if (reuseTips && numUses <= 2) {
-                  doUpdate()
-                } else None
-            }
-          }.toMap
-
-          thresholdMetCheckpoints = thresholdMetCheckpoints +
-            (checkpointBlock.baseHash -> TipData(checkpointBlock, 0)) ++
-            keysToUpdate --
-            keysToRemove
-
+          concurrentTipService.update(checkpointBlock)
           if (acceptedCBSinceSnapshot.contains(checkpointBlock.baseHash)) {
             dao.metrics.incrementMetric("checkpointAcceptedButAlreadyInAcceptedCBSinceSnapshot")
           } else {
@@ -458,8 +340,8 @@ class ThreadSafeTipService() {
             dao.metrics.updateMetric("acceptedCBSinceSnapshot",
                                      acceptedCBSinceSnapshot.size.toString)
           }
-
         }
+
       }
     }
 
@@ -509,8 +391,13 @@ trait EdgeDAO {
   val recentBlockTracker = new RecentDataTracker[CheckpointCacheData](200)
 
   val threadSafeTXMemPool = new ThreadSafeTXMemPool()
+  lazy val concurrentTipService: ConcurrentTipService = new TrieBasedTipService(processingConfig.maxActiveTipsAllowedInMemory,
+                                                     processingConfig.maxWidth,
+                                                     processingConfig.numFacilitatorPeers,
+                                                     processingConfig.minPeerTimeAddedSeconds)
+
   val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
-  val threadSafeTipService = new ThreadSafeTipService()
+  lazy val threadSafeSnapshotService = new ThreadSafeSnapshotService(concurrentTipService)
 
   var genesisBlock: Option[CheckpointBlock] = None
   var genesisObservation: Option[GenesisObservation] = None
