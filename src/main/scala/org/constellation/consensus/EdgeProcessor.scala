@@ -4,6 +4,7 @@ import java.nio.file.Path
 
 import cats.data.NonEmptyList
 import cats.data.Validated.{Invalid, Valid}
+import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
@@ -56,9 +57,11 @@ object EdgeProcessor extends StrictLogging {
         dao.metrics.incrementMetric("heightNonEmpty")
       }
 
+      dao.checkpointService.midDb.put(cb.baseHash, checkpointCacheData)
+
       cb.messages.foreach { m =>
         if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
-          dao.messageService.put(
+          dao.messageService.putSync(
             m.signedMessageData.data.channelId,
             ChannelMessageMetadata(m, Some(cb.baseHash))
           )
@@ -72,7 +75,7 @@ object EdgeProcessor extends StrictLogging {
             }
           )
         } else { // Unsafe json extract
-          dao.channelService.put(
+          dao.channelService.putSync(
             m.signedMessageData.hash,
             ChannelMetadata(
               m.signedMessageData.data.message.x[ChannelOpen],
@@ -80,27 +83,14 @@ object EdgeProcessor extends StrictLogging {
             )
           )
         }
-        dao.messageService.put(m.signedMessageData.hash,
+        dao.messageService.putSync(m.signedMessageData.hash,
                                ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.metrics.incrementMetric("messageAccepted")
       }
 
       // Accept transactions
-      cb.transactions.foreach { t =>
-        dao.metrics.incrementMetric("transactionAccepted")
-        t.store(
-          TransactionCacheData(
-            t,
-            valid = true,
-            inMemPool = false,
-            inDAG = true,
-            Map(cb.baseHash -> true),
-            resolved = true,
-            cbBaseHash = Some(cb.baseHash)
-          )
-        )
-        t.ledgerApply()
-      }
+      acceptTransactions(cb).unsafeRunSync()
+
       dao.metrics.incrementMetric("checkpointAccepted")
       val data = CheckpointCacheData(
         Some(cb),
@@ -111,6 +101,30 @@ object EdgeProcessor extends StrictLogging {
       )
 
     }
+  }
+
+  private def acceptTransactions(cb: CheckpointBlock)(implicit dao: DAO): IO[Unit] = {
+    def toCacheData(tx: Transaction) = TransactionCacheData(
+      tx,
+      valid = true,
+      inMemPool = false,
+      inDAG = true,
+      Map(cb.baseHash -> true),
+      resolved = true,
+      cbBaseHash = Some(cb.baseHash)
+    )
+
+    cb.transactions
+      .toList
+      .map(tx ⇒ (tx, toCacheData(tx)))
+      .map {
+        case (tx, txMetadata) ⇒ dao.transactionService.memPool.remove(tx.baseHash)
+        .flatMap(_ ⇒ dao.transactionService.midDb.put(tx.baseHash, txMetadata))
+        .flatMap(_ ⇒ dao.metrics.incrementMetricAsync("transactionAccepted"))
+        .flatMap(_ ⇒ dao.addressService.transfer(tx))
+      }
+      .sequence[IO, AddressCacheData]
+      .map(_ ⇒ ())
   }
 
   private def requestBlockSignature(
@@ -318,7 +332,7 @@ object EdgeProcessor extends StrictLogging {
         val hashes = sr.checkpointBlock.checkpoint.edge.data.hashes
         dao.metrics.incrementMetric(
           "signatureRequestAllHashesKnown_" + hashes.forall { h =>
-            dao.transactionService.get(h).nonEmpty
+            dao.transactionService.lookup(h).map(_.nonEmpty).unsafeRunSync()
           }
         )
 
@@ -498,7 +512,7 @@ object Snapshot {
           else {
             findLatestMessageWithSnapshotHashInner(
               depth + 1,
-              dao.messageService.get(
+              dao.messageService.getSync(
                 m.channelMessage.signedMessageData.data.previousMessageHash
               )
             )
@@ -535,7 +549,7 @@ object Snapshot {
          cbCache <- cbOpt;
          cb <- cbCache.checkpointBlock;
          message <- cb.messages) {
-      dao.messageService.update(
+      dao.messageService.updateSync(
         message.signedMessageData.signatures.hash,
         _.copy(snapshotHash = Some(snapshot.hash)),
         ChannelMessageMetadata(message, Some(cb.baseHash), Some(snapshot.hash))
@@ -549,9 +563,10 @@ object Snapshot {
          tx <- cb.transactions) {
       // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
       // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
-      tx.ledgerApplySnapshot()
-      dao.acceptedTransactionService.delete(Set(tx.hash))
-      dao.metrics.incrementMetric("snapshotAppliedBalance")
+      dao.addressService.transferSnapshot(tx)
+        .flatMap(_ ⇒ dao.acceptedTransactionService.remove(Set(tx.hash)))
+        .flatTap(_ ⇒ dao.metrics.incrementMetricAsync("snapshotAppliedBalance"))
+        .unsafeRunSync()
     }
   }
 

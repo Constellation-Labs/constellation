@@ -52,7 +52,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
             }
             if (channels.nonEmpty) {
               val (channel, lock) = channels.toList(Random.nextInt(channels.size))
-              dao.messageService.get(channel).flatMap { data =>
+              dao.messageService.getSync(channel).flatMap { data =>
                 if (lock.tryAcquire()) {
                   Some(
                     ChannelMessage.create(Random.nextInt(1000).toString,
@@ -95,7 +95,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
           dao.metrics.updateMetric("transactionMemPoolSize", memPoolCount.toString)
 
           val haveBalance =
-            dao.addressService.get(dao.selfAddressStr).exists(_.balanceByLatestSnapshot > 10000000)
+            dao.addressService.getSync(dao.selfAddressStr).exists(_.balanceByLatestSnapshot > 10000000)
 
           if (memPoolCount < dao.processingConfig.maxMemPoolSize && haveBalance) {
 
@@ -115,7 +115,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                 }
 
 
-                val balancesForAddresses = dao.addresses.map{a => a -> dao.addressService.get(a)}
+                val balancesForAddresses = dao.addresses.map{a => a -> dao.addressService.getSync(a)}
                 val auxAddressHaveSufficient = balancesForAddresses.forall{_._2.exists(_.balance > 10000000)}
 
                 def simpleTX(src: String, kp: KeyPair = dao.keyPair) = createTransaction(
@@ -165,7 +165,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
 
                 dao.threadSafeTXMemPool.put(tx)
 
-                dao.transactionService.put(
+                dao.transactionService.memPool.putSync(
                   tx.hash,
                   TransactionCacheData(
                     tx,
@@ -173,6 +173,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                     inMemPool = true
                   )
                 )
+
                 dao.peerInfo.foreach {
                   case (_, peerData) =>
                     dao.metrics.incrementMetric("transactionPut")

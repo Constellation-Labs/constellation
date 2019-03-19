@@ -12,6 +12,7 @@ import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObservationEdge}
+import org.constellation.primitives.storage._
 import org.constellation.primitives._
 
 class DAO()
@@ -92,6 +93,9 @@ class DAO()
     transactionHashStore = SwayDBDatastore.duplicateCheckStore(this, "transaction_hash_store")
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
+    transactionService = TransactionService(this, processingConfig.transactionLRUMaxSize)
+    checkpointService = CheckpointService(this, processingConfig.checkpointLRUMaxSize)
+    snapshotService = SnapshotService(this)
   }
 
 

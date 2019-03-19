@@ -1,17 +1,15 @@
 package org.constellation.primitives.storage
 
-import org.constellation.primitives.Schema.{TransactionCacheData, TransactionSerialized}
+import org.constellation.primitives.{TransactionCacheData, TransactionSerialized}
 
 import scala.collection.mutable
-
-class TransactionService(size: Int = 50000) extends StorageService[TransactionCacheData](size)
 
 class AcceptedTransactionService(size: Int = 50000)
     extends StorageService[TransactionCacheData](size) {
   private val queue = mutable.Queue[TransactionSerialized]()
   private val maxQueueSize = 20
 
-  override def put(
+  override def putSync(
     key: String,
     cache: TransactionCacheData
   ): TransactionCacheData = {
@@ -22,7 +20,7 @@ class AcceptedTransactionService(size: Int = 50000)
       }
 
       queue.enqueue(tx)
-      super.put(key, cache)
+      super.putSync(key, cache)
     }
   }
 
