@@ -64,7 +64,7 @@ case class CheckpointBlock(
 
   }
 
-  def transactionsValid: Boolean = transactions.nonEmpty && transactions.forall(_.valid)
+  def transactionsValid(implicit dao: DAO): Boolean = transactions.nonEmpty && transactions.forall(_.valid)
 
   // TODO: Return checkpoint validation status for more info rather than just a boolean
 
@@ -270,7 +270,7 @@ sealed trait CheckpointBlockValidatorNel {
 
   type ValidationResult[A] = ValidatedNel[CheckpointBlockValidation, A]
 
-  def validateTransactionIntegrity(t: Transaction): ValidationResult[Transaction] =
+  def validateTransactionIntegrity(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
     if (t.valid) t.validNel else InvalidTransaction(t).invalidNel
 
   def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
@@ -367,14 +367,6 @@ sealed trait CheckpointBlockValidatorNel {
 
     spend |+| received
   }
-
-  /*
-      def getSnapshotBalances(implicit dao: DAO): AddressBalance =
-        dao.threadSafeTipService
-          .getSnapshotInfo()
-          .addressCacheData
-          .mapValues(_.balanceByLatestSnapshot)
-   */
 
   def validateDiff(a: (String, Long))(implicit dao: DAO): Boolean = a match {
     case (hash, diff) =>
