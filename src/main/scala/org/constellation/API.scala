@@ -360,7 +360,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
       } ~
         pathPrefix("peer") {
           path("remove") {
-            entity(as[RemovePeerRequest]) { e =>
+            entity(as[ChangePeerState]) { e =>
               dao.peerManager ! e
               complete(StatusCodes.OK)
             }
