@@ -1,4 +1,5 @@
 import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
+import sbt.Keys.mainClass
 
 enablePlugins(JavaAppPackaging)
 //addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
@@ -32,8 +33,10 @@ lazy val commonSettings = Seq(
   version := _version,
   scalaVersion := "2.12.8",
   organization := "org.constellation",
-  name := "constellation",
-  mainClass := Some("org.constellation.ConstellationNode"),
+  name := "constellation"
+)
+
+lazy val coreSettings = Seq(
   parallelExecution in Test := false,
   dockerBaseImage := "openjdk:8-jdk",
   dockerExposedPorts := Seq(2551, 9000, 6006, 9010, 9001, 9002),
@@ -43,15 +46,15 @@ lazy val commonSettings = Seq(
     case v                                => Seq(v)
   },
   dockerCommands += Cmd("HEALTHCHECK",
-                        "--interval=30s",
-                        "--timeout=3s",
-                        "CMD",
-                        "curl -f http://localhost:9000/health || exit 1"),
+    "--interval=30s",
+    "--timeout=3s",
+    "CMD",
+    "curl -f http://localhost:9000/health || exit 1"),
   dockerUsername := Some("constellationlabs"),
   dockerAlias := DockerAlias(None,
-                             Some("constellationlabs"),
-                             "constellation",
-                             Some(sys.env.getOrElse("CIRCLE_SHA1", _version))),
+    Some("constellationlabs"),
+    "constellation",
+    Some(sys.env.getOrElse("CIRCLE_SHA1", _version))),
   // Update the latest tag when publishing
   dockerUpdateLatest := true,
   // These values will be filled in by the k8s StatefulSet and Deployment
@@ -128,7 +131,19 @@ assemblyMergeStrategy in assembly := {
     oldStrategy(x)
 }
 
+
+
+
+lazy val protobuf = (project in file("proto"))
+  .settings(commonSettings,
+    PB.targets in Compile := Seq(
+      scalapb.gen() -> (sourceManaged in Compile).value
+    )
+  )
+
+
 lazy val root = (project in file("."))
+  .aggregate(protobuf)
   .disablePlugins(plugins.JUnitXmlReportPlugin)
   .configs(IntegrationTest)
   .enablePlugins(BuildInfoPlugin)
@@ -136,7 +151,9 @@ lazy val root = (project in file("."))
     buildInfoKeys := Seq[BuildInfoKey](name, version, scalaVersion, sbtVersion),
     buildInfoPackage := "org.constellation",
     commonSettings,
+    coreSettings,
     Defaults.itSettings,
-    libraryDependencies ++= (coreDependencies ++ testDependencies)
+    libraryDependencies ++= (coreDependencies ++ testDependencies),
+    mainClass := Some("org.constellation.ConstellationNode")
     // other settings here
   )
