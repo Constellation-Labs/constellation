@@ -211,11 +211,19 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                     File(dao.snapshotPath, snapshotHash).byteArray
                   )
                 }, "readSnapshotForMessage").toOption.map { storedSnapshot =>
-                  val blockProof = MerkleTree(storedSnapshot.snapshot.checkpointBlocks.toList)
-                    .createProof(cmd.blockHash.get)
+
+
+                  val blocksInSnapshot = storedSnapshot.snapshot.checkpointBlocks.toList
+                  val blockHashForMessage = cmd.blockHash.get
+
+                  if (!blocksInSnapshot.contains(blockHashForMessage)) {
+                    logger.error("Message block hash not in snapshot")
+                  }
+                  val blockProof = MerkleTree(blocksInSnapshot)
+                    .createProof(blockHashForMessage)
                   val block = storedSnapshot.checkpointCache
                     .filter {
-                      _.checkpointBlock.get.baseHash == cmd.blockHash.get
+                      _.checkpointBlock.get.baseHash == blockHashForMessage
                     }
                     .head
                     .checkpointBlock

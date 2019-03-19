@@ -56,7 +56,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                 if (lock.tryAcquire()) {
                   Some(
                     ChannelMessage.create(Random.nextInt(1000).toString,
-                                          data.channelMessage.signedMessageData.signatures.hash,
+                                          data.channelMessage.signedMessageData.hash,
                                           channel)
                   )
                 } else None
@@ -89,7 +89,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
 
         if ((peerIds.nonEmpty || dao.nodeConfig.isGenesisNode) && dao.nodeState == NodeState.Ready && dao.generateRandomTX) {
 
-          generateRandomMessages()
+         //generateRandomMessages()
 
           val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
           dao.metrics.updateMetric("transactionMemPoolSize", memPoolCount.toString)
