@@ -202,7 +202,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
       dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
     }
 
-    val facilMap = dao.readyFullPeers.filter {
+    val facilMap = dao.readyPeers(NodeType.Full).filter {
       case (_, pd) =>
         // TODO: Is this still necessary?
         pd.peerMetadata.timeAdded < (System.currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000)

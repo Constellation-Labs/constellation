@@ -45,11 +45,11 @@ trait NodeData {
   val dummyAddress: String = KeyUtils.makeKeyPair().getPublic.toId.address
 
   def externalHostString: String = nodeConfig.hostName
-  def externlPeerHTTPPort: Int = nodeConfig.peerHttpPort
+  def externalPeerHTTPPort: Int = nodeConfig.peerHttpPort
 
   def peerRegistrationRequest =
     PeerRegistrationRequest(externalHostString,
-                            externlPeerHTTPPort,
+                            externalPeerHTTPPort,
                             id,
                             ResourceInfo(
                               diskUsableBytes =

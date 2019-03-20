@@ -318,7 +318,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             val self = Node(
               dao.selfAddressStr,
               dao.externalHostString,
-              dao.externlPeerHTTPPort
+              dao.externalPeerHTTPPort
             )
             val peerMap = dao.peerInfo.toSeq.map {
               case (id, pd) => Node(id.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
