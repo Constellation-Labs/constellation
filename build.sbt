@@ -90,7 +90,7 @@ lazy val coreDependencies = Seq(
   "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
   "com.twitter" %% "chill" % "0.9.3",
   "com.twitter" %% "algebird-core" % "0.13.5",
-  "org.typelevel" %% "cats-core" % versions.cats withSources () withJavadoc (),
+  "org.typelevel" %% "cats-core" % versions.cats withSources() withJavadoc(),
 //  "org.typelevel" %% "alleycats-core" % versions.cats withSources() withJavadoc(),
   "org.typelevel" %% "cats-effect" % "1.2.0" withSources() withJavadoc(),
   "net.glxn" % "qrgen" % "1.4",
