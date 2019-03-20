@@ -1,9 +1,11 @@
 package org.constellation.consensus
+
 import akka.actor.{Actor, ActorLogging, Cancellable, Props}
+import cats.effect.IO
 import cats.implicits._
 import constellation.{wrapFutureWithMetric, _}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{BroadcastTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
 import org.constellation.primitives.Schema.{CheckpointCacheData, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
 import org.constellation.{ConfigUtil, DAO}
@@ -14,9 +16,10 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
 
+  implicit val shadedDao: DAO = dao
   implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
-  val transactionProposals: mutable.Map[FacilitatorId, TransactionsProposal] =
+  val transactionProposals: mutable.Map[FacilitatorId, LightTransactionsProposal] =
     mutable.Map()
   val checkpointBlockProposals: mutable.Map[FacilitatorId, CheckpointBlock] =
     mutable.Map()
@@ -26,34 +29,39 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
   override def receive: Receive = {
     case StartTransactionProposal(_) =>
       dao.pullTransactions(1).foreach { transactions =>
-        val proposal = TransactionsProposal(
+        val proposal = LightTransactionsProposal(
           roundData.roundId,
           FacilitatorId(dao.id),
-          transactions,
-          dao.threadSafeMessageMemPool.pull(1).getOrElse(Seq()),
+          transactions.map(_.hash),
+          dao.threadSafeMessageMemPool.pull(1).map(_.map(_.signedMessageData.hash)).getOrElse(Seq()),
           dao.peerInfo.flatMap(_._2.notification).toSeq
         )
-        context.parent ! BroadcastTransactionProposal(
+        context.parent ! BroadcastLightTransactionProposal(
           roundData.peers,
           proposal
         )
         unionTransactionProposalsTikTok = scheduleUnionProposals
         self ! proposal
       }
-    case proposal: TransactionsProposal =>
+
+    case proposal: LightTransactionsProposal =>
       transactionProposals += (proposal.facilitatorId -> proposal)
-      if (transactionProposals.size >= roundData.peers.size + 1) {
-        Option(unionTransactionProposalsTikTok).foreach(_.cancel())
+      if (receivedAllTransactionProposals) {
+        cancelUnionTransactionProposalsTikTok()
         self ! UnionProposals
       }
+
     case UnionBlockProposal(roundId, facilitatorId, checkpointBlock) =>
       checkpointBlockProposals += (facilitatorId -> checkpointBlock)
-      if (checkpointBlockProposals.size >= roundData.peers.size + 1) {
+      if (receivedAllCheckpointBlockProposals) {
         self ! ResolveMajorityCheckpointBlock(roundId)
       }
-    case UnionProposals                    => unionProposals()
+
+    case UnionProposals => unionProposals()
+
     case ResolveMajorityCheckpointBlock(_) => resolveMajorityCheckpointBlock()
-    case msg                               => log.info(s"Received unknown message: $msg")
+
+    case msg => log.info(s"Received unknown message: $msg")
   }
 
   private def scheduleUnionProposals: Cancellable =
@@ -64,19 +72,64 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
       UnionProposals
     )
 
+  private def receivedAllTransactionProposals: Boolean =
+    transactionProposals.size >= roundData.peers.size + 1
+
+  private def receivedAllCheckpointBlockProposals: Boolean =
+    checkpointBlockProposals.size >= roundData.peers.size + 1
+
+  private def cancelUnionTransactionProposalsTikTok(): Unit = {
+    Option(unionTransactionProposalsTikTok).foreach(_.cancel())
+  }
+
   def unionProposals(): Unit = {
 
+    def resolveTransaction(hash: String, facilitatorId: FacilitatorId): IO[Transaction] =
+      IO.fromFuture(IO {
+        EdgeProcessor.resolveTransactions(Seq(hash), facilitatorId.id)
+      }).map(_.head.transaction)
+
+    val resolvedTxs = transactionProposals
+      .values
+      .flatMap(proposal ⇒ proposal.txHashes.map(hash ⇒ (hash, proposal)))
+      .filterNot(p ⇒ dao.transactionService.contains(p._1).unsafeRunSync())
+      .toList
+      .map(p ⇒ resolveTransaction(p._1, p._2.facilitatorId))
+      .sequence[IO, Transaction]
+      .unsafeRunSync()
+
     val transactions = transactionProposals
-      .flatMap(_._2.transactions)
-      .toSet
-      .union(roundData.transactions.toSet)
-      .toSeq
+      .values
+      .flatMap(_.txHashes)
+      .filterNot(hash ⇒ dao.transactionService.contains(hash).unsafeRunSync())
+      .map(hash ⇒ dao.transactionService.lookup(hash).map(
+        _.map(_.transaction)
+      ))
+      .toList
+      .sequence[IO, Option[Transaction]]
+      .map {
+        _.flatten
+          .toSet
+          .union(roundData.transactions.toSet)
+          .toSeq
+      }
+      .unsafeRunSync()
 
     val messages = transactionProposals
-      .flatMap(_._2.messages)
-      .toSet
-      .union(roundData.messages.toSet)
-      .toSeq
+      .values
+      .flatMap(_.messages)
+      .map(hash ⇒ dao.messageService.lookup(hash).map(
+        _.map(_.channelMessage)
+      ))
+      .toList
+      .sequence[IO, Option[ChannelMessage]]
+      .map {
+        _.flatten
+          .toSet
+          .union(roundData.messages.toSet)
+          .toSeq
+      }
+      .unsafeRunSync()
 
     val notifications = transactionProposals
       .flatMap(_._2.notifications)
@@ -85,7 +138,7 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
       .toSeq
 
     val cb = CheckpointBlock.createCheckpointBlock(
-      transactions,
+      transactions ++ resolvedTxs,
       roundData.tipsSOE.map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)),
       messages,
       notifications
@@ -96,8 +149,6 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
   }
 
   def resolveMajorityCheckpointBlock(): Unit = {
-    implicit val shadedDao: DAO = dao
-
     val acceptedBlock = if (checkpointBlockProposals.nonEmpty) {
       val sameBlocks = checkpointBlockProposals
         .groupBy(_._2.baseHash)
@@ -158,27 +209,33 @@ object Round {
   }
 
   case object UnionProposals
+
   case class ResolveMajorityCheckpointBlock(roundId: RoundId) extends RoundCommand
+
   case class StartTransactionProposal(roundId: RoundId) extends RoundCommand
 
-  case class TransactionsProposal(roundId: RoundId,
-                                  facilitatorId: FacilitatorId,
-                                  transactions: Seq[Transaction],
-                                  messages: Seq[ChannelMessage] = Seq.empty,
-                                  notifications: Seq[PeerNotification] = Seq.empty)
-      extends RoundCommand
+  case class LightTransactionsProposal(
+    roundId: RoundId,
+    facilitatorId: FacilitatorId,
+    txHashes: Seq[String],
+    messages: Seq[String] = Seq(),
+    notifications: Seq[PeerNotification] = Seq()
+  ) extends RoundCommand
 
-  case class UnionBlockProposal(roundId: RoundId,
-                                facilitatorId: FacilitatorId,
-                                checkpointBlock: CheckpointBlock)
-      extends RoundCommand
+  case class UnionBlockProposal(
+    roundId: RoundId,
+    facilitatorId: FacilitatorId,
+    checkpointBlock: CheckpointBlock
+  ) extends RoundCommand
 
-  case class RoundData(roundId: RoundId,
-                       peers: Set[PeerData],
-                       facilitatorId: FacilitatorId,
-                       transactions: Seq[Transaction],
-                       tipsSOE: Seq[SignedObservationEdge],
-                       messages: Seq[ChannelMessage])
+  case class RoundData(
+    roundId: RoundId,
+    peers: Set[PeerData],
+    facilitatorId: FacilitatorId,
+    transactions: Seq[Transaction],
+    tipsSOE: Seq[SignedObservationEdge],
+    messages: Seq[ChannelMessage]
+  )
 
   case class StopBlockCreationRound(roundId: RoundId, maybeCB: Option[CheckpointBlock]) extends RoundCommand
 
