@@ -55,13 +55,13 @@ class E2ETest extends E2E {
     val firstAPI = apis.head
     val allChannels = firstAPI.getBlocking[Seq[String]]("channels")
 
-/*
+
     val channelProof = allChannels.map{ channelId =>
       firstAPI.getBlocking[Option[ChannelProof]]("channel/" + channelId, timeout = 90.seconds)
     }
     assert(channelProof.exists{_.nonEmpty})
 
-*/
+
 
     // val deployResponse = constellationAppSim.openChannel(apis)
 

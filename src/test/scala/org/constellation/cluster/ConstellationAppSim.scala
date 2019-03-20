@@ -32,8 +32,8 @@ class ConstellationAppSim(constellationApp: ConstellationApp)(
   def messagesInSnapshots(
                                   channelId: String,
                                   apis: Seq[APIClient],
-                                  maxRetries: Int = 300,
-                                  delay: Long = 120000
+                                  maxRetries: Int = 30,
+                                  delay: Long = 3000
                                 ): Boolean = {
     sim.awaitConditionMet(
       s"Messages for ${channelId} not found in snapshot", {

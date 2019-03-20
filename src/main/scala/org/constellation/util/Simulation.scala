@@ -396,10 +396,10 @@ object Simulation {
     assert(checkSnapshot(apis, num = snapshotCount))
 
     // TODO: Fix problem with snapshots before enabling this, causes flakiness
-    /*
+
     val channelProof = apis.head.getBlocking[Option[ChannelProof]]("channel/" + channelId, timeout = 90.seconds)
     assert(channelProof.nonEmpty)
-*/
+
     logger.info("Snapshot validation passed")
 
     true
