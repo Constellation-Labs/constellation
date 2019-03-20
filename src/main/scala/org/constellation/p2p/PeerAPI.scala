@@ -15,8 +15,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.DAO
-import org.constellation.consensus.EdgeProcessor
-import org.constellation.consensus.EdgeProcessor.{FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest}
+import org.constellation.consensus.{EdgeProcessor, FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest}
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -138,7 +137,7 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
           // TODO: Add limiting
           if (sendRequest.amountActual < (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor) &&
               dao.addressService
-                .get(dao.selfAddressStr)
+                .getSync(dao.selfAddressStr)
                 .map { _.balance }
                 .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)) {
             logger.info(s"send transaction to address $sendRequest")
@@ -236,7 +235,7 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
       put {
         entity(as[Transaction]) { tx =>
           dao.metrics.incrementMetric("transactionRXByPeerAPI")
-          dao.transactionService.update(tx.hash, { tcd =>
+          dao.transactionService.memPool.updateSync(tx.hash, { tcd =>
             tcd
           }, TransactionCacheData(tx))
           // TODO: Respond with initial tx validation

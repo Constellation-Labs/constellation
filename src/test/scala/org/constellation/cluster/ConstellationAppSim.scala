@@ -74,15 +74,15 @@ class ConstellationAppSim(constellationApp: ConstellationApp)(
             val validMessages = Seq.fill(batchNumber % 2) {
               SensorData(
                 Random.nextInt(100),
-                Seq.fill(numMessages) { Random.shuffle(validNameChars).head }.mkString,
-                channel.channelId
+                Seq.fill(numMessages) { Random.shuffle(validNameChars).head }.mkString
+//                channel.channelId
               )
             }
             val invalidMessages = Seq.fill((batchNumber + 1) % 2) {
               SensorData(
                 Random.nextInt(100) + 500,
-                Seq.fill(numMessages) { Random.shuffle(invalidNameChars).head }.mkString,
-                channel.channelId
+                Seq.fill(numMessages) { Random.shuffle(invalidNameChars).head }.mkString
+//                channel.channelId
               )
             }
             validMessages ++ invalidMessages

@@ -1,12 +1,10 @@
 package org.constellation.tx
 
-import java.security.KeyPair
-
 import com.typesafe.scalalogging.Logger
 import org.constellation.Fixtures._
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
-import org.constellation.util.SignHelp
+import org.constellation.primitives.TransactionValidatorNel
 import org.scalatest.FlatSpec
 
 class TXValidationBenchmark extends FlatSpec {
@@ -21,7 +19,7 @@ class TXValidationBenchmark extends FlatSpec {
 
     val parSeq = seq.par
     val t0 = System.nanoTime()
-    parSeq.map(_.validSrcSignature)
+    parSeq.map(TransactionValidatorNel.validateSourceSignature)
     val t1 = System.nanoTime()
     val delta = (t1 - t0) / 1e6.toLong
     logger.debug(s"Validated $batchSize transactions in $delta ms")

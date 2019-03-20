@@ -5,18 +5,19 @@ import java.security.KeyPair
 import cats.data.{Ior, NonEmptyList, ValidatedNel}
 import cats.implicits._
 import constellation.signedObservationEdge
-import org.constellation.DAO
 import org.constellation.primitives.Schema._
 import org.constellation.util.HashSignature
+import org.constellation.{DAO, PeerMetadata}
 
 case class CheckpointBlock(
   transactions: Seq[Transaction],
   checkpoint: CheckpointEdge,
-  messages: Seq[ChannelMessage] = Seq()
+  messages: Seq[ChannelMessage] = Seq(),
+  notifications: Seq[PeerNotification] = Seq()
 ) {
 
   def storeSOE()(implicit dao: DAO): Unit = {
-    dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true))
+    dao.soeService.putSync(soeHash, SignedObservationEdgeCache(soe, resolved = true))
   }
 
   def calculateHeight()(implicit dao: DAO): Option[Height] = {
@@ -63,7 +64,7 @@ case class CheckpointBlock(
 
   }
 
-  def transactionsValid: Boolean = transactions.nonEmpty && transactions.forall(_.valid)
+  def transactionsValid(implicit dao: DAO): Boolean = transactions.nonEmpty && transactions.forall(_.valid)
 
   // TODO: Return checkpoint validation status for more info rather than just a boolean
 
@@ -117,7 +118,7 @@ case class CheckpointBlock(
           }
      */
     // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
-    dao.checkpointService.put(baseHash, cache)
+    dao.checkpointService.memPool.put(baseHash, cache)
     dao.recentBlockTracker.put(cache)
 
   }
@@ -143,7 +144,7 @@ case class CheckpointBlock(
   def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
 
   def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
-    parentSOEHashes.flatMap { dao.soeService.get }.map { _.signedObservationEdge.baseHash }
+    parentSOEHashes.flatMap { dao.soeService.getSync }.map { _.signedObservationEdge.baseHash }
 
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
@@ -154,21 +155,25 @@ object CheckpointBlock {
   def createCheckpointBlockSOE(
     transactions: Seq[Transaction],
     tips: Seq[SignedObservationEdge],
-    messages: Seq[ChannelMessage] = Seq()
+    messages: Seq[ChannelMessage] = Seq.empty,
+    peers: Seq[PeerNotification] = Seq.empty
   )(implicit keyPair: KeyPair): CheckpointBlock = {
     createCheckpointBlock(transactions, tips.map { t =>
       TypedEdgeHash(t.hash, EdgeHashType.CheckpointHash)
-    }, messages)
+    }, messages, peers)
   }
 
   def createCheckpointBlock(
     transactions: Seq[Transaction],
     tips: Seq[TypedEdgeHash],
-    messages: Seq[ChannelMessage] = Seq()
+    messages: Seq[ChannelMessage] = Seq.empty,
+    peers: Seq[PeerNotification] = Seq.empty
   )(implicit keyPair: KeyPair): CheckpointBlock = {
 
     val checkpointEdgeData =
-      CheckpointEdgeData(transactions.map { _.hash }.sorted, messages.map{_.signedMessageData.hash})
+      CheckpointEdgeData(transactions.map { _.hash }.sorted, messages.map {
+        _.signedMessageData.hash
+      })
 
     val observationEdge = ObservationEdge(
       tips.toList,
@@ -181,7 +186,7 @@ object CheckpointBlock {
       Edge(observationEdge, soe, checkpointEdgeData)
     )
 
-    CheckpointBlock(transactions, checkpointEdge, messages)
+    CheckpointBlock(transactions, checkpointEdge, messages, peers)
   }
 
 }
@@ -265,12 +270,12 @@ sealed trait CheckpointBlockValidatorNel {
 
   type ValidationResult[A] = ValidatedNel[CheckpointBlockValidation, A]
 
-  def validateTransactionIntegrity(t: Transaction): ValidationResult[Transaction] =
+  def validateTransactionIntegrity(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
     if (t.valid) t.validNel else InvalidTransaction(t).invalidNel
 
   def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
     dao.addressService
-      .get(t.src.address)
+      .getSync(t.src.address)
       .fold[ValidationResult[Transaction]](NoAddressCacheFound(t).invalidNel)(_ => t.validNel)
 
   def validateTransaction(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
@@ -320,7 +325,7 @@ sealed trait CheckpointBlockValidatorNel {
 
     def lookup(key: String) =
       dao.addressService
-        .get(key)
+        .getSync(key)
         .map(_.balance)
         .getOrElse(0L)
 
@@ -348,7 +353,7 @@ sealed trait CheckpointBlockValidatorNel {
       .getOrElse(List())
 
   def isInSnapshot(c: CheckpointBlock)(implicit dao: DAO): Boolean =
-    dao.threadSafeTipService.acceptedCBSinceSnapshot
+    dao.threadSafeSnapshotService.acceptedCBSinceSnapshot
       .contains(c.baseHash)
 
   def getSummaryBalance(c: CheckpointBlock)(implicit dao: DAO): AddressBalance = {
@@ -363,17 +368,9 @@ sealed trait CheckpointBlockValidatorNel {
     spend |+| received
   }
 
-  /*
-      def getSnapshotBalances(implicit dao: DAO): AddressBalance =
-        dao.threadSafeTipService
-          .getSnapshotInfo()
-          .addressCacheData
-          .mapValues(_.balanceByLatestSnapshot)
-   */
-
   def validateDiff(a: (String, Long))(implicit dao: DAO): Boolean = a match {
     case (hash, diff) =>
-      dao.addressService.get(hash).map { _.balanceByLatestSnapshot }.getOrElse(0L) + diff >= 0
+      dao.addressService.getSync(hash).map { _.balanceByLatestSnapshot }.getOrElse(0L) + diff >= 0
   }
 
   def validateCheckpointBlockTree(
@@ -415,7 +412,7 @@ sealed trait CheckpointBlockValidatorNel {
         .product(validateSourceAddressBalances(cb.transactions))
 
     val postTreeIgnoreEmptySnapshot =
-      if (dao.threadSafeTipService.lastSnapshotHeight == 0) preTreeResult
+      if (dao.threadSafeSnapshotService.lastSnapshotHeight == 0) preTreeResult
       else preTreeResult.product(validateCheckpointBlockTree(cb))
 
     postTreeIgnoreEmptySnapshot.map(_ => cb)

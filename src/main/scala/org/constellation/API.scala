@@ -11,10 +11,9 @@ import akka.http.scaladsl.server.Directives.{entity, path, _}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.directives.Credentials
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
-import akka.pattern.{CircuitBreaker, ask}
+import akka.pattern.CircuitBreaker
 import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
-import com.softwaremill.sttp.Response
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
@@ -27,11 +26,11 @@ import org.constellation.p2p.Download
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{APIBroadcast, _}
+import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{CommonEndpoints, MerkleTree, MetricTimerDirective, ServeUI}
-import org.json4s.{JValue, native}
 import org.json4s.native.Serialization
+import org.json4s.{JValue, native}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -57,9 +56,13 @@ case class UpdatePassword(password: String)
 case class ProcessingConfig(
   maxWidth: Int = 10,
   minCheckpointFormationThreshold: Int = 50,
+  maxTXInBlock: Int = 50,
+  maxMessagesInBlock: Int = 1,
+  checkpointFormationTimeSeconds: Int = 1,
+  formUndersizedCheckpointAfterSeconds: Int = 30,
   numFacilitatorPeers: Int = 2,
   randomTXPerRoundPerPeer: Int = 30,
-  metricCheckInterval: Int = 60,
+  metricCheckInterval: Int = 10,
   maxMemPoolSize: Int = 2000,
   minPeerTimeAddedSeconds: Int = 30,
   maxActiveTipsAllowedInMemory: Int = 1000,
@@ -82,15 +85,13 @@ case class ChannelUIOutput(channels: Seq[String])
 case class ChannelValidationInfo(channel: String, valid: Boolean)
 
 case class BlockUIOutput(
-                          id: String,
-                          height: Long,
-                          parents: Seq[String],
-                          channels: Seq[ChannelValidationInfo],
-                        )
+  id: String,
+  height: Long,
+  parents: Seq[String],
+  channels: Seq[ChannelValidationInfo],
+)
 
-class API()(implicit system: ActorSystem,
-                                         val timeout: Timeout,
-                                         val dao: DAO)
+class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
     extends Json4sSupport
     with ServeUI
     with CommonEndpoints
@@ -122,80 +123,86 @@ class API()(implicit system: ActorSystem,
             path("channels") {
               complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
             } ~
-            path("channel" / Segment / "info") { channelId =>
-
-              complete(dao.channelService.get(channelId).map{ cmd =>
-                SingleChannelUIOutput(
-                  cmd.channelOpen, cmd.totalNumMessages, cmd.last25MessageHashes,
-                  cmd.genesisMessageMetadata.channelMessage.signedMessageData.signatures.signatures.head.address
-                )
-              })
-            } ~
-            path("channel" / Segment / "schema") { channelId =>
-              complete(
-                dao.channelService.get(channelId).flatMap{ cmd => cmd.channelOpen.jsonSchema}
-                  .map{
-                    schemaStr =>
+              path("channel" / Segment / "info") { channelId =>
+                complete(dao.channelService.getSync(channelId).map { cmd =>
+                  SingleChannelUIOutput(
+                    cmd.channelOpen,
+                    cmd.totalNumMessages,
+                    cmd.last25MessageHashes,
+                    cmd.genesisMessageMetadata.channelMessage.signedMessageData.signatures.signatures.head.address
+                  )
+                })
+              } ~
+              path("channel" / Segment / "schema") { channelId =>
+                complete(
+                  dao.channelService
+                    .getSync(channelId)
+                    .flatMap { cmd =>
+                      cmd.channelOpen.jsonSchema
+                    }
+                    .map { schemaStr =>
                       import org.json4s.native.JsonMethods._
                       pretty(render(parse(schemaStr)))
-                  }
-              )
-            }
+                    }
+                )
+              }
           } ~
           pathPrefix("data") {
             path("channels") {
               complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
             } ~
-            path("channel" / Segment / "info") { channelId =>
-
-              complete(dao.channelService.get(channelId).map{ cmd =>
-                SingleChannelUIOutput(
-                  cmd.channelOpen, cmd.totalNumMessages, cmd.last25MessageHashes,
-                  cmd.genesisMessageMetadata.channelMessage.signedMessageData.signatures.signatures.head.address
-                )
-              })
-            } ~
-            path("channel" / Segment / "schema") { channelId =>
-              complete(
-                dao.channelService.get(channelId).flatMap{ cmd => cmd.channelOpen.jsonSchema}
-                  .map{
-                    schemaStr =>
+              path("channel" / Segment / "info") { channelId =>
+                complete(dao.channelService.getSync(channelId).map { cmd =>
+                  SingleChannelUIOutput(
+                    cmd.channelOpen,
+                    cmd.totalNumMessages,
+                    cmd.last25MessageHashes,
+                    cmd.genesisMessageMetadata.channelMessage.signedMessageData.signatures.signatures.head.address
+                  )
+                })
+              } ~
+              path("channel" / Segment / "schema") { channelId =>
+                complete(
+                  dao.channelService
+                    .getSync(channelId)
+                    .flatMap { cmd =>
+                      cmd.channelOpen.jsonSchema
+                    }
+                    .map { schemaStr =>
                       import org.json4s.native.JsonMethods._
                       pretty(render(parse(schemaStr)))
-                  }
-              )
-            } ~
-            path("graph") { // Debugging / mockup for peer graph
-              getFromResource("sample_data/dag.json")
-            } ~
-            path("blocks") {
-
-              val blocks = dao.recentBlockTracker.getAll.toSeq
-                //dao.threadSafeTipService.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.get}
-              complete(blocks.map{ ccd =>
-                val cb = ccd.checkpointBlock.get
-
-                BlockUIOutput(
-                  cb.soeHash, ccd.height.get.min, cb.parentSOEHashes,
-                  cb.messages.map{_.signedMessageData.data.channelId}.distinct.map{
-                    channelId =>
-                      ChannelValidationInfo(channelId, true)
-                  }
-
+                    }
                 )
-              })
-            }
+              } ~
+              path("graph") { // Debugging / mockup for peer graph
+                getFromResource("sample_data/dag.json")
+              } ~
+              path("blocks") {
+
+                val blocks = dao.recentBlockTracker.getAll.toSeq
+                //dao.threadSafeTipService.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.getSync}
+                complete(blocks.map { ccd =>
+                  val cb = ccd.checkpointBlock.get
+
+                  BlockUIOutput(
+                    cb.soeHash,
+                    ccd.height.get.min,
+                    cb.parentSOEHashes,
+                    cb.messages.map { _.signedMessageData.data.channelId }.distinct.map {
+                      channelId =>
+                        ChannelValidationInfo(channelId, true)
+                    }
+                  )
+                })
+              }
           } ~
           path("messageService" / Segment) { channelId =>
-            val messageService = dao.messageService.get(channelId)
-            logger.info(s"messageService resp: $messageService")
-            complete(dao.messageService.get(channelId))
+            complete(dao.messageService.getSync(channelId))
           } ~
           path("channel" / Segment) { channelHash =>
-            val channelmd = dao.messageService.get(channelHash)
-            logger.info(s"channel/channelId: dao.messageService.get(channelHash) ${channelHash} ${dao.messageService.get(channelHash)}")
-            val res = Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.get(channelmd.get.channelMessage.signedMessageData.hash))
-              logger.info(s"Snapshot.findLatestMessageWithSnapshotHash: ${res}")
+            val res =
+              Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.getSync(channelHash))
+
             val proof = res.flatMap { cmd =>
               cmd.snapshotHash.flatMap { snapshotHash =>
                 tryWithMetric({
@@ -204,11 +211,19 @@ class API()(implicit system: ActorSystem,
                     File(dao.snapshotPath, snapshotHash).byteArray
                   )
                 }, "readSnapshotForMessage").toOption.map { storedSnapshot =>
-                  val blockProof = MerkleTree(storedSnapshot.snapshot.checkpointBlocks.toList)
-                    .createProof(cmd.blockHash.get)
+
+
+                  val blocksInSnapshot = storedSnapshot.snapshot.checkpointBlocks.toList
+                  val blockHashForMessage = cmd.blockHash.get
+
+                  if (!blocksInSnapshot.contains(blockHashForMessage)) {
+                    logger.error(s"Message block hash ${blockHashForMessage} not in snapshot")
+                  }
+                  val blockProof = MerkleTree(blocksInSnapshot)
+                    .createProof(blockHashForMessage)
                   val block = storedSnapshot.checkpointCache
                     .filter {
-                      _.checkpointBlock.get.baseHash == cmd.blockHash.get
+                      _.checkpointBlock.get.baseHash == blockHashForMessage
                     }
                     .head
                     .checkpointBlock
@@ -323,7 +338,9 @@ class API()(implicit system: ActorSystem,
           path("send") {
             entity(as[ChannelSendRequest]) { send =>
               onComplete(ChannelMessage.createMessages(send)) { res =>
-                complete(res.getOrElse(ChannelSendResponse("Failed to create messages", Seq())).json)//todo removed send.channelId
+                complete(
+                  res.getOrElse(ChannelSendResponse("Failed to create messages", Seq())).json
+                )
               }
             }
           } ~
@@ -343,7 +360,7 @@ class API()(implicit system: ActorSystem,
       } ~
         pathPrefix("peer") {
           path("remove") {
-            entity(as[RemovePeerRequest]) { e =>
+            entity(as[ChangePeerState]) { e =>
               dao.peerManager ! e
               complete(StatusCodes.OK)
             }
@@ -367,7 +384,7 @@ class API()(implicit system: ActorSystem,
         pathPrefix("config") {
           path("update") {
             entity(as[ProcessingConfig]) { cu =>
-              dao.processingConfig = cu
+              dao.nodeConfig = dao.nodeConfig.copy(processingConfig = cu)
               complete(StatusCodes.OK)
             }
           }
@@ -390,14 +407,19 @@ class API()(implicit system: ActorSystem,
           dao.metrics.updateMetric("nodeState", dao.nodeState.toString)
           onComplete(res) { t =>
             t.foreach(_.filter(_._2.isInvalid).foreach {
-              case (id, e) => logger.warn(s"Unable to propogate status to node ID: $id", e) }
-            )
+              case (id, e) => logger.warn(s"Unable to propogate status to node ID: $id", e)
+            })
             complete(StatusCodes.OK)
           }
         } ~
         path("random") { // Temporary
           dao.generateRandomTX = !dao.generateRandomTX
           dao.metrics.updateMetric("generateRandomTX", dao.generateRandomTX.toString)
+          complete(StatusCodes.OK)
+        } ~
+        path("checkpointFormation") { // Temporary
+          dao.formCheckpoints = !dao.formCheckpoints
+          dao.metrics.updateMetric("checkpointFormation", dao.generateRandomTX.toString)
           complete(StatusCodes.OK)
         } ~
         path("peerHealthCheck") {
@@ -448,6 +470,14 @@ class API()(implicit system: ActorSystem,
                                        normalized = false)
             dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
 
+            dao.transactionService.memPool.putSync(
+              tx.hash,
+              TransactionCacheData(
+                tx,
+                inMemPool = true
+              )
+            )
+
             complete(tx.hash)
           }
         } ~
@@ -468,7 +498,7 @@ class API()(implicit system: ActorSystem,
                 case Array(ip, port) =>
                   ipp = ip
                   import better.files._
-                  externalHostString = ip
+                  nodeConfig = nodeConfig.copy(hostName = ip)
                   file"${ConstellationNode.LocalConfigFile}".write(LocalNodeConfig(ip).json)
                   new InetSocketAddress(ip, port.toInt)
                 case a @ _ => {

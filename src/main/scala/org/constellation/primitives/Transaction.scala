@@ -1,27 +1,49 @@
 package org.constellation.primitives
 
 import java.security.KeyPair
+import java.time.Instant
 
-import cats.data.{NonEmptyList, Validated, ValidatedNel}
+import cats.data.ValidatedNel
 import cats.implicits._
 import constellation._
 import org.constellation.DAO
-import org.constellation.primitives.Schema.{Address, TransactionCacheData, TransactionEdgeData}
+import org.constellation.primitives.Schema.{Address, Id, TransactionEdgeData}
 import org.constellation.util.HashSignature
+
+case class TransactionCacheData(
+  transaction: Transaction,
+  valid: Boolean = true,
+  inMemPool: Boolean = false,
+  inDAG: Boolean = false,
+  inDAGByAncestor: Map[String, Boolean] = Map(),
+  resolved: Boolean = true,
+  cbBaseHash: Option[String] = None,
+  cbForkBaseHashes: Set[String] = Set(),
+  signatureForks: Set[Transaction] = Set(),
+  knownPeers: Set[Id] = Set(),
+  rxTime: Long = System.currentTimeMillis()
+) {
+
+  def plus(previous: TransactionCacheData): TransactionCacheData =
+    this.copy(
+      inDAGByAncestor = inDAGByAncestor ++ previous.inDAGByAncestor
+        .filterKeys(k => !inDAGByAncestor.contains(k)),
+      cbForkBaseHashes = (cbForkBaseHashes ++ previous.cbForkBaseHashes) -- cbBaseHash.map { s =>
+        Set(s)
+      }.getOrElse(Set()),
+      signatureForks = (signatureForks ++ previous.signatureForks) - transaction,
+      rxTime = previous.rxTime
+    )
+}
 
 case class Transaction(edge: Edge[TransactionEdgeData]) {
 
   def store(cache: TransactionCacheData)(implicit dao: DAO): Unit = {
-    dao.acceptedTransactionService.put(this.hash, cache)
-  }
+      dao.acceptedTransactionService.putSync(this.hash, cache)
+    }
 
-  def ledgerApply()(implicit dao: DAO): Unit = {
-    dao.addressService.transfer(src, dst, amount).unsafeRunSync()
-  }
-
-  def ledgerApplySnapshot()(implicit dao: DAO): Unit = {
-    dao.addressService.transferSnapshot(src, dst, amount).unsafeRunSync()
-  }
+  def valid(implicit dao: DAO): Boolean =
+    TransactionValidatorNel.validateTransaction(this).isValid
 
   // Unsafe
 
@@ -39,50 +61,122 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
 
   def hash: String = edge.signedObservationEdge.hash
 
+  def signaturesHash: String = edge.signedObservationEdge.signatureBatch.hash
+
   def withSignatureFrom(keyPair: KeyPair): Transaction = this.copy(
-    edge = edge.withSignatureFrom(keyPair)
-  )
+      edge = edge.withSignatureFrom(keyPair)
+    )
+}
 
-  def valid: Boolean =
-    validSrcSignature &&
-      dst.address.nonEmpty &&
-      dst.address.length > 30 &&
-      dst.address.startsWith("DAG") &&
-      amount > 0
+case class TransactionSerialized(
+  hash: String,
+  sender: String,
+  receiver: String,
+  amount: Long,
+  signers: Set[String],
+  time: Long
+) {}
 
-  def validSrcSignature: Boolean = {
-    edge.signedObservationEdge.signatureBatch.signatures.exists { hs =>
-      hs.publicKey.address == src.address && hs.valid(
-        edge.signedObservationEdge.signatureBatch.hash
-      )
-    }
-  }
+object TransactionSerialized {
 
-  type ValidationResult[A] = ValidatedNel[TransactionValidation, A]
-
-  def validateSourceSignature(): ValidationResult[Transaction] =
-    validSrcSignature.toOption(this.validNel).getOrElse(InvalidSourceSignature().invalidNel)
-
-  def validateHashDuplicateSnapshot()(implicit dao: DAO): ValidationResult[Transaction] = {
-    dao.transactionHashStore.contains(hash).map { c =>
-      if (c) this.validNel else HashDuplicateFoundInSnapshot().invalidNel
-    }.get
-  }
-
+  def apply(tx: Transaction): TransactionSerialized =
+    new TransactionSerialized(
+      tx.hash,
+      tx.src.address,
+      tx.dst.address,
+      tx.amount,
+      tx.signatures.map(_.address).toSet,
+      Instant.now.getEpochSecond
+    )
 }
 
 sealed trait TransactionValidation {
   def errorMessage: String
 }
 
-case class HashDuplicateFoundInSnapshot() extends TransactionValidation {
-  def errorMessage: String = "Transaction hash already exists in old data"
+case class InvalidSourceSignature(txHash: String) extends TransactionValidation {
+  def errorMessage: String = s"Transaction tx=$txHash has invalid source signature"
 }
 
-case class HashDuplicateFoundInRecent() extends TransactionValidation {
-  def errorMessage: String = "Transaction hash already exists in recent data"
+object InvalidSourceSignature {
+  def apply(tx: Transaction) = new InvalidSourceSignature(tx.hash)
 }
 
-case class InvalidSourceSignature() extends TransactionValidation {
-  def errorMessage: String = s"Transaction has invalid source signature"
+case class EmptyDestinationAddress(txHash: String) extends TransactionValidation {
+  def errorMessage: String = s"Transaction tx=$txHash has an empty destination address"
 }
+
+object EmptyDestinationAddress {
+  def apply(tx: Transaction) = new EmptyDestinationAddress(tx.hash)
+}
+
+case class InvalidDestinationAddress(txHash: String, address: String) extends TransactionValidation {
+  def errorMessage: String = s"Transaction tx=$txHash has an invalid destination address=$address"
+}
+
+object InvalidDestinationAddress {
+  def apply(tx: Transaction) = new InvalidDestinationAddress(tx.hash, tx.dst.hash)
+}
+
+case class NonPositiveAmount(txHash: String, amount: Long) extends TransactionValidation {
+  def errorMessage: String = s"Transaction tx=$txHash has a non-positive amount=${amount.toString}"
+}
+
+object NonPositiveAmount {
+  def apply(tx: Transaction) = new NonPositiveAmount(tx.hash, tx.amount)
+}
+
+case class HashDuplicateFound(txHash: String) extends TransactionValidation {
+  def errorMessage: String = s"Transaction tx=$txHash already exists"
+}
+
+object HashDuplicateFound {
+  def apply(tx: Transaction) = new HashDuplicateFound(tx.hash)
+}
+
+sealed trait TransactionValidatorNel {
+  type ValidationResult[A] = ValidatedNel[TransactionValidation, A]
+
+  def validateSourceSignature(tx: Transaction): ValidationResult[Transaction] = {
+    val isValid = tx.signatures.exists { hs ⇒
+      hs.publicKey.address == tx.src.address && hs.valid(
+        tx.signaturesHash
+      )
+    }
+
+    if (isValid) tx.validNel else InvalidSourceSignature(tx).invalidNel
+  }
+
+  def validateEmptyDestinationAddress(tx: Transaction): ValidationResult[Transaction] =
+    if (tx.dst.address.nonEmpty) tx.validNel else EmptyDestinationAddress(tx).invalidNel
+
+  def validateDestinationAddress(tx: Transaction): ValidationResult[Transaction] =
+    if (tx.dst.address.length > 30 && tx.dst.address.startsWith("DAG"))
+      tx.validNel
+    else
+      InvalidDestinationAddress(tx).invalidNel
+
+  def validateAmount(tx: Transaction): ValidationResult[Transaction] =
+    if (tx.amount > 0) tx.validNel else NonPositiveAmount(tx).invalidNel
+
+
+  import org.constellation.datastore.swaydb.SwayDbConversions._
+
+  // TODO: get rid of unsafeRunSync() and make whole validation async with IO[ValidationResult[Transaction]]
+  def validateDuplicate(tx: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
+    //if (dao.transactionService.contains(tx.hash).unsafeRunSync())
+    if (dao.transactionHashStore.contains(tx.hash).unsafeRunSync())
+      HashDuplicateFound(tx).invalidNel
+    else
+      tx.validNel
+
+  def validateTransaction(tx: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
+    validateSourceSignature(tx)
+      .product(validateEmptyDestinationAddress(tx))
+      .product(validateDestinationAddress(tx))
+      .product(validateAmount(tx))
+      .product(validateDuplicate(tx))
+      .map(_ ⇒ tx)
+}
+
+object TransactionValidatorNel extends TransactionValidatorNel

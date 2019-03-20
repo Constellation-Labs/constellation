@@ -7,13 +7,13 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.consensus.RandomData.keyPairs
-import org.constellation.crypto.KeyUtils
+import cats.implicits._
+import cats.effect.IO
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.Metrics
-import org.constellation.{DAO, Fixtures}
+import org.constellation.{DAO, NodeConfig}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 
@@ -63,18 +63,22 @@ object RandomData {
         createTransaction(keyPairs.head.address, address, amount, keyPairs.head)
     }
 
-    txs.foreach(tx => {
-      tx.ledgerApply()
-      tx.ledgerApplySnapshot()
-    })
+    txs
+      .toList
+      .map(tx ⇒ IO.pure(tx)
+        .flatTap(dao.addressService.transfer)
+        .flatTap(dao.addressService.transferSnapshot)
+      )
+      .sequence[IO, Transaction]
+      .unsafeRunSync()
 
     txs
   }
 
   def setupSnapshot(cb: Seq[CheckpointBlock])(implicit dao: DAO): Seq[CheckpointBlock] = {
     // Get snapshot uses iterator while set snapshot updates underlying map causing ConcurrentModificationException
-    val snapshot = dao.threadSafeTipService.getSnapshotInfo().snapshot
-    dao.threadSafeTipService.setSnapshot(
+    val snapshot = dao.threadSafeSnapshotService.getSnapshotInfo().snapshot
+    dao.threadSafeSnapshotService.setSnapshot(
       SnapshotInfo(
         snapshot,
         cb.map(_.baseHash),
@@ -218,12 +222,13 @@ class ValidationSpec
   import RandomData._
 
   implicit val dao: DAO = new DAO() // stub[DAO]
+  dao.initialize(NodeConfig())
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val keyPair: KeyPair = keyPairs.head
 
  // (dao.id _).when().returns(Fixtures.id)
 
-  dao.keyPair = KeyUtils.makeKeyPair()
+  // dao.keyPair = KeyUtils.makeKeyPair()
   dao.metrics = new Metrics()
   val peerProbe = TestProbe.apply("peerManager")
   dao.peerManager = peerProbe.ref
@@ -231,7 +236,7 @@ class ValidationSpec
   go.genesis.store(CheckpointCacheData(Some(go.genesis)))
   go.initialDistribution.store(CheckpointCacheData(Some(go.initialDistribution)))
   go.initialDistribution2.store(CheckpointCacheData(Some(go.initialDistribution2)))
-  dao.threadSafeTipService.setSnapshot(
+  dao.threadSafeSnapshotService.setSnapshot(
     SnapshotInfo(
       Snapshot.snapshotZero,
       Seq(go.genesis.baseHash, go.initialDistribution.baseHash, go.initialDistribution2.baseHash),
@@ -463,7 +468,12 @@ class ValidationSpec
         val tx2 = createTransaction(getAddress(a), getAddress(c), 75L, a)
         val cb2 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx2), startingTips)
 
-        if (cb1.simpleValidation()) { cb1.transactions.foreach(_.ledgerApply) }
+        if (cb1.simpleValidation()) {
+          cb1.transactions.toList
+              .map(dao.addressService.transfer)
+              .sequence[IO, AddressCacheData]
+              .unsafeRunSync()
+        }
 
         assert(!cb2.simpleValidation())
       }

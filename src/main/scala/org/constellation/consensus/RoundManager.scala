@@ -1,12 +1,8 @@
 package org.constellation.consensus
 import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, Props}
-import org.constellation.consensus.CrossTalkConsensus.{
-  NotifyFacilitators,
-  ParticipateInBlockCreationRound,
-  StartNewBlockCreationRound
-}
+import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
-import org.constellation.primitives.PeerData
+import org.constellation.primitives.{PeerData, UpdatePeerNotifications}
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.collection.mutable
@@ -35,7 +31,11 @@ class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
         startRound(roundData, startedByThisNode = true)
         context.parent ! NotifyFacilitators(roundData)
         passToRoundActor(
-          TransactionsProposal(roundData.roundId, FacilitatorId(dao.id), roundData.transactions, roundData.messages)
+          TransactionsProposal(roundData.roundId,
+                               FacilitatorId(dao.id),
+                               roundData.transactions,
+                               roundData.messages,
+                               roundData.peers.flatMap(_.notification).toSeq)
         )
         log.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}")
         dao.blockFormationInProgress = true
@@ -54,6 +54,8 @@ class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
           .get(m.signedMessageData.data.channelId)
           .foreach(s => s.release())
       }
+      cmd.maybeCB.foreach(cb => dao.peerManager ! UpdatePeerNotifications(cb.notifications))
+
       dao.blockFormationInProgress = false
     case cmd: BroadcastTransactionProposal =>
       passToParentActor(cmd)
@@ -128,7 +130,7 @@ object RoundManager {
     dao
       .pullTransactions(dao.minCheckpointFormationThreshold)
       .flatMap { transactions =>
-        dao.pullTips(true).map { tips =>
+        dao.pullTips(dao.readyFacilitators()).map { tips =>
           RoundData(generateRoundId,
                     tips._2.values.toSet,
                     FacilitatorId(dao.id),

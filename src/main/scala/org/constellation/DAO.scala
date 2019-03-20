@@ -1,37 +1,41 @@
 package org.constellation
 
-import java.security.KeyPair
+import akka.pattern.ask
+import java.util.concurrent.TimeUnit
 
 import akka.stream.ActorMaterializer
+import akka.util.Timeout
 import better.files.File
 import com.typesafe.scalalogging.StrictLogging
-import org.constellation.crypto.{KeyUtils, SimpleWalletLike}
-import org.constellation.primitives.Schema.{Id, SignedObservationEdge}
-import org.constellation.primitives._
 import constellation._
+import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
+import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.NodeType.NodeType
+import scala.concurrent.duration._
+import scala.concurrent.Await
+import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObservationEdge}
+import org.constellation.primitives.storage._
+import org.constellation.primitives._
 
-class DAO(
-           val nodeConfig: NodeInitializationConfig = NodeInitializationConfig()
-         )
+class DAO()
     extends NodeData
     with Genesis
     with EdgeDAO
     with SimpleWalletLike
     with StrictLogging {
 
-  var actorMaterializer: ActorMaterializer = _
+  var initialNodeConfig : NodeConfig = _
+  @volatile var nodeConfig: NodeConfig = _
 
-  var confirmWindow: Int = 30
+  var actorMaterializer: ActorMaterializer = _
 
   var transactionAcceptedAfterDownload: Long = 0L
   var downloadFinishedTime: Long = System.currentTimeMillis()
 
-  var preventLocalhostAsPeer: Boolean = !nodeConfig.allowLocalhostPeers
+  def preventLocalhostAsPeer: Boolean = !nodeConfig.allowLocalhostPeers
 
   def idDir = File(s"tmp/${id.medium}")
-
-  idDir.createDirectoryIfNotExists(createParents = true)
 
   def dbPath: File = {
     val f = File(s"tmp/${id.medium}/db")
@@ -59,16 +63,62 @@ class DAO(
     f
   }
 
+  @volatile var nodeState: NodeState = NodeState.PendingDownload
 
-  messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
-  transactionHashStore = SwayDBDatastore.duplicateCheckStore(this, "transaction_hash_store")
-  checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
+  @volatile var nodeType: NodeType = NodeType.Full
+
+  def setNodeState(
+                    nodeState_ : NodeState
+                  ): Unit = {
+    nodeState = nodeState_
+    metrics.updateMetric("nodeState", nodeState.toString)
+  }
+
+  def peerHostPort = HostPort(nodeConfig.hostName, nodeConfig.peerHttpPort)
+
+
+  def initialize(nodeConfigInit : NodeConfig = NodeConfig())(implicit materialize: ActorMaterializer = null): Unit = {
+    initialNodeConfig = nodeConfigInit
+    nodeConfig = nodeConfigInit
+    actorMaterializer = materialize
+    standardTimeout = Timeout(nodeConfig.defaultTimeoutSeconds, TimeUnit.SECONDS)
+
+    if (nodeConfig.cliConfig.startOfflineMode) {
+      nodeState = NodeState.Offline
+    }
+
+    if (nodeConfig.cliConfig.lightNode) {
+      nodeType = NodeType.Light
+    }
+
+    idDir.createDirectoryIfNotExists(createParents = true)
+    messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
+    transactionHashStore = SwayDBDatastore.duplicateCheckStore(this, "transaction_hash_store")
+    checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
+
+    transactionService = TransactionService(this, processingConfig.transactionLRUMaxSize)
+    checkpointService = CheckpointService(this, processingConfig.checkpointLRUMaxSize)
+    snapshotService = SnapshotService(this)
+  }
 
 
   def pullTips(
-    allowEmptyFacilitators: Boolean = false
+    readyFacilitators: Map[Id, PeerData]
   ): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = {
-    threadSafeTipService.pull(allowEmptyFacilitators)(this)
+    concurrentTipService.pull(readyFacilitators)(this.metrics)
+  }
+  def peerInfo: Map[Id, PeerData] = {
+    // TODO: fix it to be Future
+    Await.result((peerManager ? GetPeerInfo).mapTo[Map[Id,PeerData]], 3 seconds)
+  }
+
+  def readyPeers: Map[Id, PeerData] =
+    peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
+
+  def readyFacilitators(): Map[Id, PeerData] = peerInfo.filter {
+    case (_, pd) =>
+      pd.peerMetadata.timeAdded < (System
+        .currentTimeMillis() - processingConfig.minPeerTimeAddedSeconds * 1000) && pd.peerMetadata.nodeState == NodeState.Ready
   }
 
 }

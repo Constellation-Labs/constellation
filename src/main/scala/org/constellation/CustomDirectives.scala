@@ -1,5 +1,7 @@
 package org.constellation
 
+import java.net.InetSocketAddress
+
 import akka.event.LoggingAdapter
 import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
 import akka.http.scaladsl.server.Directives._
@@ -7,7 +9,6 @@ import akka.http.scaladsl.server.RouteResult.{Complete, Rejected}
 import akka.http.scaladsl.server.{Directive0, RouteResult}
 import com.google.common.util.concurrent.RateLimiter
 import com.typesafe.scalalogging.Logger
-
 import org.constellation.primitives.IPManager
 
 object CustomDirectives {
@@ -16,7 +17,7 @@ object CustomDirectives {
     private var rateLimiter: Option[RateLimiter] = None
 
     def getInstance(tps: Double): RateLimiter = rateLimiter match {
-      case Some(rateLimiter) ⇒ rateLimiter
+      case Some(limiter) ⇒ limiter
       case None ⇒
         rateLimiter = Some(RateLimiter.create(tps))
         rateLimiter.get
@@ -40,27 +41,24 @@ object CustomDirectives {
 
     val ipManager: IPManager
 
-    def rejectBannedIP: Directive0 = {
-      extractClientIP flatMap { ip =>
-        println(s"Reject banned ip: ${ip.toOption.map { _.getHostAddress }} ${ip.toIP
-          .map { _.ip.getHostAddress }}")
-        if (ipManager.bannedIP(ip)) {
-          complete(StatusCodes.Forbidden)
-        } else {
-          pass
-        }
+    def rejectBannedIP(address: InetSocketAddress) : Directive0 = {
+      val ip = address.getHostName
+      println(s"Reject banned ip: $ip")
+      if (ipManager.bannedIP(ip)) {
+        complete(StatusCodes.Forbidden)
+      } else {
+        pass
       }
     }
 
-    def enforceKnownIP: Directive0 = {
-      extractClientIP flatMap { ip =>
-        if (ipManager.knownIP(ip)) {
-          pass
-        } else {
-          complete(
-            StatusCodes.custom(403, "ip unknown. Need to register using the /register endpoint.")
-          )
-        }
+    def enforceKnownIP(address: InetSocketAddress) : Directive0 = {
+      val ip = address.getHostName
+      if (ipManager.knownIP(ip)) {
+        pass
+      } else {
+        complete(
+          StatusCodes.custom(403, "ip unknown. Need to register using the /register endpoint.")
+        )
       }
     }
   }

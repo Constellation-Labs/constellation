@@ -8,17 +8,17 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.FromEntityUnmarshaller
 import akka.util.{ByteString, Timeout}
-import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.json4s.native.Serialization
-
-import scala.concurrent.Future
 import constellation._
+import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
 import org.constellation.consensus.Snapshot
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.serializer.KryoSerializer
+import org.json4s.native.Serialization
+
+import scala.concurrent.Future
 
 case class NodeStateInfo(nodeState: NodeState, addresses: Seq[String] = Seq(), nodeType: NodeType = NodeType.Full) // TODO: Refactor, addresses temp for testing
 
@@ -40,10 +40,10 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.id)
       } ~
       path("tips") {
-        complete(dao.threadSafeTipService.tips)
+        complete(dao.threadSafeSnapshotService.tips)
       } ~
       path("heights") {
-        val maybeHeights = dao.threadSafeTipService.tips.flatMap {
+        val maybeHeights = dao.threadSafeSnapshotService.tips.flatMap {
           case (k, v) => dao.checkpointService.get(k).flatMap { _.height }
         }.toSeq
         complete(maybeHeights)
@@ -52,7 +52,7 @@ trait CommonEndpoints extends Json4sSupport {
         complete(Snapshot.snapshotHashes())
       } ~
       path("info") {
-        val info = dao.threadSafeTipService.getSnapshotInfo
+        val info = dao.threadSafeSnapshotService.getSnapshotInfo
         val res =
           KryoSerializer.serializeAnyRef(
             info.copy(acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshot.flatMap {
@@ -87,10 +87,10 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.genesisObservation)
       } ~
       pathPrefix("address" / Segment) { a =>
-        complete(dao.addressService.get(a))
+        complete(dao.addressService.getSync(a))
       } ~
       pathPrefix("balance" / Segment) { a =>
-        complete(dao.addressService.get(a).map { _.balanceByLatestSnapshot })
+        complete(dao.addressService.getSync(a).map { _.balanceByLatestSnapshot })
       } ~
       path("state") {
         complete(NodeStateInfo(dao.nodeState, dao.addresses, dao.nodeType))
@@ -99,10 +99,10 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.peerInfo.map { _._2.peerMetadata }.toSeq)
       } ~
       path("transaction" / Segment) { h =>
-        complete(dao.transactionService.get(h))
+        complete(dao.transactionService.lookup(h).unsafeRunSync())
       } ~
       path("checkpoint" / Segment) { h =>
-        complete(dao.checkpointService.get(h))
+        complete(dao.checkpointService.lookup(h).unsafeRunSync())
       }
 
   }

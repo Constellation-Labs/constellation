@@ -46,7 +46,7 @@ class AppE2ETest extends E2E {
     val r = resp.get
     val messages = constellationAppSim.generateChannelMessages(r, numMessages)
     constellationAppSim.sim.logger.info(s"Broadcasted channel msg $resp")
-    testApp.broadcast[SensorData](messages, r.channelId)
+    testApp.broadcast[SensorData](messages.take(1), r.channelId)
   }
 
   "API health check" should "return true" in {

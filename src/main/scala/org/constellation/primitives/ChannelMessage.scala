@@ -1,17 +1,18 @@
 package org.constellation.primitives
 
 import java.util.concurrent.Semaphore
+
 import com.fasterxml.jackson.databind.JsonNode
 import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.{JsonSchemaFactory, JsonValidator}
-import com.typesafe.scalalogging.{Logger, StrictLogging}
-import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
-
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.DAO
 import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
+import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
 
 import scala.concurrent.Future
+import scala.util.Random
 
 // Should channelId be associated with a unique keyPair or not?
 
@@ -91,10 +92,11 @@ object ChannelMessage extends StrictLogging {
         Future {
           var retries = 0
           var metadata: Option[ChannelMetadata] = None
-          while (retries < 30 && metadata.isEmpty) {
+          while (retries < 15 && metadata.isEmpty) {
             retries += 1
+            logger.info(s"Polling genesis creation attempt $retries for $genesisHashChannelId")
             Thread.sleep(1000)
-            metadata = dao.channelService.get(genesisHashChannelId)
+            metadata = dao.channelService.getSync(genesisHashChannelId)
           }
           val response =
             if (metadata.isEmpty) "Timeout awaiting block acceptance"
@@ -111,17 +113,18 @@ object ChannelMessage extends StrictLogging {
   )(implicit dao: DAO): Future[ChannelSendResponse] = {
 
     dao.messageService
-      .get(channelSendRequest.channelId)//todo here
+      .getSync(channelSendRequest.channelId)
       .map { previousMessage =>
         val previous = previousMessage.channelMessage.signedMessageData.hash
 
         val messages: Seq[ChannelMessage] = channelSendRequest.messages
           .foldLeft(previous -> Seq[ChannelMessage]()) {
             case ((prvHash, signedMessages), nextMessage) =>
-              val nextSigned = create(nextMessage, previous, channelSendRequest.channelId)
+              val nextSigned = create(nextMessage, prvHash, channelSendRequest.channelId)
               nextSigned.signedMessageData.hash -> (signedMessages :+ nextSigned)
           }
           ._2
+
         dao.threadSafeMessageMemPool.put(messages, overrideLimit = true)
         val semaphore = new Semaphore(1)
         dao.threadSafeMessageMemPool.activeChannels(channelSendRequest.channelId) = semaphore
@@ -129,13 +132,13 @@ object ChannelMessage extends StrictLogging {
         Future.successful(
           ChannelSendResponse(
             "Success",
-            messages.map { _.signedMessageData.hash }//todo removed ,channelSendRequest.channelId
+            messages.map { _.signedMessageData.hash }
           )
         )
       }
       .getOrElse(
         Future.successful(
-          ChannelSendResponse("Channel not found", Seq())//todo removed , channelSendRequest.channelId
+          ChannelSendResponse("Channel not found", Seq())
         )
       )
   }
@@ -148,11 +151,11 @@ case class ChannelProof(
   checkpointMessageProof: MerkleProof
 )
 
-//case class ChannelOpenRequest(
-//                               channelId: String,
-//                               jsonSchema: Option[String] = None,
-//                               acceptInvalid: Boolean = true
-//                             ) //extends ChannelRequest
+case class ChannelOpenRequest(
+                               channelId: String,
+                               jsonSchema: Option[String] = None,
+                               acceptInvalid: Boolean = true
+                             ) extends ChannelRequest
 case class ChannelOpen(
   name: String,
   jsonSchema: Option[String] = None,
@@ -167,7 +170,7 @@ case class ChannelOpenResponse(
 case class ChannelSendRequest(
                                channelId: String,
                                messages: Seq[String]
-                             ) //extends ChannelRequest
+                             ) extends ChannelRequest
 trait ChannelRequest {
   val channelId: String
 }
@@ -177,16 +180,22 @@ case class ChannelSendRequestRawJson(channelId: String, messages: String)
 case class ChannelSendResponse(
   errorMessage: String = "Success",
   messageHashes: Seq[String]
-//  channelId: String
 )
 
 case class SensorData(
   temperature: Int,
-  name: String,
-  channelId: String = ""
-) //extends ChannelRequest
+  name: String
+)
 
 object SensorData {
+
+  val validNameChars: Seq[String] = ('A' to 'Z').map { _.toString }
+  val invalidNameChars: Seq[String] = validNameChars.map { _.toLowerCase }
+
+  def generateRandomValidMessage() = SensorData(
+    Random.nextInt(100),
+    Seq.fill(5) { Random.shuffle(validNameChars).head }.mkString
+  )
 
   val jsonSchema: String = """{
                              |  "title":"Sensors data",

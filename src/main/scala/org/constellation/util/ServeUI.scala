@@ -55,18 +55,19 @@ object MyStandalone extends StyleSheet.Standalone {
   import dsl._
 
   "a" - (
-    color := Colors.intBlue
+    color :=! Colors.intBlue
   )
 
 }
 
 object MyStyles extends StyleSheet.Inline {
   import dsl._
+  import Colors._
 
   val hoverDark: StyleA = style("hover-dark")(
-    backgroundColor := Colors.ansiGrey,
+    backgroundColor(Color(ansiGrey)),
     &.hover(
-      backgroundColor(Color(Colors.ansiDarkGrey))
+      backgroundColor(Color(ansiDarkGrey))
     )
   )
 
@@ -84,17 +85,17 @@ object MyStyles extends StyleSheet.Inline {
     marginRight.auto,
     border.inset,
     borderWidth(2.px),
-    borderColor(Color(Colors.commentGrey))
+    borderColor(Color(commentGrey))
   )
 
   val leftNavLink: StyleA = style(
     addClassNames("menu-link", "symbol"),
     display.block,
     textDecorationLine.none,
-    color := "white",
+    color.white,
     fontSize.larger,
     &.hover(
-      backgroundColor(Color(Colors.ansiDarkGrey))
+      backgroundColor(Color(ansiDarkGrey))
     ),
     paddingLeft(35.px),
     paddingTop(7.px),
@@ -249,7 +250,7 @@ trait ServeUI {
           Some(
             div(
               id := "message-view",
-              dao.messageService.get(msgHash).prettyJson
+              dao.messageService.getSync(msgHash).prettyJson
             )
           )
         )
