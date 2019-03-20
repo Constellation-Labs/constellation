@@ -4,17 +4,17 @@ import java.net.InetSocketAddress
 import java.security.KeyPair
 
 import akka.actor.ActorRef
+import better.files.File
 import constellation._
-import org.constellation.NodeConfig
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.primitives.Schema._
 import org.constellation.util.Metrics
-
+import org.constellation.{NodeConfig, ResourceInfo}
 
 case class LocalNodeConfig(
-                            externalIP: String
-                          )
+  externalIP: String
+)
 
 trait NodeData {
 
@@ -47,8 +47,20 @@ trait NodeData {
   def externalHostString: String = nodeConfig.hostName
   def externlPeerHTTPPort: Int = nodeConfig.peerHttpPort
 
-  def peerRegistrationRequest = PeerRegistrationRequest(externalHostString, externlPeerHTTPPort, id)
+  def peerRegistrationRequest =
+    PeerRegistrationRequest(externalHostString,
+                            externlPeerHTTPPort,
+                            id,
+                            ResourceInfo(
+                              diskUsableBytes =
+                                new java.io.File(snapshotPath.pathAsString).getUsableSpace
+                            ))
 
+  def snapshotPath: File = {
+    val f = File(s"tmp/${id.medium}/snapshots")
+    f.createDirectoryIfNotExists()
+    f
+  }
   var remotes: Seq[InetSocketAddress] = Seq()
 
   def updateKeyPair(kp: KeyPair): Unit = {

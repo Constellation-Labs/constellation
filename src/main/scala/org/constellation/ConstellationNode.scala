@@ -298,11 +298,16 @@ class ConstellationNode(
 
   // TODO: Change E2E to not use this but instead rely on peer discovery, need to send addresses there too
   def getAddPeerRequest: PeerMetadata = {
-    PeerMetadata(nodeConfig.hostName,
-                 nodeConfig.peerHttpPort,
-                 dao.id,
-                 auxAddresses = dao.addresses,
-                 nodeType = dao.nodeType)
+    PeerMetadata(
+      nodeConfig.hostName,
+      nodeConfig.peerHttpPort,
+      dao.id,
+      auxAddresses = dao.addresses,
+      nodeType = dao.nodeType,
+      resourceInfo = ResourceInfo(
+        diskUsableBytes = new java.io.File(dao.snapshotPath.pathAsString).getUsableSpace
+      ),
+    )
   }
 
   def getAPIClientForNode(node: ConstellationNode): APIClient = {

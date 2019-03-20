@@ -19,23 +19,65 @@ import org.constellation.util.APIClient
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
+import org.constellation.{ConfigUtil, DAO}
 
-trait SnapshotsProcessor {
-  def processSnapshots(hashes: Seq[String])(implicit peers: Peers): IO[Unit]
+object SnapshotsDownloader {
+
+  private implicit val getSnapshotTimeout: FiniteDuration = ConfigUtil.config.getInt("download.getSnapshotTimeout").seconds
+
+
+  def downloadSnapshotRandomly(hash: String, pool: Iterable[APIClient]): IO[StoredSnapshot] = {
+    val poolArray = pool.toArray
+    val stopAt = Random.nextInt(poolArray.length)
+
+    def makeAttempt(index: Int): IO[StoredSnapshot] =
+      getSnapshot(hash, poolArray(index)).handleErrorWith {
+        case e if index == stopAt => IO.raiseError(e)
+        case _                    => makeAttempt((index + 1) % poolArray.length)
+      }
+
+    makeAttempt((stopAt + 1) % poolArray.length)
+  }
+
+  def downloadSnapshotByDistance(hash: String, pool: Iterable[APIClient]): IO[StoredSnapshot] = {
+    val snapHash = BigInt(hash.getBytes)
+
+    val sortedPeers = pool.toSeq.sortBy { p =>
+      BigInt(p.id.hex.getBytes()) ^ snapHash
+    }
+
+    def makeAttempt(sortedPeers: Iterable[APIClient]): IO[StoredSnapshot] =
+      sortedPeers match {
+        case Nil =>
+          IO.raiseError(new RuntimeException("Unable to download Snapshot from empty peer list"))
+        case head :: tail =>
+          getSnapshot(hash, head).handleErrorWith {
+            case e if tail.isEmpty => IO.raiseError(e)
+            case _                 => makeAttempt(sortedPeers.tail)
+          }
+      }
+
+    makeAttempt(sortedPeers)
+  }
+
+  private def getSnapshot(hash: String, client: APIClient)(implicit snapshotTimeout: Duration): IO[StoredSnapshot] = IO.fromFuture {
+    IO {
+      client.getNonBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash,
+        timeout = snapshotTimeout)
+    }
+  }
 }
 
-class RandomSnapshotsProcessor(implicit dao: DAO, ec: ExecutionContext) extends SnapshotsProcessor {
+class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[StoredSnapshot])(implicit dao: DAO, ec: ExecutionContext)  {
   implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ec)
 
-  val config: Config = ConfigFactory.load()
-  private val getSnapshotTimeout = config.getInt("download.getSnapshotTimeout").seconds
 
   def processSnapshots(hashes: Seq[String])(implicit peers: Peers): IO[Unit] = {
     hashes.map(processSnapshot).toList.parSequence.map(_ => ())
   }
 
   private def processSnapshot(hash: String)(implicit peers: Peers): IO[Unit] = {
-    val clients = peers.values.toArray.map(_.client)
+    val clients = peers.values.map(_.client)
 
     downloadSnapshot(hash, clients)
       .flatTap { _ =>
@@ -47,24 +89,7 @@ class RandomSnapshotsProcessor(implicit dao: DAO, ec: ExecutionContext) extends 
       .flatMap(acceptSnapshot)
   }
 
-  private def downloadSnapshot(hash: String, pool: Array[APIClient]): IO[StoredSnapshot] = {
-    val stopAt = Random.nextInt(pool.length)
 
-    def makeAttempt(index: Int): IO[StoredSnapshot] =
-      getSnapshot(hash, pool(index)).handleErrorWith {
-        case e if index == stopAt => IO.raiseError(e)
-        case _                    => makeAttempt((index + 1) % pool.length)
-      }
-
-    makeAttempt((stopAt + 1) % pool.length)
-  }
-
-  private def getSnapshot(hash: String, client: APIClient): IO[StoredSnapshot] = IO.fromFuture {
-    IO {
-      client.getNonBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash,
-                                                     timeout = getSnapshotTimeout)
-    }
-  }
 
   private def acceptSnapshot(snapshot: StoredSnapshot): IO[Unit] = IO {
     snapshot.checkpointCache.foreach { c =>
@@ -253,7 +278,7 @@ object Download {
 
     if (dao.nodeType == NodeType.Full) {
       tryWithMetric({
-        val snapshotsProcessor = new RandomSnapshotsProcessor()
+        val snapshotsProcessor = new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotRandomly)
         val process = new DownloadProcess(snapshotsProcessor)
         process.download().unsafeRunSync()
       }, "download")

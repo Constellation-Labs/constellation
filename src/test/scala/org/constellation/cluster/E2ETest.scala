@@ -116,7 +116,7 @@ class E2ETest extends E2E {
 
     Simulation.awaitConditionMet("Accepted checkpoint blocks number differs across the nodes",
                                  allAPIs.map { _.metrics("checkpointAccepted") }.distinct.size == 1,
-                                 maxRetries = 6,
+                                 maxRetries = 10,
                                  delay = 10000)
     Simulation.awaitConditionMet(
       "Accepted transactions number differs across the nodes",

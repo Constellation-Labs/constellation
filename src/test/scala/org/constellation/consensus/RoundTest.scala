@@ -7,7 +7,7 @@ import org.constellation.consensus.RoundManager.{BroadcastLightTransactionPropos
 import org.constellation.primitives.Schema.{EdgeHashType, Id, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives.{CheckpointBlock, PeerData, Transaction}
 import org.constellation.util.{APIClient, HashSignature, Metrics, SignatureBatch}
-import org.constellation.{DAO, Fixtures, NodeConfig, PeerMetadata}
+import org.constellation._
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{BeforeAndAfter, FunSpecLike, Matchers, OneInstancePerTest}
 
@@ -27,7 +27,7 @@ class RoundTest
   private var roundProbe: TestActorRef[Round] = _
 
   val peerA =
-    PeerData(PeerMetadata("localhost", 0, Id("peer-A")), APIClient.apply(port = 9999))
+    PeerData(PeerMetadata("localhost", 0, Id("peer-A"), resourceInfo = ResourceInfo(diskUsableBytes = 1073741824)), APIClient.apply(port = 9999))
   val peerB = PeerData(peerA.peerMetadata.copy(id = Id("peer-B")), APIClient.apply(port = 9999))
   var roundData: RoundData = _
   val roundManagerActor = TestProbe("round-manager")
