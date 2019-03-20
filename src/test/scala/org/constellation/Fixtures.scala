@@ -43,7 +43,7 @@ object Fixtures {
   val address4: InetSocketAddress = constellation.addressToSocket("localhost:16184")
   val address5: InetSocketAddress = constellation.addressToSocket("localhost:16185")
 
-  val addPeerRequest = PeerMetadata("host:", 1, id: Id)
+  val addPeerRequest = PeerMetadata("host:", 1, id: Id, resourceInfo = ResourceInfo(diskUsableBytes = 1073741824))
 
   val tempKeySet = Seq(tempKey, tempKey2, tempKey3, tempKey4, tempKey5)
 

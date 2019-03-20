@@ -43,11 +43,7 @@ class DAO()
     f
   }
 
-  def snapshotPath: File = {
-    val f = File(s"tmp/${id.medium}/snapshots")
-    f.createDirectoryIfNotExists()
-    f
-  }
+
 
   def snapshotHashes: Seq[String] = {
     snapshotPath.list.toSeq.map { _.name }

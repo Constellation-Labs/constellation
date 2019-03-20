@@ -14,7 +14,7 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
-import org.constellation.DAO
+import org.constellation.{DAO, ResourceInfo}
 import org.constellation.consensus.{EdgeProcessor, FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest}
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
@@ -27,7 +27,7 @@ import scala.concurrent.ExecutionContext
 
 case class PeerAuthSignRequest(salt: Long)
 
-case class PeerRegistrationRequest(host: String, port: Int, id: Id)
+case class PeerRegistrationRequest(host: String, port: Int, id: Id, resourceInfo: ResourceInfo)
 
 case class PeerUnregister(host: String, port: Int, id: Id)
 

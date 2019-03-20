@@ -44,8 +44,14 @@ case class PeerMetadata(
   timeAdded: Long = System.currentTimeMillis(),
   auxHost: String = "",
   auxAddresses: Seq[String] = Seq(), // for testing multi key address partitioning
-  nodeType: NodeType = NodeType.Full
+  nodeType: NodeType = NodeType.Full,
+  resourceInfo: ResourceInfo
 )
+
+case class ResourceInfo(
+  maxMemory: Long = Runtime.getRuntime.maxMemory(),
+  cpuNumber: Int = Runtime.getRuntime.availableProcessors(),
+  diskUsableBytes: Long)
 
 case class HostPort(host: String, port: Int)
 
