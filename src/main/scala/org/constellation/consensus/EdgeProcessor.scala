@@ -324,6 +324,42 @@ object EdgeProcessor extends StrictLogging {
 
   }
 
+  def resolveChannelMessages(
+    hashes: Seq[String],
+    priorityPeer: Id
+  )(implicit dao: DAO): Future[Seq[ChannelMessageMetadata]] = {
+    implicit val exec: ExecutionContextExecutor = dao.signatureExecutionContext
+
+    def lookupChannelMessage(hash: String, client: APIClient): Future[Option[ChannelProof]] =
+      client.getNonBlocking[Option[ChannelProof]](
+        s"channel/$hash",
+        timeout = 4.seconds
+      )
+
+    def resolveChannelMessage(
+      hash: String,
+      peers: Seq[APIClient]
+    ): Future[Option[ChannelMessageMetadata]] = {
+      val remainingPeers = peers.tail
+      val lookupResult = lookupChannelMessage(hash, peers.head).map(_.map(_.channelMessageMetadata))
+      lookupResult.recoverWith {
+        case _ ⇒ Future.failed(new Exception("Ran out of peers to query for channel-message"))
+      }
+    }
+
+    val (priority, nonPriority) = dao.readyPeers.toSeq.partition(_._1 == priorityPeer)
+    val peerData = priority ++ nonPriority
+    val peers = peerData.map(_._2.client)
+    val results = hashes.map(hash ⇒ resolveChannelMessage(hash, peers))
+
+    val seq = Future.sequence(results)
+    seq.transformWith {
+      case Success(responses) if responses.forall(_.nonEmpty) ⇒
+        Future.successful(responses.flatten)
+      case _ ⇒ Future.failed(new Exception("Failed to resolve channel-messages"))
+    }
+  }
+
   def handleSignatureRequest(
     sr: SignatureRequest
   )(implicit dao: DAO): Future[Try[SignatureResponse]] = {
