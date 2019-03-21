@@ -89,6 +89,11 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
         EdgeProcessor.resolveTransactions(Seq(hash), facilitatorId.id)
       }).map(_.head.transaction)
 
+    def resolveMessage(hash: String, facilitatorId: FacilitatorId): IO[ChannelMessage] =
+      IO.fromFuture(IO {
+        EdgeProcessor.resolveChannelMessages(Seq(hash), facilitatorId.id)
+      }).map(_.head.channelMessage)
+
     val resolvedTxs = transactionProposals
       .values
       .flatMap(proposal ⇒ proposal.txHashes.map(hash ⇒ (hash, proposal)))
@@ -113,6 +118,15 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
           .union(roundData.transactions.toSet)
           .toSeq
       }
+      .unsafeRunSync()
+
+    val resolvedMessages = transactionProposals
+      .values
+      .flatMap(proposal ⇒ proposal.messages.map(hash ⇒ (hash, proposal)))
+      .filterNot(p ⇒ dao.messageService.contains(p._1).unsafeRunSync())
+      .toList
+      .map(p ⇒ resolveMessage(p._1, p._2.facilitatorId))
+      .sequence[IO, ChannelMessage]
       .unsafeRunSync()
 
     val messages = transactionProposals
@@ -140,7 +154,7 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
     val cb = CheckpointBlock.createCheckpointBlock(
       transactions ++ resolvedTxs,
       roundData.tipsSOE.map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)),
-      messages,
+      messages ++ resolvedMessages,
       notifications
     )(dao.keyPair)
     val blockProposal = UnionBlockProposal(roundData.roundId, FacilitatorId(dao.id), cb)
