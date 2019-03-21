@@ -161,7 +161,7 @@ object ConstellationNode extends StrictLogging {
           defaultTimeoutSeconds = config.getInt("default-timeout-seconds"),
           attemptDownload = !cliConfig.genesisNode,
           cliConfig = cliConfig,
-          processingConfig = if (cliConfig.testMode) ProcessingConfig.testProcessingConfig else processingConfig
+          processingConfig = if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10) else processingConfig
         )
       )
     } match {
