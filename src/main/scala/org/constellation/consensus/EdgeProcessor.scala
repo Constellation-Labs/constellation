@@ -385,7 +385,7 @@ object EdgeProcessor extends StrictLogging {
     )(dao.signatureExecutionContext, dao)
   }
 
-  def simpleResolveCheckpoint(hash: String)(implicit dao: DAO): Future[Boolean] = {
+  def simpleResolveCheckpoint(hash: String)(implicit dao: DAO): Future[Unit] = {
 
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
@@ -419,7 +419,6 @@ object EdgeProcessor extends StrictLogging {
         dao.metrics.incrementMetric("resolveAcceptCBCall")
         acceptWithResolveAttempt(checkpointCacheData)
       }
-      true
     }
 
   }

@@ -1,16 +1,23 @@
 package org.constellation.consensus
 
 import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, Props}
-import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
+import constellation.wrapFutureWithMetric
+import org.constellation.consensus.CrossTalkConsensus.{
+  NotifyFacilitators,
+  ParticipateInBlockCreationRound,
+  StartNewBlockCreationRound
+}
+import org.constellation.consensus.EdgeProcessor.simpleResolveCheckpoint
 import org.constellation.consensus.Round._
-import org.constellation.primitives.Schema.NodeType
+import org.constellation.primitives.Schema.{NodeType, SignedObservationEdge}
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications}
 import org.constellation.util.Distance
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.collection.mutable
 import scala.concurrent.duration.{FiniteDuration, _}
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.util.{Failure, Success}
 
 class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
   import RoundManager._
@@ -32,23 +39,34 @@ class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
 
     case StartNewBlockCreationRound if !rounds.exists(_._2.startedByThisNode) =>
       createRoundData(dao).foreach { roundData =>
-        startRound(roundData, startedByThisNode = true)
-        context.parent ! NotifyFacilitators(roundData)
-        passToRoundActor(
-          LightTransactionsProposal(
-            roundData.roundId,
-            FacilitatorId(dao.id),
-            roundData.transactions.map(_.hash),
-            roundData.messages.map(_.signedMessageData.hash),
-            roundData.peers.flatMap(_.notification).toSeq))
-        log.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}")
-        dao.blockFormationInProgress = true
+        resolveMissingParents(roundData.tipsSOE).onComplete {
+          case Failure(e) =>
+            log.error(e, s"unable to start block creation round due to: ${e.getMessage}")
+          case Success(_) =>
+            startRound(roundData, startedByThisNode = true)
+            context.parent ! NotifyFacilitators(roundData)
+            passToRoundActor(
+              LightTransactionsProposal(roundData.roundId,
+                                   FacilitatorId(dao.id),
+                                   roundData.transactions.map(_.hash),
+                                   roundData.messages.map(_.signedMessageData.hash),
+                                   roundData.peers.flatMap(_.notification).toSeq)
+            )
+            log.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}")
+            dao.blockFormationInProgress = true
+        }
       }
 
     case cmd: ParticipateInBlockCreationRound =>
       log.debug(s"node: ${dao.id.short} participating in round: ${cmd.roundData.roundId}")
-      startRound(adjustPeers(cmd.roundData))
-      passToRoundActor(StartTransactionProposal(cmd.roundData.roundId))
+      resolveMissingParents(cmd.roundData.tipsSOE).onComplete {
+        case Failure(e) =>
+          log.error(e, s"unable to start block creation round due to: ${e.getMessage}")
+          // TODO: should I interrupt others and abort the whole Round ?
+        case Success(_) =>
+          startRound(adjustPeers(cmd.roundData))
+          passToRoundActor(StartTransactionProposal(cmd.roundData.roundId))
+      }
 
     case cmd: LightTransactionsProposal =>
       passToRoundActor(cmd)
@@ -99,6 +117,25 @@ class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
       }))
 
     roundData.copy(peers = updatedPeers)
+  }
+
+  def resolveMissingParents(
+    tipsSOE: Seq[SignedObservationEdge]
+  )(implicit dao: DAO): Future[Seq[Unit]] = {
+
+    implicit val ec = dao.edgeExecutionContext
+
+    val apiCalls = tipsSOE
+      .filterNot(t => dao.checkpointService.contains(t.baseHash))
+      .map(
+        t =>
+          wrapFutureWithMetric(
+            simpleResolveCheckpoint(t.baseHash),
+            "resolveCheckpoint"
+        )
+      )
+    // TODO: Could be enhanced with cancelable future
+    Future.sequence(apiCalls)
   }
 
   def startRound(roundData: RoundData, startedByThisNode: Boolean = false): Unit = {
