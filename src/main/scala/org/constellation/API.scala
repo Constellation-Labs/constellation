@@ -59,6 +59,25 @@ case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = Non
 
 case class UpdatePassword(password: String)
 
+object ProcessingConfig {
+
+
+  val testProcessingConfig = ProcessingConfig(
+    numFacilitatorPeers = 2,
+    minCheckpointFormationThreshold = 3,
+    randomTXPerRoundPerPeer = 2,
+    metricCheckInterval = 10,
+    maxWidth = 4,
+    maxMemPoolSize = 15,
+    minPeerTimeAddedSeconds = 1,
+    snapshotInterval = 2,
+    snapshotHeightInterval = 2,
+    snapshotHeightDelayInterval = 1,
+    roundsPerMessage = 1
+  )
+
+}
+
 case class ProcessingConfig(
   maxWidth: Int = 10,
   minCheckpointFormationThreshold: Int = 50,

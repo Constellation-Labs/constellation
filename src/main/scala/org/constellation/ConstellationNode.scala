@@ -33,7 +33,8 @@ case class CliConfig(
   debug: Boolean = false,
   startOfflineMode: Boolean = false,
   lightNode: Boolean = false,
-  genesisNode: Boolean = false
+  genesisNode: Boolean = false,
+  testMode: Boolean = false
 )
 
 /**
@@ -61,18 +62,21 @@ object ConstellationNode extends StrictLogging {
         opt[Int]('p', "port")
           .action((x, c) => c.copy(externalPort = x))
           .text("the port you can be reached from outside"),
-        opt[Boolean]('d', "debug")
-          .action((x, c) => c.copy(debug = x))
+        opt[Unit]('d', "debug")
+          .action((x, c) => c.copy(debug = true))
           .text("run the node in debug mode"),
-        opt[Boolean]('o', "offline")
-          .action((x, c) => c.copy(startOfflineMode = x))
+        opt[Unit]('o', "offline")
+          .action((x, c) => c.copy(startOfflineMode = true))
           .text("Start the node in offline mode. Won't connect automatically"),
-        opt[Boolean]('l', "light")
-          .action((x, c) => c.copy(startOfflineMode = x))
+        opt[Unit]('l', "light")
+          .action((x, c) => c.copy(lightNode = true))
           .text("Start a light node, only validates & stores portions of the graph"),
-        opt[Boolean]('g', "genesis")
-          .action((x, c) => c.copy(genesisNode = x))
+        opt[Unit]('g', "genesis")
+          .action((x, c) => c.copy(genesisNode = true))
           .text("Start in single node genesis mode"),
+        opt[Unit]('t', "test-mode")
+            .action((x, c) => c.copy(testMode = true))
+            .text("Run with test settings"),
         help("help").text("prints this usage text"),
         version("version").text(s"Constellation v${BuildInfo.version}"),
         checkConfig(
@@ -140,23 +144,24 @@ object ConstellationNode extends StrictLogging {
 
       val constellationConfig = config.getConfig("constellation")
 
+      val processingConfig = ProcessingConfig(
+      maxWidth = constellationConfig.getInt("max-width")
+      // TODO: Finish porting configs from application conf
+      )
       new ConstellationNode(
         NodeConfig(
           seeds = seedsFromConfig,
           primaryKeyPair = keyPair,
-          isGenesisNode = cliConfig.startOfflineMode,
+          isGenesisNode = cliConfig.genesisNode,
           isLightNode = cliConfig.lightNode,
           hostName = hostName,
           httpInterface = config.getString("http.interface"),
           httpPort = httpPort,
           peerHttpPort = peerHttpPort,
           defaultTimeoutSeconds = config.getInt("default-timeout-seconds"),
-          attemptDownload = true,
+          attemptDownload = !cliConfig.genesisNode,
           cliConfig = cliConfig,
-          processingConfig = ProcessingConfig(
-            maxWidth = constellationConfig.getInt("max-width")
-            // TODO: Finish porting configs from application conf
-          )
+          processingConfig = if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10) else processingConfig
         )
       )
     } match {
