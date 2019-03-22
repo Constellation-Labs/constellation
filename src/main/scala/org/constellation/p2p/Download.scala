@@ -293,7 +293,7 @@ object Download {
       dao.metrics.updateMetric("downloadedNearbyChannels", nearbyChannels.size.toString)
 
       nearbyChannels.foreach{ cmd =>
-        dao.channelService.put(cmd.channelId, cmd)
+        dao.channelService.putSync(cmd.channelId, cmd)
       }
 
       dao.setNodeState(NodeState.Ready)
