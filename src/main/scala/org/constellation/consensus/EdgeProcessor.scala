@@ -13,7 +13,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Validation.EnrichedFuture
-import org.constellation.util.{APIClient, HashSignature, Signable}
+import org.constellation.util.{APIClient, Distance, HashSignature, Signable}
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.async.Async.{async, await}
@@ -520,10 +520,7 @@ object Snapshot {
   }
 
   def removeOldSnapshots()(implicit dao: DAO): Unit = {
-    val thisNodeId = BigInt(dao.id.hex.getBytes())
-    val sortedHashes = snapshotHashes().sortBy { hash =>
-      thisNodeId ^ BigInt(hash.getBytes())
-    }
+    val sortedHashes = snapshotHashes().sortBy(Distance.calculate(_, dao.id))
     sortedHashes
       .slice(ConfigUtil.snapshotClosestFractionSize, sortedHashes.size)
       .foreach(snapId => Files.delete(Paths.get(dao.snapshotPath.pathAsString, snapId)))

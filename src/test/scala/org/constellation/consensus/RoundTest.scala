@@ -65,6 +65,7 @@ class RoundTest
     roundData = RoundData(
       RoundId("round-1"),
       Set(peerA, peerB),
+      Set(),
       FacilitatorId(fakeDao.id),
       sampleTransactions,
       tips,

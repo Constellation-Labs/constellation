@@ -30,6 +30,7 @@ object BlockBuildingRoundRoute {
     RoundData(
       r.roundId,
       r.peers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort))),
+      r.lightPeers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort))),
       r.facilitatorId,
       r.transactions,
       r.tipsSOE,

@@ -12,7 +12,7 @@ import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.APIClient
+import org.constellation.util.{APIClient, Distance}
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.duration._
@@ -38,11 +38,7 @@ object SnapshotsDownloader {
   }
 
   def downloadSnapshotByDistance(hash: String, pool: Iterable[APIClient]): IO[StoredSnapshot] = {
-    val snapHash = BigInt(hash.getBytes)
-
-    val sortedPeers = pool.toSeq.sortBy { p =>
-      BigInt(p.id.hex.getBytes()) ^ snapHash
-    }
+    val sortedPeers = pool.toSeq.sortBy(p => Distance.calculate(hash, p.id))
 
     def makeAttempt(sortedPeers: Iterable[APIClient]): IO[StoredSnapshot] =
       sortedPeers match {

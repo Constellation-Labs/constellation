@@ -43,10 +43,8 @@ object Partitioner {
       neighbors.map(id => (id, numeric256(id.toPublicKey.getEncoded))).sortBy(_._2)
     val (facilitatorId, _) = sortedNeighbors.minBy {
       case (id, idBi) =>
-        val txBi = numeric256(tx.hash.getBytes())
-        val srcBi = numeric256(tx.src.address.getBytes())
-        val xorIdTx = idBi ^ txBi
-        val xorIdSrc = idBi ^ srcBi
+        val xorIdTx = Distance.calculate(tx.hash, id)
+        val xorIdSrc = Distance.calculate(tx.src.address, id)
 
         xorIdTx + xorIdSrc
     }

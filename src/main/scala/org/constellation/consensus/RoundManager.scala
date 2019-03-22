@@ -3,7 +3,9 @@ package org.constellation.consensus
 import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, Props}
 import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
+import org.constellation.primitives.Schema.NodeType
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications}
+import org.constellation.util.Distance
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.collection.mutable
@@ -146,9 +148,18 @@ object RoundManager {
       .flatMap { transactions => dao.pullTips(dao.readyFacilitators()).map(tips => {
         val messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq())
 
+        // TODO: Choose more than one tx and light peers
+        val firstTx = transactions.head
+        val lightPeers = if (dao.readyPeers(NodeType.Light).nonEmpty) {
+          Set(
+            dao.readyPeers(NodeType.Light).minBy(p => Distance.calculate(firstTx.baseHash, p._1))._2
+          )
+        } else Set[PeerData]()
+
         RoundData(
           generateRoundId,
           tips._2.values.toSet,
+          lightPeers,
           FacilitatorId(dao.id),
           transactions,
           tips._1,

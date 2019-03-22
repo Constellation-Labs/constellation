@@ -248,6 +248,7 @@ object Round {
   case class RoundData(
     roundId: RoundId,
     peers: Set[PeerData],
+    lightPeers: Set[PeerData],
     facilitatorId: FacilitatorId,
     transactions: Seq[Transaction],
     tipsSOE: Seq[SignedObservationEdge],
