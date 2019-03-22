@@ -228,7 +228,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             complete(dao.channelService.lruCache.asImmutableMap().keys.toSeq)
           } ~
           path ("channel" / "genesis" / Segment) { channelId =>
-            complete(dao.channelService.get(channelId))
+            complete(dao.channelService.getSync(channelId))
           } ~
           path("channel" / Segment) { channelHash =>
             val res =
