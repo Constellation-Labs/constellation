@@ -157,7 +157,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .flatMap(_ => IO.sleep(waitForPeersDelay))
 
   private def getReadyPeers() =
-    IO.pure(dao.readyPeers(NodeType.Full))
+    IO(dao.readyPeers(NodeType.Full))
 
   private def getSnapshotClient(peers: Peers) = IO(peers.head._2.client)
 
