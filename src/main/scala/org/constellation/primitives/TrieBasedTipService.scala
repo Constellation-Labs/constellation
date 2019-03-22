@@ -85,11 +85,22 @@ class TrieBasedTipService(sizeLimit: Int,
     }
   }
 
-  def getMinTipHeight()(implicit dao: DAO): Long =
-    tips.keys
+  def getMinTipHeight()(implicit dao: DAO): Long = {
+
+    if (tips.keys.isEmpty) {
+      dao.metrics.incrementMetric("minTipHeightKeysEmpty")
+    }
+
+    val maybeDatas = tips.keys
       .map {
         dao.checkpointService.get
       }
+
+    if (maybeDatas.exists{_.isEmpty}) {
+      dao.metrics.incrementMetric("minTipHeightCBDataEmptyForKeys")
+    }
+
+    maybeDatas
       .flatMap {
         _.flatMap {
           _.height.map {
@@ -98,6 +109,8 @@ class TrieBasedTipService(sizeLimit: Int,
         }
       }
       .min
+
+  }
 
   override def pull(
     readyFacilitators: Map[Id, PeerData]

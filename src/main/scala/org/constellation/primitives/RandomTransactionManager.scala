@@ -187,11 +187,12 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                   thisNodeId ^ peerId
                 }
 
-                val lightPeerData = dao.peerInfo(NodeType.Light).minBy(p ⇒ distance(p._1))._2
-                dao.metrics.incrementMetric("transactionPut")
-                dao.metrics.incrementMetric("transactionPutToLightNode")
-                lightPeerData.client.put("transaction", tx)
-
+                if (dao.peerInfo(NodeType.Light).nonEmpty) {
+                  val lightPeerData = dao.peerInfo(NodeType.Light).minBy(p ⇒ distance(p._1))._2
+                  dao.metrics.incrementMetric("transactionPut")
+                  dao.metrics.incrementMetric("transactionPutToLightNode")
+                  lightPeerData.client.put("transaction", tx)
+                }
 
                 /*            // TODO: Change to transport layer call
     dao.peerManager ! APIBroadcast(

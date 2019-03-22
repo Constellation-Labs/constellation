@@ -16,6 +16,7 @@ import org.constellation.{DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.util.Try
 
 class ThreadSafeTXMemPool() {
 
@@ -161,7 +162,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
     latestSnapshotInfo.snapshotCache.foreach { h =>
       dao.metrics.incrementMetric("checkpointAccepted")
-      dao.checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h)
+      dao.checkpointService.memPool.putSync(h.checkpointBlock.get.baseHash, h)
       h.checkpointBlock.get.storeSOE()
       h.checkpointBlock.get.transactions.foreach { _ =>
         dao.metrics.incrementMetric("transactionAccepted")
@@ -169,7 +170,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
     }
 
     latestSnapshotInfo.acceptedCBSinceSnapshotCache.foreach { h =>
-      dao.checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h)
+      dao.checkpointService.memPool.putSync(h.checkpointBlock.get.baseHash, h)
       h.checkpointBlock.get.storeSOE()
       dao.metrics.incrementMetric("checkpointAccepted")
       h.checkpointBlock.get.transactions.foreach { _ =>
@@ -210,7 +211,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
     if (dao.nodeState == NodeState.Ready && acceptedCBSinceSnapshot.nonEmpty) {
 
-      val minTipHeight = concurrentTipService.getMinTipHeight()
+      val minTipHeight = Try{concurrentTipService.getMinTipHeight()}.getOrElse(0L)
       dao.metrics.updateMetric("minTipHeight", minTipHeight.toString)
 
       val nextHeightInterval = lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval
