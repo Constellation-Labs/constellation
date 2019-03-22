@@ -11,6 +11,7 @@ import org.constellation.{DAO, PeerMetadata}
 case class RoundDataRemote(
   roundId: RoundId,
   peers: Set[PeerMetadata],
+  lightPeers: Set[PeerMetadata],
   facilitatorId: FacilitatorId,
   transactions: Seq[Transaction],
   tipsSOE: Seq[SignedObservationEdge],
@@ -25,7 +26,8 @@ class HTTPNodeRemoteSender(implicit val dao: DAO) extends NodeRemoteSender {
       cmd.roundData.peers,
       RoundDataRemote(
         r.roundId,
-        r.peers.map(p => p.peerMetadata),
+        r.peers.map(_.peerMetadata),
+        r.lightPeers.map(_.peerMetadata),
         r.facilitatorId,
         r.transactions,
         r.tipsSOE,

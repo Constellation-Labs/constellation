@@ -105,6 +105,7 @@ class DAO()
   ): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = {
     concurrentTipService.pull(readyFacilitators)(this.metrics)
   }
+
   def peerInfo: Map[Id, PeerData] = {
     // TODO: fix it to be Future
     Await.result((peerManager ? GetPeerInfo).mapTo[Map[Id,PeerData]], 3 seconds)
