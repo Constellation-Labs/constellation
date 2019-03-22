@@ -16,6 +16,7 @@ import org.constellation.{DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.util.Try
 
 class ThreadSafeTXMemPool() {
 
@@ -210,7 +211,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
     if (dao.nodeState == NodeState.Ready && acceptedCBSinceSnapshot.nonEmpty) {
 
-      val minTipHeight = concurrentTipService.getMinTipHeight()
+      val minTipHeight = Try{concurrentTipService.getMinTipHeight()}.getOrElse(0L)
       dao.metrics.updateMetric("minTipHeight", minTipHeight.toString)
 
       val nextHeightInterval = lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval
