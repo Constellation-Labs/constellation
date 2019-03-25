@@ -43,7 +43,8 @@ trait E2E
                   randomizePorts: Boolean = true,
                   seedHosts: Seq[HostPort] = Seq(),
                   portOffset: Int = 0,
-                  isGenesisNode: Boolean = false
+                  isGenesisNode: Boolean = false,
+                  isLightNode: Boolean = false
                 ): ConstellationNode = {
     implicit val executionContext: ExecutionContextExecutorService =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
@@ -52,7 +53,8 @@ trait E2E
       randomizePorts = randomizePorts,
       portOffset = portOffset,
       seedHosts = seedHosts,
-      isGenesisNode = isGenesisNode
+      isGenesisNode = isGenesisNode,
+      isLightNode = isLightNode
     )
   }
 

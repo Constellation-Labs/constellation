@@ -138,7 +138,7 @@ object Simulation {
     err: String,
     t: Map[String, String] => Boolean,
     apis: Seq[APIClient],
-    maxRetries: Int = 20,
+    maxRetries: Int = 10,
     delay: Long = 3000
   ): Boolean = {
     awaitConditionMet(
@@ -396,9 +396,10 @@ object Simulation {
     assert(checkSnapshot(apis, num = snapshotCount))
 
     // TODO: Fix problem with snapshots before enabling this, causes flakiness
-//    val channelProof = apis.head.getBlocking[Option[ChannelProof]]("channel/" + channelId, timeout = 90.seconds)
-//    assert(channelProof.nonEmpty)
-
+    /*
+    val channelProof = apis.head.getBlocking[Option[ChannelProof]]("channel/" + channelId, timeout = 90.seconds)
+    assert(channelProof.nonEmpty)
+*/
     logger.info("Snapshot validation passed")
 
     true

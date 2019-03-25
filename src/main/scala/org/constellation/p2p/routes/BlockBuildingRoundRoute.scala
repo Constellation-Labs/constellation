@@ -7,7 +7,7 @@ import akka.http.scaladsl.server.{RequestContext, Route}
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.consensus.CrossTalkConsensus.ParticipateInBlockCreationRound
-import org.constellation.consensus.Round.{RoundData, TransactionsProposal, UnionBlockProposal}
+import org.constellation.consensus.Round.{LightTransactionsProposal, RoundData, UnionBlockProposal}
 import org.constellation.consensus.RoundDataRemote
 import org.constellation.primitives.PeerData
 import org.constellation.util.APIClient
@@ -66,7 +66,7 @@ class BlockBuildingRoundRoute(nodeActor: ActorRef)(implicit system: ActorSystem,
   protected def addTransactionsProposal(ctx: RequestContext): Route = {
     post {
       path(BlockBuildingRoundRoute.proposalPath) {
-        entity(as[TransactionsProposal]) { proposal =>
+        entity(as[LightTransactionsProposal]) { proposal =>
           nodeActor ! proposal
           complete(StatusCodes.Created)
         }

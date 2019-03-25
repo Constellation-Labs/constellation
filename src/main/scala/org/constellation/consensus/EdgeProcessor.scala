@@ -1,14 +1,16 @@
 package org.constellation.consensus
 
+import java.io.IOException
 import java.nio.file.Path
 
+import better.files.File
 import cats.data.NonEmptyList
 import cats.data.Validated.{Invalid, Valid}
 import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import org.constellation.DAO
+import org.constellation.{ConfigUtil, DAO}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
@@ -18,7 +20,7 @@ import org.constellation.util.{APIClient, HashSignature, Signable}
 import scala.async.Async.{async, await}
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Success, Try}
+import scala.util.{Failure, Success, Try}
 
 case class CreateCheckpointEdgeResponse(
   checkpointEdge: CheckpointEdge,
@@ -57,7 +59,7 @@ object EdgeProcessor extends StrictLogging {
         dao.metrics.incrementMetric("heightNonEmpty")
       }
 
-      dao.checkpointService.midDb.put(cb.baseHash, checkpointCacheData)
+      dao.checkpointService.midDb.put(cb.baseHash, checkpointCacheData).unsafeRunSync()
 
       cb.messages.foreach { m =>
         if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
@@ -84,7 +86,7 @@ object EdgeProcessor extends StrictLogging {
           )
         }
         dao.messageService.putSync(m.signedMessageData.hash,
-                               ChannelMessageMetadata(m, Some(cb.baseHash)))
+                                   ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.metrics.incrementMetric("messageAccepted")
       }
 
@@ -114,14 +116,15 @@ object EdgeProcessor extends StrictLogging {
       cbBaseHash = Some(cb.baseHash)
     )
 
-    cb.transactions
-      .toList
+    cb.transactions.toList
       .map(tx ⇒ (tx, toCacheData(tx)))
       .map {
-        case (tx, txMetadata) ⇒ dao.transactionService.memPool.remove(tx.baseHash)
-        .flatMap(_ ⇒ dao.transactionService.midDb.put(tx.baseHash, txMetadata))
-        .flatMap(_ ⇒ dao.metrics.incrementMetricAsync("transactionAccepted"))
-        .flatMap(_ ⇒ dao.addressService.transfer(tx))
+        case (tx, txMetadata) ⇒
+          dao.transactionService.memPool
+            .remove(tx.baseHash)
+            .flatMap(_ ⇒ dao.transactionService.midDb.put(tx.baseHash, txMetadata))
+            .flatMap(_ ⇒ dao.metrics.incrementMetricAsync("transactionAccepted"))
+            .flatMap(_ ⇒ dao.addressService.transfer(tx))
       }
       .sequence[IO, AddressCacheData]
       .map(_ ⇒ ())
@@ -247,9 +250,9 @@ object EdgeProcessor extends StrictLogging {
                 val cache = CheckpointCacheData(finalCB.some, height = finalCB.calculateHeight())
                 dao.threadSafeSnapshotService.accept(cache)
                 processSignedBlock(
-                    cache,
-                    finalFacilitators
-                  )
+                  cache,
+                  finalFacilitators
+                )
               }
           }
 
@@ -319,6 +322,42 @@ object EdgeProcessor extends StrictLogging {
       case _ => Future.failed(new Exception("Failed to resolve transactions"))
     }
 
+  }
+
+  def resolveChannelMessages(
+    hashes: Seq[String],
+    priorityPeer: Id
+  )(implicit dao: DAO): Future[Seq[ChannelMessageMetadata]] = {
+    implicit val exec: ExecutionContextExecutor = dao.signatureExecutionContext
+
+    def lookupChannelMessage(hash: String, client: APIClient): Future[Option[ChannelProof]] =
+      client.getNonBlocking[Option[ChannelProof]](
+        s"channel/$hash",
+        timeout = 4.seconds
+      )
+
+    def resolveChannelMessage(
+      hash: String,
+      peers: Seq[APIClient]
+    ): Future[Option[ChannelMessageMetadata]] = {
+      val remainingPeers = peers.tail
+      val lookupResult = lookupChannelMessage(hash, peers.head).map(_.map(_.channelMessageMetadata))
+      lookupResult.recoverWith {
+        case _ ⇒ Future.failed(new Exception("Ran out of peers to query for channel-message"))
+      }
+    }
+
+    val (priority, nonPriority) = dao.readyPeers.toSeq.partition(_._1 == priorityPeer)
+    val peerData = priority ++ nonPriority
+    val peers = peerData.map(_._2.client)
+    val results = hashes.map(hash ⇒ resolveChannelMessage(hash, peers))
+
+    val seq = Future.sequence(results)
+    seq.transformWith {
+      case Success(responses) if responses.forall(_.nonEmpty) ⇒
+        Future.successful(responses.flatten)
+      case _ ⇒ Future.failed(new Exception("Failed to resolve channel-messages"))
+    }
   }
 
   def handleSignatureRequest(
@@ -454,15 +493,45 @@ import java.nio.file.{Files, Paths}
 
 object Snapshot {
 
-  def writeSnapshot(snapshot: StoredSnapshot)(implicit dao: DAO): Try[Path] = {
-    tryWithMetric(
-      {
-        val serialized = KryoSerializer.serializeAnyRef(snapshot)
-        Files.write(Paths.get(dao.snapshotPath.pathAsString, snapshot.snapshot.hash), serialized)
-        //File(dao.snapshotPath, snapshot.snapshot.hash).writeByteArray(serialized)
-      },
-      "writeSnapshot"
-    )
+  def writeSnapshot(storedSnapshot: StoredSnapshot)(implicit dao: DAO): Try[Path] = {
+    val serialized = KryoSerializer.serializeAnyRef(storedSnapshot)
+    writeSnapshot(storedSnapshot, serialized)
+  }
+
+  private def writeSnapshot(storedSnapshot: StoredSnapshot,
+                            serialized: Array[Byte],
+                            trialNumber: Int = 0)(implicit dao: DAO): Try[Path] = {
+
+    trialNumber match {
+      case x if x >= 3 => Failure(new IOException(s"Unable to write snapshot"))
+      case _ if isOverDiskCapacity(serialized.length) =>
+        removeOldSnapshots()
+        writeSnapshot(storedSnapshot, serialized, trialNumber + 1)
+      case _ =>
+        tryWithMetric(
+          {
+            Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash), serialized)
+          },
+          "writeSnapshot"
+        )
+    }
+  }
+
+  def removeOldSnapshots()(implicit dao: DAO): Unit = {
+    val thisNodeId = BigInt(dao.id.hex.getBytes())
+    val sortedHashes = snapshotHashes().sortBy { hash =>
+      thisNodeId ^ BigInt(hash.getBytes())
+    }
+    sortedHashes
+      .slice(ConfigUtil.snapshotClosestFractionSize, sortedHashes.size)
+      .foreach(snapId => Files.delete(Paths.get(dao.snapshotPath.pathAsString, snapId)))
+  }
+
+  def isOverDiskCapacity(bytesLengthToAdd: Long)(implicit dao: DAO): Boolean = {
+    val storageDir = new java.io.File(dao.snapshotPath.pathAsString)
+    val usableSpace = storageDir.getUsableSpace
+    val occupiedSpace = dao.snapshotPath.size
+    occupiedSpace + bytesLengthToAdd >= ConfigUtil.snapshotSizeDiskLimit || usableSpace <= bytesLengthToAdd
   }
 
   def loadSnapshot(snapshotHash: String)(implicit dao: DAO): Try[StoredSnapshot] = {
@@ -563,7 +632,8 @@ object Snapshot {
          tx <- cb.transactions) {
       // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
       // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
-      dao.addressService.transferSnapshot(tx)
+      dao.addressService
+        .transferSnapshot(tx)
         .flatMap(_ ⇒ dao.acceptedTransactionService.remove(Set(tx.hash)))
         .flatTap(_ ⇒ dao.metrics.incrementMetricAsync("snapshotAppliedBalance"))
         .unsafeRunSync()
