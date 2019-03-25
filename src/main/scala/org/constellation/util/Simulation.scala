@@ -383,7 +383,7 @@ object Simulation {
         if (done) {
           cmds.flatten.foreach { cmd =>
             val prev = cmd.channelMessage.signedMessageData.data.previousMessageHash
-            println(s"msg hash: ${cmd.channelMessage.signedMessageData.hash} previous: $prev")
+            logger.info(s"msg hash: ${cmd.channelMessage.signedMessageData.hash} previous: $prev")
           }
         }
 

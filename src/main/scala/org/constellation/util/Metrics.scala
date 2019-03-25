@@ -108,6 +108,10 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
     countMetrics(key) = new AtomicReference[Long](value)
   }
 
+  def updateMetric(key: String, value: Long): Unit = {
+    countMetrics(key) = new AtomicReference[Long](value)
+  }
+
   def incrementMetric(key: String): Unit = {
     countMetrics.getOrElseUpdate(key, new AtomicReference[Long](0L)).getAndUpdate(_ + 1L)
    // countMetrics(key) = countMetrics.getOrElse(key, 0L) + 1
@@ -166,7 +170,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
       updateMetric("nodeCurrentTimeMS", System.currentTimeMillis().toString)
       updateMetric("nodeCurrentDate", new DateTime().toString())
       updateMetric("metricsRound", round.toString)
-      updateMetric("addressCount", dao.addressService.lruCache.m.size)
+      updateMetric("addressCount", dao.addressService.cacheSize())
       updateMetric("channelCount", dao.threadSafeMessageMemPool.activeChannels.size)
 
     }(scala.concurrent.ExecutionContext.global)
