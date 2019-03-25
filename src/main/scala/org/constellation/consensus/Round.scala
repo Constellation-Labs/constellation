@@ -6,6 +6,7 @@ import cats.implicits._
 import constellation.{wrapFutureWithMetric, _}
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCacheData, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
 import org.constellation.{ConfigUtil, DAO}
@@ -87,29 +88,21 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
 
   def unionProposals(): Unit = {
 
-    def resolveTransaction(hash: String, facilitatorId: FacilitatorId): IO[Transaction] =
-      IO.fromFuture(IO {
-        EdgeProcessor.resolveTransactions(Seq(hash), facilitatorId.id)
-      }).map(_.head.transaction)
-
-    def resolveMessage(hash: String, facilitatorId: FacilitatorId): IO[ChannelMessage] =
-      IO.fromFuture(IO {
-        EdgeProcessor.resolveChannelMessages(Seq(hash), facilitatorId.id)
-      }).map(_.head.channelMessage)
+    val readyPeers =  dao.readyPeers
 
     val resolvedTxs = transactionProposals
       .values
       .flatMap(proposal ⇒ proposal.txHashes.map(hash ⇒ (hash, proposal)))
       .filterNot(p ⇒ dao.transactionService.contains(p._1).unsafeRunSync())
       .toList
-      .map(p ⇒ resolveTransaction(p._1, p._2.facilitatorId))
-      .sequence[IO, Transaction]
+      .map(p ⇒ DataResolver.resolveTransactions(p._1, readyPeers.map(_._2.client),readyPeers.get(p._2.facilitatorId.id).map(_.client)).map(_.transaction))
+      .sequence
       .unsafeRunSync()
 
     val transactions = transactionProposals
       .values
       .flatMap(_.txHashes)
-      .filterNot(hash ⇒ dao.transactionService.contains(hash).unsafeRunSync())
+      .filter(hash ⇒ dao.transactionService.contains(hash).unsafeRunSync())
       .map(hash ⇒ dao.transactionService.lookup(hash).map(
         _.map(_.transaction)
       ))
@@ -128,7 +121,7 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
       .flatMap(proposal ⇒ proposal.messages.map(hash ⇒ (hash, proposal)))
       .filterNot(p ⇒ dao.messageService.contains(p._1).unsafeRunSync())
       .toList
-      .map(p ⇒ resolveMessage(p._1, p._2.facilitatorId))
+      .map(p ⇒ DataResolver.resolveMessages(p._1, readyPeers.map(_._2.client), readyPeers.get(p._2.facilitatorId.id).map(_.client)).map(_.channelMessage))
       .sequence[IO, ChannelMessage]
       .unsafeRunSync()
 
