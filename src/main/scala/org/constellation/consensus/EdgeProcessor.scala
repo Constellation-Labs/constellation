@@ -9,6 +9,7 @@ import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
@@ -424,7 +425,8 @@ object EdgeProcessor extends StrictLogging {
   }
 
   def acceptWithResolveAttempt(
-    checkpointCacheData: CheckpointCacheData
+    checkpointCacheData: CheckpointCacheData,
+    nestedAcceptCount: Int = 0
   )(implicit dao: DAO): Unit = {
 
     dao.threadSafeSnapshotService.accept(checkpointCacheData)
@@ -436,13 +438,25 @@ object EdgeProcessor extends StrictLogging {
     if (parentExists.forall(_._2)) {
       dao.metrics.incrementMetric("resolveFinishedCheckpointParentsPresent")
     } else {
+      if (nestedAcceptCount >= ConfigUtil.maxNestedCBresolution) {
+        throw new RuntimeException(s"Max nested CB resolution: $nestedAcceptCount reached.")
+      }
       dao.metrics.incrementMetric("resolveFinishedCheckpointParentMissing")
       parentExists.filterNot(_._2).foreach {
         case (h, _) =>
-          wrapFutureWithMetric(
-            simpleResolveCheckpoint(h),
-            "resolveCheckpoint"
-          )(dao, dao.edgeExecutionContext)
+          DataResolver.resolveCheckpoint(h, dao.readyPeers.map(_._2.client)).runAsync { cd =>
+            IO {
+              cd.foreach { resolved =>
+                resolved.checkpointBlock.foreach { cb =>
+                  if (!dao.checkpointService
+                        .contains(resolved.checkpointBlock.get.baseHash)) {
+                    dao.metrics.incrementMetric("resolveAcceptCBCall")
+                    acceptWithResolveAttempt(resolved, nestedAcceptCount + 1)
+                  }
+                }
+              }
+            }
+          }
       }
 
     }

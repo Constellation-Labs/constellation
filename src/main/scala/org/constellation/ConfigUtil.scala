@@ -16,6 +16,9 @@ object ConfigUtil {
   val snapshotClosestFractionSize: Int = Try(config.getInt("constellation.snapshot-closest-fraction-size"))
     .getOrElse(50)
 
+  val maxNestedCBresolution: Int = Try(config.getInt("constellation.max-nested-cb-resolution"))
+    .getOrElse(100)
+
   def getDurationFromConfig(path: String): FiniteDuration = {
     FiniteDuration(config.getDuration(path, TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
   }
