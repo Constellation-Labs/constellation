@@ -16,29 +16,37 @@ case class TrustNode(id: Int, xCoordinate: Double, yCoordinate: Double, edges: S
 }
 
 /**
-  * Modification of EigenTrust
+  * Modified version of EigenTrust
   * First difference is scores are not normalized 0 -> 1 but rather -1 to 1
   * This captures interference effects among distant networks.
   * In addition, transitive scores for negative trusted Nth neighbors are discarded,
   * as they are untrustworthy and shouldn't factor into the calculations
   *
-  * Another issue with EigenTrust is that it assumes there will be observed a global convergence
-  * of neighbor explorations, which this doesn't.
+  * This does not expect a global convergence of scores ala EigenTrust,
+  * hence it cannot be run as a single decomposition
   *
+  * This is not properly optimized but meant to serve as a proof of concept / comparison against EigenTrust
+  *
+  * Several effects are not yet complete, including weighting by near-neighbors during far-neighbor calculations
+  * as well as localized eigen decompositions to capture more effects from regular EigenTrust
+  *
+  * Also needs partitioning steps (from eigen decomposition, see Graph Partitioning wiki example),
+  * and the walker direction should be influenced by trust derivatives (i.e. max flow,)
   *
   */
 object TrustRank {
 
   val sqrt2: Double = Math.sqrt(2)
 
-  // Add decay factor / normalization factor to ensure <1
   // Add slicing window to only consider highest trust scores by random factor.
 
-  // Explore Nth order 'randomly' at each iteration ? ,
-  // i.e. don't just take the normalized trust when asking peers ?
-  // When calculating transitive trust should we also incorporate how that node trusts its own neighbor scores?
-  // Or is that sufficient to calculate on the global update phase?
+  // When calculating transitive trust should we also incorporate how that node trusts its own neighbor scores,
+  // see re-weighting comment below
 
+  // TODO: Primary scores should always take direct precedence over non-primary transitive sums,
+  //  they're mixed together here.
+
+  // TODO: Add decay factor, adjust amplifications, order randomness by probability of transition ~ Abs(score)
   def exploreNextNeighbor(
                            transitiveTrust: Double,
                            nextNeighborId: Int,
@@ -46,7 +54,9 @@ object TrustRank {
                            visited: Seq[Int],
                            currentNumHops: Int = 0,
                            maxNumHops: Int = 1,
-                           amplificationFactor: Double = 1.0D
+                           amplificationFactor: Double = 1.0D,
+                           edgeSliceCap: Int = 7,
+                           transitiveSliceCap: Int = 7
                          ): Map[Int, Double] = {
 
     if (currentNumHops == maxNumHops) return Map.empty[Int, Double]
@@ -55,24 +65,50 @@ object TrustRank {
 
     val nextNeighbor = nodeMap(nextNeighborId)
     val positive = nextNeighbor.edges.filter(_.trust > 0)
+
+    val positiveSubset = if (maxNumHops >= 3)  {
+      Random.shuffle(positive).slice(0, edgeSliceCap)
+    } else positive
+
     val nextVisited = visited :+ nextNeighborId
+
+    // println(currentNumHops)
 
     // println(s"Next visited length ${nextVisited.size}")
 
-    val posTransitives = positive.flatMap{ pn =>
+    val posTransitives = positiveSubset.flatMap{ pn =>
 
       val degreeNormalizedTrust = pn.trust / positive.size
       val neighbor2Node = nodeMap(pn.dst)
       val neighbor2Degree = neighbor2Node.edges.size
 
-      val transitives = neighbor2Node.edges.filterNot(
-        neighborEdge => nextVisited.contains(neighborEdge.dst) || neighborEdge.trust <= 0
-      ).map{ edge =>
+      val candidateEdges = neighbor2Node.edges.filterNot(
+        neighborEdge => nextVisited.contains(neighborEdge.dst)
+      )
 
+      val candidateSubset = if (maxNumHops >= 3)  {
+        Random.shuffle(candidateEdges).slice(0, transitiveSliceCap)
+      } else candidateEdges
+
+
+      val transitives = candidateSubset.map{ edge =>
+
+        // This needs to be re-weighted by original degree trust of this node by self (and eventually Nth sum)
         val transitiveTrust = amplificationFactor * degreeNormalizedTrust * edge.trust / neighbor2Degree
-        val exploreResult = exploreNextNeighbor(
-          transitiveTrust, edge.dst, nodeMap, nextVisited, currentNumHops + 1, maxNumHops, amplificationFactor
-        )
+
+        val exploreResult = if (edge.trust <= 0) Map.empty[Int, Double] else {
+          exploreNextNeighbor(
+            transitiveTrust,
+            edge.dst,
+            nodeMap,
+            nextVisited,
+            currentNumHops + 1,
+            maxNumHops,
+            amplificationFactor
+          )
+        }
+
+        // Only increase contribution of dst if we're below current hops of max depth etc?
 
         exploreResult |+| Map(edge.dst -> transitiveTrust)
       }
@@ -80,25 +116,41 @@ object TrustRank {
       transitives
     }
 
-    val sumTransitives = if (posTransitives.isEmpty) Map.empty[Int, Double] else posTransitives.reduce(_ |+| _)
+    val sumTransitives = if (posTransitives.isEmpty) Map.empty[Int, Double] else {
+      posTransitives.reduce{
+        (left: Map[Int, Double], right: Map[Int, Double]) =>
+          left.map{ case (id, score) =>
+            id -> {
+              if (right.contains(id)) normalizedIncrease(score, right(id))
+              else score
+            }
+          } ++ right.filterNot{case (k,v) => left.contains(k)}
+      }
+    }
     sumTransitives
+  }
+
+  def normalizedIncrease(trustScore: Double, increaseAmount: Double): Double = {
+    (trustScore + increaseAmount) / (1 + trustScore*increaseAmount)
   }
 
   def updateNode(n: TrustNode, sumTransitives: Map[Int, Double]): TrustNode = {
     n.copy(edges = n.edges.map{ edge =>
-      edge.copy(trust = edge.trust + sumTransitives.getOrElse(edge.dst, 0D))
+      if (!sumTransitives.contains(edge.dst)) edge else {
+        edge.copy(trust = normalizedIncrease(edge.trust, sumTransitives(edge.dst)))
+      }
     } ++ sumTransitives.filterNot(n.edges.map{_.dst}.contains).map{case (id, trust) => TrustEdge(n.id, id, trust)} )
   }
 
-  def exploreOutwardsDebug(nodes: Seq[TrustNode], depth: Int = 1) = {
+  def exploreOutwards(nodes: List[TrustNode], depth: Int = 1, amplificationFactor: Double = 1.0D): List[TrustNode] = {
 
     val nodeMap = nodes.map{n => n.id -> n}.toMap
 
     val updatedNodes = nodes.map{ n =>
 
-    val sumTransitives = exploreNextNeighbor(
-      1D, n.id, nodeMap, Seq(n.id), maxNumHops = depth, amplificationFactor = 1.0D
-    )
+      val sumTransitives = exploreNextNeighbor(
+        1D, n.id, nodeMap, Seq(n.id), maxNumHops = depth, amplificationFactor = amplificationFactor
+      )
 
       println("-"*10 + " " + n.id)
       sumTransitives.toSeq.sortBy{_._1}.foreach{ case (id, trust) =>
@@ -112,7 +164,9 @@ object TrustRank {
         }
       }
 
+      println(s"Original node: $n")
       val updatedNode = updateNode(n, sumTransitives)
+      println(s"Updated node: $updatedNode")
       updatedNode
     }
 
@@ -120,16 +174,24 @@ object TrustRank {
   }
 
 
-
   def main(args: Array[String]): Unit = {
+
+    runner()
+
+  }
+
+  def runner(): Unit = {
 
     val nodes = (0 until 30).toList.map{ id =>
       TrustNode(id, Random.nextDouble(), Random.nextDouble())
     }
 
+    // TODO: Distance should influence trust score to simulate modularity
     val nodesWithEdges = nodes.map{ n =>
       val edges = nodes.filterNot(_.id == n.id).flatMap{ n2 =>
-        if (Random.nextDouble() > n.distance(n2) && Random.nextDouble() < 0.5) {
+
+        val distance = n.distance(n2)
+        if (Random.nextDouble() > distance && Random.nextDouble() < 0.5) {
           val trustZeroToOne = Random.nextDouble()
           Some(TrustEdge(n.id, n2.id, 2*(trustZeroToOne - 0.5)))
         } else None
@@ -138,61 +200,39 @@ object TrustRank {
       n.copy(edges = edges)
     }
 
-    val depthOneNodes = exploreOutwardsDebug(nodesWithEdges)
 
-    val depthTwoNodes = exploreOutwardsDebug(depthOneNodes, depth = 2)
+    // TODO: Parameter debugging, order expansion to higher number of iterations with randomized depth criteria.
+    val first = exploreOutwards(nodesWithEdges, amplificationFactor = 10.0D)
+    val second = exploreOutwards(first, depth = 2, amplificationFactor = 0.5)
+    val third = exploreOutwards(second, depth = 3, amplificationFactor = 2D)
 
+    val nodesAtIteration = Seq(
+      nodesWithEdges,
+      first,
+      second,
+      third
+    )
 
-    /*
+    nodes.indices.foreach{ nodeId =>
 
-    val updates = positive.map{pn =>
+      println("-"*10 + " " + nodeId)
 
-      0
-    }*/
+      nodes.indices.foreach{ nodeIdJ =>
 
+        val scoresFormatted = Seq.tabulate(nodesAtIteration.size){  round =>
+          val nodesOfRound = nodesAtIteration(round)
+          val nodeAtRound = nodesOfRound.find(_.id == nodeId).get
+          val scoreAtRound = nodeAtRound.edges.find(_.dst == nodeIdJ).map{_.trust}
+          val score = scoreAtRound.getOrElse(0.0)
+          f"$score%2.2f"
+        }.mkString(" ")
 
-  //    0
-  //  }
+        println(s"dst: $nodeIdJ " + scoresFormatted)
 
-/*
-    var iteration = 0
-
-    while (iteration < 100) {
-
-      iteration += 1
-*/
-
-/*
-
-
-    }
-*/
-
-
-
-/*
-
-    // Exponential weighting by threshold of map distance to simulate peer topology?
-    val links = nodes.flatMap{ src =>
-      val dest = Seq.fill(Random.nextInt(12) + 2)()
-      dest.map{ j =>
-        val trust = Random.nextDouble()
-        val trustPosNeg = (trust - 0.5)*2 + 0.2
-        val dist = ((-100*trustPosNeg) + 130).toInt
-        VizLink(i.toString, j.toString, dist, trust, trustPosNeg)
       }
+
+
     }
-
-    val linksAdjusted = links.groupBy{v => Seq(v.source, v.target).sorted}.map(_._2.head).toSeq
-
-    val nodeToEdgeTrust = linksAdjusted.flatMap{ v =>
-      Seq(v.source, v.target).map{_ -> v}
-    }.groupBy(_._1).map{
-      case (k,vv) =>
-        k -> vv.map{case (_, v) => v.other(k) -> v.trustPosNeg }
-    }
-*/
-
 
 
   }
