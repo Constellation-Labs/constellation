@@ -17,17 +17,15 @@ object DataResolver {
     implicit apiTimeout: Duration = 3.seconds,
     dao: DAO
   ): IO[ChannelMessageMetadata] = {
-    resolveDataByDistance[ChannelProof](
+    resolveDataByDistance[ChannelMessageMetadata](
       List(hash),
-      "channel",
+      "message",
       pool,
-      (t: ChannelProof) => {
-        dao.messageService.put(t.channelMessageMetadata.channelMessage.signedMessageData.hash,
-                               t.channelMessageMetadata)
+      (t: ChannelMessageMetadata) => {
+        dao.messageService.put(t.channelMessage.signedMessageData.hash, t)
       },
       priorityClient
     ).head
-      .map(_.channelMessageMetadata)
   }
 
   def resolveTransactions(hash: String,

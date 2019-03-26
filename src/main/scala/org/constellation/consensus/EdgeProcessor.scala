@@ -444,19 +444,23 @@ object EdgeProcessor extends StrictLogging {
       dao.metrics.incrementMetric("resolveFinishedCheckpointParentMissing")
       parentExists.filterNot(_._2).foreach {
         case (h, _) =>
-          DataResolver.resolveCheckpoint(h, dao.readyPeers.map(_._2.client)).runAsync { cd =>
-            IO {
-              cd.foreach { resolved =>
-                resolved.checkpointBlock.foreach { cb =>
+          DataResolver
+            .resolveCheckpoint(h, dao.readyPeers.map(_._2.client))
+            .flatMap { cd =>
+              IO {
+                cd.checkpointBlock.foreach { cb =>
+                  if (cd.children < 2) {
+                    dao.concurrentTipService.put(cb.baseHash, TipData(cb, 0))(dao.metrics)
+                  }
                   if (!dao.checkpointService
-                        .contains(resolved.checkpointBlock.get.baseHash)) {
+                        .contains(cd.checkpointBlock.get.baseHash)) {
                     dao.metrics.incrementMetric("resolveAcceptCBCall")
-                    acceptWithResolveAttempt(resolved, nestedAcceptCount + 1)
+                    acceptWithResolveAttempt(cd, nestedAcceptCount + 1)
                   }
                 }
               }
             }
-          }
+            .unsafeRunAsyncAndForget()
       }
 
     }
