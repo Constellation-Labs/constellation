@@ -14,79 +14,66 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] with L
       .maximumSize(size)
       .build[String, V]()
 
-  override def lookup(key: String): IO[Option[V]] = get(key)
+  override def lookup(key: String): IO[Option[V]] = lruCache.synchronized { get(key) }
 
-  override def getSync(key: String): Option[V] =
+  override def getSync(key: String): Option[V] = lruCache.synchronized {
     lruCache.getIfPresent(key)
+  }
 
-  override def putSync(key: String, value: V): V = {
+  override def putSync(key: String, value: V): V = lruCache.synchronized {
     lruCache.put(key, value)
     value
   }
 
-  override def updateSync(key: String, updateFunc: V => V, empty: => V): V =
+  override def updateSync(key: String, updateFunc: V => V, empty: => V): V = lruCache.synchronized {
     putSync(key, getSync(key).map(updateFunc).getOrElse(empty))
+  }
 
-  def updateOnly(key: String, updateFunc: V => V): Option[V] =
-    getSync(key).map(updateFunc).map { putSync(key, _) }
+  def updateOnly(key: String, updateFunc: V => V): Option[V] = lruCache.synchronized {
+    getSync(key).map(updateFunc).map {
+      putSync(key, _)
+    }
+  }
 
-  override def removeSync(keys: Set[String]): Unit =
+  override def removeSync(keys: Set[String]): Unit = lruCache.synchronized {
     lruCache.invalidateAll(keys)
+  }
 
-  override def containsSync(key: String): Boolean =
+  override def containsSync(key: String): Boolean = lruCache.synchronized {
     lruCache.getIfPresent(key).isDefined
+  }
 
-  override def toMapSync(): Map[String, V] =
+  override def toMapSync(): Map[String, V] = lruCache.synchronized {
     lruCache.asMap().toMap
+  }
 
-  override def get(key: String): IO[Option[V]] =
+  override def get(key: String): IO[Option[V]] = lruCache.synchronized {
     IO(getSync(key))
+  }
 
-  override def put(key: String, value: V): IO[V] =
+  override def put(key: String, value: V): IO[V] = lruCache.synchronized {
     IO(putSync(key, value))
+  }
 
-  override def update(key: String, updateFunc: V => V, empty: => V): IO[V] =
+  override def update(key: String, updateFunc: V => V, empty: => V): IO[V] = lruCache.synchronized {
     get(key)
       .map(_.map(updateFunc).getOrElse(empty))
       .flatMap(put(key, _))
+  }
 
-  override def remove(keys: Set[String]): IO[Unit] =
+  override def remove(keys: Set[String]): IO[Unit] = lruCache.synchronized {
     IO(lruCache.invalidateAll(keys))
+  }
 
-  override def contains(key: String): IO[Boolean] =
+  override def contains(key: String): IO[Boolean] = lruCache.synchronized {
     IO(containsSync(key))
+  }
 
-  override def toMap(): IO[Map[String, V]] =
+  override def toMap(): IO[Map[String, V]] = lruCache.synchronized {
     IO(lruCache.asMap().toMap)
-
-  override def cacheSize(): Long = lruCache.estimatedSize()
-}
-
-class LRUCache[K, V](capacity: Int) {
-  val cache: Cache[K, V] =
-    Scaffeine()
-    .recordStats()
-    .maximumSize(capacity)
-    .build[K, V]()
-
-  def multiRemove(ks: Set[K]): Cache[K, V] = {
-    cache.invalidateAll(ks)
-    cache
   }
 
-  def contains(k: K): Boolean = {
-    cache.getIfPresent(k).isDefined
+  override def cacheSize(): Long = lruCache.synchronized {
+    lruCache.estimatedSize()
   }
-
-  def asImmutableMap(): Map[K, V] = {
-    cache.asMap().toMap
-  }
-}
-
-class ExtendedMutableLRUCache[K, V](capacity: Int) extends MutableLRUCache[K, V](capacity) {
-
-  def asImmutableMap(): Map[K, V] = {
-    m.asScala.toMap
-  }
-
 }
