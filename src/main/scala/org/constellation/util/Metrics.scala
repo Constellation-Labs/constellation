@@ -12,6 +12,7 @@ import io.micrometer.core.instrument.binder.logging.LogbackMetrics
 import io.micrometer.core.instrument.binder.system.{FileDescriptorMetrics, ProcessorMetrics, UptimeMetrics}
 import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import io.prometheus.client.CollectorRegistry
+import io.prometheus.client.cache.caffeine.CacheMetricsCollector
 import org.constellation.{BuildInfo, DAO}
 import org.joda.time.DateTime
 
@@ -20,6 +21,8 @@ import scala.concurrent.Future
 
 /** For Grafana usage. */
 object Metrics {
+
+  val cacheMetrics = new CacheMetricsCollector()
 
   def prometheusSetup(keyHash: String): Unit = {
     val prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT,
@@ -38,6 +41,7 @@ object Metrics {
     new ClassLoaderMetrics().bindTo(prometheusMeterRegistry)
     new DiskSpaceMetrics(File(System.getProperty("user.dir")).toJava)
       .bindTo(prometheusMeterRegistry)
+    cacheMetrics.register()
     // new DatabaseTableMetrics().bindTo(prometheusMeterRegistry)
   }
 

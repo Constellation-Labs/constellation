@@ -2,9 +2,7 @@ package org.constellation.primitives.storage
 
 import cats.effect.IO
 import com.github.blemale.scaffeine.{Cache, Scaffeine}
-import com.twitter.storehaus.cache.MutableLRUCache
-
-import scala.collection.JavaConverters._
+import org.constellation.util.Metrics
 
 //noinspection ScalaStyle
 class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] with Lookup[String, V] {
@@ -13,6 +11,8 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] with L
       .recordStats()
       .maximumSize(size)
       .build[String, V]()
+
+  Metrics.cacheMetrics.addCache(this.getClass.getSimpleName, lruCache.underlying)
 
   override def lookup(key: String): IO[Option[V]] = lruCache.synchronized { get(key) }
 
