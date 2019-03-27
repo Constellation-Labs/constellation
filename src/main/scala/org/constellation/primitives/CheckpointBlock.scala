@@ -346,12 +346,23 @@ sealed trait CheckpointBlockValidatorNel {
 
   type AddressBalance = Map[String, Long]
 
-  def getParents(c: CheckpointBlock)(implicit dao: DAO): List[CheckpointBlock] =
-    c.parentSOEBaseHashes.toList
-      .map(dao.checkpointService.get)
+  def getParents(c: CheckpointBlock)(implicit dao: DAO): List[CheckpointBlock] = {
+    val parentSOEBaseHashes = c.parentSOEBaseHashes.toList
+    if (parentSOEBaseHashes.size != 2) {
+      dao.metrics.incrementMetric("validationParentSOEBaseHashesMissing")
+    }
+    val maybeDatas = parentSOEBaseHashes.map(dao.checkpointService.get)
+
+    if (maybeDatas.exists{_.isEmpty}) {
+      dao.metrics.incrementMetric("validationParentCBLookupMissing")
+    }
+
+
+    maybeDatas
       .map(_.flatMap(_.checkpointBlock))
       .sequence[Option, CheckpointBlock]
       .getOrElse(List())
+  }
 
   def isInSnapshot(c: CheckpointBlock)(implicit dao: DAO): Boolean =
     dao.threadSafeSnapshotService.acceptedCBSinceSnapshot
