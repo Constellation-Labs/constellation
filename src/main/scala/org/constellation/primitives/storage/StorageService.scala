@@ -61,32 +61,3 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] with L
 
   override def cacheSize(): Long = lruCache.estimatedSize()
 }
-
-class LRUCache[K, V](capacity: Int) {
-  val cache: Cache[K, V] =
-    Scaffeine()
-    .recordStats()
-    .maximumSize(capacity)
-    .build[K, V]()
-
-  def multiRemove(ks: Set[K]): Cache[K, V] = {
-    cache.invalidateAll(ks)
-    cache
-  }
-
-  def contains(k: K): Boolean = {
-    cache.getIfPresent(k).isDefined
-  }
-
-  def asImmutableMap(): Map[K, V] = {
-    cache.asMap().toMap
-  }
-}
-
-class ExtendedMutableLRUCache[K, V](capacity: Int) extends MutableLRUCache[K, V](capacity) {
-
-  def asImmutableMap(): Map[K, V] = {
-    m.asScala.toMap
-  }
-
-}
