@@ -2,20 +2,8 @@ package org.constellation.trust
 import scala.util.Random
 import cats.implicits._
 
-case class TrustEdge(src: Int, dst: Int, trust: Double) {
-  def other(id: Int): Int = Seq(src, dst).filterNot(_ == id).head
-}
-
-
-// Simple way to simulate modularity of connections / generate a topology different from random
-case class TrustNode(id: Int, xCoordinate: Double, yCoordinate: Double, edges: Seq[TrustEdge] = Seq()) {
-  def distance(other: TrustNode): Double = Math.sqrt{
-    Math.pow(xCoordinate - other.xCoordinate, 2) +
-      Math.pow(yCoordinate - other.yCoordinate, 2)
-  } / TrustRank.sqrt2
-}
-
 /**
+  * UNFINISHED -- Work in progress
   * Modified version of EigenTrust
   * First difference is scores are not normalized 0 -> 1 but rather -1 to 1
   * This captures interference effects among distant networks.
@@ -26,6 +14,7 @@ case class TrustNode(id: Int, xCoordinate: Double, yCoordinate: Double, edges: S
   * hence it cannot be run as a single decomposition
   *
   * This is not properly optimized but meant to serve as a proof of concept / comparison against EigenTrust
+  * Should be changed to use matrix operations instead of directly computing sums
   *
   * Several effects are not yet complete, including weighting by near-neighbors during far-neighbor calculations
   * as well as localized eigen decompositions to capture more effects from regular EigenTrust
@@ -173,33 +162,9 @@ object TrustRank {
     updatedNodes
   }
 
+  def debugExperimentalRunner(): Unit = {
 
-  def main(args: Array[String]): Unit = {
-
-    runner()
-
-  }
-
-  def runner(): Unit = {
-
-    val nodes = (0 until 30).toList.map{ id =>
-      TrustNode(id, Random.nextDouble(), Random.nextDouble())
-    }
-
-    // TODO: Distance should influence trust score to simulate modularity
-    val nodesWithEdges = nodes.map{ n =>
-      val edges = nodes.filterNot(_.id == n.id).flatMap{ n2 =>
-
-        val distance = n.distance(n2)
-        if (Random.nextDouble() > distance && Random.nextDouble() < 0.5) {
-          val trustZeroToOne = Random.nextDouble()
-          Some(TrustEdge(n.id, n2.id, 2*(trustZeroToOne - 0.5)))
-        } else None
-      }
-      println(s"Num edges ${edges.length}")
-      n.copy(edges = edges)
-    }
-
+    val nodesWithEdges = DataGeneration.generateTestData()
 
     // TODO: Parameter debugging, order expansion to higher number of iterations with randomized depth criteria.
     val first = exploreOutwards(nodesWithEdges, amplificationFactor = 10.0D)
@@ -213,11 +178,11 @@ object TrustRank {
       third
     )
 
-    nodes.indices.foreach{ nodeId =>
+    nodesWithEdges.indices.foreach{ nodeId =>
 
       println("-"*10 + " " + nodeId)
 
-      nodes.indices.foreach{ nodeIdJ =>
+      nodesWithEdges.indices.foreach{ nodeIdJ =>
 
         val scoresFormatted = Seq.tabulate(nodesAtIteration.size){  round =>
           val nodesOfRound = nodesAtIteration(round)
