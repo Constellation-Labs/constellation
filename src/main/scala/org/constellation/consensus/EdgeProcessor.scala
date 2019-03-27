@@ -3,19 +3,18 @@ package org.constellation.consensus
 import java.io.IOException
 import java.nio.file.Path
 
-import better.files.File
 import cats.data.NonEmptyList
 import cats.data.Validated.{Invalid, Valid}
 import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import org.constellation.{ConfigUtil, DAO}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Validation.EnrichedFuture
 import org.constellation.util.{APIClient, HashSignature, Signable}
+import org.constellation.{ConfigUtil, DAO}
 
 import scala.async.Async.{async, await}
 import scala.concurrent.duration._
@@ -550,18 +549,19 @@ object Snapshot {
   def loadSnapshotBytes(snapshotHash: String)(implicit dao: DAO): Try[Array[Byte]] = {
     tryWithMetric(
       {
-        {
-          val byteArray = Files.readAllBytes(Paths.get(dao.snapshotPath.pathAsString, snapshotHash))
+        val path = Paths.get(dao.snapshotPath.pathAsString, snapshotHash)
+        if (Files.exists(path)) {
+          val byteArray = Files.readAllBytes(path)
           //   val f = File(dao.snapshotPath, snapshotHash)
           byteArray
-        }
+        } else throw new RuntimeException(s"No snapshot found at $path")
       },
       "loadSnapshot"
     )
   }
 
   def snapshotHashes()(implicit dao: DAO): List[String] = {
-    dao.snapshotPath.toJava.listFiles().map { _.getName }.toList
+    dao.snapshotPath.list.map { _.name }.toList
   }
 
   def findLatestMessageWithSnapshotHash(
