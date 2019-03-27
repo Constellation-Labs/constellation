@@ -5,6 +5,7 @@ import java.security.KeyPair
 
 import akka.actor.ActorRef
 import better.files.File
+import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerRegistrationRequest
@@ -25,6 +26,8 @@ trait NodeData {
   var messageHashStore: swaydb.Set[String] = _
   var transactionHashStore: swaydb.Set[String] = _
   var checkpointHashStore: swaydb.Set[String] = _
+
+  val miscLogger = Logger("MiscLogger")
 
   @volatile var downloadMode: Boolean = true
   @volatile var downloadInProgress: Boolean = false

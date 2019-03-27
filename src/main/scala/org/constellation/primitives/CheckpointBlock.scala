@@ -78,6 +78,7 @@ case class CheckpointBlock(
       dao.metrics.incrementMetric("checkpointValidationSuccess")
     } else {
       dao.metrics.incrementMetric("checkpointValidationFailure")
+      dao.miscLogger.error(s"Checkpoint validation failure: $validation")
     }
 
     // TODO: Return Validation instead of Boolean
@@ -409,7 +410,7 @@ sealed trait CheckpointBlockValidatorNel {
         .product(validateSignatures(cb.signatures, cb.baseHash))
         .product(validateTransactions(cb.transactions))
         .product(validateDuplicatedTransactions(cb.transactions))
-        .product(validateSourceAddressBalances(cb.transactions))
+        // .product(validateSourceAddressBalances(cb.transactions))
 
     val postTreeIgnoreEmptySnapshot =
       if (dao.threadSafeSnapshotService.lastSnapshotHeight == 0) preTreeResult

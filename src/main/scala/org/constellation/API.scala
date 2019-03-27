@@ -84,7 +84,7 @@ case class ProcessingConfig(
   maxTXInBlock: Int = 50,
   maxMessagesInBlock: Int = 1,
   checkpointFormationTimeSeconds: Int = 1,
-  formUndersizedCheckpointAfterSeconds: Int = 30,
+  formUndersizedCheckpointAfterSeconds: Int = Int.MaxValue,
   numFacilitatorPeers: Int = 2,
   randomTXPerRoundPerPeer: Int = 30,
   metricCheckInterval: Int = 10,
