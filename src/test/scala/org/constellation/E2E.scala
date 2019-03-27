@@ -1,11 +1,12 @@
 package org.constellation
-import java.util.concurrent.ForkJoinPool
+import java.util.concurrent.{ForkJoinPool, TimeUnit}
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+import akka.util.Timeout
 import better.files.File
 import com.typesafe.scalalogging.StrictLogging
-import org.constellation.util.TestNode
+import org.constellation.util.{APIClient, Simulation, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, ExecutionContextExecutorService}
@@ -18,10 +19,11 @@ trait E2E
     with BeforeAndAfterEach
     with StrictLogging {
 
-  val tmpDir = "tmp"
-
   implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
+//  implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
+
+  val tmpDir = "tmp"
 
   override def beforeAll(): Unit = {
     // Cleanup DBs
@@ -41,7 +43,8 @@ trait E2E
                   randomizePorts: Boolean = true,
                   seedHosts: Seq[HostPort] = Seq(),
                   portOffset: Int = 0,
-                  isGenesisNode: Boolean = false
+                  isGenesisNode: Boolean = false,
+                  isLightNode: Boolean = false
                 ): ConstellationNode = {
     implicit val executionContext: ExecutionContextExecutorService =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
@@ -50,7 +53,8 @@ trait E2E
       randomizePorts = randomizePorts,
       portOffset = portOffset,
       seedHosts = seedHosts,
-      isGenesisNode = isGenesisNode
+      isGenesisNode = isGenesisNode,
+      isLightNode = isLightNode
     )
   }
 

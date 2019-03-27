@@ -44,14 +44,39 @@ case class PeerMetadata(
   timeAdded: Long = System.currentTimeMillis(),
   auxHost: String = "",
   auxAddresses: Seq[String] = Seq(), // for testing multi key address partitioning
-  nodeType: NodeType = NodeType.Full
+  nodeType: NodeType = NodeType.Full,
+  resourceInfo: ResourceInfo
 )
+
+case class ResourceInfo(
+  maxMemory: Long = Runtime.getRuntime.maxMemory(),
+  cpuNumber: Int = Runtime.getRuntime.availableProcessors(),
+  diskUsableBytes: Long)
 
 case class HostPort(host: String, port: Int)
 
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
 
 case class UpdatePassword(password: String)
+
+object ProcessingConfig {
+
+
+  val testProcessingConfig = ProcessingConfig(
+    numFacilitatorPeers = 2,
+    minCheckpointFormationThreshold = 3,
+    randomTXPerRoundPerPeer = 2,
+    metricCheckInterval = 10,
+    maxWidth = 4,
+    maxMemPoolSize = 15,
+    minPeerTimeAddedSeconds = 1,
+    snapshotInterval = 2,
+    snapshotHeightInterval = 2,
+    snapshotHeightDelayInterval = 1,
+    roundsPerMessage = 1
+  )
+
+}
 
 case class ProcessingConfig(
   maxWidth: Int = 10,
@@ -199,6 +224,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           path("messageService" / Segment) { channelId =>
             complete(dao.messageService.getSync(channelId))
           } ~
+          path ("channelKeys") {
+            complete(dao.channelService.lruCache.asImmutableMap().keys.toSeq)
+          } ~
+          path ("channel" / "genesis" / Segment) { channelId =>
+            complete(dao.channelService.getSync(channelId))
+          } ~
           path("channel" / Segment) { channelHash =>
             val res =
               Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.getSync(channelHash))
@@ -306,7 +337,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             val self = Node(
               dao.selfAddressStr,
               dao.externalHostString,
-              dao.externlPeerHTTPPort
+              dao.externalPeerHTTPPort
             )
             val peerMap = dao.peerInfo.toSeq.map {
               case (id, pd) => Node(id.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)

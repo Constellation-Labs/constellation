@@ -14,7 +14,7 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
-import org.constellation.DAO
+import org.constellation.{DAO, ResourceInfo}
 import org.constellation.consensus.{EdgeProcessor, FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest}
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
@@ -27,7 +27,7 @@ import scala.concurrent.ExecutionContext
 
 case class PeerAuthSignRequest(salt: Long)
 
-case class PeerRegistrationRequest(host: String, port: Int, id: Id)
+case class PeerRegistrationRequest(host: String, port: Int, id: Id, resourceInfo: ResourceInfo)
 
 case class PeerUnregister(host: String, port: Int, id: Id)
 
@@ -132,6 +132,17 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
 
   private val postEndpoints =
     post {
+      pathPrefix("channel") {
+        path("neighborhood") {
+          entity(as[Id]) { peerId =>
+            val distanceSorted = dao.channelService.lruCache.asImmutableMap().toSeq.sortBy {
+              case (channelId, meta) =>
+                BigInt(channelId.getBytes()) ^ peerId.bigInt
+            } // TODO: Determine appropriate fraction to respond with.
+            complete(Seq(distanceSorted.head._2))
+          }
+        }
+      } ~
       path("faucet") {
         entity(as[SendToAddress]) { sendRequest =>
           // TODO: Add limiting

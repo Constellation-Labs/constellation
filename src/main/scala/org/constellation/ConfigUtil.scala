@@ -10,6 +10,12 @@ object ConfigUtil {
 
   val config: Config = ConfigFactory.load().resolve()
 
+  val snapshotSizeDiskLimit: Long = Try(config.getLong("constellation.snapshot-size-disk-limit"))
+    .getOrElse(26214400)
+
+  val snapshotClosestFractionSize: Int = Try(config.getInt("constellation.snapshot-closest-fraction-size"))
+    .getOrElse(50)
+
   def getDurationFromConfig(path: String): FiniteDuration = {
     FiniteDuration(config.getDuration(path, TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
   }
