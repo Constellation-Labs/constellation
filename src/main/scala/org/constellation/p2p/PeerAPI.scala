@@ -135,7 +135,7 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
       pathPrefix("channel") {
         path("neighborhood") {
           entity(as[Id]) { peerId =>
-            val distanceSorted = dao.channelService.lruCache.asImmutableMap().toSeq.sortBy {
+            val distanceSorted = dao.channelService.toMapSync().toSeq.sortBy {
               case (channelId, meta) =>
                 BigInt(channelId.getBytes()) ^ peerId.bigInt
             } // TODO: Determine appropriate fraction to respond with.
