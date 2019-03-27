@@ -5,9 +5,17 @@ import cats.effect.IO
 import cats.implicits._
 import constellation.{wrapFutureWithMetric, _}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{
+  BroadcastLightTransactionProposal,
+  BroadcastUnionBlockProposal
+}
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCacheData, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.primitives.Schema.{
+  CheckpointCacheData,
+  EdgeHashType,
+  SignedObservationEdge,
+  TypedEdgeHash
+}
 import org.constellation.primitives._
 import org.constellation.{ConfigUtil, DAO}
 
@@ -36,7 +44,9 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
           roundData.roundId,
           FacilitatorId(dao.id),
           transactions.map(_.hash),
-          messages.map(_.map(_.signedMessageData.hash)).getOrElse(Seq()),
+          messages
+            .map(_.map(_.signedMessageData.hash))
+            .getOrElse(Seq()),
           dao.peerInfo.flatMap(_._2.notification).toSeq
         )
 
@@ -88,54 +98,74 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
 
   def unionProposals(): Unit = {
 
-    val readyPeers =  dao.readyPeers
+    val readyPeers = dao.readyPeers
 
-    val resolvedTxs = transactionProposals
-      .values
+    val resolvedTxs = transactionProposals.values
       .flatMap(proposal ⇒ proposal.txHashes.map(hash ⇒ (hash, proposal)))
       .filterNot(p ⇒ dao.transactionService.contains(p._1).unsafeRunSync())
       .toList
-      .map(p ⇒ DataResolver.resolveTransactions(p._1, readyPeers.map(_._2.client),readyPeers.get(p._2.facilitatorId.id).map(_.client)).map(_.transaction))
+      .map(
+        p ⇒
+          DataResolver
+            .resolveTransactions(p._1,
+                                 readyPeers.map(_._2.client),
+                                 readyPeers.get(p._2.facilitatorId.id).map(_.client))
+            .map(_.map(_.transaction))
+      )
       .sequence
       .unsafeRunSync()
+      .flatten
 
-    val transactions = transactionProposals
-      .values
+    val transactions = transactionProposals.values
       .flatMap(_.txHashes)
       .filter(hash ⇒ dao.transactionService.contains(hash).unsafeRunSync())
-      .map(hash ⇒ dao.transactionService.lookup(hash).map(
-        _.map(_.transaction)
-      ))
+      .map(
+        hash ⇒
+          dao.transactionService
+            .lookup(hash)
+            .map(
+              _.map(_.transaction)
+          )
+      )
       .toList
       .sequence[IO, Option[Transaction]]
       .map {
-        _.flatten
-          .toSet
+        _.flatten.toSet
           .union(roundData.transactions.toSet)
           .toSeq
       }
       .unsafeRunSync()
 
-    val resolvedMessages = transactionProposals
-      .values
+    val resolvedMessages = transactionProposals.values
       .flatMap(proposal ⇒ proposal.messages.map(hash ⇒ (hash, proposal)))
       .filterNot(p ⇒ dao.messageService.contains(p._1).unsafeRunSync())
       .toList
-      .map(p ⇒ DataResolver.resolveMessages(p._1, readyPeers.map(_._2.client), readyPeers.get(p._2.facilitatorId.id).map(_.client)).map(_.channelMessage))
-      .sequence[IO, ChannelMessage]
+      .map(
+        p ⇒
+          DataResolver
+            .resolveMessages(p._1,
+                             readyPeers.map(_._2.client),
+                             readyPeers.get(p._2.facilitatorId.id).map(_.client))
+            .map(_.map(_.channelMessage))
+      )
+      .sequence
       .unsafeRunSync()
+      .flatten
 
-    val messages = transactionProposals
-      .values
+    val messages = transactionProposals.values
       .flatMap(_.messages)
-      .map(hash ⇒ dao.messageService.lookup(hash).map(
-        _.map(_.channelMessage)
-      ))
+      .map(
+        hash ⇒
+          dao.messageService
+            .lookup(hash)
+            .map(
+              _.map(_.channelMessage)
+          )
+      )
       .toList
       .sequence[IO, Option[ChannelMessage]]
       .map {
-        _.flatten
-          .toSet
+        _.flatten.toSet
           .union(roundData.messages.toSet)
           .toSeq
       }
@@ -248,7 +278,8 @@ object Round {
     messages: Seq[ChannelMessage]
   )
 
-  case class StopBlockCreationRound(roundId: RoundId, maybeCB: Option[CheckpointBlock]) extends RoundCommand
+  case class StopBlockCreationRound(roundId: RoundId, maybeCB: Option[CheckpointBlock])
+      extends RoundCommand
 
   def props(roundData: RoundData, dao: DAO): Props = Props(new Round(roundData, dao))
 }
