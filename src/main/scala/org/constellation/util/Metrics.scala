@@ -23,6 +23,7 @@ import scala.concurrent.Future
 object Metrics {
 
   val cacheMetrics = new CacheMetricsCollector()
+  cacheMetrics.register()
 
   def prometheusSetup(keyHash: String): Unit = {
     val prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT,
@@ -41,7 +42,6 @@ object Metrics {
     new ClassLoaderMetrics().bindTo(prometheusMeterRegistry)
     new DiskSpaceMetrics(File(System.getProperty("user.dir")).toJava)
       .bindTo(prometheusMeterRegistry)
-    cacheMetrics.register()
     // new DatabaseTableMetrics().bindTo(prometheusMeterRegistry)
   }
 
