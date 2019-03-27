@@ -16,7 +16,7 @@ object DataResolver {
                       priorityClient: Option[APIClient] = None)(
     implicit apiTimeout: Duration = 3.seconds,
     dao: DAO
-  ): IO[ChannelMessageMetadata] = {
+  ): IO[Option[ChannelMessageMetadata]] = {
     resolveDataByDistance[ChannelProof](
       List(hash),
       "channel",
@@ -26,8 +26,8 @@ object DataResolver {
                                t.channelMessageMetadata)
       },
       priorityClient
-    ).head
-      .map(_.channelMessageMetadata)
+    ).head.map(_.map(_.channelMessageMetadata))
+
   }
 
   def resolveTransactions(hash: String,
@@ -35,7 +35,7 @@ object DataResolver {
                           priorityClient: Option[APIClient] = None)(
     implicit apiTimeout: Duration = 3.seconds,
     dao: DAO
-  ): IO[TransactionCacheData] = {
+  ): IO[Option[TransactionCacheData]] = {
     resolveDataByDistance[TransactionCacheData](
       List(hash),
       "transaction",
@@ -51,7 +51,7 @@ object DataResolver {
                         priorityClient: Option[APIClient] = None)(
     implicit apiTimeout: Duration = 3.seconds,
     dao: DAO
-  ): IO[CheckpointCacheData] = {
+  ): IO[Option[CheckpointCacheData]] = {
     resolveDataByDistance[CheckpointCacheData](List(hash),
                                                "checkpoint",
                                                pool,
@@ -69,7 +69,7 @@ object DataResolver {
     implicit apiTimeout: Duration = 3.seconds,
     m: Manifest[T],
     dao: DAO
-  ): IO[List[T]] = {
+  ): IO[List[Option[T]]] = {
     resolveDataByDistance[T](hashes, endpoint, pool, store, priorityClient).sequence
   }
 
@@ -81,7 +81,7 @@ object DataResolver {
     implicit apiTimeout: Duration = 3.seconds,
     m: Manifest[T],
     dao: DAO
-  ): List[IO[T]] = {
+  ): List[IO[Option[T]]] = {
     hashes.map { hash =>
       val dataHash = BigInt(hash.getBytes)
 
@@ -99,9 +99,9 @@ object DataResolver {
     implicit apiTimeout: Duration = 3.seconds,
     m: Manifest[T],
     dao: DAO
-  ): IO[T] = {
+  ): IO[Option[T]] = {
 
-    def makeAttempt(sortedPeers: Iterable[APIClient], errorsSoFar: Int = 0): IO[T] = {
+    def makeAttempt(sortedPeers: Iterable[APIClient], errorsSoFar: Int = 0): IO[Option[T]] = {
       sortedPeers match {
         case _ if errorsSoFar >= maxErrors =>
           IO.raiseError(
@@ -112,10 +112,15 @@ object DataResolver {
         case Nil =>
           IO.raiseError(new RuntimeException(s"Unable to download $endpoint from empty peer list"))
         case head :: tail =>
-          getData[T](hash, endpoint, head, store).handleErrorWith {
-            case e if tail.isEmpty => IO.raiseError(e)
-            case _                 => makeAttempt(sortedPeers.tail, errorsSoFar + 1)
-          }
+          getData[T](hash, endpoint, head, store)
+            .handleErrorWith {
+              case e if tail.isEmpty => IO.raiseError(e)
+              case _                 => makeAttempt(sortedPeers.tail, errorsSoFar + 1)
+            }
+            .flatMap { response =>
+              if (response.isEmpty) makeAttempt(sortedPeers.tail, errorsSoFar + 1)
+              else IO.pure(response)
+            }
       }
     }
     makeAttempt(sortedPeers)
@@ -127,12 +132,12 @@ object DataResolver {
     implicit apiTimeout: Duration,
     m: Manifest[T],
     dao: DAO
-  ): IO[T] = IO.fromFuture {
+  ): IO[Option[T]] = IO.fromFuture {
     IO {
       client
-        .getNonBlocking[T](s"$endpoint/$hash", timeout = apiTimeout)
+        .getNonBlocking[Option[T]](s"$endpoint/$hash", timeout = apiTimeout)
         .map { x =>
-          store(x)
+          x.foreach(store)
           x
         }(dao.edgeExecutionContext)
     }

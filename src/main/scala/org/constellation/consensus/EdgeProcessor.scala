@@ -331,16 +331,18 @@ object EdgeProcessor extends StrictLogging {
         case (h, _) =>
           DataResolver
             .resolveCheckpoint(h, dao.readyPeers.map(_._2.client))
-            .flatMap { cd =>
+            .flatMap { ccd =>
               IO {
-                cd.checkpointBlock.foreach { cb =>
-                  if (cd.children < 2) {
-                    dao.concurrentTipService.put(cb.baseHash, TipData(cb, 0))(dao.metrics)
-                  }
-                  if (!dao.checkpointService
-                        .contains(cd.checkpointBlock.get.baseHash)) {
-                    dao.metrics.incrementMetric("resolveAcceptCBCall")
-                    acceptWithResolveAttempt(cd, nestedAcceptCount + 1)
+                ccd.foreach { cd =>
+                  cd.checkpointBlock.foreach { cb =>
+                    if (cd.children < 2) {
+                      dao.concurrentTipService.put(cb.baseHash, TipData(cb, 0))(dao.metrics)
+                    }
+                    if (!dao.checkpointService
+                          .contains(cd.checkpointBlock.get.baseHash)) {
+                      dao.metrics.incrementMetric("resolveAcceptCBCall")
+                      acceptWithResolveAttempt(cd, nestedAcceptCount + 1)
+                    }
                   }
                 }
               }
