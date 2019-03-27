@@ -98,6 +98,7 @@ lazy val coreDependencies = Seq(
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus,
   "io.prometheus" % "simpleclient_caffeine" % versions.prometheus,
+  "io.prometheus" % "simpleclient_logback" % versions.prometheus,
   "com.github.java-json-tools" % "json-schema-validator" % "2.2.10",
   "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.5",
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",

@@ -2,8 +2,8 @@ package org.constellation.primitives
 
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 
-import cats.implicits._
 import akka.util.Timeout
+import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
@@ -11,8 +11,6 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives.storage._
 import org.constellation.util.Metrics
 import org.constellation.{DAO, NodeConfig, ProcessingConfig}
-import org.constellation.primitives.storage.{SnapshotsMidDbStorage, _}
-import org.constellation.{DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
