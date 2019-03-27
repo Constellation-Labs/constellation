@@ -6,7 +6,7 @@ import org.constellation.util.Metrics
 
 //noinspection ScalaStyle
 class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] with Lookup[String, V] {
-  val lruCache: Cache[String, V] =
+  private val lruCache: Cache[String, V] =
     Scaffeine()
       .recordStats()
       .maximumSize(size)
