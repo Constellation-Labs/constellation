@@ -1,7 +1,6 @@
-
 enablePlugins(ScalaJSPlugin)
 
-scalaVersion := "2.12.6" // or any other Scala version >= 2.10.2
+scalaVersion := "2.12.8" // or any other Scala version >= 2.10.2
 
 //persistLauncher in Compile := true
 
