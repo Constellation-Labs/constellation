@@ -16,6 +16,7 @@ import org.constellation.{DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.util.Try
 
 class ThreadSafeTXMemPool() {
 
@@ -161,7 +162,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
     latestSnapshotInfo.snapshotCache.foreach { h =>
       dao.metrics.incrementMetric("checkpointAccepted")
-      dao.checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h)
+      dao.checkpointService.memPool.putSync(h.checkpointBlock.get.baseHash, h)
       h.checkpointBlock.get.storeSOE()
       h.checkpointBlock.get.transactions.foreach { _ =>
         dao.metrics.incrementMetric("transactionAccepted")
@@ -169,7 +170,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
     }
 
     latestSnapshotInfo.acceptedCBSinceSnapshotCache.foreach { h =>
-      dao.checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h)
+      dao.checkpointService.memPool.putSync(h.checkpointBlock.get.baseHash, h)
       h.checkpointBlock.get.storeSOE()
       dao.metrics.incrementMetric("checkpointAccepted")
       h.checkpointBlock.get.transactions.foreach { _ =>
@@ -202,16 +203,15 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
       dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
     }
 
-    val peerIds = dao.peerInfo //(dao.peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].get().toSeq
-    val facilMap = peerIds.filter {
+    val facilMap = dao.readyPeers(NodeType.Full).filter {
       case (_, pd) =>
-        pd.peerMetadata.timeAdded < (System
-          .currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000) && pd.peerMetadata.nodeState == NodeState.Ready
+        // TODO: Is this still necessary?
+        pd.peerMetadata.timeAdded < (System.currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000)
     }
 
     if (dao.nodeState == NodeState.Ready && acceptedCBSinceSnapshot.nonEmpty) {
 
-      val minTipHeight = concurrentTipService.getMinTipHeight()
+      val minTipHeight = Try{concurrentTipService.getMinTipHeight()}.getOrElse(0L)
       dao.metrics.updateMetric("minTipHeight", minTipHeight.toString)
 
       val nextHeightInterval = lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval
@@ -425,6 +425,7 @@ trait EdgeDAO {
 
   val finishedExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
+
 
 
   def pullTransactions(minimumCount: Int = minCheckpointFormationThreshold): Option[Seq[Transaction]] =  {

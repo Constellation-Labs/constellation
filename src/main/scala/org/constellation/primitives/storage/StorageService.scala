@@ -34,10 +34,10 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] with L
     lruCache.asImmutableMap()
 
   override def get(key: String): IO[Option[V]] =
-    IO.pure(getSync(key))
+    IO(getSync(key))
 
   override def put(key: String, value: V): IO[V] =
-    IO.pure(putSync(key, value))
+    IO(putSync(key, value))
 
   override def update(key: String, updateFunc: V => V, empty: => V): IO[V] =
     get(key)
@@ -45,13 +45,13 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] with L
       .flatMap(put(key, _))
 
   override def remove(keys: Set[String]): IO[Unit] =
-    IO.pure(lruCache.multiRemove(keys))
+    IO(lruCache.multiRemove(keys))
 
   override def contains(key: String): IO[Boolean] =
-    IO.pure(containsSync(key))
+    IO(containsSync(key))
 
   override def toMap(): IO[Map[String, V]] =
-    IO.pure(lruCache.iterator.toMap)
+    IO(lruCache.iterator.toMap)
 }
 
 class ExtendedMutableLRUCache[K, V](capacity: Int) extends MutableLRUCache[K, V](capacity) {

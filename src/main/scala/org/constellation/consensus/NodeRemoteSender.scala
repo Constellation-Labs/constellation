@@ -2,7 +2,7 @@ package org.constellation.consensus
 
 import akka.actor.{Actor, Props}
 import org.constellation.consensus.CrossTalkConsensus.NotifyFacilitators
-import org.constellation.consensus.RoundManager.{BroadcastTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
 
 object NodeRemoteSender {
 
@@ -13,7 +13,7 @@ object NodeRemoteSender {
 trait NodeRemoteSender {
   def notifyFacilitators(cmd: NotifyFacilitators): Unit
 
-  def broadcastTransactionProposal(cmd: BroadcastTransactionProposal): Unit
+  def broadcastLightTransactionProposal(cmd: BroadcastLightTransactionProposal): Unit
 
   def broadcastBlockUnion(cmd: BroadcastUnionBlockProposal): Unit
 }
@@ -23,20 +23,20 @@ class ForwardingNodeSender(nodeRemoteSender: NodeRemoteSender) extends NodeRemot
   override def receive: Receive = {
     case cmd: NotifyFacilitators =>
       notifyFacilitators(cmd)
-    case cmd: BroadcastTransactionProposal =>
-      broadcastTransactionProposal(cmd)
+
+    case cmd: BroadcastLightTransactionProposal =>
+      broadcastLightTransactionProposal(cmd)
+
     case cmd: BroadcastUnionBlockProposal =>
       broadcastBlockUnion(cmd)
   }
 
-  def notifyFacilitators(cmd: NotifyFacilitators): Unit = {
+  def notifyFacilitators(cmd: NotifyFacilitators): Unit =
     nodeRemoteSender.notifyFacilitators(cmd)
-  }
-  def broadcastTransactionProposal(cmd: BroadcastTransactionProposal): Unit = {
-    nodeRemoteSender.broadcastTransactionProposal(cmd)
-  }
 
-  def broadcastBlockUnion(cmd: BroadcastUnionBlockProposal): Unit = {
+  def broadcastLightTransactionProposal(cmd: BroadcastLightTransactionProposal): Unit =
+    nodeRemoteSender.broadcastLightTransactionProposal(cmd)
+
+  def broadcastBlockUnion(cmd: BroadcastUnionBlockProposal): Unit =
     nodeRemoteSender.broadcastBlockUnion(cmd)
-  }
 }

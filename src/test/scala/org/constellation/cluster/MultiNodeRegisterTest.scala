@@ -10,8 +10,8 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.util.TestNode
-import org.constellation.{ConstellationNode, HostPort}
-import org.scalatest._
+import org.constellation.{ConstellationNode, HostPort, ResourceInfo}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, _}
 
 import scala.concurrent.ExecutionContext
 import scala.util.Try
@@ -74,13 +74,15 @@ class MultiNodeRegisterTest
               PeerRegistrationRequest(
                 ipData.canonicalHostName,
                 ipData.port,
-                a.dao.keyPair.getPublic.toId
-              )
-            val res = a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
-            assert(res.isSuccess)
-          }
-          register(n, m)
-          register(m, n)
+                a.dao.keyPair.getPublic.toId,
+              ResourceInfo(diskUsableBytes = 1073741824)
+            )
+          val res = a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
+          assert(res.isSuccess)
+        }
+        register(n, m)
+        register(m, n)
+
       }
       Thread.sleep(1000)
       nodes.foreach { n =>
