@@ -19,6 +19,11 @@ variable "region" {
   default = "us-west2"
 }
 
+variable "zone" {
+  type    = "string",
+  default = "us-west2-b"
+}
+
 // Configure the Google Cloud provider
 provider "google" {
  project     = "${var.project_name}"
@@ -30,126 +35,40 @@ resource "random_id" "instance_id" {
  byte_length = 4
 }
 
+output "cluster_tag" {
+  value = "constellation-${random_id.instance_id.hex}"
+}
+
 output "instance_ips" {
-  value = "${google_compute_instance.default.*.network_interface.0.access_config.0.assigned_nat_ip}"
+  value = "${module.nodes.instance_ips}"
 }
 
-// A single Google Cloud Engine instance
-resource "google_compute_instance" "default" {
- count = 5
- name = "constellation-${random_id.instance_id.hex}-${count.index}"
- machine_type   = "n1-highcpu-4"
- zone           = "us-west2-b"
- can_ip_forward = true
-
-
- tags = ["constellation-vm-${random_id.instance_id.hex}"]
-
- boot_disk {
-   initialize_params {
-     image = "ubuntu-os-cloud/ubuntu-1604-lts",
-     size = 200
-   }
-   auto_delete = true
- }
-
-// Make sure flask is installed on all new instances for later steps
- metadata_startup_script = "sudo apt update; sudo apt install -yq build-essential haveged rsync google-cloud-sdk openjdk-8-jre-headless"
-
- network_interface {
-   network = "${google_compute_network.default.name}"
-
-   access_config {
-     // Include this section to give the VM an external ip address
-   }
- }
-
- scheduling {
-  preemptible = "false" // "true"
-  automatic_restart = "false"
- }
-
-  provisioner "file" {
-    source      = "setup.sh"
-    destination = "/tmp/setup.sh"
-
-    connection {
-      type = "ssh"
-      user = "${var.ssh_user}"
-      timeout = "60s"
-    }
-  }
-
-  provisioner "file" {
-    source      = "constellation.service"
-    destination = "/tmp/constellation.service"
-
-    connection {
-      type = "ssh"
-      user = "${var.ssh_user}"
-    }
-  }
-
-
-  provisioner "file" {
-    source      = "start"
-    destination = "/tmp/start"
-
-    connection {
-      type = "ssh"
-      user = "${var.ssh_user}"
-    }
-  }
-
-  provisioner "file" {
-    source      = "dag"
-    destination = "/tmp/dag"
-
-    connection {
-      type = "ssh"
-      user = "${var.ssh_user}"
-    }
-  }
-
- provisioner "remote-exec" {
-  inline = [
-    "chmod +x /tmp/setup.sh",
-    "/tmp/setup.sh"
-  ]
-  connection {
-    type = "ssh"
-    user = "${var.ssh_user}"
-  }
- }
-
-  provisioner "remote-exec" {
-  inline = [
-    "sudo systemctl start constellation"
-  ]
-  connection {
-    type = "ssh"
-    user = "${var.ssh_user}"
-  }
- }
-
+output "grafana_ip" {
+  value = "${module.grafana.grafana_ip}"
 }
 
-resource "google_compute_network" "default" {
-  name = "dag-network-${random_id.instance_id.hex}"
+module "network" {
+  source = "./modules/network"
+  random_id = "${random_id.instance_id.hex}"
 }
 
-resource "google_compute_firewall" "default" {
- name    = "constellation-app-firewall-${random_id.instance_id.hex}"
- network = "${google_compute_network.default.name}"
-
- // enable_logging = true
-
-  allow {
-    protocol = "icmp"
-  }
-
- allow {
-   protocol = "tcp"
-   ports    = ["22", "9000","9001","9010", "9011"]
- }
+module "nodes" {
+  source = "./modules/instance"
+  zone = "${var.zone}"
+  instance_count = 3
+  ssh_user = "${var.ssh_user}"
+  network_name = "${module.network.network_name}"
+  random_id = "${random_id.instance_id.hex}"
 }
+
+module "grafana" {
+  source = "./modules/grafana"
+  zone = "${var.zone}"
+  ssh_user = "${var.ssh_user}"
+  network_name = "${module.network.network_name}"
+  random_id = "${random_id.instance_id.hex}"
+  ips_for_grafana = "${module.nodes.ips_for_grafana}"
+}
+
+
+
