@@ -1,5 +1,6 @@
 package org.constellation.util
 
+import com.fasterxml.jackson.databind.JsonNode
 import constellation._
 import org.constellation.primitives.SensorData
 import org.json4s.jackson.JsonMethods._

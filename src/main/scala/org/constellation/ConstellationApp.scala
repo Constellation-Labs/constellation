@@ -13,18 +13,18 @@ class ConstellationApp(
                         val clientApi: APIClient
                       )(implicit val ec: ExecutionContext) extends StrictLogging {
 
-  val channelIdToChannel = scala.collection.mutable.HashMap[String, Channel]()
-  def registerChannels(chaMsg: Channel) = channelIdToChannel.update(chaMsg.channelId, chaMsg)
+  val channelNameToId = scala.collection.mutable.HashMap[String, Channel]()
+  def registerChannels(chaMsg: Channel) = channelNameToId.update(chaMsg.name, chaMsg)
 
   //todo add auth for redeploy
   def deploy(
               schemaStr: String,
-              channelName: String = s"channel_${channelIdToChannel.keys.size + 1}"
+              channelName: String = s"test_channel_${ channelNameToId.keys.size + 1}"
             )(implicit ec: ExecutionContext) = {
-    val response = clientApi.postNonBlocking[Some[ChannelOpenResponse]]("channel/open", ChannelOpenRequest(channelName, jsonSchema = Some(schemaStr)), timeout = 15 seconds)
-    response.map { resp: Option[ChannelOpenResponse] =>
-      logger.info(s"ChannelOpenResponse: ${resp.toString}")
+    val response = clientApi.postNonBlocking[Option[ChannelOpenResponse]]("channel/open", ChannelOpen(channelName, jsonSchema = Some(schemaStr)), timeout = 120.seconds)
+    response.map { resp =>
       val channelMsg = resp.map { msg =>
+        assert(msg.errorMessage == "Success")
         Channel(msg.genesisHash, channelName, msg)
       }
       channelMsg.foreach(registerChannels)
@@ -32,15 +32,16 @@ class ConstellationApp(
     }
   }
 
-  def broadcast[T <: ChannelRequest](messages: Seq[T])(implicit ec: ExecutionContext) = {
-    val msgType = messages.map(_.channelId).head//todo handle multiple message types, or throw error
+  def broadcast[T](messages: Seq[T], msgType: String)(implicit ec: ExecutionContext) = {
+//    val msgType: String = messages.map(_.channelId).head//todo handle multiple message types, or throw error
     val serializedMessages = messages.map(_.json)
-    clientApi.postNonBlocking[Seq[ChannelMessage]](
+    logger.info(s"messages: ${messages} message type: ${msgType}")
+    clientApi.postNonBlocking[ChannelSendResponse](
       "channel/send",
-      ChannelSendRequest(msgType, serializedMessages)
+      ChannelSendRequest(msgType, serializedMessages), timeout = 120.seconds
       )
   }
 }
 
-case class Channel(channelId: String, channelName: String, channelOpenRequest: ChannelOpenResponse)
+case class Channel(channelId: String, name: String, channelOpenRequest: ChannelOpenResponse)
 
