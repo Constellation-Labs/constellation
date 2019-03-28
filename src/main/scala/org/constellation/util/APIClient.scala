@@ -6,6 +6,7 @@ import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.primitives.Schema.{Id, MetricsResult}
 import org.constellation.serializer.KryoSerializer
+import org.json4s.Formats
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -32,7 +33,16 @@ object APIClient {
     )
   }
 }
+trait PeerApiClient {
 
+  def getNonBlocking[T <: AnyRef](
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 5.seconds
+  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): Future[T]
+
+  def id: Id
+}
 class APIClient private (host: String = "127.0.0.1",
                          port: Int,
                          val peerHTTPPort: Int = 9001,
@@ -42,7 +52,7 @@ class APIClient private (host: String = "127.0.0.1",
                          authPassword: String = null)(
   implicit override val executionContext: ExecutionContext,
   dao: DAO = null
-) extends APIClientBase(host, port, authEnabled, authId, authPassword) {
+) extends APIClientBase(host, port, authEnabled, authId, authPassword) with PeerApiClient {
 
   var id: Id = _
 

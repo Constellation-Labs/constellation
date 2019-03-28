@@ -1,18 +1,16 @@
 package org.constellation.consensus
 
 import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, Props}
+import cats.effect.IO
 import constellation.wrapFutureWithMetric
-import org.constellation.consensus.CrossTalkConsensus.{
-  NotifyFacilitators,
-  ParticipateInBlockCreationRound,
-  StartNewBlockCreationRound
-}
-import org.constellation.consensus.EdgeProcessor.simpleResolveCheckpoint
+import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
-import org.constellation.primitives.Schema.{NodeType, SignedObservationEdge}
+import org.constellation.p2p.DataResolver
+import org.constellation.primitives.Schema.{CheckpointCacheData, NodeType, SignedObservationEdge}
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications}
 import org.constellation.util.Distance
 import org.constellation.{ConfigUtil, DAO}
+import cats.implicits._
 
 import scala.collection.mutable
 import scala.concurrent.duration.{FiniteDuration, _}
@@ -39,7 +37,7 @@ class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
 
     case StartNewBlockCreationRound if !rounds.exists(_._2.startedByThisNode) =>
       createRoundData(dao).foreach { roundData =>
-        resolveMissingParents(roundData.tipsSOE).onComplete {
+        resolveMissingParents(roundData).onComplete {
           case Failure(e) =>
             log.error(e, s"unable to start block creation round due to: ${e.getMessage}")
           case Success(_) =>
@@ -59,7 +57,7 @@ class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
 
     case cmd: ParticipateInBlockCreationRound =>
       log.debug(s"node: ${dao.id.short} participating in round: ${cmd.roundData.roundId}")
-      resolveMissingParents(cmd.roundData.tipsSOE).onComplete {
+      resolveMissingParents(cmd.roundData).onComplete {
         case Failure(e) =>
           log.error(e, s"unable to start block creation round due to: ${e.getMessage}")
           // TODO: should I interrupt others and abort the whole Round ?
@@ -120,22 +118,17 @@ class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
   }
 
   def resolveMissingParents(
-    tipsSOE: Seq[SignedObservationEdge]
-  )(implicit dao: DAO): Future[Seq[Unit]] = {
+    roundData: RoundData
+  )(implicit dao: DAO): Future[List[Option[CheckpointCacheData]]] = {
 
     implicit val ec = dao.edgeExecutionContext
 
-    val apiCalls = tipsSOE
+    val cbToResolve = roundData.tipsSOE
       .filterNot(t => dao.checkpointService.contains(t.baseHash))
-      .map(
-        t =>
-          wrapFutureWithMetric(
-            simpleResolveCheckpoint(t.baseHash),
-            "resolveCheckpoint"
-        )
-      )
-    // TODO: Could be enhanced with cancelable future
-    Future.sequence(apiCalls)
+      .map(_.baseHash)
+
+    DataResolver.resolveCheckpoints(cbToResolve.toList,roundData.peers.map(_.client))
+      .unsafeToFuture()
   }
 
   def startRound(roundData: RoundData, startedByThisNode: Boolean = false): Unit = {
