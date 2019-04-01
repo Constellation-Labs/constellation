@@ -26,7 +26,7 @@ data "template_file" "prometheus" {
 }
 
 output "grafana_ip" {
-  value = "${google_compute_instance.grafana.*.network_interface.0.access_config.0.assigned_nat_ip}"
+  value = "${google_compute_instance.grafana.*.network_interface.0.access_config.0.nat_ip}"
 }
 
 // Grafana GCP Instance

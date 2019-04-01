@@ -1,5 +1,5 @@
 locals {
-  instance_ips = "${google_compute_instance.default.*.network_interface.0.access_config.0.assigned_nat_ip}"
+  instance_ips = "${google_compute_instance.default.*.network_interface.0.access_config.0.nat_ip}"
 }
 
 output "instance_ips" {
