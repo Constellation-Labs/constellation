@@ -9,6 +9,8 @@ import org.constellation.DAO
 import org.constellation.primitives.Schema._
 import org.constellation.util.HashSignature
 
+import scala.annotation.tailrec
+
 case class CheckpointBlock(
   transactions: Seq[Transaction],
   checkpoint: CheckpointEdge,
@@ -416,6 +418,61 @@ sealed trait CheckpointBlockValidatorNel {
       else preTreeResult.product(validateCheckpointBlockTree(cb))
 
     postTreeIgnoreEmptySnapshot.map(_ => cb)
+  }
+
+  def getTransactionsTillSnapshot(
+    cbs: Seq[CheckpointBlock]
+  )(implicit dao: DAO): Seq[Transaction] = {
+
+    def getParentTransactions(parents: Seq[CheckpointBlock],
+                              accu: Seq[Transaction] = Seq.empty,
+                              snapshotReached: Boolean = false): Seq[Transaction] = {
+      parents match {
+        case Nil => accu
+        case cb :: tail if !snapshotReached =>
+          getParentTransactions(
+            tail ++ getParents(cb),
+            accu ++ cb.transactions,
+            isInSnapshot(cb)
+          )
+        case cb :: tail if snapshotReached =>
+          getParentTransactions(
+            tail,
+            accu ++ cb.transactions,
+            snapshotReached
+          )
+      }
+    }
+    cbs.filterNot(isInSnapshot(_)).flatMap(cb => getParentTransactions(getParents(cb)))
+  }
+
+  final def detectAncestryConflict(
+    tips: Seq[CheckpointBlock],
+    parentsTransactions: Seq[Transaction] = Seq.empty
+  )(implicit dao: DAO): Option[CheckpointBlock] = {
+
+    def detect(tips: Seq[CheckpointBlock],
+               ancestryTransactions: Seq[Transaction]): Option[CheckpointBlock] = {
+      tips match {
+        case Nil => None
+        case cb :: _ if cb.transactions.intersect(ancestryTransactions).nonEmpty =>
+          Some(cb)
+        case cb :: tail =>
+          detect(tail, ancestryTransactions ++ cb.transactions)
+      }
+    }
+    detect(tips, getTransactionsTillSnapshot(tips))
+  }
+
+  def hasTransactionInCommon(cbLeft: CheckpointBlock, cbRight: CheckpointBlock): Boolean = {
+    cbLeft.transactions.intersect(cbRight.transactions).nonEmpty
+  }
+
+  def selectBlockToPreserve(blocks: Iterable[CheckpointCacheData]): CheckpointCacheData = {
+    blocks.maxBy(
+      cb => (cb.children, cb.checkpointBlock.map(b => (b.signatures.size, b.baseHash)))
+    )
+
   }
 }
 

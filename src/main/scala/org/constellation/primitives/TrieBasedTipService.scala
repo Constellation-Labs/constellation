@@ -1,7 +1,7 @@
 package org.constellation.primitives
 import org.constellation.DAO
 import org.constellation.consensus.TipData
-import org.constellation.primitives.Schema.{Id, SignedObservationEdge}
+import org.constellation.primitives.Schema.{GenesisObservation, Id, SignedObservationEdge}
 import org.constellation.util.Metrics
 
 import scala.collection.concurrent.TrieMap
@@ -15,7 +15,7 @@ trait ConcurrentTipService {
   def set(tips: Map[String, TipData])
   def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO)
   // considerd as private only
-  def put(k: String, v: TipData)(implicit metrics: Metrics): Option[TipData]
+  def put(go: GenesisObservation)(implicit metrics: Metrics): Option[TipData]
   def pull(
     readyFacilitators: Map[Id, PeerData]
   )(implicit metrics: Metrics): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])]
@@ -73,7 +73,12 @@ class TrieBasedTipService(sizeLimit: Int,
     put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics)
   }
 
-  def put(k: String, v: TipData)(implicit metrics: Metrics): Option[TipData] = {
+  override def put(go: GenesisObservation)(implicit metrics: Metrics): Option[TipData] = {
+    put(go.initialDistribution.baseHash, TipData(go.initialDistribution, 0))
+    put(go.initialDistribution2.baseHash, TipData(go.initialDistribution2, 0))
+  }
+
+  private def put(k: String, v: TipData)(implicit metrics: Metrics): Option[TipData] = {
     if (tips.size < sizeLimit) {
       tips.put(k, v)
     } else {
@@ -96,19 +101,17 @@ class TrieBasedTipService(sizeLimit: Int,
         dao.checkpointService.get
       }
 
-    if (maybeDatas.exists{_.isEmpty}) {
+    if (maybeDatas.exists { _.isEmpty }) {
       dao.metrics.incrementMetric("minTipHeightCBDataEmptyForKeys")
     }
 
-    maybeDatas
-      .flatMap {
-        _.flatMap {
-          _.height.map {
-            _.min
-          }
+    maybeDatas.flatMap {
+      _.flatMap {
+        _.height.map {
+          _.min
         }
       }
-      .min
+    }.min
 
   }
 
