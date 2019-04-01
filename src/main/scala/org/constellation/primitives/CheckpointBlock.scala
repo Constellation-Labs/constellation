@@ -26,6 +26,10 @@ case class CheckpointBlock(
       dao.checkpointService.get
     }
 
+    if (parents.exists(_.isEmpty)) {
+      dao.metrics.incrementMetric("heightCalculationParentMissing")
+    }
+
     val maxHeight = if (parents.exists(_.isEmpty)) {
       None
     } else {
@@ -144,8 +148,20 @@ case class CheckpointBlock(
 
   def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
 
-  def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
-    parentSOEHashes.flatMap { dao.soeService.getSync }.map { _.signedObservationEdge.baseHash }
+  def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =  {
+    parentSOEHashes.flatMap { soeHash =>
+      val parent = dao.soeService.getSync(soeHash)
+      if (parent.isEmpty) {
+        dao.metrics.incrementMetric("parentSOEServiceQueryFailed")
+        // Temporary
+        val parentDirect = checkpoint.edge.observationEdge.parents.find(_.hash == soeHash).flatMap{_.baseHash}
+        if (parentDirect.isEmpty) {
+          dao.metrics.incrementMetric("parentDirectTipReferenceMissing")
+        }
+        parentDirect
+      } else parent.map{_.signedObservationEdge.baseHash}
+    }
+  }
 
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 

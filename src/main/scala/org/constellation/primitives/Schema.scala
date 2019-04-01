@@ -99,8 +99,8 @@ object Schema {
     * Wrapper for encapsulating a typed hash reference
     * @param hash : String of hashed value
     * @param hashType : Strictly typed from set of allowed edge formats
-    */
-  case class TypedEdgeHash(hash: String, hashType: EdgeHashType)
+    */ // baseHash Temporary to debug heights missing
+  case class TypedEdgeHash(hash: String, hashType: EdgeHashType, baseHash: Option[String] = None)
 
   /**
     * Basic edge format for linking two hashes with an optional piece of data attached. Similar to GraphX format.
@@ -110,7 +110,8 @@ object Schema {
     */
   case class ObservationEdge( // TODO: Consider renaming to ObservationHyperEdge or leave as is?
                              parents: Seq[TypedEdgeHash],
-                             data: TypedEdgeHash)
+                             data: TypedEdgeHash
+                            )
       extends Signable
 
   /**
