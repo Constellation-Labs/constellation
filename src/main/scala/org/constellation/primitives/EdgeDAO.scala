@@ -375,7 +375,7 @@ trait EdgeDAO {
   var snapshotService: SnapshotService = _
 
   val acceptedTransactionService = new AcceptedTransactionService(
-    5000 //processingConfig.transactionLRUMaxSize
+    500 //processingConfig.transactionLRUMaxSize
   )
 
   val addressService = new AddressService(

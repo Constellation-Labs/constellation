@@ -5,7 +5,7 @@ import org.constellation.primitives.{TransactionCacheData, TransactionSerialized
 import scala.collection.mutable
 
 
-class AcceptedTransactionService(size: Int = 50000)
+class AcceptedTransactionService(size: Int = 500)
     extends StorageService[TransactionCacheData](size) {
   private val queue = mutable.Queue[TransactionSerialized]()
   private val maxQueueSize = 20
