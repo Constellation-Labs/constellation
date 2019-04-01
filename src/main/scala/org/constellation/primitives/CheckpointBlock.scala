@@ -32,6 +32,8 @@ case class CheckpointBlock(
       dao.metrics.incrementMetric("heightCalculationParentsExist")
     }
 
+    dao.metrics.incrementMetric("heightCalculationParentLength_" + parents.length)
+
     val maxHeight = if (parents.exists(_.isEmpty)) {
       None
     } else {
