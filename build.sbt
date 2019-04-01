@@ -138,7 +138,7 @@ lazy val root = (project in file("."))
   .settings(
     buildInfoKeys := Seq[BuildInfoKey](name, version, scalaVersion, sbtVersion),
     buildInfoPackage := "org.constellation",
-    buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToJson),
+    buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
     commonSettings,
     Defaults.itSettings,
     libraryDependencies ++= (coreDependencies ++ testDependencies)
