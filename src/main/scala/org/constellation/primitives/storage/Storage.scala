@@ -28,4 +28,6 @@ trait Storage[F[_], K, V] {
   def toMapSync(): Map[K, V]
 
   def toMap(): F[Map[K, V]]
+
+  def cacheSize(): Long
 }

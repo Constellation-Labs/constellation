@@ -1,20 +1,26 @@
 package org.constellation.primitives.storage
 
 import cats.effect.IO
-import com.twitter.storehaus.cache.MutableLRUCache
+import com.github.blemale.scaffeine.{Cache, Scaffeine}
+import org.constellation.util.Metrics
 
-import scala.collection.JavaConverters._
-
+//noinspection ScalaStyle
 class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] with Lookup[String, V] {
-  val lruCache: ExtendedMutableLRUCache[String, V] = new ExtendedMutableLRUCache[String, V](size)
+  private val lruCache: Cache[String, V] =
+    Scaffeine()
+      .recordStats()
+      .maximumSize(size)
+      .build[String, V]()
+
+  Metrics.cacheMetrics.addCache(this.getClass.getSimpleName, lruCache.underlying)
 
   override def lookup(key: String): IO[Option[V]] = get(key)
 
   override def getSync(key: String): Option[V] =
-    lruCache.get(key)
+    lruCache.getIfPresent(key)
 
   override def putSync(key: String, value: V): V = {
-    lruCache.+=((key, value))
+    lruCache.put(key, value)
     value
   }
 
@@ -25,19 +31,19 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] with L
     getSync(key).map(updateFunc).map { putSync(key, _) }
 
   override def removeSync(keys: Set[String]): Unit =
-    lruCache.multiRemove(keys)
+    lruCache.invalidateAll(keys)
 
   override def containsSync(key: String): Boolean =
-    lruCache.contains(key)
+    lruCache.getIfPresent(key).isDefined
 
   override def toMapSync(): Map[String, V] =
-    lruCache.asImmutableMap()
+    lruCache.asMap().toMap
 
   override def get(key: String): IO[Option[V]] =
-    IO.pure(getSync(key))
+    IO(getSync(key))
 
   override def put(key: String, value: V): IO[V] =
-    IO.pure(putSync(key, value))
+    IO(putSync(key, value))
 
   override def update(key: String, updateFunc: V => V, empty: => V): IO[V] =
     get(key)
@@ -45,19 +51,13 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] with L
       .flatMap(put(key, _))
 
   override def remove(keys: Set[String]): IO[Unit] =
-    IO.pure(lruCache.multiRemove(keys))
+    IO(lruCache.invalidateAll(keys))
 
   override def contains(key: String): IO[Boolean] =
-    IO.pure(containsSync(key))
+    IO(containsSync(key))
 
   override def toMap(): IO[Map[String, V]] =
-    IO.pure(lruCache.iterator.toMap)
-}
+    IO(lruCache.asMap().toMap)
 
-class ExtendedMutableLRUCache[K, V](capacity: Int) extends MutableLRUCache[K, V](capacity) {
-
-  def asImmutableMap(): Map[K, V] = {
-    m.asScala.toMap
-  }
-
+  override def cacheSize(): Long = lruCache.estimatedSize()
 }

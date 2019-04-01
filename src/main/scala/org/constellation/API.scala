@@ -28,7 +28,7 @@ import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{CommonEndpoints, HostPort, MerkleTree, MetricTimerDirective, ServeUI}
+import org.constellation.util._
 import org.json4s.native.Serialization
 import org.json4s.{JValue, native}
 
@@ -44,12 +44,37 @@ case class PeerMetadata(
   timeAdded: Long = System.currentTimeMillis(),
   auxHost: String = "",
   auxAddresses: Seq[String] = Seq(), // for testing multi key address partitioning
-  nodeType: NodeType = NodeType.Full
+  nodeType: NodeType = NodeType.Full,
+  resourceInfo: ResourceInfo
 )
+
+case class ResourceInfo(
+  maxMemory: Long = Runtime.getRuntime.maxMemory(),
+  cpuNumber: Int = Runtime.getRuntime.availableProcessors(),
+  diskUsableBytes: Long)
 
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
 
 case class UpdatePassword(password: String)
+
+object ProcessingConfig {
+
+
+  val testProcessingConfig = ProcessingConfig(
+    numFacilitatorPeers = 2,
+    minCheckpointFormationThreshold = 3,
+    randomTXPerRoundPerPeer = 2,
+    metricCheckInterval = 10,
+    maxWidth = 4,
+    maxMemPoolSize = 15,
+    minPeerTimeAddedSeconds = 1,
+    snapshotInterval = 2,
+    snapshotHeightInterval = 2,
+    snapshotHeightDelayInterval = 1,
+    roundsPerMessage = 1
+  )
+
+}
 
 case class ProcessingConfig(
   maxWidth: Int = 10,
@@ -197,6 +222,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           path("messageService" / Segment) { channelId =>
             complete(dao.messageService.getSync(channelId))
           } ~
+          path ("channelKeys") {
+            complete(dao.channelService.toMapSync().keys.toSeq)
+          } ~
+          path ("channel" / "genesis" / Segment) { channelId =>
+            complete(dao.channelService.getSync(channelId))
+          } ~
           path("channel" / Segment) { channelHash =>
             val res =
               Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.getSync(channelHash))
@@ -209,11 +240,19 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                     File(dao.snapshotPath, snapshotHash).byteArray
                   )
                 }, "readSnapshotForMessage").toOption.map { storedSnapshot =>
-                  val blockProof = MerkleTree(storedSnapshot.snapshot.checkpointBlocks.toList)
-                    .createProof(cmd.blockHash.get)
+
+
+                  val blocksInSnapshot = storedSnapshot.snapshot.checkpointBlocks.toList
+                  val blockHashForMessage = cmd.blockHash.get
+
+                  if (!blocksInSnapshot.contains(blockHashForMessage)) {
+                    logger.error("Message block hash not in snapshot")
+                  }
+                  val blockProof = MerkleTree(blocksInSnapshot)
+                    .createProof(blockHashForMessage)
                   val block = storedSnapshot.checkpointCache
                     .filter {
-                      _.checkpointBlock.get.baseHash == cmd.blockHash.get
+                      _.checkpointBlock.get.baseHash == blockHashForMessage
                     }
                     .head
                     .checkpointBlock
@@ -296,7 +335,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             val self = Node(
               dao.selfAddressStr,
               dao.externalHostString,
-              dao.externlPeerHTTPPort
+              dao.externalPeerHTTPPort
             )
             val peerMap = dao.peerInfo.toSeq.map {
               case (id, pd) => Node(id.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)

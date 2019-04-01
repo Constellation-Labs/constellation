@@ -13,7 +13,7 @@ lazy val _version = "1.0.12"
 
 lazy val versions = new {
   val akka = "2.5.21"
-  val akkaHttp = "10.1.7"
+  val akkaHttp = "10.1.8"
   val akkaHttpCors = "0.4.0"
   val spongyCastle = "1.58.0.0"
   val micrometer = "1.1.3"
@@ -100,9 +100,12 @@ lazy val coreDependencies = Seq(
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus,
+  "io.prometheus" % "simpleclient_caffeine" % versions.prometheus,
+  "io.prometheus" % "simpleclient_logback" % versions.prometheus,
   "com.github.java-json-tools" % "json-schema-validator" % "2.2.10",
   "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.5",
-  "com.github.scopt" %% "scopt" % "4.0.0-RC2"
+  "com.github.scopt" %% "scopt" % "4.0.0-RC2",
+  "com.github.blemale" %% "scaffeine" % "2.6.0" withSources() withJavadoc()
 ) ++ sttpDependencies
 
 //Test dependencies

@@ -1,5 +1,6 @@
 package org.constellation.primitives
 
+import java.security.KeyPair
 import java.util.concurrent.Semaphore
 
 import com.fasterxml.jackson.databind.JsonNode
@@ -12,6 +13,7 @@ import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
 import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
 
 import scala.concurrent.Future
+import scala.util.Random
 
 // Should channelId be associated with a unique keyPair or not?
 
@@ -37,7 +39,9 @@ case class ChannelMetadata(
   genesisMessageMetadata: ChannelMessageMetadata,
   totalNumMessages: Long = 0L,
   last25MessageHashes: Seq[String] = Seq()
-)
+) {
+  def channelId = genesisMessageMetadata.channelMessage.signedMessageData.hash
+}
 
 
 case class SingleChannelUIOutput(
@@ -54,11 +58,11 @@ object ChannelMessage extends StrictLogging {
 
 
   def create(message: String, previous: String, channelId: String)(
-    implicit dao: DAO
+    implicit keyPair: KeyPair
   ): ChannelMessage = {
     val data = ChannelMessageData(message, previous, channelId)
     ChannelMessage(
-      SignedData(data, hashSignBatchZeroTyped(data, dao.keyPair))
+      SignedData(data, hashSignBatchZeroTyped(data, keyPair))
     )
   }
 
@@ -79,7 +83,7 @@ object ChannelMessage extends StrictLogging {
         logger.info(s"Channel not in use")
 
         val genesisMessageStr = channelOpenRequest.json
-        val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)
+        val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)(dao.keyPair)
         dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.name) = msg
         val genesisHashChannelId = msg.signedMessageData.hash
         dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) =
@@ -91,8 +95,9 @@ object ChannelMessage extends StrictLogging {
         Future {
           var retries = 0
           var metadata: Option[ChannelMetadata] = None
-          while (retries < 30 && metadata.isEmpty) {
+          while (retries < 15 && metadata.isEmpty) {
             retries += 1
+            logger.info(s"Polling genesis creation attempt $retries for $genesisHashChannelId")
             Thread.sleep(1000)
             metadata = dao.channelService.getSync(genesisHashChannelId)
           }
@@ -118,10 +123,11 @@ object ChannelMessage extends StrictLogging {
         val messages: Seq[ChannelMessage] = channelSendRequest.messages
           .foldLeft(previous -> Seq[ChannelMessage]()) {
             case ((prvHash, signedMessages), nextMessage) =>
-              val nextSigned = create(nextMessage, previous, channelSendRequest.channelId)
+              val nextSigned = create(nextMessage, prvHash, channelSendRequest.channelId)(dao.keyPair)
               nextSigned.signedMessageData.hash -> (signedMessages :+ nextSigned)
           }
           ._2
+
         dao.threadSafeMessageMemPool.put(messages, overrideLimit = true)
         val semaphore = new Semaphore(1)
         dao.threadSafeMessageMemPool.activeChannels(channelSendRequest.channelId) = semaphore
@@ -185,6 +191,14 @@ case class SensorData(
 )
 
 object SensorData {
+
+  val validNameChars: Seq[String] = ('A' to 'Z').map { _.toString }
+  val invalidNameChars: Seq[String] = validNameChars.map { _.toLowerCase }
+
+  def generateRandomValidMessage() = SensorData(
+    Random.nextInt(100),
+    Seq.fill(5) { Random.shuffle(validNameChars).head }.mkString
+  )
 
   val jsonSchema: String = """{
                              |  "title":"Sensors data",

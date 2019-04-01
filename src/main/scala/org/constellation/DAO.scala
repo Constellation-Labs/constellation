@@ -1,8 +1,8 @@
 package org.constellation
 
-import akka.pattern.ask
 import java.util.concurrent.TimeUnit
 
+import akka.pattern.ask
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
@@ -12,13 +12,13 @@ import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
-
-import scala.concurrent.duration._
-import scala.concurrent.Await
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObservationEdge}
-import org.constellation.primitives.storage._
 import org.constellation.primitives._
+import org.constellation.primitives.storage._
 import org.constellation.util.HostPort
+
+import scala.concurrent.Await
+import scala.concurrent.duration._
 
 class DAO()
     extends NodeData
@@ -45,11 +45,7 @@ class DAO()
     f
   }
 
-  def snapshotPath: File = {
-    val f = File(s"tmp/${id.medium}/snapshots")
-    f.createDirectoryIfNotExists()
-    f
-  }
+
 
   def snapshotHashes: Seq[String] = {
     snapshotPath.list.toSeq.map { _.name }
@@ -89,7 +85,7 @@ class DAO()
       nodeState = NodeState.Offline
     }
 
-    if (nodeConfig.cliConfig.lightNode) {
+    if (nodeConfig.isLightNode) {
       nodeType = NodeType.Light
     }
 
@@ -105,17 +101,28 @@ class DAO()
 
 
   def pullTips(
-    allowEmptyFacilitators: Boolean = false
+    readyFacilitators: Map[Id, PeerData]
   ): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = {
-    threadSafeTipService.pull(allowEmptyFacilitators)(this)
+    concurrentTipService.pull(readyFacilitators)(this.metrics)
   }
   def peerInfo: Map[Id, PeerData] = {
     // TODO: fix it to be Future
     Await.result((peerManager ? GetPeerInfo).mapTo[Map[Id,PeerData]], 3 seconds)
   }
 
+  def peerInfo(nodeType: NodeType): Map[Id, PeerData] =
+    peerInfo.filter(_._2.peerMetadata.nodeType == nodeType)
+
   def readyPeers: Map[Id, PeerData] =
     peerInfo.filter(_._2.peerMetadata.nodeState == NodeState.Ready)
 
+  def readyPeers(nodeType: NodeType): Map[Schema.Id, PeerData] =
+    peerInfo.filter(_._2.peerMetadata.nodeType == nodeType)
+
+  def readyFacilitators(): Map[Id, PeerData] = readyPeers(NodeType.Full).filter {
+    case (_, pd) =>
+      pd.peerMetadata.timeAdded < (System
+        .currentTimeMillis() - processingConfig.minPeerTimeAddedSeconds * 1000)
+  }
 
 }

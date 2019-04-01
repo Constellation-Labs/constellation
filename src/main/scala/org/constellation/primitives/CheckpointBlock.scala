@@ -5,9 +5,9 @@ import java.security.KeyPair
 import cats.data.{Ior, NonEmptyList, ValidatedNel}
 import cats.implicits._
 import constellation.signedObservationEdge
+import org.constellation.DAO
 import org.constellation.primitives.Schema._
 import org.constellation.util.HashSignature
-import org.constellation.{DAO, PeerMetadata}
 
 case class CheckpointBlock(
   transactions: Seq[Transaction],
@@ -64,7 +64,7 @@ case class CheckpointBlock(
 
   }
 
-  def transactionsValid: Boolean = transactions.nonEmpty && transactions.forall(_.valid)
+  def transactionsValid(implicit dao: DAO): Boolean = transactions.nonEmpty && transactions.forall(_.valid)
 
   // TODO: Return checkpoint validation status for more info rather than just a boolean
 
@@ -118,7 +118,7 @@ case class CheckpointBlock(
           }
      */
     // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
-    dao.checkpointService.memPool.put(baseHash, cache)
+    dao.checkpointService.memPool.put(baseHash, cache).unsafeRunSync()
     dao.recentBlockTracker.put(cache)
 
   }
@@ -270,7 +270,7 @@ sealed trait CheckpointBlockValidatorNel {
 
   type ValidationResult[A] = ValidatedNel[CheckpointBlockValidation, A]
 
-  def validateTransactionIntegrity(t: Transaction): ValidationResult[Transaction] =
+  def validateTransactionIntegrity(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
     if (t.valid) t.validNel else InvalidTransaction(t).invalidNel
 
   def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
@@ -353,7 +353,7 @@ sealed trait CheckpointBlockValidatorNel {
       .getOrElse(List())
 
   def isInSnapshot(c: CheckpointBlock)(implicit dao: DAO): Boolean =
-    dao.threadSafeTipService.acceptedCBSinceSnapshot
+    dao.threadSafeSnapshotService.acceptedCBSinceSnapshot
       .contains(c.baseHash)
 
   def getSummaryBalance(c: CheckpointBlock)(implicit dao: DAO): AddressBalance = {
@@ -367,14 +367,6 @@ sealed trait CheckpointBlockValidatorNel {
 
     spend |+| received
   }
-
-  /*
-      def getSnapshotBalances(implicit dao: DAO): AddressBalance =
-        dao.threadSafeTipService
-          .getSnapshotInfo()
-          .addressCacheData
-          .mapValues(_.balanceByLatestSnapshot)
-   */
 
   def validateDiff(a: (String, Long))(implicit dao: DAO): Boolean = a match {
     case (hash, diff) =>
@@ -420,7 +412,7 @@ sealed trait CheckpointBlockValidatorNel {
         .product(validateSourceAddressBalances(cb.transactions))
 
     val postTreeIgnoreEmptySnapshot =
-      if (dao.threadSafeTipService.lastSnapshotHeight == 0) preTreeResult
+      if (dao.threadSafeSnapshotService.lastSnapshotHeight == 0) preTreeResult
       else preTreeResult.product(validateCheckpointBlockTree(cb))
 
     postTreeIgnoreEmptySnapshot.map(_ => cb)

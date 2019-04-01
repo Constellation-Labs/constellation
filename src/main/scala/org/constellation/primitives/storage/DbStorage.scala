@@ -13,6 +13,9 @@ import swaydb.serializers.Serializer
 trait Lookup[K, V] {
   def lookup(key: K): IO[Option[V]]
   def lookupSync(key: K): Option[V] = lookup(key).unsafeRunSync()
+
+  def contains(key: K): IO[Boolean]
+  def containsSync(key: K): Boolean = contains(key).unsafeRunSync()
 }
 
 abstract class DbStorage[K, V](dbPath: File)(implicit keySerializer: Serializer[K],
@@ -27,6 +30,8 @@ abstract class DbStorage[K, V](dbPath: File)(implicit keySerializer: Serializer[
     .get
 
   def lookup(key: K): IO[Option[V]] = db.get(key).asIO
+
+  def contains(key: K): IO[Boolean] = db.contains(key).asIO
 
   def putSync(key: K, value: V): Unit = put(key, value).unsafeRunSync()
 
@@ -48,6 +53,19 @@ object DbStorage {
               o.fold(memPool.lookup(hash))(b => IO.pure(Some(b)))
             }
     }
+
+  def extendedContains[K, V]: List[Lookup[K, V]] ⇒ K ⇒ IO[Boolean] =
+    (lookups: List[Lookup[K, V]]) ⇒
+      (hash: K) ⇒
+        lookups.foldLeft(IO.pure[Boolean](false)) {
+          case (io, memPool) ⇒
+            io.flatMap { o ⇒
+              if (o)
+                IO.pure(o)
+              else
+                memPool.contains(hash)
+            }
+        }
 }
 
 abstract class MidDbStorage[K, V](dbPath: File, capacity: Int)(implicit keySerializer: Serializer[K],

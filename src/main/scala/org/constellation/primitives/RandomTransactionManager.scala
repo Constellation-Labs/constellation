@@ -38,7 +38,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
           val newChannelName = "channel_ " + dao.threadSafeMessageMemPool.activeChannels.size
           val channelOpen = ChannelOpen(newChannelName)
           val genesis =
-            ChannelMessage.create(channelOpen.json, Genesis.CoinBaseHash, newChannelName)
+            ChannelMessage.create(channelOpen.json, Genesis.CoinBaseHash, newChannelName)(dao.keyPair)
           val genesisHash = genesis.signedMessageData.hash
           testChannels :+= genesisHash
           dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHash) = newChannelName
@@ -56,8 +56,8 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                 if (lock.tryAcquire()) {
                   Some(
                     ChannelMessage.create(Random.nextInt(1000).toString,
-                                          data.channelMessage.signedMessageData.signatures.hash,
-                                          channel)
+                                          data.channelMessage.signedMessageData.hash,
+                                          channel)(dao.keyPair)
                   )
                 } else None
               }
@@ -89,7 +89,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
 
         if ((peerIds.nonEmpty || dao.nodeConfig.isGenesisNode) && dao.nodeState == NodeState.Ready && dao.generateRandomTX) {
 
-          generateRandomMessages()
+         //generateRandomMessages()
 
           val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
           dao.metrics.updateMetric("transactionMemPoolSize", memPoolCount.toString)
@@ -174,10 +174,24 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                   )
                 )
 
-                dao.peerInfo.foreach {
-                  case (_, peerData) =>
+                dao.peerInfo(NodeType.Full)
+                  .values
+                  .foreach { peerData ⇒
                     dao.metrics.incrementMetric("transactionPut")
                     peerData.client.put("transaction", tx)
+                  }
+
+                def distance(peerDataId: Id): BigInt = {
+                  val thisNodeId = BigInt(dao.id.hex.getBytes())
+                  val peerId = BigInt(peerDataId.hex.getBytes())
+                  thisNodeId ^ peerId
+                }
+
+                if (dao.peerInfo(NodeType.Light).nonEmpty) {
+                  val lightPeerData = dao.peerInfo(NodeType.Light).minBy(p ⇒ distance(p._1))._2
+                  dao.metrics.incrementMetric("transactionPut")
+                  dao.metrics.incrementMetric("transactionPutToLightNode")
+                  lightPeerData.client.put("transaction", tx)
                 }
 
                 /*            // TODO: Change to transport layer call

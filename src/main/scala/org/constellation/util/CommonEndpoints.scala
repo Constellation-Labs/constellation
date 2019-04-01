@@ -40,10 +40,10 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.id)
       } ~
       path("tips") {
-        complete(dao.threadSafeTipService.tips)
+        complete(dao.threadSafeSnapshotService.tips)
       } ~
       path("heights") {
-        val maybeHeights = dao.threadSafeTipService.tips.flatMap {
+        val maybeHeights = dao.threadSafeSnapshotService.tips.flatMap {
           case (k, v) => dao.checkpointService.get(k).flatMap { _.height }
         }.toSeq
         complete(maybeHeights)
@@ -52,7 +52,7 @@ trait CommonEndpoints extends Json4sSupport {
         complete(Snapshot.snapshotHashes())
       } ~
       path("info") {
-        val info = dao.threadSafeTipService.getSnapshotInfo
+        val info = dao.threadSafeSnapshotService.getSnapshotInfo
         val res =
           KryoSerializer.serializeAnyRef(
             info.copy(acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshot.flatMap {
