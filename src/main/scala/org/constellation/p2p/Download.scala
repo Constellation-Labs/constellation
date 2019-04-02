@@ -141,6 +141,9 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
     IO(logger.info("Download started"))
       .flatMap(_ => setNodeState(NodeState.DownloadInProgress))
       .flatMap(_ => requestForFaucet)
+      .flatMap(_ => requestForFaucet)
+      .flatMap(_ => requestForFaucet)
+      .flatMap(_ => IO.sleep(10.seconds))
       .map(_ => ())
 
   private def downloadAndAcceptGenesis =
