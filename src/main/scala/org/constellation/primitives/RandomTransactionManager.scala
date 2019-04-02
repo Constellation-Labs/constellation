@@ -27,7 +27,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
   }
 
   // TODO: Config
-  val multiAddressGenerationMode = true
+  val multiAddressGenerationMode = false
 
   private var testChannels = Seq[String]()
 
