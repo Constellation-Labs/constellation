@@ -9,8 +9,6 @@ import org.constellation.DAO
 import org.constellation.primitives.Schema._
 import org.constellation.util.HashSignature
 
-import scala.annotation.tailrec
-
 case class CheckpointBlock(
   transactions: Seq[Transaction],
   checkpoint: CheckpointEdge,
@@ -446,22 +444,37 @@ sealed trait CheckpointBlockValidatorNel {
     cbs.filterNot(isInSnapshot(_)).flatMap(cb => getParentTransactions(getParents(cb)))
   }
 
-  final def detectAncestryConflict(
-    tips: Seq[CheckpointBlock],
-    parentsTransactions: Seq[Transaction] = Seq.empty
-  )(implicit dao: DAO): Option[CheckpointBlock] = {
+  def isConflictingWithOthers(cb: CheckpointBlock,
+                              others: Seq[CheckpointBlock])(implicit dao: DAO): Boolean = {
+    cb.transactions.intersect(getTransactionsTillSnapshot(others)).nonEmpty
+  }
 
-    def detect(tips: Seq[CheckpointBlock],
-               ancestryTransactions: Seq[Transaction]): Option[CheckpointBlock] = {
+  def detectInternalTipsConflict(
+    inputTips: Seq[CheckpointCacheData]
+  )(implicit dao: DAO): Option[CheckpointCacheData] = {
+
+    def detect(
+      tips: Seq[CheckpointCacheData],
+      ancestryTransactions: Map[Transaction, String] = Map.empty
+    ): Option[CheckpointCacheData] = {
       tips match {
         case Nil => None
-        case cb :: _ if cb.transactions.intersect(ancestryTransactions).nonEmpty =>
-          Some(cb)
-        case cb :: tail =>
-          detect(tail, ancestryTransactions ++ cb.transactions)
+        case CheckpointCacheData(Some(cb), children, height) :: _
+            if cb.transactions.toSet.intersect(ancestryTransactions.keySet).nonEmpty =>
+          val conflictingCBBaseHash = ancestryTransactions(
+            cb.transactions.toSet.intersect(ancestryTransactions.keySet).head
+          )
+          Some(
+            selectBlockToPreserve(
+              Seq(CheckpointCacheData(Some(cb), children, height)) ++ inputTips
+                .filter(ccd => ccd.checkpointBlock.exists(_.baseHash == conflictingCBBaseHash))
+            )
+          )
+        case CheckpointCacheData(Some(cb), _, _) :: tail =>
+          detect(tail, ancestryTransactions ++ cb.transactions.map(i => (i, cb.baseHash)))
       }
     }
-    detect(tips, getTransactionsTillSnapshot(tips))
+    detect(inputTips)
   }
 
   def hasTransactionInCommon(cbLeft: CheckpointBlock, cbRight: CheckpointBlock): Boolean = {

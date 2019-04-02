@@ -1,4 +1,5 @@
 package org.constellation.primitives
+import com.typesafe.scalalogging.Logger
 import org.constellation.DAO
 import org.constellation.consensus.TipData
 import org.constellation.primitives.Schema.{GenesisObservation, Id, SignedObservationEdge}
@@ -11,6 +12,7 @@ trait ConcurrentTipService {
 
   def getMinTipHeight()(implicit dao: DAO): Long
   def toMap: Map[String, TipData]
+  def toSeq: Seq[CheckpointBlock]
   def size: Int
   def set(tips: Map[String, TipData])
   def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO)
@@ -21,6 +23,7 @@ trait ConcurrentTipService {
   )(implicit metrics: Metrics): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])]
   def get(k: String): Option[TipData]
   def remove(k: String)(implicit metrics: Metrics): Unit
+  def markAsConflict(key: String)(implicit metrics: Metrics): Unit
 
 }
 
@@ -30,7 +33,9 @@ class TrieBasedTipService(sizeLimit: Int,
                           minPeerTimeAddedSeconds: Int)
     extends ConcurrentTipService {
 
+  private val conflictingTips: TrieMap[String, CheckpointBlock] = TrieMap.empty
   private val tips: TrieMap[String, TipData] = TrieMap.empty
+  private val logger = Logger("TrieBasedTipService")
 
   override def set(newTips: Map[String, TipData]): Unit = {
     tips ++= newTips
@@ -53,6 +58,16 @@ class TrieBasedTipService(sizeLimit: Int,
     metrics.incrementMetric("checkpointTipsRemoved")
   }
 
+  def markAsConflict(key: String)(implicit metrics: Metrics): Unit = {
+    logger.warn(s"Marking tip as conflicted tipHash: $key")
+
+    tips.get(key).foreach { tip =>
+      tips -= key
+      metrics.incrementMetric("conflictTipRemoved")
+      conflictingTips.put(key, tip.checkpointBlock)
+    }
+  }
+
   def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): Unit = {
     // TODO: should size of the map be calculated each time or just once?
     // previously it was static due to all method were sync and map updates
@@ -69,8 +84,13 @@ class TrieBasedTipService(sizeLimit: Int,
           put(block.baseHash, TipData(block, numUses + 1))(dao.metrics)
       }
     }
-
-    put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics)
+    this.synchronized {
+      if (!CheckpointBlockValidatorNel.isConflictingWithOthers(checkpointBlock, toSeq)) {
+        put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics)
+      } else {
+        conflictingTips.put(checkpointBlock.baseHash, checkpointBlock)
+      }
+    }
   }
 
   override def put(go: GenesisObservation)(implicit metrics: Metrics): Option[TipData] = {
@@ -154,5 +174,7 @@ class TrieBasedTipService(sizeLimit: Int,
       }
     selectedFacils.toMap
   }
-
+  override def toSeq: Seq[CheckpointBlock] = {
+    tips.map(_._2.checkpointBlock).toSeq
+  }
 }

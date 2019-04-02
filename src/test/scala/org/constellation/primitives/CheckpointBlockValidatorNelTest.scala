@@ -63,21 +63,37 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
     when(snapService.acceptedCBSinceSnapshot).thenReturn(Seq.empty)
   }
 
-  test("it should detect no conflict and return None") {
-    detectAncestryConflict(Seq(leftBlock, rightBlock)) shouldBe None
+  test("it should detect no internal conflict and return None") {
+    detectInternalTipsConflict(
+      Seq(CheckpointCacheData(Some(leftBlock)), CheckpointCacheData(Some(rightBlock)))
+    ) shouldBe None
   }
 
+  test("it should detect no conflict and return None") {
+    isConflictingWithOthers(leftBlock, Seq(rightBlock)) shouldBe false
+  }
+
+  test("it should detect direct internal conflict with other tip") {
+    val rightBlockTx = rightBlock.transactions.head
+    when(leftBlock.transactions).thenReturn(Seq(tx1, tx2, rightBlockTx))
+
+    detectInternalTipsConflict(
+      Seq(CheckpointCacheData(Some(leftBlock)), CheckpointCacheData(Some(rightBlock)))
+    ) shouldBe Some(CheckpointCacheData(Some(rightBlock)))
+  }
   test("it should detect direct conflict with other tip") {
     val rightBlockTx = rightBlock.transactions.head
     when(leftBlock.transactions).thenReturn(Seq(tx1, tx2, rightBlockTx))
 
-    detectAncestryConflict(Seq(leftBlock, rightBlock)) shouldBe Some(rightBlock)
+    detectInternalTipsConflict(
+      Seq(CheckpointCacheData(Some(leftBlock)), CheckpointCacheData(Some(rightBlock)))
+    ) shouldBe Some(CheckpointCacheData(Some(rightBlock)))
   }
 
   test("it should detect conflict with ancestry of other tip") {
     when(rightParent.transactions).thenReturn(Seq(tx2))
 
-    detectAncestryConflict(Seq(leftBlock, rightBlock)) shouldBe Some(leftBlock)
+    isConflictingWithOthers(leftBlock, Seq(rightBlock)) shouldBe true
   }
 
   test("it should get transactions from parent") {

@@ -4,7 +4,7 @@ import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 
 import akka.util.Timeout
 import cats.implicits._
-import com.typesafe.scalalogging.StrictLogging
+import com.typesafe.scalalogging.{Logger, StrictLogging}
 import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
@@ -130,6 +130,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
   var acceptedCBSinceSnapshot: Seq[String] = Seq()
   private var snapshot: Snapshot = Snapshot.snapshotZero
+  val logger = Logger("ThreadSafeSnapshotService")
 
   def tips: Map[String, TipData] = concurrentTipService.toMap
 
@@ -213,9 +214,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
     if (dao.nodeState == NodeState.Ready && acceptedCBSinceSnapshot.nonEmpty) {
 
-      val minTipHeight = Try {
-        concurrentTipService.getMinTipHeight()
-      }.getOrElse(0L)
+      val minTipHeight = Try { concurrentTipService.getMinTipHeight() }.getOrElse(0L)
       dao.metrics.updateMetric("minTipHeight", minTipHeight.toString)
 
       val nextHeightInterval = lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval
@@ -237,8 +236,22 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
           dao.metrics.incrementMetric("snapshotNoBlocksWithinHeightInterval")
         } else {
 
-          val blockCaches = blocksWithinHeightInterval.map {
+          val allblockCaches = blocksWithinHeightInterval.map {
             _.get
+          }
+          val maybeConflictingTip =
+            CheckpointBlockValidatorNel.detectInternalTipsConflict(allblockCaches)
+
+          val blockCaches = if (maybeConflictingTip.isDefined) {
+            val conflictingTip = maybeConflictingTip.get.checkpointBlock.get.baseHash
+            logger.warn(
+              s"Conflict tip detected while attempt to make snapshot tipHash: $conflictingTip"
+            )
+            concurrentTipService.markAsConflict(conflictingTip)(dao.metrics)
+            acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.filterNot(_ == conflictingTip)
+            allblockCaches.filterNot(_ == maybeConflictingTip.get)
+          } else {
+            allblockCaches
           }
 
           val hashesForNextSnapshot = blockCaches.map {
