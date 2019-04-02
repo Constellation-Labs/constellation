@@ -254,7 +254,6 @@ class ConstellationNode(
   val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
   val randomTXManager = new RandomTransactionManager(crossTalkConsensusActor)
 
-
   def getIPData: ValidPeerIPData = {
     ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)
   }
@@ -340,5 +339,7 @@ class ConstellationNode(
     dao.setNodeState(NodeState.Ready)
     dao.generateRandomTX = true
   }
+
+  val dataPollingManager = new DataPollingManager(60)
 
 }
