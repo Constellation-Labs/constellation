@@ -18,23 +18,27 @@ class DataPollingManager(periodSeconds: Int = 60)(implicit dao: DAO)
 
   private val channelName = "transit"
 
-  private val channelOpenResponseF = ChannelMessage.createGenesis(ChannelOpen(channelName))
+  @volatile private var channelId: String = _
+
+  ChannelMessage.createGenesis(ChannelOpen(channelName)).foreach {
+    resp => channelId = resp.genesisHash
+  }
 
   // Need a better way to manage these, but hardcode for now.
   private val bartTransitUrl = "https://api.bart.gov/gtfsrt/tripupdate.aspx"
 
-  private def execute() = {
+  private def execute(channelId: String) = {
     futureTryWithTimeoutMetric({
       val latest = transitService.pollJson(bartTransitUrl)
       latest.foreach { msg =>
-        ChannelMessage.createMessages(ChannelSendRequest(channelName, Seq(msg)))
+        ChannelMessage.createMessages(ChannelSendRequest(channelId, Seq(msg)))
       }
     }, "dataPolling", 60, { dao.metrics.incrementMetric("dataPollingFailure") })
   }
 
   override def trigger(): Future[Try[Unit]] = {
-    if (channelOpenResponseF.isCompleted) {
-      execute()
+    if (channelId != null) {
+        execute(channelId)
     } else Future.successful(Try(Unit))
   }
 }
