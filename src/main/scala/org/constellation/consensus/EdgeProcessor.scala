@@ -58,7 +58,8 @@ object EdgeProcessor extends StrictLogging {
         dao.metrics.incrementMetric("heightNonEmpty")
       }
 
-      dao.checkpointService.midDb.put(cb.baseHash, checkpointCacheData).unsafeRunSync()
+      dao.checkpointService.memPool.putSync(cb.baseHash, checkpointCacheData)
+      // dao.checkpointService.midDb.put(cb.baseHash, checkpointCacheData).unsafeRunSync()
 
       cb.messages.foreach { m =>
         if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
@@ -121,7 +122,7 @@ object EdgeProcessor extends StrictLogging {
         case (tx, txMetadata) ⇒
           dao.transactionService.memPool
             .remove(tx.baseHash)
-            .flatMap(_ ⇒ dao.transactionService.midDb.put(tx.baseHash, txMetadata))
+        //    .flatMap(_ ⇒ dao.transactionService.midDb.put(tx.baseHash, txMetadata))
             .flatMap(_ ⇒ dao.metrics.incrementMetricAsync("transactionAccepted"))
             .flatMap(_ ⇒ dao.addressService.transfer(tx))
       }

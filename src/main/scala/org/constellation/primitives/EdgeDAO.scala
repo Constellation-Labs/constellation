@@ -265,7 +265,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
             )
 
             Snapshot.acceptSnapshot(snapshot)
-            dao.snapshotService.midDb.put(snapshot.hash, snapshot)
+            // dao.snapshotService.midDb.put(snapshot.hash, snapshot)
             dao.checkpointService.memPool.remove(snapshot.checkpointBlocks.toSet)
 
             totalNumCBsInShapshots += snapshot.checkpointBlocks.size

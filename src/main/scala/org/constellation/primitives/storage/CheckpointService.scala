@@ -45,10 +45,10 @@ class CheckpointService(dao: DAO, size: Int = 50000) {
       .map(_ => ())
   }
 
-  def lookup: String => IO[Option[CheckpointCacheData]] =
-    DbStorage.extendedLookup[String, CheckpointCacheData](List(memPool, midDb, oldDb))
+  def lookup: String => IO[Option[CheckpointCacheData]] = (key: String) => memPool.get(key)
+   // DbStorage.extendedLookup[String, CheckpointCacheData](List(memPool, midDb, oldDb))
 
-  def get(key: String) = lookup(key).unsafeRunSync()
-  def contains(key: String) = lookup(key).map(_.nonEmpty).unsafeRunSync()
+  def get(key: String): Option[CheckpointCacheData] = lookup(key).unsafeRunSync()
+  def contains(key: String): Boolean = lookup(key).map(_.nonEmpty).unsafeRunSync()
 }
 
