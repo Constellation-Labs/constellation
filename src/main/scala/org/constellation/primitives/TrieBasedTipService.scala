@@ -88,6 +88,7 @@ class TrieBasedTipService(sizeLimit: Int,
       if (!CheckpointBlockValidatorNel.isConflictingWithOthers(checkpointBlock, toSeq)) {
         put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics)
       } else {
+        logger.warn(s"Unable to add conflicted checkpoint block: ${checkpointBlock.baseHash}")
         conflictingTips.put(checkpointBlock.baseHash, checkpointBlock)
       }
     }
