@@ -627,6 +627,8 @@ object Snapshot {
       dao.metrics.incrementMetric("messageSnapshotHashUpdated")
     }
 
+    dao.checkpointService.memPool.removeSync(snapshot.checkpointBlocks.toSet)
+
     for (cbOpt <- cbData;
          cbCache <- cbOpt;
          cb <- cbCache.checkpointBlock;
