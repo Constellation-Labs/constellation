@@ -1,15 +1,16 @@
 package org.constellation.util
 
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicLong
 
 import better.files.File
 import cats.effect.IO
 import com.typesafe.scalalogging.Logger
 import constellation._
-import io.micrometer.core.instrument.Clock
+import io.micrometer.core.instrument.Metrics.globalRegistry
 import io.micrometer.core.instrument.binder.jvm._
 import io.micrometer.core.instrument.binder.logging.LogbackMetrics
 import io.micrometer.core.instrument.binder.system.{FileDescriptorMetrics, ProcessorMetrics, UptimeMetrics}
+import io.micrometer.core.instrument.{Clock, Tag}
 import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.cache.caffeine.CacheMetricsCollector
@@ -35,8 +36,9 @@ object Metrics {
     val prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT,
                                                               CollectorRegistry.defaultRegistry,
                                                               Clock.SYSTEM)
-    prometheusMeterRegistry.config().commonTags("application", s"Constellation_$keyHash")
-    io.micrometer.core.instrument.Metrics.globalRegistry.add(prometheusMeterRegistry)
+
+    prometheusMeterRegistry.config().commonTags("application", "Constellation")
+    globalRegistry.add(prometheusMeterRegistry)
 
     new JvmMemoryMetrics().bindTo(prometheusMeterRegistry)
     new JvmGcMetrics().bindTo(prometheusMeterRegistry)
@@ -96,7 +98,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   val logger = Logger("Metrics")
 
   private val stringMetrics: TrieMap[String, String] = TrieMap()
-  private val countMetrics: TrieMap[String, AtomicReference[Long]] = TrieMap()
+  private val countMetrics: TrieMap[String, AtomicLong] = TrieMap()
 
   val rateCounter = new TransactionRateTracker()
 
@@ -110,21 +112,26 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   updateMetric("externalHost", dao.externalHostString)
   updateMetric("version", BuildInfo.version)
 
+  private def guagedAtomicLong(key: String): AtomicLong = {
+    import scala.collection.JavaConverters._
+    val tags = List(Tag.of("metric", key)).asJava
+    globalRegistry.gauge(s"dag_$key", tags, new AtomicLong(0L))
+  }
+
   def updateMetric(key: String, value: String): Unit = {
     stringMetrics(key) = value
   }
 
   def updateMetric(key: String, value: Int): Unit = {
-    countMetrics(key) = new AtomicReference[Long](value)
+    updateMetric(key, value.toLong)
   }
 
   def updateMetric(key: String, value: Long): Unit = {
-    countMetrics(key) = new AtomicReference[Long](value)
+    countMetrics.getOrElse(key, guagedAtomicLong(key)).set(value)
   }
 
   def incrementMetric(key: String): Unit = {
-    countMetrics.getOrElseUpdate(key, new AtomicReference[Long](0L)).getAndUpdate(_ + 1L)
-   // countMetrics(key) = countMetrics.getOrElse(key, 0L) + 1
+    countMetrics.getOrElseUpdate(key, guagedAtomicLong(key)).getAndUpdate(_ + 1L)
   }
 
   def updateMetricAsync(key: String, value: String): IO[Unit] = IO(updateMetric(key, value))
