@@ -224,7 +224,7 @@ object EdgeProcessor extends StrictLogging {
         // Change to method on TipsReturned // abstract for reuse.
         val checkpointBlock = CheckpointBlock.createCheckpointBlock(transactions, tipSOE.map {
           soe =>
-            TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)
+            TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash, Some(soe.baseHash))
         }, messages)(dao.keyPair)
         dao.metrics.incrementMetric("checkpointBlocksCreated")
 
