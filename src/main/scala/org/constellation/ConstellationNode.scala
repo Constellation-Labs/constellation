@@ -216,9 +216,15 @@ class ConstellationNode(
 
   dao.metrics = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
 
+
+  val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
+  val crossTalkConsensusActor: ActorRef =
+    system.actorOf(CrossTalkConsensus.props(remoteSenderActor))
+
   val checkpointFormationManager = new CheckpointFormationManager(
     dao.processingConfig.checkpointFormationTimeSeconds,
-    dao.processingConfig.formUndersizedCheckpointAfterSeconds
+    dao.processingConfig.formUndersizedCheckpointAfterSeconds,
+    crossTalkConsensusActor
   )
 
   val snapshotTrigger = new SnapshotTrigger()
@@ -248,9 +254,6 @@ class ConstellationNode(
   private val bindingFuture: Future[Http.ServerBinding] =
     Http().bindAndHandle(routes, nodeConfig.httpInterface, nodeConfig.httpPort)
 
-  val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
-  val crossTalkConsensusActor: ActorRef =
-    system.actorOf(CrossTalkConsensus.props(remoteSenderActor))
   val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
   val randomTXManager = new RandomTransactionManager(crossTalkConsensusActor)
 
