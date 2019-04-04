@@ -20,7 +20,7 @@ import org.constellation.datastore.SnapshotTrigger
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
-import org.constellation.util.{EnhancedAPIClient, HostPort, Metrics}
+import org.constellation.util.{APIClient, HostPort, Metrics}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -75,8 +75,8 @@ object ConstellationNode extends StrictLogging {
           .action((x, c) => c.copy(genesisNode = true))
           .text("Start in single node genesis mode"),
         opt[Unit]('t', "test-mode")
-            .action((x, c) => c.copy(testMode = true))
-            .text("Run with test settings"),
+          .action((x, c) => c.copy(testMode = true))
+          .text("Run with test settings"),
         help("help").text("prints this usage text"),
         version("version").text(s"Constellation v${BuildInfo.version}"),
         checkConfig(
@@ -145,8 +145,8 @@ object ConstellationNode extends StrictLogging {
       val constellationConfig = config.getConfig("constellation")
 
       val processingConfig = ProcessingConfig(
-      maxWidth = constellationConfig.getInt("max-width")
-      // TODO: Finish porting configs from application conf
+        maxWidth = constellationConfig.getInt("max-width")
+        // TODO: Finish porting configs from application conf
       )
       new ConstellationNode(
         NodeConfig(
@@ -161,7 +161,9 @@ object ConstellationNode extends StrictLogging {
           defaultTimeoutSeconds = config.getInt("default-timeout-seconds"),
           attemptDownload = !cliConfig.genesisNode,
           cliConfig = cliConfig,
-          processingConfig = if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10) else processingConfig
+          processingConfig =
+            if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10)
+            else processingConfig
         )
       )
     } match {
@@ -195,7 +197,7 @@ case class NodeConfig(
   allowLocalhostPeers: Boolean = false,
   cliConfig: CliConfig = CliConfig(),
   processingConfig: ProcessingConfig = ProcessingConfig()
-                     )
+)
 
 class ConstellationNode(
   val nodeConfig: NodeConfig = NodeConfig()
@@ -288,14 +290,14 @@ class ConstellationNode(
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
 
   def getAPIClient(host: String = nodeConfig.hostName,
-                   port: Int = nodeConfig.httpPort): EnhancedAPIClient = {
-    val api = EnhancedAPIClient(host, port)
+                   port: Int = nodeConfig.httpPort): APIClient = {
+    val api = APIClient(host, port)
     api.id = dao.id
     api
   }
 
-  def getPeerAPIClient: EnhancedAPIClient = {
-    val api = EnhancedAPIClient(dao.nodeConfig.hostName, dao.nodeConfig.peerHttpPort)
+  def getPeerAPIClient: APIClient = {
+    val api = APIClient(dao.nodeConfig.hostName, dao.nodeConfig.peerHttpPort)
     api.id = dao.id
     api
   }
@@ -310,13 +312,13 @@ class ConstellationNode(
       nodeType = dao.nodeType,
       resourceInfo = ResourceInfo(
         diskUsableBytes = new java.io.File(dao.snapshotPath.pathAsString).getUsableSpace
-      ),
+      )
     )
   }
 
-  def getAPIClientForNode(node: ConstellationNode): EnhancedAPIClient = {
+  def getAPIClientForNode(node: ConstellationNode): APIClient = {
     val ipData = node.getIPData
-    val api = EnhancedAPIClient(host = ipData.canonicalHostName, port = ipData.port)
+    val api = APIClient(host = ipData.canonicalHostName, port = ipData.port)
     api.id = dao.id
     api
   }

@@ -10,7 +10,7 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.EnhancedAPIClient
+import org.constellation.util.APIClient
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FlatSpec, OneInstancePerTest}
 
@@ -77,7 +77,7 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
   // data.dbActor = mockLvlDB
 
   def getAPIClient(hostName: String, httpPort: Int) = {
-    val api = EnhancedAPIClient(host = hostName, port = httpPort)
+    val api = APIClient(host = hostName, port = httpPort)
     api.id = id
     api
   }

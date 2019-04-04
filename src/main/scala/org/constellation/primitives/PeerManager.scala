@@ -91,7 +91,7 @@ object PeerManager extends StrictLogging {
       {
         logger.info(s"Attempting to register with $hp")
 
-        EnhancedAPIClient(hp.host, hp.port).postSync(
+        APIClient(hp.host, hp.port).postSync(
           "register",
           dao.peerRegistrationRequest
         )
@@ -115,7 +115,7 @@ object PeerManager extends StrictLogging {
         logger.info(s"Attempting to register with $hp")
 
         val client =
-          EnhancedAPIClient(hp.host, hp.port)(dao.apiClientExecutionContext, dao)
+          APIClient(hp.host, hp.port)(dao.apiClientExecutionContext, dao)
 
         client
           .getNonBlocking[PeerRegistrationRequest]("registration/request")
@@ -135,7 +135,7 @@ object PeerManager extends StrictLogging {
 
   }
 
-  def peerDiscovery(client: EnhancedAPIClient)(implicit dao: DAO): Unit = {
+  def peerDiscovery(client: APIClient)(implicit dao: DAO): Unit = {
     client
       .getNonBlocking[Seq[PeerMetadata]]("peers")
       .onComplete {
@@ -143,7 +143,7 @@ object PeerManager extends StrictLogging {
           pmd.foreach { md =>
             if (dao.id != md.id && validPeerAddition(HostPort(md.host, md.httpPort), dao.peerInfo)) {
               val client =
-                EnhancedAPIClient(md.host, md.httpPort)(dao.apiClientExecutionContext, dao)
+                APIClient(md.host, md.httpPort)(dao.apiClientExecutionContext, dao)
               client
                 .getNonBlocking[PeerRegistrationRequest]("registration/request")
                 .onComplete {
@@ -173,7 +173,7 @@ object PeerManager extends StrictLogging {
   }
 
   def broadcast[T](
-    func: EnhancedAPIClient => Future[T],
+    func: APIClient => Future[T],
     skipIds: Set[Id] = Set.empty,
     subset: Set[Id] = Set.empty
   )(implicit dao: DAO, ec: ExecutionContext): Future[Map[Id, ValidatedNel[Throwable, T]]] = {
@@ -197,11 +197,11 @@ object PeerManager extends StrictLogging {
 
 case class PeerData(
   peerMetadata: PeerMetadata,
-  client: EnhancedAPIClient,
+  client: APIClient,
   notification: Seq[PeerNotification] = Seq.empty
 )
 
-case class APIBroadcast[T](func: EnhancedAPIClient => Future[T],
+case class APIBroadcast[T](func: APIClient => Future[T],
                            skipIds: Set[Id] = Set(),
                            peerSubset: Set[Id] = Set())
 
@@ -277,7 +277,8 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
           peers.get(n.id).map { p =>
             p.copy(notification = p.notification diff Seq(n))
           }
-        }.foreach(pd => self ! UpdatePeerInfo(pd))
+        }
+        .foreach(pd => self ! UpdatePeerInfo(pd))
 
     case RemovePeerRequest(hp, id) =>
       val updatedPeerInfo = peers.filter {
@@ -313,7 +314,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
         val adjustedHost = if (auxHost.nonEmpty) auxHost else host
         val client =
-          EnhancedAPIClient(adjustedHost, port)(dao.apiClientExecutionContext, dao)
+          APIClient(adjustedHost, port)(dao.apiClientExecutionContext, dao)
         client.id = id
 
         PeerManager.peerDiscovery(client)
@@ -364,7 +365,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
         implicit val ec: ExecutionContextExecutor =
           dao.apiClientExecutionContext
 
-        val client = EnhancedAPIClient(request.host, request.port)(dao.apiClientExecutionContext, dao)
+        val client = APIClient(request.host, request.port)(dao.apiClientExecutionContext, dao)
 
         val authSignRequest = PeerAuthSignRequest(Random.nextLong())
         val req =
@@ -401,11 +402,14 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
             val state = s.nodeState
             val id = sig.hashSignature.id
             val add =
-              PeerMetadata(request.host,
-                           request.port,
-                           id,
-                           nodeState = state,
-                           auxAddresses = s.addresses, resourceInfo = request.resourceInfo)
+              PeerMetadata(
+                request.host,
+                request.port,
+                id,
+                nodeState = state,
+                auxAddresses = s.addresses,
+                resourceInfo = request.resourceInfo
+              )
             val peerData = PeerData(add, client)
             client.id = id
             self ! UpdatePeerInfo(peerData)

@@ -7,14 +7,14 @@ import com.softwaremill.sttp.{Response, StatusCodes}
 import org.constellation._
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives._
-import org.constellation.util.{EnhancedAPIClient, HostPort, Simulation}
+import org.constellation.util.{APIClient, HostPort, Simulation}
 
 class E2ETest extends E2E {
   val updatePasswordReq = UpdatePassword(
     Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
   )
 
-  def updatePasswords(apiClients: Seq[EnhancedAPIClient]): Seq[Response[String]] =
+  def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
     apiClients.map { client =>
       val response = client.postSync("password/update", updatePasswordReq)
       client.setPassword(updatePasswordReq.password)
@@ -33,7 +33,7 @@ class E2ETest extends E2E {
     i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
   )
 
-  private val apis: Seq[EnhancedAPIClient] = nodes.map {
+  private val apis: Seq[APIClient] = nodes.map {
     _.getAPIClient()
   }
 
@@ -43,7 +43,6 @@ class E2ETest extends E2E {
 
   private val initialAPIs = apis
 
-
   "E2E Run" should "demonstrate full flow" in {
     logger.info("API Ports: " + apis.map {
       _.apiPort
@@ -51,7 +50,8 @@ class E2ETest extends E2E {
 
     assert(Simulation.run(initialAPIs, addPeerRequests))
 
-    val metadatas = n1.getPeerAPIClient.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", n1.dao.id)
+    val metadatas =
+      n1.getPeerAPIClient.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", n1.dao.id)
 
     println(s"Metadata: $metadatas")
 
@@ -74,7 +74,6 @@ class E2ETest extends E2E {
       lightNodeAPI.getBlocking[Seq[String]]("channelKeys").nonEmpty
     )
 
-
     val firstAPI = apis.head
     val allChannels = firstAPI.getBlocking[Seq[String]]("channels")
 
@@ -84,13 +83,15 @@ class E2ETest extends E2E {
     }
     assert(channelProof.exists{_.nonEmpty})
 
-*/
+     */
 
     // val deployResponse = constellationAppSim.openChannel(apis)
 
-    val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)),
+    val downloadNode = createNode(
+      seedHosts = Seq(HostPort("localhost", 9001)),
       randomizePorts = false,
-      portOffset = 50)
+      portOffset = 50
+    )
 
     val downloadAPI = downloadNode.getAPIClient()
     logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
@@ -104,7 +105,7 @@ class E2ETest extends E2E {
 
     val allNodes = nodes :+ downloadNode
 
-    val allAPIs: Seq[EnhancedAPIClient] = allNodes.map {
+    val allAPIs: Seq[APIClient] = allNodes.map {
       _.getAPIClient()
     } //apis :+ downloadAPI
     val updatePasswordResponses = updatePasswords(allAPIs)
@@ -118,17 +119,25 @@ class E2ETest extends E2E {
 
     Simulation.logger.info("Stopping transactions to run parity check")
 
-    Simulation.awaitConditionMet("Accepted checkpoint blocks number differs across the nodes",
-      allAPIs.map {
-        _.metrics("checkpointAccepted")
-      }.distinct.size == 1,
+    Simulation.awaitConditionMet(
+      "Accepted checkpoint blocks number differs across the nodes",
+      allAPIs
+        .map {
+          _.metrics("checkpointAccepted")
+        }
+        .distinct
+        .size == 1,
       maxRetries = 10,
-      delay = 10000)
+      delay = 10000
+    )
     Simulation.awaitConditionMet(
       "Accepted transactions number differs across the nodes",
-      allAPIs.map {
-        _.metrics("transactionAccepted")
-      }.distinct.size == 1,
+      allAPIs
+        .map {
+          _.metrics("transactionAccepted")
+        }
+        .distinct
+        .size == 1,
       maxRetries = 6,
       delay = 10000
     )

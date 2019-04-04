@@ -13,7 +13,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Validation.EnrichedFuture
-import org.constellation.util.{EnhancedAPIClient, HashSignature, Signable}
+import org.constellation.util.{APIClient, HashSignature, Signable}
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.async.Async.{async, await}
@@ -84,8 +84,8 @@ object EdgeProcessor extends StrictLogging {
             )
           )
         }
-        dao.messageService.putSync(m.signedMessageData.hash,
-                                   ChannelMessageMetadata(m, Some(cb.baseHash)))
+        dao.messageService
+          .putSync(m.signedMessageData.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.metrics.incrementMetric("messageAccepted")
       }
 
@@ -167,7 +167,7 @@ object EdgeProcessor extends StrictLogging {
           FinishedCheckpoint(cache, finalFacilitators),
           timeout = 20.seconds
         ),
-        "finishedCheckpointBroadcast",
+        "finishedCheckpointBroadcast"
       )
     }
 
@@ -288,14 +288,14 @@ object EdgeProcessor extends StrictLogging {
 
     implicit val exec: ExecutionContextExecutor = dao.signatureExecutionContext
 
-    def lookupTransaction(hash: String, client: EnhancedAPIClient): Future[Option[TransactionCacheData]] =
+    def lookupTransaction(hash: String, client: APIClient): Future[Option[TransactionCacheData]] =
       client.getNonBlocking[Option[TransactionCacheData]](
         s"transaction/$hash",
         timeout = 4.seconds
       )
 
     def resolveTransaction(hash: String,
-                           peers: Seq[EnhancedAPIClient]): Future[Option[TransactionCacheData]] = {
+                           peers: Seq[APIClient]): Future[Option[TransactionCacheData]] = {
 
       var remainingPeers = peers.tail
 
@@ -329,7 +329,7 @@ object EdgeProcessor extends StrictLogging {
   )(implicit dao: DAO): Future[Seq[ChannelMessageMetadata]] = {
     implicit val exec: ExecutionContextExecutor = dao.signatureExecutionContext
 
-    def lookupChannelMessage(hash: String, client: EnhancedAPIClient): Future[Option[ChannelProof]] =
+    def lookupChannelMessage(hash: String, client: APIClient): Future[Option[ChannelProof]] =
       client.getNonBlocking[Option[ChannelProof]](
         s"channel/$hash",
         timeout = 4.seconds
@@ -337,7 +337,7 @@ object EdgeProcessor extends StrictLogging {
 
     def resolveChannelMessage(
       hash: String,
-      peers: Seq[EnhancedAPIClient]
+      peers: Seq[APIClient]
     ): Future[Option[ChannelMessageMetadata]] = {
       val remainingPeers = peers.tail
       val lookupResult = lookupChannelMessage(hash, peers.head).map(_.map(_.channelMessageMetadata))
@@ -390,7 +390,7 @@ object EdgeProcessor extends StrictLogging {
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
     def innerResolve(
-      peers: List[EnhancedAPIClient]
+      peers: List[APIClient]
     )(implicit ec: ExecutionContext): Future[CheckpointCacheData] = {
       peers match {
         case activePeer :: rest =>
@@ -509,7 +509,10 @@ object Snapshot {
       case _ =>
         tryWithMetric(
           {
-            Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash), serialized)
+            Files.write(
+              Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash),
+              serialized
+            )
           },
           "writeSnapshot"
         )

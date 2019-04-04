@@ -5,12 +5,12 @@ import akka.stream.ActorMaterializer
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.Id
-import org.constellation.util.{EnhancedAPIClient, TestNode}
+import org.constellation.util.{APIClient, TestNode}
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
 
-class EnhancedAPIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with BeforeAndAfterAll {
+class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with BeforeAndAfterAll {
 
   implicit val system: ActorSystem = ActorSystem("BlockChain")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
@@ -20,11 +20,10 @@ class EnhancedAPIClientTest extends FlatSpec with Matchers with BeforeAndAfterEa
     TestNode.clearNodes()
   }
 
-
   "GET to /id" should "get the current nodes public key id" in {
     val keyPair = KeyUtils.makeKeyPair()
     val appNode = TestNode(Seq(), keyPair)
-    val rpc = EnhancedAPIClient(port = appNode.nodeConfig.httpPort)
+    val rpc = APIClient(port = appNode.nodeConfig.httpPort)
     val id = rpc.getBlocking[Id]("id")
 
     assert(keyPair.getPublic.toId == id)
@@ -34,8 +33,8 @@ class EnhancedAPIClientTest extends FlatSpec with Matchers with BeforeAndAfterEa
     val node1 = TestNode()
     val node2 = TestNode()
 
-    val rpc1 = EnhancedAPIClient(node1.nodeConfig.hostName, port = node1.nodeConfig.httpPort)
-    val rpc2 = EnhancedAPIClient(node2.nodeConfig.hostName, port = node2.nodeConfig.httpPort)
+    val rpc1 = APIClient(node1.nodeConfig.hostName, port = node1.nodeConfig.httpPort)
+    val rpc2 = APIClient(node2.nodeConfig.hostName, port = node2.nodeConfig.httpPort)
 
     val addPeerResponse = rpc2.postSync("peer/add", node1.dao.peerHostPort)
 

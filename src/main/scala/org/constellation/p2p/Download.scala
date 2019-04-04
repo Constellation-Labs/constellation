@@ -12,7 +12,7 @@ import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.EnhancedAPIClient
+import org.constellation.util.APIClient
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.duration._
@@ -21,10 +21,10 @@ import scala.util.Random
 
 object SnapshotsDownloader {
 
-  implicit val getSnapshotTimeout: FiniteDuration = ConfigUtil.config.getInt("download.getSnapshotTimeout").seconds
+  implicit val getSnapshotTimeout: FiniteDuration =
+    ConfigUtil.config.getInt("download.getSnapshotTimeout").seconds
 
-
-  def downloadSnapshotRandomly(hash: String, pool: Iterable[EnhancedAPIClient]): IO[StoredSnapshot] = {
+  def downloadSnapshotRandomly(hash: String, pool: Iterable[APIClient]): IO[StoredSnapshot] = {
     val poolArray = pool.toArray
     val stopAt = Random.nextInt(poolArray.length)
 
@@ -37,14 +37,14 @@ object SnapshotsDownloader {
     makeAttempt((stopAt + 1) % poolArray.length)
   }
 
-  def downloadSnapshotByDistance(hash: String, pool: Iterable[EnhancedAPIClient]): IO[StoredSnapshot] = {
+  def downloadSnapshotByDistance(hash: String, pool: Iterable[APIClient]): IO[StoredSnapshot] = {
     val snapHash = BigInt(hash.getBytes)
 
     val sortedPeers = pool.toSeq.sortBy { p =>
       BigInt(p.id.hex.getBytes()) ^ snapHash
     }
 
-    def makeAttempt(sortedPeers: Iterable[EnhancedAPIClient]): IO[StoredSnapshot] =
+    def makeAttempt(sortedPeers: Iterable[APIClient]): IO[StoredSnapshot] =
       sortedPeers match {
         case Nil =>
           IO.raiseError(new RuntimeException("Unable to download Snapshot from empty peer list"))
@@ -58,15 +58,22 @@ object SnapshotsDownloader {
     makeAttempt(sortedPeers)
   }
 
-  private def getSnapshot(hash: String, client: EnhancedAPIClient)(implicit snapshotTimeout: Duration): IO[StoredSnapshot] = IO.fromFuture {
+  private def getSnapshot(hash: String, client: APIClient)(
+    implicit snapshotTimeout: Duration
+  ): IO[StoredSnapshot] = IO.fromFuture {
     IO {
-      client.getNonBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash,
-        timeout = snapshotTimeout)
+      client.getNonBlockingBytesKryo[StoredSnapshot](
+        "storedSnapshot/" + hash,
+        timeout = snapshotTimeout
+      )
     }
   }
 }
 
-class SnapshotsProcessor(downloadSnapshot: (String, Iterable[EnhancedAPIClient]) => IO[StoredSnapshot])(implicit dao: DAO, ec: ExecutionContext)  {
+class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[StoredSnapshot])(
+  implicit dao: DAO,
+  ec: ExecutionContext
+) {
   implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ec)
 
   import SnapshotsDownloader.getSnapshotTimeout
@@ -88,7 +95,7 @@ class SnapshotsProcessor(downloadSnapshot: (String, Iterable[EnhancedAPIClient])
       .flatMap(acceptSnapshot)
   }
 
-  private def downloadSnapshot(hash: String, pool: Array[EnhancedAPIClient]): IO[StoredSnapshot] = {
+  private def downloadSnapshot(hash: String, pool: Array[APIClient]): IO[StoredSnapshot] = {
     val stopAt = Random.nextInt(pool.length)
 
     def makeAttempt(index: Int): IO[StoredSnapshot] =
@@ -100,10 +107,12 @@ class SnapshotsProcessor(downloadSnapshot: (String, Iterable[EnhancedAPIClient])
     makeAttempt((stopAt + 1) % pool.length)
   }
 
-  private def getSnapshot(hash: String, client: EnhancedAPIClient): IO[StoredSnapshot] = IO.fromFuture {
+  private def getSnapshot(hash: String, client: APIClient): IO[StoredSnapshot] = IO.fromFuture {
     IO {
-      client.getNonBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash,
-                                                     timeout = getSnapshotTimeout)
+      client.getNonBlockingBytesKryo[StoredSnapshot](
+        "storedSnapshot/" + hash,
+        timeout = getSnapshotTimeout
+      )
     }
   }
 
@@ -143,8 +152,10 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       peers <- getReadyPeers()
       snapshotClient <- getSnapshotClient(peers)
       majoritySnapshot <- getMajoritySnapshot(peers)
-      snapshotHashes <- downloadAndProcessSnapshotsFirstPass(majoritySnapshot)(snapshotClient,
-                                                                               peers)
+      snapshotHashes <- downloadAndProcessSnapshotsFirstPass(majoritySnapshot)(
+        snapshotClient,
+        peers
+      )
       snapshot <- downloadAndProcessSnapshotsSecondPass(majoritySnapshot, snapshotHashes)(
         snapshotClient,
         peers
@@ -190,7 +201,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .map(snapshots => snapshots.groupBy(_.snapshot.hash).maxBy(_._2.size)._2.head)
 
   private def downloadAndProcessSnapshotsFirstPass(snapshotInfo: SnapshotInfo)(
-    implicit snapshotClient: EnhancedAPIClient,
+    implicit snapshotClient: APIClient,
     peers: Peers
   ): IO[Seq[String]] =
     for {
@@ -203,7 +214,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   private def downloadAndProcessSnapshotsSecondPass(
     snapshotInfo: SnapshotInfo,
     hashes: Seq[String]
-  )(implicit snapshotClient: EnhancedAPIClient, peers: Peers): IO[SnapshotInfo] =
+  )(implicit snapshotClient: APIClient, peers: Peers): IO[SnapshotInfo] =
     getSnapshotHashes(snapshotInfo)
       .map(_.filterNot(hashes.contains))
       .flatMap(
@@ -291,13 +302,16 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
 
 object Download {
   def download()(implicit dao: DAO, ec: ExecutionContext): Unit =
-
     if (dao.nodeType == NodeType.Full) {
-      tryWithMetric({
-        val snapshotsProcessor = new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotRandomly)
-        val process = new DownloadProcess(snapshotsProcessor)
-        process.download().unsafeRunSync()
-      }, "download")
+      tryWithMetric(
+        {
+          val snapshotsProcessor =
+            new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotRandomly)
+          val process = new DownloadProcess(snapshotsProcessor)
+          process.download().unsafeRunSync()
+        },
+        "download"
+      )
     } else {
 
       // TODO: Move to .lightDownload() from above process, testing separately for now
@@ -308,7 +322,7 @@ object Download {
 
       dao.metrics.updateMetric("downloadedNearbyChannels", nearbyChannels.size.toString)
 
-      nearbyChannels.foreach{ cmd =>
+      nearbyChannels.foreach { cmd =>
         dao.channelService.putSync(cmd.channelId, cmd)
       }
 

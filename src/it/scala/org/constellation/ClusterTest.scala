@@ -5,7 +5,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import constellation._
 import org.constellation.crypto.KeyUtils
-import org.constellation.util.EnhancedAPIClient
+import org.constellation.util.APIClient
 import org.json4s.JsonAST.JArray
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
@@ -31,8 +31,10 @@ object ClusterTest {
 
   // todo: Add documentation.
 
-  @deprecated("Use node IPs for now -- this was for previous tests but may be useful later.",
-              "a few months")
+  @deprecated(
+    "Use node IPs for now -- this was for previous tests but may be useful later.",
+    "a few months"
+  )
   def getServiceIPs: List[KubeIPs] = {
     val cmd = kubectl ++ Seq("--output=json", "get", "services")
     val result = cmd.!!
@@ -52,9 +54,19 @@ object ClusterTest {
       .groupBy(_._1.split("-").last.toInt)
       .map {
         case (k, vs) =>
-          KubeIPs(k,
-                  vs.filter { _._1.startsWith("rpc") }.head._2,
-                  vs.filter { _._1.startsWith("udp") }.head._2)
+          KubeIPs(
+            k,
+            vs.filter {
+                _._1.startsWith("rpc")
+              }
+              .head
+              ._2,
+            vs.filter {
+                _._1.startsWith("udp")
+              }
+              .head
+              ._2
+          )
       }
       .toList
   }
@@ -149,7 +161,7 @@ class ClusterTest
     val ips = mappings.map { _.externalIP }
 
     val apis = ips.map { ip =>
-      EnhancedAPIClient(ip, 9000)
+      APIClient(ip, 9000)
     }
 
     /*
@@ -165,7 +177,7 @@ class ClusterTest
      */
 
     val peerAPIs = ips.map { ip =>
-      EnhancedAPIClient(ip, 9001)
+      APIClient(ip, 9001)
     }
 
     // sim.run(apis = apis, peerApis = peerAPIs, attemptSetExternalIP = true)
