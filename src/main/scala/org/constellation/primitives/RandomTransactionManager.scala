@@ -115,9 +115,6 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                 }
 
 
-                val balancesForAddresses = dao.addresses.map{a => a -> dao.addressService.getSync(a)}
-                val auxAddressHaveSufficient = balancesForAddresses.forall{_._2.exists(_.balance > 10000000)}
-
                 def simpleTX(src: String, kp: KeyPair = dao.keyPair) = createTransaction(
                   src,
                   getRandomAddress,
@@ -126,30 +123,36 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                   normalized = false
                 )
 
-                def txWithMultiAddress = if (!auxAddressHaveSufficient) {
-                  val possibleDestinations = balancesForAddresses.filterNot{_._2.exists(_.balance > 10000000)}
-                  val dst = Random.shuffle(possibleDestinations).head._1
-                  createTransaction(
-                    dao.selfAddressStr,
-                    dst,
-                    10,
-                    dao.keyPair
-                  )
-                } else {
+                def txWithMultiAddress = {
 
-                  val historyCheckPassable = balancesForAddresses.forall{
-                    _._2.exists(_.balanceByLatestSnapshot > 10000000)
+                  val balancesForAddresses = dao.addresses.map{a => a -> dao.addressService.getSync(a)}
+                  val auxAddressHaveSufficient = balancesForAddresses.forall{_._2.exists(_.balance > 10000000)}
+
+                  if (!auxAddressHaveSufficient) {
+                    val possibleDestinations = balancesForAddresses.filterNot{_._2.exists(_.balance > 10000000)}
+                    val dst = Random.shuffle(possibleDestinations).head._1
+                    createTransaction(
+                      dao.selfAddressStr,
+                      dst,
+                      10,
+                      dao.keyPair
+                    )
+                  } else {
+
+                    val historyCheckPassable = balancesForAddresses.forall{
+                      _._2.exists(_.balanceByLatestSnapshot > 10000000)
+                    }
+
+                    val randomSourceAddress = if (historyCheckPassable) {
+                      dao.metrics.incrementMetric("historyCheckPassable")
+                      Random.shuffle(dao.addresses :+ dao.selfAddressStr).head
+                    } else dao.selfAddressStr
+
+                    val srcKPMap = dao.addressToKeyPair + (dao.selfAddressStr -> dao.keyPair)
+
+                    simpleTX(randomSourceAddress, srcKPMap(randomSourceAddress))
+
                   }
-
-                  val randomSourceAddress = if (historyCheckPassable) {
-                    dao.metrics.incrementMetric("historyCheckPassable")
-                    Random.shuffle(dao.addresses :+ dao.selfAddressStr).head
-                  } else dao.selfAddressStr
-
-                  val srcKPMap = dao.addressToKeyPair + (dao.selfAddressStr -> dao.keyPair)
-
-                  simpleTX(randomSourceAddress, srcKPMap(randomSourceAddress))
-
                 }
 
                 val tx = if (multiAddressGenerationMode) txWithMultiAddress else simpleTX(dao.selfAddressStr)

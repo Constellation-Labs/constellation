@@ -8,12 +8,14 @@ import org.constellation.primitives.Transaction
 import org.constellation.primitives.concurrency.MultiLock
 import org.constellation.util.Metrics
 
-class AddressService(size: Int)(implicit metrics: Metrics) extends StorageService[AddressCacheData](size) {
+class AddressService(size: Int)(implicit metrics: Unit => Metrics) extends StorageService[AddressCacheData](size) {
 
   override def getSync(
     key: String
   ): Option[AddressCacheData] = {
-    metrics.incrementMetric(s"address_query_$key")
+    if (metrics() != null) {
+      metrics().incrementMetric(s"address_query_$key")
+    }
     super.getSync(key)
   }
 
