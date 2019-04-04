@@ -291,6 +291,9 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               complete(res)
             }
           } ~
+          path("buildInfo") {
+            complete(BuildInfo.toMap)
+          } ~
           path("metrics") {
             val response = MetricsResult(
               dao.metrics.getMetrics

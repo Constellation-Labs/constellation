@@ -151,8 +151,16 @@ lazy val root = (project in file("."))
   .configs(IntegrationTest)
   .enablePlugins(BuildInfoPlugin)
   .settings(
-    buildInfoKeys := Seq[BuildInfoKey](name, version, scalaVersion, sbtVersion),
+    buildInfoKeys := Seq[BuildInfoKey](
+      name,
+      version,
+      scalaVersion,
+      sbtVersion,
+      "gitBranch" -> git.gitCurrentBranch.value,
+      "gitCommit" -> git.gitHeadCommit.value.getOrElse("commit N/A")
+    ),
     buildInfoPackage := "org.constellation",
+    buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
     commonSettings,
     coreSettings,
     Defaults.itSettings,
