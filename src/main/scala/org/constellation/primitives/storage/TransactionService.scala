@@ -34,6 +34,7 @@ object TransactionService {
 }
 
 class TransactionService(dao: DAO, size: Int = 50000) {
+  val arbitraryPool = new TransactionMemPool(size)
   val memPool = new TransactionMemPool(size)
   val midDb: MidDbStorage[String, TransactionCacheData] = TransactionsMid(dao)
   val oldDb: DbStorage[String, TransactionCacheData] = TransactionsOld(dao)
