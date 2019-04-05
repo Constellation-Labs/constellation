@@ -329,9 +329,9 @@ object EdgeProcessor extends StrictLogging {
   )(implicit dao: DAO): Future[Seq[ChannelMessageMetadata]] = {
     implicit val exec: ExecutionContextExecutor = dao.signatureExecutionContext
 
-    def lookupChannelMessage(hash: String, client: APIClient): Future[Option[ChannelProof]] =
-      client.getNonBlocking[Option[ChannelProof]](
-        s"channel/$hash",
+    def lookupChannelMessage(hash: String, client: APIClient): Future[Option[ChannelMessageMetadata]] =
+      client.getNonBlocking[Option[ChannelMessageMetadata]](
+        s"message/$hash",
         timeout = 4.seconds
       )
 
@@ -340,7 +340,7 @@ object EdgeProcessor extends StrictLogging {
       peers: Seq[APIClient]
     ): Future[Option[ChannelMessageMetadata]] = {
       val remainingPeers = peers.tail
-      val lookupResult = lookupChannelMessage(hash, peers.head).map(_.map(_.channelMessageMetadata))
+      val lookupResult = lookupChannelMessage(hash, peers.head)
       lookupResult.recoverWith {
         case _ ⇒ Future.failed(new Exception("Ran out of peers to query for channel-message"))
       }
