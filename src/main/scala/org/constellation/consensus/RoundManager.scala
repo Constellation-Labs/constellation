@@ -54,11 +54,14 @@ class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
     case cmd: StopBlockCreationRound =>
       rounds.get(cmd.roundId).foreach(_.timeoutScheduler.cancel())
       rounds.remove(cmd.roundId)
-      dao.threadSafeMessageMemPool.pull(1).getOrElse(Seq()).foreach { m =>
-        dao.threadSafeMessageMemPool.activeChannels
-          .get(m.signedMessageData.data.channelId)
-          .foreach(s => s.release())
-      }
+
+      cmd.maybeCB.foreach(cb =>
+        cb.messages.foreach(message =>
+          dao.threadSafeMessageMemPool.activeChannels
+            .get(message.signedMessageData.data.channelId)
+            .foreach(_.release()))
+      )
+
       cmd.maybeCB.foreach(cb => dao.peerManager ! UpdatePeerNotifications(cb.notifications))
 
       dao.blockFormationInProgress = false
@@ -139,18 +142,18 @@ object RoundManager {
     context.actorOf(Round.props(roundData, dao))
 
   def createRoundData(dao: DAO): Option[RoundData] = {
-    val messages = dao.threadSafeMessageMemPool.pull(1).getOrElse(Seq())
-    dao
-      .pullTransactions(dao.minCheckpointFormationThreshold)
-      .flatMap { transactions =>
-        dao.pullTips(dao.readyFacilitators()).map { tips =>
-          RoundData(generateRoundId,
-                    tips._2.values.toSet,
-                    FacilitatorId(dao.id),
-                    transactions,
-                    tips._1,
-                    messages)
-        }
-      }
+    dao.pullTransactions(dao.minCheckpointFormationThreshold)
+      .flatMap { transactions => dao.pullTips(dao.readyFacilitators()).map(tips => {
+        val messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq())
+
+        RoundData(
+          generateRoundId,
+          tips._2.values.toSet,
+          FacilitatorId(dao.id),
+          transactions,
+          tips._1,
+          messages
+        )
+      }) }
   }
 }

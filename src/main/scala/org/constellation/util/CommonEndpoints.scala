@@ -101,6 +101,9 @@ trait CommonEndpoints extends Json4sSupport {
       path("transaction" / Segment) { h =>
         complete(dao.transactionService.lookup(h).unsafeRunSync())
       } ~
+      path("message" / Segment) { h =>
+        complete(dao.messageService.lookup(h).unsafeRunSync())
+      } ~
       path("checkpoint" / Segment) { h =>
         complete(dao.checkpointService.lookup(h).unsafeRunSync())
       }
