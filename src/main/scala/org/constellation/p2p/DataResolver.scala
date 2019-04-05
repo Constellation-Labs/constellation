@@ -4,98 +4,36 @@ import cats.implicits._
 import constellation._
 import org.constellation.DAO
 import org.constellation.primitives.Schema.CheckpointCacheData
-import org.constellation.primitives.{ChannelMessageMetadata, ChannelProof, TransactionCacheData}
+import org.constellation.primitives.{ChannelMessageMetadata, TransactionCacheData}
 import org.constellation.util.PeerApiClient
 
 import scala.concurrent.duration._
 
-object DataResolver {
+class DataResolver {
 
-  def resolveMessages(hash: String,
-                      pool: Iterable[PeerApiClient],
-                      priorityClient: Option[PeerApiClient] = None)(
-    implicit apiTimeout: Duration = 3.seconds,
-    dao: DAO
-  ): IO[Option[ChannelMessageMetadata]] = {
+  def resolveMessages(
+    hash: String,
+    pool: Iterable[PeerApiClient],
+    priorityClient: Option[PeerApiClient] = None
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[ChannelMessageMetadata]] = {
     resolveDataByDistance[ChannelMessageMetadata](
       List(hash),
       "message",
       pool,
-      (t: ChannelMessageMetadata) => {
-        dao.messageService.put(t.channelMessage.signedMessageData.hash,
-                               t)
-      },
+      (t: ChannelMessageMetadata) =>
+        dao.messageService.put(t.channelMessage.signedMessageData.hash, t),
       priorityClient
     ).head
 
   }
 
-  def resolveTransactions(hash: String,
-                          pool: Iterable[PeerApiClient],
-                          priorityClient: Option[PeerApiClient] = None)(
-    implicit apiTimeout: Duration = 3.seconds,
-    dao: DAO
-  ): IO[Option[TransactionCacheData]] = {
-    resolveDataByDistance[TransactionCacheData](
-      List(hash),
-      "transaction",
-      pool,
-      (t: TransactionCacheData) => {
-        dao.transactionService.memPool.put(t.transaction.hash, t)
-      },
-      priorityClient
-    ).head
-  }
-  def resolveCheckpoint(hash: String,
-                        pool: Iterable[PeerApiClient],
-                        priorityClient: Option[PeerApiClient] = None)(
-    implicit apiTimeout: Duration = 3.seconds,
-    dao: DAO
-  ): IO[Option[CheckpointCacheData]] = {
-    resolveDataByDistance[CheckpointCacheData](List(hash),
-                                               "checkpoint",
-                                               pool,
-                                               (t: CheckpointCacheData) => {
-                                                 t.checkpointBlock.foreach(cb => cb.store(t))
-                                               },
-                                               priorityClient).head
-  }
-  def resolveCheckpoints(hashes: List[String],
-                        pool: Iterable[PeerApiClient],
-                        priorityClient: Option[PeerApiClient] = None)(
-    implicit apiTimeout: Duration = 3.seconds,
-    dao: DAO
-  ): IO[List[Option[CheckpointCacheData]]] = {
-    resolveDataByDistanceFlat[CheckpointCacheData](hashes,
-                                               "checkpoint",
-                                               pool,
-                                               (t: CheckpointCacheData) => {
-                                                 t.checkpointBlock.foreach(cb => cb.store(t))
-                                               },
-                                               priorityClient)
-  }
-
-  def resolveDataByDistanceFlat[T <: AnyRef](hashes: List[String],
-                                             endpoint: String,
-                                             pool: Iterable[PeerApiClient],
-                                             store: T => Any,
-                                             priorityClient: Option[PeerApiClient] = None)(
-    implicit apiTimeout: Duration = 3.seconds,
-    m: Manifest[T],
-    dao: DAO
-  ): IO[List[Option[T]]] = {
-    resolveDataByDistance[T](hashes, endpoint, pool, store, priorityClient).sequence
-  }
-
-  def resolveDataByDistance[T <: AnyRef](hashes: List[String],
-                                         endpoint: String,
-                                         pool: Iterable[PeerApiClient],
-                                         store: T => Any,
-                                         priorityClient: Option[PeerApiClient] = None)(
-    implicit apiTimeout: Duration = 3.seconds,
-    m: Manifest[T],
-    dao: DAO
-  ): List[IO[Option[T]]] = {
+  def resolveDataByDistance[T <: AnyRef](
+    hashes: List[String],
+    endpoint: String,
+    pool: Iterable[PeerApiClient],
+    store: T => Any,
+    priorityClient: Option[PeerApiClient] = None
+  )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): List[IO[Option[T]]] = {
     hashes.map { hash =>
       val dataHash = BigInt(hash.getBytes)
 
@@ -105,15 +43,13 @@ object DataResolver {
     }
   }
 
-  def resolveData[T <: AnyRef](hash: String,
-                               endpoint: String,
-                               sortedPeers: Iterable[PeerApiClient],
-                               store: T => Any,
-                               maxErrors: Int = 10)(
-    implicit apiTimeout: Duration = 3.seconds,
-    m: Manifest[T],
-    dao: DAO
-  ): IO[Option[T]] = {
+  def resolveData[T <: AnyRef](
+    hash: String,
+    endpoint: String,
+    sortedPeers: Iterable[PeerApiClient],
+    store: T => Any,
+    maxErrors: Int = 10
+  )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[Option[T]] = {
 
     def makeAttempt(sortedPeers: Iterable[PeerApiClient], errorsSoFar: Int = 0): IO[Option[T]] = {
       sortedPeers match {
@@ -135,14 +71,13 @@ object DataResolver {
     }
     makeAttempt(sortedPeers)
   }
-  private def getData[T <: AnyRef](hash: String,
-                                   endpoint: String,
-                                   peerApiClient: PeerApiClient,
-                                   store: T => Any)(
-    implicit apiTimeout: Duration,
-    m: Manifest[T],
-    dao: DAO
-  ): IO[Option[T]] = IO.fromFuture {
+
+  private def getData[T <: AnyRef](
+    hash: String,
+    endpoint: String,
+    peerApiClient: PeerApiClient,
+    store: T => Any
+  )(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[Option[T]] = IO.fromFuture {
     IO {
       peerApiClient.client
         .getNonBlocking[Option[T]](s"$endpoint/$hash", timeout = apiTimeout)
@@ -153,7 +88,64 @@ object DataResolver {
     }
   }
 
+  def resolveTransactions(
+    hash: String,
+    pool: Iterable[PeerApiClient],
+    priorityClient: Option[PeerApiClient] = None
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[TransactionCacheData]] = {
+    resolveDataByDistance[TransactionCacheData](
+      List(hash),
+      "transaction",
+      pool,
+      (t: TransactionCacheData) => {
+        dao.transactionService.memPool.put(t.transaction.hash, t)
+      },
+      priorityClient
+    ).head
+  }
+
+  def resolveCheckpoint(
+    hash: String,
+    pool: Iterable[PeerApiClient],
+    priorityClient: Option[PeerApiClient] = None
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[CheckpointCacheData]] = {
+    resolveDataByDistance[CheckpointCacheData](
+      List(hash),
+      "checkpoint",
+      pool,
+      (t: CheckpointCacheData) => t.checkpointBlock.foreach(cb => cb.store(t)),
+      priorityClient
+    ).head
+  }
+
+  def resolveCheckpoints(
+    hashes: List[String],
+    pool: Iterable[PeerApiClient],
+    priorityClient: Option[PeerApiClient] = None
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[Option[CheckpointCacheData]]] = {
+    resolveDataByDistanceFlat[CheckpointCacheData](
+      hashes,
+      "checkpoint",
+      pool,
+      (t: CheckpointCacheData) => t.checkpointBlock.foreach(cb => cb.store(t)),
+      priorityClient
+    )
+  }
+
+  def resolveDataByDistanceFlat[T <: AnyRef](
+    hashes: List[String],
+    endpoint: String,
+    pool: Iterable[PeerApiClient],
+    store: T => Any,
+    priorityClient: Option[PeerApiClient] = None
+  )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[List[Option[T]]] = {
+    resolveDataByDistance[T](hashes, endpoint, pool, store, priorityClient).sequence
+  }
+
 }
+
+object DataResolver extends DataResolver
+
 case class DataResolutionOutOfPeers(endpoint: String, ids: Iterable[String])
     extends Exception(
       s"Run out of peers when resolving: $endpoint following tried: $ids"

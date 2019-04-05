@@ -2,7 +2,7 @@ package org.constellation.consensus
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.pattern.{Backoff, BackoffSupervisor}
-import org.constellation.DAO
+import org.constellation.{ConfigUtil, DAO}
 import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
@@ -10,7 +10,12 @@ import org.constellation.consensus.RoundManager.{BroadcastLightTransactionPropos
 import scala.concurrent.duration._
 
 class CrossTalkConsensus(remoteSenderSupervisor: ActorRef)(implicit dao: DAO) extends Actor with ActorLogging {
-  val roundManagerProps: Props = RoundManager.props
+  val roundTimeout: FiniteDuration = ConfigUtil.getDurationFromConfig(
+    "constellation.consensus.form-checkpoint-blocks-timeout",
+    60.second
+  )
+
+  val roundManagerProps: Props = RoundManager.props(roundTimeout)
   val roundManagerSupervisor: Props = BackoffSupervisor.props(
     Backoff.onFailure(
       roundManagerProps,
