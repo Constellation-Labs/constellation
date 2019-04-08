@@ -95,27 +95,6 @@ class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[S
       .flatMap(acceptSnapshot)
   }
 
-  private def downloadSnapshot(hash: String, pool: Array[APIClient]): IO[StoredSnapshot] = {
-    val stopAt = Random.nextInt(pool.length)
-
-    def makeAttempt(index: Int): IO[StoredSnapshot] =
-      getSnapshot(hash, pool(index)).handleErrorWith {
-        case e if index == stopAt => IO.raiseError(e)
-        case _                    => makeAttempt((index + 1) % pool.length)
-      }
-
-    makeAttempt((stopAt + 1) % pool.length)
-  }
-
-  private def getSnapshot(hash: String, client: APIClient): IO[StoredSnapshot] = IO.fromFuture {
-    IO {
-      client.getNonBlockingBytesKryo[StoredSnapshot](
-        "storedSnapshot/" + hash,
-        timeout = getSnapshotTimeout
-      )
-    }
-  }
-
   private def acceptSnapshot(snapshot: StoredSnapshot): IO[Unit] = IO {
     snapshot.checkpointCache.foreach { c =>
       dao.metrics.incrementMetric("downloadedBlocks")
