@@ -88,7 +88,7 @@ object ChannelMessage extends StrictLogging {
         val genesisHashChannelId = msg.signedMessageData.hash
         dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) =
           channelOpenRequest.name
-        dao.messageService.putSync(msg.signedMessageData.hash, ChannelMessageMetadata(msg))
+        dao.messageService.memPool.putSync(msg.signedMessageData.hash, ChannelMessageMetadata(msg))
         dao.threadSafeMessageMemPool.put(Seq(msg), overrideLimit = true)
         val semaphore = new Semaphore(1)
         dao.threadSafeMessageMemPool.activeChannels(genesisHashChannelId) = semaphore
@@ -117,7 +117,7 @@ object ChannelMessage extends StrictLogging {
   )(implicit dao: DAO): Future[ChannelSendResponse] = {
 
     dao.messageService
-      .getSync(channelSendRequest.channelId)
+      .memPool.getSync(channelSendRequest.channelId)
       .map { previousMessage =>
         val previous = previousMessage.channelMessage.signedMessageData.hash
 
@@ -131,7 +131,7 @@ object ChannelMessage extends StrictLogging {
 
         dao.threadSafeMessageMemPool.put(messages, overrideLimit = true)
         messages.foreach(cm => {
-          dao.messageService.putSync(cm.signedMessageData.hash, ChannelMessageMetadata(cm))
+          dao.messageService.memPool.putSync(cm.signedMessageData.hash, ChannelMessageMetadata(cm))
         })
         val semaphore = new Semaphore(1)
         dao.threadSafeMessageMemPool.activeChannels(channelSendRequest.channelId) = semaphore

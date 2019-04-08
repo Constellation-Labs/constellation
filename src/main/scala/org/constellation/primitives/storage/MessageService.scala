@@ -4,17 +4,18 @@ import cats.effect.IO
 import org.constellation.DAO
 import org.constellation.primitives.{ChannelMessageMetadata, ChannelMetadata}
 
-class MessageService(size: Int = 2000)(implicit dao: DAO)
-    extends StorageService[ChannelMessageMetadata](size) {
+class MessageService(size: Int = 2000)(implicit dao: DAO) {
+  val arbitraryPool = new StorageService[ChannelMessageMetadata](size)
+  val memPool = new StorageService[ChannelMessageMetadata](size)
 
-  override def putSync(key: String, value: ChannelMessageMetadata): ChannelMessageMetadata = {
+  def putSync(key: String, value: ChannelMessageMetadata): ChannelMessageMetadata = {
     dao.channelStorage.insert(value)
-    super.putSync(key, value)
+    memPool.putSync(key, value)
   }
 
-  override def put(key: String, value: ChannelMessageMetadata): IO[ChannelMessageMetadata] = {
+  def put(key: String, value: ChannelMessageMetadata): IO[ChannelMessageMetadata] = {
     dao.channelStorage.insert(value)
-    super.put(key, value)
+    memPool.put(key, value)
   }
 
 }

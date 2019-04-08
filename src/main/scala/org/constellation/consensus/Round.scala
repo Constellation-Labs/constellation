@@ -16,7 +16,7 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
-class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)], dao: DAO, dataResolver: DataResolver)
+class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)], arbitraryMessages: Seq[(ChannelMessage, Int)], dao: DAO, dataResolver: DataResolver)
     extends Actor
       with ActorLogging {
 
@@ -31,11 +31,11 @@ class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)]
     mutable.Map()
 
   private[consensus] var unionTransactionProposalsTikTok: Cancellable = _
-  protected var sendArbitraryTxProposalsTikTok: Cancellable = _
+  protected var sendArbitraryDataProposalsTikTok: Cancellable = _
 
   override def preStart(): Unit = {
     super.preStart()
-    sendArbitraryTxProposalsTikTok = scheduleArbitraryTxProposals(1)
+    sendArbitraryDataProposalsTikTok = scheduleArbitraryDataProposals(1)
   }
 
   private[consensus] var checkpointBlockProposalsTikTok: Cancellable = _
@@ -44,7 +44,7 @@ class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)]
 
   override def receive: Receive = {
     case StartTransactionProposal(_) =>
-      sendArbitraryTxProposalsTikTok.cancel()
+      sendArbitraryDataProposalsTikTok.cancel()
       dao.pullTransactions(1).foreach { transactions =>
         val messages = dao.threadSafeMessageMemPool.pull()
 
@@ -55,7 +55,9 @@ class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)]
           transactions.map(_.hash) ++ arbitraryTransactions.filter(_._2 == distance).map(_._1.hash),
           messages
             .map(_.map(_.signedMessageData.hash))
-            .getOrElse(Seq()),
+            .getOrElse(Seq()) ++ arbitraryMessages
+      .filter(_._2 == distance)
+      .map(_._1.signedMessageData.hash),
           dao.peerInfo.flatMap(_._2.notification).toSeq
         )
 
@@ -64,7 +66,7 @@ class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)]
           proposal
         ))
         unionTransactionProposalsTikTok = scheduleUnionProposals
-        sendArbitraryTxProposalsTikTok = scheduleArbitraryTxProposals(distance + 1)
+        sendArbitraryDataProposalsTikTok = scheduleArbitraryDataProposals(distance + 1)
         self ! proposal
       }
 
@@ -97,17 +99,32 @@ class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)]
 
     case UnionProposals => unionProposals()
 
-    case ArbitraryTxProposals(distance) =>
-      val proposedTxs = transactionProposals.values.flatMap(_.txHashes).toSet
-      context.parent ! BroadcastLightTransactionProposal(
-        roundData.peers,
-        LightTransactionsProposal(
-          roundData.roundId,
-          FacilitatorId(dao.id),
-          arbitraryTransactions.filter(a=> a._2 == distance && !proposedTxs.contains(a._1.hash)).map(_._1.hash),
-        )
-      )
-      scheduleArbitraryTxProposals(distance + 1)
+    case ArbitraryDataProposals(distance) =>
+      val proposals = transactionProposals.values
+      val proposedTxs = proposals.flatMap(_.txHashes).toSet
+      val proposedMessages = proposals.flatMap(_.messages).toSet
+      val maybeData = {
+        (arbitraryTransactions
+           .filter(a => a._2 == distance && !proposedTxs.contains(a._1.hash))
+           .map(_._1.hash),
+         arbitraryMessages
+           .filter(a => a._2 == distance && !proposedMessages.contains(a._1.signedMessageData.hash))
+           .map(_._1.signedMessageData.hash))
+      }
+      maybeData match {
+        case (Nil, Nil) =>
+        case (txs, msgs) =>
+          context.parent ! BroadcastLightTransactionProposal(
+            roundData.peers,
+            LightTransactionsProposal(
+              roundData.roundId,
+              FacilitatorId(dao.id),
+              txs,
+              msgs
+            )
+          )
+      }
+      scheduleArbitraryDataProposals(distance + 1)
 
     case ResolveMajorityCheckpointBlock(_) => resolveMajorityCheckpointBlock()
 
@@ -125,12 +142,12 @@ class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)]
       UnionProposals
     )
 
-  private def scheduleArbitraryTxProposals(distance: Int): Cancellable =
+  private def scheduleArbitraryDataProposals(distance: Int): Cancellable =
     context.system.scheduler.scheduleOnce(
-      ConfigUtil.getDurationFromConfig("constellation.consensus.arbitrary-tx-proposals-timeout",
+      ConfigUtil.getDurationFromConfig("constellation.consensus.arbitrary-data-proposals-timeout",
                                        4.second),
       self,
-      ArbitraryTxProposals(distance)
+      ArbitraryDataProposals(distance)
     )
 
   private[consensus] def scheduleCheckpointBlockProposals: Cancellable =
@@ -201,7 +218,7 @@ class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)]
 
     val resolvedMessages = transactionProposals.values
       .flatMap(proposal ⇒ proposal.messages.map(hash ⇒ (hash, proposal)))
-      .filterNot(p ⇒ dao.messageService.contains(p._1).unsafeRunSync())
+      .filterNot(p ⇒ dao.messageService.memPool.contains(p._1).unsafeRunSync())
       .toList
       .map(
         p ⇒
@@ -220,7 +237,7 @@ class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)]
       .map(
         hash ⇒
           dao.messageService
-            .lookup(hash)
+            .memPool.lookup(hash)
             .map(
               _.map(_.channelMessage)
           )
@@ -332,7 +349,7 @@ object Round {
   }
 
   case object UnionProposals
-  case class ArbitraryTxProposals(distance: Int)
+  case class ArbitraryDataProposals(distance: Int)
 
   case class ResolveMajorityCheckpointBlock(roundId: RoundId) extends RoundCommand
 
@@ -375,6 +392,7 @@ object Round {
 
   def props(roundData: RoundData,
             arbitraryTransactions: Seq[(Transaction, Int)],
+            arbitraryMessages: Seq[(ChannelMessage, Int)],
             dao: DAO, dataResolver: DataResolver): Props =
-    Props(new Round(roundData, arbitraryTransactions, dao, dataResolver))
+    Props(new Round(roundData, arbitraryTransactions,arbitraryMessages, dao, dataResolver))
 }
