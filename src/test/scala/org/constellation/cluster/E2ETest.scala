@@ -6,12 +6,8 @@ import akka.util.Timeout
 import com.softwaremill.sttp.{Response, StatusCodes}
 import org.constellation._
 import org.constellation.consensus.StoredSnapshot
-import org.constellation.primitives.{ChannelProof, _}
-import org.constellation.util.{APIClient, Simulation}
-
-import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Random
+import org.constellation.primitives._
+import org.constellation.util.{APIClient, HostPort, Simulation}
 
 class E2ETest extends E2E {
   val updatePasswordReq = UpdatePassword(
@@ -37,19 +33,25 @@ class E2ETest extends E2E {
     i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
   )
 
-  private val apis: Seq[APIClient] = nodes.map { _.getAPIClient() }
+  private val apis: Seq[APIClient] = nodes.map {
+    _.getAPIClient()
+  }
 
-  private val addPeerRequests = nodes.map { _.getAddPeerRequest }
+  private val addPeerRequests = nodes.map {
+    _.getAddPeerRequest
+  }
 
   private val initialAPIs = apis
 
-
   "E2E Run" should "demonstrate full flow" in {
-    logger.info("API Ports: " + apis.map { _.apiPort })
+    logger.info("API Ports: " + apis.map {
+      _.apiPort
+    })
 
     assert(Simulation.run(initialAPIs, addPeerRequests))
 
-    val metadatas = n1.getPeerAPIClient.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", n1.dao.id)
+    val metadatas =
+      n1.getPeerAPIClient.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", n1.dao.id)
 
     println(s"Metadata: $metadatas")
 
@@ -72,23 +74,24 @@ class E2ETest extends E2E {
       lightNodeAPI.getBlocking[Seq[String]]("channelKeys").nonEmpty
     )
 
-
     val firstAPI = apis.head
     val allChannels = firstAPI.getBlocking[Seq[String]]("channels")
 
-/*
+    /*
     val channelProof = allChannels.map{ channelId =>
       firstAPI.getBlocking[Option[ChannelProof]]("channel/" + channelId, timeout = 90.seconds)
     }
     assert(channelProof.exists{_.nonEmpty})
 
-*/
+     */
 
     // val deployResponse = constellationAppSim.openChannel(apis)
 
-    val downloadNode = createNode(seedHosts = Seq(HostPort("localhost", 9001)),
-                                  randomizePorts = false,
-                                  portOffset = 50)
+    val downloadNode = createNode(
+      seedHosts = Seq(HostPort("localhost", 9001)),
+      randomizePorts = false,
+      portOffset = 50
+    )
 
     val downloadAPI = downloadNode.getAPIClient()
     logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
@@ -102,7 +105,9 @@ class E2ETest extends E2E {
 
     val allNodes = nodes :+ downloadNode
 
-    val allAPIs: Seq[APIClient] = allNodes.map { _.getAPIClient() } //apis :+ downloadAPI
+    val allAPIs: Seq[APIClient] = allNodes.map {
+      _.getAPIClient()
+    } //apis :+ downloadAPI
     val updatePasswordResponses = updatePasswords(allAPIs)
     assert(updatePasswordResponses.forall(_.code == StatusCodes.Ok))
     assert(Simulation.healthy(allAPIs))
@@ -114,18 +119,32 @@ class E2ETest extends E2E {
 
     Simulation.logger.info("Stopping transactions to run parity check")
 
-    Simulation.awaitConditionMet("Accepted checkpoint blocks number differs across the nodes",
-                                 allAPIs.map { _.metrics("checkpointAccepted") }.distinct.size == 1,
-                                 maxRetries = 10,
-                                 delay = 10000)
+    Simulation.awaitConditionMet(
+      "Accepted checkpoint blocks number differs across the nodes",
+      allAPIs
+        .map {
+          _.metrics("checkpointAccepted")
+        }
+        .distinct
+        .size == 1,
+      maxRetries = 10,
+      delay = 10000
+    )
     Simulation.awaitConditionMet(
       "Accepted transactions number differs across the nodes",
-      allAPIs.map { _.metrics("transactionAccepted") }.distinct.size == 1,
+      allAPIs
+        .map {
+          _.metrics("transactionAccepted")
+        }
+        .distinct
+        .size == 1,
       maxRetries = 6,
       delay = 10000
     )
 
-    val storedSnapshots = allAPIs.map { _.simpleDownload() }
+    val storedSnapshots = allAPIs.map {
+      _.simpleDownload()
+    }
 
     // constellationAppSim.dumpJson(storedSnapshots)
 
@@ -134,7 +153,11 @@ class E2ETest extends E2E {
     // TODO: This is flaky and fails randomly sometimes
     val snaps = storedSnapshots.toSet
       .map { x: Seq[StoredSnapshot] => // May need to temporarily ignore messages for partitioning changes?
-        x.map { _.checkpointCache.flatMap { _.checkpointBlock} }.toSet
+        x.map {
+          _.checkpointCache.flatMap {
+            _.checkpointBlock
+          }
+        }.toSet
       }
 
     // Not inlining this for a reason -- the snaps object is quite large,
@@ -146,7 +169,6 @@ class E2ETest extends E2E {
     assert(sizeEqualOnes)
 
   }
-
 }
 
 case class BlockDumpOutput(

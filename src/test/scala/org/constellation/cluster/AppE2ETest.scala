@@ -17,7 +17,9 @@ class AppE2ETest extends E2E {
   val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes - 1)(
     i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
   )
-  val apis: Seq[APIClient] = nodes.map { _.getAPIClient() }
+  val apis: Seq[APIClient] = nodes.map {
+    _.getAPIClient()
+  }
   val addPeerRequests = nodes.map { _.getAddPeerRequest }
 
   val numMessages = 5
@@ -61,7 +63,7 @@ class AppE2ETest extends E2E {
   }
 
   "ConstellationApp" should "register a deployed state channel" in {
-    channelOpenResponse.map{ res =>
+    channelOpenResponse.map { res =>
       constellationAppSim.sim.logger.info("deploy response:" + res.toString)
       assert(res.exists(_.channelOpenRequest.errorMessage == "Success"))
       assert(res.exists(r => r.channelId == r.channelOpenRequest.genesisHash))
@@ -72,7 +74,7 @@ class AppE2ETest extends E2E {
 
   "Deployed state channels" should "get registered by peers" in {
     channelOpenResponse.map { resp: Option[Channel] =>
-    val registered = resp.map(r => constellationAppSim.assertGenesisAccepted(apis)(r))
+      val registered = resp.map(r => constellationAppSim.assertGenesisAccepted(apis)(r))
       assert(registered.contains(true))
     }
   }
@@ -87,7 +89,7 @@ class AppE2ETest extends E2E {
 
   "Broadcasted channel data" should "be accepted into all peers' snapshots" in {
     val channel = testApp.channelNameToId(testChannelName)
-    assert(awaitCheckpointsAccepted(apis))//Do not remove, need these here to assure snapshot formation before check
+    assert(awaitCheckpointsAccepted(apis)) //Do not remove, need these here to assure snapshot formation before check
     assert(checkSnapshot(apis))
     assert(constellationAppSim.messagesInSnapshots(channel.channelId, apis))
   }

@@ -15,6 +15,7 @@ import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.primitives.storage._
+import org.constellation.util.HostPort
 
 import scala.concurrent.Await
 import scala.concurrent.duration._

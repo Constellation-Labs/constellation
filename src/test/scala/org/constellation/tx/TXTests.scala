@@ -1,11 +1,11 @@
 package org.constellation.tx
 
+import constellation._
 import org.constellation.Fixtures
 import org.constellation.primitives.ChannelMessage.create
+import org.constellation.primitives.Schema.SendToAddress
 import org.constellation.primitives._
 import org.scalatest.FlatSpec
-import org.constellation.primitives.Schema.SendToAddress
-import constellation._
 
 class TXTests extends FlatSpec {
 

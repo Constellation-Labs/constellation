@@ -20,7 +20,7 @@ import org.constellation.datastore.SnapshotTrigger
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, Metrics}
+import org.constellation.util.{APIClient, HostPort, Metrics}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -75,8 +75,8 @@ object ConstellationNode extends StrictLogging {
           .action((x, c) => c.copy(genesisNode = true))
           .text("Start in single node genesis mode"),
         opt[Unit]('t', "test-mode")
-            .action((x, c) => c.copy(testMode = true))
-            .text("Run with test settings"),
+          .action((x, c) => c.copy(testMode = true))
+          .text("Run with test settings"),
         help("help").text("prints this usage text"),
         version("version").text(s"Constellation v${BuildInfo.version}"),
         checkConfig(
@@ -145,8 +145,8 @@ object ConstellationNode extends StrictLogging {
       val constellationConfig = config.getConfig("constellation")
 
       val processingConfig = ProcessingConfig(
-      maxWidth = constellationConfig.getInt("max-width")
-      // TODO: Finish porting configs from application conf
+        maxWidth = constellationConfig.getInt("max-width")
+        // TODO: Finish porting configs from application conf
       )
       new ConstellationNode(
         NodeConfig(
@@ -161,7 +161,9 @@ object ConstellationNode extends StrictLogging {
           defaultTimeoutSeconds = config.getInt("default-timeout-seconds"),
           attemptDownload = !cliConfig.genesisNode,
           cliConfig = cliConfig,
-          processingConfig = if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10) else processingConfig
+          processingConfig =
+            if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10)
+            else processingConfig
         )
       )
     } match {
@@ -195,7 +197,7 @@ case class NodeConfig(
   allowLocalhostPeers: Boolean = false,
   cliConfig: CliConfig = CliConfig(),
   processingConfig: ProcessingConfig = ProcessingConfig()
-                     )
+)
 
 class ConstellationNode(
   val nodeConfig: NodeConfig = NodeConfig()
@@ -257,7 +259,6 @@ class ConstellationNode(
   val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
   val randomTXManager = new RandomTransactionManager(crossTalkConsensusActor)
 
-
   def getIPData: ValidPeerIPData = {
     ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)
   }
@@ -314,7 +315,7 @@ class ConstellationNode(
       nodeType = dao.nodeType,
       resourceInfo = ResourceInfo(
         diskUsableBytes = new java.io.File(dao.snapshotPath.pathAsString).getUsableSpace
-      ),
+      )
     )
   }
 
@@ -343,5 +344,7 @@ class ConstellationNode(
     dao.setNodeState(NodeState.Ready)
     dao.generateRandomTX = true
   }
+
+  val dataPollingManager = new DataPollingManager(60)
 
 }

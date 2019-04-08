@@ -2,7 +2,6 @@ package org.constellation.util
 
 import com.softwaremill.sttp.{MonadError, Request, Response, SttpBackend}
 import com.typesafe.scalalogging.{LoggerTakingImplicit, StrictLogging}
-import org.constellation.HostPort
 
 class LoggingSttpBackend[R[_], S](delegate: SttpBackend[R, S])(
   implicit val apiLogger: LoggerTakingImplicit[HostPort],

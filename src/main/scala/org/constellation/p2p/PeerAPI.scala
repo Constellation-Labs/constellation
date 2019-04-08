@@ -14,12 +14,12 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
-import org.constellation.{DAO, ResourceInfo}
 import org.constellation.consensus.{EdgeProcessor, FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest}
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.{CommonEndpoints, MetricTimerDirective, SingleHashSignature}
+import org.constellation.{DAO, ResourceInfo}
 import org.json4s.native
 import org.json4s.native.Serialization
 

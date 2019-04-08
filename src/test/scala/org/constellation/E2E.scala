@@ -1,15 +1,14 @@
 package org.constellation
-import java.util.concurrent.{ForkJoinPool, TimeUnit}
+import java.util.concurrent.ForkJoinPool
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import akka.util.Timeout
 import better.files.File
 import com.typesafe.scalalogging.StrictLogging
-import org.constellation.util.{APIClient, Simulation, TestNode}
+import org.constellation.util.{HostPort, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, ExecutionContextExecutorService}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
 import scala.util.Try
 
 trait E2E

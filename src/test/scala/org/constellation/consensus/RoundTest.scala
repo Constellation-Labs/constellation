@@ -2,12 +2,15 @@ package org.constellation.consensus
 
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit, TestProbe}
+import org.constellation._
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{
+  BroadcastLightTransactionProposal,
+  BroadcastUnionBlockProposal
+}
 import org.constellation.primitives.Schema.{EdgeHashType, Id, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives.{CheckpointBlock, PeerData, Transaction}
 import org.constellation.util.{APIClient, HashSignature, Metrics, SignatureBatch}
-import org.constellation._
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{BeforeAndAfter, FunSpecLike, Matchers, OneInstancePerTest}
 
@@ -27,7 +30,15 @@ class RoundTest
   private var roundProbe: TestActorRef[Round] = _
 
   val peerA =
-    PeerData(PeerMetadata("localhost", 0, Id("peer-A"), resourceInfo = ResourceInfo(diskUsableBytes = 1073741824)), APIClient.apply(port = 9999))
+    PeerData(
+      PeerMetadata(
+        "localhost",
+        0,
+        Id("peer-A"),
+        resourceInfo = ResourceInfo(diskUsableBytes = 1073741824)
+      ),
+      APIClient.apply(port = 9999)
+    )
   val peerB = PeerData(peerA.peerMetadata.copy(id = Id("peer-B")), APIClient.apply(port = 9999))
   var roundData: RoundData = _
   val roundManagerActor = TestProbe("round-manager")
@@ -51,12 +62,14 @@ class RoundTest
       Fixtures.dummyTx(fakeDao),
       Fixtures.dummyTx(fakeDao)
     )
-    roundData = RoundData(RoundId("round-1"),
-                          Set(peerA, peerB),
-                          FacilitatorId(fakeDao.id),
-                          sampleTransactions,
-                          tips,
-                          Seq.empty)
+    roundData = RoundData(
+      RoundId("round-1"),
+      Set(peerA, peerB),
+      FacilitatorId(fakeDao.id),
+      sampleTransactions,
+      tips,
+      Seq.empty
+    )
     (fakeDao.pullTransactions _).when(*).returns(Some(sampleTransactions))
 
     roundProbe = TestActorRef(Round.props(roundData, fakeDao), roundManagerActor.ref)
@@ -68,9 +81,15 @@ class RoundTest
       roundProbe ! StartTransactionProposal(roundData.roundId)
 
       val expectedProposal =
-        LightTransactionsProposal(roundData.roundId, FacilitatorId(fakeDao.id), sampleTransactions.map(_.hash))
+        LightTransactionsProposal(
+          roundData.roundId,
+          FacilitatorId(fakeDao.id),
+          sampleTransactions.map(_.hash)
+        )
 
-      roundManagerActor.expectMsg(BroadcastLightTransactionProposal(Set(peerA, peerB), expectedProposal))
+      roundManagerActor.expectMsg(
+        BroadcastLightTransactionProposal(Set(peerA, peerB), expectedProposal)
+      )
 
       roundProbe.underlyingActor.transactionProposals shouldBe Map(
         expectedProposal.facilitatorId -> expectedProposal
@@ -81,7 +100,11 @@ class RoundTest
     ) {
       initBefore
       val transactionSelfProposal =
-        LightTransactionsProposal(roundData.roundId, FacilitatorId(fakeDao.id), sampleTransactions.map(_.hash))
+        LightTransactionsProposal(
+          roundData.roundId,
+          FacilitatorId(fakeDao.id),
+          sampleTransactions.map(_.hash)
+        )
 
       roundProbe ! transactionSelfProposal
       roundProbe ! transactionSelfProposal.copy(
@@ -109,8 +132,8 @@ class RoundTest
         roundData.messages
       )(fakeDao.keyPair)
 
-      roundProbe.underlyingActor.checkpointBlockProposals.put(roundData.facilitatorId,
-                                                              checkpointBlock)
+      roundProbe.underlyingActor.checkpointBlockProposals
+        .put(roundData.facilitatorId, checkpointBlock)
       roundProbe ! ResolveMajorityCheckpointBlock(roundData.roundId)
 
       roundManagerActor.expectMsg(StopBlockCreationRound(roundData.roundId, None))

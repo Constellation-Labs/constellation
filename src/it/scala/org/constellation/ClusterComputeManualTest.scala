@@ -32,10 +32,12 @@ object ComputeTestUtil {
       ignoreIPs :+= str
       val offset = split(2).toInt
       println(s"Initializing API to $str offset: $offset")
-      APIClient(split.head,
-                port = offset + 1,
-                peerHTTPPort = offset + 2,
-                internalPeerHost = split(3))
+      APIClient(
+        split.head,
+        port = offset + 1,
+        peerHTTPPort = offset + 2,
+        internalPeerHost = split(3)
+      )
     }
 
     val auxMultiAPIs = Try { file"aux-multi-host.txt".lines.toSeq }.getOrElse(Seq()).flatMap { ip =>
@@ -53,10 +55,12 @@ object ComputeTestUtil {
           println(sshCmd.mkString(" "))
           println(sshCmd.!!)
         }
-        APIClient(split.head,
-                  port = adjustedOffset + 1,
-                  peerHTTPPort = adjustedOffset + 2,
-                  internalPeerHost = split(3))
+        APIClient(
+          split.head,
+          port = adjustedOffset + 1,
+          peerHTTPPort = adjustedOffset + 2,
+          internalPeerHost = split(3)
+        )
 
       }
     }
@@ -95,7 +99,6 @@ class ClusterComputeManualTest
 
   "Cluster integration" should "ping a cluster, check health, go through genesis flow" in {
 
-
     // Unused for standard tests, only for custom ones
     val (ignoreIPs, auxAPIs) = ComputeTestUtil.getAuxiliaryNodes()
 
@@ -111,7 +114,9 @@ class ClusterComputeManualTest
       val split = ip.split(":")
       val portOffset = if (split.length == 1) 8999 else split(1).toInt
       val a = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
-      Simulation.logger.info(s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}")
+      Simulation.logger.info(
+        s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}"
+      )
       a
     } // ++ auxAPIs
 
@@ -122,7 +127,13 @@ class ClusterComputeManualTest
     Simulation.setIdLocal(apis)
     val addPeerRequests = apis.map { a =>
       val aux = if (auxAPIs.contains(a)) a.internalPeerHost else ""
-      PeerMetadata(a.hostName, a.peerHTTPPort, a.id, auxHost = aux, resourceInfo = ResourceInfo(diskUsableBytes = 1073741824))
+      PeerMetadata(
+        a.hostName,
+        a.peerHTTPPort,
+        a.id,
+        auxHost = aux,
+        resourceInfo = ResourceInfo(diskUsableBytes = 1073741824)
+      )
     }
 
     Simulation.run(apis, addPeerRequests, attemptSetExternalIP = true, useRegistrationFlow = true)

@@ -84,8 +84,8 @@ object EdgeProcessor extends StrictLogging {
             )
           )
         }
-        dao.messageService.putSync(m.signedMessageData.hash,
-                                   ChannelMessageMetadata(m, Some(cb.baseHash)))
+        dao.messageService
+          .putSync(m.signedMessageData.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.metrics.incrementMetric("messageAccepted")
       }
 
@@ -167,7 +167,7 @@ object EdgeProcessor extends StrictLogging {
           FinishedCheckpoint(cache, finalFacilitators),
           timeout = 20.seconds
         ),
-        "finishedCheckpointBroadcast",
+        "finishedCheckpointBroadcast"
       )
     }
 
@@ -509,7 +509,10 @@ object Snapshot {
       case _ =>
         tryWithMetric(
           {
-            Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash), serialized)
+            Files.write(
+              Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash),
+              serialized
+            )
           },
           "writeSnapshot"
         )
