@@ -277,7 +277,8 @@ class ConstellationNode(
     })
 
   def shutdown(): Unit = {
-
+    dao.nodeState = NodeState.Offline
+    randomTXManager.shutdown()
     bindingFuture
       .foreach(_.unbind())
 
