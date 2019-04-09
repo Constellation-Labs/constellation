@@ -1,18 +1,28 @@
 package org.constellation.consensus
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import akka.pattern.{Backoff, BackoffSupervisor}
+import akka.pattern.{Backoff, BackoffOpts, BackoffSupervisor}
 import org.constellation.DAO
-import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
+import org.constellation.consensus.CrossTalkConsensus.{
+  NotifyFacilitators,
+  ParticipateInBlockCreationRound,
+  StartNewBlockCreationRound
+}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{
+  BroadcastLightTransactionProposal,
+  BroadcastUnionBlockProposal
+}
 
 import scala.concurrent.duration._
 
-class CrossTalkConsensus(remoteSenderSupervisor: ActorRef)(implicit dao: DAO) extends Actor with ActorLogging {
+class CrossTalkConsensus(remoteSenderSupervisor: ActorRef)(implicit dao: DAO)
+    extends Actor
+    with ActorLogging {
   val roundManagerProps: Props = RoundManager.props
-  val roundManagerSupervisor: Props = BackoffSupervisor.props(
-    Backoff.onFailure(
+
+  val roundManagerSupervisor = BackoffSupervisor.props(
+    BackoffOpts.onFailure(
       roundManagerProps,
       childName = "round-manager",
       minBackoff = 3.seconds,
@@ -20,6 +30,7 @@ class CrossTalkConsensus(remoteSenderSupervisor: ActorRef)(implicit dao: DAO) ex
       randomFactor = 0.2
     )
   )
+
   val roundManager: ActorRef =
     context.actorOf(roundManagerSupervisor, name = "round-manager-supervisor")
 
