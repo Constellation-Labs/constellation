@@ -4,11 +4,12 @@ import java.security.KeyPair
 import java.util.concurrent.Semaphore
 
 import akka.actor.ActorRef
+import com.softwaremill.sttp.Response
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.StartNewBlockCreationRound
 import org.constellation.primitives.Schema.{InternalHeartbeat, NodeState, _}
-import org.constellation.util.Periodic
+import org.constellation.util.{Distance, Periodic}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
@@ -89,7 +90,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
 
         if ((peerIds.nonEmpty || dao.nodeConfig.isGenesisNode) && dao.nodeState == NodeState.Ready && dao.generateRandomTX) {
 
-         //generateRandomMessages()
+          //generateRandomMessages()
 
           val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
           dao.metrics.updateMetric("transactionMemPoolSize", memPoolCount.toString)
@@ -185,14 +186,8 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                     peerData.client.put("transaction", tx)
                   }
 
-                def distance(peerDataId: Id): BigInt = {
-                  val thisNodeId = BigInt(dao.id.hex.getBytes())
-                  val peerId = BigInt(peerDataId.hex.getBytes())
-                  thisNodeId ^ peerId
-                }
-
                 if (dao.peerInfo(NodeType.Light).nonEmpty) {
-                  val lightPeerData = dao.peerInfo(NodeType.Light).minBy(p ⇒ distance(p._1))._2
+                  val lightPeerData = dao.peerInfo(NodeType.Light).minBy(p ⇒ Distance.calculate(p._1, dao.id))._2
                   dao.metrics.incrementMetric("transactionPut")
                   dao.metrics.incrementMetric("transactionPutToLightNode")
                   lightPeerData.client.put("transaction", tx)

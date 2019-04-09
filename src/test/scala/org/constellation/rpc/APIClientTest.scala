@@ -20,7 +20,6 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
     TestNode.clearNodes()
   }
 
-
   "GET to /id" should "get the current nodes public key id" in {
     val keyPair = KeyUtils.makeKeyPair()
     val appNode = TestNode(Seq(), keyPair)

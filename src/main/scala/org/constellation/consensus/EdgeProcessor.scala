@@ -13,7 +13,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Validation.EnrichedFuture
-import org.constellation.util.{APIClient, HashSignature, Signable}
+import org.constellation.util.{APIClient, Distance, HashSignature, Signable}
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.async.Async.{async, await}
@@ -85,8 +85,8 @@ object EdgeProcessor extends StrictLogging {
             )
           )
         }
-        dao.messageService.putSync(m.signedMessageData.hash,
-                                   ChannelMessageMetadata(m, Some(cb.baseHash)))
+        dao.messageService
+          .putSync(m.signedMessageData.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.metrics.incrementMetric("messageAccepted")
       }
 
@@ -168,7 +168,7 @@ object EdgeProcessor extends StrictLogging {
           FinishedCheckpoint(cache, finalFacilitators),
           timeout = 20.seconds
         ),
-        "finishedCheckpointBroadcast",
+        "finishedCheckpointBroadcast"
       )
     }
 
@@ -330,9 +330,9 @@ object EdgeProcessor extends StrictLogging {
   )(implicit dao: DAO): Future[Seq[ChannelMessageMetadata]] = {
     implicit val exec: ExecutionContextExecutor = dao.signatureExecutionContext
 
-    def lookupChannelMessage(hash: String, client: APIClient): Future[Option[ChannelProof]] =
-      client.getNonBlocking[Option[ChannelProof]](
-        s"channel/$hash",
+    def lookupChannelMessage(hash: String, client: APIClient): Future[Option[ChannelMessageMetadata]] =
+      client.getNonBlocking[Option[ChannelMessageMetadata]](
+        s"message/$hash",
         timeout = 4.seconds
       )
 
@@ -341,7 +341,7 @@ object EdgeProcessor extends StrictLogging {
       peers: Seq[APIClient]
     ): Future[Option[ChannelMessageMetadata]] = {
       val remainingPeers = peers.tail
-      val lookupResult = lookupChannelMessage(hash, peers.head).map(_.map(_.channelMessageMetadata))
+      val lookupResult = lookupChannelMessage(hash, peers.head)
       lookupResult.recoverWith {
         case _ ⇒ Future.failed(new Exception("Ran out of peers to query for channel-message"))
       }
@@ -386,7 +386,7 @@ object EdgeProcessor extends StrictLogging {
     )(dao.signatureExecutionContext, dao)
   }
 
-  def simpleResolveCheckpoint(hash: String)(implicit dao: DAO): Future[Boolean] = {
+  def simpleResolveCheckpoint(hash: String)(implicit dao: DAO): Future[Unit] = {
 
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
@@ -420,7 +420,6 @@ object EdgeProcessor extends StrictLogging {
         dao.metrics.incrementMetric("resolveAcceptCBCall")
         acceptWithResolveAttempt(checkpointCacheData)
       }
-      true
     }
 
   }
@@ -510,7 +509,10 @@ object Snapshot {
       case _ =>
         tryWithMetric(
           {
-            Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash), serialized)
+            Files.write(
+              Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash),
+              serialized
+            )
           },
           "writeSnapshot"
         )
@@ -518,10 +520,7 @@ object Snapshot {
   }
 
   def removeOldSnapshots()(implicit dao: DAO): Unit = {
-    val thisNodeId = BigInt(dao.id.hex.getBytes())
-    val sortedHashes = snapshotHashes().sortBy { hash =>
-      thisNodeId ^ BigInt(hash.getBytes())
-    }
+    val sortedHashes = snapshotHashes().sortBy(Distance.calculate(_, dao.id))
     sortedHashes
       .slice(ConfigUtil.snapshotClosestFractionSize, sortedHashes.size)
       .foreach(snapId => Files.delete(Paths.get(dao.snapshotPath.pathAsString, snapId)))

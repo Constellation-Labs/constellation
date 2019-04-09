@@ -1,11 +1,12 @@
 package org.constellation.tx
 
+import constellation._
+import org.constellation.util.Distance
 import org.constellation.Fixtures
 import org.constellation.primitives.ChannelMessage.create
+import org.constellation.primitives.Schema.SendToAddress
 import org.constellation.primitives._
 import org.scalatest.FlatSpec
-import org.constellation.primitives.Schema.SendToAddress
-import constellation._
 
 class TXTests extends FlatSpec {
 
@@ -33,8 +34,8 @@ class TXTests extends FlatSpec {
       val msg =
         create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)(Fixtures.kp)
       val hash = msg.signedMessageData.hash
-      val distance = BigInt(hash.getBytes()) ^ Fixtures.id.bigInt
-      distance
+
+      Distance.calculate(hash, Fixtures.id)
     }
   }
 

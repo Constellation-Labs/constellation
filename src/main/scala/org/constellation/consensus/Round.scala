@@ -29,13 +29,16 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
   override def receive: Receive = {
     case StartTransactionProposal(_) =>
       dao.pullTransactions(1).foreach { transactions =>
+        val messages = dao.threadSafeMessageMemPool.pull()
+
         val proposal = LightTransactionsProposal(
           roundData.roundId,
           FacilitatorId(dao.id),
           transactions.map(_.hash),
-          dao.threadSafeMessageMemPool.pull(1).map(_.map(_.signedMessageData.hash)).getOrElse(Seq()),
+          messages.map(_.map(_.signedMessageData.hash)).getOrElse(Seq()),
           dao.peerInfo.flatMap(_._2.notification).toSeq
         )
+
         context.parent ! BroadcastLightTransactionProposal(
           roundData.peers,
           proposal
@@ -245,6 +248,7 @@ object Round {
   case class RoundData(
     roundId: RoundId,
     peers: Set[PeerData],
+    lightPeers: Set[PeerData],
     facilitatorId: FacilitatorId,
     transactions: Seq[Transaction],
     tipsSOE: Seq[SignedObservationEdge],

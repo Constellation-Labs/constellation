@@ -11,12 +11,10 @@ import constellation.{futureTryWithTimeoutMetric, _}
 import org.constellation.p2p.{Download, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.primitives.PeerState.PeerState
 import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.{Id, InternalHeartbeat}
-import org.constellation.util.Validation._
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState}
 import org.constellation.util.Validation._
 import org.constellation.util._
-import org.constellation.{DAO, HostPort, PeerMetadata, RemovePeerRequest}
+import org.constellation.{DAO, PeerMetadata, RemovePeerRequest}
 import org.joda.time.LocalDateTime
 
 import scala.collection.Set
@@ -243,7 +241,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
       if (round % dao.processingConfig.peerHealthCheckInterval == 0) {
         peers.values.foreach { d =>
           d.client
-            .get("health")
+            .getString("health")
             .onComplete {
               case Success(x) if x.isSuccess =>
                 dao.metrics.incrementMetric("peerHealthCheckPassed")
@@ -279,7 +277,8 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
           peers.get(n.id).map { p =>
             p.copy(notification = p.notification diff Seq(n))
           }
-        }.foreach(pd => self ! UpdatePeerInfo(pd))
+        }
+        .foreach(pd => self ! UpdatePeerInfo(pd))
 
     case RemovePeerRequest(hp, id) =>
       val updatedPeerInfo = peers.filter {
@@ -403,11 +402,14 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
             val state = s.nodeState
             val id = sig.hashSignature.id
             val add =
-              PeerMetadata(request.host,
-                           request.port,
-                           id,
-                           nodeState = state,
-                           auxAddresses = s.addresses, resourceInfo = request.resourceInfo)
+              PeerMetadata(
+                request.host,
+                request.port,
+                id,
+                nodeState = state,
+                auxAddresses = s.addresses,
+                resourceInfo = request.resourceInfo
+              )
             val peerData = PeerData(add, client)
             client.id = id
             self ! UpdatePeerInfo(peerData)

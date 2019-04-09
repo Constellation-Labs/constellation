@@ -3,16 +3,9 @@ package org.constellation.consensus
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.pattern.{Backoff, BackoffSupervisor}
 import org.constellation.DAO
-import org.constellation.consensus.CrossTalkConsensus.{
-    NotifyFacilitators,
-    ParticipateInBlockCreationRound,
-    StartNewBlockCreationRound
-  }
+import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{
-    BroadcastLightTransactionProposal,
-    BroadcastUnionBlockProposal
-  }
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
 
 import scala.concurrent.duration._
 
