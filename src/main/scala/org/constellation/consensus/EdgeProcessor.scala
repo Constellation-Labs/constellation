@@ -120,8 +120,8 @@ object EdgeProcessor extends StrictLogging {
       .map(tx ⇒ (tx, toCacheData(tx)))
       .map {
         case (tx, txMetadata) ⇒
-          dao.transactionService.memPool
-            .remove(tx.baseHash)
+          IO(dao.transactionService.memPool)
+        //    .remove(tx.baseHash)
         //    .flatMap(_ ⇒ dao.transactionService.midDb.put(tx.baseHash, txMetadata))
             .flatMap(_ ⇒ dao.metrics.incrementMetricAsync("transactionAccepted"))
             .flatMap(_ ⇒ dao.addressService.transfer(tx))
@@ -636,7 +636,10 @@ object Snapshot {
       // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
       dao.addressService
         .transferSnapshot(tx)
-        .flatMap(_ ⇒ dao.acceptedTransactionService.remove(Set(tx.hash)))
+        .flatMap { _ ⇒
+          dao.transactionService.memPool.remove(tx.hash)
+          dao.acceptedTransactionService.remove(Set(tx.hash))
+        }
         .flatTap(_ ⇒ dao.metrics.incrementMetricAsync("snapshotAppliedBalance"))
         .unsafeRunSync()
     }

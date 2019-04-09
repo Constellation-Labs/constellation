@@ -345,6 +345,6 @@ class ConstellationNode(
     dao.generateRandomTX = true
   }
 
-  val dataPollingManager = new DataPollingManager(60)
+  // val dataPollingManager = new DataPollingManager(60)
 
 }

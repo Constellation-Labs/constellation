@@ -169,7 +169,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
 
                 dao.threadSafeTXMemPool.put(tx)
 
-/*
+
                 dao.transactionService.memPool.putSync(
                   tx.hash,
                   TransactionCacheData(
@@ -192,7 +192,6 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                   dao.metrics.incrementMetric("transactionPutToLightNode")
                   lightPeerData.client.put("transaction", tx)
                 }
-*/
 
                 /*            // TODO: Change to transport layer call
     dao.peerManager ! APIBroadcast(
