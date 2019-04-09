@@ -78,8 +78,8 @@ object ProcessingConfig {
 
 case class ProcessingConfig(
   maxWidth: Int = 10,
-  minCheckpointFormationThreshold: Int = 50,
-  maxTXInBlock: Int = 50,
+  minCheckpointFormationThreshold: Int = 25,
+  maxTXInBlock: Int = 25,
   maxMessagesInBlock: Int = 1,
   checkpointFormationTimeSeconds: Int = 1,
   formUndersizedCheckpointAfterSeconds: Int = Int.MaxValue,
@@ -93,10 +93,10 @@ case class ProcessingConfig(
   peerHealthCheckInterval: Int = 30,
   peerDiscoveryInterval: Int = 60,
   snapshotHeightInterval: Int = 2,
-  snapshotHeightDelayInterval: Int = 5,
+  snapshotHeightDelayInterval: Int = 4,
   snapshotInterval: Int = 25,
   checkpointLRUMaxSize: Int = 6000,
-  transactionLRUMaxSize: Int = 5000,
+  transactionLRUMaxSize: Int = 35000,
   addressLRUMaxSize: Int = 1000,
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,
