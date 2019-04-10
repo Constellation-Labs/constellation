@@ -4,7 +4,7 @@ import java.util.concurrent.Executors
 
 import org.constellation.DAO
 import org.constellation.primitives.Schema.Id
-import org.constellation.util.PeerApiClient
+import org.constellation.util.{APIClient, PeerApiClient}
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -17,8 +17,8 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
   implicit val dao: DAO = mock(classOf[DAO])
 
   val storageMock: StorageMock = mock(classOf[StorageMock])
-  val badNode: PeerApiClient = mock(classOf[PeerApiClient])
-  val goodNode: PeerApiClient = mock(classOf[PeerApiClient])
+  val badNode: APIClient = mock(classOf[APIClient])
+  val goodNode: APIClient = mock(classOf[APIClient])
   val hashes: List[String] = List("hash1", "hash2")
   val endpoint: String = "endpoint"
 
@@ -54,7 +54,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
     val result = DataResolver
       .resolveDataByDistanceFlat[String](hashes,
                                          endpoint,
-                                         List(badNode, goodNode),
+                                         List(PeerApiClient(badNode.id,badNode), PeerApiClient(goodNode.id,goodNode)),
                                          storageMock.loopbackStore)
       .unsafeRunSync()
     result shouldBe List(Some("resolved hash1"), Some("resolved hash2"))
@@ -68,7 +68,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
     val resolverIO = DataResolver
       .resolveDataByDistanceFlat[String](hashes,
                                          endpoint,
-                                         List(badNode, badNode),
+                                         List(PeerApiClient(badNode.id,badNode)),
                                          storageMock.loopbackStore)
 
     resolverIO.attempt.unsafeRunSync() should matchPattern {
@@ -85,7 +85,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
       .thenReturn(Future.successful(None))
 
     val resolverIO = DataResolver
-      .resolveDataByDistanceFlat[String](hashes, endpoint, List(badNode), storageMock.loopbackStore)
+      .resolveDataByDistanceFlat[String](hashes, endpoint, List(PeerApiClient(badNode.id,badNode)), storageMock.loopbackStore)
 
     resolverIO.attempt.unsafeRunSync() should matchPattern {
       case Left(DataResolutionOutOfPeers("endpoint", _)) => ()
@@ -98,7 +98,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
   ) {
 
     val resolverIO = DataResolver
-      .resolveData[String]("hash1", endpoint, List(badNode, badNode), storageMock.loopbackStore, 1)
+      .resolveData[String]("hash1", endpoint, List(PeerApiClient(badNode.id, badNode),PeerApiClient(badNode.id, badNode)), storageMock.loopbackStore, 1)
 
     resolverIO.attempt.unsafeRunSync() should matchPattern {
       case Left(DataResolutionMaxErrors("endpoint", "hash1")) => ()

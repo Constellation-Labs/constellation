@@ -5,18 +5,11 @@ import cats.effect.IO
 import cats.implicits._
 import constellation.{wrapFutureWithMetric, _}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{
-  BroadcastLightTransactionProposal,
-  BroadcastUnionBlockProposal
-}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{
-  CheckpointCacheData,
-  EdgeHashType,
-  SignedObservationEdge,
-  TypedEdgeHash
-}
+import org.constellation.primitives.Schema.{CheckpointCacheData, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
+import org.constellation.util.PeerApiClient
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.collection.mutable
@@ -108,8 +101,8 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
         p ⇒
           DataResolver
             .resolveTransactions(p._1,
-                                 readyPeers.map(_._2.client),
-                                 readyPeers.get(p._2.facilitatorId.id).map(_.client))
+                                 readyPeers.map(r => PeerApiClient(r._1, r._2.client)),
+                                 readyPeers.get(p._2.facilitatorId.id).map(rp => PeerApiClient(p._2.facilitatorId.id, rp.client)))
             .map(_.map(_.transaction))
       )
       .sequence
@@ -144,8 +137,8 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
         p ⇒
           DataResolver
             .resolveMessages(p._1,
-                             readyPeers.map(_._2.client),
-                             readyPeers.get(p._2.facilitatorId.id).map(_.client))
+                             readyPeers.map(r => PeerApiClient(r._1, r._2.client)),
+                             readyPeers.get(p._2.facilitatorId.id).map(rp => PeerApiClient(p._2.facilitatorId.id, rp.client)))
             .map(_.map(_.channelMessage))
       )
       .sequence
