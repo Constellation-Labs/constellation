@@ -14,8 +14,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Validation.EnrichedFuture
-import org.constellation.util.{HashSignature, Signable}
-import org.constellation.util.{APIClient, Distance, HashSignature, Signable}
+import org.constellation.util._
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.async.Async.{async, await}
@@ -330,7 +329,7 @@ object EdgeProcessor extends StrictLogging {
       parentExists.filterNot(_._2).foreach {
         case (h, _) =>
           DataResolver
-            .resolveCheckpoint(h, dao.readyPeers.map(_._2.client))
+            .resolveCheckpoint(h, dao.readyPeers.map(p => PeerApiClient(p._1, p._2.client)))
             .flatMap { ccd =>
               IO {
                 ccd.foreach { cd =>

@@ -33,26 +33,17 @@ object APIClient {
     )
   }
 }
-trait PeerApiClient {
-
-  def getNonBlocking[T <: AnyRef](
-    suffix: String,
-    queryParams: Map[String, String] = Map(),
-    timeout: Duration = 5.seconds
-  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): Future[T]
-
-  def id: Id
-}
+case class PeerApiClient(id: Id, client: APIClient)
 class APIClient private (host: String = "127.0.0.1",
                          port: Int,
                          val peerHTTPPort: Int = 9001,
                          val internalPeerHost: String = "",
-                         authEnabled: Boolean = false,
-                         authId: String = null,
-                         authPassword: String = null)(
+  val authEnabled: Boolean = false,
+  val authId: String = null,
+  authPassword: String = null)(
   implicit override val executionContext: ExecutionContext,
   dao: DAO = null
-) extends APIClientBase(host, port, authEnabled, authId, authPassword) with PeerApiClient {
+) extends APIClientBase(host, port, authEnabled, authId, authPassword) {
 
   var id: Id = _
 

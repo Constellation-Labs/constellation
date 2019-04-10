@@ -137,14 +137,14 @@ object DataResolver {
   }
   private def getData[T <: AnyRef](hash: String,
                                    endpoint: String,
-                                   client: PeerApiClient,
+                                   peerApiClient: PeerApiClient,
                                    store: T => Any)(
     implicit apiTimeout: Duration,
     m: Manifest[T],
     dao: DAO
   ): IO[Option[T]] = IO.fromFuture {
     IO {
-      client
+      peerApiClient.client
         .getNonBlocking[Option[T]](s"$endpoint/$hash", timeout = apiTimeout)
         .map { x =>
           x.foreach(store)

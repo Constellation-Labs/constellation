@@ -8,7 +8,7 @@ import org.constellation.consensus.Round._
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCacheData, NodeType, SignedObservationEdge}
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications}
-import org.constellation.util.Distance
+import org.constellation.util.{Distance, PeerApiClient}
 import org.constellation.{ConfigUtil, DAO}
 import cats.implicits._
 
@@ -127,7 +127,7 @@ class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
       .filterNot(t => dao.checkpointService.contains(t.baseHash))
       .map(_.baseHash)
 
-    DataResolver.resolveCheckpoints(cbToResolve.toList,roundData.peers.map(_.client))
+    DataResolver.resolveCheckpoints(cbToResolve.toList,roundData.peers.map(r => PeerApiClient(r.peerMetadata.id, r.client)))
       .unsafeToFuture()
   }
 
