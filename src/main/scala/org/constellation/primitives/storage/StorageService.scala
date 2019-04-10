@@ -12,7 +12,7 @@ class StorageService[V](size: Int = 50000, expireAfterMinutes: Option[Int] = Non
         .recordStats()
 
       val cache = expireAfterMinutes.map{ mins =>
-        cacheWithStats.expireAfterWrite(mins.minutes)
+        cacheWithStats.expireAfterAccess(mins.minutes)
       }.getOrElse(cacheWithStats.maximumSize(size))
 
       cache.build[String, V]()
