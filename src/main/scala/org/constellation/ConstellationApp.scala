@@ -2,7 +2,6 @@ package org.constellation
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import org.constellation.crypto.KeyUtils
 import org.constellation.primitives._
 import org.constellation.util.APIClient
 
@@ -33,7 +32,6 @@ class ConstellationApp(
   }
 
   def broadcast[T](messages: Seq[T], msgType: String)(implicit ec: ExecutionContext) = {
-//    val msgType: String = messages.map(_.channelId).head//todo handle multiple message types, or throw error
     val serializedMessages = messages.map(_.json)
     logger.info(s"messages: ${messages} message type: ${msgType}")
     clientApi.postNonBlocking[ChannelSendResponse](
