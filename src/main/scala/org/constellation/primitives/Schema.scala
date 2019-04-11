@@ -28,11 +28,8 @@ object Schema {
 
   object NodeState extends Enumeration {
     type NodeState = Value
-    val PendingDownload,
-    DownloadInProgress,
-    DownloadCompleteAwaitingFinalSync,
-    Ready,
-    Offline = Value
+    val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, Ready, Offline =
+      Value
   }
 
   object NodeType extends Enumeration {
@@ -97,6 +94,7 @@ object Schema {
 
   /**
     * Wrapper for encapsulating a typed hash reference
+    *
     * @param hash : String of hashed value
     * @param hashType : Strictly typed from set of allowed edge formats
     */
@@ -105,6 +103,7 @@ object Schema {
   /**
     * Basic edge format for linking two hashes with an optional piece of data attached. Similar to GraphX format.
     * Left is topologically ordered before right
+    *
     * @param parents: HyperEdge parent references
     * @param data : Optional hash reference to attached information
     */
@@ -115,6 +114,7 @@ object Schema {
 
   /**
     * Encapsulation for all witness information about a given observation edge.
+    *
     * @param signatureBatch : Collection of validation signatures about the edge.
     */
   case class SignedObservationEdge(signatureBatch: SignatureBatch) extends Signable {
@@ -147,6 +147,7 @@ object Schema {
 
   /**
     * Collection of references to transaction hashes
+    *
     * @param hashes : TX edge hashes
     */
   case class CheckpointEdgeData(hashes: Seq[String], messageHashes: Seq[String] = Seq())
@@ -211,7 +212,7 @@ object Schema {
   case class CheckpointCacheData(
     checkpointBlock: Option[CheckpointBlock] = None,
     //         metadata: CommonMetadata = CommonMetadata(),
-    //         children: Set[String] = Set(),
+    children: Int = 0,
     height: Option[Height] = None
   ) {
     /*

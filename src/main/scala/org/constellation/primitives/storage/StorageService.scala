@@ -45,6 +45,13 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] with L
   override def put(key: String, value: V): IO[V] =
     IO(putSync(key, value))
 
+  override def update(key: String, updateFunc: V => V): IO[Option[V]] = {
+    import cats.implicits._
+
+    get(key)
+      .flatMap(_.map(updateFunc).map(x => put(key, x)).sequence)
+  }
+
   override def update(key: String, updateFunc: V => V, empty: => V): IO[V] =
     get(key)
       .map(_.map(updateFunc).getOrElse(empty))
