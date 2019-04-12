@@ -27,6 +27,7 @@ import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.primitives.storage.CheckpointService
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util._
 import org.json4s.native.Serialization
@@ -205,16 +206,15 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                 val blocks = dao.recentBlockTracker.getAll.toSeq
                 //dao.threadSafeTipService.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.getSync}
                 complete(blocks.map { ccd =>
-                  val cb = ccd.checkpointBlock.get
+                  val cb = ccd.cb
 
                   BlockUIOutput(
                     cb.soeHash,
-                    ccd.height.get.min,
+                    ccd.height.min,
                     cb.parentSOEHashes,
-                    cb.messages.map { _.signedMessageData.data.channelId }.distinct.map {
-                      channelId =>
-                        ChannelValidationInfo(channelId, true)
-                    }
+                    CheckpointService.fetchMessages(cb.messagesMerkleRoot)
+                      .map(m => ChannelValidationInfo(m.signedMessageData.data.channelId, valid = true))
+                      .distinct
                   )
                 })
               }

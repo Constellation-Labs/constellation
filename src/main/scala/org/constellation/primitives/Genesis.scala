@@ -22,8 +22,8 @@ object Genesis {
     createTransaction(debtAddress, keyPair.getPublic.toId.address, 4e9.toLong, keyPair)
   }
 
-  def createGenesisBlock(keyPair: KeyPair): CheckpointBlock = {
-    CheckpointBlock.createCheckpointBlock(Seq(createGenesisTransaction(keyPair)), GenesisTips)(
+  def createGenesisBlock(keyPair: KeyPair): CheckpointBlockFullData = {
+    CheckpointBlockFullData.createCheckpointBlock(Seq(createGenesisTransaction(keyPair)), GenesisTips)(
       keyPair
     )
   }
@@ -45,13 +45,13 @@ object Genesis {
     ids: Seq[Id],
     genesisSOE: SignedObservationEdge,
     keyPair: KeyPair
-  ): CheckpointBlock = {
+  ): CheckpointBlockFullData = {
 
     val distr = ids.map { id =>
       createTransaction(selfAddressStr, id.address, 1e6.toLong, keyPair)
     }
 
-    CheckpointBlock.createCheckpointBlock(
+    CheckpointBlockFullData.createCheckpointBlock(
       distr,
       Seq(
         TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash),
@@ -94,15 +94,15 @@ trait Genesis extends NodeData with EdgeDAO {
     // Store hashes for the edges
 
     go.genesis.store(
-      CheckpointCacheData(Some(go.genesis), height = Some(Height(0, 0)))
+      CheckpointCacheFullData(Some(go.genesis), height = Some(Height(0, 0)))
     )
 
     go.initialDistribution.store(
-      CheckpointCacheData(Some(go.initialDistribution), height = Some(Height(1, 1)))
+      CheckpointCacheFullData(Some(go.initialDistribution), height = Some(Height(1, 1)))
     )
 
     go.initialDistribution2.store(
-      CheckpointCacheData(Some(go.initialDistribution2), height = Some(Height(1, 1)))
+      CheckpointCacheFullData(Some(go.initialDistribution2), height = Some(Height(1, 1)))
     )
 
     go.genesis.storeSOE()

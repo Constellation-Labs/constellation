@@ -7,7 +7,8 @@ import constellation.{wrapFutureWithMetric, _}
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCacheData, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.primitives.Schema.{
+  CheckpointCacheFullData, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
 import org.constellation.util.PeerApiClient
 import org.constellation.{ConfigUtil, DAO}
@@ -23,7 +24,7 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
 
   val transactionProposals: mutable.Map[FacilitatorId, LightTransactionsProposal] =
     mutable.Map()
-  val checkpointBlockProposals: mutable.Map[FacilitatorId, CheckpointBlock] =
+  val checkpointBlockProposals: mutable.Map[FacilitatorId, CheckpointBlockFullData] =
     mutable.Map()
 
   protected var unionTransactionProposalsTikTok: Cancellable = _
@@ -170,7 +171,7 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
       .union(roundData.peers.flatMap(_.notification))
       .toSeq
 
-    val cb = CheckpointBlock.createCheckpointBlock(
+    val cb = CheckpointBlockFullData.createCheckpointBlock(
       transactions ++ resolvedTxs,
       roundData.tipsSOE.map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)),
       messages ++ resolvedMessages,
@@ -191,7 +192,7 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
       val majorityCheckpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
 
       val finalFacilitators = checkpointBlockProposals.keySet.map(_.id).toSet
-      val cache = CheckpointCacheData(Some(majorityCheckpointBlock),
+      val cache = CheckpointCacheFullData(Some(majorityCheckpointBlock),
                                       height = majorityCheckpointBlock.calculateHeight())
       broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, finalFacilitators))
 
@@ -258,7 +259,7 @@ object Round {
   case class UnionBlockProposal(
     roundId: RoundId,
     facilitatorId: FacilitatorId,
-    checkpointBlock: CheckpointBlock
+    checkpointBlock: CheckpointBlockFullData
   ) extends RoundCommand
 
   case class RoundData(
@@ -271,7 +272,7 @@ object Round {
     messages: Seq[ChannelMessage]
   )
 
-  case class StopBlockCreationRound(roundId: RoundId, maybeCB: Option[CheckpointBlock])
+  case class StopBlockCreationRound(roundId: RoundId, maybeCB: Option[CheckpointBlockFullData])
       extends RoundCommand
 
   def props(roundData: RoundData, dao: DAO): Props = Props(new Round(roundData, dao))

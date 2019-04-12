@@ -35,9 +35,9 @@ object Simulation {
     })
   }
 
-  def getCheckpointTips(apis: Seq[APIClient]): Seq[Map[String, CheckpointBlock]] = {
+  def getCheckpointTips(apis: Seq[APIClient]): Seq[Map[String, CheckpointBlockFullData]] = {
     apis.map(a => {
-      a.getBlocking[Map[String, CheckpointBlock]](s"checkpointTips", timeout = 100.seconds)
+      a.getBlocking[Map[String, CheckpointBlockFullData]](s"checkpointTips", timeout = 100.seconds)
     })
   }
 

@@ -3,7 +3,7 @@ import cats.effect.IO
 import cats.implicits._
 import constellation._
 import org.constellation.DAO
-import org.constellation.primitives.Schema.CheckpointCacheData
+import org.constellation.primitives.Schema.{CheckpointCacheData, CheckpointCacheFullData}
 import org.constellation.primitives.{ChannelMessageMetadata, ChannelProof, TransactionCacheData}
 import org.constellation.util.PeerApiClient
 
@@ -51,11 +51,11 @@ object DataResolver {
                         priorityClient: Option[PeerApiClient] = None)(
     implicit apiTimeout: Duration = 3.seconds,
     dao: DAO
-  ): IO[Option[CheckpointCacheData]] = {
-    resolveDataByDistance[CheckpointCacheData](List(hash),
+  ): IO[Option[CheckpointCacheFullData]] = {
+    resolveDataByDistance[CheckpointCacheFullData](List(hash),
                                                "checkpoint",
                                                pool,
-                                               (t: CheckpointCacheData) => {
+                                               (t: CheckpointCacheFullData) => {
                                                  t.checkpointBlock.foreach(cb => cb.store(t))
                                                },
                                                priorityClient).head
@@ -65,11 +65,11 @@ object DataResolver {
                         priorityClient: Option[PeerApiClient] = None)(
     implicit apiTimeout: Duration = 3.seconds,
     dao: DAO
-  ): IO[List[Option[CheckpointCacheData]]] = {
-    resolveDataByDistanceFlat[CheckpointCacheData](hashes,
+  ): IO[List[Option[CheckpointCacheFullData]]] = {
+    resolveDataByDistanceFlat[CheckpointCacheFullData](hashes,
                                                "checkpoint",
                                                pool,
-                                               (t: CheckpointCacheData) => {
+                                               (t: CheckpointCacheFullData) => {
                                                  t.checkpointBlock.foreach(cb => cb.store(t))
                                                },
                                                priorityClient)

@@ -38,9 +38,9 @@ object RandomData {
     Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
 
   def randomBlock(tips: Seq[SignedObservationEdge],
-                  startingKeyPair: KeyPair = keyPairs.head): CheckpointBlock = {
+                  startingKeyPair: KeyPair = keyPairs.head): CheckpointBlockFullData = {
     val txs = Seq.fill(5)(randomTransaction)
-    CheckpointBlock.createCheckpointBlock(txs, tips.map { s =>
+    CheckpointBlockFullData.createCheckpointBlock(txs, tips.map { s =>
       TypedEdgeHash(s.hash, EdgeHashType.CheckpointHash)
     })(startingKeyPair)
   }
@@ -75,7 +75,7 @@ object RandomData {
     txs
   }
 
-  def setupSnapshot(cb: Seq[CheckpointBlock])(implicit dao: DAO): Seq[CheckpointBlock] = {
+  def setupSnapshot(cb: Seq[CheckpointBlockFullData])(implicit dao: DAO): Seq[CheckpointBlockFullData] = {
     // Get snapshot uses iterator while set snapshot updates underlying map causing ConcurrentModificationException
     val snapshot = dao.threadSafeSnapshotService.getSnapshotInfo().snapshot
     dao.threadSafeSnapshotService.setSnapshot(
@@ -131,7 +131,7 @@ class RandomDataTest extends FlatSpec {
     activeBlocks(startingTips.head) = 0
     activeBlocks(startingTips.last) = 0
 
-    val cbIndex = TrieMap[SignedObservationEdge, CheckpointBlock]()
+    val cbIndex = TrieMap[SignedObservationEdge, CheckpointBlockFullData]()
     //cbIndex(go.initialDistribution.soe) = go.initialDistribution
     //cbIndex(go.initialDistribution2.soe) = go.initialDistribution2
     var blockId = 3
@@ -233,9 +233,9 @@ class ValidationSpec
   val peerProbe = TestProbe.apply("peerManager")
   dao.peerManager = peerProbe.ref
 
-  go.genesis.store(CheckpointCacheData(Some(go.genesis)))
-  go.initialDistribution.store(CheckpointCacheData(Some(go.initialDistribution)))
-  go.initialDistribution2.store(CheckpointCacheData(Some(go.initialDistribution2)))
+  go.genesis.store(CheckpointCacheFullData(Some(go.genesis)))
+  go.initialDistribution.store(CheckpointCacheFullData(Some(go.initialDistribution)))
+  go.initialDistribution2.store(CheckpointCacheFullData(Some(go.initialDistribution2)))
   dao.threadSafeSnapshotService.setSnapshot(
     SnapshotInfo(
       Snapshot.snapshotZero,
@@ -275,12 +275,12 @@ class ValidationSpec
         )
 
         val cbInit1 =
-          CheckpointBlock.createCheckpointBlockSOE(txs1.toSeq, startingTips)
+          CheckpointBlockFullData.createCheckpointBlockSOE(txs1.toSeq, startingTips)
         val cbInit2 =
-          CheckpointBlock.createCheckpointBlockSOE(txs2.toSeq, startingTips)
+          CheckpointBlockFullData.createCheckpointBlockSOE(txs2.toSeq, startingTips)
 
-        cbInit1.store(CheckpointCacheData(Some(cbInit1)))
-        cbInit2.store(CheckpointCacheData(Some(cbInit2)))
+        cbInit1.store(CheckpointCacheFullData(Some(cbInit1)))
+        cbInit2.store(CheckpointCacheFullData(Some(cbInit2)))
 
         setupSnapshot(Seq(cbInit1, cbInit2))
 
@@ -288,33 +288,33 @@ class ValidationSpec
 
         // First group
         val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
-        val cb1 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx1), tips)
+        val cb1 = CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx1), tips)
 
         val tx2 = createTransaction(getAddress(a), getAddress(b), 75L, a)
-        val cb2 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx2), tips)
+        val cb2 = CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx2), tips)
 
         val tx3 = createTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb3 =
-          CheckpointBlock.createCheckpointBlockSOE(Seq(tx3), Seq(cb1.soe, cb2.soe))
+          CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx3), Seq(cb1.soe, cb2.soe))
 
         // Second group
         val tx4 = createTransaction(getAddress(c), getAddress(a), 75L, c)
-        val cb4 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx4), tips)
+        val cb4 = CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx4), tips)
 
         val tx5 = createTransaction(getAddress(c), getAddress(a), 75L, c)
-        val cb5 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx5), tips)
+        val cb5 = CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx5), tips)
 
         val tx6 = createTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb6 =
-          CheckpointBlock.createCheckpointBlockSOE(Seq(tx6), Seq(cb4.soe, cb5.soe))
+          CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx6), Seq(cb4.soe, cb5.soe))
 
         // Tip
         val tx7 = createTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb7 =
-          CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))
+          CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
-          .foreach(cb => cb.store(CheckpointCacheData(Some(cb))))
+          .foreach(cb => cb.store(CheckpointCacheFullData(Some(cb))))
 
         assert(cb7.simpleValidation())
       }
@@ -330,7 +330,7 @@ class ValidationSpec
           createTransaction(getAddress(c), getAddress(b), 75L, c)
         )
 
-        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)
+        val cb = CheckpointBlockFullData.createCheckpointBlockSOE(txs, startingTips)
 
         fill(
           Map(
@@ -351,7 +351,7 @@ class ValidationSpec
         val tx = createTransaction(getAddress(a), getAddress(b), 75L, a)
         val txs = Seq(tx, tx)
 
-        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)
+        val cb = CheckpointBlockFullData.createCheckpointBlockSOE(txs, startingTips)
 
         fill(
           Map(
@@ -373,7 +373,7 @@ class ValidationSpec
           createTransaction(getAddress(b), getAddress(c), -5L, b)
         )
 
-        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)
+        val cb = CheckpointBlockFullData.createCheckpointBlockSOE(txs, startingTips)
 
         fill(
           Map(
@@ -396,7 +396,7 @@ class ValidationSpec
           createTransaction(getAddress(b), getAddress(c), 0L, b)
         )
 
-        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)(keyPairs.head)
+        val cb = CheckpointBlockFullData.createCheckpointBlockSOE(txs, startingTips)(keyPairs.head)
 
         fill(
           Map(
@@ -419,7 +419,7 @@ class ValidationSpec
           createTransaction(getAddress(a), getAddress(c), 75L, a),
         )
 
-        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)
+        val cb = CheckpointBlockFullData.createCheckpointBlockSOE(txs, startingTips)
 
         assert(!cb.simpleValidation())
       }
@@ -435,7 +435,7 @@ class ValidationSpec
           createTransaction(getAddress(a), getAddress(c), 75L, a),
         )
 
-        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)
+        val cb = CheckpointBlockFullData.createCheckpointBlockSOE(txs, startingTips)
 
         fill(
           Map(
@@ -463,10 +463,10 @@ class ValidationSpec
         )
 
         val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
-        val cb1 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx1), startingTips)
+        val cb1 = CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx1), startingTips)
 
         val tx2 = createTransaction(getAddress(a), getAddress(c), 75L, a)
-        val cb2 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx2), startingTips)
+        val cb2 = CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx2), startingTips)
 
         if (cb1.simpleValidation()) {
           cb1.transactions.toList
@@ -502,12 +502,12 @@ class ValidationSpec
         )
 
         val cbInit1 =
-          CheckpointBlock.createCheckpointBlockSOE(txs1.toSeq, startingTips)
+          CheckpointBlockFullData.createCheckpointBlockSOE(txs1.toSeq, startingTips)
         val cbInit2 =
-          CheckpointBlock.createCheckpointBlockSOE(txs2.toSeq, startingTips)
+          CheckpointBlockFullData.createCheckpointBlockSOE(txs2.toSeq, startingTips)
 
-        cbInit1.store(CheckpointCacheData(Some(cbInit1)))
-        cbInit2.store(CheckpointCacheData(Some(cbInit2)))
+        cbInit1.store(CheckpointCacheFullData(Some(cbInit1)))
+        cbInit2.store(CheckpointCacheFullData(Some(cbInit2)))
 
         setupSnapshot(Seq(cbInit1, cbInit2))
 
@@ -515,34 +515,34 @@ class ValidationSpec
 
         // First group
         val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
-        val cb1 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx1), tips)
+        val cb1 = CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx1), tips)
 
         val tx2 = createTransaction(getAddress(a), getAddress(b), 75L, a)
-        val cb2 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx2), tips)
+        val cb2 = CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx2), tips)
 
         val tx3 = createTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb3 =
-          CheckpointBlock.createCheckpointBlockSOE(Seq(tx3), Seq(cb1.soe, cb2.soe))
+          CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx3), Seq(cb1.soe, cb2.soe))
 
         // Second group
         val tx4 = createTransaction(getAddress(c), getAddress(a), 75L, c)
-        val cb4 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx4), tips)
+        val cb4 = CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx4), tips)
 
         val tx5 = createTransaction(getAddress(c), getAddress(a), 75L, c)
-        val cb5 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx5), tips)
+        val cb5 = CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx5), tips)
 
         val tx6 = createTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb6 =
-          CheckpointBlock.createCheckpointBlockSOE(Seq(tx6), Seq(cb4.soe, cb5.soe))
+          CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx6), Seq(cb4.soe, cb5.soe))
 
         // Tip
         val tx7 = createTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb7 =
-          CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))
+          CheckpointBlockFullData.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
           .foreach { cb =>
-            cb.store(CheckpointCacheData(Some(cb)))
+            cb.store(CheckpointCacheFullData(Some(cb)))
             cb.storeSOE()
           }
 

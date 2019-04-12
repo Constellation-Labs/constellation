@@ -6,7 +6,8 @@ import constellation.wrapFutureWithMetric
 import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCacheData, NodeType, SignedObservationEdge}
+import org.constellation.primitives.Schema.{
+  CheckpointCacheFullData, NodeType, SignedObservationEdge}
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications}
 import org.constellation.util.{Distance, PeerApiClient}
 import org.constellation.{ConfigUtil, DAO}
@@ -119,7 +120,7 @@ class RoundManager(implicit dao: DAO) extends Actor with ActorLogging {
 
   def resolveMissingParents(
     roundData: RoundData
-  )(implicit dao: DAO): Future[List[Option[CheckpointCacheData]]] = {
+  )(implicit dao: DAO): Future[List[Option[CheckpointCacheFullData]]] = {
 
     implicit val ec = dao.edgeExecutionContext
 

@@ -210,8 +210,13 @@ object Schema {
   // TODO: Separate cache with metadata vs what is stored in snapshot.
 
   case class CheckpointCacheData(
-    checkpointBlock: Option[CheckpointBlock] = None,
-    //         metadata: CommonMetadata = CommonMetadata(),
+    cb: CheckpointBlockData,
+    children: Int = 0,
+    height: Height
+  )
+
+  case class CheckpointCacheFullData(
+    checkpointBlock: Option[CheckpointBlockFullData] = None,
     children: Int = 0,
     height: Option[Height] = None
   ) {
@@ -235,12 +240,12 @@ object Schema {
   case class ValidPeerIPData(canonicalHostName: String, port: Int)
 
   case class GenesisObservation(
-    genesis: CheckpointBlock,
-    initialDistribution: CheckpointBlock,
-    initialDistribution2: CheckpointBlock
+    genesis: CheckpointBlockFullData,
+    initialDistribution: CheckpointBlockFullData,
+    initialDistribution2: CheckpointBlockFullData
   ) {
 
-    def notGenesisTips(tips: Seq[CheckpointBlock]): Boolean = {
+    def notGenesisTips(tips: Seq[CheckpointBlockFullData]): Boolean = {
       !tips.contains(initialDistribution) && !tips.contains(initialDistribution2)
     }
 

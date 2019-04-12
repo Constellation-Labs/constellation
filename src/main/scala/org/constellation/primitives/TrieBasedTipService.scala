@@ -13,7 +13,7 @@ trait ConcurrentTipService {
   def toMap: Map[String, TipData]
   def size: Int
   def set(tips: Map[String, TipData])
-  def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO)
+  def update(checkpointBlock: CheckpointBlockFullData)(implicit dao: DAO)
   // considerd as private only
   def put(k: String, v: TipData)(implicit metrics: Metrics): Option[TipData]
   def pull(
@@ -53,7 +53,7 @@ class TrieBasedTipService(sizeLimit: Int,
     metrics.incrementMetric("checkpointTipsRemoved")
   }
 
-  def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): Unit = {
+  def update(checkpointBlock: CheckpointBlockFullData)(implicit dao: DAO): Unit = {
     // TODO: should size of the map be calculated each time or just once?
     // previously it was static due to all method were sync and map updates
     // were performed on the end
@@ -102,10 +102,8 @@ class TrieBasedTipService(sizeLimit: Int,
 
     maybeDatas
       .flatMap {
-        _.flatMap {
-          _.height.map {
-            _.min
-          }
+        _.map {
+          _.height.min
         }
       }
       .min

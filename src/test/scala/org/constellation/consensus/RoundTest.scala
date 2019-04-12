@@ -9,7 +9,7 @@ import org.constellation.consensus.RoundManager.{
   BroadcastUnionBlockProposal
 }
 import org.constellation.primitives.Schema.{EdgeHashType, Id, SignedObservationEdge, TypedEdgeHash}
-import org.constellation.primitives.{CheckpointBlock, PeerData, Transaction}
+import org.constellation.primitives.{CheckpointBlockFullData, PeerData, Transaction}
 import org.constellation.util.{APIClient, HashSignature, Metrics, SignatureBatch}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{BeforeAndAfter, FunSpecLike, Matchers, OneInstancePerTest}
@@ -127,7 +127,7 @@ class RoundTest
       "should union checkpoint blocks and accept majority CB"
     ) {
       initBefore
-      val checkpointBlock = CheckpointBlock.createCheckpointBlock(
+      val checkpointBlock = CheckpointBlockFullData.createCheckpointBlock(
         sampleTransactions,
         roundData.tipsSOE.map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)),
         roundData.messages

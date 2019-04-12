@@ -24,8 +24,11 @@ case class MerkleResult(inputs: Seq[String], nodes: Seq[MerkleNode]) {
     val parentMap = MerkleTree.childToParent(nodes)
     val firstParent = parentMap(startingPoint)
     MerkleProof(startingPoint,
-                MerkleTree.collectParents(Seq(), firstParent, parentMap),
-                nodes.last.hash)
+                MerkleTree.collectParents(Seq(), firstParent, parentMap), rootHash)
+  }
+
+  def rootHash: String = {
+    nodes.last.hash
   }
 }
 
@@ -59,7 +62,7 @@ object MerkleTree extends StrictLogging {
     }
   }
 
-  def apply(hashes: List[String]): MerkleResult = {
+  def apply(hashes: Seq[String]): MerkleResult = {
 
     if (hashes.isEmpty) {
       throw new Exception("Merkle function call on empty collection of hashes")

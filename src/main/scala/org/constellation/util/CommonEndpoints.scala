@@ -44,7 +44,7 @@ trait CommonEndpoints extends Json4sSupport {
       } ~
       path("heights") {
         val maybeHeights = dao.threadSafeSnapshotService.tips.flatMap {
-          case (k, v) => dao.checkpointService.get(k).flatMap { _.height }
+          case (k, v) => dao.checkpointService.get(k).map { _.height }
         }.toSeq
         complete(maybeHeights)
       } ~

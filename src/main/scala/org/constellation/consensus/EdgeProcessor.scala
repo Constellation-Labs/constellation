@@ -12,6 +12,7 @@ import constellation._
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.primitives.storage.CheckpointService
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Validation.EnrichedFuture
 import org.constellation.util._
@@ -29,16 +30,16 @@ case class CreateCheckpointEdgeResponse(
   updatedTransactionMemPoolThresholdMet: Set[String]
 )
 
-case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
+case class SignatureRequest(checkpointBlock: CheckpointBlockFullData, facilitators: Set[Id])
 
 case class SignatureResponse(signature: Option[HashSignature], reRegister: Boolean = false)
-case class FinishedCheckpoint(checkpointCacheData: CheckpointCacheData, facilitators: Set[Id])
+case class FinishedCheckpoint(checkpointCacheData: CheckpointCacheFullData, facilitators: Set[Id])
 
 case class FinishedCheckpointResponse(reRegister: Boolean = false)
 
 object EdgeProcessor extends StrictLogging {
 
-  def acceptCheckpoint(checkpointCacheData: CheckpointCacheData)(implicit dao: DAO): Unit = {
+  def acceptCheckpoint(checkpointCacheData: CheckpointCacheFullData)(implicit dao: DAO): Unit = {
 
     if (checkpointCacheData.checkpointBlock.isEmpty) {
       dao.metrics.incrementMetric("acceptCheckpointCalledWithEmptyCB")
@@ -59,7 +60,6 @@ object EdgeProcessor extends StrictLogging {
         dao.metrics.incrementMetric("heightNonEmpty")
       }
 
-      dao.checkpointService.midDb.put(cb.baseHash, checkpointCacheData).unsafeRunSync()
 
       cb.messages.foreach { m =>
         if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
@@ -94,10 +94,13 @@ object EdgeProcessor extends StrictLogging {
       acceptTransactions(cb).unsafeRunSync()
 
       dao.metrics.incrementMetric("checkpointAccepted")
-      val data = CheckpointCacheData(
+      val data = CheckpointCacheFullData(
         Some(cb),
         height = fallbackHeight
       )
+      // TODO: wkoszycki below was originally here but shall we keep it or move it to store itself
+      dao.checkpointService.midDb.put(cb.baseHash, CheckpointCacheData(CheckpointBlockData(cb), 0, fallbackHeight.get)).unsafeRunSync()
+
       cb.store(
         data
       )
@@ -105,7 +108,7 @@ object EdgeProcessor extends StrictLogging {
     }
   }
 
-  private def acceptTransactions(cb: CheckpointBlock)(implicit dao: DAO): IO[Unit] = {
+  private def acceptTransactions(cb: CheckpointBlockFullData)(implicit dao: DAO): IO[Unit] = {
     def toCacheData(tx: Transaction) = TransactionCacheData(
       tx,
       valid = true,
@@ -131,7 +134,7 @@ object EdgeProcessor extends StrictLogging {
   }
 
   private def requestBlockSignature(
-    checkpointBlock: CheckpointBlock,
+    checkpointBlock: CheckpointBlockFullData,
     finalFacilitators: Set[
       Id
     ],
@@ -155,7 +158,7 @@ object EdgeProcessor extends StrictLogging {
   }
 
   private def processSignedBlock(
-    cache: CheckpointCacheData,
+    cache: CheckpointCacheFullData,
     finalFacilitators: Set[
       Id
     ]
@@ -201,12 +204,12 @@ object EdgeProcessor extends StrictLogging {
         maybeTips.foreach {
           case (tipSOE, _) =>
             val checkpointBlock =
-              CheckpointBlock.createCheckpointBlock(transactions, tipSOE.map { soe =>
+              CheckpointBlockFullData.createCheckpointBlock(transactions, tipSOE.map { soe =>
                 TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)
               }, messages)(dao.keyPair)
 
             val cache =
-              CheckpointCacheData(
+              CheckpointCacheFullData(
                 Some(checkpointBlock),
                 height = checkpointBlock.calculateHeight()
               )
@@ -222,7 +225,7 @@ object EdgeProcessor extends StrictLogging {
     val result = dao.concurrentTipService.pull(readyFacilitators)(dao.metrics).map {
       case (tipSOE, facils) =>
         // Change to method on TipsReturned // abstract for reuse.
-        val checkpointBlock = CheckpointBlock.createCheckpointBlock(transactions, tipSOE.map {
+        val checkpointBlock = CheckpointBlockFullData.createCheckpointBlock(transactions, tipSOE.map {
           soe =>
             TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)
         }, messages)(dao.keyPair)
@@ -247,7 +250,7 @@ object EdgeProcessor extends StrictLogging {
                 _.simpleValidation()
               )
               .traverse { finalCB =>
-                val cache = CheckpointCacheData(finalCB.some, height = finalCB.calculateHeight())
+                val cache = CheckpointCacheFullData(finalCB.some, height = finalCB.calculateHeight())
                 dao.threadSafeSnapshotService.accept(cache)
                 processSignedBlock(
                   cache,
@@ -309,7 +312,7 @@ object EdgeProcessor extends StrictLogging {
   }
 
   def acceptWithResolveAttempt(
-    checkpointCacheData: CheckpointCacheData,
+    checkpointCacheData: CheckpointCacheFullData,
     nestedAcceptCount: Int = 0
   )(implicit dao: DAO): Unit = {
 
@@ -370,7 +373,7 @@ object EdgeProcessor extends StrictLogging {
 
 }
 
-case class TipData(checkpointBlock: CheckpointBlock, numUses: Int)
+case class TipData(checkpointBlock: CheckpointBlockFullData, numUses: Int)
 
 case class SnapshotInfo(
   snapshot: Snapshot,
@@ -387,7 +390,7 @@ case object GetMemPool
 
 case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String]) extends Signable
 
-case class StoredSnapshot(snapshot: Snapshot, checkpointCache: Seq[CheckpointCacheData])
+case class StoredSnapshot(snapshot: Snapshot, checkpointCache: Seq[CheckpointCacheFullData])
 
 case class DownloadComplete(latestSnapshot: Snapshot)
 
@@ -515,30 +518,29 @@ object Snapshot {
       dao.metrics.incrementMetric("snapshotCBAcceptQueryFailed")
     }
 
-    for (cbOpt <- cbData;
-         cbCache <- cbOpt;
-         cb <- cbCache.checkpointBlock;
-         message <- cb.messages) {
-      dao.messageService.updateSync(
-        message.signedMessageData.hash,
-        _.copy(snapshotHash = Some(snapshot.hash)),
-        ChannelMessageMetadata(message, Some(cb.baseHash), Some(snapshot.hash))
-      )
-      dao.metrics.incrementMetric("messageSnapshotHashUpdated")
-    }
+    val cbs = cbData.flatten.map(_.cb)
 
-    for (cbOpt <- cbData;
-         cbCache <- cbOpt;
-         cb <- cbCache.checkpointBlock;
-         tx <- cb.transactions) {
-      // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
-      // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
+    cbs.foreach {cb =>
+
+      CheckpointService.fetchMessages(cb.transactionsMerkleRoot).foreach { message =>
+        dao.messageService.updateSync(
+          message.signedMessageData.hash,
+          _.copy(snapshotHash = Some(snapshot.hash)),
+          ChannelMessageMetadata(message, Some(cb.baseHash), Some(snapshot.hash))
+        )
+        dao.metrics.incrementMetric("messageSnapshotHashUpdated")
+
+      }
+
+      CheckpointService.fetchTransactions(cb.transactionsMerkleRoot).foreach{ tx =>
+        // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
+        // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
       dao.addressService
         .transferSnapshot(tx)
         .flatMap(_ ⇒ dao.acceptedTransactionService.remove(Set(tx.hash)))
         .flatTap(_ ⇒ dao.metrics.incrementMetricAsync("snapshotAppliedBalance"))
         .unsafeRunSync()
-    }
+    }}
   }
 
 }

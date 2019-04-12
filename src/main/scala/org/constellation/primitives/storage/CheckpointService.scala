@@ -5,7 +5,8 @@ import cats.effect.IO
 import cats.implicits._
 import org.constellation.DAO
 import org.constellation.datastore.swaydb.SwayDbConversions._
-import org.constellation.primitives.Schema.CheckpointCacheData
+import org.constellation.primitives.Schema.{CheckpointCacheData, CheckpointCacheFullData}
+import org.constellation.primitives._
 import swaydb.serializers.Default.StringSerializer
 
 import scala.concurrent.ExecutionContextExecutor
@@ -38,7 +39,7 @@ class CheckpointBlocksMemPool(size: Int = 50000)(implicit dao: DAO)
     key: String,
     value: CheckpointCacheData
   ): CheckpointCacheData = {
-    value.checkpointBlock.foreach(cb => incrementChildrenCount(cb.parentSOEBaseHashes()))
+    incrementChildrenCount(value.cb.parentSOEBaseHashes())
     super.putSync(key, value)
   }
 
@@ -54,6 +55,33 @@ class CheckpointBlocksMemPool(size: Int = 50000)(implicit dao: DAO)
 
 object CheckpointService {
   def apply(implicit dao: DAO, size: Int = 50000) = new CheckpointService(dao, size)
+
+  def fetchFullData(cacheData: CheckpointCacheData)(implicit dao: DAO): CheckpointCacheFullData = {
+    CheckpointCacheFullData(
+      Some(
+        CheckpointBlockFullData(
+          fetchTransactions(cacheData.cb.transactionsMerkleRoot),
+          cacheData.cb.checkpoint,
+          fetchMessages(cacheData.cb.messagesMerkleRoot),
+          fetchNotifications(cacheData.cb.notificationsMerkleRoot)
+        )
+      ),
+      cacheData.children,
+      Some(cacheData.height)
+    )
+  }
+  def fetchTransactions(transactionsMerkleRoot: String)(implicit dao: DAO): Seq[Transaction] = ???
+// TODO: wkoszycki implement
+//    val txs = dao.transactionService.merklePool
+//      .get(transactionsMerkleRoot)
+//      .map(opt => opt.getOrElse(Seq.empty))
+//      .map(s => s.map(dao.transactionService.lookup(_)).sequence)
+
+  def fetchMessages(messagesMerkleRoot: String)(implicit dao: DAO): Seq[ChannelMessage] = ???
+
+  def fetchNotifications(notificationsMerkleRoot: String)(
+    implicit dao: DAO
+  ): Seq[PeerNotification] = ???
 }
 
 class CheckpointService(dao: DAO, size: Int = 50000) {
@@ -64,7 +92,7 @@ class CheckpointService(dao: DAO, size: Int = 50000) {
   def migrateOverCapacity(): IO[Unit] = {
     midDb
       .pullOverCapacity()
-      .flatMap(_.map(cb => oldDb.put(cb.checkpointBlock.get.baseHash, cb)).sequence[IO, Unit])
+      .flatMap(_.map(cd => oldDb.put(cd.cb.baseHash, cd)).sequence[IO, Unit])
       .map(_ => ())
   }
 

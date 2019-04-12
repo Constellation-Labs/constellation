@@ -18,11 +18,11 @@ trait KVDBDatastoreImpl extends Datastore {
 
   override def getSnapshot(key: String): Option[consensus.Snapshot] = get[consensus.Snapshot](key)
 
-  override def putCheckpointCacheData(s: String, c: CheckpointCacheData): Unit =
+  override def putCheckpointCacheData(s: String, c: CheckpointCacheFullData): Unit =
     put(s, c)
 
-  override def getCheckpointCacheData(s: String): Option[CheckpointCacheData] =
-    get[CheckpointCacheData](s)
+  override def getCheckpointCacheData(s: String): Option[CheckpointCacheFullData] =
+    get[CheckpointCacheFullData](s)
 
   override def putTransactionCacheData(s: String, t: TransactionCacheData): Unit =
     put(s, t)
@@ -33,9 +33,9 @@ trait KVDBDatastoreImpl extends Datastore {
 
   override def updateCheckpointCacheData(
     key: String,
-    f: CheckpointCacheData => CheckpointCacheData,
-    empty: CheckpointCacheData
-  ): CheckpointCacheData = update(key, f, empty)
+    f: CheckpointCacheFullData => CheckpointCacheFullData,
+    empty: CheckpointCacheFullData
+  ): CheckpointCacheFullData = update(key, f, empty)
 
   override def updateTransactionCacheData(
     key: String,
