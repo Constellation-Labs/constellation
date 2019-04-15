@@ -62,8 +62,8 @@ object CheckpointService {
         CheckpointBlockFullData(
           fetchTransactions(cacheData.cb.transactionsMerkleRoot),
           cacheData.cb.checkpoint,
-          fetchMessages(cacheData.cb.messagesMerkleRoot),
-          fetchNotifications(cacheData.cb.notificationsMerkleRoot)
+          cacheData.cb.messagesMerkleRoot.map( mr => fetchMessages(mr)).getOrElse(Seq.empty),
+          cacheData.cb.notificationsMerkleRoot.map( mr => fetchNotifications(mr)).getOrElse(Seq.empty)
         )
       ),
       cacheData.children,

@@ -15,23 +15,23 @@ object CheckpointBlockData {
   def apply(data: CheckpointBlockFullData)(implicit dao: DAO): CheckpointBlockData = {
 
       val txTree = MerkleTree(data.transactions.map(_.hash))
-      val msgTree = MerkleTree(data.messages.map(_.signedMessageData.signatures.hash))
-      val notificationsTree = MerkleTree(data.messages.map(_.signedMessageData.signatures.hash))
+      val msgs = data.messages.map(_.signedMessageData.signatures.hash)
+      val notifications = data.messages.map(_.signedMessageData.signatures.hash)
      // rootHash => List[Transactions]
      // rootHash => List[Transactions]
       CheckpointBlockData(
         txTree.rootHash,
         data.checkpoint,
-        msgTree.rootHash,
-        notificationsTree.rootHash,
+        if (msgs.isEmpty) None else Some(MerkleTree(msgs).rootHash),
+        if (notifications.isEmpty) None else Some(MerkleTree(notifications).rootHash),
       )
     }
 }
 case class CheckpointBlockData(
     transactionsMerkleRoot: String,
     checkpoint: CheckpointEdge,
-    messagesMerkleRoot: String,
-    notificationsMerkleRoot: String
+    messagesMerkleRoot: Option[String],
+    notificationsMerkleRoot: Option[String]
   ) {
     def baseHash: String = checkpoint.edge.baseHash
 

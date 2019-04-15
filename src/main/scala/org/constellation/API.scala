@@ -212,10 +212,10 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                     cb.soeHash,
                     ccd.height.min,
                     cb.parentSOEHashes,
-                    CheckpointService.fetchMessages(cb.messagesMerkleRoot)
+                    cb.messagesMerkleRoot.map(mr => CheckpointService.fetchMessages(mr)
                       .map(m => ChannelValidationInfo(m.signedMessageData.data.channelId, valid = true))
                       .distinct
-                  )
+                  ).getOrElse(Seq.empty))
                 })
               }
           } ~

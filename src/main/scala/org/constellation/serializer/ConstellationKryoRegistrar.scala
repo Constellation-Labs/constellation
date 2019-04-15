@@ -40,6 +40,8 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[SignedObservationEdge])
     kryo.register(classOf[ObservationEdge])
     kryo.register(classOf[CheckpointBlockFullData])
+    kryo.register(classOf[CheckpointCacheData])
+    kryo.register(classOf[CheckpointBlockData])
     kryo.register(classOf[TypedEdgeHash])
     //  kryo.register(classOf[EdgeHashType])
     kryo.register(classOf[Enumeration#Value])
