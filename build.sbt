@@ -113,6 +113,8 @@ lazy val testDependencies = Seq(
   "org.scalatest" %% "scalatest" % "3.0.7",
   "org.scalactic" %% "scalactic" % "3.0.7",
   "org.scalamock" %% "scalamock" % "4.1.0",
+  "org.mockito" % "mockito-core" % "2.18.0",
+
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
 ).map(_ % "it,test")

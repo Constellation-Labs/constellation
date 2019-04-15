@@ -9,17 +9,18 @@ import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Validation.EnrichedFuture
-import org.constellation.util.{APIClient, Distance, HashSignature, Signable}
+import org.constellation.util._
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.async.Async.{async, await}
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
 case class CreateCheckpointEdgeResponse(
   checkpointEdge: CheckpointEdge,
@@ -281,84 +282,6 @@ object EdgeProcessor extends StrictLogging {
     result.sequence
   }
 
-  def resolveTransactions(
-    hashes: Seq[String],
-    priorityPeer: Id
-  )(implicit dao: DAO): Future[Seq[TransactionCacheData]] = {
-
-    implicit val exec: ExecutionContextExecutor = dao.signatureExecutionContext
-
-    def lookupTransaction(hash: String, client: APIClient): Future[Option[TransactionCacheData]] =
-      client.getNonBlocking[Option[TransactionCacheData]](
-        s"transaction/$hash",
-        timeout = 4.seconds
-      )
-
-    def resolveTransaction(hash: String,
-                           peers: Seq[APIClient]): Future[Option[TransactionCacheData]] = {
-
-      var remainingPeers = peers.tail
-
-      val lookupResult = lookupTransaction(hash, peers.head)
-      lookupResult.recoverWith {
-        // TODO: handle more exceptions here by collecting them all
-        case _ => Future.failed(new Exception("Ran out of peers to query for transaction"))
-      }
-    }
-
-    // Change to facilitator ordering
-
-    val (priority, nonPriority) = dao.readyPeers.toSeq.partition(_._1 == priorityPeer)
-    val peerData = priority ++ nonPriority
-    val peers = peerData.map { _._2.client }
-    val results = hashes.map { hash =>
-      resolveTransaction(hash, peers)
-    }
-    val seq = Future.sequence(results)
-    seq.transformWith {
-      case Success(responses) if responses.forall(_.nonEmpty) =>
-        Future.successful(responses.flatten)
-      case _ => Future.failed(new Exception("Failed to resolve transactions"))
-    }
-
-  }
-
-  def resolveChannelMessages(
-    hashes: Seq[String],
-    priorityPeer: Id
-  )(implicit dao: DAO): Future[Seq[ChannelMessageMetadata]] = {
-    implicit val exec: ExecutionContextExecutor = dao.signatureExecutionContext
-
-    def lookupChannelMessage(hash: String, client: APIClient): Future[Option[ChannelMessageMetadata]] =
-      client.getNonBlocking[Option[ChannelMessageMetadata]](
-        s"message/$hash",
-        timeout = 4.seconds
-      )
-
-    def resolveChannelMessage(
-      hash: String,
-      peers: Seq[APIClient]
-    ): Future[Option[ChannelMessageMetadata]] = {
-      val remainingPeers = peers.tail
-      val lookupResult = lookupChannelMessage(hash, peers.head)
-      lookupResult.recoverWith {
-        case _ ⇒ Future.failed(new Exception("Ran out of peers to query for channel-message"))
-      }
-    }
-
-    val (priority, nonPriority) = dao.readyPeers.toSeq.partition(_._1 == priorityPeer)
-    val peerData = priority ++ nonPriority
-    val peers = peerData.map(_._2.client)
-    val results = hashes.map(hash ⇒ resolveChannelMessage(hash, peers))
-
-    val seq = Future.sequence(results)
-    seq.transformWith {
-      case Success(responses) if responses.forall(_.nonEmpty) ⇒
-        Future.successful(responses.flatten)
-      case _ ⇒ Future.failed(new Exception("Failed to resolve channel-messages"))
-    }
-  }
-
   def handleSignatureRequest(
     sr: SignatureRequest
   )(implicit dao: DAO): Future[Try[SignatureResponse]] = {
@@ -385,46 +308,9 @@ object EdgeProcessor extends StrictLogging {
     )(dao.signatureExecutionContext, dao)
   }
 
-  def simpleResolveCheckpoint(hash: String)(implicit dao: DAO): Future[Unit] = {
-
-    implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
-
-    def innerResolve(
-      peers: List[APIClient]
-    )(implicit ec: ExecutionContext): Future[CheckpointCacheData] = {
-      peers match {
-        case activePeer :: rest =>
-          val resp = activePeer
-            .getNonBlocking[Option[CheckpointCacheData]](s"checkpoint/$hash", timeout = 10.seconds)
-          resp.flatMap {
-            case Some(ccd) => Future.successful(ccd)
-            case None =>
-              dao.metrics.incrementMetric("resolvePeerIncrement")
-              innerResolve(rest)
-          }
-
-        case Nil =>
-          Future.failed(new RuntimeException(s"Unable to resolve checkpoint hash $hash"))
-
-      }
-    }
-
-    val resolved = wrapFutureWithMetric(
-      innerResolve(dao.peerInfo.values.map(_.client).toList)(dao.edgeExecutionContext),
-      "simpleResolveCheckpoint"
-    )
-
-    resolved.map { checkpointCacheData =>
-      if (!dao.checkpointService.contains(checkpointCacheData.checkpointBlock.get.baseHash)) {
-        dao.metrics.incrementMetric("resolveAcceptCBCall")
-        acceptWithResolveAttempt(checkpointCacheData)
-      }
-    }
-
-  }
-
   def acceptWithResolveAttempt(
-    checkpointCacheData: CheckpointCacheData
+    checkpointCacheData: CheckpointCacheData,
+    nestedAcceptCount: Int = 0
   )(implicit dao: DAO): Unit = {
 
     dao.threadSafeSnapshotService.accept(checkpointCacheData)
@@ -436,13 +322,31 @@ object EdgeProcessor extends StrictLogging {
     if (parentExists.forall(_._2)) {
       dao.metrics.incrementMetric("resolveFinishedCheckpointParentsPresent")
     } else {
+      if (nestedAcceptCount >= ConfigUtil.maxNestedCBresolution) {
+        throw new RuntimeException(s"Max nested CB resolution: $nestedAcceptCount reached.")
+      }
       dao.metrics.incrementMetric("resolveFinishedCheckpointParentMissing")
       parentExists.filterNot(_._2).foreach {
         case (h, _) =>
-          wrapFutureWithMetric(
-            simpleResolveCheckpoint(h),
-            "resolveCheckpoint"
-          )(dao, dao.edgeExecutionContext)
+          DataResolver
+            .resolveCheckpoint(h, dao.readyPeers.map(p => PeerApiClient(p._1, p._2.client)))
+            .flatMap { ccd =>
+              IO {
+                ccd.foreach { cd =>
+                  cd.checkpointBlock.foreach { cb =>
+                    if (cd.children < 2) {
+                      dao.concurrentTipService.put(cb.baseHash, TipData(cb, 0))(dao.metrics)
+                    }
+                    if (!dao.checkpointService
+                          .contains(cd.checkpointBlock.get.baseHash)) {
+                      dao.metrics.incrementMetric("resolveAcceptCBCall")
+                      acceptWithResolveAttempt(cd, nestedAcceptCount + 1)
+                    }
+                  }
+                }
+              }
+            }
+            .unsafeRunAsyncAndForget()
       }
 
     }
@@ -508,10 +412,8 @@ object Snapshot {
       case _ =>
         tryWithMetric(
           {
-            Files.write(
-              Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash),
-              serialized
-            )
+            Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash),
+                        serialized)
           },
           "writeSnapshot"
         )

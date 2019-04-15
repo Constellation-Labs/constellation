@@ -15,7 +15,9 @@ object CheckpointBlocksOld {
 }
 
 class CheckpointBlocksOld(path: File)(implicit ec: ExecutionContextExecutor)
-  extends DbStorage[String, CheckpointCacheData](dbPath = (path / "disk1" / "checkpoints_old").path)
+    extends DbStorage[String, CheckpointCacheData](
+      dbPath = (path / "disk1" / "checkpoints_old").path
+    )
 
 object CheckpointBlocksMid {
   val midCapacity = 1
@@ -24,23 +26,44 @@ object CheckpointBlocksMid {
 }
 
 class CheckpointBlocksMid(path: File, midCapacity: Int)(implicit ec: ExecutionContextExecutor)
-  extends MidDbStorage[String, CheckpointCacheData](dbPath = (path / "disk1" / "checkpoints_mid").path, midCapacity)
+    extends MidDbStorage[String, CheckpointCacheData](dbPath =
+                                                        (path / "disk1" / "checkpoints_mid").path,
+                                                      midCapacity)
 
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
 // mwadon: /\ is still relevant?
-class CheckpointBlocksMemPool(size: Int = 50000) extends StorageService[CheckpointCacheData](size)
+class CheckpointBlocksMemPool(size: Int = 50000)(implicit dao: DAO)
+    extends StorageService[CheckpointCacheData](size) {
+  override def putSync(
+    key: String,
+    value: CheckpointCacheData
+  ): CheckpointCacheData = {
+    value.checkpointBlock.foreach(cb => incrementChildrenCount(cb.parentSOEBaseHashes()))
+    super.putSync(key, value)
+  }
+
+  def incrementChildrenCount(hashes: Seq[String]): Unit = {
+    hashes.foreach(
+      hash =>
+        update(hash, (cd: CheckpointCacheData) => { cd.copy(children = cd.children + 1) })
+          .unsafeRunAsyncAndForget()
+    )
+  }
+
+}
 
 object CheckpointService {
   def apply(implicit dao: DAO, size: Int = 50000) = new CheckpointService(dao, size)
 }
 
 class CheckpointService(dao: DAO, size: Int = 50000) {
-  val memPool = new CheckpointBlocksMemPool(size)
+  val memPool = new CheckpointBlocksMemPool(size)(dao)
   val midDb: MidDbStorage[String, CheckpointCacheData] = CheckpointBlocksMid(dao)
   val oldDb: DbStorage[String, CheckpointCacheData] = CheckpointBlocksOld(dao)
 
   def migrateOverCapacity(): IO[Unit] = {
-    midDb.pullOverCapacity()
+    midDb
+      .pullOverCapacity()
       .flatMap(_.map(cb => oldDb.put(cb.checkpointBlock.get.baseHash, cb)).sequence[IO, Unit])
       .map(_ => ())
   }
@@ -51,4 +74,3 @@ class CheckpointService(dao: DAO, size: Int = 50000) {
   def get(key: String) = lookup(key).unsafeRunSync()
   def contains(key: String) = lookup(key).map(_.nonEmpty).unsafeRunSync()
 }
-
