@@ -278,7 +278,10 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
             p.copy(notification = p.notification diff Seq(n))
           }
         }
-        .foreach(pd => self ! UpdatePeerInfo(pd))
+        .foreach{pd =>
+          pd.notification.foreach(n => dao.notificationService.memPool.put(n.hash, n))
+          self ! UpdatePeerInfo(pd)
+        }
 
     case RemovePeerRequest(hp, id) =>
       val updatedPeerInfo = peers.filter {

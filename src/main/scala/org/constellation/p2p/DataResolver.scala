@@ -22,7 +22,7 @@ object DataResolver {
       "message",
       pool,
       (t: ChannelMessageMetadata) => {
-        dao.messageService.put(t.channelMessage.signedMessageData.hash,
+        dao.messageService.memPool.put(t.channelMessage.signedMessageData.hash,
                                t)
       },
       priorityClient

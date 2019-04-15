@@ -70,18 +70,62 @@ object CheckpointService {
       Some(cacheData.height)
     )
   }
-  def fetchTransactions(transactionsMerkleRoot: String)(implicit dao: DAO): Seq[Transaction] = ???
-// TODO: wkoszycki implement
-//    val txs = dao.transactionService.merklePool
-//      .get(transactionsMerkleRoot)
-//      .map(opt => opt.getOrElse(Seq.empty))
-//      .map(s => s.map(dao.transactionService.lookup(_)).sequence)
+  def fetchTransactions(transactionsMerkleRoot: String)(implicit dao: DAO): Seq[Transaction] = {
 
-  def fetchMessages(messagesMerkleRoot: String)(implicit dao: DAO): Seq[ChannelMessage] = ???
+    dao.transactionService.merklePool
+      .get(transactionsMerkleRoot)
+      .map(opt => opt.getOrElse(Seq.empty))
+      .map(
+        s =>
+          s.map(
+              dao.transactionService
+                .lookup(_)
+                .map(maybeT => maybeT.get.transaction)
+            )
+            .toList
+            .sequence[IO, Transaction]
+      )
+      .flatten
+      .unsafeRunSync()
+  }
+
+  def fetchMessages(messagesMerkleRoot: String)(implicit dao: DAO): Seq[ChannelMessage] = {
+    dao.messageService.merklePool
+      .get(messagesMerkleRoot)
+      .map(opt => opt.getOrElse(Seq.empty))
+      .map(
+        s =>
+          s.map(
+              dao.messageService
+                .lookup(_)
+                .map(maybeM => maybeM.get.channelMessage)
+            )
+            .toList
+            .sequence[IO, ChannelMessage]
+      )
+      .flatten
+      .unsafeRunSync()
+  }
 
   def fetchNotifications(notificationsMerkleRoot: String)(
     implicit dao: DAO
-  ): Seq[PeerNotification] = ???
+  ): Seq[PeerNotification] = {
+    dao.notificationService.merklePool
+      .get(notificationsMerkleRoot)
+      .map(opt => opt.getOrElse(Seq.empty))
+      .map(
+        s =>
+          s.map(
+              dao.notificationService
+                .lookup(_)
+                .map(maybeM => maybeM.get)
+            )
+            .toList
+            .sequence[IO, PeerNotification]
+      )
+      .flatten
+      .unsafeRunSync()
+  }
 }
 
 class CheckpointService(dao: DAO, size: Int = 50000) {

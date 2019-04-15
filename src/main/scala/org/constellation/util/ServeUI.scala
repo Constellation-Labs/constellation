@@ -250,7 +250,7 @@ trait ServeUI {
           Some(
             div(
               id := "message-view",
-              dao.messageService.getSync(msgHash).prettyJson
+              dao.messageService.memPool.getSync(msgHash).prettyJson
             )
           )
         )

@@ -132,7 +132,7 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
 
     val resolvedMessages = transactionProposals.values
       .flatMap(proposal ⇒ proposal.messages.map(hash ⇒ (hash, proposal)))
-      .filterNot(p ⇒ dao.messageService.contains(p._1).unsafeRunSync())
+      .filterNot(p ⇒ dao.messageService.memPool.contains(p._1).unsafeRunSync())
       .toList
       .map(
         p ⇒

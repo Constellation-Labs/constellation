@@ -371,6 +371,7 @@ trait EdgeDAO {
   )
   val messageService = new MessageService()
   val channelService = new ChannelService()
+  val notificationService = new NotificationService()
   val soeService = new SOEService()
 
   val recentBlockTracker = new RecentDataTracker[CheckpointCacheData](200)
