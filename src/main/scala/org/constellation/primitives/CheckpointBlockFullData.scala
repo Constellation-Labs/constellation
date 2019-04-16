@@ -7,32 +7,35 @@ import cats.implicits._
 import constellation.signedObservationEdge
 import org.constellation.DAO
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.storage.CheckpointService
+import org.constellation.primitives.storage.{CheckpointService, StorageService}
 import org.constellation.util.{HashSignature, MerkleTree}
 
 object CheckpointBlockData {
 
   def apply(data: CheckpointBlockFullData)(implicit dao: DAO): CheckpointBlockData = {
-
-      val txTree = MerkleTree(data.transactions.map(_.hash))
-      val msgs = data.messages.map(_.signedMessageData.signatures.hash)
-      val notifications = data.messages.map(_.signedMessageData.signatures.hash)
-     // rootHash => List[Transactions]
-     // rootHash => List[Transactions]
       CheckpointBlockData(
-        txTree.rootHash,
+        add(data.transactions.map(_.hash), dao.transactionService.merklePool).get,
         data.checkpoint,
-        if (msgs.isEmpty) None else Some(MerkleTree(msgs).rootHash),
-        if (notifications.isEmpty) None else Some(MerkleTree(notifications).rootHash),
+        add(data.messages.map(_.signedMessageData.hash),
+            dao.messageService.merklePool),
+        add(data.notifications.map(_.hash),
+          dao.notificationService.merklePool)
+        ,
       )
     }
+
+  private def add(data: Seq[String], ss: StorageService[Seq[String]]): Option[String] = {
+      data match {
+        case Seq() => None
+        case _ =>
+          val rootHash = MerkleTree(data).rootHash
+          ss.putSync(rootHash, data)
+          Some(rootHash)
+      }
+    }
 }
-case class CheckpointBlockData(
-    transactionsMerkleRoot: String,
-    checkpoint: CheckpointEdge,
-    messagesMerkleRoot: Option[String],
-    notificationsMerkleRoot: Option[String]
-  ) {
+
+abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
     def baseHash: String = checkpoint.edge.baseHash
 
     def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
@@ -49,9 +52,17 @@ case class CheckpointBlockData(
 
     def soeHash: String = checkpoint.edge.signedObservationEdge.hash
 
-    def signatures: Seq[HashSignature] = checkpoint.edge.signedObservationEdge.signatureBatch.signatures
-
+    def signatures: Seq[HashSignature] =
+      checkpoint.edge.signedObservationEdge.signatureBatch.signatures
   }
+
+case class CheckpointBlockData(
+    transactionsMerkleRoot: String,
+    checkpointEdge: CheckpointEdge,
+    messagesMerkleRoot: Option[String],
+    notificationsMerkleRoot: Option[String]
+  ) extends CheckpointEdgeLike(checkpointEdge)
+
 case class CheckpointBlockFullData(
   transactions: Seq[Transaction],
   checkpoint: CheckpointEdge,
@@ -152,7 +163,7 @@ case class CheckpointBlockFullData(
 
   def store(cache: CheckpointCacheFullData)(implicit dao: DAO): Unit = {
     cache.checkpointBlock.foreach { cb =>
-      val data = CheckpointCacheData(CheckpointBlockData(cb), 0, cache.height.get)
+      val data = CheckpointCacheData(CheckpointBlockData(cb), cache.children, cache.height.get)
       dao.checkpointService.memPool.put(baseHash, data).unsafeRunSync()
       dao.recentBlockTracker.put(data)
     }

@@ -57,74 +57,69 @@ object CheckpointService {
   def apply(implicit dao: DAO, size: Int = 50000) = new CheckpointService(dao, size)
 
   def fetchFullData(cacheData: CheckpointCacheData)(implicit dao: DAO): CheckpointCacheFullData = {
+    val txs = fetchTransactions(cacheData.cb.transactionsMerkleRoot)
+    val msgs = cacheData.cb.messagesMerkleRoot.map(mr => fetchMessages(mr)).getOrElse(Seq.empty)
+    val notifications =
+      cacheData.cb.notificationsMerkleRoot.map(mr => fetchNotifications(mr)).getOrElse(Seq.empty)
     CheckpointCacheFullData(
       Some(
         CheckpointBlockFullData(
-          fetchTransactions(cacheData.cb.transactionsMerkleRoot),
+          txs,
           cacheData.cb.checkpoint,
-          cacheData.cb.messagesMerkleRoot.map( mr => fetchMessages(mr)).getOrElse(Seq.empty),
-          cacheData.cb.notificationsMerkleRoot.map( mr => fetchNotifications(mr)).getOrElse(Seq.empty)
+          msgs,
+          notifications
         )
       ),
       cacheData.children,
       Some(cacheData.height)
     )
   }
-  def fetchTransactions(transactionsMerkleRoot: String)(implicit dao: DAO): Seq[Transaction] = {
 
-    dao.transactionService.merklePool
-      .get(transactionsMerkleRoot)
-      .map(opt => opt.getOrElse(Seq.empty))
-      .map(
-        s =>
-          s.map(
-              dao.transactionService
-                .lookup(_)
-                .map(maybeT => maybeT.get.transaction)
-            )
-            .toList
-            .sequence[IO, Transaction]
-      )
-      .flatten
-      .unsafeRunSync()
+  def orElseThrow[T](merkleRoot: String, data: Option[Seq[T]])(implicit m: ClassManifest[T]): Seq[T] = {
+    data match {
+      case None    => throw MerkleRootMappingException(merkleRoot, m.runtimeClass.getSimpleName)
+      case Some(x) => x
+    }
   }
 
-  def fetchMessages(messagesMerkleRoot: String)(implicit dao: DAO): Seq[ChannelMessage] = {
-    dao.messageService.merklePool
-      .get(messagesMerkleRoot)
-      .map(opt => opt.getOrElse(Seq.empty))
-      .map(
-        s =>
-          s.map(
-              dao.messageService
-                .lookup(_)
-                .map(maybeM => maybeM.get.channelMessage)
-            )
-            .toList
-            .sequence[IO, ChannelMessage]
-      )
-      .flatten
-      .unsafeRunSync()
+  def fetchTransactions(
+    merkleRoot: String
+  )(implicit dao: DAO): Seq[Transaction] = {
+    orElseThrow(
+      merkleRoot,
+      dao.transactionService.merklePool
+        .get(merkleRoot)
+        .map(_.getOrElse(Seq.empty).map(dao.transactionService.lookup(_).map(_.map(_.transaction))))
+        .flatMap(_.toList.sequence)
+        .map(_.sequence)
+        .unsafeRunSync()
+    )
   }
 
-  def fetchNotifications(notificationsMerkleRoot: String)(
+  def fetchMessages(merkleRoot: String)(implicit dao: DAO): Seq[ChannelMessage] = {
+    orElseThrow(
+      merkleRoot,
+      dao.messageService.merklePool
+        .get(merkleRoot)
+        .map(_.getOrElse(Seq.empty).map(dao.messageService.lookup(_).map(_.map(_.channelMessage))))
+        .flatMap(_.toList.sequence)
+        .map(_.sequence)
+        .unsafeRunSync()
+    )
+  }
+
+  def fetchNotifications(merkleRoot: String)(
     implicit dao: DAO
   ): Seq[PeerNotification] = {
-    dao.notificationService.merklePool
-      .get(notificationsMerkleRoot)
-      .map(opt => opt.getOrElse(Seq.empty))
-      .map(
-        s =>
-          s.map(
-              dao.notificationService
-                .lookup(_)
-                .map(maybeM => maybeM.get)
-            )
-            .toList
-            .sequence[IO, PeerNotification]
-      )
-      .flatten
-      .unsafeRunSync()
+    orElseThrow(
+      merkleRoot,
+      dao.notificationService.merklePool
+        .get(merkleRoot)
+        .map(_.getOrElse(Seq.empty).map(dao.notificationService.lookup(_)))
+        .flatMap(_.toList.sequence)
+        .map(_.sequence)
+        .unsafeRunSync()
+    )
   }
 }
 
@@ -146,3 +141,5 @@ class CheckpointService(dao: DAO, size: Int = 50000) {
   def get(key: String) = lookup(key).unsafeRunSync()
   def contains(key: String) = lookup(key).map(_.nonEmpty).unsafeRunSync()
 }
+case class MerkleRootMappingException(root: String, t: String)
+      extends Exception(s"Unable to obtain data for root: $root and type:")
