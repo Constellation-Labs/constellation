@@ -99,11 +99,12 @@ class TrieBasedTipService(sizeLimit: Int,
     if (maybeDatas.exists{_.isEmpty}) {
       dao.metrics.incrementMetric("minTipHeightCBDataEmptyForKeys")
     }
-
     maybeDatas
       .flatMap {
-        _.map {
-          _.height.min
+        _.flatMap {
+          _.height.map {
+            _.min
+          }
         }
       }
       .min

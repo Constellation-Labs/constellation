@@ -210,7 +210,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
 
                   BlockUIOutput(
                     cb.soeHash,
-                    ccd.height.min,
+                    ccd.height.get.min,
                     cb.parentSOEHashes,
                     cb.messagesMerkleRoot.map(mr => CheckpointService.fetchMessages(mr)
                       .map(m => ChannelValidationInfo(m.signedMessageData.data.channelId, valid = true))

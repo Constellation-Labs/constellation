@@ -212,7 +212,7 @@ object Schema {
   case class CheckpointCacheData(
     cb: CheckpointBlockData,
     children: Int = 0,
-    height: Height
+    height: Option[Height]
   )
 
   case class CheckpointCacheFullData(

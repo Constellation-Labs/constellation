@@ -215,7 +215,11 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
         val maybeDatas = acceptedCBSinceSnapshot.map(dao.checkpointService.get)
 
-        val blocksWithinHeightInterval = maybeDatas.filter(_.exists(ccd =>  ccd.height.min > lastSnapshotHeight && ccd.height.min <= nextHeightInterval))
+        val blocksWithinHeightInterval = maybeDatas.filter {
+          _.exists(_.height.exists { h =>
+            h.min > lastSnapshotHeight && h.min <= nextHeightInterval
+          })
+        }
         if (blocksWithinHeightInterval.isEmpty) {
           dao.metrics.incrementMetric("snapshotNoBlocksWithinHeightInterval")
         } else {

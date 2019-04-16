@@ -99,7 +99,7 @@ object EdgeProcessor extends StrictLogging {
         height = fallbackHeight
       )
       // TODO: wkoszycki below was originally here but shall we keep it or move it to store itself
-      dao.checkpointService.midDb.put(cb.baseHash, CheckpointCacheData(CheckpointBlockData(cb), 0, fallbackHeight.get)).unsafeRunSync()
+      dao.checkpointService.midDb.put(cb.baseHash, CheckpointCacheData(CheckpointBlockData(cb), 0, fallbackHeight)).unsafeRunSync()
 
       cb.store(
         data

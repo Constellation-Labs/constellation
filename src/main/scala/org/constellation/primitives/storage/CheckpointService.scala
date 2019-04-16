@@ -10,6 +10,7 @@ import org.constellation.primitives._
 import swaydb.serializers.Default.StringSerializer
 
 import scala.concurrent.ExecutionContextExecutor
+import scala.reflect.ClassTag
 
 object CheckpointBlocksOld {
   def apply(dao: DAO) = new CheckpointBlocksOld(dao.dbPath)(dao.edgeExecutionContext)
@@ -71,11 +72,11 @@ object CheckpointService {
         )
       ),
       cacheData.children,
-      Some(cacheData.height)
+      cacheData.height
     )
   }
 
-  def orElseThrow[T](merkleRoot: String, data: Option[Seq[T]])(implicit m: ClassManifest[T]): Seq[T] = {
+  def orElseThrow[T](merkleRoot: String, data: Option[Seq[T]])(implicit m: ClassTag[T]): Seq[T] = {
     data match {
       case None    => throw MerkleRootMappingException(merkleRoot, m.runtimeClass.getSimpleName)
       case Some(x) => x

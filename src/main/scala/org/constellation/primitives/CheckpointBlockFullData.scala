@@ -86,7 +86,7 @@ case class CheckpointBlockFullData(
 
       val parents2 = parents.map { _.get }
 
-      val nonEmptyHeights = parents2.map { _.height.max }
+      val nonEmptyHeights = parents2.flatMap { _.height.map { _.max } }
       if (nonEmptyHeights.isEmpty) None
       else {
         Some(nonEmptyHeights.max + 1)
@@ -99,7 +99,7 @@ case class CheckpointBlockFullData(
 
       val parents2 = parents.map { _.get }
 
-      val nonEmptyHeights = parents2.map { _.height.max }
+      val nonEmptyHeights = parents2.flatMap(_.height.map { _.max })
       if (nonEmptyHeights.isEmpty) None
       else {
         Some(nonEmptyHeights.min + 1)
@@ -163,7 +163,7 @@ case class CheckpointBlockFullData(
 
   def store(cache: CheckpointCacheFullData)(implicit dao: DAO): Unit = {
     cache.checkpointBlock.foreach { cb =>
-      val data = CheckpointCacheData(CheckpointBlockData(cb), cache.children, cache.height.get)
+      val data = CheckpointCacheData(CheckpointBlockData(cb), cache.children, cache.height)
       dao.checkpointService.memPool.put(baseHash, data).unsafeRunSync()
       dao.recentBlockTracker.put(data)
     }
