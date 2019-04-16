@@ -14,7 +14,7 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import constellation._
 import org.constellation.CustomDirectives.printResponseTime
-import org.constellation.consensus.{CrossTalkConsensus, HTTPNodeRemoteSender, NodeRemoteSender}
+import org.constellation.consensus.{CrossTalkConsensus, HTTPNodeRemoteSender, NodeRemoteSender, RoundManager}
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.p2p.PeerAPI
@@ -277,7 +277,8 @@ class ConstellationNode(
     })
 
   def shutdown(): Unit = {
-
+    dao.nodeState = NodeState.Offline
+    randomTXManager.shutdown()
     bindingFuture
       .foreach(_.unbind())
 

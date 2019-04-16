@@ -6,25 +6,27 @@ import cats.implicits._
 import constellation.{wrapFutureWithMetric, _}
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCacheData, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
+import org.constellation.util.PeerApiClient
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
-class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
+class Round(roundData: RoundData, dao: DAO, dataResolver: DataResolver) extends Actor with ActorLogging {
 
   implicit val shadedDao: DAO = dao
   implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
-  val transactionProposals: mutable.Map[FacilitatorId, LightTransactionsProposal] =
+  private[consensus] val transactionProposals: mutable.Map[FacilitatorId, LightTransactionsProposal] =
     mutable.Map()
-  val checkpointBlockProposals: mutable.Map[FacilitatorId, CheckpointBlock] =
+  private[consensus] val checkpointBlockProposals: mutable.Map[FacilitatorId, CheckpointBlock] =
     mutable.Map()
 
-  protected var unionTransactionProposalsTikTok: Cancellable = _
+  private[consensus] var unionTransactionProposalsTikTok: Cancellable = _
 
   override def receive: Receive = {
     case StartTransactionProposal(_) =>
@@ -35,14 +37,16 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
           roundData.roundId,
           FacilitatorId(dao.id),
           transactions.map(_.hash),
-          messages.map(_.map(_.signedMessageData.hash)).getOrElse(Seq()),
+          messages
+            .map(_.map(_.signedMessageData.hash))
+            .getOrElse(Seq()),
           dao.peerInfo.flatMap(_._2.notification).toSeq
         )
 
-        context.parent ! BroadcastLightTransactionProposal(
+        passToParentActor(BroadcastLightTransactionProposal(
           roundData.peers,
           proposal
-        )
+        ))
         unionTransactionProposalsTikTok = scheduleUnionProposals
         self ! proposal
       }
@@ -67,82 +71,95 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
     case msg => log.info(s"Received unknown message: $msg")
   }
 
-  private def scheduleUnionProposals: Cancellable =
+  private[consensus] def scheduleUnionProposals: Cancellable =
     context.system.scheduler.scheduleOnce(
-      ConfigUtil.getDurationFromConfig("constellation.consensus.union-proposals-timeout",
-                                       15.second),
+      ConfigUtil.getDurationFromConfig(
+        "constellation.consensus.union-proposals-timeout",
+        15.second),
       self,
       UnionProposals
     )
 
-  private def receivedAllTransactionProposals: Boolean =
+  private[consensus] def receivedAllTransactionProposals: Boolean =
     transactionProposals.size >= roundData.peers.size + 1
 
-  private def receivedAllCheckpointBlockProposals: Boolean =
+  private[consensus] def receivedAllCheckpointBlockProposals: Boolean =
     checkpointBlockProposals.size >= roundData.peers.size + 1
 
-  private def cancelUnionTransactionProposalsTikTok(): Unit = {
+  private[consensus] def cancelUnionTransactionProposalsTikTok(): Unit = {
     Option(unionTransactionProposalsTikTok).foreach(_.cancel())
   }
 
-  def unionProposals(): Unit = {
+  private[consensus] def unionProposals(): Unit = {
 
-    def resolveTransaction(hash: String, facilitatorId: FacilitatorId): IO[Transaction] =
-      IO.fromFuture(IO {
-        EdgeProcessor.resolveTransactions(Seq(hash), facilitatorId.id)
-      }).map(_.head.transaction)
+    val readyPeers = dao.readyPeers
 
-    def resolveMessage(hash: String, facilitatorId: FacilitatorId): IO[ChannelMessage] =
-      IO.fromFuture(IO {
-        EdgeProcessor.resolveChannelMessages(Seq(hash), facilitatorId.id)
-      }).map(_.head.channelMessage)
-
-    val resolvedTxs = transactionProposals
-      .values
+    val resolvedTxs = transactionProposals.values
       .flatMap(proposal ⇒ proposal.txHashes.map(hash ⇒ (hash, proposal)))
       .filterNot(p ⇒ dao.transactionService.contains(p._1).unsafeRunSync())
       .toList
-      .map(p ⇒ resolveTransaction(p._1, p._2.facilitatorId))
-      .sequence[IO, Transaction]
+      .map(
+        p ⇒
+          dataResolver
+            .resolveTransactions(p._1,
+                                 readyPeers.map(r => PeerApiClient(r._1, r._2.client)),
+                                 readyPeers.get(p._2.facilitatorId.id).map(rp => PeerApiClient(p._2.facilitatorId.id, rp.client)))
+            .map(_.map(_.transaction))
+      )
+      .sequence
       .unsafeRunSync()
+      .flatten
 
-    val transactions = transactionProposals
-      .values
+    val transactions = transactionProposals.values
       .flatMap(_.txHashes)
-      .filterNot(hash ⇒ dao.transactionService.contains(hash).unsafeRunSync())
-      .map(hash ⇒ dao.transactionService.lookup(hash).map(
-        _.map(_.transaction)
-      ))
+      .filter(hash ⇒ dao.transactionService.contains(hash).unsafeRunSync())
+      .map(
+        hash ⇒
+          dao.transactionService
+            .lookup(hash)
+            .map(
+              _.map(_.transaction)
+          )
+      )
       .toList
       .sequence[IO, Option[Transaction]]
       .map {
-        _.flatten
-          .toSet
+        _.flatten.toSet
           .union(roundData.transactions.toSet)
           .toSeq
       }
       .unsafeRunSync()
 
-    val resolvedMessages = transactionProposals
-      .values
+    val resolvedMessages = transactionProposals.values
       .flatMap(proposal ⇒ proposal.messages.map(hash ⇒ (hash, proposal)))
       .filterNot(p ⇒ dao.messageService.contains(p._1).unsafeRunSync())
       .toList
-      .map(p ⇒ resolveMessage(p._1, p._2.facilitatorId))
-      .sequence[IO, ChannelMessage]
+      .map(
+        p ⇒
+          dataResolver
+            .resolveMessages(p._1,
+                             readyPeers.map(r => PeerApiClient(r._1, r._2.client)),
+                             readyPeers.get(p._2.facilitatorId.id).map(rp => PeerApiClient(p._2.facilitatorId.id, rp.client)))
+            .map(_.map(_.channelMessage))
+      )
+      .sequence
       .unsafeRunSync()
+      .flatten
 
-    val messages = transactionProposals
-      .values
+    val messages = transactionProposals.values
       .flatMap(_.messages)
-      .map(hash ⇒ dao.messageService.lookup(hash).map(
-        _.map(_.channelMessage)
-      ))
+      .map(
+        hash ⇒
+          dao.messageService
+            .lookup(hash)
+            .map(
+              _.map(_.channelMessage)
+          )
+      )
       .toList
       .sequence[IO, Option[ChannelMessage]]
       .map {
-        _.flatten
-          .toSet
+        _.flatten.toSet
           .union(roundData.messages.toSet)
           .toSeq
       }
@@ -161,11 +178,11 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
       notifications
     )(dao.keyPair)
     val blockProposal = UnionBlockProposal(roundData.roundId, FacilitatorId(dao.id), cb)
-    context.parent ! BroadcastUnionBlockProposal(roundData.peers, blockProposal)
+    passToParentActor(BroadcastUnionBlockProposal(roundData.peers, blockProposal))
     self ! blockProposal
   }
 
-  def resolveMajorityCheckpointBlock(): Unit = {
+  private[consensus] def resolveMajorityCheckpointBlock(): Unit = {
     val acceptedBlock = if (checkpointBlockProposals.nonEmpty) {
       val sameBlocks = checkpointBlockProposals
         .groupBy(_._2.baseHash)
@@ -182,11 +199,10 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
       dao.threadSafeSnapshotService.accept(cache)
       Some(majorityCheckpointBlock)
     } else None
-    context.parent ! StopBlockCreationRound(roundData.roundId, acceptedBlock)
-    context.stop(self)
+    passToParentActor(StopBlockCreationRound(roundData.roundId, acceptedBlock))
   }
 
-  def broadcastSignedBlockToNonFacilitators(
+  private[consensus] def broadcastSignedBlockToNonFacilitators(
     finishedCheckpoint: FinishedCheckpoint
   ): Future[List[Option[FinishedCheckpointResponse]]] = {
     val allFacilitators = roundData.peers.map(p => p.peerMetadata.id -> p).toMap
@@ -215,6 +231,9 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
     wrapFutureWithMetric(signatureResponses, "checkpointBlockFormation")(dao, ec)
   }
 
+  private[consensus] def passToParentActor(cmd: Any): Unit = {
+    context.parent ! cmd
+  }
 }
 
 case class FacilitatorId(id: Schema.Id) extends AnyVal
@@ -255,7 +274,9 @@ object Round {
     messages: Seq[ChannelMessage]
   )
 
-  case class StopBlockCreationRound(roundId: RoundId, maybeCB: Option[CheckpointBlock]) extends RoundCommand
+  case class StopBlockCreationRound(roundId: RoundId, maybeCB: Option[CheckpointBlock])
+      extends RoundCommand
 
-  def props(roundData: RoundData, dao: DAO): Props = Props(new Round(roundData, dao))
+  def props(roundData: RoundData, dao: DAO, dataResolver: DataResolver): Props =
+    Props(new Round(roundData, dao, dataResolver))
 }
