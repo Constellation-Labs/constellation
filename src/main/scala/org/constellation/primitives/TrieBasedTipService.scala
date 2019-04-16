@@ -27,7 +27,7 @@ trait ConcurrentTipService {
 class TrieBasedTipService(sizeLimit: Int,
                           maxWidth: Int,
                           numFacilitatorPeers: Int,
-                          minPeerTimeAddedSeconds: Int)
+                          minPeerTimeAddedSeconds: Int) (implicit dao: DAO)
     extends ConcurrentTipService {
 
   private val tips: TrieMap[String, TipData] = TrieMap.empty
@@ -128,7 +128,20 @@ class TrieBasedTipService(sizeLimit: Int,
     }
   }
 
+  private def ensureTipsHaveParents(): Unit = {
+    tips.filterNot{
+      z =>
+        val parentHashes = z._2.checkpointBlock.parentSOEBaseHashes
+        parentHashes.size == 2 && parentHashes.forall(dao.checkpointService.contains)
+    }.foreach{
+      case (k, _) => tips.remove(k)
+    }
+  }
+
   private def calculateTipsSOE(): Seq[SignedObservationEdge] = {
+
+    ensureTipsHaveParents()
+
     Random
       .shuffle(if (size > 50) tips.slice(0, 50).toSeq else tips.toSeq)
       .take(2)

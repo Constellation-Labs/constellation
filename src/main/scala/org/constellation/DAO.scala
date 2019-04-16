@@ -99,6 +99,12 @@ class DAO()
     snapshotService = SnapshotService(this)
   }
 
+  lazy val concurrentTipService: ConcurrentTipService = new TrieBasedTipService(processingConfig.maxActiveTipsAllowedInMemory,
+    processingConfig.maxWidth,
+    processingConfig.numFacilitatorPeers,
+    processingConfig.minPeerTimeAddedSeconds)(this)
+
+  lazy val threadSafeSnapshotService = new ThreadSafeSnapshotService(concurrentTipService)
 
   def pullTips(
     readyFacilitators: Map[Id, PeerData]

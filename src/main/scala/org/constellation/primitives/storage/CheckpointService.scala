@@ -28,7 +28,7 @@ class CheckpointBlocksMid(path: File, midCapacity: Int)(implicit ec: ExecutionCo
 
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
 // mwadon: /\ is still relevant?
-class CheckpointBlocksMemPool(size: Int = 50000) extends StorageService[CheckpointCacheData](size)
+class CheckpointBlocksMemPool(size: Int = 50000) extends StorageService[CheckpointCacheData](size, Some(45))
 
 object CheckpointService {
   def apply(implicit dao: DAO, size: Int = 50000) = new CheckpointService(dao, size)

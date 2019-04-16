@@ -389,13 +389,8 @@ trait EdgeDAO {
   val recentBlockTracker = new RecentDataTracker[CheckpointCacheData](200)
 
   val threadSafeTXMemPool = new ThreadSafeTXMemPool()
-  lazy val concurrentTipService: ConcurrentTipService = new TrieBasedTipService(processingConfig.maxActiveTipsAllowedInMemory,
-                                                     processingConfig.maxWidth,
-                                                     processingConfig.numFacilitatorPeers,
-                                                     processingConfig.minPeerTimeAddedSeconds)
 
   val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
-  lazy val threadSafeSnapshotService = new ThreadSafeSnapshotService(concurrentTipService)
 
   var genesisBlock: Option[CheckpointBlock] = None
   var genesisObservation: Option[GenesisObservation] = None
