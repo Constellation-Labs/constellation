@@ -15,7 +15,7 @@ import scala.collection.JavaConverters._
 object EigenTrust {
 
 
-  def main(args: Array[String]): Unit = {
+//  def main(args: Array[String]): Unit = {
 
 
     val nodesWithEdges = DataGeneration.generateTestData()
@@ -46,5 +46,5 @@ object EigenTrust {
     trustMap.toSeq.sortBy(_._1).foreach{println}
 
 
-  }
+//  }
 }
