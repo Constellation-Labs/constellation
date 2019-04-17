@@ -2,9 +2,9 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
+import cats.implicits._
 import constellation._
 import org.constellation.DAO
-import org.constellation.consensus.TipData
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 
@@ -98,7 +98,7 @@ trait Genesis extends NodeData with EdgeDAO {
     )
 
     go.initialDistribution.store(
-      CheckpointCacheData(Some(go.initialDistribution), height = Some(Height(1, 1)))
+        CheckpointCacheData(Some(go.initialDistribution), height = Some(Height(1, 1)))
     )
 
     go.initialDistribution2.store(
@@ -124,7 +124,7 @@ trait Genesis extends NodeData with EdgeDAO {
       dao.addressService
         .putSync(t.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal))
     }
-
+    storeTransactions(go)
     val numTX = (1 + go.initialDistribution.transactions.size * 2).toString
     //  metricsManager ! UpdateMetric("validTransactions", numTX)
     //  metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
@@ -148,6 +148,22 @@ trait Genesis extends NodeData with EdgeDAO {
     }
     dao.metrics.updateMetric("genesisHash", go.genesis.soeHash)
     // println(s"accept genesis = ", go)
+  }
+
+  private def storeTransactions(genesisObservation: GenesisObservation)(implicit dao: DAO): Unit = {
+    Seq(genesisObservation.genesis,
+        genesisObservation.initialDistribution,
+        genesisObservation.initialDistribution2)
+      .flatMap { cb =>
+        cb.transactions.map(
+          tx =>
+            dao.transactionService.midDb
+              .put(tx.hash, TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
+        )
+      }
+      .toList
+      .sequence
+      .unsafeRunAsyncAndForget()
   }
 
 }

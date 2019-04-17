@@ -21,6 +21,7 @@ import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, HostPort, Metrics}
+import org.slf4j.MDC
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -213,6 +214,7 @@ class ConstellationNode(
   dao.initialize(nodeConfig)
 
   val logger = Logger(s"ConstellationNode_${dao.publicKeyHash}")
+  MDC.put("node_id", dao.id.short)
 
   logger.info(
     s"Node init with API ${nodeConfig.httpInterface} ${nodeConfig.httpPort} peerPort: ${nodeConfig.peerHttpPort}"

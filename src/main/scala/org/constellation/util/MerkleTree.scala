@@ -27,6 +27,10 @@ case class MerkleResult(inputs: Seq[String], nodes: Seq[MerkleNode]) {
                 MerkleTree.collectParents(Seq(), firstParent, parentMap),
                 nodes.last.hash)
   }
+
+  def rootHash: String = {
+    nodes.last.hash
+  }
 }
 
 import com.typesafe.scalalogging.StrictLogging
@@ -59,7 +63,7 @@ object MerkleTree extends StrictLogging {
     }
   }
 
-  def apply(hashes: List[String]): MerkleResult = {
+  def apply(hashes: Seq[String]): MerkleResult = {
 
     if (hashes.isEmpty) {
       throw new Exception("Merkle function call on empty collection of hashes")

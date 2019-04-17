@@ -116,8 +116,8 @@ object ChannelMessage extends StrictLogging {
     channelSendRequest: ChannelSendRequest
   )(implicit dao: DAO): Future[ChannelSendResponse] = {
 
-    dao.messageService
-      .memPool.lookup(channelSendRequest.channelId).unsafeRunSync()
+    dao.messageService.memPool
+      .lookup(channelSendRequest.channelId).unsafeRunSync()
       .map { previousMessage =>
         val previous = previousMessage.channelMessage.signedMessageData.hash
 
