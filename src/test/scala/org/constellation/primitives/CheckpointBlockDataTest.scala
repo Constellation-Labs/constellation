@@ -91,7 +91,7 @@ class CheckpointBlockDataTest extends FunSuite with IdiomaticMockitoFixture with
     val cbProposalCache = CheckpointCacheFullData(Some(cbProposal), 3, Some(Height(2, 4)))
     cbProposal.store(cbProposalCache)
     val storedCB = dao.checkpointService.memPool.getSync(cbProposal.baseHash).get
-    storedCB.height shouldBe Height(2, 4)
+    storedCB.height shouldBe Some(Height(2, 4))
     storedCB.children shouldBe 3
 
     CheckpointService.fetchFullData(storedCB) shouldBe cbProposalCache

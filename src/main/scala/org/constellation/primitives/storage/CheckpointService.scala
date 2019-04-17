@@ -5,8 +5,10 @@ import cats.effect.IO
 import cats.implicits._
 import org.constellation.DAO
 import org.constellation.datastore.swaydb.SwayDbConversions._
+import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCacheData, CheckpointCacheFullData}
 import org.constellation.primitives._
+import org.constellation.util.PeerApiClient
 import swaydb.serializers.Default.StringSerializer
 
 import scala.concurrent.ExecutionContextExecutor
@@ -59,9 +61,9 @@ object CheckpointService {
 
   def fetchFullData(cacheData: CheckpointCacheData)(implicit dao: DAO): CheckpointCacheFullData = {
     val txs = fetchTransactions(cacheData.cb.transactionsMerkleRoot)
-    val msgs = cacheData.cb.messagesMerkleRoot.map(mr => fetchMessages(mr)).getOrElse(Seq.empty)
+    val msgs = cacheData.cb.messagesMerkleRoot.fold(Seq[ChannelMessage]())(mr => fetchMessages(mr))
     val notifications =
-      cacheData.cb.notificationsMerkleRoot.map(mr => fetchNotifications(mr)).getOrElse(Seq.empty)
+      cacheData.cb.notificationsMerkleRoot.fold(Seq[PeerNotification]())(mr => fetchNotifications(mr))
     CheckpointCacheFullData(
       Some(
         CheckpointBlockFullData(
@@ -76,51 +78,64 @@ object CheckpointService {
     )
   }
 
-  def orElseThrow[T](merkleRoot: String, data: Option[Seq[T]])(implicit m: ClassTag[T]): Seq[T] = {
-    data match {
-      case None    => throw MerkleRootMappingException(merkleRoot, m.runtimeClass.getSimpleName)
-      case Some(x) => x
-    }
-  }
+//  def orElseThrow[T](merkleRoot: String, data: Option[Seq[T]])(implicit m: ClassTag[T]): Seq[T] = {
+//    data match {
+//      case None    => throw MerkleRootMappingException(merkleRoot, m.runtimeClass.getSimpleName)
+//      case Some(x) => x
+//    }
+//  }
 
   def fetchTransactions(
     merkleRoot: String
   )(implicit dao: DAO): Seq[Transaction] = {
-    orElseThrow(
+
+    fetch[TransactionCacheData,Transaction](
       merkleRoot,
-      dao.transactionService.merklePool
-        .get(merkleRoot)
-        .map(_.getOrElse(Seq.empty).map(dao.transactionService.lookup(_).map(_.map(_.transaction))))
-        .flatMap(_.toList.sequence)
-        .map(_.sequence)
-        .unsafeRunSync()
+      dao.transactionService,
+      (x: TransactionCacheData) => x.transaction,
+      (s: String) =>
+        DataResolver.resolveTransactions(s,
+                                         dao.readyPeers.map(p => PeerApiClient(p._1, p._2.client))).map(_.get)
     )
   }
 
   def fetchMessages(merkleRoot: String)(implicit dao: DAO): Seq[ChannelMessage] = {
-    orElseThrow(
+    fetch[ChannelMessageMetadata,ChannelMessage](
       merkleRoot,
-      dao.messageService.merklePool
-        .get(merkleRoot)
-        .map(_.getOrElse(Seq.empty).map(dao.messageService.lookup(_).map(_.map(_.channelMessage))))
-        .flatMap(_.toList.sequence)
-        .map(_.sequence)
-        .unsafeRunSync()
+      dao.messageService,
+      (x: ChannelMessageMetadata) => x.channelMessage,
+      (s: String) =>
+        DataResolver.resolveMessages(s,
+          dao.readyPeers.map(p => PeerApiClient(p._1, p._2.client))).map(_.get)
     )
   }
 
   def fetchNotifications(merkleRoot: String)(
     implicit dao: DAO
   ): Seq[PeerNotification] = {
-    orElseThrow(
+    fetch[PeerNotification,PeerNotification](
       merkleRoot,
-      dao.notificationService.merklePool
-        .get(merkleRoot)
-        .map(_.getOrElse(Seq.empty).map(dao.notificationService.lookup(_)))
-        .flatMap(_.toList.sequence)
-        .map(_.sequence)
-        .unsafeRunSync()
+      dao.notificationService,
+      (x: PeerNotification) => x,
+      (s: String) => ???
     )
+  }
+
+  def fetch[T, R](
+    merkleRoot: String,
+    service: MerkleService[T],
+    mapper: T => R,
+    resolver: String => IO[T],
+  )(implicit dao: DAO): Seq[R] = {
+    service.merklePool
+      .get(merkleRoot)
+      .map(
+        _.getOrElse(Seq.empty)
+          .map(hash => service.lookup(hash).map(t => mapper(t.getOrElse(resolver(hash).unsafeRunSync()))))
+      )
+      .map(_.toList.sequence)
+      .flatten
+      .unsafeRunSync()
   }
 }
 

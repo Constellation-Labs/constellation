@@ -33,7 +33,7 @@ object TransactionService {
   def apply(implicit dao: DAO, size: Int = 50000) = new TransactionService(dao, size)
 }
 
-class TransactionService(dao: DAO, size: Int = 50000) {
+class TransactionService(dao: DAO, size: Int = 50000) extends MerkleService[TransactionCacheData] {
   val merklePool = new StorageService[Seq[String]](size)
   val memPool = new TransactionMemPool(size)
   val midDb: MidDbStorage[String, TransactionCacheData] = TransactionsMid(dao)
@@ -51,4 +51,7 @@ class TransactionService(dao: DAO, size: Int = 50000) {
   def contains: String ⇒ IO[Boolean] =
     DbStorage.extendedContains[String, TransactionCacheData](List(memPool, midDb, oldDb))
 }
-
+trait MerkleService[T] {
+  def lookup: String => IO[Option[T]]
+  def merklePool: StorageService[Seq[String]]
+}

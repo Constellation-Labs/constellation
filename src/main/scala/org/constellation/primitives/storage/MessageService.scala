@@ -3,7 +3,7 @@ package org.constellation.primitives.storage
 import cats.effect.IO
 import org.constellation.primitives.{ChannelMessageMetadata, ChannelMetadata}
 
-class MessageService(size: Int = 2000)  {
+class MessageService(size: Int = 2000) extends MerkleService[ChannelMessageMetadata] {
   val merklePool = new StorageService[Seq[String]](size)
   val memPool = new StorageService[ChannelMessageMetadata](size)
 
