@@ -163,7 +163,8 @@ object ConstellationNode extends StrictLogging {
           cliConfig = cliConfig,
           processingConfig =
             if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10)
-            else processingConfig
+            else processingConfig,
+          dataPollingManagerOn = config.getBoolean("dataPollingManagerOn")
         )
       )
     } match {
@@ -196,7 +197,8 @@ case class NodeConfig(
   attemptDownload: Boolean = false,
   allowLocalhostPeers: Boolean = false,
   cliConfig: CliConfig = CliConfig(),
-  processingConfig: ProcessingConfig = ProcessingConfig()
+  processingConfig: ProcessingConfig = ProcessingConfig(),
+  dataPollingManagerOn: Boolean = false
 )
 
 class ConstellationNode(
@@ -345,6 +347,8 @@ class ConstellationNode(
     dao.generateRandomTX = true
   }
 
-  val dataPollingManager = new DataPollingManager(60)
-
+  var dataPollingManager: DataPollingManager = _
+  if (nodeConfig.dataPollingManagerOn) {
+    dataPollingManager = new DataPollingManager(60)
+  }
 }

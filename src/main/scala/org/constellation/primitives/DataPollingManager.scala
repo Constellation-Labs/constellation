@@ -11,7 +11,7 @@ import scala.util.Try
 
 //noinspection ScalaStyle
 class DataPollingManager(periodSeconds: Int = 60)(implicit dao: DAO)
-    extends Periodic[Try[Unit]]("RandomTransactionManager", periodSeconds)
+    extends Periodic[Try[Unit]]("DataPollingManager", periodSeconds)
     with StrictLogging {
 
   implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
