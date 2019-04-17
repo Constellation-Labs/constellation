@@ -8,13 +8,12 @@ import akka.testkit.{TestKit, TestProbe}
 import cats.effect.IO
 import cats.implicits._
 import constellation.createTransaction
-import org.constellation.{DAO, NodeConfig}
-import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
-import org.constellation.consensus.RandomData._
+import org.constellation.consensus.{EdgeProcessor, RandomData, Snapshot, SnapshotInfo}
 import org.constellation.primitives.CheckpointBlockValidatorNel._
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCacheData, Id}
 import org.constellation.primitives.storage.CheckpointService
 import org.constellation.util.{HashSignature, Metrics}
+import org.constellation.{DAO, NodeConfig}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito
 import org.mockito.Mockito._
@@ -60,9 +59,9 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
     when(leftParent.transactions).thenReturn(Seq.empty)
     when(rightParent.transactions).thenReturn(Seq.empty)
 
-    when(checkpointService.get(rightParent.baseHash))
+    when(checkpointService.getFullData(rightParent.baseHash))
       .thenReturn(Some(CheckpointCacheData(Some(rightParent))))
-    when(checkpointService.get(leftParent.baseHash))
+    when(checkpointService.getFullData(leftParent.baseHash))
       .thenReturn(Some(CheckpointCacheData(Some(leftParent))))
 
     when(leftBlock.transactions).thenReturn(Seq(tx1, tx2))
@@ -71,7 +70,8 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
 
     when(dao.threadSafeSnapshotService).thenReturn(snapService)
     when(dao.checkpointService).thenReturn(checkpointService)
-    when(snapService.acceptedCBSinceSnapshot).thenReturn(Seq.empty)
+    val cbNotInSnapshot = Seq(leftBlock.baseHash,rightBlock.baseHash,leftParent.baseHash,rightParent.baseHash)
+    when(snapService.acceptedCBSinceSnapshot).thenReturn(cbNotInSnapshot)
   }
 
   test("it should detect no internal conflict and return None") {
@@ -109,10 +109,19 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
 
   test("it should get transactions from parent") {
     when(rightParent.transactions).thenReturn(Seq(tx2))
+    val ancestors = Seq("ancestor_in_snap")
+    when(rightParent.parentSOEBaseHashes()).thenReturn(ancestors)
+    when(checkpointService.getFullData("ancestor_in_snap"))
+      .thenReturn(None)
 
     val combinedTxs =
       getTransactionsTillSnapshot(List(rightBlock))
     combinedTxs shouldBe rightParent.transactions
+  }
+
+  test("it should return false for cb not in snap") {
+    isInSnapshot(rightParent) shouldBe false
+    isInSnapshot(leftParent) shouldBe false
   }
 
   test("it should return correct block to preserve with greater base hash") {
@@ -469,8 +478,10 @@ class ValidationSpec
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
           .foreach { cb =>
-            cb.store(CheckpointCacheData(Some(cb)))
-            cb.storeSOE()
+            // TODO: wkoszycki make one store function for CB
+            EdgeProcessor.acceptCheckpoint(CheckpointCacheData(Some(cb)))
+            //            cb.store(CheckpointCacheData(Some(cb)))
+            //            cb.storeSOE()
           }
 
         assert(!cb7.simpleValidation())

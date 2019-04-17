@@ -12,6 +12,7 @@ import constellation._
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.primitives.storage.CheckpointService
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Validation.EnrichedFuture
 import org.constellation.util._
@@ -59,7 +60,6 @@ object EdgeProcessor extends StrictLogging {
         dao.metrics.incrementMetric("heightNonEmpty")
       }
 
-      dao.checkpointService.midDb.put(cb.baseHash, checkpointCacheData).unsafeRunSync()
 
       cb.messages.foreach { m =>
         if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
@@ -121,8 +121,8 @@ object EdgeProcessor extends StrictLogging {
       .map {
         case (tx, txMetadata) ⇒
           dao.transactionService.memPool
-            .remove(tx.baseHash)
-            .flatMap(_ ⇒ dao.transactionService.midDb.put(tx.baseHash, txMetadata))
+            .remove(tx.hash)
+            .flatMap(_ ⇒ dao.transactionService.midDb.put(tx.hash, txMetadata))
             .flatMap(_ ⇒ dao.metrics.incrementMetricAsync("transactionAccepted"))
             .flatMap(_ ⇒ dao.addressService.transfer(tx))
       }
@@ -329,7 +329,7 @@ object EdgeProcessor extends StrictLogging {
       parentExists.filterNot(_._2).foreach {
         case (h, _) =>
           DataResolver
-            .resolveCheckpoint(h, dao.readyPeers.map(p => PeerApiClient(p._1, p._2.client)))
+            .resolveCheckpointDefaults(h)
             .flatMap { ccd =>
               IO {
                 ccd.foreach { cd =>
@@ -508,36 +508,49 @@ object Snapshot {
   val snapshotZeroHash: String = Snapshot("", Seq()).hash
 
   def acceptSnapshot(snapshot: Snapshot)(implicit dao: DAO): Unit = {
-    // dao.dbActor.putSnapshot(snapshot.hash, snapshot)
     val cbData = snapshot.checkpointBlocks.map { dao.checkpointService.get }
 
     if (cbData.exists { _.isEmpty }) {
       dao.metrics.incrementMetric("snapshotCBAcceptQueryFailed")
     }
 
-    for (cbOpt <- cbData;
-         cbCache <- cbOpt;
-         cb <- cbCache.checkpointBlock;
-         message <- cb.messages) {
-      dao.messageService.memPool.updateSync(
-        message.signedMessageData.hash,
-        _.copy(snapshotHash = Some(snapshot.hash)),
-        ChannelMessageMetadata(message, Some(cb.baseHash), Some(snapshot.hash))
-      )
-      dao.metrics.incrementMetric("messageSnapshotHashUpdated")
-    }
+    val cbs = cbData.flatten.map(_.checkpointBlock)
+    cbs.foreach { cb =>
+      cb.messagesMerkleRoot.map { messagesMerkleRoot =>
+        val updates = dao.messageService
+          .findHashesByMerkleRoot(messagesMerkleRoot)
+          .map(
+            _.get.map { msgHash =>
+              dao.metrics.incrementMetric("messageSnapshotHashUpdated")
+              dao.messageService.memPool
+                .update(
+                  msgHash,
+                  _.copy(snapshotHash = Some(snapshot.hash)),
+                  ChannelMessageMetadata(
+                    DataResolver
+                      .resolveMessagesDefaults(msgHash)
+                      .unsafeRunSync()
+                      .get
+                      .channelMessage,
+                    Some(cb.baseHash),
+                    Some(snapshot.hash)
+                  )
+                )
+            }.toList.sequence
+          ).flatten
 
-    for (cbOpt <- cbData;
-         cbCache <- cbOpt;
-         cb <- cbCache.checkpointBlock;
-         tx <- cb.transactions) {
-      // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
-      // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
-      dao.addressService
-        .transferSnapshot(tx)
-        .flatMap(_ ⇒ dao.acceptedTransactionService.remove(Set(tx.hash)))
-        .flatTap(_ ⇒ dao.metrics.incrementMetricAsync("snapshotAppliedBalance"))
-        .unsafeRunSync()
+        updates.unsafeRunSync()
+      }
+
+      CheckpointService.fetchTransactions(cb.transactionsMerkleRoot).foreach { tx =>
+        // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
+        // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
+        dao.addressService
+          .transferSnapshot(tx)
+          .flatMap(_ ⇒ dao.acceptedTransactionService.remove(Set(tx.hash)))
+          .flatTap(_ ⇒ dao.metrics.incrementMetricAsync("snapshotAppliedBalance"))
+          .unsafeRunSync()
+      }
     }
   }
 

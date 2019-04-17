@@ -4,6 +4,7 @@ import com.softwaremill.sttp._
 import com.typesafe.config.ConfigFactory
 import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.primitives.PeerData
 import org.constellation.primitives.Schema.{Id, MetricsResult}
 import org.constellation.serializer.KryoSerializer
 import org.json4s.Formats

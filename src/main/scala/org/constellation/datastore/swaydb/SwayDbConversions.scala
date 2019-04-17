@@ -1,7 +1,7 @@
 package org.constellation.datastore.swaydb
 import cats.effect.IO
 import org.constellation.consensus.Snapshot
-import org.constellation.primitives.Schema.CheckpointCacheData
+import org.constellation.primitives.Schema.{CheckpointCacheData, CheckpointCacheDataMerkle}
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.serializer.KryoSerializer
 import swaydb.data.slice.Slice
@@ -21,6 +21,6 @@ object SwayDbConversions {
   }
 
   implicit object TransactionSerializer extends SwayDbKryoSerializer[TransactionCacheData]
-  implicit object CheckpointBlockSerializer extends SwayDbKryoSerializer[CheckpointCacheData]
+  implicit object CheckpointBlockSerializer extends SwayDbKryoSerializer[CheckpointCacheDataMerkle]
   implicit object SnapshotSerializer extends SwayDbKryoSerializer[Snapshot]
 }

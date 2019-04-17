@@ -88,7 +88,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
       .resolveDataByDistanceFlat[String](hashes, endpoint, List(PeerApiClient(badNode.id,badNode)), storageMock.loopbackStore)
 
     resolverIO.attempt.unsafeRunSync() should matchPattern {
-      case Left(DataResolutionOutOfPeers("endpoint", _)) => ()
+      case Left(DataResolutionOutOfPeers("endpoint",_, _)) => ()
     }
     verify(storageMock, never()).loopbackStore(anyString())
   }

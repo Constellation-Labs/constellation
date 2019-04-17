@@ -142,7 +142,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
       snapshotHashes = dao.snapshotHashes,
       addressCacheData = dao.addressService.toMapSync(),
       tips = concurrentTipService.toMap,
-      snapshotCache = snapshot.checkpointBlocks.flatMap { dao.checkpointService.get }
+      snapshotCache = snapshot.checkpointBlocks.flatMap { dao.checkpointService.getFullData }
     )
   )
 
@@ -162,16 +162,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
         dao.addressService.putSync(k, v)
     }
 
-    latestSnapshotInfo.snapshotCache.foreach { h =>
-      dao.metrics.incrementMetric("checkpointAccepted")
-      dao.checkpointService.memPool.putSync(h.checkpointBlock.get.baseHash, h)
-      h.checkpointBlock.get.storeSOE()
-      h.checkpointBlock.get.transactions.foreach { _ =>
-        dao.metrics.incrementMetric("transactionAccepted")
-      }
-    }
-
-    latestSnapshotInfo.acceptedCBSinceSnapshotCache.foreach { h =>
+    (latestSnapshotInfo.snapshotCache ++ latestSnapshotInfo.acceptedCBSinceSnapshotCache).foreach { h =>
       dao.checkpointService.memPool.putSync(h.checkpointBlock.get.baseHash, h)
       h.checkpointBlock.get.storeSOE()
       dao.metrics.incrementMetric("checkpointAccepted")
@@ -224,7 +215,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
         dao.metrics.incrementMetric("snapshotHeightIntervalConditionNotMet")
       } else {
 
-        val maybeDatas = acceptedCBSinceSnapshot.map(dao.checkpointService.get)
+        val maybeDatas = acceptedCBSinceSnapshot.map(dao.checkpointService.getFullData)
 
         val blocksWithinHeightInterval = maybeDatas.filter {
           _.exists(_.height.exists { h =>
@@ -254,8 +245,8 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
             allblockCaches
           }
 
-          val hashesForNextSnapshot = blockCaches.map {
-            _.checkpointBlock.get.baseHash
+          val hashesForNextSnapshot = blockCaches.flatMap {
+            _.checkpointBlock.map(_.baseHash)
           }.sorted
           val nextSnapshot = Snapshot(snapshot.hash, hashesForNextSnapshot)
 
@@ -268,7 +259,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
             tryWithMetric(
               {
                 val maybeBlocks = snapshot.checkpointBlocks.map {
-                  dao.checkpointService.get
+                  dao.checkpointService.getFullData
                 }
                 if (maybeBlocks.exists(_.exists(_.checkpointBlock.isEmpty))) {
                   // TODO : This should never happen, if it does we need to reset the node state and redownload
@@ -403,8 +394,8 @@ trait EdgeDAO {
     5000
     // processingConfig.addressLRUMaxSize
   )
-
-  val messageService: MessageService
+  val notificationService = new NotificationService()
+  val messageService : MessageService
   val channelService = new ChannelService()
   val soeService = new SOEService()
 

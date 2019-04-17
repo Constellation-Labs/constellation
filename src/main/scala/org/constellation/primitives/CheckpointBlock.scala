@@ -7,7 +7,62 @@ import cats.implicits._
 import constellation.signedObservationEdge
 import org.constellation.DAO
 import org.constellation.primitives.Schema._
-import org.constellation.util.HashSignature
+import org.constellation.primitives.storage.StorageService
+import org.constellation.util.{HashSignature, MerkleTree}
+
+object CheckpointBlockData {
+
+  def apply(data: CheckpointBlock)(implicit dao: DAO): CheckpointBlockData = {
+    CheckpointBlockData(
+      add(data.transactions.map(_.hash), dao.transactionService.merklePool).get,
+      data.checkpoint,
+      add(data.messages.map(_.signedMessageData.hash),
+        dao.messageService.merklePool),
+      add(data.notifications.map(_.hash),
+        dao.notificationService.merklePool)
+      ,
+    )
+  }
+
+  private def add(data: Seq[String], ss: StorageService[Seq[String]]): Option[String] = {
+    data match {
+      case Seq() => None
+      case _ =>
+        val rootHash = MerkleTree(data).rootHash
+        ss.putSync(rootHash, data)
+        Some(rootHash)
+    }
+  }
+}
+
+
+abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
+  def baseHash: String = checkpoint.edge.baseHash
+
+  def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
+
+  def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
+    checkpoint.edge.parentHashes.flatMap { dao.soeService.getSync }.map {
+      _.signedObservationEdge.baseHash
+    }
+
+  def storeSOE()(implicit dao: DAO): Unit = {
+    dao.soeService.putSync(soeHash, SignedObservationEdgeCache(soe, resolved = true))
+  }
+  def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
+
+  def soeHash: String = checkpoint.edge.signedObservationEdge.hash
+
+  def signatures: Seq[HashSignature] =
+    checkpoint.edge.signedObservationEdge.signatureBatch.signatures
+}
+
+case class CheckpointBlockData(
+  transactionsMerkleRoot: String,
+  checkpointEdge: CheckpointEdge,
+  messagesMerkleRoot: Option[String],
+  notificationsMerkleRoot: Option[String]
+) extends CheckpointEdgeLike(checkpointEdge)
 
 case class CheckpointBlock(
   transactions: Seq[Transaction],
@@ -118,7 +173,7 @@ case class CheckpointBlock(
           }
      */
     // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
-    dao.checkpointService.memPool.put(baseHash, cache).unsafeRunSync()
+    dao.checkpointService.memPool.putSync(baseHash, cache)
     dao.recentBlockTracker.put(cache)
 
   }
@@ -347,13 +402,13 @@ sealed trait CheckpointBlockValidatorNel {
 
   def getParents(c: CheckpointBlock)(implicit dao: DAO): List[CheckpointBlock] =
     c.parentSOEBaseHashes.toList
-      .map(dao.checkpointService.get)
+      .map(dao.checkpointService.getFullData)
       .map(_.flatMap(_.checkpointBlock))
       .sequence[Option, CheckpointBlock]
       .getOrElse(List())
 
   def isInSnapshot(c: CheckpointBlock)(implicit dao: DAO): Boolean =
-    dao.threadSafeSnapshotService.acceptedCBSinceSnapshot
+    !dao.threadSafeSnapshotService.acceptedCBSinceSnapshot
       .contains(c.baseHash)
 
   def getSummaryBalance(c: CheckpointBlock)(implicit dao: DAO): AddressBalance = {
@@ -427,13 +482,13 @@ sealed trait CheckpointBlockValidatorNel {
                               snapshotReached: Boolean = false): Seq[Transaction] = {
       parents match {
         case Nil => accu
-        case cb :: tail if !snapshotReached =>
+        case cb :: tail if !snapshotReached && !isInSnapshot(cb) =>
           getParentTransactions(
             tail ++ getParents(cb),
             accu ++ cb.transactions,
             isInSnapshot(cb)
           )
-        case cb :: tail if snapshotReached =>
+        case cb :: tail if snapshotReached || isInSnapshot(cb) =>
           getParentTransactions(
             tail,
             accu ++ cb.transactions,
