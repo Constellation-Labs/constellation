@@ -18,5 +18,11 @@ class MessageService(size: Int = 2000)(implicit dao: DAO) {
     memPool.put(key, value)
   }
 
+
+  def lookup: String => IO[Option[ChannelMessageMetadata]] =
+    DbStorage.extendedLookup[String, ChannelMessageMetadata](List(memPool))
+
+  def contains: String ⇒ IO[Boolean] =
+    DbStorage.extendedContains[String, ChannelMessageMetadata](List(memPool))
 }
 class ChannelService(size: Int = 2000) extends StorageService[ChannelMetadata](size)

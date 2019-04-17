@@ -218,7 +218,7 @@ class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)]
 
     val resolvedMessages = transactionProposals.values
       .flatMap(proposal ⇒ proposal.messages.map(hash ⇒ (hash, proposal)))
-      .filterNot(p ⇒ dao.messageService.memPool.contains(p._1).unsafeRunSync())
+      .filterNot(p ⇒ dao.messageService.contains(p._1).unsafeRunSync())
       .toList
       .map(
         p ⇒
@@ -237,7 +237,7 @@ class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)]
       .map(
         hash ⇒
           dao.messageService
-            .memPool.lookup(hash)
+            .lookup(hash)
             .map(
               _.map(_.channelMessage)
           )

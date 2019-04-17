@@ -482,9 +482,9 @@ object Snapshot {
           else {
             findLatestMessageWithSnapshotHashInner(
               depth + 1,
-              dao.messageService.memPool.getSync(
+              dao.messageService.memPool.lookup(
                 m.channelMessage.signedMessageData.data.previousMessageHash
-              )
+              ).unsafeRunSync()
             )
           }
         }
