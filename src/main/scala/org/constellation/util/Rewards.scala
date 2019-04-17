@@ -56,13 +56,15 @@ object Rewards {
       val neighborView = view.map{ case (neighbor, score) => neighborhoodReputationMatrix(key) * score }.sum
         (key, neighborView)
     }
-    weightedTransitiveReputation.mapValues{ trust => - trust * math.log(trust)/math.log(2) }
+    weightedTransitiveReputation.mapValues{ trust =>
+      if (trust == 0.0 ) 0.0
+      else - trust * math.log(trust)/math.log(2) }
   }
 
   def rewardDistribution(partitonChart: Map[String, Set[String]], trustEntropyMap: Map[String, Double]) = {
     val totalSpace = partitonChart.values.map(_.size).max
     val contributions = partitonChart.mapValues( partiton => partiton.size / totalSpace )
-    val weightedEntropy = contributions.map{ case (address, partitonSize) =>
+    val weightedEntropy = contributions.map { case (address, partitonSize) =>
       val reward = partitonSize * ( 1 - trustEntropyMap(address)) //normalize wrt total partition space
       (address, reward)
     }
