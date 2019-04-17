@@ -218,7 +218,6 @@ class ConstellationNode(
 
   dao.metrics = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
 
-
   val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
   val crossTalkConsensusActor: ActorRef =
     system.actorOf(CrossTalkConsensus.props(remoteSenderActor))

@@ -16,17 +16,17 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
-class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
+class Round(roundData: RoundData, dao: DAO, dataResolver: DataResolver) extends Actor with ActorLogging {
 
   implicit val shadedDao: DAO = dao
   implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
-  val transactionProposals: mutable.Map[FacilitatorId, LightTransactionsProposal] =
+  private[consensus] val transactionProposals: mutable.Map[FacilitatorId, LightTransactionsProposal] =
     mutable.Map()
-  val checkpointBlockProposals: mutable.Map[FacilitatorId, CheckpointBlock] =
+  private[consensus] val checkpointBlockProposals: mutable.Map[FacilitatorId, CheckpointBlock] =
     mutable.Map()
 
-  protected var unionTransactionProposalsTikTok: Cancellable = _
+  private[consensus] var unionTransactionProposalsTikTok: Cancellable = _
 
   override def receive: Receive = {
     case StartTransactionProposal(_) =>
@@ -43,10 +43,10 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
           dao.peerInfo.flatMap(_._2.notification).toSeq
         )
 
-        context.parent ! BroadcastLightTransactionProposal(
+        passToParentActor(BroadcastLightTransactionProposal(
           roundData.peers,
           proposal
-        )
+        ))
         unionTransactionProposalsTikTok = scheduleUnionProposals
         self ! proposal
       }
@@ -71,25 +71,26 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
     case msg => log.info(s"Received unknown message: $msg")
   }
 
-  private def scheduleUnionProposals: Cancellable =
+  private[consensus] def scheduleUnionProposals: Cancellable =
     context.system.scheduler.scheduleOnce(
-      ConfigUtil.getDurationFromConfig("constellation.consensus.union-proposals-timeout",
-                                       15.second),
+      ConfigUtil.getDurationFromConfig(
+        "constellation.consensus.union-proposals-timeout",
+        15.second),
       self,
       UnionProposals
     )
 
-  private def receivedAllTransactionProposals: Boolean =
+  private[consensus] def receivedAllTransactionProposals: Boolean =
     transactionProposals.size >= roundData.peers.size + 1
 
-  private def receivedAllCheckpointBlockProposals: Boolean =
+  private[consensus] def receivedAllCheckpointBlockProposals: Boolean =
     checkpointBlockProposals.size >= roundData.peers.size + 1
 
-  private def cancelUnionTransactionProposalsTikTok(): Unit = {
+  private[consensus] def cancelUnionTransactionProposalsTikTok(): Unit = {
     Option(unionTransactionProposalsTikTok).foreach(_.cancel())
   }
 
-  def unionProposals(): Unit = {
+  private[consensus] def unionProposals(): Unit = {
 
     val readyPeers = dao.readyPeers
 
@@ -99,7 +100,7 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
       .toList
       .map(
         p ⇒
-          DataResolver
+          dataResolver
             .resolveTransactions(p._1,
                                  readyPeers.map(r => PeerApiClient(r._1, r._2.client)),
                                  readyPeers.get(p._2.facilitatorId.id).map(rp => PeerApiClient(p._2.facilitatorId.id, rp.client)))
@@ -135,7 +136,7 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
       .toList
       .map(
         p ⇒
-          DataResolver
+          dataResolver
             .resolveMessages(p._1,
                              readyPeers.map(r => PeerApiClient(r._1, r._2.client)),
                              readyPeers.get(p._2.facilitatorId.id).map(rp => PeerApiClient(p._2.facilitatorId.id, rp.client)))
@@ -177,11 +178,11 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
       notifications
     )(dao.keyPair)
     val blockProposal = UnionBlockProposal(roundData.roundId, FacilitatorId(dao.id), cb)
-    context.parent ! BroadcastUnionBlockProposal(roundData.peers, blockProposal)
+    passToParentActor(BroadcastUnionBlockProposal(roundData.peers, blockProposal))
     self ! blockProposal
   }
 
-  def resolveMajorityCheckpointBlock(): Unit = {
+  private[consensus] def resolveMajorityCheckpointBlock(): Unit = {
     val acceptedBlock = if (checkpointBlockProposals.nonEmpty) {
       val sameBlocks = checkpointBlockProposals
         .groupBy(_._2.baseHash)
@@ -198,11 +199,10 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
       dao.threadSafeSnapshotService.accept(cache)
       Some(majorityCheckpointBlock)
     } else None
-    context.parent ! StopBlockCreationRound(roundData.roundId, acceptedBlock)
-    context.stop(self)
+    passToParentActor(StopBlockCreationRound(roundData.roundId, acceptedBlock))
   }
 
-  def broadcastSignedBlockToNonFacilitators(
+  private[consensus] def broadcastSignedBlockToNonFacilitators(
     finishedCheckpoint: FinishedCheckpoint
   ): Future[List[Option[FinishedCheckpointResponse]]] = {
     val allFacilitators = roundData.peers.map(p => p.peerMetadata.id -> p).toMap
@@ -231,6 +231,9 @@ class Round(roundData: RoundData, dao: DAO) extends Actor with ActorLogging {
     wrapFutureWithMetric(signatureResponses, "checkpointBlockFormation")(dao, ec)
   }
 
+  private[consensus] def passToParentActor(cmd: Any): Unit = {
+    context.parent ! cmd
+  }
 }
 
 case class FacilitatorId(id: Schema.Id) extends AnyVal
@@ -274,5 +277,6 @@ object Round {
   case class StopBlockCreationRound(roundId: RoundId, maybeCB: Option[CheckpointBlock])
       extends RoundCommand
 
-  def props(roundData: RoundData, dao: DAO): Props = Props(new Round(roundData, dao))
+  def props(roundData: RoundData, dao: DAO, dataResolver: DataResolver): Props =
+    Props(new Round(roundData, dao, dataResolver))
 }
