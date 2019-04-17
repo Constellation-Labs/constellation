@@ -9,6 +9,7 @@ import org.constellation.primitives.Schema.CheckpointCacheData
 import swaydb.serializers.Default.StringSerializer
 
 import scala.concurrent.ExecutionContextExecutor
+import scala.util.Try
 
 object CheckpointBlocksOld {
   def apply(dao: DAO) = new CheckpointBlocksOld(dao.dbPath)(dao.edgeExecutionContext)
@@ -38,7 +39,7 @@ class CheckpointBlocksMemPool(size: Int = 50000)(implicit dao: DAO)
     key: String,
     value: CheckpointCacheData
   ): CheckpointCacheData = {
-    value.checkpointBlock.foreach(cb => incrementChildrenCount(cb.parentSOEBaseHashes()))
+    // Try{value.checkpointBlock.foreach(cb => incrementChildrenCount(cb.parentSOEBaseHashes()))}
     super.putSync(key, value)
   }
 

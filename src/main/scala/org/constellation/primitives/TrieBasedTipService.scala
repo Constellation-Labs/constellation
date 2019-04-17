@@ -140,7 +140,7 @@ class TrieBasedTipService(sizeLimit: Int,
 
   private def calculateTipsSOE(): Seq[SignedObservationEdge] = {
 
-    ensureTipsHaveParents()
+    // ensureTipsHaveParents()
 
     Random
       .shuffle(if (size > 50) tips.slice(0, 50).toSeq else tips.toSeq)
