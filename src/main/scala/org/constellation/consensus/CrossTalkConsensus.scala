@@ -1,7 +1,7 @@
 package org.constellation.consensus
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import akka.pattern.{Backoff, BackoffOpts, BackoffSupervisor}
+import akka.pattern.{BackoffOpts, BackoffSupervisor}
 import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.{
   NotifyFacilitators,

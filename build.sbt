@@ -104,7 +104,8 @@ lazy val coreDependencies = Seq(
   "com.github.java-json-tools" % "json-schema-validator" % "2.2.10",
   "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.5",
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
-  "com.github.blemale" %% "scaffeine" % "2.6.0" withSources () withJavadoc ()
+  "com.github.blemale" %% "scaffeine" % "2.6.0" withSources () withJavadoc (),
+  "com.typesafe.slick" %% "slick" % "3.3.0" withSources () withJavadoc ()
 ) ++ sttpDependencies
 
 //Test dependencies
@@ -114,7 +115,6 @@ lazy val testDependencies = Seq(
   "org.scalactic" %% "scalactic" % "3.0.7",
   "org.scalamock" %% "scalamock" % "4.1.0",
   "org.mockito" % "mockito-core" % "2.18.0",
-
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
 ).map(_ % "it,test")
