@@ -105,7 +105,8 @@ lazy val coreDependencies = Seq(
   "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.5",
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
   "com.github.blemale" %% "scaffeine" % "2.6.0" withSources () withJavadoc (),
-  "com.typesafe.slick" %% "slick" % "3.3.0" withSources () withJavadoc ()
+  "com.typesafe.slick" %% "slick" % "3.3.0" withSources () withJavadoc (),
+  "com.h2database" % "h2" % "1.4.199"
 ) ++ sttpDependencies
 
 //Test dependencies
