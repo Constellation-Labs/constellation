@@ -2,7 +2,7 @@ package org.constellation.consensus
 
 import java.util.concurrent.Semaphore
 
-import akka.actor.{ActorSystem, Props, Scheduler}
+import akka.actor.{ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import org.constellation._
@@ -14,8 +14,7 @@ import org.constellation.consensus.CrossTalkConsensus.{
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{
   BroadcastLightTransactionProposal,
-  BroadcastUnionBlockProposal,
-  RoundInfo
+  BroadcastUnionBlockProposal
 }
 import org.constellation.primitives.Schema.{NodeType, SignedObservationEdge}
 import org.constellation.primitives._

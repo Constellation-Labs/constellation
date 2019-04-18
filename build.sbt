@@ -8,17 +8,16 @@ scalacOptions := Seq("-Ypartial-unification", "-unchecked", "-deprecation")
 
 // javacOptions := Seq("-XX:MaxMetaspaceSize=256m")
 
-
 lazy val _version = "1.0.12"
 
 lazy val versions = new {
-  val akka = "2.5.21"
+  val akka = "2.5.22"
   val akkaHttp = "10.1.8"
   val akkaHttpCors = "0.4.0"
   val spongyCastle = "1.58.0.0"
-  val micrometer = "1.1.3"
+  val micrometer = "1.1.4"
   val prometheus = "0.6.0"
-  val sttp = "1.5.11"
+  val sttp = "1.5.12"
   val cats = "1.6.0"
   val json4s = "3.6.5"
 }
@@ -46,15 +45,15 @@ lazy val coreSettings = Seq(
     case v                                => Seq(v)
   },
   dockerCommands += Cmd("HEALTHCHECK",
-    "--interval=30s",
-    "--timeout=3s",
-    "CMD",
-    "curl -f http://localhost:9000/health || exit 1"),
+                        "--interval=30s",
+                        "--timeout=3s",
+                        "CMD",
+                        "curl -f http://localhost:9000/health || exit 1"),
   dockerUsername := Some("constellationlabs"),
   dockerAlias := DockerAlias(None,
-    Some("constellationlabs"),
-    "constellation",
-    Some(sys.env.getOrElse("CIRCLE_SHA1", _version))),
+                             Some("constellationlabs"),
+                             "constellation",
+                             Some(sys.env.getOrElse("CIRCLE_SHA1", _version))),
   // Update the latest tag when publishing
   dockerUpdateLatest := true,
   // These values will be filled in by the k8s StatefulSet and Deployment
@@ -69,8 +68,8 @@ lazy val coreSettings = Seq(
 )
 
 lazy val coreDependencies = Seq(
-  "org.scala-lang.modules" %% "scala-async" % "0.9.7",
-  "com.github.pathikrit" %% "better-files" % "3.7.1" withSources() withJavadoc(),
+  "org.scala-lang.modules" %% "scala-async" % "0.10.0",
+  "com.github.pathikrit" %% "better-files" % "3.7.1" withSources () withJavadoc (),
   "com.roundeights" %% "hasher" % "1.2.0",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
@@ -90,9 +89,9 @@ lazy val coreDependencies = Seq(
   "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
   "com.twitter" %% "chill" % "0.9.3",
   "com.twitter" %% "algebird-core" % "0.13.5",
-  "org.typelevel" %% "cats-core" % versions.cats withSources() withJavadoc(),
+  "org.typelevel" %% "cats-core" % versions.cats withSources () withJavadoc (),
 //  "org.typelevel" %% "alleycats-core" % versions.cats withSources() withJavadoc(),
-  "org.typelevel" %% "cats-effect" % "1.2.0" withSources() withJavadoc(),
+  "org.typelevel" %% "cats-effect" % "1.2.0" withSources () withJavadoc (),
   "net.glxn" % "qrgen" % "1.4",
 //  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.twitter" %% "storehaus-cache" % "0.15.0",
@@ -105,7 +104,9 @@ lazy val coreDependencies = Seq(
   "com.github.java-json-tools" % "json-schema-validator" % "2.2.10",
   "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.5",
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
-  "com.github.blemale" %% "scaffeine" % "2.6.0" withSources() withJavadoc()
+  "com.github.blemale" %% "scaffeine" % "2.6.0" withSources () withJavadoc (),
+  "com.typesafe.slick" %% "slick" % "3.3.0" withSources () withJavadoc (),
+  "com.h2database" % "h2" % "1.4.199"
 ) ++ sttpDependencies
 
 //Test dependencies
@@ -115,13 +116,14 @@ lazy val testDependencies = Seq(
   "org.scalactic" %% "scalactic" % "3.0.7",
   "org.scalamock" %% "scalamock" % "4.1.0",
   "org.mockito" %% "mockito-scala" % "1.3.1",
-
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
 ).map(_ % "it,test")
 
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
-testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,"-u", "target/test-results/scalatest")
+testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
+                                      "-u",
+                                      "target/test-results/scalatest")
 
 test in assembly := {}
 
@@ -129,23 +131,18 @@ Test / fork := true
 Test / logBuffered := false
 
 assemblyMergeStrategy in assembly := {
-  case "logback.xml" => MergeStrategy.first
+  case "logback.xml"                                       => MergeStrategy.first
   case PathList(xs @ _*) if xs.last == "module-info.class" => MergeStrategy.first
   case x =>
     val oldStrategy = (assemblyMergeStrategy in assembly).value
     oldStrategy(x)
 }
 
-
-
-
 lazy val protobuf = (project in file("proto"))
   .settings(commonSettings,
-    PB.targets in Compile := Seq(
-      scalapb.gen() -> (sourceManaged in Compile).value
-    )
-  )
-
+            PB.targets in Compile := Seq(
+              scalapb.gen() -> (sourceManaged in Compile).value
+            ))
 
 lazy val root = (project in file("."))
   .dependsOn(protobuf)

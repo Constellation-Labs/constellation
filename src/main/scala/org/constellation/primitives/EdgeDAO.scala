@@ -88,8 +88,11 @@ class ThreadSafeMessageMemPool() extends StrictLogging {
     } else None*/
     val flat = messages.flatten
     messages = Seq()
-    if (flat.isEmpty) None else {
-      logger.info(s"Pulled messages from mempool: ${flat.map{_.signedMessageData.hash}}")
+    if (flat.isEmpty) None
+    else {
+      logger.info(s"Pulled messages from mempool: ${flat.map {
+        _.signedMessageData.hash
+      }}")
       Some(flat)
     }
   }
@@ -204,12 +207,15 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
     val facilMap = dao.readyPeers(NodeType.Full).filter {
       case (_, pd) =>
         // TODO: Is this still necessary?
-        pd.peerMetadata.timeAdded < (System.currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000)
+        pd.peerMetadata.timeAdded < (System
+          .currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000)
     }
 
     if (dao.nodeState == NodeState.Ready && acceptedCBSinceSnapshot.nonEmpty) {
 
-      val minTipHeight = Try{concurrentTipService.getMinTipHeight()}.getOrElse(0L)
+      val minTipHeight = Try {
+        concurrentTipService.getMinTipHeight()
+      }.getOrElse(0L)
       dao.metrics.updateMetric("minTipHeight", minTipHeight.toString)
 
       val nextHeightInterval = lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval
@@ -349,7 +355,7 @@ trait EdgeDAO {
 
   var metrics: Metrics
 
-  @volatile var nodeConfig : NodeConfig
+  @volatile var nodeConfig: NodeConfig
 
   def processingConfig: ProcessingConfig = nodeConfig.processingConfig
 
@@ -357,7 +363,9 @@ trait EdgeDAO {
 
   private[this] var _blockFormationInProgress: Boolean = false
 
-  def blockFormationInProgress: Boolean = blockFormationLock.synchronized { _blockFormationInProgress }
+  def blockFormationInProgress: Boolean = blockFormationLock.synchronized {
+    _blockFormationInProgress
+  }
 
   def blockFormationInProgress_=(value: Boolean): Unit = blockFormationLock.synchronized {
     _blockFormationInProgress = value
@@ -382,17 +390,20 @@ trait EdgeDAO {
     5000
     // processingConfig.addressLRUMaxSize
   )
-  val messageService = new MessageService()
+
+  val messageService: MessageService
   val channelService = new ChannelService()
   val soeService = new SOEService()
 
   val recentBlockTracker = new RecentDataTracker[CheckpointCacheData](200)
 
   val threadSafeTXMemPool = new ThreadSafeTXMemPool()
-  lazy val concurrentTipService: ConcurrentTipService = new TrieBasedTipService(processingConfig.maxActiveTipsAllowedInMemory,
-                                                     processingConfig.maxWidth,
-                                                     processingConfig.numFacilitatorPeers,
-                                                     processingConfig.minPeerTimeAddedSeconds)
+  lazy val concurrentTipService: ConcurrentTipService = new TrieBasedTipService(
+    processingConfig.maxActiveTipsAllowedInMemory,
+    processingConfig.maxWidth,
+    processingConfig.numFacilitatorPeers,
+    processingConfig.minPeerTimeAddedSeconds
+  )
 
   val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
   lazy val threadSafeSnapshotService = new ThreadSafeSnapshotService(concurrentTipService)
@@ -424,9 +435,9 @@ trait EdgeDAO {
   val finishedExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
-
-
-  def pullTransactions(minimumCount: Int = minCheckpointFormationThreshold): Option[Seq[Transaction]] =  {
+  def pullTransactions(
+    minimumCount: Int = minCheckpointFormationThreshold
+  ): Option[Seq[Transaction]] = {
     threadSafeTXMemPool.pull(minimumCount)
   }
 
