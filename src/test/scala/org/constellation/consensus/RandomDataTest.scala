@@ -542,8 +542,10 @@ class ValidationSpec
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
           .foreach { cb =>
-            cb.store(CheckpointCacheFullData(Some(cb)))
-            cb.storeSOE()
+          // TODO: wkoszycki make one store function for CB
+          EdgeProcessor.acceptCheckpoint(CheckpointCacheFullData(Some(cb)))
+//            cb.store(CheckpointCacheFullData(Some(cb)))
+//            cb.storeSOE()
           }
 
         assert(!cb7.simpleValidation())

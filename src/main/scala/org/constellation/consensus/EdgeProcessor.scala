@@ -124,8 +124,8 @@ object EdgeProcessor extends StrictLogging {
       .map {
         case (tx, txMetadata) ⇒
           dao.transactionService.memPool
-            .remove(tx.baseHash)
-            .flatMap(_ ⇒ dao.transactionService.midDb.put(tx.baseHash, txMetadata))
+            .remove(tx.hash)
+            .flatMap(_ ⇒ dao.transactionService.midDb.put(tx.hash, txMetadata))
             .flatMap(_ ⇒ dao.metrics.incrementMetricAsync("transactionAccepted"))
             .flatMap(_ ⇒ dao.addressService.transfer(tx))
       }
