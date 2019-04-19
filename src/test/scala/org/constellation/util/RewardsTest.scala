@@ -17,10 +17,13 @@ class RewardsTest extends FlatSpec {
     Should come from reputation, partition management services
    */
   val neighborhoodReputationMatrix: Map[String, Double] =
-    (1 to 100).map(idx => (idx.toString, r.nextDouble())).toMap
+    (0 to 100).map(idx => (idx.toString, 0.0)).toMap
   val transitiveReputationMatrix: Map[String, Map[String, Double]] =
-    (1 to 100).map(idx => (idx.toString, neighborhoodReputationMatrix)).toMap
-  val partitonChart = (1 to 100).map(idx => (idx.toString, Set(idx.toString))).toMap
+    (0 to 100).map(idx => (idx.toString, neighborhoodReputationMatrix)).toMap
+  val partitonChart = (0 to 100).map(idx => (idx.toString, Set(idx.toString))).toMap
+
+  val thing = r.nextInt(100).toString
+  neighborhoodReputationMatrix.updated(thing, 0.0)//Ensure perfect behavior doesn't throw Nan
 
   "rewardForEpoch" should "return correct $DAG ammount" in {
     assert(rewardForEpoch(epochOneRandom) === epochOneRewards)
@@ -35,6 +38,7 @@ class RewardsTest extends FlatSpec {
                                                 neighborhoodReputationMatrix,
                                                 partitonChart)
     val totalDistributionSum = rewardsDistro.values.sum
+    println(totalDistributionSum - epochOneRewards)
     assert(totalDistributionSum - epochOneRewards <= roundingError)
   }
 }
