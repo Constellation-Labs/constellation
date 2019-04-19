@@ -20,20 +20,17 @@ import org.constellation.util.HostPort
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class DAO()
-    extends NodeData
-    with Genesis
-    with EdgeDAO
-    with SimpleWalletLike
-    with StrictLogging {
+class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike with StrictLogging {
 
-  var initialNodeConfig : NodeConfig = _
+  var initialNodeConfig: NodeConfig = _
   @volatile var nodeConfig: NodeConfig = _
 
   var actorMaterializer: ActorMaterializer = _
 
   var transactionAcceptedAfterDownload: Long = 0L
   var downloadFinishedTime: Long = System.currentTimeMillis()
+
+  val channelStorage: ChannelStorage = ChannelStorage(this)
 
   def preventLocalhostAsPeer: Boolean = !nodeConfig.allowLocalhostPeers
 
@@ -44,8 +41,6 @@ class DAO()
     f.createDirectoryIfNotExists()
     f
   }
-
-
 
   def snapshotHashes: Seq[String] = {
     snapshotPath.list.toSeq.map { _.name }
@@ -65,17 +60,20 @@ class DAO()
 
   @volatile var nodeType: NodeType = NodeType.Full
 
+  lazy val messageService = new MessageService()(this)
+
   def setNodeState(
-                    nodeState_ : NodeState
-                  ): Unit = {
+    nodeState_ : NodeState
+  ): Unit = {
     nodeState = nodeState_
     metrics.updateMetric("nodeState", nodeState.toString)
   }
 
   def peerHostPort = HostPort(nodeConfig.hostName, nodeConfig.peerHttpPort)
 
-
-  def initialize(nodeConfigInit : NodeConfig = NodeConfig())(implicit materialize: ActorMaterializer = null): Unit = {
+  def initialize(
+    nodeConfigInit: NodeConfig = NodeConfig()
+  )(implicit materialize: ActorMaterializer = null): Unit = {
     initialNodeConfig = nodeConfigInit
     nodeConfig = nodeConfigInit
     actorMaterializer = materialize
@@ -97,8 +95,8 @@ class DAO()
     transactionService = TransactionService(this, processingConfig.transactionLRUMaxSize)
     checkpointService = CheckpointService(this, processingConfig.checkpointLRUMaxSize)
     snapshotService = SnapshotService(this)
-  }
 
+  }
 
   def pullTips(
     readyFacilitators: Map[Id, PeerData]
@@ -108,7 +106,7 @@ class DAO()
 
   def peerInfo: Map[Id, PeerData] = {
     // TODO: fix it to be Future
-    Await.result((peerManager ? GetPeerInfo).mapTo[Map[Id,PeerData]], 3 seconds)
+    Await.result((peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]], 3 seconds)
   }
 
   def peerInfo(nodeType: NodeType): Map[Id, PeerData] =

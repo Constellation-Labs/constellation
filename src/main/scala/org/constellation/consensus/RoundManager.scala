@@ -1,23 +1,27 @@
 package org.constellation.consensus
 
 import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, Props}
-import cats.effect.IO
-import constellation.wrapFutureWithMetric
-import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
+import cats.implicits._
+import org.constellation.DAO
+import org.constellation.consensus.CrossTalkConsensus.{
+  NotifyFacilitators,
+  ParticipateInBlockCreationRound,
+  StartNewBlockCreationRound
+}
 import org.constellation.consensus.Round._
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCacheData, NodeType, SignedObservationEdge}
+import org.constellation.primitives.Schema.{CheckpointCacheData, NodeType}
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications}
 import org.constellation.util.{Distance, PeerApiClient}
-import org.constellation.{ConfigUtil, DAO}
-import cats.implicits._
 
 import scala.collection.mutable
-import scala.concurrent.duration.{FiniteDuration, _}
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success}
 
-class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO) extends Actor with ActorLogging {
+class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO)
+    extends Actor
+    with ActorLogging {
   import RoundManager._
 
   implicit val ec: ExecutionContextExecutor = ExecutionContext.global
@@ -73,7 +77,7 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO) extends Acto
       passToRoundActor(cmd)
 
     case cmd: StopBlockCreationRound =>
-      rounds.get(cmd.roundId).fold { } { round =>
+      rounds.get(cmd.roundId).fold {} { round =>
         round.timeoutScheduler.cancel()
         if (round.startedByThisNode) {
           ownRoundInProgress = false
@@ -116,7 +120,8 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO) extends Acto
   }
 
   private[consensus] def closeRoundActor(roundId: RoundId): Unit = {
-    rounds.get(roundId)
+    rounds
+      .get(roundId)
       .foreach(r => context.stop(r.roundActor))
   }
 
@@ -144,17 +149,19 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO) extends Acto
       .filterNot(t => dao.checkpointService.contains(t.baseHash))
       .map(_.baseHash)
 
-    DataResolver.resolveCheckpoints(cbToResolve.toList,roundData.peers.map(r => PeerApiClient(r.peerMetadata.id, r.client)))
+    DataResolver
+      .resolveCheckpoints(cbToResolve.toList,
+                          roundData.peers.map(r => PeerApiClient(r.peerMetadata.id, r.client)))
       .unsafeToFuture()
   }
 
-  private[consensus] def startRound(roundData: RoundData, startedByThisNode: Boolean = false): Unit = {
+  private[consensus] def startRound(roundData: RoundData,
+                                    startedByThisNode: Boolean = false): Unit = {
     rounds += roundData.roundId -> RoundInfo(
       generateRoundActor(roundData, dao),
-      context.system.scheduler.scheduleOnce(
-        roundTimeout,
-        self,
-        ResolveMajorityCheckpointBlock(roundData.roundId)),
+      context.system.scheduler.scheduleOnce(roundTimeout,
+                                            self,
+                                            ResolveMajorityCheckpointBlock(roundData.roundId)),
       startedByThisNode
     )
   }
@@ -169,37 +176,42 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO) extends Acto
 }
 
 object RoundManager {
-  def props(roundTimeout: FiniteDuration)(implicit dao: DAO): Props = Props(new RoundManager(roundTimeout))
+  def props(roundTimeout: FiniteDuration)(implicit dao: DAO): Props =
+    Props(new RoundManager(roundTimeout))
 
   def generateRoundActor(roundData: RoundData, dao: DAO)(implicit context: ActorContext): ActorRef =
     context.actorOf(Round.props(roundData, dao, DataResolver))
 
   def createRoundData(dao: DAO): Option[RoundData] = {
-    dao.pullTransactions(dao.minCheckpointFormationThreshold)
-      .flatMap { transactions => dao.pullTips(dao.readyFacilitators())
-        .map(tips => {
-          val messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq())
+    dao
+      .pullTransactions(dao.minCheckpointFormationThreshold)
+      .flatMap { transactions =>
+        dao
+          .pullTips(dao.readyFacilitators())
+          .map(tips => {
+            val messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq())
 
-          // TODO: Choose more than one tx and light peers
-          val firstTx = transactions.head
-          val lightPeers = if (dao.readyPeers(NodeType.Light).nonEmpty) {
-            Set(
-              dao.readyPeers(NodeType.Light)
-                .minBy(p => Distance.calculate(firstTx.baseHash, p._1))
-                ._2
+            // TODO: Choose more than one tx and light peers
+            val firstTx = transactions.head
+            val lightPeers = if (dao.readyPeers(NodeType.Light).nonEmpty) {
+              Set(
+                dao
+                  .readyPeers(NodeType.Light)
+                  .minBy(p => Distance.calculate(firstTx.baseHash, p._1))
+                  ._2
+              )
+            } else Set[PeerData]()
+
+            RoundData(
+              generateRoundId,
+              tips._2.values.toSet,
+              lightPeers,
+              FacilitatorId(dao.id),
+              transactions,
+              tips._1,
+              messages
             )
-          } else Set[PeerData]()
-
-          RoundData(
-            generateRoundId,
-            tips._2.values.toSet,
-            lightPeers,
-            FacilitatorId(dao.id),
-            transactions,
-            tips._1,
-            messages
-          )
-        })
+          })
       }
   }
 
@@ -218,4 +230,5 @@ object RoundManager {
   )
 
   case class BroadcastUnionBlockProposal(peers: Set[PeerData], proposal: UnionBlockProposal)
+
 }

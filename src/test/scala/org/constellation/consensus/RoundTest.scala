@@ -1,18 +1,22 @@
 package org.constellation.consensus
+
 import java.util.concurrent.Executors
 
 import akka.actor.{ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import cats.effect.IO
-import org.constellation.{DAO, Fixtures, PeerMetadata}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{
+  BroadcastLightTransactionProposal,
+  BroadcastUnionBlockProposal
+}
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCacheData, CheckpointEdge, NodeType, SignedObservationEdge}
+import org.constellation.primitives.Schema.{CheckpointCacheData, NodeType, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.primitives.storage.{MessageService, TransactionService}
 import org.constellation.util.Metrics
+import org.constellation.{DAO, Fixtures, PeerMetadata}
 import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers, OneInstancePerTest}
 
@@ -20,7 +24,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 class RoundTest
-  extends TestKit(ActorSystem("RoundTest"))
+    extends TestKit(ActorSystem("RoundTest"))
     with FunSuiteLike
     with Matchers
     with IdiomaticMockitoFixture
@@ -81,7 +85,9 @@ class RoundTest
   msgService.lookup(*) shouldReturn IO.pure(None)
   dao.messageService shouldReturn msgService
 
-  dao.edgeExecutionContext shouldReturn ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
+  dao.edgeExecutionContext shouldReturn ExecutionContext.fromExecutor(
+    Executors.newWorkStealingPool(8)
+  )
   val metrics = new Metrics()
   dao.metrics shouldReturn metrics
 
@@ -112,7 +118,9 @@ class RoundTest
     TestKit.shutdownActorSystem(system)
   }
 
-  test("it should pass BroadcastLightTransactionProposal to parent when requested for StartTransactionProposal") {
+  test(
+    "it should pass BroadcastLightTransactionProposal to parent when requested for StartTransactionProposal"
+  ) {
     round ! mock[StartTransactionProposal]
 
     within(2 seconds) {
@@ -313,7 +321,9 @@ class RoundTest
     }
   }
 
-  test("it should send ResolveMajorityCheckpointBlock to self when received all union block proposals") {
+  test(
+    "it should send ResolveMajorityCheckpointBlock to self when received all union block proposals"
+  ) {
     round ! UnionBlockProposal(
       roundId,
       FacilitatorId(daoId),
