@@ -189,6 +189,9 @@ class Round(roundData: RoundData, dao: DAO, dataResolver: DataResolver) extends 
         .maxBy(_._2.size)
         ._2
 
+      dao.metrics.incrementMetric("resolveMajorityCheckpointBlockProposalCount_" + checkpointBlockProposals.size)
+
+
       val majorityCheckpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
 
       val finalFacilitators = checkpointBlockProposals.keySet.map(_.id).toSet
@@ -198,7 +201,10 @@ class Round(roundData: RoundData, dao: DAO, dataResolver: DataResolver) extends 
 
       dao.threadSafeSnapshotService.accept(cache)
       Some(majorityCheckpointBlock)
-    } else None
+    } else {
+      dao.metrics.incrementMetric("resolveMajorityCheckpointBlockProposalsEmpty")
+      None
+    }
     passToParentActor(StopBlockCreationRound(roundData.roundId, acceptedBlock))
   }
 

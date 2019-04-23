@@ -52,7 +52,11 @@ class CheckpointFormationManager(
         )
       }
 
-      crossTalkConsensusActor ! StartNewBlockCreationRound
+      if (dao.nodeConfig.isGenesisNode) {
+        EdgeProcessor.formCheckpoint(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))
+      } else {
+        crossTalkConsensusActor ! StartNewBlockCreationRound
+      }
       dao.metrics.updateMetric("blockFormationInProgress", dao.blockFormationInProgress.toString)
     }
 
