@@ -13,16 +13,23 @@ import org.constellation.primitives.IPManager
 
 object CustomDirectives {
 
-  object Limiters {
-    private var rateLimiter: Option[RateLimiter] = None
+  def printResponseTime(logger: Logger)(log: LoggingAdapter) = {
+    val requestTimestamp = System.nanoTime
 
-    def getInstance(tps: Double): RateLimiter = rateLimiter match {
-      case Some(limiter) ⇒ limiter
-      case None ⇒
-        rateLimiter = Some(RateLimiter.create(tps))
-        rateLimiter.get
-    }
+    wrapper(logger, requestTimestamp) _
   }
+
+  def wrapper(logger: Logger, requestTimestamp: Long)(req: HttpRequest)(res: RouteResult) =
+    res match {
+      case Complete(resp) =>
+        val responseTimestamp: Long = System.nanoTime
+        val elapsedTime: Long = (responseTimestamp - requestTimestamp) / 1000000
+        val loggingString =
+          s"""Logged Request:${req.method}:${req.uri}:${resp.status}:${elapsedTime}ms"""
+        logger.info(loggingString)
+      case Rejected(reason) =>
+        logger.info(s"Rejected Reason: ${reason.mkString(",")}")
+    }
 
   trait Throttle {
 
@@ -41,7 +48,7 @@ object CustomDirectives {
 
     val ipManager: IPManager
 
-    def rejectBannedIP(address: InetSocketAddress) : Directive0 = {
+    def rejectBannedIP(address: InetSocketAddress): Directive0 = {
       val ip = address.getHostName
       println(s"Reject banned ip: $ip")
       if (ipManager.bannedIP(ip)) {
@@ -51,7 +58,7 @@ object CustomDirectives {
       }
     }
 
-    def enforceKnownIP(address: InetSocketAddress) : Directive0 = {
+    def enforceKnownIP(address: InetSocketAddress): Directive0 = {
       val ip = address.getHostName
       if (ipManager.knownIP(ip)) {
         pass
@@ -63,22 +70,15 @@ object CustomDirectives {
     }
   }
 
-  def wrapper(logger: Logger, requestTimestamp: Long)(req: HttpRequest)(res: RouteResult) =
-    res match {
-      case Complete(resp) =>
-        val responseTimestamp: Long = System.nanoTime
-        val elapsedTime: Long = (responseTimestamp - requestTimestamp) / 1000000
-        val loggingString =
-          s"""Logged Request:${req.method}:${req.uri}:${resp.status}:${elapsedTime}ms"""
-        logger.info(loggingString)
-      case Rejected(reason) =>
-        logger.info(s"Rejected Reason: ${reason.mkString(",")}")
+  object Limiters {
+    private var rateLimiter: Option[RateLimiter] = None
+
+    def getInstance(tps: Double): RateLimiter = rateLimiter match {
+      case Some(limiter) ⇒ limiter
+      case None ⇒
+        rateLimiter = Some(RateLimiter.create(tps))
+        rateLimiter.get
     }
-
-  def printResponseTime(logger: Logger)(log: LoggingAdapter) = {
-    val requestTimestamp = System.nanoTime
-
-    wrapper(logger, requestTimestamp) _
   }
 
 }

@@ -14,7 +14,12 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
-import org.constellation.consensus.{EdgeProcessor, FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest}
+import org.constellation.consensus.{
+  EdgeProcessor,
+  FinishedCheckpoint,
+  FinishedCheckpointResponse,
+  SignatureRequest
+}
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -51,39 +56,13 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
 
   implicit val serialization: Serialization.type = native.Serialization
 
-  implicit val executionContext
-    : ExecutionContext = dao.edgeExecutionContext // system.dispatchers.lookup("peer-api-dispatcher")
+  implicit val executionContext: ExecutionContext =
+    dao.edgeExecutionContext // system.dispatchers.lookup("peer-api-dispatcher")
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
   private val config: Config = ConfigFactory.load()
-
-  private var pendingRegistrations = Map[String, PeerRegistrationRequest]()
-
-  private def getHostAndPortFromRemoteAddress(clientIP: RemoteAddress) = {
-    clientIP.toOption.map { z =>
-      PeerIPData(z.getHostAddress, Some(clientIP.getPort()))
-    }
-  }
-
-  private def getEndpoints(address: InetSocketAddress) = {
-    get {
-      path("ip") {
-        complete(address)
-      }
-    }
-  }
-
-  def exceptionHandler: ExceptionHandler =
-    ExceptionHandler {
-      case e: Exception =>
-        extractUri { uri =>
-          logger.error(s"Request to $uri could not be handled normally", e)
-          complete(HttpResponse(StatusCodes.InternalServerError))
-        }
-    }
-
   private val signEndpoints =
     post {
       path("status") {
@@ -129,7 +108,6 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
           }
         }
       }
-
   private val postEndpoints =
     post {
       pathPrefix("channel") {
@@ -143,32 +121,32 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
           }
         }
       } ~
-      path("faucet") {
-        entity(as[SendToAddress]) { sendRequest =>
-          // TODO: Add limiting
-          if (sendRequest.amountActual < (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor) &&
-              dao.addressService
-                .getSync(dao.selfAddressStr)
-                .map { _.balance }
-                .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)) {
-            logger.info(s"send transaction to address $sendRequest")
+        path("faucet") {
+          entity(as[SendToAddress]) { sendRequest =>
+            // TODO: Add limiting
+            if (sendRequest.amountActual < (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor) &&
+                dao.addressService
+                  .getSync(dao.selfAddressStr)
+                  .map { _.balance }
+                  .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)) {
+              logger.info(s"send transaction to address $sendRequest")
 
-            val tx = createTransaction(dao.selfAddressStr,
-                                       sendRequest.dst,
-                                       sendRequest.amountActual,
-                                       dao.keyPair,
-                                       normalized = false)
-            dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
-            dao.metrics.incrementMetric("faucetRequest")
+              val tx = createTransaction(dao.selfAddressStr,
+                                         sendRequest.dst,
+                                         sendRequest.amountActual,
+                                         dao.keyPair,
+                                         normalized = false)
+              dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
+              dao.metrics.incrementMetric("faucetRequest")
 
-            complete(Some(tx.hash))
-          } else {
-            logger.warn(s"Invalid faucet request $sendRequest")
-            dao.metrics.incrementMetric("faucetInvalidRequest")
-            complete(None)
+              complete(Some(tx.hash))
+            } else {
+              logger.warn(s"Invalid faucet request $sendRequest")
+              dao.metrics.incrementMetric("faucetInvalidRequest")
+              complete(None)
+            }
           }
-        }
-      } ~
+        } ~
         path("deregister") {
           extractClientIP { clientIP =>
             entity(as[PeerUnregister]) { request =>
@@ -227,20 +205,10 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
           }
         }
     }
-
   private val blockBuildingRoundRoute =
     createRoute(BlockBuildingRoundRoute.pathPrefix)(
       () => new BlockBuildingRoundRoute(nodeActor).createBlockBuildingRoundRoutes()
     )
-
-  private def createRoute(path: String)(routeFactory: () => Route): Route = {
-    pathPrefix(path) {
-      handleExceptions(exceptionHandler) {
-        routeFactory()
-      }
-    }
-  }
-
   private val mixedEndpoints = {
     path("transaction") {
       put {
@@ -255,9 +223,9 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
       }
     }
   }
+  private var pendingRegistrations = Map[String, PeerRegistrationRequest]()
 
-
-  def routes(address : InetSocketAddress): Route = withTimer("peer-api") {
+  def routes(address: InetSocketAddress): Route = withTimer("peer-api") {
     decodeRequest {
       encodeResponse {
         // rejectBannedIP {
@@ -266,5 +234,36 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
       }
     }
   }
+
+  private def getEndpoints(address: InetSocketAddress) = {
+    get {
+      path("ip") {
+        complete(address)
+      }
+    }
+  }
+
+  private def getHostAndPortFromRemoteAddress(clientIP: RemoteAddress) = {
+    clientIP.toOption.map { z =>
+      PeerIPData(z.getHostAddress, Some(clientIP.getPort()))
+    }
+  }
+
+  private def createRoute(path: String)(routeFactory: () => Route): Route = {
+    pathPrefix(path) {
+      handleExceptions(exceptionHandler) {
+        routeFactory()
+      }
+    }
+  }
+
+  def exceptionHandler: ExceptionHandler =
+    ExceptionHandler {
+      case e: Exception =>
+        extractUri { uri =>
+          logger.error(s"Request to $uri could not be handled normally", e)
+          complete(HttpResponse(StatusCodes.InternalServerError))
+        }
+    }
 
 }
