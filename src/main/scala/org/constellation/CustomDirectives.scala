@@ -8,7 +8,7 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.RouteResult.{Complete, Rejected}
 import akka.http.scaladsl.server.{Directive0, RouteResult}
 import com.google.common.util.concurrent.RateLimiter
-import com.typesafe.scalalogging.Logger
+import com.typesafe.scalalogging.{Logger, StrictLogging}
 import org.constellation.primitives.IPManager
 
 object CustomDirectives {
@@ -44,14 +44,14 @@ object CustomDirectives {
       }
   }
 
-  trait IPEnforcer {
+  trait IPEnforcer extends StrictLogging {
 
     val ipManager: IPManager
 
     def rejectBannedIP(address: InetSocketAddress): Directive0 = {
-      val ip = address.getHostName
-      println(s"Reject banned ip: $ip")
+      val ip = address.getAddress.getHostAddress
       if (ipManager.bannedIP(ip)) {
+        logger.info(s"Reject banned ip: $ip")
         complete(StatusCodes.Forbidden)
       } else {
         pass
@@ -59,10 +59,11 @@ object CustomDirectives {
     }
 
     def enforceKnownIP(address: InetSocketAddress): Directive0 = {
-      val ip = address.getHostName
+      val ip = address.getAddress.getHostAddress
       if (ipManager.knownIP(ip)) {
         pass
       } else {
+        logger.info(s"Reject unknown ip: $ip")
         complete(
           StatusCodes.custom(403, "ip unknown. Need to register using the /register endpoint.")
         )
