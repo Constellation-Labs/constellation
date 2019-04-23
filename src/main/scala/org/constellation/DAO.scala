@@ -106,7 +106,7 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
 
   def peerInfo: Map[Id, PeerData] = {
     // TODO: fix it to be Future
-    Await.result((peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]], 3 seconds)
+    Await.result((peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]], 10 seconds)
   }
 
   def peerInfo(nodeType: NodeType): Map[Id, PeerData] =

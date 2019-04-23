@@ -226,11 +226,15 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
   private var pendingRegistrations = Map[String, PeerRegistrationRequest]()
 
   def routes(address: InetSocketAddress): Route = withTimer("peer-api") {
+    val id = ipLookup(address)
+    // TODO: pass id down and use it if needed
+
     decodeRequest {
       encodeResponse {
         // rejectBannedIP {
-        signEndpoints ~ commonEndpoints ~ blockBuildingRoundRoute ~ // { //enforceKnownIP
-          getEndpoints(address) ~ postEndpoints ~ mixedEndpoints
+        signEndpoints ~ commonEndpoints ~ enforceKnownIP(address) {
+          getEndpoints(address) ~ postEndpoints ~ mixedEndpoints ~ blockBuildingRoundRoute
+        }
       }
     }
   }
@@ -255,6 +259,14 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
         routeFactory()
       }
     }
+  }
+
+  private def ipLookup(address: InetSocketAddress): Option[Schema.Id] = {
+    val ip = address.getAddress.getHostAddress
+
+    def sameHost(p: PeerData) = p.peerMetadata.host == ip
+
+    dao.peerInfo.find(p => sameHost(p._2)).map(_._1)
   }
 
   def exceptionHandler: ExceptionHandler =
