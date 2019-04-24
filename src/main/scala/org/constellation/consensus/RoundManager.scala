@@ -3,15 +3,11 @@ package org.constellation.consensus
 import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, Props}
 import cats.implicits._
 import org.constellation.DAO
-import org.constellation.consensus.CrossTalkConsensus.{
-  NotifyFacilitators,
-  ParticipateInBlockCreationRound,
-  StartNewBlockCreationRound
-}
+import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCacheData, NodeType}
-import org.constellation.primitives.{PeerData, UpdatePeerNotifications}
+import org.constellation.primitives.{CheckpointBlock, PeerData, UpdatePeerNotifications}
 import org.constellation.util.{Distance, PeerApiClient}
 
 import scala.collection.mutable
@@ -113,6 +109,12 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO)
       log.debug(
         s"node ${dao.id.short} Block formation timeout occurred for ${cmd.roundId} resolving majority CheckpointBlock"
       )
+      passToRoundActor(cmd)
+
+    case cmd: BroadcastSelectedUnionBlock =>
+      passToParentActor(cmd)
+
+    case cmd: SelectedUnionBlock =>
       passToRoundActor(cmd)
 
     case msg => log.info(s"Received unknown message: $msg")
@@ -230,5 +232,7 @@ object RoundManager {
   )
 
   case class BroadcastUnionBlockProposal(peers: Set[PeerData], proposal: UnionBlockProposal)
+
+  case class BroadcastSelectedUnionBlock(peers: Set[PeerData], cb: SelectedUnionBlock)
 
 }

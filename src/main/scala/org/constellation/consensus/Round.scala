@@ -5,7 +5,7 @@ import cats.effect.IO
 import cats.implicits._
 import constellation.{wrapFutureWithMetric, _}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCacheData, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
@@ -25,8 +25,14 @@ class Round(roundData: RoundData, dao: DAO, dataResolver: DataResolver) extends 
     mutable.Map()
   private[consensus] val checkpointBlockProposals: mutable.Map[FacilitatorId, CheckpointBlock] =
     mutable.Map()
+  private[consensus] val selectedCheckpointBlocks: mutable.Map[FacilitatorId, CheckpointBlock] =
+    mutable.Map()
 
   private[consensus] var unionTransactionProposalsTikTok: Cancellable = _
+
+  private[consensus] var checkpointBlockProposalsTikTok: Cancellable = _
+
+  private[consensus] var majorityCheckpointBlock: Option[CheckpointBlock] = None
 
   override def receive: Receive = {
     case StartTransactionProposal(_) =>
@@ -61,12 +67,21 @@ class Round(roundData: RoundData, dao: DAO, dataResolver: DataResolver) extends 
     case UnionBlockProposal(roundId, facilitatorId, checkpointBlock) =>
       checkpointBlockProposals += (facilitatorId -> checkpointBlock)
       if (receivedAllCheckpointBlockProposals) {
+        cancelCheckpointBlockProposalsTikTok()
         self ! ResolveMajorityCheckpointBlock(roundId)
+      }
+
+    case SelectedUnionBlock(roundId, facilitatorId, checkpointBlock) =>
+      selectedCheckpointBlocks += (facilitatorId -> checkpointBlock)
+      if (receivedAllSelectedUnionedBlocks) {
+        self ! AcceptMajorityCheckpointBlock(roundId)
       }
 
     case UnionProposals => unionProposals()
 
     case ResolveMajorityCheckpointBlock(_) => resolveMajorityCheckpointBlock()
+
+    case AcceptMajorityCheckpointBlock(_) => acceptMajorityCheckpointBlock()
 
     case msg => log.info(s"Received unknown message: $msg")
   }
@@ -80,14 +95,30 @@ class Round(roundData: RoundData, dao: DAO, dataResolver: DataResolver) extends 
       UnionProposals
     )
 
+  private[consensus] def scheduleCheckpointBlockProposals: Cancellable =
+    context.system.scheduler.scheduleOnce(
+      ConfigUtil.getDurationFromConfig(
+        "constellation.consensus.checkpoint-block-proposals-timeout",
+        15.second),
+      self,
+      ResolveMajorityCheckpointBlock
+    )
+
   private[consensus] def receivedAllTransactionProposals: Boolean =
     transactionProposals.size >= roundData.peers.size + 1
 
   private[consensus] def receivedAllCheckpointBlockProposals: Boolean =
     checkpointBlockProposals.size >= roundData.peers.size + 1
 
+  private[consensus] def receivedAllSelectedUnionedBlocks: Boolean =
+    selectedCheckpointBlocks.size >= roundData.peers.size + 1
+
   private[consensus] def cancelUnionTransactionProposalsTikTok(): Unit = {
     Option(unionTransactionProposalsTikTok).foreach(_.cancel())
+  }
+
+  private[consensus] def cancelCheckpointBlockProposalsTikTok(): Unit = {
+    Option(checkpointBlockProposalsTikTok).foreach(_.cancel())
   }
 
   private[consensus] def unionProposals(): Unit = {
@@ -183,22 +214,40 @@ class Round(roundData: RoundData, dao: DAO, dataResolver: DataResolver) extends 
   }
 
   private[consensus] def resolveMajorityCheckpointBlock(): Unit = {
-    val acceptedBlock = if (checkpointBlockProposals.nonEmpty) {
+    majorityCheckpointBlock = if (checkpointBlockProposals.nonEmpty) {
       val sameBlocks = checkpointBlockProposals
         .groupBy(_._2.baseHash)
         .maxBy(_._2.size)
         ._2
 
-      val majorityCheckpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
+      val checkpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
 
-      val finalFacilitators = checkpointBlockProposals.keySet.map(_.id).toSet
-      val cache = CheckpointCacheData(Some(majorityCheckpointBlock),
-                                      height = majorityCheckpointBlock.calculateHeight())
+      val selectedCheckpointBlock = SelectedUnionBlock(roundData.roundId, FacilitatorId(dao.id), checkpointBlock)
+      passToParentActor(BroadcastSelectedUnionBlock(roundData.peers, selectedCheckpointBlock))
+      self ! selectedCheckpointBlock
+
+      Some(checkpointBlock)
+    } else None
+  }
+
+  private[consensus] def acceptMajorityCheckpointBlock(): Unit = {
+    val acceptedBlock = if (selectedCheckpointBlocks.nonEmpty) {
+      val sameBlocks = selectedCheckpointBlocks
+        .groupBy(_._2.soeHash)
+        .maxBy(_._2.size)
+        ._2
+
+      val checkpointBlock = sameBlocks.head._2
+
+      val finalFacilitators = selectedCheckpointBlocks.keySet.map(_.id).toSet
+      val cache = CheckpointCacheData(Some(checkpointBlock),
+        height = checkpointBlock.calculateHeight())
       broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, finalFacilitators))
 
       dao.threadSafeSnapshotService.accept(cache)
-      Some(majorityCheckpointBlock)
+      Some(checkpointBlock)
     } else None
+
     passToParentActor(StopBlockCreationRound(roundData.roundId, acceptedBlock))
   }
 
@@ -248,6 +297,8 @@ object Round {
 
   case class ResolveMajorityCheckpointBlock(roundId: RoundId) extends RoundCommand
 
+  case class AcceptMajorityCheckpointBlock(roundId: RoundId) extends RoundCommand
+
   case class StartTransactionProposal(roundId: RoundId) extends RoundCommand
 
   case class LightTransactionsProposal(
@@ -276,6 +327,12 @@ object Round {
 
   case class StopBlockCreationRound(roundId: RoundId, maybeCB: Option[CheckpointBlock])
       extends RoundCommand
+
+  case class SelectedUnionBlock(
+    roundId: RoundId,
+    facilitatorId: FacilitatorId,
+    checkpointBlock: CheckpointBlock
+   ) extends RoundCommand
 
   def props(roundData: RoundData, dao: DAO, dataResolver: DataResolver): Props =
     Props(new Round(roundData, dao, dataResolver))

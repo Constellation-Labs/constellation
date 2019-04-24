@@ -2,7 +2,7 @@ package org.constellation.consensus
 
 import constellation._
 import org.constellation.consensus.CrossTalkConsensus.NotifyFacilitators
-import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema.SignedObservationEdge
 import org.constellation.primitives.{ChannelMessage, PeerData, Transaction}
@@ -45,6 +45,9 @@ class HTTPNodeRemoteSender(implicit val dao: DAO) extends NodeRemoteSender {
 
   override def broadcastBlockUnion(cmd: BroadcastUnionBlockProposal): Unit =
     parallelFireForget(BlockBuildingRoundRoute.unionFullPath, cmd.peers, cmd.proposal)
+
+  override def broadcastSelectedUnionBlock(cmd: BroadcastSelectedUnionBlock): Unit =
+    parallelFireForget(BlockBuildingRoundRoute.selectedFullPath, cmd.peers, cmd.cb)
 
   def parallelFireForget(path: String, peers: Iterable[PeerData], cmd: AnyRef): Unit =
     peers.par.foreach(_.client.postNonBlockingUnit(path, cmd))
