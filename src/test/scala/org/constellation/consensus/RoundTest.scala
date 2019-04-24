@@ -7,10 +7,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import cats.effect.IO
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{
-  BroadcastLightTransactionProposal,
-  BroadcastUnionBlockProposal
-}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCacheData, NodeType, SignedObservationEdge}
 import org.constellation.primitives._
@@ -324,27 +321,23 @@ class RoundTest
   test(
     "it should send ResolveMajorityCheckpointBlock to self when received all union block proposals"
   ) {
-    round ! UnionBlockProposal(
-      roundId,
-      FacilitatorId(daoId),
-      cb1,
-    )
-    round ! UnionBlockProposal(
-      roundId,
-      facilitatorId1,
-      cb2,
-    )
-    round ! UnionBlockProposal(
-      roundId,
-      facilitatorId2,
-      cb3
-    )
+    round ! UnionBlockProposal(roundId, FacilitatorId(daoId), cb1)
+    round ! UnionBlockProposal(roundId, facilitatorId1, cb2)
+    round ! UnionBlockProposal(roundId, facilitatorId2, cb3)
 
     round.underlyingActor.resolveMajorityCheckpointBlock() was called
   }
 
-  test("it should resolve majority checkpoint block") {
-    round ! mock[ResolveMajorityCheckpointBlock]
+  test("it should broadcast selected union block") {
+    round ! UnionBlockProposal(roundId, FacilitatorId(daoId), cb1)
+    round ! UnionBlockProposal(roundId, facilitatorId1, cb2)
+    round ! UnionBlockProposal(roundId, facilitatorId2, cb3)
+
+    round.underlyingActor.passToParentActor(any[BroadcastSelectedUnionBlock]) was called
+  }
+
+  test("it should accept majority checkpoint block") {
+    round ! mock[AcceptMajorityCheckpointBlock]
 
     // TODO: verify accepted block
     round.underlyingActor.passToParentActor(any[StopBlockCreationRound]) was called
@@ -352,5 +345,42 @@ class RoundTest
 
   // TODO: verify accepted block, then write this unit tests
   ignore("it should broadcast signed block to non facilitators") {}
+
+  test("it should combine all received selected union blocks") {
+    round ! SelectedUnionBlock(
+      roundId,
+      facilitatorId1,
+      cb1
+    )
+
+    round ! SelectedUnionBlock(
+      roundId,
+      facilitatorId2,
+      cb2
+    )
+
+    within(3 seconds) {
+      expectNoMessage
+      round.underlyingActor.selectedCheckpointBlocks.size shouldBe 2
+    }
+  }
+
+  test(
+    "it should send AcceptMajorityCheckpointBlock to self when received all selected union blocks"
+  ) {
+    round ! SelectedUnionBlock(roundId, FacilitatorId(daoId), cb1)
+    round ! SelectedUnionBlock(roundId, facilitatorId1, cb2)
+    round ! SelectedUnionBlock(roundId, facilitatorId2, cb3)
+
+    round.underlyingActor.acceptMajorityCheckpointBlock() was called
+  }
+
+  test("it should cancel checkpoint block proposals timer when received all checkpoint block proposals") {
+    round ! UnionBlockProposal(roundId, facilitatorId1, cb1)
+    round ! UnionBlockProposal(roundId, facilitatorId2, cb2)
+    round ! UnionBlockProposal(roundId, FacilitatorId(daoId), cb3)
+
+    round.underlyingActor.cancelCheckpointBlockProposalsTikTok() was called
+  }
 
 }

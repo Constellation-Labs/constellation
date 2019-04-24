@@ -2,16 +2,9 @@ package org.constellation.consensus
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.pattern.{BackoffOpts, BackoffSupervisor}
-import org.constellation.consensus.CrossTalkConsensus.{
-  NotifyFacilitators,
-  ParticipateInBlockCreationRound,
-  StartNewBlockCreationRound
-}
+import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{
-  BroadcastLightTransactionProposal,
-  BroadcastUnionBlockProposal
-}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.duration._
@@ -54,10 +47,16 @@ class CrossTalkConsensus(remoteSenderSupervisor: ActorRef)(implicit dao: DAO)
     case cmd: UnionBlockProposal =>
       roundManager ! cmd
 
+    case cmd: SelectedUnionBlock =>
+      roundManager ! cmd
+
     case cmd: BroadcastUnionBlockProposal =>
       remoteSenderSupervisor ! cmd
 
     case cmd: NotifyFacilitators =>
+      remoteSenderSupervisor ! cmd
+
+    case cmd: BroadcastSelectedUnionBlock =>
       remoteSenderSupervisor ! cmd
 
     case cmd => log.warning(s"Received unknown message $cmd")

@@ -6,16 +6,9 @@ import akka.actor.{ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import org.constellation._
-import org.constellation.consensus.CrossTalkConsensus.{
-  NotifyFacilitators,
-  ParticipateInBlockCreationRound,
-  StartNewBlockCreationRound
-}
+import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{
-  BroadcastLightTransactionProposal,
-  BroadcastUnionBlockProposal
-}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.primitives.Schema.{NodeType, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.primitives.storage.CheckpointService
@@ -296,5 +289,22 @@ class RoundManagerTest
 
       roundManager.underlyingActor.closeRoundActor(round._1) was called
     }
+  }
+
+  test("it should pass BroadcastSelectedUnionBlock to parent actor") {
+    val cmd = mock[BroadcastSelectedUnionBlock]
+
+    roundManager ! cmd
+
+    roundManager.underlyingActor.passToParentActor(cmd) was called
+  }
+
+  test("it should pass SelectedUnionBlock to round actor") {
+    val cmd = mock[SelectedUnionBlock]
+    cmd.roundId shouldReturn RoundId("round1")
+
+    roundManager ! cmd
+
+    roundManager.underlyingActor.passToRoundActor(cmd) was called
   }
 }
