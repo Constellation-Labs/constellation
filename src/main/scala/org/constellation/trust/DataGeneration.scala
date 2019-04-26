@@ -12,6 +12,18 @@ case class TrustNode(id: Int, xCoordinate: Double, yCoordinate: Double, edges: S
     Math.pow(xCoordinate - other.xCoordinate, 2) +
       Math.pow(yCoordinate - other.yCoordinate, 2)
   } / TrustRank.sqrt2
+
+  def positiveEdges: Seq[TrustEdge] = edges.filter(_.trust > 0)
+  def normalizedPositiveEdges(visited: Set[Int]): Map[Int, Double] = {
+    val positiveSubset = positiveEdges.filterNot{ e => visited.contains(e.dst)}
+    if (positiveSubset.isEmpty) Map.empty[Int, Double] else {
+      val total = positiveSubset.map { _.trust }.sum
+      positiveSubset.map { edge =>
+        edge.dst -> (edge.trust / total)
+      }.toMap
+    }
+  }
+
 }
 
 object DataGeneration {
