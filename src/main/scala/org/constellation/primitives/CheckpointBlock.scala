@@ -417,6 +417,76 @@ sealed trait CheckpointBlockValidatorNel {
 
     postTreeIgnoreEmptySnapshot.map(_ => cb)
   }
+
+  def getTransactionsTillSnapshot(
+    cbs: Seq[CheckpointBlock]
+  )(implicit dao: DAO): Seq[Transaction] = {
+
+    def getParentTransactions(parents: Seq[CheckpointBlock],
+                              accu: Seq[Transaction] = Seq.empty,
+                              snapshotReached: Boolean = false): Seq[Transaction] = {
+      parents match {
+        case Nil => accu
+        case cb :: tail if !snapshotReached =>
+          getParentTransactions(
+            tail ++ getParents(cb),
+            accu ++ cb.transactions,
+            isInSnapshot(cb)
+          )
+        case cb :: tail if snapshotReached =>
+          getParentTransactions(
+            tail,
+            accu ++ cb.transactions,
+            snapshotReached
+          )
+      }
+    }
+    cbs.filterNot(isInSnapshot(_)).flatMap(cb => getParentTransactions(getParents(cb)))
+  }
+
+  def isConflictingWithOthers(cb: CheckpointBlock,
+                              others: Seq[CheckpointBlock])(implicit dao: DAO): Boolean = {
+    cb.transactions.intersect(getTransactionsTillSnapshot(others)).nonEmpty
+  }
+
+  def detectInternalTipsConflict(
+    inputTips: Seq[CheckpointCacheData]
+  )(implicit dao: DAO): Option[CheckpointCacheData] = {
+
+    def detect(
+      tips: Seq[CheckpointCacheData],
+      ancestryTransactions: Map[Transaction, String] = Map.empty
+    ): Option[CheckpointCacheData] = {
+      tips match {
+        case Nil => None
+        case CheckpointCacheData(Some(cb), children, height) :: _
+            if cb.transactions.toSet.intersect(ancestryTransactions.keySet).nonEmpty =>
+          val conflictingCBBaseHash = ancestryTransactions(
+            cb.transactions.toSet.intersect(ancestryTransactions.keySet).head
+          )
+          Some(
+            selectBlockToPreserve(
+              Seq(CheckpointCacheData(Some(cb), children, height)) ++ inputTips
+                .filter(ccd => ccd.checkpointBlock.exists(_.baseHash == conflictingCBBaseHash))
+            )
+          )
+        case CheckpointCacheData(Some(cb), _, _) :: tail =>
+          detect(tail, ancestryTransactions ++ cb.transactions.map(i => (i, cb.baseHash)))
+      }
+    }
+    detect(inputTips)
+  }
+
+  def hasTransactionInCommon(cbLeft: CheckpointBlock, cbRight: CheckpointBlock): Boolean = {
+    cbLeft.transactions.intersect(cbRight.transactions).nonEmpty
+  }
+
+  def selectBlockToPreserve(blocks: Iterable[CheckpointCacheData]): CheckpointCacheData = {
+    blocks.maxBy(
+      cb => (cb.children, cb.checkpointBlock.map(b => (b.signatures.size, b.baseHash)))
+    )
+
+  }
 }
 
 object CheckpointBlockValidatorNel extends CheckpointBlockValidatorNel

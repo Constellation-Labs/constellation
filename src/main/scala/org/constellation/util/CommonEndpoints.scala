@@ -20,7 +20,11 @@ import org.json4s.native.Serialization
 
 import scala.concurrent.Future
 
-case class NodeStateInfo(nodeState: NodeState, addresses: Seq[String] = Seq(), nodeType: NodeType = NodeType.Full) // TODO: Refactor, addresses temp for testing
+case class NodeStateInfo(
+  nodeState: NodeState,
+  addresses: Seq[String] = Seq(),
+  nodeType: NodeType = NodeType.Full
+) // TODO: Refactor, addresses temp for testing
 
 trait CommonEndpoints extends Json4sSupport {
 
@@ -40,11 +44,11 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.id)
       } ~
       path("tips") {
-        complete(dao.threadSafeSnapshotService.tips)
+        complete(dao.concurrentTipService.toMap)
       } ~
       path("heights") {
-        val maybeHeights = dao.threadSafeSnapshotService.tips.flatMap {
-          case (k, v) => dao.checkpointService.get(k).flatMap { _.height }
+        val maybeHeights = dao.concurrentTipService.toMap.flatMap {
+          case (k, _) => dao.checkpointService.get(k).flatMap { _.height }
         }.toSeq
         complete(maybeHeights)
       } ~

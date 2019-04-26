@@ -335,7 +335,7 @@ object EdgeProcessor extends StrictLogging {
                 ccd.foreach { cd =>
                   cd.checkpointBlock.foreach { cb =>
                     if (cd.children < 2) {
-                      dao.concurrentTipService.put(cb.baseHash, TipData(cb, 0))(dao.metrics)
+                      dao.concurrentTipService.update(cb)(dao)
                     }
                     if (!dao.checkpointService
                           .contains(cd.checkpointBlock.get.baseHash)) {

@@ -1,7 +1,8 @@
 package org.constellation.primitives
+import com.typesafe.scalalogging.Logger
 import org.constellation.DAO
 import org.constellation.consensus.TipData
-import org.constellation.primitives.Schema.{Id, SignedObservationEdge}
+import org.constellation.primitives.Schema.{GenesisObservation, Id, SignedObservationEdge}
 import org.constellation.util.Metrics
 
 import scala.collection.concurrent.TrieMap
@@ -11,16 +12,18 @@ trait ConcurrentTipService {
 
   def getMinTipHeight()(implicit dao: DAO): Long
   def toMap: Map[String, TipData]
+  def toSeq: Seq[CheckpointBlock]
   def size: Int
   def set(tips: Map[String, TipData])
   def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO)
   // considerd as private only
-  def put(k: String, v: TipData)(implicit metrics: Metrics): Option[TipData]
+  def put(go: GenesisObservation)(implicit metrics: Metrics): Option[TipData]
   def pull(
     readyFacilitators: Map[Id, PeerData]
   )(implicit metrics: Metrics): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])]
   def get(k: String): Option[TipData]
   def remove(k: String)(implicit metrics: Metrics): Unit
+  def markAsConflict(key: String)(implicit metrics: Metrics): Unit
 
 }
 
@@ -30,7 +33,9 @@ class TrieBasedTipService(sizeLimit: Int,
                           minPeerTimeAddedSeconds: Int)
     extends ConcurrentTipService {
 
+  private val conflictingTips: TrieMap[String, CheckpointBlock] = TrieMap.empty
   private val tips: TrieMap[String, TipData] = TrieMap.empty
+  private val logger = Logger("TrieBasedTipService")
 
   override def set(newTips: Map[String, TipData]): Unit = {
     tips ++= newTips
@@ -53,6 +58,16 @@ class TrieBasedTipService(sizeLimit: Int,
     metrics.incrementMetric("checkpointTipsRemoved")
   }
 
+  def markAsConflict(key: String)(implicit metrics: Metrics): Unit = {
+    logger.warn(s"Marking tip as conflicted tipHash: $key")
+
+    tips.get(key).foreach { tip =>
+      tips -= key
+      metrics.incrementMetric("conflictTipRemoved")
+      conflictingTips.put(key, tip.checkpointBlock)
+    }
+  }
+
   def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): Unit = {
     // TODO: should size of the map be calculated each time or just once?
     // previously it was static due to all method were sync and map updates
@@ -69,11 +84,22 @@ class TrieBasedTipService(sizeLimit: Int,
           put(block.baseHash, TipData(block, numUses + 1))(dao.metrics)
       }
     }
-
-    put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics)
+    this.synchronized {
+      if (!CheckpointBlockValidatorNel.isConflictingWithOthers(checkpointBlock, toSeq)) {
+        put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics)
+      } else {
+        logger.warn(s"Unable to add conflicted checkpoint block: ${checkpointBlock.baseHash}")
+        conflictingTips.put(checkpointBlock.baseHash, checkpointBlock)
+      }
+    }
   }
 
-  def put(k: String, v: TipData)(implicit metrics: Metrics): Option[TipData] = {
+  override def put(go: GenesisObservation)(implicit metrics: Metrics): Option[TipData] = {
+    put(go.initialDistribution.baseHash, TipData(go.initialDistribution, 0))
+    put(go.initialDistribution2.baseHash, TipData(go.initialDistribution2, 0))
+  }
+
+  private def put(k: String, v: TipData)(implicit metrics: Metrics): Option[TipData] = {
     if (tips.size < sizeLimit) {
       tips.put(k, v)
     } else {
@@ -96,19 +122,17 @@ class TrieBasedTipService(sizeLimit: Int,
         dao.checkpointService.get
       }
 
-    if (maybeDatas.exists{_.isEmpty}) {
+    if (maybeDatas.exists { _.isEmpty }) {
       dao.metrics.incrementMetric("minTipHeightCBDataEmptyForKeys")
     }
 
-    maybeDatas
-      .flatMap {
-        _.flatMap {
-          _.height.map {
-            _.min
-          }
+    maybeDatas.flatMap {
+      _.flatMap {
+        _.height.map {
+          _.min
         }
       }
-      .min
+    }.min
 
   }
 
@@ -151,5 +175,7 @@ class TrieBasedTipService(sizeLimit: Int,
       }
     selectedFacils.toMap
   }
-
+  override def toSeq: Seq[CheckpointBlock] = {
+    tips.map(_._2.checkpointBlock).toSeq
+  }
 }
