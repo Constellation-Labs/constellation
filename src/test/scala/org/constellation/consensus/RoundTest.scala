@@ -78,8 +78,8 @@ class RoundTest
   dao.readyPeers shouldReturn readyFacilitators
 
   val msgService = mock[MessageService]
-  msgService.contains(*) shouldReturn IO.pure(true)
-  msgService.lookup(*) shouldReturn IO.pure(None)
+  msgService.contains shouldReturn (_ => IO.pure(true))
+  msgService.lookup shouldReturn (_ => IO.pure(None))
   dao.messageService shouldReturn msgService
 
   dao.edgeExecutionContext shouldReturn ExecutionContext.fromExecutor(
@@ -109,7 +109,7 @@ class RoundTest
 
   val dataResolver = mock[DataResolver]
   val roundProbe = TestProbe()
-  val round: TestActorRef[Round] = TestActorRef(Props(spy(new Round(roundData, dao, dataResolver))))
+  val round: TestActorRef[Round] = TestActorRef(Props(spy(new Round(roundData, Seq.empty,Seq.empty,dao, dataResolver))))
 
   after {
     TestKit.shutdownActorSystem(system)
@@ -241,7 +241,7 @@ class RoundTest
   test("it should resolve missing messages on union block proposals step") {
     dao.readyPeers shouldReturn Map()
 
-    dao.messageService.contains(*) shouldReturn IO.pure(false)
+    dao.messageService.contains shouldReturn (_ => IO.pure(false))
 
     dataResolver.resolveMessages(*, *, *)(3 seconds, dao) shouldReturn IO.pure(None)
 
