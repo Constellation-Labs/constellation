@@ -240,7 +240,7 @@ object RoundManager {
     ).getOrElse("hash") match {
       case "id" =>
           (id: Id, tx: Transaction) =>
-        BigInt(id.hex.getBytes()) ^ BigInt(tx.src.address.getBytes())
+        Distance.calculate(tx.src.address, id)
       case "hash" =>
           (id: Id, tx: Transaction) =>
             val idBi = BigInt(id.hex.getBytes())
