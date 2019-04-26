@@ -3,6 +3,7 @@ package org.constellation.primitives
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 
 import akka.util.Timeout
+import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
@@ -189,7 +190,6 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
   }
 
   def attemptSnapshot()(implicit dao: DAO): Unit = this.synchronized {
-
     if (acceptedCBSinceSnapshot.size > dao.processingConfig.maxAcceptedCBHashesInMemory) {
       acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.slice(0, 100)
       dao.metrics.incrementMetric("memoryExceeded_acceptedCBSinceSnapshot")
@@ -274,13 +274,19 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
               "snapshotWriteToDisk"
             )
 
-            Snapshot.acceptSnapshot(snapshot)
-            dao.snapshotService.midDb.put(snapshot.hash, snapshot)
-            dao.checkpointService.memPool.remove(snapshot.checkpointBlocks.toSet)
+            val cbData = snapshot.checkpointBlocks.map { dao.checkpointService.getFullData }
+            val cbs = cbData.toList.map(_.flatMap(_.checkpointBlock)).sequence
+            val addresses = cbs.map(_.flatMap(_.transactions.toList.flatMap(t => List(t.src, t.dst))).toSet)
 
-            totalNumCBsInShapshots += snapshot.checkpointBlocks.size
-            dao.metrics.updateMetric("totalNumCBsInShapshots", totalNumCBsInShapshots.toString)
-            dao.metrics.updateMetric("lastSnapshotHash", snapshot.hash)
+            dao.addressService.lockForSnapshot(addresses.get, IO {
+              Snapshot.acceptSnapshot(snapshot)
+              dao.snapshotService.midDb.put(snapshot.hash, snapshot)
+              dao.checkpointService.memPool.remove(snapshot.checkpointBlocks.toSet)
+
+              totalNumCBsInShapshots += snapshot.checkpointBlocks.size
+              dao.metrics.updateMetric("totalNumCBsInShapshots", totalNumCBsInShapshots.toString)
+              dao.metrics.updateMetric("lastSnapshotHash", snapshot.hash)
+            }).unsafeRunSync()
           }
 
           // TODO: Verify from file
