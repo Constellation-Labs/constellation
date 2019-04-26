@@ -1,6 +1,11 @@
 package org.constellation.trust
 import scala.util.Random
 
+/**
+  * https://en.wikipedia.org/wiki/Node_influence_metric
+  * https://en.wikipedia.org/wiki/Self-avoiding_walk
+  *
+  */
 object SelfAvoidingWalk {
 
   final def sample[A](dist: Map[A, Double]): A = {
