@@ -164,7 +164,7 @@ object ConstellationNode extends StrictLogging {
           processingConfig =
             if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10)
             else processingConfig,
-          dataPollingManagerOn = config.getBoolean("dataPollingManagerOn")
+          dataPollingManagerOn = config.getBoolean("constellation.dataPollingManagerOn")
         )
       )
     } match {
