@@ -18,9 +18,11 @@ case class TrustNode(id: Int, xCoordinate: Double, yCoordinate: Double, edges: S
     val positiveSubset = positiveEdges.filterNot{ e => visited.contains(e.dst)}
     if (positiveSubset.isEmpty) Map.empty[Int, Double] else {
       val total = positiveSubset.map { _.trust }.sum
-      positiveSubset.map { edge =>
+      val normalized = positiveSubset.map { edge =>
         edge.dst -> (edge.trust / total)
       }.toMap
+      // println("Normalized sum: " + normalized.values.sum)
+      normalized
     }
   }
 

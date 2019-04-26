@@ -66,16 +66,16 @@ object SelfAvoidingWalk {
 
           val productTrust = currentTrust * transitionTrust
 
-          /*
-        println(
+
+/*        println(
           s"currentLength $currentPathLength " +
           s"on $currentId " +
           s"visiting $transitionDst " +
           s"with transition trust $transitionTrust " +
           s"product $productTrust " +
           s"visited $visitedNext"
-        )
-     */
+        )*/
+
 
           walk(
             selfId,
@@ -93,7 +93,41 @@ object SelfAvoidingWalk {
 
   def main(args: Array[String]): Unit = {
 
-    val nodes = DataGeneration.generateTestData()
+     testConflictSybil()
+    //debugRunner()
+  }
+
+  def testConflictSybil(): Unit = {
+
+    val goodNodes = Seq.tabulate(10){ i =>
+
+      // Change edges to Map[Dst, TrustInfo]
+      val edgeIds = Random.shuffle(Seq.tabulate(10) { identity}).take(Random.nextInt(3) + 5)
+
+      TrustNode(i, 0D, 0D, edgeIds.map{ dst =>
+        TrustEdge(i, dst, Random.nextDouble())
+      })
+    }
+
+    val badNodes = Seq.tabulate(10){ i =>
+      val iOffset = 10 + i
+      val edgeIds = Random.shuffle(Seq.tabulate(10) { _ + 10}).take(Random.nextInt(3) + 5)
+
+      TrustNode(iOffset, 0D, 0D, edgeIds.map{ dst =>
+        TrustEdge(i, dst, Random.nextDouble())
+      })
+    }
+
+    val updatedGoodNodesWithBadEdge = goodNodes.tail :+
+      goodNodes.head.copy(edges = goodNodes.head.edges :+ TrustEdge(goodNodes.head.id, badNodes.head.id, 0.2D))
+
+    val secondNode = goodNodes.tail.head
+
+    runWalk(secondNode.id, updatedGoodNodesWithBadEdge ++ badNodes, numIterations = 100000)
+
+  }
+
+  def runWalk(selfId: Int, nodes: Seq[TrustNode], numIterations : Int = 100000): Unit = {
 
     val nodeMap = nodes.map{n => n.id -> n}.toMap
 
@@ -108,9 +142,9 @@ object SelfAvoidingWalk {
 
     val walkScores = Array.fill(nodes.size)(0D)
 
-    for (_ <- 0 to 100000) {
+    for (_ <- 0 to numIterations) {
       val (id, trust) = walkFromOrigin()
-    //  println(s"Returning $id with trust $trust")
+      //  println(s"Returning $id with trust $trust")
       if (id != n1.id) {
         walkScores(id) += trust
       }
@@ -136,10 +170,18 @@ object SelfAvoidingWalk {
     println("Weighted edges all")
 
     // TODO: Normalize again
-    weightedEdgesAll.foreach{println}
+    weightedEdgesAll.zipWithIndex.foreach{println}
 
 
     println(s"n1 id: ${n1.id}")
+
+  }
+
+  def debugRunner(): Unit = {
+
+    val nodes = DataGeneration.generateTestData()
+
+    runWalk(nodes.head.id, nodes)
 
   }
 }
