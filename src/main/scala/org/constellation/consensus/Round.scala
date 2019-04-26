@@ -66,7 +66,12 @@ class Round(roundData: RoundData, dao: DAO, dataResolver: DataResolver) extends 
 
     case UnionProposals => unionProposals()
 
-    case ResolveMajorityCheckpointBlock(_) => resolveMajorityCheckpointBlock()
+    case ResolveMajorityCheckpointBlock(_, triggeredFromTimeOut) => {
+      dao.metrics.incrementMetric(
+        "resolveMajorityCheckpointBlockActorTriggeredFromTimeout_" + triggeredFromTimeOut
+      )
+      resolveMajorityCheckpointBlock()
+    }
 
     case msg => log.info(s"Received unknown message: $msg")
   }
@@ -252,7 +257,7 @@ object Round {
 
   case object UnionProposals
 
-  case class ResolveMajorityCheckpointBlock(roundId: RoundId) extends RoundCommand
+  case class ResolveMajorityCheckpointBlock(roundId: RoundId, triggeredFromTimeout: Boolean = false) extends RoundCommand
 
   case class StartTransactionProposal(roundId: RoundId) extends RoundCommand
 

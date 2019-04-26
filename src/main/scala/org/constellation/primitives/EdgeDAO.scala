@@ -422,7 +422,14 @@ trait EdgeDAO {
 
 
   def pullTransactions(minimumCount: Int = minCheckpointFormationThreshold): Option[Seq[Transaction]] =  {
-    threadSafeTXMemPool.pull(minimumCount)
+    val ret = threadSafeTXMemPool.pull(minimumCount)
+    ret.foreach{
+      _.foreach{ _ =>
+        metrics.incrementMetric("transactionPull")
+      }
+    }
+
+    ret
   }
 
   def pullMessages(minimumCount: Int): Option[Seq[ChannelMessage]] = {

@@ -154,7 +154,7 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO) extends Acto
       context.system.scheduler.scheduleOnce(
         roundTimeout,
         self,
-        ResolveMajorityCheckpointBlock(roundData.roundId)),
+        ResolveMajorityCheckpointBlock(roundData.roundId, triggeredFromTimeout = true)),
       startedByThisNode
     )
   }

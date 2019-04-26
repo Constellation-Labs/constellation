@@ -540,6 +540,8 @@ object Snapshot {
         .transferSnapshot(tx)
         .flatMap { _ ⇒
           dao.transactionService.memPool.remove(tx.hash)
+        }
+        .flatMap { _ =>
           dao.acceptedTransactionService.remove(Set(tx.hash))
         }
         .flatTap(_ ⇒ dao.metrics.incrementMetricAsync("snapshotAppliedBalance"))
