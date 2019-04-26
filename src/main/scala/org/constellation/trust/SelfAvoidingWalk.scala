@@ -19,6 +19,7 @@ object SelfAvoidingWalk {
 
 
   def walk(
+            selfId: Int,
             currentId: Int,
             nodeMap: Map[Int, TrustNode],
             totalPathLength: Int,
@@ -41,11 +42,20 @@ object SelfAvoidingWalk {
 
 
         val transitionDst = sample(normalEdges)
-        val transitionTrust = normalEdges(transitionDst)
 
-        val productTrust = currentTrust * transitionTrust
+        // Ignore paths that distrust self (maybe consider ignoring paths that distrust immediate
+        // neighbors as well? This is where Jaccard distance is important
+        // We need to discard walks where large distance exists from previous
+        // (i.e. discard information from distant nodes if they distrust nearby nodes that you trust in general)
+        if (nodeMap(transitionDst).edges.exists(edge => edge.trust < 0 && edge.dst == selfId)) {
+          currentId -> currentTrust
+        } else {
 
-/*
+          val transitionTrust = normalEdges(transitionDst)
+
+          val productTrust = currentTrust * transitionTrust
+
+          /*
         println(
           s"currentLength $currentPathLength " +
           s"on $currentId " +
@@ -54,9 +64,18 @@ object SelfAvoidingWalk {
           s"product $productTrust " +
           s"visited $visitedNext"
         )
-*/
+     */
 
-        walk(transitionDst, nodeMap, totalPathLength, currentPathLength + 1, visitedNext, productTrust)
+          walk(
+            selfId,
+            transitionDst,
+            nodeMap,
+            totalPathLength,
+            currentPathLength + 1,
+            visitedNext,
+            productTrust
+          )
+        }
       }
     }
   }
@@ -73,25 +92,41 @@ object SelfAvoidingWalk {
 
     def walkFromOrigin() = {
       val totalPathLength = Random.nextInt(maxPathLength - 1) + 1
-      walk(n1.id, nodeMap, totalPathLength, 0, Set(n1.id), 1D)
+      walk(n1.id, n1.id, nodeMap, totalPathLength, 0, Set(n1.id), 1D)
     }
-
-
 
     val walkScores = Array.fill(nodes.size)(0D)
 
     for (_ <- 0 to 100000) {
       val (id, trust) = walkFromOrigin()
     //  println(s"Returning $id with trust $trust")
-      walkScores(id) += trust
+      if (id != n1.id) {
+        walkScores(id) += trust
+      }
     }
 
-    val maxWalkScore = walkScores.max
-    val normalizedWalk = walkScores.map{_ / maxWalkScore}
+    val sumScore = walkScores.sum
+    val walkProbability = walkScores.map{_ / sumScore}
 
-    normalizedWalk.zipWithIndex.foreach{println}
+    walkProbability.zipWithIndex.foreach{println}
 
     n1.positiveEdges.foreach{println}
+
+    val weightedEdgesAll = Array.fill(nodes.size)(0D)
+
+    walkProbability.zipWithIndex.foreach{
+      case (prob, id) =>
+        // Same issue here as above, need to discard information from untrustworthy original nodes in event
+        // walk accidentally trusts them. -- See Jaccard distance comment
+        nodeMap(id).edges.foreach{
+          e => weightedEdgesAll(e.dst) += e.trust * prob
+        }
+    }
+    println("Weighted edges all")
+
+    // TODO: Normalize again
+    weightedEdgesAll.foreach{println}
+
 
     println(s"n1 id: ${n1.id}")
 
