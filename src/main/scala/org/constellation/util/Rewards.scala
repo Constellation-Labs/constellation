@@ -31,9 +31,9 @@ object Rewards {
 
   def validatorRewards(
                         curShapshot: Int,
-                       transitiveReputationMatrix: Map[String, Map[String, Double]],
-                       neighborhoodReputationMatrix: Map[String, Double],
-                       partitonChart: Map[String, Set[String]]
+                        transitiveReputationMatrix: Map[String, Map[String, Double]],
+                        neighborhoodReputationMatrix: Map[String, Double],
+                        partitonChart: Map[String, Set[String]]
                       )= {
     val trustEntropyMap = shannonEntropy(transitiveReputationMatrix, neighborhoodReputationMatrix)
     val distro = rewardDistribution(partitonChart, trustEntropyMap)
@@ -53,8 +53,8 @@ object Rewards {
                       neighborhoodReputationMatrix: Map[String, Double]
                     ) = {
     val weightedTransitiveReputation = transitiveReputationMatrix.map { case (key, view) =>
-      val neighborView = view.map{ case (neighbor, score) => neighborhoodReputationMatrix(key) * score }.sum
-        (key, neighborView)
+      val neighborView = view.map { case (neighbor, score) => neighborhoodReputationMatrix(key) * score }.sum
+      (key, neighborView)
     }
     weightedTransitiveReputation.mapValues{ trust =>
       if (trust == 0.0 ) 0.0
