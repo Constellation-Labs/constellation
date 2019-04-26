@@ -37,6 +37,12 @@ object SelfAvoidingWalk {
     } else {
 
       val n1 = nodeMap(currentId)
+
+      // TODO: Visited should have a 'direction' associated to bias the walk not just in terms of trust
+      // but also trust derivatives in order to move 'outward' as effectively as possible (to discourage loop formation)
+      // otherwise the path length may not matter as the walks will get trapped in the same neighborhood
+      // Essentially need topo information from something else processing total edge map
+
       val visitedNext = visited + currentId
 
       val normalEdges = n1.normalizedPositiveEdges(visitedNext)
