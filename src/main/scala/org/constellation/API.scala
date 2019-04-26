@@ -28,7 +28,7 @@ import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{CommonEndpoints, MerkleTree, MetricTimerDirective, ServeUI}
+import org.constellation.util._
 import org.json4s.native.Serialization
 import org.json4s.{JValue, native}
 
@@ -48,19 +48,15 @@ case class PeerMetadata(
   resourceInfo: ResourceInfo
 )
 
-case class ResourceInfo(
-  maxMemory: Long = Runtime.getRuntime.maxMemory(),
-  cpuNumber: Int = Runtime.getRuntime.availableProcessors(),
-  diskUsableBytes: Long)
-
-case class HostPort(host: String, port: Int)
+case class ResourceInfo(maxMemory: Long = Runtime.getRuntime.maxMemory(),
+                        cpuNumber: Int = Runtime.getRuntime.availableProcessors(),
+                        diskUsableBytes: Long)
 
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
 
 case class UpdatePassword(password: String)
 
 object ProcessingConfig {
-
 
   val testProcessingConfig = ProcessingConfig(
     numFacilitatorPeers = 2,
@@ -224,10 +220,10 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           path("messageService" / Segment) { channelId =>
             complete(dao.messageService.getSync(channelId))
           } ~
-          path ("channelKeys") {
-            complete(dao.channelService.lruCache.asImmutableMap().keys.toSeq)
+          path("channelKeys") {
+            complete(dao.channelService.toMapSync().keys.toSeq)
           } ~
-          path ("channel" / "genesis" / Segment) { channelId =>
+          path("channel" / "genesis" / Segment) { channelId =>
             complete(dao.channelService.getSync(channelId))
           } ~
           path("channel" / Segment) { channelHash =>
@@ -242,8 +238,6 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                     File(dao.snapshotPath, snapshotHash).byteArray
                   )
                 }, "readSnapshotForMessage").toOption.map { storedSnapshot =>
-
-
                   val blocksInSnapshot = storedSnapshot.snapshot.checkpointBlocks.toList
                   val blockHashForMessage = cmd.blockHash.get
 
@@ -276,6 +270,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
 
             complete(proof)
           } ~
+          path("messages") {
+            complete(dao.channelStorage.getLastNMessages(20))
+          } ~
+          path("messages" / Segment) { channelId =>
+            complete(dao.channelStorage.getLastNMessages(20, Some(channelId)))
+          } ~
           path("restart") { // TODO: Revisit / fix
             System.exit(0)
             complete(StatusCodes.OK)
@@ -292,6 +292,9 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               } else StatusCodes.BadRequest
               complete(res)
             }
+          } ~
+          path("buildInfo") {
+            complete(BuildInfo.toMap)
           } ~
           path("metrics") {
             val response = MetricsResult(
@@ -460,7 +463,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                                            callTimeout = 5.seconds,
                                            resetTimeout)
 
-          val response = PeerManager.broadcast(_.get("health"))
+          val response = PeerManager.broadcast(_.getString("health"))
 
           onCompleteWithBreaker(breaker)(response) {
             case Success(idMap) =>

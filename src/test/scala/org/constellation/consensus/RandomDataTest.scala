@@ -5,10 +5,10 @@ import java.security.KeyPair
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
+import cats.effect.IO
+import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import constellation._
-import cats.implicits._
-import cats.effect.IO
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -222,8 +222,8 @@ class ValidationSpec
   import RandomData._
 
   implicit val dao: DAO = new DAO() // stub[DAO]
-  dao.initialize(NodeConfig())
   implicit val materializer: ActorMaterializer = ActorMaterializer()
+  dao.initialize(NodeConfig())
   implicit val keyPair: KeyPair = keyPairs.head
 
  // (dao.id _).when().returns(Fixtures.id)

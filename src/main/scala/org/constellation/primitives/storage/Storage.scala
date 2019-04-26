@@ -13,6 +13,8 @@ trait Storage[F[_], K, V] {
 
   def update(key: K, updateFunc: V => V, empty: => V): F[V]
 
+  def update(key: K, updateFunc: V => V): F[Option[V]]
+
   def removeSync(key: K): Unit = removeSync(Set(key))
 
   def removeSync(keys: Set[K]): Unit
@@ -28,4 +30,6 @@ trait Storage[F[_], K, V] {
   def toMapSync(): Map[K, V]
 
   def toMap(): F[Map[K, V]]
+
+  def cacheSize(): Long
 }

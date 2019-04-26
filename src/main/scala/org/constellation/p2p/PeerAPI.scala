@@ -14,12 +14,12 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
-import org.constellation.{DAO, ResourceInfo}
 import org.constellation.consensus.{EdgeProcessor, FinishedCheckpoint, FinishedCheckpointResponse, SignatureRequest}
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.{CommonEndpoints, MetricTimerDirective, SingleHashSignature}
+import org.constellation.util.{CommonEndpoints, Distance, MetricTimerDirective, SingleHashSignature}
+import org.constellation.{DAO, ResourceInfo}
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -135,9 +135,9 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
       pathPrefix("channel") {
         path("neighborhood") {
           entity(as[Id]) { peerId =>
-            val distanceSorted = dao.channelService.lruCache.asImmutableMap().toSeq.sortBy {
+            val distanceSorted = dao.channelService.toMapSync().toSeq.sortBy {
               case (channelId, meta) =>
-                BigInt(channelId.getBytes()) ^ peerId.bigInt
+                Distance.calculate(meta.channelId, peerId)
             } // TODO: Determine appropriate fraction to respond with.
             complete(Seq(distanceSorted.head._2))
           }

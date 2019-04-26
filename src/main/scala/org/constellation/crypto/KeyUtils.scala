@@ -7,7 +7,6 @@ import java.util.Base64
 import better.files.File
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.StrictLogging
-import org.constellation.ConstellationNode.logger
 import org.spongycastle.jce.provider.BouncyCastleProvider
 
 /**

@@ -5,9 +5,9 @@ import java.util.concurrent.ForkJoinPool
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.primitives._
+import org.constellation.PeerMetadata
 import org.constellation.primitives.Schema._
-import org.constellation.{HostPort, PeerMetadata}
+import org.constellation.primitives._
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration._
@@ -348,48 +348,60 @@ object Simulation {
     var channelId: String = ""
 
     // TODO: Remove after fixing dropped messages
-    Simulation.awaitConditionMet("Unable to open channel", {
+    Simulation.awaitConditionMet(
+      "Unable to open channel", {
 
-      debugChannelName = "debug" + attempt
+        debugChannelName = "debug" + attempt
 
-      val channelOpenResponse = apis.head.postBlocking[ChannelOpenResponse](
-        "channel/open",
-        ChannelOpen(debugChannelName, jsonSchema = Some(SensorData.jsonSchema)), timeout = 90.seconds
-      )
-      attempt += 1
-      logger.info(s"Channel open response: ${channelOpenResponse.errorMessage}")
-      if (channelOpenResponse.errorMessage == "Success") {
-        channelId = channelOpenResponse.genesisHash
-        true
-      } else false
-    })
+        val channelOpenResponse = apis.head.postBlocking[ChannelOpenResponse](
+          "channel/open",
+          ChannelOpen(debugChannelName, jsonSchema = Some(SensorData.jsonSchema)),
+          timeout = 90.seconds
+        )
+        attempt += 1
+        logger.info(s"Channel open response: ${channelOpenResponse.errorMessage}")
+        if (channelOpenResponse.errorMessage == "Success") {
+          channelId = channelOpenResponse.genesisHash
+          true
+        } else false
+      }
+    )
 
     logger.info(s"Channel opened with hash $channelId")
 
     // TODO: Remove after fixing dropped messages
-    Simulation.awaitConditionMet("Unable to send message", {
+    Simulation.awaitConditionMet(
+      "Unable to send message", {
 
-      val csr = apis.head.postBlocking[ChannelSendResponse](
-        "channel/send",
-        ChannelSendRequest(channelId, Seq.fill(2) { SensorData.generateRandomValidMessage().json })
-      )
-      Simulation.awaitConditionMet("Unable to find sent message", {
+        val csr =
+          apis.head.postBlocking[ChannelSendResponse](
+            "channel/send",
+            ChannelSendRequest(channelId, Seq.fill(2) {
+              SensorData.generateRandomValidMessage().json
+            })
+          )
+        Simulation.awaitConditionMet(
+          "Unable to find sent message", {
 
-        val cmds = csr.messageHashes.map { h =>
-          apis.head.getBlocking[Option[ChannelMessageMetadata]]("messageService/" + h)
-        }
+            val cmds = csr.messageHashes.map { h =>
+              apis.head.getBlocking[Option[ChannelMessageMetadata]]("messageService/" + h)
+            }
 
-        val done = cmds.forall(_.nonEmpty)
-        if (done) {
-          cmds.flatten.foreach { cmd =>
-            val prev = cmd.channelMessage.signedMessageData.data.previousMessageHash
-            println(s"msg hash: ${cmd.channelMessage.signedMessageData.hash} previous: $prev")
+            val done = cmds.forall(_.nonEmpty)
+            if (done) {
+              cmds.flatten.foreach { cmd =>
+                val prev = cmd.channelMessage.signedMessageData.data.previousMessageHash
+                logger.info(
+                  s"msg hash: ${cmd.channelMessage.signedMessageData.hash} previous: $prev"
+                )
+              }
+            }
+
+            done
           }
-        }
-
-        done
-      })
-    })
+        )
+      }
+    )
 
     assert(awaitCheckpointsAccepted(apis))
 
@@ -399,7 +411,7 @@ object Simulation {
     /*
     val channelProof = apis.head.getBlocking[Option[ChannelProof]]("channel/" + channelId, timeout = 90.seconds)
     assert(channelProof.nonEmpty)
-*/
+     */
     logger.info("Snapshot validation passed")
 
     true
