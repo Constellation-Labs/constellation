@@ -218,7 +218,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               }
           } ~
           path("messageService" / Segment) { channelId =>
-            complete(dao.messageService.getSync(channelId))
+            complete(dao.messageService.lookup(channelId).unsafeRunSync())
           } ~
           path("channelKeys") {
             complete(dao.channelService.toMapSync().keys.toSeq)
@@ -228,7 +228,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           } ~
           path("channel" / Segment) { channelHash =>
             val res =
-              Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.getSync(channelHash))
+              Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.lookup(channelHash).unsafeRunSync())
 
             val proof = res.flatMap { cmd =>
               cmd.snapshotHash.flatMap { snapshotHash =>

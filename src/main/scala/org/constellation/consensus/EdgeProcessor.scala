@@ -63,7 +63,7 @@ object EdgeProcessor extends StrictLogging {
 
       cb.messages.foreach { m =>
         if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
-          dao.messageService.putSync(
+          dao.messageService.memPool.putSync(
             m.signedMessageData.data.channelId,
             ChannelMessageMetadata(m, Some(cb.baseHash))
           )
@@ -86,7 +86,7 @@ object EdgeProcessor extends StrictLogging {
           )
         }
         dao.messageService
-          .putSync(m.signedMessageData.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
+          .memPool.putSync(m.signedMessageData.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.metrics.incrementMetric("messageAccepted")
       }
 
@@ -482,9 +482,9 @@ object Snapshot {
           else {
             findLatestMessageWithSnapshotHashInner(
               depth + 1,
-              dao.messageService.getSync(
+              dao.messageService.memPool.lookup(
                 m.channelMessage.signedMessageData.data.previousMessageHash
-              )
+              ).unsafeRunSync()
             )
           }
         }
@@ -519,7 +519,7 @@ object Snapshot {
          cbCache <- cbOpt;
          cb <- cbCache.checkpointBlock;
          message <- cb.messages) {
-      dao.messageService.updateSync(
+      dao.messageService.memPool.updateSync(
         message.signedMessageData.hash,
         _.copy(snapshotHash = Some(snapshot.hash)),
         ChannelMessageMetadata(message, Some(cb.baseHash), Some(snapshot.hash))

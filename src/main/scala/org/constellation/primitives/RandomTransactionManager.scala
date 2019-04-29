@@ -53,7 +53,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
             }
             if (channels.nonEmpty) {
               val (channel, lock) = channels.toList(Random.nextInt(channels.size))
-              dao.messageService.getSync(channel).flatMap { data =>
+              dao.messageService.lookup(channel).unsafeRunSync().flatMap { data =>
                 if (lock.tryAcquire()) {
                   Some(
                     ChannelMessage.create(Random.nextInt(1000).toString,
