@@ -6,7 +6,7 @@ import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCacheData, NodeType}
+import org.constellation.primitives.Schema.{CheckpointCache, NodeType}
 import org.constellation.primitives.{CheckpointBlock, PeerData, UpdatePeerNotifications}
 import org.constellation.util.{Distance, PeerApiClient}
 import org.constellation.primitives.Schema.Id
@@ -151,7 +151,7 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO)
 
   private[consensus] def resolveMissingParents(
     roundData: RoundData
-  )(implicit dao: DAO): Future[List[Option[CheckpointCacheData]]] = {
+  )(implicit dao: DAO): Future[List[Option[CheckpointCache]]] = {
 
     implicit val ec = dao.edgeExecutionContext
 

@@ -10,7 +10,7 @@ import cats.implicits._
 import constellation.createTransaction
 import org.constellation.consensus.{EdgeProcessor, RandomData, Snapshot, SnapshotInfo}
 import org.constellation.primitives.CheckpointBlockValidatorNel._
-import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCacheData, Id}
+import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, Id}
 import org.constellation.primitives.storage.CheckpointService
 import org.constellation.util.{HashSignature, Metrics}
 import org.constellation.{DAO, NodeConfig}
@@ -60,9 +60,9 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
     when(rightParent.transactions).thenReturn(Seq.empty)
 
     when(checkpointService.getFullData(rightParent.baseHash))
-      .thenReturn(Some(CheckpointCacheData(Some(rightParent))))
+      .thenReturn(Some(CheckpointCache(Some(rightParent))))
     when(checkpointService.getFullData(leftParent.baseHash))
-      .thenReturn(Some(CheckpointCacheData(Some(leftParent))))
+      .thenReturn(Some(CheckpointCache(Some(leftParent))))
 
     when(leftBlock.transactions).thenReturn(Seq(tx1, tx2))
 
@@ -76,7 +76,7 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
 
   test("it should detect no internal conflict and return None") {
     detectInternalTipsConflict(
-      Seq(CheckpointCacheData(Some(leftBlock)), CheckpointCacheData(Some(rightBlock)))
+      Seq(CheckpointCache(Some(leftBlock)), CheckpointCache(Some(rightBlock)))
     ) shouldBe None
   }
 
@@ -89,16 +89,16 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
     when(leftBlock.transactions).thenReturn(Seq(tx1, tx2, rightBlockTx))
 
     detectInternalTipsConflict(
-      Seq(CheckpointCacheData(Some(leftBlock)), CheckpointCacheData(Some(rightBlock)))
-    ) shouldBe Some(CheckpointCacheData(Some(rightBlock)))
+      Seq(CheckpointCache(Some(leftBlock)), CheckpointCache(Some(rightBlock)))
+    ) shouldBe Some(CheckpointCache(Some(rightBlock)))
   }
   test("it should detect direct conflict with other tip") {
     val rightBlockTx = rightBlock.transactions.head
     when(leftBlock.transactions).thenReturn(Seq(tx1, tx2, rightBlockTx))
 
     detectInternalTipsConflict(
-      Seq(CheckpointCacheData(Some(leftBlock)), CheckpointCacheData(Some(rightBlock)))
-    ) shouldBe Some(CheckpointCacheData(Some(rightBlock)))
+      Seq(CheckpointCache(Some(leftBlock)), CheckpointCache(Some(rightBlock)))
+    ) shouldBe Some(CheckpointCache(Some(rightBlock)))
   }
 
   test("it should detect conflict with ancestry of other tip") {
@@ -126,8 +126,8 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
 
   test("it should return correct block to preserve with greater base hash") {
     selectBlockToPreserve(
-      Seq(CheckpointCacheData(Some(leftBlock)), CheckpointCacheData(Some(rightBlock)))
-    ) shouldBe CheckpointCacheData(Some(rightBlock))
+      Seq(CheckpointCache(Some(leftBlock)), CheckpointCache(Some(rightBlock)))
+    ) shouldBe CheckpointCache(Some(rightBlock))
   }
 
   test("it should return correct block to preserve with greater number of signatures") {
@@ -136,14 +136,14 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
     when(leftBlock.signatures).thenReturn(signatures)
 
     selectBlockToPreserve(
-      Seq(CheckpointCacheData(Some(leftBlock)), CheckpointCacheData(Some(rightBlock)))
-    ) shouldBe CheckpointCacheData(Some(leftBlock))
+      Seq(CheckpointCache(Some(leftBlock)), CheckpointCache(Some(rightBlock)))
+    ) shouldBe CheckpointCache(Some(leftBlock))
   }
 
   test("it should return correct block to preserve with greater number of children") {
     selectBlockToPreserve(
-      Seq(CheckpointCacheData(Some(leftBlock), 2), CheckpointCacheData(Some(rightBlock)))
-    ) shouldBe CheckpointCacheData(Some(leftBlock), 2)
+      Seq(CheckpointCache(Some(leftBlock), 2), CheckpointCache(Some(rightBlock)))
+    ) shouldBe CheckpointCache(Some(leftBlock), 2)
   }
 }
 class ValidationSpec
@@ -169,9 +169,9 @@ class ValidationSpec
   val peerProbe = TestProbe.apply("peerManager")
   dao.peerManager = peerProbe.ref
 
-  go.genesis.store(CheckpointCacheData(Some(go.genesis)))
-  go.initialDistribution.store(CheckpointCacheData(Some(go.initialDistribution)))
-  go.initialDistribution2.store(CheckpointCacheData(Some(go.initialDistribution2)))
+  go.genesis.store(CheckpointCache(Some(go.genesis)))
+  go.initialDistribution.store(CheckpointCache(Some(go.initialDistribution)))
+  go.initialDistribution2.store(CheckpointCache(Some(go.initialDistribution2)))
   dao.threadSafeSnapshotService.setSnapshot(
     SnapshotInfo(
       Snapshot.snapshotZero,
@@ -215,8 +215,8 @@ class ValidationSpec
         val cbInit2 =
           CheckpointBlock.createCheckpointBlockSOE(txs2.toSeq, startingTips)
 
-        cbInit1.store(CheckpointCacheData(Some(cbInit1)))
-        cbInit2.store(CheckpointCacheData(Some(cbInit2)))
+        cbInit1.store(CheckpointCache(Some(cbInit1)))
+        cbInit2.store(CheckpointCache(Some(cbInit2)))
 
         setupSnapshot(Seq(cbInit1, cbInit2))
 
@@ -250,7 +250,7 @@ class ValidationSpec
           CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
-          .foreach(cb => cb.store(CheckpointCacheData(Some(cb))))
+          .foreach(cb => cb.store(CheckpointCache(Some(cb))))
 
         assert(cb7.simpleValidation())
       }
@@ -442,8 +442,8 @@ class ValidationSpec
         val cbInit2 =
           CheckpointBlock.createCheckpointBlockSOE(txs2.toSeq, startingTips)
 
-        cbInit1.store(CheckpointCacheData(Some(cbInit1)))
-        cbInit2.store(CheckpointCacheData(Some(cbInit2)))
+        cbInit1.store(CheckpointCache(Some(cbInit1)))
+        cbInit2.store(CheckpointCache(Some(cbInit2)))
 
         setupSnapshot(Seq(cbInit1, cbInit2))
 
@@ -479,7 +479,7 @@ class ValidationSpec
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
           .foreach { cb =>
             // TODO: wkoszycki make one store function for CB
-            EdgeProcessor.acceptCheckpoint(CheckpointCacheData(Some(cb)))
+            EdgeProcessor.acceptCheckpoint(CheckpointCache(Some(cb)))
             //            cb.store(CheckpointCacheData(Some(cb)))
             //            cb.storeSOE()
           }

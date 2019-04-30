@@ -6,7 +6,7 @@ import java.util.concurrent.Executors
 import better.files.File
 import constellation._
 import org.constellation.crypto.KeyUtils.makeKeyPair
-import org.constellation.primitives.Schema.{CheckpointCacheData, Height, SignedObservationEdge}
+import org.constellation.primitives.Schema.{CheckpointCache, Height, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.{DAO, PeerMetadata}
 import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
@@ -37,7 +37,7 @@ class CheckpointServiceTest
                                                               prepareMessages(),
                                                               prepareNotifications())
 
-    val cbProposalCache = CheckpointCacheData(Some(cbProposal), 3, Some(Height(2, 4)))
+    val cbProposalCache = CheckpointCache(Some(cbProposal), 3, Some(Height(2, 4)))
     dao.checkpointService.memPool.putSync(cbProposal.baseHash, cbProposalCache)
 
     val storedCB = dao.checkpointService.memPool.getSync(cbProposal.baseHash).get
@@ -81,11 +81,11 @@ class CheckpointServiceTest
 
   private def storeCheckpointBlock(txs: Seq[Transaction],
                                    msgs: Seq[ChannelMessage],
-                                   notifics: Seq[PeerNotification]): CheckpointCacheData = {
+                                   notifics: Seq[PeerNotification]): CheckpointCache = {
 
     val cbProposal = CheckpointBlock.createCheckpointBlockSOE(txs, Seq(soe), msgs, notifics)
 
-    val cbProposalCache = CheckpointCacheData(Some(cbProposal), 3, Some(Height(2, 4)))
+    val cbProposalCache = CheckpointCache(Some(cbProposal), 3, Some(Height(2, 4)))
     dao.checkpointService.memPool.putSync(cbProposal.baseHash, cbProposalCache)
     cbProposalCache
   }

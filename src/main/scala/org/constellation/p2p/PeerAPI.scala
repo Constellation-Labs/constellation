@@ -40,7 +40,7 @@ object PeerAPI {
 
   case class EdgeResponse(
     soe: Option[SignedObservationEdgeCache] = None,
-    cb: Option[CheckpointCacheData] = None
+    cb: Option[CheckpointCache] = None
   )
 
 }

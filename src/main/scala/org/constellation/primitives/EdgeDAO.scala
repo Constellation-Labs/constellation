@@ -181,9 +181,9 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
   // TODO: Read from lastSnapshot in DB optionally, assign elsewhere
   var lastSnapshotHeight = 0
 
-  var syncBuffer: Seq[CheckpointCacheData] = Seq()
+  var syncBuffer: Seq[CheckpointCache] = Seq()
 
-  def syncBufferAccept(cb: CheckpointCacheData)(implicit dao: DAO): Unit = {
+  def syncBufferAccept(cb: CheckpointCache)(implicit dao: DAO): Unit = {
     syncBuffer :+= cb
     dao.metrics.updateMetric("syncBufferSize", syncBuffer.size.toString)
   }
@@ -323,7 +323,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
   // TODO: Synchronize only on values modified by this, same for other functions
 
-  def accept(checkpointCacheData: CheckpointCacheData)(implicit dao: DAO): Unit =
+  def accept(checkpointCacheData: CheckpointCache)(implicit dao: DAO): Unit =
     this.synchronized {
 
       if (dao.checkpointService.contains(
@@ -399,7 +399,7 @@ trait EdgeDAO {
   val channelService = new ChannelService()
   val soeService = new SOEService()
 
-  val recentBlockTracker = new RecentDataTracker[CheckpointCacheData](200)
+  val recentBlockTracker = new RecentDataTracker[CheckpointCache](200)
 
   val threadSafeTXMemPool = new ThreadSafeTXMemPool()
   lazy val concurrentTipService: ConcurrentTipService = new TrieBasedTipService(

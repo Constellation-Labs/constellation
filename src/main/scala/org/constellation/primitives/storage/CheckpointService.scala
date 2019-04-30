@@ -6,7 +6,7 @@ import cats.implicits._
 import org.constellation.DAO
 import org.constellation.datastore.swaydb.SwayDbConversions._
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCacheData, CheckpointCacheDataMerkle}
+import org.constellation.primitives.Schema.{CheckpointCache, CheckpointCacheMetadata}
 import org.constellation.primitives._
 import org.constellation.util.MerkleTree
 import swaydb.serializers.Default.StringSerializer
@@ -18,7 +18,7 @@ object CheckpointBlocksOld {
 }
 
 class CheckpointBlocksOld(path: File)(implicit ec: ExecutionContextExecutor)
-    extends DbStorage[String, CheckpointCacheDataMerkle](
+    extends DbStorage[String, CheckpointCacheMetadata](
       dbPath = (path / "disk1" / "checkpoints_old").path
     )
 
@@ -29,7 +29,7 @@ object CheckpointBlocksMid {
 }
 
 class CheckpointBlocksMid(path: File, midCapacity: Int)(implicit ec: ExecutionContextExecutor)
-    extends MidDbStorage[String, CheckpointCacheDataMerkle](
+    extends MidDbStorage[String, CheckpointCacheMetadata](
         dbPath = (path / "disk1" / "checkpoints_mid").path,
         midCapacity
       )
@@ -37,25 +37,25 @@ class CheckpointBlocksMid(path: File, midCapacity: Int)(implicit ec: ExecutionCo
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
 // mwadon: /\ is still relevant?
 class CheckpointBlocksMemPool(size: Int = 50000)(implicit dao: DAO)
-    extends StorageService[CheckpointCacheDataMerkle](size) {
+    extends StorageService[CheckpointCacheMetadata](size) {
 
   def putSync(
     key: String,
-    value: CheckpointCacheData
-  ): CheckpointCacheDataMerkle = {
+    value: CheckpointCache
+  ): CheckpointCacheMetadata = {
     value.checkpointBlock.foreach(cb => incrementChildrenCount(cb.parentSOEBaseHashes()))
 
-    super.putSync(key, CheckpointCacheDataMerkle(storeMerkleRoots(value.checkpointBlock.get),
+    super.putSync(key, CheckpointCacheMetadata(storeMerkleRoots(value.checkpointBlock.get),
                                             value.children,
                                             value.height))
   }
 
-  def storeMerkleRoots(data: CheckpointBlock): CheckpointBlockData = {
+  def storeMerkleRoots(data: CheckpointBlock): CheckpointBlockMetadata = {
     val t = store(data.transactions.map(_.hash), dao.transactionService.merklePool).get
     val m = store(data.messages.map(_.signedMessageData.hash), dao.messageService.merklePool)
     val n = store(data.notifications.map(_.hash), dao.notificationService.merklePool)
 
-    CheckpointBlockData(
+    CheckpointBlockMetadata(
       t,
       data.checkpoint,
       m,
@@ -77,7 +77,7 @@ class CheckpointBlocksMemPool(size: Int = 50000)(implicit dao: DAO)
   def incrementChildrenCount(hashes: Seq[String]): Unit = {
     hashes.foreach(
       hash =>
-        update(hash, (cd: CheckpointCacheDataMerkle) => { cd.copy(children = cd.children + 1) })
+        update(hash, (cd: CheckpointCacheMetadata) => { cd.copy(children = cd.children + 1) })
           .unsafeRunAsyncAndForget()
     )
   }
@@ -87,14 +87,14 @@ class CheckpointBlocksMemPool(size: Int = 50000)(implicit dao: DAO)
 object CheckpointService {
   def apply(implicit dao: DAO, size: Int = 50000) = new CheckpointService(dao, size)
 
-  def convert(merkle: CheckpointCacheDataMerkle)(implicit dao: DAO): CheckpointCacheData = {
+  def convert(merkle: CheckpointCacheMetadata)(implicit dao: DAO): CheckpointCache = {
     val txs = fetchTransactions(merkle.checkpointBlock.transactionsMerkleRoot)
     val msgs =
       merkle.checkpointBlock.messagesMerkleRoot
         .fold(Seq[ChannelMessage]())(mr => fetchMessages(mr))
     val notifications =
       merkle.checkpointBlock.notificationsMerkleRoot.fold(Seq[PeerNotification]())(mr => fetchNotifications(mr))
-    CheckpointCacheData(
+    CheckpointCache(
       Some(
         CheckpointBlock(
           txs,
@@ -162,8 +162,8 @@ object CheckpointService {
 
 class CheckpointService(dao: DAO, size: Int = 50000) {
   val memPool = new CheckpointBlocksMemPool(size)(dao)
-  val midDb: MidDbStorage[String, CheckpointCacheDataMerkle] = CheckpointBlocksMid(dao)
-  val oldDb: DbStorage[String, CheckpointCacheDataMerkle] = CheckpointBlocksOld(dao)
+  val midDb: MidDbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksMid(dao)
+  val oldDb: DbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksOld(dao)
 
   def migrateOverCapacity(): IO[Unit] = {
     midDb
@@ -172,12 +172,12 @@ class CheckpointService(dao: DAO, size: Int = 50000) {
       .map(_ => ())
   }
 
-  def lookup: String => IO[Option[CheckpointCacheDataMerkle]] =
-    DbStorage.extendedLookup[String, CheckpointCacheDataMerkle](List(memPool, midDb, oldDb))
+  def lookup: String => IO[Option[CheckpointCacheMetadata]] =
+    DbStorage.extendedLookup[String, CheckpointCacheMetadata](List(memPool, midDb, oldDb))
 
-  def lookupFullData: String => IO[Option[CheckpointCacheData]] =
+  def lookupFullData: String => IO[Option[CheckpointCache]] =
     DbStorage
-      .extendedLookup[String, CheckpointCacheDataMerkle](List(memPool, midDb, oldDb))
+      .extendedLookup[String, CheckpointCacheMetadata](List(memPool, midDb, oldDb))
       .map(_.map(_.map(CheckpointService.convert(_)(dao))))
 
   def get(key: String) = lookup(key).unsafeRunSync()

@@ -7,7 +7,8 @@ import constellation.{wrapFutureWithMetric, _}
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCacheData, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.primitives.Schema.{
+  CheckpointCache, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
 import org.constellation.util.PeerApiClient
 import org.constellation.{ConfigUtil, DAO}
@@ -295,7 +296,7 @@ class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)]
       val checkpointBlock = sameBlocks.head._2
 
       val finalFacilitators = selectedCheckpointBlocks.keySet.map(_.id).toSet
-      val cache = CheckpointCacheData(Some(checkpointBlock),
+      val cache = CheckpointCache(Some(checkpointBlock),
         height = checkpointBlock.calculateHeight())
       broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, finalFacilitators))
 
