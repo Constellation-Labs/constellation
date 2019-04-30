@@ -94,15 +94,15 @@ trait Genesis extends NodeData with EdgeDAO {
     // Store hashes for the edges
 
     go.genesis.store(
-      CheckpointCacheData(Some(go.genesis), height = Some(Height(0, 0)))
+      CheckpointCache(Some(go.genesis), height = Some(Height(0, 0)))
     )
 
     go.initialDistribution.store(
-        CheckpointCacheData(Some(go.initialDistribution), height = Some(Height(1, 1)))
+        CheckpointCache(Some(go.initialDistribution), height = Some(Height(1, 1)))
     )
 
     go.initialDistribution2.store(
-      CheckpointCacheData(Some(go.initialDistribution2), height = Some(Height(1, 1)))
+      CheckpointCache(Some(go.initialDistribution2), height = Some(Height(1, 1)))
     )
 
     go.genesis.storeSOE()

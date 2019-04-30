@@ -33,13 +33,13 @@ case class CreateCheckpointEdgeResponse(
 case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
 
 case class SignatureResponse(signature: Option[HashSignature], reRegister: Boolean = false)
-case class FinishedCheckpoint(checkpointCacheData: CheckpointCacheData, facilitators: Set[Id])
+case class FinishedCheckpoint(checkpointCacheData: CheckpointCache, facilitators: Set[Id])
 
 case class FinishedCheckpointResponse(reRegister: Boolean = false)
 
 object EdgeProcessor extends StrictLogging {
 
-  def acceptCheckpoint(checkpointCacheData: CheckpointCacheData)(implicit dao: DAO): Unit = {
+  def acceptCheckpoint(checkpointCacheData: CheckpointCache)(implicit dao: DAO): Unit = {
 
     if (checkpointCacheData.checkpointBlock.isEmpty) {
       dao.metrics.incrementMetric("acceptCheckpointCalledWithEmptyCB")
@@ -94,7 +94,7 @@ object EdgeProcessor extends StrictLogging {
       acceptTransactions(cb).unsafeRunSync()
 
       dao.metrics.incrementMetric("checkpointAccepted")
-      val data = CheckpointCacheData(
+      val data = CheckpointCache(
         Some(cb),
         height = fallbackHeight
       )
@@ -155,7 +155,7 @@ object EdgeProcessor extends StrictLogging {
   }
 
   private def processSignedBlock(
-    cache: CheckpointCacheData,
+    cache: CheckpointCache,
     finalFacilitators: Set[
       Id
     ]
@@ -206,7 +206,7 @@ object EdgeProcessor extends StrictLogging {
               }, messages)(dao.keyPair)
 
             val cache =
-              CheckpointCacheData(
+              CheckpointCache(
                 Some(checkpointBlock),
                 height = checkpointBlock.calculateHeight()
               )
@@ -247,7 +247,7 @@ object EdgeProcessor extends StrictLogging {
                 _.simpleValidation()
               )
               .traverse { finalCB =>
-                val cache = CheckpointCacheData(finalCB.some, height = finalCB.calculateHeight())
+                val cache = CheckpointCache(finalCB.some, height = finalCB.calculateHeight())
                 dao.threadSafeSnapshotService.accept(cache)
                 processSignedBlock(
                   cache,
@@ -309,7 +309,7 @@ object EdgeProcessor extends StrictLogging {
   }
 
   def acceptWithResolveAttempt(
-    checkpointCacheData: CheckpointCacheData,
+    checkpointCacheData: CheckpointCache,
     nestedAcceptCount: Int = 0
   )(implicit dao: DAO): Unit = {
 
@@ -375,19 +375,19 @@ case class TipData(checkpointBlock: CheckpointBlock, numUses: Int)
 case class SnapshotInfo(
   snapshot: Snapshot,
   acceptedCBSinceSnapshot: Seq[String] = Seq(),
-  acceptedCBSinceSnapshotCache: Seq[CheckpointCacheData] = Seq(),
+  acceptedCBSinceSnapshotCache: Seq[CheckpointCache] = Seq(),
   lastSnapshotHeight: Int = 0,
   snapshotHashes: Seq[String] = Seq(),
   addressCacheData: Map[String, AddressCacheData] = Map(),
   tips: Map[String, TipData] = Map(),
-  snapshotCache: Seq[CheckpointCacheData] = Seq()
+  snapshotCache: Seq[CheckpointCache] = Seq()
 )
 
 case object GetMemPool
 
 case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String]) extends Signable
 
-case class StoredSnapshot(snapshot: Snapshot, checkpointCache: Seq[CheckpointCacheData])
+case class StoredSnapshot(snapshot: Snapshot, checkpointCache: Seq[CheckpointCache])
 
 case class DownloadComplete(latestSnapshot: Snapshot)
 

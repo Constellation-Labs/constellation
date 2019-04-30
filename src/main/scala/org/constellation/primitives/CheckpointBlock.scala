@@ -10,31 +10,6 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives.storage.StorageService
 import org.constellation.util.{HashSignature, MerkleTree}
 
-object CheckpointBlockData {
-
-  def apply(data: CheckpointBlock)(implicit dao: DAO): CheckpointBlockData = {
-    CheckpointBlockData(
-      add(data.transactions.map(_.hash), dao.transactionService.merklePool).get,
-      data.checkpoint,
-      add(data.messages.map(_.signedMessageData.hash),
-        dao.messageService.merklePool),
-      add(data.notifications.map(_.hash),
-        dao.notificationService.merklePool)
-      ,
-    )
-  }
-
-  private def add(data: Seq[String], ss: StorageService[Seq[String]]): Option[String] = {
-    data match {
-      case Seq() => None
-      case _ =>
-        val rootHash = MerkleTree(data).rootHash
-        ss.putSync(rootHash, data)
-        Some(rootHash)
-    }
-  }
-}
-
 
 abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
   def baseHash: String = checkpoint.edge.baseHash
@@ -57,7 +32,7 @@ abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
     checkpoint.edge.signedObservationEdge.signatureBatch.signatures
 }
 
-case class CheckpointBlockData(
+case class CheckpointBlockMetadata(
   transactionsMerkleRoot: String,
   checkpointEdge: CheckpointEdge,
   messagesMerkleRoot: Option[String],
@@ -166,7 +141,7 @@ case class CheckpointBlock(
 
   def soeHash: String = checkpoint.edge.signedObservationEdge.hash
 
-  def store(cache: CheckpointCacheData)(implicit dao: DAO): Unit = {
+  def store(cache: CheckpointCache)(implicit dao: DAO): Unit = {
     /*
           transactions.foreach { rt =>
             rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))
@@ -505,27 +480,27 @@ sealed trait CheckpointBlockValidatorNel {
   }
 
   def detectInternalTipsConflict(
-    inputTips: Seq[CheckpointCacheData]
-  )(implicit dao: DAO): Option[CheckpointCacheData] = {
+    inputTips: Seq[CheckpointCache]
+  )(implicit dao: DAO): Option[CheckpointCache] = {
 
     def detect(
-      tips: Seq[CheckpointCacheData],
+      tips: Seq[CheckpointCache],
       ancestryTransactions: Map[Transaction, String] = Map.empty
-    ): Option[CheckpointCacheData] = {
+    ): Option[CheckpointCache] = {
       tips match {
         case Nil => None
-        case CheckpointCacheData(Some(cb), children, height) :: _
+        case CheckpointCache(Some(cb), children, height) :: _
             if cb.transactions.toSet.intersect(ancestryTransactions.keySet).nonEmpty =>
           val conflictingCBBaseHash = ancestryTransactions(
             cb.transactions.toSet.intersect(ancestryTransactions.keySet).head
           )
           Some(
             selectBlockToPreserve(
-              Seq(CheckpointCacheData(Some(cb), children, height)) ++ inputTips
+              Seq(CheckpointCache(Some(cb), children, height)) ++ inputTips
                 .filter(ccd => ccd.checkpointBlock.exists(_.baseHash == conflictingCBBaseHash))
             )
           )
-        case CheckpointCacheData(Some(cb), _, _) :: tail =>
+        case CheckpointCache(Some(cb), _, _) :: tail =>
           detect(tail, ancestryTransactions ++ cb.transactions.map(i => (i, cb.baseHash)))
       }
     }
@@ -536,7 +511,7 @@ sealed trait CheckpointBlockValidatorNel {
     cbLeft.transactions.intersect(cbRight.transactions).nonEmpty
   }
 
-  def selectBlockToPreserve(blocks: Iterable[CheckpointCacheData]): CheckpointCacheData = {
+  def selectBlockToPreserve(blocks: Iterable[CheckpointCache]): CheckpointCache = {
     blocks.maxBy(
       cb => (cb.children, cb.checkpointBlock.map(b => (b.signatures.size, b.baseHash)))
     )

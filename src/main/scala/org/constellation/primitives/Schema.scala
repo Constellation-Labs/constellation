@@ -210,15 +210,13 @@ object Schema {
 
   // TODO: Separate cache with metadata vs what is stored in snapshot.
 
-  case class CheckpointCacheDataMerkle(
-    checkpointBlock: CheckpointBlockData,
-    //         metadata: CommonMetadata = CommonMetadata(),
+  case class CheckpointCacheMetadata(
+    checkpointBlock: CheckpointBlockMetadata,
     children: Int = 0,
     height: Option[Height] = None
   )
-  case class CheckpointCacheData(
+  case class CheckpointCache(
     checkpointBlock: Option[CheckpointBlock] = None,
-    //         metadata: CommonMetadata = CommonMetadata(),
     children: Int = 0,
     height: Option[Height] = None
   ) {

@@ -3,7 +3,7 @@ import cats.effect.IO
 import cats.implicits._
 import constellation._
 import org.constellation.DAO
-import org.constellation.primitives.Schema.CheckpointCacheData
+import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives.{ChannelMessageMetadata, TransactionCacheData}
 import org.constellation.util.PeerApiClient
 
@@ -121,12 +121,12 @@ class DataResolver {
   def resolveCheckpointDefaults(
     hash: String,
     priorityClient: Option[PeerApiClient] = None
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[CheckpointCacheData]] = {
-    resolveDataByDistance[CheckpointCacheData](
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[CheckpointCache]] = {
+    resolveDataByDistance[CheckpointCache](
       List(hash),
       "checkpoint",
       getReadyPeers(dao),
-      (t: CheckpointCacheData) => t.checkpointBlock.foreach(cb => cb.store(t)),
+      (t: CheckpointCache) => t.checkpointBlock.foreach(cb => cb.store(t)),
       priorityClient
     ).head
   }
@@ -135,12 +135,12 @@ class DataResolver {
     hash: String,
     pool: Iterable[PeerApiClient],
     priorityClient: Option[PeerApiClient]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[CheckpointCacheData]] = {
-    resolveDataByDistance[CheckpointCacheData](
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[CheckpointCache]] = {
+    resolveDataByDistance[CheckpointCache](
       List(hash),
       "checkpoint",
       pool,
-      (t: CheckpointCacheData) => t.checkpointBlock.foreach(cb => cb.store(t)),
+      (t: CheckpointCache) => t.checkpointBlock.foreach(cb => cb.store(t)),
       priorityClient
     ).head
   }
@@ -149,12 +149,12 @@ class DataResolver {
     hashes: List[String],
     pool: Iterable[PeerApiClient],
     priorityClient: Option[PeerApiClient] = None
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[Option[CheckpointCacheData]]] = {
-    resolveDataByDistanceFlat[CheckpointCacheData](
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[Option[CheckpointCache]]] = {
+    resolveDataByDistanceFlat[CheckpointCache](
       hashes,
       "checkpoint",
       pool,
-      (t: CheckpointCacheData) => t.checkpointBlock.foreach(cb => cb.store(t)),
+      (t: CheckpointCache) => t.checkpointBlock.foreach(cb => cb.store(t)),
       priorityClient
     )
   }

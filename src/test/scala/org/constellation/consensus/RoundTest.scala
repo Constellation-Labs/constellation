@@ -9,7 +9,7 @@ import cats.effect.IO
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCacheData, NodeType, SignedObservationEdge}
+import org.constellation.primitives.Schema.{CheckpointCache, NodeType, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.primitives.storage.{MessageService, TransactionService}
 import org.constellation.util.Metrics
@@ -89,7 +89,7 @@ class RoundTest
   dao.metrics shouldReturn metrics
 
   dao.threadSafeSnapshotService shouldReturn mock[ThreadSafeSnapshotService]
-  dao.threadSafeSnapshotService.accept(*) shouldAnswer ((a: CheckpointCacheData) => ())
+  dao.threadSafeSnapshotService.accept(*) shouldAnswer ((a: CheckpointCache) => ())
 
   val roundId = RoundId("round1")
 
