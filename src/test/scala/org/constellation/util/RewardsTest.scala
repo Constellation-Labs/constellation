@@ -92,4 +92,16 @@ class RewardsTest extends FlatSpec {
     val trustMap2 = eigenTrust.getTrust(0).asScala.toMap
     assert(trustMap2.filterKeys(_ > 20).forall{ case (id, rank) => rank < trustMap(id)})
     }
+
+  "performanceExperience" should "accurately calculate diffs" in {
+    val correctResult = Map(1 -> 0.0, 2 -> 0.0, 3 -> 0.5)
+    val consensusRound1 = Map(1 -> Set("tx1", "tx2"), 2 -> Set("tx1", "tx2"), 3 -> Set("tx1"))
+    val consensusRound2 = Map(1 -> Set("tx3", "tx4"), 2 -> Set("tx3", "tx4"), 3 -> Set("tx3"))
+    val testSnapshotWindow = Seq(
+      TestCheckpointBlock(consensusRound1, Set("tx1", "tx2")),
+      TestCheckpointBlock(consensusRound2, Set("tx3", "tx4")),
+    )
+    val res = performanceExperience(testSnapshotWindow)
+    assert(res == correctResult)
   }
+}

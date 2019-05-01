@@ -75,7 +75,16 @@ object Rewards {
   /*
   If nodes deviate more than 10% from the accepted checkpoint block,
    */
-  def performanceExperience(): Unit ={
-
+  def performanceExperience(cpb: Seq[TestCheckpointBlock]): Map[Int, Double] = {
+    val facilDiffsPerRound = cpb.flatMap { cb =>
+      cb.proposals.mapValues { proposedCb =>
+      val diff = cb.acceptedCb diff proposedCb
+        diff.size
+      }
+    }
+    val facilDiffs: Map[Int, Seq[(Int, Int)]] = facilDiffsPerRound.groupBy { case (facilitator, diff) => facilitator}//.mapValues(v => v / cpb.size.toDouble)
+    facilDiffs.mapValues(fd => fd.map(_._2).sum / cpb.flatMap(_.acceptedCb).size.toDouble)
   }
+
+  case class TestCheckpointBlock(proposals: Map[Int, Set[String]], acceptedCb: Set[String])
 }
