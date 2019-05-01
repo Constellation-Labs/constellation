@@ -71,4 +71,11 @@ object Rewards {
     val totalEntropy = weightedEntropy.values.sum
     weightedEntropy.mapValues(_ / totalEntropy )//scale by entropy magnitude
   }
+
+  /*
+  If nodes deviate more than 10% from the accepted checkpoint block,
+   */
+  def performanceExperience(): Unit ={
+
+  }
 }

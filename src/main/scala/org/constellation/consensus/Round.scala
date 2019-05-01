@@ -94,7 +94,8 @@ class Round(roundData: RoundData, dao: DAO, dataResolver: DataResolver) extends 
 
     val readyPeers = dao.readyPeers
 
-    val resolvedTxs = transactionProposals.values
+    val resolvedTxs
+      : Seq[Transaction] = transactionProposals.values
       .flatMap(proposal ⇒ proposal.txHashes.map(hash ⇒ (hash, proposal)))
       .filterNot(p ⇒ dao.transactionService.contains(p._1).unsafeRunSync())
       .toList
@@ -110,7 +111,7 @@ class Round(roundData: RoundData, dao: DAO, dataResolver: DataResolver) extends 
       .unsafeRunSync()
       .flatten
 
-    val transactions = transactionProposals.values
+    val transactions: Seq[Transaction] = transactionProposals.values
       .flatMap(_.txHashes)
       .filter(hash ⇒ dao.transactionService.contains(hash).unsafeRunSync())
       .map(
@@ -165,7 +166,7 @@ class Round(roundData: RoundData, dao: DAO, dataResolver: DataResolver) extends 
       }
       .unsafeRunSync()
 
-    val notifications = transactionProposals
+    val notifications: Seq[PeerNotification] = transactionProposals
       .flatMap(_._2.notifications)
       .toSet
       .union(roundData.peers.flatMap(_.notification))
@@ -184,12 +185,12 @@ class Round(roundData: RoundData, dao: DAO, dataResolver: DataResolver) extends 
 
   private[consensus] def resolveMajorityCheckpointBlock(): Unit = {
     val acceptedBlock = if (checkpointBlockProposals.nonEmpty) {
-      val sameBlocks = checkpointBlockProposals
+      val sameBlocks: mutable.Map[FacilitatorId, CheckpointBlock] = checkpointBlockProposals
         .groupBy(_._2.baseHash)
-        .maxBy(_._2.size)
+        .maxBy(_._2.size)//todo put trust ranking here, use diff overlap on CheckpointBlock contents to portion rewards
         ._2
 
-      val majorityCheckpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
+      val majorityCheckpointBlock: CheckpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
 
       val finalFacilitators = checkpointBlockProposals.keySet.map(_.id).toSet
       val cache = CheckpointCacheData(Some(majorityCheckpointBlock),

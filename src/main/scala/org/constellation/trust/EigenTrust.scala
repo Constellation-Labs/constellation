@@ -18,11 +18,11 @@ object EigenTrust {
 //  def main(args: Array[String]): Unit = {
 
 
-    val nodesWithEdges = DataGeneration.generateTestData()
+    val nodesWithEdges: List[TrustNode] = DataGeneration.generateTestData()
 
     val opinionsInput = new util.ArrayList[Opinion]()
 
-    nodesWithEdges.foreach{ node =>
+    nodesWithEdges.foreach{ node: TrustNode =>
       node.edges.foreach{ edge =>
         val trust = edge.trust / 2 + 0.5 // Revert from -1 to 1 => 0 to 1
         println(trust)
