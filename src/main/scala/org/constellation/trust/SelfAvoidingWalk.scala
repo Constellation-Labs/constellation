@@ -1,4 +1,5 @@
 package org.constellation.trust
+import scala.collection.immutable
 import scala.util.Random
 
 /**
@@ -182,6 +183,62 @@ object SelfAvoidingWalk {
     val nodes = DataGeneration.generateTestData()
 
     runWalk(nodes.head.id, nodes)
+
+  }
+
+  def getWalk(selfId: Int, nodes: Seq[TrustNode], numIterations : Int = 100000) = {
+    val nodeMap = nodes.map{n => n.id -> n}.toMap
+    val n1 = nodes.head
+    val maxPathLength = nodes.size - 1
+
+    def walkFromOrigin() = {
+      val totalPathLength = Random.nextInt(maxPathLength - 1) + 1
+      walk(n1.id, n1.id, nodeMap, totalPathLength, 0, Set(n1.id), 1D)
+    }
+
+    val walkScores = Array.fill(nodes.size)(0D)
+    for (_ <- 0 to numIterations) {
+      val (id, trust) = walkFromOrigin()
+      //  println(s"Returning $id with trust $trust")
+      if (id != n1.id) {
+        walkScores(id) += trust
+      }
+    }
+    val sumScore = walkScores.sum
+    val walkProbability = walkScores.map{_ / sumScore}
+//    walkProbability.zipWithIndex.foreach{println}
+//    n1.positiveEdges.foreach{println}
+    val weightedEdgesAll = Array.fill(nodes.size)(0D)
+    walkProbability.zipWithIndex.foreach{
+      case (prob, id) =>
+        // Same issue here as above, need to discard information from untrustworthy original nodes in event
+        // walk accidentally trusts them. -- See Jaccard distance comment
+        nodeMap(id).edges.foreach{
+          e => weightedEdgesAll(e.dst) += e.trust * prob
+        }
+    }
+    weightedEdgesAll.zipWithIndex
+  }
+
+  def updateTrustDistro(curNodes: Seq[TrustNode], updateGroups: Map[Int, Seq[TrustEdge]]) = {//todo should dist updates be a map from observer to its edges?
+//    val updateGroups: Map[Int, Seq[TrustEdge]] = distUpdates.groupBy(_.src)
+    val curDist: Map[Int, Seq[TrustNode]] = curNodes.groupBy(_.id)
+    val updatedNeighborhoods = updateGroups.map { case (id, edgeUpdates: Seq[TrustEdge]) =>
+    val curNode: TrustNode = curDist(id).head
+      val updateDsts = edgeUpdates.map(_.dst)
+      val unchangedEdges = curNode.edges.filterNot {edge => updateDsts.contains(edge.dst)}//should only have one TrustNode per Id
+      val newEdges = unchangedEdges ++ edgeUpdates
+      curNode.copy(edges = newEdges)
+    }
+    updatedNeighborhoods
+  }
+
+  def getRandomDistro(num: Int = 10) = Seq.tabulate(num){ i =>
+      // Change edges to Map[Dst, TrustInfo]
+      val edgeIds = Random.shuffle(Seq.tabulate(10) { identity}).take(Random.nextInt(3) + 5)
+      TrustNode(i, 0D, 0D, edgeIds.map{ dst =>
+        TrustEdge(i, dst, Random.nextDouble())
+      })
 
   }
 }
