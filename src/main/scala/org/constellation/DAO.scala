@@ -1,5 +1,6 @@
 package org.constellation
 
+import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
 
 import akka.pattern.ask
@@ -31,6 +32,8 @@ class DAO()
   @volatile var nodeConfig: NodeConfig = _
 
   var actorMaterializer: ActorMaterializer = _
+
+  @volatile var lastCheckpoint = LocalDateTime.now
 
   var transactionAcceptedAfterDownload: Long = 0L
   var downloadFinishedTime: Long = System.currentTimeMillis()

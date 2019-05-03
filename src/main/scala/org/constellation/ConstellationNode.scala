@@ -163,7 +163,9 @@ object ConstellationNode extends StrictLogging {
           cliConfig = cliConfig,
           processingConfig =
             if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10)
-            else processingConfig
+            else processingConfig,
+          randomTXManagerON = false,
+          dataPollingManagerOn = config.getBoolean("constellation.dataPollingManagerOn")
         )
       )
     } match {
@@ -196,7 +198,9 @@ case class NodeConfig(
   attemptDownload: Boolean = false,
   allowLocalhostPeers: Boolean = false,
   cliConfig: CliConfig = CliConfig(),
-  processingConfig: ProcessingConfig = ProcessingConfig()
+  processingConfig: ProcessingConfig = ProcessingConfig(),
+  randomTXManagerON: Boolean = true,
+  dataPollingManagerOn: Boolean = false
 )
 
 class ConstellationNode(
@@ -257,7 +261,10 @@ class ConstellationNode(
     Http().bindAndHandle(routes, nodeConfig.httpInterface, nodeConfig.httpPort)
 
   val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
-  val randomTXManager = new RandomTransactionManager(crossTalkConsensusActor)
+  var randomTXManager: RandomTransactionManager[Nothing] = null
+  if (nodeConfig.randomTXManagerON) {
+    randomTXManager = new RandomTransactionManager(crossTalkConsensusActor)
+  }
 
   def getIPData: ValidPeerIPData = {
     ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)
@@ -278,7 +285,9 @@ class ConstellationNode(
 
   def shutdown(): Unit = {
     dao.nodeState = NodeState.Offline
-    randomTXManager.shutdown()
+    if (nodeConfig.randomTXManagerON) {
+      randomTXManager.shutdown()
+    }
     bindingFuture
       .foreach(_.unbind())
 

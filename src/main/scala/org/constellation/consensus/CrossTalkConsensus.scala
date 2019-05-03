@@ -1,9 +1,10 @@
 package org.constellation.consensus
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import akka.pattern.{Backoff, BackoffSupervisor}
+import akka.pattern.{Backoff, BackoffSupervisor, ask}
 import org.constellation.{ConfigUtil, DAO}
-import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
+import constellation._
+import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, OwnRoundInProgress, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
 
@@ -50,6 +51,10 @@ class CrossTalkConsensus(remoteSenderSupervisor: ActorRef)(implicit dao: DAO) ex
     case cmd: NotifyFacilitators =>
       remoteSenderSupervisor ! cmd
 
+    case OwnRoundInProgress =>
+      val resp = (roundManager ? OwnRoundInProgress).mapTo[Boolean].get()
+      sender ! resp
+
     case cmd => log.warning(s"Received unknown message $cmd")
   }
 }
@@ -65,4 +70,6 @@ object CrossTalkConsensus {
   case class ParticipateInBlockCreationRound(roundData: RoundData) extends CrossTalkConsensusCommand
 
   case object StartNewBlockCreationRound extends CrossTalkConsensusCommand
+
+  case object OwnRoundInProgress extends CrossTalkConsensusCommand
 }

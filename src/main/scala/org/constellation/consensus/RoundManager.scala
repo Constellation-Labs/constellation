@@ -1,9 +1,12 @@
 package org.constellation.consensus
 
+import java.time.LocalDateTime
+
 import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, Props}
+import akka.util.Timeout
 import cats.effect.IO
 import constellation.wrapFutureWithMetric
-import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
+import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, OwnRoundInProgress, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCacheData, NodeType, SignedObservationEdge}
@@ -22,26 +25,35 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO) extends Acto
 
   implicit val ec: ExecutionContextExecutor = ExecutionContext.global
 
+  implicit val timeout: Timeout = Timeout(5.seconds)
+
   private[consensus] var ownRoundInProgress: Boolean = false
 
   private[consensus] val rounds: mutable.Map[RoundId, RoundInfo] =
     mutable.Map[RoundId, RoundInfo]()
 
+  //noinspection ScalaStyle
   override def receive: Receive = {
     case StartNewBlockCreationRound if ownRoundInProgress =>
       log.debug(
         s"Unable to initiate new round another round: ${rounds.filter(_._2.startedByThisNode)} is in progress"
       )
 
+    case OwnRoundInProgress =>
+      sender ! ownRoundInProgress
+
     case StartNewBlockCreationRound if !ownRoundInProgress =>
+      log.debug("Starting a new round")
       ownRoundInProgress = true
       createRoundData(dao).fold {
         ownRoundInProgress = false
       } { roundData =>
+        val startTime = System.currentTimeMillis
         resolveMissingParents(roundData).onComplete {
           case Failure(e) =>
             ownRoundInProgress = false
-            log.error(e, s"unable to start block creation round due to: ${e.getMessage}")
+            val elapsedS = (System.currentTimeMillis - startTime) / 1000
+            log.error(e, s"unable to start block creation round due to: ${e.getMessage}, elapsed: ${elapsedS}s")
           case Success(_) =>
             startRound(roundData, startedByThisNode = true)
             passToParentActor(NotifyFacilitators(roundData))
@@ -54,7 +66,8 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO) extends Acto
                 roundData.peers.flatMap(_.notification).toSeq
               )
             )
-            log.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}")
+            val elapsedS = (System.currentTimeMillis - startTime) / 1000
+            log.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}, elapsed: ${elapsedS}s")
             dao.blockFormationInProgress = true
         }
       }
@@ -73,6 +86,7 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO) extends Acto
       passToRoundActor(cmd)
 
     case cmd: StopBlockCreationRound =>
+      log.debug("StopBlockCreationRound")
       rounds.get(cmd.roundId).fold { } { round =>
         round.timeoutScheduler.cancel()
         if (round.startedByThisNode) {
@@ -94,7 +108,9 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO) extends Acto
 
       cmd.maybeCB.foreach(cb => dao.peerManager ! UpdatePeerNotifications(cb.notifications))
 
+      dao.lastCheckpoint = LocalDateTime.now
       dao.blockFormationInProgress = false
+      log.debug("End StopBlockCreationRound")
 
     case cmd: BroadcastLightTransactionProposal =>
       passToParentActor(cmd)
@@ -181,11 +197,11 @@ object RoundManager {
           val messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq())
 
           // TODO: Choose more than one tx and light peers
-          val firstTx = transactions.head
-          val lightPeers = if (dao.readyPeers(NodeType.Light).nonEmpty) {
+          val firstTx = transactions.headOption
+          val lightPeers = if (firstTx.isDefined && dao.readyPeers(NodeType.Light).nonEmpty) {
             Set(
               dao.readyPeers(NodeType.Light)
-                .minBy(p => Distance.calculate(firstTx.baseHash, p._1))
+                .minBy(p => Distance.calculate(firstTx.get.baseHash, p._1))
                 ._2
             )
           } else Set[PeerData]()

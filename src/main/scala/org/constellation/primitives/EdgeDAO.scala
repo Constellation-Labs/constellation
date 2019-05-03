@@ -422,7 +422,7 @@ trait EdgeDAO {
 
 
   def pullTransactions(minimumCount: Int = minCheckpointFormationThreshold): Option[Seq[Transaction]] =  {
-    val ret = threadSafeTXMemPool.pull(minimumCount)
+    val ret = Some(threadSafeTXMemPool.pullUpTo(minimumCount))
     ret.foreach{
       _.foreach{ _ =>
         metrics.incrementMetric("transactionPull")

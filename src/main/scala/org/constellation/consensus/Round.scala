@@ -30,7 +30,7 @@ class Round(roundData: RoundData, dao: DAO, dataResolver: DataResolver) extends 
 
   override def receive: Receive = {
     case StartTransactionProposal(_) =>
-      dao.pullTransactions(1).foreach { transactions =>
+      dao.pullTransactions(0).foreach { transactions =>
         val messages = dao.threadSafeMessageMemPool.pull()
 
         val proposal = LightTransactionsProposal(
