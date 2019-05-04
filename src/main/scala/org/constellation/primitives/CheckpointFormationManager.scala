@@ -56,7 +56,7 @@ class CheckpointFormationManager(
         !ownRoundInProgress) {
 
       logger.info("forming checkpoint")
-//      dao.blockFormationInProgress = true
+      dao.blockFormationInProgress = true
 
       if (elapsedTime >= formEmptyCheckpointAfterThreshold) {
         // randomize the next threshold window to prevent nodes from synchronizing empty block formation.
@@ -69,7 +69,11 @@ class CheckpointFormationManager(
       }
 
       if (dao.nodeConfig.isGenesisNode) {
-        EdgeProcessor.formCheckpoint(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))
+        val op = EdgeProcessor.formCheckpoint(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))
+        op.onComplete {
+          _ => dao.blockFormationInProgress = false
+          dao.lastCheckpoint = LocalDateTime.now()
+        }
       } else {
         crossTalkConsensusActor ! StartNewBlockCreationRound
       }
