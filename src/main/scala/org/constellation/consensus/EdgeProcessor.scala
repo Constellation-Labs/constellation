@@ -56,7 +56,7 @@ object EdgeProcessor extends StrictLogging {
         if (height.isEmpty) checkpointCacheData.height else height
 
       if (fallbackHeight.isEmpty) {
-        dao.metrics.incrementMetric("heightEmpty")
+        dao.metrics.incrementMetric(Metrics.heightEmpty)
       } else {
         dao.metrics.incrementMetric("heightNonEmpty")
       }
@@ -99,7 +99,7 @@ object EdgeProcessor extends StrictLogging {
       // Accept transactions
       acceptTransactions(cb).unsafeRunSync()
 
-      dao.metrics.incrementMetric("checkpointAccepted")
+      dao.metrics.incrementMetric(Metrics.checkpointAccepted)
       val data = CheckpointCache(
         Some(cb),
         height = fallbackHeight

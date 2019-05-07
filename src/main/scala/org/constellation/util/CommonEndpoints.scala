@@ -38,6 +38,12 @@ trait CommonEndpoints extends Json4sSupport {
 
   val commonEndpoints: Route = get {
     path("health") {
+//      Continually increase total block created (not stall or remain the same) across a period of a ~3seconds
+//        Continually increase total snapshots formed, however on a longer period ~(3mins)
+//      lastSnapshotHash should be the same across all peers
+//        There should be no emptyHeight metrics across all peers
+//      No checkpoint validation failures across all peers
+
       complete(StatusCodes.OK)
     } ~
       path("id") {

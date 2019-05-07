@@ -8,7 +8,7 @@ import constellation.signedObservationEdge
 import org.constellation.DAO
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.storage.StorageService
-import org.constellation.util.{HashSignature, MerkleTree}
+import org.constellation.util.{HashSignature, MerkleTree, Metrics}
 
 
 abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
@@ -115,7 +115,7 @@ case class CheckpointBlock(
     if (validation.isValid) {
       dao.metrics.incrementMetric("checkpointValidationSuccess")
     } else {
-      dao.metrics.incrementMetric("checkpointValidationFailure")
+      dao.metrics.incrementMetric(Metrics.checkpointValidationFailure)
       dao.miscLogger.error(s"Checkpoint validation failure: $validation")
     }
 

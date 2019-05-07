@@ -200,7 +200,7 @@ object Simulation {
       s"Less than $num snapshots", {
         apis.forall { a =>
           val m = Try { a.metrics }.toOption.getOrElse(Map())
-          m.get("snapshotCount").exists { _.toInt >= num }
+          m.get(Metrics.snapshotCount).exists { _.toInt >= num }
         }
       },
       maxRetries,
@@ -237,7 +237,7 @@ object Simulation {
     awaitConditionMet(
       s"Accepted checkpoints below $numAccepted", {
         apis.forall { a =>
-          val maybeString = a.metrics.get("checkpointAccepted")
+          val maybeString = a.metrics.get(Metrics.checkpointAccepted)
           maybeString.exists(_.toInt > numAccepted)
         }
       },

@@ -168,7 +168,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
         .foreach { h =>
           dao.checkpointService.memPool.putSync(h.checkpointBlock.get.baseHash, h)
           h.checkpointBlock.get.storeSOE()
-          dao.metrics.incrementMetric("checkpointAccepted")
+          dao.metrics.incrementMetric(Metrics.checkpointAccepted)
           h.checkpointBlock.get.transactions.foreach { _ =>
             dao.metrics.incrementMetric("transactionAccepted")
           }
@@ -294,7 +294,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
                     totalNumCBsInShapshots += snapshot.checkpointBlocks.size
                     dao.metrics.updateMetric("totalNumCBsInShapshots",
                                              totalNumCBsInShapshots.toString)
-                    dao.metrics.updateMetric("lastSnapshotHash", snapshot.hash)
+                    dao.metrics.updateMetric(Metrics.lastSnapshotHash, snapshot.hash)
                   }
                 )
                 .unsafeRunSync()

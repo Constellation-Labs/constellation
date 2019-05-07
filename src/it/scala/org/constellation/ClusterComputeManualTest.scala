@@ -69,6 +69,24 @@ object ComputeTestUtil {
 
   }
 
+  def createApisFromIpFile(filePath: String, ignoreIPs: Seq[String])(implicit ec: ExecutionContextExecutor): Seq[APIClient] = {
+    val ips = file"$filePath".lines.toSeq.filterNot(ignoreIPs.contains)
+
+    Simulation.logger.info(ips.toString)
+
+    val apis = ips.map { ip =>
+      val split = ip.split(":")
+      val portOffset = if (split.length == 1) 8999 else split(1).toInt
+      val a = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
+      Simulation.logger.info(
+        s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}"
+      )
+      a
+    }
+    Simulation.logger.info("Num APIs " + apis.size)
+    apis
+  }
+
 }
 
 /**
@@ -106,21 +124,7 @@ class ClusterComputeManualTest
 
     Simulation.logger.info(s"Using primary hosts file: $primaryHostsFile")
 
-    val ips = file"$primaryHostsFile".lines.toSeq.filterNot(ignoreIPs.contains)
-
-    Simulation.logger.info(ips.toString)
-
-    val apis = ips.map { ip =>
-      val split = ip.split(":")
-      val portOffset = if (split.length == 1) 8999 else split(1).toInt
-      val a = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
-      Simulation.logger.info(
-        s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}"
-      )
-      a
-    } // ++ auxAPIs
-
-    Simulation.logger.info("Num APIs " + apis.size)
+    val apis = ComputeTestUtil.createApisFromIpFile(primaryHostsFile, ignoreIPs)
 
     assert(Simulation.checkHealthy(apis))
 
