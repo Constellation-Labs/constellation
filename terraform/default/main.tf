@@ -56,7 +56,7 @@ module "network" {
 module "nodes" {
   source = "./modules/instance"
   zone = "${var.zone}"
-  instance_count = 3
+  instance_count = 6
   ssh_user = "${var.ssh_user}"
   network_name = "${module.network.network_name}"
   random_id = "${random_id.instance_id.hex}"

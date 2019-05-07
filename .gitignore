@@ -10,3 +10,4 @@ src/main/resources/ui/ui*
 site/
 .floo*
 swaydb-stress-test.log
+terraform/default-*
