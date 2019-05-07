@@ -1,6 +1,6 @@
 package org.constellation.trust
 
-import java.util
+import java.{lang, util}
 
 import atb.common.DefaultRandomGenerator
 import atb.interfaces.{Experience, Opinion, RandomGenerator}
@@ -41,7 +41,7 @@ object EigenTrust {
     eigenTrust.calculateTrust()
 
 
-    val trustMap = eigenTrust.getTrust(0).asScala.toMap
+    val trustMap: Map[Integer, lang.Double] = eigenTrust.getTrust(0).asScala.toMap
 
     trustMap.toSeq.sortBy(_._1).foreach{println}
 

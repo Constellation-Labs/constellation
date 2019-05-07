@@ -221,7 +221,6 @@ object SelfAvoidingWalk {
   }
 
   def updateTrustDistro(curNodes: Seq[TrustNode], updateGroups: Map[Int, Seq[TrustEdge]]) = {//todo should dist updates be a map from observer to its edges?
-//    val updateGroups: Map[Int, Seq[TrustEdge]] = distUpdates.groupBy(_.src)
     val curDist: Map[Int, Seq[TrustNode]] = curNodes.groupBy(_.id)
     val updatedNeighborhoods = updateGroups.map { case (id, edgeUpdates: Seq[TrustEdge]) =>
     val curNode: TrustNode = curDist(id).head
