@@ -1,43 +1,46 @@
 package org.constellation.util
-import org.constellation.DAO
+import cats.implicits._
 
-case class HeightEmpty(peer: APIClient)
-    extends Exception(s"Empty height found for node: ${peer.baseURI}")
-case class CheckPointValidationFailures(peer: APIClient)
-    extends Exception(
-      s"Checkpoint validation failures found for node: ${peer.baseURI}"
+class MetricFailure(message: String) extends Exception(message)
+case class HeightEmpty(nodeId: String) extends MetricFailure(s"Empty height found for node: $nodeId")
+case class CheckPointValidationFailures(nodeId: String)
+    extends MetricFailure(
+      s"Checkpoint validation failures found for node: $nodeId"
     )
-case class InconsistentSnapshotHash(peer: APIClient, hashes: Set[String])
-    extends Exception(s"Node: ${peer.baseURI} last snapshot hash differs: $hashes")
+case class InconsistentSnapshotHash(nodeId: String, hashes: Set[String])
+      extends MetricFailure(s"Node: $nodeId last snapshot hash differs: $hashes")
 
 object HealthChecker {
 
-  def checkAllMetrics(apis: Seq[APIClient]): Option[Exception] = {
+  def checkAllMetrics(apis: Seq[APIClient]): Either[MetricFailure, Unit] = {
     var hashes: Set[String] = Set.empty
     val it = apis.iterator
-    while (it.hasNext) {
+    var lastCheck: Either[MetricFailure,Unit] = Right(())
+    while (it.hasNext && lastCheck.isRight) {
       val a = it.next()
       val metrics = a.metrics
-
-      if (hasEmptyHeight(metrics)) return Some(HeightEmpty(a))
-      if (hasCheckpointValidationFailures(metrics)) return Some(CheckPointValidationFailures(a))
-      hashes ++= Set(a.metrics.getOrElse(Metrics.lastSnapshotHash, "no_snap"))
-      if (hashes.size > 1) return Some(InconsistentSnapshotHash(a, hashes))
+      lastCheck = checkLocalMetrics(metrics, a.baseURI)
+      .orElse {
+        hashes ++= Set(metrics.getOrElse(Metrics.lastSnapshotHash, "no_snap"))
+        Either.cond(hashes.size == 1, (), InconsistentSnapshotHash(a.baseURI, hashes))
+      }
     }
-
-    None
+    lastCheck
   }
 
-  def checkTotalBlocksCreatedIncreased(implicit dao: DAO): Unit = {
-    dao.metrics.getCountMetric(Metrics.checkpointAccepted)
+  def checkLocalMetrics(metrics: Map[String, String],
+                        nodeId: String): Either[MetricFailure, Unit] = {
+    hasEmptyHeight(metrics, nodeId)
+      .orElse(hasCheckpointValidationFailures(metrics, nodeId))
   }
 
-  def hasEmptyHeight(metrics: Map[String, String]): Boolean = {
-    metrics.get(Metrics.heightEmpty).isDefined
+  def hasEmptyHeight(metrics: Map[String, String], nodeId: String): Either[MetricFailure, Unit] = {
+    Either.cond(!metrics.contains(Metrics.heightEmpty), (), HeightEmpty(nodeId))
   }
 
-  def hasCheckpointValidationFailures(metrics: Map[String, String]): Boolean = {
-    metrics.get(Metrics.checkpointValidationFailure).isDefined
+  def hasCheckpointValidationFailures(metrics: Map[String, String],
+                                      nodeId: String): Either[MetricFailure, Unit] = {
+    Either.cond(!metrics.contains(Metrics.checkpointValidationFailure), (), CheckPointValidationFailures(nodeId))
   }
 
 }

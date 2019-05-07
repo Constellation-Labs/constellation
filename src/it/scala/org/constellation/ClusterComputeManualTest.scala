@@ -69,8 +69,21 @@ object ComputeTestUtil {
 
   }
 
-  def createApisFromIpFile(filePath: String, ignoreIPs: Seq[String])(implicit ec: ExecutionContextExecutor): Seq[APIClient] = {
-    val ips = file"$filePath".lines.toSeq.filterNot(ignoreIPs.contains)
+  def createApisFromIpFile(
+    ignoreIPs: Seq[String]
+  )(implicit ec: ExecutionContextExecutor): Seq[APIClient] = {
+    val hostFile = {
+      val defaultFile = File(System.getenv().getOrDefault("HOSTS_FILE", "hosts-2.txt"))
+      if (defaultFile.exists) {
+        defaultFile
+      } else {
+        File("./terraform/").listRecursively.find(f => f.name == "hosts").get
+      }
+    }
+
+    Simulation.logger.info(s"Using primary hosts file: ${hostFile.pathAsString}")
+
+    val ips = hostFile.lines.toSeq.filterNot(ignoreIPs.contains)
 
     Simulation.logger.info(ips.toString)
 
@@ -120,11 +133,7 @@ class ClusterComputeManualTest
     // Unused for standard tests, only for custom ones
     val (ignoreIPs, auxAPIs) = ComputeTestUtil.getAuxiliaryNodes()
 
-    val primaryHostsFile = System.getenv().getOrDefault("HOSTS_FILE", "hosts-2.txt")
-
-    Simulation.logger.info(s"Using primary hosts file: $primaryHostsFile")
-
-    val apis = ComputeTestUtil.createApisFromIpFile(primaryHostsFile, ignoreIPs)
+    val apis = ComputeTestUtil.createApisFromIpFile(ignoreIPs)
 
     assert(Simulation.checkHealthy(apis))
 
