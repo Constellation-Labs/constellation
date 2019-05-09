@@ -471,7 +471,7 @@ sealed trait CheckpointBlockValidatorNel {
           )
       }
     }
-    cbs.filterNot(isInSnapshot(_)).flatMap(cb => getParentTransactions(getParents(cb)))
+    cbs.filterNot(isInSnapshot(_)).flatMap(cb => getParentTransactions(getParents(cb), cb.transactions))
   }
 
   def isConflictingWithOthers(cb: CheckpointBlock,

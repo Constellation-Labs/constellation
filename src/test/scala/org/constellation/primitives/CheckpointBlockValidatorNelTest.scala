@@ -116,7 +116,7 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
 
     val combinedTxs =
       getTransactionsTillSnapshot(List(rightBlock))
-    combinedTxs shouldBe rightParent.transactions
+    combinedTxs shouldBe rightBlock.transactions ++ rightParent.transactions
   }
 
   test("it should return false for cb not in snap") {

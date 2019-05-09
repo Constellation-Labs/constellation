@@ -7,8 +7,7 @@ import constellation.{wrapFutureWithMetric, _}
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{
-  CheckpointCache, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
 import org.constellation.util.PeerApiClient
 import org.constellation.{ConfigUtil, DAO}
@@ -16,6 +15,7 @@ import org.constellation.{ConfigUtil, DAO}
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.util.{Failure, Success}
 
 class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)], arbitraryMessages: Seq[(ChannelMessage, Int)], dao: DAO, dataResolver: DataResolver)
     extends Actor
@@ -294,14 +294,18 @@ class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)]
         ._2
 
       val checkpointBlock = sameBlocks.head._2
-
       val finalFacilitators = selectedCheckpointBlocks.keySet.map(_.id).toSet
       val cache = CheckpointCache(Some(checkpointBlock),
         height = checkpointBlock.calculateHeight())
-      broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, finalFacilitators))
+      dao.threadSafeSnapshotService.accept(cache) match {
+        case Success(_) =>
+          broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, finalFacilitators))
+          Some(checkpointBlock)
+        case Failure(err) =>
+          log.error(s"Failed to accept majority checkpoint block due to: ${err.getMessage}", err)
+          None
+      }
 
-      dao.threadSafeSnapshotService.accept(cache)
-      Some(checkpointBlock)
     } else None
 
     passToParentActor(StopBlockCreationRound(roundData.roundId, acceptedBlock))

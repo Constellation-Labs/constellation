@@ -1,32 +1,32 @@
 package org.constellation.primitives
+import cats.effect.IO
 import com.typesafe.scalalogging.Logger
 import org.constellation.DAO
 import org.constellation.consensus.TipData
-import org.constellation.primitives.Schema.{GenesisObservation, Id, SignedObservationEdge}
+import org.constellation.primitives.Schema.{Id, SignedObservationEdge}
 import org.constellation.util.Metrics
 
 import scala.collection.concurrent.TrieMap
-import scala.util.Random
+import scala.util.{Failure, Random, Success, Try}
 
 trait ConcurrentTipService {
 
   def getMinTipHeight()(implicit dao: DAO): Long
   def toMap: Map[String, TipData]
-  def toSeq: Seq[CheckpointBlock]
   def size: Int
   def set(tips: Map[String, TipData])
-  def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO)
-  // considerd as private only
-  def put(go: GenesisObservation)(implicit metrics: Metrics): Option[TipData]
+  def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): IO[Try[Option[TipData]]]
   def pull(
     readyFacilitators: Map[Id, PeerData]
   )(implicit metrics: Metrics): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])]
-  def get(k: String): Option[TipData]
-  def remove(k: String)(implicit metrics: Metrics): Unit
   def markAsConflict(key: String)(implicit metrics: Metrics): Unit
 
 }
 
+case class TipConflictException(cb: CheckpointBlock)
+      extends Exception(
+        s"CB with baseHash: ${cb.baseHash} is conflicting with other tip or its ancestor."
+      )
 class TrieBasedTipService(sizeLimit: Int,
                           maxWidth: Int,
                           numFacilitatorPeers: Int,
@@ -68,47 +68,46 @@ class TrieBasedTipService(sizeLimit: Int,
     }
   }
 
-  def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): Unit = {
-    // TODO: should size of the map be calculated each time or just once?
-    // previously it was static due to all method were sync and map updates
-    // were performed on the end
-//    def reuseTips: Boolean = tips.size < maxWidth
-    val reuseTips: Boolean = tips.size < maxWidth
+  def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): IO[Try[Option[TipData]]] = {
+    IO {
+      val reuseTips: Boolean = tips.size < maxWidth
 
-    checkpointBlock.parentSOEBaseHashes.distinct.foreach { h =>
-      tips.get(h).foreach {
-        case TipData(block, numUses) if !reuseTips || numUses >= 2 =>
-          remove(block.baseHash)(dao.metrics)
-        case TipData(block, numUses) if reuseTips && numUses <= 2 =>
-          dao.metrics.incrementMetric("checkpointTipsIncremented")
-          put(block.baseHash, TipData(block, numUses + 1))(dao.metrics)
+      checkpointBlock.parentSOEBaseHashes.distinct.foreach { h =>
+        tips.get(h).foreach {
+          case TipData(block, numUses) if !reuseTips || numUses >= 2 =>
+            remove(block.baseHash)(dao.metrics)
+          case TipData(block, numUses) if reuseTips && numUses <= 2 =>
+            dao.metrics.incrementMetric("checkpointTipsIncremented")
+            put(block.baseHash, TipData(block, numUses + 1))(dao.metrics)
+        }
       }
-    }
-    this.synchronized {
-      if (!CheckpointBlockValidatorNel.isConflictingWithOthers(checkpointBlock, toSeq)) {
-        put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics)
-      } else {
-        logger.warn(s"Unable to add conflicted checkpoint block: ${checkpointBlock.baseHash}")
-        conflictingTips.put(checkpointBlock.baseHash, checkpointBlock)
+      tips.synchronized {
+        if (!CheckpointBlockValidatorNel.isConflictingWithOthers(
+              checkpointBlock,
+              tips.map(_._2.checkpointBlock).toSeq
+            )) {
+          Success(put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics))
+        } else {
+          logger.warn(s"Unable to add conflicted checkpoint block: ${checkpointBlock.baseHash}")
+          conflictingTips.put(checkpointBlock.baseHash, checkpointBlock)
+          Failure(TipConflictException(checkpointBlock))
+        }
       }
     }
   }
 
-  override def put(go: GenesisObservation)(implicit metrics: Metrics): Option[TipData] = {
-    put(go.initialDistribution.baseHash, TipData(go.initialDistribution, 0))
-    put(go.initialDistribution2.baseHash, TipData(go.initialDistribution2, 0))
-  }
 
   private def put(k: String, v: TipData)(implicit metrics: Metrics): Option[TipData] = {
-    if (tips.size < sizeLimit) {
-      tips.put(k, v)
-    } else {
-      // TODO: should newest override oldest cache-like? previously was just discarded
-//      thresholdMetCheckpoints = thresholdMetCheckpoints.slice(0, 100)
-      metrics.incrementMetric("memoryExceeded_thresholdMetCheckpoints")
-      metrics.updateMetric("activeTips", tips.size.toString)
-      None
-    }
+
+      if (tips.size < sizeLimit) {
+        tips.put(k, v)
+      } else {
+        // TODO: should newest override oldest cache-like? previously was just discarded
+        //      thresholdMetCheckpoints = thresholdMetCheckpoints.slice(0, 100)
+        metrics.incrementMetric("memoryExceeded_thresholdMetCheckpoints")
+        metrics.updateMetric("activeTips", tips.size.toString)
+        None
+      }
   }
 
   def getMinTipHeight()(implicit dao: DAO): Long = {
@@ -174,8 +173,5 @@ class TrieBasedTipService(sizeLimit: Int,
         sortedFacils(_)
       }
     selectedFacils.toMap
-  }
-  override def toSeq: Seq[CheckpointBlock] = {
-    tips.map(_._2.checkpointBlock).toSeq
   }
 }

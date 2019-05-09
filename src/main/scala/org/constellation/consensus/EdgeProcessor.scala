@@ -335,7 +335,7 @@ object EdgeProcessor extends StrictLogging {
                 ccd.foreach { cd =>
                   cd.checkpointBlock.foreach { cb =>
                     if (cd.children < 2) {
-                      dao.concurrentTipService.update(cb)(dao)
+                      dao.concurrentTipService.update(cb)(dao).unsafeRunSync()
                     }
                     if (!dao.checkpointService
                           .contains(cd.checkpointBlock.get.baseHash)) {
@@ -353,7 +353,7 @@ object EdgeProcessor extends StrictLogging {
 
   }
 
-  def handleFinishedCheckpoint(fc: FinishedCheckpoint)(implicit dao: DAO) = {
+  def handleFinishedCheckpoint(fc: FinishedCheckpoint)(implicit dao: DAO): Future[Try[Unit]] = {
     futureTryWithTimeoutMetric(
       if (dao.nodeState == NodeState.DownloadCompleteAwaitingFinalSync) {
         dao.threadSafeSnapshotService.syncBufferAccept(fc.checkpointCacheData)
