@@ -14,7 +14,7 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import constellation._
 import org.constellation.CustomDirectives.printResponseTime
-import org.constellation.consensus.{CrossTalkConsensus, HTTPNodeRemoteSender, NodeRemoteSender, RoundManager}
+import org.constellation.consensus.{CrossTalkConsensus, HTTPNodeRemoteSender, NodeRemoteSender}
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.p2p.PeerAPI
@@ -163,7 +163,8 @@ object ConstellationNode extends StrictLogging {
           cliConfig = cliConfig,
           processingConfig =
             if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10)
-            else processingConfig
+            else processingConfig,
+          dataPollingManagerOn = config.getBoolean("dataPollingManagerOn")
         )
       )
     } match {
@@ -196,7 +197,8 @@ case class NodeConfig(
   attemptDownload: Boolean = false,
   allowLocalhostPeers: Boolean = false,
   cliConfig: CliConfig = CliConfig(),
-  processingConfig: ProcessingConfig = ProcessingConfig()
+  processingConfig: ProcessingConfig = ProcessingConfig(),
+  dataPollingManagerOn: Boolean = false
 )
 
 class ConstellationNode(
@@ -346,6 +348,9 @@ class ConstellationNode(
     dao.generateRandomTX = true
   }
 
-  // val dataPollingManager = new DataPollingManager(60)
+  var dataPollingManager: DataPollingManager = _
 
+  if (nodeConfig.dataPollingManagerOn) {
+    dataPollingManager = new DataPollingManager(60)
+  }
 }

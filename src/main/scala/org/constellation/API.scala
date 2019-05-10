@@ -274,6 +274,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
 
             complete(proof)
           } ~
+          path("messages") {
+            complete(dao.channelStorage.getLastNMessages(20))
+          } ~
+          path("messages" / Segment) { channelId =>
+            complete(dao.channelStorage.getLastNMessages(20, Some(channelId)))
+          } ~
           path("restart") { // TODO: Revisit / fix
             System.exit(0)
             complete(StatusCodes.OK)

@@ -30,6 +30,10 @@ class DAO()
   var initialNodeConfig : NodeConfig = _
   @volatile var nodeConfig: NodeConfig = _
 
+  val channelStorage: ChannelStorage = ChannelStorage(this)
+
+  lazy val messageService = new MessageService()(this)
+
   var actorMaterializer: ActorMaterializer = _
 
   var transactionAcceptedAfterDownload: Long = 0L
