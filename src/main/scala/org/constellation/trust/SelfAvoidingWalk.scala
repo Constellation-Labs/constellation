@@ -24,6 +24,7 @@ object SelfAvoidingWalk {
   }
 
 
+  // TODO: Make this iterative (simpler, avoid stack depth issue) and memoize visited up to N (small)
   def walk(
             selfId: Int,
             currentId: Int,
@@ -92,43 +93,8 @@ object SelfAvoidingWalk {
     }
   }
 
-  def main(args: Array[String]): Unit = {
 
-     testConflictSybil()
-    //debugRunner()
-  }
-
-  def testConflictSybil(): Unit = {
-
-    val goodNodes = Seq.tabulate(10){ i =>
-
-      // Change edges to Map[Dst, TrustInfo]
-      val edgeIds = Random.shuffle(Seq.tabulate(10) { identity}).take(Random.nextInt(3) + 5)
-
-      TrustNode(i, 0D, 0D, edgeIds.map{ dst =>
-        TrustEdge(i, dst, Random.nextDouble())
-      })
-    }
-
-    val badNodes = Seq.tabulate(10){ i =>
-      val iOffset = 10 + i
-      val edgeIds = Random.shuffle(Seq.tabulate(10) { _ + 10}).take(Random.nextInt(3) + 5)
-
-      TrustNode(iOffset, 0D, 0D, edgeIds.map{ dst =>
-        TrustEdge(i, dst, Random.nextDouble())
-      })
-    }
-
-    val updatedGoodNodesWithBadEdge = goodNodes.tail :+
-      goodNodes.head.copy(edges = goodNodes.head.edges :+ TrustEdge(goodNodes.head.id, badNodes.head.id, 0.2D))
-
-    val secondNode = goodNodes.tail.head
-
-    runWalk(secondNode.id, updatedGoodNodesWithBadEdge ++ badNodes, numIterations = 100000)
-
-  }
-
-  def runWalk(selfId: Int, nodes: Seq[TrustNode], numIterations : Int = 100000): Unit = {
+  def runWalkRaw(selfId: Int, nodes: Seq[TrustNode], numIterations : Int = 100000): Array[Double] = {
 
     val nodeMap = nodes.map{n => n.id -> n}.toMap
 
@@ -150,15 +116,47 @@ object SelfAvoidingWalk {
         walkScores(id) += trust
       }
     }
+    walkScores
+  }
 
-    val sumScore = walkScores.sum
-    val walkProbability = walkScores.map{_ / sumScore}
+  def normalizeScores(scores: Array[Double]): Array[Double] = {
+    val sumScore = scores.sum
+    scores.map{_ / sumScore}
+  }
 
-    walkProbability.zipWithIndex.foreach{println}
+  def runWalkBatches(
+                      selfId: Int,
+                      nodes: Seq[TrustNode],
+                      batchIterationSize : Int = 10000,
+                      epsilon: Double = 1e-6,
+                      maxIterations: Int = 100
+                    ): Array[Double] = {
 
-    n1.positiveEdges.foreach{println}
+    var walkScores = runWalkRaw(selfId, nodes, batchIterationSize)
+    var walkProbability = normalizeScores(walkScores)
 
-    val weightedEdgesAll = Array.fill(nodes.size)(0D)
+    var delta = Double.MaxValue
+    var iterationNum = 0
+
+    while (delta > epsilon && iterationNum < maxIterations) {
+
+      val batchScores = runWalkRaw(selfId, nodes, batchIterationSize)
+      val merged = walkScores.zip(batchScores).map{case (s1, s2) => s1 + s2}
+      val renormalized = normalizeScores(merged)
+      delta = renormalized.zip(walkProbability).map{case (s1, s2) => Math.pow(Math.abs(s1 - s2), 2)}.sum
+      iterationNum += 1
+      walkScores = merged
+      walkProbability = renormalized
+      println(s"Batch number $iterationNum with delta $delta")
+    }
+    walkProbability
+  }
+
+  def reweightEdges(
+                     walkProbability: Array[Double],
+                     nodeMap: Map[Int, TrustNode]
+                   ) = {
+    val weightedEdgesAll = Array.fill(nodeMap.size)(0D)
 
     walkProbability.zipWithIndex.foreach{
       case (prob, id) =>
@@ -168,13 +166,30 @@ object SelfAvoidingWalk {
           e => weightedEdgesAll(e.dst) += e.trust * prob
         }
     }
-    println("Weighted edges all")
+    weightedEdgesAll
+  }
+
+  def runWalk(
+               selfId: Int,
+               nodes: Seq[TrustNode],
+               batchIterationSize : Int = 10000,
+               epsilon: Double = 1e-6,
+               maxIterations: Int = 100,
+               feedbackCycles: Option[Int] = None
+             ): Array[Double] = {
+
+    val nodeMap = nodes.map{n => n.id -> n}.toMap
+
+    val walkProbability = runWalkBatches(selfId, nodes, batchIterationSize, epsilon, maxIterations)
+
+    val weightedEdgesAll = reweightEdges(walkProbability, nodeMap)
 
     // TODO: Normalize again
     weightedEdgesAll.zipWithIndex.foreach{println}
 
+  //  println(s"n1 id: ${n1.id}")
 
-    println(s"n1 id: ${n1.id}")
+    weightedEdgesAll
 
   }
 
