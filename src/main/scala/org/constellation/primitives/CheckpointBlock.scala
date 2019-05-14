@@ -56,6 +56,14 @@ case class CheckpointBlock(
       dao.checkpointService.get
     }
 
+    if (parents.exists(_.isEmpty)) {
+      dao.metrics.incrementMetric("heightCalculationParentMissing")
+    } else {
+      dao.metrics.incrementMetric("heightCalculationParentsExist")
+    }
+
+    dao.metrics.incrementMetric("heightCalculationParentLength_" + parents.length)
+
     val maxHeight = if (parents.exists(_.isEmpty)) {
       None
     } else {
@@ -108,6 +116,7 @@ case class CheckpointBlock(
       dao.metrics.incrementMetric("checkpointValidationSuccess")
     } else {
       dao.metrics.incrementMetric("checkpointValidationFailure")
+      dao.miscLogger.error(s"Checkpoint validation failure: $validation")
     }
 
     // TODO: Return Validation instead of Boolean
@@ -173,8 +182,18 @@ case class CheckpointBlock(
 
   def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
 
-  def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
-    parentSOEHashes.flatMap { dao.soeService.getSync }.map { _.signedObservationEdge.baseHash }
+  def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] = {
+//    parentSOEHashes.flatMap(dao.soeService.getSync).map(_.signedObservationEdge.baseHash)
+    parentSOEHashes.flatMap { soeHash =>
+      val parent = dao.soeService.getSync(soeHash)
+
+      if (parent.isEmpty) {
+        dao.metrics.incrementMetric("parentSOEServiceQueryFailed")
+      }
+
+      parent.map(_.signedObservationEdge.baseHash)
+    }
+  }
 
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
@@ -261,15 +280,15 @@ object DuplicatedTransaction {
   def apply(t: Transaction) = new DuplicatedTransaction(t.hash)
 }
 
-case class NoAddressCacheFound(txHash: String) extends CheckpointBlockValidation {
+case class NoAddressCacheFound(txHash: String, srcAddress: String) extends CheckpointBlockValidation {
 
   def errorMessage: String =
-    s"CheckpointBlock includes transaction=$txHash which has no address cache"
+    s"CheckpointBlock includes transaction=$txHash which has no address cache for address=$srcAddress"
 }
 
 object NoAddressCacheFound {
 
-  def apply(t: Transaction) = new NoAddressCacheFound(t.hash)
+  def apply(t: Transaction) = new NoAddressCacheFound(t.hash, t.src.address)
 }
 
 case class InsufficientBalance(address: String) extends CheckpointBlockValidation {
@@ -375,12 +394,24 @@ sealed trait CheckpointBlockValidatorNel {
 
   type AddressBalance = Map[String, Long]
 
-  def getParents(c: CheckpointBlock)(implicit dao: DAO): List[CheckpointBlock] =
-    c.parentSOEBaseHashes.toList
-      .map(dao.checkpointService.getFullData)
+  def getParents(c: CheckpointBlock)(implicit dao: DAO): List[CheckpointBlock] = {
+    val parentSOEBaseHashes = c.parentSOEBaseHashes.toList
+
+    if (parentSOEBaseHashes.size != 2) {
+      dao.metrics.incrementMetric("validationParentSOEBaseHashesMissing")
+    }
+
+    val fullData = parentSOEBaseHashes.map(dao.checkpointService.getFullData)
+
+    if (fullData.exists(_.isEmpty)) {
+      dao.metrics.incrementMetric("validationParentCBLookupMissing")
+    }
+
+    fullData
       .map(_.flatMap(_.checkpointBlock))
       .sequence[Option, CheckpointBlock]
       .getOrElse(List())
+  }
 
   def isInSnapshot(c: CheckpointBlock)(implicit dao: DAO): Boolean =
     !dao.threadSafeSnapshotService.acceptedCBSinceSnapshot

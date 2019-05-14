@@ -6,7 +6,7 @@ import better.files.File
 import cats.effect.IO
 import com.typesafe.scalalogging.Logger
 import constellation._
-import io.micrometer.core.instrument.Clock
+import io.micrometer.core.instrument.{Clock, Counter, Timer}
 import io.micrometer.core.instrument.binder.jvm._
 import io.micrometer.core.instrument.binder.logging.LogbackMetrics
 import io.micrometer.core.instrument.binder.system.{FileDescriptorMetrics, ProcessorMetrics, UptimeMetrics}
@@ -25,12 +25,13 @@ object Metrics {
   val cacheMetrics = new CacheMetricsCollector()
   cacheMetrics.register()
 
-  def prometheusSetup(keyHash: String): Unit = {
+  def prometheusSetup(keyHash: String): PrometheusMeterRegistry = {
     val prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT,
                                                               CollectorRegistry.defaultRegistry,
                                                               Clock.SYSTEM)
     prometheusMeterRegistry.config().commonTags("application", s"Constellation_$keyHash")
     io.micrometer.core.instrument.Metrics.globalRegistry.add(prometheusMeterRegistry)
+    io.kontainers.micrometer.akka.AkkaMetricRegistry.setRegistry(prometheusMeterRegistry)
 
     new JvmMemoryMetrics().bindTo(prometheusMeterRegistry)
     new JvmGcMetrics().bindTo(prometheusMeterRegistry)
@@ -43,6 +44,10 @@ object Metrics {
     new DiskSpaceMetrics(File(System.getProperty("user.dir")).toJava)
       .bindTo(prometheusMeterRegistry)
     // new DatabaseTableMetrics().bindTo(prometheusMeterRegistry)
+
+
+
+    prometheusMeterRegistry
   }
 
 }
@@ -93,10 +98,12 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   private val countMetrics: TrieMap[String, AtomicReference[Long]] = TrieMap()
 
   val rateCounter = new TransactionRateTracker()
+  val micrometerCounter = new TrieMap[String, Counter]
+//  val micrometerTimer = new TrieMap[String, Timer]
 
   // Init
   updateMetric("id", dao.id.hex)
-  Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
+  val registry = Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
   updateMetric("nodeState", dao.nodeState.toString)
   updateMetric("address", dao.selfAddressStr)
   updateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
@@ -117,8 +124,14 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   }
 
   def incrementMetric(key: String): Unit = {
+    micrometerCounter.getOrElseUpdate(s"metrics_$key", { registry.counter(s"metrics_$key") }).increment()
     countMetrics.getOrElseUpdate(key, new AtomicReference[Long](0L)).getAndUpdate(_ + 1L)
-   // countMetrics(key) = countMetrics.getOrElse(key, 0L) + 1
+  }
+
+  def startTimer: Timer.Sample = Timer.start()
+
+  def stopTimer(key: String, timer: Timer.Sample): Unit = {
+    timer.stop(Timer.builder(key).register(registry))
   }
 
   def updateMetricAsync(key: String, value: String): IO[Unit] = IO(updateMetric(key, value))

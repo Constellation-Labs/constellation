@@ -8,10 +8,11 @@ import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import org.constellation._
 import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal,BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.primitives.Schema.{NodeType, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.primitives.storage._
+import org.constellation.util.Metrics
 import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers, OneInstancePerTest}
 
@@ -19,7 +20,7 @@ import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
 
 class RoundManagerTest
-    extends TestKit(ActorSystem("RoundManagerTest"))
+  extends TestKit(ActorSystem("RoundManagerTest"))
     with FunSuiteLike
     with Matchers
     with IdiomaticMockitoFixture
@@ -69,6 +70,9 @@ class RoundManagerTest
   dao.threadSafeMessageMemPool.pull(1) shouldReturn None
   dao.checkpointService shouldReturn mock[CheckpointService]
   dao.checkpointService.contains(*) shouldReturn true
+
+  val metrics = new Metrics()
+  dao.metrics shouldReturn metrics
 
   dao.messageService shouldReturn mock[MessageService]
   dao.messageService.arbitraryPool shouldReturn mock[StorageService[ChannelMessageMetadata]]

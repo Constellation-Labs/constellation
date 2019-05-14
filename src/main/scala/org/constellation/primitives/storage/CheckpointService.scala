@@ -37,7 +37,7 @@ class CheckpointBlocksMid(path: File, midCapacity: Int)(implicit ec: ExecutionCo
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
 // mwadon: /\ is still relevant?
 class CheckpointBlocksMemPool(size: Int = 50000)(implicit dao: DAO)
-    extends StorageService[CheckpointCacheMetadata](size) {
+    extends StorageService[CheckpointCacheMetadata](size, Some(45)) {
 
   def putSync(
     key: String,
@@ -45,9 +45,10 @@ class CheckpointBlocksMemPool(size: Int = 50000)(implicit dao: DAO)
   ): CheckpointCacheMetadata = {
     value.checkpointBlock.foreach(cb => incrementChildrenCount(cb.parentSOEBaseHashes()))
 
-    super.putSync(key, CheckpointCacheMetadata(storeMerkleRoots(value.checkpointBlock.get),
-                                            value.children,
-                                            value.height))
+    super.putSync(
+      key,
+      CheckpointCacheMetadata(storeMerkleRoots(value.checkpointBlock.get), value.children, value.height)
+    )
   }
 
   def storeMerkleRoots(data: CheckpointBlock): CheckpointBlockMetadata = {

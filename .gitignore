@@ -11,3 +11,4 @@ site/
 .floo*
 swaydb-stress-test.log
 terraform/default-*
+.dag

@@ -333,7 +333,7 @@ class RoundTest
     round ! UnionBlockProposal(roundId, facilitatorId1, cb2)
     round ! UnionBlockProposal(roundId, facilitatorId2, cb3)
 
-    round.underlyingActor.resolveMajorityCheckpointBlock() was called
+    round.underlyingActor.resolveMajorityCheckpointBlock(false) was called
   }
 
   test("it should broadcast selected union block") {

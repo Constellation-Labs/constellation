@@ -14,7 +14,7 @@ import org.constellation.util.{Distance, Periodic}
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
-class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(implicit dao: DAO)
+class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 10)(implicit dao: DAO)
     extends Periodic[Try[Unit]]("RandomTransactionManager", periodSeconds) {
 
   def trigger(): Future[Try[Unit]] = {
@@ -93,6 +93,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
           //generateRandomMessages()
 
           val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
+//          val memPoolCount = dao.transactionService.memPool.cacheSize()
           dao.metrics.updateMetric("transactionMemPoolSize", memPoolCount.toString)
 
           val haveBalance =
@@ -198,17 +199,6 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
       peerSubset = Set(getRandomPeer._1)
     )*/
             }
-          }
-
-          if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold &&
-              dao.generateRandomTX &&
-              dao.nodeState == NodeState.Ready &&
-              !dao.blockFormationInProgress) {
-
-            nodeActor ! StartNewBlockCreationRound
-            dao.metrics.updateMetric("blockFormationInProgress",
-                                     dao.blockFormationInProgress.toString)
-
           }
         }
       },

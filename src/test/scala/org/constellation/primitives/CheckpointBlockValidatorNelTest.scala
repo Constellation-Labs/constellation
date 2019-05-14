@@ -13,65 +13,69 @@ import org.constellation.primitives.CheckpointBlockValidatorNel._
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, Id}
 import org.constellation.primitives.storage.CheckpointService
 import org.constellation.util.{HashSignature, Metrics}
-import org.constellation.{DAO, NodeConfig}
+import org.constellation.{DAO, Fixtures, NodeConfig}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito
 import org.mockito.Mockito._
+import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{mock => _, _}
 
-class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with BeforeAndAfter {
+class CheckpointBlockValidatorNelTest
+  extends FunSuite
+    with IdiomaticMockitoFixture
+    with Matchers
+    with BeforeAndAfter {
 
-  implicit val dao: DAO = mock(classOf[DAO])
-  val snapService: ThreadSafeSnapshotService = Mockito.mock(classOf[ThreadSafeSnapshotService])
-  val checkpointService: CheckpointService = Mockito.mock(classOf[CheckpointService])
+  implicit val dao: DAO = mock[DAO]
 
-  val leftBlock: CheckpointBlock = Mockito.mock(classOf[CheckpointBlock])
-  val leftParent: CheckpointBlock = Mockito.mock(classOf[CheckpointBlock])
+  val snapService: ThreadSafeSnapshotService = mock[ThreadSafeSnapshotService]
+  val checkpointService: CheckpointService = mock[CheckpointService]
 
-  val rightBlock: CheckpointBlock = Mockito.mock(classOf[CheckpointBlock])
-  val rightParent: CheckpointBlock = Mockito.mock(classOf[CheckpointBlock])
+  val leftBlock: CheckpointBlock = mock[CheckpointBlock]
+  val leftParent: CheckpointBlock = mock[CheckpointBlock]
 
-  val tx1: Transaction = mock(classOf[Transaction])
-  val tx2: Transaction = mock(classOf[Transaction])
-  val tx3: Transaction = mock(classOf[Transaction])
-  val tx4: Transaction = mock(classOf[Transaction])
+  val rightBlock: CheckpointBlock = mock[CheckpointBlock]
+  val rightParent: CheckpointBlock = mock[CheckpointBlock]
+
+  val tx1: Transaction = mock[Transaction]
+  val tx2: Transaction = mock[Transaction]
+  val tx3: Transaction = mock[Transaction]
+  val tx4: Transaction = mock[Transaction]
 
   before {
-    when(leftBlock.baseHash).thenReturn("block1")
-    when(leftParent.baseHash).thenReturn("leftParent")
-    when(rightBlock.baseHash).thenReturn("block2")
-    when(rightParent.baseHash).thenReturn("rightParent")
+    leftBlock.baseHash shouldReturn "block1"
+    leftParent.baseHash shouldReturn "leftParent"
 
-    when(rightBlock.signatures).thenReturn(
-      Seq(HashSignature.apply("sig1", Id("id1")), HashSignature.apply("sig2", Id("id2")))
-    )
-    when(leftBlock.signatures).thenReturn(
-      Seq(HashSignature.apply("sig1", Id("id1")), HashSignature.apply("sig2", Id("id2")))
-    )
+    rightBlock.baseHash shouldReturn "block2"
+    rightParent.baseHash shouldReturn "rightParent"
 
-    when(rightBlock.parentSOEBaseHashes()(any())).thenReturn(Seq("rightParent"))
-    when(leftBlock.parentSOEBaseHashes()(any())).thenReturn(Seq("leftParent"))
+    rightBlock.signatures shouldReturn Seq(HashSignature.apply("sig1", Id("id1")), HashSignature.apply("sig2", Id("id2")))
+    leftBlock.signatures shouldReturn Seq(HashSignature.apply("sig1", Id("id1")), HashSignature.apply("sig2", Id("id2")))
 
-    when(leftParent.parentSOEBaseHashes()(any())).thenReturn(Seq.empty)
-    when(rightParent.parentSOEBaseHashes()(any())).thenReturn(Seq.empty)
+    rightBlock.parentSOEBaseHashes()(*) shouldReturn Seq("rightParent")
+    leftBlock.parentSOEBaseHashes()(*) shouldReturn Seq("leftParent")
 
-    when(leftParent.transactions).thenReturn(Seq.empty)
-    when(rightParent.transactions).thenReturn(Seq.empty)
+    leftParent.parentSOEBaseHashes()(*) shouldReturn Seq.empty
+    rightParent.parentSOEBaseHashes()(*) shouldReturn Seq.empty
 
-    when(checkpointService.getFullData(rightParent.baseHash))
-      .thenReturn(Some(CheckpointCache(Some(rightParent))))
-    when(checkpointService.getFullData(leftParent.baseHash))
-      .thenReturn(Some(CheckpointCache(Some(leftParent))))
+    leftParent.transactions shouldReturn Seq.empty
+    rightParent.transactions shouldReturn Seq.empty
 
-    when(leftBlock.transactions).thenReturn(Seq(tx1, tx2))
+    checkpointService.getFullData(rightParent.baseHash) shouldReturn Some(CheckpointCache(Some(rightParent)))
+    checkpointService.getFullData(leftParent.baseHash) shouldReturn Some(CheckpointCache(Some(leftParent)))
 
-    when(rightBlock.transactions).thenReturn(Seq(tx3, tx4))
+    leftBlock.transactions shouldReturn Seq(tx1, tx2)
+    rightBlock.transactions shouldReturn Seq(tx3, tx4)
 
-    when(dao.threadSafeSnapshotService).thenReturn(snapService)
-    when(dao.checkpointService).thenReturn(checkpointService)
-    val cbNotInSnapshot = Seq(leftBlock.baseHash,rightBlock.baseHash,leftParent.baseHash,rightParent.baseHash)
-    when(snapService.acceptedCBSinceSnapshot).thenReturn(cbNotInSnapshot)
+    dao.threadSafeSnapshotService shouldReturn snapService
+    dao.checkpointService shouldReturn checkpointService
+
+    val metrics = mock[Metrics]
+    dao.metrics shouldReturn metrics
+
+    val cbNotInSnapshot = Seq(leftBlock.baseHash, rightBlock.baseHash, leftParent.baseHash, rightParent.baseHash)
+    snapService.acceptedCBSinceSnapshot shouldReturn cbNotInSnapshot
   }
 
   test("it should detect no internal conflict and return None") {
@@ -86,7 +90,7 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
 
   test("it should detect direct internal conflict with other tip") {
     val rightBlockTx = rightBlock.transactions.head
-    when(leftBlock.transactions).thenReturn(Seq(tx1, tx2, rightBlockTx))
+    leftBlock.transactions shouldReturn Seq(tx1, tx2, rightBlockTx)
 
     detectInternalTipsConflict(
       Seq(CheckpointCache(Some(leftBlock)), CheckpointCache(Some(rightBlock)))
@@ -94,7 +98,7 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
   }
   test("it should detect direct conflict with other tip") {
     val rightBlockTx = rightBlock.transactions.head
-    when(leftBlock.transactions).thenReturn(Seq(tx1, tx2, rightBlockTx))
+    leftBlock.transactions shouldReturn Seq(tx1, tx2, rightBlockTx)
 
     detectInternalTipsConflict(
       Seq(CheckpointCache(Some(leftBlock)), CheckpointCache(Some(rightBlock)))
@@ -102,17 +106,16 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
   }
 
   test("it should detect conflict with ancestry of other tip") {
-    when(rightParent.transactions).thenReturn(Seq(tx2))
+    rightParent.transactions shouldReturn Seq(tx2)
 
     isConflictingWithOthers(leftBlock, Seq(rightBlock)) shouldBe true
   }
 
   test("it should get transactions from parent") {
-    when(rightParent.transactions).thenReturn(Seq(tx2))
+    rightParent.transactions shouldReturn Seq(tx2)
     val ancestors = Seq("ancestor_in_snap")
-    when(rightParent.parentSOEBaseHashes()).thenReturn(ancestors)
-    when(checkpointService.getFullData("ancestor_in_snap"))
-      .thenReturn(None)
+    rightParent.parentSOEBaseHashes() shouldReturn ancestors
+    checkpointService.getFullData("ancestor_in_snap") shouldReturn None
 
     val combinedTxs =
       getTransactionsTillSnapshot(List(rightBlock))
@@ -133,7 +136,7 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
   test("it should return correct block to preserve with greater number of signatures") {
     val signatures = rightBlock.signatures ++ Seq(HashSignature.apply("extraSig", Id("extra_id1")))
 
-    when(leftBlock.signatures).thenReturn(signatures)
+    leftBlock.signatures shouldReturn signatures
 
     selectBlockToPreserve(
       Seq(CheckpointCache(Some(leftBlock)), CheckpointCache(Some(rightBlock)))
@@ -146,6 +149,7 @@ class CheckpointBlockValidatorNelTest extends FunSuite with Matchers with Before
     ) shouldBe CheckpointCache(Some(leftBlock), 2)
   }
 }
+
 class ValidationSpec
   extends TestKit(ActorSystem("Validation"))
     with WordSpecLike
@@ -157,14 +161,10 @@ class ValidationSpec
 
   import RandomData._
 
-  implicit val dao: DAO = new DAO() // stub[DAO]
+  implicit val dao: DAO = new DAO()
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   dao.initialize(NodeConfig())
   implicit val keyPair: KeyPair = keyPairs.head
-
-  // (dao.id _).when().returns(Fixtures.id)
-
-  // dao.keyPair = KeyUtils.makeKeyPair()
   dao.metrics = new Metrics()
   val peerProbe = TestProbe.apply("peerManager")
   dao.peerManager = peerProbe.ref
@@ -252,6 +252,7 @@ class ValidationSpec
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
           .foreach(cb => cb.store(CheckpointCache(Some(cb))))
 
+        println(dao.metrics)
         assert(cb7.simpleValidation())
       }
     }

@@ -214,8 +214,10 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
         val canSnapshot = minTipHeight > (nextHeightInterval + dao.processingConfig.snapshotHeightDelayInterval)
         if (!canSnapshot) {
+          logger.info("Snapshot - height interval condition not met")
           dao.metrics.incrementMetric("snapshotHeightIntervalConditionNotMet")
         } else {
+          dao.metrics.incrementMetric("snapshotHeightIntervalConditionMet")
 
           val maybeDatas = acceptedCBSinceSnapshot.map(dao.checkpointService.getFullData)
 
@@ -410,15 +412,9 @@ trait EdgeDAO {
   var transactionService: TransactionService = _
   var checkpointService: CheckpointService = _
   var snapshotService: SnapshotService = _
+  var acceptedTransactionService: AcceptedTransactionService = _
+  var addressService: AddressService = _
 
-  val acceptedTransactionService = new AcceptedTransactionService(
-    5000 //processingConfig.transactionLRUMaxSize
-  )
-
-  val addressService = new AddressService(
-    5000
-    // processingConfig.addressLRUMaxSize
-  )
   val notificationService = new NotificationService()
   val messageService : MessageService
   val channelService = new ChannelService()
@@ -427,15 +423,8 @@ trait EdgeDAO {
   val recentBlockTracker = new RecentDataTracker[CheckpointCache](200)
 
   val threadSafeTXMemPool = new ThreadSafeTXMemPool()
-  lazy val concurrentTipService: ConcurrentTipService = new TrieBasedTipService(
-    processingConfig.maxActiveTipsAllowedInMemory,
-    processingConfig.maxWidth,
-    processingConfig.numFacilitatorPeers,
-    processingConfig.minPeerTimeAddedSeconds
-  )
 
   val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
-  lazy val threadSafeSnapshotService = new ThreadSafeSnapshotService(concurrentTipService)
 
   var genesisBlock: Option[CheckpointBlock] = None
   var genesisObservation: Option[GenesisObservation] = None
@@ -452,11 +441,15 @@ trait EdgeDAO {
   val edgeExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
-  // val peerAPIExecutionContext: ExecutionContextExecutor =
-  //   ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+//  val snapshotExecutionContext: ExecutionContextExecutor =
+//    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+//
+//   val peerAPIExecutionContext: ExecutionContextExecutor =
+//     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
 
-  val apiClientExecutionContext: ExecutionContextExecutor = edgeExecutionContext
-  //  ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
+  val apiClientExecutionContext: ExecutionContextExecutor =
+    edgeExecutionContext
+//    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
 
   val signatureExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
@@ -467,7 +460,13 @@ trait EdgeDAO {
   def pullTransactions(
     minimumCount: Int = minCheckpointFormationThreshold
   ): Option[Seq[Transaction]] = {
-    threadSafeTXMemPool.pull(minimumCount)
+    val txs = threadSafeTXMemPool.pull(minimumCount)
+
+    txs.foreach(_.foreach(_ =>
+      metrics.incrementMetric("transactionPull")
+    ))
+
+    txs
   }
 
   def pullMessages(minimumCount: Int): Option[Seq[ChannelMessage]] = {
