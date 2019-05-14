@@ -41,6 +41,9 @@ object Metrics {
     prometheusMeterRegistry.config().commonTags("application", "Constellation")
     globalRegistry.add(prometheusMeterRegistry)
     io.kontainers.micrometer.akka.AkkaMetricRegistry.setRegistry(prometheusMeterRegistry)
+    prometheusMeterRegistry.config().commonTags("application", s"Constellation_$keyHash")
+    io.micrometer.core.instrument.Metrics.globalRegistry.add(prometheusMeterRegistry)
+    io.kontainers.micrometer.akka.AkkaMetricRegistry.setRegistry(prometheusMeterRegistry)
 
     new JvmMemoryMetrics().bindTo(prometheusMeterRegistry)
     new JvmGcMetrics().bindTo(prometheusMeterRegistry)
