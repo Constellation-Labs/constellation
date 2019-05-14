@@ -35,7 +35,8 @@ case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[
 case class SignatureResponse(signature: Option[HashSignature], reRegister: Boolean = false)
 case class FinishedCheckpoint(checkpointCacheData: CheckpointCache, facilitators: Set[Id])
 
-case class FinishedCheckpointResponse(reRegister: Boolean = false)
+case class FinishedCheckpointResponse(isSuccess: Boolean = false)
+case class FinishedCheckpointAck(reRegister: Boolean = false)
 
 object EdgeProcessor extends StrictLogging {
 
@@ -89,8 +90,8 @@ object EdgeProcessor extends StrictLogging {
             )
           )
         }
-        dao.messageService
-          .memPool.putSync(m.signedMessageData.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
+        dao.messageService.memPool
+          .putSync(m.signedMessageData.hash, ChannelMessageMetadata(m, Some(cb.baseHash)))
         dao.metrics.incrementMetric("messageAccepted")
       }
 
@@ -171,10 +172,14 @@ object EdgeProcessor extends StrictLogging {
 
     val responses = dao.peerInfo.values.toList.map { peer =>
       wrapFutureWithMetric(
-        peer.client.postNonBlocking[Option[FinishedCheckpointResponse]](
+        peer.client.postNonBlocking[FinishedCheckpointAck](
           "finished/checkpoint",
           FinishedCheckpoint(cache, finalFacilitators),
-          timeout = 20.seconds
+          timeout = 8.seconds,
+          Map(
+            "ReplyTo" -> APIClient(dao.nodeConfig.hostName, dao.nodeConfig.peerHttpPort)
+              .base("finished/reply")
+          )
         ),
         "finishedCheckpointBroadcast"
       )
@@ -494,9 +499,11 @@ object Snapshot {
           else {
             findLatestMessageWithSnapshotHashInner(
               depth + 1,
-              dao.messageService.memPool.lookup(
-                m.channelMessage.signedMessageData.data.previousMessageHash
-              ).unsafeRunSync()
+              dao.messageService.memPool
+                .lookup(
+                  m.channelMessage.signedMessageData.data.previousMessageHash
+                )
+                .unsafeRunSync()
             )
           }
         }
@@ -532,24 +539,28 @@ object Snapshot {
         val updates = dao.messageService
           .findHashesByMerkleRoot(messagesMerkleRoot)
           .map(
-            _.get.map { msgHash =>
-              dao.metrics.incrementMetric("messageSnapshotHashUpdated")
-              dao.messageService.memPool
-                .update(
-                  msgHash,
-                  _.copy(snapshotHash = Some(snapshot.hash)),
-                  ChannelMessageMetadata(
-                    DataResolver
-                      .resolveMessagesDefaults(msgHash)
-                      .unsafeRunSync()
-                      .get
-                      .channelMessage,
-                    Some(cb.baseHash),
-                    Some(snapshot.hash)
+            _.get
+              .map { msgHash =>
+                dao.metrics.incrementMetric("messageSnapshotHashUpdated")
+                dao.messageService.memPool
+                  .update(
+                    msgHash,
+                    _.copy(snapshotHash = Some(snapshot.hash)),
+                    ChannelMessageMetadata(
+                      DataResolver
+                        .resolveMessagesDefaults(msgHash)
+                        .unsafeRunSync()
+                        .get
+                        .channelMessage,
+                      Some(cb.baseHash),
+                      Some(snapshot.hash)
+                    )
                   )
-                )
-            }.toList.sequence
-          ).flatten
+              }
+              .toList
+              .sequence
+          )
+          .flatten
 
         updates.unsafeRunSync()
       }
