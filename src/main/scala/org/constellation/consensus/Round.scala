@@ -7,10 +7,9 @@ import constellation.{wrapFutureWithMetric, _}
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{
-  CheckpointCache, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
-import org.constellation.util.PeerApiClient
+import org.constellation.util.{APIClient, PeerApiClient}
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.collection.mutable
@@ -309,17 +308,21 @@ class Round(roundData: RoundData, arbitraryTransactions: Seq[(Transaction, Int)]
 
   private[consensus] def broadcastSignedBlockToNonFacilitators(
     finishedCheckpoint: FinishedCheckpoint
-  ): Future[List[Option[FinishedCheckpointResponse]]] = {
+  ): Future[List[FinishedCheckpointAck]] = {
     val allFacilitators = roundData.peers.map(p => p.peerMetadata.id -> p).toMap
     val signatureResponses = Future.sequence(
       dao.peerInfo.values.toList
         .filterNot(pd => allFacilitators.contains(pd.peerMetadata.id))
         .map { peer =>
           wrapFutureWithMetric(
-            peer.client.postNonBlocking[Option[FinishedCheckpointResponse]](
+            peer.client.postNonBlocking[FinishedCheckpointAck](
               "finished/checkpoint",
               finishedCheckpoint,
-              timeout = 20.seconds
+              timeout = 8.seconds,
+              Map(
+                "ReplyTo" -> APIClient(dao.nodeConfig.hostName, dao.nodeConfig.peerHttpPort)
+                  .base("finished/reply")
+              )
             ),
             "finishedCheckpointBroadcast",
           )(dao, ec).recoverWith {
