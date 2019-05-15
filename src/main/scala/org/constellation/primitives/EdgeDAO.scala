@@ -354,7 +354,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
         concurrentTipService
           .update(cb)
           .unsafeRunSync() match {
-          case Success(_) =>
+          case Right(_) =>
             acceptedCBSinceSnapshot.synchronized {
               if (acceptedCBSinceSnapshot.contains(cb.baseHash)) {
                 (IO.shift *> dao.metrics.incrementMetricAsync(
@@ -367,7 +367,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
               }
             }
             Success(())
-          case Failure(err) =>
+          case Left(err) =>
             logger.error(s"Unable to accept checkpoint due to: ${err.getMessage}", err)
 
             (IO.shift *> dao.metrics.incrementMetricAsync("acceptedCBSinceSnapshotFailure"))

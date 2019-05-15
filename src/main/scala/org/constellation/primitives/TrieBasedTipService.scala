@@ -15,7 +15,7 @@ trait ConcurrentTipService {
   def toMap: Map[String, TipData]
   def size: Int
   def set(tips: Map[String, TipData])
-  def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): IO[Try[Option[TipData]]]
+  def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): IO[Either[TipConflictException, Option[TipData]]]
   def pull(
     readyFacilitators: Map[Id, PeerData]
   )(implicit metrics: Metrics): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])]
@@ -68,7 +68,7 @@ class TrieBasedTipService(sizeLimit: Int,
     }
   }
 
-  def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): IO[Try[Option[TipData]]] = {
+  def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): IO[Either[TipConflictException, Option[TipData]]] = {
     IO {
       val reuseTips: Boolean = tips.size < maxWidth
 
@@ -86,11 +86,11 @@ class TrieBasedTipService(sizeLimit: Int,
               checkpointBlock,
               tips.map(_._2.checkpointBlock).toSeq
             )) {
-          Success(put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics))
+          Right(put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics))
         } else {
           logger.warn(s"Unable to add conflicted checkpoint block: ${checkpointBlock.baseHash}")
           conflictingTips.put(checkpointBlock.baseHash, checkpointBlock)
-          Failure(TipConflictException(checkpointBlock))
+          Left(TipConflictException(checkpointBlock))
         }
       }
     }
