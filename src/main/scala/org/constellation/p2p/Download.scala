@@ -12,7 +12,7 @@ import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{APIClient, Distance}
+import org.constellation.util.{APIClient, Distance, Metrics}
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.duration._
@@ -85,7 +85,7 @@ class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[S
       .flatTap { _ =>
         IO {
           dao.metrics.incrementMetric("downloadedSnapshots")
-          dao.metrics.incrementMetric("snapshotCount")
+          dao.metrics.incrementMetric(Metrics.snapshotCount)
         }
       }
       .flatMap(acceptSnapshot)
@@ -94,7 +94,7 @@ class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[S
   private def acceptSnapshot(snapshot: StoredSnapshot): IO[Unit] = IO {
     snapshot.checkpointCache.foreach { c =>
       dao.metrics.incrementMetric("downloadedBlocks")
-      dao.metrics.incrementMetric("checkpointAccepted")
+      dao.metrics.incrementMetric(Metrics.checkpointAccepted)
 
       c.checkpointBlock.foreach(_.transactions.foreach { _ =>
         dao.metrics.incrementMetric("transactionAccepted")

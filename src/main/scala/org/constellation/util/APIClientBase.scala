@@ -69,7 +69,7 @@ class APIClientBase(host: String = "127.0.0.1",
 
   def setExternalIP(): Boolean = postSync("ip", hostName + ":" + udpPort).isSuccess
 
-  private def baseURI: String = {
+  def baseURI: String = {
     val uri = s"http://$hostName:$apiPort"
     uri
   }
