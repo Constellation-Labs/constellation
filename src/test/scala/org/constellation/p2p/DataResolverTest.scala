@@ -23,6 +23,8 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
   val endpoint: String = "endpoint"
 
   before {
+    when(dao.id)
+        .thenReturn(Id("node1"))
     when(dao.edgeExecutionContext)
       .thenReturn(ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8)))
 
@@ -88,7 +90,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
       .resolveDataByDistanceFlat[String](hashes, endpoint, List(PeerApiClient(badNode.id,badNode)), storageMock.loopbackStore)
 
     resolverIO.attempt.unsafeRunSync() should matchPattern {
-      case Left(DataResolutionOutOfPeers("endpoint",_, _)) => ()
+      case Left(DataResolutionOutOfPeers("node1","endpoint",_, _)) => ()
     }
     verify(storageMock, never()).loopbackStore(anyString())
   }

@@ -88,7 +88,7 @@ class TrieBasedTipService(sizeLimit: Int,
             )) {
           Right(put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics))
         } else {
-          logger.warn(s"Unable to add conflicted checkpoint block: ${checkpointBlock.baseHash}")
+          logger.warn(s"Unable to add conflicted checkpoint block: ${checkpointBlock.baseHash}" )
           conflictingTips.put(checkpointBlock.baseHash, checkpointBlock)
           Left(TipConflictException(checkpointBlock))
         }

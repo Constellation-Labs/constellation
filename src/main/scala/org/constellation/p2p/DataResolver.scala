@@ -63,7 +63,7 @@ class DataResolver {
         case _ if errorsSoFar >= maxErrors =>
           IO.raiseError(DataResolutionMaxErrors(endpoint, hash))
         case Nil =>
-          IO.raiseError(DataResolutionOutOfPeers(endpoint,hash, sortedPeers.map(_.id.short)))
+          IO.raiseError(DataResolutionOutOfPeers(dao.id.short, endpoint,hash, sortedPeers.map(_.id.short)))
         case head :: tail =>
           getData[T](hash, endpoint, head, store)
             .handleErrorWith {
@@ -177,9 +177,9 @@ class DataResolver {
 
 object DataResolver extends DataResolver
 
-case class DataResolutionOutOfPeers(endpoint: String,hash: String, peers: Iterable[String])
+case class DataResolutionOutOfPeers(thisNode: String, endpoint: String,hash: String, peers: Iterable[String])
     extends Exception(
-      s"Run out of peers when resolving: $endpoint with hash: $hash following tried: $peers"
+      s"node [${thisNode}] Run out of peers when resolving: $endpoint with hash: $hash following tried: $peers"
     )
 
 case class DataResolutionMaxErrors(endpoint: String, hash: String)
