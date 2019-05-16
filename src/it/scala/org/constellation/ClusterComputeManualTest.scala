@@ -69,6 +69,37 @@ object ComputeTestUtil {
 
   }
 
+  def createApisFromIpFile(
+    ignoreIPs: Seq[String]
+  )(implicit ec: ExecutionContextExecutor): Seq[APIClient] = {
+    val hostFile = {
+      val defaultFile = File(System.getenv().getOrDefault("HOSTS_FILE", "hosts-2.txt"))
+      if (defaultFile.exists) {
+        defaultFile
+      } else {
+        File("./terraform/").listRecursively.find(f => f.name == "hosts").get
+      }
+    }
+
+    Simulation.logger.info(s"Using primary hosts file: ${hostFile.pathAsString}")
+
+    val ips = hostFile.lines.toSeq.filterNot(ignoreIPs.contains)
+
+    Simulation.logger.info(ips.toString)
+
+    val apis = ips.map { ip =>
+      val split = ip.split(":")
+      val portOffset = if (split.length == 1) 8999 else split(1).toInt
+      val a = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
+      Simulation.logger.info(
+        s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}"
+      )
+      a
+    }
+    Simulation.logger.info("Num APIs " + apis.size)
+    apis
+  }
+
 }
 
 /**
@@ -102,25 +133,7 @@ class ClusterComputeManualTest
     // Unused for standard tests, only for custom ones
     val (ignoreIPs, auxAPIs) = ComputeTestUtil.getAuxiliaryNodes()
 
-    val primaryHostsFile = System.getenv().getOrDefault("HOSTS_FILE", "hosts-2.txt")
-
-    Simulation.logger.info(s"Using primary hosts file: $primaryHostsFile")
-
-    val ips = file"$primaryHostsFile".lines.toSeq.filterNot(ignoreIPs.contains)
-
-    Simulation.logger.info(ips.toString)
-
-    val apis = ips.map { ip =>
-      val split = ip.split(":")
-      val portOffset = if (split.length == 1) 8999 else split(1).toInt
-      val a = APIClient(split.head, port = portOffset + 1, peerHTTPPort = portOffset + 2)
-      Simulation.logger.info(
-        s"Initializing API to ${split.head} ${portOffset + 1} ${portOffset + 2}"
-      )
-      a
-    } // ++ auxAPIs
-
-    Simulation.logger.info("Num APIs " + apis.size)
+    val apis = ComputeTestUtil.createApisFromIpFile(ignoreIPs)
 
     assert(Simulation.checkHealthy(apis))
 

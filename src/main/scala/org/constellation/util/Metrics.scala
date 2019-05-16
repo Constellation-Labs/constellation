@@ -22,6 +22,12 @@ import scala.concurrent.Future
 /** For Grafana usage. */
 object Metrics {
 
+  val checkpointAccepted = "checkpointAccepted"
+  val snapshotCount = "snapshotCount"
+  val lastSnapshotHash = "lastSnapshotHash"
+  val heightEmpty = "heightEmpty"
+  val checkpointValidationFailure = "checkpointValidationFailure"
+
   val cacheMetrics = new CacheMetricsCollector()
   cacheMetrics.register()
 
@@ -131,6 +137,10 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
     */
   def getMetrics: Map[String, String] = {
     stringMetrics.toMap ++ countMetrics.toMap.mapValues(_.toString)
+  }
+
+  def getCountMetric(key: String): Option[Long] = {
+    countMetrics.get(key).map(_.get())
   }
 
   // Temporary, for debugging only. Would cause a problem with many peers

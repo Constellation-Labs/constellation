@@ -18,3 +18,12 @@ for bringing up machines
 `update-hosts.sh <hosts-file> <node-label>`
 
 `redeploy.sh <hosts-file> <node-label>`
+
+Checking active cluster after initialization (requires hosts file in one of locations:
+
+- environmental variable HOSTS_FILE
+- <project_root>/hosts-2.txt
+- <project_root>/terraform/*/hosts
+
+
+`sbt "it:testOnly org.constellation.ClusterHealthCheckTest"`

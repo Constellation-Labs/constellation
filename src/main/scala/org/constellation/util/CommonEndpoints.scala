@@ -38,7 +38,11 @@ trait CommonEndpoints extends Json4sSupport {
 
   val commonEndpoints: Route = get {
     path("health") {
-      complete(StatusCodes.OK)
+      val metricFailure = HealthChecker.checkLocalMetrics(dao.metrics.getMetrics, dao.id.short)
+      metricFailure match {
+        case Left(value) => failWith(value)
+        case Right(_) => complete(StatusCodes.OK)
+      }
     } ~
       path("id") {
         complete(dao.id)
