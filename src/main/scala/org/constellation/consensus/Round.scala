@@ -345,7 +345,7 @@ class Round(roundData: RoundData,
 
   private[consensus] def broadcastSignedBlockToNonFacilitators(
     finishedCheckpoint: FinishedCheckpoint
-  ): Future[List[FinishedCheckpointAck]] = {
+  ): Future[List[Option[FinishedCheckpointResponse]]] = {
     val allFacilitators = roundData.peers.map(p => p.peerMetadata.id -> p).toMap
     val signatureResponses = Future.sequence(
       dao.peerInfo.values.toList
@@ -356,11 +356,7 @@ class Round(roundData: RoundData,
             peer.client.postNonBlocking[Option[FinishedCheckpointResponse]](
               "finished/checkpoint",
               finishedCheckpoint,
-              timeout = 8.seconds,
-              Map(
-                "ReplyTo" -> APIClient(dao.nodeConfig.hostName, dao.nodeConfig.peerHttpPort)
-                  .base("finished/reply")
-              )
+              timeout = 20.seconds
             ),
             "finishedCheckpointBroadcast",
           )(dao, ec).recoverWith {
