@@ -95,7 +95,7 @@ class TrieBasedTipService(sizeLimit: Int,
           logger.info(s"--- --- TrieBased Elapsed2: ${elapsed2}ms")
           Right(put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics))
         } else {
-          logger.warn(s"Unable to add conflicted checkpoint block: ${checkpointBlock.baseHash}")
+          logger.warn(s"Unable to add conflicted checkpoint block: ${checkpointBlock.baseHash}" )
           conflictingTips.put(checkpointBlock.baseHash, checkpointBlock)
           val elapsed3 = (System.currentTimeMillis - start)
           logger.info(s"--- --- TrieBased Elapsed3: ${elapsed3}ms")
