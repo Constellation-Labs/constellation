@@ -68,17 +68,6 @@ object SelfAvoidingWalk {
 
           val productTrust = currentTrust * transitionTrust
 
-
-/*        println(
-          s"currentLength $currentPathLength " +
-          s"on $currentId " +
-          s"visiting $transitionDst " +
-          s"with transition trust $transitionTrust " +
-          s"product $productTrust " +
-          s"visited $visitedNext"
-        )*/
-
-
           walk(
             selfId,
             transitionDst,
@@ -149,13 +138,14 @@ object SelfAvoidingWalk {
       walkProbability = renormalized
       println(s"Batch number $iterationNum with delta $delta")
     }
-    walkProbability
+
+    reweightEdges(walkProbability, nodes.map{n => n.id -> n}.toMap)
   }
 
   def reweightEdges(
                      walkProbability: Array[Double],
                      nodeMap: Map[Int, TrustNode]
-                   ) = {
+                   ): Array[Double] = {
     val weightedEdgesAll = Array.fill(nodeMap.size)(0D)
 
     walkProbability.zipWithIndex.foreach{
@@ -169,6 +159,21 @@ object SelfAvoidingWalk {
     weightedEdgesAll
   }
 
+
+  def updateNode(n: TrustNode, sumTransitives: Map[Int, Double]): TrustNode = {
+    n.copy(edges = n.edges.map{ edge =>
+      if (!sumTransitives.contains(edge.dst)) edge else {
+        edge.copy(trust = sumTransitives(edge.dst))
+      }
+    } ++ sumTransitives.filterNot(n.edges.map{_.dst}.contains).map{case (id, trust) => TrustEdge(n.id, id, trust)} )
+  }
+
+  def updateNodeIn(selfId: Int, nodes: Seq[TrustNode], prevEdges: Array[Double]): Seq[TrustNode] = {
+    nodes.filter{_.id == selfId}.map{n =>
+      updateNode(n, prevEdges.zipWithIndex.filterNot(_._2 == selfId).map{case (x,y) => y -> x}.toMap)
+    } ++ nodes.filterNot(_.id == selfId)
+  }
+
   def runWalk(
                selfId: Int,
                nodes: Seq[TrustNode],
@@ -180,9 +185,20 @@ object SelfAvoidingWalk {
 
     val nodeMap = nodes.map{n => n.id -> n}.toMap
 
-    val walkProbability = runWalkBatches(selfId, nodes, batchIterationSize, epsilon, maxIterations)
+    val weightedEdgeZero  = runWalkBatches(selfId, nodes, batchIterationSize, epsilon, maxIterations)
 
-    val weightedEdgesAll = reweightEdges(walkProbability, nodeMap)
+    val weightedEdgesAll = feedbackCycles.map{ cycles =>
+
+      var prevEdges = weightedEdgeZero
+      var nodesCycle = nodes
+
+      (0 until cycles).foreach{ cycle =>
+        prevEdges = runWalkBatches(selfId, nodesCycle, batchIterationSize, epsilon, maxIterations)
+        nodesCycle = updateNodeIn(selfId, nodesCycle, prevEdges)
+      }
+      prevEdges
+
+    }.getOrElse(weightedEdgeZero)
 
     // TODO: Normalize again
     weightedEdgesAll.zipWithIndex.foreach{println}
@@ -190,6 +206,26 @@ object SelfAvoidingWalk {
   //  println(s"n1 id: ${n1.id}")
 
     weightedEdgesAll
+
+  }
+  def runWalkFeedbackUpdateSingleNode(
+               selfId: Int,
+               nodes: Seq[TrustNode],
+               batchIterationSize : Int = 10000,
+               epsilon: Double = 1e-6,
+               maxIterations: Int = 100,
+               feedbackCycles: Int = 5
+             ): TrustNode = {
+
+    var prevEdges = runWalkBatches(selfId, nodes, batchIterationSize, epsilon, maxIterations)
+    var nodesCycle = nodes
+
+    (0 until feedbackCycles).foreach{ cycle =>
+        prevEdges = runWalkBatches(selfId, nodesCycle, batchIterationSize, epsilon, maxIterations)
+        nodesCycle = updateNodeIn(selfId, nodesCycle, prevEdges)
+    }
+
+    nodesCycle.filter(_.id == selfId).head
 
   }
 
