@@ -25,11 +25,11 @@ class RewardsTest extends FlatSpec {
   val thing = r.nextInt(100).toString
   neighborhoodReputationMatrix.updated(thing, 0.0)//Ensure perfect behavior doesn't throw Nan
 
-  "rewardForEpoch" should "return correct $DAG ammount" in {
-    assert(rewardForEpoch(epochOneRandom) === epochOneRewards)
-    assert(rewardForEpoch(epochTwoRandom) === epochTwoRewards)
-    assert(rewardForEpoch(epochThreeRandom) === epochThreeRewards)
-    assert(rewardForEpoch(epochFourRandom) === epochFourRewards)
+  "rewardDuringEpoch" should "return correct $DAG ammount" in {
+    assert(rewardDuringEpoch(epochOneRandom) === epochOneRewards)
+    assert(rewardDuringEpoch(epochTwoRandom) === epochTwoRewards)
+    assert(rewardDuringEpoch(epochThreeRandom) === epochThreeRewards)
+    assert(rewardDuringEpoch(epochFourRandom) === epochFourRewards)
   }
 
   "total rewards disbursed" should "equal total per epoch within error bar" in {
