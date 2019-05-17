@@ -30,7 +30,7 @@
   "editable": true,
   "gnetId": 4701,
   "graphTooltip": 1,
-  "iteration": 1553641306776,
+  "iteration": 1558126325053,
   "links": [],
   "panels": [
     {
@@ -40,6 +40,695 @@
         "w": 24,
         "x": 0,
         "y": 0
+      },
+      "id": 171,
+      "panels": [],
+      "title": "DAG Metrics",
+      "type": "row"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "fill": 1,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "id": 185,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "dag_TPS_all{application=\"$application\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "TPS ALL",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "fill": 1,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "id": 192,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "dag_TPS_last_60_seconds{application=\"$application\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "TPS Last 60 Seconds",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "fill": 1,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "id": 181,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "dag_transactionAccepted_total{application=\"$application\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Transaction Accepted",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "fill": 1,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "id": 177,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "dag_acceptCheckpoint_success_total{application=\"$application\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "A"
+        },
+        {
+          "expr": "dag_acceptCheckpoint_failure_total{application=\"$application\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Accept Checkpoint",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "fill": 1,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "id": 179,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "dag_checkpointBlockFormation_success_total{application=\"$application\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "A"
+        },
+        {
+          "expr": "dag_checkpointBlockFormation_failure_total{application=\"$application\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Checkpoint Block Formation",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "fill": 1,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "id": 183,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "dag_randomTransactionsGenerated_total{application=\"$application\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Random Transactions Generated",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "fill": 1,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "id": 194,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "dag_messageAccepted_total{application=\"$application\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Messages Accepted",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "fill": 1,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "id": 187,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "dag_lastSnapshotHeight{application=\"$application\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Last Snapshot Height",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
       },
       "id": 125,
       "panels": [],
@@ -72,7 +761,7 @@
         "h": 3,
         "w": 6,
         "x": 0,
-        "y": 1
+        "y": 34
       },
       "height": "",
       "id": 63,
@@ -159,7 +848,7 @@
         "h": 3,
         "w": 6,
         "x": 6,
-        "y": 1
+        "y": 34
       },
       "height": "",
       "id": 92,
@@ -246,7 +935,7 @@
         "h": 3,
         "w": 6,
         "x": 12,
-        "y": 1
+        "y": 34
       },
       "id": 65,
       "interval": null,
@@ -331,7 +1020,7 @@
         "h": 3,
         "w": 6,
         "x": 18,
-        "y": 1
+        "y": 34
       },
       "id": 75,
       "interval": null,
@@ -407,7 +1096,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 37
       },
       "id": 127,
       "panels": [],
@@ -436,7 +1125,7 @@
         "h": 7,
         "w": 6,
         "x": 0,
-        "y": 5
+        "y": 38
       },
       "id": 24,
       "legend": {
@@ -557,7 +1246,7 @@
         "h": 7,
         "w": 6,
         "x": 6,
-        "y": 5
+        "y": 38
       },
       "id": 25,
       "legend": {
@@ -679,7 +1368,7 @@
         "h": 7,
         "w": 6,
         "x": 12,
-        "y": 5
+        "y": 38
       },
       "id": 26,
       "legend": {
@@ -851,7 +1540,7 @@
         "h": 7,
         "w": 6,
         "x": 18,
-        "y": 5
+        "y": 38
       },
       "id": 86,
       "legend": {
@@ -942,7 +1631,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 12
+        "y": 45
       },
       "id": 128,
       "panels": [],
@@ -971,7 +1660,7 @@
         "h": 7,
         "w": 6,
         "x": 0,
-        "y": 13
+        "y": 46
       },
       "id": 106,
       "legend": {
@@ -1094,7 +1783,7 @@
         "h": 7,
         "w": 6,
         "x": 6,
-        "y": 13
+        "y": 46
       },
       "id": 93,
       "legend": {
@@ -1213,7 +1902,7 @@
         "h": 7,
         "w": 6,
         "x": 12,
-        "y": 13
+        "y": 46
       },
       "id": 32,
       "legend": {
@@ -1342,7 +2031,7 @@
         "h": 7,
         "w": 6,
         "x": 18,
-        "y": 13
+        "y": 46
       },
       "id": 124,
       "legend": {
@@ -1446,7 +2135,7 @@
         "h": 7,
         "w": 18,
         "x": 0,
-        "y": 20
+        "y": 53
       },
       "height": "",
       "id": 91,
@@ -1567,7 +2256,7 @@
         "h": 7,
         "w": 6,
         "x": 18,
-        "y": 20
+        "y": 53
       },
       "id": 61,
       "legend": {
@@ -1683,7 +2372,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 60
       },
       "id": 141,
       "panels": [],
@@ -1701,7 +2390,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 28
+        "y": 61
       },
       "id": 139,
       "legend": {
@@ -1723,6 +2412,7 @@
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [],
+      "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
@@ -1788,7 +2478,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 28
+        "y": 61
       },
       "id": 150,
       "legend": {
@@ -1810,6 +2500,7 @@
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [],
+      "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
@@ -1875,7 +2566,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 36
+        "y": 69
       },
       "id": 148,
       "legend": {
@@ -1897,6 +2588,7 @@
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [],
+      "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
@@ -1961,7 +2653,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 36
+        "y": 69
       },
       "id": 147,
       "legend": {
@@ -1983,6 +2675,7 @@
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [],
+      "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
@@ -2047,7 +2740,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 44
+        "y": 77
       },
       "id": 149,
       "legend": {
@@ -2069,6 +2762,7 @@
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [],
+      "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
@@ -2136,7 +2830,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 44
+        "y": 77
       },
       "id": 151,
       "links": [],
@@ -2191,7 +2885,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 52
+        "y": 85
       },
       "id": 165,
       "panels": [],
@@ -2208,7 +2902,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 53
+        "y": 86
       },
       "id": 157,
       "legend": {
@@ -2230,6 +2924,7 @@
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [],
+      "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
@@ -2288,7 +2983,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 61
+        "y": 94
       },
       "id": 129,
       "panels": [],
@@ -2317,7 +3012,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 62
+        "y": 95
       },
       "id": 3,
       "legend": {
@@ -2457,9 +3152,9 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 62
+        "y": 95
       },
-      "id": 166,
+      "id": 195,
       "legend": {
         "alignAsTable": false,
         "avg": false,
@@ -2482,7 +3177,7 @@
       "points": false,
       "renderer": "flot",
       "repeat": null,
-      "repeatIteration": 1553641306776,
+      "repeatIteration": 1558126325053,
       "repeatPanelId": 3,
       "scopedVars": {
         "jvm_memory_pool_heap": {
@@ -2599,9 +3294,9 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 62
+        "y": 95
       },
-      "id": 167,
+      "id": 196,
       "legend": {
         "alignAsTable": false,
         "avg": false,
@@ -2624,7 +3319,7 @@
       "points": false,
       "renderer": "flot",
       "repeat": null,
-      "repeatIteration": 1553641306776,
+      "repeatIteration": 1558126325053,
       "repeatPanelId": 3,
       "scopedVars": {
         "jvm_memory_pool_heap": {
@@ -2726,7 +3421,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 102
       },
       "id": 130,
       "panels": [],
@@ -2755,7 +3450,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 70
+        "y": 103
       },
       "id": 78,
       "legend": {
@@ -2895,9 +3590,9 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 70
+        "y": 103
       },
-      "id": 168,
+      "id": 197,
       "legend": {
         "alignAsTable": false,
         "avg": false,
@@ -2920,7 +3615,7 @@
       "points": false,
       "renderer": "flot",
       "repeat": null,
-      "repeatIteration": 1553641306776,
+      "repeatIteration": 1558126325053,
       "repeatPanelId": 78,
       "scopedVars": {
         "jvm_memory_pool_nonheap": {
@@ -3037,9 +3732,9 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 70
+        "y": 103
       },
-      "id": 169,
+      "id": 198,
       "legend": {
         "alignAsTable": false,
         "avg": false,
@@ -3062,7 +3757,7 @@
       "points": false,
       "renderer": "flot",
       "repeat": null,
-      "repeatIteration": 1553641306776,
+      "repeatIteration": 1558126325053,
       "repeatPanelId": 78,
       "scopedVars": {
         "jvm_memory_pool_nonheap": {
@@ -3164,7 +3859,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 77
+        "y": 110
       },
       "id": 131,
       "panels": [],
@@ -3183,7 +3878,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 78
+        "y": 111
       },
       "id": 98,
       "legend": {
@@ -3270,7 +3965,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 78
+        "y": 111
       },
       "id": 101,
       "legend": {
@@ -3367,7 +4062,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 78
+        "y": 111
       },
       "id": 99,
       "legend": {
@@ -3457,7 +4152,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 85
+        "y": 118
       },
       "id": 132,
       "panels": [],
@@ -3486,7 +4181,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 86
+        "y": 119
       },
       "id": 37,
       "legend": {
@@ -3591,7 +4286,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 86
+        "y": 119
       },
       "id": 38,
       "legend": {
@@ -3684,7 +4379,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 93
+        "y": 126
       },
       "id": 133,
       "panels": [],
@@ -3713,7 +4408,7 @@
         "h": 7,
         "w": 6,
         "x": 0,
-        "y": 94
+        "y": 127
       },
       "id": 33,
       "legend": {
@@ -3827,7 +4522,7 @@
         "h": 7,
         "w": 6,
         "x": 6,
-        "y": 94
+        "y": 127
       },
       "id": 83,
       "legend": {
@@ -3933,7 +4628,7 @@
         "h": 7,
         "w": 6,
         "x": 12,
-        "y": 94
+        "y": 127
       },
       "id": 85,
       "legend": {
@@ -4047,7 +4742,7 @@
         "h": 7,
         "w": 6,
         "x": 18,
-        "y": 94
+        "y": 127
       },
       "id": 84,
       "legend": {
@@ -4142,8 +4837,8 @@
       {
         "allValue": null,
         "current": {
-          "text": "Constellation_ca2f8ffdb3df7c4ade273c7577fbf7d32679cc6880cf7d5d50f5104d24cd8d3d",
-          "value": "Constellation_ca2f8ffdb3df7c4ade273c7577fbf7d32679cc6880cf7d5d50f5104d24cd8d3d"
+          "text": "Constellation",
+          "value": "Constellation"
         },
         "datasource": "ConstellationNode",
         "definition": "",
@@ -4168,8 +4863,8 @@
         "allFormat": "glob",
         "allValue": null,
         "current": {
-          "text": "35.236.17.144:9000",
-          "value": "35.236.17.144:9000"
+          "text": "35.236.108.173:9000",
+          "value": "35.236.108.173:9000"
         },
         "datasource": "ConstellationNode",
         "definition": "",
