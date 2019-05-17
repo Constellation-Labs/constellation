@@ -160,7 +160,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
 
   def updateBalanceMetrics(): Unit = {
 
-    val peers = dao.peerInfo.toSeq
+    val peers = dao.peerInfoAsync.unsafeRunSync().toSeq
 
     val allAddresses = peers.map { _._1.address } :+ dao.selfAddressStr
 

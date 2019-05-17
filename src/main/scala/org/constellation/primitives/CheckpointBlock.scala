@@ -4,11 +4,14 @@ import java.security.KeyPair
 
 import cats.data.{Ior, NonEmptyList, ValidatedNel}
 import cats.implicits._
+import com.typesafe.scalalogging.StrictLogging
 import constellation.signedObservationEdge
 import org.constellation.DAO
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.storage.StorageService
 import org.constellation.util.{HashSignature, MerkleTree, Metrics}
+
+import scala.annotation.tailrec
 
 
 abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
@@ -108,9 +111,12 @@ case class CheckpointBlock(
 
   def simpleValidation()(implicit dao: DAO): Boolean = {
 
+    val start = System.currentTimeMillis
     val validation = CheckpointBlockValidatorNel.validateCheckpointBlock(
       CheckpointBlock(transactions, checkpoint)
     )
+    val elapsed = (System.currentTimeMillis - start) / 1000000
+    dao.miscLogger.info(s"--- --- --- Checkpoint block validation: ${elapsed}ms")
 
     if (validation.isValid) {
       dao.metrics.incrementMetric("checkpointValidationSuccess")
@@ -329,7 +335,7 @@ sealed trait CheckpointBlockValidatorNel {
 
   def validateTransaction(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
     validateTransactionIntegrity(t)
-      .product(validateSourceAddressCache(t))
+//      .product(validateSourceAddressCache(t))
       .map(_ => t)
 
   def validateTransactions(
@@ -414,8 +420,7 @@ sealed trait CheckpointBlockValidatorNel {
   }
 
   def isInSnapshot(c: CheckpointBlock)(implicit dao: DAO): Boolean =
-    !dao.threadSafeSnapshotService.acceptedCBSinceSnapshot
-      .contains(c.baseHash)
+    !dao.threadSafeSnapshotService.acceptedCBSinceSnapshot.contains(c.baseHash)
 
   def getSummaryBalance(c: CheckpointBlock)(implicit dao: DAO): AddressBalance = {
     val spend = c.transactions
@@ -474,40 +479,56 @@ sealed trait CheckpointBlockValidatorNel {
 
     val postTreeIgnoreEmptySnapshot =
       if (dao.threadSafeSnapshotService.lastSnapshotHeight == 0) preTreeResult
-      else preTreeResult.product(validateCheckpointBlockTree(cb))
+//      else preTreeResult.product(validateCheckpointBlockTree(cb))
+      else preTreeResult
 
     postTreeIgnoreEmptySnapshot.map(_ => cb)
   }
 
   def getTransactionsTillSnapshot(
     cbs: Seq[CheckpointBlock]
-  )(implicit dao: DAO): Seq[Transaction] = {
+  )(implicit dao: DAO): Seq[String] = {
 
-    def getParentTransactions(parents: Seq[CheckpointBlock],
-                              accu: Seq[Transaction] = Seq.empty,
-                              snapshotReached: Boolean = false): Seq[Transaction] = {
+    @tailrec
+    def getParentTransactions(
+      parents: Seq[CheckpointBlock],
+      accu: Seq[String] = Seq.empty,
+      snapshotReached: Boolean = false
+    ): Seq[String] = {
       parents match {
         case Nil => accu
         case cb :: tail if !snapshotReached && !isInSnapshot(cb) =>
           getParentTransactions(
             tail ++ getParents(cb),
-            accu ++ cb.transactions,
+            accu ++ cb.transactions.map(_.hash),
             isInSnapshot(cb)
           )
         case cb :: tail if snapshotReached || isInSnapshot(cb) =>
           getParentTransactions(
             tail,
-            accu ++ cb.transactions,
+            accu ++ cb.transactions.map(_.hash),
             snapshotReached
           )
       }
     }
-    cbs.filterNot(isInSnapshot(_)).flatMap(cb => getParentTransactions(getParents(cb), cb.transactions))
+
+    cbs.filterNot(isInSnapshot)
+      .flatMap(cb => getParentTransactions(getParents(cb), cb.transactions.map(_.hash)))
   }
 
   def isConflictingWithOthers(cb: CheckpointBlock,
                               others: Seq[CheckpointBlock])(implicit dao: DAO): Boolean = {
-    cb.transactions.intersect(getTransactionsTillSnapshot(others)).nonEmpty
+    val cbs = dao.checkpointService.memPool.cacheSize()
+    val start = System.currentTimeMillis
+    val startTimer = dao.metrics.startTimer
+    val result = false
+//    val result = cb.transactions.map(_.hash).intersect(getTransactionsTillSnapshot(others)).nonEmpty
+
+    val stop = System.currentTimeMillis
+    dao.metrics.stopTimer("isConflictingWithOthers", startTimer)
+    println(s"isConflictingWithOthers - elapsed: ${stop - start}ms for cbs: $cbs")
+
+    result
   }
 
   def detectInternalTipsConflict(

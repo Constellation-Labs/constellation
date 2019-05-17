@@ -174,7 +174,7 @@ class DataResolver extends StrictLogging {
   }
 
   def getReadyPeers(dao: DAO): Iterable[PeerApiClient] = {
-    dao.readyPeers.map(p => PeerApiClient(p._1, p._2.client))
+    dao.readyPeersAsync.unsafeRunSync().map(p => PeerApiClient(p._1, p._2.client))
   }
 
 }

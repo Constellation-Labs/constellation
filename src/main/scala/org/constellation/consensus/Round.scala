@@ -73,7 +73,7 @@ class Round(roundData: RoundData,
             .getOrElse(Seq()) ++ arbitraryMessages
             .filter(_._2 == distance)
             .map(_._1.signedMessageData.hash),
-          dao.peerInfo.flatMap(_._2.notification).toSeq
+          dao.peerInfoAsync.unsafeRunSync().flatMap(_._2.notification).toSeq
         )
 
         passToParentActor(
@@ -193,7 +193,7 @@ class Round(roundData: RoundData,
 
   private[consensus] def unionProposals(): Unit = {
 
-    val readyPeers = dao.readyPeers
+    val readyPeers = dao.readyPeersAsync.unsafeRunSync()
 
     val transactions = transactionProposals.values
       .flatMap(_.txHashes)
@@ -348,7 +348,7 @@ class Round(roundData: RoundData,
   ): Future[List[Option[FinishedCheckpointResponse]]] = {
     val allFacilitators = roundData.peers.map(p => p.peerMetadata.id -> p).toMap
     val signatureResponses = Future.sequence(
-      dao.peerInfo.values.toList
+      dao.peerInfoAsync.unsafeRunSync().values.toList
         .filterNot(pd => allFacilitators.contains(pd.peerMetadata.id))
         .map { peer =>
           log.debug(s"[${dao.id.short}] broadcasting cb ${finishedCheckpoint.checkpointCacheData.checkpointBlock.get.baseHash} to  ${peer.client.id} in round ${roundData.roundId}")

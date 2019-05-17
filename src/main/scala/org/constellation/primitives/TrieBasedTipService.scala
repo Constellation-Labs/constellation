@@ -53,7 +53,7 @@ class TrieBasedTipService(sizeLimit: Int,
     tips.get(key)
   }
 
-  def remove(key: String)(implicit metrics: Metrics): Unit = {
+  def remove(key: String)(implicit metrics: Metrics): Unit = tips.synchronized {
     tips -= key
     metrics.incrementMetric("checkpointTipsRemoved")
   }
@@ -70,28 +70,40 @@ class TrieBasedTipService(sizeLimit: Int,
 
   def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): IO[Either[TipConflictException, Option[TipData]]] = {
     IO {
-      val reuseTips: Boolean = tips.size < maxWidth
-
-      checkpointBlock.parentSOEBaseHashes.distinct.foreach { h =>
-        tips.get(h).foreach {
-          case TipData(block, numUses) if !reuseTips || numUses >= 2 =>
-            remove(block.baseHash)(dao.metrics)
-          case TipData(block, numUses) if reuseTips && numUses <= 2 =>
-            dao.metrics.incrementMetric("checkpointTipsIncremented")
-            put(block.baseHash, TipData(block, numUses + 1))(dao.metrics)
-        }
-      }
       tips.synchronized {
+        val start = System.currentTimeMillis
+        val reuseTips: Boolean = tips.size < maxWidth
+
+        checkpointBlock.parentSOEBaseHashes.distinct.foreach { h =>
+          tips.get(h).foreach {
+            case TipData(block, numUses) if !reuseTips || numUses >= 2 =>
+              remove(block.baseHash)(dao.metrics)
+            case TipData(block, numUses) if reuseTips && numUses <= 2 =>
+              dao.metrics.incrementMetric("checkpointTipsIncremented")
+              put(block.baseHash, TipData(block, numUses + 1))(dao.metrics)
+          }
+        }
+
+        val elapsed1 = System.currentTimeMillis - start
+        logger.info(s"--- --- TrieBased Elapsed1: ${elapsed1}ms")
+
         if (!CheckpointBlockValidatorNel.isConflictingWithOthers(
-              checkpointBlock,
-              tips.map(_._2.checkpointBlock).toSeq
-            )) {
+          checkpointBlock,
+          tips.map(_._2.checkpointBlock).toSeq
+        )) {
+          val elapsed2 = (System.currentTimeMillis - start)
+          logger.info(s"--- --- TrieBased Elapsed2: ${elapsed2}ms")
           Right(put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics))
         } else {
-          logger.warn(s"Unable to add conflicted checkpoint block: ${checkpointBlock.baseHash}" )
+          logger.warn(s"Unable to add conflicted checkpoint block: ${checkpointBlock.baseHash}")
           conflictingTips.put(checkpointBlock.baseHash, checkpointBlock)
+          val elapsed3 = (System.currentTimeMillis - start)
+          logger.info(s"--- --- TrieBased Elapsed3: ${elapsed3}ms")
           Left(TipConflictException(checkpointBlock))
         }
+
+        Right(put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics))
+
       }
     }
   }

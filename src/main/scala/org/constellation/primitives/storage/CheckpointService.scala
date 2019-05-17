@@ -11,6 +11,8 @@ import org.constellation.primitives._
 import org.constellation.util.MerkleTree
 import swaydb.serializers.Default.StringSerializer
 
+import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
 import scala.concurrent.ExecutionContextExecutor
 
 object CheckpointBlocksOld {
@@ -89,10 +91,11 @@ object CheckpointService {
   def apply(implicit dao: DAO, size: Int = 50000) = new CheckpointService(dao, size)
 
   def convert(merkle: CheckpointCacheMetadata)(implicit dao: DAO): CheckpointCache = {
-    val txs = fetchTransactions(merkle.checkpointBlock.transactionsMerkleRoot)
+    println(s"Convert triggered for: ${merkle.checkpointBlock.baseHash}")
+    val txs =
+      fetchTransactions(merkle.checkpointBlock.transactionsMerkleRoot)
     val msgs =
-      merkle.checkpointBlock.messagesMerkleRoot
-        .fold(Seq[ChannelMessage]())(mr => fetchMessages(mr))
+      merkle.checkpointBlock.messagesMerkleRoot.fold(Seq[ChannelMessage]())(mr => fetchMessages(mr))
     val notifications =
       merkle.checkpointBlock.notificationsMerkleRoot.fold(Seq[PeerNotification]())(mr => fetchNotifications(mr))
     CheckpointCache(
@@ -166,6 +169,8 @@ class CheckpointService(dao: DAO, size: Int = 50000) {
   val midDb: MidDbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksMid(dao)
   val oldDb: DbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksOld(dao)
 
+  val memoizedFullData: TrieMap[String, Option[Schema.CheckpointCache]] = TrieMap.empty
+
   def migrateOverCapacity(): IO[Unit] = {
     midDb
       .pullOverCapacity()
@@ -173,16 +178,24 @@ class CheckpointService(dao: DAO, size: Int = 50000) {
       .map(_ => ())
   }
 
+  def fullData(key: String): Option[Schema.CheckpointCache] = {
+    if (!memoizedFullData.contains(key)) {
+      val full = lookup(key).map(_.map(CheckpointService.convert(_)(dao))).unsafeRunSync()
+      memoizedFullData.update(key, full)
+    }
+    memoizedFullData.get(key).flatten
+  }
+
   def lookup: String => IO[Option[CheckpointCacheMetadata]] =
     DbStorage.extendedLookup[String, CheckpointCacheMetadata](List(memPool, midDb, oldDb))
 
-  def lookupFullData: String => IO[Option[CheckpointCache]] =
-    DbStorage
-      .extendedLookup[String, CheckpointCacheMetadata](List(memPool, midDb, oldDb))
-      .map(_.map(_.map(CheckpointService.convert(_)(dao))))
+//  def lookupFullData: String => IO[Option[CheckpointCache]] =
+//    DbStorage
+//      .extendedLookup[String, CheckpointCacheMetadata](List(memPool, midDb, oldDb))
+//      .map(_.map(_.map(CheckpointService.convert(_)(dao))))
 
   def get(key: String) = lookup(key).unsafeRunSync()
-  def getFullData(key: String) = lookup(key).map(_.map(CheckpointService.convert(_)(dao))).unsafeRunSync()
+  def getFullData(key: String) = fullData(key)
   def contains(key: String) = lookup(key).map(_.nonEmpty).unsafeRunSync()
 
 

@@ -348,13 +348,16 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               dao.externalHostString,
               dao.externalPeerHTTPPort
             )
-            val peerMap = dao.peerInfo.toSeq.map {
-              case (id, pd) => Node(id.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
-            } :+ self
+
+            val peerMap = dao.peerInfoAsync.map {
+              _.toSeq.map {
+                case (id, pd) => Node(id.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
+              } :+ self
+            }
 
             complete(
               Map(
-                "peers" -> peerMap,
+                "peers" -> peerMap.unsafeRunSync(),
                 "transactions" -> txs
               )
             )

@@ -170,7 +170,7 @@ object EdgeProcessor extends StrictLogging {
     ]
   )(implicit dao: DAO, ec: ExecutionContext) = {
 
-    val responses = dao.peerInfo.values.toList.map { peer =>
+    val responses = dao.peerInfoAsync.unsafeRunSync().values.toList.map { peer =>
       wrapFutureWithMetric(
         peer.client.postNonBlocking[FinishedCheckpointAck](
           "finished/checkpoint",
@@ -202,7 +202,7 @@ object EdgeProcessor extends StrictLogging {
     if (transactions.isEmpty) {
       dao.metrics.incrementMetric("attemptFormCheckpointNoTX")
     }
-    val readyFacilitators = dao.readyFacilitators()
+    val readyFacilitators = dao.readyFacilitatorsAsync.unsafeRunSync()
 
     if (readyFacilitators.isEmpty) {
       dao.metrics.incrementMetric("attemptFormCheckpointInsufficientTipsOrFacilitators")

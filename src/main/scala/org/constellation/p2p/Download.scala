@@ -162,7 +162,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .flatMap(_ => IO.sleep(waitForPeersDelay))
 
   private def getReadyPeers() =
-    IO(dao.readyPeers(NodeType.Full))
+    dao.readyPeersAsync(NodeType.Full)
 
   private def getSnapshotClient(peers: Peers) = IO(peers.head._2.client)
 
@@ -229,7 +229,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   private def requestForFaucet: IO[Iterable[Response[String]]] =
     Future
       .sequence(
-        dao.peerInfo
+        dao.peerInfoAsync.unsafeRunSync()
           .map(_._2.client)
           .map(_.post("faucet", SendToAddress(dao.selfAddressStr, 500L)))
       )
@@ -295,7 +295,7 @@ object Download {
 
       // TODO: Move to .lightDownload() from above process, testing separately for now
       // Debug
-      val peer = dao.readyPeers(NodeType.Full).head._2.client
+      val peer = dao.readyPeersAsync(NodeType.Full).unsafeRunSync().head._2.client
 
       val nearbyChannels = peer.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", dao.id)
 

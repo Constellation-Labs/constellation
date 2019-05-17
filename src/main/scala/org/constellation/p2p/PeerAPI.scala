@@ -194,7 +194,7 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
                 optionalHeaderValueByName("ReplyTo") { replyToOpt =>
                   val maybeData = getHostAndPortFromRemoteAddress(ip)
                   val knownHost = maybeData.exists(
-                    i => dao.peerInfo.exists(_._2.client.hostName == i.canonicalHostName)
+                    i => dao.peerInfoAsync.unsafeRunSync().exists(_._2.client.hostName == i.canonicalHostName)
                   )
                   dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
                   EdgeProcessor.handleFinishedCheckpoint(fc).map { result =>
@@ -290,7 +290,7 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
 
     def sameHost(p: PeerData) = p.peerMetadata.host == ip
 
-    dao.peerInfo.find(p => sameHost(p._2)).map(_._1)
+    dao.peerInfoAsync.unsafeRunSync().find(p => sameHost(p._2)).map(_._1)
   }
 
   def exceptionHandler: ExceptionHandler =

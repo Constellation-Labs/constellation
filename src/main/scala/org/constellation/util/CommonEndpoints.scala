@@ -104,7 +104,10 @@ trait CommonEndpoints extends Json4sSupport {
         complete(NodeStateInfo(dao.nodeState, dao.addresses, dao.nodeType))
       } ~
       path("peers") {
-        complete(dao.peerInfo.map { _._2.peerMetadata }.toSeq)
+        val peers = dao.peerInfoAsync.map(_.map(_._2.peerMetadata).toSeq)
+        onComplete(peers.unsafeToFuture) { a =>
+          complete(a.toOption.getOrElse(Seq()))
+        }
       } ~
       path("transaction" / Segment) { h =>
         complete(dao.transactionService.lookup(h).unsafeRunSync())

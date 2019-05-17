@@ -65,12 +65,12 @@ class RoundTest
 
   dao.id shouldReturn daoId
   dao.pullTransactions(checkpointFormationThreshold) shouldReturn Some(Seq(tx1, tx2))
-  dao.readyFacilitators() shouldReturn readyFacilitators
-  dao.peerInfo shouldReturn readyFacilitators
+  dao.readyFacilitatorsAsync shouldReturn IO.pure(readyFacilitators)
+  dao.peerInfoAsync shouldReturn IO.pure(readyFacilitators)
   dao.pullTips(readyFacilitators) shouldReturn Some(tips)
   dao.threadSafeMessageMemPool shouldReturn mock[ThreadSafeMessageMemPool]
   dao.threadSafeMessageMemPool.pull(1) shouldReturn None
-  dao.readyPeers(NodeType.Light) shouldReturn Map()
+  dao.readyPeersAsync(NodeType.Light) shouldReturn IO.pure(Map())
 
   val peerManagerProbe = TestProbe()
   val ipManager = mock[IPManager]
@@ -81,7 +81,7 @@ class RoundTest
   txService.contains shouldReturn (_ => IO.pure(true))
   txService.lookup shouldReturn (_ => IO.pure(None))
   dao.transactionService shouldReturn txService
-  dao.readyPeers shouldReturn readyFacilitators
+  dao.readyPeersAsync shouldReturn IO.pure(readyFacilitators)
 
   val msgService = mock[MessageService]
   msgService.contains shouldReturn (_ => IO.pure(true))
@@ -210,7 +210,7 @@ class RoundTest
   }
 
   test("it should resolve missing transactions on union block proposals step") {
-    dao.readyPeers shouldReturn Map()
+    dao.readyPeersAsync shouldReturn IO.pure(Map())
 
     dao.transactionService.contains shouldReturn ((hash: String) => {
       if (hash == tx3.hash || hash == tx2.hash)
@@ -247,7 +247,7 @@ class RoundTest
   }
 
   test("it should resolve missing messages on union block proposals step") {
-    dao.readyPeers shouldReturn Map()
+    dao.readyPeersAsync shouldReturn IO.pure(Map())
 
     dao.messageService.contains shouldReturn (_ => IO.pure(false))
 

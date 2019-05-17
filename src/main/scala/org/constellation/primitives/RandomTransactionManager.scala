@@ -80,12 +80,12 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 10)(
       {
 
         // Move elsewhere
-        val peerIds = dao.readyPeers.toSeq.filter {
+        val peerIds = dao.readyPeersAsync.unsafeRunSync().toSeq.filter {
           case (_, pd) =>
             pd.peerMetadata.timeAdded < (System
               .currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000)
         }
-        dao.metrics.updateMetric("numPeersOnDAO", dao.peerInfo.size.toString)
+        dao.metrics.updateMetric("numPeersOnDAO", dao.peerInfoAsync.unsafeRunSync().size.toString)
         dao.metrics.updateMetric("numPeersOnDAOThatAreReady", peerIds.size.toString)
 
         if ((peerIds.nonEmpty || dao.nodeConfig.isGenesisNode) && dao.nodeState == NodeState.Ready && dao.generateRandomTX) {
@@ -179,15 +179,16 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 10)(
                   )
                 )
 
-                dao.peerInfo(NodeType.Full)
+                dao.peerInfoAsync(NodeType.Full)
+                  .unsafeRunSync()
                   .values
                   .foreach { peerData ⇒
                     dao.metrics.incrementMetric("transactionPut")
                     peerData.client.put("transaction", tx)
                   }
 
-                if (dao.peerInfo(NodeType.Light).nonEmpty) {
-                  val lightPeerData = dao.peerInfo(NodeType.Light).minBy(p ⇒ Distance.calculate(p._1, dao.id))._2
+                if (dao.peerInfoAsync(NodeType.Light).unsafeRunSync().nonEmpty) {
+                  val lightPeerData = dao.peerInfoAsync(NodeType.Light).unsafeRunSync().minBy(p ⇒ Distance.calculate(p._1, dao.id))._2
                   dao.metrics.incrementMetric("transactionPut")
                   dao.metrics.incrementMetric("transactionPutToLightNode")
                   lightPeerData.client.put("transaction", tx)
