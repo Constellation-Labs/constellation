@@ -4,6 +4,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import better.files.File
 import cats.effect.IO
+import com.google.common.util.concurrent.AtomicDouble
 import com.typesafe.scalalogging.Logger
 import constellation._
 import io.micrometer.core.instrument.Metrics.globalRegistry
@@ -69,7 +70,7 @@ class TransactionRateTracker()(implicit dao: DAO) {
     * @param transactionAccepted: Current number of transactions accepted from stored metrics
     * @return TPS all time and TPS last n seconds in metrics form
     */
-  def calculate(transactionAccepted: Long): Map[String, String] = {
+  def calculate(transactionAccepted: Long): Map[String, Double] = {
     val countAll = transactionAccepted - dao.transactionAcceptedAfterDownload
     val startTime = dao.downloadFinishedTime // metrics.getOrElse("nodeStartTimeMS", "1").toLong
     val deltaStart = System.currentTimeMillis() - startTime
@@ -80,8 +81,8 @@ class TransactionRateTracker()(implicit dao: DAO) {
     lastTXCount = countAll
     lastCheckTime = System.currentTimeMillis()
     Map(
-      "TPS_last_" + dao.nodeConfig.metricIntervalSeconds + "_seconds" -> tps.toString,
-      "TPS_all" -> tpsAll.toString
+      "TPS_last_" + dao.nodeConfig.metricIntervalSeconds + "_seconds" -> tps,
+      "TPS_all" -> tpsAll
     )
   }
 
@@ -99,6 +100,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
 
   private val stringMetrics: TrieMap[String, String] = TrieMap()
   private val countMetrics: TrieMap[String, AtomicLong] = TrieMap()
+  private val doubleMetrics: TrieMap[String, AtomicDouble] = TrieMap()
 
   val rateCounter = new TransactionRateTracker()
 
@@ -116,6 +118,17 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
     import scala.collection.JavaConverters._
     val tags = List(Tag.of("metric", key)).asJava
     globalRegistry.gauge(s"dag_$key", tags, new AtomicLong(0L))
+  }
+
+  // Note: AtomicDouble comes from guava
+  private def guagedAtomicDouble(key: String): AtomicDouble = {
+    import scala.collection.JavaConverters._
+    val tags = List(Tag.of("metric", key)).asJava
+    globalRegistry.gauge(s"dag_$key", tags, new AtomicDouble(0L))
+  }
+
+  def updateMetric(key: String, value: Double): Unit = {
+    doubleMetrics.getOrElse(key, guagedAtomicDouble(key)).set(value)
   }
 
   def updateMetric(key: String, value: String): Unit = {
@@ -143,7 +156,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
     * @return : Key value map of all metrics
     */
   def getMetrics: Map[String, String] = {
-    stringMetrics.toMap ++ countMetrics.toMap.mapValues(_.toString)
+    stringMetrics.toMap ++ countMetrics.toMap.mapValues(_.toString) ++ doubleMetrics.toMap.mapValues(_.toString)
   }
 
   def getCountMetric(key: String): Option[Long] = {

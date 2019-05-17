@@ -316,11 +316,11 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
           snapshot = nextSnapshot
           acceptedCBSinceSnapshot =
             acceptedCBSinceSnapshot.filterNot(hashesForNextSnapshot.contains)
-          dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
-          dao.metrics.updateMetric("lastSnapshotHeight", lastSnapshotHeight.toString)
+          dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size)
+          dao.metrics.updateMetric("lastSnapshotHeight", lastSnapshotHeight)
           dao.metrics.updateMetric(
             "nextSnapshotHeight",
-            (lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval).toString
+            lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval
           )
         }
       }
@@ -352,7 +352,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
           } else {
             acceptedCBSinceSnapshot = acceptedCBSinceSnapshot :+ checkpointBlock.baseHash
             dao.metrics.updateMetric("acceptedCBSinceSnapshot",
-                                     acceptedCBSinceSnapshot.size.toString)
+                                     acceptedCBSinceSnapshot.size)
           }
         }
 
