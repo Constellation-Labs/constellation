@@ -23,9 +23,9 @@ class RewardsTest extends FlatSpec {
   val partitonChart = (0 to 100).map(idx => (idx.toString, Set(idx.toString))).toMap
 
   val thing = r.nextInt(100).toString
-  neighborhoodReputationMatrix.updated(thing, 0.0)//Ensure perfect behavior doesn't throw Nan
+  neighborhoodReputationMatrix.updated(thing, 0.0) // Ensure perfect behavior doesn't throw NaN
 
-  "rewardDuringEpoch" should "return correct $DAG ammount" in {
+  "rewardDuringEpoch" should "return correct $DAG amount" in {
     assert(rewardDuringEpoch(epochOneRandom) === epochOneRewards)
     assert(rewardDuringEpoch(epochTwoRandom) === epochTwoRewards)
     assert(rewardDuringEpoch(epochThreeRandom) === epochThreeRewards)
