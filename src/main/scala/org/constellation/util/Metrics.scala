@@ -113,7 +113,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
 
   // Init
   updateMetric("id", dao.id.hex)
-  val registry = globalRegistry // Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
+  val registry = Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
   updateMetric("nodeState", dao.nodeState.toString)
   updateMetric("address", dao.selfAddressStr)
   updateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
