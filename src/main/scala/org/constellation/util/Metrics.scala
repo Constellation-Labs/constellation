@@ -113,7 +113,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
 
   // Init
   updateMetric("id", dao.id.hex)
-  val registry = Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
+  val registry = globalRegistry // Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
   updateMetric("nodeState", dao.nodeState.toString)
   updateMetric("address", dao.selfAddressStr)
   updateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
@@ -124,14 +124,14 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   private def guagedAtomicLong(key: String): AtomicLong = {
     import scala.collection.JavaConverters._
     val tags = List(Tag.of("metric", key)).asJava
-    globalRegistry.gauge(s"dag_$key", tags, new AtomicLong(0L))
+    registry.gauge(s"dag_$key", tags, new AtomicLong(0L))
   }
 
   // Note: AtomicDouble comes from guava
   private def guagedAtomicDouble(key: String): AtomicDouble = {
     import scala.collection.JavaConverters._
     val tags = List(Tag.of("metric", key)).asJava
-    globalRegistry.gauge(s"dag_$key", tags, new AtomicDouble(0D))
+    registry.gauge(s"dag_$key", tags, new AtomicDouble(0D))
   }
 
   def updateMetric(key: String, value: Double): Unit = {
@@ -151,7 +151,9 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   }
 
   def incrementMetric(key: String): Unit = {
-    micrometerCounter.getOrElseUpdate(s"dag_$key", { registry.counter(s"dag_$key") }).increment()
+    import scala.collection.JavaConverters._
+    val tags = List(Tag.of("metric", key)).asJava
+    micrometerCounter.getOrElseUpdate(s"dag_$key", { registry.counter(s"dag_$key", tags) }).increment()
     countMetrics.getOrElseUpdate(key, new AtomicLong(0L)).getAndUpdate(_ + 1L)
   }
 
