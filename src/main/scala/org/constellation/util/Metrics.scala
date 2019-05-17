@@ -124,11 +124,11 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   private def guagedAtomicDouble(key: String): AtomicDouble = {
     import scala.collection.JavaConverters._
     val tags = List(Tag.of("metric", key)).asJava
-    globalRegistry.gauge(s"dag_$key", tags, new AtomicDouble(0L))
+    globalRegistry.gauge(s"dag_$key", tags, new AtomicDouble(0D))
   }
 
   def updateMetric(key: String, value: Double): Unit = {
-    doubleMetrics.getOrElse(key, guagedAtomicDouble(key)).set(value)
+    doubleMetrics.getOrElseUpdate(key, guagedAtomicDouble(key)).set(value)
   }
 
   def updateMetric(key: String, value: String): Unit = {
@@ -140,7 +140,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   }
 
   def updateMetric(key: String, value: Long): Unit = {
-    countMetrics.getOrElse(key, guagedAtomicLong(key)).set(value)
+    countMetrics.getOrElseUpdate(key, guagedAtomicLong(key)).set(value)
   }
 
   def incrementMetric(key: String): Unit = {
