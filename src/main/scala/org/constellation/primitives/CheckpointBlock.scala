@@ -4,12 +4,10 @@ import java.security.KeyPair
 
 import cats.data.{Ior, NonEmptyList, ValidatedNel}
 import cats.implicits._
-import com.typesafe.scalalogging.StrictLogging
 import constellation.signedObservationEdge
 import org.constellation.DAO
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.storage.StorageService
-import org.constellation.util.{HashSignature, MerkleTree, Metrics}
+import org.constellation.util.{HashSignature, Metrics}
 
 import scala.annotation.tailrec
 

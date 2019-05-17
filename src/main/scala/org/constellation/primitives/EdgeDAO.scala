@@ -261,7 +261,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
             if (snapshot != Snapshot.snapshotZero) {
               logger.info("--------- Snapshot - not zero snapshot")
 
-              dao.metrics.incrementMetric("snapshotCount")
+              dao.metrics.incrementMetric(Metrics.snapshotCount)
 
               // Write snapshot to file
               tryWithMetric(
@@ -337,11 +337,11 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
             acceptedCBSinceSnapshot =
               acceptedCBSinceSnapshot.filterNot(hashesForNextSnapshot.contains)
             dao.metrics.updateMetric("acceptedCBSinceSnapshot",
-                                     acceptedCBSinceSnapshot.size.toString)
-            dao.metrics.updateMetric("lastSnapshotHeight", lastSnapshotHeight.toString)
+                                     acceptedCBSinceSnapshot.size)
+            dao.metrics.updateMetric("lastSnapshotHeight", lastSnapshotHeight)
             dao.metrics.updateMetric(
               "nextSnapshotHeight",
-              (lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval).toString
+              lastSnapshotHeight + dao.processingConfig.snapshotHeightInterval
             )
           }
         }
@@ -372,7 +372,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
               } else {
                 acceptedCBSinceSnapshot = acceptedCBSinceSnapshot :+ cb.baseHash
                 dao.metrics.updateMetric("acceptedCBSinceSnapshot",
-                  acceptedCBSinceSnapshot.size.toString)
+                  acceptedCBSinceSnapshot.size)
               }
             }
             Success(())
