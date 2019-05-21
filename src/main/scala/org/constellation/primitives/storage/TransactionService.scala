@@ -7,9 +7,10 @@ import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
 import org.constellation.datastore.swaydb.SwayDbConversions._
 import org.constellation.primitives.TransactionCacheData
+import org.constellation.util.Periodic
 import swaydb.serializers.Default.StringSerializer
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 object TransactionsOld {
   def apply(dao: DAO) = new TransactionsOld(dao.dbPath)(dao.edgeExecutionContext)
@@ -41,16 +42,14 @@ class TransactionService(dao: DAO, size: Int = 50000) extends MerkleService[Tran
   val merklePool = new StorageService[Seq[String]](size)
   val arbitraryPool = new TransactionMemPool(size)
   val memPool = new TransactionMemPool(size)
-  val midDb = new TransactionMidPool(size)
-  val oldDb = new TransactionOldPool(size)
-//  val midDb: MidDbStorage[String, TransactionCacheData] = TransactionsMid(dao)
-//  val oldDb: DbStorage[String, TransactionCacheData] = TransactionsOld(dao)
+  val midDb: MidDbStorage[String, TransactionCacheData] = TransactionsMid(dao)
+  val oldDb: DbStorage[String, TransactionCacheData] = TransactionsOld(dao)
 
-//  def migrateOverCapacity(): IO[Unit] = {
-//    midDb.pullOverCapacity()
-//      .flatMap(_.map(tx => oldDb.put(tx.transaction.hash, tx)).sequence[IO, Unit])
-//      .map(_ => ())
-//  }
+  def migrateOverCapacity(): IO[Unit] = {
+    midDb.pullOverCapacity()
+      .flatMap(_.map(tx => oldDb.put(tx.transaction.hash, tx)).sequence[IO, Unit])
+      .map(_ => ())
+  }
 
   override def lookup: String => IO[Option[TransactionCacheData]] =
     DbStorage.extendedLookup[String, TransactionCacheData](List(memPool, midDb, oldDb))
@@ -63,3 +62,11 @@ class TransactionService(dao: DAO, size: Int = 50000) extends MerkleService[Tran
     merklePool.get(merkleRoot)
 }
 
+class TransactionPeriodicMigration[T](periodSeconds: Int = 10)(implicit dao: DAO)
+  extends Periodic[Unit]("TransactionPeriodicMigration", periodSeconds) {
+
+  def trigger(): Future[Unit] = {
+    dao.transactionService.migrateOverCapacity()
+      .unsafeToFuture()
+  }
+}
