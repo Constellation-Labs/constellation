@@ -40,7 +40,7 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
 
   def store(cache: TransactionCacheData)(implicit dao: DAO): Unit = {
     // mwadon: What about transactionService?
-      dao.acceptedTransactionService.putSync(this.hash, cache)
+//      dao.acceptedTransactionService.putSync(this.hash, cache)
     }
 
   def valid(implicit dao: DAO): Boolean =

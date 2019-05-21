@@ -129,9 +129,10 @@ object EdgeProcessor extends StrictLogging {
       .map(tx ⇒ (tx, toCacheData(tx)))
       .map {
         case (tx, txMetadata) ⇒
-          dao.transactionService.memPool.remove(tx.hash)
+//          dao.transactionService.memPool.remove(tx.hash)
+        IO.unit
             .flatMap(_ => dao.transactionService.midDb.put(tx.hash, txMetadata))
-            .flatMap(_ => dao.acceptedTransactionService.put(tx.hash, txMetadata))
+//            .flatMap(_ => dao.acceptedTransactionService.put(tx.hash, txMetadata))
             .flatMap(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
             .flatMap(_ => dao.addressService.transfer(tx))
       }
@@ -534,6 +535,7 @@ object Snapshot {
     }
 
     val cbs = cbData.flatten.map(_.checkpointBlock)
+    println(s"------ Accepting snapshot with cbs: ${cbs.size}")
     cbs.foreach { cb =>
       cb.messagesMerkleRoot.map { messagesMerkleRoot =>
         val updates = dao.messageService
@@ -570,7 +572,7 @@ object Snapshot {
         // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
         dao.addressService.transferSnapshot(tx)
           .flatMap(_ => dao.transactionService.memPool.remove(tx.hash))
-          .flatMap(_ => dao.acceptedTransactionService.remove(Set(tx.hash)))
+//          .flatMap(_ => dao.acceptedTransactionService.remove(Set(tx.hash)))
           .flatMap(_ => IO { println(s"------- Should remove tx: ${tx.hash}") })
           .flatTap(_ => dao.metrics.incrementMetricAsync("snapshotAppliedBalance"))
           .unsafeRunSync()

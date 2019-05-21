@@ -133,14 +133,16 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
                                          dao.keyPair,
                                          normalized = false)
               logger.info(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
-              dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
-              dao.transactionService.memPool.putSync(
-                tx.hash,
-                TransactionCacheData(
-                  tx,
-                  inMemPool = true
+              val put = dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
+              if (put) {
+                dao.transactionService.memPool.putSync(
+                  tx.hash,
+                  TransactionCacheData(
+                    tx,
+                    inMemPool = true
+                  )
                 )
-              )
+              }
 
               dao.metrics.incrementMetric("faucetRequest")
 

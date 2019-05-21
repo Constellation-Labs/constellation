@@ -511,15 +511,17 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                                        sendRequest.amountActual,
                                        dao.keyPair,
                                        normalized = false)
-            dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
-
-            dao.transactionService.memPool.putSync(
-              tx.hash,
-              TransactionCacheData(
-                tx,
-                inMemPool = true
+            val put = dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
+            if (put) {
+              dao.transactionService.memPool.putSync(
+                tx.hash,
+                TransactionCacheData(
+                  tx,
+                  inMemPool = true
+                )
               )
-            )
+            }
+
 
             complete(tx.hash)
           }
