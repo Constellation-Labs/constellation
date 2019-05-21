@@ -568,10 +568,10 @@ object Snapshot {
       CheckpointService.fetchTransactions(cb.transactionsMerkleRoot).foreach { tx =>
         // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
         // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
-        dao.addressService
-          .transferSnapshot(tx)
+        dao.addressService.transferSnapshot(tx)
           .flatMap(_ => dao.transactionService.memPool.remove(tx.hash))
           .flatMap(_ => dao.acceptedTransactionService.remove(Set(tx.hash)))
+          .flatMap(_ => IO { println(s"------- Should remove tx: ${tx.hash}") })
           .flatTap(_ => dao.metrics.incrementMetricAsync("snapshotAppliedBalance"))
           .unsafeRunSync()
       }

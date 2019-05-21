@@ -37,7 +37,10 @@ class StorageService[V](size: Int = 50000, expireAfterMinutes: Option[Int] = Non
     getSync(key).map(updateFunc).map { putSync(key, _) }
 
   override def removeSync(keys: Set[String]): Unit =
-    lruCache.invalidateAll(keys)
+    {
+      lruCache.invalidateAll(keys)
+      println(s"--------------- Removing transactions from mem-pool: $keys")
+    }
 
   override def containsSync(key: String): Boolean =
     lruCache.getIfPresent(key).isDefined
