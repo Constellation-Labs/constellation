@@ -30,7 +30,7 @@
   "editable": true,
   "gnetId": 4701,
   "graphTooltip": 1,
-  "iteration": 1558126325053,
+  "iteration": 1558543062766,
   "links": [],
   "panels": [
     {
@@ -85,6 +85,7 @@
           "expr": "dag_TPS_all{application=\"$application\"}",
           "format": "time_series",
           "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -168,6 +169,7 @@
           "expr": "dag_TPS_last_60_seconds{application=\"$application\"}",
           "format": "time_series",
           "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
           "refId": "B"
         }
       ],
@@ -251,6 +253,7 @@
           "expr": "dag_transactionAccepted_total{application=\"$application\"}",
           "format": "time_series",
           "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -334,12 +337,14 @@
           "expr": "dag_acceptCheckpoint_success_total{application=\"$application\"}",
           "format": "time_series",
           "intervalFactor": 1,
+          "legendFormat": "{{instance}}:success",
           "refId": "A"
         },
         {
           "expr": "dag_acceptCheckpoint_failure_total{application=\"$application\"}",
           "format": "time_series",
           "intervalFactor": 1,
+          "legendFormat": "{{instance}}:failure",
           "refId": "B"
         }
       ],
@@ -422,13 +427,16 @@
         {
           "expr": "dag_checkpointBlockFormation_success_total{application=\"$application\"}",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
+          "legendFormat": "{{instance}}:success",
           "refId": "A"
         },
         {
           "expr": "dag_checkpointBlockFormation_failure_total{application=\"$application\"}",
           "format": "time_series",
           "intervalFactor": 1,
+          "legendFormat": "{{instance}}:failure",
           "refId": "B"
         }
       ],
@@ -512,6 +520,7 @@
           "expr": "dag_randomTransactionsGenerated_total{application=\"$application\"}",
           "format": "time_series",
           "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -595,6 +604,7 @@
           "expr": "dag_messageAccepted_total{application=\"$application\"}",
           "format": "time_series",
           "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -678,6 +688,7 @@
           "expr": "dag_lastSnapshotHeight{application=\"$application\"}",
           "format": "time_series",
           "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -3177,7 +3188,7 @@
       "points": false,
       "renderer": "flot",
       "repeat": null,
-      "repeatIteration": 1558126325053,
+      "repeatIteration": 1558543062766,
       "repeatPanelId": 3,
       "scopedVars": {
         "jvm_memory_pool_heap": {
@@ -3319,7 +3330,7 @@
       "points": false,
       "renderer": "flot",
       "repeat": null,
-      "repeatIteration": 1558126325053,
+      "repeatIteration": 1558543062766,
       "repeatPanelId": 3,
       "scopedVars": {
         "jvm_memory_pool_heap": {
@@ -3615,7 +3626,7 @@
       "points": false,
       "renderer": "flot",
       "repeat": null,
-      "repeatIteration": 1558126325053,
+      "repeatIteration": 1558543062766,
       "repeatPanelId": 78,
       "scopedVars": {
         "jvm_memory_pool_nonheap": {
@@ -3757,7 +3768,7 @@
       "points": false,
       "renderer": "flot",
       "repeat": null,
-      "repeatIteration": 1558126325053,
+      "repeatIteration": 1558543062766,
       "repeatPanelId": 78,
       "scopedVars": {
         "jvm_memory_pool_nonheap": {
@@ -4863,8 +4874,8 @@
         "allFormat": "glob",
         "allValue": null,
         "current": {
-          "text": "35.236.108.173:9000",
-          "value": "35.236.108.173:9000"
+          "text": "35.236.119.159:9000",
+          "value": "35.236.119.159:9000"
         },
         "datasource": "ConstellationNode",
         "definition": "",
