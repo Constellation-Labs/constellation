@@ -7,8 +7,9 @@ import cats.implicits._
 import constellation.signedObservationEdge
 import org.constellation.DAO
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.storage.StorageService
-import org.constellation.util.{HashSignature, MerkleTree, Metrics}
+import org.constellation.util.{HashSignature, Metrics}
+
+import scala.annotation.tailrec
 
 
 abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
@@ -56,6 +57,14 @@ case class CheckpointBlock(
       dao.checkpointService.get
     }
 
+    if (parents.exists(_.isEmpty)) {
+      dao.metrics.incrementMetric("heightCalculationParentMissing")
+    } else {
+      dao.metrics.incrementMetric("heightCalculationParentsExist")
+    }
+
+    dao.metrics.incrementMetric("heightCalculationParentLength_" + parents.length)
+
     val maxHeight = if (parents.exists(_.isEmpty)) {
       None
     } else {
@@ -100,14 +109,18 @@ case class CheckpointBlock(
 
   def simpleValidation()(implicit dao: DAO): Boolean = {
 
+    val start = System.currentTimeMillis
     val validation = CheckpointBlockValidatorNel.validateCheckpointBlock(
       CheckpointBlock(transactions, checkpoint)
     )
+    val elapsed = (System.currentTimeMillis - start) / 1000000
+    dao.miscLogger.info(s"--- --- --- Checkpoint block validation: ${elapsed}ms")
 
     if (validation.isValid) {
       dao.metrics.incrementMetric("checkpointValidationSuccess")
     } else {
       dao.metrics.incrementMetric(Metrics.checkpointValidationFailure)
+      dao.miscLogger.error(s"Checkpoint validation failure: $validation")
     }
 
     // TODO: Return Validation instead of Boolean
@@ -173,8 +186,18 @@ case class CheckpointBlock(
 
   def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
 
-  def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
-    parentSOEHashes.flatMap { dao.soeService.getSync }.map { _.signedObservationEdge.baseHash }
+  def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] = {
+//    parentSOEHashes.flatMap(dao.soeService.getSync).map(_.signedObservationEdge.baseHash)
+    parentSOEHashes.flatMap { soeHash =>
+      val parent = dao.soeService.getSync(soeHash)
+
+      if (parent.isEmpty) {
+        dao.metrics.incrementMetric("parentSOEServiceQueryFailed")
+      }
+
+      parent.map(_.signedObservationEdge.baseHash)
+    }
+  }
 
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
@@ -261,15 +284,15 @@ object DuplicatedTransaction {
   def apply(t: Transaction) = new DuplicatedTransaction(t.hash)
 }
 
-case class NoAddressCacheFound(txHash: String) extends CheckpointBlockValidation {
+case class NoAddressCacheFound(txHash: String, srcAddress: String) extends CheckpointBlockValidation {
 
   def errorMessage: String =
-    s"CheckpointBlock includes transaction=$txHash which has no address cache"
+    s"CheckpointBlock includes transaction=$txHash which has no address cache for address=$srcAddress"
 }
 
 object NoAddressCacheFound {
 
-  def apply(t: Transaction) = new NoAddressCacheFound(t.hash)
+  def apply(t: Transaction) = new NoAddressCacheFound(t.hash, t.src.address)
 }
 
 case class InsufficientBalance(address: String) extends CheckpointBlockValidation {
@@ -310,7 +333,7 @@ sealed trait CheckpointBlockValidatorNel {
 
   def validateTransaction(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
     validateTransactionIntegrity(t)
-      .product(validateSourceAddressCache(t))
+//      .product(validateSourceAddressCache(t))
       .map(_ => t)
 
   def validateTransactions(
@@ -375,16 +398,27 @@ sealed trait CheckpointBlockValidatorNel {
 
   type AddressBalance = Map[String, Long]
 
-  def getParents(c: CheckpointBlock)(implicit dao: DAO): List[CheckpointBlock] =
-    c.parentSOEBaseHashes.toList
-      .map(dao.checkpointService.getFullData)
+  def getParents(c: CheckpointBlock)(implicit dao: DAO): List[CheckpointBlock] = {
+    val parentSOEBaseHashes = c.parentSOEBaseHashes.toList
+
+    if (parentSOEBaseHashes.size != 2) {
+      dao.metrics.incrementMetric("validationParentSOEBaseHashesMissing")
+    }
+
+    val fullData = parentSOEBaseHashes.map(dao.checkpointService.getFullData)
+
+    if (fullData.exists(_.isEmpty)) {
+      dao.metrics.incrementMetric("validationParentCBLookupMissing")
+    }
+
+    fullData
       .map(_.flatMap(_.checkpointBlock))
       .sequence[Option, CheckpointBlock]
       .getOrElse(List())
+  }
 
   def isInSnapshot(c: CheckpointBlock)(implicit dao: DAO): Boolean =
-    !dao.threadSafeSnapshotService.acceptedCBSinceSnapshot
-      .contains(c.baseHash)
+    !dao.threadSafeSnapshotService.acceptedCBSinceSnapshot.contains(c.baseHash)
 
   def getSummaryBalance(c: CheckpointBlock)(implicit dao: DAO): AddressBalance = {
     val spend = c.transactions
@@ -443,40 +477,56 @@ sealed trait CheckpointBlockValidatorNel {
 
     val postTreeIgnoreEmptySnapshot =
       if (dao.threadSafeSnapshotService.lastSnapshotHeight == 0) preTreeResult
-      else preTreeResult.product(validateCheckpointBlockTree(cb))
+//      else preTreeResult.product(validateCheckpointBlockTree(cb))
+      else preTreeResult
 
     postTreeIgnoreEmptySnapshot.map(_ => cb)
   }
 
   def getTransactionsTillSnapshot(
     cbs: Seq[CheckpointBlock]
-  )(implicit dao: DAO): Seq[Transaction] = {
+  )(implicit dao: DAO): Seq[String] = {
 
-    def getParentTransactions(parents: Seq[CheckpointBlock],
-                              accu: Seq[Transaction] = Seq.empty,
-                              snapshotReached: Boolean = false): Seq[Transaction] = {
+    @tailrec
+    def getParentTransactions(
+      parents: Seq[CheckpointBlock],
+      accu: Seq[String] = Seq.empty,
+      snapshotReached: Boolean = false
+    ): Seq[String] = {
       parents match {
         case Nil => accu
         case cb :: tail if !snapshotReached && !isInSnapshot(cb) =>
           getParentTransactions(
             tail ++ getParents(cb),
-            accu ++ cb.transactions,
+            accu ++ cb.transactions.map(_.hash),
             isInSnapshot(cb)
           )
         case cb :: tail if snapshotReached || isInSnapshot(cb) =>
           getParentTransactions(
             tail,
-            accu ++ cb.transactions,
+            accu ++ cb.transactions.map(_.hash),
             snapshotReached
           )
       }
     }
-    cbs.filterNot(isInSnapshot(_)).flatMap(cb => getParentTransactions(getParents(cb)))
+
+    cbs.filterNot(isInSnapshot)
+      .flatMap(cb => getParentTransactions(getParents(cb), cb.transactions.map(_.hash)))
   }
 
   def isConflictingWithOthers(cb: CheckpointBlock,
                               others: Seq[CheckpointBlock])(implicit dao: DAO): Boolean = {
-    cb.transactions.intersect(getTransactionsTillSnapshot(others)).nonEmpty
+    val cbs = dao.checkpointService.memPool.cacheSize()
+    val start = System.currentTimeMillis
+    val startTimer = dao.metrics.startTimer
+    val result = false
+//    val result = cb.transactions.map(_.hash).intersect(getTransactionsTillSnapshot(others)).nonEmpty
+
+    val stop = System.currentTimeMillis
+    dao.metrics.stopTimer("isConflictingWithOthers", startTimer)
+    println(s"isConflictingWithOthers - elapsed: ${stop - start}ms for cbs: $cbs")
+
+    result
   }
 
   def detectInternalTipsConflict(

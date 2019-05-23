@@ -8,7 +8,9 @@ import constellation._
 import org.constellation.crypto.KeyUtils.makeKeyPair
 import org.constellation.primitives.Schema.{CheckpointCache, Height, SignedObservationEdge}
 import org.constellation.primitives._
+import org.constellation.util.Metrics
 import org.constellation.{DAO, PeerMetadata}
+import org.mockito.Mockito.doNothing
 import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 
@@ -133,6 +135,7 @@ class CheckpointServiceTest
     val f = File(s"tmp/${kp.getPublic.toId.medium}/db")
     f.createDirectoryIfNotExists()
     dao.dbPath shouldReturn f
+
     val ec = ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
     dao.edgeExecutionContext shouldReturn ec
     val cs = new CheckpointService(dao)
@@ -149,6 +152,10 @@ class CheckpointServiceTest
 
     val ts = new TransactionService(dao)
     dao.transactionService shouldReturn ts
+
+    val metrics = mock[Metrics]
+    doNothing().when(metrics).incrementMetric(*)
+    dao.metrics shouldReturn metrics
 
     dao
   }

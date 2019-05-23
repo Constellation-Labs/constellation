@@ -232,7 +232,9 @@ class ConstellationNode(
     crossTalkConsensusActor
   )
 
-  val snapshotTrigger = new SnapshotTrigger()
+  val snapshotTrigger = new SnapshotTrigger(
+    dao.processingConfig.snapshotTriggeringTimeSeconds
+  )
 
   val ipManager = IPManager()
 
@@ -260,7 +262,10 @@ class ConstellationNode(
     Http().bindAndHandle(routes, nodeConfig.httpInterface, nodeConfig.httpPort)
 
   val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
-  val randomTXManager = new RandomTransactionManager(crossTalkConsensusActor)
+  val randomTXManager = new RandomTransactionManager(
+    crossTalkConsensusActor,
+    dao.processingConfig.randomTransactionLoopTimeSeconds
+  )
 
   def getIPData: ValidPeerIPData = {
     ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)

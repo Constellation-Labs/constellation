@@ -144,7 +144,10 @@ trait Genesis extends NodeData with EdgeDAO {
     dao.metrics.updateMetric("genesisAccepted", "true")
     //   metricsManager ! UpdateMetric("z_genesisBlock", go.json)
     if (setAsTips) {
-      dao.concurrentTipService.put(go)(dao.metrics)
+      List(go.initialDistribution, go.initialDistribution2)
+        .map(dao.concurrentTipService.update)
+        .sequence
+        .unsafeRunSync()
     }
     dao.metrics.updateMetric("genesisHash", go.genesis.soeHash)
     // println(s"accept genesis = ", go)

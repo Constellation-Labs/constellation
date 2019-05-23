@@ -3,12 +3,14 @@ package org.constellation.primitives.storage
 import better.files.File
 import cats.effect.IO
 import cats.implicits._
+import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
 import org.constellation.datastore.swaydb.SwayDbConversions._
 import org.constellation.primitives.TransactionCacheData
+import org.constellation.util.Periodic
 import swaydb.serializers.Default.StringSerializer
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 object TransactionsOld {
   def apply(dao: DAO) = new TransactionsOld(dao.dbPath)(dao.edgeExecutionContext)
@@ -27,13 +29,16 @@ class TransactionsMid(path: File, midCapacity: Int)(implicit ec: ExecutionContex
   extends MidDbStorage[String, TransactionCacheData](dbPath = (path / "disk1" / "transactions_mid").path, midCapacity)
 
 
-class TransactionMemPool(size: Int = 50000) extends StorageService[TransactionCacheData](size)
+class TransactionMemPool(size: Int = 50000) extends StorageService[TransactionCacheData](size, Some(45))
 
 object TransactionService {
   def apply(implicit dao: DAO, size: Int = 50000) = new TransactionService(dao, size)
 }
 
-class TransactionService(dao: DAO, size: Int = 50000) extends MerkleService[TransactionCacheData]{
+class TransactionMidPool(size: Int = 50000) extends TransactionMemPool(size)
+class TransactionOldPool(size: Int = 50000) extends TransactionMemPool(size)
+
+class TransactionService(dao: DAO, size: Int = 50000) extends MerkleService[TransactionCacheData] with StrictLogging {
   val merklePool = new StorageService[Seq[String]](size)
   val arbitraryPool = new TransactionMemPool(size)
   val memPool = new TransactionMemPool(size)
@@ -49,6 +54,7 @@ class TransactionService(dao: DAO, size: Int = 50000) extends MerkleService[Tran
   override def lookup: String => IO[Option[TransactionCacheData]] =
     DbStorage.extendedLookup[String, TransactionCacheData](List(memPool, midDb, oldDb))
 
+
   def contains: String ⇒ IO[Boolean] =
     DbStorage.extendedContains[String, TransactionCacheData](List(memPool, midDb, oldDb))
 
@@ -56,3 +62,11 @@ class TransactionService(dao: DAO, size: Int = 50000) extends MerkleService[Tran
     merklePool.get(merkleRoot)
 }
 
+class TransactionPeriodicMigration[T](periodSeconds: Int = 10)(implicit dao: DAO)
+  extends Periodic[Unit]("TransactionPeriodicMigration", periodSeconds) {
+
+  def trigger(): Future[Unit] = {
+    dao.transactionService.migrateOverCapacity()
+      .unsafeToFuture()
+  }
+}

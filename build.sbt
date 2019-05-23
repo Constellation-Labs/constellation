@@ -1,10 +1,11 @@
 import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 import sbt.Keys.mainClass
 
-enablePlugins(JavaAppPackaging)
+enablePlugins(JavaAgent, JavaAppPackaging)
 //addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 
 scalacOptions := Seq("-Ypartial-unification", "-unchecked", "-deprecation")
+javaAgents += "org.aspectj" % "aspectjweaver" % "1.9.4" % "runtime"
 
 // javacOptions := Seq("-XX:MaxMetaspaceSize=256m")
 
@@ -97,6 +98,7 @@ lazy val coreDependencies = Seq(
   "com.twitter" %% "storehaus-cache" % "0.15.0",
   "io.swaydb" %% "swaydb" % "0.7.1",
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
+  "io.kontainers" %% "micrometer-akka" % "0.10.1",
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus,
   "io.prometheus" % "simpleclient_caffeine" % versions.prometheus,
