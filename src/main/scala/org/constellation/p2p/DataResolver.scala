@@ -16,7 +16,7 @@ class DataResolver extends StrictLogging {
     hash: String,
     priorityClient: Option[PeerApiClient] = None
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[ChannelMessageMetadata]] = {
-    resolveMessages(hash, getReadyPeers(dao),priorityClient)
+    resolveMessages(hash, getReadyPeers(dao), priorityClient)
   }
 
   def resolveMessages(
@@ -66,20 +66,30 @@ class DataResolver extends StrictLogging {
         case _ if errorsSoFar >= maxErrors =>
           IO.raiseError(DataResolutionMaxErrors(endpoint, hash))
         case Nil =>
-          IO.raiseError(DataResolutionOutOfPeers(dao.id.short, endpoint,hash, sortedPeers.map(_.id.short)))
+          IO.raiseError(
+            DataResolutionOutOfPeers(dao.id.short, endpoint, hash, sortedPeers.map(_.id.short))
+          )
         case head :: tail =>
-          val q = getData[T](hash, endpoint, head, store)
-            q.handleErrorWith {
+          getData[T](hash, endpoint, head, store)
+            .handleErrorWith {
               case e if tail.isEmpty => IO.raiseError(e)
-              case e                 => logger.error(s"Failed to resolve with host=${head.client.hostPortForLogging}, trying next peer", e)
-                                        makeAttempt(tail, errorsSoFar + 1)
+              case e =>
+                logger.error(
+                  s"Failed to resolve with host=${head.client.hostPortForLogging}, trying next peer",
+                  e
+                )
+                makeAttempt(tail, errorsSoFar + 1)
             }
             .flatTap(_.map(storeIO).getOrElse(IO.unit))
             .flatMap { response =>
               if (response.isEmpty) {
-                logger.warn(s"Empty response resolving with host=${head.client.hostPortForLogging}, trying next peer")
+                logger.warn(
+                  s"Empty response resolving with host=${head.client.hostPortForLogging}, trying next peer"
+                )
                 makeAttempt(tail, errorsSoFar + 1)
-              } else { IO.pure(response) }
+              } else {
+                IO.pure(response)
+              }
             }
       }
     }
@@ -92,8 +102,8 @@ class DataResolver extends StrictLogging {
     peerApiClient: PeerApiClient,
     store: T => Any
   )(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[Option[T]] = {
-      peerApiClient.client
-        .getNonBlockingIO[Option[T]](s"$endpoint/$hash", timeout = apiTimeout)
+    peerApiClient.client
+      .getNonBlockingIO[Option[T]](s"$endpoint/$hash", timeout = apiTimeout)
   }
 
   def resolveTransactionsDefaults(
@@ -180,7 +190,10 @@ class DataResolver extends StrictLogging {
 
 object DataResolver extends DataResolver
 
-case class DataResolutionOutOfPeers(thisNode: String, endpoint: String,hash: String, peers: Iterable[String])
+case class DataResolutionOutOfPeers(thisNode: String,
+                                    endpoint: String,
+                                    hash: String,
+                                    peers: Iterable[String])
     extends Exception(
       s"node [${thisNode}] Run out of peers when resolving: $endpoint with hash: $hash following tried: $peers"
     )
