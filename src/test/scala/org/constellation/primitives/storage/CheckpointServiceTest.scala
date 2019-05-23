@@ -40,7 +40,7 @@ class CheckpointServiceTest
                                                               prepareNotifications())
 
     val cbProposalCache = CheckpointCache(Some(cbProposal), 3, Some(Height(2, 4)))
-    dao.checkpointService.memPool.putSync(cbProposal.baseHash, cbProposalCache)
+    dao.checkpointService.memPool.put(cbProposal.baseHash, cbProposalCache).unsafeRunSync()
 
     val storedCB = dao.checkpointService.memPool.getSync(cbProposal.baseHash).get
 
@@ -88,7 +88,7 @@ class CheckpointServiceTest
     val cbProposal = CheckpointBlock.createCheckpointBlockSOE(txs, Seq(soe), msgs, notifics)
 
     val cbProposalCache = CheckpointCache(Some(cbProposal), 3, Some(Height(2, 4)))
-    dao.checkpointService.memPool.putSync(cbProposal.baseHash, cbProposalCache)
+    dao.checkpointService.memPool.put(cbProposal.baseHash, cbProposalCache).unsafeRunSync()
     cbProposalCache
   }
 

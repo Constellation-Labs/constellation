@@ -95,7 +95,7 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockitoFixture with Match
 
   def createShiftedTasks(
     cbs: List[CheckpointBlock],
-    func: CheckpointBlock => IO[Either[TipConflictException, Option[TipData]]]
+    func: CheckpointBlock => IO[Option[TipData]]
   ) =
     cbs.map(IO.shift *> func(_))
 

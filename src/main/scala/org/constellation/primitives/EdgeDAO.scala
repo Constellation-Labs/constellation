@@ -6,7 +6,6 @@ import akka.util.Timeout
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.{Logger, StrictLogging}
-import org.constellation.consensus.EdgeProcessor.acceptCheckpoint
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.storage._
@@ -15,7 +14,7 @@ import org.constellation.{DAO, NodeConfig, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 class ThreadSafeTXMemPool() {
 
@@ -166,8 +165,9 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
       (latestSnapshotInfo.snapshotCache ++ latestSnapshotInfo.acceptedCBSinceSnapshotCache)
         .foreach { h =>
-          dao.checkpointService.memPool.putSync(h.checkpointBlock.get.baseHash, h)
-          h.checkpointBlock.get.storeSOE()
+          // TODO: wkoszycki revisit it should call accept method instead
+          dao.checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h).unsafeRunSync()
+          h.checkpointBlock.get.storeSOE().unsafeRunSync()
           dao.metrics.incrementMetric(Metrics.checkpointAccepted)
           h.checkpointBlock.get.transactions.foreach { _ =>
             dao.metrics.incrementMetric("transactionAccepted")
@@ -350,43 +350,147 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
   implicit val shift: ContextShift[IO] =
     IO.contextShift(scala.concurrent.ExecutionContext.Implicits.global)
+  def accept(checkpoint: CheckpointCache)(implicit dao: DAO): IO[Unit] = {
 
-  def accept(checkpoint: CheckpointCache)(implicit dao: DAO): Try[Unit] = {
-
-    checkpoint.checkpointBlock match {
-      case None => Failure(MissingCheckpointBlockException)
+    val acceptCheckpoint: IO[Unit] = checkpoint.checkpointBlock match {
+      case None => IO.raiseError(MissingCheckpointBlockException)
 
       case Some(cb) if dao.checkpointService.contains(cb.baseHash) =>
-        dao.metrics.incrementMetric("checkpointAcceptBlockAlreadyStored")
-        Failure(CheckpointAcceptBlockAlreadyStored)
+        for {
+        _ <- dao.metrics.incrementMetricAsync("checkpointAcceptBlockAlreadyStored")
+        _ <- IO.raiseError(CheckpointAcceptBlockAlreadyStored)
+      } yield ()
 
       case Some(cb) =>
-        tryWithMetric(acceptCheckpoint(checkpoint), "acceptCheckpoint")
-        concurrentTipService.update(cb).unsafeRunSync() match {
-          case Right(_) =>
-            acceptedCBSinceSnapshot.synchronized {
-              if (acceptedCBSinceSnapshot.contains(cb.baseHash)) {
-                (IO.shift *> dao.metrics.incrementMetricAsync(
-                  "checkpointAcceptedButAlreadyInAcceptedCBSinceSnapshot"
-                )).unsafeRunAsyncAndForget()
-              } else {
-                acceptedCBSinceSnapshot = acceptedCBSinceSnapshot :+ cb.baseHash
-                dao.metrics.updateMetric("acceptedCBSinceSnapshot",
-                  acceptedCBSinceSnapshot.size)
-              }
-            }
-            Success(())
-          case Left(err) =>
-            logger.error(s"Unable to accept checkpoint due to: ${err.getMessage}", err)
+        for {
+          conflicts <- CheckpointBlockValidatorNel.containsAlreadyAcceptedTx(cb)
+          _ <- conflicts match {
+            case Nil => IO.unit
+            case _ =>
+              concurrentTipService
+                .putConflicting(cb.baseHash, cb)
+                .flatMap(_ => IO.raiseError(TipConflictException(cb, conflicts)))
+          }
+          _ <- cb.storeSOE()
+          maybeHeight <- calculateHeight(checkpoint)
+          metricKey = if (maybeHeight.isEmpty) Metrics.heightEmpty else Metrics.heightNonEmpty
+          _ <- dao.metrics.incrementMetricAsync(metricKey)
+          _ <- dao.checkpointService.memPool.put(cb.baseHash, checkpoint.copy(height = maybeHeight))
+          _ <- IO.delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
+          _ <- acceptMessages(cb)
+          _ <- acceptTransactions(cb)
+          _ = logger.info(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}]")
+          _ <- concurrentTipService.update(cb)
+          _ <- updateAcceptedCBSinceSnapshot(cb)
+          _ <- IO.shift *> dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted)
+        } yield ()
 
-            (IO.shift *> dao.metrics.incrementMetricAsync("acceptedCBSinceSnapshotFailure"))
-              .unsafeRunAsyncAndForget()
-            Failure(err)
-
-        }
     }
-
+    acceptCheckpoint.recoverWith {
+      case err =>
+        IO.shift *> dao.metrics.incrementMetricAsync("acceptCheckpoint_failure")
+        IO.raiseError(err) //propagate to upper levels
+    }
   }
+
+  private def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock)(implicit dao: DAO): IO[Unit] = {
+    IO {
+      acceptedCBSinceSnapshot.synchronized {
+        if (acceptedCBSinceSnapshot.contains(cb.baseHash)) {
+          dao.metrics.incrementMetric(
+            "checkpointAcceptedButAlreadyInAcceptedCBSinceSnapshot"
+          )
+        } else {
+          acceptedCBSinceSnapshot = acceptedCBSinceSnapshot :+ cb.baseHash
+          dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size)
+        }
+      }
+    }
+  }
+
+  private def calculateHeight(
+    checkpointCacheData: CheckpointCache
+  )(implicit dao: DAO): IO[Option[Height]] = {
+    IO {
+      checkpointCacheData.checkpointBlock.flatMap { cb =>
+        cb.calculateHeight() match {
+          case None       => checkpointCacheData.height
+          case calculated => calculated
+        }
+      }
+    }
+  }
+
+  private def acceptMessages(cb: CheckpointBlock)(implicit dao: DAO): IO[List[Unit]] = {
+    cb.messages
+      .map { m =>
+        val channelMessageMetadata = ChannelMessageMetadata(m, Some(cb.baseHash))
+        val messageUpdate =
+          if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
+            for {
+              _ <- dao.messageService.memPool.put(
+                m.signedMessageData.data.channelId,
+                channelMessageMetadata
+              )
+              _ <- dao.channelService.update(
+                m.signedMessageData.hash, { cmd =>
+                  val slicedMessages = cmd.last25MessageHashes.slice(0, 25)
+                  cmd.copy(
+                    totalNumMessages = cmd.totalNumMessages + 1,
+                    last25MessageHashes = Seq(m.signedMessageData.hash) ++ slicedMessages
+                  )
+                }
+              )
+            } yield ()
+          } else { // Unsafe json extract
+            dao.channelService.put(
+              m.signedMessageData.hash,
+              ChannelMetadata(
+                m.signedMessageData.data.message.x[ChannelOpen],
+                channelMessageMetadata
+              )
+            )
+          }
+
+        for {
+          _ <- messageUpdate
+          _ <- dao.messageService.memPool
+            .put(m.signedMessageData.hash, channelMessageMetadata)
+          _ <- dao.metrics.incrementMetricAsync("messageAccepted")
+        } yield ()
+      }
+      .toList
+      .sequence
+  }
+
+  private def acceptTransactions(cb: CheckpointBlock)(implicit dao: DAO): IO[Unit] = {
+    def toCacheData(tx: Transaction) = TransactionCacheData(
+      tx,
+      valid = true,
+      inMemPool = false,
+      inDAG = true,
+      Map(cb.baseHash -> true),
+      resolved = true,
+      cbBaseHash = Some(cb.baseHash)
+    )
+
+    logger.info(s"Accepting transactions ${cb.transactions.size}")
+
+    cb.transactions.toList
+      .map(tx ⇒ (tx, toCacheData(tx)))
+      .map {
+        case (tx, txMetadata) ⇒
+          //          dao.transactionService.memPool.remove(tx.hash)
+          IO.unit
+            .flatMap(_ => dao.transactionService.midDb.put(tx.hash, txMetadata))
+            //            .flatMap(_ => dao.acceptedTransactionService.put(tx.hash, txMetadata))
+            .flatMap(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
+            .flatMap(_ => dao.addressService.transfer(tx))
+      }
+      .sequence[IO, AddressCacheData]
+      .map(_ ⇒ ())
+  }
+
 }
 
 trait EdgeDAO {

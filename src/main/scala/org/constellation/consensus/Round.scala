@@ -5,26 +5,16 @@ import cats.effect.IO
 import cats.implicits._
 import constellation.{wrapFutureWithMetric, _}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{
-  BroadcastLightTransactionProposal,
-  BroadcastSelectedUnionBlock,
-  BroadcastUnionBlockProposal
-}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{
-  CheckpointCache,
-  EdgeHashType,
-  SignedObservationEdge,
-  TypedEdgeHash
-}
+import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, PeerApiClient}
+import org.constellation.util.PeerApiClient
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
-import scala.util.{Failure, Success}
 
 class Round(roundData: RoundData,
             arbitraryTransactions: Seq[(Transaction, Int)],
@@ -329,14 +319,19 @@ class Round(roundData: RoundData,
       log.debug(s"[${dao.id.short}] accepting majority checkpoint block ${checkpointBlock.baseHash}  " +
         s" with txs ${checkpointBlock.transactions.map(_.hash)} " +
         s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId}")
-      dao.threadSafeSnapshotService.accept(cache) match {
-        case Success(_) =>
-          broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, finalFacilitators))
-          Some(checkpointBlock)
-        case Failure(err) =>
-          log.error(s"Failed to accept majority checkpoint block due to: ${err.getMessage}", err)
-          None
+      dao.threadSafeSnapshotService
+      .accept(cache)
+      .map { _ =>
+        broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, finalFacilitators))
+        Option(checkpointBlock)
       }
+      .recoverWith {
+        case err =>
+          log.error(s"Failed to accept majority checkpoint block due to: ${err.getMessage}", err)
+          IO.delay(None)
+      }
+      .unsafeRunSync()
+
 
     } else None
 

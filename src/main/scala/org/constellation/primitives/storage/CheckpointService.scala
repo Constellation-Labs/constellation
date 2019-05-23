@@ -41,13 +41,13 @@ class CheckpointBlocksMid(path: File, midCapacity: Int)(implicit ec: ExecutionCo
 class CheckpointBlocksMemPool(size: Int = 50000)(implicit dao: DAO)
     extends StorageService[CheckpointCacheMetadata](size, Some(45)) {
 
-  def putSync(
+  def put(
     key: String,
     value: CheckpointCache
-  ): CheckpointCacheMetadata = {
+  ): IO[CheckpointCacheMetadata] = {
     value.checkpointBlock.foreach(cb => incrementChildrenCount(cb.parentSOEBaseHashes()))
 
-    super.putSync(
+    super.put(
       key,
       CheckpointCacheMetadata(storeMerkleRoots(value.checkpointBlock.get), value.children, value.height)
     )
