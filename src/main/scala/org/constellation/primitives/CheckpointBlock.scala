@@ -3,6 +3,7 @@ package org.constellation.primitives
 import java.security.KeyPair
 
 import cats.data.{Ior, NonEmptyList, ValidatedNel}
+import cats.effect.IO
 import cats.implicits._
 import constellation.signedObservationEdge
 import org.constellation.DAO
@@ -514,19 +515,28 @@ sealed trait CheckpointBlockValidatorNel {
       .flatMap(cb => getParentTransactions(getParents(cb), cb.transactions.map(_.hash)))
   }
 
-  def isConflictingWithOthers(cb: CheckpointBlock,
-                              others: Seq[CheckpointBlock])(implicit dao: DAO): Boolean = {
+  def containsAlreadyAcceptedTx(cb: CheckpointBlock)(implicit dao: DAO): IO[List[String]] = {
     val cbs = dao.checkpointService.memPool.cacheSize()
     val start = System.currentTimeMillis
     val startTimer = dao.metrics.startTimer
-    val result = false
-//    val result = cb.transactions.map(_.hash).intersect(getTransactionsTillSnapshot(others)).nonEmpty
+    val containsAccepted = dao.acceptedTransactionService.synchronized {
+      cb.transactions
+        .map(
+          t =>
+            dao.acceptedTransactionService
+              .contains(t.hash)
+              .map(b => (t.hash, b))
+        )
+        .toList
+        .sequence
+        .map(l => l.collect { case (h, true) => h })
+    }
 
     val stop = System.currentTimeMillis
     dao.metrics.stopTimer("isConflictingWithOthers", startTimer)
     println(s"isConflictingWithOthers - elapsed: ${stop - start}ms for cbs: $cbs")
 
-    result
+    containsAccepted
   }
 
   def detectInternalTipsConflict(
