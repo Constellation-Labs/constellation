@@ -1,7 +1,7 @@
 package org.constellation.trust
 import scala.util.Random
 
-case class TrustEdge(src: Int, dst: Int, trust: Double) {
+case class TrustEdge(src: Int, dst: Int, trust: Double, isLabel: Boolean = false) {
   def other(id: Int): Int = Seq(src, dst).filterNot(_ == id).head
 }
 
@@ -14,6 +14,8 @@ case class TrustNode(id: Int, xCoordinate: Double, yCoordinate: Double, edges: S
   } / TrustRank.sqrt2
 
   def positiveEdges: Seq[TrustEdge] = edges.filter(_.trust > 0)
+  def negativeEdges: Seq[TrustEdge] = edges.filter(_.trust < 0)
+
   def normalizedPositiveEdges(visited: Set[Int]): Map[Int, Double] = {
     val positiveSubset = positiveEdges.filterNot{ e => visited.contains(e.dst)}
     if (positiveSubset.isEmpty) Map.empty[Int, Double] else {
@@ -30,9 +32,9 @@ case class TrustNode(id: Int, xCoordinate: Double, yCoordinate: Double, edges: S
 
 object DataGeneration {
 
-  def generateTestData(): List[TrustNode] = {
+  def generateTestData(numNodes: Int = 30): List[TrustNode] = {
 
-    val nodes = (0 until 30).toList.map{ id =>
+    val nodes = (0 until numNodes).toList.map{ id =>
       TrustNode(id, Random.nextDouble(), Random.nextDouble())
     }
 

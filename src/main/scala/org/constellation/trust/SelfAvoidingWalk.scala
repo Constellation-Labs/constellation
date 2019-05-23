@@ -142,6 +142,68 @@ object SelfAvoidingWalk {
     reweightEdges(walkProbability, nodes.map{n => n.id -> n}.toMap)
   }
 
+  def runWalkBatchesFeedback(
+                      selfId: Int,
+                      nodes: Seq[TrustNode],
+                      batchIterationSize : Int = 10000,
+                      epsilon: Double = 1e-6,
+                      maxIterations: Int = 100
+                    ): Seq[TrustNode] = {
+
+    var walkScores = runWalkRaw(selfId, nodes, batchIterationSize)
+    var walkProbability = normalizeScores(walkScores)
+
+    var merged = walkScores
+
+    var delta = Double.MaxValue
+    var iterationNum = 0
+
+
+    while (delta > epsilon && iterationNum < maxIterations) {
+
+      val batchScores = runWalkRaw(selfId, nodes, batchIterationSize)
+      merged = walkScores.zip(batchScores).map{case (s1, s2) => s1 + s2}
+      val renormalized = normalizeScores(merged)
+      delta = renormalized.zip(walkProbability).map{case (s1, s2) => Math.pow(Math.abs(s1 - s2), 2)}.sum
+      iterationNum += 1
+      walkScores = merged
+      walkProbability = renormalized
+      println(s"Batch number $iterationNum with delta $delta")
+    }
+
+    val selfNode = nodes.filter{_.id == selfId}.head
+    val others = nodes.filterNot{_.id == selfId}.map{o => o.id -> o}.toMap
+
+    val negativeScores = merged.zipWithIndex.filterNot{_._2 == selfId}.flatMap{ case (score, id) =>
+      val other = others(id)
+      val negativeEdges = other.negativeEdges
+      negativeEdges.filterNot{_.dst == selfId}.map{ ne =>
+        ne.dst -> (ne.trust * score / negativeEdges.size)
+      }
+    }.groupBy(_._1).mapValues(_.map{_._2}.sum)
+
+    negativeScores.foreach{ case (id, negScore) =>
+      merged(id) += negScore
+    }
+
+    val labelEdges = selfNode.edges.filter(_.isLabel)
+    val labelDst = labelEdges.map{_.dst}
+
+    val renormalizedAfterNegative = normalizeScores(merged).zipWithIndex.filterNot{
+      case (score, id) => labelDst.contains(id)
+    }
+
+    val newEdges = renormalizedAfterNegative.map{ case (score, id) =>
+      TrustEdge(selfId, id, score)
+    }
+
+    val updatedSelfNode = selfNode.copy(
+      edges = labelEdges ++ newEdges
+    )
+    others.values.toSeq :+ updatedSelfNode
+  }
+
+
   def reweightEdges(
                      walkProbability: Array[Double],
                      nodeMap: Map[Int, TrustNode]
@@ -211,18 +273,17 @@ object SelfAvoidingWalk {
   def runWalkFeedbackUpdateSingleNode(
                selfId: Int,
                nodes: Seq[TrustNode],
-               batchIterationSize : Int = 10000,
-               epsilon: Double = 1e-6,
+               batchIterationSize : Int = 5000,
+               epsilon: Double = 1e-5,
                maxIterations: Int = 100,
-               feedbackCycles: Int = 5
+               feedbackCycles: Int = 3
              ): TrustNode = {
 
-    var prevEdges = runWalkBatches(selfId, nodes, batchIterationSize, epsilon, maxIterations)
     var nodesCycle = nodes
 
     (0 until feedbackCycles).foreach{ cycle =>
-        prevEdges = runWalkBatches(selfId, nodesCycle, batchIterationSize, epsilon, maxIterations)
-        nodesCycle = updateNodeIn(selfId, nodesCycle, prevEdges)
+        println(s"feedback cycle $cycle for node $selfId")
+        nodesCycle = runWalkBatchesFeedback(selfId, nodes, batchIterationSize, epsilon, maxIterations)
     }
 
     nodesCycle.filter(_.id == selfId).head

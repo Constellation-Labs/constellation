@@ -47,9 +47,9 @@ class TrustTest extends FlatSpec {
 
   "Random nodes and edges" should "defend small attack with feedback" in {
 
-    var nodesWithEdges = DataGeneration.generateTestData()
+    var nodesWithEdges = DataGeneration.generateTestData(15)
 
-    val iterations = 5
+    val iterations = 3
 
     (0 until iterations).foreach{ i =>
 
@@ -60,7 +60,7 @@ class TrustTest extends FlatSpec {
 
     }
 
-    val badNodes = Random.shuffle(nodesWithEdges).take(5)
+    val badNodes = Random.shuffle(nodesWithEdges).take(3)
 
     val goodNodes = nodesWithEdges.filterNot(badNodes.map{_.id}.contains)
 
