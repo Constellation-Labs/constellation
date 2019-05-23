@@ -87,10 +87,9 @@ class TrieBasedTipService(sizeLimit: Int,
         val elapsed1 = System.currentTimeMillis - start
         logger.info(s"--- --- TrieBased Elapsed1: ${elapsed1}ms")
 
-        if (!CheckpointBlockValidatorNel.isConflictingWithOthers(
+        if (CheckpointBlockValidatorNel.containsAlreadyAcceptedTx(
           checkpointBlock,
-          tips.map(_._2.checkpointBlock).toSeq
-        )) {
+        ).unsafeRunSync().isEmpty) {
           val elapsed2 = (System.currentTimeMillis - start)
           logger.info(s"--- --- TrieBased Elapsed2: ${elapsed2}ms")
           Right(put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics))
@@ -101,8 +100,6 @@ class TrieBasedTipService(sizeLimit: Int,
           logger.info(s"--- --- TrieBased Elapsed3: ${elapsed3}ms")
           Left(TipConflictException(checkpointBlock))
         }
-
-        Right(put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics))
 
       }
     }

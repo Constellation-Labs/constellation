@@ -11,12 +11,9 @@ import constellation.createTransaction
 import org.constellation.consensus.{EdgeProcessor, RandomData, Snapshot, SnapshotInfo}
 import org.constellation.primitives.CheckpointBlockValidatorNel._
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, Id}
-import org.constellation.primitives.storage.CheckpointService
+import org.constellation.primitives.storage.{AcceptedTransactionService, CheckpointBlocksMemPool, CheckpointService}
 import org.constellation.util.{HashSignature, Metrics}
-import org.constellation.{DAO, Fixtures, NodeConfig}
-import org.mockito.ArgumentMatchers._
-import org.mockito.Mockito
-import org.mockito.Mockito._
+import org.constellation.{DAO, NodeConfig}
 import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{mock => _, _}
@@ -39,9 +36,13 @@ class CheckpointBlockValidatorNelTest
   val rightParent: CheckpointBlock = mock[CheckpointBlock]
 
   val tx1: Transaction = mock[Transaction]
+  tx1.hash shouldReturn "tx1"
   val tx2: Transaction = mock[Transaction]
+  tx2.hash shouldReturn "tx2"
   val tx3: Transaction = mock[Transaction]
+  tx3.hash shouldReturn "tx3"
   val tx4: Transaction = mock[Transaction]
+
 
   before {
     leftBlock.baseHash shouldReturn "block1"
@@ -64,6 +65,10 @@ class CheckpointBlockValidatorNelTest
 
     checkpointService.getFullData(rightParent.baseHash) shouldReturn Some(CheckpointCache(Some(rightParent)))
     checkpointService.getFullData(leftParent.baseHash) shouldReturn Some(CheckpointCache(Some(leftParent)))
+    checkpointService.memPool shouldReturn mock[CheckpointBlocksMemPool]
+    checkpointService.memPool.cacheSize() shouldReturn 0
+    dao.acceptedTransactionService shouldReturn mock[AcceptedTransactionService]
+    dao.acceptedTransactionService.contains(*) shouldReturn IO.pure(false)
 
     leftBlock.transactions shouldReturn Seq(tx1, tx2)
     rightBlock.transactions shouldReturn Seq(tx3, tx4)
@@ -85,7 +90,7 @@ class CheckpointBlockValidatorNelTest
   }
 
   test("it should detect no conflict and return None") {
-    isConflictingWithOthers(leftBlock, Seq(rightBlock)) shouldBe false
+    containsAlreadyAcceptedTx(leftBlock).unsafeRunSync() shouldBe List.empty
   }
 
   test("it should detect direct internal conflict with other tip") {
@@ -106,9 +111,11 @@ class CheckpointBlockValidatorNelTest
   }
 
   test("it should detect conflict with ancestry of other tip") {
-    rightParent.transactions shouldReturn Seq(tx2)
+    val conflictTx = leftBlock.transactions.head.hash
+    dao.acceptedTransactionService.contains(conflictTx) shouldReturn IO.pure(true)
 
-    isConflictingWithOthers(leftBlock, Seq(rightBlock)) shouldBe true
+
+    containsAlreadyAcceptedTx(leftBlock).unsafeRunSync() shouldBe List(conflictTx)
   }
 
   test("it should get transactions from parent") {
@@ -119,7 +126,7 @@ class CheckpointBlockValidatorNelTest
 
     val combinedTxs =
       getTransactionsTillSnapshot(List(rightBlock))
-    combinedTxs shouldBe rightBlock.transactions ++ rightParent.transactions
+    combinedTxs shouldBe  (rightBlock.transactions ++ rightParent.transactions).map(_.hash)
   }
 
   test("it should return false for cb not in snap") {
