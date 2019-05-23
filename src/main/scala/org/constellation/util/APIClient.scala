@@ -1,6 +1,10 @@
 package org.constellation.util
 
+import akka.http.scaladsl.coding.Gzip
+import akka.util.ByteString
+import cats.effect.IO
 import com.softwaremill.sttp._
+import com.softwaremill.sttp.json4s.asJson
 import com.typesafe.config.ConfigFactory
 import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
@@ -8,6 +12,7 @@ import org.constellation.primitives.PeerData
 import org.constellation.primitives.Schema.{Id, MetricsResult}
 import org.constellation.serializer.KryoSerializer
 import org.json4s.Formats
+import org.json4s.native.Serialization
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -76,6 +81,24 @@ class APIClient private (host: String = "127.0.0.1",
       .response(asByteArray)
       .send()
       .map(resp => KryoSerializer.deserializeCast[T](resp.unsafeBody))
+  }
+
+  def getNonBlockingIO[T <: AnyRef](
+                                   suffix: String,
+                                   queryParams: Map[String, String] = Map(),
+                                   timeout: Duration = 5.seconds
+                                 )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats) = {
+    IO.fromFuture(IO { getNonBlocking[T](suffix, queryParams, timeout) })
+  }
+
+  def postNonBlockingIO[T <: AnyRef](suffix: String,
+                                     b: AnyRef,
+                                     timeout: Duration = 5.seconds,
+                                     headers: Map[String, String] = Map.empty)(
+                                      implicit m: Manifest[T],
+                                      f: Formats = constellation.constellationFormats
+                                    ) = {
+    IO.fromFuture(IO { postNonBlocking[T](suffix,b,timeout,headers) })
   }
 
   def getSnapshotInfo(): SnapshotInfo = getBlocking[SnapshotInfo]("info")

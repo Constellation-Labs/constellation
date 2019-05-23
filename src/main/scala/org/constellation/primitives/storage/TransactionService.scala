@@ -29,7 +29,7 @@ class TransactionsMid(path: File, midCapacity: Int)(implicit ec: ExecutionContex
   extends MidDbStorage[String, TransactionCacheData](dbPath = (path / "disk1" / "transactions_mid").path, midCapacity)
 
 
-class TransactionMemPool(size: Int = 50000) extends StorageService[TransactionCacheData](size, Some(45))
+class TransactionMemPool(size: Int = 50000) extends StorageService[TransactionCacheData](size, Some(240))
 
 object TransactionService {
   def apply(implicit dao: DAO, size: Int = 50000) = new TransactionService(dao, size)
