@@ -59,6 +59,7 @@ class DataResolver extends StrictLogging {
     store: T => Any,
     maxErrors: Int = 10
   )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[Option[T]] = {
+    val storeIO = (t: T) => IO { store(t) }.void
 
     def makeAttempt(innerPeers: Iterable[PeerApiClient], errorsSoFar: Int = 0): IO[Option[T]] = {
       innerPeers match {
@@ -67,14 +68,18 @@ class DataResolver extends StrictLogging {
         case Nil =>
           IO.raiseError(DataResolutionOutOfPeers(dao.id.short, endpoint,hash, sortedPeers.map(_.id.short)))
         case head :: tail =>
-          getData[T](hash, endpoint, head, store)
-            .handleErrorWith {
+          val q = getData[T](hash, endpoint, head, store)
+            q.handleErrorWith {
               case e if tail.isEmpty => IO.raiseError(e)
-              case _                 => makeAttempt(tail, errorsSoFar + 1)
+              case e                 => logger.error(s"Failed to resolve with host=${head.client.hostPortForLogging}, trying next peer", e)
+                                        makeAttempt(tail, errorsSoFar + 1)
             }
+            .flatTap(_.map(storeIO).getOrElse(IO.unit))
             .flatMap { response =>
-              if (response.isEmpty) makeAttempt(tail, errorsSoFar + 1)
-              else IO.pure(response)
+              if (response.isEmpty) {
+                logger.warn(s"Empty response resolving with host=${head.client.hostPortForLogging}, trying next peer")
+                makeAttempt(tail, errorsSoFar + 1)
+              } else { IO.pure(response) }
             }
       }
     }
@@ -86,15 +91,9 @@ class DataResolver extends StrictLogging {
     endpoint: String,
     peerApiClient: PeerApiClient,
     store: T => Any
-  )(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[Option[T]] = IO.fromFuture {
-    IO {
+  )(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[Option[T]] = {
       peerApiClient.client
-        .getNonBlocking[Option[T]](s"$endpoint/$hash", timeout = apiTimeout)
-        .map { x =>
-          x.foreach(store)
-          x
-        }(dao.edgeExecutionContext)
-    }
+        .getNonBlockingIO[Option[T]](s"$endpoint/$hash", timeout = apiTimeout)
   }
 
   def resolveTransactionsDefaults(
