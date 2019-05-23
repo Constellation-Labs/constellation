@@ -108,9 +108,28 @@ object SelfAvoidingWalk {
     walkScores
   }
 
+  // Handle edge case where sum is 0
   def normalizeScores(scores: Array[Double]): Array[Double] = {
     val sumScore = scores.sum
     scores.map{_ / sumScore}
+  }
+
+  def normalizeScoresWithIndex(scores: Array[(Double, Int)]): Array[(Double, Int)] = {
+    val sumScore = scores.map{_._1}.sum
+    scores.map{case (k,v) => (k / sumScore) -> v}
+  }
+
+  // Need to change to fit to a distribution. Simple way to avoid that for now is splitting pos neg
+  def normalizeScoresWithNegative(scores: Array[Double]): Array[Double] = {
+    val pos = scores.zipWithIndex.filter(_._1 > 0)
+    val neg = scores.zipWithIndex.filter(_._1 <= 0)
+    normalizeScoresWithIndex(pos).foreach{ case (s, i) =>
+      scores(i) = s
+    }
+    normalizeScoresWithIndex(neg).foreach{ case (s, i) =>
+      scores(i) = -1 * s
+    }
+    scores
   }
 
   def runWalkBatches(
@@ -189,7 +208,7 @@ object SelfAvoidingWalk {
     val labelEdges = selfNode.edges.filter(_.isLabel)
     val labelDst = labelEdges.map{_.dst}
 
-    val renormalizedAfterNegative = normalizeScores(merged).zipWithIndex.filterNot{
+    val renormalizedAfterNegative = normalizeScoresWithNegative(merged).zipWithIndex.filterNot{
       case (score, id) => labelDst.contains(id)
     }
 

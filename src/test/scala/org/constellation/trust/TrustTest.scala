@@ -55,6 +55,7 @@ class TrustTest extends FlatSpec {
 
       nodesWithEdges = nodesWithEdges.map{
         node =>
+          // println(node.edges) // Debug view
           SelfAvoidingWalk.runWalkFeedbackUpdateSingleNode(node.id, nodesWithEdges)
       }
 

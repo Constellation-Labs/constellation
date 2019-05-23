@@ -45,7 +45,7 @@ object DataGeneration {
         val distance = n.distance(n2)
         if (Random.nextDouble() > distance && Random.nextDouble() < 0.5) {
           val trustZeroToOne = Random.nextDouble()
-          Some(TrustEdge(n.id, n2.id, 2*(trustZeroToOne - 0.5)))
+          Some(TrustEdge(n.id, n2.id, 2*(trustZeroToOne - 0.5), isLabel = true))
         } else None
       }
       println(s"Num edges ${edges.length}")
