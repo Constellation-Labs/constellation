@@ -2,7 +2,7 @@ package org.constellation.trust
 import org.constellation.trust.SelfAvoidingWalk.runWalk
 import org.scalatest.FlatSpec
 
-import scala.util.Random
+import scala.util.{Random, Try}
 
 class TrustTest extends FlatSpec {
 
@@ -65,12 +65,14 @@ class TrustTest extends FlatSpec {
 
     val goodNodes = nodesWithEdges.filterNot(badNodes.map{_.id}.contains)
 
-    goodNodes.map{ n =>
+    val testNode = goodNodes.head
 
-      val (badEdges, goodEdges) = n.edges.partition(e => badNodes.map{_.id}.contains(e.dst))
-      assert(goodEdges.map{_.trust}.sum > badEdges.map{_.trust}.sum)
+    assert(
+      testNode.positiveEdges.filter{e => goodNodes.map{_.id}.contains(e.dst)}.map{_.trust}.sum >
+      Try{testNode.positiveEdges.filter{e => badNodes.map{_.id}.contains(e.dst)}.map{_.trust}.sum}.getOrElse(0D)
+    )
 
-    }
+
 
 
   }
