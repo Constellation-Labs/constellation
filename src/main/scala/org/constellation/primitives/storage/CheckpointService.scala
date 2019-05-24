@@ -166,6 +166,7 @@ object CheckpointService {
 
 class CheckpointService(dao: DAO, size: Int = 50000) {
   val memPool = new CheckpointBlocksMemPool(size)(dao)
+  val pendingAcceptance = new StorageService[CheckpointBlock](1000,Some(10))
   val midDb: MidDbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksMid(dao)
   val oldDb: DbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksOld(dao)
 

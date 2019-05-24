@@ -21,12 +21,8 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockitoFixture with Match
   def prepareDAO(): DAO = {
     val dao = mock[DAO]
     dao.metrics shouldReturn mock[Metrics]
-    dao.threadSafeSnapshotService shouldReturn mock[ThreadSafeSnapshotService]
-    dao.checkpointService shouldReturn mock[CheckpointService]
-    dao.checkpointService.memPool shouldReturn mock[CheckpointBlocksMemPool]
-    dao.checkpointService.memPool.cacheSize() shouldReturn 0
-    dao.acceptedTransactionService shouldReturn mock[AcceptedTransactionService]
-    dao.threadSafeSnapshotService.acceptedCBSinceSnapshot shouldReturn Seq.empty
+    dao.metrics.incrementMetricAsync(*) shouldReturn IO.unit
+    dao.metrics.updateMetricAsync(*,any[String]) shouldReturn IO.unit
     dao
   }
 
@@ -48,29 +44,6 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockitoFixture with Match
       concurrentTipService.toMap.size shouldBe limit
     }
 
-    it("forbids adding conflicting tip") {
-      dao.acceptedTransactionService.contains(*) shouldReturn IO.pure(true)
-      val limit = 6
-      val concurrentTipService = new TrieBasedTipService(limit, 10, 2, 30)
-      val txs = prepareTransactions()
-
-      val cbs = createIndexedCBmocks(limit * 3, { i =>
-        val cb = createCBMock(i.toString)
-        cb.transactions shouldReturn txs
-        cb
-      })
-
-      val tasks = createShiftedTasks(cbs.toList, { cb =>
-        concurrentTipService.update(cb)
-      })
-
-      val cbsNotInSnap = cbs.map(_.baseHash)
-      dao.threadSafeSnapshotService.acceptedCBSinceSnapshot shouldReturn cbsNotInSnap
-
-      tasks.par.foreach(_.unsafeRunAsyncAndForget)
-      Thread.sleep(2000)
-      concurrentTipService.toMap.size shouldBe 0
-    }
   }
 
   private def prepareTransactions(): Seq[Transaction] = {
@@ -84,7 +57,7 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockitoFixture with Match
   private def createCBMock(hash: String) = {
     val cb = mock[CheckpointBlock]
     cb.parentSOEBaseHashes shouldReturn Seq.empty
-    cb.transactions shouldReturn Seq.empty
+//    cb.transactions shouldReturn Seq.empty
     cb.baseHash shouldReturn hash
     cb
   }

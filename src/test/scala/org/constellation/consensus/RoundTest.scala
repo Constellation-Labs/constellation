@@ -433,7 +433,7 @@ class RoundTest
     round ! UnionBlockProposal(roundId, facilitatorId2, cb2)
     round ! UnionBlockProposal(roundId, FacilitatorId(daoId), cb3)
 
-    round.underlyingActor.cancelCheckpointBlockProposalsTikTok() was called
+    round.underlyingActor.cancelResolveMajorityCheckpointBlockTikTok() was called
   }
 
 }

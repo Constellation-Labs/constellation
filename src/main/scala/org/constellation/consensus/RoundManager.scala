@@ -1,14 +1,10 @@
 package org.constellation.consensus
 
 import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, Props}
+import akka.event.Logging
+import akka.event.Logging.LogLevel
 import cats.implicits._
-import org.constellation.consensus.CrossTalkConsensus.{
-  NotifyFacilitators,
-  ParticipateInBlockCreationRound,
-  StartNewBlockCreationRound
-}
 import io.micrometer.core.instrument.Timer
-import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
 import org.constellation.p2p.DataResolver
@@ -94,7 +90,8 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO)
     case cmd: StopBlockCreationRound =>
       rounds.get(cmd.roundId).fold {} { round =>
         dao.metrics.stopTimer("crosstalkConsensus", round.timer)
-        log.info(s"Stop block creation round")
+        val logLevel = if(cmd.timeout) Logging.ErrorLevel else Logging.InfoLevel
+        log.log(logLevel, s"Stop block creation round has been triggered from timeout: ${cmd.timeout} for round ${cmd.roundId} on node ${dao.id.short}")
 
         round.timeoutScheduler.cancel()
         if (round.startedByThisNode) {
@@ -126,12 +123,6 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO)
       passToParentActor(cmd)
 
     case cmd: UnionBlockProposal =>
-      passToRoundActor(cmd)
-
-    case cmd: ResolveMajorityCheckpointBlock =>
-      log.warning(
-        s"node ${dao.id.short} Block formation timeout occurred for ${cmd.roundId} resolving majority CheckpointBlock"
-      )
       passToRoundActor(cmd)
 
     case cmd: BroadcastSelectedUnionBlock =>
@@ -193,7 +184,8 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO)
       generateRoundActor(roundData, arbitraryTransactions, arbitraryMessages, dao),
       context.system.scheduler.scheduleOnce(roundTimeout,
                                             self,
-                                            ResolveMajorityCheckpointBlock(roundData.roundId, triggeredFromTimeout = true)),
+        StopBlockCreationRound(roundData.roundId, None, timeout = true)
+      ),
       startedByThisNode,
       dao.metrics.startTimer
     )

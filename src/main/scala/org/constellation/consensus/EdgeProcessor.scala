@@ -127,7 +127,7 @@ object EdgeProcessor extends StrictLogging {
                 height = checkpointBlock.calculateHeight()
               )
 
-            dao.threadSafeSnapshotService.accept(cache)
+            dao.threadSafeSnapshotService.accept(cache).unsafeRunSync()
             dao.threadSafeMessageMemPool.release(messages)
 
         }
@@ -164,7 +164,7 @@ object EdgeProcessor extends StrictLogging {
               )
               .traverse { finalCB =>
                 val cache = CheckpointCache(finalCB.some, height = finalCB.calculateHeight())
-                dao.threadSafeSnapshotService.accept(cache)
+                dao.threadSafeSnapshotService.accept(cache).unsafeRunSync()
                 processSignedBlock(
                   cache,
                   finalFacilitators
@@ -229,7 +229,7 @@ object EdgeProcessor extends StrictLogging {
     nestedAcceptCount: Int = 0
   )(implicit dao: DAO): Unit = {
 
-    dao.threadSafeSnapshotService.accept(checkpointCacheData)
+    dao.threadSafeSnapshotService.accept(checkpointCacheData).unsafeRunSync()
     val block = checkpointCacheData.checkpointBlock.get
     val parents = block.parentSOEBaseHashes
     val parentExists = parents.map { h =>

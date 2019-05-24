@@ -36,14 +36,16 @@ class Round(roundData: RoundData,
     mutable.Map()
 
   private[consensus] var unionTransactionProposalsTikTok: Cancellable = _
+  private[consensus] var acceptMajorityCheckpointBlockTikTok: Cancellable = _
   protected var sendArbitraryDataProposalsTikTok: Cancellable = _
 
   override def preStart(): Unit = {
     super.preStart()
     sendArbitraryDataProposalsTikTok = scheduleArbitraryDataProposals(1)
+    unionTransactionProposalsTikTok = scheduleUnionProposals
   }
 
-  private[consensus] var checkpointBlockProposalsTikTok: Cancellable = _
+  private[consensus] var resolveMajorityCheckpointBlockTikTok: Cancellable = _
 
   private[consensus] var majorityCheckpointBlock: Option[CheckpointBlock] = None
 
@@ -72,7 +74,6 @@ class Round(roundData: RoundData,
             proposal
           )
         )
-        unionTransactionProposalsTikTok = scheduleUnionProposals
         sendArbitraryDataProposalsTikTok = scheduleArbitraryDataProposals(distance + 1)
         self ! proposal
       }
@@ -94,13 +95,14 @@ class Round(roundData: RoundData,
     case UnionBlockProposal(roundId, facilitatorId, checkpointBlock) =>
       checkpointBlockProposals += (facilitatorId -> checkpointBlock)
       if (receivedAllCheckpointBlockProposals) {
-        cancelCheckpointBlockProposalsTikTok()
+        cancelResolveMajorityCheckpointBlockTikTok()
         self ! ResolveMajorityCheckpointBlock(roundId)
       }
 
     case SelectedUnionBlock(roundId, facilitatorId, checkpointBlock) =>
       selectedCheckpointBlocks += (facilitatorId -> checkpointBlock)
       if (receivedAllSelectedUnionedBlocks) {
+        cancelAcceptMajorityCheckpointBlockTikTok()
         self ! AcceptMajorityCheckpointBlock(roundId)
       }
 
@@ -156,12 +158,20 @@ class Round(roundData: RoundData,
       ArbitraryDataProposals(distance)
     )
 
-  private[consensus] def scheduleCheckpointBlockProposals: Cancellable =
+  private[consensus] def scheduleResolveMajorityCheckpointBlock: Cancellable =
     context.system.scheduler.scheduleOnce(
-      ConfigUtil.getDurationFromConfig("constellation.consensus.checkpoint-block-proposals-timeout",
-                                       15.second),
+      ConfigUtil.getDurationFromConfig("constellation.consensus.checkpoint-block-resolve-majority-timeout",
+                                       5.second),
       self,
       ResolveMajorityCheckpointBlock(roundData.roundId, triggeredFromTimeout = true)
+    )
+
+  private[consensus] def scheduleAcceptMajorityCheckpointBlock: Cancellable =
+    context.system.scheduler.scheduleOnce(
+      ConfigUtil.getDurationFromConfig("constellation.consensus.accept-resolved-majority-block-timeout",
+                                       5.second),
+      self,
+      AcceptMajorityCheckpointBlock(roundData.roundId)
     )
 
   private[consensus] def receivedAllTransactionProposals: Boolean =
@@ -177,8 +187,12 @@ class Round(roundData: RoundData,
     Option(unionTransactionProposalsTikTok).foreach(_.cancel())
   }
 
-  private[consensus] def cancelCheckpointBlockProposalsTikTok(): Unit = {
-    Option(checkpointBlockProposalsTikTok).foreach(_.cancel())
+  private[consensus] def cancelResolveMajorityCheckpointBlockTikTok(): Unit = {
+    Option(resolveMajorityCheckpointBlockTikTok).foreach(_.cancel())
+  }
+
+  private[consensus] def cancelAcceptMajorityCheckpointBlockTikTok(): Unit = {
+    Option(acceptMajorityCheckpointBlockTikTok).foreach(_.cancel())
   }
 
   private[consensus] def unionProposals(): Unit = {
@@ -275,6 +289,7 @@ class Round(roundData: RoundData,
     )(dao.keyPair)
     val blockProposal = UnionBlockProposal(roundData.roundId, FacilitatorId(dao.id), cb)
     passToParentActor(BroadcastUnionBlockProposal(roundData.peers, blockProposal))
+    resolveMajorityCheckpointBlockTikTok  = scheduleResolveMajorityCheckpointBlock
     self ! blockProposal
   }
 
@@ -294,6 +309,7 @@ class Round(roundData: RoundData,
       val selectedCheckpointBlock =
         SelectedUnionBlock(roundData.roundId, FacilitatorId(dao.id), checkpointBlock)
       passToParentActor(BroadcastSelectedUnionBlock(roundData.peers, selectedCheckpointBlock))
+      acceptMajorityCheckpointBlockTikTok = scheduleAcceptMajorityCheckpointBlock
       self ! selectedCheckpointBlock
 
       Some(checkpointBlock)
@@ -346,7 +362,7 @@ class Round(roundData: RoundData,
       dao.peerInfoAsync.unsafeRunSync().values.toList
         .filterNot(pd => allFacilitators.contains(pd.peerMetadata.id))
         .map { peer =>
-          log.debug(s"[${dao.id.short}] broadcasting cb ${finishedCheckpoint.checkpointCacheData.checkpointBlock.get.baseHash} to  ${peer.client.id} in round ${roundData.roundId}")
+          log.info(s"[${dao.id.short}] broadcasting cb ${finishedCheckpoint.checkpointCacheData.checkpointBlock.get.baseHash} to  ${peer.client.id} in round ${roundData.roundId}")
             wrapFutureWithMetric(
             peer.client.postNonBlocking[Option[FinishedCheckpointResponse]](
               "finished/checkpoint",
@@ -414,7 +430,7 @@ object Round {
     messages: Seq[ChannelMessage]
   )
 
-  case class StopBlockCreationRound(roundId: RoundId, maybeCB: Option[CheckpointBlock])
+  case class StopBlockCreationRound(roundId: RoundId, maybeCB: Option[CheckpointBlock],timeout: Boolean = false)
       extends RoundCommand
 
   case class SelectedUnionBlock(

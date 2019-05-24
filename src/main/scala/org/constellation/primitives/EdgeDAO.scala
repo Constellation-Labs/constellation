@@ -125,7 +125,10 @@ class ThreadSafeMessageMemPool() extends StrictLogging {
 import constellation._
 // TODO: wkoszycki this one is temporary till (#412 Flatten checkpointBlock in CheckpointCache) is finished
 case object MissingCheckpointBlockException extends Exception("CheckpointBlock object is empty.")
-case object CheckpointAcceptBlockAlreadyStored extends Exception("CheckpointBlock is already stored.")
+case class PendingAcceptance(cb: CheckpointBlock)
+      extends Exception(s"CheckpointBlock: ${cb.baseHash} is already pending acceptance phase.")
+case class CheckpointAcceptBlockAlreadyStored(cb: CheckpointBlock)
+      extends Exception(s"CheckpointBlock: ${cb.baseHash} is already stored.")
 
 class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
@@ -350,6 +353,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
   implicit val shift: ContextShift[IO] =
     IO.contextShift(scala.concurrent.ExecutionContext.Implicits.global)
+
   def accept(checkpoint: CheckpointCache)(implicit dao: DAO): IO[Unit] = {
 
     val acceptCheckpoint: IO[Unit] = checkpoint.checkpointBlock match {
@@ -358,11 +362,12 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
       case Some(cb) if dao.checkpointService.contains(cb.baseHash) =>
         for {
         _ <- dao.metrics.incrementMetricAsync("checkpointAcceptBlockAlreadyStored")
-        _ <- IO.raiseError(CheckpointAcceptBlockAlreadyStored)
+        _ <- IO.raiseError(CheckpointAcceptBlockAlreadyStored(cb))
       } yield ()
 
       case Some(cb) =>
         for {
+          _ <- syncPending(cb)
           conflicts <- CheckpointBlockValidatorNel.containsAlreadyAcceptedTx(cb)
           _ <- conflicts match {
             case Nil => IO.unit
@@ -383,6 +388,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
           _ <- concurrentTipService.update(cb)
           _ <- updateAcceptedCBSinceSnapshot(cb)
           _ <- IO.shift *> dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted)
+          _ <- dao.checkpointService.pendingAcceptance.remove(cb.baseHash)
         } yield ()
 
     }
@@ -390,6 +396,21 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
       case err =>
         IO.shift *> dao.metrics.incrementMetricAsync("acceptCheckpoint_failure")
         IO.raiseError(err) //propagate to upper levels
+    }
+  }
+
+  private def syncPending(cb: CheckpointBlock)(implicit dao: DAO): IO[Unit] = {
+    IO {
+      dao.checkpointService.pendingAcceptance.synchronized {
+        if (dao.checkpointService.pendingAcceptance.containsSync(
+          cb.baseHash
+        )) {
+          throw PendingAcceptance(cb)
+        } else {
+          dao.checkpointService.pendingAcceptance
+            .putSync(cb.baseHash, cb)
+        }
+      }
     }
   }
 
