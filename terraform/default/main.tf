@@ -58,7 +58,7 @@ module "nodes" {
   zone           = var.zone
   instance_count = 3
   ssh_user       = var.ssh_user
-  network_name   = module.network.network_name
+  network   = module.network.network
   random_id      = random_id.instance_id.hex
 }
 
@@ -66,7 +66,7 @@ module "grafana" {
   source          = "./modules/grafana"
   zone            = var.zone
   ssh_user        = var.ssh_user
-  network_name    = module.network.network_name
+  network    = module.network.network
   random_id       = random_id.instance_id.hex
   ips_for_grafana = module.nodes.ips_for_grafana
 }
