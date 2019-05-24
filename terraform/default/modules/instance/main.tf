@@ -22,9 +22,7 @@ variable "instance_count" {
   type = "string"
 }
 
-variable "network_name" {
-  type = "string"
-}
+variable "network" {}
 
 variable "random_id" {
   type = "string"
@@ -65,7 +63,7 @@ resource "google_compute_instance" "default" {
   }
 
   network_interface {
-    network = var.network_name
+    network = var.network.name
 
     access_config {
       // Include this section to give the VM an external ip address

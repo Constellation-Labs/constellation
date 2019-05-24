@@ -6,8 +6,8 @@ resource "google_compute_network" "default" {
   name = "dag-network-${var.random_id}"
 }
 
-output "network_name" {
-  value = "${google_compute_network.default.name}"
+output "network" {
+  value = google_compute_network.default
 }
 
 resource "google_compute_firewall" "default" {
