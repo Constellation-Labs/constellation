@@ -48,7 +48,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
     ).thenReturn(IO {Some("resolved hash2")})
 
     when(badNode.getNonBlockingIO(anyString(), any(), any())(any(), any()))
-      .thenReturn(IO.fromFuture(IO {Future.failed(new TimeoutException("Whoops"))}))
+      .thenReturn(IO.fromFuture(IO {Future.failed(new TimeoutException("Testing timeout, case just ignore this message."))}))
     reset(storageMock)
   }
 

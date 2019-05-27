@@ -1,8 +1,6 @@
 package org.constellation.consensus
 
 import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, Props}
-import akka.event.Logging
-import akka.event.Logging.LogLevel
 import cats.implicits._
 import io.micrometer.core.instrument.Timer
 import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
@@ -87,11 +85,13 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO)
     case cmd: LightTransactionsProposal =>
       passToRoundActor(cmd)
 
+    case cmd: ConsensusTimeout =>
+      log.error(s"Consensus with roundId: ${cmd.roundId} timeout on node: ${dao.id.short}")
+      self ! StopBlockCreationRound(cmd.roundId, None)
     case cmd: StopBlockCreationRound =>
       rounds.get(cmd.roundId).fold {} { round =>
         dao.metrics.stopTimer("crosstalkConsensus", round.timer)
-        val logLevel = if(cmd.timeout) Logging.ErrorLevel else Logging.InfoLevel
-        log.log(logLevel, s"Stop block creation round has been triggered from timeout: ${cmd.timeout} for round ${cmd.roundId} on node ${dao.id.short}")
+        log.info(s"Stop block creation round has been triggered for round ${cmd.roundId} on node ${dao.id.short}")
 
         round.timeoutScheduler.cancel()
         if (round.startedByThisNode) {
@@ -184,7 +184,7 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO)
       generateRoundActor(roundData, arbitraryTransactions, arbitraryMessages, dao),
       context.system.scheduler.scheduleOnce(roundTimeout,
                                             self,
-        StopBlockCreationRound(roundData.roundId, None, timeout = true)
+        ConsensusTimeout(roundData.roundId)
       ),
       startedByThisNode,
       dao.metrics.startTimer

@@ -449,7 +449,7 @@ object Snapshot {
                 dao.messageService.memPool
                   .update(
                     msgHash,
-                    _.copy(snapshotHash = Some(snapshot.hash)),
+                    _.copy(snapshotHash = Some(snapshot.hash),blockHash = Some(cb.baseHash)),
                     ChannelMessageMetadata(
                       DataResolver
                         .resolveMessagesDefaults(msgHash)

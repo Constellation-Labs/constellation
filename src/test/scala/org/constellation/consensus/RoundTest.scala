@@ -95,7 +95,7 @@ class RoundTest
   dao.metrics shouldReturn metrics
 
   dao.threadSafeSnapshotService shouldReturn mock[ThreadSafeSnapshotService]
-  dao.threadSafeSnapshotService.accept(*) shouldAnswer ((a: CheckpointCache) => IO.pure(()))
+  dao.threadSafeSnapshotService.accept(*) shouldAnswer ((a: CheckpointCache) => IO.unit)
 
   val roundId = RoundId("round1")
 
