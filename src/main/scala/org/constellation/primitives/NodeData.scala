@@ -24,7 +24,6 @@ trait NodeData {
   var peerManager: ActorRef = _
   var metrics: Metrics = _
   var messageHashStore: swaydb.Set[String] = _
-  var transactionHashStore: swaydb.Set[String] = _
   var checkpointHashStore: swaydb.Set[String] = _
 
   val miscLogger = Logger("MiscLogger")

@@ -519,18 +519,16 @@ sealed trait CheckpointBlockValidatorNel {
     val cbs = dao.checkpointService.memPool.cacheSize()
     val start = System.currentTimeMillis
     val startTimer = dao.metrics.startTimer
-    val containsAccepted = dao.acceptedTransactionService.synchronized {
-      cb.transactions
-        .map(
-          t =>
-            dao.acceptedTransactionService
-              .contains(t.hash)
-              .map(b => (t.hash, b))
-        )
-        .toList
-        .sequence
-        .map(l => l.collect { case (h, true) => h })
-    }
+    val containsAccepted = cb.transactions
+      .map(
+        t =>
+          dao.transactionService
+            .isAccepted(t.hash)
+            .map(b => (t.hash, b))
+      )
+      .toList
+      .sequence[IO, (String, Boolean)]
+      .map(l => l.collect { case (h, true) => h })
 
     val stop = System.currentTimeMillis
     dao.metrics.stopTimer("isConflictingWithOthers", startTimer)

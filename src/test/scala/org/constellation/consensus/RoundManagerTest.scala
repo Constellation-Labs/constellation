@@ -1,6 +1,6 @@
 package org.constellation.consensus
 
-import java.util.concurrent.Semaphore
+import java.util.concurrent.{Executors, Semaphore}
 
 import akka.actor.{ActorSystem, Props}
 import akka.stream.ActorMaterializer
@@ -18,6 +18,7 @@ import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers, OneInstancePerTest}
 
 import scala.collection.concurrent.TrieMap
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 class RoundManagerTest
@@ -30,6 +31,10 @@ class RoundManagerTest
 
   implicit val dao: DAO = mock[DAO]
   implicit val materialize: ActorMaterializer = ActorMaterializer()
+
+  dao.edgeExecutionContext shouldReturn ExecutionContext.fromExecutor(
+    Executors.newWorkStealingPool(8)
+  )
 
   val roundManagerProbe = TestProbe()
   val roundManager: TestActorRef[RoundManager] =
@@ -63,7 +68,7 @@ class RoundManagerTest
 
   dao.id shouldReturn daoId
   dao.minCheckpointFormationThreshold shouldReturn checkpointFormationThreshold
-  dao.pullTransactions(checkpointFormationThreshold) shouldReturn Some(Seq(tx1, tx2))
+
   dao.readyFacilitatorsAsync shouldReturn IO.pure(readyFacilitators)
   dao.peerInfoAsync shouldReturn IO.pure(readyFacilitators)
   dao.pullTips(readyFacilitators) shouldReturn Some(tips)
@@ -79,9 +84,9 @@ class RoundManagerTest
   dao.messageService.arbitraryPool shouldReturn mock[StorageService[ChannelMessageMetadata]]
   dao.messageService.arbitraryPool.toMapSync() shouldReturn Map.empty
 
-  dao.transactionService shouldReturn mock[TransactionService]
-  dao.transactionService.arbitraryPool shouldReturn mock[TransactionMemPool]
-  dao.transactionService.arbitraryPool.toMapSync() shouldReturn Map.empty
+  dao.transactionService shouldReturn mock[TransactionService[String, TransactionCacheData]]
+  dao.transactionService.getArbitrary shouldReturn IO.pure(Map.empty)
+  dao.transactionService.pullForConsensus(checkpointFormationThreshold) shouldReturn IO(List(tx1, tx2).map(TransactionCacheData(_)))
 
   dao.readyPeersAsync(NodeType.Light) shouldReturn IO.pure(Map())
 

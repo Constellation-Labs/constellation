@@ -4,6 +4,7 @@ import cats.effect.IO
 import com.github.blemale.scaffeine.{Cache, Scaffeine}
 import org.constellation.util.Metrics
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 
 //noinspection ScalaStyle
@@ -17,6 +18,8 @@ class StorageService[V](size: Int = 50000, expireAfterMinutes: Option[Int] = Non
     cache.build[String, V]()
   }
 
+  private val queue = mutable.Queue[V]()
+  private val maxQueueSize = 20
 
   Metrics.cacheMetrics.addCache(this.getClass.getSimpleName, lruCache.underlying)
 
@@ -26,8 +29,16 @@ class StorageService[V](size: Int = 50000, expireAfterMinutes: Option[Int] = Non
     lruCache.getIfPresent(key)
 
   override def putSync(key: String, value: V): V = {
-    lruCache.put(key, value)
-    value
+    queue.synchronized {
+      if (queue.size == maxQueueSize) {
+        queue.dequeue()
+      }
+
+      queue.enqueue(value)
+      lruCache.put(key, value)
+
+      value
+    }
   }
 
   override def updateSync(key: String, updateFunc: V => V, empty: => V): V =
@@ -37,10 +48,7 @@ class StorageService[V](size: Int = 50000, expireAfterMinutes: Option[Int] = Non
     getSync(key).map(updateFunc).map { putSync(key, _) }
 
   override def removeSync(keys: Set[String]): Unit =
-    {
-      lruCache.invalidateAll(keys)
-      println(s"--------------- Removing transactions from mem-pool: $keys")
-    }
+    lruCache.invalidateAll(keys)
 
   override def containsSync(key: String): Boolean =
     lruCache.getIfPresent(key).isDefined
@@ -76,4 +84,8 @@ class StorageService[V](size: Int = 50000, expireAfterMinutes: Option[Int] = Non
     IO(lruCache.asMap().toMap)
 
   override def cacheSize(): Long = lruCache.estimatedSize()
+
+  override def getLast20Sync = queue.reverse.toList
+
+  override def getLast20 = IO(getLast20Sync)
 }
