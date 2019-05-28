@@ -151,7 +151,7 @@ class CheckpointServiceTest
     val cs = new CheckpointService(dao)
     dao.checkpointService shouldReturn cs
 
-    val ss = new SOEService()
+    val ss = new SOEService(10)
     dao.soeService shouldReturn ss
 
     val ns = new NotificationService()

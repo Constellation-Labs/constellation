@@ -10,7 +10,7 @@ import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.storage._
 import org.constellation.util.Metrics
-import org.constellation.{DAO, NodeConfig, ProcessingConfig}
+import org.constellation.{ConfigUtil, DAO, NodeConfig, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
@@ -546,7 +546,7 @@ trait EdgeDAO {
   val notificationService = new NotificationService()
   val messageService : MessageService
   val channelService = new ChannelService()
-  val soeService = new SOEService()
+  val soeService = new SOEService(ConfigUtil.getOrElse("constellation.cache.soe-mem-pool-eviction-minutes", 15))
 
   val recentBlockTracker = new RecentDataTracker[CheckpointCache](200)
 
