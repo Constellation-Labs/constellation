@@ -227,6 +227,12 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
       updateMetric("addressCount", dao.addressService.cacheSize())
       updateMetric("channelCount", dao.threadSafeMessageMemPool.activeChannels.size)
 
+      // Get TransactionServiceDBSize
+      val txServiceMap = dao.transactionService.getMetricsMap
+      txServiceMap.foreach { case (k,v) =>
+        updateMetric(s"transactionService_${k}_size", v)
+      }
+
     }(scala.concurrent.ExecutionContext.global)
 
 }

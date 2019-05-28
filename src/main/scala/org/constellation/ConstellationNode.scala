@@ -354,8 +354,8 @@ class ConstellationNode(
     dao.setNodeState(NodeState.Ready)
     dao.generateRandomTX = true
   }
-
-  private val txMigrator = new TransactionPeriodicMigration
+//  Keeping disabled for now -- going to only use midDb for the time being.
+//  private val txMigrator = new TransactionPeriodicMigration
 
   var dataPollingManager: DataPollingManager = _
   if (nodeConfig.dataPollingManagerOn) {
