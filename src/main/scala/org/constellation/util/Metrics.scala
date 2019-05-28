@@ -30,7 +30,6 @@ object Metrics {
   val lastSnapshotHash = "lastSnapshotHash"
   val heightEmpty = "heightEmpty"
   val checkpointValidationFailure = "checkpointValidationFailure"
-  val heightNonEmpty = "heightNonEmpty"
 
   val cacheMetrics = new CacheMetricsCollector()
   cacheMetrics.register()

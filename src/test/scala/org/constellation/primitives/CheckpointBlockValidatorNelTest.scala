@@ -10,7 +10,7 @@ import cats.implicits._
 import constellation.createTransaction
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
 import org.constellation.primitives.CheckpointBlockValidatorNel._
-import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, Id}
+import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, Height, Id}
 import org.constellation.storage.{CheckpointBlocksMemPool, CheckpointService, TransactionService}
 import org.constellation.util.{HashSignature, Metrics}
 import org.constellation.{DAO, NodeConfig}
@@ -487,7 +487,7 @@ class ValidationSpec
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
           .foreach { cb =>
-            dao.threadSafeSnapshotService.accept(CheckpointCache(Some(cb))).unsafeRunSync()
+            dao.threadSafeSnapshotService.accept(CheckpointCache(Some(cb), 0, Some(Height(1, 2)))).unsafeRunSync()
           }
 
         assert(!cb7.simpleValidation())
