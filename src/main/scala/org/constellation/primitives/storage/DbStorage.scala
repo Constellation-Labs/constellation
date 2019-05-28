@@ -37,6 +37,8 @@ abstract class DbStorage[K, V](dbPath: File)(implicit keySerializer: Serializer[
 
   def put(key: K, value: V): IO[Unit] = IO(db.put(key, value).asIO.get).map(_ => ())
 
+  def putAll(kvs: Iterable[(K, V)]): IO[Unit] = IO(db.put(kvs))
+
   def removeSync(key: K): Unit = remove(key).unsafeRunSync()
 
   def remove(key: K): IO[Unit] = IO(db.remove(key).asIO.get).map(_ => ())

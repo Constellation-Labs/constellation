@@ -20,6 +20,7 @@ import org.constellation.datastore.SnapshotTrigger
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
+import org.constellation.primitives.storage.TransactionPeriodicMigration
 import org.constellation.util.{APIClient, HostPort, Metrics}
 import org.slf4j.MDC
 
@@ -353,6 +354,8 @@ class ConstellationNode(
     dao.setNodeState(NodeState.Ready)
     dao.generateRandomTX = true
   }
+
+  private val txMigrator = new TransactionPeriodicMigration
 
   var dataPollingManager: DataPollingManager = _
   if (nodeConfig.dataPollingManagerOn) {

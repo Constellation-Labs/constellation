@@ -92,13 +92,13 @@ lazy val coreDependencies = Seq(
   "com.twitter" %% "algebird-core" % "0.13.5",
   "org.typelevel" %% "cats-core" % versions.cats withSources () withJavadoc (),
 //  "org.typelevel" %% "alleycats-core" % versions.cats withSources() withJavadoc(),
-  "org.typelevel" %% "cats-effect" % "1.3.0" withSources () withJavadoc (),
+  "org.typelevel" %% "cats-effect" % "1.3.1" withSources () withJavadoc (),
   "net.glxn" % "qrgen" % "1.4",
 //  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.twitter" %% "storehaus-cache" % "0.15.0",
   "io.swaydb" %% "swaydb" % "0.7.1",
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
-  "io.kontainers" %% "micrometer-akka" % "0.10.1",
+  "io.kontainers" %% "micrometer-akka" % "0.10.2",
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus,
   "io.prometheus" % "simpleclient_caffeine" % versions.prometheus,
@@ -107,7 +107,7 @@ lazy val coreDependencies = Seq(
   "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.6",
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
   "com.github.blemale" %% "scaffeine" % "2.6.0" withSources () withJavadoc (),
-  "com.typesafe.slick" %% "slick" % "3.3.0" withSources () withJavadoc (),
+  "com.typesafe.slick" %% "slick" % "3.3.1" withSources () withJavadoc (),
   "com.h2database" % "h2" % "1.4.199"
 ) ++ sttpDependencies
 

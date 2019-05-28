@@ -46,9 +46,11 @@ class TransactionService(dao: DAO, size: Int = 50000) extends MerkleService[Tran
   val oldDb: DbStorage[String, TransactionCacheData] = TransactionsOld(dao)
 
   def migrateOverCapacity(): IO[Unit] = {
-    midDb.pullOverCapacity()
-      .flatMap(_.map(tx => oldDb.put(tx.transaction.hash, tx)).sequence[IO, Unit])
-      .map(_ => ())
+    for {
+      overage <- midDb.pullOverCapacity()
+      kvs     =  overage.map(tx => tx.transaction.hash -> tx)
+      _       <- oldDb.putAll(kvs)
+    } yield ()
   }
 
   override def lookup: String => IO[Option[TransactionCacheData]] =
@@ -62,7 +64,7 @@ class TransactionService(dao: DAO, size: Int = 50000) extends MerkleService[Tran
     merklePool.get(merkleRoot)
 }
 
-class TransactionPeriodicMigration[T](periodSeconds: Int = 10)(implicit dao: DAO)
+class TransactionPeriodicMigration(periodSeconds: Int = 10)(implicit dao: DAO)
   extends Periodic[Unit]("TransactionPeriodicMigration", periodSeconds) {
 
   def trigger(): Future[Unit] = {
