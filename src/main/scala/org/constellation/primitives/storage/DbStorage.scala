@@ -84,6 +84,14 @@ abstract class MidDbStorage[K, V](dbPath: File, capacity: Int)(implicit keySeria
       .put(key, value)
       .flatTap(_ => IO(hashQueue.add(key)))
 
+  override def putAll(kvs: Iterable[(K,V)]): IO[Unit] = {
+    import scala.collection.JavaConverters._
+    super
+      .putAll(kvs)
+      .flatTap(_ => IO(hashQueue.addAll(kvs.map(_._1).asJavaCollection)))
+  }
+
+
   def pullOverCapacity(): IO[List[V]] = {
     if (!isOverCapacity) {
       return IO.pure(List())
