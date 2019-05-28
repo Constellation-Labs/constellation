@@ -95,7 +95,7 @@ class RoundTest
   dao.metrics shouldReturn metrics
 
   dao.threadSafeSnapshotService shouldReturn mock[ThreadSafeSnapshotService]
-  dao.threadSafeSnapshotService.accept(*) shouldAnswer ((a: CheckpointCache) => Success(()))
+  dao.threadSafeSnapshotService.accept(*) shouldAnswer ((a: CheckpointCache) => IO.unit)
 
   val roundId = RoundId("round1")
 
@@ -366,7 +366,7 @@ class RoundTest
 
   test("it should finish round with no finished checkpoint block when accept majority checkpoint block failed") {
     dao.threadSafeSnapshotService.accept(*) shouldAnswer (
-      (a: CheckpointCache) => Failure(TipConflictException(cb1))
+      (a: CheckpointCache) => IO.raiseError(TipConflictException(cb1, cb1.transactions.toList.map(_.hash)))
     )
     round ! SelectedUnionBlock(
       roundId,
@@ -433,7 +433,7 @@ class RoundTest
     round ! UnionBlockProposal(roundId, facilitatorId2, cb2)
     round ! UnionBlockProposal(roundId, FacilitatorId(daoId), cb3)
 
-    round.underlyingActor.cancelCheckpointBlockProposalsTikTok() was called
+    round.underlyingActor.cancelResolveMajorityCheckpointBlockTikTok() was called
   }
 
 }

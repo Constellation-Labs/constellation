@@ -48,8 +48,8 @@ case class CheckpointBlock(
   notifications: Seq[PeerNotification] = Seq()
 ) {
 
-  def storeSOE()(implicit dao: DAO): Unit = {
-    dao.soeService.putSync(soeHash, SignedObservationEdgeCache(soe, resolved = true))
+  def storeSOE()(implicit dao: DAO): IO[SignedObservationEdgeCache] = {
+    dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true))
   }
 
   def calculateHeight()(implicit dao: DAO): Option[Height] = {
@@ -162,7 +162,7 @@ case class CheckpointBlock(
           }
      */
     // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
-    dao.checkpointService.memPool.putSync(baseHash, cache)
+    dao.checkpointService.memPool.put(baseHash, cache).unsafeRunSync()
     dao.recentBlockTracker.put(cache)
 
   }
