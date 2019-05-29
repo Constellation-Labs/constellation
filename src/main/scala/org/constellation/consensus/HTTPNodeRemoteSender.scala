@@ -23,6 +23,7 @@ class HTTPNodeRemoteSender(implicit val dao: DAO) extends NodeRemoteSender {
     val r = cmd.roundData
     parallelFireForget(
       BlockBuildingRoundRoute.newRoundFullPath,
+      r.roundId,
       cmd.roundData.peers,
       RoundDataRemote(
         r.roundId,
@@ -33,22 +34,27 @@ class HTTPNodeRemoteSender(implicit val dao: DAO) extends NodeRemoteSender {
         r.tipsSOE,
         r.messages
       )
+      ,"NotifyFacilitators"
     )
   }
 
   override def broadcastLightTransactionProposal(cmd: BroadcastLightTransactionProposal): Unit =
     parallelFireForget(
       BlockBuildingRoundRoute.proposalFullPath,
+      cmd.roundId,
       cmd.peers,
-      cmd.transactionsProposal
+      cmd.transactionsProposal,
+      "BroadcastLightTransactionProposal"
     )
 
   override def broadcastBlockUnion(cmd: BroadcastUnionBlockProposal): Unit =
-    parallelFireForget(BlockBuildingRoundRoute.unionFullPath, cmd.peers, cmd.proposal)
+    parallelFireForget(BlockBuildingRoundRoute.unionFullPath, cmd.roundId, cmd.peers, cmd.proposal,"BroadcastUnionBlockProposal")
 
   override def broadcastSelectedUnionBlock(cmd: BroadcastSelectedUnionBlock): Unit =
-    parallelFireForget(BlockBuildingRoundRoute.selectedFullPath, cmd.peers, cmd.cb)
+    parallelFireForget(BlockBuildingRoundRoute.selectedFullPath, cmd.roundId, cmd.peers, cmd.cb,"BroadcastSelectedUnionBlock")
 
-  def parallelFireForget(path: String, peers: Iterable[PeerData], cmd: AnyRef): Unit =
+  def parallelFireForget(path: String,roundId: RoundId, peers: Iterable[PeerData], cmd: AnyRef, msg: String): Unit ={
+    println(s"[${dao.id.short}] round ${roundId} sending to peers ${peers.map(_.peerMetadata.id.short)} message :${msg} ")
     peers.par.foreach(_.client.postNonBlockingUnit(path, cmd))
+  }
 }

@@ -2,6 +2,7 @@ package org.constellation.consensus
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
+import com.typesafe.config.ConfigFactory
 import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round.{LightTransactionsProposal, SelectedUnionBlock, UnionBlockProposal}
@@ -27,7 +28,7 @@ class CrossTalkConsensusTest
 
   val crossTalkProbe = TestProbe()
   val crossTalkConsensus: TestActorRef[CrossTalkConsensus] =
-    TestActorRef(Props(new CrossTalkConsensus(remoteSender) {
+    TestActorRef(Props(new CrossTalkConsensus(remoteSender, ConfigFactory.load().resolve()) {
       override val roundManager: ActorRef = roundManagerProbe.ref
     }), crossTalkProbe.ref)
 

@@ -395,8 +395,8 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
     }
     acceptCheckpoint.recoverWith {
       case err =>
-        IO.shift *> dao.metrics.incrementMetricAsync("acceptCheckpoint_failure")
-        IO.raiseError(err) //propagate to upper levels
+        dao.metrics.incrementMetricAsync("acceptCheckpoint_failure")
+            .flatTap(_ => IO.raiseError(err)) //propagate to upper levels
     }
   }
 

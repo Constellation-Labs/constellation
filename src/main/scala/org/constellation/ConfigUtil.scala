@@ -26,8 +26,8 @@ object ConfigUtil {
   def getDurationFromConfig(path: String): FiniteDuration = {
     FiniteDuration(config.getDuration(path, TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
   }
-  def getDurationFromConfig(path: String, default: FiniteDuration): FiniteDuration = {
-    Try(FiniteDuration(config.getDuration(path, TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS))
+  def getDurationFromConfig(path: String, default: FiniteDuration, ownConfig: Config = config): FiniteDuration = {
+    Try(FiniteDuration(ownConfig.getDuration(path, TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS))
       .getOrElse(default)
   }
 }

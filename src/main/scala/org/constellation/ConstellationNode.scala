@@ -224,7 +224,7 @@ class ConstellationNode(
 
   val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
   val crossTalkConsensusActor: ActorRef =
-    system.actorOf(CrossTalkConsensus.props(remoteSenderActor))
+    system.actorOf(CrossTalkConsensus.props(remoteSenderActor, ConfigFactory.load().resolve()))
 
   val checkpointFormationManager = new CheckpointFormationManager(
     dao.processingConfig.checkpointFormationTimeSeconds,
