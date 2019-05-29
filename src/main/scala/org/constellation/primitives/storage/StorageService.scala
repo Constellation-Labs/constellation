@@ -58,7 +58,7 @@ class StorageService[V](size: Int = 50000, expireAfterMinutes: Option[Int] = Non
     import cats.implicits._
 
     get(key)
-      .flatMap(_.map(updateFunc).map(x => put(key, x)).sequence)
+      .flatMap(_.map(updateFunc).traverse(x => put(key, x)))
   }
 
   override def update(key: String, updateFunc: V => V, empty: => V): IO[V] =

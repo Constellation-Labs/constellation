@@ -223,7 +223,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
       }
       updateMetric("nodeCurrentTimeMS", System.currentTimeMillis().toString)
       updateMetric("nodeCurrentDate", new DateTime().toString())
-      updateMetric("metricsRound", round.toString)
+      updateMetric("metricsRound", round)
       updateMetric("addressCount", dao.addressService.cacheSize())
       updateMetric("channelCount", dao.threadSafeMessageMemPool.activeChannels.size)
 

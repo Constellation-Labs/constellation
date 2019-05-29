@@ -81,10 +81,10 @@ class TrieBasedTipService(sizeLimit: Int,
   }
 
   def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): IO[Option[TipData]] = {
-    val tipUpdates = checkpointBlock.parentSOEBaseHashes.distinct.toList.map { h =>
+    val tipUpdates = checkpointBlock.parentSOEBaseHashes.distinct.toList.traverse { h =>
       for {
-        reuseTips <- IO.pure(tips.size < maxWidth)
         tipData <- get(h)
+        reuseTips = tips.size < maxWidth
         _ <- tipData match {
           case None => IO.unit
           case Some(TipData(block, numUses)) if !reuseTips || numUses >= 2 =>
@@ -94,7 +94,7 @@ class TrieBasedTipService(sizeLimit: Int,
               .flatMap(_ => dao.metrics.incrementMetricAsync("checkpointTipsIncremented"))
         }
       } yield ()
-    }.sequence
+    }
 
     tipUpdates
       .flatMap(_ => put(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics))
@@ -102,7 +102,7 @@ class TrieBasedTipService(sizeLimit: Int,
         case err: TipThresholdException =>
           dao.metrics
             .incrementMetricAsync("memoryExceeded_thresholdMetCheckpoints")
-            .flatMap(_ => dao.metrics.updateMetricAsync("activeTips", tips.size.toString))
+            .flatMap(_ => dao.metrics.updateMetricAsync("activeTips", tips.size))
             .flatMap(_ => IO.raiseError(err))
       }
   }
@@ -155,7 +155,7 @@ class TrieBasedTipService(sizeLimit: Int,
     readyFacilitators: Map[Id, PeerData]
   )(implicit metrics: Metrics): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = {
 
-    metrics.updateMetric("activeTips", tips.size.toString)
+    metrics.updateMetric("activeTips", tips.size)
 
     (tips.size, readyFacilitators) match {
       case (x, facilitators) if x >= 2 && facilitators.nonEmpty =>
