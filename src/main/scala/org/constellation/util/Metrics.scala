@@ -1,15 +1,17 @@
 package org.constellation.util
 
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicLong
 
 import better.files.File
 import cats.effect.IO
+import com.google.common.util.concurrent.AtomicDouble
 import com.typesafe.scalalogging.Logger
 import constellation._
-import io.micrometer.core.instrument.Clock
+import io.micrometer.core.instrument.Metrics.globalRegistry
 import io.micrometer.core.instrument.binder.jvm._
 import io.micrometer.core.instrument.binder.logging.LogbackMetrics
 import io.micrometer.core.instrument.binder.system.{FileDescriptorMetrics, ProcessorMetrics, UptimeMetrics}
+import io.micrometer.core.instrument.{Clock, Counter, Tag, Timer}
 import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.cache.caffeine.CacheMetricsCollector
@@ -27,16 +29,22 @@ object Metrics {
   val lastSnapshotHash = "lastSnapshotHash"
   val heightEmpty = "heightEmpty"
   val checkpointValidationFailure = "checkpointValidationFailure"
+  val heightNonEmpty = "heightNonEmpty"
 
   val cacheMetrics = new CacheMetricsCollector()
   cacheMetrics.register()
 
-  def prometheusSetup(keyHash: String): Unit = {
+  def prometheusSetup(keyHash: String): PrometheusMeterRegistry = {
     val prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT,
                                                               CollectorRegistry.defaultRegistry,
                                                               Clock.SYSTEM)
+
+    prometheusMeterRegistry.config().commonTags("application", "Constellation")
+    globalRegistry.add(prometheusMeterRegistry)
+    io.kontainers.micrometer.akka.AkkaMetricRegistry.setRegistry(prometheusMeterRegistry)
     prometheusMeterRegistry.config().commonTags("application", s"Constellation_$keyHash")
     io.micrometer.core.instrument.Metrics.globalRegistry.add(prometheusMeterRegistry)
+    io.kontainers.micrometer.akka.AkkaMetricRegistry.setRegistry(prometheusMeterRegistry)
 
     new JvmMemoryMetrics().bindTo(prometheusMeterRegistry)
     new JvmGcMetrics().bindTo(prometheusMeterRegistry)
@@ -49,6 +57,10 @@ object Metrics {
     new DiskSpaceMetrics(File(System.getProperty("user.dir")).toJava)
       .bindTo(prometheusMeterRegistry)
     // new DatabaseTableMetrics().bindTo(prometheusMeterRegistry)
+
+
+
+    prometheusMeterRegistry
   }
 
 }
@@ -67,7 +79,7 @@ class TransactionRateTracker()(implicit dao: DAO) {
     * @param transactionAccepted: Current number of transactions accepted from stored metrics
     * @return TPS all time and TPS last n seconds in metrics form
     */
-  def calculate(transactionAccepted: Long): Map[String, String] = {
+  def calculate(transactionAccepted: Long): Map[String, Double] = {
     val countAll = transactionAccepted - dao.transactionAcceptedAfterDownload
     val startTime = dao.downloadFinishedTime // metrics.getOrElse("nodeStartTimeMS", "1").toLong
     val deltaStart = System.currentTimeMillis() - startTime
@@ -78,8 +90,8 @@ class TransactionRateTracker()(implicit dao: DAO) {
     lastTXCount = countAll
     lastCheckTime = System.currentTimeMillis()
     Map(
-      "TPS_last_" + dao.nodeConfig.metricIntervalSeconds + "_seconds" -> tps.toString,
-      "TPS_all" -> tpsAll.toString
+      "TPS_last_" + dao.nodeConfig.metricIntervalSeconds + "_seconds" -> tps,
+      "TPS_all" -> tpsAll
     )
   }
 
@@ -96,13 +108,16 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   val logger = Logger("Metrics")
 
   private val stringMetrics: TrieMap[String, String] = TrieMap()
-  private val countMetrics: TrieMap[String, AtomicReference[Long]] = TrieMap()
+  private val countMetrics: TrieMap[String, AtomicLong] = TrieMap()
+  private val doubleMetrics: TrieMap[String, AtomicDouble] = TrieMap()
 
   val rateCounter = new TransactionRateTracker()
+  val micrometerCounter = new TrieMap[String, Counter]
+//  val micrometerTimer = new TrieMap[String, Timer]
 
   // Init
   updateMetric("id", dao.id.hex)
-  Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
+  val registry = Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
   updateMetric("nodeState", dao.nodeState.toString)
   updateMetric("address", dao.selfAddressStr)
   updateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
@@ -110,21 +125,46 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   updateMetric("externalHost", dao.externalHostString)
   updateMetric("version", BuildInfo.version)
 
+  private def guagedAtomicLong(key: String): AtomicLong = {
+    import scala.collection.JavaConverters._
+    val tags = List(Tag.of("metric", key)).asJava
+    registry.gauge(s"dag_$key", tags, new AtomicLong(0L))
+  }
+
+  // Note: AtomicDouble comes from guava
+  private def guagedAtomicDouble(key: String): AtomicDouble = {
+    import scala.collection.JavaConverters._
+    val tags = List(Tag.of("metric", key)).asJava
+    registry.gauge(s"dag_$key", tags, new AtomicDouble(0D))
+  }
+
+  def updateMetric(key: String, value: Double): Unit = {
+    doubleMetrics.getOrElseUpdate(key, guagedAtomicDouble(key)).set(value)
+  }
+
   def updateMetric(key: String, value: String): Unit = {
     stringMetrics(key) = value
   }
 
   def updateMetric(key: String, value: Int): Unit = {
-    countMetrics(key) = new AtomicReference[Long](value)
+    updateMetric(key, value.toLong)
   }
 
   def updateMetric(key: String, value: Long): Unit = {
-    countMetrics(key) = new AtomicReference[Long](value)
+    countMetrics.getOrElseUpdate(key, guagedAtomicLong(key)).set(value)
   }
 
   def incrementMetric(key: String): Unit = {
-    countMetrics.getOrElseUpdate(key, new AtomicReference[Long](0L)).getAndUpdate(_ + 1L)
-   // countMetrics(key) = countMetrics.getOrElse(key, 0L) + 1
+    import scala.collection.JavaConverters._
+    val tags = List(Tag.of("metric", key)).asJava
+    micrometerCounter.getOrElseUpdate(s"dag_$key", { registry.counter(s"dag_$key", tags) }).increment()
+    countMetrics.getOrElseUpdate(key, new AtomicLong(0L)).getAndUpdate(_ + 1L)
+  }
+
+  def startTimer: Timer.Sample = Timer.start()
+
+  def stopTimer(key: String, timer: Timer.Sample): Unit = {
+    timer.stop(Timer.builder(key).register(registry))
   }
 
   def updateMetricAsync(key: String, value: String): IO[Unit] = IO(updateMetric(key, value))
@@ -136,7 +176,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
     * @return : Key value map of all metrics
     */
   def getMetrics: Map[String, String] = {
-    stringMetrics.toMap ++ countMetrics.toMap.mapValues(_.toString)
+    stringMetrics.toMap ++ countMetrics.toMap.mapValues(_.toString) ++ doubleMetrics.toMap.mapValues(_.toString)
   }
 
   def getCountMetric(key: String): Option[Long] = {
@@ -147,7 +187,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
 
   def updateBalanceMetrics(): Unit = {
 
-    val peers = dao.peerInfo.toSeq
+    val peers = dao.peerInfoAsync.unsafeRunSync().toSeq
 
     val allAddresses = peers.map { _._1.address } :+ dao.selfAddressStr
 

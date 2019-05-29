@@ -1,25 +1,26 @@
 import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 import sbt.Keys.mainClass
 
-enablePlugins(JavaAppPackaging)
+enablePlugins(JavaAgent, JavaAppPackaging)
 //addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 
 scalacOptions := Seq("-Ypartial-unification", "-unchecked", "-deprecation")
+javaAgents += "org.aspectj" % "aspectjweaver" % "1.9.4" % "runtime"
 
 // javacOptions := Seq("-XX:MaxMetaspaceSize=256m")
 
 lazy val _version = "1.0.12"
 
 lazy val versions = new {
-  val akka = "2.5.22"
+  val akka = "2.5.23"
   val akkaHttp = "10.1.8"
   val akkaHttpCors = "0.4.0"
   val spongyCastle = "1.58.0.0"
   val micrometer = "1.1.4"
   val prometheus = "0.6.0"
-  val sttp = "1.5.12"
+  val sttp = "1.5.17"
   val cats = "1.6.0"
-  val json4s = "3.6.5"
+  val json4s = "3.6.6"
 }
 
 lazy val sttpDependencies = Seq(
@@ -69,7 +70,7 @@ lazy val coreSettings = Seq(
 
 lazy val coreDependencies = Seq(
   "org.scala-lang.modules" %% "scala-async" % "0.10.0",
-  "com.github.pathikrit" %% "better-files" % "3.7.1" withSources () withJavadoc (),
+  "com.github.pathikrit" %% "better-files" % "3.8.0" withSources () withJavadoc (),
   "com.roundeights" %% "hasher" % "1.2.0",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
@@ -91,18 +92,19 @@ lazy val coreDependencies = Seq(
   "com.twitter" %% "algebird-core" % "0.13.5",
   "org.typelevel" %% "cats-core" % versions.cats withSources () withJavadoc (),
 //  "org.typelevel" %% "alleycats-core" % versions.cats withSources() withJavadoc(),
-  "org.typelevel" %% "cats-effect" % "1.2.0" withSources () withJavadoc (),
+  "org.typelevel" %% "cats-effect" % "1.3.0" withSources () withJavadoc (),
   "net.glxn" % "qrgen" % "1.4",
 //  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.twitter" %% "storehaus-cache" % "0.15.0",
   "io.swaydb" %% "swaydb" % "0.7.1",
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
+  "io.kontainers" %% "micrometer-akka" % "0.10.1",
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus,
   "io.prometheus" % "simpleclient_caffeine" % versions.prometheus,
   "io.prometheus" % "simpleclient_logback" % versions.prometheus,
   "com.github.java-json-tools" % "json-schema-validator" % "2.2.10",
-  "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.5",
+  "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.6",
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
   "com.github.blemale" %% "scaffeine" % "2.6.0" withSources () withJavadoc (),
   "com.typesafe.slick" %% "slick" % "3.3.0" withSources () withJavadoc (),
@@ -114,8 +116,8 @@ lazy val testDependencies = Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.0",
   "org.scalatest" %% "scalatest" % "3.0.7",
   "org.scalactic" %% "scalactic" % "3.0.7",
-  "org.scalamock" %% "scalamock" % "4.1.0",
-  "org.mockito" %% "mockito-scala" % "1.3.1",
+  "org.scalamock" %% "scalamock" % "4.2.0",
+  "org.mockito" %% "mockito-scala" % "1.4.6",
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
 ).map(_ % "it,test")

@@ -1,6 +1,7 @@
 package org.constellation.p2p
 import cats.effect.IO
 import cats.implicits._
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.DAO
 import org.constellation.primitives.Schema.CheckpointCache
@@ -9,13 +10,13 @@ import org.constellation.util.PeerApiClient
 
 import scala.concurrent.duration._
 
-class DataResolver {
+class DataResolver extends StrictLogging {
 
   def resolveMessagesDefaults(
     hash: String,
     priorityClient: Option[PeerApiClient] = None
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[ChannelMessageMetadata]] = {
-    resolveMessages(hash, getReadyPeers(dao),priorityClient)
+    resolveMessages(hash, getReadyPeers(dao), priorityClient)
   }
 
   def resolveMessages(
@@ -23,12 +24,13 @@ class DataResolver {
     pool: Iterable[PeerApiClient],
     priorityClient: Option[PeerApiClient]
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[ChannelMessageMetadata]] = {
+    logger.info(s"Resolve message=$hash")
     resolveDataByDistance[ChannelMessageMetadata](
       List(hash),
       "message",
       pool,
       (t: ChannelMessageMetadata) =>
-        dao.messageService.memPool.put(t.channelMessage.signedMessageData.hash, t),
+        dao.messageService.memPool.putSync(t.channelMessage.signedMessageData.hash, t),
       priorityClient
     ).head
 
@@ -57,22 +59,37 @@ class DataResolver {
     store: T => Any,
     maxErrors: Int = 10
   )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[Option[T]] = {
+    val storeIO = (t: T) => IO { store(t) }.void
 
     def makeAttempt(innerPeers: Iterable[PeerApiClient], errorsSoFar: Int = 0): IO[Option[T]] = {
       innerPeers match {
         case _ if errorsSoFar >= maxErrors =>
           IO.raiseError(DataResolutionMaxErrors(endpoint, hash))
         case Nil =>
-          IO.raiseError(DataResolutionOutOfPeers(endpoint,hash, sortedPeers.map(_.id.short)))
+          IO.raiseError(
+            DataResolutionOutOfPeers(dao.id.short, endpoint, hash, sortedPeers.map(_.id.short))
+          )
         case head :: tail =>
           getData[T](hash, endpoint, head, store)
             .handleErrorWith {
               case e if tail.isEmpty => IO.raiseError(e)
-              case _                 => makeAttempt(tail, errorsSoFar + 1)
+              case e =>
+                logger.error(
+                  s"Failed to resolve with host=${head.client.hostPortForLogging}, trying next peer",
+                  e
+                )
+                makeAttempt(tail, errorsSoFar + 1)
             }
+            .flatTap(_.map(storeIO).getOrElse(IO.unit))
             .flatMap { response =>
-              if (response.isEmpty) makeAttempt(tail, errorsSoFar + 1)
-              else IO.pure(response)
+              if (response.isEmpty) {
+                logger.warn(
+                  s"Empty response resolving with host=${head.client.hostPortForLogging}, trying next peer"
+                )
+                makeAttempt(tail, errorsSoFar + 1)
+              } else {
+                IO.pure(response)
+              }
             }
       }
     }
@@ -84,15 +101,9 @@ class DataResolver {
     endpoint: String,
     peerApiClient: PeerApiClient,
     store: T => Any
-  )(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[Option[T]] = IO.fromFuture {
-    IO {
-      peerApiClient.client
-        .getNonBlocking[Option[T]](s"$endpoint/$hash", timeout = apiTimeout)
-        .map { x =>
-          x.foreach(store)
-          x
-        }(dao.edgeExecutionContext)
-    }
+  )(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[Option[T]] = {
+    peerApiClient.client
+      .getNonBlockingIO[Option[T]](s"$endpoint/$hash", timeout = apiTimeout)
   }
 
   def resolveTransactionsDefaults(
@@ -107,12 +118,13 @@ class DataResolver {
     pool: Iterable[PeerApiClient],
     priorityClient: Option[PeerApiClient]
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[TransactionCacheData]] = {
+    logger.info(s"Resolve transaction=$hash")
     resolveDataByDistance[TransactionCacheData](
       List(hash),
       "transaction",
       pool,
       (t: TransactionCacheData) => {
-        dao.transactionService.memPool.put(t.transaction.hash, t)
+        dao.transactionService.memPool.putSync(t.transaction.hash, t)
       },
       priorityClient
     ).head
@@ -136,6 +148,7 @@ class DataResolver {
     pool: Iterable[PeerApiClient],
     priorityClient: Option[PeerApiClient]
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[CheckpointCache]] = {
+    logger.info(s"Resolve cb=$hash")
     resolveDataByDistance[CheckpointCache](
       List(hash),
       "checkpoint",
@@ -170,16 +183,19 @@ class DataResolver {
   }
 
   def getReadyPeers(dao: DAO): Iterable[PeerApiClient] = {
-    dao.readyPeers.map(p => PeerApiClient(p._1, p._2.client))
+    dao.readyPeersAsync.unsafeRunSync().map(p => PeerApiClient(p._1, p._2.client))
   }
 
 }
 
 object DataResolver extends DataResolver
 
-case class DataResolutionOutOfPeers(endpoint: String,hash: String, peers: Iterable[String])
+case class DataResolutionOutOfPeers(thisNode: String,
+                                    endpoint: String,
+                                    hash: String,
+                                    peers: Iterable[String])
     extends Exception(
-      s"Run out of peers when resolving: $endpoint with hash: $hash following tried: $peers"
+      s"node [${thisNode}] Run out of peers when resolving: $endpoint with hash: $hash following tried: $peers"
     )
 
 case class DataResolutionMaxErrors(endpoint: String, hash: String)

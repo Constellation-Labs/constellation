@@ -62,7 +62,7 @@ class MultiNodeRegisterTest
       val nodes = Seq(n1) ++ Seq.fill(otherNodesSize)(createNode())
 
       nodes.foreach { n =>
-        assert(n.dao.peerInfo.isEmpty)
+        assert(n.dao.peerInfoAsync.unsafeRunSync().isEmpty)
         assert(n.ipManager.listKnownIPs.isEmpty)
       }
 
@@ -86,7 +86,7 @@ class MultiNodeRegisterTest
       }
       Thread.sleep(1000)
       nodes.foreach { n =>
-        assert(n.dao.peerInfo.size == otherNodesSize)
+        assert(n.dao.peerInfoAsync.unsafeRunSync().size == otherNodesSize)
       }
 
     }

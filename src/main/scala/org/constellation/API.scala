@@ -79,22 +79,24 @@ case class ProcessingConfig(
   minCheckpointFormationThreshold: Int = 50,
   maxTXInBlock: Int = 50,
   maxMessagesInBlock: Int = 1,
-  checkpointFormationTimeSeconds: Int = 1,
+  checkpointFormationTimeSeconds: Int = 2,
+  randomTransactionLoopTimeSeconds: Int = 2,
+  snapshotTriggeringTimeSeconds: Int = 2,
   formUndersizedCheckpointAfterSeconds: Int = 30,
   numFacilitatorPeers: Int = 2,
   randomTXPerRoundPerPeer: Int = 30,
   metricCheckInterval: Int = 10,
-  maxMemPoolSize: Int = 2000,
+  maxMemPoolSize: Int = 35000,
   minPeerTimeAddedSeconds: Int = 30,
   maxActiveTipsAllowedInMemory: Int = 1000,
   maxAcceptedCBHashesInMemory: Int = 5000,
   peerHealthCheckInterval: Int = 30,
   peerDiscoveryInterval: Int = 60,
   snapshotHeightInterval: Int = 2,
-  snapshotHeightDelayInterval: Int = 5,
+  snapshotHeightDelayInterval: Int = 2,
   snapshotInterval: Int = 25,
-  checkpointLRUMaxSize: Int = 2000,
-  transactionLRUMaxSize: Int = 5000,
+  checkpointLRUMaxSize: Int = 6000,
+  transactionLRUMaxSize: Int = 35000,
   addressLRUMaxSize: Int = 1000,
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,
@@ -346,13 +348,16 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               dao.externalHostString,
               dao.externalPeerHTTPPort
             )
-            val peerMap = dao.peerInfo.toSeq.map {
-              case (id, pd) => Node(id.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
-            } :+ self
+
+            val peerMap = dao.peerInfoAsync.map {
+              _.toSeq.map {
+                case (id, pd) => Node(id.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
+              } :+ self
+            }
 
             complete(
               Map(
-                "peers" -> peerMap,
+                "peers" -> peerMap.unsafeRunSync(),
                 "transactions" -> txs
               )
             )
@@ -506,15 +511,17 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                                        sendRequest.amountActual,
                                        dao.keyPair,
                                        normalized = false)
-            dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
-
-            dao.transactionService.memPool.putSync(
-              tx.hash,
-              TransactionCacheData(
-                tx,
-                inMemPool = true
+            val put = dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
+            if (put) {
+              dao.transactionService.memPool.putSync(
+                tx.hash,
+                TransactionCacheData(
+                  tx,
+                  inMemPool = true
+                )
               )
-            )
+            }
+
 
             complete(tx.hash)
           }

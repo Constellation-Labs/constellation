@@ -5,13 +5,15 @@ import java.util.concurrent.Semaphore
 import akka.actor.{ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
+import cats.effect.IO
 import org.constellation._
 import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal,BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.primitives.Schema.{NodeType, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.primitives.storage._
+import org.constellation.util.Metrics
 import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers, OneInstancePerTest}
 
@@ -19,7 +21,7 @@ import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
 
 class RoundManagerTest
-    extends TestKit(ActorSystem("RoundManagerTest"))
+  extends TestKit(ActorSystem("RoundManagerTest"))
     with FunSuiteLike
     with Matchers
     with IdiomaticMockitoFixture
@@ -62,13 +64,16 @@ class RoundManagerTest
   dao.id shouldReturn daoId
   dao.minCheckpointFormationThreshold shouldReturn checkpointFormationThreshold
   dao.pullTransactions(checkpointFormationThreshold) shouldReturn Some(Seq(tx1, tx2))
-  dao.readyFacilitators() shouldReturn readyFacilitators
-  dao.peerInfo shouldReturn readyFacilitators
+  dao.readyFacilitatorsAsync shouldReturn IO.pure(readyFacilitators)
+  dao.peerInfoAsync shouldReturn IO.pure(readyFacilitators)
   dao.pullTips(readyFacilitators) shouldReturn Some(tips)
   dao.threadSafeMessageMemPool shouldReturn mock[ThreadSafeMessageMemPool]
   dao.threadSafeMessageMemPool.pull(1) shouldReturn None
   dao.checkpointService shouldReturn mock[CheckpointService]
   dao.checkpointService.contains(*) shouldReturn true
+
+  val metrics = new Metrics()
+  dao.metrics shouldReturn metrics
 
   dao.messageService shouldReturn mock[MessageService]
   dao.messageService.arbitraryPool shouldReturn mock[StorageService[ChannelMessageMetadata]]
@@ -78,7 +83,7 @@ class RoundManagerTest
   dao.transactionService.arbitraryPool shouldReturn mock[TransactionMemPool]
   dao.transactionService.arbitraryPool.toMapSync() shouldReturn Map.empty
 
-  dao.readyPeers(NodeType.Light) shouldReturn Map()
+  dao.readyPeersAsync(NodeType.Light) shouldReturn IO.pure(Map())
 
   val peerManagerProbe = TestProbe()
   val ipManager = mock[IPManager]

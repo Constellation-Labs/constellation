@@ -122,8 +122,10 @@ class E2ETest extends E2E {
     Simulation.awaitConditionMet(
       "Accepted checkpoint blocks number differs across the nodes",
       allAPIs
-        .map {
-          _.metrics(Metrics.checkpointAccepted)
+        .map { p =>
+          val n = p.metrics(Metrics.checkpointAccepted)
+          Simulation.logger.info(s"peer ${p.id} has $n accepted cbs")
+          n
         }
         .distinct
         .size == 1,

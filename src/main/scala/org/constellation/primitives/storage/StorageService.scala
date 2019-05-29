@@ -4,13 +4,19 @@ import cats.effect.IO
 import com.github.blemale.scaffeine.{Cache, Scaffeine}
 import org.constellation.util.Metrics
 
+import scala.concurrent.duration._
+
 //noinspection ScalaStyle
-class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] with Lookup[String, V] {
-  private val lruCache: Cache[String, V] =
-    Scaffeine()
-      .recordStats()
-      .maximumSize(size)
-      .build[String, V]()
+class StorageService[V](size: Int = 50000, expireAfterMinutes: Option[Int] = None) extends Storage[IO, String, V] with Lookup[String, V] {
+  private val lruCache: Cache[String, V] = {
+    val cacheWithStats = Scaffeine().recordStats()
+
+    val cache = expireAfterMinutes.map(mins => cacheWithStats.expireAfterAccess(mins.minutes))
+      .getOrElse(cacheWithStats.maximumSize(size))
+
+    cache.build[String, V]()
+  }
+
 
   Metrics.cacheMetrics.addCache(this.getClass.getSimpleName, lruCache.underlying)
 
@@ -31,7 +37,10 @@ class StorageService[V](size: Int = 50000) extends Storage[IO, String, V] with L
     getSync(key).map(updateFunc).map { putSync(key, _) }
 
   override def removeSync(keys: Set[String]): Unit =
-    lruCache.invalidateAll(keys)
+    {
+      lruCache.invalidateAll(keys)
+      println(s"--------------- Removing transactions from mem-pool: $keys")
+    }
 
   override def containsSync(key: String): Boolean =
     lruCache.getIfPresent(key).isDefined
