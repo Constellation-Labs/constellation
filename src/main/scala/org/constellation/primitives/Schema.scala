@@ -98,8 +98,8 @@ object Schema {
     *
     * @param hash : String of hashed value
     * @param hashType : Strictly typed from set of allowed edge formats
-    */
-  case class TypedEdgeHash(hash: String, hashType: EdgeHashType)
+    */ // baseHash Temporary to debug heights missing
+  case class TypedEdgeHash(hash: String, hashType: EdgeHashType, baseHash: Option[String] = None)
 
   /**
     * Basic edge format for linking two hashes with an optional piece of data attached. Similar to GraphX format.

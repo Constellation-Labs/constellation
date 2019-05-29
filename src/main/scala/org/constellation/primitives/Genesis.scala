@@ -54,8 +54,8 @@ object Genesis {
     CheckpointBlock.createCheckpointBlock(
       distr,
       Seq(
-        TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash),
-        TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash)
+        TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash, Some(genesisSOE.baseHash)),
+        TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash, Some(genesisSOE.baseHash))
       ),
     )(keyPair)
 
