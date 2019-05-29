@@ -188,7 +188,7 @@ class CheckpointService(dao: DAO, size: Int = 50000) {
   }
 
   def lookup: String => IO[Option[CheckpointCacheMetadata]] =
-    DbStorage.extendedLookup[String, CheckpointCacheMetadata](List(memPool, midDb, oldDb))
+    DbStorage.extendedLookup[String, CheckpointCacheMetadata](List(memPool, midDb)) //, oldDb))
 
 //  def lookupFullData: String => IO[Option[CheckpointCache]] =
 //    DbStorage

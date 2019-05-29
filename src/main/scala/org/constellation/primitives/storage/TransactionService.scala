@@ -52,11 +52,11 @@ class TransactionService(dao: DAO, size: Int = 50000) extends MerkleService[Tran
   }
 
   override def lookup: String => IO[Option[TransactionCacheData]] =
-    DbStorage.extendedLookup[String, TransactionCacheData](List(memPool, midDb, oldDb))
+    DbStorage.extendedLookup[String, TransactionCacheData](List(memPool, midDb)) // , oldDb))
 
 
   def contains: String ⇒ IO[Boolean] =
-    DbStorage.extendedContains[String, TransactionCacheData](List(memPool, midDb, oldDb))
+    DbStorage.extendedContains[String, TransactionCacheData](List(memPool, midDb)) //, oldDb))
 
   override def findHashesByMerkleRoot(merkleRoot: String): IO[Option[Seq[String]]] =
     merklePool.get(merkleRoot)

@@ -80,7 +80,7 @@ abstract class MidDbStorage[K, V](dbPath: File, capacity: Int)(implicit keySeria
   ): IO[Unit] =
     super
       .put(key, value)
-      .flatTap(_ => IO(hashQueue.add(key)))
+    //  .flatTap(_ => IO(hashQueue.add(key)))
 
   def pullOverCapacity(): IO[List[V]] = {
     if (!isOverCapacity) {
