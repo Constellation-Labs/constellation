@@ -478,26 +478,11 @@ object Snapshot {
 
       // TODO: CheckpointService - apply snapshot (remove from mem pool, add to midDb)
 
-
-      /*
-
-      CheckpointService.fetchTransactions(cb.transactionsMerkleRoot).foreach { tx =>
-        // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
-        // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
-        dao.addressService.transferSnapshot(tx)
-          .flatMap(_ => dao.transactionService.memPool.remove(tx.hash))
-          .flatMap(_ => dao.transactionService.midDb.remove(tx.hash))
-//          .flatMap(_ => dao.acceptedTransactionService.remove(Set(tx.hash)))
-          .flatMap(_ => IO { println(s"------- Should remove tx: ${tx.hash}") })
-          .flatTap(_ => dao.metrics.incrementMetricAsync("snapshotAppliedBalance"))
-          .unsafeRunSync()
-      }
-
       dao.checkpointService.memPool.remove(cb.baseHash).unsafeRunSync()
       dao.checkpointService.midDb.remove(cb.baseHash).unsafeRunSync()
       dao.transactionService.merklePool.remove(cb.transactionsMerkleRoot).unsafeRunSync()
+
       // TODO: add to midDb
-       */
     }
   }
 
