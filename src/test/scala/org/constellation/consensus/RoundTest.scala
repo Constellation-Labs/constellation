@@ -7,29 +7,25 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import cats.effect.IO
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{
-  BroadcastLightTransactionProposal,
-  BroadcastSelectedUnionBlock,
-  BroadcastUnionBlockProposal
-}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCache, NodeType, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.primitives.storage.{MessageService, TransactionService}
 import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures, PeerMetadata}
-import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers, OneInstancePerTest}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
 
 class RoundTest
     extends TestKit(ActorSystem("RoundTest"))
     with FunSuiteLike
     with Matchers
-    with IdiomaticMockitoFixture
+    with IdiomaticMockito
+    with ArgumentMatchersSugar
     with BeforeAndAfter
     with OneInstancePerTest {
 

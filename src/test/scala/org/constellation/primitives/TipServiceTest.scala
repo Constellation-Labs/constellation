@@ -3,16 +3,11 @@ import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import org.constellation.DAO
 import org.constellation.consensus.TipData
-import org.constellation.primitives.storage.{
-  AcceptedTransactionService,
-  CheckpointBlocksMemPool,
-  CheckpointService
-}
 import org.constellation.util.Metrics
-import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{FunSpecLike, Matchers}
 
-class TipServiceTest extends FunSpecLike with IdiomaticMockitoFixture with Matchers {
+class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatchersSugar with Matchers {
 
   implicit val dao: DAO = prepareDAO()
   implicit val ioContextShift: ContextShift[IO] =

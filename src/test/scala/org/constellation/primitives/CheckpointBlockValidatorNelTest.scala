@@ -8,19 +8,20 @@ import akka.testkit.{TestKit, TestProbe}
 import cats.effect.IO
 import cats.implicits._
 import constellation.createTransaction
-import org.constellation.consensus.{EdgeProcessor, RandomData, Snapshot, SnapshotInfo}
+import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
 import org.constellation.primitives.CheckpointBlockValidatorNel._
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, Id}
-import org.constellation.primitives.storage.{AcceptedTransactionService, CheckpointBlocksMemPool, CheckpointService, TransactionService}
+import org.constellation.primitives.storage.{CheckpointBlocksMemPool, CheckpointService, TransactionService}
 import org.constellation.util.{HashSignature, Metrics}
 import org.constellation.{DAO, NodeConfig}
-import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{mock => _, _}
 
 class CheckpointBlockValidatorNelTest
   extends FunSuite
-    with IdiomaticMockitoFixture
+    with IdiomaticMockito
+    with ArgumentMatchersSugar
     with Matchers
     with BeforeAndAfter {
 
