@@ -1131,7 +1131,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "dag_transactionService_merklePool_size",
+          "expr": "dag_transactionService_accepted_size",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "$instance",
@@ -1142,7 +1142,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "MerklePool Size",
+      "title": "Accepted Size",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1216,7 +1216,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "dag_transactionService_memPool_size",
+          "expr": "dag_transactionService_Arbitrary_size",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "$instance",
@@ -1227,7 +1227,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "MemPool Size",
+      "title": "Arbitrary Size",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1301,7 +1301,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "dag_transactionService_arbitraryPool_size",
+          "expr": "dag_transactionService_inConsensus_size",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "$instance",
@@ -1312,7 +1312,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "ArbitraryPool Size",
+      "title": "InConsensus Size",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1386,7 +1386,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "dag_transactionService_midDb_size",
+          "expr": "dag_transactionService_pending_size",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "$instance",
@@ -1397,7 +1397,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "MidDb Size",
+      "title": "Pending Size",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1471,7 +1471,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "dag_transactionService_oldDb_size",
+          "expr": "dag_transactionService_unknown_size",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "$instance",
@@ -1482,7 +1482,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "OldDb Size",
+      "title": "Unknown Size",
       "tooltip": {
         "shared": true,
         "sort": 0,
