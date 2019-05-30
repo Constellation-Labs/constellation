@@ -5,13 +5,14 @@ import java.util.concurrent.Executors
 
 import better.files.File
 import constellation._
+import cats.implicits._
 import org.constellation.crypto.KeyUtils.makeKeyPair
 import org.constellation.primitives.Schema.{CheckpointCache, Height, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.util.Metrics
-import org.constellation.{DAO, PeerMetadata}
-import org.mockito.Mockito.doNothing
+import org.constellation.{DAO, Fixtures, PeerMetadata}
 import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
+import org.mockito.Mockito.doNothing
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 
 import scala.concurrent.ExecutionContext
@@ -26,7 +27,8 @@ class CheckpointServiceTest
   val soe: SignedObservationEdge = mock[SignedObservationEdge]
 
   implicit val kp: KeyPair = makeKeyPair()
-  implicit val dao: DAO = prepareDao()
+  implicit var dao: DAO = prepareDao()
+
 
   before {
     soe.baseHash shouldReturn "abc"
@@ -97,8 +99,10 @@ class CheckpointServiceTest
     tx1.hash shouldReturn "tx1"
     val tx2 = mock[Transaction]
     tx2.hash shouldReturn "tx2"
-    dao.transactionService.memPool.putSync(tx1.hash, TransactionCacheData(tx1))
-    dao.transactionService.memPool.putSync(tx2.hash, TransactionCacheData(tx2))
+
+    (dao.transactionService.put(TransactionCacheData(tx1)) *>
+      dao.transactionService.put(TransactionCacheData(tx2))).unsafeRunSync()
+
     Seq(tx1, tx2)
   }
 
@@ -136,6 +140,8 @@ class CheckpointServiceTest
     f.createDirectoryIfNotExists()
     dao.dbPath shouldReturn f
 
+    dao.id shouldReturn Fixtures.id
+
     val ec = ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
     dao.edgeExecutionContext shouldReturn ec
     val cs = new CheckpointService(dao)
@@ -150,7 +156,7 @@ class CheckpointServiceTest
     val ms = new MessageService()(dao)
     dao.messageService shouldReturn ms
 
-    val ts = new TransactionService(dao)
+    val ts = new DefaultTransactionService(dao)
     dao.transactionService shouldReturn ts
 
     val metrics = mock[Metrics]

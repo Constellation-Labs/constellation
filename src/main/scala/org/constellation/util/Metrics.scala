@@ -4,6 +4,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import better.files.File
 import cats.effect.IO
+import cats.implicits._
 import com.google.common.util.concurrent.AtomicDouble
 import com.typesafe.scalalogging.Logger
 import constellation._
@@ -168,7 +169,9 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   }
 
   def updateMetricAsync(key: String, value: String): IO[Unit] = IO(updateMetric(key, value))
+  def updateMetricAsync(key: String, value: Double): IO[Unit] = IO(updateMetric(key, value))
   def updateMetricAsync(key: String, value: Int): IO[Unit] = IO(updateMetric(key, value))
+  def updateMetricAsync(key: String, value: Long): IO[Unit] = IO(updateMetric(key, value))
   def incrementMetricAsync(key: String): IO[Unit] = IO(incrementMetric(key))
 
   /**
@@ -212,27 +215,31 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
 
   }
 
+  private def updateTransactionAcceptedMetrics(): IO[Unit] =
+    IO { rateCounter.calculate(countMetrics.get("transactionAccepted").map{_.get()}.getOrElse(0L)) }
+      .map(_.toList)
+      .map(_.map { case (k, v) => updateMetricAsync(k, v) })
+      .flatMap(_.sequence)
+      .void
+
+  private def updateTransactionServiceMetrics(): IO[Unit] =
+    dao.transactionService.getMetricsMap
+      .map(_.toList.map { case (k, v) => updateMetricAsync(s"transactionService_${k}_size", v) })
+      .flatMap(_.sequence)
+      .void
+
+  private def updatePeriodicMetrics(): IO[Unit] =
+    IO { updateBalanceMetrics() } *>
+      updateTransactionAcceptedMetrics() *>
+      updateMetricAsync("nodeCurrentTimeMS", System.currentTimeMillis().toString) *>
+      updateMetricAsync("nodeCurrentDate", new DateTime().toString()) *>
+      updateMetricAsync("metricsRound", round) *>
+      updateMetricAsync("addressCount", dao.addressService.cacheSize()) *>
+      updateMetricAsync("channelCount", dao.threadSafeMessageMemPool.activeChannels.size) *>
+      updateTransactionServiceMetrics()
+
   /**
     * Recalculates window based / periodic metrics
     */
-  override def trigger(): Future[Unit] =
-    Future {
-      updateBalanceMetrics()
-      rateCounter.calculate(countMetrics.get("transactionAccepted").map{_.get()}.getOrElse(0L)).foreach {
-        case (k, v) => updateMetric(k, v)
-      }
-      updateMetric("nodeCurrentTimeMS", System.currentTimeMillis().toString)
-      updateMetric("nodeCurrentDate", new DateTime().toString())
-      updateMetric("metricsRound", round)
-      updateMetric("addressCount", dao.addressService.cacheSize())
-      updateMetric("channelCount", dao.threadSafeMessageMemPool.activeChannels.size)
-
-      // Get TransactionServiceDBSize
-      val txServiceMap = dao.transactionService.getMetricsMap
-      txServiceMap.foreach { case (k,v) =>
-        updateMetric(s"transactionService_${k}_size", v)
-      }
-
-    }(scala.concurrent.ExecutionContext.global)
-
+  override def trigger(): Future[Unit] = updatePeriodicMetrics().unsafeToFuture()
 }

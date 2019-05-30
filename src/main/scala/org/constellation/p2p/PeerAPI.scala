@@ -10,6 +10,7 @@ import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.util.Timeout
 import cats.data.Validated.{Invalid, Valid}
+import cats.effect.IO
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
@@ -20,12 +21,14 @@ import org.constellation.consensus._
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.primitives.storage.TransactionStatus
 import org.constellation.util._
 import org.constellation.{DAO, ResourceInfo}
 import org.json4s.native
 import org.json4s.native.Serialization
 
 import scala.concurrent.ExecutionContext
+import scala.util.{Failure, Success}
 
 case class PeerAuthSignRequest(salt: Long)
 
@@ -133,16 +136,8 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
                                          dao.keyPair,
                                          normalized = false)
               logger.info(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
-              val put = dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
-              if (put) {
-                dao.transactionService.memPool.putSync(
-                  tx.hash,
-                  TransactionCacheData(
-                    tx,
-                    inMemPool = true
-                  )
-                )
-              }
+
+              dao.transactionService.put(TransactionCacheData(tx)).unsafeRunSync()
 
               dao.metrics.incrementMetric("faucetRequest")
 
@@ -240,11 +235,20 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
       put {
         entity(as[Transaction]) { tx =>
           dao.metrics.incrementMetric("transactionRXByPeerAPI")
-          dao.transactionService.memPool.updateSync(tx.hash, { tcd =>
-            tcd
-          }, TransactionCacheData(tx))
-          // TODO: Respond with initial tx validation
-          complete(StatusCodes.OK)
+
+          onComplete {
+            dao.transactionService.exists(tx.hash)
+              .flatMap {
+                case false => dao.transactionService.put(TransactionCacheData(tx), as = TransactionStatus.Unknown, false)
+                case _ => IO.unit
+              }
+              // TODO: Respond with initial tx validation
+              .map(_ => StatusCodes.OK)
+              .unsafeToFuture()
+          } {
+            case Success(statusCode) => complete(statusCode)
+            case Failure(_) => complete(StatusCodes.InternalServerError)
+          }
         }
       }
     }

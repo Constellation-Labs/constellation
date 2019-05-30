@@ -37,6 +37,7 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO)
     case StartNewBlockCreationRound if !ownRoundInProgress =>
       ownRoundInProgress = true
       createRoundData(dao).fold {
+        log.error("Cannot create a round data")
         ownRoundInProgress = false
       } { tuple =>
         val roundData = tuple._1
@@ -217,36 +218,36 @@ object RoundManager {
     dao: DAO
   ): Option[(RoundData, Seq[(Transaction, Int)], Seq[(ChannelMessage, Int)])] = {
     dao
-      .pullTransactions(dao.minCheckpointFormationThreshold)
-      .flatMap { transactions =>
-        dao
-          .pullTips(dao.readyFacilitatorsAsync.unsafeRunSync())
-          .map(tips => {
-            val messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq()) // TODO: Choose more than one tx and light peers
-            val firstTx = transactions.headOption
-            val lightPeers = if (firstTx.isDefined && dao.readyPeersAsync(NodeType.Light).unsafeRunSync().nonEmpty) {
-              Set(
-                dao
-                  .readyPeersAsync(NodeType.Light)
-                  .unsafeRunSync()
-                  .minBy(p => Distance.calculate(firstTx.get.baseHash, p._1))
-                  ._2
-              )
-            } else Set[PeerData]()
-            val allFacilitators = tips._2.values.map(_.peerMetadata.id).toSet ++ Set(dao.id)
-            (RoundData(
-               generateRoundId,
-               tips._2.values.toSet,
-               lightPeers,
-               FacilitatorId(dao.id),
-               transactions,
-               tips._1,
-               messages
-             ),
-             getArbitraryTransactionsWithDistance(allFacilitators, dao).filter(t => t._2 == 1),
-             getArbitraryMessagesWithDistance(allFacilitators, dao).filter(t => t._2 == 1))
-          })
-      }
+      .pullTips(dao.readyFacilitatorsAsync.unsafeRunSync())
+      .map(tips => {
+        val transactions = dao.transactionService
+          .pullForConsensus(dao.minCheckpointFormationThreshold)
+          .unsafeRunSync()
+        val messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq()) // TODO: Choose more than one tx and light peers
+        val firstTx = transactions.headOption
+        val lightPeers = if (firstTx.isDefined && dao.readyPeersAsync(NodeType.Light).unsafeRunSync().nonEmpty) {
+          Set(
+            dao
+              .readyPeersAsync(NodeType.Light)
+              .unsafeRunSync()
+              .minBy(p => Distance.calculate(firstTx.get.transaction.baseHash, p._1))
+              ._2
+          )
+        } else Set[PeerData]()
+        val allFacilitators = tips._2.values.map(_.peerMetadata.id).toSet ++ Set(dao.id)
+
+        (RoundData(
+           generateRoundId,
+           tips._2.values.toSet,
+           lightPeers,
+           FacilitatorId(dao.id),
+           transactions.map(_.transaction),
+           tips._1,
+           messages
+         ),
+         getArbitraryTransactionsWithDistance(allFacilitators, dao).filter(t => t._2 == 1),
+         getArbitraryMessagesWithDistance(allFacilitators, dao).filter(t => t._2 == 1))
+      })
   }
 
   def getArbitraryTransactionsWithDistance(facilitators: Set[Id],
@@ -267,8 +268,9 @@ object RoundManager {
             (idBi ^ txBi) + (idBi ^ srcBi)
       }
 
-    dao.transactionService.arbitraryPool
-      .toMapSync()
+    dao.transactionService
+      .getArbitrary
+      .unsafeRunSync()
       .map { t =>
         (t._2.transaction,
          facilitators

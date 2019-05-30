@@ -496,16 +496,15 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
     )
 
     val insertTX =
-      cb.transactions.toList.map(tx ⇒ (tx, toCacheData(tx)))
-      .traverse {
-        case (tx, txMetadata) ⇒
-          //          dao.transactionService.memPool.remove(tx.hash)
-          IO.unit
-            .flatMap(_ => dao.transactionService.midDb.put(tx.hash, txMetadata))
-            //            .flatMap(_ => dao.acceptedTransactionService.put(tx.hash, txMetadata))
-            .flatMap(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
-            .flatMap(_ => dao.addressService.transfer(tx))
-      }.void
+      cb.transactions
+        .toList
+        .map(tx ⇒ (tx, toCacheData(tx)))
+        .traverse {
+          case (tx, txMetadata) =>
+            dao.transactionService.accept(txMetadata) *>
+              dao.addressService.transfer(tx)
+        }
+        .void
 
     IO { logger.info(s"Accepting transactions ${cb.transactions.size}") } >> insertTX
   }
@@ -539,10 +538,9 @@ trait EdgeDAO {
 
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
-  var transactionService: TransactionService = _
+  var transactionService: TransactionService[String, TransactionCacheData] = _
   var checkpointService: CheckpointService = _
   var snapshotService: SnapshotService = _
-  var acceptedTransactionService: AcceptedTransactionService = _
   var addressService: AddressService = _
 
   val notificationService = new NotificationService()
@@ -551,8 +549,6 @@ trait EdgeDAO {
   val soeService = new SOEService()
 
   val recentBlockTracker = new RecentDataTracker[CheckpointCache](200)
-
-  val threadSafeTXMemPool = new ThreadSafeTXMemPool()
 
   val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
 
@@ -571,15 +567,8 @@ trait EdgeDAO {
   val edgeExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
-//  val snapshotExecutionContext: ExecutionContextExecutor =
-//    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
-//
-//   val peerAPIExecutionContext: ExecutionContextExecutor =
-//     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
-
   val apiClientExecutionContext: ExecutionContextExecutor =
     edgeExecutionContext
-//    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(40))
 
   val signatureExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
@@ -587,17 +576,6 @@ trait EdgeDAO {
   val finishedExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
-  def pullTransactions(
-    minimumCount: Int = minCheckpointFormationThreshold
-  ): Option[Seq[Transaction]] = {
-    val txs = threadSafeTXMemPool.pull(minimumCount)
-
-    txs.foreach(_.foreach(_ =>
-      metrics.incrementMetric("transactionPull")
-    ))
-
-    txs
-  }
 
   def pullMessages(minimumCount: Int): Option[Seq[ChannelMessage]] = {
     threadSafeMessageMemPool.pull(minimumCount)

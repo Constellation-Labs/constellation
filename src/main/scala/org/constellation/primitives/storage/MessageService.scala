@@ -4,7 +4,7 @@ import cats.effect.IO
 import org.constellation.DAO
 import org.constellation.primitives.{ChannelMessageMetadata, ChannelMetadata}
 
-class MessageService(size: Int = 2000)(implicit dao: DAO) extends MerkleService[ChannelMessageMetadata] {
+class MessageService(size: Int = 2000)(implicit dao: DAO) extends MerkleService[String, ChannelMessageMetadata] {
   val merklePool = new StorageService[Seq[String]](size)
   val arbitraryPool = new StorageService[ChannelMessageMetadata](size)
   val memPool = new StorageService[ChannelMessageMetadata](size)

@@ -61,31 +61,35 @@ class Round(roundData: RoundData,
   override def receive: Receive = {
     case StartTransactionProposal(_) =>
       sendArbitraryDataProposalsTikTok.cancel()
-      dao.pullTransactions(1).foreach { transactions =>
-        val messages = dao.threadSafeMessageMemPool.pull()
+      val transactions = dao.transactionService
+        .pullForConsensus(1)
+        .map(_.map(_.transaction))
+        .unsafeRunSync()
 
-        val distance = 0
-        val proposal = LightTransactionsProposal(
-          roundData.roundId,
-          FacilitatorId(dao.id),
-          transactions.map(_.hash) ++ arbitraryTransactions.filter(_._2 == distance).map(_._1.hash),
-          messages
-            .map(_.map(_.signedMessageData.hash))
-            .getOrElse(Seq()) ++ arbitraryMessages
-            .filter(_._2 == distance)
-            .map(_._1.signedMessageData.hash),
-          dao.peerInfoAsync.unsafeRunSync().flatMap(_._2.notification).toSeq
-        )
+      val messages = dao.threadSafeMessageMemPool.pull()
 
-        passToParentActor(
-          BroadcastLightTransactionProposal(
-            roundData.peers,
-            proposal
-          )
+      val distance = 0
+      val proposal = LightTransactionsProposal(
+        roundData.roundId,
+        FacilitatorId(dao.id),
+        transactions.map(_.hash) ++ arbitraryTransactions.filter(_._2 == distance).map(_._1.hash),
+        messages
+          .map(_.map(_.signedMessageData.hash))
+          .getOrElse(Seq()) ++ arbitraryMessages
+          .filter(_._2 == distance)
+          .map(_._1.signedMessageData.hash),
+        dao.peerInfoAsync.unsafeRunSync().flatMap(_._2.notification).toSeq
+      )
+
+      passToParentActor(
+        BroadcastLightTransactionProposal(
+          roundData.peers,
+          proposal
         )
-        sendArbitraryDataProposalsTikTok = scheduleArbitraryDataProposals(distance + 1)
-        self ! proposal
-      }
+      )
+
+      sendArbitraryDataProposalsTikTok = scheduleArbitraryDataProposals(distance + 1)
+      self ! proposal
 
     case newProp: LightTransactionsProposal =>
       val merged = if (transactionProposals.contains(newProp.facilitatorId)) {
@@ -215,7 +219,7 @@ class Round(roundData: RoundData,
 
     val transactions = transactionProposals.values
       .flatMap(_.txHashes)
-      .filter(hash ⇒ dao.transactionService.contains(hash).unsafeRunSync())
+      .filter(hash ⇒ dao.transactionService.exists(hash).unsafeRunSync())
       .map(
         hash ⇒
           dao.transactionService
@@ -235,7 +239,7 @@ class Round(roundData: RoundData,
 
     val resolvedTxs = transactionProposals.values
       .flatMap(proposal ⇒ proposal.txHashes.map(hash ⇒ (hash, proposal)))
-      .filterNot(p ⇒ dao.transactionService.contains(p._1).unsafeRunSync())
+      .filterNot(p ⇒ dao.transactionService.exists(p._1).unsafeRunSync())
       .toList
       .map(
         p ⇒

@@ -23,7 +23,6 @@ case class TransactionCacheData(
   knownPeers: Set[Id] = Set(),
   rxTime: Long = System.currentTimeMillis()
 ) {
-
   def plus(previous: TransactionCacheData): TransactionCacheData =
     this.copy(
       inDAGByAncestor = inDAGByAncestor ++ previous.inDAGByAncestor
@@ -166,7 +165,7 @@ sealed trait TransactionValidatorNel {
   // TODO: get rid of unsafeRunSync() and make whole validation async with IO[ValidationResult[Transaction]]
   def validateDuplicate(tx: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
     //if (dao.transactionService.contains(tx.hash).unsafeRunSync())
-    if (dao.transactionHashStore.contains(tx.hash).unsafeRunSync())
+    if (dao.transactionService.isAccepted(tx.hash).unsafeRunSync())
       HashDuplicateFound(tx).invalidNel
     else
       tx.validNel

@@ -9,6 +9,7 @@ import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.StartNewBlockCreationRound
 import org.constellation.primitives.Schema.{InternalHeartbeat, NodeState, _}
+import org.constellation.primitives.storage.TransactionStatus
 import org.constellation.util.{Distance, Periodic}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -92,14 +93,13 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 10)(
 
           //generateRandomMessages()
 
-          val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
-//          val memPoolCount = dao.transactionService.memPool.cacheSize()
-          dao.metrics.updateMetric("transactionMemPoolSize", memPoolCount.toString)
+          val pendingCount = dao.transactionService.count(TransactionStatus.Pending).unsafeRunSync()
+          dao.metrics.updateMetric("transactionPendingSize", pendingCount.toString)
 
           val haveBalance =
             dao.addressService.getSync(dao.selfAddressStr).exists(_.balanceByLatestSnapshot > 10000000)
 
-          if (memPoolCount < dao.processingConfig.maxMemPoolSize && haveBalance) {
+          if (pendingCount < dao.processingConfig.maxMemPoolSize && haveBalance) {
 
             val numTX = (dao.processingConfig.randomTXPerRoundPerPeer / (peerIds.size + 1)) + 1
             Seq.fill(numTX)(0).foreach {
@@ -168,16 +168,12 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 10)(
                 dao.metrics.incrementMetric("randomTransactionsGenerated")
                 dao.metrics.incrementMetric("sentTransactions")
 
-                dao.threadSafeTXMemPool.put(tx)
-
-                dao.transactionService.memPool.putSync(
-                  tx.hash,
+                dao.transactionService.put(
                   TransactionCacheData(
                     tx,
                     valid = true,
-                    inMemPool = true
-                  )
-                )
+                    inMemPool = true))
+                  .unsafeRunSync()
 
                 dao.peerInfoAsync(NodeType.Full)
                   .unsafeRunSync()
