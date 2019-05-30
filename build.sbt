@@ -4,7 +4,14 @@ import sbt.Keys.mainClass
 enablePlugins(JavaAgent, JavaAppPackaging)
 //addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 
-scalacOptions := Seq("-Ypartial-unification", "-unchecked", "-deprecation")
+scalacOptions :=
+  Seq("-Ypartial-unification",
+      "-unchecked",
+      "-deprecation",
+      "-feature",
+      "-language:postfixOps",
+      "-language:implicitConversions",
+      "-language:higherKinds")
 javaAgents += "org.aspectj" % "aspectjweaver" % "1.9.4" % "runtime"
 
 // javacOptions := Seq("-XX:MaxMetaspaceSize=256m")
@@ -76,6 +83,7 @@ lazy val coreDependencies = Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
+  "com.typesafe.akka" %% "akka-slf4j" % versions.akka,
   "ch.megard" %% "akka-http-cors" % versions.akkaHttpCors,
   "de.heikoseeberger" %% "akka-http-json4s" % "1.25.2",
   "org.json4s" %% "json4s-native" % versions.json4s,

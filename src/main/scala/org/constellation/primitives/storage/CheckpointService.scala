@@ -12,7 +12,6 @@ import org.constellation.util.MerkleTree
 import swaydb.serializers.Default.StringSerializer
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
 import scala.concurrent.ExecutionContextExecutor
 
 object CheckpointBlocksOld {
@@ -38,8 +37,8 @@ class CheckpointBlocksMid(path: File, midCapacity: Int)(implicit ec: ExecutionCo
 
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
 // mwadon: /\ is still relevant?
-class CheckpointBlocksMemPool(size: Int = 50000)(implicit dao: DAO)
-    extends StorageService[CheckpointCacheMetadata](size, Some(45)) {
+class CheckpointBlocksMemPool()(implicit dao: DAO)
+    extends StorageService[CheckpointCacheMetadata]() {
 
   def put(
     key: String,
@@ -88,7 +87,7 @@ class CheckpointBlocksMemPool(size: Int = 50000)(implicit dao: DAO)
 }
 
 object CheckpointService {
-  def apply(implicit dao: DAO, size: Int = 50000) = new CheckpointService(dao, size)
+  def apply(implicit dao: DAO) = new CheckpointService(dao)
 
   def convert(merkle: CheckpointCacheMetadata)(implicit dao: DAO): CheckpointCache = {
     println(s"Convert triggered for: ${merkle.checkpointBlock.baseHash}")
@@ -164,9 +163,9 @@ object CheckpointService {
   }
 }
 
-class CheckpointService(dao: DAO, size: Int = 50000) {
-  val memPool = new CheckpointBlocksMemPool(size)(dao)
-  val pendingAcceptance = new StorageService[CheckpointBlock](1000, Some(10))
+class CheckpointService(dao: DAO) {
+  val memPool = new CheckpointBlocksMemPool()(dao)
+  val pendingAcceptance = new StorageService[CheckpointBlock]( Some(10))
   val midDb: MidDbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksMid(dao)
   val oldDb: DbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksOld(dao)
 
