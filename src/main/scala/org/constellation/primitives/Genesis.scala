@@ -7,6 +7,7 @@ import constellation._
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
+import org.constellation.primitives.storage.TransactionStatus
 
 object Genesis {
 
@@ -114,19 +115,14 @@ trait Genesis extends NodeData with EdgeDAO {
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
     go.genesis.transactions.foreach { rtx =>
       val bal = rtx.amount - (go.initialDistribution.transactions.map { _.amount }.sum * 2)
-      dao.addressService.putSync(
-        rtx.dst.hash,
-        AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal)
-      )
+      dao.addressService.putSync(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal))
     }
 
     // Store the balance for the initial distribution addresses along with starting rep score.
     go.initialDistribution.transactions.foreach { t =>
       val bal = t.amount * 2
-      dao.addressService
-        .putSync(t.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal))
+      dao.addressService.putSync(t.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal))
     }
-    storeTransactions(go)
     val numTX = (1 + go.initialDistribution.transactions.size * 2).toString
     //  metricsManager ! UpdateMetric("validTransactions", numTX)
     //  metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
@@ -151,6 +147,7 @@ trait Genesis extends NodeData with EdgeDAO {
         .sequence
         .unsafeRunSync()
     }
+    storeTransactions(go)
     dao.metrics.updateMetric("genesisHash", go.genesis.soeHash)
     // println(s"accept genesis = ", go)
   }
@@ -160,15 +157,14 @@ trait Genesis extends NodeData with EdgeDAO {
         genesisObservation.initialDistribution,
         genesisObservation.initialDistribution2)
       .flatMap { cb =>
-        cb.transactions.map(
-          tx =>
-            dao.transactionService.midDb
-              .put(tx.hash, TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
-        )
+        cb.transactions
+          .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
+          .map(tcd => dao.transactionService.put(tcd, TransactionStatus.Accepted, false))
       }
       .toList
       .sequence
-      .unsafeRunAsyncAndForget()
+      .void
+      .unsafeRunSync()
   }
 
 }

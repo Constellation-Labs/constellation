@@ -137,7 +137,7 @@ object CheckpointService {
 
   def fetch[T, R](
     merkleRoot: String,
-    service: MerkleService[T],
+    service: MerkleService[String, T],
     mapper: T => R,
     resolver: String => IO[T],
   )(implicit dao: DAO): Seq[R] = {
@@ -166,7 +166,7 @@ object CheckpointService {
 
 class CheckpointService(dao: DAO, size: Int = 50000) {
   val memPool = new CheckpointBlocksMemPool(size)(dao)
-  val pendingAcceptance = new StorageService[CheckpointBlock](1000,Some(10))
+  val pendingAcceptance = new StorageService[CheckpointBlock](1000, Some(10))
   val midDb: MidDbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksMid(dao)
   val oldDb: DbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksOld(dao)
 

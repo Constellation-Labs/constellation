@@ -11,7 +11,7 @@ import constellation.createTransaction
 import org.constellation.consensus.{EdgeProcessor, RandomData, Snapshot, SnapshotInfo}
 import org.constellation.primitives.CheckpointBlockValidatorNel._
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, Id}
-import org.constellation.primitives.storage.{AcceptedTransactionService, CheckpointBlocksMemPool, CheckpointService}
+import org.constellation.primitives.storage.{AcceptedTransactionService, CheckpointBlocksMemPool, CheckpointService, TransactionService}
 import org.constellation.util.{HashSignature, Metrics}
 import org.constellation.{DAO, NodeConfig}
 import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
@@ -67,8 +67,8 @@ class CheckpointBlockValidatorNelTest
     checkpointService.getFullData(leftParent.baseHash) shouldReturn Some(CheckpointCache(Some(leftParent)))
     checkpointService.memPool shouldReturn mock[CheckpointBlocksMemPool]
     checkpointService.memPool.cacheSize() shouldReturn 0
-    dao.acceptedTransactionService shouldReturn mock[AcceptedTransactionService]
-    dao.acceptedTransactionService.contains(*) shouldReturn IO.pure(false)
+    dao.transactionService shouldReturn mock[TransactionService[String, TransactionCacheData]]
+    dao.transactionService.isAccepted(*) shouldReturn IO.pure(false)
 
     leftBlock.transactions shouldReturn Seq(tx1, tx2)
     rightBlock.transactions shouldReturn Seq(tx3, tx4)
@@ -112,7 +112,7 @@ class CheckpointBlockValidatorNelTest
 
   test("it should detect conflict with ancestry of other tip") {
     val conflictTx = leftBlock.transactions.head.hash
-    dao.acceptedTransactionService.contains(conflictTx) shouldReturn IO.pure(true)
+    dao.transactionService.isAccepted(conflictTx) shouldReturn IO.pure(true)
 
 
     containsAlreadyAcceptedTx(leftBlock).unsafeRunSync() shouldBe List(conflictTx)

@@ -97,8 +97,10 @@ object EdgeProcessor extends StrictLogging {
 
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
-    val transactions =
-      dao.threadSafeTXMemPool.pullUpTo(dao.maxTXInBlock)
+    val transactions = dao.transactionService
+      .pullForConsensus(dao.maxTXInBlock)
+      .map(_.map(_.transaction))
+      .unsafeRunSync()
 
     dao.metrics.incrementMetric("attemptFormCheckpointCalls")
 
@@ -437,7 +439,6 @@ object Snapshot {
     }
 
     val cbs = cbData.flatten.map(_.checkpointBlock)
-    println(s"------ Accepting snapshot with cbs: ${cbs.size}")
     cbs.foreach { cb =>
       cb.messagesMerkleRoot.map { messagesMerkleRoot =>
         val updates = dao.messageService
@@ -469,6 +470,17 @@ object Snapshot {
         updates.unsafeRunSync()
       }
 
+      // DEBUG: mwadon \/
+      val transactions = CheckpointService.fetchTransactions(cb.transactionsMerkleRoot).toList
+
+      transactions.map(dao.addressService.transferSnapshot).sequence.unsafeRunSync()
+      dao.transactionService.applySnapshot(transactions.map(TransactionCacheData(_))).unsafeRunSync()
+
+      // TODO: CheckpointService - apply snapshot (remove from mem pool, add to midDb)
+
+
+      /*
+
       CheckpointService.fetchTransactions(cb.transactionsMerkleRoot).foreach { tx =>
         // TODO: Should really apply this to the N-1 snapshot instead of doing it directly
         // To allow consensus more time since the latest snapshot includes all data up to present, but this is simple for now
@@ -485,6 +497,7 @@ object Snapshot {
       dao.checkpointService.midDb.remove(cb.baseHash).unsafeRunSync()
       dao.transactionService.merklePool.remove(cb.transactionsMerkleRoot).unsafeRunSync()
       // TODO: add to midDb
+       */
     }
   }
 

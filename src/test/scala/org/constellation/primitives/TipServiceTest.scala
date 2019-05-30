@@ -22,7 +22,7 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockitoFixture with Match
     val dao = mock[DAO]
     dao.metrics shouldReturn mock[Metrics]
     dao.metrics.incrementMetricAsync(*) shouldReturn IO.unit
-    dao.metrics.updateMetricAsync(*,any[String]) shouldReturn IO.unit
+    dao.metrics.updateMetricAsync(*, any[Int]) shouldReturn IO.unit
     dao
   }
 

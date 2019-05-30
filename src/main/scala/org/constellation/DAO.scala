@@ -91,13 +91,11 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
 
     idDir.createDirectoryIfNotExists(createParents = true)
     messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
-    transactionHashStore = SwayDBDatastore.duplicateCheckStore(this, "transaction_hash_store")
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
-    transactionService = TransactionService(this, processingConfig.transactionLRUMaxSize)
+    transactionService = new DefaultTransactionService(this) //, processingConfig.transactionLRUMaxSize)
     checkpointService = CheckpointService(this, processingConfig.checkpointLRUMaxSize)
     snapshotService = SnapshotService(this)
-    acceptedTransactionService = new AcceptedTransactionService(processingConfig.transactionLRUMaxSize)
     addressService = new AddressService(processingConfig.addressLRUMaxSize)(_ => metrics)
   }
 

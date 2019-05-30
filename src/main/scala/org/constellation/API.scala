@@ -342,7 +342,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             }
           } ~
           path("dashboard") {
-            val txs = dao.acceptedTransactionService.getLast20TX
+            val txs = dao.transactionService.getLast20Accepted.unsafeRunSync()
             val self = Node(
               dao.selfAddressStr,
               dao.externalHostString,
@@ -506,22 +506,16 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           entity(as[SendToAddress]) { sendRequest =>
             logger.info(s"send transaction to address $sendRequest")
 
-            val tx = createTransaction(dao.selfAddressStr,
-                                       sendRequest.dst,
-                                       sendRequest.amountActual,
-                                       dao.keyPair,
-                                       normalized = false)
-            val put = dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
-            if (put) {
-              dao.transactionService.memPool.putSync(
-                tx.hash,
-                TransactionCacheData(
-                  tx,
-                  inMemPool = true
-                )
-              )
-            }
+            val tx = createTransaction(
+              dao.selfAddressStr,
+              sendRequest.dst,
+              sendRequest.amountActual,
+              dao.keyPair,
+              normalized = false)
 
+            dao.transactionService
+              .put(TransactionCacheData(tx, inMemPool = true), true)
+              .unsafeRunSync()
 
             complete(tx.hash)
           }

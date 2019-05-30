@@ -10,6 +10,7 @@ import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.StartNewBlockCreationRound
 import org.constellation.consensus.EdgeProcessor
 import org.constellation.primitives.Schema.NodeState
+import org.constellation.primitives.storage.TransactionStatus
 import org.constellation.util.Periodic
 
 import scala.concurrent.duration._
@@ -33,7 +34,7 @@ class CheckpointFormationManager(
   @volatile private var lastCheckpoint = LocalDateTime.now
 
   override def trigger() = {
-    val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
+    val memPoolCount = dao.transactionService.count(TransactionStatus.Pending).unsafeRunSync()
     val elapsedTime = toFiniteDuration(JDuration.between(lastCheckpoint, LocalDateTime.now))
 
     val minTXInBlock = dao.processingConfig.minCheckpointFormationThreshold
