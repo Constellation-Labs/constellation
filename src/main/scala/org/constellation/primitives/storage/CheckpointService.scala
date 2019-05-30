@@ -171,6 +171,11 @@ class CheckpointService(dao: DAO) {
 
   val memoizedFullData: TrieMap[String, Option[Schema.CheckpointCache]] = TrieMap.empty
 
+  def applySnapshot(baseHash: String): Unit = {
+    memPool.removeSync(baseHash)
+    midDb.removeSync(baseHash)
+  }
+
   def migrateOverCapacity(): IO[Unit] = {
     midDb
       .pullOverCapacity()
