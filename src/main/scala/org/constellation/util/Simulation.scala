@@ -313,19 +313,17 @@ object Simulation {
   }
 
   def triggerRandom(apis: Seq[APIClient]): Seq[Response[String]] = {
-    val responses = apis.map(_.postNonBlockingEmpty("random"))
-
+    val responses = apis.map(_.postNonBlockingEmptyString("random"))
     Future.sequence(responses).get()
   }
 
   def triggerCheckpointFormation(apis: Seq[APIClient]): Seq[Response[String]] = {
-    val responses = apis.map(_.postNonBlockingEmpty("checkpointFormation"))
-
+    val responses = apis.map(_.postNonBlockingEmptyString("checkpointFormation"))
     Future.sequence(responses).get()
   }
 
   def setReady(apis: Seq[APIClient]): Unit = {
-    val responses = apis.map(_.postNonBlockingEmpty("ready"))
+    val responses = apis.map(_.postNonBlockingEmptyString("ready"))
     Future.sequence(responses).get()
   }
 

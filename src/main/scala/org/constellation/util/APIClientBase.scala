@@ -194,8 +194,15 @@ class APIClientBase(host: String = "127.0.0.1",
   def postNonBlockingEmpty[T <: AnyRef](
                                       suffix: String,
                                       timeout: Duration = 5.seconds
-                                    )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats) = {
+                                    )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): Future[T] = {
     httpWithAuth(suffix, timeout = timeout)(Method.POST).response(asJson[T]).send().map(_.unsafeBody)
+  }
+
+  def postNonBlockingEmptyString(
+                                 suffix: String,
+                                 timeout: Duration = 5.seconds
+                                )(implicit f: Formats = constellation.constellationFormats): Future[Response[String]] = {
+    httpWithAuth(suffix, timeout = timeout)(Method.POST).send()
   }
 
   def getBytes(suffix: String,
