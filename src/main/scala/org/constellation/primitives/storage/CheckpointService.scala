@@ -3,6 +3,7 @@ package org.constellation.primitives.storage
 import better.files.File
 import cats.effect.IO
 import cats.implicits._
+import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
 import org.constellation.datastore.swaydb.SwayDbConversions._
 import org.constellation.p2p.DataResolver
@@ -86,11 +87,11 @@ class CheckpointBlocksMemPool()(implicit dao: DAO)
 
 }
 
-object CheckpointService {
+object CheckpointService extends StrictLogging {
   def apply(implicit dao: DAO) = new CheckpointService(dao)
 
   def convert(merkle: CheckpointCacheMetadata)(implicit dao: DAO): CheckpointCache = {
-    println(s"Convert triggered for: ${merkle.checkpointBlock.baseHash}")
+    logger.debug(s"Convert triggered for: ${merkle.checkpointBlock.baseHash}")
     val txs =
       fetchTransactions(merkle.checkpointBlock.transactionsMerkleRoot)
     val msgs =

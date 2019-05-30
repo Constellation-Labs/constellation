@@ -66,6 +66,10 @@ class APIClient private (host: String = "127.0.0.1",
     getBlocking[MetricsResult]("metrics", timeout = 5.seconds).metrics
   }
 
+  def metricsAsync: Future[Map[String, String]] = {
+    getNonBlocking[MetricsResult]("metrics", timeout = 5.seconds).map(_.metrics)
+  }
+
   def getBlockingBytesKryo[T <: AnyRef](suffix: String,
                                         queryParams: Map[String, String] = Map(),
                                         timeout: Duration = 5.seconds): T = {
