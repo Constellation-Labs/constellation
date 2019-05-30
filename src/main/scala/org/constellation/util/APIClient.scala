@@ -87,7 +87,7 @@ class APIClient private (host: String = "127.0.0.1",
                                    suffix: String,
                                    queryParams: Map[String, String] = Map(),
                                    timeout: Duration = 5.seconds
-                                 )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats) = {
+                                 )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): IO[T] = {
     IO.fromFuture(IO { getNonBlocking[T](suffix, queryParams, timeout) })
   }
 
@@ -97,7 +97,7 @@ class APIClient private (host: String = "127.0.0.1",
                                      headers: Map[String, String] = Map.empty)(
                                       implicit m: Manifest[T],
                                       f: Formats = constellation.constellationFormats
-                                    ) = {
+                                    ): IO[T] = {
     IO.fromFuture(IO { postNonBlocking[T](suffix,b,timeout,headers) })
   }
 

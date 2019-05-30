@@ -369,14 +369,12 @@ class Round(roundData: RoundData,
         }
         .recoverWith {
           case error @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
-            log.warning(error.getMessage)
-            IO.pure(None)
+            IO { log.warning(error.getMessage) } >> IO.pure(None)
           case unknownError =>
-            log.error(
+            IO { log.error(
               s"Failed to accept majority checkpoint block due to: ${unknownError.getMessage}",
               unknownError
-            )
-            IO.pure(None)
+            ) } >> IO.pure(None)
         }
         .unsafeRunSync()
 

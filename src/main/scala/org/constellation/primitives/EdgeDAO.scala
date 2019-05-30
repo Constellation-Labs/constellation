@@ -384,7 +384,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
           _ <- IO.delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
           _ <- acceptMessages(cb)
           _ <- acceptTransactions(cb)
-          _ = logger.info(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}]")
+          _ <- IO { logger.info(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}]") }
           _ <- concurrentTipService.update(cb)
           _ <- updateAcceptedCBSinceSnapshot(cb)
           _ <- IO.shift *> dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted)
@@ -495,11 +495,9 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
       cbBaseHash = Some(cb.baseHash)
     )
 
-    logger.info(s"Accepting transactions ${cb.transactions.size}")
-
-    cb.transactions.toList
-      .map(tx ⇒ (tx, toCacheData(tx)))
-      .map {
+    val insertTX =
+      cb.transactions.toList.map(tx ⇒ (tx, toCacheData(tx)))
+      .traverse {
         case (tx, txMetadata) ⇒
           //          dao.transactionService.memPool.remove(tx.hash)
           IO.unit
@@ -507,9 +505,9 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
             //            .flatMap(_ => dao.acceptedTransactionService.put(tx.hash, txMetadata))
             .flatMap(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
             .flatMap(_ => dao.addressService.transfer(tx))
-      }
-      .sequence[IO, AddressCacheData]
-      .map(_ ⇒ ())
+      }.void
+
+    IO { logger.info(s"Accepting transactions ${cb.transactions.size}") } >> insertTX
   }
 
 }

@@ -136,7 +136,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
         peers
       )
       _ <- finishDownload(snapshot)
-      _ <- setAcceptedTransactionsAfterDownload
+      _ <- setAcceptedTransactionsAfterDownload()
     } yield ()
 
   private def initDownloadingProcess: IO[Unit] =
@@ -155,7 +155,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .map(_.find(_.nonEmpty).flatten.get)
       .toIO
       .flatMap(updateMetricAndPass("downloadedGenesis", "true"))
-      .flatMap(genesis => IO(dao.acceptGenesis(genesis)).map(_ => genesis))
+      .flatTap(genesis => IO(dao.acceptGenesis(genesis)))
 
   private def waitForPeers(): IO[Unit] =
     IO(logger.info(s"Waiting ${waitForPeersDelay.toString()} for peers"))
@@ -211,10 +211,10 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       _ <- acceptSnapshotCacheData(snapshot)
       _ <- setNodeState(NodeState.Ready)
       _ <- clearSyncBuffer
-      _ <- setDownloadFinishedTime
+      _ <- setDownloadFinishedTime()
     } yield ()
 
-  private def setAcceptedTransactionsAfterDownload: IO[Unit] = IO {
+  private def setAcceptedTransactionsAfterDownload(): IO[Unit] = IO {
     dao.transactionAcceptedAfterDownload =
       dao.metrics.getMetrics.get("transactionAccepted").map(_.toLong).getOrElse(0L)
     logger.info("download process has finished")
@@ -227,13 +227,11 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .flatMap(_ => IO(PeerManager.broadcastNodeState()))
 
   private def requestForFaucet: IO[Iterable[Response[String]]] =
-    Future
-      .sequence(
-        dao.peerInfoAsync.unsafeRunSync()
-          .map(_._2.client)
-          .map(_.post("faucet", SendToAddress(dao.selfAddressStr, 500L)))
-      )
-      .toIO
+    for {
+      m       <-  dao.peerInfoAsync
+      clients =   m.toList.map(_._2.client)
+      resp    <-  clients.traverse(_.post("faucet", SendToAddress(dao.selfAddressStr, 500L)).toIO)
+    } yield resp
 
   private def getSnapshotHashes(snapshotInfo: SnapshotInfo): IO[Seq[String]] = {
     val preExistingSnapshots = dao.snapshotPath.list.toSeq.map(_.name)
@@ -265,7 +263,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
     dao.threadSafeSnapshotService.syncBuffer = Seq()
   }
 
-  private def setDownloadFinishedTime: IO[Unit] = IO {
+  private def setDownloadFinishedTime(): IO[Unit] = IO {
     dao.downloadFinishedTime = System.currentTimeMillis()
   }
 
