@@ -26,7 +26,7 @@ trait TransactionService[H, T] extends MerkleService[H, T] {
   def exists: H => IO[Boolean]
   def isAccepted(hash: H): IO[Boolean]
   def pullForConsensus(minCount: Int): IO[List[T]]
-  def applySnapshot(txs: List[T]): IO[Unit]
+  def applySnapshot(txs: List[T], merkleRoot: String): IO[Unit]
   def getArbitrary: IO[Map[H, T]]
   def getLast20Accepted: IO[List[T]]
   def findHashesByMerkleRoot(merkleRoot: H): IO[Option[Seq[H]]]
@@ -115,8 +115,11 @@ class DefaultTransactionService(dao: DAO) extends TransactionService[String, Tra
 
   def isAccepted(hash: String): IO[Boolean] = accepted.contains(hash)
 
-  def applySnapshot(txs: List[TransactionCacheData]): IO[Unit] =
-    txs.map(tx => accepted.remove(tx.transaction.hash)).sequence.void
+  def applySnapshot(txs: List[TransactionCacheData], merkleRoot: String): IO[Unit] = {
+    merklePool.remove(merkleRoot).flatMap(_ =>
+      txs.map(tx => accepted.remove(tx.transaction.hash)).sequence.void
+    )
+  }
 
   def pullForConsensus(minCount: Int): IO[List[TransactionCacheData]] =
     pending.pull(minCount)

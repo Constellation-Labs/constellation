@@ -93,7 +93,6 @@ abstract class MidDbStorage[K, V](dbPath: File, capacity: Int)(implicit keySeria
 //      .flatTap(_ => IO(hashQueue.addAll(kvs.map(_._1).asJavaCollection)))
   }
 
-
   def pullOverCapacity(): IO[List[V]] = {
     if (!isOverCapacity) {
       IO.pure(Nil)
