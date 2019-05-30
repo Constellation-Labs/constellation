@@ -4,22 +4,23 @@ import java.security.KeyPair
 import java.util.concurrent.Executors
 
 import better.files.File
-import constellation._
 import cats.implicits._
+import constellation._
 import org.constellation.crypto.KeyUtils.makeKeyPair
 import org.constellation.primitives.Schema.{CheckpointCache, Height, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures, PeerMetadata}
-import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
 import org.mockito.Mockito.doNothing
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 
 import scala.concurrent.ExecutionContext
 
 class CheckpointServiceTest
     extends FunSuite
-    with IdiomaticMockitoFixture
+    with IdiomaticMockito
+    with ArgumentMatchersSugar
     with Matchers
     with BeforeAndAfter {
 

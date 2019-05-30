@@ -2,4 +2,4 @@ package org.constellation.primitives.storage
 
 import org.constellation.primitives.Schema.SignedObservationEdgeCache
 
-class SOEService(size: Int = 10000) extends StorageService[SignedObservationEdgeCache](size)
+class SOEService() extends StorageService[SignedObservationEdgeCache]()

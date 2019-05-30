@@ -8,12 +8,12 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 
 //noinspection ScalaStyle
-class StorageService[V](size: Int = 50000, expireAfterMinutes: Option[Int] = None) extends Storage[IO, String, V] with Lookup[String, V] {
+class StorageService[V](expireAfterMinutes: Option[Int] = Some(240)) extends Storage[IO, String, V] with Lookup[String, V] {
   private val lruCache: Cache[String, V] = {
     val cacheWithStats = Scaffeine().recordStats()
 
     val cache = expireAfterMinutes.map(mins => cacheWithStats.expireAfterAccess(mins.minutes))
-      .getOrElse(cacheWithStats.maximumSize(size))
+      .getOrElse(cacheWithStats)
 
     cache.build[String, V]()
   }
