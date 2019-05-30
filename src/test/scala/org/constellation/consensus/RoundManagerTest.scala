@@ -14,7 +14,7 @@ import org.constellation.primitives.Schema.{NodeType, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.primitives.storage._
 import org.constellation.util.Metrics
-import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers, OneInstancePerTest}
 
 import scala.collection.concurrent.TrieMap
@@ -25,7 +25,8 @@ class RoundManagerTest
   extends TestKit(ActorSystem("RoundManagerTest"))
     with FunSuiteLike
     with Matchers
-    with IdiomaticMockitoFixture
+    with IdiomaticMockito
+    with ArgumentMatchersSugar
     with BeforeAndAfter
     with OneInstancePerTest {
 

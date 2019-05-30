@@ -4,10 +4,10 @@ import cats.effect.IO
 import org.constellation.DAO
 import org.constellation.primitives.{ChannelMessageMetadata, ChannelMetadata}
 
-class MessageService(size: Int = 2000)(implicit dao: DAO) extends MerkleService[String, ChannelMessageMetadata] {
-  val merklePool = new StorageService[Seq[String]](size)
-  val arbitraryPool = new StorageService[ChannelMessageMetadata](size)
-  val memPool = new StorageService[ChannelMessageMetadata](size)
+class MessageService()(implicit dao: DAO) extends MerkleService[String, ChannelMessageMetadata] {
+  val merklePool = new StorageService[Seq[String]]()
+  val arbitraryPool = new StorageService[ChannelMessageMetadata]()
+  val memPool = new StorageService[ChannelMessageMetadata]()
 
   def putSync(key: String, value: ChannelMessageMetadata): ChannelMessageMetadata = {
     dao.channelStorage.insert(value)
@@ -29,4 +29,4 @@ class MessageService(size: Int = 2000)(implicit dao: DAO) extends MerkleService[
   override def findHashesByMerkleRoot(merkleRoot: String): IO[Option[Seq[String]]] =
     merklePool.get(merkleRoot)
 }
-class ChannelService(size: Int = 2000) extends StorageService[ChannelMetadata](size)
+class ChannelService() extends StorageService[ChannelMetadata]()

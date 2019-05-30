@@ -7,7 +7,6 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import cats.effect.IO
-import cats.effect.IO.Async
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.crypto.SimpleWalletLike
@@ -18,9 +17,6 @@ import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObser
 import org.constellation.primitives._
 import org.constellation.primitives.storage._
 import org.constellation.util.HostPort
-
-import scala.concurrent.Await
-import scala.concurrent.duration._
 
 class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike with StrictLogging {
 
@@ -94,9 +90,9 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
     transactionService = new DefaultTransactionService(this) //, processingConfig.transactionLRUMaxSize)
-    checkpointService = CheckpointService(this, processingConfig.checkpointLRUMaxSize)
+    checkpointService = CheckpointService(this)
     snapshotService = SnapshotService(this)
-    addressService = new AddressService(processingConfig.addressLRUMaxSize)(_ => metrics)
+    addressService = new AddressService()(() => metrics)
   }
 
   lazy val concurrentTipService: ConcurrentTipService = new TrieBasedTipService(

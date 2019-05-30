@@ -6,14 +6,14 @@ import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round.{LightTransactionsProposal, SelectedUnionBlock, UnionBlockProposal}
 import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
-import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, OneInstancePerTest}
-import scala.concurrent.duration._
 
 class CrossTalkConsensusTest
     extends TestKit(ActorSystem("CrossTalkConsensusTest"))
     with FunSuiteLike
-    with IdiomaticMockitoFixture
+    with IdiomaticMockito
+    with ArgumentMatchersSugar
     with BeforeAndAfter
     with OneInstancePerTest {
 

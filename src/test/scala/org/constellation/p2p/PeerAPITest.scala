@@ -14,18 +14,17 @@ import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
 import org.constellation.util.Metrics
 import org.json4s.native
 import org.json4s.native.Serialization
-import org.mockito.Mockito
-import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito, Mockito}
 import org.scalatest.{Matchers, WordSpec}
 
-import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class PeerAPITest
     extends WordSpec
     with Matchers
     with ScalatestRouteTest
-    with IdiomaticMockitoFixture
+    with IdiomaticMockito
+    with ArgumentMatchersSugar
     with Json4sSupport {
 
   implicit val serialization: Serialization.type = native.Serialization
@@ -55,7 +54,7 @@ class PeerAPITest
         responseAs[FinishedCheckpointAck] shouldEqual FinishedCheckpointAck(true)
       }
 
-      //      requires mockito 1.4.x and migrating all IdiomaticMockitoFixtures
+      //      requires mockito 1.4.x and migrating all IdiomaticMockitos
       //      peerAPI.makeCallback(*, *) wasCalled (once within 2.seconds)
     }
 

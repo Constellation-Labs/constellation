@@ -3,8 +3,8 @@ import cats.effect.IO
 import org.constellation.primitives.PeerNotification
 
 class NotificationService(size: Int = 2000)  extends MerkleService[String, PeerNotification]{
-  val merklePool = new StorageService[Seq[String]](size)
-  val memPool = new StorageService[PeerNotification](size)
+  val merklePool = new StorageService[Seq[String]]()
+  val memPool = new StorageService[PeerNotification]()
 
   def lookup: String => IO[Option[PeerNotification]] =
     DbStorage.extendedLookup[String, PeerNotification](List(memPool))

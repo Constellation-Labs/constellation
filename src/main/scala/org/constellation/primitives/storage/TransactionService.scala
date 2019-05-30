@@ -5,11 +5,10 @@ import cats.effect.concurrent._
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
-import org.constellation.consensus.Snapshot
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.primitives.storage.TransactionStatus.TransactionStatus
 
-import scala.concurrent.{ExecutionContext}
+import scala.concurrent.ExecutionContext
 
 object TransactionStatus extends Enumeration {
   type TransactionStatus = Value
@@ -69,7 +68,7 @@ class PendingTransactionsMemPool(implicit dao: DAO) extends Lookup[String, Trans
   def size: Int = transactions.get.map(_.size).unsafeRunSync()
 }
 
-class TransactionMemPool(size: Int = 50000) extends StorageService[TransactionCacheData](size, Some(240))
+class TransactionMemPool() extends StorageService[TransactionCacheData](Some(240))
 
 class DefaultTransactionService(dao: DAO) extends TransactionService[String, TransactionCacheData] with StrictLogging {
   val merklePool = new StorageService[Seq[String]]()
