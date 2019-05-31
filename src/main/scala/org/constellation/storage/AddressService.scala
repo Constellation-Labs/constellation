@@ -1,4 +1,4 @@
-package org.constellation.primitives.storage
+package org.constellation.storage
 
 import cats.effect.{ContextShift, IO}
 import cats.implicits._

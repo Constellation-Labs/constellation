@@ -1,4 +1,4 @@
-package org.constellation.primitives.storage
+package org.constellation.storage
 
 import cats.effect._
 import cats.effect.concurrent._
@@ -6,7 +6,7 @@ import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
 import org.constellation.primitives.TransactionCacheData
-import org.constellation.primitives.storage.TransactionStatus.TransactionStatus
+import org.constellation.storage.TransactionStatus.TransactionStatus
 
 import scala.concurrent.ExecutionContext
 
@@ -17,6 +17,7 @@ object TransactionStatus extends Enumeration {
 
 trait TransactionService[H, T] extends MerkleService[H, T] {
   val merklePool: StorageService[Seq[H]]
+
   def put(tx: T): IO[T] = put(tx, as = TransactionStatus.Pending, overrideLimit = false)
   def put(tx: T, overrideLimit: Boolean): IO[T] = put(tx, TransactionStatus.Pending, overrideLimit)
   def put(tx: T, as: TransactionStatus, overrideLimit: Boolean): IO[T]

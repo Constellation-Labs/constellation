@@ -9,7 +9,7 @@ import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.StartNewBlockCreationRound
 import org.constellation.primitives.Schema.{InternalHeartbeat, NodeState, _}
-import org.constellation.primitives.storage.TransactionStatus
+import org.constellation.storage.TransactionStatus
 import org.constellation.util.{Distance, Periodic}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}

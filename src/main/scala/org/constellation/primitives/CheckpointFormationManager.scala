@@ -10,7 +10,7 @@ import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.StartNewBlockCreationRound
 import org.constellation.consensus.EdgeProcessor
 import org.constellation.primitives.Schema.NodeState
-import org.constellation.primitives.storage.TransactionStatus
+import org.constellation.storage.TransactionStatus
 import org.constellation.util.Periodic
 
 import scala.concurrent.duration._

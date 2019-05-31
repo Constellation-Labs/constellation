@@ -1,4 +1,4 @@
-package org.constellation.primitives.storage
+package org.constellation.storage
 
 import better.files.File
 import cats.effect.IO

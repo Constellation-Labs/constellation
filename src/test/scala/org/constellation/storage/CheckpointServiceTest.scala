@@ -1,4 +1,4 @@
-package org.constellation.primitives.storage
+package org.constellation.storage
 
 import java.security.KeyPair
 import java.util.concurrent.Executors
