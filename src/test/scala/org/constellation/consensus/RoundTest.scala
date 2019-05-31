@@ -11,7 +11,7 @@ import org.constellation.consensus.RoundManager.{BroadcastLightTransactionPropos
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCache, NodeType, SignedObservationEdge}
 import org.constellation.primitives._
-import org.constellation.primitives.storage.{MessageService, TransactionService}
+import org.constellation.storage.{MessageService, TransactionService}
 import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures, PeerMetadata}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

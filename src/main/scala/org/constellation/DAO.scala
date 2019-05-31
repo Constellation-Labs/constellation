@@ -15,7 +15,7 @@ import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObservationEdge}
 import org.constellation.primitives._
-import org.constellation.primitives.storage._
+import org.constellation.storage._
 import org.constellation.util.HostPort
 
 class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike with StrictLogging {

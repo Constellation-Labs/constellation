@@ -1,4 +1,4 @@
-package org.constellation.primitives.storage
+package org.constellation.storage
 
 import com.typesafe.scalalogging.StrictLogging
 import constellation._

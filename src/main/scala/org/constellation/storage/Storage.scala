@@ -1,4 +1,4 @@
-package org.constellation.primitives.storage
+package org.constellation.storage
 
 trait Storage[F[_], K, V] {
   def getSync(key: K): Option[V]

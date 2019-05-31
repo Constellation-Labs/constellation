@@ -1,4 +1,4 @@
-package org.constellation.primitives.storage
+package org.constellation.storage
 
 import cats.effect.IO
 import com.github.blemale.scaffeine.{Cache, Scaffeine}

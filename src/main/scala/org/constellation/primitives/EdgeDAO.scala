@@ -8,7 +8,7 @@ import cats.implicits._
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.storage._
+import org.constellation.storage._
 import org.constellation.util.Metrics
 import org.constellation.{DAO, NodeConfig, ProcessingConfig}
 
