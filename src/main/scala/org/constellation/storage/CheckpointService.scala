@@ -170,8 +170,6 @@ class CheckpointService(dao: DAO) {
   val midDb: MidDbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksMid(dao)
   val oldDb: DbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksOld(dao)
 
-  val memoizedFullData: TrieMap[String, Option[Schema.CheckpointCache]] = TrieMap.empty
-
   def applySnapshot(baseHash: String): Unit = {
     memPool.removeSync(baseHash)
     midDb.removeSync(baseHash)
@@ -185,11 +183,7 @@ class CheckpointService(dao: DAO) {
   }
 
   def fullData(key: String): Option[Schema.CheckpointCache] = {
-    if (!memoizedFullData.contains(key)) {
-      val full = lookup(key).map(_.map(CheckpointService.convert(_)(dao))).unsafeRunSync()
-      memoizedFullData.update(key, full)
-    }
-    memoizedFullData.get(key).flatten
+    lookup(key).map(_.map(CheckpointService.convert(_)(dao))).unsafeRunSync()
   }
 
   def lookup: String => IO[Option[CheckpointCacheMetadata]] =

@@ -124,7 +124,7 @@ object PeerManager extends StrictLogging {
             client.post("register", dao.peerRegistrationRequest)
           }
           .recover {
-            case e: Throwable =>
+            case e: Exception =>
               logger.error("registration request failed", e)
               dao.metrics.incrementMetric("peerGetRegistrationRequestFailed")
               throw e
