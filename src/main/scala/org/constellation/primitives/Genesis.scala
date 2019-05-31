@@ -115,13 +115,13 @@ trait Genesis extends NodeData with EdgeDAO {
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
     go.genesis.transactions.foreach { rtx =>
       val bal = rtx.amount - (go.initialDistribution.transactions.map { _.amount }.sum * 2)
-      dao.addressService.putSync(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal))
+      dao.addressService.put(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal)).unsafeRunSync()
     }
 
     // Store the balance for the initial distribution addresses along with starting rep score.
     go.initialDistribution.transactions.foreach { t =>
       val bal = t.amount * 2
-      dao.addressService.putSync(t.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal))
+      dao.addressService.put(t.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal)).unsafeRunSync()
     }
     val numTX = (1 + go.initialDistribution.transactions.size * 2).toString
     //  metricsManager ! UpdateMetric("validTransactions", numTX)
@@ -159,7 +159,7 @@ trait Genesis extends NodeData with EdgeDAO {
       .flatMap { cb =>
         cb.transactions
           .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
-          .map(tcd => dao.transactionService.put(tcd, TransactionStatus.Accepted, false))
+          .map(tcd => dao.transactionService.put(tcd, TransactionStatus.Accepted))
       }
       .toList
       .sequence

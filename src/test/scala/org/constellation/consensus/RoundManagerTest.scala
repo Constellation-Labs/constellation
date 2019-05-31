@@ -71,7 +71,7 @@ class RoundManagerTest
   dao.minCheckpointFormationThreshold shouldReturn checkpointFormationThreshold
 
   dao.readyFacilitatorsAsync shouldReturn IO.pure(readyFacilitators)
-  dao.peerInfoAsync shouldReturn IO.pure(readyFacilitators)
+  dao.peerInfo shouldReturn IO.pure(readyFacilitators)
   dao.pullTips(readyFacilitators) shouldReturn Some(tips)
   dao.threadSafeMessageMemPool shouldReturn mock[ThreadSafeMessageMemPool]
   dao.threadSafeMessageMemPool.pull(1) shouldReturn None
@@ -82,14 +82,14 @@ class RoundManagerTest
   dao.metrics shouldReturn metrics
 
   dao.messageService shouldReturn mock[MessageService]
-  dao.messageService.arbitraryPool shouldReturn mock[StorageService[ChannelMessageMetadata]]
-  dao.messageService.arbitraryPool.toMapSync() shouldReturn Map.empty
+  dao.messageService.arbitraryPool shouldReturn mock[StorageService[IO, ChannelMessageMetadata]]
+  dao.messageService.arbitraryPool.toMap() shouldReturn IO.pure(Map.empty)
 
-  dao.transactionService shouldReturn mock[TransactionService[String, TransactionCacheData]]
+  dao.transactionService shouldReturn mock[TransactionService[IO]]
   dao.transactionService.getArbitrary shouldReturn IO.pure(Map.empty)
   dao.transactionService.pullForConsensus(checkpointFormationThreshold) shouldReturn IO(List(tx1, tx2).map(TransactionCacheData(_)))
 
-  dao.readyPeersAsync(NodeType.Light) shouldReturn IO.pure(Map())
+  dao.readyPeers(NodeType.Light) shouldReturn IO.pure(Map())
 
   val peerManagerProbe = TestProbe()
   val ipManager = mock[IPManager]

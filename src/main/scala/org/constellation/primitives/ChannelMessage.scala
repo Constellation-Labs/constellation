@@ -88,7 +88,7 @@ object ChannelMessage extends StrictLogging {
         val genesisHashChannelId = msg.signedMessageData.hash
         dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) =
           channelOpenRequest.name
-        dao.messageService.memPool.putSync(msg.signedMessageData.hash, ChannelMessageMetadata(msg))
+        dao.messageService.memPool.put(msg.signedMessageData.hash, ChannelMessageMetadata(msg)).unsafeRunSync()
         dao.threadSafeMessageMemPool.put(Seq(msg), overrideLimit = true)
         val semaphore = new Semaphore(1)
         dao.threadSafeMessageMemPool.activeChannels(genesisHashChannelId) = semaphore
@@ -100,7 +100,7 @@ object ChannelMessage extends StrictLogging {
             retries += 1
             logger.info(s"Polling genesis creation attempt $retries for $genesisHashChannelId")
             Thread.sleep(1000)
-            metadata = dao.channelService.getSync(genesisHashChannelId)
+            metadata = dao.channelService.lookup(genesisHashChannelId).unsafeRunSync()
           }
           val response =
             if (metadata.isEmpty) "Timeout awaiting block acceptance"
@@ -131,7 +131,7 @@ object ChannelMessage extends StrictLogging {
 
         dao.threadSafeMessageMemPool.put(messages, overrideLimit = true)
         messages.foreach(cm => {
-          dao.messageService.memPool.putSync(cm.signedMessageData.hash, ChannelMessageMetadata(cm))
+          dao.messageService.memPool.put(cm.signedMessageData.hash, ChannelMessageMetadata(cm)).unsafeRunSync()
         })
         val semaphore = new Semaphore(1)
         dao.threadSafeMessageMemPool.activeChannels(channelSendRequest.channelId) = semaphore

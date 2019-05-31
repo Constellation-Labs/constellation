@@ -78,7 +78,7 @@ class Round(roundData: RoundData,
           .getOrElse(Seq()) ++ arbitraryMessages
           .filter(_._2 == distance)
           .map(_._1.signedMessageData.hash),
-        dao.peerInfoAsync.unsafeRunSync().flatMap(_._2.notification).toSeq
+        dao.peerInfo.unsafeRunSync().flatMap(_._2.notification).toSeq
       )
 
       passToParentActor(
@@ -215,11 +215,11 @@ class Round(roundData: RoundData,
 
   private[consensus] def unionProposals(): Unit = {
 
-    val readyPeers = dao.readyPeersAsync.unsafeRunSync()
+    val readyPeers = dao.readyPeers.unsafeRunSync()
 
     val transactions = transactionProposals.values
       .flatMap(_.txHashes)
-      .filter(hash ⇒ dao.transactionService.exists(hash).unsafeRunSync())
+      .filter(hash ⇒ dao.transactionService.contains(hash).unsafeRunSync())
       .map(
         hash ⇒
           dao.transactionService
@@ -239,7 +239,7 @@ class Round(roundData: RoundData,
 
     val resolvedTxs = transactionProposals.values
       .flatMap(proposal ⇒ proposal.txHashes.map(hash ⇒ (hash, proposal)))
-      .filterNot(p ⇒ dao.transactionService.exists(p._1).unsafeRunSync())
+      .filterNot(p ⇒ dao.transactionService.contains(p._1).unsafeRunSync())
       .toList
       .map(
         p ⇒
@@ -298,6 +298,7 @@ class Round(roundData: RoundData,
       .union(roundData.peers.flatMap(_.notification))
       .toSeq
 
+    log.info(s"--------------- Transactions: ${transactions.size} + ${resolvedTxs.size}")
     log.info(s"--------------- Messages: ${messages.size} + ${resolvedMessages.size}")
 //    if (messages.nonEmpty) {
 //      log.info(s"${messages.head.signedMessageData.data.hash} / ${resolvedMessages.head.signedMessageData.data.hash}")
@@ -392,7 +393,7 @@ class Round(roundData: RoundData,
   ): Future[List[Option[FinishedCheckpointResponse]]] = {
     val allFacilitators = roundData.peers.map(p => p.peerMetadata.id -> p).toMap
     val signatureResponses = Future.sequence(
-      dao.peerInfoAsync
+      dao.peerInfo
         .unsafeRunSync()
         .values
         .toList

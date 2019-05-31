@@ -190,13 +190,13 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
 
   def updateBalanceMetrics(): Unit = {
 
-    val peers = dao.peerInfoAsync.unsafeRunSync().toSeq
+    val peers = dao.peerInfo.unsafeRunSync().toSeq
 
     val allAddresses = peers.map { _._1.address } :+ dao.selfAddressStr
 
     val balancesBySnapshotMetrics = allAddresses
       .map { a =>
-        val balance = dao.addressService.getSync(a).map { _.balanceByLatestSnapshot }.getOrElse(0L)
+        val balance = dao.addressService.lookup(a).unsafeRunSync().map { _.balanceByLatestSnapshot }.getOrElse(0L)
         a.slice(0, 8) + " " + balance
       }
       .sorted
@@ -204,7 +204,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
 
     val balancesMetrics = allAddresses
       .map { a =>
-        val balance = dao.addressService.getSync(a).map { _.balance }.getOrElse(0L)
+        val balance = dao.addressService.lookup(a).unsafeRunSync().map { _.balance }.getOrElse(0L)
         a.slice(0, 8) + " " + balance
       }
       .sorted
@@ -234,7 +234,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
       updateMetricAsync("nodeCurrentTimeMS", System.currentTimeMillis().toString) *>
       updateMetricAsync("nodeCurrentDate", new DateTime().toString()) *>
       updateMetricAsync("metricsRound", round) *>
-      updateMetricAsync("addressCount", dao.addressService.cacheSize()) *>
+      dao.addressService.size().flatMap(size => updateMetricAsync("addressCount", size)) *>
       updateMetricAsync("channelCount", dao.threadSafeMessageMemPool.activeChannels.size) *>
       updateTransactionServiceMetrics()
 

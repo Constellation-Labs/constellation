@@ -3,24 +3,18 @@ package org.constellation.storage
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import better.files.File
-import cats.effect.IO
+import cats.Applicative
+import cats.effect.{IO, Sync}
 import cats.implicits._
 import org.constellation.datastore.swaydb.SwayDbConversions._
+import org.constellation.storage.algebra.LookupAlgebra
 import swaydb.data.config.MMAP
 import swaydb.persistent
 import swaydb.serializers.Serializer
 
-trait Lookup[K, V] {
-  def lookup(key: K): IO[Option[V]]
-  def lookupSync(key: K): Option[V] = lookup(key).unsafeRunSync()
-
-  def contains(key: K): IO[Boolean]
-  def containsSync(key: K): Boolean = contains(key).unsafeRunSync()
-}
-
 abstract class DbStorage[K, V](dbPath: File)(implicit keySerializer: Serializer[K],
                                            valueSerializer: Serializer[V])
-    extends Lookup[K, V] {
+    extends LookupAlgebra[IO, K, V] {
 
   val db: swaydb.Map[K, V] = persistent
     .Map[K, V](dir = dbPath.path,
@@ -44,32 +38,6 @@ abstract class DbStorage[K, V](dbPath: File)(implicit keySerializer: Serializer[
   def remove(key: K): IO[Unit] = db.remove(key).map(_ => ())
 
   def size: Int = db.size
-}
-
-object DbStorage {
-
-  def extendedLookup[K, V]: List[Lookup[K, V]] => K => IO[Option[V]] =
-    (lookups: List[Lookup[K, V]]) =>
-      (hash: K) =>
-        lookups.foldLeft(IO.pure[Option[V]](None)) {
-          case (io, memPool) =>
-            io.flatMap { o =>
-              o.fold(memPool.lookup(hash))(b => IO.pure(Some(b)))
-            }
-    }
-
-  def extendedContains[K, V]: List[Lookup[K, V]] ⇒ K ⇒ IO[Boolean] =
-    (lookups: List[Lookup[K, V]]) ⇒
-      (hash: K) ⇒
-        lookups.foldLeft(IO.pure[Boolean](false)) {
-          case (io, memPool) ⇒
-            io.flatMap { o ⇒
-              if (o)
-                IO.pure(o)
-              else
-                memPool.contains(hash)
-            }
-        }
 }
 
 abstract class MidDbStorage[K, V](dbPath: File, capacity: Int)(implicit keySerializer: Serializer[K],

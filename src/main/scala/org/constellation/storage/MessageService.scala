@@ -1,32 +1,28 @@
 package org.constellation.storage
 
 import cats.effect.IO
+import cats.implicits._
 import org.constellation.DAO
 import org.constellation.primitives.{ChannelMessageMetadata, ChannelMetadata}
+import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 
-class MessageService()(implicit dao: DAO) extends MerkleService[String, ChannelMessageMetadata] {
-  val merklePool = new StorageService[Seq[String]]()
-  val arbitraryPool = new StorageService[ChannelMessageMetadata]()
-  val memPool = new StorageService[ChannelMessageMetadata]()
-
-  def putSync(key: String, value: ChannelMessageMetadata): ChannelMessageMetadata = {
-    dao.channelStorage.insert(value)
-    memPool.putSync(key, value)
-  }
+class MessageService()(implicit dao: DAO) extends MerkleStorageAlgebra[IO, String, ChannelMessageMetadata] {
+  val merklePool = new StorageService[IO, Seq[String]]()
+  val arbitraryPool = new StorageService[IO, ChannelMessageMetadata]()
+  val memPool = new StorageService[IO, ChannelMessageMetadata]()
 
   def put(key: String, value: ChannelMessageMetadata): IO[ChannelMessageMetadata] = {
-    dao.channelStorage.insert(value)
     memPool.put(key, value)
+      .flatTap { _ => IO { dao.channelStorage.insert(value) } }
   }
 
+  def lookup(key: String): IO[Option[ChannelMessageMetadata]] =
+    Lookup.extendedLookup[IO, String, ChannelMessageMetadata](List(memPool))(key)
 
-  override def lookup: String => IO[Option[ChannelMessageMetadata]] =
-    DbStorage.extendedLookup[String, ChannelMessageMetadata](List(memPool))
-
-  def contains: String ⇒ IO[Boolean] =
-    DbStorage.extendedContains[String, ChannelMessageMetadata](List(memPool))
+  def contains(key: String): IO[Boolean] =
+    Lookup.extendedContains[IO, String, ChannelMessageMetadata](List(memPool))(key)
 
   override def findHashesByMerkleRoot(merkleRoot: String): IO[Option[Seq[String]]] =
-    merklePool.get(merkleRoot)
+    merklePool.lookup(merkleRoot)
 }
-class ChannelService() extends StorageService[ChannelMetadata]()
+class ChannelService() extends StorageService[IO, ChannelMetadata]()

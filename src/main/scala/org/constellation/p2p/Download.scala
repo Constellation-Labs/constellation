@@ -162,7 +162,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .flatMap(_ => IO.sleep(waitForPeersDelay))
 
   private def getReadyPeers() =
-    dao.readyPeersAsync(NodeType.Full)
+    dao.readyPeers(NodeType.Full)
 
   private def getSnapshotClient(peers: Peers) = IO(peers.head._2.client)
 
@@ -228,7 +228,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
 
   private def requestForFaucet: IO[Iterable[Response[String]]] =
     for {
-      m       <-  dao.peerInfoAsync
+      m       <-  dao.peerInfo
       clients =   m.toList.map(_._2.client)
       resp    <-  clients.traverse(_.post("faucet", SendToAddress(dao.selfAddressStr, 500L)).toIO)
     } yield resp
@@ -293,15 +293,17 @@ object Download {
 
       // TODO: Move to .lightDownload() from above process, testing separately for now
       // Debug
-      val peer = dao.readyPeersAsync(NodeType.Full).unsafeRunSync().head._2.client
+      val peer = dao.readyPeers(NodeType.Full).unsafeRunSync().head._2.client
 
       val nearbyChannels = peer.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", dao.id)
 
       dao.metrics.updateMetric("downloadedNearbyChannels", nearbyChannels.size.toString)
 
-      nearbyChannels.foreach { cmd =>
-        dao.channelService.putSync(cmd.channelId, cmd)
-      }
+      nearbyChannels
+        .toList
+        .map(cmd => dao.channelService.put(cmd.channelId, cmd))
+        .sequence
+        .unsafeRunSync()
 
       dao.setNodeState(NodeState.Ready)
 

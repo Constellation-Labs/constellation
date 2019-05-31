@@ -144,7 +144,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
         acceptedCBSinceSnapshot,
         lastSnapshotHeight = lastSnapshotHeight,
         snapshotHashes = dao.snapshotHashes,
-        addressCacheData = dao.addressService.toMapSync(),
+        addressCacheData = dao.addressService.toMap().unsafeRunSync(),
         tips = concurrentTipService.toMap,
         snapshotCache = snapshot.checkpointBlocks.flatMap { dao.checkpointService.getFullData }
       )
@@ -163,7 +163,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
       acceptedCBSinceSnapshot = latestSnapshotInfo.acceptedCBSinceSnapshot
       latestSnapshotInfo.addressCacheData.foreach {
         case (k, v) =>
-          dao.addressService.putSync(k, v)
+          dao.addressService.put(k, v).unsafeRunSync()
       }
 
       (latestSnapshotInfo.snapshotCache ++ latestSnapshotInfo.acceptedCBSinceSnapshotCache)
@@ -201,7 +201,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
         dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
       }
 
-      val facilMap = dao.readyPeersAsync(NodeType.Full).unsafeRunSync().filter {
+      val facilMap = dao.readyPeers(NodeType.Full).unsafeRunSync().filter {
         case (_, pd) =>
           // TODO: Is this still necessary?
           pd.peerMetadata.timeAdded < (System
@@ -402,13 +402,13 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
   private def syncPending(cb: CheckpointBlock)(implicit dao: DAO): IO[Unit] = {
     IO {
       dao.checkpointService.pendingAcceptance.synchronized {
-        if (dao.checkpointService.pendingAcceptance.containsSync(
+        if (dao.checkpointService.pendingAcceptance.contains(
           cb.baseHash
-        )) {
+        ).unsafeRunSync()) {
           throw PendingAcceptance(cb)
         } else {
           dao.checkpointService.pendingAcceptance
-            .putSync(cb.baseHash, cb)
+            .put(cb.baseHash, cb).unsafeRunSync()
         }
       }
     }
@@ -538,7 +538,7 @@ trait EdgeDAO {
 
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
-  var transactionService: TransactionService[String, TransactionCacheData] = _
+  var transactionService: TransactionService[IO] = _
   var checkpointService: CheckpointService = _
   var snapshotService: SnapshotService = _
   var addressService: AddressService = _

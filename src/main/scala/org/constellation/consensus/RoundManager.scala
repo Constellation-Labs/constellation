@@ -145,7 +145,7 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO)
   private[consensus] def adjustPeers(roundData: RoundData): RoundData = {
     val updatedPeers = roundData.peers
       .filter(_.peerMetadata.id != dao.id)
-      .union(Set(dao.peerInfoAsync.unsafeRunSync().get(roundData.facilitatorId.id) match {
+      .union(Set(dao.peerInfo.unsafeRunSync().get(roundData.facilitatorId.id) match {
         case Some(value) => value
         case None =>
           throw new IllegalStateException(
@@ -170,7 +170,7 @@ class RoundManager(roundTimeout: FiniteDuration)(implicit dao: DAO)
       .resolveCheckpoints(
         cbToResolve.toList,
         roundData.peers.map(r => PeerApiClient(r.peerMetadata.id, r.client)),
-        dao.peerInfoAsync.unsafeRunSync()
+        dao.peerInfo.unsafeRunSync()
           .get(roundData.facilitatorId.id)
           .map(x => PeerApiClient(roundData.facilitatorId.id, x.client))
       )
@@ -225,10 +225,10 @@ object RoundManager {
           .unsafeRunSync()
         val messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq()) // TODO: Choose more than one tx and light peers
         val firstTx = transactions.headOption
-        val lightPeers = if (firstTx.isDefined && dao.readyPeersAsync(NodeType.Light).unsafeRunSync().nonEmpty) {
+        val lightPeers = if (firstTx.isDefined && dao.readyPeers(NodeType.Light).unsafeRunSync().nonEmpty) {
           Set(
             dao
-              .readyPeersAsync(NodeType.Light)
+              .readyPeers(NodeType.Light)
               .unsafeRunSync()
               .minBy(p => Distance.calculate(firstTx.get.transaction.baseHash, p._1))
               ._2
@@ -291,7 +291,8 @@ object RoundManager {
     }
 
     dao.messageService.arbitraryPool
-      .toMapSync()
+      .toMap()
+      .unsafeRunSync()
       .map { m =>
         (m._2.channelMessage,
          facilitators
