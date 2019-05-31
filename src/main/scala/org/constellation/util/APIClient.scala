@@ -63,16 +63,16 @@ class APIClient private (host: String = "127.0.0.1",
       .getOrElse(Map())
 
   def metrics: Map[String, String] = {
-    getBlocking[MetricsResult]("metrics", timeout = 5.seconds).metrics
+    getBlocking[MetricsResult]("metrics", timeout = 15.seconds).metrics
   }
 
   def metricsAsync: Future[Map[String, String]] = {
-    getNonBlocking[MetricsResult]("metrics", timeout = 5.seconds).map(_.metrics)
+    getNonBlocking[MetricsResult]("metrics", timeout = 15.seconds).map(_.metrics)
   }
 
   def getBlockingBytesKryo[T <: AnyRef](suffix: String,
                                         queryParams: Map[String, String] = Map(),
-                                        timeout: Duration = 5.seconds): T = {
+                                        timeout: Duration = 15.seconds): T = {
     val resp =
       httpWithAuth(suffix, queryParams, timeout)(Method.GET).response(asByteArray).send().blocking()
     KryoSerializer.deserializeCast[T](resp.unsafeBody)
@@ -80,7 +80,7 @@ class APIClient private (host: String = "127.0.0.1",
 
   def getNonBlockingBytesKryo[T <: AnyRef](suffix: String,
                                            queryParams: Map[String, String] = Map(),
-                                           timeout: Duration = 5.seconds): Future[T] = {
+                                           timeout: Duration = 15.seconds): Future[T] = {
     httpWithAuth(suffix, queryParams, timeout)(Method.GET)
       .response(asByteArray)
       .send()
@@ -90,14 +90,14 @@ class APIClient private (host: String = "127.0.0.1",
   def getNonBlockingIO[T <: AnyRef](
                                    suffix: String,
                                    queryParams: Map[String, String] = Map(),
-                                   timeout: Duration = 5.seconds
+                                   timeout: Duration = 15.seconds
                                  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): IO[T] = {
     IO.fromFuture(IO { getNonBlocking[T](suffix, queryParams, timeout) })
   }
 
   def postNonBlockingIO[T <: AnyRef](suffix: String,
                                      b: AnyRef,
-                                     timeout: Duration = 5.seconds,
+                                     timeout: Duration = 15.seconds,
                                      headers: Map[String, String] = Map.empty)(
                                       implicit m: Manifest[T],
                                       f: Formats = constellation.constellationFormats

@@ -86,14 +86,14 @@ object Simulation {
     api: APIClient,
     peer: PeerMetadata
   )(implicit executionContext: ExecutionContext): Future[Response[String]] = {
-    api.post("addPeer", peer, 30.seconds)
+    api.post("addPeer", peer, 60.seconds)
   }
 
   def addPeerWithRegistrationFlow(
     api: APIClient,
     peer: HostPort
   )(implicit executionContext: ExecutionContext): Future[Response[String]] = {
-    api.post("peer/add", peer, 30.seconds)
+    api.post("peer/add", peer, 60.seconds)
   }
 
   def assignReputations(apis: Seq[APIClient]): Unit = {
