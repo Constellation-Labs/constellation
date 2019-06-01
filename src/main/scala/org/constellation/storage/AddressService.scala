@@ -7,14 +7,14 @@ import org.constellation.primitives.Transaction
 import org.constellation.primitives.concurrency.MultiLock
 import org.constellation.util.Metrics
 
-class AddressService()(implicit metrics: () => Metrics) extends StorageService[AddressCacheData]() {
+class AddressService()(implicit metrics: () => Metrics) extends StorageService[IO, AddressCacheData]() {
 
-  override def getSync(key: String): Option[AddressCacheData] = {
-    if (metrics() != null) {
-      metrics().incrementMetric(s"address_query_$key")
-    }
-
-    super.getSync(key)
+  override def lookup(key: String): IO[Option[AddressCacheData]] = {
+    super.lookup(key).flatTap { _ => IO {
+      if (metrics() != null) {
+        metrics().incrementMetric(s"address_query_$key")
+      }
+    }}
   }
 
   def transfer(tx: Transaction): IO[AddressCacheData] =

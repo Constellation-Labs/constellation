@@ -9,6 +9,7 @@ import org.constellation.datastore.swaydb.SwayDbConversions._
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCache, CheckpointCacheMetadata}
 import org.constellation.primitives._
+import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 import org.constellation.util.MerkleTree
 import swaydb.serializers.Default.StringSerializer
 
@@ -39,7 +40,7 @@ class CheckpointBlocksMid(path: File, midCapacity: Int)(implicit ec: ExecutionCo
 // TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
 // mwadon: /\ is still relevant?
 class CheckpointBlocksMemPool()(implicit dao: DAO)
-    extends StorageService[CheckpointCacheMetadata]() {
+    extends StorageService[IO, CheckpointCacheMetadata]() {
 
   def put(
     key: String,
@@ -66,12 +67,12 @@ class CheckpointBlocksMemPool()(implicit dao: DAO)
     )
   }
 
-  private def store(data: Seq[String], ss: StorageService[Seq[String]]): Option[String] = {
+  private def store(data: Seq[String], ss: StorageService[IO, Seq[String]]): Option[String] = {
     data match {
       case Seq() => None
       case _ =>
         val rootHash = MerkleTree(data).rootHash
-        ss.putSync(rootHash, data)
+        ss.put(rootHash, data).unsafeRunSync() // TODO !!
         Some(rootHash)
     }
   }
@@ -137,7 +138,7 @@ object CheckpointService extends StrictLogging {
 
   def fetch[T, R](
     merkleRoot: String,
-    service: MerkleService[String, T],
+    service: MerkleStorageAlgebra[IO, String, T],
     mapper: T => R,
     resolver: String => IO[T],
   )(implicit dao: DAO): Seq[R] = {
@@ -166,15 +167,15 @@ object CheckpointService extends StrictLogging {
 
 class CheckpointService(dao: DAO) {
   val memPool = new CheckpointBlocksMemPool()(dao)
-  val pendingAcceptance = new StorageService[CheckpointBlock]( Some(10))
+  val pendingAcceptance = new StorageService[IO, CheckpointBlock]( Some(10))
   val midDb: MidDbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksMid(dao)
   val oldDb: DbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksOld(dao)
 
   val memoizedFullData: TrieMap[String, Option[Schema.CheckpointCache]] = TrieMap.empty
 
   def applySnapshot(baseHash: String): Unit = {
-    memPool.removeSync(baseHash)
-    midDb.removeSync(baseHash)
+    (memPool.remove(baseHash) *> midDb.remove(baseHash))
+      .unsafeRunSync()
   }
 
   def migrateOverCapacity(): IO[Unit] = {
@@ -193,7 +194,7 @@ class CheckpointService(dao: DAO) {
   }
 
   def lookup: String => IO[Option[CheckpointCacheMetadata]] =
-    DbStorage.extendedLookup[String, CheckpointCacheMetadata](List(memPool, midDb)) //, oldDb))
+    Lookup.extendedLookup[IO, String, CheckpointCacheMetadata](List(memPool, midDb)) //, oldDb))
 
 //  def lookupFullData: String => IO[Option[CheckpointCache]] =
 //    DbStorage
