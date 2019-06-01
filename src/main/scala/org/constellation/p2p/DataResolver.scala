@@ -31,7 +31,7 @@ class DataResolver extends StrictLogging {
       "message",
       pool,
       (t: ChannelMessageMetadata) =>
-        dao.messageService.memPool.putSync(t.channelMessage.signedMessageData.hash, t),
+        dao.messageService.memPool.put(t.channelMessage.signedMessageData.hash, t).unsafeRunSync(),
       priorityClient
     ).head
 
@@ -125,7 +125,7 @@ class DataResolver extends StrictLogging {
       "transaction",
       pool,
       (t: TransactionCacheData) => {
-        dao.transactionService.put(t, TransactionStatus.Unknown, false).unsafeRunSync()
+        dao.transactionService.put(t, TransactionStatus.Unknown).unsafeRunSync()
       },
       priorityClient
     ).head
@@ -184,7 +184,7 @@ class DataResolver extends StrictLogging {
   }
 
   def getReadyPeers(dao: DAO): Iterable[PeerApiClient] = {
-    dao.readyPeersAsync.unsafeRunSync().map(p => PeerApiClient(p._1, p._2.client))
+    dao.readyPeers.unsafeRunSync().map(p => PeerApiClient(p._1, p._2.client))
   }
 
 }
@@ -196,7 +196,7 @@ case class DataResolutionOutOfPeers(thisNode: String,
                                     hash: String,
                                     peers: Iterable[String])
     extends Exception(
-      s"node [${thisNode}] Run out of peers when resolving: $endpoint with hash: $hash following tried: $peers"
+      s"node [$thisNode] Run out of peers when resolving: $endpoint with hash: $hash following tried: $peers"
     )
 
 case class DataResolutionMaxErrors(endpoint: String, hash: String)

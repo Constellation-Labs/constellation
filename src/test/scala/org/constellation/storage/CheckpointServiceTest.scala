@@ -4,6 +4,7 @@ import java.security.KeyPair
 import java.util.concurrent.Executors
 
 import better.files.File
+import cats.effect.IO
 import cats.implicits._
 import constellation._
 import org.constellation.crypto.KeyUtils.makeKeyPair
@@ -45,14 +46,14 @@ class CheckpointServiceTest
     val cbProposalCache = CheckpointCache(Some(cbProposal), 3, Some(Height(2, 4)))
     dao.checkpointService.memPool.put(cbProposal.baseHash, cbProposalCache).unsafeRunSync()
 
-    val storedCB = dao.checkpointService.memPool.getSync(cbProposal.baseHash).get
+    val storedCB = dao.checkpointService.memPool.lookup(cbProposal.baseHash).unsafeRunSync().get
 
     CheckpointService.convert(storedCB) shouldBe cbProposalCache
   }
 
   test("should convert CB to merkle roots when minimum data is filled") {
     val fullData = storeCheckpointBlock(prepareTransactions(), Seq.empty, Seq.empty)
-    val storedCB = dao.checkpointService.memPool.getSync(fullData.checkpointBlock.get.baseHash).get
+    val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
 
     CheckpointService.convert(storedCB) shouldBe fullData
   }
@@ -60,7 +61,7 @@ class CheckpointServiceTest
   test("should fetch messages when they exist") {
     val msgs = prepareMessages()
     val fullData = storeCheckpointBlock(prepareTransactions(), msgs, Seq.empty)
-    val storedCB = dao.checkpointService.memPool.getSync(fullData.checkpointBlock.get.baseHash).get
+    val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
 
     CheckpointService
       .fetchMessages(storedCB.checkpointBlock.messagesMerkleRoot.get) shouldBe msgs
@@ -69,7 +70,7 @@ class CheckpointServiceTest
   test("should fetch transactions when they exist") {
     val txs = prepareTransactions()
     val fullData = storeCheckpointBlock(txs, Seq.empty, Seq.empty)
-    val storedCB = dao.checkpointService.memPool.getSync(fullData.checkpointBlock.get.baseHash).get
+    val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
 
     CheckpointService
       .fetchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot) shouldBe txs
@@ -78,7 +79,7 @@ class CheckpointServiceTest
   test("should fetch notifications when they exist") {
     val notifications = prepareNotifications()
     val fullData = storeCheckpointBlock(prepareTransactions(), Seq.empty, notifications)
-    val storedCB = dao.checkpointService.memPool.getSync(fullData.checkpointBlock.get.baseHash).get
+    val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
 
     CheckpointService
       .fetchNotifications(storedCB.checkpointBlock.notificationsMerkleRoot.get) shouldBe notifications
@@ -101,8 +102,9 @@ class CheckpointServiceTest
     val tx2 = mock[Transaction]
     tx2.hash shouldReturn "tx2"
 
-    (dao.transactionService.put(TransactionCacheData(tx1)) *>
-      dao.transactionService.put(TransactionCacheData(tx2))).unsafeRunSync()
+    (dao.transactionService.put(TransactionCacheData(tx1), TransactionStatus.Accepted) *>
+      dao.transactionService.put(TransactionCacheData(tx2), TransactionStatus.Accepted))
+      .unsafeRunSync()
 
     Seq(tx1, tx2)
   }
@@ -114,8 +116,10 @@ class CheckpointServiceTest
     val notification2 = mock[PeerNotification]
     notification2.hash shouldReturn "notification2"
 
-    dao.notificationService.memPool.putSync(notification1.hash, notification1)
-    dao.notificationService.memPool.putSync(notification2.hash, notification2)
+    (dao.notificationService.memPool.put(notification1.hash, notification1) *>
+      dao.notificationService.memPool.put(notification2.hash, notification2))
+      .unsafeRunSync()
+
     Seq(notification1, notification2)
   }
 
@@ -128,10 +132,9 @@ class CheckpointServiceTest
     msg2.signedMessageData shouldReturn mock[SignedData[ChannelMessageData]]
     msg2.signedMessageData.hash shouldReturn "msg2"
 
-    dao.messageService.memPool
-      .putSync(msg1.signedMessageData.hash, ChannelMessageMetadata(msg1))
-    dao.messageService.memPool
-      .putSync(msg2.signedMessageData.hash, ChannelMessageMetadata(msg2))
+    (dao.messageService.memPool.put(msg1.signedMessageData.hash, ChannelMessageMetadata(msg1)) *>
+      dao.messageService.memPool.put(msg2.signedMessageData.hash, ChannelMessageMetadata(msg2)))
+      .unsafeRunSync()
     Seq(msg1, msg2)
   }
 
@@ -157,12 +160,14 @@ class CheckpointServiceTest
     val ms = new MessageService()(dao)
     dao.messageService shouldReturn ms
 
-    val ts = new DefaultTransactionService(dao)
+    val ts = new TransactionService[IO](dao)
     dao.transactionService shouldReturn ts
 
     val metrics = mock[Metrics]
     doNothing().when(metrics).incrementMetric(*)
     dao.metrics shouldReturn metrics
+
+    dao.readyPeers shouldReturn IO.pure(Map())
 
     dao
   }

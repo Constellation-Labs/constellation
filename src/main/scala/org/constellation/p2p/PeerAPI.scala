@@ -113,7 +113,7 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
       pathPrefix("channel") {
         path("neighborhood") {
           entity(as[Id]) { peerId =>
-            val distanceSorted = dao.channelService.toMapSync().toSeq.sortBy {
+            val distanceSorted = dao.channelService.toMap().unsafeRunSync().toSeq.sortBy {
               case (channelId, meta) =>
                 Distance.calculate(meta.channelId, peerId)
             } // TODO: Determine appropriate fraction to respond with.
@@ -126,7 +126,8 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
             // TODO: Add limiting
             if (sendRequest.amountActual < (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor) &&
                 dao.addressService
-                  .getSync(dao.selfAddressStr)
+                  .lookup(dao.selfAddressStr)
+                  .unsafeRunSync()
                   .map { _.balance }
                   .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)) {
 
@@ -191,7 +192,7 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
                 optionalHeaderValueByName("ReplyTo") { replyToOpt =>
                   val maybeData = getHostAndPortFromRemoteAddress(ip)
                   val knownHost = maybeData.exists(
-                    i => dao.peerInfoAsync.unsafeRunSync().exists(_._2.client.hostName == i.canonicalHostName)
+                    i => dao.peerInfo.unsafeRunSync().exists(_._2.client.hostName == i.canonicalHostName)
                   )
                   dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
                   EdgeProcessor.handleFinishedCheckpoint(fc).map { result =>
@@ -237,9 +238,9 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
           dao.metrics.incrementMetric("transactionRXByPeerAPI")
 
           onComplete {
-            dao.transactionService.exists(tx.hash)
+            dao.transactionService.contains(tx.hash)
               .flatMap {
-                case false => dao.transactionService.put(TransactionCacheData(tx), as = TransactionStatus.Unknown, false)
+                case false => dao.transactionService.put(TransactionCacheData(tx), as = TransactionStatus.Unknown)
                 case _ => IO.unit
               }
               // TODO: Respond with initial tx validation
@@ -296,7 +297,7 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
 
     def sameHost(p: PeerData) = p.peerMetadata.host == ip
 
-    dao.peerInfoAsync.unsafeRunSync().find(p => sameHost(p._2)).map(_._1)
+    dao.peerInfo.unsafeRunSync().find(p => sameHost(p._2)).map(_._1)
   }
 
   def exceptionHandler: ExceptionHandler =

@@ -19,12 +19,12 @@ abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
   def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
 
   def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
-    checkpoint.edge.parentHashes.flatMap { dao.soeService.getSync }.map {
+    checkpoint.edge.parentHashes.flatMap { key => dao.soeService.lookup(key).unsafeRunSync() }.map {
       _.signedObservationEdge.baseHash
     }
 
   def storeSOE()(implicit dao: DAO): Unit = {
-    dao.soeService.putSync(soeHash, SignedObservationEdgeCache(soe, resolved = true))
+    dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true)).unsafeRunSync()
   }
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
@@ -189,7 +189,7 @@ case class CheckpointBlock(
 
   def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =  {
     parentSOEHashes.flatMap { soeHash =>
-      val parent = dao.soeService.getSync(soeHash)
+      val parent = dao.soeService.lookup(soeHash).unsafeRunSync()
       if (parent.isEmpty) {
         println(s"ERROR: SOEHash $soeHash missing from soeService")
         dao.metrics.incrementMetric("parentSOEServiceQueryFailed")
@@ -333,7 +333,8 @@ sealed trait CheckpointBlockValidatorNel {
 
   def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
     dao.addressService
-      .getSync(t.src.address)
+      .lookup(t.src.address)
+      .unsafeRunSync()
       .fold[ValidationResult[Transaction]](NoAddressCacheFound(t).invalidNel)(_ => t.validNel)
 
   def validateTransaction(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
@@ -383,7 +384,8 @@ sealed trait CheckpointBlockValidatorNel {
 
     def lookup(key: String) =
       dao.addressService
-        .getSync(key)
+        .lookup(key)
+        .unsafeRunSync()
         .map(_.balance)
         .getOrElse(0L)
 
@@ -439,7 +441,10 @@ sealed trait CheckpointBlockValidatorNel {
 
   def validateDiff(a: (String, Long))(implicit dao: DAO): Boolean = a match {
     case (hash, diff) =>
-      dao.addressService.getSync(hash).map { _.balanceByLatestSnapshot }.getOrElse(0L) + diff >= 0
+      dao.addressService
+        .lookup(hash)
+        .unsafeRunSync()
+        .map { _.balanceByLatestSnapshot }.getOrElse(0L) + diff >= 0
   }
 
   def validateCheckpointBlockTree(
@@ -520,7 +525,7 @@ sealed trait CheckpointBlockValidatorNel {
   }
 
   def containsAlreadyAcceptedTx(cb: CheckpointBlock)(implicit dao: DAO): IO[List[String]] = {
-    val cbs = dao.checkpointService.memPool.cacheSize()
+    val cbs = dao.checkpointService.memPool.size().unsafeRunSync()
     val start = System.currentTimeMillis
     val startTimer = dao.metrics.startTimer
     val containsAccepted = cb.transactions
