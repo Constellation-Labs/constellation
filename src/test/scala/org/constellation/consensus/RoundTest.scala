@@ -61,27 +61,27 @@ class RoundTest
 
   dao.id shouldReturn daoId
   dao.readyFacilitatorsAsync shouldReturn IO.pure(readyFacilitators)
-  dao.peerInfoAsync shouldReturn IO.pure(readyFacilitators)
+  dao.peerInfo shouldReturn IO.pure(readyFacilitators)
   dao.pullTips(readyFacilitators) shouldReturn Some(tips)
   dao.threadSafeMessageMemPool shouldReturn mock[ThreadSafeMessageMemPool]
   dao.threadSafeMessageMemPool.pull(1) shouldReturn None
-  dao.readyPeersAsync(NodeType.Light) shouldReturn IO.pure(Map())
+  dao.readyPeers(NodeType.Light) shouldReturn IO.pure(Map())
 
   val peerManagerProbe = TestProbe()
   val ipManager = mock[IPManager]
   val peerManager = TestActorRef(Props(new PeerManager(ipManager)))
   dao.peerManager shouldReturn peerManager
 
-  val txService = mock[TransactionService[String, TransactionCacheData]]
+  val txService = mock[TransactionService[IO]]
   txService.pullForConsensus(checkpointFormationThreshold) shouldReturn IO.pure(List(tx1, tx2).map(TransactionCacheData(_)))
-  txService.exists shouldReturn (_ => IO.pure(true))
-  txService.lookup shouldReturn (_ => IO.pure(None))
+  txService.contains(*) shouldReturn IO.pure(true)
+  txService.lookup(*) shouldReturn IO.pure(None)
   dao.transactionService shouldReturn txService
-  dao.readyPeersAsync shouldReturn IO.pure(readyFacilitators)
+  dao.readyPeers shouldReturn IO.pure(readyFacilitators)
 
   val msgService = mock[MessageService]
-  msgService.contains shouldReturn (_ => IO.pure(true))
-  msgService.lookup shouldReturn (_ => IO.pure(None))
+  msgService.contains(*) shouldReturn IO.pure(true)
+  msgService.lookup(*) shouldReturn IO.pure(None)
   dao.messageService shouldReturn msgService
 
   dao.edgeExecutionContext shouldReturn ExecutionContext.fromExecutor(
@@ -206,14 +206,11 @@ class RoundTest
   }
 
   test("it should resolve missing transactions on union block proposals step") {
-    dao.readyPeersAsync shouldReturn IO.pure(Map())
+    dao.readyPeers shouldReturn IO.pure(Map())
 
-    dao.transactionService.exists shouldReturn ((hash: String) => {
-      if (hash == tx3.hash || hash == tx2.hash)
-        IO.pure(true)
-      else
-        IO.pure(false)
-    })
+    dao.transactionService.contains(*) shouldReturn IO.pure(false)
+    dao.transactionService.contains(tx3.hash) shouldReturn IO.pure(true)
+    dao.transactionService.contains(tx2.hash) shouldReturn IO.pure(true)
 
     dataResolver.resolveTransactions(*, *, *)(3 seconds, dao) shouldReturn IO.pure(None)
 
@@ -243,9 +240,9 @@ class RoundTest
   }
 
   test("it should resolve missing messages on union block proposals step") {
-    dao.readyPeersAsync shouldReturn IO.pure(Map())
+    dao.readyPeers shouldReturn IO.pure(Map())
 
-    dao.messageService.contains shouldReturn (_ => IO.pure(false))
+    dao.messageService.contains(*) shouldReturn IO.pure(false)
 
     dataResolver.resolveMessages(*, *, *)(3 seconds, dao) shouldReturn IO.pure(None)
 

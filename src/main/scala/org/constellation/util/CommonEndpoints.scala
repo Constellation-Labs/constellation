@@ -95,16 +95,16 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.genesisObservation)
       } ~
       pathPrefix("address" / Segment) { a =>
-        complete(dao.addressService.getSync(a))
+        complete(dao.addressService.lookup(a).unsafeRunSync())
       } ~
       pathPrefix("balance" / Segment) { a =>
-        complete(dao.addressService.getSync(a).map { _.balanceByLatestSnapshot })
+        complete(dao.addressService.lookup(a).unsafeRunSync().map { _.balanceByLatestSnapshot })
       } ~
       path("state") {
         complete(NodeStateInfo(dao.nodeState, dao.addresses, dao.nodeType))
       } ~
       path("peers") {
-        val peers = dao.peerInfoAsync.map(_.map(_._2.peerMetadata).toSeq)
+        val peers = dao.peerInfo.map(_.map(_._2.peerMetadata).toSeq)
         onComplete(peers.unsafeToFuture) { a =>
           complete(a.toOption.getOrElse(Seq()))
         }

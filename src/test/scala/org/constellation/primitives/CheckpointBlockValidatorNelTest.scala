@@ -67,8 +67,8 @@ class CheckpointBlockValidatorNelTest
     checkpointService.getFullData(rightParent.baseHash) shouldReturn Some(CheckpointCache(Some(rightParent)))
     checkpointService.getFullData(leftParent.baseHash) shouldReturn Some(CheckpointCache(Some(leftParent)))
     checkpointService.memPool shouldReturn mock[CheckpointBlocksMemPool]
-    checkpointService.memPool.cacheSize() shouldReturn 0
-    dao.transactionService shouldReturn mock[TransactionService[String, TransactionCacheData]]
+    checkpointService.memPool.size() shouldReturn IO.pure(0)
+    dao.transactionService shouldReturn mock[TransactionService[IO]]
     dao.transactionService.isAccepted(*) shouldReturn IO.pure(false)
 
     leftBlock.transactions shouldReturn Seq(tx1, tx2)
