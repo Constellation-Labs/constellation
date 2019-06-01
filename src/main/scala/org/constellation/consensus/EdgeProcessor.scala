@@ -73,7 +73,7 @@ object EdgeProcessor extends StrictLogging {
     ]
   )(implicit dao: DAO, ec: ExecutionContext) = {
 
-    val responses = dao.peerInfoAsync.unsafeRunSync().values.toList.map { peer =>
+    val responses = dao.peerInfo.unsafeRunSync().values.toList.map { peer =>
       wrapFutureWithMetric(
         peer.client.postNonBlocking[FinishedCheckpointAck](
           "finished/checkpoint",

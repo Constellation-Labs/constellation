@@ -6,6 +6,7 @@ import cats.implicits._
 import org.constellation.DAO
 import org.constellation.consensus.Snapshot
 import org.constellation.datastore.swaydb.SwayDbConversions._
+import org.constellation.storage.algebra.Lookup
 import swaydb.serializers.Default._
 
 import scala.concurrent.ExecutionContextExecutor
@@ -41,5 +42,5 @@ class SnapshotService(implicit dao: DAO) {
   }
 
   def lookup: String => IO[Option[Snapshot]] =
-    DbStorage.extendedLookup[String, Snapshot](List(midDb, oldDb))
+    Lookup.extendedLookup[IO, String, Snapshot](List(midDb, oldDb))
 }

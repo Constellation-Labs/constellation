@@ -17,6 +17,7 @@ import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import cats.implicits._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
@@ -144,7 +145,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
             } ~
               path("channel" / Segment / "info") { channelId =>
-                complete(dao.channelService.getSync(channelId).map { cmd =>
+                complete(dao.channelService.lookup(channelId).unsafeRunSync().map { cmd =>
                   SingleChannelUIOutput(
                     cmd.channelOpen,
                     cmd.totalNumMessages,
@@ -156,7 +157,8 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               path("channel" / Segment / "schema") { channelId =>
                 complete(
                   dao.channelService
-                    .getSync(channelId)
+                    .lookup(channelId)
+                    .unsafeRunSync()
                     .flatMap { cmd =>
                       cmd.channelOpen.jsonSchema
                     }
@@ -172,7 +174,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
             } ~
               path("channel" / Segment / "info") { channelId =>
-                complete(dao.channelService.getSync(channelId).map { cmd =>
+                complete(dao.channelService.lookup(channelId).unsafeRunSync().map { cmd =>
                   SingleChannelUIOutput(
                     cmd.channelOpen,
                     cmd.totalNumMessages,
@@ -184,7 +186,8 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               path("channel" / Segment / "schema") { channelId =>
                 complete(
                   dao.channelService
-                    .getSync(channelId)
+                    .lookup(channelId)
+                    .unsafeRunSync()
                     .flatMap { cmd =>
                       cmd.channelOpen.jsonSchema
                     }
@@ -220,13 +223,13 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             complete(dao.messageService.lookup(channelId).unsafeRunSync())
           } ~
           path("channelKeys") {
-            complete(dao.channelService.toMapSync().keys.toSeq)
+            complete(dao.channelService.toMap().unsafeRunSync().keys.toSeq)
           } ~
           path("channel" / "genesis" / Segment) { channelId =>
-            complete(dao.channelService.getSync(channelId))
+            complete(dao.channelService.lookup(channelId).unsafeRunSync())
           } ~
           path("channel" / Segment) { channelHash =>
-            val msg = dao.messageService.memPool.getSync(channelHash)
+            val msg = dao.messageService.memPool.lookup(channelHash).unsafeRunSync()
             val channelRes =
               Snapshot.findLatestMessageWithSnapshotHash(0, msg)
 
@@ -346,7 +349,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               dao.externalPeerHTTPPort
             )
 
-            val peerMap = dao.peerInfoAsync.map {
+            val peerMap = dao.peerInfo.map {
               _.toSeq.map {
                 case (id, pd) => Node(id.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
               } :+ self
@@ -511,7 +514,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               normalized = false)
 
             dao.transactionService
-              .put(TransactionCacheData(tx, inMemPool = true), true)
+              .put(TransactionCacheData(tx, inMemPool = true))
               .unsafeRunSync()
 
             complete(tx.hash)
