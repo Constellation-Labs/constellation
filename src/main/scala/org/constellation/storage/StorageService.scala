@@ -40,7 +40,7 @@ class StorageService[F[_]: Sync, V](expireAfterMinutes: Option[Int] = Some(240))
     queueRef.get.flatMap { queue =>
       val dequeue = {
         if (queue.size == maxQueueSize) {
-          queue.dequeue._2.pure[F]
+          Sync[F].delay(queue.dequeue._2)
         } else {
           queue.pure[F]
         }
@@ -49,24 +49,24 @@ class StorageService[F[_]: Sync, V](expireAfterMinutes: Option[Int] = Some(240))
       dequeue *> queueRef
         .set(queue.enqueue(value))
         .flatTap { _ =>
-          lruCache.put(key, value).pure[F]
+          Sync[F].delay(lruCache.put(key, value))
         }
         .map(_ => value)
     }
 
   def lookup(key: String): F[Option[V]] =
-    lruCache.getIfPresent(key).pure[F]
+    Sync[F].delay(lruCache.getIfPresent(key))
 
   def remove(keys: Set[String]): F[Unit] =
-    lruCache.invalidateAll(keys).pure[F]
+    Sync[F].delay(lruCache.invalidateAll(keys))
 
   def contains(key: String): F[Boolean] =
     lookup(key).map(_.isDefined)
 
-  def size(): F[Long] = lruCache.estimatedSize().pure[F]
+  def size(): F[Long] = Sync[F].delay(lruCache.estimatedSize())
 
   def toMap(): F[Map[String, V]] =
-    lruCache.asMap().toMap.pure[F]
+    Sync[F].delay(lruCache.asMap().toMap)
 
   def getLast20(): F[List[V]] =
     queueRef.get.map(_.reverse.toList)

@@ -86,9 +86,10 @@ class RoundTest
     dao.peerInfo shouldReturn IO.pure(readyFacilitators)
     dao.id shouldReturn facilitatorId1.id
 
-    msgService.contains(*) shouldReturn IO.pure(true)
-    msgService.lookup(*) shouldReturn IO.pure(None)
-    dao.messageService shouldReturn msgService
+  val msgService = mock[MessageService[IO]]
+  msgService.contains(*) shouldReturn IO.pure(true)
+  msgService.lookup(*) shouldReturn IO.pure(None)
+  dao.messageService shouldReturn msgService
 
     dao.edgeExecutionContext shouldReturn ExecutionContext.fromExecutor(
       Executors.newWorkStealingPool(8)

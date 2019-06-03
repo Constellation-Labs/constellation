@@ -54,9 +54,7 @@ case class CheckpointBlock(
 
   def calculateHeight()(implicit dao: DAO): Option[Height] = {
 
-    val parents = parentSOEBaseHashes.map {
-      dao.checkpointService.get
-    }
+    val parents = parentSOEBaseHashes.map(dao.checkpointService.lookup(_).unsafeRunSync())
 
     if (parents.exists(_.isEmpty)) {
       dao.metrics.incrementMetric("heightCalculationParentMissing")
@@ -412,7 +410,7 @@ sealed trait CheckpointBlockValidatorNel {
       dao.metrics.incrementMetric("validationParentSOEBaseHashesMissing")
     }
 
-    val fullData = parentSOEBaseHashes.map(dao.checkpointService.getFullData)
+    val fullData = parentSOEBaseHashes.map(dao.checkpointService.fullData(_).unsafeRunSync())
 
     if (fullData.exists(_.isEmpty)) {
       dao.metrics.incrementMetric("validationParentCBLookupMissing")

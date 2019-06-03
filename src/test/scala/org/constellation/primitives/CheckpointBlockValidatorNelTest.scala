@@ -31,7 +31,7 @@ class CheckpointBlockValidatorNelTest
   implicit val dao: DAO = mock[DAO]
 
   val snapService: ThreadSafeSnapshotService = mock[ThreadSafeSnapshotService]
-  val checkpointService: CheckpointService = mock[CheckpointService]
+  val checkpointService: CheckpointService[IO] = mock[CheckpointService[IO]]
 
   val leftBlock: CheckpointBlock = mock[CheckpointBlock]
   val leftParent: CheckpointBlock = mock[CheckpointBlock]
@@ -69,9 +69,9 @@ class CheckpointBlockValidatorNelTest
     leftParent.transactions shouldReturn Seq.empty
     rightParent.transactions shouldReturn Seq.empty
 
-    checkpointService.getFullData(rightParent.baseHash) shouldReturn Some(CheckpointCache(Some(rightParent)))
-    checkpointService.getFullData(leftParent.baseHash) shouldReturn Some(CheckpointCache(Some(leftParent)))
-    checkpointService.memPool shouldReturn mock[CheckpointBlocksMemPool]
+    checkpointService.fullData(rightParent.baseHash) shouldReturn IO.pure(Some(CheckpointCache(Some(rightParent))))
+    checkpointService.fullData(leftParent.baseHash) shouldReturn IO.pure(Some(CheckpointCache(Some(leftParent))))
+    checkpointService.memPool shouldReturn mock[CheckpointBlocksMemPool[IO]]
     checkpointService.memPool.size() shouldReturn IO.pure(0)
     dao.transactionService shouldReturn mock[TransactionService[IO]]
     dao.transactionService.isAccepted(*) shouldReturn IO.pure(false)
@@ -128,7 +128,7 @@ class CheckpointBlockValidatorNelTest
     rightParent.transactions shouldReturn Seq(tx2)
     val ancestors = Seq("ancestor_in_snap")
     rightParent.parentSOEBaseHashes() shouldReturn ancestors
-    checkpointService.getFullData("ancestor_in_snap") shouldReturn None
+    checkpointService.fullData("ancestor_in_snap") shouldReturn IO.pure(None)
 
     val combinedTxs =
       getTransactionsTillSnapshot(List(rightBlock))

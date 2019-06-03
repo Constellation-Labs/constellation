@@ -49,14 +49,14 @@ class CheckpointServiceTest
 
     val storedCB = dao.checkpointService.memPool.lookup(cbProposal.baseHash).unsafeRunSync().get
 
-    CheckpointService.convert(storedCB) shouldBe cbProposalCache
+    dao.checkpointService.convert(storedCB).unsafeRunSync() shouldBe cbProposalCache
   }
 
   test("should convert CB to merkle roots when minimum data is filled") {
     val fullData = storeCheckpointBlock(prepareTransactions(), Seq.empty, Seq.empty)
     val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
 
-    CheckpointService.convert(storedCB) shouldBe fullData
+    dao.checkpointService.convert(storedCB).unsafeRunSync() shouldBe fullData
   }
 
   test("should fetch messages when they exist") {
@@ -64,8 +64,8 @@ class CheckpointServiceTest
     val fullData = storeCheckpointBlock(prepareTransactions(), msgs, Seq.empty)
     val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
 
-    CheckpointService
-      .fetchMessages(storedCB.checkpointBlock.messagesMerkleRoot.get) shouldBe msgs
+    dao.checkpointService
+      .fetchMessages(storedCB.checkpointBlock.messagesMerkleRoot.get).unsafeRunSync() shouldBe msgs
   }
 
   test("should fetch transactions when they exist") {
@@ -73,8 +73,8 @@ class CheckpointServiceTest
     val fullData = storeCheckpointBlock(txs, Seq.empty, Seq.empty)
     val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
 
-    CheckpointService
-      .fetchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot) shouldBe txs
+    dao.checkpointService
+      .fetchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot).unsafeRunSync() shouldBe txs
   }
 
   test("should fetch notifications when they exist") {
@@ -82,8 +82,8 @@ class CheckpointServiceTest
     val fullData = storeCheckpointBlock(prepareTransactions(), Seq.empty, notifications)
     val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
 
-    CheckpointService
-      .fetchNotifications(storedCB.checkpointBlock.notificationsMerkleRoot.get) shouldBe notifications
+    dao.checkpointService
+      .fetchNotifications(storedCB.checkpointBlock.notificationsMerkleRoot.get).unsafeRunSync() shouldBe notifications
   }
 
   private def storeCheckpointBlock(txs: Seq[Transaction],
@@ -149,20 +149,24 @@ class CheckpointServiceTest
 
     val ec = ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
     dao.edgeExecutionContext shouldReturn ec
-    val cs = new CheckpointService(dao)
-    dao.checkpointService shouldReturn cs
 
-    val ss = new SOEService()
+    val ss = new SOEService[IO]()
     dao.soeService shouldReturn ss
 
-    val ns = new NotificationService()
+    val ns = new NotificationService[IO]()
     dao.notificationService shouldReturn ns
 
-    val ms = new MessageService()(dao)
+    val ms = {
+      implicit val shadedDao = dao
+      new MessageService[IO]()
+    }
     dao.messageService shouldReturn ms
 
     val ts = new TransactionService[IO](dao)
     dao.transactionService shouldReturn ts
+
+    val cs = new CheckpointService(dao, ts, ms, ns)
+    dao.checkpointService shouldReturn cs
 
     val metrics = mock[Metrics]
     doNothing().when(metrics).incrementMetric(*)

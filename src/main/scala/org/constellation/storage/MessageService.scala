@@ -1,28 +1,31 @@
 package org.constellation.storage
 
-import cats.effect.IO
+import cats.effect.Sync
 import cats.implicits._
 import org.constellation.DAO
 import org.constellation.primitives.{ChannelMessageMetadata, ChannelMetadata}
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 
-class MessageService()(implicit dao: DAO) extends MerkleStorageAlgebra[IO, String, ChannelMessageMetadata] {
-  val merklePool = new StorageService[IO, Seq[String]]()
-  val arbitraryPool = new StorageService[IO, ChannelMessageMetadata]()
-  val memPool = new StorageService[IO, ChannelMessageMetadata]()
+class MessageService[F[_]: Sync]()(implicit dao: DAO)
+    extends MerkleStorageAlgebra[F, String, ChannelMessageMetadata] {
+  val merklePool = new StorageService[F, Seq[String]]()
+  val arbitraryPool = new StorageService[F, ChannelMessageMetadata]()
+  val memPool = new StorageService[F, ChannelMessageMetadata]()
 
-  def put(key: String, value: ChannelMessageMetadata): IO[ChannelMessageMetadata] = {
-    memPool.put(key, value)
-      .flatTap { _ => IO { dao.channelStorage.insert(value) } }
+  def put(key: String, value: ChannelMessageMetadata): F[ChannelMessageMetadata] = {
+    memPool
+      .put(key, value)
+      .flatTap { _ => Sync[F].delay(dao.channelStorage.insert(value)) }
   }
 
-  def lookup(key: String): IO[Option[ChannelMessageMetadata]] =
-    Lookup.extendedLookup[IO, String, ChannelMessageMetadata](List(memPool))(key)
+  def lookup(key: String): F[Option[ChannelMessageMetadata]] =
+    Lookup.extendedLookup[F, String, ChannelMessageMetadata](List(memPool))(key)
 
-  def contains(key: String): IO[Boolean] =
-    Lookup.extendedContains[IO, String, ChannelMessageMetadata](List(memPool))(key)
+  def contains(key: String): F[Boolean] =
+    Lookup.extendedContains[F, String, ChannelMessageMetadata](List(memPool))(key)
 
-  override def findHashesByMerkleRoot(merkleRoot: String): IO[Option[Seq[String]]] =
+  def findHashesByMerkleRoot(merkleRoot: String): F[Option[Seq[String]]] =
     merklePool.lookup(merkleRoot)
 }
-class ChannelService() extends StorageService[IO, ChannelMetadata]()
+
+class ChannelService[F[_]: Sync]() extends StorageService[F, ChannelMetadata]()

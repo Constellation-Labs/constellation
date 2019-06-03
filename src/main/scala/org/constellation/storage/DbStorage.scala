@@ -3,8 +3,7 @@ package org.constellation.storage
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import better.files.File
-import cats.Applicative
-import cats.effect.{IO, Sync}
+import cats.effect.IO
 import cats.implicits._
 import org.constellation.datastore.swaydb.SwayDbConversions._
 import org.constellation.storage.algebra.LookupAlgebra

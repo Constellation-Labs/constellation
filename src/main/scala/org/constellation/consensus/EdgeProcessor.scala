@@ -252,7 +252,7 @@ object EdgeProcessor extends StrictLogging {
           s"[${dao.id.short}] acceptWithResolveAttempt block.parentSOEBaseHashes ${parents} "
         )
         val parentExists = parents.map { h =>
-          h -> dao.checkpointService.contains(h)
+          h -> dao.checkpointService.contains(h).unsafeRunSync()
         }
         if (parentExists.forall(_._2)) {
           dao.metrics.incrementMetric("resolveFinishedCheckpointParentsPresent")
@@ -273,7 +273,7 @@ object EdgeProcessor extends StrictLogging {
                           dao.concurrentTipService.update(cb)(dao).unsafeRunSync()
                         }
                         if (!dao.checkpointService
-                              .contains(cd.checkpointBlock.get.baseHash)) {
+                              .contains(cd.checkpointBlock.get.baseHash).unsafeRunSync()) {
                           dao.metrics.incrementMetric("resolveAcceptCBCall")
                           acceptWithResolveAttempt(cd, nestedAcceptCount + 1)
                         }
@@ -451,7 +451,7 @@ object Snapshot {
   val snapshotZeroHash: String = Snapshot("", Seq()).hash
 
   def acceptSnapshot(snapshot: Snapshot)(implicit dao: DAO): Unit = {
-    val cbData = snapshot.checkpointBlocks.map { dao.checkpointService.get }
+    val cbData = snapshot.checkpointBlocks.map { dao.checkpointService.lookup(_).unsafeRunSync() }
 
     if (cbData.exists { _.isEmpty }) {
       dao.metrics.incrementMetric("snapshotCBAcceptQueryFailed")
@@ -490,7 +490,7 @@ object Snapshot {
       }
 
       // DEBUG: mwadon \/
-      val transactions = CheckpointService.fetchTransactions(cb.transactionsMerkleRoot).toList
+      val transactions = dao.checkpointService.fetchTransactions(cb.transactionsMerkleRoot).unsafeRunSync()
 
       transactions.map(dao.addressService.transferSnapshot).sequence.unsafeRunSync()
       dao.transactionService

@@ -1,6 +1,5 @@
 package org.constellation.storage
 
-import cats.{Applicative, ApplicativeError}
 import cats.effect._
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
@@ -39,7 +38,7 @@ class TransactionService[F[_]: Sync](dao: DAO)
       inConsensus.remove(tx.transaction.hash) *>
       unknown.remove(tx.transaction.hash) *>
       arbitrary.remove(tx.transaction.hash)
-        .flatTap(_ => { dao.metrics.incrementMetric("transactionAccepted") }.pure[F] )
+        .flatTap(_ => Sync[F].delay(dao.metrics.incrementMetric("transactionAccepted")) )
 
   def lookup(key: String): F[Option[TransactionCacheData]] =
     Lookup.extendedLookup[F, String, TransactionCacheData](
