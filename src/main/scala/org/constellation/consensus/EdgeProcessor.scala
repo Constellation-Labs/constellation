@@ -493,12 +493,11 @@ object Snapshot {
       val transactions = dao.checkpointService.fetchTransactions(cb.transactionsMerkleRoot).unsafeRunSync()
 
       transactions.map(dao.addressService.transferSnapshot).sequence.unsafeRunSync()
+
       dao.transactionService
         .applySnapshot(transactions.map(TransactionCacheData(_)), cb.transactionsMerkleRoot).unsafeRunSync()
 
-      // TODO: CheckpointService - apply snapshot (remove from mem pool, add to midDb)
-      dao.checkpointService.applySnapshot(cb.baseHash)
-      // TODO: add to midDb
+      dao.checkpointService.applySnapshot(List(cb.baseHash)).unsafeRunSync()
     }
   }
 

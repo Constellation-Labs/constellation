@@ -51,7 +51,7 @@ class RoundTest
   val tips = (Seq(soe), readyFacilitators)
 
   val txService = mock[TransactionService[IO]]
-  val msgService = mock[MessageService]
+  val msgService = mock[MessageService[IO]]
   val roundId = RoundId("round1")
 
   val dataResolver = mock[DataResolver]

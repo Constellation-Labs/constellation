@@ -60,7 +60,7 @@ class CheckpointService[F[_]: Async](
   messageService: MessageService[F],
   notificationService: NotificationService[F]
 ) extends StrictLogging {
-  private val memPool = new CheckpointBlocksMemPool[F](
+  val memPool = new CheckpointBlocksMemPool[F](
     dao,
     transactionService.merklePool,
     messageService.merklePool,

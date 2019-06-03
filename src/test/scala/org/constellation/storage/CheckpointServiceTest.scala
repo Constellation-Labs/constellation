@@ -165,7 +165,7 @@ class CheckpointServiceTest
     val ts = new TransactionService[IO](dao)
     dao.transactionService shouldReturn ts
 
-    val cs = new CheckpointService(dao, ts, ms, ns)
+    val cs = new CheckpointService[IO](dao, ts, ms, ns)
     dao.checkpointService shouldReturn cs
 
     val metrics = mock[Metrics]
