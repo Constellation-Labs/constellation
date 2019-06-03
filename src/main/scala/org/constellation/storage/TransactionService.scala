@@ -6,14 +6,9 @@ import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
 import org.constellation.primitives.TransactionCacheData
-import org.constellation.storage.TransactionStatus.TransactionStatus
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
-import org.constellation.storage.transactions.PendingTransactionsMemPool
-
-object TransactionStatus extends Enumeration {
-  type TransactionStatus = Value
-  val Pending, Arbitrary, InConsensus, Accepted, Unknown = Value
-}
+import org.constellation.storage.transactions.TransactionStatus.TransactionStatus
+import org.constellation.storage.transactions.{PendingTransactionsMemPool, TransactionStatus}
 
 class TransactionService[F[_]: Sync](dao: DAO)
   extends MerkleStorageAlgebra[F, String, TransactionCacheData]
@@ -43,8 +38,7 @@ class TransactionService[F[_]: Sync](dao: DAO)
     accepted.put(tx.transaction.hash, tx) *>
       inConsensus.remove(tx.transaction.hash) *>
       unknown.remove(tx.transaction.hash) *>
-      arbitrary
-        .remove(tx.transaction.hash)
+      arbitrary.remove(tx.transaction.hash)
         .flatTap(_ => { dao.metrics.incrementMetric("transactionAccepted") }.pure[F] )
 
   def lookup(key: String): F[Option[TransactionCacheData]] =

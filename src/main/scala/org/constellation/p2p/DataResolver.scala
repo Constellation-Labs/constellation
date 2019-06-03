@@ -5,8 +5,8 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.DAO
 import org.constellation.primitives.Schema.CheckpointCache
-import org.constellation.storage.TransactionStatus
 import org.constellation.primitives.{ChannelMessageMetadata, TransactionCacheData}
+import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.PeerApiClient
 
 import scala.concurrent.duration._

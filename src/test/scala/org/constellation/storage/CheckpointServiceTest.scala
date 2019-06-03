@@ -10,6 +10,7 @@ import constellation._
 import org.constellation.crypto.KeyUtils.makeKeyPair
 import org.constellation.primitives.Schema.{CheckpointCache, Height, SignedObservationEdge}
 import org.constellation.primitives._
+import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures, PeerMetadata}
 import org.mockito.Mockito.doNothing

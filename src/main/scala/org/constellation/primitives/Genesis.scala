@@ -7,7 +7,7 @@ import constellation._
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
-import org.constellation.storage.TransactionStatus
+import org.constellation.storage.transactions.TransactionStatus
 
 object Genesis {
 
