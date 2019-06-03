@@ -1,17 +1,15 @@
 package org.constellation.consensus
 
 import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, Props}
+import cats.effect.IO
 import cats.implicits._
 import com.typesafe.config.Config
 import io.micrometer.core.instrument.Timer
-import org.constellation.consensus.CrossTalkConsensus.{
-  NotifyFacilitators,
-  ParticipateInBlockCreationRound,
-  StartNewBlockCreationRound
-}
+import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeType}
+import org.constellation.storage.StorageService
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications, _}
 import org.constellation.util.{Distance, PeerApiClient}
 import org.constellation.{ConfigUtil, DAO}
@@ -30,6 +28,8 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
 
   private[consensus] val rounds: mutable.Map[RoundId, RoundInfo] =
     mutable.Map[RoundId, RoundInfo]()
+
+  private val messagesWithoutRound = new StorageService[IO,Seq[RoundCommand]](expireAfterMinutes = Some(2))
 
   override def receive: Receive = {
     case StartNewBlockCreationRound if ownRoundInProgress =>
@@ -83,6 +83,9 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
                      getArbitraryTransactionsWithDistance(allFacilitators, dao),
                      getArbitraryMessagesWithDistance(allFacilitators, dao))
           passToRoundActor(StartTransactionProposal(cmd.roundData.roundId))
+          messagesWithoutRound.lookup(cmd.roundData.roundId.id).unsafeRunSync().foreach { commands =>
+            commands.foreach(passToRoundActor)
+          }
       }
 
     case cmd: LightTransactionsProposal =>
@@ -202,7 +205,15 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
   }
 
   private[consensus] def passToRoundActor(cmd: RoundCommand): Unit = {
-    rounds.get(cmd.roundId).foreach(_.roundActor ! cmd)
+    rounds.get(cmd.roundId) match {
+      case Some(info) => info.roundActor ! cmd
+      case None =>
+        messagesWithoutRound.update(cmd.roundId.id, { commands =>
+          commands :+ cmd
+        }, {
+          Seq(cmd)
+        }).unsafeRunSync()
+    }
   }
 
   private[consensus] def passToParentActor(cmd: Any): Unit = {
@@ -233,7 +244,7 @@ object RoundManager {
         val transactions =
           dao.transactionService.pullForConsensus(dao.minCheckpointFormationThreshold)
           .unsafeRunSync()
-            .getOrElse(Seq.empty)
+
         val messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq()) // TODO: Choose more than one tx and light peers
         val firstTx = transactions.headOption
         val lightPeers =
@@ -242,7 +253,7 @@ object RoundManager {
               dao
                 .readyPeers(NodeType.Light)
                 .unsafeRunSync()
-                .minBy(p => Distance.calculate(firstTx.get.baseHash, p._1))
+                .minBy(p => Distance.calculate(firstTx.get.transaction.baseHash, p._1))
                 ._2
             )
           } else Set[PeerData]()
@@ -252,7 +263,7 @@ object RoundManager {
            tips._2.values.toSet,
            lightPeers,
            FacilitatorId(dao.id),
-           transactions,
+           transactions.map(_.transaction),
            tips._1,
            messages
          ),

@@ -165,7 +165,7 @@ class RoundManagerTest
       Set(peerData1, peerData2),
       Set(),
       FacilitatorId(facilitatorId1),
-      Seq(),
+      List(),
       Seq(),
       Seq()
     )
@@ -190,7 +190,7 @@ class RoundManagerTest
       Set(peerData1, peerData2),
       Set(),
       FacilitatorId(facilitatorId1),
-      Seq(),
+      List(),
       Seq(),
       Seq()
     )
@@ -350,4 +350,5 @@ class RoundManagerTest
 
     roundManager.underlyingActor.passToRoundActor(cmd) was called
   }
+
 }

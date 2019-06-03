@@ -416,7 +416,6 @@ class Round(roundData: RoundData,
         val acceptedBlock = dao.threadSafeSnapshotService
           .accept(cache)
           .map { _ =>
-            broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, finalFacilitators))
             Option(checkpointBlock)
           }
           .recoverWith {
@@ -431,6 +430,7 @@ class Round(roundData: RoundData,
               ) } >>IO.pure(None)
           }
           .unsafeRunSync()
+        acceptedBlock.foreach(_ => broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, finalFacilitators)))
         passToParentActor(StopBlockCreationRound(roundData.roundId, acceptedBlock))
     }
   }
@@ -536,7 +536,7 @@ object Round {
     peers: Set[PeerData],
     lightPeers: Set[PeerData],
     facilitatorId: FacilitatorId,
-    transactions: Seq[Transaction],
+    transactions: List[Transaction],
     tipsSOE: Seq[SignedObservationEdge],
     messages: Seq[ChannelMessage]
   )

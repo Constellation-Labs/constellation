@@ -11,7 +11,10 @@ import constellation.createTransaction
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
 import org.constellation.primitives.CheckpointBlockValidatorNel._
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, Height, Id}
-import org.constellation.storage.{CheckpointBlocksMemPool, CheckpointService, TransactionService}
+import org.constellation.storage.{
+  CheckpointBlocksMemPool,
+  CheckpointService
+, TransactionService}
 import org.constellation.util.{HashSignature, Metrics}
 import org.constellation.{DAO, NodeConfig}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -19,7 +22,7 @@ import org.scalamock.scalatest.MockFactory
 import org.scalatest.{mock => _, _}
 
 class CheckpointBlockValidatorNelTest
-  extends FunSuite
+    extends FunSuite
     with IdiomaticMockito
     with ArgumentMatchersSugar
     with Matchers
@@ -52,8 +55,10 @@ class CheckpointBlockValidatorNelTest
     rightBlock.baseHash shouldReturn "block2"
     rightParent.baseHash shouldReturn "rightParent"
 
-    rightBlock.signatures shouldReturn Seq(HashSignature.apply("sig1", Id("id1")), HashSignature.apply("sig2", Id("id2")))
-    leftBlock.signatures shouldReturn Seq(HashSignature.apply("sig1", Id("id1")), HashSignature.apply("sig2", Id("id2")))
+    rightBlock.signatures shouldReturn Seq(HashSignature.apply("sig1", Id("id1")),
+                                           HashSignature.apply("sig2", Id("id2")))
+    leftBlock.signatures shouldReturn Seq(HashSignature.apply("sig1", Id("id1")),
+                                          HashSignature.apply("sig2", Id("id2")))
 
     rightBlock.parentSOEBaseHashes()(*) shouldReturn Seq("rightParent")
     leftBlock.parentSOEBaseHashes()(*) shouldReturn Seq("leftParent")
@@ -487,7 +492,9 @@ class ValidationSpec
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
           .foreach { cb =>
-            dao.threadSafeSnapshotService.accept(CheckpointCache(Some(cb), 0, Some(Height(1, 2)))).unsafeRunSync()
+            dao.threadSafeSnapshotService
+              .accept(CheckpointCache(Some(cb), 0, Some(Height(1, 2))))
+              .unsafeRunSync()
           }
 
         assert(!cb7.simpleValidation())

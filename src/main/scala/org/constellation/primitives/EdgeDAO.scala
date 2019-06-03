@@ -547,7 +547,7 @@ trait EdgeDAO {
   val notificationService = new NotificationService()
   val messageService : MessageService
   val channelService = new ChannelService()
-  val soeService = new SOEService(ConfigUtil.getOrElse("constellation.cache.soe-mem-pool-eviction-minutes", 15))
+  val soeService = new SOEService()
 
   val recentBlockTracker = new RecentDataTracker[CheckpointCache](200)
 

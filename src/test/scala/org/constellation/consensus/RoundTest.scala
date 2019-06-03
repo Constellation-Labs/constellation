@@ -61,7 +61,7 @@ class RoundTest
     Set(peerData1, peerData2),
     Set(),
     facilitatorId1,
-    Seq(),
+    List(),
     Seq(),
     Seq()
   )
@@ -83,6 +83,7 @@ class RoundTest
     txService.lookup(*) shouldReturn IO.pure(None)
     dao.transactionService shouldReturn txService
     dao.readyPeers shouldReturn IO.pure(readyFacilitators)
+    dao.peerInfo shouldReturn IO.pure(readyFacilitators)
     dao.id shouldReturn facilitatorId1.id
 
     msgService.contains(*) shouldReturn IO.pure(true)
@@ -182,6 +183,33 @@ class RoundTest
     // should broadcast mine proposals
     val selectedBlock = parentActor.expectMsgType[BroadcastSelectedUnionBlock]
     parentActor.expectMsg(EmptyProposals(roundId, "acceptMajorityCheckpointBlock"))
+    parentActor.expectNoMessage()
+  }
+  test(
+    "it should proceed when union proposals are not received but all peers have sent selected"
+  ) {
+    dao.id shouldReturn facilitatorId2.id
+
+    val parentActor = TestProbe()
+    val roundParticipant = createRoundActor(shortTimeouts, parentActor.ref)
+    val underlyingActor = roundParticipant.underlyingActor
+
+    roundParticipant ! StartTransactionProposal(roundId)
+    parentActor.expectMsgType[BroadcastLightTransactionProposal]
+
+    underlyingActor.unionTransactionProposalsTikTok.isCancelled shouldBe false
+
+    roundParticipant ! LightTransactionsProposal(roundId, facilitatorId3, Seq(tx2.hash), Seq(), Seq())
+
+    val cb1 = CheckpointBlock.createCheckpointBlock(Seq(tx1), Seq(), Seq(), Seq())(dao.keyPair)
+
+    val unionBlock = parentActor.expectMsgType[BroadcastUnionBlockProposal]
+
+    roundParticipant ! SelectedUnionBlock(roundId, facilitatorId1, cb1)
+    roundParticipant ! SelectedUnionBlock(roundId, facilitatorId3, cb1)
+
+    val selectedBlock = parentActor.expectMsgType[BroadcastSelectedUnionBlock]
+    parentActor.expectMsgType[StopBlockCreationRound]
     parentActor.expectNoMessage()
   }
 

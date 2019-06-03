@@ -13,7 +13,7 @@ case class RoundDataRemote(
   peers: Set[PeerMetadata],
   lightPeers: Set[PeerMetadata],
   facilitatorId: FacilitatorId,
-  transactions: Seq[Transaction],
+  transactions: List[Transaction],
   tipsSOE: Seq[SignedObservationEdge],
   messages: Seq[ChannelMessage]
 )
@@ -54,7 +54,6 @@ class HTTPNodeRemoteSender(implicit val dao: DAO) extends NodeRemoteSender {
     parallelFireForget(BlockBuildingRoundRoute.selectedFullPath, cmd.roundId, cmd.peers, cmd.cb,"BroadcastSelectedUnionBlock")
 
   def parallelFireForget(path: String,roundId: RoundId, peers: Iterable[PeerData], cmd: AnyRef, msg: String): Unit ={
-    println(s"[${dao.id.short}] round ${roundId} sending to peers ${peers.map(_.peerMetadata.id.short)} message :${msg} ")
     peers.par.foreach(_.client.postNonBlockingUnit(path, cmd))
   }
 }
