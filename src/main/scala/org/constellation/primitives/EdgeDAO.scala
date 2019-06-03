@@ -3,6 +3,7 @@ package org.constellation.primitives
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 
 import akka.util.Timeout
+import cats.effect.IO.RaiseError
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.{Logger, StrictLogging}
@@ -10,7 +11,7 @@ import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.storage._
 import org.constellation.util.Metrics
-import org.constellation.{DAO, NodeConfig, ProcessingConfig}
+import org.constellation.{ConfigUtil, DAO, NodeConfig, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
@@ -125,6 +126,7 @@ class ThreadSafeMessageMemPool() extends StrictLogging {
 import constellation._
 // TODO: wkoszycki this one is temporary till (#412 Flatten checkpointBlock in CheckpointCache) is finished
 case object MissingCheckpointBlockException extends Exception("CheckpointBlock object is empty.")
+case class MissingHeightException(cb: CheckpointBlock) extends Exception(s"CheckpointBlock ${cb.baseHash} height is missing for soeHash ${cb.soeHash}.")
 case class PendingAcceptance(cb: CheckpointBlock)
       extends Exception(s"CheckpointBlock: ${cb.baseHash} is already pending acceptance phase.")
 case class CheckpointAcceptBlockAlreadyStored(cb: CheckpointBlock)
@@ -378,8 +380,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
           }
           _ <- cb.storeSOE()
           maybeHeight <- calculateHeight(checkpoint)
-          metricKey = if (maybeHeight.isEmpty) Metrics.heightEmpty else Metrics.heightNonEmpty
-          _ <- dao.metrics.incrementMetricAsync(metricKey)
+          _ <- if(maybeHeight.isEmpty) dao.metrics.incrementMetricAsync(Metrics.heightEmpty).flatMap(_ => IO.raiseError(MissingHeightException(cb))) else IO.unit
           _ <- dao.checkpointService.memPool.put(cb.baseHash, checkpoint.copy(height = maybeHeight))
           _ <- IO.delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
           _ <- acceptMessages(cb)
@@ -394,8 +395,8 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
     }
     acceptCheckpoint.recoverWith {
       case err =>
-        IO.shift *> dao.metrics.incrementMetricAsync("acceptCheckpoint_failure")
-        IO.raiseError(err) //propagate to upper levels
+        dao.metrics.incrementMetricAsync("acceptCheckpoint_failure")
+            .flatTap(_ => IO.raiseError(err)) //propagate to upper levels
     }
   }
 

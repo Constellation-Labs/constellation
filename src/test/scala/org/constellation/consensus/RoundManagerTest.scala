@@ -6,17 +6,19 @@ import akka.actor.{ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import cats.effect.IO
+import com.typesafe.config.ConfigFactory
 import org.constellation._
 import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
-import org.constellation.consensus.Round._
+import org.constellation.consensus.Round.{UnionProposals, _}
 import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
-import org.constellation.primitives.Schema.{NodeType, SignedObservationEdge}
+import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage._
 import org.constellation.util.Metrics
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers, OneInstancePerTest}
 
+import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -33,13 +35,32 @@ class RoundManagerTest
   implicit val dao: DAO = mock[DAO]
   implicit val materialize: ActorMaterializer = ActorMaterializer()
 
-  dao.edgeExecutionContext shouldReturn ExecutionContext.fromExecutor(
-    Executors.newWorkStealingPool(8)
+  val roundManagerProbe = TestProbe("roundManagerSupervisor")
+  val shortTimeouts = ConfigFactory.parseString(
+    """constellation {
+      consensus {
+          union-proposals-timeout = 2s
+          arbitrary-data-proposals-timeout = 2s
+          checkpoint-block-resolve-majority-timeout = 2s
+          accept-resolved-majority-block-timeout = 2s
+          form-checkpoint-blocks-timeout = 40s
+       }
+      }"""
+  )
+  val conf = ConfigFactory.parseString(
+      """constellation {
+      consensus {
+          union-proposals-timeout = 8s
+          arbitrary-data-proposals-timeout = 8s
+          checkpoint-block-resolve-majority-timeout = 8s
+          accept-resolved-majority-block-timeout = 8s
+          form-checkpoint-blocks-timeout = 40s
+       }
+      }"""
   )
 
-  val roundManagerProbe = TestProbe()
   val roundManager: TestActorRef[RoundManager] =
-    TestActorRef(Props(spy(new RoundManager(60 seconds))), roundManagerProbe.ref)
+    TestActorRef(Props(spy(new RoundManager(conf))), roundManagerProbe.ref)
 
   val checkpointFormationThreshold = 1
   val daoId = Schema.Id("a")
@@ -68,6 +89,7 @@ class RoundManagerTest
   val tips = (Seq(soe), readyFacilitators)
 
   dao.id shouldReturn daoId
+  dao.edgeExecutionContext shouldReturn system.dispatcher
   dao.minCheckpointFormationThreshold shouldReturn checkpointFormationThreshold
 
   dao.readyFacilitatorsAsync shouldReturn IO.pure(readyFacilitators)
@@ -143,7 +165,7 @@ class RoundManagerTest
       Set(peerData1, peerData2),
       Set(),
       FacilitatorId(facilitatorId1),
-      Seq(),
+      List(),
       Seq(),
       Seq()
     )
@@ -168,7 +190,7 @@ class RoundManagerTest
       Set(peerData1, peerData2),
       Set(),
       FacilitatorId(facilitatorId1),
-      Seq(),
+      List(),
       Seq(),
       Seq()
     )
@@ -195,10 +217,11 @@ class RoundManagerTest
   test("it should send ResolveMajorityCheckpointBlock to round actor when round timeout has passed") {
     val timersRoundManagerProbe = TestProbe()
     val timersRoundManager: TestActorRef[RoundManager] =
-      TestActorRef(Props(spy(new RoundManager(3 second), true)), timersRoundManagerProbe.ref)
+      TestActorRef(Props(spy(new RoundManager(conf), true)), timersRoundManagerProbe.ref)
 
     timersRoundManager ! StartNewBlockCreationRound
 
+    timersRoundManagerProbe.expectMsgType[NotifyFacilitators]
     Thread.sleep(5000)
     timersRoundManager.underlyingActor.passToRoundActor(any[ResolveMajorityCheckpointBlock]) wasCalled atLeastOnce
   }
@@ -327,4 +350,5 @@ class RoundManagerTest
 
     roundManager.underlyingActor.passToRoundActor(cmd) was called
   }
+
 }

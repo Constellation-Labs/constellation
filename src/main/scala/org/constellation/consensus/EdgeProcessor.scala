@@ -231,43 +231,62 @@ object EdgeProcessor extends StrictLogging {
     nestedAcceptCount: Int = 0
   )(implicit dao: DAO): Unit = {
 
-    dao.threadSafeSnapshotService.accept(checkpointCacheData).unsafeRunSync()
-    val block = checkpointCacheData.checkpointBlock.get
-    val parents = block.parentSOEBaseHashes
-    val parentExists = parents.map { h =>
-      h -> dao.checkpointService.contains(h)
-    }
-    if (parentExists.forall(_._2)) {
-      dao.metrics.incrementMetric("resolveFinishedCheckpointParentsPresent")
-    } else {
-      if (nestedAcceptCount >= ConfigUtil.maxNestedCBresolution) {
-        throw new RuntimeException(s"Max nested CB resolution: $nestedAcceptCount reached.")
+    val maybeAcceptedBlock = dao.threadSafeSnapshotService
+      .accept(checkpointCacheData)
+      .map { _ =>
+        Option(checkpointCacheData)
       }
-      dao.metrics.incrementMetric("resolveFinishedCheckpointParentMissing")
-      parentExists.filterNot(_._2).foreach {
-        case (h, _) =>
-          DataResolver
-            .resolveCheckpointDefaults(h)
-            .flatMap { ccd =>
-              IO {
-                ccd.foreach { cd =>
-                  cd.checkpointBlock.foreach { cb =>
-                    if (cd.children < 2) {
-                      dao.concurrentTipService.update(cb)(dao).unsafeRunSync()
-                    }
-                    if (!dao.checkpointService
-                          .contains(cd.checkpointBlock.get.baseHash)) {
-                      dao.metrics.incrementMetric("resolveAcceptCBCall")
-                      acceptWithResolveAttempt(cd, nestedAcceptCount + 1)
+      .recoverWith {
+        case error @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
+          logger.warn(s"Accepting cb from other node failed due to: ${error.getMessage}")
+          IO.pure(None)
+      }
+
+    maybeAcceptedBlock
+      .unsafeRunSync()
+      .foreach { acceptedBlock =>
+        val block = acceptedBlock.checkpointBlock.get
+
+        val parents = block.parentSOEBaseHashes
+        logger.warn(
+          s"[${dao.id.short}] acceptWithResolveAttempt block.parentSOEBaseHashes ${parents} "
+        )
+        val parentExists = parents.map { h =>
+          h -> dao.checkpointService.contains(h)
+        }
+        if (parentExists.forall(_._2)) {
+          dao.metrics.incrementMetric("resolveFinishedCheckpointParentsPresent")
+        } else {
+          if (nestedAcceptCount >= ConfigUtil.maxNestedCBresolution) {
+            throw new RuntimeException(s"Max nested CB resolution: $nestedAcceptCount reached.")
+          }
+          dao.metrics.incrementMetric("resolveFinishedCheckpointParentMissing")
+          parentExists.filterNot(_._2).foreach {
+            case (h, _) =>
+              DataResolver
+                .resolveCheckpointDefaults(h)
+                .flatMap { ccd =>
+                  IO {
+                    ccd.foreach { cd =>
+                      cd.checkpointBlock.foreach { cb =>
+                        if (cd.children < 2) {
+                          dao.concurrentTipService.update(cb)(dao).unsafeRunSync()
+                        }
+                        if (!dao.checkpointService
+                              .contains(cd.checkpointBlock.get.baseHash)) {
+                          dao.metrics.incrementMetric("resolveAcceptCBCall")
+                          acceptWithResolveAttempt(cd, nestedAcceptCount + 1)
+                        }
+                      }
                     }
                   }
                 }
-              }
-            }
-            .unsafeRunAsyncAndForget()
-      }
+                .unsafeRunAsyncAndForget()
+          }
 
-    }
+        }
+
+      }
 
   }
 
@@ -377,7 +396,7 @@ object Snapshot {
           val byteArray = Files.readAllBytes(path)
           //   val f = File(dao.snapshotPath, snapshotHash)
           byteArray
-        } else throw new RuntimeException(s"No snapshot found at $path")
+        } else throw new RuntimeException(s"${dao.id.short} No snapshot found at $path")
       },
       "loadSnapshot"
     )
