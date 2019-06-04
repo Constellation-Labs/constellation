@@ -176,12 +176,9 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
         val canSnapshot = minTipHeight > (nextHeightInterval + dao.processingConfig.snapshotHeightDelayInterval)
         if (!canSnapshot) {
-          logger.info("Snapshot - height interval condition not met")
           dao.metrics.incrementMetric("snapshotHeightIntervalConditionNotMet")
         } else {
           dao.metrics.incrementMetric("snapshotHeightIntervalConditionMet")
-
-          logger.info("--------- Snapshot - height interval condition met")
 
           val maybeDatas = acceptedCBSinceSnapshot.map(dao.checkpointService.fullData(_).unsafeRunSync())
 
@@ -221,7 +218,6 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
             // TODO: Make this a future and have it not break the unit test
             // Also make the db puts blocking, may help for different issue
             if (snapshot != Snapshot.snapshotZero) {
-              logger.info("--------- Snapshot - not zero snapshot")
 
               dao.metrics.incrementMetric(Metrics.snapshotCount)
 
@@ -249,13 +245,10 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
               val addresses =
                 cbs.map(_.flatMap(_.transactions.toList.flatMap(t => List(t.src, t.dst))).toSet)
 
-              logger.info("--------- Snapshot - just before lock for snapshot")
-
               dao.addressService
                 .lockForSnapshot(
                   addresses.get,
-                  IO(logger.info("--------- Snapshot - lock for snapshot - acquired")) *>
-                    IO(Snapshot.acceptSnapshot(snapshot)) *>
+                  IO(Snapshot.acceptSnapshot(snapshot)) *>
                     dao.snapshotService.midDb.put(snapshot.hash, snapshot) *>
                     dao.checkpointService.applySnapshot(snapshot.checkpointBlocks.toList) *>
                     IO { totalNumCBsInShapshots += snapshot.checkpointBlocks.size } *>
@@ -263,8 +256,6 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
                     dao.metrics.updateMetricAsync(Metrics.lastSnapshotHash, snapshot.hash)
                 )
                 .unsafeRunSync()
-            } else {
-              logger.info("--------- Snapshot - it's a zero snapshot")
             }
 
             // TODO: Verify from file
@@ -349,7 +340,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
     acceptCheckpoint.recoverWith {
       case err =>
         dao.metrics.incrementMetricAsync("acceptCheckpoint_failure")
-            .flatTap(_ => IO.raiseError(err)) //propagate to upper levels
+            .flatMap(_ => IO.raiseError(err)) //propagate to upper levels
     }
   }
 
@@ -460,7 +451,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
         }
         .void
 
-    IO { logger.info(s"Accepting transactions ${cb.transactions.size}") } >> insertTX
+    IO { logger.debug(s"Accepting transactions ${cb.transactions.size}") } >> insertTX
   }
 
 }

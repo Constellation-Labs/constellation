@@ -137,7 +137,7 @@ testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
 
 test in assembly := {}
 
-Test / fork := true
+//Test / fork := true // <-- unable to attach debugger
 Test / logBuffered := false
 
 assemblyMergeStrategy in assembly := {
@@ -177,3 +177,4 @@ lazy val root = (project in file("."))
     mainClass := Some("org.constellation.ConstellationNode")
     // other settings here
   )
+

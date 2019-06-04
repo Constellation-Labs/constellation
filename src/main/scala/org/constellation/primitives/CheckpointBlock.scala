@@ -18,10 +18,12 @@ abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
 
   def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
 
-  def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
+  def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] = {
     checkpoint.edge.parentHashes.flatMap { key => dao.soeService.lookup(key).unsafeRunSync() }.map {
       _.signedObservationEdge.baseHash
     }
+  }
+
 
   def storeSOE()(implicit dao: DAO): Unit = {
     dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true)).unsafeRunSync()
@@ -113,7 +115,6 @@ case class CheckpointBlock(
       CheckpointBlock(transactions, checkpoint)
     )
     val elapsed = (System.currentTimeMillis - start) / 1000000
-    dao.miscLogger.info(s"--- --- --- Checkpoint block validation: ${elapsed}ms")
 
     if (validation.isValid) {
       dao.metrics.incrementMetric("checkpointValidationSuccess")
@@ -161,6 +162,7 @@ case class CheckpointBlock(
      */
     // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
     dao.checkpointService.memPool.put(baseHash, cache).unsafeRunSync()
+    cache.checkpointBlock.get.storeSOE().unsafeRunSync()
     dao.recentBlockTracker.put(cache)
 
   }
@@ -187,18 +189,23 @@ case class CheckpointBlock(
 
   def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =  {
     parentSOEHashes.flatMap { soeHash =>
-      val parent = dao.soeService.lookup(soeHash).unsafeRunSync()
-      if (parent.isEmpty) {
-        println(s"ERROR: SOEHash $soeHash missing from soeService")
-        dao.metrics.incrementMetric("parentSOEServiceQueryFailed")
-        // Temporary
-        val parentDirect = checkpoint.edge.observationEdge.parents.find(_.hash == soeHash).flatMap{_.baseHash}
-        if (parentDirect.isEmpty) {
-          dao.metrics.incrementMetric("parentDirectTipReferenceMissing")
-      //    throw new Exception("Missing parent direct reference")
-        }
-        parentDirect
-      } else parent.map{_.signedObservationEdge.baseHash}
+      if (soeHash == Genesis.CoinBaseHash) {
+        Seq()
+      }
+      else {
+        val parent = dao.soeService.lookup(soeHash).unsafeRunSync()
+        if (parent.isEmpty) {
+          println(s"ERROR: SOEHash $soeHash missing from soeService")
+          dao.metrics.incrementMetric("parentSOEServiceQueryFailed")
+          // Temporary
+          val parentDirect = checkpoint.edge.observationEdge.parents.find(_.hash == soeHash).flatMap{_.baseHash}
+          if (parentDirect.isEmpty) {
+            dao.metrics.incrementMetric("parentDirectTipReferenceMissing")
+        //    throw new Exception("Missing parent direct reference")
+          }
+          parentDirect
+        } else parent.map{_.signedObservationEdge.baseHash}
+      }
     }
   }
 
@@ -524,8 +531,6 @@ sealed trait CheckpointBlockValidatorNel {
 
   def containsAlreadyAcceptedTx(cb: CheckpointBlock)(implicit dao: DAO): IO[List[String]] = {
     val cbs = dao.checkpointService.memPool.size().unsafeRunSync()
-    val start = System.currentTimeMillis
-    val startTimer = dao.metrics.startTimer
     val containsAccepted = cb.transactions
       .map(
         t =>
@@ -536,10 +541,6 @@ sealed trait CheckpointBlockValidatorNel {
       .toList
       .sequence[IO, (String, Boolean)]
       .map(l => l.collect { case (h, true) => h })
-
-    val stop = System.currentTimeMillis
-    dao.metrics.stopTimer("isConflictingWithOthers", startTimer)
-    println(s"isConflictingWithOthers - elapsed: ${stop - start}ms for cbs: $cbs")
 
     containsAccepted
   }

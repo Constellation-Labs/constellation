@@ -98,14 +98,14 @@ object ConstellationNode extends StrictLogging {
     }
 
     val config = ConfigFactory.load()
-    logger.info("Config loaded")
+    logger.debug("Config loaded")
 
     Try {
 
       // TODO: Move to scopt above.
       val seedsFromConfig: Seq[HostPort] = PeerManager.loadSeedsFromConfig(config)
 
-      logger.info(s"Seeds: $seedsFromConfig")
+      logger.debug(s"Seeds: $seedsFromConfig")
 
       // TODO: This should be unified as a single conf file
       val hostName = Option(cliConfig.externalIp).map(_.toString).getOrElse {
@@ -171,7 +171,7 @@ object ConstellationNode extends StrictLogging {
     } match {
       case Failure(e) => e.printStackTrace()
       case Success(_) =>
-        logger.info("success")
+        logger.debug("success")
 
         // To stop daemon threads
         while (true) {

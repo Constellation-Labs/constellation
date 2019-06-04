@@ -140,7 +140,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
     } yield ()
 
   private def initDownloadingProcess: IO[Unit] =
-    IO(logger.info("Download started"))
+    IO(logger.debug("Download started"))
       .flatMap(_ => setNodeState(NodeState.DownloadInProgress))
       .flatMap(_ => requestForFaucet)
       .flatMap(_ => requestForFaucet)
@@ -158,7 +158,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .flatTap(genesis => IO(dao.acceptGenesis(genesis)))
 
   private def waitForPeers(): IO[Unit] =
-    IO(logger.info(s"Waiting ${waitForPeersDelay.toString()} for peers"))
+    IO(logger.debug(s"Waiting ${waitForPeersDelay.toString()} for peers"))
       .flatMap(_ => IO.sleep(waitForPeersDelay))
 
   private def getReadyPeers() =

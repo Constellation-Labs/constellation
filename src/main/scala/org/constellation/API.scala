@@ -411,7 +411,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             path("add") {
               entity(as[HostPort]) { hp =>
                 onSuccess(PeerManager.attemptRegisterPeer(hp)) { result =>
-                  logger.info(s"Add Peer Request: $hp. Result: $result")
+                  logger.debug(s"Add Peer Request: $hp. Result: $result")
                   complete(StatusCode.int2StatusCode(result.code))
                 }
 

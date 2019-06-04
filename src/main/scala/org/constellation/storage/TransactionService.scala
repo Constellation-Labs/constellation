@@ -61,8 +61,7 @@ class TransactionService[F[_]: Sync](dao: DAO)
   def isAccepted(hash: String): F[Boolean] = accepted.contains(hash)
 
   def applySnapshot(txs: List[TransactionCacheData], merkleRoot: String): F[Unit] = {
-    merklePool
-      .remove(merkleRoot)
+    merklePool.remove(merkleRoot)
       .flatMap(_ => txs.map(tx => accepted.remove(tx.transaction.hash)).sequence.void)
   }
 

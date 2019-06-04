@@ -72,7 +72,7 @@ class BlockBuildingRoundRoute(nodeActor: ActorRef)(implicit system: ActorSystem,
     post {
       path(BlockBuildingRoundRoute.proposalPath) {
         entity(as[LightTransactionsProposal]) { proposal =>
-          logger.info(s"[${dao.id.short}] Received LightTransactionsProposal for round ${proposal.roundId} from ${proposal.facilitatorId}")
+          logger.debug(s"[${dao.id.short}] Received LightTransactionsProposal for round ${proposal.roundId} from ${proposal.facilitatorId}")
           nodeActor ! proposal
           complete(StatusCodes.Created)
         }
@@ -84,7 +84,7 @@ class BlockBuildingRoundRoute(nodeActor: ActorRef)(implicit system: ActorSystem,
     post {
       path(BlockBuildingRoundRoute.unionPath) {
         entity(as[UnionBlockProposal]) { proposal =>
-          logger.info(s"[${dao.id.short}] Received UnionBlockProposal for round ${proposal.roundId} from ${proposal.facilitatorId}")
+          logger.debug(s"[${dao.id.short}] Received UnionBlockProposal for round ${proposal.roundId} from ${proposal.facilitatorId}")
           nodeActor ! proposal
           complete(StatusCodes.Created)
         }
@@ -96,7 +96,7 @@ class BlockBuildingRoundRoute(nodeActor: ActorRef)(implicit system: ActorSystem,
     post {
       path(BlockBuildingRoundRoute.selectedPath) {
         entity(as[SelectedUnionBlock]) { sub =>
-          logger.info(s"[${dao.id.short}] Received SelectedUnionBlock for round ${sub.roundId} from ${sub.facilitatorId}")
+          logger.debug(s"[${dao.id.short}] Received SelectedUnionBlock for round ${sub.roundId} from ${sub.facilitatorId}")
           nodeActor ! sub
           complete(StatusCodes.Created)
         }
