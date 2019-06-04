@@ -210,9 +210,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
               allblockCaches
             }
 
-            val hashesForNextSnapshot = blockCaches.flatMap {
-              _.checkpointBlock.map(_.baseHash)
-            }.sorted
+            val hashesForNextSnapshot = blockCaches.flatMap(_.checkpointBlock.map(_.baseHash)).sorted
             val nextSnapshot = Snapshot(snapshot.hash, hashesForNextSnapshot)
 
             // TODO: Make this a future and have it not break the unit test
@@ -283,10 +281,8 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
             lastSnapshotHeight = nextHeightInterval
             snapshot = nextSnapshot
-            acceptedCBSinceSnapshot =
-              acceptedCBSinceSnapshot.filterNot(hashesForNextSnapshot.contains)
-            dao.metrics.updateMetric("acceptedCBSinceSnapshot",
-                                     acceptedCBSinceSnapshot.size)
+            acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.filterNot(hashesForNextSnapshot.contains)
+            dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size)
             dao.metrics.updateMetric("lastSnapshotHeight", lastSnapshotHeight)
             dao.metrics.updateMetric(
               "nextSnapshotHeight",
