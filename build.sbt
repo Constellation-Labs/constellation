@@ -137,7 +137,7 @@ testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
 
 test in assembly := {}
 
-//Test / fork := true // <-- unable to attach debugger
+Test / fork := true // <-- comment out to attach debugger
 Test / logBuffered := false
 
 assemblyMergeStrategy in assembly := {
