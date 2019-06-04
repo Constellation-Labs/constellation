@@ -35,7 +35,7 @@ abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
 }
 
 case class CheckpointBlockMetadata(
-  transactionsMerkleRoot: String,
+  transactionsMerkleRoot: Option[String],
   checkpointEdge: CheckpointEdge,
   messagesMerkleRoot: Option[String],
   notificationsMerkleRoot: Option[String]

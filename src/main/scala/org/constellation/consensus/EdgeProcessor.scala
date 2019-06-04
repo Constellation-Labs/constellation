@@ -12,7 +12,6 @@ import constellation._
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.storage.CheckpointService
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Validation.EnrichedFuture
 import org.constellation.util._
@@ -39,8 +38,6 @@ case class FinishedCheckpointResponse(isSuccess: Boolean = false)
 case class FinishedCheckpointAck(reRegister: Boolean = false)
 
 object EdgeProcessor extends StrictLogging {
-
-
 
   private def requestBlockSignature(
     checkpointBlock: CheckpointBlock,
@@ -273,7 +270,8 @@ object EdgeProcessor extends StrictLogging {
                           dao.concurrentTipService.update(cb)(dao).unsafeRunSync()
                         }
                         if (!dao.checkpointService
-                              .contains(cd.checkpointBlock.get.baseHash).unsafeRunSync()) {
+                              .contains(cd.checkpointBlock.get.baseHash)
+                              .unsafeRunSync()) {
                           dao.metrics.incrementMetric("resolveAcceptCBCall")
                           acceptWithResolveAttempt(cd, nestedAcceptCount + 1)
                         }
@@ -334,7 +332,7 @@ case class DownloadComplete(latestSnapshot: Snapshot)
 
 import java.nio.file.{Files, Paths}
 
-object Snapshot {
+object Snapshot extends StrictLogging {
 
   def writeSnapshot(storedSnapshot: StoredSnapshot)(implicit dao: DAO): Try[Path] = {
     val serialized = KryoSerializer.serializeAnyRef(storedSnapshot)
@@ -469,7 +467,7 @@ object Snapshot {
                 dao.messageService.memPool
                   .update(
                     msgHash,
-                    _.copy(snapshotHash = Some(snapshot.hash),blockHash = Some(cb.baseHash)),
+                    _.copy(snapshotHash = Some(snapshot.hash), blockHash = Some(cb.baseHash)),
                     ChannelMessageMetadata(
                       DataResolver
                         .resolveMessagesDefaults(msgHash)
@@ -489,15 +487,18 @@ object Snapshot {
         updates.unsafeRunSync()
       }
 
-      // DEBUG: mwadon \/
-      val transactions = dao.checkpointService.fetchTransactions(cb.transactionsMerkleRoot).unsafeRunSync()
+      cb.transactionsMerkleRoot
+        .map { merkle =>
+          for {
+            txs <- dao.checkpointService.fetchTransactions(merkle)
+            _ <- txs.map(t => dao.addressService.transferSnapshot(t)).sequence
+            _ <- dao.transactionService.applySnapshot(txs.map(TransactionCacheData(_)), merkle)
+          } yield ()
+        }
+        .sequence
+        .flatMap(_ => dao.checkpointService.applySnapshot(List(cb.baseHash)))
+        .unsafeRunSync()
 
-      transactions.map(dao.addressService.transferSnapshot).sequence.unsafeRunSync()
-
-      dao.transactionService
-        .applySnapshot(transactions.map(TransactionCacheData(_)), cb.transactionsMerkleRoot).unsafeRunSync()
-
-      dao.checkpointService.applySnapshot(List(cb.baseHash)).unsafeRunSync()
     }
   }
 

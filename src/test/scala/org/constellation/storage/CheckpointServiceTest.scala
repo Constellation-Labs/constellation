@@ -74,7 +74,7 @@ class CheckpointServiceTest
     val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
 
     dao.checkpointService
-      .fetchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot).unsafeRunSync() shouldBe txs
+      .fetchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot.get).unsafeRunSync() shouldBe txs
   }
 
   test("should fetch notifications when they exist") {
