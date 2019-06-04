@@ -33,7 +33,7 @@ class CheckpointBlocksMemPool[F[_]: Sync](
       t <- store(data.transactions.map(_.hash), transactionsMerklePool)
       m <- store(data.messages.map(_.signedMessageData.hash), messagesMerklePool)
       n <- store(data.notifications.map(_.hash), notificationsMerklePool)
-    } yield CheckpointBlockMetadata(t.get, data.checkpoint, m, n)
+    } yield CheckpointBlockMetadata(t, data.checkpoint, m, n)
 
   private def store(data: Seq[String], ss: StorageService[F, Seq[String]]): F[Option[String]] = {
     data match {
@@ -83,7 +83,7 @@ class CheckpointService[F[_]: Sync : LiftIO](
 
   def convert(merkle: CheckpointCacheMetadata)(implicit dao: DAO): F[CheckpointCache] = {
     for {
-      txs <- fetchTransactions(merkle.checkpointBlock.transactionsMerkleRoot)
+      txs <- merkle.checkpointBlock.transactionsMerkleRoot.fold(List[Transaction]().pure[F])(fetchTransactions)
       msgs <- merkle.checkpointBlock.messagesMerkleRoot.fold(List[ChannelMessage]().pure[F])(fetchMessages)
       notifications <- merkle.checkpointBlock.notificationsMerkleRoot
         .fold(List[PeerNotification]().pure[F])(fetchNotifications)
