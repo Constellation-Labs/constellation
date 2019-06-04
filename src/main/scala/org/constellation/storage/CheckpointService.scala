@@ -1,6 +1,6 @@
 package org.constellation.storage
 
-import cats.effect.{Async, IO, Sync}
+import cats.effect.{Async, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
@@ -10,7 +10,7 @@ import org.constellation.primitives._
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 import org.constellation.util.MerkleTree
 
-class CheckpointBlocksMemPool[F[_]: Async](
+class CheckpointBlocksMemPool[F[_]: Sync](
   dao: DAO,
   transactionsMerklePool: StorageService[F, Seq[String]],
   messagesMerklePool: StorageService[F, Seq[String]],
@@ -54,7 +54,7 @@ class CheckpointBlocksMemPool[F[_]: Async](
       .void
 }
 
-class CheckpointService[F[_]: Async](
+class CheckpointService[F[_]: Sync : LiftIO](
   dao: DAO,
   transactionService: TransactionService[F],
   messageService: MessageService[F],
@@ -112,7 +112,7 @@ class CheckpointService[F[_]: Async](
       merkleRoot,
       transactionService,
       (x: TransactionCacheData) => x.transaction,
-      (s: String) => Async[F].liftIO(DataResolver.resolveTransactionsDefaults(s).map(_.get))
+      (s: String) => LiftIO[F].liftIO(DataResolver.resolveTransactionsDefaults(s).map(_.get))
     )
 
   def fetchMessages(merkleRoot: String)(implicit dao: DAO): F[List[ChannelMessage]] =
@@ -120,7 +120,7 @@ class CheckpointService[F[_]: Async](
       merkleRoot,
       messageService,
       (x: ChannelMessageMetadata) => x.channelMessage,
-      (s: String) => Async[F].liftIO(DataResolver.resolveMessagesDefaults(s).map(_.get))
+      (s: String) => LiftIO[F].liftIO(DataResolver.resolveMessagesDefaults(s).map(_.get))
     )
 
   def fetchNotifications(merkleRoot: String)(implicit dao: DAO): F[List[PeerNotification]] =
