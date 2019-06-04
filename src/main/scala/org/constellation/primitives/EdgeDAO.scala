@@ -329,7 +329,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
           _ <- IO.delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
           _ <- acceptMessages(cb)
           _ <- acceptTransactions(cb)
-          _ <- IO { logger.info(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}]") }
+          _ <- IO { logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}]") }
           _ <- concurrentTipService.update(cb)
           _ <- updateAcceptedCBSinceSnapshot(cb)
           _ <- IO.shift *> dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted)
