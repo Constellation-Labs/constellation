@@ -488,17 +488,13 @@ object Snapshot extends StrictLogging {
       }
 
       cb.transactionsMerkleRoot
-        .map { merkle =>
-          for {
-            txs <- dao.checkpointService.fetchTransactions(merkle)
-            _ <- txs.map(t => dao.addressService.transferSnapshot(t)).sequence
-            _ <- dao.transactionService.applySnapshot(txs.map(TransactionCacheData(_)), merkle)
-          } yield ()
+        .foreach { merkle =>
+          // TODO: wkoszycki this fails when chained with IO
+            val txs = dao.checkpointService.fetchTransactions(merkle).unsafeRunSync()
+            txs.map(t => dao.addressService.transferSnapshot(t)).sequence.unsafeRunSync()
+            dao.transactionService.applySnapshot(txs.map(TransactionCacheData(_)), merkle).unsafeRunSync()
         }
-        .sequence
-        .flatMap(_ => dao.checkpointService.applySnapshot(List(cb.baseHash)))
-        .unsafeRunSync()
-
+      dao.checkpointService.applySnapshot(List(cb.baseHash)).unsafeRunSync()
     }
   }
 
