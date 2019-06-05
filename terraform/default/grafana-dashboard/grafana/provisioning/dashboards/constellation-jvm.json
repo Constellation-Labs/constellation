@@ -5661,7 +5661,7 @@
       }
     }
   ],
-  "refresh": false,
+  "refresh": "5s",
   "schemaVersion": 18,
   "style": "dark",
   "tags": [],
@@ -5776,8 +5776,8 @@
     ]
   },
   "time": {
-    "from": "2019-05-29T02:31:58.568Z",
-    "to": "2019-05-29T17:13:25.841Z"
+    "from": "now-5m",
+    "to": "now"
   },
   "timepicker": {
     "now": true,

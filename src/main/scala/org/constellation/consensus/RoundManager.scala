@@ -33,7 +33,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
 
   override def receive: Receive = {
     case StartNewBlockCreationRound if ownRoundInProgress =>
-      log.info(
+      log.warning(
         s"Unable to initiate new round another round: ${rounds.filter(_._2.startedByThisNode)} is in progress"
       )
 
@@ -100,7 +100,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
     case cmd: StopBlockCreationRound =>
       rounds.get(cmd.roundId).fold {} { round =>
         dao.metrics.stopTimer("crosstalkConsensus", round.timer)
-        log.info(s"Stop block creation round has been triggered for round ${cmd.roundId} on node ${dao.id.short}")
+        log.debug(s"Stop block creation round has been triggered for round ${cmd.roundId} on node ${dao.id.short}")
 
         round.timeoutScheduler.cancel()
         if (round.startedByThisNode) {
@@ -140,7 +140,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
     case cmd: SelectedUnionBlock =>
       passToRoundActor(cmd)
 
-    case msg => log.info(s"Received unknown message: $msg")
+    case msg => log.warning(s"Received unknown message: $msg")
 
   }
 
@@ -201,7 +201,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
       startedByThisNode,
       dao.metrics.startTimer
     )
-    log.info(s"Started round=${roundData.roundId}")
+    log.debug(s"Started round=${roundData.roundId}")
   }
 
   private[consensus] def passToRoundActor(cmd: RoundCommand): Unit = {

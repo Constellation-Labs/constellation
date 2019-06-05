@@ -185,7 +185,7 @@ class Round(roundData: RoundData,
 
     case AcceptMajorityCheckpointBlock(_) => acceptMajorityCheckpointBlock()
 
-    case msg => log.info(s"Received unknown message: $msg")
+    case msg => log.warning(s"Received unknown message: $msg")
   }
 
   private[consensus] def scheduleUnionProposals: Cancellable = {
@@ -408,7 +408,7 @@ class Round(roundData: RoundData,
         val finalFacilitators = selectedCheckpointBlocks.keySet.map(_.id).toSet
         val cache =
           CheckpointCache(Some(checkpointBlock), height = checkpointBlock.calculateHeight())
-        log.info(
+        log.debug(
           s"[${dao.id.short}] accepting majority checkpoint block ${checkpointBlock.baseHash}  " +
             s" with txs ${checkpointBlock.transactions.map(_.hash)} " +
             s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId}"
@@ -446,7 +446,7 @@ class Round(roundData: RoundData,
         .toList
         .filterNot(pd => allFacilitators.contains(pd.peerMetadata.id))
         .map { peer =>
-          log.info(
+          log.debug(
             s"[${dao.id.short}] broadcasting cb ${finishedCheckpoint.checkpointCacheData.checkpointBlock.get.baseHash} to  ${peer.client.id} in round ${roundData.roundId}"
           )
           wrapFutureWithMetric(

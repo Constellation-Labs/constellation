@@ -2,6 +2,7 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
+import cats.effect.IO
 import cats.implicits._
 import constellation._
 import org.constellation.DAO
@@ -94,23 +95,13 @@ trait Genesis extends NodeData with EdgeDAO {
   def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = false)(implicit dao: DAO): Unit = {
     // Store hashes for the edges
 
-    go.genesis.store(
-      CheckpointCache(Some(go.genesis), height = Some(Height(0, 0)))
-    )
-
-    go.initialDistribution.store(
-        CheckpointCache(Some(go.initialDistribution), height = Some(Height(1, 1)))
-    )
-
-    go.initialDistribution2.store(
-      CheckpointCache(Some(go.initialDistribution2), height = Some(Height(1, 1)))
-    )
-
-    go.genesis
-      .storeSOE()
-      .flatMap(_ => go.initialDistribution.storeSOE())
-      .flatMap(_ => go.initialDistribution2.storeSOE())
-      .unsafeRunSync()
+    (go.genesis.storeSOE() *>
+      go.initialDistribution.storeSOE() *>
+      go.initialDistribution2.storeSOE() *>
+      IO(go.genesis.store(CheckpointCache(Some(go.genesis), height = Some(Height(0, 0))))) *>
+      IO(go.initialDistribution.store(CheckpointCache(Some(go.initialDistribution), height = Some(Height(1, 1))))) *>
+      IO(go.initialDistribution2.store(CheckpointCache(Some(go.initialDistribution2), height = Some(Height(1, 1))))))
+        .unsafeRunSync()
 
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
     go.genesis.transactions.foreach { rtx =>
