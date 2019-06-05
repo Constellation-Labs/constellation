@@ -3,14 +3,17 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.testkit.TestProbe
+import better.files.File
+import cats.effect.IO
 import com.softwaremill.sttp.Response
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
-import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointAck, FinishedCheckpointResponse}
+import org.constellation.consensus._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.IPManager
 import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
+import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 import org.json4s.native
 import org.json4s.native.Serialization
@@ -43,7 +46,7 @@ class PeerAPITest
       val reply = "http://originator:9001/peer-api/finished/checkpoint/reply"
       val fakeResp = Future.successful(mock[Response[Unit]])
       Mockito
-        .doReturn(fakeResp,fakeResp)
+        .doReturn(fakeResp, fakeResp)
         .when(peerAPI)
         .makeCallback(*, *)
 
@@ -68,6 +71,43 @@ class PeerAPITest
     "handle reply message" in {
       Post("/finished/reply", FinishedCheckpointResponse(true)) ~> peerAPI.postEndpoints ~> check {
         status shouldEqual StatusCodes.OK
+      }
+    }
+
+    "return snapshot bytes when stored snapshot exist" in {
+      val snapshotHash = File.newTemporaryFile("snapTest_").name
+      dao.snapshotService shouldReturn mock[SnapshotService]
+      dao.snapshotService.lookup(snapshotHash) shouldReturn IO.pure(
+        Some(Snapshot(snapshotHash, Seq.empty))
+      )
+      dao.snapshotPath shouldReturn File.temp
+
+      Get(s"/storedSnapshot/$snapshotHash") ~> peerAPI.commonEndpoints ~> check {
+        status shouldEqual StatusCodes.OK
+      }
+    }
+
+    "return error when snapshot hash found but file does not exist" in {
+      val snapshotHash = "foo"
+      dao.snapshotService shouldReturn mock[SnapshotService]
+      dao.snapshotService.lookup(snapshotHash) shouldReturn IO.pure(
+        Some(Snapshot(snapshotHash, Seq.empty))
+      )
+      dao.snapshotPath shouldReturn File.temp
+
+      Get(s"/storedSnapshot/$snapshotHash") ~> peerAPI.commonEndpoints ~> check {
+        status shouldEqual StatusCodes.InternalServerError
+      }
+    }
+
+    "return snapshot not found when stored snapshot does not exist" in {
+      val snapshotHash = "foo"
+      dao.snapshotService shouldReturn mock[SnapshotService]
+      dao.snapshotService.lookup(snapshotHash) shouldReturn IO.pure(None)
+      dao.snapshotPath shouldReturn File.temp
+
+      Get(s"/storedSnapshot/$snapshotHash") ~> peerAPI.commonEndpoints ~> check {
+        status shouldEqual StatusCodes.NotFound
       }
     }
   }

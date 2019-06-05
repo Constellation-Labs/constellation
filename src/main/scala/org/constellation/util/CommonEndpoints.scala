@@ -8,6 +8,7 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.FromEntityUnmarshaller
 import akka.util.{ByteString, Timeout}
+import cats.effect.IO
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
@@ -18,7 +19,7 @@ import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.serializer.KryoSerializer
 import org.json4s.native.Serialization
 
-import scala.concurrent.Future
+import scala.util.{Failure, Success}
 
 case class NodeStateInfo(
   nodeState: NodeState,
@@ -41,7 +42,7 @@ trait CommonEndpoints extends Json4sSupport {
       val metricFailure = HealthChecker.checkLocalMetrics(dao.metrics.getMetrics, dao.id.short)
       metricFailure match {
         case Left(value) => failWith(value)
-        case Right(_) => complete(StatusCodes.OK)
+        case Right(_)    => complete(StatusCodes.OK)
       }
     } ~
       path("id") {
@@ -73,21 +74,25 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.dbActor.getSnapshot(s))
       } ~*/
       path("storedSnapshot" / Segment) { s =>
+        val getSnapshotTask = for {
+          maybeSnapshot <- dao.snapshotService.lookup(s)
+          bytes <- IO(maybeSnapshot.flatMap(_ => Snapshot.loadSnapshotBytes(s).toOption))
+        } yield bytes
+
         onComplete {
-          Future {
-            Snapshot.loadSnapshotBytes(s)
-          }(dao.edgeExecutionContext)
+          getSnapshotTask.unsafeToFuture()
         } { res =>
-          val byteArray = res.toOption.flatMap { _.toOption }.getOrElse(Array[Byte]())
-
-          val body = ByteString(byteArray)
-
-          val entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, body)
-
-          val httpResponse = HttpResponse(entity = entity)
+          val httpResponse: HttpResponse = res match {
+            case Failure(err) =>
+              HttpResponse(StatusCodes.InternalServerError, entity = err.getMessage)
+            case Success(None) => HttpResponse(StatusCodes.NotFound)
+            case Success(Some(bytes)) =>
+              HttpResponse(
+                entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, ByteString(bytes))
+              )
+          }
 
           complete(httpResponse)
-        //complete(bytes)
         }
 
       } ~

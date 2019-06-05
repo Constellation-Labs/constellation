@@ -41,6 +41,6 @@ class SnapshotService(implicit dao: DAO) {
       .map(_ => ())
   }
 
-  def lookup: String => IO[Option[Snapshot]] =
-    Lookup.extendedLookup[IO, String, Snapshot](List(midDb, oldDb))
+  def lookup(key: String): IO[Option[Snapshot]] =
+    Lookup.extendedLookup[IO, String, Snapshot](List(midDb, oldDb))(key)
 }
