@@ -17,49 +17,6 @@ import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 import scala.util.Try
 
-class ThreadSafeTXMemPool() {
-
-  private var transactions = Seq[Transaction]()
-
-  def pull(minCount: Int): Option[Seq[Transaction]] = this.synchronized {
-    if (transactions.size > minCount) {
-      val (left, right) = transactions.splitAt(minCount)
-      transactions = right
-      Some(left)
-    } else None
-  }
-
-  def pullUpTo(minCount: Int): Seq[Transaction] = this.synchronized {
-    val (left, right) = transactions.splitAt(minCount)
-    transactions = right
-    left
-  }
-
-  def batchPutDebug(txs: Seq[Transaction]): Boolean = this.synchronized {
-    transactions ++= txs
-    true
-  }
-
-  def put(transaction: Transaction, overrideLimit: Boolean = false)(implicit dao: DAO): Boolean =
-    this.synchronized {
-      val notContained = !transactions.contains(transaction)
-
-      if (notContained) {
-        if (overrideLimit) {
-          // Prepend in front to process user TX first before random ones
-          transactions = Seq(transaction) ++ transactions
-
-        } else if (transactions.size < dao.processingConfig.maxMemPoolSize) {
-          transactions :+= transaction
-        }
-      }
-      notContained
-    }
-
-  def unsafeCount: Int = transactions.size
-
-}
-
 class ThreadSafeMessageMemPool() extends StrictLogging {
 
   private var messages = Seq[Seq[ChannelMessage]]()
@@ -148,7 +105,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
         snapshotHashes = dao.snapshotHashes,
         addressCacheData = dao.addressService.toMap().unsafeRunSync(),
         tips = concurrentTipService.toMap,
-        snapshotCache = snapshot.checkpointBlocks.flatMap { dao.checkpointService.getFullData }
+        snapshotCache = snapshot.checkpointBlocks.flatMap { dao.checkpointService.fullData(_).unsafeRunSync() }
       )
     )
 
@@ -226,7 +183,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
 
           logger.info("--------- Snapshot - height interval condition met")
 
-          val maybeDatas = acceptedCBSinceSnapshot.map(dao.checkpointService.getFullData)
+          val maybeDatas = acceptedCBSinceSnapshot.map(dao.checkpointService.fullData(_).unsafeRunSync())
 
           val blocksWithinHeightInterval = maybeDatas.filter {
             _.exists(_.height.exists { h =>
@@ -272,7 +229,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
               tryWithMetric(
                 {
                   val maybeBlocks = snapshot.checkpointBlocks.map {
-                    dao.checkpointService.getFullData
+                    dao.checkpointService.fullData(_).unsafeRunSync()
                   }
                   if (maybeBlocks.exists(_.exists(_.checkpointBlock.isEmpty))) {
                     // TODO : This should never happen, if it does we need to reset the node state and redownload
@@ -287,7 +244,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
                 "snapshotWriteToDisk"
               )
 
-              val cbData = snapshot.checkpointBlocks.map { dao.checkpointService.getFullData }
+              val cbData = snapshot.checkpointBlocks.map { dao.checkpointService.fullData(_).unsafeRunSync() }
               val cbs = cbData.toList.map(_.flatMap(_.checkpointBlock)).sequence
               val addresses =
                 cbs.map(_.flatMap(_.transactions.toList.flatMap(t => List(t.src, t.dst))).toSet)
@@ -297,17 +254,13 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
               dao.addressService
                 .lockForSnapshot(
                   addresses.get,
-                  IO {
-                    logger.info("--------- Snapshot - lock for snapshot - acquired")
-                    Snapshot.acceptSnapshot(snapshot)
-                    dao.snapshotService.midDb.put(snapshot.hash, snapshot)
-                    dao.checkpointService.memPool.remove(snapshot.checkpointBlocks.toSet)
-
-                    totalNumCBsInShapshots += snapshot.checkpointBlocks.size
-                    dao.metrics.updateMetric("totalNumCBsInShapshots",
-                                             totalNumCBsInShapshots.toString)
-                    dao.metrics.updateMetric(Metrics.lastSnapshotHash, snapshot.hash)
-                  }
+                  IO(logger.info("--------- Snapshot - lock for snapshot - acquired")) *>
+                    IO(Snapshot.acceptSnapshot(snapshot)) *>
+                    dao.snapshotService.midDb.put(snapshot.hash, snapshot) *>
+                    dao.checkpointService.applySnapshot(snapshot.checkpointBlocks.toList) *>
+                    IO { totalNumCBsInShapshots += snapshot.checkpointBlocks.size } *>
+                    dao.metrics.updateMetricAsync("totalNumCBsInShapshots", totalNumCBsInShapshots.toString) *>
+                    dao.metrics.updateMetricAsync(Metrics.lastSnapshotHash, snapshot.hash)
                 )
                 .unsafeRunSync()
             } else {
@@ -361,7 +314,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
     val acceptCheckpoint: IO[Unit] = checkpoint.checkpointBlock match {
       case None => IO.raiseError(MissingCheckpointBlockException)
 
-      case Some(cb) if dao.checkpointService.contains(cb.baseHash) =>
+      case Some(cb) if dao.checkpointService.contains(cb.baseHash).unsafeRunSync() =>
         for {
         _ <- dao.metrics.incrementMetricAsync("checkpointAcceptBlockAlreadyStored")
         _ <- IO.raiseError(CheckpointAcceptBlockAlreadyStored(cb))
@@ -540,14 +493,14 @@ trait EdgeDAO {
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
   var transactionService: TransactionService[IO] = _
-  var checkpointService: CheckpointService = _
+  var checkpointService: CheckpointService[IO] = _
   var snapshotService: SnapshotService = _
-  var addressService: AddressService = _
+  var addressService: AddressService[IO] = _
 
-  val notificationService = new NotificationService()
-  val messageService : MessageService
-  val channelService = new ChannelService()
-  val soeService = new SOEService()
+  val notificationService = new NotificationService[IO]()
+  val messageService: MessageService[IO]
+  val channelService = new ChannelService[IO]()
+  val soeService = new SOEService[IO]()
 
   val recentBlockTracker = new RecentDataTracker[CheckpointCache](200)
 

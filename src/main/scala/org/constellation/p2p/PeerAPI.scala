@@ -21,7 +21,7 @@ import org.constellation.consensus._
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.storage.TransactionStatus
+import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util._
 import org.constellation.{DAO, ResourceInfo}
 import org.json4s.native

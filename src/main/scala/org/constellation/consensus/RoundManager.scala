@@ -171,7 +171,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
     implicit val ec = dao.edgeExecutionContext
 
     val cbToResolve = roundData.tipsSOE
-      .filterNot(t => dao.checkpointService.contains(t.baseHash))
+      .filterNot(t => dao.checkpointService.contains(t.baseHash).unsafeRunSync())
       .map(_.baseHash)
 
     DataResolver

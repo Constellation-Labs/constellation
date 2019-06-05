@@ -6,7 +6,7 @@ import akka.pattern.ask
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.crypto.SimpleWalletLike
@@ -16,7 +16,7 @@ import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.storage._
-import org.constellation.util.HostPort
+import org.constellation.util.{HostPort, Metrics}
 
 class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike with StrictLogging {
 
@@ -58,7 +58,10 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
 
   @volatile var nodeType: NodeType = NodeType.Full
 
-  lazy val messageService = new MessageService()(this)
+  lazy val messageService: MessageService[IO] = {
+    implicit val daoImpl: DAO = this
+    new MessageService[IO]()
+  }
 
   def setNodeState(
     nodeState_ : NodeState
@@ -89,10 +92,16 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
     messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
-    transactionService = new TransactionService[IO](this) //, processingConfig.transactionLRUMaxSize)
-    checkpointService = CheckpointService(this)
+
+    transactionService = new TransactionService[IO](this)
+    checkpointService = new CheckpointService[IO](this, transactionService, messageService, notificationService)
     snapshotService = SnapshotService(this)
-    addressService = new AddressService()(() => metrics)
+    addressService = {
+      implicit val implMetrics: () => Metrics = () => metrics
+      implicit val edgeContextShift: ContextShift[IO] = IO.contextShift(edgeExecutionContext)
+
+      new AddressService[IO]()
+    }
   }
 
   lazy val concurrentTipService: ConcurrentTipService = new TrieBasedTipService(

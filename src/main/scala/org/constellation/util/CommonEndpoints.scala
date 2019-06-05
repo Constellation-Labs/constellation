@@ -52,7 +52,7 @@ trait CommonEndpoints extends Json4sSupport {
       } ~
       path("heights") {
         val maybeHeights = dao.concurrentTipService.toMap.flatMap {
-          case (k, _) => dao.checkpointService.get(k).flatMap { _.height }
+          case (k, _) => dao.checkpointService.lookup(k).unsafeRunSync().flatMap { _.height }
         }.toSeq
         complete(maybeHeights)
       } ~
@@ -64,7 +64,7 @@ trait CommonEndpoints extends Json4sSupport {
         val res =
           KryoSerializer.serializeAnyRef(
             info.copy(acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshot.flatMap {
-              dao.checkpointService.getFullData
+              dao.checkpointService.fullData(_).unsafeRunSync()
             })
           )
         complete(res)

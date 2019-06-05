@@ -132,10 +132,7 @@ class TrieBasedTipService(sizeLimit: Int,
       dao.metrics.incrementMetric("minTipHeightKeysEmpty")
     }
 
-    val maybeDatas = tips.keys
-      .map {
-        dao.checkpointService.get
-      }
+    val maybeDatas = tips.keys.map(dao.checkpointService.lookup(_).unsafeRunSync())
 
     if (maybeDatas.exists { _.isEmpty }) {
       dao.metrics.incrementMetric("minTipHeightCBDataEmptyForKeys")
@@ -171,7 +168,7 @@ class TrieBasedTipService(sizeLimit: Int,
     tips.filterNot{
       z =>
         val parentHashes = z._2.checkpointBlock.parentSOEBaseHashes
-        parentHashes.size == 2 && parentHashes.forall(dao.checkpointService.contains)
+        parentHashes.size == 2 && parentHashes.forall(dao.checkpointService.contains(_).unsafeRunSync())
     }.foreach{
       case (k, _) => tips.remove(k)
     }

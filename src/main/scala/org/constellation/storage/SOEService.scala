@@ -1,6 +1,6 @@
 package org.constellation.storage
 
-import cats.effect.IO
+import cats.effect.Sync
 import org.constellation.primitives.Schema.SignedObservationEdgeCache
 
-class SOEService() extends StorageService[IO, SignedObservationEdgeCache]()
+class SOEService[F[_]: Sync]() extends StorageService[F, SignedObservationEdgeCache]()

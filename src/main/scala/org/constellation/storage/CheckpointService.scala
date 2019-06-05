@@ -1,203 +1,134 @@
 package org.constellation.storage
 
-import better.files.File
-import cats.effect.IO
+import cats.effect.{Async, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
-import org.constellation.datastore.swaydb.SwayDbConversions._
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCache, CheckpointCacheMetadata}
 import org.constellation.primitives._
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 import org.constellation.util.MerkleTree
-import swaydb.serializers.Default.StringSerializer
 
-import scala.collection.concurrent.TrieMap
-import scala.concurrent.ExecutionContextExecutor
-
-object CheckpointBlocksOld {
-  def apply(dao: DAO) = new CheckpointBlocksOld(dao.dbPath)(dao.edgeExecutionContext)
-}
-
-class CheckpointBlocksOld(path: File)(implicit ec: ExecutionContextExecutor)
-    extends DbStorage[String, CheckpointCacheMetadata](
-      dbPath = (path / "disk1" / "checkpoints_old").path
-    )
-
-object CheckpointBlocksMid {
-  val midCapacity = 1
-
-  def apply(dao: DAO) = new CheckpointBlocksMid(dao.dbPath, midCapacity)(dao.edgeExecutionContext)
-}
-
-class CheckpointBlocksMid(path: File, midCapacity: Int)(implicit ec: ExecutionContextExecutor)
-    extends MidDbStorage[String, CheckpointCacheMetadata](
-        dbPath = (path / "disk1" / "checkpoints_mid").path,
-        midCapacity
-      )
-
-// TODO: Make separate one for acceptedCheckpoints vs nonresolved etc.
-// mwadon: /\ is still relevant?
-class CheckpointBlocksMemPool()(implicit dao: DAO)
-    extends StorageService[IO, CheckpointCacheMetadata]() {
-
+class CheckpointBlocksMemPool[F[_]: Sync](
+  dao: DAO,
+  transactionsMerklePool: StorageService[F, Seq[String]],
+  messagesMerklePool: StorageService[F, Seq[String]],
+  notificationsMerklePool: StorageService[F, Seq[String]]
+) extends StorageService[F, CheckpointCacheMetadata]() {
   def put(
     key: String,
     value: CheckpointCache
-  ): IO[CheckpointCacheMetadata] = {
-    value.checkpointBlock.foreach(cb => incrementChildrenCount(cb.parentSOEBaseHashes()))
+  ): F[CheckpointCacheMetadata] =
+    value.checkpointBlock
+      .map(cb => incrementChildrenCount(cb.parentSOEBaseHashes()(dao)))
+      .sequence *>
+      storeMerkleRoots(value.checkpointBlock.get)
+        .flatMap(ccm => {
+          super.put(key, CheckpointCacheMetadata(ccm, value.children, value.height))
+        })
 
-    super.put(
-      key,
-      CheckpointCacheMetadata(storeMerkleRoots(value.checkpointBlock.get), value.children, value.height)
-    )
-  }
+  def storeMerkleRoots(data: CheckpointBlock): F[CheckpointBlockMetadata] =
+    for {
+      t <- store(data.transactions.map(_.hash), transactionsMerklePool)
+      m <- store(data.messages.map(_.signedMessageData.hash), messagesMerklePool)
+      n <- store(data.notifications.map(_.hash), notificationsMerklePool)
+    } yield CheckpointBlockMetadata(t.get, data.checkpoint, m, n)
 
-  def storeMerkleRoots(data: CheckpointBlock): CheckpointBlockMetadata = {
-    val t = store(data.transactions.map(_.hash), dao.transactionService.merklePool).get
-    val m = store(data.messages.map(_.signedMessageData.hash), dao.messageService.merklePool)
-    val n = store(data.notifications.map(_.hash), dao.notificationService.merklePool)
-
-    CheckpointBlockMetadata(
-      t,
-      data.checkpoint,
-      m,
-      n,
-    )
-  }
-
-  private def store(data: Seq[String], ss: StorageService[IO, Seq[String]]): Option[String] = {
+  private def store(data: Seq[String], ss: StorageService[F, Seq[String]]): F[Option[String]] = {
     data match {
-      case Seq() => None
+      case Seq() => none[String].pure[F]
       case _ =>
         val rootHash = MerkleTree(data).rootHash
-        ss.put(rootHash, data).unsafeRunSync() // TODO !!
-        Some(rootHash)
+        ss.put(rootHash, data).map(_ => rootHash.some)
     }
   }
 
-
-  def incrementChildrenCount(hashes: Seq[String]): Unit = {
-    hashes.foreach(
-      hash =>
-        update(hash, (cd: CheckpointCacheMetadata) => { cd.copy(children = cd.children + 1) })
-          .unsafeRunAsyncAndForget()
-    )
-  }
-
+  def incrementChildrenCount(hashes: Seq[String]): F[Unit] =
+    hashes
+      .toList
+      .map { hash =>
+        update(hash, (cd: CheckpointCacheMetadata) => cd.copy(children = cd.children + 1))
+      }
+      .sequence
+      .void
 }
 
-object CheckpointService extends StrictLogging {
-  def apply(implicit dao: DAO) = new CheckpointService(dao)
+class CheckpointService[F[_]: Sync : LiftIO](
+  dao: DAO,
+  transactionService: TransactionService[F],
+  messageService: MessageService[F],
+  notificationService: NotificationService[F]
+) extends StrictLogging {
+  val memPool = new CheckpointBlocksMemPool[F](
+    dao,
+    transactionService.merklePool,
+    messageService.merklePool,
+    notificationService.merklePool)
 
-  def convert(merkle: CheckpointCacheMetadata)(implicit dao: DAO): CheckpointCache = {
-    logger.debug(s"Convert triggered for: ${merkle.checkpointBlock.baseHash}")
-    val txs =
-      fetchTransactions(merkle.checkpointBlock.transactionsMerkleRoot)
-    val msgs =
-      merkle.checkpointBlock.messagesMerkleRoot.fold(Seq[ChannelMessage]())(mr => fetchMessages(mr))
-    val notifications =
-      merkle.checkpointBlock.notificationsMerkleRoot.fold(Seq[PeerNotification]())(mr => fetchNotifications(mr))
-    CheckpointCache(
-      Some(
-        CheckpointBlock(
-          txs,
-          merkle.checkpointBlock.checkpoint,
-          msgs,
-          notifications
-        )
-      ),
+  val pendingAcceptance = new StorageService[IO, CheckpointBlock](Some(10))
+
+  def applySnapshot(cbs: List[String]): F[Unit] =
+    cbs.map(memPool.remove)
+      .sequence
+      .void
+
+  def fullData(key: String): F[Option[CheckpointCache]] =
+    lookup(key).flatMap(_.map(convert(_)(dao)).sequence)
+
+  def lookup(key: String): F[Option[CheckpointCacheMetadata]] =
+    Lookup.extendedLookup[F, String, CheckpointCacheMetadata](List(memPool))(key)
+
+  def contains(key: String): F[Boolean] = lookup(key).map(_.nonEmpty)
+
+  def convert(merkle: CheckpointCacheMetadata)(implicit dao: DAO): F[CheckpointCache] = {
+    for {
+      txs <- fetchTransactions(merkle.checkpointBlock.transactionsMerkleRoot)
+      msgs <- merkle.checkpointBlock.messagesMerkleRoot.fold(List[ChannelMessage]().pure[F])(fetchMessages)
+      notifications <- merkle.checkpointBlock.notificationsMerkleRoot
+        .fold(List[PeerNotification]().pure[F])(fetchNotifications)
+    } yield CheckpointCache(
+      CheckpointBlock(txs, merkle.checkpointBlock.checkpoint, msgs, notifications).some,
       merkle.children,
-      merkle.height
-    )
-  }
-
-  def fetchTransactions(
-    merkleRoot: String
-  )(implicit dao: DAO): Seq[Transaction] = {
-
-    fetch[TransactionCacheData,Transaction](
-      merkleRoot,
-      dao.transactionService,
-      (x: TransactionCacheData) => x.transaction,
-      (s: String) =>
-        DataResolver.resolveTransactionsDefaults(s).map(_.get)
-    )
-  }
-
-  def fetchMessages(merkleRoot: String)(implicit dao: DAO): Seq[ChannelMessage] = {
-    fetch[ChannelMessageMetadata,ChannelMessage](
-      merkleRoot,
-      dao.messageService,
-      (x: ChannelMessageMetadata) => x.channelMessage,
-      (s: String) =>
-        DataResolver.resolveMessagesDefaults(s).map(_.get)
-    )
+      merkle.height)
   }
 
   def fetch[T, R](
     merkleRoot: String,
-    service: MerkleStorageAlgebra[IO, String, T],
+    service: MerkleStorageAlgebra[F, String, T],
     mapper: T => R,
-    resolver: String => IO[T],
-  )(implicit dao: DAO): Seq[R] = {
+    resolver: String => F[T],
+  ): F[List[R]] =
     service.findHashesByMerkleRoot(merkleRoot)
-      .map(
-        _.get
-          .map(hash => service.lookup(hash)
-            .flatMap(t => t.map(IO.pure).getOrElse(resolver(hash)).map(mapper)))
-      )
+      .map(_.get.map(hash =>
+        service
+          .lookup(hash)
+          .flatMap(_.map(_.pure[F]).getOrElse(resolver(hash)).map(mapper))))
       .map(_.toList.sequence)
       .flatten
-      .unsafeRunSync()
-  }
 
-  def fetchNotifications(merkleRoot: String)(
-    implicit dao: DAO
-  ): Seq[PeerNotification] = {
-    fetch[PeerNotification,PeerNotification](
+  def fetchTransactions(merkleRoot: String)(implicit dao: DAO): F[List[Transaction]] =
+    fetch[TransactionCacheData, Transaction](
       merkleRoot,
-      dao.notificationService,
+      transactionService,
+      (x: TransactionCacheData) => x.transaction,
+      (s: String) => LiftIO[F].liftIO(DataResolver.resolveTransactionsDefaults(s).map(_.get))
+    )
+
+  def fetchMessages(merkleRoot: String)(implicit dao: DAO): F[List[ChannelMessage]] =
+    fetch[ChannelMessageMetadata, ChannelMessage](
+      merkleRoot,
+      messageService,
+      (x: ChannelMessageMetadata) => x.channelMessage,
+      (s: String) => LiftIO[F].liftIO(DataResolver.resolveMessagesDefaults(s).map(_.get))
+    )
+
+  def fetchNotifications(merkleRoot: String)(implicit dao: DAO): F[List[PeerNotification]] =
+    fetch[PeerNotification, PeerNotification](
+      merkleRoot,
+      notificationService,
       (x: PeerNotification) => x,
       (s: String) => ???
     )
-  }
-}
-
-class CheckpointService(dao: DAO) {
-  val memPool = new CheckpointBlocksMemPool()(dao)
-  val pendingAcceptance = new StorageService[IO, CheckpointBlock]( Some(10))
-  val midDb: MidDbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksMid(dao)
-  val oldDb: DbStorage[String, CheckpointCacheMetadata] = CheckpointBlocksOld(dao)
-
-  def applySnapshot(baseHash: String): Unit = {
-    (memPool.remove(baseHash) *> midDb.remove(baseHash))
-      .unsafeRunSync()
-  }
-
-  def migrateOverCapacity(): IO[Unit] = {
-    midDb
-      .pullOverCapacity()
-      .flatMap(_.map(cb => oldDb.put(cb.checkpointBlock.baseHash, cb)).sequence[IO, Unit])
-      .map(_ => ())
-  }
-
-  def fullData(key: String): Option[Schema.CheckpointCache] = {
-    lookup(key).map(_.map(CheckpointService.convert(_)(dao))).unsafeRunSync()
-  }
-
-  def lookup: String => IO[Option[CheckpointCacheMetadata]] =
-    Lookup.extendedLookup[IO, String, CheckpointCacheMetadata](List(memPool, midDb)) //, oldDb))
-
-//  def lookupFullData: String => IO[Option[CheckpointCache]] =
-//    DbStorage
-//      .extendedLookup[String, CheckpointCacheMetadata](List(memPool, midDb, oldDb))
-//      .map(_.map(_.map(CheckpointService.convert(_)(dao))))
-
-  def get(key: String) = lookup(key).unsafeRunSync()
-  def getFullData(key: String) = fullData(key)
-  def contains(key: String) = lookup(key).map(_.nonEmpty).unsafeRunSync()
-
 
 }

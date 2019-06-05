@@ -97,13 +97,13 @@ class RoundManagerTest
   dao.pullTips(readyFacilitators) shouldReturn Some(tips)
   dao.threadSafeMessageMemPool shouldReturn mock[ThreadSafeMessageMemPool]
   dao.threadSafeMessageMemPool.pull(1) shouldReturn None
-  dao.checkpointService shouldReturn mock[CheckpointService]
-  dao.checkpointService.contains(*) shouldReturn true
+  dao.checkpointService shouldReturn mock[CheckpointService[IO]]
+  dao.checkpointService.contains(*) shouldReturn IO.pure(true)
 
   val metrics = new Metrics()
   dao.metrics shouldReturn metrics
 
-  dao.messageService shouldReturn mock[MessageService]
+  dao.messageService shouldReturn mock[MessageService[IO]]
   dao.messageService.arbitraryPool shouldReturn mock[StorageService[IO, ChannelMessageMetadata]]
   dao.messageService.arbitraryPool.toMap() shouldReturn IO.pure(Map.empty)
 
