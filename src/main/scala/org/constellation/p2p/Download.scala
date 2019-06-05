@@ -217,7 +217,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   private def setAcceptedTransactionsAfterDownload(): IO[Unit] = IO {
     dao.transactionAcceptedAfterDownload =
       dao.metrics.getMetrics.get("transactionAccepted").map(_.toLong).getOrElse(0L)
-    logger.info("download process has finished")
+    logger.info("download process has been finished")
   }
 
   /** **/

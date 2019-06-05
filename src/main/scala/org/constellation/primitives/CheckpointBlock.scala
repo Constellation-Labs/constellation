@@ -24,10 +24,10 @@ abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
     }
   }
 
-
   def storeSOE()(implicit dao: DAO): Unit = {
     dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true)).unsafeRunSync()
   }
+
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
   def soeHash: String = checkpoint.edge.signedObservationEdge.hash
@@ -161,8 +161,7 @@ case class CheckpointBlock(
           }
      */
     // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
-    dao.checkpointService.memPool.put(baseHash, cache).unsafeRunSync()
-    cache.checkpointBlock.get.storeSOE().unsafeRunSync()
+    (cache.checkpointBlock.get.storeSOE() *> dao.checkpointService.memPool.put(baseHash, cache)).unsafeRunSync()
     dao.recentBlockTracker.put(cache)
 
   }
@@ -305,15 +304,10 @@ object NoAddressCacheFound {
   def apply(t: Transaction) = new NoAddressCacheFound(t.hash, t.src.address)
 }
 
-case class InsufficientBalance(address: String) extends CheckpointBlockValidation {
+case class InsufficientBalance(address: String, amount: Long, diff: Long) extends CheckpointBlockValidation {
 
   def errorMessage: String =
     s"CheckpointBlock includes transaction from address=$address which has insufficient balance"
-}
-
-object InsufficientBalance {
-
-  def apply(t: Transaction) = new InsufficientBalance(t.src.address)
 }
 
 // TODO: pass also a transaction metadata
@@ -397,8 +391,9 @@ sealed trait CheckpointBlockValidatorNel {
     def validateBalance(address: String,
                         t: Iterable[Transaction]): ValidationResult[List[Transaction]] = {
       val diff = lookup(address) - t.map(_.amount).sum
+      val amount = t.map(_.amount).sum
 
-      if (diff >= 0L) t.toList.validNel else InsufficientBalance(address).invalidNel
+      if (diff >= 0L) t.toList.validNel else InsufficientBalance(address, amount, diff).invalidNel
     }
 
     t.toList
