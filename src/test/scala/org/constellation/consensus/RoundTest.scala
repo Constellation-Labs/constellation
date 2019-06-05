@@ -12,15 +12,13 @@ import org.constellation.consensus.RoundManager.{BroadcastLightTransactionPropos
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.storage.TransactionService
+import org.constellation.storage.{MessageService, ThreadSafeSnapshotService, TransactionService}
 import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures, PeerMetadata}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers}
 
 import scala.concurrent.ExecutionContext
-import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
-import org.constellation.storage.{MessageService, TransactionService}
 
 class RoundTest
     extends TestKit(ActorSystem("RoundTest"))
