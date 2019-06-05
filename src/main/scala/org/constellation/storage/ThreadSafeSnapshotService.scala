@@ -58,12 +58,13 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
     (latestSnapshotInfo.snapshotCache ++ latestSnapshotInfo.acceptedCBSinceSnapshotCache)
       .foreach { h =>
         // TODO: wkoszycki revisit it should call accept method instead
-        dao.checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h).unsafeRunSync()
-        h.checkpointBlock.get.storeSOE().unsafeRunSync()
-        dao.metrics.incrementMetric(Metrics.checkpointAccepted)
-        h.checkpointBlock.get.transactions.foreach { _ =>
-          dao.metrics.incrementMetric("transactionAccepted")
-        }
+        (h.checkpointBlock.get.storeSOE() *>
+          dao.checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h) *>
+          dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) *>
+          h.checkpointBlock.get
+            .transactions.toList
+            .map(_ => dao.metrics.incrementMetricAsync("transactionAccepted")).sequence)
+          .unsafeRunSync()
       }
 
     dao.metrics.updateMetric(
