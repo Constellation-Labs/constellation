@@ -408,10 +408,10 @@ class Round(roundData: RoundData,
         val finalFacilitators = selectedCheckpointBlocks.keySet.map(_.id).toSet
         val cache =
           CheckpointCache(Some(checkpointBlock), height = checkpointBlock.calculateHeight())
-        log.debug(
+        log.info(
           s"[${dao.id.short}] accepting majority checkpoint block ${checkpointBlock.baseHash}  " +
             s" with txs ${checkpointBlock.transactions.map(_.hash)} " +
-            s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId}"
+            s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash}"
         )
         val acceptedBlock = dao.threadSafeSnapshotService
           .accept(cache)

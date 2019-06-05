@@ -194,7 +194,7 @@ case class CheckpointBlock(
       else {
         val parent = dao.soeService.lookup(soeHash).unsafeRunSync()
         if (parent.isEmpty) {
-          println(s"ERROR: SOEHash $soeHash missing from soeService")
+          println(s"ERROR: SOEHash $soeHash missing from soeService for cb: $baseHash")
           dao.metrics.incrementMetric("parentSOEServiceQueryFailed")
           // Temporary
           val parentDirect = checkpoint.edge.observationEdge.parents.find(_.hash == soeHash).flatMap{_.baseHash}

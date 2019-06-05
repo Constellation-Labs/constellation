@@ -238,38 +238,43 @@ object RoundManager {
     dao: DAO
   ): Option[(RoundData, Seq[(Transaction, Int)], Seq[(ChannelMessage, Int)])] = {
 
-    dao
-      .pullTips(dao.readyFacilitatorsAsync.unsafeRunSync())
-      .map { tips =>
-        val transactions =
-          dao.transactionService.pullForConsensus(dao.minCheckpointFormationThreshold)
-          .unsafeRunSync()
 
-        val messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq()) // TODO: Choose more than one tx and light peers
+    val transactions = dao.transactionService.pullForConsensus(dao.minCheckpointFormationThreshold)
+      .unsafeRunSync()
+    if (transactions.nonEmpty) {
+      dao
+        .pullTips(dao.readyFacilitatorsAsync.unsafeRunSync())
+        .map { tips =>
+          val transactions =
+            dao.transactionService.pullForConsensus(dao.minCheckpointFormationThreshold)
+              .unsafeRunSync()
+
+          val messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq()) // TODO: Choose more than one tx and light peers
         val firstTx = transactions.headOption
-        val lightPeers =
-          if (firstTx.isDefined && dao.readyPeers(NodeType.Light).unsafeRunSync().nonEmpty) {
-            Set(
-              dao
-                .readyPeers(NodeType.Light)
-                .unsafeRunSync()
-                .minBy(p => Distance.calculate(firstTx.get.transaction.baseHash, p._1))
-                ._2
-            )
-          } else Set[PeerData]()
-        val allFacilitators = tips._2.values.map(_.peerMetadata.id).toSet ++ Set(dao.id)
-        (RoundData(
-           generateRoundId,
-           tips._2.values.toSet,
-           lightPeers,
-           FacilitatorId(dao.id),
-           transactions.map(_.transaction),
-           tips._1,
-           messages
-         ),
-         getArbitraryTransactionsWithDistance(allFacilitators, dao).filter(t => t._2 == 1),
-         getArbitraryMessagesWithDistance(allFacilitators, dao).filter(t => t._2 == 1))
-      }
+          val lightPeers =
+            if (firstTx.isDefined && dao.readyPeers(NodeType.Light).unsafeRunSync().nonEmpty) {
+              Set(
+                dao
+                  .readyPeers(NodeType.Light)
+                  .unsafeRunSync()
+                  .minBy(p => Distance.calculate(firstTx.get.transaction.baseHash, p._1))
+                  ._2
+              )
+            } else Set[PeerData]()
+          val allFacilitators = tips._2.values.map(_.peerMetadata.id).toSet ++ Set(dao.id)
+          (RoundData(
+            generateRoundId,
+            tips._2.values.toSet,
+            lightPeers,
+            FacilitatorId(dao.id),
+            transactions.map(_.transaction),
+            tips._1,
+            messages
+          ),
+            getArbitraryTransactionsWithDistance(allFacilitators, dao).filter(t => t._2 == 1),
+            getArbitraryMessagesWithDistance(allFacilitators, dao).filter(t => t._2 == 1))
+        }
+    } else None
 
   }
 
