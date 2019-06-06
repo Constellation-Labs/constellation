@@ -98,6 +98,10 @@ class Round(roundData: RoundData,
       self ! proposal
 
     case newProp: LightTransactionsProposal =>
+      log.info(s"[${dao.id.short}] ${roundData.roundId} received LightTransactionsProposal from ${newProp.facilitatorId.id.short}")
+      if(transactionProposals.contains(newProp.facilitatorId)) {
+        log.error(s"[${dao.id.short}] ${roundData.roundId} received doubled LightTransactionProposal is ${newProp.facilitatorId.id.short}")
+      }
       val merged = if (transactionProposals.contains(newProp.facilitatorId)) {
         val old = transactionProposals(newProp.facilitatorId)
         old.copy(txHashes = old.txHashes ++ newProp.txHashes,
@@ -107,42 +111,58 @@ class Round(roundData: RoundData,
         newProp
       transactionProposals += (newProp.facilitatorId -> merged)
       if (receivedAllTransactionProposals) {
+        log.info(s"[${dao.id.short}] ${roundData.roundId} received all transaction proposals")
         cancelUnionTransactionProposalsTikTok()
         self ! UnionProposals(StageState.FINISHED)
       }
 
     case UnionBlockProposal(roundId, facilitatorId, checkpointBlock) =>
+      log.info(s"[${dao.id.short}] ${roundData.roundId} received UnionBlockProposal from ${facilitatorId.id.short}")
+      if(checkpointBlockProposals.contains(facilitatorId)) {
+        log.error(s"[${dao.id.short}] ${roundData.roundId} received doubled UnionBlockProposal is ${facilitatorId.id.short}")
+      }
       checkpointBlockProposals += (facilitatorId -> checkpointBlock)
 
-      if (facilitatorId.id != dao.id && !receivedAllTransactionProposals && roundData.peers.size == checkpointBlockProposals
-            .filterNot(_._1 == FacilitatorId(dao.id))
-            .size) {
-        cancelUnionTransactionProposalsTikTok()
-        self ! UnionProposals(StageState.BEHIND)
-      }
+
+//      if (facilitatorId.id != dao.id && !receivedAllTransactionProposals && roundData.peers.size == checkpointBlockProposals
+//            .filterNot(_._1 == FacilitatorId(dao.id))
+//            .size) {
+//        cancelUnionTransactionProposalsTikTok()
+//        self ! UnionProposals(StageState.BEHIND)
+//      }
       if (receivedAllCheckpointBlockProposals) {
+        log.info(s"[${dao.id.short}] ${roundData.roundId} received receivedAllCheckpointBlockProposals")
         cancelResolveMajorityCheckpointBlockTikTok()
         self ! ResolveMajorityCheckpointBlock(roundId, StageState.FINISHED)
       }
 
     case SelectedUnionBlock(roundId, facilitatorId, checkpointBlock) =>
+      log.info(s"[${dao.id.short}] ${roundData.roundId} received SelectedUnionBlock from ${facilitatorId.id.short}")
+      if(selectedCheckpointBlocks.contains(facilitatorId)) {
+        log.error(s"[${dao.id.short}] ${roundData.roundId} received doubled SelectedUnionBlock is ${facilitatorId.id.short}")
+      }
       selectedCheckpointBlocks += (facilitatorId -> checkpointBlock)
 
-      if (facilitatorId.id != dao.id && !receivedAllCheckpointBlockProposals && roundData.peers.size == selectedCheckpointBlocks
-            .filterNot(_._1 == FacilitatorId(dao.id))
-            .size) {
-        cancelResolveMajorityCheckpointBlockTikTok()
-        self ! ResolveMajorityCheckpointBlock(roundId, StageState.BEHIND)
-      }
+//      if (facilitatorId.id != dao.id && !receivedAllCheckpointBlockProposals && roundData.peers.size == selectedCheckpointBlocks
+//            .filterNot(_._1 == FacilitatorId(dao.id))
+//            .size) {
+//        cancelResolveMajorityCheckpointBlockTikTok()
+//        self ! ResolveMajorityCheckpointBlock(roundId, StageState.BEHIND)
+//      }
 
       if (receivedAllSelectedUnionedBlocks) {
+        log.info(s"[${dao.id.short}] ${roundData.roundId} received receivedAllSelectedUnionedBlocks")
         cancelUnionTransactionProposalsTikTok()
         cancelAcceptMajorityCheckpointBlockTikTok()
         self ! AcceptMajorityCheckpointBlock(roundId)
       }
 
-    case UnionProposals(StageState.BEHIND) => unionProposals()
-    case UnionProposals(_)                 => validateAndUnionTransactionProposals()
+    case UnionProposals(StageState.BEHIND) =>
+      log.info(s"[${dao.id.short}] ${roundData.roundId} self send UnionState")
+      unionProposals()
+    case UnionProposals(state)                 =>
+      log.info(s"[${dao.id.short}] ${roundData.roundId} self send UnionState ${state}")
+      validateAndUnionTransactionProposals()
 
     case ArbitraryDataProposals(distance) =>
       val proposals = transactionProposals.values
@@ -175,15 +195,18 @@ class Round(roundData: RoundData,
       scheduleArbitraryDataProposals(distance + 1)
 
     case ResolveMajorityCheckpointBlock(_, StageState.BEHIND) =>
+      log.info(s"[${dao.id.short}] ${roundData.roundId} received ResolveMajorityCheckpointBlock BEHIND")
       resolveMajorityCheckpointBlock()
 
     case ResolveMajorityCheckpointBlock(_, state) =>
+      log.info(s"[${dao.id.short}] ${roundData.roundId} received ResolveMajorityCheckpointBlock state: ${state}")
       dao.metrics.incrementMetric(
         "resolveMajorityCheckpointBlockActor_" + state
       )
       validateAndResolveMajorityCheckpointBlock()
 
-    case AcceptMajorityCheckpointBlock(_) => acceptMajorityCheckpointBlock()
+    case AcceptMajorityCheckpointBlock(_) =>
+      acceptMajorityCheckpointBlock()
 
     case msg => log.warning(s"Received unknown message: $msg")
   }
@@ -256,7 +279,7 @@ class Round(roundData: RoundData,
   }
 
   private[consensus] def validateAndUnionTransactionProposals(): Unit = {
-    validateReceivedProposals(transactionProposals.toMap, "unionProposals", roundStartedByMe) match {
+    validateReceivedProposals(transactionProposals.toMap, "unionProposals", countSelfAsPeer = roundStartedByMe) match {
       case Failure(exception) => passToParentActor(exception)
       case Success(_)         => unionProposals()
     }
@@ -391,7 +414,7 @@ class Round(roundData: RoundData,
   }
 
   private[consensus] def acceptMajorityCheckpointBlock(): Unit = {
-    validateReceivedProposals(selectedCheckpointBlocks.toMap, "acceptMajorityCheckpointBlock") match {
+    validateReceivedProposals(selectedCheckpointBlocks.toMap, "acceptMajorityCheckpointBlock", 100) match {
       case Failure(exception) => passToParentActor(exception)
       case Success(_) =>
         val sameBlocks = selectedCheckpointBlocks
@@ -411,7 +434,7 @@ class Round(roundData: RoundData,
         log.info(
           s"[${dao.id.short}] accepting majority checkpoint block ${checkpointBlock.baseHash}  " +
             s" with txs ${checkpointBlock.transactions.map(_.hash)} " +
-            s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash}"
+            s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height}"
         )
         val acceptedBlock = dao.threadSafeSnapshotService
           .accept(cache)
@@ -474,21 +497,26 @@ class Round(roundData: RoundData,
     context.parent ! cmd
   }
 
+  def getOwnTransactionsToReturn() = {
+    transactionProposals.get(FacilitatorId(dao.id)).map(_.txHashes).getOrElse(Seq.empty)
+  }
   def validateReceivedProposals(proposals: Map[FacilitatorId, AnyRef],
                                 stage: String,
+                                minimumPercentage: Int = 51,
                                 countSelfAsPeer: Boolean = true): Try[Unit] = {
     val peerSize = roundData.peers.size + (if (countSelfAsPeer) 1 else 0)
     val proposalPercentage: Float = proposals.size * 100 / peerSize
     (proposalPercentage, proposals.size) match {
       case (0, _) =>
-        Failure(EmptyProposals(roundData.roundId, stage))
+        Failure(EmptyProposals(roundData.roundId, stage, getOwnTransactionsToReturn()))
       case (_, size) if size == 1 =>
-        Failure(EmptyProposals(roundData.roundId, stage))
-      case (p, _) if p <= 50 =>
-        Failure(NotEnoughProposals(roundData.roundId, proposals.size, peerSize, stage))
+        Failure(EmptyProposals(roundData.roundId, stage, getOwnTransactionsToReturn()))
+      case (p, _) if p < minimumPercentage =>
+        Failure(NotEnoughProposals(roundData.roundId, proposals.size, peerSize, stage, getOwnTransactionsToReturn()))
       case _ => Success(())
     }
   }
+
 }
 
 case class FacilitatorId(id: Schema.Id) extends AnyVal
@@ -500,6 +528,7 @@ object Round {
   }
   abstract class RoundException(msg: String) extends Exception(msg) {
     def roundId: RoundId
+    def transactionsToReturn: Seq[String]
   }
 
   object StageState extends Enumeration {
@@ -541,17 +570,14 @@ object Round {
     messages: Seq[ChannelMessage]
   )
 
-  case class ConsensusTimeout(roundId: RoundId)
-      extends RoundException(s"Consensus with roundId: $roundId timeout.")
   case class StopBlockCreationRound(roundId: RoundId, maybeCB: Option[CheckpointBlock])
       extends RoundCommand
 
-  case class EmptyProposals(roundId: RoundId, stage: String)
+  case class EmptyProposals(roundId: RoundId, stage: String, transactionsToReturn: Seq[String])
       extends RoundException(s"Proposals for stage: $stage and round: $roundId are empty.")
-  case class NotEnoughProposals(roundId: RoundId, proposals: Int, facilitators: Int, stage: String)
+  case class NotEnoughProposals(roundId: RoundId, proposals: Int, facilitators: Int, stage: String, transactionsToReturn: Seq[String])
       extends RoundException(
-        s"Proposals number: $proposals for stage: $stage and round: $roundId are below given percentage. Number of facilitators: $facilitators"
-      )
+        s"Proposals number: $proposals for stage: $stage and round: $roundId are below given percentage. Number of facilitators: $facilitators")
 
   case class SelectedUnionBlock(
     roundId: RoundId,

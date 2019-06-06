@@ -386,7 +386,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
         }
         .void
 
-    IO { logger.debug(s"Accepting transactions ${cb.transactions.size}") } >> insertTX
+    IO { logger.info(s"Accepting transactions ${cb.transactions.size}") } >> insertTX
   }
 
 }

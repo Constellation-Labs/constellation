@@ -9,8 +9,9 @@ import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, Parti
 import org.constellation.consensus.Round._
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeType}
-import org.constellation.storage.StorageService
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications, _}
+import org.constellation.storage.StorageService
+import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.{Distance, PeerApiClient}
 import org.constellation.{ConfigUtil, DAO}
 
@@ -40,7 +41,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
     case StartNewBlockCreationRound if !ownRoundInProgress =>
       ownRoundInProgress = true
       createRoundData(dao).fold {
-        log.error("Cannot create a round data")
+        log.debug("Cannot create a round data do to no transactions")
         ownRoundInProgress = false
       } { tuple =>
         val roundData = tuple._1
@@ -53,6 +54,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
             ownRoundInProgress = false
             log.error(e, s"unable to start block creation round due to: ${e.getMessage}")
           case Success(_) =>
+            log.info(s"[${dao.id.short}] ${roundData.roundId} started round")
             startRound(roundData, tuple._2, tuple._3, startedByThisNode = true)
             passToParentActor(NotifyFacilitators(roundData))
             passToRoundActor(
@@ -97,6 +99,16 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
     case cmd: RoundException =>
       log.error(s"Consensus on node: ${dao.id.short} finished with error {}", cmd)
       self ! StopBlockCreationRound(cmd.roundId, None)
+      // TODO: wkoszycki return tx to become pending and remove from inCOnsensus
+//      cmd.transactionsToReturn.toList
+//        .map(
+//          hash =>
+//            dao.transactionService.lookup(hash, TransactionStatus.InConsensus).map {
+//              case Some(tx) => dao.transactionService.put(tx, TransactionStatus.Pending)
+//              case _        =>
+//          }
+//        )
+
     case cmd: StopBlockCreationRound =>
       rounds.get(cmd.roundId).fold {} { round =>
         dao.metrics.stopTimer("crosstalkConsensus", round.timer)
@@ -245,10 +257,6 @@ object RoundManager {
       dao
         .pullTips(dao.readyFacilitatorsAsync.unsafeRunSync())
         .map { tips =>
-          val transactions =
-            dao.transactionService.pullForConsensus(dao.minCheckpointFormationThreshold)
-              .unsafeRunSync()
-
           val messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq()) // TODO: Choose more than one tx and light peers
         val firstTx = transactions.headOption
           val lightPeers =
@@ -357,4 +365,5 @@ object RoundManager {
                                          peers: Set[PeerData],
                                          cb: SelectedUnionBlock)
 
+  case class ConsensusTimeout(roundId: RoundId)
 }
