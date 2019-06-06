@@ -397,11 +397,13 @@ class Round(roundData: RoundData,
       .maxBy(_._2.size)
       ._2
 
+    val uniques = checkpointBlockProposals.groupBy(_._2.baseHash).size
+
     dao.metrics.incrementMetric(
       "resolveMajorityCheckpointBlockProposalCount_" + checkpointBlockProposals.size
     )
     dao.metrics.incrementMetric(
-      "resolveMajorityCheckpointBlockSameBlocksCount_" + sameBlocks.size
+      "resolveMajorityCheckpointBlockUniquesCount_" + uniques
     )
     val checkpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
 
@@ -425,12 +427,13 @@ class Round(roundData: RoundData,
           ._2
 
         val checkpointBlock = sameBlocks.head._2
+        val uniques = checkpointBlockProposals.groupBy(_._2.baseHash).size
 
         dao.metrics.incrementMetric(
           "acceptMajorityCheckpointBlockSelectedCount_" + selectedCheckpointBlocks.size
         )
         dao.metrics.incrementMetric(
-          "acceptMajorityCheckpointBlockSameBlocksCount_" + sameBlocks.size
+          "acceptMajorityCheckpointBlockUniquesCount_" + uniques
         )
 
         val finalFacilitators = selectedCheckpointBlocks.keySet.map(_.id).toSet
