@@ -400,7 +400,9 @@ class Round(roundData: RoundData,
     dao.metrics.incrementMetric(
       "resolveMajorityCheckpointBlockProposalCount_" + checkpointBlockProposals.size
     )
-
+    dao.metrics.incrementMetric(
+      "resolveMajorityCheckpointBlockSameBlocksCount_" + sameBlocks.size
+    )
     val checkpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
 
     val selectedCheckpointBlock =
@@ -426,6 +428,9 @@ class Round(roundData: RoundData,
 
         dao.metrics.incrementMetric(
           "acceptMajorityCheckpointBlockSelectedCount_" + selectedCheckpointBlocks.size
+        )
+        dao.metrics.incrementMetric(
+          "acceptMajorityCheckpointBlockSameBlocksCount_" + sameBlocks.size
         )
 
         val finalFacilitators = selectedCheckpointBlocks.keySet.map(_.id).toSet
