@@ -466,7 +466,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           val resetTimeout = 1.second
           val breaker = new CircuitBreaker(system.scheduler,
                                            maxFailures = 1,
-                                           callTimeout = 5.seconds,
+                                           callTimeout = 15.seconds,
                                            resetTimeout)
 
           val response = PeerManager.broadcast(_.getString("health"))
