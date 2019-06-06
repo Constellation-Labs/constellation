@@ -94,6 +94,9 @@ trait Genesis extends NodeData with EdgeDAO {
   def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = false)(implicit dao: DAO): Unit = {
     // Store hashes for the edges
 
+    (go.genesis.storeSOE() *> go.initialDistribution.storeSOE() *> go.initialDistribution2.storeSOE())
+      .unsafeRunSync()
+
     go.genesis.store(
       CheckpointCache(Some(go.genesis), height = Some(Height(0, 0)))
     )
@@ -105,12 +108,6 @@ trait Genesis extends NodeData with EdgeDAO {
     go.initialDistribution2.store(
       CheckpointCache(Some(go.initialDistribution2), height = Some(Height(1, 1)))
     )
-
-    go.genesis
-      .storeSOE()
-      .flatMap(_ => go.initialDistribution.storeSOE())
-      .flatMap(_ => go.initialDistribution2.storeSOE())
-      .unsafeRunSync()
 
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
     go.genesis.transactions.foreach { rtx =>
