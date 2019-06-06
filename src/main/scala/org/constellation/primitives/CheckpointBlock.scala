@@ -189,18 +189,22 @@ case class CheckpointBlock(
 
   def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =  {
     parentSOEHashes.flatMap { soeHash =>
-      val parent = dao.soeService.getSync(soeHash)
-      if (parent.isEmpty) {
-        println(s"ERROR: SOEHash $soeHash missing from soeService")
-        dao.metrics.incrementMetric("parentSOEServiceQueryFailed")
-        // Temporary
-        val parentDirect = checkpoint.edge.observationEdge.parents.find(_.hash == soeHash).flatMap{_.baseHash}
-        if (parentDirect.isEmpty) {
-          dao.metrics.incrementMetric("parentDirectTipReferenceMissing")
-      //    throw new Exception("Missing parent direct reference")
-        }
-        parentDirect
-      } else parent.map{_.signedObservationEdge.baseHash}
+      if (soeHash == Genesis.CoinBaseHash) {
+        Seq()
+      } else {
+        val parent = dao.soeService.getSync(soeHash)
+        if (parent.isEmpty) {
+          println(s"ERROR: SOEHash $soeHash missing from soeService")
+          dao.metrics.incrementMetric("parentSOEServiceQueryFailed")
+          // Temporary
+          val parentDirect = checkpoint.edge.observationEdge.parents.find(_.hash == soeHash).flatMap{_.baseHash}
+          if (parentDirect.isEmpty) {
+            dao.metrics.incrementMetric("parentDirectTipReferenceMissing")
+        //    throw new Exception("Missing parent direct reference")
+          }
+          parentDirect
+        } else parent.map{_.signedObservationEdge.baseHash}
+      }
     }
   }
 
