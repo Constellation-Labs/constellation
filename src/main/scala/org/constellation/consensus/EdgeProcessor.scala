@@ -95,7 +95,7 @@ object EdgeProcessor extends StrictLogging {
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
     val transactions = dao.transactionService
-      .pullForConsensus(dao.maxTXInBlock)
+      .pullForConsensus(dao.minCheckpointFormationThreshold)
       .map(_.map(_.transaction))
       .unsafeRunSync()
 

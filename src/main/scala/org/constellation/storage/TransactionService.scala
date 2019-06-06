@@ -65,14 +65,16 @@ class TransactionService[F[_]: Sync](dao: DAO)
       .flatMap(_ => txs.map(tx => accepted.remove(tx.transaction.hash)).sequence.void)
   }
 
-  def pullForConsensus(minCount: Int): F[List[TransactionCacheData]] =
+  def pullForConsensus(minCount: Int): F[List[TransactionCacheData]] = {
     pending
       .pull(minCount)
       .map(_.getOrElse(List()))
+      .flatTap(txs => Sync[F].delay(logger.info(s"Pulling txs=${txs.size} for consensus with minCount: $minCount")))
       .flatMap(
         txs =>
           txs.map(tx => inConsensus.put(tx.transaction.hash, tx)).sequence
       )
+  }
 
   def getLast20Accepted: F[List[TransactionCacheData]] =
     accepted.getLast20()

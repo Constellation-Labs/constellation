@@ -77,7 +77,7 @@ object ProcessingConfig {
 
 case class ProcessingConfig(
   maxWidth: Int = 10,
-  minCheckpointFormationThreshold: Int = 50,
+  minCheckpointFormationThreshold: Int = 25,
   maxTXInBlock: Int = 50,
   maxMessagesInBlock: Int = 1,
   checkpointFormationTimeSeconds: Int = 2,
