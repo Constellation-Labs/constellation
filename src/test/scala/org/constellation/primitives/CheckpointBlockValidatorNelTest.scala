@@ -490,7 +490,8 @@ class ValidationSpec
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
           .foreach { cb =>
             dao.threadSafeSnapshotService
-              .accept(CheckpointCache(Some(cb), 0, Some(Height(1, 2))))
+//              .accept(CheckpointCache(Some(cb), 0, Some(Height(1, 2))))
+                .updateAcceptedCBSinceSnapshot(cb)
               .unsafeRunSync()
           }
 

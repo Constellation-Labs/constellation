@@ -7,8 +7,10 @@ import java.util.Random
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.{Id, SendToAddress}
-import org.constellation.primitives.Transaction
-import org.constellation.util.SignHelp
+import org.constellation.primitives.{PeerData, Transaction}
+import org.constellation.util.{APIClient, SignHelp}
+
+import scala.concurrent.ExecutionContext
 
 object Fixtures {
 
@@ -16,7 +18,7 @@ object Fixtures {
   val kp: KeyPair = KeyUtils.makeKeyPair()
   val kp1: KeyPair = KeyUtils.makeKeyPair()
   val tx: Transaction = SignHelp.createTransaction(kp.address, kp1.address, 1L, kp)
-
+  val keyPair: KeyPair = KeyUtils.makeKeyPair()
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()
   val tempKey2: KeyPair = KeyUtils.makeKeyPair()
@@ -66,4 +68,9 @@ object Fixtures {
     createTransaction(srcAddressString, sendRequest.dst, sendRequest.amountActual, keyPair)
   }
 
+  def getAPIClient(hostName: String, httpPort: Int)(implicit dao: DAO, executionContext: ExecutionContext ) = {
+    val api = APIClient(host = hostName, port = httpPort)
+    api.id = id
+    api
+  }
 }

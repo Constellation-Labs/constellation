@@ -232,10 +232,11 @@ object EdgeProcessor extends StrictLogging {
     logger.warn(
       s"[${dao.id.short}] acceptWithResolveAttempt block.parentSOEBaseHashes ${parents} "
     )
-    val parentExists = parents.map { h =>
+    val parentExists: Seq[(String, Boolean)] = parents.map { h =>
       h -> dao.checkpointService.contains(h).unsafeRunSync()
     }
-    if (parentExists.forall(_._2)) {
+
+    if (parentExists.nonEmpty && parentExists.forall(_._2)) {
       dao.metrics.incrementMetric("resolveFinishedCheckpointParentsPresent")
       dao.checkpointService
         .accept(checkpointCacheData)
