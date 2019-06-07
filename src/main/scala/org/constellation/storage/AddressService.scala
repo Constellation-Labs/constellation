@@ -12,8 +12,7 @@ class AddressService[F[_]: Concurrent]()(implicit metrics: () => Metrics)
   private val locks = new MultiLock[F, String]()
 
   override def lookup(key: String): F[Option[AddressCacheData]] =
-    super
-      .lookup(key)
+    super.lookup(key)
       .flatTap(_ => Sync[F].delay({
         if (metrics() != null) {
           metrics().incrementMetric(s"address_query_$key")

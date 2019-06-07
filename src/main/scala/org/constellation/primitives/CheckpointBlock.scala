@@ -58,13 +58,19 @@ case class CheckpointBlock(
 
     val parents = parentSOEBaseHashes.map(dao.checkpointService.lookup(_).unsafeRunSync())
 
+    dao.miscLogger.info(s"[CB baseHash=$baseHash] Height calculation parents ${parentSOEBaseHashes()}")
+
     if (parents.exists(_.isEmpty)) {
+      dao.miscLogger.error(s"[CB baseHash=$baseHash] Height calculation parent missing")
+      dao.miscLogger.error(s"[CB baseHash=$baseHash] Height calculation parent are defined ${parents.map(_.isDefined)}")
       dao.metrics.incrementMetric("heightCalculationParentMissing")
     } else {
+      dao.miscLogger.info(s"[CB baseHash=$baseHash] Height calculation parent exists")
       dao.metrics.incrementMetric("heightCalculationParentsExist")
     }
 
     dao.metrics.incrementMetric("heightCalculationParentLength_" + parents.length)
+    dao.miscLogger.info(s"[CB baseHash=$baseHash] Height calculation parents length ${parents.length}")
 
     val maxHeight = if (parents.exists(_.isEmpty)) {
       None
@@ -72,6 +78,9 @@ case class CheckpointBlock(
 
       val parents2 = parents.map { _.get }
       val heights = parents2.map { _.height.map { _.max } }
+
+      dao.miscLogger.info(s"[CB baseHash=$baseHash] Height calculation MAX parents are defined: ${parents.forall(_.isDefined)}")
+      dao.miscLogger.info(s"[CB baseHash=$baseHash] Height calculation MAX heights ${heights}")
 
       val nonEmptyHeights = heights.flatten
       if (nonEmptyHeights.isEmpty) None
@@ -86,6 +95,9 @@ case class CheckpointBlock(
 
       val parents2 = parents.map { _.get }
       val heights = parents2.map { _.height.map { _.min } }
+
+      dao.miscLogger.info(s"[CB baseHash=$baseHash] Height calculation MIN parents are defined: ${parents.forall(_.isDefined)}")
+      dao.miscLogger.info(s"[CB baseHash=$baseHash] Height calculation MIN heights ${heights}")
 
       val nonEmptyHeights = heights.flatten
       if (nonEmptyHeights.isEmpty) None

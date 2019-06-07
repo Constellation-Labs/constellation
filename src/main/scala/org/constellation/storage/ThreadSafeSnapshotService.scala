@@ -3,15 +3,15 @@ package org.constellation.storage
 import java.util.concurrent.TimeUnit
 
 import akka.util.Timeout
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import constellation.tryWithMetric
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
-import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState, NodeType}
+import org.constellation.primitives.Schema.{CheckpointCache, NodeState, NodeType}
 import org.constellation.primitives._
 import org.constellation.util.Metrics
-import constellation._
+
 import org.constellation.DAO
 
 import scala.util.Try
@@ -122,22 +122,21 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
           val allblockCaches = blocksWithinHeightInterval.map {
             _.get
           }
-          val maybeConflictingTip =
-            CheckpointBlockValidatorNel.detectInternalTipsConflict(allblockCaches)
+//          val maybeConflictingTip = CheckpointBlockValidatorNel.detectInternalTipsConflict(allblockCaches)
 
-          val blockCaches = if (maybeConflictingTip.isDefined) {
-            val conflictingTip = maybeConflictingTip.get.checkpointBlock.get.baseHash
-            logger.warn(
-              s"Conflict tip detected while attempt to make snapshot tipHash: $conflictingTip"
-            )
-            concurrentTipService.markAsConflict(conflictingTip)(dao.metrics)
-            acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.filterNot(_ == conflictingTip)
-            allblockCaches.filterNot(_ == maybeConflictingTip.get)
-          } else {
-            allblockCaches
-          }
+//          val blockCaches = if (maybeConflictingTip.isDefined) {
+//            val conflictingTip = maybeConflictingTip.get.checkpointBlock.get.baseHash
+//            logger.warn(
+//              s"Conflict tip detected while attempt to make snapshot tipHash: $conflictingTip"
+//            )
+//            concurrentTipService.markAsConflict(conflictingTip)(dao.metrics)
+//            acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.filterNot(_ == conflictingTip)
+//            allblockCaches.filterNot(_ == maybeConflictingTip.get)
+//          } else {
+//            allblockCaches
+//          }
 
-          val hashesForNextSnapshot = blockCaches.flatMap(_.checkpointBlock.map(_.baseHash)).sorted
+          val hashesForNextSnapshot = allblockCaches.flatMap(_.checkpointBlock.map(_.baseHash)).sorted
           val nextSnapshot = Snapshot(snapshot.hash, hashesForNextSnapshot)
 
           // TODO: Make this a future and have it not break the unit test
@@ -145,6 +144,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
           if (snapshot != Snapshot.snapshotZero) {
 
             dao.metrics.incrementMetric(Metrics.snapshotCount)
+            logger.info("Performing snapshot")
 
             // Write snapshot to file
             tryWithMetric(
@@ -224,78 +224,7 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
     }
   }
 
-  implicit val shift: ContextShift[IO] =
-    IO.contextShift(scala.concurrent.ExecutionContext.Implicits.global)
-
-  def accept(checkpoint: CheckpointCache)(implicit dao: DAO): IO[Unit] = {
-
-    val acceptCheckpoint: IO[Unit] = checkpoint.checkpointBlock match {
-      case None => IO.raiseError(MissingCheckpointBlockException)
-
-      case Some(cb) if dao.checkpointService.contains(cb.baseHash).unsafeRunSync() =>
-        for {
-          _ <- dao.metrics.incrementMetricAsync("checkpointAcceptBlockAlreadyStored")
-          _ <- IO.raiseError(CheckpointAcceptBlockAlreadyStored(cb))
-        } yield ()
-
-      case Some(cb) =>
-        for {
-          _ <- syncPending(cb)
-          conflicts <- CheckpointBlockValidatorNel.containsAlreadyAcceptedTx(cb)
-          _ <- conflicts match {
-            case Nil => IO.unit
-            case _ =>
-              concurrentTipService
-                .putConflicting(cb.baseHash, cb)
-                .flatMap(_ => IO.raiseError(TipConflictException(cb, conflicts)))
-          }
-          _ <- cb.storeSOE()
-          maybeHeight <- calculateHeight(checkpoint)
-          _ <- if (maybeHeight.isEmpty)
-            dao.metrics
-              .incrementMetricAsync(Metrics.heightEmpty)
-              .flatMap(_ => IO.raiseError(MissingHeightException(cb)))
-          else IO.unit
-          _ <- dao.checkpointService.memPool.put(cb.baseHash, checkpoint.copy(height = maybeHeight))
-          _ <- IO.delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
-          _ <- acceptMessages(cb)
-          _ <- acceptTransactions(cb)
-          _ <- IO { logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}]") }
-          _ <- concurrentTipService.update(cb)
-          _ <- updateAcceptedCBSinceSnapshot(cb)
-          _ <- IO.shift *> dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted)
-          _ <- dao.checkpointService.pendingAcceptance.remove(cb.baseHash)
-        } yield ()
-
-    }
-
-    acceptCheckpoint.recoverWith {
-      case err =>
-        dao.metrics
-          .incrementMetricAsync("acceptCheckpoint_failure")
-          .flatMap(_ => IO.raiseError(err)) //propagate to upper levels
-    }
-  }
-
-  private def syncPending(cb: CheckpointBlock)(implicit dao: DAO): IO[Unit] = {
-    IO {
-      dao.checkpointService.pendingAcceptance.synchronized {
-        if (dao.checkpointService.pendingAcceptance
-              .contains(
-                cb.baseHash
-              )
-              .unsafeRunSync()) {
-          throw PendingAcceptance(cb)
-        } else {
-          dao.checkpointService.pendingAcceptance
-            .put(cb.baseHash, cb)
-            .unsafeRunSync()
-        }
-      }
-    }
-  }
-
-  private def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock)(implicit dao: DAO): IO[Unit] = {
+  def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock)(implicit dao: DAO): IO[Unit] = {
     IO {
       acceptedCBSinceSnapshot.synchronized {
         if (acceptedCBSinceSnapshot.contains(cb.baseHash)) {
@@ -308,85 +237,6 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
         }
       }
     }
-  }
-
-  private def calculateHeight(
-    checkpointCacheData: CheckpointCache
-  )(implicit dao: DAO): IO[Option[Height]] = {
-    IO {
-      checkpointCacheData.checkpointBlock.flatMap { cb =>
-        cb.calculateHeight() match {
-          case None       => checkpointCacheData.height
-          case calculated => calculated
-        }
-      }
-    }
-  }
-
-  private def acceptMessages(cb: CheckpointBlock)(implicit dao: DAO): IO[List[Unit]] = {
-    cb.messages
-      .map { m =>
-        val channelMessageMetadata = ChannelMessageMetadata(m, Some(cb.baseHash))
-        val messageUpdate =
-          if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
-            for {
-              _ <- dao.messageService.memPool.put(
-                m.signedMessageData.data.channelId,
-                channelMessageMetadata
-              )
-              _ <- dao.channelService.update(
-                m.signedMessageData.hash, { cmd =>
-                  val slicedMessages = cmd.last25MessageHashes.slice(0, 25)
-                  cmd.copy(
-                    totalNumMessages = cmd.totalNumMessages + 1,
-                    last25MessageHashes = Seq(m.signedMessageData.hash) ++ slicedMessages
-                  )
-                }
-              )
-            } yield ()
-          } else { // Unsafe json extract
-            dao.channelService.put(
-              m.signedMessageData.hash,
-              ChannelMetadata(
-                m.signedMessageData.data.message.x[ChannelOpen],
-                channelMessageMetadata
-              )
-            )
-          }
-
-        for {
-          _ <- messageUpdate
-          _ <- dao.messageService.memPool
-            .put(m.signedMessageData.hash, channelMessageMetadata)
-          _ <- dao.metrics.incrementMetricAsync("messageAccepted")
-        } yield ()
-      }
-      .toList
-      .sequence
-  }
-
-  private def acceptTransactions(cb: CheckpointBlock)(implicit dao: DAO): IO[Unit] = {
-    def toCacheData(tx: Transaction) = TransactionCacheData(
-      tx,
-      valid = true,
-      inMemPool = false,
-      inDAG = true,
-      Map(cb.baseHash -> true),
-      resolved = true,
-      cbBaseHash = Some(cb.baseHash)
-    )
-
-    val insertTX =
-      cb.transactions.toList
-        .map(tx ⇒ (tx, toCacheData(tx)))
-        .traverse {
-          case (tx, txMetadata) =>
-            dao.transactionService.accept(txMetadata) *>
-              dao.addressService.transfer(tx)
-        }
-        .void
-
-    IO { logger.info(s"Accepting transactions ${cb.transactions.size}") } >> insertTX
   }
 
 }

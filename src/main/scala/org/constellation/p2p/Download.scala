@@ -254,7 +254,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache
             .contains(h)) {
         dao.metrics.incrementMetric("syncBufferCBAccepted")
-        dao.threadSafeSnapshotService.accept(h).unsafeRunSync()
+        dao.checkpointService.accept(h).unsafeRunSync()
       }
     }
   }

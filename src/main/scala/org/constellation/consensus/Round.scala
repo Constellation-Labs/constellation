@@ -444,7 +444,7 @@ class Round(roundData: RoundData,
             s" with txs ${checkpointBlock.transactions.map(_.hash)} " +
             s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height}"
         )
-        val acceptedBlock = dao.threadSafeSnapshotService
+        val acceptedBlock = dao.checkpointService
           .accept(cache)
           .map { _ =>
             Option(checkpointBlock)

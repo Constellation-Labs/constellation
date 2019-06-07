@@ -94,7 +94,7 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
 
 
     transactionService = new TransactionService[IO](this)
-    checkpointService = new CheckpointService[IO](this, transactionService, messageService, notificationService)
+    checkpointService = new CheckpointService[IO](this, transactionService, messageService, notificationService, concurrentTipService)
     snapshotService = SnapshotService(this)
     addressService = {
       implicit val implMetrics: () => Metrics = () => metrics

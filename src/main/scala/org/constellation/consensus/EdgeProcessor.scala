@@ -126,7 +126,7 @@ object EdgeProcessor extends StrictLogging {
                 height = checkpointBlock.calculateHeight()
               )
 
-            dao.threadSafeSnapshotService.accept(cache).unsafeRunSync()
+            dao.checkpointService.accept(cache).unsafeRunSync()
             dao.threadSafeMessageMemPool.release(messages)
 
         }
@@ -163,7 +163,7 @@ object EdgeProcessor extends StrictLogging {
               )
               .traverse { finalCB =>
                 val cache = CheckpointCache(finalCB.some, height = finalCB.calculateHeight())
-                dao.threadSafeSnapshotService.accept(cache).unsafeRunSync()
+                dao.checkpointService.accept(cache).unsafeRunSync()
                 processSignedBlock(
                   cache,
                   finalFacilitators
@@ -228,7 +228,7 @@ object EdgeProcessor extends StrictLogging {
     nestedAcceptCount: Int = 0
   )(implicit dao: DAO): Unit = {
 
-    val maybeAcceptedBlock = dao.threadSafeSnapshotService
+    val maybeAcceptedBlock = dao.checkpointService
       .accept(checkpointCacheData)
       .map { _ =>
         Option(checkpointCacheData)
@@ -439,8 +439,14 @@ object Snapshot extends StrictLogging {
     // TODO: Refactor round into InternalHeartbeat
     if (round % dao.processingConfig.snapshotInterval == 0 && dao.nodeState == NodeState.Ready) {
       futureTryWithTimeoutMetric(
-        dao.threadSafeSnapshotService.attemptSnapshot(),
-        "snapshotAttempt"
+        {
+          val start = System.currentTimeMillis()
+          dao.threadSafeSnapshotService.attemptSnapshot()
+          val elapsed = System.currentTimeMillis() - start
+          logger.info(s"Attempt snapshot took: ${elapsed} millis")
+        },
+        "snapshotAttempt",
+        60
       )(dao.edgeExecutionContext, dao)
     } else Future.successful(Try(()))
   }
