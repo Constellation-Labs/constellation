@@ -1,6 +1,6 @@
 package org.constellation.consensus
 
-import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, Props}
+import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, OneForOneStrategy, Props}
 import cats.effect.IO
 import cats.implicits._
 import com.typesafe.config.Config
@@ -31,6 +31,14 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
     mutable.Map[RoundId, RoundInfo]()
 
   private val messagesWithoutRound = new StorageService[IO,Seq[RoundCommand]](expireAfterMinutes = Some(2))
+
+  override val supervisorStrategy: OneForOneStrategy = {
+
+    import akka.actor.SupervisorStrategy.Stop
+    OneForOneStrategy(maxNrOfRetries = 1, withinTimeRange = 1 minute) {
+      case _: Exception => Stop
+    }
+  }
 
   override def receive: Receive = {
     case StartNewBlockCreationRound if ownRoundInProgress =>
