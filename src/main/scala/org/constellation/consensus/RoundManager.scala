@@ -1,7 +1,8 @@
 package org.constellation.consensus
 
 import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, OneForOneStrategy, Props}
-import cats.effect.IO
+import cats.effect.{Concurrent, IO}
+import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import com.typesafe.config.Config
 import io.micrometer.core.instrument.Timer
@@ -23,10 +24,13 @@ import scala.util.{Failure, Success, Try}
 class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLogging {
   import RoundManager._
 
+  // Needed for getting a Concurrent[IO] instance
+  implicit val ctx = IO.contextShift(ExecutionContext.global)
   implicit val ec: ExecutionContextExecutor = ExecutionContext.global
 
   private[consensus] var ownRoundInProgress: Boolean = false
 
+  val lock: IO[Semaphore[IO]] = Semaphore[IO](1)
   private[consensus] val rounds: mutable.Map[RoundId, RoundInfo] =
     mutable.Map[RoundId, RoundInfo]()
 
@@ -48,36 +52,39 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
 
     case StartNewBlockCreationRound if !ownRoundInProgress =>
       ownRoundInProgress = true
-      createRoundData(dao).fold {
-        log.debug("Cannot create a round data do to no transactions")
-        ownRoundInProgress = false
-      } { tuple =>
-        val roundData = tuple._1
-        log.debug(
-          s"node: ${dao.id.short} starting new round ${roundData.roundId} with facilis: ${roundData.peers
-            .map(_.peerMetadata.id.short)}"
-        )
-        resolveMissingParents(roundData).onComplete {
-          case Failure(e) =>
-            ownRoundInProgress = false
-            log.error(e, s"unable to start block creation round due to: ${e.getMessage}")
-          case Success(_) =>
-            log.info(s"[${dao.id.short}] ${roundData.roundId} started round")
-            startRound(roundData, tuple._2, tuple._3, startedByThisNode = true)
-            passToParentActor(NotifyFacilitators(roundData))
-            passToRoundActor(
-              LightTransactionsProposal(
-                roundData.roundId,
-                FacilitatorId(dao.id),
-                roundData.transactions.map(_.hash) ++ tuple._2.filter(_._2 == 0).map(_._1.hash),
-                roundData.messages.map(_.signedMessageData.hash),
-                roundData.peers.flatMap(_.notification).toSeq
-              )
+      lock.map { semaphore =>
+    createRoundData(dao, semaphore).fold {
+      log.debug("Cannot create a round data do to no transactions")
+      ownRoundInProgress = false
+    } { tuple =>
+      val roundData = tuple._1
+      log.debug(
+        s"node: ${dao.id.short} starting new round ${roundData.roundId} with facilis: ${roundData.peers
+          .map(_.peerMetadata.id.short)}"
+      )
+      resolveMissingParents(roundData).onComplete {
+        case Failure(e) =>
+          ownRoundInProgress = false
+          log.error(e, s"unable to start block creation round due to: ${e.getMessage}")
+        case Success(_) =>
+          log.info(s"[${dao.id.short}] ${roundData.roundId} started round")
+          startRound(roundData, tuple._2, tuple._3, startedByThisNode = true)
+          passToParentActor(NotifyFacilitators(roundData))
+          passToRoundActor(
+            LightTransactionsProposal(
+              roundData.roundId,
+              FacilitatorId(dao.id),
+              roundData.transactions.map(_.hash) ++ tuple._2.filter(_._2 == 0).map(_._1.hash),
+              roundData.messages.map(_.signedMessageData.hash),
+              roundData.peers.flatMap(_.notification).toSeq
             )
-            log.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}")
-            dao.blockFormationInProgress = true
-            dao.metrics.updateMetric("blockFormationInProgress", dao.blockFormationInProgress.toString)
-        }
+          )
+          log.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}")
+          dao.blockFormationInProgress = true
+          dao.metrics.updateMetric("blockFormationInProgress",
+                                   dao.blockFormationInProgress.toString)
+      }
+    }
       }
 
     case cmd: ParticipateInBlockCreationRound =>
@@ -254,13 +261,11 @@ object RoundManager {
       Round.props(roundData, arbitraryTransactions, arbitraryMessages, dao, DataResolver, config)
     )
 
-  def createRoundData(
-    dao: DAO
-  ): Option[(RoundData, Seq[(Transaction, Int)], Seq[(ChannelMessage, Int)])] = {
-
-
-    val transactions = dao.transactionService.pullForConsensus(dao.minCheckpointFormationThreshold).unsafeRunSync()
+  def createRoundData(dao: DAO, lock: Semaphore[IO])
+                        (implicit F: Concurrent[IO]): Option[(RoundData, Seq[(Transaction, Int)], Seq[(ChannelMessage, Int)])] = {
+    val transactions = dao.transactionService.pullForConsensusSafe(dao.minCheckpointFormationThreshold, lock).unsafeRunSync()
     if (transactions.nonEmpty) {
+
       dao
         .pullTips(dao.readyFacilitatorsAsync.unsafeRunSync())
         .map { tips =>
