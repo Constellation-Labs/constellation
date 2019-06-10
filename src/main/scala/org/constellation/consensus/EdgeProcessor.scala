@@ -229,7 +229,7 @@ object EdgeProcessor extends StrictLogging {
   )(implicit dao: DAO): Unit = {
     val block = checkpointCacheData.checkpointBlock.get
     val parents = block.parentSOEBaseHashes
-    logger.warn(
+    dao.miscLogger.warn(
       s"[${dao.id.short}] acceptWithResolveAttempt block.parentSOEBaseHashes ${parents} "
     )
     val parentExists: Seq[(String, Boolean)] = parents.map { h =>
@@ -245,12 +245,12 @@ object EdgeProcessor extends StrictLogging {
         }
         .recoverWith {
           case error @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
-            logger.warn(s"Accepting cb from other node failed due to: ${error.getMessage}")
+            dao.miscLogger.warn(s"acceptWithResolveAttempt - Accepting cb from other node failed due to: ${error.getMessage}")
             IO.pure(None)
         }
     } else {
       if (nestedAcceptCount >= ConfigUtil.maxNestedCBresolution) {
-        throw new RuntimeException(s"Max nested CB resolution: $nestedAcceptCount reached.")
+        throw new RuntimeException(s"acceptWithResolveAttempt - Max nested CB resolution: $nestedAcceptCount reached for ${block.baseHash} with parents ${parents}")
       }
       dao.metrics.incrementMetric("resolveFinishedCheckpointParentMissing")
       parentExists.filterNot(_._2).foreach {
@@ -262,11 +262,20 @@ object EdgeProcessor extends StrictLogging {
                 ccd.foreach { cd =>
                   cd.checkpointBlock.foreach { cb =>
                     if (cd.children < 2) {
+                      dao.miscLogger.warn(
+                        s"acceptWithResolveAttempt - ${cb.baseHash} children = ${cd.children} after resolve attempt"
+                      )
                       dao.concurrentTipService.update(cb)(dao).unsafeRunSync()
+                      dao.miscLogger.warn(
+                        s"acceptWithResolveAttempt - ${cb.baseHash} children = ${cd.children} concurrentTipService updated"
+                      )
                     }
                     if (!dao.checkpointService
                           .contains(cd.checkpointBlock.get.baseHash)
                           .unsafeRunSync()) {
+                      dao.miscLogger.warn(
+                        s"acceptWithResolveAttempt - checkpointService !contains basehash for ${cb.baseHash} children = ${cd.children} for attempt $nestedAcceptCount"
+                      )
                       dao.metrics.incrementMetric("resolveAcceptCBCall")
                       acceptWithResolveAttempt(cd, nestedAcceptCount + 1)
                     }
