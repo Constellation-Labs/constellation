@@ -91,7 +91,7 @@ class TrieBasedTipService(sizeLimit: Int,
             remove(block.baseHash)(dao.metrics)
           case Some(TipData(block, numUses)) if reuseTips && numUses <= 2 =>
             put(block.baseHash, TipData(block, numUses + 1))(dao.metrics)
-              .flatMap(_ => dao.metrics.incrementMetricAsync("checkpointTipsIncremented"))
+              .flatMap(_ => dao.metrics.incrementMetricAsync[IO]("checkpointTipsIncremented"))
         }
       } yield ()
     }
@@ -101,8 +101,8 @@ class TrieBasedTipService(sizeLimit: Int,
       .recoverWith {
         case err: TipThresholdException =>
           dao.metrics
-            .incrementMetricAsync("memoryExceeded_thresholdMetCheckpoints")
-            .flatMap(_ => dao.metrics.updateMetricAsync("activeTips", tips.size))
+            .incrementMetricAsync[IO]("memoryExceeded_thresholdMetCheckpoints")
+            .flatMap(_ => dao.metrics.updateMetricAsync[IO]("activeTips", tips.size))
             .flatMap(_ => IO.raiseError(err))
       }
   }
@@ -110,7 +110,7 @@ class TrieBasedTipService(sizeLimit: Int,
   def putConflicting(k: String,
     v: CheckpointBlock)(implicit dao: DAO): IO[Option[CheckpointBlock]] = {
     dao.metrics
-      .updateMetricAsync("conflictingTips", conflictingTips.size)
+      .updateMetricAsync[IO]("conflictingTips", conflictingTips.size)
       .flatMap(_ => IO(conflictingTips.put(k, v)))
   }
 

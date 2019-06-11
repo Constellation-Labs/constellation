@@ -154,7 +154,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .map(_.values.flatMap(_.toOption))
       .map(_.find(_.nonEmpty).flatten.get)
       .toIO
-      .flatMap(updateMetricAndPass("downloadedGenesis", "true"))
+      .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadedGenesis", "true"))
       .flatTap(genesis => IO(dao.acceptGenesis(genesis)))
 
   private def waitForPeers(): IO[Unit] =
@@ -185,7 +185,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
     for {
       snapshotHashes <- getSnapshotHashes(snapshotInfo)
       _ <- snapshotsProcessor.processSnapshots(snapshotHashes)
-      _ <- updateMetric("downloadFirstPassComplete", "true")
+      _ <- dao.metrics.updateMetricAsync[IO]("downloadFirstPassComplete", "true")
       _ <- setNodeState(NodeState.DownloadCompleteAwaitingFinalSync)
     } yield snapshotHashes
 
@@ -197,11 +197,11 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .map(_.filterNot(hashes.contains))
       .flatMap(
         hashes =>
-          updateMetric("downloadExpectedNumSnapshotsSecondPass", hashes.size.toString)
+          dao.metrics.updateMetricAsync[IO]("downloadExpectedNumSnapshotsSecondPass", hashes.size.toString)
             .map(_ => hashes)
       )
       .flatMap(snapshotsProcessor.processSnapshots)
-      .flatMap(_ => updateMetric("downloadSecondPassComplete", "true"))
+      .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadSecondPassComplete", "true"))
       .map(_ => snapshotInfo)
 
   private def finishDownload(snapshot: SnapshotInfo): IO[Unit] =
@@ -223,7 +223,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   /** **/
   private def setNodeState(nodeState: NodeState): IO[Unit] =
     IO(dao.nodeState = nodeState)
-      .flatMap(updateMetricAndPass("nodeState", nodeState.toString))
+      .flatTap(_ => dao.metrics.updateMetricAsync[IO]("nodeState", nodeState.toString))
       .flatMap(_ => IO(PeerManager.broadcastNodeState()))
 
   private def requestForFaucet: IO[Iterable[Response[String]]] =
@@ -238,43 +238,33 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
     val snapshotHashes = snapshotInfo.snapshotHashes.filterNot(preExistingSnapshots.contains)
 
     IO.pure(snapshotHashes)
-      .flatMap(updateMetricAndPass("downloadExpectedNumSnapshots", snapshotHashes.size.toString))
+      .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadExpectedNumSnapshots", snapshotHashes.size.toString))
   }
 
-  private def setSnapshot(snapshotInfo: SnapshotInfo): IO[Unit] = IO {
-    dao.threadSafeSnapshotService.setSnapshot(snapshotInfo)
-  }
+  private def setSnapshot(snapshotInfo: SnapshotInfo): IO[Unit] =
+    dao.snapshotService.setSnapshot(snapshotInfo)
 
   private def enableRandomTX: IO[Unit] = IO {
     dao.generateRandomTX = true
   }
 
-  private def acceptSnapshotCacheData(snapshotInfo: SnapshotInfo): IO[Unit] = IO {
-    dao.threadSafeSnapshotService.syncBuffer.foreach { h =>
-      if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache
-            .contains(h)) {
-        dao.metrics.incrementMetric("syncBufferCBAccepted")
-        dao.checkpointService.accept(h).unsafeRunSync()
-      }
-    }
-  }
+  private def acceptSnapshotCacheData(snapshotInfo: SnapshotInfo): IO[Unit] =
+    dao.snapshotService.syncBuffer.get
+      .flatMap(_.toList.map { h =>
+        if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache.contains(h)) {
+          dao.metrics.incrementMetricAsync[IO]("SyncBufferCBAccepted") *> dao.checkpointService.accept(h)
+        } else {
+          IO.unit
+        }
+      }.sequence[IO, Unit])
+    .void
 
-  private def clearSyncBuffer: IO[Unit] = IO {
-    dao.threadSafeSnapshotService.syncBuffer = Seq()
-  }
+  private def clearSyncBuffer: IO[Unit] =
+    dao.snapshotService.syncBuffer.set(Seq())
 
   private def setDownloadFinishedTime(): IO[Unit] = IO {
     dao.downloadFinishedTime = System.currentTimeMillis()
   }
-
-  private def updateMetric(key: String, value: String): IO[Unit] = IO {
-    dao.metrics.updateMetric(key, value)
-  }
-
-  private def updateMetricAndPass[A](key: String, value: String)(a: A): IO[A] =
-    IO {
-      dao.metrics.updateMetric(key, value)
-    }.map(_ => a)
 }
 
 object Download {

@@ -437,7 +437,7 @@ sealed trait CheckpointBlockValidatorNel {
   }
 
   def isInSnapshot(c: CheckpointBlock)(implicit dao: DAO): Boolean =
-    !dao.threadSafeSnapshotService.acceptedCBSinceSnapshot.contains(c.baseHash)
+    !dao.snapshotService.acceptedCBSinceSnapshot.get.map(_.contains(c.baseHash)).unsafeRunSync()
 
   def getSummaryBalance(c: CheckpointBlock)(implicit dao: DAO): AddressBalance = {
     val spend = c.transactions
@@ -498,7 +498,7 @@ sealed trait CheckpointBlockValidatorNel {
         .product(validateSourceAddressBalances(cb.transactions))
 
     val postTreeIgnoreEmptySnapshot =
-      if (dao.threadSafeSnapshotService.lastSnapshotHeight == 0) preTreeResult
+      if (dao.snapshotService.lastSnapshotHeight.get.unsafeRunSync() == 0) preTreeResult
 //      else preTreeResult.product(validateCheckpointBlockTree(cb))
       else preTreeResult
 

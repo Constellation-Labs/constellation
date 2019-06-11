@@ -16,8 +16,8 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
   def prepareDAO(): DAO = {
     val dao = mock[DAO]
     dao.metrics shouldReturn mock[Metrics]
-    dao.metrics.incrementMetricAsync(*) shouldReturn IO.unit
-    dao.metrics.updateMetricAsync(*, any[Int]) shouldReturn IO.unit
+    dao.metrics.incrementMetricAsync[IO](*) shouldReturn IO.unit
+    dao.metrics.updateMetricAsync[IO](*, any[Int]) shouldReturn IO.unit
     dao
   }
 

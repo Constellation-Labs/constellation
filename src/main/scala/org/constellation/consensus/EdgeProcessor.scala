@@ -294,7 +294,7 @@ object EdgeProcessor extends StrictLogging {
         val timer = dao.metrics.startTimer
         val ccd = fc.checkpointCacheData
         if (dao.nodeState == NodeState.DownloadCompleteAwaitingFinalSync) {
-          dao.threadSafeSnapshotService.syncBufferAccept(ccd)
+          dao.snapshotService.syncBufferAccept(ccd).unsafeRunSync()
           dao.metrics.stopTimer("handleFinishedCheckpoint_downloadCompleteAwaiting", timer)
         } else if (dao.nodeState == NodeState.Ready) {
           if (ccd.checkpointBlock.exists(_.simpleValidation())) {
@@ -441,9 +441,9 @@ object Snapshot extends StrictLogging {
       futureTryWithTimeoutMetric(
         {
           val start = System.currentTimeMillis()
-          dao.threadSafeSnapshotService.attemptSnapshot()
+          dao.snapshotService.attemptSnapshot().value.unsafeRunSync()
           val elapsed = System.currentTimeMillis() - start
-          logger.info(s"Attempt snapshot took: ${elapsed} millis")
+          logger.info(s"Attempt snapshot took: $elapsed millis")
         },
         "snapshotAttempt",
         60

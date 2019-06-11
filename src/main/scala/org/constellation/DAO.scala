@@ -95,13 +95,13 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
 
     transactionService = new TransactionService[IO](this)
     checkpointService = new CheckpointService[IO](this, transactionService, messageService, notificationService, concurrentTipService)
-    snapshotService = SnapshotService(this)
     addressService = {
       implicit val implMetrics: () => Metrics = () => metrics
       implicit val edgeContextShift: ContextShift[IO] = IO.contextShift(edgeExecutionContext)
 
       new AddressService[IO]()
     }
+    snapshotService = SnapshotService[IO](concurrentTipService, addressService, checkpointService, this)
   }
 
   lazy val concurrentTipService: ConcurrentTipService = new TrieBasedTipService(
@@ -110,8 +110,6 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
     processingConfig.numFacilitatorPeers,
     processingConfig.minPeerTimeAddedSeconds
   )(this)
-
-  lazy val threadSafeSnapshotService = new ThreadSafeSnapshotService(concurrentTipService)
 
   def pullTips(
     readyFacilitators: Map[Id, PeerData]

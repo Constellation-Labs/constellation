@@ -141,7 +141,7 @@ class CheckpointService[F[_]: Sync : LiftIO](
 
       case Some(cb) if dao.checkpointService.contains(cb.baseHash).unsafeRunSync() =>
         for {
-          _ <- LiftIO[F].liftIO(dao.metrics.incrementMetricAsync("checkpointAcceptBlockAlreadyStored"))
+          _ <- dao.metrics.incrementMetricAsync[F]("checkpointAcceptBlockAlreadyStored")
           _ <- CheckpointAcceptBlockAlreadyStored(cb).raiseError[F, Unit]
         } yield ()
 
@@ -164,11 +164,9 @@ class CheckpointService[F[_]: Sync : LiftIO](
           maybeHeight <- calculateHeight(checkpoint)
 
           _ <- if (maybeHeight.isEmpty) {
-              LiftIO[F].liftIO {
-                dao.metrics.incrementMetricAsync(Metrics.heightEmpty)
-                  .flatMap(_ => IO.raiseError(MissingHeightException(cb)))
-                  .void
-              }
+              dao.metrics.incrementMetricAsync[F](Metrics.heightEmpty)
+                .flatMap(_ => MissingHeightException(cb).raiseError[F, Unit])
+                .void
             } else Sync[F].unit
 
           _ <- memPool.put(cb.baseHash, checkpoint.copy(height = maybeHeight))
@@ -177,8 +175,8 @@ class CheckpointService[F[_]: Sync : LiftIO](
           _ <- acceptTransactions(cb)
           _ <- Sync[F].delay { logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}]") }
           _ <- LiftIO[F].liftIO(concurrentTipService.update(cb))
-          _ <- LiftIO[F].liftIO(dao.threadSafeSnapshotService.updateAcceptedCBSinceSnapshot(cb))
-          _ <- LiftIO[F].liftIO(dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted))
+          _ <- LiftIO[F].liftIO(dao.snapshotService.updateAcceptedCBSinceSnapshot(cb))
+          _ <- dao.metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
           _ <- pendingAcceptance.remove(cb.baseHash)
         } yield ()
 
@@ -186,7 +184,7 @@ class CheckpointService[F[_]: Sync : LiftIO](
 
     acceptCheckpoint.recoverWith {
       case err =>
-        LiftIO[F].liftIO(dao.metrics.incrementMetricAsync("acceptCheckpoint_failure")) *> Sync[F].raiseError[Unit](err)
+        dao.metrics.incrementMetricAsync[F]("acceptCheckpoint_failure") *> err.raiseError[F, Unit]
     }
   }
 
@@ -251,7 +249,7 @@ class CheckpointService[F[_]: Sync : LiftIO](
             _ <- messageUpdate
             _ <- dao.messageService.memPool
               .put(m.signedMessageData.hash, channelMessageMetadata)
-            _ <- dao.metrics.incrementMetricAsync("messageAccepted")
+            _ <- dao.metrics.incrementMetricAsync[IO]("messageAccepted")
           } yield ()
         }
         .toList

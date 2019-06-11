@@ -3,7 +3,7 @@ package org.constellation.storage
 import java.util.concurrent.TimeUnit
 
 import akka.util.Timeout
-import cats.effect.IO
+import cats.effect.{IO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import constellation.tryWithMetric
@@ -11,7 +11,6 @@ import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.primitives.Schema.{CheckpointCache, NodeState, NodeType}
 import org.constellation.primitives._
 import org.constellation.util.Metrics
-
 import org.constellation.DAO
 
 import scala.util.Try
@@ -60,10 +59,10 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
         // TODO: wkoszycki revisit it should call accept method instead
         (h.checkpointBlock.get.storeSOE() *>
           dao.checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h) *>
-          dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) *>
+          dao.metrics.incrementMetricAsync[IO](Metrics.checkpointAccepted) *>
           h.checkpointBlock.get
             .transactions.toList
-            .map(_ => dao.metrics.incrementMetricAsync("transactionAccepted")).sequence)
+            .map(_ => dao.metrics.incrementMetricAsync[IO]("transactionAccepted")).sequence)
           .unsafeRunSync()
       }
 
@@ -86,12 +85,6 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
       dao.metrics.updateMetric("acceptedCBSinceSnapshot", acceptedCBSinceSnapshot.size.toString)
     }
 
-    val facilMap = dao.readyPeers(NodeType.Full).unsafeRunSync().filter {
-      case (_, pd) =>
-        // TODO: Is this still necessary?
-        pd.peerMetadata.timeAdded < (System
-          .currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000)
-    }
 
     if (dao.nodeState == NodeState.Ready && acceptedCBSinceSnapshot.nonEmpty) {
 
@@ -122,19 +115,6 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
           val allblockCaches = blocksWithinHeightInterval.map {
             _.get
           }
-//          val maybeConflictingTip = CheckpointBlockValidatorNel.detectInternalTipsConflict(allblockCaches)
-
-//          val blockCaches = if (maybeConflictingTip.isDefined) {
-//            val conflictingTip = maybeConflictingTip.get.checkpointBlock.get.baseHash
-//            logger.warn(
-//              s"Conflict tip detected while attempt to make snapshot tipHash: $conflictingTip"
-//            )
-//            concurrentTipService.markAsConflict(conflictingTip)(dao.metrics)
-//            acceptedCBSinceSnapshot = acceptedCBSinceSnapshot.filterNot(_ == conflictingTip)
-//            allblockCaches.filterNot(_ == maybeConflictingTip.get)
-//          } else {
-//            allblockCaches
-//          }
 
           val hashesForNextSnapshot = allblockCaches.flatMap(_.checkpointBlock.map(_.baseHash)).sorted
           val nextSnapshot = Snapshot(snapshot.hash, hashesForNextSnapshot)
@@ -176,12 +156,11 @@ class ThreadSafeSnapshotService(concurrentTipService: ConcurrentTipService) {
               .lockForSnapshot(
                 addresses.get,
                 IO(Snapshot.acceptSnapshot(snapshot)) *>
-                  dao.snapshotService.midDb.put(snapshot.hash, snapshot) *>
                   dao.checkpointService.applySnapshot(snapshot.checkpointBlocks.toList) *>
                   IO { totalNumCBsInShapshots += snapshot.checkpointBlocks.size } *>
-                  dao.metrics.updateMetricAsync("totalNumCBsInShapshots",
+                  dao.metrics.updateMetricAsync[IO]("totalNumCBsInShapshots",
                                                 totalNumCBsInShapshots.toString) *>
-                  dao.metrics.updateMetricAsync(Metrics.lastSnapshotHash, snapshot.hash)
+                  dao.metrics.updateMetricAsync[IO](Metrics.lastSnapshotHash, snapshot.hash)
               )
               .unsafeRunSync()
           }

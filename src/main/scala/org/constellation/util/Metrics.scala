@@ -3,7 +3,7 @@ package org.constellation.util
 import java.util.concurrent.atomic.AtomicLong
 
 import better.files.File
-import cats.effect.IO
+import cats.effect.{IO, Sync}
 import cats.implicits._
 import com.google.common.util.concurrent.AtomicDouble
 import com.typesafe.scalalogging.Logger
@@ -167,11 +167,11 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
     timer.stop(Timer.builder(key).register(registry))
   }
 
-  def updateMetricAsync(key: String, value: String): IO[Unit] = IO(updateMetric(key, value))
-  def updateMetricAsync(key: String, value: Double): IO[Unit] = IO(updateMetric(key, value))
-  def updateMetricAsync(key: String, value: Int): IO[Unit] = IO(updateMetric(key, value))
-  def updateMetricAsync(key: String, value: Long): IO[Unit] = IO(updateMetric(key, value))
-  def incrementMetricAsync(key: String): IO[Unit] = IO(incrementMetric(key))
+  def updateMetricAsync[F[_]: Sync](key: String, value: String): F[Unit] = Sync[F].delay(updateMetric(key, value))
+  def updateMetricAsync[F[_]: Sync](key: String, value: Double): F[Unit] = Sync[F].delay(updateMetric(key, value))
+  def updateMetricAsync[F[_]: Sync](key: String, value: Int): F[Unit] = Sync[F].delay(updateMetric(key, value))
+  def updateMetricAsync[F[_]: Sync](key: String, value: Long): F[Unit] = Sync[F].delay(updateMetric(key, value))
+  def incrementMetricAsync[F[_]: Sync](key: String): F[Unit] = Sync[F].delay(incrementMetric(key))
 
   /**
     * Converts counter metrics to string for export / display
@@ -217,24 +217,24 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO)
   private def updateTransactionAcceptedMetrics(): IO[Unit] =
     IO { rateCounter.calculate(countMetrics.get("transactionAccepted").map{_.get()}.getOrElse(0L)) }
       .map(_.toList)
-      .map(_.map { case (k, v) => updateMetricAsync(k, v) })
+      .map(_.map { case (k, v) => updateMetricAsync[IO](k, v) })
       .flatMap(_.sequence)
       .void
 
   private def updateTransactionServiceMetrics(): IO[Unit] =
     dao.transactionService.getMetricsMap
-      .map(_.toList.map { case (k, v) => updateMetricAsync(s"transactionService_${k}_size", v) })
+      .map(_.toList.map { case (k, v) => updateMetricAsync[IO](s"transactionService_${k}_size", v) })
       .flatMap(_.sequence)
       .void
 
   private def updatePeriodicMetrics(): IO[Unit] =
     IO { updateBalanceMetrics() } *>
       updateTransactionAcceptedMetrics() *>
-      updateMetricAsync("nodeCurrentTimeMS", System.currentTimeMillis().toString) *>
-      updateMetricAsync("nodeCurrentDate", new DateTime().toString()) *>
-      updateMetricAsync("metricsRound", round) *>
-      dao.addressService.size().flatMap(size => updateMetricAsync("addressCount", size)) *>
-      updateMetricAsync("channelCount", dao.threadSafeMessageMemPool.activeChannels.size) *>
+      updateMetricAsync[IO]("nodeCurrentTimeMS", System.currentTimeMillis().toString) *>
+      updateMetricAsync[IO]("nodeCurrentDate", new DateTime().toString()) *>
+      updateMetricAsync[IO]("metricsRound", round) *>
+      dao.addressService.size().flatMap(size => updateMetricAsync[IO]("addressCount", size)) *>
+      updateMetricAsync[IO]("channelCount", dao.threadSafeMessageMemPool.activeChannels.size) *>
       updateTransactionServiceMetrics()
 
   /**

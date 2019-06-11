@@ -6,12 +6,13 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
 import cats.effect.IO
+import cats.effect.concurrent.Ref
 import cats.implicits._
 import constellation.createTransaction
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
 import org.constellation.primitives.CheckpointBlockValidatorNel._
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, Height, Id}
-import org.constellation.storage.{CheckpointBlocksMemPool, CheckpointService, ThreadSafeSnapshotService, TransactionService}
+import org.constellation.storage.{CheckpointBlocksMemPool, CheckpointService, SnapshotService, TransactionService}
 import org.constellation.util.{HashSignature, Metrics}
 import org.constellation.{DAO, NodeConfig}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -27,7 +28,7 @@ class CheckpointBlockValidatorNelTest
 
   implicit val dao: DAO = mock[DAO]
 
-  val snapService: ThreadSafeSnapshotService = mock[ThreadSafeSnapshotService]
+  val snapService: SnapshotService[IO] = mock[SnapshotService[IO]]
   val checkpointService: CheckpointService[IO] = mock[CheckpointService[IO]]
 
   val leftBlock: CheckpointBlock = mock[CheckpointBlock]
@@ -76,14 +77,14 @@ class CheckpointBlockValidatorNelTest
     leftBlock.transactions shouldReturn Seq(tx1, tx2)
     rightBlock.transactions shouldReturn Seq(tx3, tx4)
 
-    dao.threadSafeSnapshotService shouldReturn snapService
+    dao.snapshotService shouldReturn snapService
     dao.checkpointService shouldReturn checkpointService
 
     val metrics = mock[Metrics]
     dao.metrics shouldReturn metrics
 
     val cbNotInSnapshot = Seq(leftBlock.baseHash, rightBlock.baseHash, leftParent.baseHash, rightParent.baseHash)
-    snapService.acceptedCBSinceSnapshot shouldReturn cbNotInSnapshot
+    snapService.acceptedCBSinceSnapshot shouldReturn Ref.unsafe[IO, Seq[String]](cbNotInSnapshot)
   }
 
   test("it should detect no internal conflict and return None") {
@@ -182,7 +183,7 @@ class ValidationSpec
   go.genesis.store(CheckpointCache(Some(go.genesis)))
   go.initialDistribution.store(CheckpointCache(Some(go.initialDistribution)))
   go.initialDistribution2.store(CheckpointCache(Some(go.initialDistribution2)))
-  dao.threadSafeSnapshotService.setSnapshot(
+  dao.snapshotService.setSnapshot(
     SnapshotInfo(
       Snapshot.snapshotZero,
       Seq(go.genesis.baseHash, go.initialDistribution.baseHash, go.initialDistribution2.baseHash),
@@ -193,7 +194,7 @@ class ValidationSpec
       Map.empty,
       Seq()
     )
-  )
+  ).unsafeRunSync()
 
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
@@ -489,7 +490,7 @@ class ValidationSpec
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
           .foreach { cb =>
-            dao.threadSafeSnapshotService
+            dao.checkpointService
               .accept(CheckpointCache(Some(cb), 0, Some(Height(1, 2))))
               .unsafeRunSync()
           }
