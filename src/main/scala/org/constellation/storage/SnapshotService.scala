@@ -1,22 +1,26 @@
 package org.constellation.storage
 
 import cats.data.EitherT
-import cats.effect.{LiftIO, Sync}
+import cats.effect.{LiftIO, Sync, Timer}
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
-import org.constellation.primitives.{CheckpointBlock, ConcurrentTipService}
+import org.constellation.p2p.DataResolver
+import org.constellation.primitives.{ChannelMessage, ChannelMessageMetadata, CheckpointBlock, CheckpointBlockMetadata, ConcurrentTipService, TransactionCacheData}
 import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.util.Metrics
 
+import scala.concurrent.duration._
 import scala.util.Try
 
-class SnapshotService[F[_]: Sync : LiftIO](
+class SnapshotService[F[_]: Sync : LiftIO : Timer](
   concurrentTipService: ConcurrentTipService,
   addressService: AddressService[F],
   checkpointService: CheckpointService[F],
+  messageService: MessageService[F],
+  transactionService: TransactionService[F],
   dao: DAO
 ) {
   import constellation._
@@ -105,7 +109,6 @@ class SnapshotService[F[_]: Sync : LiftIO](
     _ <- EitherT.liftF(updateMetricsAfterSnapshot())
 
     _ <- EitherT.liftF(snapshot.set(nextSnapshot))
-
   } yield ()
 
   def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock): F[Unit] = {
@@ -231,7 +234,7 @@ class SnapshotService[F[_]: Sync : LiftIO](
       } else {
         dao.metrics.incrementMetricAsync(Metrics.snapshotCount) *>
           writeSnapshotToDisk(currentSnapshot) *>
-          applyAfterSnapshot(currentSnapshot)
+            applyAfterSnapshot(currentSnapshot)
       }
     }
   }
@@ -255,28 +258,19 @@ class SnapshotService[F[_]: Sync : LiftIO](
             )
           }
       }
+      .void
   }
 
   private def applyAfterSnapshot(currentSnapshot: Snapshot): F[Unit] = {
-    currentSnapshot
-      .checkpointBlocks
-      .toList
-      .map(checkpointService.fullData)
-      .sequence
-      .map(_.map(_.flatMap(_.checkpointBlock)).sequence)
-      .map(_.map(_.flatMap(_.transactions.toList.flatMap(t => List(t.src, t.dst))).toSet))
-      .flatMap { addresses =>
-        addressService.lockForSnapshot(
-          addresses.get,
-          Sync[F].delay(Snapshot.acceptSnapshot(currentSnapshot)) *>
-            totalNumCBsInSnapshots.update(_ + currentSnapshot.checkpointBlocks.size) *>
-            totalNumCBsInSnapshots.get.flatTap { total =>
-              dao.metrics.updateMetricAsync("totalNumCBsInShapshots", total.toString)
-            } *>
-            checkpointService.applySnapshot(currentSnapshot.checkpointBlocks.toList) *>
-            dao.metrics.updateMetricAsync(Metrics.lastSnapshotHash, currentSnapshot.hash)
-          )
-      }
+    for {
+      _ <- Sync[F].delay(acceptSnapshot(currentSnapshot))
+
+      _ <- totalNumCBsInSnapshots.update(_ + currentSnapshot.checkpointBlocks.size)
+      _ <- totalNumCBsInSnapshots.get.flatTap { total => dao.metrics.updateMetricAsync("totalNumCBsInShapshots", total.toString) }
+      
+      _ <- checkpointService.applySnapshot(currentSnapshot.checkpointBlocks.toList)
+      _ <- dao.metrics.updateMetricAsync(Metrics.lastSnapshotHash, currentSnapshot.hash)
+    } yield ()
   }
 
   private def updateMetricsAfterSnapshot(): F[Unit] = {
@@ -290,16 +284,79 @@ class SnapshotService[F[_]: Sync : LiftIO](
       _ <- dao.metrics.updateMetricAsync("nextSnapshotHeight", nextHeight)
     } yield ()
   }
+
+  private def acceptSnapshot(s: Snapshot): F[Unit] = {
+    for {
+      cbs <- getCheckpointBlocksFromSnapshot(s)
+      _ <- cbs.traverse(applySnapshotMessages(s, _))
+      _ <- cbs.traverse(applySnapshotTransactions(s, _))
+      _ <- checkpointService.applySnapshot(cbs.map(_.baseHash))
+    } yield ()
+  }
+
+  private def getCheckpointBlocksFromSnapshot(s: Snapshot): F[List[CheckpointBlockMetadata]] = {
+    for {
+      cbData <- s.checkpointBlocks
+        .toList
+        .traverse(checkpointService.lookup)
+
+      _ <- if (cbData.exists(_.isEmpty)) {
+          dao.metrics.incrementMetricAsync("snapshotCBAcceptQueryFailed")
+        } else Sync[F].unit
+
+      cbs = cbData.flatten.map(_.checkpointBlock)
+    } yield cbs
+  }
+
+  private def applySnapshotMessages(s: Snapshot, cb: CheckpointBlockMetadata): F[Unit] = {
+
+    def updateMessage(msgHash: String, channelMessage: ChannelMessage) =
+      messageService.memPool.update(
+        msgHash,
+        _.copy(snapshotHash = Some(s.hash), blockHash = Some(cb.baseHash)),
+        ChannelMessageMetadata(
+          channelMessage,
+          Some(cb.baseHash),
+          Some(s.hash)
+        )
+      )
+
+    cb.messagesMerkleRoot.traverse {
+      messageService.findHashesByMerkleRoot(_).flatMap(_.get.toList.traverse { msgHash =>
+        dao.metrics.incrementMetricAsync("messageSnapshotHashUpdated") *>
+          LiftIO[F].liftIO(DataResolver.resolveMessagesDefaults(msgHash).map(_.get.channelMessage))
+            .flatMap(updateMessage(msgHash, _))
+      })
+    }.void
+  }
+
+  private def applySnapshotTransactions(s: Snapshot, cb: CheckpointBlockMetadata): F[Unit] = {
+    cb.transactionsMerkleRoot.map { merkle =>
+      checkpointService.fetchTransactions(merkle).flatMap { txs =>
+        txs.map(t => addressService.lockForSnapshot(
+          Set(t.src, t.dst),
+          addressService.transferSnapshot(t).void)).sequence *>
+        transactionService.applySnapshot(txs.map(TransactionCacheData(_)), merkle)
+      }
+    }.sequence.void
+  }
 }
 
 object SnapshotService {
-  def apply[F[_]: Sync : LiftIO](
+  def apply[F[_]: Sync : LiftIO : Timer](
     concurrentTipService: ConcurrentTipService,
     addressService: AddressService[F],
     checkpointService: CheckpointService[F],
+    messageService: MessageService[F],
+    transactionService: TransactionService[F],
     dao: DAO
-  ) =
-    new SnapshotService[F](concurrentTipService, addressService, checkpointService, dao)
+  ) = new SnapshotService[F](
+    concurrentTipService,
+    addressService,
+    checkpointService,
+    messageService,
+    transactionService,
+    dao)
 }
 
 sealed trait SnapshotError
