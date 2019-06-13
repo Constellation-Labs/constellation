@@ -4,13 +4,14 @@ object Rewards {
   val roundingError = 0.000000000001
 
   /*
-  Set for a first epoch of 2.5 years. 
-  Computed for ~20 snapshots per hour, i.e. about ~14,600 snapshots per month.
+  Rewards computed assuming ~20 snapshots per hour, i.e. ~14,600 snapshots per month.
+  Snapshots for a first epoch of 2.5 years. 
    */
   val epochOne = 438000 // = 14,600 * 12 * 2.5 (2.5 years)
   val epochTwo = 876000 // = epochOne * 2 (5 years)
   val epochThree = 1314000 // = epochOne * 3 (7.5 years)
   val epochFour = 1752000 // = epochOne * 4 (10 years)
+  val rewardsPool = epochFour
 
   /*
   10,000 units per month.
@@ -31,8 +32,6 @@ object Rewards {
    */
   val transitiveReputationMatrix = Map[String, Map[String, Double]]()
   val neighborhoodReputationMatrix = Map[String, Double]()
-  
-  val rewardsPool = epochFour
 
   def validatorRewards(
                         curShapshot: Int,
@@ -62,7 +61,7 @@ object Rewards {
         (key, neighborView)
     }
     weightedTransitiveReputation.mapValues{ trust =>
-      if (trust == 0.0 ) 0.0
+      if (trust == 0.0) 0.0
       else - trust * math.log(trust)/math.log(2) }
   }
 
