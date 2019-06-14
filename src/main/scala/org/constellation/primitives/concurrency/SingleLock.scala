@@ -5,8 +5,8 @@ import cats.implicits._
 
 import scala.concurrent.duration._
 
-class SingleLock[F[_], R](name: String, s: Semaphore[F], op: => F[R])(implicit F: Concurrent[F]){
-  def acquire: F[R] =
+class SingleLock[F[_], R](name: String, s: Semaphore[F])(op: => F[R])(implicit F: Concurrent[F]){
+  def use: F[R] = {
     for {
       x <- s.available
       _ <- F.delay(println(s"$name >> Availability: $x"))
@@ -18,4 +18,5 @@ class SingleLock[F[_], R](name: String, s: Semaphore[F], op: => F[R])(implicit F
       z <- s.available
       _ <- F.delay(println(s"$name >> Done | Availability: $z"))
     } yield res
+  }
 }

@@ -71,8 +71,8 @@ class TransactionService[F[_]: Sync](dao: DAO)
 
   def pullForConsensusSafe(minCount: Int, semaphore: Semaphore[F], roundId: String = "roundId")
                           (implicit F: Concurrent[F]): F[List[TransactionCacheData]] = {
-    val lock = new SingleLock[F, List[TransactionCacheData]](roundId, semaphore, pullForConsensus(minCount, roundId))
-    lock.acquire
+    val lock = new SingleLock[F, List[TransactionCacheData]](roundId, semaphore)(pullForConsensus(minCount, roundId))
+    lock.use
   }
 
   def pullForConsensus(minCount: Int, roundId: String = "roundId"): F[List[TransactionCacheData]] = {
