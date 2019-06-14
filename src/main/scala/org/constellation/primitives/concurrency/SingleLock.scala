@@ -9,7 +9,7 @@ class SingleLock[F[_], R](name: String, s: Semaphore[F])(op: => F[R])(implicit F
   def use: F[R] = {
     for {
       x <- s.available
-      _ <- F.delay(println(s"$name >> Availability: $x"))
+      _ <- F.delay(println(s"$name >> Availability: $x"))//todo: remove or set log to debug
       _ <- s.acquire
       y <- s.available
       _ <- F.delay(println(s"$name >> Started | Availability: $y"))
