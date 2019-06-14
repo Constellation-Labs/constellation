@@ -2,23 +2,15 @@ package org.constellation.consensus
 
 import akka.actor.{Actor, ActorLogging, Cancellable, Props}
 import cats.effect.IO
+import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import com.typesafe.config.Config
 import constellation.{wrapFutureWithMetric, _}
 import org.constellation.consensus.Round.StageState.StageState
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{
-  BroadcastLightTransactionProposal,
-  BroadcastSelectedUnionBlock,
-  BroadcastUnionBlockProposal
-}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{
-  CheckpointCache,
-  EdgeHashType,
-  SignedObservationEdge,
-  TypedEdgeHash
-}
+import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
 import org.constellation.util.PeerApiClient
 import org.constellation.{ConfigUtil, DAO}
@@ -68,7 +60,7 @@ class Round(roundData: RoundData,
     case StartTransactionProposal(_) =>
       sendArbitraryDataProposalsTikTok.cancel()
       val transactions = dao.transactionService
-        .pullForConsensus(1)
+        .pullForConsensusSafe(1)
         .map(_.map(_.transaction))
         .unsafeRunSync()
 

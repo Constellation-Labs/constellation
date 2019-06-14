@@ -31,15 +31,10 @@ class MultiLock[F[_]: Concurrent, K] {
     def unlockAll(openLocks: List[Semaphore[F]]) =
       openLocks.map(_.release).sequence
 
-    lockAll()
-      .flatMap(
-        openLocks =>
-          thunk
-            .flatMap(
-              result =>
-                unlockAll(openLocks)
-                  .map(_ => result)
-          )
-      )
+    for {
+      openLocks <- lockAll()
+      result <- thunk
+      _ <- unlockAll(openLocks)
+    } yield result
   }
 }

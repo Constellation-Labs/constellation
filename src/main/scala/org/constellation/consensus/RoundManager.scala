@@ -1,17 +1,28 @@
 package org.constellation.consensus
 
-import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, OneForOneStrategy, Props}
+import akka.actor.{
+  Actor,
+  ActorContext,
+  ActorLogging,
+  ActorRef,
+  Cancellable,
+  OneForOneStrategy,
+  Props
+}
 import cats.effect.IO
 import cats.implicits._
 import com.typesafe.config.Config
 import io.micrometer.core.instrument.Timer
-import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
+import org.constellation.consensus.CrossTalkConsensus.{
+  NotifyFacilitators,
+  ParticipateInBlockCreationRound,
+  StartNewBlockCreationRound
+}
 import org.constellation.consensus.Round._
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeType}
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications, _}
 import org.constellation.storage.StorageService
-import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.{Distance, PeerApiClient}
 import org.constellation.{ConfigUtil, DAO}
 
@@ -24,14 +35,6 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
   import RoundManager._
 
   implicit val ec: ExecutionContextExecutor = ExecutionContext.global
-
-  private[consensus] var ownRoundInProgress: Boolean = false
-
-  private[consensus] val rounds: mutable.Map[RoundId, RoundInfo] =
-    mutable.Map[RoundId, RoundInfo]()
-
-  private val messagesWithoutRound = new StorageService[IO,Seq[RoundCommand]](expireAfterMinutes = Some(2))
-
   override val supervisorStrategy: OneForOneStrategy = {
 
     import akka.actor.SupervisorStrategy.Stop
@@ -39,6 +42,12 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
       case _: Exception => Stop
     }
   }
+  private[consensus] val rounds: mutable.Map[RoundId, RoundInfo] =
+    mutable.Map[RoundId, RoundInfo]()
+
+  private val messagesWithoutRound =
+    new StorageService[IO, Seq[RoundCommand]](expireAfterMinutes = Some(2))
+  private[consensus] var ownRoundInProgress: Boolean = false
 
   override def receive: Receive = {
     case StartNewBlockCreationRound if ownRoundInProgress =>
@@ -76,7 +85,8 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
             )
             log.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}")
             dao.blockFormationInProgress = true
-            dao.metrics.updateMetric("blockFormationInProgress", dao.blockFormationInProgress.toString)
+            dao.metrics.updateMetric("blockFormationInProgress",
+                                     dao.blockFormationInProgress.toString)
         }
       }
 
@@ -93,8 +103,9 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
                      getArbitraryTransactionsWithDistance(allFacilitators, dao),
                      getArbitraryMessagesWithDistance(allFacilitators, dao))
           passToRoundActor(StartTransactionProposal(cmd.roundData.roundId))
-          messagesWithoutRound.lookup(cmd.roundData.roundId.id).unsafeRunSync().foreach { commands =>
-            commands.foreach(passToRoundActor)
+          messagesWithoutRound.lookup(cmd.roundData.roundId.id).unsafeRunSync().foreach {
+            commands =>
+              commands.foreach(passToRoundActor)
           }
       }
 
@@ -107,20 +118,22 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
     case cmd: RoundException =>
       log.error(s"Consensus on node: ${dao.id.short} finished with error {}", cmd)
       self ! StopBlockCreationRound(cmd.roundId, None)
-      // TODO: wkoszycki return tx to become pending and remove from inCOnsensus
-//      cmd.transactionsToReturn.toList
-//        .map(
-//          hash =>
-//            dao.transactionService.lookup(hash, TransactionStatus.InConsensus).map {
-//              case Some(tx) => dao.transactionService.put(tx, TransactionStatus.Pending)
-//              case _        =>
-//          }
-//        )
+    // TODO: wkoszycki return tx to become pending and remove from inCOnsensus
+    //      cmd.transactionsToReturn.toList
+    //        .map(
+    //          hash =>
+    //            dao.transactionService.lookup(hash, TransactionStatus.InConsensus).map {
+    //              case Some(tx) => dao.transactionService.put(tx, TransactionStatus.Pending)
+    //              case _        =>
+    //          }
+    //        )
 
     case cmd: StopBlockCreationRound =>
       rounds.get(cmd.roundId).fold {} { round =>
         dao.metrics.stopTimer("crosstalkConsensus", round.timer)
-        log.debug(s"Stop block creation round has been triggered for round ${cmd.roundId} on node ${dao.id.short}")
+        log.debug(
+          s"Stop block creation round has been triggered for round ${cmd.roundId} on node ${dao.id.short}"
+        )
 
         round.timeoutScheduler.cancel()
         if (round.startedByThisNode) {
@@ -198,7 +211,8 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
       .resolveCheckpoints(
         cbToResolve.toList,
         roundData.peers.map(r => PeerApiClient(r.peerMetadata.id, r.client)),
-        dao.peerInfo.unsafeRunSync()
+        dao.peerInfo
+          .unsafeRunSync()
           .get(roundData.facilitatorId.id)
           .map(x => PeerApiClient(roundData.facilitatorId.id, x.client))
       )
@@ -228,11 +242,13 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
     rounds.get(cmd.roundId) match {
       case Some(info) => info.roundActor ! cmd
       case None =>
-        messagesWithoutRound.update(cmd.roundId.id, { commands =>
-          commands :+ cmd
-        }, {
-          Seq(cmd)
-        }).unsafeRunSync()
+        messagesWithoutRound
+          .update(cmd.roundId.id, { commands =>
+            commands :+ cmd
+          }, {
+            Seq(cmd)
+          })
+          .unsafeRunSync()
     }
   }
 
@@ -258,37 +274,37 @@ object RoundManager {
     dao: DAO
   ): Option[(RoundData, Seq[(Transaction, Int)], Seq[(ChannelMessage, Int)])] = {
 
-
-    val transactions = dao.transactionService.pullForConsensus(dao.minCheckpointFormationThreshold).unsafeRunSync()
+    val transactions =
+      dao.transactionService.pullForConsensusSafe(dao.minCheckpointFormationThreshold).unsafeRunSync()
     if (transactions.nonEmpty) {
       dao
         .pullTips(dao.readyFacilitatorsAsync.unsafeRunSync())
         .map { tips =>
           val messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq()) // TODO: Choose more than one tx and light peers
           val firstTx = transactions.headOption
-            val lightPeers =
-              if (firstTx.isDefined && dao.readyPeers(NodeType.Light).unsafeRunSync().nonEmpty) {
-                Set(
-                  dao
-                    .readyPeers(NodeType.Light)
-                    .unsafeRunSync()
-                    .minBy(p => Distance.calculate(firstTx.get.transaction.baseHash, p._1))
-                    ._2
-                )
-              } else Set[PeerData]()
-            val allFacilitators = tips._2.values.map(_.peerMetadata.id).toSet ++ Set(dao.id)
-            (RoundData(
-              generateRoundId,
-              tips._2.values.toSet,
-              lightPeers,
-              FacilitatorId(dao.id),
-              transactions.map(_.transaction),
-              tips._1,
-              messages
-            ),
-              getArbitraryTransactionsWithDistance(allFacilitators, dao).filter(t => t._2 == 1),
-              getArbitraryMessagesWithDistance(allFacilitators, dao).filter(t => t._2 == 1))
-          }
+          val lightPeers =
+            if (firstTx.isDefined && dao.readyPeers(NodeType.Light).unsafeRunSync().nonEmpty) {
+              Set(
+                dao
+                  .readyPeers(NodeType.Light)
+                  .unsafeRunSync()
+                  .minBy(p => Distance.calculate(firstTx.get.transaction.baseHash, p._1))
+                  ._2
+              )
+            } else Set[PeerData]()
+          val allFacilitators = tips._2.values.map(_.peerMetadata.id).toSet ++ Set(dao.id)
+          (RoundData(
+             generateRoundId,
+             tips._2.values.toSet,
+             lightPeers,
+             FacilitatorId(dao.id),
+             transactions.map(_.transaction),
+             tips._1,
+             messages
+           ),
+           getArbitraryTransactionsWithDistance(allFacilitators, dao).filter(t => t._2 == 1),
+           getArbitraryMessagesWithDistance(allFacilitators, dao).filter(t => t._2 == 1))
+        }
     } else None
   }
 
@@ -310,8 +326,7 @@ object RoundManager {
             (idBi ^ txBi) + (idBi ^ srcBi)
       }
 
-    dao.transactionService
-      .getArbitrary
+    dao.transactionService.getArbitrary
       .unsafeRunSync()
       .map { t =>
         (t._2.transaction,

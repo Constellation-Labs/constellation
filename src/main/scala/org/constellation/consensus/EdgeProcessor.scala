@@ -95,7 +95,7 @@ object EdgeProcessor extends StrictLogging {
     implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
 
     val transactions = dao.transactionService
-      .pullForConsensus(dao.minCheckpointFormationThreshold)
+      .pullForConsensusSafe(dao.minCheckpointFormationThreshold)
       .map(_.map(_.transaction))
       .unsafeRunSync()
 
@@ -453,55 +453,5 @@ object Snapshot extends StrictLogging {
 
   val snapshotZero = Snapshot("", Seq())
   val snapshotZeroHash: String = Snapshot("", Seq()).hash
-
-  def acceptSnapshot(snapshot: Snapshot)(implicit dao: DAO): Unit = {
-    val cbData = snapshot.checkpointBlocks.map { dao.checkpointService.lookup(_).unsafeRunSync() }
-
-    if (cbData.exists { _.isEmpty }) {
-      dao.metrics.incrementMetric("snapshotCBAcceptQueryFailed")
-    }
-
-    val cbs = cbData.flatten.map(_.checkpointBlock)
-    cbs.foreach { cb =>
-      cb.messagesMerkleRoot.map { messagesMerkleRoot =>
-        val updates = dao.messageService
-          .findHashesByMerkleRoot(messagesMerkleRoot)
-          .map(
-            _.get
-              .map { msgHash =>
-                dao.metrics.incrementMetric("messageSnapshotHashUpdated")
-                dao.messageService.memPool
-                  .update(
-                    msgHash,
-                    _.copy(snapshotHash = Some(snapshot.hash), blockHash = Some(cb.baseHash)),
-                    ChannelMessageMetadata(
-                      DataResolver
-                        .resolveMessagesDefaults(msgHash)
-                        .unsafeRunSync()
-                        .get
-                        .channelMessage,
-                      Some(cb.baseHash),
-                      Some(snapshot.hash)
-                    )
-                  )
-              }
-              .toList
-              .sequence
-          )
-          .flatten
-
-        updates.unsafeRunSync()
-      }
-
-      cb.transactionsMerkleRoot
-        .foreach { merkle =>
-          // TODO: wkoszycki this fails when chained with IO
-            val txs = dao.checkpointService.fetchTransactions(merkle).unsafeRunSync()
-            txs.map(t => dao.addressService.transferSnapshot(t)).sequence.unsafeRunSync()
-            dao.transactionService.applySnapshot(txs.map(TransactionCacheData(_)), merkle).unsafeRunSync()
-        }
-      dao.checkpointService.applySnapshot(List(cb.baseHash)).unsafeRunSync()
-    }
-  }
 
 }
