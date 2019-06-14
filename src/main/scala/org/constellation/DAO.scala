@@ -7,7 +7,7 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import cats.effect.concurrent.Semaphore
-import cats.effect.{ContextShift, IO}
+import cats.effect.{ContextShift, IO, Timer}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.crypto.SimpleWalletLike
