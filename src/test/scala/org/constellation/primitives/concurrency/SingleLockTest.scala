@@ -26,10 +26,10 @@ class SingleLockTest extends WordSpec with Matchers {
       }
       val program = for {
         s <- Semaphore[IO](1)
-        r1 = new SingleLock[IO, Unit]("R1", s)(op)
-        r2 = new SingleLock[IO, Unit]("R2", s)(op)
-        r3 = new SingleLock[IO, Unit]("R3", s)(op)
-        _ <- List(r1.use, r2.use, r3.use).parSequence.void
+        r1 = new SingleLock[IO, Unit]("R1", s).use(op)
+        r2 = new SingleLock[IO, Unit]("R2", s).use(op)
+        r3 = new SingleLock[IO, Unit]("R3", s).use(op)
+        _ <- List(r1, r2, r3).parSequence.void
       } yield ()
       val res = Await.result(Future.sequence(List(program.unsafeToFuture())), 10.seconds)
       res.foreach { r =>
@@ -50,15 +50,15 @@ class SingleLockTest extends WordSpec with Matchers {
       }
       val program = for {
         s <- Semaphore[IO](1)
-        r1 = new SingleLock[IO, Unit]("R1", s)(op)
-        r2 = new SingleLock[IO, Unit]("R2", s)(throwError)
-        r3 = new SingleLock[IO, Unit]("R3", s)(op)
-        _ <- List(r1.use, r2.use, r3.use).parSequence.void
+        r1 = new SingleLock[IO, Unit]("R1", s).use(op)
+        r2 = new SingleLock[IO, Unit]("R2", s).use(throwError).handleErrorWith(_ => IO.unit)
+        r3 = new SingleLock[IO, Unit]("R3", s).use(op)
+        _ <- List(r1, r2, r3).parSequence.void
       } yield ()
 
       val res = Await.result(Future.sequence(List(program.unsafeToFuture())), 10.seconds)
       res.foreach { r =>
-        assert(processedItems.distinct.size == 3)
+        assert(processedItems.distinct.size == 2)
       }
     }
   }

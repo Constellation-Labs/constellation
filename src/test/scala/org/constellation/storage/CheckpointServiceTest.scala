@@ -5,6 +5,7 @@ import java.util.concurrent.Executors
 
 import better.files.File
 import cats.effect.IO
+import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import constellation._
 import org.constellation.crypto.KeyUtils.makeKeyPair
@@ -162,7 +163,9 @@ class CheckpointServiceTest
     }
     dao.messageService shouldReturn ms
 
-    val ts = new TransactionService[IO](dao)
+    implicit val contextShift = IO.contextShift(ExecutionContext.global)
+    val semaphore = Semaphore[IO](1).unsafeRunSync()
+    val ts = new TransactionService[IO](dao, semaphore)
     dao.transactionService shouldReturn ts
 
     val cs = new CheckpointService[IO](dao, ts, ms, ns, ???)

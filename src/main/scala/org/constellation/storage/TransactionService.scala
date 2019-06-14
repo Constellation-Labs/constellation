@@ -7,13 +7,12 @@ import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.primitives.concurrency.SingleLock
-//import org.constellation.primitives.concurrency.SingleLock
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 import org.constellation.storage.transactions.TransactionStatus.TransactionStatus
 import org.constellation.storage.transactions.{PendingTransactionsMemPool, TransactionStatus}
 
 
-class TransactionService[F[_]: Sync](dao: DAO)
+class TransactionService[F[_]: Sync : Concurrent](dao: DAO, pullSemaphore: Semaphore[F])
   extends MerkleStorageAlgebra[F, String, TransactionCacheData]
     with StrictLogging {
 
@@ -69,10 +68,8 @@ class TransactionService[F[_]: Sync](dao: DAO)
       .flatMap(_ => txs.map(tx => accepted.remove(tx.transaction.hash)).sequence.void)
   }
 
-  def pullForConsensusSafe(minCount: Int, semaphore: Semaphore[F], roundId: String = "roundId")
-                          (implicit F: Concurrent[F]): F[List[TransactionCacheData]] = {
-    val lock = new SingleLock[F, List[TransactionCacheData]](roundId, semaphore)(pullForConsensus(minCount, roundId))
-    lock.use
+  def pullForConsensusSafe(minCount: Int, roundId: String = "roundId"): F[List[TransactionCacheData]] = {
+    new SingleLock[F, List[TransactionCacheData]](roundId, pullSemaphore).use(pullForConsensus(minCount, roundId))
   }
 
   def pullForConsensus(minCount: Int, roundId: String = "roundId"): F[List[TransactionCacheData]] = {

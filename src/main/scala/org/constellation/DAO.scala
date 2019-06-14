@@ -6,7 +6,8 @@ import akka.pattern.ask
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.concurrent.Semaphore
+import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.crypto.SimpleWalletLike
@@ -92,13 +93,12 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
     messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
-
-    transactionService = new TransactionService[IO](this)
+    implicit val edgeContextShift: ContextShift[IO] = IO.contextShift(edgeExecutionContext)
+    val semaphore = Semaphore[IO](1).unsafeRunSync()
+    transactionService = new TransactionService[IO](this, semaphore)
     checkpointService = new CheckpointService[IO](this, transactionService, messageService, notificationService, concurrentTipService)
     addressService = {
       implicit val implMetrics: () => Metrics = () => metrics
-      implicit val edgeContextShift: ContextShift[IO] = IO.contextShift(edgeExecutionContext)
-
       new AddressService[IO]()
     }
     implicit val timer: Timer[IO] = IO.timer(edgeExecutionContext)
