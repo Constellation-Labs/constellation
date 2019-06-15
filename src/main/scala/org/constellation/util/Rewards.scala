@@ -7,10 +7,10 @@ object Rewards {
   Rewards computed about one snapshots per 3 minutes, i.e. about 14,600 snapshots per month.
   Snapshots for a first epoch of 2.5 years.
    */
-  val epochOne = 438000 // = 14,600 (snapshots per month) * 12 (months per year) * 2.5 (years)
-  val epochTwo = 876000 // = epochOne * 2 (5 years)
-  val epochThree = 1314000 // = epochOne * 3 (7.5 years)
-  val epochFour = 1752000 // = epochOne * 4 (10 years)
+  val epochOne = 438000 // = 14,600 snapshots per month * 12 months per year * 2.5 years
+  val epochTwo = 876000 // = 2 * epochOne (5 years)
+  val epochThree = 1314000 // = 3 * epochOne (7.5 years)
+  val epochFour = 1752000 // = 4 * epochOne (10 years)
   val rewardsPool = epochFour
 
   /*
