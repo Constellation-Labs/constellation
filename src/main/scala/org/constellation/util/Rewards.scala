@@ -4,10 +4,10 @@ object Rewards {
   val roundingError = 0.000000000001
 
   /*
-  Rewards computed assuming ~20 snapshots per hour, i.e. ~14,600 snapshots per month.
-  Snapshots for a first epoch of 2.5 years. 
+  Rewards computed about one snapshots per 3 minutes, i.e. about 14,600 snapshots per month.
+  Snapshots for a first epoch of 2.5 years.
    */
-  val epochOne = 438000 // = 14,600 * 12 * 2.5 (2.5 years)
+  val epochOne = 438000 // = 14,600 (snapshots per month) * 12 (months per year) * 2.5 (years)
   val epochTwo = 876000 // = epochOne * 2 (5 years)
   val epochThree = 1314000 // = epochOne * 3 (7.5 years)
   val epochFour = 1752000 // = epochOne * 4 (10 years)
