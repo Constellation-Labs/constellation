@@ -1,40 +1,41 @@
 package org.constellation.consensus
 
-import java.util.concurrent.Semaphore
+import java.util.concurrent.{Executors, Semaphore}
 
 import akka.actor.{ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
+import cats.effect.IO
 import org.constellation._
-import org.constellation.consensus.CrossTalkConsensus.{
-  NotifyFacilitators,
-  ParticipateInBlockCreationRound,
-  StartNewBlockCreationRound
-}
+import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{
-  BroadcastLightTransactionProposal,
-  BroadcastUnionBlockProposal
-}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.primitives.Schema.{NodeType, SignedObservationEdge}
 import org.constellation.primitives._
-import org.constellation.primitives.storage.CheckpointService
-import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
+import org.constellation.storage._
+import org.constellation.util.Metrics
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers, OneInstancePerTest}
 
 import scala.collection.concurrent.TrieMap
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 class RoundManagerTest
-    extends TestKit(ActorSystem("RoundManagerTest"))
+  extends TestKit(ActorSystem("RoundManagerTest"))
     with FunSuiteLike
     with Matchers
-    with IdiomaticMockitoFixture
+    with IdiomaticMockito
+    with ArgumentMatchersSugar
     with BeforeAndAfter
     with OneInstancePerTest {
 
   implicit val dao: DAO = mock[DAO]
   implicit val materialize: ActorMaterializer = ActorMaterializer()
+
+  dao.edgeExecutionContext shouldReturn ExecutionContext.fromExecutor(
+    Executors.newWorkStealingPool(8)
+  )
 
   val roundManagerProbe = TestProbe()
   val roundManager: TestActorRef[RoundManager] =
@@ -68,15 +69,27 @@ class RoundManagerTest
 
   dao.id shouldReturn daoId
   dao.minCheckpointFormationThreshold shouldReturn checkpointFormationThreshold
-  dao.pullTransactions(checkpointFormationThreshold) shouldReturn Some(Seq(tx1, tx2))
-  dao.readyFacilitators() shouldReturn readyFacilitators
-  dao.peerInfo shouldReturn readyFacilitators
+
+  dao.readyFacilitatorsAsync shouldReturn IO.pure(readyFacilitators)
+  dao.peerInfoAsync shouldReturn IO.pure(readyFacilitators)
   dao.pullTips(readyFacilitators) shouldReturn Some(tips)
   dao.threadSafeMessageMemPool shouldReturn mock[ThreadSafeMessageMemPool]
   dao.threadSafeMessageMemPool.pull(1) shouldReturn None
   dao.checkpointService shouldReturn mock[CheckpointService]
   dao.checkpointService.contains(*) shouldReturn true
-  dao.readyPeers(NodeType.Light) shouldReturn Map()
+
+  val metrics = new Metrics()
+  dao.metrics shouldReturn metrics
+
+  dao.messageService shouldReturn mock[MessageService]
+  dao.messageService.arbitraryPool shouldReturn mock[StorageService[ChannelMessageMetadata]]
+  dao.messageService.arbitraryPool.toMapSync() shouldReturn Map.empty
+
+  dao.transactionService shouldReturn mock[TransactionService[String, TransactionCacheData]]
+  dao.transactionService.getArbitrary shouldReturn IO.pure(Map.empty)
+  dao.transactionService.pullForConsensus(checkpointFormationThreshold) shouldReturn IO(List(tx1, tx2).map(TransactionCacheData(_)))
+
+  dao.readyPeersAsync(NodeType.Light) shouldReturn IO.pure(Map())
 
   val peerManagerProbe = TestProbe()
   val ipManager = mock[IPManager]
@@ -296,5 +309,22 @@ class RoundManagerTest
 
       roundManager.underlyingActor.closeRoundActor(round._1) was called
     }
+  }
+
+  test("it should pass BroadcastSelectedUnionBlock to parent actor") {
+    val cmd = mock[BroadcastSelectedUnionBlock]
+
+    roundManager ! cmd
+
+    roundManager.underlyingActor.passToParentActor(cmd) was called
+  }
+
+  test("it should pass SelectedUnionBlock to round actor") {
+    val cmd = mock[SelectedUnionBlock]
+    cmd.roundId shouldReturn RoundId("round1")
+
+    roundManager ! cmd
+
+    roundManager.underlyingActor.passToRoundActor(cmd) was called
   }
 }

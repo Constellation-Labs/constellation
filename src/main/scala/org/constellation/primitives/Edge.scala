@@ -29,8 +29,8 @@ case class Edge[+D <: Signable](
   }
 
   def storeCheckpointData(db: Datastore,
-                          update: CheckpointCacheData => CheckpointCacheData,
-                          empty: CheckpointCacheData,
+                          update: CheckpointCache => CheckpointCache,
+                          empty: CheckpointCache,
                           resolved: Boolean = false): Unit = {
     db.updateCheckpointCacheData(signedObservationEdge.baseHash, update, empty)
     db.putSignedObservationEdgeCache(signedObservationEdge.hash,

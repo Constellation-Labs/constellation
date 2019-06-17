@@ -7,7 +7,7 @@ import org.constellation.util.Periodic
 
 import scala.util.Try
 
-class SnapshotTrigger(periodSeconds: Int = 1)(implicit dao: DAO)
+class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO)
     extends Periodic[Try[Unit]]("SnapshotTrigger", periodSeconds) {
 
   override def trigger(): Future[Try[Unit]] = {

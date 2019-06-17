@@ -3,23 +3,17 @@ package org.constellation.consensus
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import org.constellation.DAO
-import org.constellation.consensus.CrossTalkConsensus.{
-  NotifyFacilitators,
-  ParticipateInBlockCreationRound,
-  StartNewBlockCreationRound
-}
-import org.constellation.consensus.Round.{LightTransactionsProposal, UnionBlockProposal}
-import org.constellation.consensus.RoundManager.{
-  BroadcastLightTransactionProposal,
-  BroadcastUnionBlockProposal
-}
-import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
+import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
+import org.constellation.consensus.Round.{LightTransactionsProposal, SelectedUnionBlock, UnionBlockProposal}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, OneInstancePerTest}
 
 class CrossTalkConsensusTest
     extends TestKit(ActorSystem("CrossTalkConsensusTest"))
     with FunSuiteLike
-    with IdiomaticMockitoFixture
+    with IdiomaticMockito
+    with ArgumentMatchersSugar
     with BeforeAndAfter
     with OneInstancePerTest {
 
@@ -95,5 +89,21 @@ class CrossTalkConsensusTest
     crossTalkConsensus ! cmd
 
     nodeRemoteSender.notifyFacilitators(cmd) was called
+  }
+
+  test("it should pass BroadcastSelectedUnionBlock to the remote sender") {
+    val cmd = mock[BroadcastSelectedUnionBlock]
+
+    crossTalkConsensus ! cmd
+
+    nodeRemoteSender.broadcastSelectedUnionBlock(cmd) was called
+  }
+
+  test("it should pass SelectedUnionBlock to the round manager") {
+    val cmd = mock[SelectedUnionBlock]
+
+    crossTalkConsensus ! cmd
+
+    roundManagerProbe.expectMsg(cmd)
   }
 }

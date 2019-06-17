@@ -63,7 +63,9 @@ class AppE2ETest extends E2E {
   }
 
   "ConstellationApp" should "register a deployed state channel" in {
+    Thread.sleep(10000)
     channelOpenResponse.map { res =>
+      constellationAppSim.sim.logger.info("----------------------- HELLO!")
       constellationAppSim.sim.logger.info("deploy response:" + res.toString)
       assert(res.exists(_.channelOpenRequest.errorMessage == "Success"))
       assert(res.exists(r => r.channelId == r.channelOpenRequest.genesisHash))

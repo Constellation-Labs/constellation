@@ -24,8 +24,8 @@ cp -r ./default $DEPLOY_FOLDER
 pushd $DEPLOY_FOLDER
 
 sed -i'.bak' "s/state-default/state-default-$JAR_TAG/g" ./main.tf
-sed -i'.bak' "s/count = 5/count = $NODE_COUNT/g" ./main.tf
-sed -i'.bak' "s/test/$JAR_TAG/g" ./setup.sh
+sed -i'.bak' "s/instance_count = 3/instance_count = $NODE_COUNT/g" ./main.tf
+sed -i'.bak' "s/dag-dev/dag-$JAR_TAG/g" ./setup.sh
 
 terraform init -force-copy
 terraform apply -auto-approve

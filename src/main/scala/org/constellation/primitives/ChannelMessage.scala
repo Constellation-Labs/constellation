@@ -88,7 +88,7 @@ object ChannelMessage extends StrictLogging {
         val genesisHashChannelId = msg.signedMessageData.hash
         dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) =
           channelOpenRequest.name
-        dao.messageService.putSync(msg.signedMessageData.hash, ChannelMessageMetadata(msg))
+        dao.messageService.memPool.putSync(msg.signedMessageData.hash, ChannelMessageMetadata(msg))
         dao.threadSafeMessageMemPool.put(Seq(msg), overrideLimit = true)
         val semaphore = new Semaphore(1)
         dao.threadSafeMessageMemPool.activeChannels(genesisHashChannelId) = semaphore
@@ -96,7 +96,7 @@ object ChannelMessage extends StrictLogging {
         Future {
           var retries = 0
           var metadata: Option[ChannelMetadata] = None
-          while (retries < 15 && metadata.isEmpty) {
+          while (retries < 30 && metadata.isEmpty) {
             retries += 1
             logger.info(s"Polling genesis creation attempt $retries for $genesisHashChannelId")
             Thread.sleep(1000)
@@ -116,8 +116,8 @@ object ChannelMessage extends StrictLogging {
     channelSendRequest: ChannelSendRequest
   )(implicit dao: DAO): Future[ChannelSendResponse] = {
 
-    dao.messageService
-      .getSync(channelSendRequest.channelId)
+    dao.messageService.memPool
+      .lookup(channelSendRequest.channelId).unsafeRunSync()
       .map { previousMessage =>
         val previous = previousMessage.channelMessage.signedMessageData.hash
 
@@ -131,7 +131,7 @@ object ChannelMessage extends StrictLogging {
 
         dao.threadSafeMessageMemPool.put(messages, overrideLimit = true)
         messages.foreach(cm => {
-          dao.messageService.putSync(cm.signedMessageData.hash, ChannelMessageMetadata(cm))
+          dao.messageService.memPool.putSync(cm.signedMessageData.hash, ChannelMessageMetadata(cm))
         })
         val semaphore = new Semaphore(1)
         dao.threadSafeMessageMemPool.activeChannels(channelSendRequest.channelId) = semaphore

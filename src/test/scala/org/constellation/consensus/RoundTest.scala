@@ -7,17 +7,14 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import cats.effect.IO
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{
-  BroadcastLightTransactionProposal,
-  BroadcastUnionBlockProposal
-}
+import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCacheData, NodeType, SignedObservationEdge}
+import org.constellation.primitives.Schema.{CheckpointCache, NodeType, SignedObservationEdge}
 import org.constellation.primitives._
-import org.constellation.primitives.storage.{MessageService, TransactionService}
+import org.constellation.storage.{MessageService, TransactionService}
 import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures, PeerMetadata}
-import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers, OneInstancePerTest}
 
 import scala.concurrent.ExecutionContext
@@ -27,7 +24,8 @@ class RoundTest
     extends TestKit(ActorSystem("RoundTest"))
     with FunSuiteLike
     with Matchers
-    with IdiomaticMockitoFixture
+    with IdiomaticMockito
+    with ArgumentMatchersSugar
     with BeforeAndAfter
     with OneInstancePerTest {
 
@@ -44,6 +42,7 @@ class RoundTest
   peerData1.notification shouldReturn Seq()
 
   val facilitatorId2 = FacilitatorId(Schema.Id("c"))
+  val facilitatorId3 = FacilitatorId(Schema.Id("d"))
   val peerData2 = mock[PeerData]
   peerData2.peerMetadata shouldReturn mock[PeerMetadata]
   peerData2.peerMetadata.id shouldReturn facilitatorId2.id
@@ -61,28 +60,28 @@ class RoundTest
   val tips = (Seq(soe), readyFacilitators)
 
   dao.id shouldReturn daoId
-  dao.pullTransactions(checkpointFormationThreshold) shouldReturn Some(Seq(tx1, tx2))
-  dao.readyFacilitators() shouldReturn readyFacilitators
-  dao.peerInfo shouldReturn readyFacilitators
+  dao.readyFacilitatorsAsync shouldReturn IO.pure(readyFacilitators)
+  dao.peerInfoAsync shouldReturn IO.pure(readyFacilitators)
   dao.pullTips(readyFacilitators) shouldReturn Some(tips)
   dao.threadSafeMessageMemPool shouldReturn mock[ThreadSafeMessageMemPool]
   dao.threadSafeMessageMemPool.pull(1) shouldReturn None
-  dao.readyPeers(NodeType.Light) shouldReturn Map()
+  dao.readyPeersAsync(NodeType.Light) shouldReturn IO.pure(Map())
 
   val peerManagerProbe = TestProbe()
   val ipManager = mock[IPManager]
   val peerManager = TestActorRef(Props(new PeerManager(ipManager)))
   dao.peerManager shouldReturn peerManager
 
-  val txService = mock[TransactionService]
-  txService.contains shouldReturn (_ => IO.pure(true))
+  val txService = mock[TransactionService[String, TransactionCacheData]]
+  txService.pullForConsensus(checkpointFormationThreshold) shouldReturn IO.pure(List(tx1, tx2).map(TransactionCacheData(_)))
+  txService.exists shouldReturn (_ => IO.pure(true))
   txService.lookup shouldReturn (_ => IO.pure(None))
   dao.transactionService shouldReturn txService
-  dao.readyPeers shouldReturn readyFacilitators
+  dao.readyPeersAsync shouldReturn IO.pure(readyFacilitators)
 
   val msgService = mock[MessageService]
-  msgService.contains(*) shouldReturn IO.pure(true)
-  msgService.lookup(*) shouldReturn IO.pure(None)
+  msgService.contains shouldReturn (_ => IO.pure(true))
+  msgService.lookup shouldReturn (_ => IO.pure(None))
   dao.messageService shouldReturn msgService
 
   dao.edgeExecutionContext shouldReturn ExecutionContext.fromExecutor(
@@ -92,11 +91,11 @@ class RoundTest
   dao.metrics shouldReturn metrics
 
   dao.threadSafeSnapshotService shouldReturn mock[ThreadSafeSnapshotService]
-  dao.threadSafeSnapshotService.accept(*) shouldAnswer ((a: CheckpointCacheData) => ())
+  dao.threadSafeSnapshotService.accept(*) shouldAnswer ((a: CheckpointCache) => IO.unit)
 
   val roundId = RoundId("round1")
 
-  val roundData = new RoundData(
+  val roundData = RoundData(
     roundId,
     Set(peerData1, peerData2),
     Set(),
@@ -112,7 +111,9 @@ class RoundTest
 
   val dataResolver = mock[DataResolver]
   val roundProbe = TestProbe()
-  val round: TestActorRef[Round] = TestActorRef(Props(spy(new Round(roundData, dao, dataResolver))))
+  val round: TestActorRef[Round] = TestActorRef(
+    Props(spy(new Round(roundData, Seq.empty, Seq.empty, dao, dataResolver)))
+  )
 
   after {
     TestKit.shutdownActorSystem(system)
@@ -205,9 +206,9 @@ class RoundTest
   }
 
   test("it should resolve missing transactions on union block proposals step") {
-    dao.readyPeers shouldReturn Map()
+    dao.readyPeersAsync shouldReturn IO.pure(Map())
 
-    dao.transactionService.contains shouldReturn ((hash: String) => {
+    dao.transactionService.exists shouldReturn ((hash: String) => {
       if (hash == tx3.hash || hash == tx2.hash)
         IO.pure(true)
       else
@@ -242,9 +243,9 @@ class RoundTest
   }
 
   test("it should resolve missing messages on union block proposals step") {
-    dao.readyPeers shouldReturn Map()
+    dao.readyPeersAsync shouldReturn IO.pure(Map())
 
-    dao.messageService.contains(*) shouldReturn IO.pure(false)
+    dao.messageService.contains shouldReturn (_ => IO.pure(false))
 
     dataResolver.resolveMessages(*, *, *)(3 seconds, dao) shouldReturn IO.pure(None)
 
@@ -324,33 +325,111 @@ class RoundTest
   test(
     "it should send ResolveMajorityCheckpointBlock to self when received all union block proposals"
   ) {
-    round ! UnionBlockProposal(
-      roundId,
-      FacilitatorId(daoId),
-      cb1,
-    )
-    round ! UnionBlockProposal(
-      roundId,
-      facilitatorId1,
-      cb2,
-    )
-    round ! UnionBlockProposal(
-      roundId,
-      facilitatorId2,
-      cb3
-    )
+    round ! UnionBlockProposal(roundId, FacilitatorId(daoId), cb1)
+    round ! UnionBlockProposal(roundId, facilitatorId1, cb2)
+    round ! UnionBlockProposal(roundId, facilitatorId2, cb3)
 
-    round.underlyingActor.resolveMajorityCheckpointBlock() was called
+    round.underlyingActor.resolveMajorityCheckpointBlock(false) was called
   }
 
-  test("it should resolve majority checkpoint block") {
-    round ! mock[ResolveMajorityCheckpointBlock]
+  test("it should broadcast selected union block") {
+    round ! UnionBlockProposal(roundId, FacilitatorId(daoId), cb1)
+    round ! UnionBlockProposal(roundId, facilitatorId1, cb2)
+    round ! UnionBlockProposal(roundId, facilitatorId2, cb3)
 
-    // TODO: verify accepted block
-    round.underlyingActor.passToParentActor(any[StopBlockCreationRound]) was called
+    round.underlyingActor.passToParentActor(any[BroadcastSelectedUnionBlock]) was called
+  }
+
+  test("it should accept majority checkpoint block") {
+    round ! SelectedUnionBlock(
+      roundId,
+      facilitatorId1,
+      cb1
+    )
+    round ! SelectedUnionBlock(
+      roundId,
+      facilitatorId2,
+      cb1
+    )
+
+    round ! SelectedUnionBlock(
+      roundId,
+      facilitatorId3,
+      cb2
+    )
+    round.underlyingActor.passToParentActor(StopBlockCreationRound(RoundId("round1"), Some(cb1))) was called
+  }
+
+  test("it should finish round with no finished checkpoint block when accept majority checkpoint block failed") {
+    dao.threadSafeSnapshotService.accept(*) shouldAnswer (
+      (a: CheckpointCache) => IO.raiseError(TipConflictException(cb1, cb1.transactions.toList.map(_.hash)))
+    )
+    round ! SelectedUnionBlock(
+      roundId,
+      facilitatorId1,
+      cb1
+    )
+    round ! SelectedUnionBlock(
+      roundId,
+      facilitatorId2,
+      cb1
+    )
+
+    round ! SelectedUnionBlock(
+      roundId,
+      facilitatorId3,
+      cb2
+    )
+
+    round.underlyingActor.passToParentActor(StopBlockCreationRound(RoundId("round1"), None)) was called
+  }
+
+  test("it should finish round with no finished checkpoint block when selectedCheckpointBlocks are empty") {
+    round ! mock[AcceptMajorityCheckpointBlock]
+
+    round.underlyingActor.passToParentActor(StopBlockCreationRound(RoundId("round1"), None)) was called
   }
 
   // TODO: verify accepted block, then write this unit tests
   ignore("it should broadcast signed block to non facilitators") {}
+
+  test("it should combine all received selected union blocks") {
+    round ! SelectedUnionBlock(
+      roundId,
+      facilitatorId1,
+      cb1
+    )
+
+    round ! SelectedUnionBlock(
+      roundId,
+      facilitatorId2,
+      cb2
+    )
+
+    within(3 seconds) {
+      expectNoMessage
+      round.underlyingActor.selectedCheckpointBlocks.size shouldBe 2
+    }
+  }
+
+  test(
+    "it should send AcceptMajorityCheckpointBlock to self when received all selected union blocks"
+  ) {
+    round ! SelectedUnionBlock(roundId, FacilitatorId(daoId), cb1)
+    round ! SelectedUnionBlock(roundId, facilitatorId1, cb2)
+    round ! SelectedUnionBlock(roundId, facilitatorId2, cb3)
+
+    round.underlyingActor.acceptMajorityCheckpointBlock() was called
+  }
+
+  test(
+    "it should cancel checkpoint block proposals timer when received all checkpoint block proposals"
+  ) {
+    round ! UnionBlockProposal(roundId, facilitatorId1, cb1)
+    round ! UnionBlockProposal(roundId, facilitatorId2, cb2)
+    round ! UnionBlockProposal(roundId, FacilitatorId(daoId), cb3)
+
+    round.underlyingActor.cancelResolveMajorityCheckpointBlockTikTok() was called
+  }
 
 }

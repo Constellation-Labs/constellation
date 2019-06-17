@@ -124,7 +124,7 @@ object PeerManager extends StrictLogging {
             client.post("register", dao.peerRegistrationRequest)
           }
           .recover {
-            case e: Throwable =>
+            case e: Exception =>
               logger.error("registration request failed", e)
               dao.metrics.incrementMetric("peerGetRegistrationRequestFailed")
               throw e
@@ -141,7 +141,7 @@ object PeerManager extends StrictLogging {
       .onComplete {
         case Success(pmd) =>
           pmd.foreach { md =>
-            if (dao.id != md.id && validPeerAddition(HostPort(md.host, md.httpPort), dao.peerInfo)) {
+            if (dao.id != md.id && validPeerAddition(HostPort(md.host, md.httpPort), dao.peerInfoAsync.unsafeRunSync())) {
               val client =
                 APIClient(md.host, md.httpPort)(dao.apiClientExecutionContext, dao)
               client
@@ -178,7 +178,7 @@ object PeerManager extends StrictLogging {
     subset: Set[Id] = Set.empty
   )(implicit dao: DAO, ec: ExecutionContext): Future[Map[Id, ValidatedNel[Throwable, T]]] = {
 
-    val peerInfo = dao.peerInfo
+    val peerInfo = dao.peerInfoAsync.unsafeRunSync()
     val selected =
       if (subset.nonEmpty) peerInfo.filterKeys(subset.contains)
       else {

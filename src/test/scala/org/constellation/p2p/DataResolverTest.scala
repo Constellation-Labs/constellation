@@ -2,6 +2,7 @@ package org.constellation.p2p
 
 import java.util.concurrent.Executors
 
+import cats.effect.IO
 import org.constellation.DAO
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.{APIClient, PeerApiClient}
@@ -23,6 +24,8 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
   val endpoint: String = "endpoint"
 
   before {
+    when(dao.id)
+        .thenReturn(Id("node1"))
     when(dao.edgeExecutionContext)
       .thenReturn(ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8)))
 
@@ -33,19 +36,19 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
       .thenReturn(Id("responsiveNode"))
 
     when(
-      goodNode.getNonBlocking[Option[String]](ArgumentMatchers.eq(s"$endpoint/hash1"),
+      goodNode.getNonBlockingIO[Option[String]](ArgumentMatchers.eq(s"$endpoint/hash1"),
                                               any(),
                                               any())(any(), any())
-    ).thenReturn(Future.successful(Some("resolved hash1")))
+    ).thenReturn(IO {Some("resolved hash1")})
 
     when(
-      goodNode.getNonBlocking[Option[String]](ArgumentMatchers.eq(s"$endpoint/hash2"),
+      goodNode.getNonBlockingIO[Option[String]](ArgumentMatchers.eq(s"$endpoint/hash2"),
                                               any(),
                                               any())(any(), any())
-    ).thenReturn(Future.successful(Some("resolved hash2")))
+    ).thenReturn(IO {Some("resolved hash2")})
 
-    when(badNode.getNonBlocking(anyString(), any(), any())(any(), any()))
-      .thenReturn(Future.failed(new TimeoutException("Whoops")))
+    when(badNode.getNonBlockingIO(anyString(), any(), any())(any(), any()))
+      .thenReturn(IO.fromFuture(IO {Future.failed(new TimeoutException("Testing timeout, case just ignore this message."))}))
     reset(storageMock)
   }
 
@@ -81,14 +84,14 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
   test(
     "it should throw an exception when bad node returns empty response"
   ) {
-    when(badNode.getNonBlocking[Option[String]](anyString(), any(), any())(any(), any()))
-      .thenReturn(Future.successful(None))
+    when(badNode.getNonBlockingIO[Option[String]](anyString(), any(), any())(any(), any()))
+      .thenReturn(IO {None})
 
     val resolverIO = DataResolver
       .resolveDataByDistanceFlat[String](hashes, endpoint, List(PeerApiClient(badNode.id,badNode)), storageMock.loopbackStore)
 
     resolverIO.attempt.unsafeRunSync() should matchPattern {
-      case Left(DataResolutionOutOfPeers("endpoint", _)) => ()
+      case Left(DataResolutionOutOfPeers("node1","endpoint",_, _)) => ()
     }
     verify(storageMock, never()).loopbackStore(anyString())
   }

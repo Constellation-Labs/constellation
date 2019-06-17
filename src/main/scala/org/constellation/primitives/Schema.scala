@@ -2,6 +2,7 @@ package org.constellation.primitives
 
 import java.security.{KeyPair, PublicKey}
 
+import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.hexToPublicKey
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
@@ -97,8 +98,8 @@ object Schema {
     *
     * @param hash : String of hashed value
     * @param hashType : Strictly typed from set of allowed edge formats
-    */
-  case class TypedEdgeHash(hash: String, hashType: EdgeHashType)
+    */ // baseHash Temporary to debug heights missing
+  case class TypedEdgeHash(hash: String, hashType: EdgeHashType, baseHash: Option[String] = None)
 
   /**
     * Basic edge format for linking two hashes with an optional piece of data attached. Similar to GraphX format.
@@ -209,9 +210,13 @@ object Schema {
 
   // TODO: Separate cache with metadata vs what is stored in snapshot.
 
-  case class CheckpointCacheData(
+  case class CheckpointCacheMetadata(
+    checkpointBlock: CheckpointBlockMetadata,
+    children: Int = 0,
+    height: Option[Height] = None
+  )
+  case class CheckpointCache(
     checkpointBlock: Option[CheckpointBlock] = None,
-    //         metadata: CommonMetadata = CommonMetadata(),
     children: Int = 0,
     height: Option[Height] = None
   ) {

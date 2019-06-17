@@ -7,7 +7,7 @@ import akka.http.scaladsl.server.{RequestContext, Route}
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.consensus.CrossTalkConsensus.ParticipateInBlockCreationRound
-import org.constellation.consensus.Round.{LightTransactionsProposal, RoundData, UnionBlockProposal}
+import org.constellation.consensus.Round.{LightTransactionsProposal, RoundData, SelectedUnionBlock, UnionBlockProposal}
 import org.constellation.consensus.RoundDataRemote
 import org.constellation.primitives.PeerData
 import org.constellation.util.APIClient
@@ -25,6 +25,8 @@ object BlockBuildingRoundRoute {
   val unionFullPath = s"$pathPrefix/$unionPath"
   val newRoundPath = "new-round"
   val newRoundFullPath = s"$pathPrefix/$newRoundPath"
+  val selectedPath = "selected"
+  val selectedFullPath = s"$pathPrefix/$selectedPath"
 
   def convert(r: RoundDataRemote)(implicit executionContext: ExecutionContext): RoundData = {
     RoundData(
@@ -50,7 +52,8 @@ class BlockBuildingRoundRoute(nodeActor: ActorRef)(implicit system: ActorSystem,
   def createBlockBuildingRoundRoutes(): Route = extractRequestContext { ctx =>
     participateInNewRound(ctx) ~
       addTransactionsProposal(ctx) ~
-      addUnionBlock(ctx)
+      addUnionBlock(ctx) ~
+      addSelectedUnionBlock(ctx)
   }
 
   protected def participateInNewRound(ctx: RequestContext): Route = {
@@ -85,5 +88,15 @@ class BlockBuildingRoundRoute(nodeActor: ActorRef)(implicit system: ActorSystem,
       }
     }
   }
+
+  protected def addSelectedUnionBlock(ctx: RequestContext): Route =
+    post {
+      path(BlockBuildingRoundRoute.selectedPath) {
+        entity(as[SelectedUnionBlock]) { sub =>
+          nodeActor ! sub
+          complete(StatusCodes.Created)
+        }
+      }
+    }
 
 }

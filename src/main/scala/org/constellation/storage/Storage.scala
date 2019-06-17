@@ -1,4 +1,4 @@
-package org.constellation.primitives.storage
+package org.constellation.storage
 
 trait Storage[F[_], K, V] {
   def getSync(key: K): Option[V]
@@ -32,4 +32,8 @@ trait Storage[F[_], K, V] {
   def toMap(): F[Map[K, V]]
 
   def cacheSize(): Long
+
+  def getLast20: F[List[V]]
+
+  def getLast20Sync: List[V]
 }

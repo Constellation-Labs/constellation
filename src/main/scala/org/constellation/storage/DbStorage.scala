@@ -1,4 +1,4 @@
-package org.constellation.primitives.storage
+package org.constellation.storage
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -29,17 +29,21 @@ abstract class DbStorage[K, V](dbPath: File)(implicit keySerializer: Serializer[
                mmapAppendix = false)
     .get
 
-  def lookup(key: K): IO[Option[V]] = db.get(key).asIO
+  def lookup(key: K): IO[Option[V]] = db.get(key)
 
-  def contains(key: K): IO[Boolean] = db.contains(key).asIO
+  def contains(key: K): IO[Boolean] = db.contains(key)
 
   def putSync(key: K, value: V): Unit = put(key, value).unsafeRunSync()
 
-  def put(key: K, value: V): IO[Unit] = IO(db.put(key, value).asIO.get).map(_ => ())
+  def put(key: K, value: V): IO[Unit] = IO(db.put(key, value).get).map(_ => ())
+
+  def putAll(kvs: Iterable[(K, V)]): IO[Unit] = IO(db.put(kvs))
 
   def removeSync(key: K): Unit = remove(key).unsafeRunSync()
 
-  def remove(key: K): IO[Unit] = IO(db.remove(key).asIO.get).map(_ => ())
+  def remove(key: K): IO[Unit] = db.remove(key).map(_ => ())
+
+  def size: Int = db.size
 }
 
 object DbStorage {
@@ -80,23 +84,31 @@ abstract class MidDbStorage[K, V](dbPath: File, capacity: Int)(implicit keySeria
   ): IO[Unit] =
     super
       .put(key, value)
-      .flatTap(_ => IO(hashQueue.add(key)))
+//      .flatTap(_ => IO(hashQueue.add(key)))
+
+  override def putAll(kvs: Iterable[(K,V)]): IO[Unit] = {
+    import scala.collection.JavaConverters._
+    super
+      .putAll(kvs)
+//      .flatTap(_ => IO(hashQueue.addAll(kvs.map(_._1).asJavaCollection)))
+  }
 
   def pullOverCapacity(): IO[List[V]] = {
     if (!isOverCapacity) {
-      return IO.pure(List())
+      IO.pure(Nil)
+    } else {
+
+      var hashes = List[K]()
+
+      while (isOverCapacity) {
+        hashes = hashes :+ hashQueue.poll()
+      }
+
+      hashes
+        .map(poll)
+        .sequence[IO, Option[V]]
+        .map(_.flatten)
     }
-
-    var hashes = List[K]()
-
-    while (isOverCapacity) {
-      hashes = hashes :+ hashQueue.poll()
-    }
-
-    hashes
-      .map(poll)
-      .sequence[IO, Option[V]]
-      .map(_.flatten)
   }
 
   private def poll(hash: K): IO[Option[V]] = {

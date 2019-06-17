@@ -79,23 +79,22 @@ case class ProcessingConfig(
   minCheckpointFormationThreshold: Int = 50,
   maxTXInBlock: Int = 50,
   maxMessagesInBlock: Int = 1,
-  checkpointFormationTimeSeconds: Int = 1,
+  checkpointFormationTimeSeconds: Int = 2,
+  randomTransactionLoopTimeSeconds: Int = 2,
+  snapshotTriggeringTimeSeconds: Int = 2,
   formUndersizedCheckpointAfterSeconds: Int = 30,
   numFacilitatorPeers: Int = 2,
   randomTXPerRoundPerPeer: Int = 30,
   metricCheckInterval: Int = 10,
-  maxMemPoolSize: Int = 2000,
+  maxMemPoolSize: Int = 35000,
   minPeerTimeAddedSeconds: Int = 30,
   maxActiveTipsAllowedInMemory: Int = 1000,
   maxAcceptedCBHashesInMemory: Int = 5000,
   peerHealthCheckInterval: Int = 30,
   peerDiscoveryInterval: Int = 60,
   snapshotHeightInterval: Int = 2,
-  snapshotHeightDelayInterval: Int = 5,
+  snapshotHeightDelayInterval: Int = 2,
   snapshotInterval: Int = 25,
-  checkpointLRUMaxSize: Int = 2000,
-  transactionLRUMaxSize: Int = 5000,
-  addressLRUMaxSize: Int = 1000,
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,
   roundsPerMessage: Int = 10
@@ -218,7 +217,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               }
           } ~
           path("messageService" / Segment) { channelId =>
-            complete(dao.messageService.getSync(channelId))
+            complete(dao.messageService.lookup(channelId).unsafeRunSync())
           } ~
           path("channelKeys") {
             complete(dao.channelService.toMapSync().keys.toSeq)
@@ -227,8 +226,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             complete(dao.channelService.getSync(channelId))
           } ~
           path("channel" / Segment) { channelHash =>
-            val res =
-              Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.getSync(channelHash))
+            val msg = dao.messageService.memPool.getSync(channelHash)
+            val channelRes =
+              Snapshot.findLatestMessageWithSnapshotHash(0, msg)
+
+            val res = if(channelRes.isDefined || msg.isEmpty) channelRes
+            else Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.lookup(msg.get.channelMessage.signedMessageData.hash).unsafeRunSync())
 
             val proof = res.flatMap { cmd =>
               cmd.snapshotHash.flatMap { snapshotHash =>
@@ -336,19 +339,22 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             }
           } ~
           path("dashboard") {
-            val txs = dao.acceptedTransactionService.getLast20TX
+            val txs = dao.transactionService.getLast20Accepted.unsafeRunSync()
             val self = Node(
               dao.selfAddressStr,
               dao.externalHostString,
               dao.externalPeerHTTPPort
             )
-            val peerMap = dao.peerInfo.toSeq.map {
-              case (id, pd) => Node(id.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
-            } :+ self
+
+            val peerMap = dao.peerInfoAsync.map {
+              _.toSeq.map {
+                case (id, pd) => Node(id.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
+              } :+ self
+            }
 
             complete(
               Map(
-                "peers" -> peerMap,
+                "peers" -> peerMap.unsafeRunSync(),
                 "transactions" -> txs
               )
             )
@@ -497,20 +503,16 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           entity(as[SendToAddress]) { sendRequest =>
             logger.info(s"send transaction to address $sendRequest")
 
-            val tx = createTransaction(dao.selfAddressStr,
-                                       sendRequest.dst,
-                                       sendRequest.amountActual,
-                                       dao.keyPair,
-                                       normalized = false)
-            dao.threadSafeTXMemPool.put(tx, overrideLimit = true)
+            val tx = createTransaction(
+              dao.selfAddressStr,
+              sendRequest.dst,
+              sendRequest.amountActual,
+              dao.keyPair,
+              normalized = false)
 
-            dao.transactionService.memPool.putSync(
-              tx.hash,
-              TransactionCacheData(
-                tx,
-                inMemPool = true
-              )
-            )
+            dao.transactionService
+              .put(TransactionCacheData(tx, inMemPool = true), true)
+              .unsafeRunSync()
 
             complete(tx.hash)
           }

@@ -21,6 +21,7 @@ import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, HostPort, Metrics}
+import org.slf4j.MDC
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -213,6 +214,7 @@ class ConstellationNode(
   dao.initialize(nodeConfig)
 
   val logger = Logger(s"ConstellationNode_${dao.publicKeyHash}")
+  MDC.put("node_id", dao.id.short)
 
   logger.info(
     s"Node init with API ${nodeConfig.httpInterface} ${nodeConfig.httpPort} peerPort: ${nodeConfig.peerHttpPort}"
@@ -230,7 +232,9 @@ class ConstellationNode(
     crossTalkConsensusActor
   )
 
-  val snapshotTrigger = new SnapshotTrigger()
+  val snapshotTrigger = new SnapshotTrigger(
+    dao.processingConfig.snapshotTriggeringTimeSeconds
+  )
 
   val ipManager = IPManager()
 
@@ -258,7 +262,10 @@ class ConstellationNode(
     Http().bindAndHandle(routes, nodeConfig.httpInterface, nodeConfig.httpPort)
 
   val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
-  val randomTXManager = new RandomTransactionManager(crossTalkConsensusActor)
+  val randomTXManager = new RandomTransactionManager(
+    crossTalkConsensusActor,
+    dao.processingConfig.randomTransactionLoopTimeSeconds
+  )
 
   def getIPData: ValidPeerIPData = {
     ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)
@@ -346,6 +353,8 @@ class ConstellationNode(
     dao.setNodeState(NodeState.Ready)
     dao.generateRandomTX = true
   }
+//  Keeping disabled for now -- going to only use midDb for the time being.
+//  private val txMigrator = new TransactionPeriodicMigration
 
   var dataPollingManager: DataPollingManager = _
   if (nodeConfig.dataPollingManagerOn) {

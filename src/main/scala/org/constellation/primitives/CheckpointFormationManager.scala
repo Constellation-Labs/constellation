@@ -4,11 +4,13 @@ import java.time.{LocalDateTime, Duration => JDuration}
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorRef
+import akka.util.Timeout
 import constellation.{EasyFutureBlock, futureTryWithTimeoutMetric}
 import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.StartNewBlockCreationRound
 import org.constellation.consensus.EdgeProcessor
 import org.constellation.primitives.Schema.NodeState
+import org.constellation.storage.TransactionStatus
 import org.constellation.util.Periodic
 
 import scala.concurrent.duration._
@@ -16,7 +18,7 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
 class CheckpointFormationManager(
-  periodSeconds: Int = 1,
+  periodSeconds: Int = 10,
   undersizedCheckpointThresholdSeconds: Int = 30,
   crossTalkConsensusActor: ActorRef
 )(implicit dao: DAO)
@@ -32,7 +34,7 @@ class CheckpointFormationManager(
   @volatile private var lastCheckpoint = LocalDateTime.now
 
   override def trigger() = {
-    val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
+    val memPoolCount = dao.transactionService.count(TransactionStatus.Pending).unsafeRunSync()
     val elapsedTime = toFiniteDuration(JDuration.between(lastCheckpoint, LocalDateTime.now))
 
     val minTXInBlock = dao.processingConfig.minCheckpointFormationThreshold
@@ -52,8 +54,11 @@ class CheckpointFormationManager(
         )
       }
 
-      crossTalkConsensusActor ! StartNewBlockCreationRound
-      dao.metrics.updateMetric("blockFormationInProgress", dao.blockFormationInProgress.toString)
+      if (dao.nodeConfig.isGenesisNode) {
+        EdgeProcessor.formCheckpoint(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))
+      } else {
+        crossTalkConsensusActor ! StartNewBlockCreationRound
+      }
     }
 
     Future.successful(Try(None))

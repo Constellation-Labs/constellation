@@ -14,13 +14,13 @@ trait Datastore {
 
   def putSnapshot(key: String, snapshot: consensus.Snapshot): Unit
 
-  def putCheckpointCacheData(key: String, c: CheckpointCacheData): Unit
+  def putCheckpointCacheData(key: String, c: CheckpointCache): Unit
 
   def updateCheckpointCacheData(key: String,
-                                f: CheckpointCacheData => CheckpointCacheData,
-                                empty: CheckpointCacheData): CheckpointCacheData
+                                f: CheckpointCache => CheckpointCache,
+                                empty: CheckpointCache): CheckpointCache
 
-  def getCheckpointCacheData(key: String): Option[CheckpointCacheData]
+  def getCheckpointCacheData(key: String): Option[CheckpointCache]
 
   def putTransactionCacheData(key: String, t: TransactionCacheData): Unit
 

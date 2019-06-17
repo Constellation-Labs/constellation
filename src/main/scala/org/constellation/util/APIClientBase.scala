@@ -69,7 +69,7 @@ class APIClientBase(host: String = "127.0.0.1",
 
   def setExternalIP(): Boolean = postSync("ip", hostName + ":" + udpPort).isSuccess
 
-  private def baseURI: String = {
+  def baseURI: String = {
     val uri = s"http://$hostName:$apiPort"
     uri
   }
@@ -151,7 +151,10 @@ class APIClientBase(host: String = "127.0.0.1",
     postNonBlocking(suffix, b, timeout).blocking(timeout)
   }
 
-  def postNonBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeout: Duration = 5.seconds)(
+  def postNonBlocking[T <: AnyRef](suffix: String,
+                                   b: AnyRef,
+                                   timeout: Duration = 5.seconds,
+                                   headers: Map[String, String] = Map.empty)(
     implicit m: Manifest[T],
     f: Formats = constellation.constellationFormats
   ): Future[T] = {
@@ -161,6 +164,7 @@ class APIClientBase(host: String = "127.0.0.1",
       .body(gzipped)
       .contentType("application/json")
       .header("Content-Encoding", "gzip")
+      .headers(headers)
       .response(asJson[T])
       .send()
       .map(_.unsafeBody)
@@ -185,6 +189,20 @@ class APIClientBase(host: String = "127.0.0.1",
   )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): T = {
     val res = postEmpty(suffix, timeout)
     Serialization.read[T](res.unsafeBody)
+  }
+
+  def postNonBlockingEmpty[T <: AnyRef](
+                                      suffix: String,
+                                      timeout: Duration = 5.seconds
+                                    )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): Future[T] = {
+    httpWithAuth(suffix, timeout = timeout)(Method.POST).response(asJson[T]).send().map(_.unsafeBody)
+  }
+
+  def postNonBlockingEmptyString(
+                                 suffix: String,
+                                 timeout: Duration = 5.seconds
+                                )(implicit f: Formats = constellation.constellationFormats): Future[Response[String]] = {
+    httpWithAuth(suffix, timeout = timeout)(Method.POST).send()
   }
 
   def getBytes(suffix: String,
