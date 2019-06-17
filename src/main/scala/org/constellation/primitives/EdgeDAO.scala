@@ -534,6 +534,11 @@ trait EdgeDAO {
 
   // TODO: Put on Id keyed datastore (address? potentially) with other metadata
   val publicReputation: TrieMap[Id, Double] = TrieMap()
+
+  var publicReputationOtherNodes: Map[Id, Map[Id, Double]] = Map()
+
+  var predictedReputation: Map[Id, Double] = Map()
+
   val secretReputation: TrieMap[Id, Double] = TrieMap()
 
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()

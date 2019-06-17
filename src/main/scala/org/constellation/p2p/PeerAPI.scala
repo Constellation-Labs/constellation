@@ -273,6 +273,9 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
     get {
       path("ip") {
         complete(address)
+      } ~
+      path("trust") {
+        complete(dao.publicReputation.toMap)
       }
     }
   }
