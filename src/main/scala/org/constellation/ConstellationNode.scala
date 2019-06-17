@@ -200,7 +200,8 @@ case class NodeConfig(
   allowLocalhostPeers: Boolean = false,
   cliConfig: CliConfig = CliConfig(),
   processingConfig: ProcessingConfig = ProcessingConfig(),
-  dataPollingManagerOn: Boolean = false
+  dataPollingManagerOn: Boolean = false,
+  trustModelEnabled: Boolean = false
 )
 
 class ConstellationNode(
@@ -362,6 +363,8 @@ class ConstellationNode(
     dataPollingManager = new DataPollingManager(60)
   }
 
-  val trustManager = new TrustManager()
+  if (nodeConfig.trustModelEnabled) {
+    val trustManager = new TrustManager()
+  }
 
 }
