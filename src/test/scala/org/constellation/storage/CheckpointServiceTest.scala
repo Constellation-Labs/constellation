@@ -168,7 +168,9 @@ class CheckpointServiceTest
     val ts = new TransactionService[IO](dao, semaphore)
     dao.transactionService shouldReturn ts
 
-    val cs = new CheckpointService[IO](dao, ts, ms, ns, ???)
+    val cts = mock[ConcurrentTipService]
+
+    val cs = new CheckpointService[IO](dao, ts, ms, ns, cts)
     dao.checkpointService shouldReturn cs
 
     val metrics = mock[Metrics]
