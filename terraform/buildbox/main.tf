@@ -88,8 +88,10 @@ resource "google_compute_instance" "default" {
 
 
   provisioner "remote-exec" {
-    inline = ["curl -sSO https://dl.google.com/cloudagents/install-monitoring-agent.sh",
-    "sudo bash install-monitoring-agent.sh"]
+    inline = [
+      "curl -sSO https://dl.google.com/cloudagents/install-monitoring-agent.sh",
+      "sudo bash install-monitoring-agent.sh"
+    ]
     connection {
       host = self.network_interface.0.access_config.0.nat_ip
       type = "ssh"
@@ -111,7 +113,19 @@ resource "google_compute_instance" "default" {
 
   provisioner "file" {
     source      = "upload_jar.sh"
-    destination = "~/constellation/upload_jar.sh"
+    destination = "~/upload_jar.sh"
+
+    connection {
+      host    = self.network_interface.0.access_config.0.nat_ip
+      type    = "ssh"
+      user    = var.ssh_user
+      timeout = "90s"
+    }
+  }
+
+  provisioner "file" {
+    source      = "deploy.sh"
+    destination = "~/deploy.sh"
 
     connection {
       host    = self.network_interface.0.access_config.0.nat_ip
@@ -123,7 +137,8 @@ resource "google_compute_instance" "default" {
 
   provisioner "remote-exec" {
     inline = [
-      "chmod u+x ~/constellation/upload_jar.sh",
+      "chmod u+x ~/upload_jar.sh",
+      "chmod u+x ~/deploy.sh",
     ]
     connection {
       host = self.network_interface.0.access_config.0.nat_ip

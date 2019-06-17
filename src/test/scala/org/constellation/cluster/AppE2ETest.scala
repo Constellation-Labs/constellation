@@ -6,11 +6,9 @@ import org.constellation.primitives._
 import org.constellation.util.APIClient
 import org.constellation.util.Simulation.{awaitCheckpointsAccepted, checkSnapshot}
 import org.constellation.{Channel, ConstellationApp, E2E}
-import org.scalatest.Ignore
 
 import scala.concurrent.Future
 
-@Ignore
 class AppE2ETest extends E2E {
   implicit val timeout: Timeout = Timeout(120, TimeUnit.SECONDS)
 
