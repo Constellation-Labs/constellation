@@ -23,6 +23,7 @@ import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeType}
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications, _}
 import org.constellation.storage.StorageService
+import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.{Distance, PeerApiClient}
 import org.constellation.{ConfigUtil, DAO}
 
@@ -114,19 +115,10 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
 
     case cmd: ConsensusTimeout =>
       log.error(s"Consensus with roundId: ${cmd.roundId} timeout on node: ${dao.id.short}")
-      self ! StopBlockCreationRound(cmd.roundId, None)
+      self ! StopBlockCreationRound(cmd.roundId, None, Seq.empty)
     case cmd: RoundException =>
       log.error(s"Consensus on node: ${dao.id.short} finished with error {}", cmd)
-      self ! StopBlockCreationRound(cmd.roundId, None)
-    // TODO: wkoszycki return tx to become pending and remove from inCOnsensus
-    //      cmd.transactionsToReturn.toList
-    //        .map(
-    //          hash =>
-    //            dao.transactionService.lookup(hash, TransactionStatus.InConsensus).map {
-    //              case Some(tx) => dao.transactionService.put(tx, TransactionStatus.Pending)
-    //              case _        =>
-    //          }
-    //        )
+      self ! StopBlockCreationRound(cmd.roundId, None, cmd.transactionsToReturn)
 
     case cmd: StopBlockCreationRound =>
       rounds.get(cmd.roundId).fold {} { round =>
@@ -152,7 +144,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
                 .foreach(_.release())
         )
       )
-
+      returnTransactionsToPending(cmd.transactionsToReturn, cmd.roundId)
       cmd.maybeCB.foreach(cb => dao.peerManager ! UpdatePeerNotifications(cb.notifications))
 
       dao.blockFormationInProgress = false
@@ -175,6 +167,23 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
 
     case msg => log.warning(s"Received unknown message: $msg")
 
+  }
+
+  private[consensus] def returnTransactionsToPending(transactionsToReturn: Seq[String],
+                                                     roundId: RoundId): Unit = {
+    dao.transactionService.returnTransactionsToPending(transactionsToReturn)
+      .unsafeRunAsync {
+        case Right(Nil) => ()
+        case Right(txs) =>
+          log.info(
+            s"Transactions returned to pending state ${txs.map(_.transaction.hash)} in round $roundId"
+          )
+        case Left(value) =>
+          log.error(
+            s"Unable to cleanup transactions $transactionsToReturn from consensus round $roundId {}",
+            value
+          )
+      }
   }
 
   private[consensus] def closeRoundActor(roundId: RoundId): Unit = {
@@ -275,7 +284,9 @@ object RoundManager {
   ): Option[(RoundData, Seq[(Transaction, Int)], Seq[(ChannelMessage, Int)])] = {
 
     val transactions =
-      dao.transactionService.pullForConsensusSafe(dao.minCheckpointFormationThreshold).unsafeRunSync()
+      dao.transactionService
+        .pullForConsensusSafe(dao.minCheckpointFormationThreshold)
+        .unsafeRunSync()
     if (transactions.nonEmpty) {
       dao
         .pullTips(dao.readyFacilitatorsAsync.unsafeRunSync())
