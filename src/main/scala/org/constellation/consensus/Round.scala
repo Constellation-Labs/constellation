@@ -90,7 +90,7 @@ class Round(
       self ! proposal
 
     case newProp: LightTransactionsProposal =>
-      log.info(
+      log.debug(
         s"[${dao.id.short}] ${roundData.roundId} received LightTransactionsProposal from ${newProp.facilitatorId.id.short}"
       )
       if (transactionProposals.contains(newProp.facilitatorId)) {
@@ -109,13 +109,13 @@ class Round(
         newProp
       transactionProposals += (newProp.facilitatorId -> merged)
       if (receivedAllTransactionProposals) {
-        log.info(s"[${dao.id.short}] ${roundData.roundId} received all transaction proposals")
+        log.debug(s"[${dao.id.short}] ${roundData.roundId} received all transaction proposals")
         cancelUnionTransactionProposalsTikTok()
         self ! UnionProposals(StageState.FINISHED)
       }
 
     case UnionBlockProposal(roundId, facilitatorId, checkpointBlock) =>
-      log.info(
+      log.debug(
         s"[${dao.id.short}] ${roundData.roundId} received UnionBlockProposal from ${facilitatorId.id.short}"
       )
       if (checkpointBlockProposals.contains(facilitatorId)) {
@@ -132,7 +132,7 @@ class Round(
 //        self ! UnionProposals(StageState.BEHIND)
 //      }
       if (receivedAllCheckpointBlockProposals) {
-        log.info(
+        log.debug(
           s"[${dao.id.short}] ${roundData.roundId} received receivedAllCheckpointBlockProposals"
         )
         cancelResolveMajorityCheckpointBlockTikTok()
@@ -140,7 +140,7 @@ class Round(
       }
 
     case SelectedUnionBlock(roundId, facilitatorId, checkpointBlock) =>
-      log.info(
+      log.debug(
         s"[${dao.id.short}] ${roundData.roundId} received SelectedUnionBlock from ${facilitatorId.id.short}"
       )
       if (selectedCheckpointBlocks.contains(facilitatorId)) {
@@ -158,7 +158,7 @@ class Round(
 //      }
 
       if (receivedAllSelectedUnionedBlocks) {
-        log.info(
+        log.debug(
           s"[${dao.id.short}] ${roundData.roundId} received receivedAllSelectedUnionedBlocks"
         )
         cancelUnionTransactionProposalsTikTok()
@@ -167,7 +167,7 @@ class Round(
       }
 
     case UnionProposals(StageState.BEHIND) =>
-      log.info(s"[${dao.id.short}] ${roundData.roundId} self send UnionState")
+      log.debug(s"[${dao.id.short}] ${roundData.roundId} self send UnionState")
       unionProposals()
     case UnionProposals(state) =>
       log.info(s"[${dao.id.short}] ${roundData.roundId} self send UnionState ${state}")
@@ -206,13 +206,13 @@ class Round(
       scheduleArbitraryDataProposals(distance + 1)
 
     case ResolveMajorityCheckpointBlock(_, StageState.BEHIND) =>
-      log.info(
+      log.debug(
         s"[${dao.id.short}] ${roundData.roundId} received ResolveMajorityCheckpointBlock BEHIND"
       )
       resolveMajorityCheckpointBlock()
 
     case ResolveMajorityCheckpointBlock(_, state) =>
-      log.info(
+      log.debug(
         s"[${dao.id.short}] ${roundData.roundId} received ResolveMajorityCheckpointBlock state: ${state}"
       )
       dao.metrics.incrementMetric(
@@ -448,7 +448,7 @@ class Round(
         val finalFacilitators = selectedCheckpointBlocks.keySet.map(_.id).toSet
         val cache =
           CheckpointCache(Some(checkpointBlock), height = checkpointBlock.calculateHeight())
-        log.info(
+        log.debug(
           s"[${dao.id.short}] accepting majority checkpoint block ${checkpointBlock.baseHash}  " +
             s" with txs ${checkpointBlock.transactions.map(_.hash)} " +
             s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height}"

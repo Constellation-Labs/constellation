@@ -39,13 +39,10 @@ class AddressService[F[_]: Concurrent]()(implicit metrics: () => Metrics)
   def transferSnapshot(tx: Transaction): F[AddressCacheData] =
     update(tx.src.hash, { a =>
       a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - tx.amount)
-    }, AddressCacheData(0L, 0L))
-      .flatMap(
-        _ =>
-          update(tx.dst.hash, { a =>
-            a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + tx.amount)
-          }, AddressCacheData(tx.amount, 0L))
-      )
+    }, AddressCacheData(0L, 0L)) *>
+      update(tx.dst.hash, { a =>
+        a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + tx.amount)
+      }, AddressCacheData(tx.amount, 0L))
 
   def lockForSnapshot(addresses: Set[Address], fn: F[Unit]): F[Unit] =
     locks.acquire(addresses.map(_.hash).toList) {

@@ -66,9 +66,8 @@ class TransactionService[F[_]: Sync: Concurrent](dao: DAO, pullSemaphore: Semaph
   def isAccepted(hash: String): F[Boolean] = accepted.contains(hash)
 
   def applySnapshot(txs: List[TransactionCacheData], merkleRoot: String): F[Unit] =
-    merklePool
-      .remove(merkleRoot)
-      .flatMap(_ => txs.map(tx => accepted.remove(tx.transaction.hash)).sequence.void)
+    merklePool.remove(merkleRoot) *>
+      txs.map(tx => accepted.remove(tx.transaction.hash)).sequence.void
 
   def returnTransactionsToPending(txs: Seq[String]): F[List[TransactionCacheData]] =
     txs.toList
