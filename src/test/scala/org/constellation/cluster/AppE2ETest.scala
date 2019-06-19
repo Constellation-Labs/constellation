@@ -14,9 +14,11 @@ class AppE2ETest extends E2E {
 
   val totalNumNodes = 3
   val n1 = createNode(randomizePorts = false)
+
   val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes - 1)(
     i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
   )
+
   val apis: Seq[APIClient] = nodes.map {
     _.getAPIClient()
   }

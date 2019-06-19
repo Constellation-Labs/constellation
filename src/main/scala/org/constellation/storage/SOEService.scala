@@ -5,10 +5,9 @@ import cats.implicits._
 import org.constellation.primitives.Schema.SignedObservationEdgeCache
 
 class SOEService[F[_]: Sync]() extends StorageService[F, SignedObservationEdgeCache]() {
-  override def put(key: String, value: SignedObservationEdgeCache): F[SignedObservationEdgeCache] = {
+  override def put(key: String, value: SignedObservationEdgeCache): F[SignedObservationEdgeCache] =
     super.put(key, value)
 //      .flatTap(_ => Sync[F].delay(println(s"---- ---- PUT $key to SOEService")))
-  }
 
   override def update(
     key: String,

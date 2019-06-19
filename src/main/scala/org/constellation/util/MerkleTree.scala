@@ -23,14 +23,11 @@ case class MerkleResult(inputs: Seq[String], nodes: Seq[MerkleNode]) {
   def createProof(startingPoint: String): MerkleProof = {
     val parentMap = MerkleTree.childToParent(nodes)
     val firstParent = parentMap(startingPoint)
-    MerkleProof(startingPoint,
-                MerkleTree.collectParents(Seq(), firstParent, parentMap),
-                nodes.last.hash)
+    MerkleProof(startingPoint, MerkleTree.collectParents(Seq(), firstParent, parentMap), nodes.last.hash)
   }
 
-  def rootHash: String = {
+  def rootHash: String =
     nodes.last.hash
-  }
 }
 
 import com.typesafe.scalalogging.StrictLogging
@@ -41,6 +38,7 @@ import constellation.SHA256Ext
 // Couldn't find any libs that were easy drop ins so just doing this for now
 
 object MerkleTree extends StrictLogging {
+
   def childToParent(nodes: Seq[MerkleNode]): Map[String, MerkleNode] =
     nodes.flatMap { n =>
       n.children.map {
@@ -75,9 +73,8 @@ object MerkleTree extends StrictLogging {
     MerkleResult(hashes, merkleIteration(Seq(), zero))
   }
 
-  def merkleHashFunc(left: String, right: String): String = {
+  def merkleHashFunc(left: String, right: String): String =
     (left + right).sha256
-  }
 
   def applyRound(level: Seq[String]): Seq[MerkleNode] = {
     logger.debug(s"Applying Merkle round on ${level.length} level length")
@@ -89,13 +86,12 @@ object MerkleTree extends StrictLogging {
     }
   }
 
-  def merkleIteration(agg: Seq[MerkleNode], currentLevel: Seq[MerkleNode]): Seq[MerkleNode] = {
+  def merkleIteration(agg: Seq[MerkleNode], currentLevel: Seq[MerkleNode]): Seq[MerkleNode] =
     if (currentLevel.size == 1) {
       agg ++ currentLevel
     } else {
       val nextLevel = applyRound(currentLevel.map { _.hash })
       merkleIteration(agg ++ currentLevel, nextLevel)
     }
-  }
 
 }

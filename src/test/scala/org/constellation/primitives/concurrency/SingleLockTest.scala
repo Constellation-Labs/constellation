@@ -37,7 +37,7 @@ class SingleLockTest extends WordSpec with Matchers {
       }
     }
     "Handle exceptions thrown" in {
-      lazy val throwError = IO{
+      lazy val throwError = IO {
         throw new RuntimeException("throwError")
       }
       implicit val timer = IO.timer(ExecutionContext.global)

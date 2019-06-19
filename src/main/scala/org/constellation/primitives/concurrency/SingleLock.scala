@@ -6,7 +6,7 @@ import cats.implicits._
 
 class SingleLock[F[_], R](name: String, lock: Semaphore[F])(implicit F: Concurrent[F]) {
 
-  def use(thunk: => F[R]): F[R] = {
+  def use(thunk: => F[R]): F[R] =
     for {
       x <- lock.available
       _ <- Concurrent[F].delay(println(s"[$name] Availability: $x"))
@@ -26,6 +26,5 @@ class SingleLock[F[_], R](name: String, lock: Semaphore[F])(implicit F: Concurre
       z <- lock.available
       _ <- Concurrent[F].delay(println(s"[$name] Done | Availability: $z"))
     } yield res
-  }
 
 }

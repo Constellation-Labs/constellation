@@ -2,7 +2,11 @@ package org.constellation.consensus
 
 import constellation._
 import org.constellation.consensus.CrossTalkConsensus.NotifyFacilitators
-import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{
+  BroadcastLightTransactionProposal,
+  BroadcastSelectedUnionBlock,
+  BroadcastUnionBlockProposal
+}
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema.SignedObservationEdge
 import org.constellation.primitives.{ChannelMessage, PeerData, Transaction}
@@ -33,8 +37,8 @@ class HTTPNodeRemoteSender(implicit val dao: DAO) extends NodeRemoteSender {
         r.transactions,
         r.tipsSOE,
         r.messages
-      )
-      ,"NotifyFacilitators"
+      ),
+      "NotifyFacilitators"
     )
   }
 
@@ -48,12 +52,23 @@ class HTTPNodeRemoteSender(implicit val dao: DAO) extends NodeRemoteSender {
     )
 
   override def broadcastBlockUnion(cmd: BroadcastUnionBlockProposal): Unit =
-    parallelFireForget(BlockBuildingRoundRoute.unionFullPath, cmd.roundId, cmd.peers, cmd.proposal,"BroadcastUnionBlockProposal")
+    parallelFireForget(
+      BlockBuildingRoundRoute.unionFullPath,
+      cmd.roundId,
+      cmd.peers,
+      cmd.proposal,
+      "BroadcastUnionBlockProposal"
+    )
 
   override def broadcastSelectedUnionBlock(cmd: BroadcastSelectedUnionBlock): Unit =
-    parallelFireForget(BlockBuildingRoundRoute.selectedFullPath, cmd.roundId, cmd.peers, cmd.cb,"BroadcastSelectedUnionBlock")
+    parallelFireForget(
+      BlockBuildingRoundRoute.selectedFullPath,
+      cmd.roundId,
+      cmd.peers,
+      cmd.cb,
+      "BroadcastSelectedUnionBlock"
+    )
 
-  def parallelFireForget(path: String,roundId: RoundId, peers: Iterable[PeerData], cmd: AnyRef, msg: String): Unit ={
+  def parallelFireForget(path: String, roundId: RoundId, peers: Iterable[PeerData], cmd: AnyRef, msg: String): Unit =
     peers.par.foreach(_.client.postNonBlockingUnit(path, cmd))
-  }
 }

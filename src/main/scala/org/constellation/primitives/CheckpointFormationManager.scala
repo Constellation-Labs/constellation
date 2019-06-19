@@ -22,7 +22,7 @@ class CheckpointFormationManager(
   undersizedCheckpointThresholdSeconds: Int = 30,
   crossTalkConsensusActor: ActorRef
 )(implicit dao: DAO)
-  extends Periodic[Try[Option[Boolean]]]("RandomTransactionManager", periodSeconds) {
+    extends Periodic[Try[Option[Boolean]]]("RandomTransactionManager", periodSeconds) {
 
   def toFiniteDuration(d: java.time.Duration): FiniteDuration = Duration.fromNanos(d.toNanos)
 

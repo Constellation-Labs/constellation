@@ -43,6 +43,7 @@ class RoundManagerTest
   implicit val materialize: ActorMaterializer = ActorMaterializer()
 
   val roundManagerProbe = TestProbe("roundManagerSupervisor")
+
   val shortTimeouts = ConfigFactory.parseString(
     """constellation {
       consensus {
@@ -54,6 +55,7 @@ class RoundManagerTest
        }
       }"""
   )
+
   val conf = ConfigFactory.parseString(
     """constellation {
       consensus {
@@ -155,7 +157,7 @@ class RoundManagerTest
 
     within(2 seconds) {
       expectNoMessage
-      roundManager.underlyingActor.passToParentActor(any[NotifyFacilitators]) was called
+      roundManager.underlyingActor.passToParentActor(any[NotifyFacilitators]).was(called)
     }
   }
 
@@ -164,7 +166,7 @@ class RoundManagerTest
 
     within(2 seconds) {
       expectNoMessage
-      roundManager.underlyingActor.passToRoundActor(any[LightTransactionsProposal]) was called
+      roundManager.underlyingActor.passToRoundActor(any[LightTransactionsProposal]).was(called)
     }
   }
 
@@ -210,7 +212,7 @@ class RoundManagerTest
 
     within(2 seconds) {
       expectNoMessage
-      roundManager.underlyingActor.passToRoundActor(any[StartTransactionProposal]) was called
+      roundManager.underlyingActor.passToRoundActor(any[StartTransactionProposal]).was(called)
     }
   }
 
@@ -220,7 +222,7 @@ class RoundManagerTest
 
     roundManager ! cmd
 
-    roundManager.underlyingActor.passToRoundActor(cmd) was called
+    roundManager.underlyingActor.passToRoundActor(cmd).was(called)
   }
 
   test("it should send ResolveMajorityCheckpointBlock to round actor when round timeout has passed") {
@@ -232,7 +234,7 @@ class RoundManagerTest
 
     timersRoundManagerProbe.expectMsgType[NotifyFacilitators]
     Thread.sleep(5000)
-    timersRoundManager.underlyingActor.passToRoundActor(any[ResolveMajorityCheckpointBlock]) wasCalled atLeastOnce
+    timersRoundManager.underlyingActor.passToRoundActor(any[ResolveMajorityCheckpointBlock]).wasCalled(atLeastOnce)
   }
 
   test("it should cancel round timeout scheduler on StopBlockCreationRound") {
@@ -300,7 +302,7 @@ class RoundManagerTest
 
       roundManager ! StopBlockCreationRound(round._1, Some(cb), Seq.empty)
 
-      semaphore.release() was called
+      semaphore.release().was(called)
     }
   }
 
@@ -309,7 +311,7 @@ class RoundManagerTest
 
     roundManager ! cmd
 
-    roundManager.underlyingActor.passToParentActor(cmd) was called
+    roundManager.underlyingActor.passToParentActor(cmd).was(called)
   }
 
   test("it should pass BroadcastUnionBlockProposal to parent actor") {
@@ -317,7 +319,7 @@ class RoundManagerTest
 
     roundManager ! cmd
 
-    roundManager.underlyingActor.passToParentActor(cmd) was called
+    roundManager.underlyingActor.passToParentActor(cmd).was(called)
   }
 
   test("it should pass UnionBlockProposal to round actor") {
@@ -326,7 +328,7 @@ class RoundManagerTest
 
     roundManager ! cmd
 
-    roundManager.underlyingActor.passToRoundActor(cmd) was called
+    roundManager.underlyingActor.passToRoundActor(cmd).was(called)
   }
 
   test("it should close round actor when the round has been finished") {
@@ -339,7 +341,7 @@ class RoundManagerTest
 
       roundManager ! StopBlockCreationRound(round._1, None, Seq.empty)
 
-      roundManager.underlyingActor.closeRoundActor(round._1) was called
+      roundManager.underlyingActor.closeRoundActor(round._1).was(called)
     }
   }
 
@@ -348,7 +350,7 @@ class RoundManagerTest
 
     roundManager ! cmd
 
-    roundManager.underlyingActor.passToParentActor(cmd) was called
+    roundManager.underlyingActor.passToParentActor(cmd).was(called)
   }
 
   test("it should pass SelectedUnionBlock to round actor") {
@@ -357,7 +359,7 @@ class RoundManagerTest
 
     roundManager ! cmd
 
-    roundManager.underlyingActor.passToRoundActor(cmd) was called
+    roundManager.underlyingActor.passToRoundActor(cmd).was(called)
   }
 
   test("it should remove not accepted transactions") {

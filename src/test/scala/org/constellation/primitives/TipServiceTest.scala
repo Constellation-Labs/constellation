@@ -63,9 +63,8 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
     cb
   }
 
-  def createIndexedCBmocks(size: Int, func: Int => CheckpointBlock) = {
+  def createIndexedCBmocks(size: Int, func: Int => CheckpointBlock) =
     (1 to size).map(func)
-  }
 
   def createShiftedTasks(
     cbs: List[CheckpointBlock],

@@ -45,7 +45,7 @@ object EdgeProcessor extends StrictLogging {
       Id
     ],
     data: PeerData
-  )(implicit dao: DAO, ec: ExecutionContext) = {
+  )(implicit dao: DAO, ec: ExecutionContext) =
     async {
       val sigResp = await(
         data.client.postNonBlocking[SignatureResponse](
@@ -61,7 +61,6 @@ object EdgeProcessor extends StrictLogging {
 
       sigResp.signature
     }
-  }
 
   private def processSignedBlock(
     cache: CheckpointCache,
@@ -137,39 +136,34 @@ object EdgeProcessor extends StrictLogging {
     val result = dao.concurrentTipService.pull(readyFacilitators)(dao.metrics).map {
       case (tipSOE, facils) =>
         // Change to method on TipsReturned // abstract for reuse.
-        val checkpointBlock = CheckpointBlock.createCheckpointBlock(transactions, tipSOE.map {
-          soe =>
-            TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)
+        val checkpointBlock = CheckpointBlock.createCheckpointBlock(transactions, tipSOE.map { soe =>
+          TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)
         }, messages)(dao.keyPair)
         dao.metrics.incrementMetric("checkpointBlocksCreated")
 
         val finalFacilitators = facils.keySet
 
-        val signatureResults = facils.values.toList
-          .traverse { peerData =>
-            requestBlockSignature(checkpointBlock, finalFacilitators, peerData).toValidatedNel
-          }
-          .flatMap { signatureResultList =>
-            signatureResultList.sequence
-              .map { signatures =>
-                // Unsafe flatten -- revisit during consensus updates
-                signatures.flatten.foldLeft(checkpointBlock) {
-                  case (cb, hs) =>
-                    cb.plus(hs)
-                }
-              }
-              .ensure(NonEmptyList.one(new Throwable("Invalid CheckpointBlock")))(
-                _.simpleValidation()
+        val signatureResults = facils.values.toList.traverse { peerData =>
+          requestBlockSignature(checkpointBlock, finalFacilitators, peerData).toValidatedNel
+        }.flatMap { signatureResultList =>
+          signatureResultList.sequence.map { signatures =>
+            // Unsafe flatten -- revisit during consensus updates
+            signatures.flatten.foldLeft(checkpointBlock) {
+              case (cb, hs) =>
+                cb.plus(hs)
+            }
+          }.ensure(NonEmptyList.one(new Throwable("Invalid CheckpointBlock")))(
+              _.simpleValidation()
+            )
+            .traverse { finalCB =>
+              val cache = CheckpointCache(finalCB.some, height = finalCB.calculateHeight())
+              dao.checkpointService.accept(cache).unsafeRunSync()
+              processSignedBlock(
+                cache,
+                finalFacilitators
               )
-              .traverse { finalCB =>
-                val cache = CheckpointCache(finalCB.some, height = finalCB.calculateHeight())
-                dao.checkpointService.accept(cache).unsafeRunSync()
-                processSignedBlock(
-                  cache,
-                  finalFacilitators
-                )
-              }
-          }
+            }
+        }
 
         wrapFutureWithMetric(signatureResults, "checkpointBlockFormation")
 
@@ -199,8 +193,7 @@ object EdgeProcessor extends StrictLogging {
 
   def handleSignatureRequest(
     sr: SignatureRequest
-  )(implicit dao: DAO): Future[Try[SignatureResponse]] = {
-
+  )(implicit dao: DAO): Future[Try[SignatureResponse]] =
     futureTryWithTimeoutMetric(
       {
         dao.metrics.incrementMetric("peerApiRXSignatureRequest")
@@ -221,7 +214,6 @@ object EdgeProcessor extends StrictLogging {
       },
       "handleSignatureRequest"
     )(dao.signatureExecutionContext, dao)
-  }
 
   def acceptWithResolveAttempt(
     checkpointCacheData: CheckpointCache,
@@ -288,7 +280,7 @@ object EdgeProcessor extends StrictLogging {
 
   }
 
-  def handleFinishedCheckpoint(fc: FinishedCheckpoint)(implicit dao: DAO): Future[Try[Unit]] = {
+  def handleFinishedCheckpoint(fc: FinishedCheckpoint)(implicit dao: DAO): Future[Try[Unit]] =
     futureTryWithTimeoutMetric(
       {
         val timer = dao.metrics.startTimer
@@ -305,7 +297,6 @@ object EdgeProcessor extends StrictLogging {
       },
       "handleFinishedCheckpoint"
     )(dao.finishedExecutionContext, dao)
-  }
 
 }
 
@@ -339,10 +330,9 @@ object Snapshot extends StrictLogging {
     writeSnapshot(storedSnapshot, serialized)
   }
 
-  private def writeSnapshot(storedSnapshot: StoredSnapshot,
-                            serialized: Array[Byte],
-                            trialNumber: Int = 0)(implicit dao: DAO): Try[Path] = {
-
+  private def writeSnapshot(storedSnapshot: StoredSnapshot, serialized: Array[Byte], trialNumber: Int = 0)(
+    implicit dao: DAO
+  ): Try[Path] =
     trialNumber match {
       case x if x >= 3 => Failure(new IOException(s"Unable to write snapshot"))
       case _ if isOverDiskCapacity(serialized.length) =>
@@ -351,13 +341,11 @@ object Snapshot extends StrictLogging {
       case _ =>
         tryWithMetric(
           {
-            Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash),
-                        serialized)
+            Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash), serialized)
           },
           "writeSnapshot"
         )
     }
-  }
 
   def removeOldSnapshots()(implicit dao: DAO): Unit = {
     val sortedHashes = snapshotHashes().sortBy(Distance.calculate(_, dao.id))
@@ -373,7 +361,7 @@ object Snapshot extends StrictLogging {
     occupiedSpace + bytesLengthToAdd >= ConfigUtil.snapshotSizeDiskLimit || usableSpace <= bytesLengthToAdd
   }
 
-  def loadSnapshot(snapshotHash: String)(implicit dao: DAO): Try[StoredSnapshot] = {
+  def loadSnapshot(snapshotHash: String)(implicit dao: DAO): Try[StoredSnapshot] =
     tryWithMetric(
       {
         KryoSerializer.deserializeCast[StoredSnapshot] {
@@ -384,9 +372,8 @@ object Snapshot extends StrictLogging {
       },
       "loadSnapshot"
     )
-  }
 
-  def loadSnapshotBytes(snapshotHash: String)(implicit dao: DAO): Try[Array[Byte]] = {
+  def loadSnapshotBytes(snapshotHash: String)(implicit dao: DAO): Try[Array[Byte]] =
     tryWithMetric(
       {
         val path = Paths.get(dao.snapshotPath.pathAsString, snapshotHash)
@@ -398,11 +385,9 @@ object Snapshot extends StrictLogging {
       },
       "loadSnapshot"
     )
-  }
 
-  def snapshotHashes()(implicit dao: DAO): List[String] = {
+  def snapshotHashes()(implicit dao: DAO): List[String] =
     dao.snapshotPath.list.map { _.name }.toList
-  }
 
   def findLatestMessageWithSnapshotHash(
     depth: Int,
@@ -413,7 +398,7 @@ object Snapshot extends StrictLogging {
     def findLatestMessageWithSnapshotHashInner(
       depth: Int,
       lastMessage: Option[ChannelMessageMetadata]
-    ): Option[ChannelMessageMetadata] = {
+    ): Option[ChannelMessageMetadata] =
       if (depth > maxDepth) None
       else {
         lastMessage.flatMap { m =>
@@ -430,12 +415,11 @@ object Snapshot extends StrictLogging {
           }
         }
       }
-    }
 
     findLatestMessageWithSnapshotHashInner(depth, lastMessage)
   }
 
-  def triggerSnapshot(round: Long)(implicit dao: DAO): Future[Try[Unit]] = {
+  def triggerSnapshot(round: Long)(implicit dao: DAO): Future[Try[Unit]] =
     // TODO: Refactor round into InternalHeartbeat
     if (round % dao.processingConfig.snapshotInterval == 0 && dao.nodeState == NodeState.Ready) {
       futureTryWithTimeoutMetric(
@@ -449,7 +433,6 @@ object Snapshot extends StrictLogging {
         60
       )(dao.edgeExecutionContext, dao)
     } else Future.successful(Try(()))
-  }
 
   val snapshotZero = Snapshot("", Seq())
   val snapshotZeroHash: String = Snapshot("", Seq()).hash

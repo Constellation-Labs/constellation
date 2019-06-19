@@ -6,17 +6,17 @@ import org.constellation.DAO
 import org.constellation.primitives.{ChannelMessageMetadata, ChannelMetadata}
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 
-class MessageService[F[_]: Sync]()(implicit dao: DAO)
-    extends MerkleStorageAlgebra[F, String, ChannelMessageMetadata] {
+class MessageService[F[_]: Sync]()(implicit dao: DAO) extends MerkleStorageAlgebra[F, String, ChannelMessageMetadata] {
   val merklePool = new StorageService[F, Seq[String]]()
   val arbitraryPool = new StorageService[F, ChannelMessageMetadata]()
   val memPool = new StorageService[F, ChannelMessageMetadata]()
 
-  def put(key: String, value: ChannelMessageMetadata): F[ChannelMessageMetadata] = {
+  def put(key: String, value: ChannelMessageMetadata): F[ChannelMessageMetadata] =
     memPool
       .put(key, value)
-      .flatTap { _ => Sync[F].delay(dao.channelStorage.insert(value)) }
-  }
+      .flatTap { _ =>
+        Sync[F].delay(dao.channelStorage.insert(value))
+      }
 
   def lookup(key: String): F[Option[ChannelMessageMetadata]] =
     Lookup.extendedLookup[F, String, ChannelMessageMetadata](List(memPool))(key)

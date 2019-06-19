@@ -50,13 +50,14 @@ trait NodeData {
   def externalPeerHTTPPort: Int = nodeConfig.peerHttpPort
 
   def peerRegistrationRequest =
-    PeerRegistrationRequest(externalHostString,
-                            externalPeerHTTPPort,
-                            id,
-                            ResourceInfo(
-                              diskUsableBytes =
-                                new java.io.File(snapshotPath.pathAsString).getUsableSpace
-                            ))
+    PeerRegistrationRequest(
+      externalHostString,
+      externalPeerHTTPPort,
+      id,
+      ResourceInfo(
+        diskUsableBytes = new java.io.File(snapshotPath.pathAsString).getUsableSpace
+      )
+    )
 
   def snapshotPath: File = {
     val f = File(s"tmp/${id.medium}/snapshots")
@@ -65,8 +66,7 @@ trait NodeData {
   }
   var remotes: Seq[InetSocketAddress] = Seq()
 
-  def updateKeyPair(kp: KeyPair): Unit = {
+  def updateKeyPair(kp: KeyPair): Unit =
     nodeConfig = nodeConfig.copy(primaryKeyPair = kp)
-  }
 
 }

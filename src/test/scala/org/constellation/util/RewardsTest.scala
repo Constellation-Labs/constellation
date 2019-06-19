@@ -18,12 +18,13 @@ class RewardsTest extends FlatSpec {
    */
   val neighborhoodReputationMatrix: Map[String, Double] =
     (0 to 100).map(idx => (idx.toString, 0.0)).toMap
+
   val transitiveReputationMatrix: Map[String, Map[String, Double]] =
     (0 to 100).map(idx => (idx.toString, neighborhoodReputationMatrix)).toMap
   val partitonChart = (0 to 100).map(idx => (idx.toString, Set(idx.toString))).toMap
 
   val thing = r.nextInt(100).toString
-  neighborhoodReputationMatrix.updated(thing, 0.0)//Ensure perfect behavior doesn't throw Nan
+  neighborhoodReputationMatrix.updated(thing, 0.0) //Ensure perfect behavior doesn't throw Nan
 
   "rewardForEpoch" should "return correct $DAG ammount" in {
     assert(rewardForEpoch(epochOneRandom) === epochOneRewards)
@@ -33,10 +34,7 @@ class RewardsTest extends FlatSpec {
   }
 
   "total rewards disbursed" should "equal total per epoch within error bar" in {
-    val rewardsDistro = validatorRewards(0,
-                                                transitiveReputationMatrix,
-                                                neighborhoodReputationMatrix,
-                                                partitonChart)
+    val rewardsDistro = validatorRewards(0, transitiveReputationMatrix, neighborhoodReputationMatrix, partitonChart)
     val totalDistributionSum = rewardsDistro.values.sum
     println(totalDistributionSum - epochOneRewards)
     assert(totalDistributionSum - epochOneRewards <= roundingError)

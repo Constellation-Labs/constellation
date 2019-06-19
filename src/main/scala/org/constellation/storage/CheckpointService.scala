@@ -17,6 +17,7 @@ class CheckpointBlocksMemPool[F[_]: Sync](
   messagesMerklePool: StorageService[F, Seq[String]],
   notificationsMerklePool: StorageService[F, Seq[String]]
 ) extends StorageService[F, CheckpointCacheMetadata]() {
+
   def put(
     key: String,
     value: CheckpointCache
@@ -36,44 +37,39 @@ class CheckpointBlocksMemPool[F[_]: Sync](
       n <- store(data.notifications.map(_.hash), notificationsMerklePool)
     } yield CheckpointBlockMetadata(t, data.checkpoint, m, n)
 
-  private def store(data: Seq[String], ss: StorageService[F, Seq[String]]): F[Option[String]] = {
+  private def store(data: Seq[String], ss: StorageService[F, Seq[String]]): F[Option[String]] =
     data match {
       case Seq() => none[String].pure[F]
       case _ =>
         val rootHash = MerkleTree(data).rootHash
         ss.put(rootHash, data).map(_ => rootHash.some)
     }
-  }
 
   def incrementChildrenCount(hashes: Seq[String]): F[Unit] =
-    hashes
-      .toList
-      .map { hash =>
-        update(hash, (cd: CheckpointCacheMetadata) => cd.copy(children = cd.children + 1))
-      }
-      .sequence
-      .void
+    hashes.toList.map { hash =>
+      update(hash, (cd: CheckpointCacheMetadata) => cd.copy(children = cd.children + 1))
+    }.sequence.void
 }
 
-class CheckpointService[F[_]: Sync : LiftIO](
+class CheckpointService[F[_]: Sync: LiftIO](
   dao: DAO,
   transactionService: TransactionService[F],
   messageService: MessageService[F],
   notificationService: NotificationService[F],
   concurrentTipService: ConcurrentTipService
 ) extends StrictLogging {
+
   val memPool = new CheckpointBlocksMemPool[F](
     dao,
     transactionService.merklePool,
     messageService.merklePool,
-    notificationService.merklePool)
+    notificationService.merklePool
+  )
 
   val pendingAcceptance = new StorageService[F, CheckpointBlock](Some(10))
 
   def applySnapshot(cbs: List[String]): F[Unit] =
-    cbs.map(memPool.remove)
-      .sequence
-      .void
+    cbs.map(memPool.remove).sequence.void
 
   def fullData(key: String): F[Option[CheckpointCache]] =
     lookup(key).flatMap(_.map(convert(_)(dao)).sequence)
@@ -83,29 +79,35 @@ class CheckpointService[F[_]: Sync : LiftIO](
 
   def contains(key: String): F[Boolean] = lookup(key).map(_.nonEmpty)
 
-  def convert(merkle: CheckpointCacheMetadata)(implicit dao: DAO): F[CheckpointCache] = {
+  def convert(merkle: CheckpointCacheMetadata)(implicit dao: DAO): F[CheckpointCache] =
     for {
       txs <- merkle.checkpointBlock.transactionsMerkleRoot.fold(List[Transaction]().pure[F])(fetchTransactions)
       msgs <- merkle.checkpointBlock.messagesMerkleRoot.fold(List[ChannelMessage]().pure[F])(fetchMessages)
       notifications <- merkle.checkpointBlock.notificationsMerkleRoot
         .fold(List[PeerNotification]().pure[F])(fetchNotifications)
-    } yield CheckpointCache(
-      CheckpointBlock(txs, merkle.checkpointBlock.checkpoint, msgs, notifications).some,
-      merkle.children,
-      merkle.height)
-  }
+    } yield
+      CheckpointCache(
+        CheckpointBlock(txs, merkle.checkpointBlock.checkpoint, msgs, notifications).some,
+        merkle.children,
+        merkle.height
+      )
 
   def fetch[T, R](
     merkleRoot: String,
     service: MerkleStorageAlgebra[F, String, T],
     mapper: T => R,
-    resolver: String => F[T],
+    resolver: String => F[T]
   ): F[List[R]] =
-    service.findHashesByMerkleRoot(merkleRoot)
-      .map(_.get.map(hash =>
-        service
-          .lookup(hash)
-          .flatMap(_.map(_.pure[F]).getOrElse(resolver(hash)).map(mapper))))
+    service
+      .findHashesByMerkleRoot(merkleRoot)
+      .map(
+        _.get.map(
+          hash =>
+            service
+              .lookup(hash)
+              .flatMap(_.map(_.pure[F]).getOrElse(resolver(hash)).map(mapper))
+        )
+      )
       .map(_.toList.sequence)
       .flatten
 
@@ -133,7 +135,6 @@ class CheckpointService[F[_]: Sync : LiftIO](
       (s: String) => ???
     )
 
-
   def accept(checkpoint: CheckpointCache)(implicit dao: DAO): F[Unit] = {
 
     val acceptCheckpoint: F[Unit] = checkpoint.checkpointBlock match {
@@ -153,21 +154,24 @@ class CheckpointService[F[_]: Sync : LiftIO](
 
           _ <- conflicts match {
             case Nil => Sync[F].unit
-            case _ => LiftIO[F].liftIO {
-              concurrentTipService.putConflicting(cb.baseHash, cb)
-                .flatMap(_ => IO.raiseError(TipConflictException(cb, conflicts)))
-                .void
-            }
+            case _ =>
+              LiftIO[F].liftIO {
+                concurrentTipService
+                  .putConflicting(cb.baseHash, cb)
+                  .flatMap(_ => IO.raiseError(TipConflictException(cb, conflicts)))
+                  .void
+              }
           }
 
           _ <- LiftIO[F].liftIO(cb.storeSOE())
           maybeHeight <- calculateHeight(checkpoint)
 
           _ <- if (maybeHeight.isEmpty) {
-              dao.metrics.incrementMetricAsync[F](Metrics.heightEmpty)
-                .flatMap(_ => MissingHeightException(cb).raiseError[F, Unit])
-                .void
-            } else Sync[F].unit
+            dao.metrics
+              .incrementMetricAsync[F](Metrics.heightEmpty)
+              .flatMap(_ => MissingHeightException(cb).raiseError[F, Unit])
+              .void
+          } else Sync[F].unit
 
           _ <- memPool.put(cb.baseHash, checkpoint.copy(height = maybeHeight))
           _ <- Sync[F].delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
@@ -188,7 +192,7 @@ class CheckpointService[F[_]: Sync : LiftIO](
     }
   }
 
-  private def calculateHeight(checkpointCacheData: CheckpointCache)(implicit dao: DAO): F[Option[Height]] = {
+  private def calculateHeight(checkpointCacheData: CheckpointCache)(implicit dao: DAO): F[Option[Height]] =
     Sync[F].delay {
       checkpointCacheData.checkpointBlock.flatMap { cb =>
         cb.calculateHeight() match {
@@ -197,65 +201,56 @@ class CheckpointService[F[_]: Sync : LiftIO](
         }
       }
     }
-  }
 
-
-  private def syncPending(cb: CheckpointBlock)(implicit dao: DAO): F[Unit] = {
+  private def syncPending(cb: CheckpointBlock)(implicit dao: DAO): F[Unit] =
     Sync[F].delay {
       pendingAcceptance.synchronized {
-        pendingAcceptance.contains(cb.baseHash)
-          .flatMap {
-            case true => pendingAcceptance.put(cb.baseHash, cb)
-            case _ => throw PendingAcceptance(cb)
-          }
+        pendingAcceptance.contains(cb.baseHash).flatMap {
+          case true => pendingAcceptance.put(cb.baseHash, cb)
+          case _    => throw PendingAcceptance(cb)
+        }
       }
     }
-  }
 
-
-  private def acceptMessages(cb: CheckpointBlock)(implicit dao: DAO): F[List[Unit]] = {
+  private def acceptMessages(cb: CheckpointBlock)(implicit dao: DAO): F[List[Unit]] =
     LiftIO[F].liftIO {
-      cb.messages
-        .map { m =>
-          val channelMessageMetadata = ChannelMessageMetadata(m, Some(cb.baseHash))
-          val messageUpdate =
-            if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
-              for {
-                _ <- dao.messageService.memPool.put(
-                  m.signedMessageData.data.channelId,
-                  channelMessageMetadata
-                )
-                _ <- dao.channelService.update(
-                  m.signedMessageData.hash, { cmd =>
-                    val slicedMessages = cmd.last25MessageHashes.slice(0, 25)
-                    cmd.copy(
-                      totalNumMessages = cmd.totalNumMessages + 1,
-                      last25MessageHashes = Seq(m.signedMessageData.hash) ++ slicedMessages
-                    )
-                  }
-                )
-              } yield ()
-            } else { // Unsafe json extract
-              dao.channelService.put(
-                m.signedMessageData.hash,
-                ChannelMetadata(
-                  m.signedMessageData.data.message.x[ChannelOpen],
-                  channelMessageMetadata
-                )
+      cb.messages.map { m =>
+        val channelMessageMetadata = ChannelMessageMetadata(m, Some(cb.baseHash))
+        val messageUpdate =
+          if (m.signedMessageData.data.previousMessageHash != Genesis.CoinBaseHash) {
+            for {
+              _ <- dao.messageService.memPool.put(
+                m.signedMessageData.data.channelId,
+                channelMessageMetadata
               )
-            }
+              _ <- dao.channelService.update(
+                m.signedMessageData.hash, { cmd =>
+                  val slicedMessages = cmd.last25MessageHashes.slice(0, 25)
+                  cmd.copy(
+                    totalNumMessages = cmd.totalNumMessages + 1,
+                    last25MessageHashes = Seq(m.signedMessageData.hash) ++ slicedMessages
+                  )
+                }
+              )
+            } yield ()
+          } else { // Unsafe json extract
+            dao.channelService.put(
+              m.signedMessageData.hash,
+              ChannelMetadata(
+                m.signedMessageData.data.message.x[ChannelOpen],
+                channelMessageMetadata
+              )
+            )
+          }
 
-          for {
-            _ <- messageUpdate
-            _ <- dao.messageService.memPool
-              .put(m.signedMessageData.hash, channelMessageMetadata)
-            _ <- dao.metrics.incrementMetricAsync[IO]("messageAccepted")
-          } yield ()
-        }
-        .toList
-        .sequence
+        for {
+          _ <- messageUpdate
+          _ <- dao.messageService.memPool
+            .put(m.signedMessageData.hash, channelMessageMetadata)
+          _ <- dao.metrics.incrementMetricAsync[IO]("messageAccepted")
+        } yield ()
+      }.toList.sequence
     }
-  }
 
   private def acceptTransactions(cb: CheckpointBlock)(implicit dao: DAO): F[Unit] = {
     def toCacheData(tx: Transaction) = TransactionCacheData(
@@ -271,13 +266,13 @@ class CheckpointService[F[_]: Sync : LiftIO](
     val insertTX =
       LiftIO[F].liftIO {
         cb.transactions.toList
-        .map(tx ⇒ (tx, toCacheData(tx)))
-        .traverse {
-          case (tx, txMetadata) =>
-            dao.transactionService.accept(txMetadata) *>
-              dao.addressService.transfer(tx)
-        }
-        .void
+          .map(tx ⇒ (tx, toCacheData(tx)))
+          .traverse {
+            case (tx, txMetadata) =>
+              dao.transactionService.accept(txMetadata) *>
+                dao.addressService.transfer(tx)
+          }
+          .void
       }
 
     Sync[F].delay { logger.info(s"Accepting transactions ${cb.transactions.size}") } >> insertTX

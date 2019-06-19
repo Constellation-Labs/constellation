@@ -19,22 +19,25 @@ case class HostPort(host: String, port: Int)
 
 object APIClientBase {
 
-  def apply(host: String = "127.0.0.1",
-            port: Int,
-            authEnabled: Boolean = false,
-            authId: String = null,
-            authPassword: String = null)(
+  def apply(
+    host: String = "127.0.0.1",
+    port: Int,
+    authEnabled: Boolean = false,
+    authId: String = null,
+    authPassword: String = null
+  )(
     implicit executionContext: ExecutionContext
-  ): APIClientBase = {
+  ): APIClientBase =
     new APIClientBase(host, port, authEnabled, authId, authPassword)(executionContext)
-  }
 }
 
-class APIClientBase(host: String = "127.0.0.1",
-                    port: Int,
-                    authEnabled: Boolean = false,
-                    authId: String = null,
-                    var authPassword: String = null)(
+class APIClientBase(
+  host: String = "127.0.0.1",
+  port: Int,
+  authEnabled: Boolean = false,
+  authId: String = null,
+  var authPassword: String = null
+)(
   implicit val executionContext: ExecutionContext
 ) {
 
@@ -84,16 +87,15 @@ class APIClientBase(host: String = "127.0.0.1",
 
   implicit class AddBlocking[T](req: Future[T]) {
 
-    def blocking(timeout: Duration = 60.seconds): T = {
+    def blocking(timeout: Duration = 60.seconds): T =
       Await.result(req, timeout + 100.millis)
-    }
   }
 
   def optHeaders: Map[String, String] = Map()
 
-  def httpWithAuth(suffix: String,
-                   params: Map[String, String] = Map.empty,
-                   timeout: Duration = 15.seconds)(method: Method) = {
+  def httpWithAuth(suffix: String, params: Map[String, String] = Map.empty, timeout: Duration = 15.seconds)(
+    method: Method
+  ) = {
     val base = baseUri(suffix)
     val uri = uri"$base?$params"
     val req = sttp.method(method, uri).readTimeout(timeout).headers(optHeaders)
@@ -128,33 +130,31 @@ class APIClientBase(host: String = "127.0.0.1",
 
   def postEmpty(suffix: String, timeout: Duration = 15.seconds)(
     implicit f: Formats = constellation.constellationFormats
-  ): Response[String] = {
+  ): Response[String] =
     httpWithAuth(suffix, timeout = timeout)(Method.POST).send().blocking()
-  }
 
   def postSync(suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
     implicit f: Formats = constellation.constellationFormats
-  ): Response[String] = {
+  ): Response[String] =
     post(suffix, b, timeout).blocking(timeout)
-  }
 
   def putSync(suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
     implicit f: Formats = constellation.constellationFormats
-  ): Response[String] = {
+  ): Response[String] =
     put(suffix, b, timeout).blocking(timeout)
-  }
 
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
     implicit m: Manifest[T],
     f: Formats = constellation.constellationFormats
-  ): T = {
+  ): T =
     postNonBlocking(suffix, b, timeout).blocking(timeout)
-  }
 
-  def postNonBlocking[T <: AnyRef](suffix: String,
-                                   b: AnyRef,
-                                   timeout: Duration = 15.seconds,
-                                   headers: Map[String, String] = Map.empty)(
+  def postNonBlocking[T <: AnyRef](
+    suffix: String,
+    b: AnyRef,
+    timeout: Duration = 15.seconds,
+    headers: Map[String, String] = Map.empty
+  )(
     implicit m: Manifest[T],
     f: Formats = constellation.constellationFormats
   ): Future[T] = {
@@ -192,62 +192,62 @@ class APIClientBase(host: String = "127.0.0.1",
   }
 
   def postNonBlockingEmpty[T <: AnyRef](
-                                      suffix: String,
-                                      timeout: Duration = 15.seconds
-                                    )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): Future[T] = {
+    suffix: String,
+    timeout: Duration = 15.seconds
+  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): Future[T] =
     httpWithAuth(suffix, timeout = timeout)(Method.POST).response(asJson[T]).send().map(_.unsafeBody)
-  }
 
   def postNonBlockingEmptyString(
-                                 suffix: String,
-                                 timeout: Duration = 15.seconds
-                                )(implicit f: Formats = constellation.constellationFormats): Future[Response[String]] = {
+    suffix: String,
+    timeout: Duration = 15.seconds
+  )(implicit f: Formats = constellation.constellationFormats): Future[Response[String]] =
     httpWithAuth(suffix, timeout = timeout)(Method.POST).send()
-  }
 
-  def getBytes(suffix: String,
-               queryParams: Map[String, String] = Map(),
-               timeout: Duration = 15.seconds): Future[Response[Array[Byte]]] = {
+  def getBytes(
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds
+  ): Future[Response[Array[Byte]]] =
     httpWithAuth(suffix, queryParams, timeout)(Method.GET).response(asByteArray).send()
-  }
 
-  def getString(suffix: String,
-                queryParams: Map[String, String] = Map(),
-                timeout: Duration = 15.seconds): Future[Response[String]] = {
+  def getString(
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds
+  ): Future[Response[String]] =
     httpWithAuth(suffix, queryParams, timeout)(Method.GET).send()
-  }
 
-  def getSync(suffix: String,
-              queryParams: Map[String, String] = Map(),
-              timeout: Duration = 15.seconds): Response[String] = {
+  def getSync(
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds
+  ): Response[String] =
     getString(suffix, queryParams, timeout).blocking(timeout)
-  }
 
   def getBlocking[T <: AnyRef](
     suffix: String,
     queryParams: Map[String, String] = Map(),
     timeout: Duration = 15.seconds
-  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): T = {
+  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): T =
     getNonBlocking[T](suffix, queryParams, timeout).blocking(timeout)
-  }
 
   def getNonBlocking[T <: AnyRef](
     suffix: String,
     queryParams: Map[String, String] = Map(),
     timeout: Duration = 15.seconds
-  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): Future[T] = {
+  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): Future[T] =
     httpWithAuth(suffix, queryParams, timeout)(Method.GET)
       .response(asJson[T])
       .send()
       .map(_.unsafeBody)
-  }
 
-  def getNonBlockingStr(suffix: String,
-                        queryParams: Map[String, String] = Map(),
-                        timeout: Duration = 15.seconds): Future[String] = {
+  def getNonBlockingStr(
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds
+  ): Future[String] =
     httpWithAuth(suffix, queryParams, timeout)(Method.GET).send().map { x =>
       x.unsafeBody
     }
-  }
 
 }

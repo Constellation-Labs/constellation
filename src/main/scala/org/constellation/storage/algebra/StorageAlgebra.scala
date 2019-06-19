@@ -14,7 +14,6 @@ trait StorageAlgebra[F[_], K, V] extends LookupAlgebra[F, K, V] {
 
   def size(): F[Long]
 
-
   // Rethink if needed \/:
 
   def toMap(): F[Map[K, V]]

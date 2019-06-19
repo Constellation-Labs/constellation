@@ -33,17 +33,14 @@ class CheckpointServiceTest
   implicit val kp: KeyPair = makeKeyPair()
   implicit var dao: DAO = prepareDao()
 
-
   before {
     soe.baseHash shouldReturn "abc"
   }
 
   test("should convert CB to merkle roots when all data is filled") {
 
-    val cbProposal = CheckpointBlock.createCheckpointBlockSOE(prepareTransactions(),
-                                                              Seq(soe),
-                                                              prepareMessages(),
-                                                              prepareNotifications())
+    val cbProposal = CheckpointBlock
+      .createCheckpointBlockSOE(prepareTransactions(), Seq(soe), prepareMessages(), prepareNotifications())
 
     val cbProposalCache = CheckpointCache(Some(cbProposal), 3, Some(Height(2, 4)))
     dao.checkpointService.memPool.put(cbProposal.baseHash, cbProposalCache).unsafeRunSync()
@@ -66,7 +63,8 @@ class CheckpointServiceTest
     val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
 
     dao.checkpointService
-      .fetchMessages(storedCB.checkpointBlock.messagesMerkleRoot.get).unsafeRunSync() shouldBe msgs
+      .fetchMessages(storedCB.checkpointBlock.messagesMerkleRoot.get)
+      .unsafeRunSync() shouldBe msgs
   }
 
   test("should fetch transactions when they exist") {
@@ -75,7 +73,8 @@ class CheckpointServiceTest
     val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
 
     dao.checkpointService
-      .fetchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot.get).unsafeRunSync() shouldBe txs
+      .fetchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot.get)
+      .unsafeRunSync() shouldBe txs
   }
 
   test("should fetch notifications when they exist") {
@@ -84,12 +83,15 @@ class CheckpointServiceTest
     val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
 
     dao.checkpointService
-      .fetchNotifications(storedCB.checkpointBlock.notificationsMerkleRoot.get).unsafeRunSync() shouldBe notifications
+      .fetchNotifications(storedCB.checkpointBlock.notificationsMerkleRoot.get)
+      .unsafeRunSync() shouldBe notifications
   }
 
-  private def storeCheckpointBlock(txs: Seq[Transaction],
-                                   msgs: Seq[ChannelMessage],
-                                   notifics: Seq[PeerNotification]): CheckpointCache = {
+  private def storeCheckpointBlock(
+    txs: Seq[Transaction],
+    msgs: Seq[ChannelMessage],
+    notifics: Seq[PeerNotification]
+  ): CheckpointCache = {
 
     val cbProposal = CheckpointBlock.createCheckpointBlockSOE(txs, Seq(soe), msgs, notifics)
 
