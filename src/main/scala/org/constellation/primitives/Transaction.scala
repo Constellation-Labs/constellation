@@ -23,6 +23,7 @@ case class TransactionCacheData(
   knownPeers: Set[Id] = Set(),
   rxTime: Long = System.currentTimeMillis()
 ) {
+
   def plus(previous: TransactionCacheData): TransactionCacheData =
     this.copy(
       inDAGByAncestor = inDAGByAncestor ++ previous.inDAGByAncestor
@@ -40,7 +41,7 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
   def store(cache: TransactionCacheData)(implicit dao: DAO): Unit = {
     // mwadon: What about transactionService?
 //      dao.acceptedTransactionService.putSync(this.hash, cache)
-    }
+  }
 
   def valid(implicit dao: DAO): Boolean =
     TransactionValidatorNel.validateTransaction(this).isValid
@@ -64,8 +65,8 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
   def signaturesHash: String = edge.signedObservationEdge.signatureBatch.hash
 
   def withSignatureFrom(keyPair: KeyPair): Transaction = this.copy(
-      edge = edge.withSignatureFrom(keyPair)
-    )
+    edge = edge.withSignatureFrom(keyPair)
+  )
 }
 
 case class TransactionSerialized(
@@ -158,7 +159,6 @@ sealed trait TransactionValidatorNel {
 
   def validateAmount(tx: Transaction): ValidationResult[Transaction] =
     if (tx.amount > 0) tx.validNel else NonPositiveAmount(tx).invalidNel
-
 
   import org.constellation.datastore.swaydb.SwayDbConversions._
 

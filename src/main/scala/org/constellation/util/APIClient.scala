@@ -19,10 +19,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 object APIClient {
 
-  def apply(host: String = "127.0.0.1",
-            port: Int,
-            peerHTTPPort: Int = 9001,
-            internalPeerHost: String = "")(
+  def apply(host: String = "127.0.0.1", port: Int, peerHTTPPort: Int = 9001, internalPeerHost: String = "")(
     implicit executionContext: ExecutionContext,
     dao: DAO = null
   ): APIClient = {
@@ -40,13 +37,16 @@ object APIClient {
   }
 }
 case class PeerApiClient(id: Id, client: APIClient)
-class APIClient private (host: String = "127.0.0.1",
-                         port: Int,
-                         val peerHTTPPort: Int = 9001,
-                         val internalPeerHost: String = "",
+
+class APIClient private (
+  host: String = "127.0.0.1",
+  port: Int,
+  val peerHTTPPort: Int = 9001,
+  val internalPeerHost: String = "",
   val authEnabled: Boolean = false,
   val authId: String = null,
-  authPassword: String = null)(
+  authPassword: String = null
+)(
   implicit override val executionContext: ExecutionContext,
   dao: DAO = null
 ) extends APIClientBase(host, port, authEnabled, authId, authPassword) {
@@ -56,54 +56,53 @@ class APIClient private (host: String = "127.0.0.1",
   val daoOpt = Option(dao)
 
   override def optHeaders: Map[String, String] =
-    daoOpt
-      .map { d =>
-        Map("Remote-Address" -> d.externalHostString, "X-Real-IP" -> d.externalHostString)
-      }
-      .getOrElse(Map())
+    daoOpt.map { d =>
+      Map("Remote-Address" -> d.externalHostString, "X-Real-IP" -> d.externalHostString)
+    }.getOrElse(Map())
 
-  def metrics: Map[String, String] = {
+  def metrics: Map[String, String] =
     getBlocking[MetricsResult]("metrics", timeout = 15.seconds).metrics
-  }
 
-  def metricsAsync: Future[Map[String, String]] = {
+  def metricsAsync: Future[Map[String, String]] =
     getNonBlocking[MetricsResult]("metrics", timeout = 15.seconds).map(_.metrics)
-  }
 
-  def getBlockingBytesKryo[T <: AnyRef](suffix: String,
-                                        queryParams: Map[String, String] = Map(),
-                                        timeout: Duration = 15.seconds): T = {
+  def getBlockingBytesKryo[T <: AnyRef](
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds
+  ): T = {
     val resp =
       httpWithAuth(suffix, queryParams, timeout)(Method.GET).response(asByteArray).send().blocking()
     KryoSerializer.deserializeCast[T](resp.unsafeBody)
   }
 
-  def getNonBlockingBytesKryo[T <: AnyRef](suffix: String,
-                                           queryParams: Map[String, String] = Map(),
-                                           timeout: Duration = 15.seconds): Future[T] = {
+  def getNonBlockingBytesKryo[T <: AnyRef](
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds
+  ): Future[T] =
     httpWithAuth(suffix, queryParams, timeout)(Method.GET)
       .response(asByteArray)
       .send()
       .map(resp => KryoSerializer.deserializeCast[T](resp.unsafeBody))
-  }
 
   def getNonBlockingIO[T <: AnyRef](
-                                   suffix: String,
-                                   queryParams: Map[String, String] = Map(),
-                                   timeout: Duration = 15.seconds
-                                 )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): IO[T] = {
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds
+  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): IO[T] =
     IO.fromFuture(IO { getNonBlocking[T](suffix, queryParams, timeout) })
-  }
 
-  def postNonBlockingIO[T <: AnyRef](suffix: String,
-                                     b: AnyRef,
-                                     timeout: Duration = 15.seconds,
-                                     headers: Map[String, String] = Map.empty)(
-                                      implicit m: Manifest[T],
-                                      f: Formats = constellation.constellationFormats
-                                    ): IO[T] = {
-    IO.fromFuture(IO { postNonBlocking[T](suffix,b,timeout,headers) })
-  }
+  def postNonBlockingIO[T <: AnyRef](
+    suffix: String,
+    b: AnyRef,
+    timeout: Duration = 15.seconds,
+    headers: Map[String, String] = Map.empty
+  )(
+    implicit m: Manifest[T],
+    f: Formats = constellation.constellationFormats
+  ): IO[T] =
+    IO.fromFuture(IO { postNonBlocking[T](suffix, b, timeout, headers) })
 
   def getSnapshotInfo(): SnapshotInfo = getBlocking[SnapshotInfo]("info")
 

@@ -9,8 +9,8 @@ import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, HostPort, Metrics, Simulation}
 
-
 class E2ETest extends E2E {
+
   val updatePasswordReq = UpdatePassword(
     Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
   )
@@ -122,25 +122,19 @@ class E2ETest extends E2E {
 
     Simulation.awaitConditionMet(
       "Accepted checkpoint blocks number differs across the nodes",
-      allAPIs
-        .map { p =>
-          val n = p.metrics(Metrics.checkpointAccepted)
-          Simulation.logger.info(s"peer ${p.id} has $n accepted cbs")
-          n
-        }
-        .distinct
-        .size == 1,
+      allAPIs.map { p =>
+        val n = p.metrics(Metrics.checkpointAccepted)
+        Simulation.logger.info(s"peer ${p.id} has $n accepted cbs")
+        n
+      }.distinct.size == 1,
       maxRetries = 10,
       delay = 10000
     )
     Simulation.awaitConditionMet(
       "Accepted transactions number differs across the nodes",
-      allAPIs
-        .map {
-          _.metrics("transactionAccepted")
-        }
-        .distinct
-        .size == 1,
+      allAPIs.map {
+        _.metrics("transactionAccepted")
+      }.distinct.size == 1,
       maxRetries = 6,
       delay = 10000
     )
@@ -154,14 +148,13 @@ class E2ETest extends E2E {
     // TODO: Move to separate test
 
     // TODO: This is flaky and fails randomly sometimes
-    val snaps = storedSnapshots.toSet
-      .map { x: Seq[StoredSnapshot] => // May need to temporarily ignore messages for partitioning changes?
-        x.map {
-          _.checkpointCache.flatMap {
-            _.checkpointBlock
-          }
-        }.toSet
-      }
+    val snaps = storedSnapshots.toSet.map { x: Seq[StoredSnapshot] => // May need to temporarily ignore messages for partitioning changes?
+      x.map {
+        _.checkpointCache.flatMap {
+          _.checkpointBlock
+        }
+      }.toSet
+    }
 
     // Not inlining this for a reason -- the snaps object is quite large,
     // and scalatest tries to be smart when the assert fails and dumps the object to stdout,

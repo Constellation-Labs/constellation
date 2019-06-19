@@ -36,9 +36,8 @@ case class HashSignature(
   def valid(hash: String): Boolean =
     verifySignature(hash.getBytes(), KeyUtils.hex2bytes(signature))(publicKey)
 
-  override def compare(that: HashSignature): Int = {
-    signature compare that.signature
-  }
+  override def compare(that: HashSignature): Int =
+    signature.compare(that.signature)
 }
 
 case class SignatureBatch(
@@ -46,9 +45,8 @@ case class SignatureBatch(
   signatures: Seq[HashSignature]
 ) extends Monoid[SignatureBatch] {
 
-  def valid: Boolean = {
+  def valid: Boolean =
     signatures.forall(_.valid(hash))
-  }
 
   override def empty: SignatureBatch = SignatureBatch(hash, Seq())
 
@@ -57,9 +55,8 @@ case class SignatureBatch(
   override def combine(x: SignatureBatch, y: SignatureBatch): SignatureBatch =
     x.copy(signatures = (x.signatures ++ y.signatures).distinct.sorted)
 
-  def withSignatureFrom(other: KeyPair): SignatureBatch = {
+  def withSignatureFrom(other: KeyPair): SignatureBatch =
     withSignature(hashSign(hash, other))
-  }
 
   def plus(other: SignatureBatch): SignatureBatch = {
     val toAdd = other.signatures
@@ -83,21 +80,19 @@ case class SignatureBatch(
 
 trait SignHelpExt {
 
-  def hashSign(hash: String, keyPair: KeyPair): HashSignature = {
+  def hashSign(hash: String, keyPair: KeyPair): HashSignature =
     HashSignature(
       signHashWithKey(hash, keyPair.getPrivate),
       keyPair.getPublic.toId
     )
-  }
 
   def hashSignBatchZeroTyped(productHash: Signable, keyPair: KeyPair): SignatureBatch = {
     val hash = productHash.hash
     SignatureBatch(hash, Seq(hashSign(hash, keyPair)))
   }
 
-  def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge = {
+  def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge =
     SignedObservationEdge(hashSignBatchZeroTyped(oe, kp))
-  }
 
   /**
     * Transaction builder (for local use)
@@ -108,11 +103,13 @@ trait SignHelpExt {
     * @param normalized : Whether quantity is normalized by NormalizationFactor (1e-8)
     * @return : Resolved transaction in edge format
     */
-  def createTransaction(src: String,
-                        dst: String,
-                        amount: Long,
-                        keyPair: KeyPair,
-                        normalized: Boolean = true): Transaction = {
+  def createTransaction(
+    src: String,
+    dst: String,
+    amount: Long,
+    keyPair: KeyPair,
+    normalized: Boolean = true
+  ): Transaction = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
     val txData = TransactionEdgeData(amountToUse)

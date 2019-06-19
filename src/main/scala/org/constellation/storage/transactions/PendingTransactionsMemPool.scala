@@ -6,8 +6,7 @@ import cats.implicits._
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.storage.algebra.LookupAlgebra
 
-class PendingTransactionsMemPool[F[_]: Sync]()
-    extends LookupAlgebra[F, String, TransactionCacheData] {
+class PendingTransactionsMemPool[F[_]: Sync]() extends LookupAlgebra[F, String, TransactionCacheData] {
 
   private val txRef: Ref[F, Map[String, TransactionCacheData]] =
     Ref.unsafe[F, Map[String, TransactionCacheData]](Map())

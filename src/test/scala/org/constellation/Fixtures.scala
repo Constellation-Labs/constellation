@@ -12,7 +12,6 @@ import org.constellation.util.SignHelp
 
 object Fixtures {
 
-
   val kp: KeyPair = KeyUtils.makeKeyPair()
   val kp1: KeyPair = KeyUtils.makeKeyPair()
   val tx: Transaction = SignHelp.createTransaction(kp.address, kp1.address, 1L, kp)
@@ -58,10 +57,7 @@ object Fixtures {
     createTransaction(data.selfAddressStr, sendRequest.dst, sendRequest.amountActual, data.keyPair)
   }
 
-  def makeTransaction(srcAddressString: String,
-                      destinationAddressString: String,
-                      amt: Long,
-                      keyPair: KeyPair) = {
+  def makeTransaction(srcAddressString: String, destinationAddressString: String, amt: Long, keyPair: KeyPair) = {
     val sendRequest = SendToAddress(destinationAddressString, amt)
     createTransaction(srcAddressString, sendRequest.dst, sendRequest.amountActual, keyPair)
   }

@@ -29,6 +29,7 @@ object Schema {
 
   object NodeState extends Enumeration {
     type NodeState = Value
+
     val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, Ready, Offline =
       Value
   }
@@ -52,9 +53,7 @@ object Schema {
 
   final case class ReputationUpdates(updates: Seq[UpdateReputation]) extends ConfigUpdate
 
-  case class UpdateReputation(id: Id,
-                              secretReputation: Option[Double],
-                              publicReputation: Option[Double])
+  case class UpdateReputation(id: Id, secretReputation: Option[Double], publicReputation: Option[Double])
 
   // I.e. equivalent to number of sat per btc
   val NormalizationFactor: Long = 1e8.toLong
@@ -87,8 +86,9 @@ object Schema {
   /** Our basic set of allowed edge hash types */
   object EdgeHashType extends Enumeration {
     type EdgeHashType = Value
-    val AddressHash, CheckpointDataHash, CheckpointHash, TransactionDataHash, TransactionHash,
-    ValidationHash, BundleDataHash, ChannelMessageDataHash = Value
+
+    val AddressHash, CheckpointDataHash, CheckpointHash, TransactionDataHash, TransactionHash, ValidationHash,
+      BundleDataHash, ChannelMessageDataHash = Value
   }
 
   case class BundleEdgeData(rank: Double, hashes: Seq[String])
@@ -109,9 +109,9 @@ object Schema {
     * @param data : Optional hash reference to attached information
     */
   case class ObservationEdge( // TODO: Consider renaming to ObservationHyperEdge or leave as is?
-                             parents: Seq[TypedEdgeHash],
-                             data: TypedEdgeHash)
-      extends Signable
+    parents: Seq[TypedEdgeHash],
+    data: TypedEdgeHash
+  ) extends Signable
 
   /**
     * Encapsulation for all witness information about a given observation edge.
@@ -151,8 +151,7 @@ object Schema {
     *
     * @param hashes : TX edge hashes
     */
-  case class CheckpointEdgeData(hashes: Seq[String], messageHashes: Seq[String] = Seq())
-      extends Signable
+  case class CheckpointEdgeData(hashes: Seq[String], messageHashes: Seq[String] = Seq()) extends Signable
 
   case class CheckpointEdge(edge: Edge[CheckpointEdgeData]) {
 
@@ -174,7 +173,7 @@ object Schema {
     balanceByLatestSnapshot: Long = 0L
   ) {
 
-    def plus(previous: AddressCacheData): AddressCacheData = {
+    def plus(previous: AddressCacheData): AddressCacheData =
       this.copy(
         ancestorBalances =
           ancestorBalances ++ previous.ancestorBalances
@@ -186,7 +185,6 @@ object Schema {
         //recentTransactions =
         //  recentTransactions ++ previous.recentTransactions.filter(k => !recentTransactions.contains(k))
       )
-    }
 
   }
 
@@ -232,8 +230,7 @@ object Schema {
 
   }
 
-  case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge,
-                                        resolved: Boolean = false)
+  case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
 
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
 
@@ -245,9 +242,8 @@ object Schema {
     initialDistribution2: CheckpointBlock
   ) {
 
-    def notGenesisTips(tips: Seq[CheckpointBlock]): Boolean = {
+    def notGenesisTips(tips: Seq[CheckpointBlock]): Boolean =
       !tips.contains(initialDistribution) && !tips.contains(initialDistribution2)
-    }
 
   }
 

@@ -41,9 +41,8 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
     f
   }
 
-  def snapshotHashes: Seq[String] = {
+  def snapshotHashes: Seq[String] =
     snapshotPath.list.toSeq.map { _.name }
-  }
 
   def peersInfoPath: File = {
     val f = File(s"tmp/${id.medium}/peers")
@@ -96,7 +95,8 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
     implicit val edgeContextShift: ContextShift[IO] = IO.contextShift(edgeExecutionContext)
     val semaphore = Semaphore[IO](1).unsafeRunSync()
     transactionService = new TransactionService[IO](this, semaphore)
-    checkpointService = new CheckpointService[IO](this, transactionService, messageService, notificationService, concurrentTipService)
+    checkpointService =
+      new CheckpointService[IO](this, transactionService, messageService, notificationService, concurrentTipService)
     addressService = {
       implicit val implMetrics: () => Metrics = () => metrics
       new AddressService[IO]()
@@ -108,7 +108,8 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
       checkpointService,
       messageService,
       transactionService,
-      this)
+      this
+    )
   }
 
   lazy val concurrentTipService: ConcurrentTipService = new TrieBasedTipService(
@@ -120,17 +121,18 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
 
   def pullTips(
     readyFacilitators: Map[Id, PeerData]
-  ): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = {
+  ): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] =
     concurrentTipService.pull(readyFacilitators)(this.metrics)
-  }
 
   def peerInfo: IO[Map[Id, PeerData]] = IO.async { cb =>
     import scala.util.{Failure, Success}
 
-    (peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].onComplete {
-      case Success(peerInfo) => cb(Right(peerInfo))
-      case Failure(error) => cb(Left(error))
-    }(edgeExecutionContext)
+    (peerManager ? GetPeerInfo)
+      .mapTo[Map[Id, PeerData]]
+      .onComplete {
+        case Success(peerInfo) => cb(Right(peerInfo))
+        case Failure(error)    => cb(Left(error))
+      }(edgeExecutionContext)
   }
 
   private def eqNodeType(nodeType: NodeType)(m: (Id, PeerData)) = m._2.peerMetadata.nodeType == nodeType

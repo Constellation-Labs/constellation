@@ -45,7 +45,6 @@ class CheckpointBlockValidatorNelTest
   tx3.hash shouldReturn "tx3"
   val tx4: Transaction = mock[Transaction]
 
-
   before {
     leftBlock.baseHash shouldReturn "block1"
     leftParent.baseHash shouldReturn "leftParent"
@@ -53,10 +52,14 @@ class CheckpointBlockValidatorNelTest
     rightBlock.baseHash shouldReturn "block2"
     rightParent.baseHash shouldReturn "rightParent"
 
-    rightBlock.signatures shouldReturn Seq(HashSignature.apply("sig1", Id("id1")),
-                                           HashSignature.apply("sig2", Id("id2")))
-    leftBlock.signatures shouldReturn Seq(HashSignature.apply("sig1", Id("id1")),
-                                          HashSignature.apply("sig2", Id("id2")))
+    rightBlock.signatures shouldReturn Seq(
+      HashSignature.apply("sig1", Id("id1")),
+      HashSignature.apply("sig2", Id("id2"))
+    )
+    leftBlock.signatures shouldReturn Seq(
+      HashSignature.apply("sig1", Id("id1")),
+      HashSignature.apply("sig2", Id("id2"))
+    )
 
     rightBlock.parentSOEBaseHashes()(*) shouldReturn Seq("rightParent")
     leftBlock.parentSOEBaseHashes()(*) shouldReturn Seq("leftParent")
@@ -118,7 +121,6 @@ class CheckpointBlockValidatorNelTest
     val conflictTx = leftBlock.transactions.head.hash
     dao.transactionService.isAccepted(conflictTx) shouldReturn IO.pure(true)
 
-
     containsAlreadyAcceptedTx(leftBlock).unsafeRunSync() shouldBe List(conflictTx)
   }
 
@@ -130,7 +132,7 @@ class CheckpointBlockValidatorNelTest
 
     val combinedTxs =
       getTransactionsTillSnapshot(List(rightBlock))
-    combinedTxs shouldBe  (rightBlock.transactions ++ rightParent.transactions).map(_.hash)
+    combinedTxs shouldBe (rightBlock.transactions ++ rightParent.transactions).map(_.hash)
   }
 
   test("it should return false for cb not in snap") {
@@ -162,7 +164,7 @@ class CheckpointBlockValidatorNelTest
 }
 
 class ValidationSpec
-  extends TestKit(ActorSystem("Validation"))
+    extends TestKit(ActorSystem("Validation"))
     with WordSpecLike
     with Matchers
     with BeforeAndAfterEach
@@ -183,22 +185,23 @@ class ValidationSpec
   go.genesis.store(CheckpointCache(Some(go.genesis)))
   go.initialDistribution.store(CheckpointCache(Some(go.initialDistribution)))
   go.initialDistribution2.store(CheckpointCache(Some(go.initialDistribution2)))
-  dao.snapshotService.setSnapshot(
-    SnapshotInfo(
-      Snapshot.snapshotZero,
-      Seq(go.genesis.baseHash, go.initialDistribution.baseHash, go.initialDistribution2.baseHash),
-      Seq(),
-      0,
-      Seq(),
-      Map.empty,
-      Map.empty,
-      Seq()
+  dao.snapshotService
+    .setSnapshot(
+      SnapshotInfo(
+        Snapshot.snapshotZero,
+        Seq(go.genesis.baseHash, go.initialDistribution.baseHash, go.initialDistribution2.baseHash),
+        Seq(),
+        0,
+        Seq(),
+        Map.empty,
+        Map.empty,
+        Seq()
+      )
     )
-  ).unsafeRunSync()
+    .unsafeRunSync()
 
-  override def afterAll(): Unit = {
+  override def afterAll(): Unit =
     TestKit.shutdownActorSystem(system)
-  }
 
   "Checkpoint block validation" when {
     "all transactions are valid" should {
@@ -364,7 +367,7 @@ class ValidationSpec
 
         val txs = Seq(
           createTransaction(getAddress(a), getAddress(b), 75L, a),
-          createTransaction(getAddress(a), getAddress(c), 75L, a),
+          createTransaction(getAddress(a), getAddress(c), 75L, a)
         )
 
         val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)
@@ -380,7 +383,7 @@ class ValidationSpec
 
         val txs = Seq(
           createTransaction(getAddress(a), getAddress(b), 75L, a),
-          createTransaction(getAddress(a), getAddress(c), 75L, a),
+          createTransaction(getAddress(a), getAddress(c), 75L, a)
         )
 
         val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)
@@ -488,12 +491,11 @@ class ValidationSpec
         val cb7 =
           CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))
 
-        Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
-          .foreach { cb =>
-            dao.checkpointService
-              .accept(CheckpointCache(Some(cb), 0, Some(Height(1, 2))))
-              .unsafeRunSync()
-          }
+        Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7).foreach { cb =>
+          dao.checkpointService
+            .accept(CheckpointCache(Some(cb), 0, Some(Height(1, 2))))
+            .unsafeRunSync()
+        }
 
         assert(!cb7.simpleValidation())
       }

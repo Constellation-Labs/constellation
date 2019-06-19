@@ -43,19 +43,16 @@ case class ChannelMetadata(
   def channelId = genesisMessageMetadata.channelMessage.signedMessageData.hash
 }
 
-
 case class SingleChannelUIOutput(
-                                  channelOpen: ChannelOpen,
-                                  totalNumMessages: Long = 0L,
-                                  last25MessageHashes: Seq[String] = Seq(),
-                                  genesisAddress: String
-                                )
-
+  channelOpen: ChannelOpen,
+  totalNumMessages: Long = 0L,
+  last25MessageHashes: Seq[String] = Seq(),
+  genesisAddress: String
+)
 
 case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 
 object ChannelMessage extends StrictLogging {
-
 
   def create(message: String, previous: String, channelId: String)(
     implicit keyPair: KeyPair
@@ -86,8 +83,7 @@ object ChannelMessage extends StrictLogging {
         val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)(dao.keyPair)
         dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.name) = msg
         val genesisHashChannelId = msg.signedMessageData.hash
-        dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) =
-          channelOpenRequest.name
+        dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) = channelOpenRequest.name
         dao.messageService.memPool.put(msg.signedMessageData.hash, ChannelMessageMetadata(msg)).unsafeRunSync()
         dao.threadSafeMessageMemPool.put(Seq(msg), overrideLimit = true)
         val semaphore = new Semaphore(1)
@@ -114,10 +110,10 @@ object ChannelMessage extends StrictLogging {
 
   def createMessages(
     channelSendRequest: ChannelSendRequest
-  )(implicit dao: DAO): Future[ChannelSendResponse] = {
-
+  )(implicit dao: DAO): Future[ChannelSendResponse] =
     dao.messageService.memPool
-      .lookup(channelSendRequest.channelId).unsafeRunSync()
+      .lookup(channelSendRequest.channelId)
+      .unsafeRunSync()
       .map { previousMessage =>
         val previous = previousMessage.channelMessage.signedMessageData.hash
 
@@ -148,7 +144,6 @@ object ChannelMessage extends StrictLogging {
           ChannelSendResponse("Channel not found", Seq())
         )
       )
-  }
 }
 
 case class ChannelProof(
@@ -159,10 +154,10 @@ case class ChannelProof(
 )
 
 case class ChannelOpenRequest(
-                               channelId: String,
-                               jsonSchema: Option[String] = None,
-                               acceptInvalid: Boolean = true
-                             ) extends ChannelRequest
+  channelId: String,
+  jsonSchema: Option[String] = None,
+  acceptInvalid: Boolean = true
+) extends ChannelRequest
 case class ChannelOpen(
   name: String,
   jsonSchema: Option[String] = None,
@@ -170,14 +165,15 @@ case class ChannelOpen(
 )
 
 case class ChannelOpenResponse(
-                                errorMessage: String = "Success",
-                                genesisHash: String = ""
-                              )
+  errorMessage: String = "Success",
+  genesisHash: String = ""
+)
 
 case class ChannelSendRequest(
-                               channelId: String,
-                               messages: Seq[String]
-                             ) extends ChannelRequest
+  channelId: String,
+  messages: Seq[String]
+) extends ChannelRequest
+
 trait ChannelRequest {
   val channelId: String
 }

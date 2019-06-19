@@ -49,9 +49,7 @@ class EdgeProcessorTest extends FlatSpec with MockFactory with OneInstancePerTes
 
   mockData.updateKeyPair(keyPair)
 
-  def makeDao(mockData: DAO,
-              peerManager: TestProbe = peerManager,
-              metricsManager: TestProbe = metricsManager) = {
+  def makeDao(mockData: DAO, peerManager: TestProbe = peerManager, metricsManager: TestProbe = metricsManager) = {
     mockData.actorMaterializer = materialize
     mockData.peerManager = peerManager.testActor
     mockData

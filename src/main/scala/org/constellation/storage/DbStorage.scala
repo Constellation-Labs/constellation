@@ -11,15 +11,11 @@ import swaydb.data.config.MMAP
 import swaydb.persistent
 import swaydb.serializers.Serializer
 
-abstract class DbStorage[K, V](dbPath: File)(implicit keySerializer: Serializer[K],
-                                           valueSerializer: Serializer[V])
+abstract class DbStorage[K, V](dbPath: File)(implicit keySerializer: Serializer[K], valueSerializer: Serializer[V])
     extends LookupAlgebra[IO, K, V] {
 
   val db: swaydb.Map[K, V] = persistent
-    .Map[K, V](dir = dbPath.path,
-               mmapMaps = false,
-               mmapSegments = MMAP.Disabled,
-               mmapAppendix = false)
+    .Map[K, V](dir = dbPath.path, mmapMaps = false, mmapSegments = MMAP.Disabled, mmapAppendix = false)
     .get
 
   def lookup(key: K): IO[Option[V]] = db.get(key)
@@ -39,9 +35,10 @@ abstract class DbStorage[K, V](dbPath: File)(implicit keySerializer: Serializer[
   def size: Int = db.size
 }
 
-abstract class MidDbStorage[K, V](dbPath: File, capacity: Int)(implicit keySerializer: Serializer[K],
-                                                             valueSerializer: Serializer[V])
-    extends DbStorage[K, V](dbPath) {
+abstract class MidDbStorage[K, V](dbPath: File, capacity: Int)(
+  implicit keySerializer: Serializer[K],
+  valueSerializer: Serializer[V]
+) extends DbStorage[K, V](dbPath) {
 
   private val hashQueue: ConcurrentLinkedQueue[K] = new ConcurrentLinkedQueue[K]()
 
@@ -53,14 +50,14 @@ abstract class MidDbStorage[K, V](dbPath: File, capacity: Int)(implicit keySeria
       .put(key, value)
 //      .flatTap(_ => IO(hashQueue.add(key)))
 
-  override def putAll(kvs: Iterable[(K,V)]): IO[Unit] = {
+  override def putAll(kvs: Iterable[(K, V)]): IO[Unit] = {
     import scala.collection.JavaConverters._
     super
       .putAll(kvs)
 //      .flatTap(_ => IO(hashQueue.addAll(kvs.map(_._1).asJavaCollection)))
   }
 
-  def pullOverCapacity(): IO[List[V]] = {
+  def pullOverCapacity(): IO[List[V]] =
     if (!isOverCapacity) {
       IO.pure(Nil)
     } else {
@@ -76,12 +73,10 @@ abstract class MidDbStorage[K, V](dbPath: File, capacity: Int)(implicit keySeria
         .sequence[IO, Option[V]]
         .map(_.flatten)
     }
-  }
 
-  private def poll(hash: K): IO[Option[V]] = {
+  private def poll(hash: K): IO[Option[V]] =
     lookup(hash)
       .flatTap(_ => remove(hash))
-  }
 
   override def remove(
     key: K

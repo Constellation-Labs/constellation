@@ -9,7 +9,11 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{
+  BroadcastLightTransactionProposal,
+  BroadcastSelectedUnionBlock,
+  BroadcastUnionBlockProposal
+}
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -78,7 +82,9 @@ class RoundTest
     dao.threadSafeMessageMemPool shouldReturn mock[ThreadSafeMessageMemPool]
     dao.threadSafeMessageMemPool.pull(1) shouldReturn None
     dao.readyPeers(NodeType.Light) shouldReturn IO.pure(Map())
-    txService.pullForConsensusSafe(checkpointFormationThreshold) shouldReturn IO.pure(List(tx1, tx2).map(TransactionCacheData(_)))
+    txService.pullForConsensusSafe(checkpointFormationThreshold) shouldReturn IO.pure(
+      List(tx1, tx2).map(TransactionCacheData(_))
+    )
     txService.contains(*) shouldReturn IO.pure(true)
     txService.lookup(*) shouldReturn IO.pure(None)
     dao.transactionService shouldReturn txService
@@ -87,10 +93,10 @@ class RoundTest
     dao.id shouldReturn facilitatorId1.id
     dao.miscLogger shouldReturn Logger("MiscLogger")
 
-  val msgService = mock[MessageService[IO]]
-  msgService.contains(*) shouldReturn IO.pure(true)
-  msgService.lookup(*) shouldReturn IO.pure(None)
-  dao.messageService shouldReturn msgService
+    val msgService = mock[MessageService[IO]]
+    msgService.contains(*) shouldReturn IO.pure(true)
+    msgService.lookup(*) shouldReturn IO.pure(None)
+    dao.messageService shouldReturn msgService
 
     dao.edgeExecutionContext shouldReturn ExecutionContext.fromExecutor(
       Executors.newWorkStealingPool(8)
@@ -114,9 +120,8 @@ class RoundTest
       }"""
   )
 
-  def createRoundActor(config: Config, parent: ActorRef): TestActorRef[Round] = {
+  def createRoundActor(config: Config, parent: ActorRef): TestActorRef[Round] =
     TestActorRef(Round.props(roundData, Seq.empty, Seq.empty, dao, dataResolver, config), parent)
-  }
 
   test("it should send EmptyProposals when transaction proposals are missing") {
     val parentActor = TestProbe()
@@ -150,11 +155,7 @@ class RoundTest
 
     roundParticipant ! StartTransactionProposal(roundId)
     parentActor.expectMsgType[BroadcastLightTransactionProposal]
-    roundParticipant ! LightTransactionsProposal(roundId,
-                                                 facilitatorId3,
-                                                 Seq(tx2.hash),
-                                                 Seq(),
-                                                 Seq())
+    roundParticipant ! LightTransactionsProposal(roundId, facilitatorId3, Seq(tx2.hash), Seq(), Seq())
     underlyingActor.unionTransactionProposalsTikTok.isCancelled shouldBe true
     val unionBlock = parentActor.expectMsgType[BroadcastUnionBlockProposal]
 

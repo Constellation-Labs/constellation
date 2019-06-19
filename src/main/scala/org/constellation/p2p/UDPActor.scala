@@ -34,21 +34,26 @@ case object GetPacketGroups
 
 // Need to catch alert messages to detect socket closure.
 
-class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
-               port: Int = 16180,
-               bindInterface: String = "0.0.0.0",
-               dao: DAO)
-    extends Actor {
+class UDPActor(
+  @volatile var nextActor: Option[ActorRef] = None,
+  port: Int = 16180,
+  bindInterface: String = "0.0.0.0",
+  dao: DAO
+) extends Actor {
 
   import context.system
 
   private val address = new InetSocketAddress(bindInterface, port)
 
-  IO(Udp) ! Udp.Bind(self,
-                     address,
-                     List(Udp.SO.ReceiveBufferSize(1024 * 1024 * 20),
-                          Udp.SO.SendBufferSize(1024 * 1024 * 20),
-                          Udp.SO.ReuseAddress.apply(true)))
+  IO(Udp) ! Udp.Bind(
+    self,
+    address,
+    List(
+      Udp.SO.ReceiveBufferSize(1024 * 1024 * 20),
+      Udp.SO.SendBufferSize(1024 * 1024 * 20),
+      Udp.SO.ReuseAddress.apply(true)
+    )
+  )
 
   @volatile var udpSocket: ActorRef = _
 
@@ -65,11 +70,10 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
       nextActor = Some(next)
   }
 
-  def processMessage(d: Any, remote: InetSocketAddress): Unit = {
+  def processMessage(d: Any, remote: InetSocketAddress): Unit =
     nextActor.foreach { n =>
       n ! UDPMessage(d, remote)
     }
-  }
 
   def ready(socket: ActorRef): Receive = {
 
@@ -86,9 +90,7 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
         val pg = serMsg.packetGroup
 
-        def updatePacketGroup(serMsg: SerializedUDPMessage,
-                              messages: TrieMap[Int, SerializedUDPMessage]): Unit = {
-
+        def updatePacketGroup(serMsg: SerializedUDPMessage, messages: TrieMap[Int, SerializedUDPMessage]): Unit =
           // make sure this is not a duplicate packet first
           if (!messages.isDefinedAt(serMsg.packetGroupId)) {
 
@@ -106,8 +108,6 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
               packetGroups(pg) = messages += (serMsg.packetGroupId -> serMsg)
             }
           }
-
-        }
 
         packetGroups.get(pg) match {
 
@@ -149,7 +149,4 @@ class UDPActor(@volatile var nextActor: Option[ActorRef] = None,
 
 // Change packetGroup to UUID
 
-case class SerializedUDPMessage(data: ByteString,
-                                packetGroup: Long,
-                                packetGroupSize: Long,
-                                packetGroupId: Int)
+case class SerializedUDPMessage(data: ByteString, packetGroup: Long, packetGroupSize: Long, packetGroupId: Int)

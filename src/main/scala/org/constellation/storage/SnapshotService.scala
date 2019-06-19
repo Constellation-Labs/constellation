@@ -7,7 +7,14 @@ import cats.implicits._
 import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.{ChannelMessage, ChannelMessageMetadata, CheckpointBlock, CheckpointBlockMetadata, ConcurrentTipService, TransactionCacheData}
+import org.constellation.primitives.{
+  ChannelMessage,
+  ChannelMessageMetadata,
+  CheckpointBlock,
+  CheckpointBlockMetadata,
+  ConcurrentTipService,
+  TransactionCacheData
+}
 import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.util.Metrics
@@ -16,7 +23,7 @@ import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
 import scala.util.Try
 
-class SnapshotService[F[_]: Sync : LiftIO : Timer](
+class SnapshotService[F[_]: Sync: LiftIO: Timer](
   concurrentTipService: ConcurrentTipService,
   addressService: AddressService[F],
   checkpointService: CheckpointService[F],
@@ -37,100 +44,96 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
 
   val timers: Ref[F, TrieMap[String, Long]] = Ref.unsafe[F, TrieMap[String, Long]](TrieMap())
 
-  private def startTimer(key: String): F[Unit] = {
+  private def startTimer(key: String): F[Unit] =
     for {
       start <- Clock[F].realTime(MILLISECONDS)
       _ <- timers.update(_ += (key -> start))
     } yield ()
-  }
 
-  private def stopTimer(key: String): F[Unit] = {
+  private def stopTimer(key: String): F[Unit] =
     for {
       stop <- Clock[F].realTime(MILLISECONDS)
       t <- timers.get
       start = t(key)
       _ <- timers.update(_ += (key -> (stop - start)))
     } yield ()
-  }
 
-  def getSnapshotInfo(): F[SnapshotInfo] = for {
-    s <- snapshot.get
-    accepted <- acceptedCBSinceSnapshot.get
-    lastHeight <- lastSnapshotHeight.get
-    hashes = dao.snapshotHashes
-    addressCacheData <- addressService.toMap()
-    tips = concurrentTipService.toMap
-    snapshotCache <- s.checkpointBlocks
-      .toList
-      .map(checkpointService.fullData)
-      .sequence
-      .map(_.flatten)
-  } yield SnapshotInfo(
-    s,
-    accepted,
-    lastSnapshotHeight = lastHeight,
-    snapshotHashes = hashes,
-    addressCacheData = addressCacheData,
-    tips = tips,
-    snapshotCache = snapshotCache
-  )
+  def getSnapshotInfo(): F[SnapshotInfo] =
+    for {
+      s <- snapshot.get
+      accepted <- acceptedCBSinceSnapshot.get
+      lastHeight <- lastSnapshotHeight.get
+      hashes = dao.snapshotHashes
+      addressCacheData <- addressService.toMap()
+      tips = concurrentTipService.toMap
+      snapshotCache <- s.checkpointBlocks.toList
+        .map(checkpointService.fullData)
+        .sequence
+        .map(_.flatten)
+    } yield
+      SnapshotInfo(
+        s,
+        accepted,
+        lastSnapshotHeight = lastHeight,
+        snapshotHashes = hashes,
+        addressCacheData = addressCacheData,
+        tips = tips,
+        snapshotCache = snapshotCache
+      )
 
-  def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] = {
+  def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
       _ <- snapshot.set(snapshotInfo.snapshot)
       _ <- lastSnapshotHeight.set(snapshotInfo.lastSnapshotHeight)
       _ <- Sync[F].delay(concurrentTipService.set(snapshotInfo.tips))
       _ <- acceptedCBSinceSnapshot.set(snapshotInfo.acceptedCBSinceSnapshot)
-      _ <- snapshotInfo.addressCacheData
-              .map { case (k, v) => addressService.put(k, v) }
-              .toList
-              .sequence
-      _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache)
-              .toList
-              .map { h =>
-                LiftIO[F].liftIO(h.checkpointBlock.get.storeSOE()) *>
-                  checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h) *>
-                  dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) *>
-                  h.checkpointBlock.get
-                    .transactions.toList
-                    .map(_ => dao.metrics.incrementMetricAsync("transactionAccepted")).sequence
-              }.sequence
+      _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.put(k, v) }.toList.sequence
+      _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.map { h =>
+        LiftIO[F].liftIO(h.checkpointBlock.get.storeSOE()) *>
+          checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h) *>
+          dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) *>
+          h.checkpointBlock.get.transactions.toList
+            .map(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
+            .sequence
+      }.sequence
       _ <- dao.metrics.updateMetricAsync[F](
         "acceptedCBCacheMatchesAcceptedSize",
-        (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString)
+        (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString
+      )
     } yield ()
-  }
 
-  def syncBufferAccept(cb: CheckpointCache)(implicit dao: DAO): F[Unit] = for {
-    _ <- syncBuffer.update(_ ++ Seq(cb))
-    buffer <- syncBuffer.get
-    _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", buffer.size.toString)
-  } yield ()
+  def syncBufferAccept(cb: CheckpointCache)(implicit dao: DAO): F[Unit] =
+    for {
+      _ <- syncBuffer.update(_ ++ Seq(cb))
+      buffer <- syncBuffer.get
+      _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", buffer.size.toString)
+    } yield ()
 
-  def attemptSnapshot(): EitherT[F, SnapshotError, Unit] = for {
-    _ <- validateMaxAcceptedCBHashesInMemory()
-    _ <- validateNodeState(NodeState.Ready)
-    _ <- validateAcceptedCBsSinceSnapshot()
+  def attemptSnapshot(): EitherT[F, SnapshotError, Unit] =
+    for {
+      _ <- validateMaxAcceptedCBHashesInMemory()
+      _ <- validateNodeState(NodeState.Ready)
+      _ <- validateAcceptedCBsSinceSnapshot()
 
-    nextHeightInterval <- EitherT.liftF(getNextHeightInterval)
-    _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval)
-    blocksWithinHeightInterval <- EitherT.liftF(getBlocksWithinHeightInterval(nextHeightInterval))
-    _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
-    allBlocks = blocksWithinHeightInterval.map(_.get)
+      nextHeightInterval <- EitherT.liftF(getNextHeightInterval)
+      _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval)
+      blocksWithinHeightInterval <- EitherT.liftF(getBlocksWithinHeightInterval(nextHeightInterval))
+      _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
+      allBlocks = blocksWithinHeightInterval.map(_.get)
 
-    hashesForNextSnapshot = allBlocks.flatMap(_.checkpointBlock.map(_.baseHash)).sorted
-    nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot))
+      hashesForNextSnapshot = allBlocks.flatMap(_.checkpointBlock.map(_.baseHash)).sorted
+      nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot))
 
-    _ <- EitherT.liftF(applySnapshot())
+      _ <- EitherT.liftF(applySnapshot())
 
-    _ <- EitherT.liftF(lastSnapshotHeight.set(nextHeightInterval.toInt))
-    _ <- EitherT.liftF(acceptedCBSinceSnapshot.update(_.filterNot(hashesForNextSnapshot.contains)))
-    _ <- EitherT.liftF(updateMetricsAfterSnapshot())
+      _ <- EitherT.liftF(lastSnapshotHeight.set(nextHeightInterval.toInt))
+      _ <- EitherT.liftF(acceptedCBSinceSnapshot.update(_.filterNot(hashesForNextSnapshot.contains)))
+      _ <- EitherT.liftF(updateMetricsAfterSnapshot())
 
-    _ <- EitherT.liftF(snapshot.set(nextSnapshot))
-  } yield ()
+      _ <- EitherT.liftF(snapshot.set(nextSnapshot))
+    } yield ()
 
-  def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock): F[Unit] = {
+  def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock): F[Unit] =
     acceptedCBSinceSnapshot.get.flatMap { accepted =>
       if (accepted.contains(cb.baseHash)) {
         dao.metrics.incrementMetricAsync("checkpointAcceptedButAlreadyInAcceptedCBSinceSnapshot")
@@ -140,28 +143,24 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
         }
       }
     }
-  }
 
   private def validateMaxAcceptedCBHashesInMemory(): EitherT[F, SnapshotError, Unit] = EitherT {
-    acceptedCBSinceSnapshot
-      .get
-      .map { accepted =>
-        if (accepted.size > dao.processingConfig.maxAcceptedCBHashesInMemory)
-          Left(MaxCBHashesInMemory)
-        else
-          Right(())
-      }
-      .flatMap { e =>
-        val tap = if (e.isLeft) {
-          acceptedCBSinceSnapshot.update(accepted => accepted.slice(0, 100)) *>
-            dao.metrics.incrementMetricAsync[F]("memoryExceeded_acceptedCBSinceSnapshot") *>
-            acceptedCBSinceSnapshot.get.flatMap { accepted =>
-              dao.metrics.updateMetricAsync[F]("acceptedCBSinceSnapshot", accepted.size.toString)
-            }
-        } else Sync[F].unit
+    acceptedCBSinceSnapshot.get.map { accepted =>
+      if (accepted.size > dao.processingConfig.maxAcceptedCBHashesInMemory)
+        Left(MaxCBHashesInMemory)
+      else
+        Right(())
+    }.flatMap { e =>
+      val tap = if (e.isLeft) {
+        acceptedCBSinceSnapshot.update(accepted => accepted.slice(0, 100)) *>
+          dao.metrics.incrementMetricAsync[F]("memoryExceeded_acceptedCBSinceSnapshot") *>
+          acceptedCBSinceSnapshot.get.flatMap { accepted =>
+            dao.metrics.updateMetricAsync[F]("acceptedCBSinceSnapshot", accepted.size.toString)
+          }
+      } else Sync[F].unit
 
-        tap.map(_ => e)
-      }
+      tap.map(_ => e)
+    }
   }
 
   private def validateNodeState(requiredState: NodeState): EitherT[F, SnapshotError, Unit] = EitherT {
@@ -175,40 +174,42 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
   }
 
   private def validateAcceptedCBsSinceSnapshot(): EitherT[F, SnapshotError, Unit] = EitherT {
-    acceptedCBSinceSnapshot.get.map { accepted => accepted.size match {
-      case 0 => Left(NoAcceptedCBsSinceSnapshot)
-      case _ => Right(())
-    }}
+    acceptedCBSinceSnapshot.get.map { accepted =>
+      accepted.size match {
+        case 0 => Left(NoAcceptedCBsSinceSnapshot)
+        case _ => Right(())
+      }
+    }
   }
 
-  private def validateSnapshotHeightIntervalCondition(nextHeightInterval: Long): EitherT[F, SnapshotError, Unit] = EitherT {
-    val minTipHeight = Try { concurrentTipService.getMinTipHeight() }.getOrElse(0L)
-    val snapshotHeightDelayInterval = dao.processingConfig.snapshotHeightDelayInterval
+  private def validateSnapshotHeightIntervalCondition(nextHeightInterval: Long): EitherT[F, SnapshotError, Unit] =
+    EitherT {
+      val minTipHeight = Try { concurrentTipService.getMinTipHeight() }.getOrElse(0L)
+      val snapshotHeightDelayInterval = dao.processingConfig.snapshotHeightDelayInterval
 
-    dao.metrics.updateMetricAsync[F]("minTipHeight", minTipHeight.toString) *>
-      Sync[F].pure {
-        if (minTipHeight > (nextHeightInterval + snapshotHeightDelayInterval)) {
-          Right(())
-        } else {
-          Left(HeightIntervalConditionNotMet)
-        }
-      }
-      .flatMap { e =>
-        val tap = if (e.isLeft) {
-          dao.metrics.incrementMetricAsync[F]("snapshotHeightIntervalConditionNotMet")
-        } else {
-          dao.metrics.incrementMetricAsync[F]("snapshotHeightIntervalConditionMet")
-        }
+      dao.metrics.updateMetricAsync[F]("minTipHeight", minTipHeight.toString) *>
+        Sync[F].pure {
+          if (minTipHeight > (nextHeightInterval + snapshotHeightDelayInterval)) {
+            Right(())
+          } else {
+            Left(HeightIntervalConditionNotMet)
+          }
+        }.flatMap { e =>
+          val tap = if (e.isLeft) {
+            dao.metrics.incrementMetricAsync[F]("snapshotHeightIntervalConditionNotMet")
+          } else {
+            dao.metrics.incrementMetricAsync[F]("snapshotHeightIntervalConditionMet")
+          }
 
-        tap.map(_ => e)
-      }
-  }
+          tap.map(_ => e)
+        }
+    }
 
   private def getNextHeightInterval: F[Long] =
     lastSnapshotHeight.get
       .map(_ + dao.processingConfig.snapshotHeightInterval)
 
-  private def getBlocksWithinHeightInterval(nextHeightInterval: Long): F[List[Option[CheckpointCache]]] = {
+  private def getBlocksWithinHeightInterval(nextHeightInterval: Long): F[List[Option[CheckpointCache]]] =
     for {
       height <- lastSnapshotHeight.get
 
@@ -220,7 +221,6 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
         })
       }
     } yield blocks
-  }
 
   private def validateBlocksWithinHeightInterval(
     blocks: List[Option[CheckpointCache]]
@@ -240,27 +240,24 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
     }
   }
 
-  private def getNextSnapshot(hashesForNextSnapshot: Seq[String]): F[Snapshot] = {
+  private def getNextSnapshot(hashesForNextSnapshot: Seq[String]): F[Snapshot] =
     snapshot.get
       .map(_.hash)
       .map(hash => Snapshot(hash, hashesForNextSnapshot))
-  }
 
-  private def applySnapshot(): F[Unit] = {
+  private def applySnapshot(): F[Unit] =
     snapshot.get.flatMap { currentSnapshot =>
       if (currentSnapshot == Snapshot.snapshotZero) {
         Sync[F].unit
       } else {
         dao.metrics.incrementMetricAsync(Metrics.snapshotCount) *>
           writeSnapshotToDisk(currentSnapshot) *>
-            applyAfterSnapshot(currentSnapshot)
+          applyAfterSnapshot(currentSnapshot)
       }
     }
-  }
 
-  private def writeSnapshotToDisk(currentSnapshot: Snapshot): F[Unit] = {
-    currentSnapshot.checkpointBlocks
-      .toList
+  private def writeSnapshotToDisk(currentSnapshot: Snapshot): F[Unit] =
+    currentSnapshot.checkpointBlocks.toList
       .map(checkpointService.fullData)
       .sequence
       .map {
@@ -278,21 +275,21 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
           }
       }
       .void
-  }
 
-  private def applyAfterSnapshot(currentSnapshot: Snapshot): F[Unit] = {
+  private def applyAfterSnapshot(currentSnapshot: Snapshot): F[Unit] =
     for {
       _ <- acceptSnapshot(currentSnapshot)
 
       _ <- totalNumCBsInSnapshots.update(_ + currentSnapshot.checkpointBlocks.size)
-      _ <- totalNumCBsInSnapshots.get.flatTap { total => dao.metrics.updateMetricAsync("totalNumCBsInShapshots", total.toString) }
+      _ <- totalNumCBsInSnapshots.get.flatTap { total =>
+        dao.metrics.updateMetricAsync("totalNumCBsInShapshots", total.toString)
+      }
 
       _ <- checkpointService.applySnapshot(currentSnapshot.checkpointBlocks.toList)
       _ <- dao.metrics.updateMetricAsync(Metrics.lastSnapshotHash, currentSnapshot.hash)
     } yield ()
-  }
 
-  private def updateMetricsAfterSnapshot(): F[Unit] = {
+  private def updateMetricsAfterSnapshot(): F[Unit] =
     for {
       accepted <- acceptedCBSinceSnapshot.get
       height <- lastSnapshotHeight.get
@@ -302,31 +299,27 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
       _ <- dao.metrics.updateMetricAsync("lastSnapshotHeight", height)
       _ <- dao.metrics.updateMetricAsync("nextSnapshotHeight", nextHeight)
     } yield ()
-  }
 
-  private def acceptSnapshot(s: Snapshot): F[Unit] = {
+  private def acceptSnapshot(s: Snapshot): F[Unit] =
     for {
       cbs <- getCheckpointBlocksFromSnapshot(s)
       _ <- cbs.map(applySnapshotMessages(s, _)).sequence
       _ <- applySnapshotTransactions(s, cbs)
       _ <- checkpointService.applySnapshot(cbs.map(_.baseHash))
     } yield ()
-  }
 
-  private def getCheckpointBlocksFromSnapshot(s: Snapshot): F[List[CheckpointBlockMetadata]] = {
+  private def getCheckpointBlocksFromSnapshot(s: Snapshot): F[List[CheckpointBlockMetadata]] =
     for {
-      cbData <- s.checkpointBlocks
-        .toList
+      cbData <- s.checkpointBlocks.toList
         .map(checkpointService.lookup)
         .sequence
 
       _ <- if (cbData.exists(_.isEmpty)) {
-          dao.metrics.incrementMetricAsync("snapshotCBAcceptQueryFailed")
-        } else Sync[F].unit
+        dao.metrics.incrementMetricAsync("snapshotCBAcceptQueryFailed")
+      } else Sync[F].unit
 
       cbs = cbData.flatten.map(_.checkpointBlock)
     } yield cbs
-  }
 
   private def applySnapshotMessages(s: Snapshot, cb: CheckpointBlockMetadata): F[Unit] = {
 
@@ -342,15 +335,18 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
       )
 
     cb.messagesMerkleRoot.traverse {
-      messageService.findHashesByMerkleRoot(_).flatMap(_.get.toList.traverse { msgHash =>
-        dao.metrics.incrementMetricAsync("messageSnapshotHashUpdated") *>
-          LiftIO[F].liftIO(DataResolver.resolveMessagesDefaults(msgHash).map(_.get.channelMessage))
-            .flatMap(updateMessage(msgHash, _))
-      })
+      messageService
+        .findHashesByMerkleRoot(_)
+        .flatMap(_.get.toList.traverse { msgHash =>
+          dao.metrics.incrementMetricAsync("messageSnapshotHashUpdated") *>
+            LiftIO[F]
+              .liftIO(DataResolver.resolveMessagesDefaults(msgHash).map(_.get.channelMessage))
+              .flatMap(updateMessage(msgHash, _))
+        })
     }.void
   }
 
-  private def applySnapshotTransactions(s: Snapshot, cbs: List[CheckpointBlockMetadata]): F[Unit] = {
+  private def applySnapshotTransactions(s: Snapshot, cbs: List[CheckpointBlockMetadata]): F[Unit] =
     for {
       txs <- cbs
         .traverse(_.transactionsMerkleRoot.traverse(checkpointService.fetchTransactions).map(_.getOrElse(List())))
@@ -358,26 +354,30 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
 
       _ <- txs.traverse(t => addressService.lockForSnapshot(Set(t.src, t.dst), addressService.transferSnapshot(t).void))
 
-      _ <- cbs.traverse(_.transactionsMerkleRoot.traverse(transactionService.applySnapshot(txs.map(TransactionCacheData(_)), _)))
+      _ <- cbs.traverse(
+        _.transactionsMerkleRoot.traverse(transactionService.applySnapshot(txs.map(TransactionCacheData(_)), _))
+      )
     } yield ()
-  }
 }
 
 object SnapshotService {
-  def apply[F[_]: Sync : LiftIO : Timer](
+
+  def apply[F[_]: Sync: LiftIO: Timer](
     concurrentTipService: ConcurrentTipService,
     addressService: AddressService[F],
     checkpointService: CheckpointService[F],
     messageService: MessageService[F],
     transactionService: TransactionService[F],
     dao: DAO
-  ) = new SnapshotService[F](
-    concurrentTipService,
-    addressService,
-    checkpointService,
-    messageService,
-    transactionService,
-    dao)
+  ) =
+    new SnapshotService[F](
+      concurrentTipService,
+      addressService,
+      checkpointService,
+      messageService,
+      transactionService,
+      dao
+    )
 }
 
 sealed trait SnapshotError

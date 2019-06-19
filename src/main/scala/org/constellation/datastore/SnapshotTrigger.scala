@@ -10,8 +10,7 @@ import scala.util.Try
 class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO)
     extends Periodic[Try[Unit]]("SnapshotTrigger", periodSeconds) {
 
-  override def trigger(): Future[Try[Unit]] = {
+  override def trigger(): Future[Try[Unit]] =
     Snapshot.triggerSnapshot(round)
-  }
 
 }

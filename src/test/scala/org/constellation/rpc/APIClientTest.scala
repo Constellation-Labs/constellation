@@ -16,9 +16,8 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-  override def afterEach(): Unit = {
+  override def afterEach(): Unit =
     TestNode.clearNodes()
-  }
 
   "GET to /id" should "get the current nodes public key id" in {
     val keyPair = KeyUtils.makeKeyPair()

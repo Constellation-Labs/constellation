@@ -124,19 +124,15 @@ object ConstellationNode extends StrictLogging {
       val peerHttpPortFromArg = portOffset.map { _ + 2 }
 
       val httpPort = httpPortFromArg.getOrElse(
-        Option(System.getenv("DAG_HTTP_PORT"))
-          .map {
-            _.toInt
-          }
-          .getOrElse(config.getInt("http.port"))
+        Option(System.getenv("DAG_HTTP_PORT")).map {
+          _.toInt
+        }.getOrElse(config.getInt("http.port"))
       )
 
       val peerHttpPort = peerHttpPortFromArg.getOrElse(
-        Option(System.getenv("DAG_PEER_HTTP_PORT"))
-          .map {
-            _.toInt
-          }
-          .getOrElse(config.getInt("http.peer-port"))
+        Option(System.getenv("DAG_PEER_HTTP_PORT")).map {
+          _.toInt
+        }.getOrElse(config.getInt("http.peer-port"))
       )
 
       implicit val system: ActorSystem = ActorSystem("Constellation")
@@ -223,6 +219,7 @@ class ConstellationNode(
   dao.metrics = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
 
   val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
+
   val crossTalkConsensusActor: ActorRef =
     system.actorOf(CrossTalkConsensus.props(remoteSenderActor, ConfigFactory.load().resolve()))
 
@@ -262,24 +259,23 @@ class ConstellationNode(
     Http().bindAndHandle(routes, nodeConfig.httpInterface, nodeConfig.httpPort)
 
   val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
+
   val randomTXManager = new RandomTransactionManager(
     crossTalkConsensusActor,
     dao.processingConfig.randomTransactionLoopTimeSeconds
   )
 
-  def getIPData: ValidPeerIPData = {
+  def getIPData: ValidPeerIPData =
     ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)
-  }
 
-  def getInetSocketAddress: InetSocketAddress = {
+  def getInetSocketAddress: InetSocketAddress =
     new InetSocketAddress(nodeConfig.hostName, nodeConfig.peerHttpPort)
-  }
 
   // Setup http server for peer API
   // TODO: Add shutdown mechanism
   Http()
     .bind(nodeConfig.httpInterface, nodeConfig.peerHttpPort)
-    .runWith(Sink foreach { conn =>
+    .runWith(Sink.foreach { conn =>
       val address = conn.remoteAddress
       conn.handleWith(peerAPI.routes(address))
     })
@@ -301,8 +297,7 @@ class ConstellationNode(
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
 
-  def getAPIClient(host: String = nodeConfig.hostName,
-                   port: Int = nodeConfig.httpPort): APIClient = {
+  def getAPIClient(host: String = nodeConfig.hostName, port: Int = nodeConfig.httpPort): APIClient = {
     val api = APIClient(host, port)
     api.id = dao.id
     api
@@ -315,7 +310,7 @@ class ConstellationNode(
   }
 
   // TODO: Change E2E to not use this but instead rely on peer discovery, need to send addresses there too
-  def getAddPeerRequest: PeerMetadata = {
+  def getAddPeerRequest: PeerMetadata =
     PeerMetadata(
       nodeConfig.hostName,
       nodeConfig.peerHttpPort,
@@ -326,7 +321,6 @@ class ConstellationNode(
         diskUsableBytes = new java.io.File(dao.snapshotPath.pathAsString).getUsableSpace
       )
     )
-  }
 
   def getAPIClientForNode(node: ConstellationNode): APIClient = {
     val ipData = node.getIPData

@@ -10,8 +10,7 @@ import org.constellation.util.Metrics
 import scala.collection.immutable.Queue
 import scala.concurrent.duration._
 
-class StorageService[F[_]: Sync, V](expireAfterMinutes: Option[Int] = Some(240))
-    extends StorageAlgebra[F, String, V] {
+class StorageService[F[_]: Sync, V](expireAfterMinutes: Option[Int] = Some(240)) extends StorageAlgebra[F, String, V] {
   private val lruCache: Cache[String, V] = {
     val cacheWithStats = Scaffeine().recordStats()
 

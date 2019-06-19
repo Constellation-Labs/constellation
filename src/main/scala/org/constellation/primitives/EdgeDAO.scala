@@ -28,14 +28,13 @@ class ThreadSafeMessageMemPool() extends StrictLogging {
 
   val messageHashToSendRequest: TrieMap[String, ChannelSendRequest] = TrieMap()
 
-  def release(messages: Seq[ChannelMessage]): Unit = {
+  def release(messages: Seq[ChannelMessage]): Unit =
     messages.foreach { m =>
       activeChannels.get(m.signedMessageData.data.channelId).foreach {
         _.release()
       }
 
     }
-  }
 
   // TODO: Fix
   def pull(minCount: Int = 1): Option[Seq[ChannelMessage]] = this.synchronized {
@@ -60,21 +59,21 @@ class ThreadSafeMessageMemPool() extends StrictLogging {
     true
   }
 
-  def put(message: Seq[ChannelMessage],
-          overrideLimit: Boolean = false)(implicit dao: DAO): Boolean = this.synchronized {
-    val notContained = !messages.contains(message)
+  def put(message: Seq[ChannelMessage], overrideLimit: Boolean = false)(implicit dao: DAO): Boolean =
+    this.synchronized {
+      val notContained = !messages.contains(message)
 
-    if (notContained) {
-      if (overrideLimit) {
-        // Prepend in front to process user TX first before random ones
-        messages = Seq(message) ++ messages
+      if (notContained) {
+        if (overrideLimit) {
+          // Prepend in front to process user TX first before random ones
+          messages = Seq(message) ++ messages
 
-      } else if (messages.size < dao.processingConfig.maxMemPoolSize) {
-        messages :+= message
+        } else if (messages.size < dao.processingConfig.maxMemPoolSize) {
+          messages :+= message
+        }
       }
+      notContained
     }
-    notContained
-  }
 
   def unsafeCount: Int = messages.size
 
@@ -83,11 +82,12 @@ class ThreadSafeMessageMemPool() extends StrictLogging {
 import constellation._
 // TODO: wkoszycki this one is temporary till (#412 Flatten checkpointBlock in CheckpointCache) is finished
 case object MissingCheckpointBlockException extends Exception("CheckpointBlock object is empty.")
-case class MissingHeightException(cb: CheckpointBlock) extends Exception(s"CheckpointBlock ${cb.baseHash} height is missing for soeHash ${cb.soeHash}.")
+case class MissingHeightException(cb: CheckpointBlock)
+    extends Exception(s"CheckpointBlock ${cb.baseHash} height is missing for soeHash ${cb.soeHash}.")
 case class PendingAcceptance(cb: CheckpointBlock)
-      extends Exception(s"CheckpointBlock: ${cb.baseHash} is already pending acceptance phase.")
+    extends Exception(s"CheckpointBlock: ${cb.baseHash} is already pending acceptance phase.")
 case class CheckpointAcceptBlockAlreadyStored(cb: CheckpointBlock)
-      extends Exception(s"CheckpointBlock: ${cb.baseHash} is already stored.")
+    extends Exception(s"CheckpointBlock: ${cb.baseHash} is already stored.")
 
 trait EdgeDAO {
 
@@ -154,9 +154,7 @@ trait EdgeDAO {
   val finishedExecutionContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
 
-
-  def pullMessages(minimumCount: Int): Option[Seq[ChannelMessage]] = {
+  def pullMessages(minimumCount: Int): Option[Seq[ChannelMessage]] =
     threadSafeMessageMemPool.pull(minimumCount)
-  }
 
 }

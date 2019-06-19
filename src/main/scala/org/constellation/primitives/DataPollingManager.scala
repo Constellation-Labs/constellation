@@ -29,7 +29,7 @@ class DataPollingManager(periodSeconds: Int = 60)(implicit dao: DAO)
   // Need a better way to manage these, but hardcode for now.
   private val bartTransitUrl = "https://api.bart.gov/gtfsrt/tripupdate.aspx"
 
-  private def execute(channelId: String) = {
+  private def execute(channelId: String) =
     futureTryWithTimeoutMetric(
       {
         val latest = transitService.pollJson(bartTransitUrl)
@@ -43,11 +43,9 @@ class DataPollingManager(periodSeconds: Int = 60)(implicit dao: DAO)
         dao.metrics.incrementMetric("dataPollingFailure")
       }
     )
-  }
 
-  override def trigger(): Future[Try[Unit]] = {
+  override def trigger(): Future[Try[Unit]] =
     if (channelId != null) {
       execute(channelId)
     } else Future.successful(Try(Unit))
-  }
 }

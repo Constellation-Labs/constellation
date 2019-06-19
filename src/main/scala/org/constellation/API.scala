@@ -49,9 +49,11 @@ case class PeerMetadata(
   resourceInfo: ResourceInfo
 )
 
-case class ResourceInfo(maxMemory: Long = Runtime.getRuntime.maxMemory(),
-                        cpuNumber: Int = Runtime.getRuntime.availableProcessors(),
-                        diskUsableBytes: Long)
+case class ResourceInfo(
+  maxMemory: Long = Runtime.getRuntime.maxMemory(),
+  cpuNumber: Int = Runtime.getRuntime.availableProcessors(),
+  diskUsableBytes: Long
+)
 
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
 
@@ -109,7 +111,7 @@ case class BlockUIOutput(
   id: String,
   height: Long,
   parents: Seq[String],
-  channels: Seq[ChannelValidationInfo],
+  channels: Seq[ChannelValidationInfo]
 )
 
 class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
@@ -211,9 +213,8 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                     cb.soeHash,
                     ccd.height.get.min,
                     cb.parentSOEHashes,
-                    cb.messages.map { _.signedMessageData.data.channelId }.distinct.map {
-                      channelId =>
-                        ChannelValidationInfo(channelId, true)
+                    cb.messages.map { _.signedMessageData.data.channelId }.distinct.map { channelId =>
+                      ChannelValidationInfo(channelId, true)
                     }
                   )
                 })
@@ -233,8 +234,13 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             val channelRes =
               Snapshot.findLatestMessageWithSnapshotHash(0, msg)
 
-            val res = if(channelRes.isDefined || msg.isEmpty) channelRes
-            else Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.lookup(msg.get.channelMessage.signedMessageData.hash).unsafeRunSync())
+            val res =
+              if (channelRes.isDefined || msg.isEmpty) channelRes
+              else
+                Snapshot.findLatestMessageWithSnapshotHash(
+                  0,
+                  dao.messageService.lookup(msg.get.channelMessage.signedMessageData.hash).unsafeRunSync()
+                )
 
             val proof = res.flatMap { cmd =>
               cmd.snapshotHash.flatMap { snapshotHash =>
@@ -252,15 +258,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                   }
                   val blockProof = MerkleTree(blocksInSnapshot)
                     .createProof(blockHashForMessage)
-                  val block = storedSnapshot.checkpointCache
-                    .filter {
-                      _.checkpointBlock.get.baseHash == blockHashForMessage
-                    }
-                    .head
-                    .checkpointBlock
-                    .get
-                  val messageProofInput = block.transactions.map { _.hash } ++ block.messages
-                    .map { _.signedMessageData.signatures.hash }
+                  val block = storedSnapshot.checkpointCache.filter {
+                    _.checkpointBlock.get.baseHash == blockHashForMessage
+                  }.head.checkpointBlock.get
+                  val messageProofInput = block.transactions.map { _.hash } ++ block.messages.map {
+                    _.signedMessageData.signatures.hash
+                  }
                   val messageProof = MerkleTree(messageProofInput.toList)
                     .createProof(cmd.channelMessage.signedMessageData.signatures.hash)
                   ChannelProof(
@@ -467,10 +470,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         } ~
         path("peerHealthCheck") {
           val resetTimeout = 1.second
-          val breaker = new CircuitBreaker(system.scheduler,
-                                           maxFailures = 1,
-                                           callTimeout = 5.seconds,
-                                           resetTimeout)
+          val breaker = new CircuitBreaker(system.scheduler, maxFailures = 1, callTimeout = 5.seconds, resetTimeout)
 
           val response = PeerManager.broadcast(_.getString("health"))
 
@@ -511,7 +511,8 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               sendRequest.dst,
               sendRequest.amountActual,
               dao.keyPair,
-              normalized = false)
+              normalized = false
+            )
 
             dao.transactionService
               .put(TransactionCacheData(tx, inMemPool = true))
@@ -584,13 +585,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
     }
   }
 
-  private def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
+  private def myUserPassAuthenticator(credentials: Credentials): Option[String] =
     credentials match {
       case p @ Credentials.Provided(id) if id == authId && p.verify(authPassword) =>
         Some(id)
       case _ => None
     }
-  }
 
   val routes = withTimer("api") {
     if (authEnabled) {

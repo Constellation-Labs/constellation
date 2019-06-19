@@ -34,7 +34,7 @@ object CustomDirectives {
   trait Throttle {
 
     def throttle(tps: Double): Directive0 =
-      extractClientIP flatMap { ip =>
+      extractClientIP.flatMap { ip =>
         val rateLimiter = Limiters.getInstance(tps)
         if (rateLimiter.tryAcquire(1)) {
           pass

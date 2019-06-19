@@ -24,19 +24,16 @@ object Genesis {
     createTransaction(debtAddress, keyPair.getPublic.toId.address, 4e9.toLong, keyPair)
   }
 
-  def createGenesisBlock(keyPair: KeyPair): CheckpointBlock = {
+  def createGenesisBlock(keyPair: KeyPair): CheckpointBlock =
     CheckpointBlock.createCheckpointBlock(Seq(createGenesisTransaction(keyPair)), GenesisTips)(
       keyPair
     )
-  }
 
   def start()(implicit dao: DAO): Unit = {
     // TODO: Remove initial distribution
     //val genesis = createGenesisBlock(dao.keyPair)
     val fakeIdToGenerateTips = KeyUtils.makeKeyPair().getPublic.toId
-    val go = createGenesisAndInitialDistributionDirect(dao.selfAddressStr,
-                                                       Set(fakeIdToGenerateTips),
-                                                       dao.keyPair)
+    val go = createGenesisAndInitialDistributionDirect(dao.selfAddressStr, Set(fakeIdToGenerateTips), dao.keyPair)
     dao.acceptGenesis(go, setAsTips = true)
 
   }
@@ -58,7 +55,7 @@ object Genesis {
       Seq(
         TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash, Some(genesisSOE.baseHash)),
         TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash, Some(genesisSOE.baseHash))
-      ),
+      )
     )(keyPair)
 
   }
@@ -69,9 +66,11 @@ object Genesis {
     * @param ids: Initial node public keys
     * @return : Resolved edges for state update
     */
-  def createGenesisAndInitialDistributionDirect(selfAddressStr: String,
-                                                ids: Set[Id],
-                                                keyPair: KeyPair): GenesisObservation = {
+  def createGenesisAndInitialDistributionDirect(
+    selfAddressStr: String,
+    ids: Set[Id],
+    keyPair: KeyPair
+  ): GenesisObservation = {
 
     val genesisCBO = createGenesisBlock(keyPair)
     val soe = genesisCBO.soe
@@ -88,9 +87,8 @@ import org.constellation.primitives.Genesis._
 
 trait Genesis extends NodeData with EdgeDAO {
 
-  def createGenesisAndInitialDistribution(ids: Set[Id]): GenesisObservation = {
+  def createGenesisAndInitialDistribution(ids: Set[Id]): GenesisObservation =
     createGenesisAndInitialDistributionDirect(selfAddressStr, ids, keyPair)
-  }
 
   def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = false)(implicit dao: DAO): Unit = {
     // Store hashes for the edges
@@ -101,18 +99,22 @@ trait Genesis extends NodeData with EdgeDAO {
       IO(go.genesis.store(CheckpointCache(Some(go.genesis), height = Some(Height(0, 0))))) *>
       IO(go.initialDistribution.store(CheckpointCache(Some(go.initialDistribution), height = Some(Height(1, 1))))) *>
       IO(go.initialDistribution2.store(CheckpointCache(Some(go.initialDistribution2), height = Some(Height(1, 1))))))
-        .unsafeRunSync()
+      .unsafeRunSync()
 
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
     go.genesis.transactions.foreach { rtx =>
       val bal = rtx.amount - (go.initialDistribution.transactions.map { _.amount }.sum * 2)
-      dao.addressService.put(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal)).unsafeRunSync()
+      dao.addressService
+        .put(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
+        .unsafeRunSync()
     }
 
     // Store the balance for the initial distribution addresses along with starting rep score.
     go.initialDistribution.transactions.foreach { t =>
       val bal = t.amount * 2
-      dao.addressService.put(t.dst.hash, AddressCacheData(bal, bal, Some(1000D), balanceByLatestSnapshot = bal)).unsafeRunSync()
+      dao.addressService
+        .put(t.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
+        .unsafeRunSync()
     }
     val numTX = (1 + go.initialDistribution.transactions.size * 2).toString
     //  metricsManager ! UpdateMetric("validTransactions", numTX)
@@ -143,19 +145,13 @@ trait Genesis extends NodeData with EdgeDAO {
     // println(s"accept genesis = ", go)
   }
 
-  private def storeTransactions(genesisObservation: GenesisObservation)(implicit dao: DAO): Unit = {
-    Seq(genesisObservation.genesis,
-        genesisObservation.initialDistribution,
-        genesisObservation.initialDistribution2)
-      .flatMap { cb =>
+  private def storeTransactions(genesisObservation: GenesisObservation)(implicit dao: DAO): Unit =
+    Seq(genesisObservation.genesis, genesisObservation.initialDistribution, genesisObservation.initialDistribution2).flatMap {
+      cb =>
         cb.transactions
           .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
           .map(tcd => dao.transactionService.put(tcd, TransactionStatus.Accepted))
-      }
-      .toList
-      .sequence
-      .void
+    }.toList.sequence.void
       .unsafeRunSync()
-  }
 
 }

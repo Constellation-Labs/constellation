@@ -11,13 +11,12 @@ object SwayDbConversions {
   implicit def swayIOtoIO[A](io: swaydb.data.IO[A]): IO[A] = IO(io.get)
 
   class SwayDbKryoSerializer[T <: AnyRef] extends Serializer[T] {
-    def write(data: T): Slice[Byte] = {
-      Slice(KryoSerializer.serializeAnyRef(data))
-    }
 
-    def read(data: Slice[Byte]): T = {
+    def write(data: T): Slice[Byte] =
+      Slice(KryoSerializer.serializeAnyRef(data))
+
+    def read(data: Slice[Byte]): T =
       KryoSerializer.deserializeCast[T](data.toArray)
-    }
   }
 
   implicit object TransactionSerializer extends SwayDbKryoSerializer[TransactionCacheData]
