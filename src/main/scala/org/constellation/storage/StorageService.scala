@@ -29,11 +29,11 @@ class StorageService[F[_]: Sync, V](expireAfterMinutes: Option[Int] = Some(240))
   def update(key: String, updateFunc: V => V, empty: => V): F[V] =
     lookup(key)
       .map(_.map(updateFunc).getOrElse(empty))
-      .flatMap(put(key, _))
+      .flatMap(v => Sync[F].delay(lruCache.put(key, v)).map(_ => v))
 
   def update(key: String, updateFunc: V => V): F[Option[V]] =
     lookup(key)
-      .flatMap(_.map(updateFunc).traverse(put(key, _)))
+      .flatMap(_.map(updateFunc).traverse(v => Sync[F].delay(lruCache.put(key, _)).map(_ => v)))
 
   def put(key: String, value: V): F[V] =
     queueRef.get.flatMap { queue =>
