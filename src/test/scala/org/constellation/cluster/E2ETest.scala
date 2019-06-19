@@ -67,9 +67,9 @@ class E2ETest extends E2E {
 //      randomizePorts = false,
 //      isLightNode = true
 //    )
-
+//
 //    val lightNodeAPI = lightNode.getAPIClient()
-
+//
 //    Simulation.awaitConditionMet(
 //      "Light node has no data",
 //      lightNodeAPI.getBlocking[Seq[String]]("channelKeys").nonEmpty

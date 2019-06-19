@@ -131,6 +131,8 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
       _ <- EitherT.liftF(updateMetricsAfterSnapshot())
 
       _ <- EitherT.liftF(snapshot.set(nextSnapshot))
+
+      _ <- EitherT.liftF(timers.get.flatMap(t => Sync[F].delay(dao.miscLogger.info(t.toString))))
     } yield ()
 
   def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock): F[Unit] =
@@ -304,7 +306,11 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
     for {
       cbs <- getCheckpointBlocksFromSnapshot(s)
       _ <- cbs.map(applySnapshotMessages(s, _)).sequence
+
+      _ <- startTimer("applySnapshotTransactions")
       _ <- applySnapshotTransactions(s, cbs)
+      _ <- stopTimer("applySnapshotTransactions")
+
       _ <- checkpointService.applySnapshot(cbs.map(_.baseHash))
     } yield ()
 

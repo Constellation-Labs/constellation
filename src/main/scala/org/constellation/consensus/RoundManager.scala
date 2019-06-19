@@ -64,7 +64,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
             ownRoundInProgress = false
             log.error(e, s"unable to start block creation round due to: ${e.getMessage}")
           case Success(_) =>
-            log.info(s"[${dao.id.short}] ${roundData.roundId} started round")
+            log.debug(s"[${dao.id.short}] ${roundData.roundId} started round")
             startRound(roundData, tuple._2, tuple._3, startedByThisNode = true)
             passToParentActor(NotifyFacilitators(roundData))
             passToRoundActor(
