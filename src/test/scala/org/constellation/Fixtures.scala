@@ -8,7 +8,9 @@ import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.{Id, SendToAddress}
 import org.constellation.primitives.Transaction
-import org.constellation.util.SignHelp
+import org.constellation.util.{APIClient, SignHelp}
+
+import scala.concurrent.ExecutionContext
 
 object Fixtures {
 
@@ -60,6 +62,12 @@ object Fixtures {
   def makeTransaction(srcAddressString: String, destinationAddressString: String, amt: Long, keyPair: KeyPair) = {
     val sendRequest = SendToAddress(destinationAddressString, amt)
     createTransaction(srcAddressString, sendRequest.dst, sendRequest.amountActual, keyPair)
+  }
+
+  def getAPIClient(hostName: String, httpPort: Int)(implicit dao: DAO, executionContext: ExecutionContext) = {
+    val api = APIClient(host = hostName, port = httpPort)
+    api.id = id
+    api
   }
 
 }

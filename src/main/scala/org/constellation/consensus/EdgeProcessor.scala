@@ -220,63 +220,55 @@ object EdgeProcessor extends StrictLogging {
     nestedAcceptCount: Int = 0
   )(implicit dao: DAO): Unit = {
 
-    val maybeAcceptedBlock = dao.checkpointService
-      .accept(checkpointCacheData)
-      .map { _ =>
-        Option(checkpointCacheData)
-      }
-      .recoverWith {
-        case error @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
-          logger.warn(s"Accepting cb from other node failed due to: ${error.getMessage}")
-          IO.pure(None)
-      }
+    val block = checkpointCacheData.checkpointBlock.get
+    val parents = block.parentSOEBaseHashes()
+    dao.miscLogger.warn(
+      s"[${dao.id.short}] acceptWithResolveAttempt block.parentSOEBaseHashes $parents"
+    )
 
-    maybeAcceptedBlock
-      .unsafeRunSync()
-      .foreach { acceptedBlock =>
-        val block = acceptedBlock.checkpointBlock.get
+    val parentExists: Seq[(String, Boolean)] = parents.map { h =>
+      h -> dao.checkpointService.contains(h).unsafeRunSync()
+    }
 
-        val parents = block.parentSOEBaseHashes
-        logger.warn(
-          s"[${dao.id.short}] acceptWithResolveAttempt block.parentSOEBaseHashes ${parents} "
-        )
-        val parentExists = parents.map { h =>
-          h -> dao.checkpointService.contains(h).unsafeRunSync()
+    if (parentExists.nonEmpty && parentExists.forall(_._2 == true)) {
+      dao.metrics.incrementMetricAsync[IO]("resolveFinishedCheckpointParentsPresent").unsafeRunSync()
+      dao.checkpointService
+        .accept(checkpointCacheData)
+        .map { _ =>
+          Option(checkpointCacheData)
         }
-        if (parentExists.forall(_._2)) {
-          dao.metrics.incrementMetric("resolveFinishedCheckpointParentsPresent")
-        } else {
-          if (nestedAcceptCount >= ConfigUtil.maxNestedCBresolution) {
-            throw new RuntimeException(s"Max nested CB resolution: $nestedAcceptCount reached.")
-          }
-          dao.metrics.incrementMetric("resolveFinishedCheckpointParentMissing")
-          parentExists.filterNot(_._2).foreach {
-            case (h, _) =>
-              DataResolver
-                .resolveCheckpointDefaults(h)
-                .flatMap { ccd =>
-                  IO {
-                    ccd.foreach { cd =>
-                      cd.checkpointBlock.foreach { cb =>
-                        if (cd.children < 2) {
-                          dao.concurrentTipService.update(cb)(dao).unsafeRunSync()
-                        }
-                        if (!dao.checkpointService
-                              .contains(cd.checkpointBlock.get.baseHash)
-                              .unsafeRunSync()) {
-                          dao.metrics.incrementMetric("resolveAcceptCBCall")
-                          acceptWithResolveAttempt(cd, nestedAcceptCount + 1)
-                        }
-                      }
+        .recoverWith {
+          case error @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
+            logger.warn(s"Accepting cb from other node failed due to: ${error.getMessage}")
+            IO.pure(None)
+        }
+    } else {
+      dao.metrics.incrementMetricAsync[IO]("resolveFinishedCheckpointParentMissing").unsafeRunSync()
+      parentExists.filterNot(_._2 == true).foreach {
+        case (h, _) =>
+          DataResolver
+            .resolveCheckpointDefaults(h)
+            .flatMap { ccd =>
+              IO {
+                ccd.foreach { cd =>
+                  cd.checkpointBlock.foreach { cb =>
+                    if (cd.children < 2) {
+                      dao.concurrentTipService.update(cb)(dao).unsafeRunSync()
+                    }
+                    if (!dao.checkpointService
+                          .contains(cd.checkpointBlock.get.baseHash)
+                          .unsafeRunSync()) {
+                      dao.metrics.incrementMetric("resolveAcceptCBCall")
+                      acceptWithResolveAttempt(cd, nestedAcceptCount + 1)
                     }
                   }
                 }
-                .unsafeRunAsyncAndForget()
-          }
-
-        }
-
+              }
+            }
+            .unsafeRunAsyncAndForget()
       }
+
+    }
 
   }
 
