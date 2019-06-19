@@ -68,6 +68,15 @@ class TransactionService[F[_]: Sync : Concurrent](dao: DAO, pullSemaphore: Semap
       .flatMap(_ => txs.map(tx => accepted.remove(tx.transaction.hash)).sequence.void)
   }
 
+  def returnTransactionsToPending(transactionsToReturn: Seq[String]): F[List[TransactionCacheData]] = {
+    transactionsToReturn.toList
+      .map(inConsensus.lookup)
+      .sequence
+      .map(x => x.flatten)
+      .map(txs => txs.map(tx => pending.put(tx.transaction.hash, tx)))
+      .flatMap(_.sequence)
+  }
+
   def pullForConsensusSafe(minCount: Int, roundId: String = "roundId"): F[List[TransactionCacheData]] = {
     new SingleLock[F, List[TransactionCacheData]](roundId, pullSemaphore).use(pullForConsensus(minCount, roundId))
   }
