@@ -42,22 +42,6 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
   val totalNumCBsInSnapshots: Ref[F, Long] = Ref.unsafe(0L)
   val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
 
-  val timers: Ref[F, TrieMap[String, Long]] = Ref.unsafe[F, TrieMap[String, Long]](TrieMap())
-
-  private def startTimer(key: String): F[Unit] =
-    for {
-      start <- Clock[F].realTime(MILLISECONDS)
-      _ <- timers.update(_ += (key -> start))
-    } yield ()
-
-  private def stopTimer(key: String): F[Unit] =
-    for {
-      stop <- Clock[F].realTime(MILLISECONDS)
-      t <- timers.get
-      start = t(key)
-      _ <- timers.update(_ += (key -> (stop - start)))
-    } yield ()
-
   def getSnapshotInfo(): F[SnapshotInfo] =
     for {
       s <- snapshot.get
@@ -131,8 +115,6 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
       _ <- EitherT.liftF(updateMetricsAfterSnapshot())
 
       _ <- EitherT.liftF(snapshot.set(nextSnapshot))
-
-      _ <- EitherT.liftF(timers.get.flatMap(t => Sync[F].delay(dao.miscLogger.info(t.toString))))
     } yield ()
 
   def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock): F[Unit] =
@@ -307,9 +289,7 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
       cbs <- getCheckpointBlocksFromSnapshot(s)
       _ <- cbs.map(applySnapshotMessages(s, _)).sequence
 
-      _ <- startTimer("applySnapshotTransactions")
       _ <- applySnapshotTransactions(s, cbs)
-      _ <- stopTimer("applySnapshotTransactions")
 
       _ <- checkpointService.applySnapshot(cbs.map(_.baseHash))
     } yield ()
