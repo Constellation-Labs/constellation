@@ -1,7 +1,7 @@
 package org.constellation.storage
 
 import cats.data.EitherT
-import cats.effect.{LiftIO, Sync, Timer}
+import cats.effect.{Clock, LiftIO, Sync, Timer}
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import org.constellation.DAO
@@ -12,6 +12,7 @@ import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.util.Metrics
 
+import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
 import scala.util.Try
 
@@ -33,6 +34,24 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
 
   val totalNumCBsInSnapshots: Ref[F, Long] = Ref.unsafe(0L)
   val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
+
+  val timers: Ref[F, TrieMap[String, Long]] = Ref.unsafe[F, TrieMap[String, Long]](TrieMap())
+
+  private def startTimer(key: String): F[Unit] = {
+    for {
+      start <- Clock[F].realTime(MILLISECONDS)
+      _ <- timers.update(_ += (key -> start))
+    } yield ()
+  }
+
+  private def stopTimer(key: String): F[Unit] = {
+    for {
+      stop <- Clock[F].realTime(MILLISECONDS)
+      t <- timers.get
+      start = t(key)
+      _ <- timers.update(_ += (key -> (stop - start)))
+    } yield ()
+  }
 
   def getSnapshotInfo(): F[SnapshotInfo] = for {
     s <- snapshot.get
@@ -93,7 +112,7 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
     _ <- validateNodeState(NodeState.Ready)
     _ <- validateAcceptedCBsSinceSnapshot()
 
-    nextHeightInterval <- EitherT.liftF(getNextHeightInterval())
+    nextHeightInterval <- EitherT.liftF(getNextHeightInterval)
     _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval)
     blocksWithinHeightInterval <- EitherT.liftF(getBlocksWithinHeightInterval(nextHeightInterval))
     _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
@@ -185,7 +204,7 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
       }
   }
 
-  private def getNextHeightInterval(): F[Long] =
+  private def getNextHeightInterval: F[Long] =
     lastSnapshotHeight.get
       .map(_ + dao.processingConfig.snapshotHeightInterval)
 
@@ -263,11 +282,11 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
 
   private def applyAfterSnapshot(currentSnapshot: Snapshot): F[Unit] = {
     for {
-      _ <- Sync[F].delay(acceptSnapshot(currentSnapshot))
+      _ <- acceptSnapshot(currentSnapshot)
 
       _ <- totalNumCBsInSnapshots.update(_ + currentSnapshot.checkpointBlocks.size)
       _ <- totalNumCBsInSnapshots.get.flatTap { total => dao.metrics.updateMetricAsync("totalNumCBsInShapshots", total.toString) }
-      
+
       _ <- checkpointService.applySnapshot(currentSnapshot.checkpointBlocks.toList)
       _ <- dao.metrics.updateMetricAsync(Metrics.lastSnapshotHash, currentSnapshot.hash)
     } yield ()
@@ -288,8 +307,8 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
   private def acceptSnapshot(s: Snapshot): F[Unit] = {
     for {
       cbs <- getCheckpointBlocksFromSnapshot(s)
-      _ <- cbs.traverse(applySnapshotMessages(s, _))
-      _ <- cbs.traverse(applySnapshotTransactions(s, _))
+      _ <- cbs.map(applySnapshotMessages(s, _)).sequence
+      _ <- applySnapshotTransactions(s, cbs)
       _ <- checkpointService.applySnapshot(cbs.map(_.baseHash))
     } yield ()
   }
@@ -298,7 +317,8 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
     for {
       cbData <- s.checkpointBlocks
         .toList
-        .traverse(checkpointService.lookup)
+        .map(checkpointService.lookup)
+        .sequence
 
       _ <- if (cbData.exists(_.isEmpty)) {
           dao.metrics.incrementMetricAsync("snapshotCBAcceptQueryFailed")
@@ -330,15 +350,16 @@ class SnapshotService[F[_]: Sync : LiftIO : Timer](
     }.void
   }
 
-  private def applySnapshotTransactions(s: Snapshot, cb: CheckpointBlockMetadata): F[Unit] = {
-    cb.transactionsMerkleRoot.map { merkle =>
-      checkpointService.fetchTransactions(merkle).flatMap { txs =>
-        txs.map(t => addressService.lockForSnapshot(
-          Set(t.src, t.dst),
-          addressService.transferSnapshot(t).void)).sequence *>
-        transactionService.applySnapshot(txs.map(TransactionCacheData(_)), merkle)
-      }
-    }.sequence.void
+  private def applySnapshotTransactions(s: Snapshot, cbs: List[CheckpointBlockMetadata]): F[Unit] = {
+    for {
+      txs <- cbs
+        .traverse(_.transactionsMerkleRoot.traverse(checkpointService.fetchTransactions).map(_.getOrElse(List())))
+        .map(_.flatten)
+
+      _ <- txs.traverse(t => addressService.lockForSnapshot(Set(t.src, t.dst), addressService.transferSnapshot(t).void))
+
+      _ <- cbs.traverse(_.transactionsMerkleRoot.traverse(transactionService.applySnapshot(txs.map(TransactionCacheData(_)), _)))
+    } yield ()
   }
 }
 

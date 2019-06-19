@@ -1,6 +1,6 @@
 package org.constellation.consensus
 
-import java.util.concurrent.{Executors, Semaphore}
+import java.util.concurrent.Semaphore
 
 import akka.actor.{ActorSystem, Props}
 import akka.stream.ActorMaterializer
@@ -9,7 +9,7 @@ import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import org.constellation._
 import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
-import org.constellation.consensus.Round.{UnionProposals, _}
+import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -18,10 +18,9 @@ import org.constellation.util.Metrics
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers, OneInstancePerTest}
 
-import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+
 
 class RoundManagerTest
   extends TestKit(ActorSystem("RoundManagerTest"))
@@ -109,7 +108,7 @@ class RoundManagerTest
 
   dao.transactionService shouldReturn mock[TransactionService[IO]]
   dao.transactionService.getArbitrary shouldReturn IO.pure(Map.empty)
-  dao.transactionService.pullForConsensusSafe(checkpointFormationThreshold, "consensusRound_n") shouldReturn IO(List(tx1, tx2).map(TransactionCacheData(_)))
+  dao.transactionService.pullForConsensusSafe(checkpointFormationThreshold, *) shouldReturn IO(List(tx1, tx2).map(TransactionCacheData(_)))
 
   dao.readyPeers(NodeType.Light) shouldReturn IO.pure(Map())
 

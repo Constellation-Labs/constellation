@@ -9,6 +9,7 @@ import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, HostPort, Metrics, Simulation}
 
+
 class E2ETest extends E2E {
   val updatePasswordReq = UpdatePassword(
     Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
