@@ -38,7 +38,7 @@ class TrustManager(periodSeconds: Int = 120)(implicit dao: DAO)
 
           val scores = peerTrustScores :+ (dao.id -> selfLabels)
 
-          val idMap = (peers.map { _._1 } :+ dao.id).sorted.zipWithIndex.toMap
+          val idMap = (peers.map { _._1 } :+ dao.id).sortBy{_.hex}.zipWithIndex.toMap
           val idxMap = idMap.map { case (k, v) => v -> k }
 
           val nodes = scores.map {
