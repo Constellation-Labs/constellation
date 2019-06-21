@@ -206,7 +206,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
     Sync[F].delay {
       pendingAcceptance.synchronized {
         pendingAcceptance.contains(cb.baseHash).flatMap {
-          case true => pendingAcceptance.put(cb.baseHash, cb)
+          case false => pendingAcceptance.put(cb.baseHash, cb)
           case _    => throw PendingAcceptance(cb)
         }
       }
