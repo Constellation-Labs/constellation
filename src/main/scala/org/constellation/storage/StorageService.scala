@@ -36,22 +36,14 @@ class StorageService[F[_]: Sync, V](expireAfterMinutes: Option[Int] = Some(240))
       .flatMap(_.map(updateFunc).traverse(v => Sync[F].delay(lruCache.put(key, _)).map(_ => v)))
 
   def put(key: String, value: V): F[V] =
-    queueRef.get.flatMap { queue =>
-      val dequeue = {
-        if (queue.size == maxQueueSize) {
-          Sync[F].delay(queue.dequeue._2)
-        } else {
-          queue.pure[F]
-        }
-      }
-
-      dequeue *> queueRef
-        .set(queue.enqueue(value))
-        .flatTap { _ =>
-          Sync[F].delay(lruCache.put(key, value))
-        }
-        .map(_ => value)
-    }
+    queueRef.update { q =>
+      val que = if (q.size >= maxQueueSize) {
+        q.dequeue._2
+      } else q
+      que.enqueue(value)
+    }.flatMap { _ =>
+      Sync[F].delay(lruCache.put(key, value))
+    }.map(_ => value)
 
   def lookup(key: String): F[Option[V]] =
     Sync[F].delay(lruCache.getIfPresent(key))
