@@ -88,15 +88,15 @@ class E2ETest extends E2E {
 
     // val deployResponse = constellationAppSim.openChannel(apis)
 
-    val downloadNode = createNode(
-      seedHosts = Seq(HostPort("localhost", 9001)),
-      randomizePorts = false,
-      portOffset = 50
-    )
+//    val downloadNode = createNode(
+//      seedHosts = Seq(HostPort("localhost", 9001)),
+//      randomizePorts = false,
+//      portOffset = 50
+//    )
 
-    val downloadAPI = downloadNode.getAPIClient()
-    logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
-    assert(Simulation.checkReady(Seq(downloadAPI)))
+//    val downloadAPI = downloadNode.getAPIClient()
+//    logger.info(s"DownloadNode API Port: ${downloadAPI.apiPort}")
+//    assert(Simulation.checkReady(Seq(downloadAPI)))
     // deployResponse.foreach{ res => res.foreach(constellationAppSim.postDownload(apis.head, _))}
 
     // messageSim.postDownload(apis.head)
@@ -104,7 +104,8 @@ class E2ETest extends E2E {
     // TODO: Change to wait for the download node to participate in several blocks.
     Thread.sleep(20 * 1000)
 
-    val allNodes = nodes :+ downloadNode
+//    val allNodes = nodes :+ downloadNode
+    val allNodes = nodes
 
     val allAPIs: Seq[APIClient] = allNodes.map {
       _.getAPIClient()
