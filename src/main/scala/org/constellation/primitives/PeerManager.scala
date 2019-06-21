@@ -433,9 +433,8 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
     )
     peers = updatedPeerInfo
 // TODO: use swayDB when ready
-    if (dao.peersInfoPath.exists) {
-      dao.peersInfoPath.write(updatedPeerInfo.values.toSeq.map { _.peerMetadata }.json)
-    }
+
+    dao.peersInfoPath.write(updatedPeerInfo.values.toSeq.map { _.peerMetadata }.json)
 
   }
 
