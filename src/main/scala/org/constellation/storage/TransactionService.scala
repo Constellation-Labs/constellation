@@ -17,11 +17,11 @@ class TransactionService[F[_]: Sync: Concurrent](dao: DAO, pullSemaphore: Semaph
 
   val merklePool = new StorageService[F, Seq[String]]()
 
-  private val pending = new PendingTransactionsMemPool[F]()
-  private val arbitrary = new StorageService[F, TransactionCacheData](Some(240))
-  private val inConsensus = new StorageService[F, TransactionCacheData](Some(240))
-  private val accepted = new StorageService[F, TransactionCacheData](Some(240))
-  private val unknown = new StorageService[F, TransactionCacheData](Some(240))
+  private[storage] val pending = new PendingTransactionsMemPool[F]()
+  private[storage] val arbitrary = new StorageService[F, TransactionCacheData](Some(240))
+  private[storage] val inConsensus = new StorageService[F, TransactionCacheData](Some(240))
+  private[storage] val accepted = new StorageService[F, TransactionCacheData](Some(240))
+  private[storage] val unknown = new StorageService[F, TransactionCacheData](Some(240))
 
   def getArbitrary = arbitrary.toMap()
 
@@ -34,6 +34,15 @@ class TransactionService[F[_]: Sync: Concurrent](dao: DAO, pullSemaphore: Semaph
     case TransactionStatus.Unknown   => unknown.put(tx.transaction.hash, tx)
     case _                           => new Exception("Unknown transaction status").raiseError[F, TransactionCacheData]
   }
+
+  def update(key: String, fn: TransactionCacheData => TransactionCacheData): F[Unit] =
+    for {
+      _ <- pending.update(key, fn)
+      _ <- arbitrary.update(key, fn)
+      _ <- inConsensus.update(key, fn)
+      _ <- accepted.update(key, fn)
+      _ <- unknown.update(key, fn)
+    } yield ()
 
   def accept(tx: TransactionCacheData): F[Unit] =
     accepted.put(tx.transaction.hash, tx) *>
@@ -73,7 +82,10 @@ class TransactionService[F[_]: Sync: Concurrent](dao: DAO, pullSemaphore: Semaph
     txs.toList
       .traverse(inConsensus.lookup)
       .map(_.flatten)
-      .flatMap(_.traverse(tx => pending.put(tx.transaction.hash, tx)))
+      .flatMap { txs =>
+        txs.traverse(tx => inConsensus.remove(tx.transaction.hash)) *>
+          txs.traverse(tx => pending.put(tx.transaction.hash, tx))
+      }
 
   def pullForConsensusSafe(minCount: Int, roundId: String = "roundId"): F[List[TransactionCacheData]] =
     new SingleLock[F, List[TransactionCacheData]](roundId, pullSemaphore).use(pullForConsensus(minCount, roundId))
