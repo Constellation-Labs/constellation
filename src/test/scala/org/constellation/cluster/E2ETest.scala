@@ -8,13 +8,16 @@ import org.constellation._
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, Metrics, Simulation}
+import scala.concurrent.duration._
+
+import scala.concurrent.{Await, Future}
 
 class E2ETest extends E2E {
 
   val updatePasswordReq = UpdatePassword(
     Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
   )
-  val totalNumNodes = 3
+  val totalNumNodes = 4
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
   private val n1 = createNode(randomizePorts = false)
@@ -22,7 +25,6 @@ class E2ETest extends E2E {
     i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
   )
 
-  //private val address1 = n1.getInetSocketAddress
   private val apis: Seq[APIClient] = nodes.map {
     _.getAPIClient()
   }
@@ -118,7 +120,7 @@ class E2ETest extends E2E {
     Simulation.awaitConditionMet(
       "Accepted checkpoint blocks number differs across the nodes",
       allAPIs.map { p =>
-        val n = p.metrics(Metrics.checkpointAccepted)
+        val n = Await.result(p.metricsAsync, 5 seconds)(Metrics.checkpointAccepted)
         Simulation.logger.info(s"peer ${p.id} has $n accepted cbs")
         n
       }.distinct.size == 1,
@@ -127,8 +129,8 @@ class E2ETest extends E2E {
     )
     Simulation.awaitConditionMet(
       "Accepted transactions number differs across the nodes",
-      allAPIs.map {
-        _.metrics("transactionAccepted")
+      allAPIs.map { a =>
+        Await.result(a.metricsAsync, 5 seconds).get("transactionAccepted").toList
       }.distinct.size == 1,
       maxRetries = 6,
       delay = 10000

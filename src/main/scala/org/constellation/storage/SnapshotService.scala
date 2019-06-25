@@ -4,6 +4,7 @@ import cats.data.EitherT
 import cats.effect.{Clock, LiftIO, Sync, Timer}
 import cats.effect.concurrent.Ref
 import cats.implicits._
+import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.p2p.DataResolver
@@ -30,7 +31,7 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
   messageService: MessageService[F],
   transactionService: TransactionService[F],
   dao: DAO
-) {
+) extends StrictLogging {
   import constellation._
 
   implicit val shadowDao: DAO = dao
@@ -113,6 +114,9 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
 
       hashesForNextSnapshot = allBlocks.flatMap(_.checkpointBlock.map(_.baseHash)).sorted
       nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot))
+      _ <- EitherT.liftF(
+        Sync[F].delay(logger.debug(s"nextSnapshot: ${nextSnapshot.hash} with cbs: $hashesForNextSnapshot"))
+      )
 
       _ <- EitherT.liftF(applySnapshot())
 
@@ -210,6 +214,9 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
           h.min > height && h.min <= nextHeightInterval
         })
       }
+      _ <- Sync[F].delay(
+        logger.debug(s"blocks for snapshot between lastSnapshotHeight: $height nextHeightInterval: $nextHeightInterval")
+      )
     } yield blocks
 
   private def validateBlocksWithinHeightInterval(
@@ -331,7 +338,7 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
         .flatMap(_.get.toList.traverse { msgHash =>
           dao.metrics.incrementMetricAsync("messageSnapshotHashUpdated") *>
             LiftIO[F]
-              .liftIO(DataResolver.resolveMessagesDefaults(msgHash).map(_.get.channelMessage))
+              .liftIO(DataResolver.resolveMessagesDefaults(msgHash).map(_.channelMessage))
               .flatMap(updateMessage(msgHash, _))
         })
     }.void

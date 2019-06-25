@@ -91,7 +91,7 @@ class TransactionService[F[_]: Sync: Concurrent](dao: DAO, semaphore: Semaphore[
   def pullForConsensus(minCount: Int, roundId: String = "roundId"): F[List[TransactionCacheData]] =
     withLock("pullForConsensus", pending.pull(minCount))
       .map(_.getOrElse(List()))
-      .flatTap(txs => Sync[F].delay(logger.info(s"Pulling txs=${txs.size} for consensus with minCount: $minCount")))
+      .flatTap(txs => Sync[F].delay(logger.debug(s"Pulling txs=${txs.size} for consensus with minCount: $minCount")))
       .flatMap(_.traverse(tx => withLock("inConsensusPut", inConsensus.put(tx.transaction.hash, tx))))
 
   def getLast20Accepted: F[List[TransactionCacheData]] =

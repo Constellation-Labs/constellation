@@ -4,6 +4,7 @@ import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, One
 import cats.effect.IO
 import cats.implicits._
 import com.typesafe.config.Config
+import com.typesafe.scalalogging.StrictLogging
 import io.micrometer.core.instrument.Timer
 import org.constellation.consensus.CrossTalkConsensus.{
   NotifyFacilitators,
@@ -23,7 +24,7 @@ import scala.concurrent.duration._
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
-class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLogging {
+class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictLogging {
   import RoundManager._
 
   override val supervisorStrategy: OneForOneStrategy = {
@@ -42,27 +43,27 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
 
   override def receive: Receive = {
     case StartNewBlockCreationRound if ownRoundInProgress =>
-      log.warning(
+      logger.warn(
         s"Unable to initiate new round another round: ${rounds.filter(_._2.startedByThisNode)} is in progress"
       )
 
     case StartNewBlockCreationRound if !ownRoundInProgress =>
       ownRoundInProgress = true
       createRoundData(dao).fold {
-        log.debug("Cannot create a round data do to no transactions")
+        logger.debug("Cannot create a round data do to no transactions")
         ownRoundInProgress = false
       } { tuple =>
         val roundData = tuple._1
-        log.debug(
+        logger.debug(
           s"node: ${dao.id.short} starting new round ${roundData.roundId} with facilis: ${roundData.peers
             .map(_.peerMetadata.id.short)}"
         )
         resolveMissingParents(roundData).onComplete {
           case Failure(e) =>
             ownRoundInProgress = false
-            log.error(e, s"unable to start block creation round due to: ${e.getMessage}")
+            logger.error(s"unable to start block creation round due to: ${e.getMessage}", e)
           case Success(_) =>
-            log.debug(s"[${dao.id.short}] ${roundData.roundId} started round")
+            logger.debug(s"[${dao.id.short}] ${roundData.roundId} started round")
             startRound(roundData, tuple._2, tuple._3, startedByThisNode = true)
             passToParentActor(NotifyFacilitators(roundData))
             passToRoundActor(
@@ -74,7 +75,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
                 roundData.peers.flatMap(_.notification).toSeq
               )
             )
-            log.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}")
+            logger.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}")
             dao.blockFormationInProgress = true
             dao.metrics.updateMetric("blockFormationInProgress", dao.blockFormationInProgress.toString)
         }(ConstellationExecutionContext.global)
@@ -83,9 +84,9 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
     case cmd: ParticipateInBlockCreationRound =>
       resolveMissingParents(cmd.roundData).onComplete {
         case Failure(e) =>
-          log.error(
-            e,
-            s"unable to participate in block creation round: ${cmd.roundData.roundId} due to: ${e.getMessage}"
+          logger.error(
+            s"unable to participate in block creation round: ${cmd.roundData.roundId} due to: ${e.getMessage}",
+            e
           )
         case Success(_) =>
           val allFacilitators = cmd.roundData.peers.map(_.peerMetadata.id) ++ Set(dao.id)
@@ -104,16 +105,16 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
       passToRoundActor(cmd)
 
     case cmd: ConsensusTimeout =>
-      log.error(s"Consensus with roundId: ${cmd.roundId} timeout on node: ${dao.id.short}")
+      logger.error(s"Consensus with roundId: ${cmd.roundId} timeout on node: ${dao.id.short}")
       self ! StopBlockCreationRound(cmd.roundId, None, Seq.empty)
     case cmd: RoundException =>
-      log.error(s"Consensus on node: ${dao.id.short} finished with error {}", cmd)
+      logger.error(s"Consensus on node: ${dao.id.short} finished with error {}", cmd)
       self ! StopBlockCreationRound(cmd.roundId, None, cmd.transactionsToReturn)
 
     case cmd: StopBlockCreationRound =>
       rounds.get(cmd.roundId).fold {} { round =>
         dao.metrics.stopTimer("crosstalkConsensus", round.timer)
-        log.debug(
+        logger.debug(
           s"Stop block creation round has been triggered for round ${cmd.roundId} on node ${dao.id.short}"
         )
 
@@ -155,7 +156,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
     case cmd: SelectedUnionBlock =>
       passToRoundActor(cmd)
 
-    case msg => log.warning(s"Received unknown message: $msg")
+    case msg => logger.warn(s"Received unknown message: $msg")
 
   }
 
@@ -163,11 +164,11 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
     dao.transactionService.returnTransactionsToPending(transactionsToReturn).unsafeRunAsync {
       case Right(Nil) => ()
       case Right(txs) =>
-        log.info(
+        logger.info(
           s"Transactions returned to pending state ${txs.map(_.transaction.hash)} in round $roundId"
         )
       case Left(value) =>
-        log.error(
+        logger.error(
           s"Unable to cleanup transactions $transactionsToReturn from consensus round $roundId {}",
           value
         )
@@ -194,23 +195,21 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
 
   private[consensus] def resolveMissingParents(
     roundData: RoundData
-  )(implicit dao: DAO): Future[List[Option[CheckpointCache]]] = {
-
-    val cbToResolve = roundData.tipsSOE
+  )(implicit dao: DAO): Future[List[CheckpointCache]] =
+    roundData.tipsSOE
       .filterNot(t => dao.checkpointService.contains(t.baseHash).unsafeRunSync())
-      .map(_.baseHash)
-
-    DataResolver
-      .resolveCheckpoints(
-        cbToResolve.toList,
-        roundData.peers.map(r => PeerApiClient(r.peerMetadata.id, r.client)),
-        dao.peerInfo
-          .unsafeRunSync()
-          .get(roundData.facilitatorId.id)
-          .map(x => PeerApiClient(roundData.facilitatorId.id, x.client))
-      )
-      .unsafeToFuture()
-  }
+      .map(_.baseHash) match {
+      case Nil => Future.successful(List.empty)
+      case nel =>
+        dao.readyPeers
+          .map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client)))
+          .flatMap(
+            peers =>
+              DataResolver
+                .resolveCheckpoints(nel.toList, peers.values.toList, peers.get(roundData.facilitatorId.id))
+          )
+          .unsafeToFuture()
+    }
 
   private[consensus] def startRound(
     roundData: RoundData,
@@ -228,7 +227,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
       startedByThisNode,
       dao.metrics.startTimer
     )
-    log.debug(s"Started round=${roundData.roundId}")
+    logger.debug(s"Started round=${roundData.roundId}")
   }
 
   private[consensus] def passToRoundActor(cmd: RoundCommand): Unit =

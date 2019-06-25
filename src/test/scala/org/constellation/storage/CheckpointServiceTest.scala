@@ -1,24 +1,22 @@
 package org.constellation.storage
 
 import java.security.KeyPair
-import java.util.concurrent.Executors
 
 import better.files.File
 import cats.effect.IO
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
-import constellation._
+import constellation.createTransaction
+import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.crypto.KeyUtils.makeKeyPair
-import org.constellation.primitives.Schema.{CheckpointCache, Height, SignedObservationEdge}
+import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage.transactions.TransactionStatus
-import org.constellation.util.Metrics
+import org.constellation.util.{APIClient, HostPort, Metrics}
 import org.constellation.{ConstellationContextShift, DAO, Fixtures, PeerMetadata}
 import org.mockito.Mockito.doNothing
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
-
-import scala.concurrent.ExecutionContext
 
 class CheckpointServiceTest
     extends FunSuite
@@ -87,6 +85,44 @@ class CheckpointServiceTest
       .unsafeRunSync() shouldBe notifications
   }
 
+  test("should accept cb resolving parents soeHashes and cb baseHashes recursively ") {
+    val go = Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair)
+    Genesis.acceptGenesis(go, setAsTips = true)
+
+    val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
+
+    val cb1 = makeBlock(startingTips)
+
+    val cb2 = makeBlock(startingTips)
+    val cb3 = makeBlock(Seq(cb1.soe, cb2.soe))
+
+    val peer = readyFacilitators(Id("b")).client
+    val blocks = Seq(cb1, cb2)
+
+    blocks.foreach { c =>
+      peer.getNonBlockingIO[Option[SignedObservationEdgeCache]](eqTo(s"soe/${c.soeHash}"), *, *)(*, *) shouldReturn IO
+        .pure(Some(SignedObservationEdgeCache(c.soe)))
+
+      peer.getNonBlockingIO[Option[CheckpointCache]](eqTo(s"checkpoint/${c.baseHash}"), *, *)(*, *) shouldReturn IO
+        .pure(Some(CheckpointCache(Some(c))))
+    }
+
+    dao.checkpointService
+      .accept(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
+      .unsafeRunSync()
+    dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
+  }
+
+  private def makeBlock(tips: Seq[SignedObservationEdge]): CheckpointBlock =
+    CheckpointBlock.createCheckpointBlock(
+      Seq(createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair)),
+      tips.map { s =>
+        TypedEdgeHash(s.hash, EdgeHashType.CheckpointHash)
+      },
+      Seq(),
+      Seq()
+    )
+
   private def storeCheckpointBlock(
     txs: Seq[Transaction],
     msgs: Seq[ChannelMessage],
@@ -144,6 +180,7 @@ class CheckpointServiceTest
 
   private def prepareDao(): DAO = {
     val dao: DAO = mock[DAO]
+
     val f = File(s"tmp/${kp.getPublic.toId.medium}/db")
     f.createDirectoryIfNotExists()
     dao.dbPath shouldReturn f
@@ -176,24 +213,23 @@ class CheckpointServiceTest
     doNothing().when(metrics).incrementMetric(*)
     dao.metrics shouldReturn metrics
 
-    dao.readyPeers shouldReturn IO.pure(Map())
+    dao.nodeState shouldReturn NodeState.Ready
+
+    dao.readyPeers shouldReturn IO.pure(readyFacilitators)
 
     dao
   }
 
   private def prepareFacilitators(): Map[Schema.Id, PeerData] = {
+
     val facilitatorId1 = Schema.Id("b")
     val peerData1: PeerData = mock[PeerData]
     peerData1.peerMetadata shouldReturn mock[PeerMetadata]
     peerData1.peerMetadata.id shouldReturn facilitatorId1
     peerData1.notification shouldReturn Seq()
+    peerData1.client shouldReturn mock[APIClient]
+    peerData1.client.hostPortForLogging shouldReturn HostPort("http://b", 9000)
 
-    val facilitatorId2 = Schema.Id("c")
-    val peerData2: PeerData = mock[PeerData]
-    peerData2.peerMetadata shouldReturn mock[PeerMetadata]
-    peerData2.peerMetadata.id shouldReturn facilitatorId2
-    peerData2.notification shouldReturn Seq()
-
-    Map(facilitatorId1 -> peerData1, facilitatorId2 -> peerData2)
+    Map(facilitatorId1 -> peerData1)
   }
 }

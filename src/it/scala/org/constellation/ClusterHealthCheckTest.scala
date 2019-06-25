@@ -8,8 +8,8 @@ import org.constellation.util.{APIClient, HealthChecker, Metrics}
 import org.scalatest.{BeforeAndAfterAll, CancelAfterFailure, FlatSpecLike}
 import org.slf4j.LoggerFactory
 
-import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration.{FiniteDuration, _}
+import scala.concurrent.{Await, ExecutionContextExecutor}
 
 class ClusterHealthCheckTest
     extends TestKit(ActorSystem("ClusterHealthCheckTest"))
@@ -27,10 +27,10 @@ class ClusterHealthCheckTest
   val logger = Logger(LoggerFactory.getLogger(getClass.getName))
 
   val (ignoreIPs, auxAPIs) = ComputeTestUtil.getAuxiliaryNodes()
+
   val apis: Seq[APIClient] = ComputeTestUtil.createApisFromIpFile(
     ignoreIPs
   )
-
 
   "All nodes" should "have valid metrics" in {
     HealthChecker.checkAllMetrics(apis) match {
@@ -42,8 +42,7 @@ class ClusterHealthCheckTest
   "All nodes" should "continually increase total block created (not stall or remain the same) across a period" in {
     assertMetricIncreasing(
       Metrics.checkpointAccepted,
-      ConfigUtil.getDurationFromConfig("constellation.it.block-creation.check-interval",
-                                       10 seconds),
+      ConfigUtil.getDurationFromConfig("constellation.it.block-creation.check-interval", 10 seconds),
       ConfigUtil.getOrElse("constellation.it.block-creation.check-retries", 5)
     )
   }
@@ -51,20 +50,17 @@ class ClusterHealthCheckTest
   "All nodes" should "continually increase total snapshots count" in {
     assertMetricIncreasing(
       Metrics.snapshotCount,
-      ConfigUtil.getDurationFromConfig("constellation.it.snapshot-creation.check-interval",
-                                       4 minutes),
+      ConfigUtil.getDurationFromConfig("constellation.it.snapshot-creation.check-interval", 4 minutes),
       ConfigUtil.getOrElse("constellation.it.snapshot-creation.check-retries", 2)
     )
   }
 
-  private def assertMetricIncreasing(metricKey: String,
-                                    delay: FiniteDuration,
-                                    retries: Int): Unit = {
+  private def assertMetricIncreasing(metricKey: String, delay: FiniteDuration, retries: Int): Unit = {
     var lastMetrics = apis.map(a => (a.baseURI, -1)).toMap
     runPeriodically(
       apis.foreach { a =>
         val id = a.baseURI
-        val currentMetricCount = a.metrics.getOrElse(metricKey, "0").toInt
+        val currentMetricCount = Await.result(a.metricsAsync, 5 seconds).getOrElse(metricKey, "0").toInt
         logger.info(s"Checking if metric: $metricKey is increasing on node ${a.baseURI}")
         val isIncreasing = currentMetricCount > lastMetrics(id)
         if (!isIncreasing) {

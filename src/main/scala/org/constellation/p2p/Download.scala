@@ -151,7 +151,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .map(_.find(_.nonEmpty).flatten.get)
       .toIO
       .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadedGenesis", "true"))
-      .flatTap(genesis => IO(dao.acceptGenesis(genesis)))
+      .flatTap(genesis => IO(Genesis.acceptGenesis(genesis)))
 
   private def waitForPeers(): IO[Unit] =
     IO(logger.debug(s"Waiting ${waitForPeersDelay.toString()} for peers"))

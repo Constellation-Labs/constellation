@@ -1,4 +1,5 @@
 package org.constellation.util
+import cats.effect.IO
 import cats.implicits._
 
 class MetricFailure(message: String) extends Exception(message)
@@ -18,7 +19,7 @@ object HealthChecker {
     var lastCheck: Either[MetricFailure, Unit] = Right(())
     while (it.hasNext && lastCheck.isRight) {
       val a = it.next()
-      val metrics = a.metrics
+      val metrics = IO.fromFuture(IO {a.metricsAsync}).unsafeRunSync() // TODO: wkoszycki revisit
       lastCheck = checkLocalMetrics(metrics, a.baseURI).orElse {
         hashes ++= Set(metrics.getOrElse(Metrics.lastSnapshotHash, "no_snap"))
         Either.cond(hashes.size == 1, (), InconsistentSnapshotHash(a.baseURI, hashes))

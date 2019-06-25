@@ -1,9 +1,11 @@
 package org.constellation.consensus
 
-import akka.actor.{Actor, ActorLogging, Cancellable, Props}
+import akka.actor.{Actor, Cancellable, Props}
 import cats.effect.IO
 import cats.implicits._
+import com.softwaremill.sttp.Response
 import com.typesafe.config.Config
+import com.typesafe.scalalogging.StrictLogging
 import constellation.{wrapFutureWithMetric, _}
 import org.constellation.consensus.Round.RoundStage.RoundStage
 import org.constellation.consensus.Round.StageState.StageState
@@ -16,7 +18,7 @@ import org.constellation.consensus.RoundManager.{
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
-import org.constellation.util.PeerApiClient
+import org.constellation.util.{APIClient, PeerApiClient}
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.collection.mutable
@@ -32,7 +34,7 @@ class Round(
   dataResolver: DataResolver,
   config: Config
 ) extends Actor
-    with ActorLogging {
+    with StrictLogging {
 
   implicit val shadedDao: DAO = dao
   implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.edge
@@ -94,7 +96,7 @@ class Round(
       self ! proposal
 
     case newProp: LightTransactionsProposal =>
-      log.debug(
+      logger.debug(
         s"[${dao.id.short}] ${roundData.roundId} received LightTransactionsProposal from ${newProp.facilitatorId.id.short}"
       )
 
@@ -108,7 +110,7 @@ class Round(
       )
 
       if (transactionProposals.contains(newProp.facilitatorId)) {
-        log.error(
+        logger.error(
           s"[${dao.id.short}] ${roundData.roundId} received doubled LightTransactionProposal is ${newProp.facilitatorId.id.short}"
         )
       }
@@ -125,13 +127,13 @@ class Round(
       transactionProposals += (newProp.facilitatorId -> merged)
       if (receivedAllTransactionProposals) {
         setRoundStage(RoundStage.WAITING_FOR_BLOCK_PROPOSALS)
-        log.debug(s"[${dao.id.short}] ${roundData.roundId} received all transaction proposals")
+        logger.debug(s"[${dao.id.short}] ${roundData.roundId} received all transaction proposals")
         cancelUnionTransactionProposalsTikTok()
         self ! UnionProposals(StageState.FINISHED)
       }
 
     case UnionBlockProposal(roundId, facilitatorId, checkpointBlock) =>
-      log.debug(
+      logger.debug(
         s"[${dao.id.short}] ${roundData.roundId} received UnionBlockProposal from ${facilitatorId.id.short}"
       )
 
@@ -144,7 +146,7 @@ class Round(
       )
 
       if (checkpointBlockProposals.contains(facilitatorId)) {
-        log.error(
+        logger.error(
           s"[${dao.id.short}] ${roundData.roundId} received doubled UnionBlockProposal is ${facilitatorId.id.short}"
         )
       }
@@ -158,7 +160,7 @@ class Round(
 //      }
       if (receivedAllCheckpointBlockProposals) {
         setRoundStage(RoundStage.RESOLVING_MAJORITY_CB)
-        log.debug(
+        logger.debug(
           s"[${dao.id.short}] ${roundData.roundId} received receivedAllCheckpointBlockProposals"
         )
         cancelResolveMajorityCheckpointBlockTikTok()
@@ -166,14 +168,14 @@ class Round(
       }
 
     case SelectedUnionBlock(roundId, facilitatorId, checkpointBlock) =>
-      log.debug(
+      logger.debug(
         s"[${dao.id.short}] ${roundData.roundId} received SelectedUnionBlock from ${facilitatorId.id.short}"
       )
 
       verifyRoundStage(Set(RoundStage.ACCEPTING_MAJORITY_CB))
 
       if (selectedCheckpointBlocks.contains(facilitatorId)) {
-        log.error(
+        logger.error(
           s"[${dao.id.short}] ${roundData.roundId} received doubled SelectedUnionBlock is ${facilitatorId.id.short}"
         )
       }
@@ -188,7 +190,7 @@ class Round(
 
       if (receivedAllSelectedUnionedBlocks) {
         setRoundStage(RoundStage.ACCEPTING_MAJORITY_CB)
-        log.debug(
+        logger.debug(
           s"[${dao.id.short}] ${roundData.roundId} received receivedAllSelectedUnionedBlocks"
         )
         cancelUnionTransactionProposalsTikTok()
@@ -197,7 +199,7 @@ class Round(
       }
 
     case UnionProposals(StageState.BEHIND) =>
-      log.debug(s"[${dao.id.short}] ${roundData.roundId} self send UnionState")
+      logger.debug(s"[${dao.id.short}] ${roundData.roundId} self send UnionState")
 
       verifyRoundStage(
         Set(
@@ -209,7 +211,7 @@ class Round(
       unionProposals()
 
     case UnionProposals(state) =>
-      log.info(s"[${dao.id.short}] ${roundData.roundId} self send UnionState ${state}")
+      logger.debug(s"[${dao.id.short}] ${roundData.roundId} self send UnionState ${state}")
 
       verifyRoundStage(
         Set(
@@ -253,7 +255,7 @@ class Round(
       scheduleArbitraryDataProposals(distance + 1)
 
     case ResolveMajorityCheckpointBlock(_, StageState.BEHIND) =>
-      log.debug(
+      logger.debug(
         s"[${dao.id.short}] ${roundData.roundId} received ResolveMajorityCheckpointBlock BEHIND"
       )
 
@@ -266,7 +268,7 @@ class Round(
       resolveMajorityCheckpointBlock()
 
     case ResolveMajorityCheckpointBlock(_, state) =>
-      log.debug(
+      logger.debug(
         s"[${dao.id.short}] ${roundData.roundId} received ResolveMajorityCheckpointBlock state: ${state}"
       )
       dao.metrics.incrementMetric(
@@ -284,7 +286,7 @@ class Round(
     case AcceptMajorityCheckpointBlock(_) =>
       acceptMajorityCheckpointBlock()
 
-    case msg => log.warning(s"Received unknown message: $msg")
+    case msg => logger.warn(s"Received unknown message: $msg")
   }
 
   private[consensus] def scheduleUnionProposals: Cancellable =
@@ -353,7 +355,9 @@ class Round(
 
   private[consensus] def unionProposals(): Unit = {
 
-    val readyPeers = dao.readyPeers.unsafeRunSync()
+    val readyPeers = dao.readyPeers
+      .map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client)))
+      .unsafeRunSync()
 
     val transactions = transactionProposals.values
       .flatMap(_.txHashes)
@@ -382,18 +386,11 @@ class Round(
       .map(
         p ⇒
           dataResolver
-            .resolveTransactions(
-              p._1,
-              readyPeers.map(r => PeerApiClient(r._1, r._2.client)),
-              readyPeers
-                .get(p._2.facilitatorId.id)
-                .map(rp => PeerApiClient(p._2.facilitatorId.id, rp.client))
-            )
-            .map(_.map(_.transaction))
+            .resolveTransactions(p._1, readyPeers.values.toList, readyPeers.get(p._2.facilitatorId.id))
+            .map(_.transaction)
       )
       .sequence
       .unsafeRunSync()
-      .flatten
 
     val messages = transactionProposals.values
       .flatMap(_.messages)
@@ -421,18 +418,11 @@ class Round(
       .map(
         p ⇒
           dataResolver
-            .resolveMessages(
-              p._1,
-              readyPeers.map(r => PeerApiClient(r._1, r._2.client)),
-              readyPeers
-                .get(p._2.facilitatorId.id)
-                .map(rp => PeerApiClient(p._2.facilitatorId.id, rp.client))
-            )
-            .map(_.map(_.channelMessage))
+            .resolveMessages(p._1, readyPeers.values.toList, readyPeers.get(p._2.facilitatorId.id))
+            .map(_.channelMessage)
       )
       .sequence
       .unsafeRunSync()
-      .flatten
 
     val notifications = transactionProposals
       .flatMap(_._2.notifications)
@@ -510,7 +500,7 @@ class Round(
         val finalFacilitators = selectedCheckpointBlocks.keySet.map(_.id).toSet
         val cache =
           CheckpointCache(Some(checkpointBlock), height = checkpointBlock.calculateHeight())
-        log.debug(
+        logger.debug(
           s"[${dao.id.short}] accepting majority checkpoint block ${checkpointBlock.baseHash}  " +
             s" with txs ${checkpointBlock.transactions.map(_.hash)} " +
             s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height}"
@@ -522,13 +512,10 @@ class Round(
           }
           .recoverWith {
             case error @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
-              IO { log.warning(error.getMessage) } >> IO.pure(None)
+              IO { logger.warn(error.getMessage) } >> IO.pure(None)
             case unknownError =>
               IO {
-                log.error(
-                  s"Failed to accept majority checkpoint block due to: ${unknownError.getMessage}",
-                  unknownError
-                )
+                logger.error(s"[${dao.id.short}] Failed to accept majority checkpoint block", unknownError)
               } >> IO.pure(None)
           }
           .unsafeRunSync()
@@ -547,7 +534,7 @@ class Round(
 
   private[consensus] def broadcastSignedBlockToNonFacilitators(
     finishedCheckpoint: FinishedCheckpoint
-  ): Future[List[Option[FinishedCheckpointResponse]]] = {
+  ): Future[List[Response[Unit]]] = {
     val allFacilitators = roundData.peers.map(p => p.peerMetadata.id -> p).toMap
     val signatureResponses = Future.sequence(
       dao.peerInfo
@@ -556,19 +543,23 @@ class Round(
         .toList
         .filterNot(pd => allFacilitators.contains(pd.peerMetadata.id))
         .map { peer =>
-          log.debug(
-            s"[${dao.id.short}] broadcasting cb ${finishedCheckpoint.checkpointCacheData.checkpointBlock.get.baseHash} to  ${peer.client.id} in round ${roundData.roundId}"
+          logger.debug(
+            s"[${dao.id.short}] broadcasting cb ${finishedCheckpoint.checkpointCacheData.checkpointBlock.get.baseHash} to  ${peer.client.id.short} in round ${roundData.roundId}"
           )
           wrapFutureWithMetric(
-            peer.client.postNonBlocking[Option[FinishedCheckpointResponse]](
+            peer.client.postNonBlockingUnit(
               "finished/checkpoint",
               finishedCheckpoint,
-              timeout = 20.seconds
+              timeout = 10.seconds,
+              Map(
+                "ReplyTo" -> APIClient(dao.nodeConfig.hostName, dao.nodeConfig.peerHttpPort)
+                  .base("finished/reply")
+              )
             ),
             "finishedCheckpointBroadcast"
           )(dao, ec).recoverWith {
             case e: Throwable =>
-              log.warning("Failure gathering signature", e)
+              logger.warn("Failure gathering signature", e)
               dao.metrics.incrementMetric(
                 "formCheckpointSignatureResponseError"
               )

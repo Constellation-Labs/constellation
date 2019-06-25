@@ -10,7 +10,7 @@ import com.softwaremill.sttp.Response
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
-import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointAck, FinishedCheckpointResponse}
+import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointResponse}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.{ConcurrentTipService, IPManager}
 import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
@@ -60,7 +60,7 @@ class PeerAPITest
     /*
         Unfortunately ScalatestRouteTest instansiate it's own class of PeerAPI thus we can't spy on it
      */
-    "return acknowledge message on finishing checkpoint and reply with callback" ignore {
+    "return accepted message on finishing checkpoint and reply with callback" ignore {
       val reply = "http://originator:9001/peer-api/finished/checkpoint/reply"
       val fakeResp = Future.successful(mock[Response[Unit]])
       Mockito
@@ -71,19 +71,17 @@ class PeerAPITest
       val req = FinishedCheckpoint(CheckpointCache(None), Set.empty)
 
       Post("/finished/checkpoint", req) ~> addHeader("ReplyTo", reply) ~> peerAPI.postEndpoints ~> check {
-        status shouldEqual StatusCodes.OK
-        responseAs[FinishedCheckpointAck] shouldEqual FinishedCheckpointAck(true)
+        status shouldEqual StatusCodes.Accepted
       }
 
       //      requires mockito 1.4.x and migrating all IdiomaticMockitos
       //      peerAPI.makeCallback(*, *) wasCalled (once within 2.seconds)
     }
 
-    "return acknowledge message on finishing checkpoint and make no reply with callback" in {
+    "return accepted on finishing checkpoint and make no reply with callback" in {
       val req = FinishedCheckpoint(CheckpointCache(None), Set.empty)
       Post("/finished/checkpoint", req) ~> peerAPI.postEndpoints ~> check {
-        status shouldEqual StatusCodes.OK
-        responseAs[FinishedCheckpointAck] shouldEqual FinishedCheckpointAck(true)
+        status shouldEqual StatusCodes.Accepted
       }
     }
     "handle reply message" in {
@@ -141,6 +139,10 @@ class PeerAPITest
     val metrics = new Metrics(1)(dao)
     dao.metrics shouldReturn metrics
 
+    dao.checkpointService shouldReturn mock[CheckpointService[IO]]
+    dao.checkpointService.accept(any[FinishedCheckpoint])(dao) shouldReturn IO({
+      Thread.sleep(2000)
+    })
     dao
   }
 }
