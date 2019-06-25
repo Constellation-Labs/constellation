@@ -1,32 +1,31 @@
 package org.constellation.storage
 
-import cats.effect.IO
+import cats.effect.Sync
+import cats.implicits._
 import org.constellation.DAO
 import org.constellation.primitives.{ChannelMessageMetadata, ChannelMetadata}
+import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 
-class MessageService()(implicit dao: DAO) extends MerkleService[String, ChannelMessageMetadata] {
-  val merklePool = new StorageService[Seq[String]]()
-  val arbitraryPool = new StorageService[ChannelMessageMetadata]()
-  val memPool = new StorageService[ChannelMessageMetadata]()
+class MessageService[F[_]: Sync]()(implicit dao: DAO) extends MerkleStorageAlgebra[F, String, ChannelMessageMetadata] {
+  val merklePool = new StorageService[F, Seq[String]]()
+  val arbitraryPool = new StorageService[F, ChannelMessageMetadata]()
+  val memPool = new StorageService[F, ChannelMessageMetadata]()
 
-  def putSync(key: String, value: ChannelMessageMetadata): ChannelMessageMetadata = {
-    dao.channelStorage.insert(value)
-    memPool.putSync(key, value)
-  }
+  def put(key: String, value: ChannelMessageMetadata): F[ChannelMessageMetadata] =
+    memPool
+      .put(key, value)
+      .flatTap { _ =>
+        Sync[F].delay(dao.channelStorage.insert(value))
+      }
 
-  def put(key: String, value: ChannelMessageMetadata): IO[ChannelMessageMetadata] = {
-    dao.channelStorage.insert(value)
-    memPool.put(key, value)
-  }
+  def lookup(key: String): F[Option[ChannelMessageMetadata]] =
+    Lookup.extendedLookup[F, String, ChannelMessageMetadata](List(memPool))(key)
 
+  def contains(key: String): F[Boolean] =
+    Lookup.extendedContains[F, String, ChannelMessageMetadata](List(memPool))(key)
 
-  override def lookup: String => IO[Option[ChannelMessageMetadata]] =
-    DbStorage.extendedLookup[String, ChannelMessageMetadata](List(memPool))
-
-  def contains: String ⇒ IO[Boolean] =
-    DbStorage.extendedContains[String, ChannelMessageMetadata](List(memPool))
-
-  override def findHashesByMerkleRoot(merkleRoot: String): IO[Option[Seq[String]]] =
-    merklePool.get(merkleRoot)
+  def findHashesByMerkleRoot(merkleRoot: String): F[Option[Seq[String]]] =
+    merklePool.lookup(merkleRoot)
 }
-class ChannelService() extends StorageService[ChannelMetadata]()
+
+class ChannelService[F[_]: Sync]() extends StorageService[F, ChannelMetadata]()

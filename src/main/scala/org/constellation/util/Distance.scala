@@ -4,6 +4,7 @@ import com.google.common.hash.Hashing
 import org.constellation.primitives.Schema.Id
 
 object Distance {
+
   def calculate(hash: String, id: Id): BigInt =
     numeric256(id.toPublicKey.getEncoded) ^ numeric256(hash.getBytes())
 

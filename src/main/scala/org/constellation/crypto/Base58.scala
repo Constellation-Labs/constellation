@@ -17,7 +17,7 @@ object Base58 {
     * @param input binary data
     * @return the base-58 representation of input
     */
-  def encode(input: Seq[Byte]): String = {
+  def encode(input: Seq[Byte]): String =
     if (input.isEmpty) ""
     else {
       val big = new BigInteger(1, input.toArray)
@@ -36,7 +36,6 @@ object Base58 {
       input.takeWhile(_ == 0).map(_ => builder.append(alphabet.charAt(0)))
       builder.toString().reverse
     }
-  }
 
   /** Documentation.
     *

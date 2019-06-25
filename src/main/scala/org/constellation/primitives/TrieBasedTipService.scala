@@ -16,10 +16,12 @@ trait ConcurrentTipService {
   def toMap: Map[String, TipData]
   def size: Int
   def set(tips: Map[String, TipData])
+
   def update(checkpointBlock: CheckpointBlock)(
     implicit dao: DAO
   ): IO[Option[TipData]]
   def putConflicting(k: String, v: CheckpointBlock)(implicit dao: DAO): IO[Option[CheckpointBlock]]
+
   def pull(
     readyFacilitators: Map[Id, PeerData]
   )(implicit metrics: Metrics): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])]
@@ -28,47 +30,41 @@ trait ConcurrentTipService {
 }
 
 case class TipConflictException(cb: CheckpointBlock, conflictingTxs: List[String])
-  extends Exception(
-    s"CB with baseHash: ${cb.baseHash} is conflicting with other tip or its ancestor. With following txs: $conflictingTxs"
-  )
+    extends Exception(
+      s"CB with baseHash: ${cb.baseHash} is conflicting with other tip or its ancestor. With following txs: $conflictingTxs"
+    )
 case class TipThresholdException(cb: CheckpointBlock, limit: Int)
-  extends Exception(
-    s"Unable to add CB with baseHash: ${cb.baseHash} as tip. Current tips limit met: $limit"
-  )
-class TrieBasedTipService(sizeLimit: Int,
-  maxWidth: Int,
-  numFacilitatorPeers: Int,
-  minPeerTimeAddedSeconds: Int)(implicit dao: DAO)
-  extends ConcurrentTipService {
+    extends Exception(
+      s"Unable to add CB with baseHash: ${cb.baseHash} as tip. Current tips limit met: $limit"
+    )
+
+class TrieBasedTipService(sizeLimit: Int, maxWidth: Int, numFacilitatorPeers: Int, minPeerTimeAddedSeconds: Int)(
+  implicit dao: DAO
+) extends ConcurrentTipService {
 
   private val conflictingTips: TrieMap[String, CheckpointBlock] = TrieMap.empty
   private val tips: TrieMap[String, TipData] = TrieMap.empty
   private val logger = Logger("TrieBasedTipService")
 
-  override def set(newTips: Map[String, TipData]): Unit = {
+  override def set(newTips: Map[String, TipData]): Unit =
     tips ++= newTips
-  }
 
-  override def toMap: Map[String, TipData] = {
+  override def toMap: Map[String, TipData] =
     tips.toMap
-  }
 
-  def size: Int = {
+  def size: Int =
     tips.size
-  }
 
-  def get(key: String): IO[Option[TipData]] = {
+  def get(key: String): IO[Option[TipData]] =
     IO(tips.get(key))
-  }
 
-  def remove(key: String)(implicit metrics: Metrics): IO[Unit] = {
+  def remove(key: String)(implicit metrics: Metrics): IO[Unit] =
     IO {
       tips.synchronized {
         tips -= key
       }
       metrics.incrementMetric("checkpointTipsRemoved")
     }
-  }
 
   def markAsConflict(key: String)(implicit metrics: Metrics): Unit = {
     logger.warn(s"Marking tip as conflicted tipHash: $key")
@@ -91,7 +87,7 @@ class TrieBasedTipService(sizeLimit: Int,
             remove(block.baseHash)(dao.metrics)
           case Some(TipData(block, numUses)) if reuseTips && numUses <= 2 =>
             put(block.baseHash, TipData(block, numUses + 1))(dao.metrics)
-              .flatMap(_ => dao.metrics.incrementMetricAsync("checkpointTipsIncremented"))
+              .flatMap(_ => dao.metrics.incrementMetricAsync[IO]("checkpointTipsIncremented"))
         }
       } yield ()
     }
@@ -101,20 +97,18 @@ class TrieBasedTipService(sizeLimit: Int,
       .recoverWith {
         case err: TipThresholdException =>
           dao.metrics
-            .incrementMetricAsync("memoryExceeded_thresholdMetCheckpoints")
-            .flatMap(_ => dao.metrics.updateMetricAsync("activeTips", tips.size))
+            .incrementMetricAsync[IO]("memoryExceeded_thresholdMetCheckpoints")
+            .flatMap(_ => dao.metrics.updateMetricAsync[IO]("activeTips", tips.size))
             .flatMap(_ => IO.raiseError(err))
       }
   }
 
-  def putConflicting(k: String,
-    v: CheckpointBlock)(implicit dao: DAO): IO[Option[CheckpointBlock]] = {
+  def putConflicting(k: String, v: CheckpointBlock)(implicit dao: DAO): IO[Option[CheckpointBlock]] =
     dao.metrics
-      .updateMetricAsync("conflictingTips", conflictingTips.size)
+      .updateMetricAsync[IO]("conflictingTips", conflictingTips.size)
       .flatMap(_ => IO(conflictingTips.put(k, v)))
-  }
 
-  private def put(k: String, v: TipData)(implicit metrics: Metrics): IO[Option[TipData]] = {
+  private def put(k: String, v: TipData)(implicit metrics: Metrics): IO[Option[TipData]] =
     IO {
       tips.synchronized {
         if (tips.size < sizeLimit) {
@@ -124,7 +118,6 @@ class TrieBasedTipService(sizeLimit: Int,
         }
       }
     }
-  }
 
   def getMinTipHeight()(implicit dao: DAO): Long = {
 
@@ -132,10 +125,7 @@ class TrieBasedTipService(sizeLimit: Int,
       dao.metrics.incrementMetric("minTipHeightKeysEmpty")
     }
 
-    val maybeDatas = tips.keys
-      .map {
-        dao.checkpointService.get
-      }
+    val maybeDatas = tips.keys.map(dao.checkpointService.lookup(_).unsafeRunSync())
 
     if (maybeDatas.exists { _.isEmpty }) {
       dao.metrics.incrementMetric("minTipHeightCBDataEmptyForKeys")
@@ -167,20 +157,16 @@ class TrieBasedTipService(sizeLimit: Int,
     }
   }
 
-  private def ensureTipsHaveParents(): Unit = {
-    tips.filterNot{
-      z =>
-        val parentHashes = z._2.checkpointBlock.parentSOEBaseHashes
-        parentHashes.size == 2 && parentHashes.forall(dao.checkpointService.contains)
-    }.foreach{
+  private def ensureTipsHaveParents(): Unit =
+    tips.filterNot { z =>
+      val parentHashes = z._2.checkpointBlock.parentSOEBaseHashes
+      parentHashes.size == 2 && parentHashes.forall(dao.checkpointService.contains(_).unsafeRunSync())
+    }.foreach {
       case (k, _) => tips.remove(k)
     }
-  }
 
-  private def calculateTipsSOE(): Seq[SignedObservationEdge] = {
-
+  private def calculateTipsSOE(): Seq[SignedObservationEdge] =
     // ensureTipsHaveParents()
-
     Random
       .shuffle(if (size > 50) tips.slice(0, 50).toSeq else tips.toSeq)
       .take(2)
@@ -188,9 +174,7 @@ class TrieBasedTipService(sizeLimit: Int,
         _._2.checkpointBlock.checkpoint.edge.signedObservationEdge
       }
       .sortBy(_.hash)
-  }
-  private def calculateFinalFacilitators(facilitators: Map[Id, PeerData],
-    mergedTipHash: String): Map[Id, PeerData] = {
+  private def calculateFinalFacilitators(facilitators: Map[Id, PeerData], mergedTipHash: String): Map[Id, PeerData] = {
     // TODO: Use XOR distance instead as it handles peer data mismatch cases better
     val facilitatorIndex = (BigInt(mergedTipHash, 16) % facilitators.size).toInt
     val sortedFacils = facilitators.toSeq.sortBy(_._1.hex)

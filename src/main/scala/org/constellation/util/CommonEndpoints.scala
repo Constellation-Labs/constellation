@@ -41,7 +41,7 @@ trait CommonEndpoints extends Json4sSupport {
       val metricFailure = HealthChecker.checkLocalMetrics(dao.metrics.getMetrics, dao.id.short)
       metricFailure match {
         case Left(value) => failWith(value)
-        case Right(_) => complete(StatusCodes.OK)
+        case Right(_)    => complete(StatusCodes.OK)
       }
     } ~
       path("id") {
@@ -52,7 +52,7 @@ trait CommonEndpoints extends Json4sSupport {
       } ~
       path("heights") {
         val maybeHeights = dao.concurrentTipService.toMap.flatMap {
-          case (k, _) => dao.checkpointService.get(k).flatMap { _.height }
+          case (k, _) => dao.checkpointService.lookup(k).unsafeRunSync().flatMap { _.height }
         }.toSeq
         complete(maybeHeights)
       } ~
@@ -60,11 +60,11 @@ trait CommonEndpoints extends Json4sSupport {
         complete(Snapshot.snapshotHashes())
       } ~
       path("info") {
-        val info = dao.threadSafeSnapshotService.getSnapshotInfo
+        val info = dao.snapshotService.getSnapshotInfo().unsafeRunSync()
         val res =
           KryoSerializer.serializeAnyRef(
             info.copy(acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshot.flatMap {
-              dao.checkpointService.getFullData
+              dao.checkpointService.fullData(_).unsafeRunSync()
             })
           )
         complete(res)
@@ -95,16 +95,16 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.genesisObservation)
       } ~
       pathPrefix("address" / Segment) { a =>
-        complete(dao.addressService.getSync(a))
+        complete(dao.addressService.lookup(a).unsafeRunSync())
       } ~
       pathPrefix("balance" / Segment) { a =>
-        complete(dao.addressService.getSync(a).map { _.balanceByLatestSnapshot })
+        complete(dao.addressService.lookup(a).unsafeRunSync().map { _.balanceByLatestSnapshot })
       } ~
       path("state") {
         complete(NodeStateInfo(dao.nodeState, dao.addresses, dao.nodeType))
       } ~
       path("peers") {
-        val peers = dao.peerInfoAsync.map(_.map(_._2.peerMetadata).toSeq)
+        val peers = dao.peerInfo.map(_.map(_._2.peerMetadata).toSeq)
         onComplete(peers.unsafeToFuture) { a =>
           complete(a.toOption.getOrElse(Seq()))
         }

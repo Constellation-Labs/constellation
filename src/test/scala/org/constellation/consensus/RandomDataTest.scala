@@ -37,8 +37,7 @@ object RandomData {
   val startingTips: Seq[SignedObservationEdge] =
     Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
 
-  def randomBlock(tips: Seq[SignedObservationEdge],
-                  startingKeyPair: KeyPair = keyPairs.head): CheckpointBlock = {
+  def randomBlock(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): CheckpointBlock = {
     val txs = Seq.fill(5)(randomTransaction)
     CheckpointBlock.createCheckpointBlock(txs, tips.map { s =>
       TypedEdgeHash(s.hash, EdgeHashType.CheckpointHash)
@@ -63,11 +62,12 @@ object RandomData {
         createTransaction(keyPairs.head.address, address, amount, keyPairs.head)
     }
 
-    txs
-      .toList
-      .map(tx ⇒ IO.pure(tx)
-        .flatTap(dao.addressService.transfer)
-        .flatTap(dao.addressService.transferSnapshot)
+    txs.toList
+      .map(
+        tx ⇒
+          IO.pure(tx)
+            .flatTap(dao.addressService.transfer)
+            .flatTap(dao.addressService.transferSnapshot)
       )
       .sequence[IO, Transaction]
       .unsafeRunSync()
@@ -77,19 +77,24 @@ object RandomData {
 
   def setupSnapshot(cb: Seq[CheckpointBlock])(implicit dao: DAO): Seq[CheckpointBlock] = {
     // Get snapshot uses iterator while set snapshot updates underlying map causing ConcurrentModificationException
-    val snapshot = dao.threadSafeSnapshotService.getSnapshotInfo().snapshot
-    dao.threadSafeSnapshotService.setSnapshot(
-      SnapshotInfo(
-        snapshot,
-        cb.map(_.baseHash),
-        Seq(),
-        1,
-        Seq(),
-        Map.empty,
-        Map.empty,
-        Seq()
-      )
-    )
+    dao.snapshotService
+      .getSnapshotInfo()
+      .map(_.snapshot)
+      .flatMap { snapshot =>
+        dao.snapshotService.setSnapshot(
+          SnapshotInfo(
+            snapshot,
+            cb.map(_.baseHash),
+            Seq(),
+            1,
+            Seq(),
+            Map.empty,
+            Map.empty,
+            Seq()
+          )
+        )
+      }
+      .unsafeRunSync()
 
     cb
   }
@@ -194,10 +199,8 @@ class RandomDataTest extends FlatSpec {
           conv
         })
     } ++ Seq(
-      Map("id" -> conv(go.initialDistribution.soe.hash),
-          "parentIds" -> Seq(conv(go.genesis.soe.hash))),
-      Map("id" -> conv(go.initialDistribution2.soe.hash),
-          "parentIds" -> Seq(conv(go.genesis.soe.hash))),
+      Map("id" -> conv(go.initialDistribution.soe.hash), "parentIds" -> Seq(conv(go.genesis.soe.hash))),
+      Map("id" -> conv(go.initialDistribution2.soe.hash), "parentIds" -> Seq(conv(go.genesis.soe.hash))),
       Map("id" -> conv(go.genesis.soe.hash), "parentIds" -> Seq[String]())
     )).json
     logger.debug(json)
@@ -209,5 +212,3 @@ class RandomDataTest extends FlatSpec {
   }
 
 }
-
-

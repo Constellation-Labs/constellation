@@ -11,9 +11,8 @@ import org.constellation.util.{HashSignature, SignatureBatch}
 
 class ConstellationKryoRegistrar extends IKryoRegistrar {
 
-  override def apply(kryo: Kryo): Unit = {
+  override def apply(kryo: Kryo): Unit =
     this.registerClasses(kryo)
-  }
 
   def registerClasses(kryo: Kryo): Unit = {
 

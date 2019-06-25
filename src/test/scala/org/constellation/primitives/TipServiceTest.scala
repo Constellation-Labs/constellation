@@ -1,7 +1,7 @@
 package org.constellation.primitives
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
-import org.constellation.DAO
+import org.constellation.{DAO, Fixtures}
 import org.constellation.consensus.TipData
 import org.constellation.util.Metrics
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -15,9 +15,15 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
 
   def prepareDAO(): DAO = {
     val dao = mock[DAO]
-    dao.metrics shouldReturn mock[Metrics]
-    dao.metrics.incrementMetricAsync(*) shouldReturn IO.unit
-    dao.metrics.updateMetricAsync(*, any[Int]) shouldReturn IO.unit
+
+    val metrics = mock[Metrics]
+    metrics.incrementMetricAsync[IO](*)(*) shouldReturn IO.unit
+    metrics.updateMetricAsync[IO](*, any[Int])(*) shouldReturn IO.unit
+
+    metrics.updateMetricAsync[IO]("activeTips", 2).unsafeRunSync()
+
+    dao.metrics shouldReturn metrics
+
     dao
   }
 
@@ -57,9 +63,8 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
     cb
   }
 
-  def createIndexedCBmocks(size: Int, func: Int => CheckpointBlock) = {
+  def createIndexedCBmocks(size: Int, func: Int => CheckpointBlock) =
     (1 to size).map(func)
-  }
 
   def createShiftedTasks(
     cbs: List[CheckpointBlock],

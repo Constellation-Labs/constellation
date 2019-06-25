@@ -12,7 +12,7 @@ class MultiLock[F[_]: Concurrent, K] {
   private[this] val locks = TrieMap.empty[K, Semaphore[F]]
 
   def acquire[R](keys: List[K])(thunk: => F[R])(implicit o: Ordering[K]): F[R] = {
-    def lockAll() = {
+    def lockAll() =
       for {
         k <- keys.sorted.pure[F]
 
@@ -26,20 +26,14 @@ class MultiLock[F[_]: Concurrent, K] {
           })
           .sequence
       } yield openLocks
-    }
 
     def unlockAll(openLocks: List[Semaphore[F]]) =
       openLocks.map(_.release).sequence
 
-    lockAll()
-      .flatMap(
-        openLocks =>
-          thunk
-            .flatMap(
-              result =>
-                unlockAll(openLocks)
-                  .map(_ => result)
-          )
-      )
+    for {
+      openLocks <- lockAll()
+      result <- thunk
+      _ <- unlockAll(openLocks)
+    } yield result
   }
 }

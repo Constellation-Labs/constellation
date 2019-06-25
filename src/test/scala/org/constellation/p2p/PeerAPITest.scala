@@ -43,7 +43,7 @@ class PeerAPITest
       val reply = "http://originator:9001/peer-api/finished/checkpoint/reply"
       val fakeResp = Future.successful(mock[Response[Unit]])
       Mockito
-        .doReturn(fakeResp,fakeResp)
+        .doReturn(fakeResp, fakeResp)
         .when(peerAPI)
         .makeCallback(*, *)
 

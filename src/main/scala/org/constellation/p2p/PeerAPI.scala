@@ -21,7 +21,7 @@ import org.constellation.consensus._
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.storage.TransactionStatus
+import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util._
 import org.constellation.{DAO, ResourceInfo}
 import org.json4s.native
@@ -45,10 +45,11 @@ object PeerAPI {
 
 }
 
-class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit system: ActorSystem,
-                                                                      val timeout: Timeout,
-                                                                      val dao: DAO)
-    extends Json4sSupport
+class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
+  implicit system: ActorSystem,
+  val timeout: Timeout,
+  val dao: DAO
+) extends Json4sSupport
     with CommonEndpoints
     with IPEnforcer
     with StrictLogging
@@ -113,7 +114,7 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
       pathPrefix("channel") {
         path("neighborhood") {
           entity(as[Id]) { peerId =>
-            val distanceSorted = dao.channelService.toMapSync().toSeq.sortBy {
+            val distanceSorted = dao.channelService.toMap().unsafeRunSync().toSeq.sortBy {
               case (channelId, meta) =>
                 Distance.calculate(meta.channelId, peerId)
             } // TODO: Determine appropriate fraction to respond with.
@@ -126,15 +127,18 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
             // TODO: Add limiting
             if (sendRequest.amountActual < (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor) &&
                 dao.addressService
-                  .getSync(dao.selfAddressStr)
+                  .lookup(dao.selfAddressStr)
+                  .unsafeRunSync()
                   .map { _.balance }
                   .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)) {
 
-              val tx = createTransaction(dao.selfAddressStr,
-                                         sendRequest.dst,
-                                         sendRequest.amountActual,
-                                         dao.keyPair,
-                                         normalized = false)
+              val tx = createTransaction(
+                dao.selfAddressStr,
+                sendRequest.dst,
+                sendRequest.amountActual,
+                dao.keyPair,
+                normalized = false
+              )
               logger.info(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
 
               dao.transactionService.put(TransactionCacheData(tx)).unsafeRunSync()
@@ -191,7 +195,7 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
                 optionalHeaderValueByName("ReplyTo") { replyToOpt =>
                   val maybeData = getHostAndPortFromRemoteAddress(ip)
                   val knownHost = maybeData.exists(
-                    i => dao.peerInfoAsync.unsafeRunSync().exists(_._2.client.hostName == i.canonicalHostName)
+                    i => dao.peerInfo.unsafeRunSync().exists(_._2.client.hostName == i.canonicalHostName)
                   )
                   dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
                   EdgeProcessor.handleFinishedCheckpoint(fc).map { result =>
@@ -209,7 +213,7 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
           } ~
             path("reply") {
               entity(as[FinishedCheckpointResponse]) { fc =>
-                if(!fc.isSuccess){
+                if (!fc.isSuccess) {
                   dao.metrics.incrementMetric(
                     "formCheckpointSignatureResponseError"
                   )
@@ -221,10 +225,9 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
         }
     }
 
-  private[p2p] def makeCallback(u: URI, entity: AnyRef) = {
+  private[p2p] def makeCallback(u: URI, entity: AnyRef) =
     APIClient(u.getHost, u.getPort)
       .postNonBlockingUnit(u.getPath, entity)
-  }
 
   private val blockBuildingRoundRoute =
     createRoute(BlockBuildingRoundRoute.pathPrefix)(
@@ -237,17 +240,18 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
           dao.metrics.incrementMetric("transactionRXByPeerAPI")
 
           onComplete {
-            dao.transactionService.exists(tx.hash)
+            dao.transactionService
+              .contains(tx.hash)
               .flatMap {
-                case false => dao.transactionService.put(TransactionCacheData(tx), as = TransactionStatus.Unknown, false)
-                case _ => IO.unit
+                case false => dao.transactionService.put(TransactionCacheData(tx), as = TransactionStatus.Unknown)
+                case _     => IO.unit
               }
               // TODO: Respond with initial tx validation
               .map(_ => StatusCodes.OK)
               .unsafeToFuture()
           } {
             case Success(statusCode) => complete(statusCode)
-            case Failure(_) => complete(StatusCodes.InternalServerError)
+            case Failure(_)          => complete(StatusCodes.InternalServerError)
           }
         }
       }
@@ -269,34 +273,31 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(implicit s
     }
   }
 
-  private def getEndpoints(address: InetSocketAddress) = {
+  private def getEndpoints(address: InetSocketAddress) =
     get {
       path("ip") {
         complete(address)
       }
     }
-  }
 
-  private def getHostAndPortFromRemoteAddress(clientIP: RemoteAddress) = {
+  private def getHostAndPortFromRemoteAddress(clientIP: RemoteAddress) =
     clientIP.toOption.map { z =>
       PeerIPData(z.getHostAddress, Some(clientIP.getPort()))
     }
-  }
 
-  private def createRoute(path: String)(routeFactory: () => Route): Route = {
+  private def createRoute(path: String)(routeFactory: () => Route): Route =
     pathPrefix(path) {
       handleExceptions(exceptionHandler) {
         routeFactory()
       }
     }
-  }
 
   private def ipLookup(address: InetSocketAddress): Option[Schema.Id] = {
     val ip = address.getAddress.getHostAddress
 
     def sameHost(p: PeerData) = p.peerMetadata.host == ip
 
-    dao.peerInfoAsync.unsafeRunSync().find(p => sameHost(p._2)).map(_._1)
+    dao.peerInfo.unsafeRunSync().find(p => sameHost(p._2)).map(_._1)
   }
 
   def exceptionHandler: ExceptionHandler =

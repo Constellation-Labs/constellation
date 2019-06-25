@@ -6,9 +6,8 @@ import constellation._
 
 trait SimpleWalletLike {
 
-
   // TODO: Not this.
-  @volatile var wallet: Seq[KeyPair] = Seq.fill(10){ KeyUtils.makeKeyPair()}
+  @volatile var wallet: Seq[KeyPair] = Seq.fill(10) { KeyUtils.makeKeyPair() }
 
   // For generating additional keyPairs, maybe make this just regular API call instead.
 

@@ -74,21 +74,18 @@ class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[S
 
   import SnapshotsDownloader.getSnapshotTimeout
 
-  def processSnapshots(hashes: Seq[String])(implicit peers: Peers): IO[Unit] = {
+  def processSnapshots(hashes: Seq[String])(implicit peers: Peers): IO[Unit] =
     hashes.map(processSnapshot).toList.parSequence.map(_ => ())
-  }
 
   private def processSnapshot(hash: String)(implicit peers: Peers): IO[Unit] = {
     val clients = peers.values.map(_.client)
 
-    downloadSnapshot(hash, clients)
-      .flatTap { _ =>
-        IO {
-          dao.metrics.incrementMetric("downloadedSnapshots")
-          dao.metrics.incrementMetric(Metrics.snapshotCount)
-        }
+    downloadSnapshot(hash, clients).flatTap { _ =>
+      IO {
+        dao.metrics.incrementMetric("downloadedSnapshots")
+        dao.metrics.incrementMetric(Metrics.snapshotCount)
       }
-      .flatMap(acceptSnapshot)
+    }.flatMap(acceptSnapshot)
   }
 
   private def acceptSnapshot(snapshot: StoredSnapshot): IO[Unit] = IO {
@@ -107,8 +104,7 @@ class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[S
   }
 }
 
-class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
-                                                              ec: ExecutionContext)
+class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO, ec: ExecutionContext)
     extends StrictLogging {
   private implicit val ioTimer: Timer[IO] = IO.timer(ec)
 
@@ -140,7 +136,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
     } yield ()
 
   private def initDownloadingProcess: IO[Unit] =
-    IO(logger.info("Download started"))
+    IO(logger.debug("Download started"))
       .flatMap(_ => setNodeState(NodeState.DownloadInProgress))
       .flatMap(_ => requestForFaucet)
       .flatMap(_ => requestForFaucet)
@@ -154,15 +150,15 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .map(_.values.flatMap(_.toOption))
       .map(_.find(_.nonEmpty).flatten.get)
       .toIO
-      .flatMap(updateMetricAndPass("downloadedGenesis", "true"))
+      .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadedGenesis", "true"))
       .flatTap(genesis => IO(dao.acceptGenesis(genesis)))
 
   private def waitForPeers(): IO[Unit] =
-    IO(logger.info(s"Waiting ${waitForPeersDelay.toString()} for peers"))
+    IO(logger.debug(s"Waiting ${waitForPeersDelay.toString()} for peers"))
       .flatMap(_ => IO.sleep(waitForPeersDelay))
 
   private def getReadyPeers() =
-    dao.readyPeersAsync(NodeType.Full)
+    dao.readyPeers(NodeType.Full)
 
   private def getSnapshotClient(peers: Peers) = IO(peers.head._2.client)
 
@@ -185,7 +181,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
     for {
       snapshotHashes <- getSnapshotHashes(snapshotInfo)
       _ <- snapshotsProcessor.processSnapshots(snapshotHashes)
-      _ <- updateMetric("downloadFirstPassComplete", "true")
+      _ <- dao.metrics.updateMetricAsync[IO]("downloadFirstPassComplete", "true")
       _ <- setNodeState(NodeState.DownloadCompleteAwaitingFinalSync)
     } yield snapshotHashes
 
@@ -197,11 +193,12 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .map(_.filterNot(hashes.contains))
       .flatMap(
         hashes =>
-          updateMetric("downloadExpectedNumSnapshotsSecondPass", hashes.size.toString)
+          dao.metrics
+            .updateMetricAsync[IO]("downloadExpectedNumSnapshotsSecondPass", hashes.size.toString)
             .map(_ => hashes)
       )
       .flatMap(snapshotsProcessor.processSnapshots)
-      .flatMap(_ => updateMetric("downloadSecondPassComplete", "true"))
+      .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadSecondPassComplete", "true"))
       .map(_ => snapshotInfo)
 
   private def finishDownload(snapshot: SnapshotInfo): IO[Unit] =
@@ -215,22 +212,21 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
     } yield ()
 
   private def setAcceptedTransactionsAfterDownload(): IO[Unit] = IO {
-    dao.transactionAcceptedAfterDownload =
-      dao.metrics.getMetrics.get("transactionAccepted").map(_.toLong).getOrElse(0L)
-    logger.info("download process has finished")
+    dao.transactionAcceptedAfterDownload = dao.metrics.getMetrics.get("transactionAccepted").map(_.toLong).getOrElse(0L)
+    logger.info("download process has been finished")
   }
 
   /** **/
   private def setNodeState(nodeState: NodeState): IO[Unit] =
     IO(dao.nodeState = nodeState)
-      .flatMap(updateMetricAndPass("nodeState", nodeState.toString))
+      .flatTap(_ => dao.metrics.updateMetricAsync[IO]("nodeState", nodeState.toString))
       .flatMap(_ => IO(PeerManager.broadcastNodeState()))
 
   private def requestForFaucet: IO[Iterable[Response[String]]] =
     for {
-      m       <-  dao.peerInfoAsync
-      clients =   m.toList.map(_._2.client)
-      resp    <-  clients.traverse(_.post("faucet", SendToAddress(dao.selfAddressStr, 500L)).toIO)
+      m <- dao.peerInfo
+      clients = m.toList.map(_._2.client)
+      resp <- clients.traverse(_.post("faucet", SendToAddress(dao.selfAddressStr, 500L)).toIO)
     } yield resp
 
   private def getSnapshotHashes(snapshotInfo: SnapshotInfo): IO[Seq[String]] = {
@@ -238,46 +234,37 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
     val snapshotHashes = snapshotInfo.snapshotHashes.filterNot(preExistingSnapshots.contains)
 
     IO.pure(snapshotHashes)
-      .flatMap(updateMetricAndPass("downloadExpectedNumSnapshots", snapshotHashes.size.toString))
+      .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadExpectedNumSnapshots", snapshotHashes.size.toString))
   }
 
-  private def setSnapshot(snapshotInfo: SnapshotInfo): IO[Unit] = IO {
-    dao.threadSafeSnapshotService.setSnapshot(snapshotInfo)
-  }
+  private def setSnapshot(snapshotInfo: SnapshotInfo): IO[Unit] =
+    dao.snapshotService.setSnapshot(snapshotInfo)
 
   private def enableRandomTX: IO[Unit] = IO {
     dao.generateRandomTX = true
   }
 
-  private def acceptSnapshotCacheData(snapshotInfo: SnapshotInfo): IO[Unit] = IO {
-    dao.threadSafeSnapshotService.syncBuffer.foreach { h =>
-      if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache
-            .contains(h)) {
-        dao.metrics.incrementMetric("syncBufferCBAccepted")
-        dao.threadSafeSnapshotService.accept(h).unsafeRunSync()
-      }
-    }
-  }
+  private def acceptSnapshotCacheData(snapshotInfo: SnapshotInfo): IO[Unit] =
+    dao.snapshotService.syncBuffer.get
+      .flatMap(_.toList.map { h =>
+        if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache.contains(h)) {
+          dao.metrics.incrementMetricAsync[IO]("SyncBufferCBAccepted") *> dao.checkpointService.accept(h)
+        } else {
+          IO.unit
+        }
+      }.sequence[IO, Unit])
+      .void
 
-  private def clearSyncBuffer: IO[Unit] = IO {
-    dao.threadSafeSnapshotService.syncBuffer = Seq()
-  }
+  private def clearSyncBuffer: IO[Unit] =
+    dao.snapshotService.syncBuffer.set(Seq())
 
   private def setDownloadFinishedTime(): IO[Unit] = IO {
     dao.downloadFinishedTime = System.currentTimeMillis()
   }
-
-  private def updateMetric(key: String, value: String): IO[Unit] = IO {
-    dao.metrics.updateMetric(key, value)
-  }
-
-  private def updateMetricAndPass[A](key: String, value: String)(a: A): IO[A] =
-    IO {
-      dao.metrics.updateMetric(key, value)
-    }.map(_ => a)
 }
 
 object Download {
+
   def download()(implicit dao: DAO, ec: ExecutionContext): Unit =
     if (dao.nodeType == NodeType.Full) {
       tryWithMetric(
@@ -293,15 +280,16 @@ object Download {
 
       // TODO: Move to .lightDownload() from above process, testing separately for now
       // Debug
-      val peer = dao.readyPeersAsync(NodeType.Full).unsafeRunSync().head._2.client
+      val peer = dao.readyPeers(NodeType.Full).unsafeRunSync().head._2.client
 
       val nearbyChannels = peer.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", dao.id)
 
       dao.metrics.updateMetric("downloadedNearbyChannels", nearbyChannels.size.toString)
 
-      nearbyChannels.foreach { cmd =>
-        dao.channelService.putSync(cmd.channelId, cmd)
-      }
+      nearbyChannels.toList
+        .map(cmd => dao.channelService.put(cmd.channelId, cmd))
+        .sequence
+        .unsafeRunSync()
 
       dao.setNodeState(NodeState.Ready)
 

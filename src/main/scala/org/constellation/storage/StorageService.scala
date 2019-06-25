@@ -1,91 +1,65 @@
 package org.constellation.storage
 
-import cats.effect.IO
+import cats.effect.concurrent.Ref
+import cats.effect.Sync
+import cats.implicits._
 import com.github.blemale.scaffeine.{Cache, Scaffeine}
+import org.constellation.storage.algebra.StorageAlgebra
 import org.constellation.util.Metrics
 
-import scala.collection.mutable
+import scala.collection.immutable.Queue
 import scala.concurrent.duration._
 
-//noinspection ScalaStyle
-class StorageService[V](expireAfterMinutes: Option[Int] = Some(240)) extends Storage[IO, String, V] with Lookup[String, V] {
+class StorageService[F[_]: Sync, V](expireAfterMinutes: Option[Int] = Some(240)) extends StorageAlgebra[F, String, V] {
   private val lruCache: Cache[String, V] = {
     val cacheWithStats = Scaffeine().recordStats()
 
-    val cache = expireAfterMinutes.map(mins => cacheWithStats.expireAfterAccess(mins.minutes))
+    val cache = expireAfterMinutes
+      .map(mins => cacheWithStats.expireAfterAccess(mins.minutes))
       .getOrElse(cacheWithStats)
 
     cache.build[String, V]()
   }
 
-  private val queue = mutable.Queue[V]()
+  private val queueRef: Ref[F, Queue[V]] = Ref.unsafe[F, Queue[V]](Queue[V]())
   private val maxQueueSize = 20
 
   Metrics.cacheMetrics.addCache(this.getClass.getSimpleName, lruCache.underlying)
 
-  override def lookup(key: String): IO[Option[V]] = get(key)
-
-  override def getSync(key: String): Option[V] =
-    lruCache.getIfPresent(key)
-
-  override def putSync(key: String, value: V): V = {
-    queue.synchronized {
-      if (queue.size == maxQueueSize) {
-        queue.dequeue()
-      }
-
-      queue.enqueue(value)
-      lruCache.put(key, value)
-
-      value
-    }
-  }
-
-  override def updateSync(key: String, updateFunc: V => V, empty: => V): V =
-    putSync(key, getSync(key).map(updateFunc).getOrElse(empty))
-
-  def updateOnly(key: String, updateFunc: V => V): Option[V] =
-    getSync(key).map(updateFunc).map { putSync(key, _) }
-
-  override def removeSync(keys: Set[String]): Unit =
-    lruCache.invalidateAll(keys)
-
-  override def containsSync(key: String): Boolean =
-    lruCache.getIfPresent(key).isDefined
-
-  override def toMapSync(): Map[String, V] =
-    lruCache.asMap().toMap
-
-  override def get(key: String): IO[Option[V]] =
-    IO(getSync(key))
-
-  override def put(key: String, value: V): IO[V] =
-    IO(putSync(key, value))
-
-  override def update(key: String, updateFunc: V => V): IO[Option[V]] = {
-    import cats.implicits._
-
-    get(key)
-      .flatMap(_.map(updateFunc).traverse(x => put(key, x)))
-  }
-
-  override def update(key: String, updateFunc: V => V, empty: => V): IO[V] =
-    get(key)
+  def update(key: String, updateFunc: V => V, empty: => V): F[V] =
+    lookup(key)
       .map(_.map(updateFunc).getOrElse(empty))
-      .flatMap(put(key, _))
+      .flatMap(v => Sync[F].delay(lruCache.put(key, v)).map(_ => v))
 
-  override def remove(keys: Set[String]): IO[Unit] =
-    IO(lruCache.invalidateAll(keys))
+  def update(key: String, updateFunc: V => V): F[Option[V]] =
+    lookup(key)
+      .flatMap(
+        _.map(updateFunc)
+          .traverse(v => Sync[F].delay(lruCache.put(key, v)).map(_ => v))
+      )
 
-  override def contains(key: String): IO[Boolean] =
-    IO(containsSync(key))
+  def put(key: String, value: V): F[V] =
+    queueRef.update {
+      case q if q.size >= maxQueueSize => q.dequeue._2
+      case q                           => q
+    } *>
+      queueRef.update(_.enqueue(value)) *>
+      Sync[F].delay(lruCache.put(key, value)).map(_ => value)
 
-  override def toMap(): IO[Map[String, V]] =
-    IO(lruCache.asMap().toMap)
+  def lookup(key: String): F[Option[V]] =
+    Sync[F].delay(lruCache.getIfPresent(key))
 
-  override def cacheSize(): Long = lruCache.estimatedSize()
+  def remove(keys: Set[String]): F[Unit] =
+    Sync[F].delay(lruCache.invalidateAll(keys))
 
-  override def getLast20Sync = queue.reverse.toList
+  def contains(key: String): F[Boolean] =
+    lookup(key).map(_.isDefined)
 
-  override def getLast20 = IO(getLast20Sync)
+  def size(): F[Long] = Sync[F].delay(lruCache.estimatedSize())
+
+  def toMap(): F[Map[String, V]] =
+    Sync[F].delay(lruCache.asMap().toMap)
+
+  def getLast20(): F[List[V]] =
+    queueRef.get.map(_.reverse.toList)
 }

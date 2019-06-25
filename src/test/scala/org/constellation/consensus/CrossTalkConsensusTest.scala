@@ -2,10 +2,19 @@ package org.constellation.consensus
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
+import com.typesafe.config.ConfigFactory
 import org.constellation.DAO
-import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
+import org.constellation.consensus.CrossTalkConsensus.{
+  NotifyFacilitators,
+  ParticipateInBlockCreationRound,
+  StartNewBlockCreationRound
+}
 import org.constellation.consensus.Round.{LightTransactionsProposal, SelectedUnionBlock, UnionBlockProposal}
-import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{
+  BroadcastLightTransactionProposal,
+  BroadcastSelectedUnionBlock,
+  BroadcastUnionBlockProposal
+}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, OneInstancePerTest}
 
@@ -26,8 +35,9 @@ class CrossTalkConsensusTest
   val roundManagerProbe = TestProbe()
 
   val crossTalkProbe = TestProbe()
+
   val crossTalkConsensus: TestActorRef[CrossTalkConsensus] =
-    TestActorRef(Props(new CrossTalkConsensus(remoteSender) {
+    TestActorRef(Props(new CrossTalkConsensus(remoteSender, ConfigFactory.load().resolve()) {
       override val roundManager: ActorRef = roundManagerProbe.ref
     }), crossTalkProbe.ref)
 
@@ -56,7 +66,7 @@ class CrossTalkConsensusTest
 
     crossTalkConsensus ! cmd
 
-    nodeRemoteSender.broadcastLightTransactionProposal(cmd) was called
+    nodeRemoteSender.broadcastLightTransactionProposal(cmd).was(called)
   }
 
   test("it should pass LightTransactionsProposal to the round manager") {
@@ -80,7 +90,7 @@ class CrossTalkConsensusTest
 
     crossTalkConsensus ! cmd
 
-    nodeRemoteSender.broadcastBlockUnion(cmd) was called
+    nodeRemoteSender.broadcastBlockUnion(cmd).was(called)
   }
 
   test("it should pass NotifyFacilitators to the remote sender") {
@@ -88,7 +98,7 @@ class CrossTalkConsensusTest
 
     crossTalkConsensus ! cmd
 
-    nodeRemoteSender.notifyFacilitators(cmd) was called
+    nodeRemoteSender.notifyFacilitators(cmd).was(called)
   }
 
   test("it should pass BroadcastSelectedUnionBlock to the remote sender") {
@@ -96,7 +106,7 @@ class CrossTalkConsensusTest
 
     crossTalkConsensus ! cmd
 
-    nodeRemoteSender.broadcastSelectedUnionBlock(cmd) was called
+    nodeRemoteSender.broadcastSelectedUnionBlock(cmd).was(called)
   }
 
   test("it should pass SelectedUnionBlock to the round manager") {

@@ -1,11 +1,6 @@
 package org.constellation.cluster
 
-import org.constellation.primitives.{
-  ChannelMessage,
-  ChannelMessageMetadata,
-  ChannelProof,
-  SensorData
-}
+import org.constellation.primitives.{ChannelMessage, ChannelMessageMetadata, ChannelProof, SensorData}
 import org.constellation.util.{APIClientBase, Simulation}
 import org.constellation.{Channel, ConstellationApp}
 
@@ -22,7 +17,7 @@ class ConstellationAppSim(constellationApp: ConstellationApp)(
   private val schemaStr = SensorData.jsonSchema
   private var broadcastedMessages: Seq[ChannelMessage] = Seq.empty[ChannelMessage]
 
-  def assertGenesisAccepted(apis: Seq[APIClientBase])(resp: Channel) = {
+  def assertGenesisAccepted(apis: Seq[APIClientBase])(resp: Channel) =
     sim.awaitConditionMet(
       "Test channel genesis not stored",
       apis.forall {
@@ -31,14 +26,13 @@ class ConstellationAppSim(constellationApp: ConstellationApp)(
         ).exists(_.blockHash.nonEmpty)
       }
     )
-  }
 
   def messagesInSnapshots(
     channelId: String,
     apis: Seq[APIClientBase],
     maxRetries: Int = 30,
     delay: Long = 3000
-  ): Boolean = {
+  ): Boolean =
     sim.awaitConditionMet(
       s"Messages for ${channelId} not found in snapshot", {
         apis.forall { a =>
@@ -50,14 +44,13 @@ class ConstellationAppSim(constellationApp: ConstellationApp)(
       maxRetries,
       delay
     )
-  }
 
   def messagesReceived(
     channelId: String,
     apis: Seq[APIClientBase],
     maxRetries: Int = 10,
     delay: Long = 3000
-  ): Boolean = {
+  ): Boolean =
     sim.awaitConditionMet(
       s"Peer health checks failed", {
         apis.forall { a =>
@@ -72,7 +65,6 @@ class ConstellationAppSim(constellationApp: ConstellationApp)(
       maxRetries,
       delay
     )
-  }
 
   def generateChannelMessages(channel: Channel, numMessages: Int = 1): Seq[SensorData] = {
     val validNameChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray.map {
@@ -135,6 +127,7 @@ class ConstellationAppSim(constellationApp: ConstellationApp)(
       )
     }
   }
+
   def messagesValid(proof: ChannelProof) = {
     val m = proof.channelMessageMetadata
     val hasSnapshotHash = m.snapshotHash.nonEmpty

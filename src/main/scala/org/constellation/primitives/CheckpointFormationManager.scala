@@ -10,7 +10,7 @@ import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.StartNewBlockCreationRound
 import org.constellation.consensus.EdgeProcessor
 import org.constellation.primitives.Schema.NodeState
-import org.constellation.storage.TransactionStatus
+import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.Periodic
 
 import scala.concurrent.duration._
@@ -22,7 +22,7 @@ class CheckpointFormationManager(
   undersizedCheckpointThresholdSeconds: Int = 30,
   crossTalkConsensusActor: ActorRef
 )(implicit dao: DAO)
-  extends Periodic[Try[Option[Boolean]]]("RandomTransactionManager", periodSeconds) {
+    extends Periodic[Try[Option[Boolean]]]("RandomTransactionManager", periodSeconds) {
 
   def toFiniteDuration(d: java.time.Duration): FiniteDuration = Duration.fromNanos(d.toNanos)
 

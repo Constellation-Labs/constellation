@@ -13,11 +13,7 @@ import org.constellation.primitives.Schema.SendToAddress
 
 import scala.util.Random
 
-class PartitionerTest
-    extends AsyncFlatSpecLike
-    with Matchers
-    with BeforeAndAfterAll
-    with BeforeAndAfterEach {
+class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
   val random = new java.util.Random()
 
@@ -25,11 +21,7 @@ class PartitionerTest
     val destinationAddresses = idSet5.map(_.address)
     val destinationAddressDups = (0 to factor).flatMap(_ => destinationAddresses)
     destinationAddressDups.map(
-      destStr =>
-        makeTransaction(id.address,
-                        destStr,
-                        random.nextLong(),
-                        getRandomElement(tempKeySet, random))
+      destStr => makeTransaction(id.address, destStr, random.nextLong(), getRandomElement(tempKeySet, random))
     )
   }
   val randomTxs = getRandomTxs()

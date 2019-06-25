@@ -12,12 +12,12 @@ object Validation {
 //  }
 
   implicit class EnrichedFuture[A](future: Future[A]) {
-    def toValidatedNel(implicit ec: ExecutionContext): Future[ValidatedNel[Throwable, A]] = {
+
+    def toValidatedNel(implicit ec: ExecutionContext): Future[ValidatedNel[Throwable, A]] =
       future.map(Validated.valid).recover {
         case e =>
           Validated.invalidNel(e)
       }
-    }
   }
 
 }

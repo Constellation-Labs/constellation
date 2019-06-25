@@ -43,19 +43,16 @@ case class ChannelMetadata(
   def channelId = genesisMessageMetadata.channelMessage.signedMessageData.hash
 }
 
-
 case class SingleChannelUIOutput(
-                                  channelOpen: ChannelOpen,
-                                  totalNumMessages: Long = 0L,
-                                  last25MessageHashes: Seq[String] = Seq(),
-                                  genesisAddress: String
-                                )
-
+  channelOpen: ChannelOpen,
+  totalNumMessages: Long = 0L,
+  last25MessageHashes: Seq[String] = Seq(),
+  genesisAddress: String
+)
 
 case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 
 object ChannelMessage extends StrictLogging {
-
 
   def create(message: String, previous: String, channelId: String)(
     implicit keyPair: KeyPair
@@ -86,9 +83,8 @@ object ChannelMessage extends StrictLogging {
         val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)(dao.keyPair)
         dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.name) = msg
         val genesisHashChannelId = msg.signedMessageData.hash
-        dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) =
-          channelOpenRequest.name
-        dao.messageService.memPool.putSync(msg.signedMessageData.hash, ChannelMessageMetadata(msg))
+        dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) = channelOpenRequest.name
+        dao.messageService.memPool.put(msg.signedMessageData.hash, ChannelMessageMetadata(msg)).unsafeRunSync()
         dao.threadSafeMessageMemPool.put(Seq(msg), overrideLimit = true)
         val semaphore = new Semaphore(1)
         dao.threadSafeMessageMemPool.activeChannels(genesisHashChannelId) = semaphore
@@ -100,7 +96,7 @@ object ChannelMessage extends StrictLogging {
             retries += 1
             logger.info(s"Polling genesis creation attempt $retries for $genesisHashChannelId")
             Thread.sleep(1000)
-            metadata = dao.channelService.getSync(genesisHashChannelId)
+            metadata = dao.channelService.lookup(genesisHashChannelId).unsafeRunSync()
           }
           val response =
             if (metadata.isEmpty) "Timeout awaiting block acceptance"
@@ -114,10 +110,10 @@ object ChannelMessage extends StrictLogging {
 
   def createMessages(
     channelSendRequest: ChannelSendRequest
-  )(implicit dao: DAO): Future[ChannelSendResponse] = {
-
+  )(implicit dao: DAO): Future[ChannelSendResponse] =
     dao.messageService.memPool
-      .lookup(channelSendRequest.channelId).unsafeRunSync()
+      .lookup(channelSendRequest.channelId)
+      .unsafeRunSync()
       .map { previousMessage =>
         val previous = previousMessage.channelMessage.signedMessageData.hash
 
@@ -131,7 +127,7 @@ object ChannelMessage extends StrictLogging {
 
         dao.threadSafeMessageMemPool.put(messages, overrideLimit = true)
         messages.foreach(cm => {
-          dao.messageService.memPool.putSync(cm.signedMessageData.hash, ChannelMessageMetadata(cm))
+          dao.messageService.memPool.put(cm.signedMessageData.hash, ChannelMessageMetadata(cm)).unsafeRunSync()
         })
         val semaphore = new Semaphore(1)
         dao.threadSafeMessageMemPool.activeChannels(channelSendRequest.channelId) = semaphore
@@ -148,7 +144,6 @@ object ChannelMessage extends StrictLogging {
           ChannelSendResponse("Channel not found", Seq())
         )
       )
-  }
 }
 
 case class ChannelProof(
@@ -159,10 +154,10 @@ case class ChannelProof(
 )
 
 case class ChannelOpenRequest(
-                               channelId: String,
-                               jsonSchema: Option[String] = None,
-                               acceptInvalid: Boolean = true
-                             ) extends ChannelRequest
+  channelId: String,
+  jsonSchema: Option[String] = None,
+  acceptInvalid: Boolean = true
+) extends ChannelRequest
 case class ChannelOpen(
   name: String,
   jsonSchema: Option[String] = None,
@@ -170,14 +165,15 @@ case class ChannelOpen(
 )
 
 case class ChannelOpenResponse(
-                                errorMessage: String = "Success",
-                                genesisHash: String = ""
-                              )
+  errorMessage: String = "Success",
+  genesisHash: String = ""
+)
 
 case class ChannelSendRequest(
-                               channelId: String,
-                               messages: Seq[String]
-                             ) extends ChannelRequest
+  channelId: String,
+  messages: Seq[String]
+) extends ChannelRequest
+
 trait ChannelRequest {
   val channelId: String
 }

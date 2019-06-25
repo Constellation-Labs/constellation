@@ -52,9 +52,8 @@ trait KVDBDatastoreImpl extends Datastore {
     empty: AddressCacheData
   ): AddressCacheData = update(key, f, empty)
 
-  override def getAddressCacheData(key: String): Option[AddressCacheData] = {
+  override def getAddressCacheData(key: String): Option[AddressCacheData] =
     get[AddressCacheData](key)
-  }
 
   override def putSignedObservationEdgeCache(
     key: String,

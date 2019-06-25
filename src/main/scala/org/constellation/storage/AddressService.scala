@@ -1,24 +1,30 @@
 package org.constellation.storage
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.{Concurrent, Sync}
 import cats.implicits._
 import org.constellation.primitives.Schema.{Address, AddressCacheData}
 import org.constellation.primitives.Transaction
 import org.constellation.primitives.concurrency.MultiLock
 import org.constellation.util.Metrics
 
-class AddressService()(implicit metrics: () => Metrics) extends StorageService[AddressCacheData]() {
+class AddressService[F[_]: Concurrent]()(implicit metrics: () => Metrics)
+    extends StorageService[F, AddressCacheData]() {
+  private val locks = new MultiLock[F, String]()
 
-  override def getSync(key: String): Option[AddressCacheData] = {
-    if (metrics() != null) {
-      metrics().incrementMetric(s"address_query_$key")
-    }
+  override def lookup(key: String): F[Option[AddressCacheData]] =
+    super
+      .lookup(key)
+      .flatTap(
+        _ =>
+          Sync[F].delay({
+            if (metrics() != null) {
+              metrics().incrementMetric(s"address_query_$key")
+            }
+          })
+      )
 
-    super.getSync(key)
-  }
-
-  def transfer(tx: Transaction): IO[AddressCacheData] =
-    AddressService.locks.acquire(List(tx.src.hash, tx.dst.hash)) {
+  def transfer(tx: Transaction): F[AddressCacheData] =
+    locks.acquire(List(tx.src.hash, tx.dst.hash)) {
       update(tx.src.hash, { a =>
         a.copy(balance = a.balance - tx.amount)
       }, AddressCacheData(0L, 0L))
@@ -30,26 +36,16 @@ class AddressService()(implicit metrics: () => Metrics) extends StorageService[A
         )
     }
 
-  def transferSnapshot(tx: Transaction): IO[AddressCacheData] =
+  def transferSnapshot(tx: Transaction): F[AddressCacheData] =
     update(tx.src.hash, { a =>
       a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - tx.amount)
-    }, AddressCacheData(0L, 0L))
-      .flatMap(
-        _ =>
-          update(tx.dst.hash, { a =>
-            a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + tx.amount)
-          }, AddressCacheData(tx.amount, 0L))
-      )
+    }, AddressCacheData(0L, 0L)) *>
+      update(tx.dst.hash, { a =>
+        a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + tx.amount)
+      }, AddressCacheData(tx.amount, 0L))
 
-  def lockForSnapshot(addresses: Set[Address], fn: IO[Unit]): IO[Unit] =
-    AddressService.locks.acquire(addresses.map(_.hash).toList) {
+  def lockForSnapshot(addresses: Set[Address], fn: F[Unit]): F[Unit] =
+    locks.acquire(addresses.map(_.hash).toList) {
       fn
     }
-}
-
-object AddressService {
-  implicit val ioContextShift: ContextShift[IO] =
-    IO.contextShift(scala.concurrent.ExecutionContext.Implicits.global)
-
-  private val locks = new MultiLock[IO, String]()
 }

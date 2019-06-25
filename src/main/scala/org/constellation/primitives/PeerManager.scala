@@ -78,9 +78,8 @@ object PeerManager extends StrictLogging {
 
   }
 
-  def broadcastNodeState()(implicit dao: DAO, ec: ExecutionContext): Unit = {
+  def broadcastNodeState()(implicit dao: DAO, ec: ExecutionContext): Unit =
     broadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
-  }
 
   def attemptRegisterSelfWithPeer(hp: HostPort)(implicit dao: DAO): Future[Any] = {
 
@@ -135,13 +134,13 @@ object PeerManager extends StrictLogging {
 
   }
 
-  def peerDiscovery(client: APIClient)(implicit dao: DAO): Unit = {
+  def peerDiscovery(client: APIClient)(implicit dao: DAO): Unit =
     client
       .getNonBlocking[Seq[PeerMetadata]]("peers")
       .onComplete {
         case Success(pmd) =>
           pmd.foreach { md =>
-            if (dao.id != md.id && validPeerAddition(HostPort(md.host, md.httpPort), dao.peerInfoAsync.unsafeRunSync())) {
+            if (dao.id != md.id && validPeerAddition(HostPort(md.host, md.httpPort), dao.peerInfo.unsafeRunSync())) {
               val client =
                 APIClient(md.host, md.httpPort)(dao.apiClientExecutionContext, dao)
               client
@@ -159,7 +158,6 @@ object PeerManager extends StrictLogging {
           dao.metrics.incrementMetric("peerDiscoveryQueryFailed")
 
       }(dao.apiClientExecutionContext)
-  }
 
   def validWithLoopbackGuard(host: String)(implicit dao: DAO): Boolean =
     (host != dao.externalHostString && host != "127.0.0.1" && host != "localhost") || !dao.preventLocalhostAsPeer
@@ -178,7 +176,7 @@ object PeerManager extends StrictLogging {
     subset: Set[Id] = Set.empty
   )(implicit dao: DAO, ec: ExecutionContext): Future[Map[Id, ValidatedNel[Throwable, T]]] = {
 
-    val peerInfo = dao.peerInfoAsync.unsafeRunSync()
+    val peerInfo = dao.peerInfo.unsafeRunSync()
     val selected =
       if (subset.nonEmpty) peerInfo.filterKeys(subset.contains)
       else {
@@ -201,9 +199,7 @@ case class PeerData(
   notification: Seq[PeerNotification] = Seq.empty
 )
 
-case class APIBroadcast[T](func: APIClient => Future[T],
-                           skipIds: Set[Id] = Set(),
-                           peerSubset: Set[Id] = Set())
+case class APIBroadcast[T](func: APIClient => Future[T], skipIds: Set[Id] = Set(), peerSubset: Set[Id] = Set())
 
 case class PeerHealthCheck(status: Map[Id, Boolean])
 
@@ -216,10 +212,7 @@ case object GetPeerInfo
 case class UpdatePeerInfo(peerData: PeerData)
 case class ChangePeerState(id: Id, state: NodeState)
 
-case class PeerNotification(id: Id,
-                            state: PeerState,
-                            timestamp: LocalDateTime = LocalDateTime.now())
-    extends Signable
+case class PeerNotification(id: Id, state: PeerState, timestamp: LocalDateTime = LocalDateTime.now()) extends Signable
 
 object PeerState extends Enumeration {
   type PeerState = Value
@@ -272,13 +265,11 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
       updatePeerInfo(peerData)
 
     case UpdatePeerNotifications(obsoleteNotifications) =>
-      val peerUpdate = obsoleteNotifications
-        .flatMap { n =>
-          peers.get(n.id).map { p =>
-            p.copy(notification = p.notification diff Seq(n))
-          }
+      val peerUpdate = obsoleteNotifications.flatMap { n =>
+        peers.get(n.id).map { p =>
+          p.copy(notification = p.notification.diff(Seq(n)))
         }
-        .foreach(pd => self ! UpdatePeerInfo(pd))
+      }.foreach(pd => self ! UpdatePeerInfo(pd))
 
     case RemovePeerRequest(hp, id) =>
       val updatedPeerInfo = peers.filter {
@@ -433,17 +424,16 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
   private def updateMetricsAndPersistentStore(updatedPeerInfo: Map[Id, PeerData]): Unit = {
     dao.metrics.updateMetric(
       "peers",
-      updatedPeerInfo
-        .map {
-          case (idI, clientI) =>
-            val addr =
-              s"http://${clientI.client.hostName}:${clientI.client.apiPort - 1}"
-            s"${idI.short} API: $addr"
-        }
-        .mkString(" --- ")
+      updatedPeerInfo.map {
+        case (idI, clientI) =>
+          val addr =
+            s"http://${clientI.client.hostName}:${clientI.client.apiPort - 1}"
+          s"${idI.short} API: $addr"
+      }.mkString(" --- ")
     )
     peers = updatedPeerInfo
 // TODO: use swayDB when ready
+
     dao.peersInfoPath.write(updatedPeerInfo.values.toSeq.map { _.peerMetadata }.json)
 
   }

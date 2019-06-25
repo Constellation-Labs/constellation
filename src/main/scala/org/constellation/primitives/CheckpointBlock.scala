@@ -12,20 +12,21 @@ import org.constellation.util.{HashSignature, Metrics}
 
 import scala.annotation.tailrec
 
-
 abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
   def baseHash: String = checkpoint.edge.baseHash
 
   def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
 
   def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
-    checkpoint.edge.parentHashes.flatMap { dao.soeService.getSync }.map {
+    checkpoint.edge.parentHashes.flatMap { key =>
+      dao.soeService.lookup(key).unsafeRunSync()
+    }.map {
       _.signedObservationEdge.baseHash
     }
 
-  def storeSOE()(implicit dao: DAO): Unit = {
-    dao.soeService.putSync(soeHash, SignedObservationEdgeCache(soe, resolved = true))
-  }
+  def storeSOE()(implicit dao: DAO): Unit =
+    dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true)).unsafeRunSync()
+
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
   def soeHash: String = checkpoint.edge.signedObservationEdge.hash
@@ -35,7 +36,7 @@ abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
 }
 
 case class CheckpointBlockMetadata(
-  transactionsMerkleRoot: String,
+  transactionsMerkleRoot: Option[String],
   checkpointEdge: CheckpointEdge,
   messagesMerkleRoot: Option[String],
   notificationsMerkleRoot: Option[String]
@@ -48,23 +49,26 @@ case class CheckpointBlock(
   notifications: Seq[PeerNotification] = Seq()
 ) {
 
-  def storeSOE()(implicit dao: DAO): IO[SignedObservationEdgeCache] = {
+  def storeSOE()(implicit dao: DAO): IO[SignedObservationEdgeCache] =
     dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true))
-  }
 
   def calculateHeight()(implicit dao: DAO): Option[Height] = {
 
-    val parents = parentSOEBaseHashes.map {
-      dao.checkpointService.get
-    }
+    val parents = parentSOEBaseHashes.map(dao.checkpointService.lookup(_).unsafeRunSync())
+
+    dao.miscLogger.debug(s"[CB baseHash=$baseHash] Height calculation parents ${parentSOEBaseHashes()}")
 
     if (parents.exists(_.isEmpty)) {
+      dao.miscLogger.error(s"[CB baseHash=$baseHash] Height calculation parent missing")
+      dao.miscLogger.error(s"[CB baseHash=$baseHash] Height calculation parent are defined ${parents.map(_.isDefined)}")
       dao.metrics.incrementMetric("heightCalculationParentMissing")
     } else {
+      dao.miscLogger.debug(s"[CB baseHash=$baseHash] Height calculation parent exists")
       dao.metrics.incrementMetric("heightCalculationParentsExist")
     }
 
     dao.metrics.incrementMetric("heightCalculationParentLength_" + parents.length)
+    dao.miscLogger.debug(s"[CB baseHash=$baseHash] Height calculation parents length ${parents.length}")
 
     val maxHeight = if (parents.exists(_.isEmpty)) {
       None
@@ -72,6 +76,11 @@ case class CheckpointBlock(
 
       val parents2 = parents.map { _.get }
       val heights = parents2.map { _.height.map { _.max } }
+
+      dao.miscLogger.debug(
+        s"[CB baseHash=$baseHash] Height calculation MAX parents are defined: ${parents.forall(_.isDefined)}"
+      )
+      dao.miscLogger.debug(s"[CB baseHash=$baseHash] Height calculation MAX heights ${heights}")
 
       val nonEmptyHeights = heights.flatten
       if (nonEmptyHeights.isEmpty) None
@@ -86,6 +95,11 @@ case class CheckpointBlock(
 
       val parents2 = parents.map { _.get }
       val heights = parents2.map { _.height.map { _.min } }
+
+      dao.miscLogger.debug(
+        s"[CB baseHash=$baseHash] Height calculation MIN parents are defined: ${parents.forall(_.isDefined)}"
+      )
+      dao.miscLogger.debug(s"[CB baseHash=$baseHash] Height calculation MIN heights ${heights}")
 
       val nonEmptyHeights = heights.flatten
       if (nonEmptyHeights.isEmpty) None
@@ -115,7 +129,6 @@ case class CheckpointBlock(
       CheckpointBlock(transactions, checkpoint)
     )
     val elapsed = (System.currentTimeMillis - start) / 1000000
-    dao.miscLogger.info(s"--- --- --- Checkpoint block validation: ${elapsed}ms")
 
     if (validation.isValid) {
       dao.metrics.incrementMetric("checkpointValidationSuccess")
@@ -134,13 +147,12 @@ case class CheckpointBlock(
 
   def hashSignaturesOf(id: Id): Seq[HashSignature] = signatures.filter(_.id == id)
 
-  def signatureConflict(other: CheckpointBlock): Boolean = {
+  def signatureConflict(other: CheckpointBlock): Boolean =
     signatures.exists { s =>
       other.signatures.exists { s2 =>
         s.signature != s2.signature && s.id == s2.id
       }
     }
-  }
 
   def witnessIds: Seq[Id] = signatures.map { _.id }
 
@@ -162,47 +174,46 @@ case class CheckpointBlock(
           }
      */
     // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
-    dao.checkpointService.memPool.put(baseHash, cache).unsafeRunSync()
+    (cache.checkpointBlock.get.storeSOE() *> dao.checkpointService.memPool.put(baseHash, cache)).unsafeRunSync()
     dao.recentBlockTracker.put(cache)
 
   }
 
-  def plus(keyPair: KeyPair): CheckpointBlock = {
+  def plus(keyPair: KeyPair): CheckpointBlock =
     this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.withSignatureFrom(keyPair)))
-  }
 
-  def plus(hs: HashSignature): CheckpointBlock = {
+  def plus(hs: HashSignature): CheckpointBlock =
     this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.withSignature(hs)))
-  }
 
-  def plus(other: CheckpointBlock): CheckpointBlock = {
+  def plus(other: CheckpointBlock): CheckpointBlock =
     this.copy(checkpoint = checkpoint.plus(other.checkpoint))
-  }
 
-  def +(other: CheckpointBlock): CheckpointBlock = {
+  def +(other: CheckpointBlock): CheckpointBlock =
     this.copy(checkpoint = checkpoint.plus(other.checkpoint))
-  }
 
   def parentSOE: Seq[TypedEdgeHash] = checkpoint.edge.parents
 
   def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
 
-  def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =  {
+  def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
     parentSOEHashes.flatMap { soeHash =>
-      val parent = dao.soeService.getSync(soeHash)
-      if (parent.isEmpty) {
-        println(s"ERROR: SOEHash $soeHash missing from soeService")
-        dao.metrics.incrementMetric("parentSOEServiceQueryFailed")
-        // Temporary
-        val parentDirect = checkpoint.edge.observationEdge.parents.find(_.hash == soeHash).flatMap{_.baseHash}
-        if (parentDirect.isEmpty) {
-          dao.metrics.incrementMetric("parentDirectTipReferenceMissing")
-      //    throw new Exception("Missing parent direct reference")
-        }
-        parentDirect
-      } else parent.map{_.signedObservationEdge.baseHash}
+      if (soeHash == Genesis.CoinBaseHash) {
+        Seq()
+      } else {
+        val parent = dao.soeService.lookup(soeHash).unsafeRunSync()
+        if (parent.isEmpty) {
+          println(s"ERROR: SOEHash $soeHash missing from soeService for cb: $baseHash")
+          dao.metrics.incrementMetric("parentSOEServiceQueryFailed")
+          // Temporary
+          val parentDirect = checkpoint.edge.observationEdge.parents.find(_.hash == soeHash).flatMap { _.baseHash }
+          if (parentDirect.isEmpty) {
+            dao.metrics.incrementMetric("parentDirectTipReferenceMissing")
+            //    throw new Exception("Missing parent direct reference")
+          }
+          parentDirect
+        } else parent.map { _.signedObservationEdge.baseHash }
+      }
     }
-  }
 
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
@@ -215,11 +226,10 @@ object CheckpointBlock {
     tips: Seq[SignedObservationEdge],
     messages: Seq[ChannelMessage] = Seq.empty,
     peers: Seq[PeerNotification] = Seq.empty
-  )(implicit keyPair: KeyPair): CheckpointBlock = {
+  )(implicit keyPair: KeyPair): CheckpointBlock =
     createCheckpointBlock(transactions, tips.map { t =>
       TypedEdgeHash(t.hash, EdgeHashType.CheckpointHash)
     }, messages, peers)
-  }
 
   def createCheckpointBlock(
     transactions: Seq[Transaction],
@@ -300,15 +310,10 @@ object NoAddressCacheFound {
   def apply(t: Transaction) = new NoAddressCacheFound(t.hash, t.src.address)
 }
 
-case class InsufficientBalance(address: String) extends CheckpointBlockValidation {
+case class InsufficientBalance(address: String, amount: Long, diff: Long) extends CheckpointBlockValidation {
 
   def errorMessage: String =
     s"CheckpointBlock includes transaction from address=$address which has insufficient balance"
-}
-
-object InsufficientBalance {
-
-  def apply(t: Transaction) = new InsufficientBalance(t.src.address)
 }
 
 // TODO: pass also a transaction metadata
@@ -333,7 +338,8 @@ sealed trait CheckpointBlockValidatorNel {
 
   def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
     dao.addressService
-      .getSync(t.src.address)
+      .lookup(t.src.address)
+      .unsafeRunSync()
       .fold[ValidationResult[Transaction]](NoAddressCacheFound(t).invalidNel)(_ => t.validNel)
 
   def validateTransaction(t: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
@@ -362,16 +368,14 @@ sealed trait CheckpointBlockValidatorNel {
     }
   }
 
-  def validateSignatureIntegrity(s: HashSignature,
-                                 baseHash: String): ValidationResult[HashSignature] =
+  def validateSignatureIntegrity(s: HashSignature, baseHash: String): ValidationResult[HashSignature] =
     if (s.valid(baseHash)) s.validNel else InvalidSignature(s).invalidNel
 
   def validateSignature(s: HashSignature, baseHash: String): ValidationResult[HashSignature] =
     validateSignatureIntegrity(s, baseHash)
       .map(_ => s)
 
-  def validateSignatures(s: Iterable[HashSignature],
-                         baseHash: String): ValidationResult[List[HashSignature]] =
+  def validateSignatures(s: Iterable[HashSignature], baseHash: String): ValidationResult[List[HashSignature]] =
     s.toList.map(validateSignature(_, baseHash).map(List(_))).combineAll
 
   def validateEmptySignatures(s: Iterable[HashSignature]): ValidationResult[List[HashSignature]] =
@@ -383,15 +387,16 @@ sealed trait CheckpointBlockValidatorNel {
 
     def lookup(key: String) =
       dao.addressService
-        .getSync(key)
+        .lookup(key)
+        .unsafeRunSync()
         .map(_.balance)
         .getOrElse(0L)
 
-    def validateBalance(address: String,
-                        t: Iterable[Transaction]): ValidationResult[List[Transaction]] = {
+    def validateBalance(address: String, t: Iterable[Transaction]): ValidationResult[List[Transaction]] = {
       val diff = lookup(address) - t.map(_.amount).sum
+      val amount = t.map(_.amount).sum
 
-      if (diff >= 0L) t.toList.validNel else InsufficientBalance(address).invalidNel
+      if (diff >= 0L) t.toList.validNel else InsufficientBalance(address, amount, diff).invalidNel
     }
 
     t.toList
@@ -410,7 +415,7 @@ sealed trait CheckpointBlockValidatorNel {
       dao.metrics.incrementMetric("validationParentSOEBaseHashesMissing")
     }
 
-    val fullData = parentSOEBaseHashes.map(dao.checkpointService.getFullData)
+    val fullData = parentSOEBaseHashes.map(dao.checkpointService.fullData(_).unsafeRunSync())
 
     if (fullData.exists(_.isEmpty)) {
       dao.metrics.incrementMetric("validationParentCBLookupMissing")
@@ -423,7 +428,7 @@ sealed trait CheckpointBlockValidatorNel {
   }
 
   def isInSnapshot(c: CheckpointBlock)(implicit dao: DAO): Boolean =
-    !dao.threadSafeSnapshotService.acceptedCBSinceSnapshot.contains(c.baseHash)
+    !dao.snapshotService.acceptedCBSinceSnapshot.get.map(_.contains(c.baseHash)).unsafeRunSync()
 
   def getSummaryBalance(c: CheckpointBlock)(implicit dao: DAO): AddressBalance = {
     val spend = c.transactions
@@ -439,7 +444,11 @@ sealed trait CheckpointBlockValidatorNel {
 
   def validateDiff(a: (String, Long))(implicit dao: DAO): Boolean = a match {
     case (hash, diff) =>
-      dao.addressService.getSync(hash).map { _.balanceByLatestSnapshot }.getOrElse(0L) + diff >= 0
+      dao.addressService
+        .lookup(hash)
+        .unsafeRunSync()
+        .map { _.balanceByLatestSnapshot }
+        .getOrElse(0L) + diff >= 0
   }
 
   def validateCheckpointBlockTree(
@@ -481,7 +490,7 @@ sealed trait CheckpointBlockValidatorNel {
         .product(validateSourceAddressBalances(cb.transactions))
 
     val postTreeIgnoreEmptySnapshot =
-      if (dao.threadSafeSnapshotService.lastSnapshotHeight == 0) preTreeResult
+      if (dao.snapshotService.lastSnapshotHeight.get.unsafeRunSync() == 0) preTreeResult
 //      else preTreeResult.product(validateCheckpointBlockTree(cb))
       else preTreeResult
 
@@ -497,7 +506,7 @@ sealed trait CheckpointBlockValidatorNel {
       parents: Seq[CheckpointBlock],
       accu: Seq[String] = Seq.empty,
       snapshotReached: Boolean = false
-    ): Seq[String] = {
+    ): Seq[String] =
       parents match {
         case Nil => accu
         case cb :: tail if !snapshotReached && !isInSnapshot(cb) =>
@@ -513,16 +522,14 @@ sealed trait CheckpointBlockValidatorNel {
             snapshotReached
           )
       }
-    }
 
-    cbs.filterNot(isInSnapshot)
+    cbs
+      .filterNot(isInSnapshot)
       .flatMap(cb => getParentTransactions(getParents(cb), cb.transactions.map(_.hash)))
   }
 
   def containsAlreadyAcceptedTx(cb: CheckpointBlock)(implicit dao: DAO): IO[List[String]] = {
-    val cbs = dao.checkpointService.memPool.cacheSize()
-    val start = System.currentTimeMillis
-    val startTimer = dao.metrics.startTimer
+    val cbs = dao.checkpointService.memPool.size().unsafeRunSync()
     val containsAccepted = cb.transactions
       .map(
         t =>
@@ -534,10 +541,6 @@ sealed trait CheckpointBlockValidatorNel {
       .sequence[IO, (String, Boolean)]
       .map(l => l.collect { case (h, true) => h })
 
-    val stop = System.currentTimeMillis
-    dao.metrics.stopTimer("isConflictingWithOthers", startTimer)
-    println(s"isConflictingWithOthers - elapsed: ${stop - start}ms for cbs: $cbs")
-
     containsAccepted
   }
 
@@ -548,7 +551,7 @@ sealed trait CheckpointBlockValidatorNel {
     def detect(
       tips: Seq[CheckpointCache],
       ancestryTransactions: Map[Transaction, String] = Map.empty
-    ): Option[CheckpointCache] = {
+    ): Option[CheckpointCache] =
       tips match {
         case Nil => None
         case CheckpointCache(Some(cb), children, height) :: _
@@ -565,20 +568,17 @@ sealed trait CheckpointBlockValidatorNel {
         case CheckpointCache(Some(cb), _, _) :: tail =>
           detect(tail, ancestryTransactions ++ cb.transactions.map(i => (i, cb.baseHash)))
       }
-    }
     detect(inputTips)
   }
 
-  def hasTransactionInCommon(cbLeft: CheckpointBlock, cbRight: CheckpointBlock): Boolean = {
+  def hasTransactionInCommon(cbLeft: CheckpointBlock, cbRight: CheckpointBlock): Boolean =
     cbLeft.transactions.intersect(cbRight.transactions).nonEmpty
-  }
 
-  def selectBlockToPreserve(blocks: Iterable[CheckpointCache]): CheckpointCache = {
+  def selectBlockToPreserve(blocks: Iterable[CheckpointCache]): CheckpointCache =
     blocks.maxBy(
       cb => (cb.children, cb.checkpointBlock.map(b => (b.signatures.size, b.baseHash)))
     )
 
-  }
 }
 
 object CheckpointBlockValidatorNel extends CheckpointBlockValidatorNel
