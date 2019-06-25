@@ -35,6 +35,15 @@ class TransactionService[F[_]: Sync: Concurrent](dao: DAO, pullSemaphore: Semaph
     case _                           => new Exception("Unknown transaction status").raiseError[F, TransactionCacheData]
   }
 
+  def update(key: String, fn: TransactionCacheData => TransactionCacheData): F[Unit] =
+    for {
+      _ <- pending.update(key, fn)
+      _ <- arbitrary.update(key, fn)
+      _ <- inConsensus.update(key, fn)
+      _ <- accepted.update(key, fn)
+      _ <- unknown.update(key, fn)
+    } yield ()
+
   def accept(tx: TransactionCacheData): F[Unit] =
     accepted.put(tx.transaction.hash, tx) *>
       inConsensus.remove(tx.transaction.hash) *>

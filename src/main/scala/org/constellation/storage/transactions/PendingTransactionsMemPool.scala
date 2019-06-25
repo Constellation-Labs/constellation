@@ -14,6 +14,11 @@ class PendingTransactionsMemPool[F[_]: Sync]() extends LookupAlgebra[F, String, 
   def put(key: String, value: TransactionCacheData): F[TransactionCacheData] =
     txRef.get.flatMap(txs => txRef.set(txs + (key -> value)).map(_ => value))
 
+  def update(key: String, fn: TransactionCacheData => TransactionCacheData): F[Unit] =
+    txRef.update { txs =>
+      txs.get(key).map(fn).map(t => txs ++ List(key -> t)).getOrElse(txs)
+    }
+
   def lookup(key: String): F[Option[TransactionCacheData]] =
     txRef.get.map(_.find(_._2.transaction.hash == key).map(_._2))
 

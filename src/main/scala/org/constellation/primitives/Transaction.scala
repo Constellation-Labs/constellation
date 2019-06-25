@@ -21,7 +21,8 @@ case class TransactionCacheData(
   cbForkBaseHashes: Set[String] = Set(),
   signatureForks: Set[Transaction] = Set(),
   knownPeers: Set[Id] = Set(),
-  rxTime: Long = System.currentTimeMillis()
+  rxTime: Long = System.currentTimeMillis(),
+  path: Set[Id] = Set()
 ) {
 
   def plus(previous: TransactionCacheData): TransactionCacheData =
