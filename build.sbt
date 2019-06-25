@@ -25,8 +25,8 @@ lazy val versions = new {
   val spongyCastle = "1.58.0.0"
   val micrometer = "1.1.4"
   val prometheus = "0.6.0"
-  val sttp = "1.5.17"
-  val cats = "1.6.0"
+  val sttp = "1.5.19"
+  val cats = "1.6.1"
   val json4s = "3.6.6"
 }
 
@@ -85,7 +85,7 @@ lazy val coreDependencies = Seq(
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
   "com.typesafe.akka" %% "akka-slf4j" % versions.akka,
   "ch.megard" %% "akka-http-cors" % versions.akkaHttpCors,
-  "de.heikoseeberger" %% "akka-http-json4s" % "1.25.2",
+  "de.heikoseeberger" %% "akka-http-json4s" % "1.26.0",
   "org.json4s" %% "json4s-native" % versions.json4s,
   "org.json4s" %% "json4s-ext" % versions.json4s,
   "org.json4s" %% "json4s-jackson" % versions.json4s,
@@ -95,7 +95,7 @@ lazy val coreDependencies = Seq(
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.62",
   "com.twitter" %% "chill" % "0.9.3",
   "com.twitter" %% "algebird-core" % "0.13.5",
   "org.typelevel" %% "cats-core" % versions.cats withSources () withJavadoc (),
@@ -122,10 +122,10 @@ lazy val coreDependencies = Seq(
 //Test dependencies
 lazy val testDependencies = Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.0",
-  "org.scalatest" %% "scalatest" % "3.0.7",
-  "org.scalactic" %% "scalactic" % "3.0.7",
+  "org.scalatest" %% "scalatest" % "3.0.8",
+  "org.scalactic" %% "scalactic" % "3.0.8",
   "org.scalamock" %% "scalamock" % "4.2.0",
-  "org.mockito" %% "mockito-scala" % "1.4.7",
+  "org.mockito" %% "mockito-scala" % "1.5.9",
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
 ).map(_ % "it,test")
