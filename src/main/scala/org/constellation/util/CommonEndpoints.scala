@@ -8,6 +8,8 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.FromEntityUnmarshaller
 import akka.util.{ByteString, Timeout}
+import cats.effect.IO
+import cats.implicits._
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
@@ -19,6 +21,7 @@ import org.constellation.serializer.KryoSerializer
 import org.json4s.native.Serialization
 
 import scala.concurrent.Future
+import scala.util.{Failure, Success}
 
 case class NodeStateInfo(
   nodeState: NodeState,
@@ -73,21 +76,28 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.dbActor.getSnapshot(s))
       } ~*/
       path("storedSnapshot" / Segment) { s =>
+        val getSnapshot = for {
+          exists <- dao.snapshotService.exists(s)
+          bytes <- if (exists) {
+            IO(Snapshot.loadSnapshotBytes(s).toOption)
+          } else None.pure[IO]
+        } yield bytes
+
         onComplete {
-          Future {
-            Snapshot.loadSnapshotBytes(s)
-          }(dao.edgeExecutionContext)
+          getSnapshot.unsafeToFuture()
         } { res =>
-          val byteArray = res.toOption.flatMap { _.toOption }.getOrElse(Array[Byte]())
-
-          val body = ByteString(byteArray)
-
-          val entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, body)
-
-          val httpResponse = HttpResponse(entity = entity)
+          val httpResponse: HttpResponse = res match {
+            case Failure(_) =>
+              HttpResponse(StatusCodes.NotFound)
+            case Success(None) =>
+              HttpResponse(StatusCodes.NotFound)
+            case Success(Some(bytes)) =>
+              HttpResponse(
+                entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, ByteString(bytes))
+              )
+          }
 
           complete(httpResponse)
-        //complete(bytes)
         }
 
       } ~

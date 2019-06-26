@@ -7,13 +7,29 @@ import com.softwaremill.sttp.{Response, StatusCodes}
 import org.constellation._
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, HostPort, Metrics, Simulation}
+import org.constellation.util.{APIClient, Metrics, Simulation}
 
 class E2ETest extends E2E {
 
   val updatePasswordReq = UpdatePassword(
     Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
   )
+  val totalNumNodes = 3
+
+  implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
+  private val n1 = createNode(randomizePorts = false)
+  private val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes - 1)(
+    i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
+  )
+
+  //private val address1 = n1.getInetSocketAddress
+  private val apis: Seq[APIClient] = nodes.map {
+    _.getAPIClient()
+  }
+  private val addPeerRequests = nodes.map {
+    _.getAddPeerRequest
+  }
+  private val initialAPIs = apis
 
   def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
     apiClients.map { client =>
@@ -21,28 +37,6 @@ class E2ETest extends E2E {
       client.setPassword(updatePasswordReq.password)
       response
     }
-
-  implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
-
-  val totalNumNodes = 3
-
-  private val n1 = createNode(randomizePorts = false)
-
-  //private val address1 = n1.getInetSocketAddress
-
-  private val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes - 1)(
-    i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
-  )
-
-  private val apis: Seq[APIClient] = nodes.map {
-    _.getAPIClient()
-  }
-
-  private val addPeerRequests = nodes.map {
-    _.getAddPeerRequest
-  }
-
-  private val initialAPIs = apis
 
   "E2E Run" should "demonstrate full flow" in {
     logger.info("API Ports: " + apis.map {

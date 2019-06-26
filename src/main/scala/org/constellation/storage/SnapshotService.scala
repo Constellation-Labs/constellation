@@ -42,6 +42,12 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
   val totalNumCBsInSnapshots: Ref[F, Long] = Ref.unsafe(0L)
   val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
 
+  def exists(hash: String): F[Boolean] =
+    for {
+      last <- snapshot.get
+      hashes = Snapshot.snapshotHashes()
+    } yield last.hash == hash || hashes.contains(hash)
+
   def getSnapshotInfo(): F[SnapshotInfo] =
     for {
       s <- snapshot.get
@@ -287,7 +293,7 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
   private def acceptSnapshot(s: Snapshot): F[Unit] =
     for {
       cbs <- getCheckpointBlocksFromSnapshot(s)
-      _ <- cbs.map(applySnapshotMessages(s, _)).sequence
+      _ <- cbs.traverse(applySnapshotMessages(s, _))
 
       _ <- applySnapshotTransactions(s, cbs)
 
