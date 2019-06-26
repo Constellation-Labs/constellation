@@ -42,6 +42,12 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
   val totalNumCBsInSnapshots: Ref[F, Long] = Ref.unsafe(0L)
   val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
 
+  def exists(hash: String): F[Boolean] =
+    for {
+      last <- snapshot.get
+      hashes = Snapshot.snapshotHashes()
+    } yield last.hash == hash || hashes.contains(hash)
+
   def getSnapshotInfo(): F[SnapshotInfo] =
     for {
       s <- snapshot.get
@@ -234,20 +240,20 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
       if (currentSnapshot == Snapshot.snapshotZero) {
         Sync[F].unit
       } else {
-        dao.metrics.incrementMetricAsync(Metrics.snapshotCount) *>
-          writeSnapshotToDisk(currentSnapshot) *>
-          applyAfterSnapshot(currentSnapshot)
+        writeSnapshotToDisk(currentSnapshot) *>
+          applyAfterSnapshot(currentSnapshot) *>
+          dao.metrics.incrementMetricAsync(Metrics.snapshotCount)
       }
     }
 
-  private def writeSnapshotToDisk(currentSnapshot: Snapshot): F[Unit] =
+  private def writeSnapshotToDisk(currentSnapshot: Snapshot) =
     currentSnapshot.checkpointBlocks.toList
-      .map(checkpointService.fullData)
-      .sequence
-      .map {
+      .traverse(checkpointService.fullData)
+      .flatMap {
         case maybeBlocks if maybeBlocks.exists(_.exists(_.checkpointBlock.isEmpty)) =>
           // TODO : This should never happen, if it does we need to reset the node state and redownload
-          dao.metrics.incrementMetricAsync("snapshotWriteToDiskMissingData")
+          dao.metrics
+            .incrementMetricAsync("snapshotWriteToDiskMissingData")
 
         case maybeBlocks =>
           val flatten = maybeBlocks.flatten.sortBy(_.checkpointBlock.map(_.baseHash))
@@ -256,9 +262,8 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
               Snapshot.writeSnapshot(StoredSnapshot(currentSnapshot, flatten)),
               "snapshotWriteToDisk"
             )
-          }
+          }.void
       }
-      .void
 
   private def applyAfterSnapshot(currentSnapshot: Snapshot): F[Unit] =
     for {
@@ -287,7 +292,7 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
   private def acceptSnapshot(s: Snapshot): F[Unit] =
     for {
       cbs <- getCheckpointBlocksFromSnapshot(s)
-      _ <- cbs.map(applySnapshotMessages(s, _)).sequence
+      _ <- cbs.traverse(applySnapshotMessages(s, _))
 
       _ <- applySnapshotTransactions(s, cbs)
 

@@ -13,6 +13,7 @@ import akka.http.scaladsl.server.directives.Credentials
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.CircuitBreaker
 import akka.util.Timeout
+import cats.effect.IO
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
@@ -230,54 +231,64 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             complete(dao.channelService.lookup(channelId).unsafeRunSync())
           } ~
           path("channel" / Segment) { channelHash =>
-            val msg = dao.messageService.memPool.lookup(channelHash).unsafeRunSync()
-            val channelRes =
-              Snapshot.findLatestMessageWithSnapshotHash(0, msg)
+            def makeProof(cmd: ChannelMessageMetadata, storedSnapshot: StoredSnapshot) = {
+              val blocksInSnapshot = storedSnapshot.snapshot.checkpointBlocks.toList
+              val blockHashForMessage = cmd.blockHash.get
 
-            val res =
-              if (channelRes.isDefined || msg.isEmpty) channelRes
-              else
-                Snapshot.findLatestMessageWithSnapshotHash(
-                  0,
-                  dao.messageService.lookup(msg.get.channelMessage.signedMessageData.hash).unsafeRunSync()
-                )
-
-            val proof = res.flatMap { cmd =>
-              cmd.snapshotHash.flatMap { snapshotHash =>
-                tryWithMetric({
-                  import better.files._
-                  KryoSerializer.deserializeCast[StoredSnapshot](
-                    File(dao.snapshotPath, snapshotHash).byteArray
-                  )
-                }, "readSnapshotForMessage").toOption.map { storedSnapshot =>
-                  val blocksInSnapshot = storedSnapshot.snapshot.checkpointBlocks.toList
-                  val blockHashForMessage = cmd.blockHash.get
-
-                  if (!blocksInSnapshot.contains(blockHashForMessage)) {
-                    logger.error("Message block hash not in snapshot")
-                  }
-                  val blockProof = MerkleTree(blocksInSnapshot)
-                    .createProof(blockHashForMessage)
-                  val block = storedSnapshot.checkpointCache.filter {
-                    _.checkpointBlock.get.baseHash == blockHashForMessage
-                  }.head.checkpointBlock.get
-                  val messageProofInput = block.transactions.map { _.hash } ++ block.messages.map {
-                    _.signedMessageData.signatures.hash
-                  }
-                  val messageProof = MerkleTree(messageProofInput.toList)
-                    .createProof(cmd.channelMessage.signedMessageData.signatures.hash)
-                  ChannelProof(
-                    cmd,
-                    blockProof,
-                    messageProof
-                  )
-                }
-
+              if (!blocksInSnapshot.contains(blockHashForMessage)) {
+                logger.error("Message block hash not in snapshot")
               }
 
+              val blockProof = MerkleTree(blocksInSnapshot).createProof(blockHashForMessage)
+
+              val block = storedSnapshot.checkpointCache.filter {
+                _.checkpointBlock.get.baseHash == blockHashForMessage
+              }.head.checkpointBlock.get
+
+              val messageProofInput = block.transactions.map { _.hash } ++ block.messages.map {
+                _.signedMessageData.signatures.hash
+              }
+
+              val messageProof = MerkleTree(messageProofInput.toList)
+                .createProof(cmd.channelMessage.signedMessageData.signatures.hash)
+
+              ChannelProof(
+                cmd,
+                blockProof,
+                messageProof
+              )
             }
 
-            complete(proof)
+            val proof = for {
+              msg <- dao.messageService.memPool.lookup(channelHash)
+              channelRes = Snapshot.findLatestMessageWithSnapshotHash(0, msg)
+
+              res <- if (channelRes.isDefined || msg.isEmpty) {
+                channelRes.pure[IO]
+              } else {
+                dao.messageService
+                  .lookup(msg.get.channelMessage.signedMessageData.hash)
+                  .map(Snapshot.findLatestMessageWithSnapshotHash(0, _))
+              }
+
+              exists <- res.flatMap(_.snapshotHash.map(dao.snapshotService.exists)).sequence.map(_.forall(_ == true))
+
+              proof = if (exists) {
+                res.flatMap { cmd =>
+                  cmd.snapshotHash.flatMap { snapshotHash =>
+                    tryWithMetric(
+                      {
+                        import better.files._
+                        KryoSerializer.deserializeCast[StoredSnapshot](File(dao.snapshotPath, snapshotHash).byteArray)
+                      },
+                      "readSnapshotForMessage"
+                    ).toOption.map(makeProof(cmd, _))
+                  }
+                }
+              } else None
+            } yield proof
+
+            onSuccess(proof.unsafeToFuture())(complete(_))
           } ~
           path("messages") {
             complete(dao.channelStorage.getLastNMessages(20))
