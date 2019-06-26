@@ -5,6 +5,7 @@ import java.security.KeyPair
 
 import akka.actor.ActorRef
 import better.files.File
+import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerRegistrationRequest
@@ -23,8 +24,9 @@ trait NodeData {
   var peerManager: ActorRef = _
   var metrics: Metrics = _
   var messageHashStore: swaydb.Set[String] = _
-  var transactionHashStore: swaydb.Set[String] = _
   var checkpointHashStore: swaydb.Set[String] = _
+
+  val miscLogger = Logger("MiscLogger")
 
   @volatile var downloadMode: Boolean = true
   @volatile var downloadInProgress: Boolean = false
@@ -48,13 +50,14 @@ trait NodeData {
   def externalPeerHTTPPort: Int = nodeConfig.peerHttpPort
 
   def peerRegistrationRequest =
-    PeerRegistrationRequest(externalHostString,
-                            externalPeerHTTPPort,
-                            id,
-                            ResourceInfo(
-                              diskUsableBytes =
-                                new java.io.File(snapshotPath.pathAsString).getUsableSpace
-                            ))
+    PeerRegistrationRequest(
+      externalHostString,
+      externalPeerHTTPPort,
+      id,
+      ResourceInfo(
+        diskUsableBytes = new java.io.File(snapshotPath.pathAsString).getUsableSpace
+      )
+    )
 
   def snapshotPath: File = {
     val f = File(s"tmp/${id.medium}/snapshots")
@@ -63,8 +66,7 @@ trait NodeData {
   }
   var remotes: Seq[InetSocketAddress] = Seq()
 
-  def updateKeyPair(kp: KeyPair): Unit = {
+  def updateKeyPair(kp: KeyPair): Unit =
     nodeConfig = nodeConfig.copy(primaryKeyPair = kp)
-  }
 
 }

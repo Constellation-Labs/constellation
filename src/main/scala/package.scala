@@ -42,6 +42,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
       import scala.concurrent.duration._
       Try { Await.result(f, t.seconds) }.toOption
     }
+
     def getTry(t: Int = 30): Try[T] = {
       import scala.concurrent.duration._
       Try { Await.result(f, t.seconds) }
@@ -77,9 +78,8 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     new EnumNameSerializer(NodeState) +
     new EnumNameSerializer(NodeType)
 
-  def caseClassToJson(message: Any): String = {
+  def caseClassToJson(message: Any): String =
     compactRender(Extraction.decompose(message))
-  }
 
   def decompose(message: Any): JValue = Extraction.decompose(message)
 
@@ -137,10 +137,9 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     def unmarshal: Future[String] = Unmarshal(httpResponse.entity).to[String]
   }
 
-  def pprintInet(inetSocketAddress: InetSocketAddress): String = {
+  def pprintInet(inetSocketAddress: InetSocketAddress): String =
     s"address: ${inetSocketAddress.getAddress}, hostname: ${inetSocketAddress.getHostName}, " +
       s"hostString: ${inetSocketAddress.getHostString}, port: ${inetSocketAddress.getPort}"
-  }
 
   implicit def pubKeyToAddress(key: PublicKey): AddressMetaData =
     AddressMetaData(publicKeyToAddressString(key))
@@ -150,10 +149,9 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     // This is because the equals method on keypair relies on an object hash code instead of an actual check on the data.
     // The equals method for public and private keys is totally fine though.
 
-    def dataEqual(other: KeyPair): Boolean = {
+    def dataEqual(other: KeyPair): Boolean =
       kp.getPrivate == other.getPrivate &&
-      kp.getPublic == other.getPublic
-    }
+        kp.getPublic == other.getPublic
 
     def address: String = publicKeyToAddressString(kp.getPublic)
 
@@ -226,7 +224,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     val prom = Promise[T]()
     val timeout = TimeoutScheduler.scheduleTimeout(prom, after)
     val combinedFut = Future.firstCompletedOf(List(fut, prom.future))
-    fut onComplete { case result => timeout.cancel() }
+    fut.onComplete { case result => timeout.cancel() }
     combinedFut
   }
 
@@ -242,7 +240,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     val after = timeoutSeconds.seconds
     val timeout = TimeoutScheduler.scheduleTimeout(prom, after)
     val combinedFut = Future.firstCompletedOf(List(fut, prom.future))
-    fut onComplete { _ =>
+    fut.onComplete { _ =>
       timeout.cancel()
     }
     prom.future.onComplete { result =>
@@ -265,7 +263,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     metricPrefix: String,
     timeoutSeconds: Int = 10,
     onError: => Unit = ()
-  )(implicit ec: ExecutionContext, dao: DAO): Future[Try[T]] = {
+  )(implicit ec: ExecutionContext, dao: DAO): Future[Try[T]] =
     withTimeoutSecondsAndMetric(
       Future {
         val originalName = Thread.currentThread().getName
@@ -278,7 +276,6 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
       metricPrefix,
       timeoutSeconds = timeoutSeconds
     )
-  }
 
   def withRetries(
     err: String,
@@ -306,6 +303,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   }
 
   implicit class BoolToOption(val self: Boolean) extends AnyVal {
+
     def toOption[A](value: => A): Option[A] =
       if (self) Some(value) else None
   }
@@ -323,7 +321,7 @@ object TimeoutScheduler {
 
   val timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
 
-  def scheduleTimeout(promise: Promise[_], after: Duration) = {
+  def scheduleTimeout(promise: Promise[_], after: Duration) =
     timer.newTimeout(
       new TimerTask {
 
@@ -336,5 +334,4 @@ object TimeoutScheduler {
       after.toNanos,
       TimeUnit.NANOSECONDS
     )
-  }
 }

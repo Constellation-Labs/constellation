@@ -16,9 +16,11 @@ trait Datastore {
 
   def putCheckpointCacheData(key: String, c: CheckpointCache): Unit
 
-  def updateCheckpointCacheData(key: String,
-                                f: CheckpointCache => CheckpointCache,
-                                empty: CheckpointCache): CheckpointCache
+  def updateCheckpointCacheData(
+    key: String,
+    f: CheckpointCache => CheckpointCache,
+    empty: CheckpointCache
+  ): CheckpointCache
 
   def getCheckpointCacheData(key: String): Option[CheckpointCache]
 
@@ -34,9 +36,11 @@ trait Datastore {
 
   def putAddressCacheData(key: String, t: AddressCacheData): Unit
 
-  def updateAddressCacheData(key: String,
-                             f: AddressCacheData => AddressCacheData,
-                             empty: AddressCacheData): AddressCacheData
+  def updateAddressCacheData(
+    key: String,
+    f: AddressCacheData => AddressCacheData,
+    empty: AddressCacheData
+  ): AddressCacheData
 
   def getAddressCacheData(key: String): Option[AddressCacheData]
 
@@ -54,17 +58,21 @@ trait Datastore {
 
   def putTransactionEdgeData(key: String, t: TransactionEdgeData): Unit
 
-  def updateTransactionEdgeData(key: String,
-                                f: TransactionEdgeData => TransactionEdgeData,
-                                empty: TransactionEdgeData): TransactionEdgeData
+  def updateTransactionEdgeData(
+    key: String,
+    f: TransactionEdgeData => TransactionEdgeData,
+    empty: TransactionEdgeData
+  ): TransactionEdgeData
 
   def getTransactionEdgeData(key: String): Option[TransactionEdgeData]
 
   def putCheckpointEdgeData(key: String, t: CheckpointEdgeData): Unit
 
-  def updateCheckpointEdgeData(key: String,
-                               f: CheckpointEdgeData => CheckpointEdgeData,
-                               empty: CheckpointEdgeData): CheckpointEdgeData
+  def updateCheckpointEdgeData(
+    key: String,
+    f: CheckpointEdgeData => CheckpointEdgeData,
+    empty: CheckpointEdgeData
+  ): CheckpointEdgeData
 
   def getCheckpointEdgeData(key: String): Option[CheckpointEdgeData]
 }

@@ -8,6 +8,8 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling.FromEntityUnmarshaller
 import akka.util.{ByteString, Timeout}
+import cats.effect.IO
+import cats.implicits._
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
@@ -19,6 +21,7 @@ import org.constellation.serializer.KryoSerializer
 import org.json4s.native.Serialization
 
 import scala.concurrent.Future
+import scala.util.{Failure, Success}
 
 case class NodeStateInfo(
   nodeState: NodeState,
@@ -41,7 +44,7 @@ trait CommonEndpoints extends Json4sSupport {
       val metricFailure = HealthChecker.checkLocalMetrics(dao.metrics.getMetrics, dao.id.short)
       metricFailure match {
         case Left(value) => failWith(value)
-        case Right(_) => complete(StatusCodes.OK)
+        case Right(_)    => complete(StatusCodes.OK)
       }
     } ~
       path("id") {
@@ -52,7 +55,7 @@ trait CommonEndpoints extends Json4sSupport {
       } ~
       path("heights") {
         val maybeHeights = dao.concurrentTipService.toMap.flatMap {
-          case (k, _) => dao.checkpointService.get(k).flatMap { _.height }
+          case (k, _) => dao.checkpointService.lookup(k).unsafeRunSync().flatMap { _.height }
         }.toSeq
         complete(maybeHeights)
       } ~
@@ -60,11 +63,11 @@ trait CommonEndpoints extends Json4sSupport {
         complete(Snapshot.snapshotHashes())
       } ~
       path("info") {
-        val info = dao.threadSafeSnapshotService.getSnapshotInfo
+        val info = dao.snapshotService.getSnapshotInfo().unsafeRunSync()
         val res =
           KryoSerializer.serializeAnyRef(
             info.copy(acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshot.flatMap {
-              dao.checkpointService.getFullData
+              dao.checkpointService.fullData(_).unsafeRunSync()
             })
           )
         complete(res)
@@ -73,21 +76,28 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.dbActor.getSnapshot(s))
       } ~*/
       path("storedSnapshot" / Segment) { s =>
+        val getSnapshot = for {
+          exists <- dao.snapshotService.exists(s)
+          bytes <- if (exists) {
+            IO(Snapshot.loadSnapshotBytes(s).toOption)
+          } else None.pure[IO]
+        } yield bytes
+
         onComplete {
-          Future {
-            Snapshot.loadSnapshotBytes(s)
-          }(dao.edgeExecutionContext)
+          getSnapshot.unsafeToFuture()
         } { res =>
-          val byteArray = res.toOption.flatMap { _.toOption }.getOrElse(Array[Byte]())
-
-          val body = ByteString(byteArray)
-
-          val entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, body)
-
-          val httpResponse = HttpResponse(entity = entity)
+          val httpResponse: HttpResponse = res match {
+            case Failure(_) =>
+              HttpResponse(StatusCodes.NotFound)
+            case Success(None) =>
+              HttpResponse(StatusCodes.NotFound)
+            case Success(Some(bytes)) =>
+              HttpResponse(
+                entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, ByteString(bytes))
+              )
+          }
 
           complete(httpResponse)
-        //complete(bytes)
         }
 
       } ~
@@ -95,16 +105,19 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.genesisObservation)
       } ~
       pathPrefix("address" / Segment) { a =>
-        complete(dao.addressService.getSync(a))
+        complete(dao.addressService.lookup(a).unsafeRunSync())
       } ~
       pathPrefix("balance" / Segment) { a =>
-        complete(dao.addressService.getSync(a).map { _.balanceByLatestSnapshot })
+        complete(dao.addressService.lookup(a).unsafeRunSync().map { _.balanceByLatestSnapshot })
       } ~
       path("state") {
         complete(NodeStateInfo(dao.nodeState, dao.addresses, dao.nodeType))
       } ~
       path("peers") {
-        complete(dao.peerInfo.map { _._2.peerMetadata }.toSeq)
+        val peers = dao.peerInfo.map(_.map(_._2.peerMetadata).toSeq)
+        onComplete(peers.unsafeToFuture) { a =>
+          complete(a.toOption.getOrElse(Seq()))
+        }
       } ~
       path("transaction" / Segment) { h =>
         complete(dao.transactionService.lookup(h).unsafeRunSync())

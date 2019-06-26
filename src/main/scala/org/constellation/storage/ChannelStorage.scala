@@ -1,4 +1,4 @@
-package org.constellation.primitives.storage
+package org.constellation.storage
 
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
@@ -15,14 +15,14 @@ case class MessageResponse(id: Long, channelId: String, hash: Option[String], bo
 class ChannelStorage(implicit dao: DAO) extends StrictLogging {
 
   implicit class RunAction[R](a: DBIOAction[R, NoStream, Nothing]) {
-    def dbRun(): R = {
+
+    def dbRun(): R =
       db.run(a).get()
-    }
   }
 
   // Definition of the SUPPLIERS table
-  private class Message(tag: Tag)
-      extends Table[(Long, String, Option[String], String)](tag, "MESSAGE") {
+  private class Message(tag: Tag) extends Table[(Long, String, Option[String], String)](tag, "MESSAGE") {
+
     def id: Rep[Long] =
       column[Long]("MSG_ID", O.AutoInc, O.PrimaryKey) // This is the primary key column
     def channelId: Rep[String] = column[String]("CHANNEL_ID")
@@ -49,7 +49,7 @@ class ChannelStorage(implicit dao: DAO) extends StrictLogging {
     val op =
       (messages.map { m =>
         (m.channelId, m.hash, m.body)
-      } returning messages.map(_.id)) +=
+      }.returning(messages.map(_.id))) +=
         (messageMeta.channelMessage.signedMessageData.data.channelId,
         messageMeta.blockHash,
         messageMeta.channelMessage.signedMessageData.data.message)
@@ -65,19 +65,17 @@ class ChannelStorage(implicit dao: DAO) extends StrictLogging {
     }
   }
 
-  def printMessages(): Unit = {
+  def printMessages(): Unit =
     db.run(messages.result).foreach { msgs =>
       msgs.foreach { m =>
         logger.info(m.toString)
       }
     }
 
-  }
-
 }
 
 object ChannelStorage {
-  def apply(implicit dao: DAO): ChannelStorage = {
+
+  def apply(implicit dao: DAO): ChannelStorage =
     new ChannelStorage()
-  }
 }

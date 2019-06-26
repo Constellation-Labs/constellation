@@ -34,11 +34,11 @@ object Rewards {
   val neighborhoodReputationMatrix = Map[String, Double]()
 
   def validatorRewards(
-                        curShapshot: Int,
-                       transitiveReputationMatrix: Map[String, Map[String, Double]],
-                       neighborhoodReputationMatrix: Map[String, Double],
-                       partitonChart: Map[String, Set[String]]
-                      )= {
+    curShapshot: Int,
+    transitiveReputationMatrix: Map[String, Map[String, Double]],
+    neighborhoodReputationMatrix: Map[String, Double],
+    partitonChart: Map[String, Set[String]]
+  ) = {
     val trustEntropyMap = shannonEntropy(transitiveReputationMatrix, neighborhoodReputationMatrix)
     val distro = rewardDistribution(partitonChart, trustEntropyMap)
     distro.mapValues(_ * rewardDuringEpoch(curShapshot))
@@ -53,11 +53,12 @@ object Rewards {
   }
 
   def shannonEntropy(
-                      transitiveReputationMatrix: Map[String, Map[String, Double]],
-                      neighborhoodReputationMatrix: Map[String, Double]
-                    ) = {
-    val weightedTransitiveReputation = transitiveReputationMatrix.map { case (key, view) =>
-      val neighborView = view.map{ case (neighbor, score) => neighborhoodReputationMatrix(key) * score }.sum
+    transitiveReputationMatrix: Map[String, Map[String, Double]],
+    neighborhoodReputationMatrix: Map[String, Double]
+  ) = {
+    val weightedTransitiveReputation = transitiveReputationMatrix.map {
+      case (key, view) =>
+        val neighborView = view.map { case (neighbor, score) => neighborhoodReputationMatrix(key) * score }.sum
         (key, neighborView)
     }
     weightedTransitiveReputation.mapValues{ trust =>
@@ -68,9 +69,10 @@ object Rewards {
   def rewardDistribution(partitonChart: Map[String, Set[String]], trustEntropyMap: Map[String, Double]) = {
     val totalSpace = partitonChart.values.map(_.size).max
     val contributions = partitonChart.mapValues( partiton => partiton.size / totalSpace )
-    val weightedEntropy = contributions.map { case (address, partitonSize) =>
-      val reward = partitonSize * (1 - trustEntropyMap(address)) // Normalize wrt total partition space
-      (address, reward)
+    val weightedEntropy = contributions.map { 
+		case (address, partitonSize) => 
+			val reward = partitonSize * (1 - trustEntropyMap(address)) // Normalize wrt total partition space
+      	  	(address, reward)
     }
     val totalEntropy = weightedEntropy.values.sum
     weightedEntropy.mapValues(_ / totalEntropy) // Scale by entropy magnitude

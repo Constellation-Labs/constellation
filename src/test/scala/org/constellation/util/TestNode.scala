@@ -14,13 +14,14 @@ object TestNode {
 
   private var nodes = Seq[ConstellationNode]()
 
-  def apply(seedHosts: Seq[HostPort] = Seq(),
-            keyPair: KeyPair = KeyUtils.makeKeyPair(),
-            randomizePorts: Boolean = true,
-            portOffset: Int = 0,
-            isGenesisNode: Boolean = false,
-            isLightNode: Boolean = false
-           )(
+  def apply(
+    seedHosts: Seq[HostPort] = Seq(),
+    keyPair: KeyPair = KeyUtils.makeKeyPair(),
+    randomizePorts: Boolean = true,
+    portOffset: Int = 0,
+    isGenesisNode: Boolean = false,
+    isLightNode: Boolean = false
+  )(
     implicit system: ActorSystem,
     materializer: ActorMaterializer,
     executionContext: ExecutionContext
@@ -51,13 +52,12 @@ object TestNode {
     node
   }
 
-  def clearNodes(): Unit = {
+  def clearNodes(): Unit =
     Try {
       nodes.foreach { node =>
         node.shutdown()
       }
       nodes = Seq()
     }
-  }
 
 }

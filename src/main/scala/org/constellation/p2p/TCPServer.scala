@@ -12,7 +12,7 @@ class SimplisticHandler extends Actor {
 
   def receive: PartialFunction[Any, Unit] = {
     case Received(data) => sender() ! Write(data)
-    case PeerClosed     => context stop self
+    case PeerClosed     => context.stop(self)
   }
 }
 
@@ -27,7 +27,7 @@ class TCPServer(hostInterface: String, port: Int) extends Actor {
     case b @ Bound(localAddress) =>
       context.parent ! b
 
-    case CommandFailed(_: Bind) => context stop self
+    case CommandFailed(_: Bind) => context.stop(self)
 
     case c @ Connected(remote, local) =>
       val handler = context.actorOf(Props[SimplisticHandler])

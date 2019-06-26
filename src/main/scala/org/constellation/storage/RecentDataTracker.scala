@@ -1,4 +1,4 @@
-package org.constellation.primitives.storage
+package org.constellation.storage
 import java.util.concurrent.ConcurrentLinkedQueue
 
 // TODO: Put transaction tracker / block tracker here
@@ -19,8 +19,7 @@ class RecentDataTracker[T](maxLength: Int = 100) {
     queue.add(item)
   }
 
-  def getAll: Array[T] = {
+  def getAll: Array[T] =
     queue.toArray().asInstanceOf[Array[T]]
-  }
 
 }

@@ -9,12 +9,13 @@ import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.StartNewBlockCreationRound
 import org.constellation.primitives.Schema.{InternalHeartbeat, NodeState, _}
+import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.{Distance, Periodic}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
-class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(implicit dao: DAO)
+class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 10)(implicit dao: DAO)
     extends Periodic[Try[Unit]]("RandomTransactionManager", periodSeconds) {
 
   def trigger(): Future[Try[Unit]] = {
@@ -56,9 +57,11 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
               dao.messageService.lookup(channel).unsafeRunSync().flatMap { data =>
                 if (lock.tryAcquire()) {
                   Some(
-                    ChannelMessage.create(Random.nextInt(1000).toString,
-                                          data.channelMessage.signedMessageData.hash,
-                                          channel)(dao.keyPair)
+                    ChannelMessage.create(
+                      Random.nextInt(1000).toString,
+                      data.channelMessage.signedMessageData.hash,
+                      channel
+                    )(dao.keyPair)
                   )
                 } else None
               }
@@ -67,8 +70,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
         }
       cm.foreach { c =>
         dao.threadSafeMessageMemPool.put(Seq(c))
-        dao.metrics.updateMetric("messageMemPoolSize",
-                                 dao.threadSafeMessageMemPool.unsafeCount.toString)
+        dao.metrics.updateMetric("messageMemPoolSize", dao.threadSafeMessageMemPool.unsafeCount.toString)
       }
     }
 
@@ -80,25 +82,25 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
       {
 
         // Move elsewhere
-        val peerIds = dao.readyPeers.toSeq.filter {
+        val peerIds = dao.readyPeers.unsafeRunSync().toSeq.filter {
           case (_, pd) =>
             pd.peerMetadata.timeAdded < (System
               .currentTimeMillis() - dao.processingConfig.minPeerTimeAddedSeconds * 1000)
         }
-        dao.metrics.updateMetric("numPeersOnDAO", dao.peerInfo.size.toString)
+        dao.metrics.updateMetric("numPeersOnDAO", dao.peerInfo.unsafeRunSync().size.toString)
         dao.metrics.updateMetric("numPeersOnDAOThatAreReady", peerIds.size.toString)
 
         if ((peerIds.nonEmpty || dao.nodeConfig.isGenesisNode) && dao.nodeState == NodeState.Ready && dao.generateRandomTX) {
 
           //generateRandomMessages()
 
-          val memPoolCount = dao.threadSafeTXMemPool.unsafeCount
-          dao.metrics.updateMetric("transactionMemPoolSize", memPoolCount.toString)
+          val pendingCount = dao.transactionService.count(TransactionStatus.Pending).unsafeRunSync()
+          dao.metrics.updateMetric("transactionPendingSize", pendingCount.toString)
 
           val haveBalance =
-            dao.addressService.getSync(dao.selfAddressStr).exists(_.balanceByLatestSnapshot > 10000000)
+            dao.addressService.lookup(dao.selfAddressStr).unsafeRunSync().exists(_.balanceByLatestSnapshot > 10000000)
 
-          if (memPoolCount < dao.processingConfig.maxMemPoolSize && haveBalance) {
+          if (pendingCount < dao.processingConfig.maxMemPoolSize && haveBalance) {
 
             val numTX = (dao.processingConfig.randomTXPerRoundPerPeer / (peerIds.size + 1)) + 1
             Seq.fill(numTX)(0).foreach {
@@ -106,15 +108,13 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                 // TODO: Make deterministic buckets for tx hashes later to process based on node ids.
                 // this is super easy, just combine the hashes with ID hashes and take the max with BigInt
 
-                def getRandomAddress: String = {
+                def getRandomAddress: String =
                   if (dao.nodeConfig.isGenesisNode && peerIds.isEmpty) {
                     dao.dummyAddress
                   } else {
 
                     peerIds(Random.nextInt(peerIds.size))._1.address
                   }
-                }
-
 
                 def simpleTX(src: String, kp: KeyPair = dao.keyPair) = createTransaction(
                   src,
@@ -126,11 +126,13 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
 
                 def txWithMultiAddress = {
 
-                  val balancesForAddresses = dao.addresses.map{a => a -> dao.addressService.getSync(a)}
-                  val auxAddressHaveSufficient = balancesForAddresses.forall{_._2.exists(_.balance > 10000000)}
+                  val balancesForAddresses = dao.addresses.map { a =>
+                    a -> dao.addressService.lookup(a).unsafeRunSync()
+                  }
+                  val auxAddressHaveSufficient = balancesForAddresses.forall { _._2.exists(_.balance > 10000000) }
 
                   if (!auxAddressHaveSufficient) {
-                    val possibleDestinations = balancesForAddresses.filterNot{_._2.exists(_.balance > 10000000)}
+                    val possibleDestinations = balancesForAddresses.filterNot { _._2.exists(_.balance > 10000000) }
                     val dst = Random.shuffle(possibleDestinations).head._1
                     createTransaction(
                       dao.selfAddressStr,
@@ -140,7 +142,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                     )
                   } else {
 
-                    val historyCheckPassable = balancesForAddresses.forall{
+                    val historyCheckPassable = balancesForAddresses.forall {
                       _._2.exists(_.balanceByLatestSnapshot > 10000000)
                     }
 
@@ -159,7 +161,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                 val tx = if (multiAddressGenerationMode) txWithMultiAddress else simpleTX(dao.selfAddressStr)
 
                 // TODO: Unify this as an API call function equivalent
-/*                val sendRequest = SendToAddress(getRandomAddress,
+                /*                val sendRequest = SendToAddress(getRandomAddress,
                                                 ,
                                                 normalized = false)*/
 
@@ -167,26 +169,22 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
                 dao.metrics.incrementMetric("randomTransactionsGenerated")
                 dao.metrics.incrementMetric("sentTransactions")
 
-                dao.threadSafeTXMemPool.put(tx)
+                dao.transactionService
+                  .put(TransactionCacheData(tx, valid = true, inMemPool = true))
+                  .unsafeRunSync()
 
-                dao.transactionService.memPool.putSync(
-                  tx.hash,
-                  TransactionCacheData(
-                    tx,
-                    valid = true,
-                    inMemPool = true
-                  )
-                )
-
-                dao.peerInfo(NodeType.Full)
+                dao
+                  .peerInfo(NodeType.Full)
+                  .unsafeRunSync()
                   .values
                   .foreach { peerData ⇒
                     dao.metrics.incrementMetric("transactionPut")
                     peerData.client.put("transaction", tx)
                   }
 
-                if (dao.peerInfo(NodeType.Light).nonEmpty) {
-                  val lightPeerData = dao.peerInfo(NodeType.Light).minBy(p ⇒ Distance.calculate(p._1, dao.id))._2
+                if (dao.peerInfo(NodeType.Light).unsafeRunSync().nonEmpty) {
+                  val lightPeerData =
+                    dao.peerInfo(NodeType.Light).unsafeRunSync().minBy(p ⇒ Distance.calculate(p._1, dao.id))._2
                   dao.metrics.incrementMetric("transactionPut")
                   dao.metrics.incrementMetric("transactionPutToLightNode")
                   lightPeerData.client.put("transaction", tx)
@@ -198,17 +196,6 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 1)(i
       peerSubset = Set(getRandomPeer._1)
     )*/
             }
-          }
-
-          if (memPoolCount > dao.processingConfig.minCheckpointFormationThreshold &&
-              dao.generateRandomTX &&
-              dao.nodeState == NodeState.Ready &&
-              !dao.blockFormationInProgress) {
-
-            nodeActor ! StartNewBlockCreationRound
-            dao.metrics.updateMetric("blockFormationInProgress",
-                                     dao.blockFormationInProgress.toString)
-
           }
         }
       },

@@ -21,7 +21,8 @@ case class TransactionCacheData(
   cbForkBaseHashes: Set[String] = Set(),
   signatureForks: Set[Transaction] = Set(),
   knownPeers: Set[Id] = Set(),
-  rxTime: Long = System.currentTimeMillis()
+  rxTime: Long = System.currentTimeMillis(),
+  path: Set[Id] = Set()
 ) {
 
   def plus(previous: TransactionCacheData): TransactionCacheData =
@@ -39,8 +40,9 @@ case class TransactionCacheData(
 case class Transaction(edge: Edge[TransactionEdgeData]) {
 
   def store(cache: TransactionCacheData)(implicit dao: DAO): Unit = {
-      dao.acceptedTransactionService.putSync(this.hash, cache)
-    }
+    // mwadon: What about transactionService?
+//      dao.acceptedTransactionService.putSync(this.hash, cache)
+  }
 
   def valid(implicit dao: DAO): Boolean =
     TransactionValidatorNel.validateTransaction(this).isValid
@@ -64,8 +66,8 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
   def signaturesHash: String = edge.signedObservationEdge.signatureBatch.hash
 
   def withSignatureFrom(keyPair: KeyPair): Transaction = this.copy(
-      edge = edge.withSignatureFrom(keyPair)
-    )
+    edge = edge.withSignatureFrom(keyPair)
+  )
 }
 
 case class TransactionSerialized(
@@ -159,13 +161,12 @@ sealed trait TransactionValidatorNel {
   def validateAmount(tx: Transaction): ValidationResult[Transaction] =
     if (tx.amount > 0) tx.validNel else NonPositiveAmount(tx).invalidNel
 
-
   import org.constellation.datastore.swaydb.SwayDbConversions._
 
   // TODO: get rid of unsafeRunSync() and make whole validation async with IO[ValidationResult[Transaction]]
   def validateDuplicate(tx: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
     //if (dao.transactionService.contains(tx.hash).unsafeRunSync())
-    if (dao.transactionHashStore.contains(tx.hash).unsafeRunSync())
+    if (dao.transactionService.isAccepted(tx.hash).unsafeRunSync())
       HashDuplicateFound(tx).invalidNel
     else
       tx.validNel

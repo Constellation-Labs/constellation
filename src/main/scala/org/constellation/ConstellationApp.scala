@@ -37,7 +37,7 @@ class ConstellationApp(
 
   def broadcast[T](messages: Seq[T], channelId: String)(implicit ec: ExecutionContext) = {
     val serializedMessages = messages.map(_.json)
-    logger.info(s"messages: ${messages} channelId: ${ channelId}")
+    logger.info(s"messages: ${messages} channelId: ${channelId}")
     clientApi.postNonBlocking[ChannelSendResponse](
       "channel/send",
       ChannelSendRequest(channelId, serializedMessages),

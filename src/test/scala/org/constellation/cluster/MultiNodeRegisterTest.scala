@@ -16,11 +16,7 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, _}
 import scala.concurrent.ExecutionContext
 import scala.util.Try
 
-class MultiNodeRegisterTest
-    extends FunSpecLike
-    with Matchers
-    with BeforeAndAfterAll
-    with BeforeAndAfterEach {
+class MultiNodeRegisterTest extends FunSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
   val logger = Logger("MultiNodeRegisterTest")
 
@@ -29,10 +25,9 @@ class MultiNodeRegisterTest
   implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
-  override def beforeEach(): Unit = {
+  override def beforeEach(): Unit =
     // Cleanup DBs
     Try { File(tmpDir).delete() }
-  }
 
   override def afterEach() {
     // Cleanup DBs
@@ -41,8 +36,7 @@ class MultiNodeRegisterTest
     system.terminate()
   }
 
-  def createNode(randomizePorts: Boolean = true,
-                 seedHosts: Seq[HostPort] = Seq()): ConstellationNode = {
+  def createNode(randomizePorts: Boolean = true, seedHosts: Seq[HostPort] = Seq()): ConstellationNode = {
     implicit val executionContext: ExecutionContext =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 
@@ -50,7 +44,6 @@ class MultiNodeRegisterTest
   }
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
-
 
   describe("E2E Multiple Nodes Register Test") {
     it("add register peers to each other successfully") {
@@ -62,7 +55,7 @@ class MultiNodeRegisterTest
       val nodes = Seq(n1) ++ Seq.fill(otherNodesSize)(createNode())
 
       nodes.foreach { n =>
-        assert(n.dao.peerInfo.isEmpty)
+        assert(n.dao.peerInfo.unsafeRunSync().isEmpty)
         assert(n.ipManager.listKnownIPs.isEmpty)
       }
 
@@ -75,18 +68,18 @@ class MultiNodeRegisterTest
                 ipData.canonicalHostName,
                 ipData.port,
                 a.dao.keyPair.getPublic.toId,
-              ResourceInfo(diskUsableBytes = 1073741824)
-            )
-          val res = a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
-          assert(res.isSuccess)
-        }
-        register(n, m)
-        register(m, n)
+                ResourceInfo(diskUsableBytes = 1073741824)
+              )
+            val res = a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
+            assert(res.isSuccess)
+          }
+          register(n, m)
+          register(m, n)
 
       }
       Thread.sleep(1000)
       nodes.foreach { n =>
-        assert(n.dao.peerInfo.size == otherNodesSize)
+        assert(n.dao.peerInfo.unsafeRunSync().size == otherNodesSize)
       }
 
     }

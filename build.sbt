@@ -1,25 +1,36 @@
 import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 import sbt.Keys.mainClass
 
-enablePlugins(JavaAppPackaging)
+enablePlugins(JavaAgent, JavaAppPackaging)
 //addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 
-scalacOptions := Seq("-Ypartial-unification", "-unchecked", "-deprecation")
+scalacOptions :=
+  Seq(
+    "-Ypartial-unification",
+    "-unchecked",
+    "-deprecation",
+    "-feature",
+    "-language:postfixOps",
+    "-language:implicitConversions",
+    "-language:higherKinds"
+  )
+javaAgents += "org.aspectj" % "aspectjweaver" % "1.9.4" % "runtime"
 
 // javacOptions := Seq("-XX:MaxMetaspaceSize=256m")
 
 lazy val _version = "1.0.12"
 
 lazy val versions = new {
-  val akka = "2.5.22"
+  val akka = "2.5.23"
   val akkaHttp = "10.1.8"
   val akkaHttpCors = "0.4.0"
   val spongyCastle = "1.58.0.0"
   val micrometer = "1.1.4"
   val prometheus = "0.6.0"
-  val sttp = "1.5.12"
-  val cats = "1.6.0"
-  val json4s = "3.6.5"
+  val sttp = "1.5.19"
+  val cats = "1.6.1"
+  val json4s = "3.6.6"
+  val mockito = "1.5.9"
 }
 
 lazy val sttpDependencies = Seq(
@@ -44,16 +55,20 @@ lazy val coreSettings = Seq(
     case ExecCmd("ENTRYPOINT", args @ _*) => Seq(Cmd("ENTRYPOINT", args.mkString(" ")))
     case v                                => Seq(v)
   },
-  dockerCommands += Cmd("HEALTHCHECK",
-                        "--interval=30s",
-                        "--timeout=3s",
-                        "CMD",
-                        "curl -f http://localhost:9000/health || exit 1"),
+  dockerCommands += Cmd(
+    "HEALTHCHECK",
+    "--interval=30s",
+    "--timeout=3s",
+    "CMD",
+    "curl -f http://localhost:9000/health || exit 1"
+  ),
   dockerUsername := Some("constellationlabs"),
-  dockerAlias := DockerAlias(None,
-                             Some("constellationlabs"),
-                             "constellation",
-                             Some(sys.env.getOrElse("CIRCLE_SHA1", _version))),
+  dockerAlias := DockerAlias(
+    None,
+    Some("constellationlabs"),
+    "constellation",
+    Some(sys.env.getOrElse("CIRCLE_SHA1", _version))
+  ),
   // Update the latest tag when publishing
   dockerUpdateLatest := true,
   // These values will be filled in by the k8s StatefulSet and Deployment
@@ -62,21 +77,22 @@ lazy val coreSettings = Seq(
     "-Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false",
     """-DakkaActorSystemName="$AKKA_ACTOR_SYSTEM_NAME""""
   ),
-  resolvers += "Artima Maven Repository" at "http://repo.artima.com/releases",
-  resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
-  resolvers += "jitpack" at "https://jitpack.io"
+  resolvers += "Artima Maven Repository".at("http://repo.artima.com/releases"),
+  resolvers += "Typesafe Releases".at("http://repo.typesafe.com/typesafe/maven-releases/"),
+  resolvers += "jitpack".at("https://jitpack.io")
 )
 
 lazy val coreDependencies = Seq(
   "org.scala-lang.modules" %% "scala-async" % "0.10.0",
-  "com.github.pathikrit" %% "better-files" % "3.7.1" withSources () withJavadoc (),
+  ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
   "com.roundeights" %% "hasher" % "1.2.0",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
+  "com.typesafe.akka" %% "akka-slf4j" % versions.akka,
   "ch.megard" %% "akka-http-cors" % versions.akkaHttpCors,
-  "de.heikoseeberger" %% "akka-http-json4s" % "1.25.2",
+  "de.heikoseeberger" %% "akka-http-json4s" % "1.26.0",
   "org.json4s" %% "json4s-native" % versions.json4s,
   "org.json4s" %% "json4s-ext" % versions.json4s,
   "org.json4s" %% "json4s-jackson" % versions.json4s,
@@ -86,48 +102,48 @@ lazy val coreDependencies = Seq(
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.62",
   "com.twitter" %% "chill" % "0.9.3",
   "com.twitter" %% "algebird-core" % "0.13.5",
-  "org.typelevel" %% "cats-core" % versions.cats withSources () withJavadoc (),
-//  "org.typelevel" %% "alleycats-core" % versions.cats withSources() withJavadoc(),
-  "org.typelevel" %% "cats-effect" % "1.2.0" withSources () withJavadoc (),
+  ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
+  //  "org.typelevel" %% "alleycats-core" % versions.cats withSources() withJavadoc(),
+  ("org.typelevel" %% "cats-effect" % "1.3.1").withSources().withJavadoc(),
   "net.glxn" % "qrgen" % "1.4",
-//  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
+  //  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.twitter" %% "storehaus-cache" % "0.15.0",
   "io.swaydb" %% "swaydb" % "0.7.1",
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
+  "io.kontainers" %% "micrometer-akka" % "0.10.2",
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus,
   "io.prometheus" % "simpleclient_caffeine" % versions.prometheus,
   "io.prometheus" % "simpleclient_logback" % versions.prometheus,
   "com.github.java-json-tools" % "json-schema-validator" % "2.2.10",
-  "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.5",
+  "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.6",
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
-  "com.github.blemale" %% "scaffeine" % "2.6.0" withSources () withJavadoc (),
-  "com.typesafe.slick" %% "slick" % "3.3.0" withSources () withJavadoc (),
+  ("com.github.blemale" %% "scaffeine" % "2.6.0").withSources().withJavadoc(),
+  ("com.typesafe.slick" %% "slick" % "3.3.1").withSources().withJavadoc(),
   "com.h2database" % "h2" % "1.4.199"
 ) ++ sttpDependencies
 
 //Test dependencies
 lazy val testDependencies = Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.0",
-  "org.scalatest" %% "scalatest" % "3.0.7",
-  "org.scalactic" %% "scalactic" % "3.0.7",
-  "org.scalamock" %% "scalamock" % "4.1.0",
-  "org.mockito" %% "mockito-scala" % "1.3.1",
+  "org.scalatest" %% "scalatest" % "3.0.8",
+  "org.scalactic" %% "scalactic" % "3.0.8",
+  "org.scalamock" %% "scalamock" % "4.2.0",
+  "org.mockito" %% "mockito-scala" % versions.mockito,
+  "org.mockito" %% "mockito-scala-cats" % versions.mockito,
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
 ).map(_ % "it,test")
 
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
-testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
-                                      "-u",
-                                      "target/test-results/scalatest")
+testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-u", "target/test-results/scalatest")
 
 test in assembly := {}
 
-Test / fork := true
+Test / fork := true // <-- comment out to attach debugger
 Test / logBuffered := false
 
 assemblyMergeStrategy in assembly := {
@@ -139,10 +155,12 @@ assemblyMergeStrategy in assembly := {
 }
 
 lazy val protobuf = (project in file("proto"))
-  .settings(commonSettings,
-            PB.targets in Compile := Seq(
-              scalapb.gen() -> (sourceManaged in Compile).value
-            ))
+  .settings(
+    commonSettings,
+    PB.targets in Compile := Seq(
+      scalapb.gen() -> (sourceManaged in Compile).value
+    )
+  )
 
 lazy val root = (project in file("."))
   .dependsOn(protobuf)
