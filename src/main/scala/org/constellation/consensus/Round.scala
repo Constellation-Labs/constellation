@@ -5,6 +5,7 @@ import cats.effect.IO
 import cats.implicits._
 import com.typesafe.config.Config
 import constellation.{wrapFutureWithMetric, _}
+import org.constellation.consensus.Round.RoundStage.RoundStage
 import org.constellation.consensus.Round.StageState.StageState
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{
@@ -47,6 +48,8 @@ class Round(
   private[consensus] var acceptMajorityCheckpointBlockTikTok: Cancellable = _
   protected var sendArbitraryDataProposalsTikTok: Cancellable = _
 
+  private[consensus] var roundStage: RoundStage = RoundStage.STARTING
+
   override def preStart(): Unit = {
     super.preStart()
     sendArbitraryDataProposalsTikTok = scheduleArbitraryDataProposals(1)
@@ -82,6 +85,7 @@ class Round(
           .map(_._1.signedMessageData.hash),
         dao.peerInfo.unsafeRunSync().flatMap(_._2.notification).toSeq
       )
+      setRoundStage(RoundStage.WAITING_FOR_PROPOSALS)
       passToParentActor(
         BroadcastLightTransactionProposal(roundData.roundId, roundData.peers, proposal)
       )
@@ -93,11 +97,22 @@ class Round(
       log.debug(
         s"[${dao.id.short}] ${roundData.roundId} received LightTransactionsProposal from ${newProp.facilitatorId.id.short}"
       )
+
+      verifyRoundStage(
+        Set(
+          RoundStage.WAITING_FOR_BLOCK_PROPOSALS,
+          RoundStage.RESOLVING_MAJORITY_CB,
+          RoundStage.WAITING_FOR_SELECTED_BLOCKS,
+          RoundStage.ACCEPTING_MAJORITY_CB
+        )
+      )
+
       if (transactionProposals.contains(newProp.facilitatorId)) {
         log.error(
           s"[${dao.id.short}] ${roundData.roundId} received doubled LightTransactionProposal is ${newProp.facilitatorId.id.short}"
         )
       }
+
       val merged = if (transactionProposals.contains(newProp.facilitatorId)) {
         val old = transactionProposals(newProp.facilitatorId)
         old.copy(
@@ -109,6 +124,7 @@ class Round(
         newProp
       transactionProposals += (newProp.facilitatorId -> merged)
       if (receivedAllTransactionProposals) {
+        setRoundStage(RoundStage.WAITING_FOR_BLOCK_PROPOSALS)
         log.debug(s"[${dao.id.short}] ${roundData.roundId} received all transaction proposals")
         cancelUnionTransactionProposalsTikTok()
         self ! UnionProposals(StageState.FINISHED)
@@ -118,6 +134,15 @@ class Round(
       log.debug(
         s"[${dao.id.short}] ${roundData.roundId} received UnionBlockProposal from ${facilitatorId.id.short}"
       )
+
+      verifyRoundStage(
+        Set(
+          RoundStage.RESOLVING_MAJORITY_CB,
+          RoundStage.WAITING_FOR_SELECTED_BLOCKS,
+          RoundStage.ACCEPTING_MAJORITY_CB
+        )
+      )
+
       if (checkpointBlockProposals.contains(facilitatorId)) {
         log.error(
           s"[${dao.id.short}] ${roundData.roundId} received doubled UnionBlockProposal is ${facilitatorId.id.short}"
@@ -132,6 +157,7 @@ class Round(
 //        self ! UnionProposals(StageState.BEHIND)
 //      }
       if (receivedAllCheckpointBlockProposals) {
+        setRoundStage(RoundStage.RESOLVING_MAJORITY_CB)
         log.debug(
           s"[${dao.id.short}] ${roundData.roundId} received receivedAllCheckpointBlockProposals"
         )
@@ -143,6 +169,9 @@ class Round(
       log.debug(
         s"[${dao.id.short}] ${roundData.roundId} received SelectedUnionBlock from ${facilitatorId.id.short}"
       )
+
+      verifyRoundStage(Set(RoundStage.ACCEPTING_MAJORITY_CB))
+
       if (selectedCheckpointBlocks.contains(facilitatorId)) {
         log.error(
           s"[${dao.id.short}] ${roundData.roundId} received doubled SelectedUnionBlock is ${facilitatorId.id.short}"
@@ -158,6 +187,7 @@ class Round(
 //      }
 
       if (receivedAllSelectedUnionedBlocks) {
+        setRoundStage(RoundStage.ACCEPTING_MAJORITY_CB)
         log.debug(
           s"[${dao.id.short}] ${roundData.roundId} received receivedAllSelectedUnionedBlocks"
         )
@@ -168,9 +198,26 @@ class Round(
 
     case UnionProposals(StageState.BEHIND) =>
       log.debug(s"[${dao.id.short}] ${roundData.roundId} self send UnionState")
+
+      verifyRoundStage(
+        Set(
+          RoundStage.RESOLVING_MAJORITY_CB,
+          RoundStage.WAITING_FOR_SELECTED_BLOCKS,
+          RoundStage.ACCEPTING_MAJORITY_CB
+        )
+      )
       unionProposals()
+
     case UnionProposals(state) =>
       log.info(s"[${dao.id.short}] ${roundData.roundId} self send UnionState ${state}")
+
+      verifyRoundStage(
+        Set(
+          RoundStage.RESOLVING_MAJORITY_CB,
+          RoundStage.WAITING_FOR_SELECTED_BLOCKS,
+          RoundStage.ACCEPTING_MAJORITY_CB
+        )
+      )
       validateAndUnionTransactionProposals()
 
     case ArbitraryDataProposals(distance) =>
@@ -209,6 +256,13 @@ class Round(
       log.debug(
         s"[${dao.id.short}] ${roundData.roundId} received ResolveMajorityCheckpointBlock BEHIND"
       )
+
+      verifyRoundStage(
+        Set(
+          RoundStage.WAITING_FOR_SELECTED_BLOCKS,
+          RoundStage.ACCEPTING_MAJORITY_CB
+        )
+      )
       resolveMajorityCheckpointBlock()
 
     case ResolveMajorityCheckpointBlock(_, state) =>
@@ -217,6 +271,13 @@ class Round(
       )
       dao.metrics.incrementMetric(
         "resolveMajorityCheckpointBlockActor_" + state
+      )
+
+      verifyRoundStage(
+        Set(
+          RoundStage.WAITING_FOR_SELECTED_BLOCKS,
+          RoundStage.ACCEPTING_MAJORITY_CB
+        )
       )
       validateAndResolveMajorityCheckpointBlock()
 
@@ -291,6 +352,7 @@ class Round(
     }
 
   private[consensus] def unionProposals(): Unit = {
+
     val readyPeers = dao.readyPeers.unsafeRunSync()
 
     val transactions = transactionProposals.values
@@ -415,7 +477,7 @@ class Round(
       "resolveMajorityCheckpointBlockUniquesCount_" + uniques
     )
     val checkpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
-
+    setRoundStage(RoundStage.WAITING_FOR_SELECTED_BLOCKS)
     val selectedCheckpointBlock =
       SelectedUnionBlock(roundData.roundId, FacilitatorId(dao.id), checkpointBlock)
     passToParentActor(
@@ -545,6 +607,13 @@ class Round(
     }
   }
 
+  def setRoundStage(stage: RoundStage): Unit =
+    roundStage = stage
+
+  def verifyRoundStage(forbiddenStages: Set[RoundStage]): Unit =
+    if (forbiddenStages.contains(roundStage)) {
+      throw new RuntimeException(s"Received message from previous round stage. Current round stage is $roundStage")
+    }
 }
 
 case class FacilitatorId(id: Schema.Id) extends AnyVal
@@ -557,6 +626,14 @@ object Round {
   abstract class RoundException(msg: String) extends Exception(msg) {
     def roundId: RoundId
     def transactionsToReturn: Seq[String]
+  }
+
+  object RoundStage extends Enumeration {
+    type RoundStage = Value
+
+    val STARTING, WAITING_FOR_PROPOSALS, WAITING_FOR_BLOCK_PROPOSALS, RESOLVING_MAJORITY_CB,
+      WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
+      Value
   }
 
   object StageState extends Enumeration {

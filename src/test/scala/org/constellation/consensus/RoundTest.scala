@@ -256,4 +256,26 @@ class RoundTest
     parentActor.expectNoMessage()
   }
 
+  test("it should throw an exception when received a message from previous round stage") {
+    val parentActor = TestProbe()
+    val roundInitiator = createRoundActor(shortTimeouts, parentActor.ref)
+    val underlyingActor = roundInitiator.underlyingActor
+
+    roundInitiator ! LightTransactionsProposal(roundId, facilitatorId1, Seq(tx1.hash), Seq(), Seq())
+    roundInitiator ! LightTransactionsProposal(roundId, facilitatorId2, Seq(tx2.hash), Seq(), Seq())
+    roundInitiator ! LightTransactionsProposal(roundId, facilitatorId3, Seq(tx3.hash), Seq(), Seq())
+
+    val cb1 = CheckpointBlock.createCheckpointBlock(Seq(tx1), Seq(), Seq(), Seq())(dao.keyPair)
+    val cb2 = CheckpointBlock.createCheckpointBlock(Seq(tx2), Seq(), Seq(), Seq())(dao.keyPair)
+
+    roundInitiator ! UnionBlockProposal(roundId, facilitatorId2, cb1)
+    roundInitiator ! UnionBlockProposal(roundId, facilitatorId3, cb2)
+
+    an[RuntimeException] should be thrownBy {
+      intercept[RuntimeException] {
+        roundInitiator ! LightTransactionsProposal(roundId, facilitatorId1, Seq(tx1.hash), Seq(), Seq())
+      }
+    }
+  }
+
 }
