@@ -17,6 +17,7 @@ import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.storage._
+import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.HostPort
 
 class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLogging {
@@ -97,6 +98,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       Concurrent(ConstellationConcurrentEffect.edge),
       ConstellationConcurrentEffect.edge
     )
+    transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this) // TODO: rethink if it shouldn't be inside the tx service
     checkpointService =
       new CheckpointService[IO](this, transactionService, messageService, notificationService, concurrentTipService)
     addressService = new AddressService[IO]()(Concurrent(ConstellationConcurrentEffect.edge), () => metrics)

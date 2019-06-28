@@ -112,7 +112,7 @@ trait SignHelpExt {
   ): Transaction = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
-    val txData = TransactionEdgeData(amountToUse)
+    val txData = TransactionEdgeData(amount = amountToUse)
 
     val oe = ObservationEdge(
       Seq(
