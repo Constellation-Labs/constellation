@@ -4,6 +4,8 @@ import java.security.KeyPair
 import java.util.concurrent.Semaphore
 
 import akka.actor.ActorRef
+import cats.effect.{ContextShift, IO}
+import cats.implicits._
 import com.softwaremill.sttp.Response
 import constellation._
 import org.constellation.DAO
@@ -169,25 +171,32 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 10)(
                 dao.metrics.incrementMetric("randomTransactionsGenerated")
                 dao.metrics.incrementMetric("sentTransactions")
 
-                dao.transactionService
-                  .put(TransactionCacheData(tx, valid = true, inMemPool = true))
-                  .unsafeRunSync()
+                dao.transactionService.put(TransactionCacheData(tx, path = Set(dao.id))).unsafeRunSync
 
-                dao
-                  .peerInfo(NodeType.Full)
-                  .unsafeRunSync()
-                  .values
-                  .foreach { peerData ⇒
-                    dao.metrics.incrementMetric("transactionPut")
-                    peerData.client.put("transaction", tx)
-                  }
+                implicit val random: Random = scala.util.Random
+                val contextShift: ContextShift[IO] = IO.contextShift(dao.edgeExecutionContext)
+
+                val rebroadcast =
+                  for {
+                    tcd <- dao.transactionGossiping.observe(TransactionCacheData(tx))
+                    _ <- IO.delay {
+                      dao.miscLogger.debug(s"Rebroadcast tx=${tcd.transaction.hash}, initial path=${tcd.path}")
+                    }
+                    peers <- dao.transactionGossiping.selectPeers(tcd)
+                    peerData <- dao.peerInfo(NodeType.Full).map(_.filterKeys(peers.contains).values.toList)
+                    _ <- contextShift.shift *> peerData
+                      .traverse(_.client.putAsync("transaction", TransactionGossip(tcd)))
+                    _ <- dao.metrics.incrementMetricAsync[IO]("transactionGossipingSent")
+                  } yield ()
+
+                rebroadcast.unsafeRunAsyncAndForget
 
                 if (dao.peerInfo(NodeType.Light).unsafeRunSync().nonEmpty) {
                   val lightPeerData =
                     dao.peerInfo(NodeType.Light).unsafeRunSync().minBy(p ⇒ Distance.calculate(p._1, dao.id))._2
                   dao.metrics.incrementMetric("transactionPut")
                   dao.metrics.incrementMetric("transactionPutToLightNode")
-                  lightPeerData.client.put("transaction", tx)
+                  lightPeerData.client.put("transaction", TransactionGossip(tx))
                 }
 
                 /*            // TODO: Change to transport layer call

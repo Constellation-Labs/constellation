@@ -17,6 +17,7 @@ import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.storage._
+import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.{HostPort, Metrics}
 
 class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike with StrictLogging {
@@ -95,6 +96,7 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
     implicit val edgeContextShift: ContextShift[IO] = IO.contextShift(edgeExecutionContext)
     val semaphore = Semaphore[IO](1).unsafeRunSync()
     transactionService = new TransactionService[IO](this, semaphore)
+    transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this) // TODO: rethink if it shouldn't be inside the tx service
     checkpointService =
       new CheckpointService[IO](this, transactionService, messageService, notificationService, concurrentTipService)
     addressService = {

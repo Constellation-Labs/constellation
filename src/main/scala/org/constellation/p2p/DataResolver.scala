@@ -24,7 +24,7 @@ class DataResolver extends StrictLogging {
     pool: Iterable[PeerApiClient],
     priorityClient: Option[PeerApiClient]
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[ChannelMessageMetadata]] = {
-    logger.info(s"Resolve message=$hash")
+    logger.debug(s"Resolve message=$hash")
     resolveDataByDistance[ChannelMessageMetadata](
       List(hash),
       "message",
@@ -77,17 +77,16 @@ class DataResolver extends StrictLogging {
                 e
               )
               makeAttempt(tail, errorsSoFar + 1)
-          }.flatTap(_.map(storeIO).getOrElse(IO.unit))
-            .flatMap { response =>
-              if (response.isEmpty) {
-                logger.warn(
-                  s"Empty response resolving with host=${head.client.hostPortForLogging}, trying next peer"
-                )
-                makeAttempt(tail, errorsSoFar + 1)
-              } else {
-                IO.pure(response)
-              }
+          }.flatTap(_.map(storeIO).getOrElse(IO.unit)).flatMap { response =>
+            if (response.isEmpty) {
+              logger.warn(
+                s"Empty response resolving with host=${head.client.hostPortForLogging}, trying next peer"
+              )
+              makeAttempt(tail, errorsSoFar + 1)
+            } else {
+              IO.pure(response)
             }
+          }
       }
     makeAttempt(sortedPeers)
   }
@@ -112,7 +111,7 @@ class DataResolver extends StrictLogging {
     pool: Iterable[PeerApiClient],
     priorityClient: Option[PeerApiClient]
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[TransactionCacheData]] = {
-    logger.info(s"Resolve transaction=$hash")
+    logger.debug(s"Resolve transaction=$hash")
     resolveDataByDistance[TransactionCacheData](
       List(hash),
       "transaction",
@@ -141,7 +140,7 @@ class DataResolver extends StrictLogging {
     pool: Iterable[PeerApiClient],
     priorityClient: Option[PeerApiClient]
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Option[CheckpointCache]] = {
-    logger.info(s"Resolve cb=$hash")
+    logger.debug(s"Resolve cb=$hash")
     resolveDataByDistance[CheckpointCache](
       List(hash),
       "checkpoint",

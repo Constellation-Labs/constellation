@@ -1,6 +1,7 @@
 package org.constellation.storage.transactions
 
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
+import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import org.constellation.primitives.{PeerData, Transaction, TransactionCacheData}
 import org.constellation.storage.TransactionService
@@ -9,6 +10,7 @@ import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{FunSuite, Matchers}
 
+import scala.concurrent.ExecutionContext
 import scala.util.Random
 
 class TransactionGossipingTest
@@ -20,7 +22,7 @@ class TransactionGossipingTest
 
   test("it should randomly select the diff of all peer IDs and peers in the tx path") {
     val dao = mockDAO
-    val gossiping = new TransactionGossiping[IO](mockTxService, dao)
+    val gossiping = new TransactionGossiping[IO](mockTxService, 2, dao)
 
     val tx = mock[TransactionCacheData]
     val path = Set(Fixtures.id2, Fixtures.id3)
@@ -28,36 +30,33 @@ class TransactionGossipingTest
 
     Random.setSeed(57L)
 
-    val selectedPeers = gossiping.selectPeers(tx, 2)(Random).unsafeRunSync
+    val selectedPeers = gossiping.selectPeers(tx)(Random).unsafeRunSync
 
     selectedPeers shouldBe Set(Fixtures.id1, Fixtures.id4)
   }
 
   test("it should update the transaction path if it's the first time the tx is being observed") {
+    implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+
     val dao = mockDAO
-    val txService = mockTxService
-    val gossiping = new TransactionGossiping[IO](txService, dao)
+    val semaphore = Semaphore[IO](1).unsafeRunSync
+    val txService = spy(new TransactionService[IO](dao, semaphore))
+    val gossiping = new TransactionGossiping[IO](txService, 2, dao)
 
-    val tx = mock[TransactionCacheData]
-
-    tx.transaction shouldReturn mock[Transaction]
-    tx.transaction.hash shouldReturn "abc"
-
-    val path = Set(Fixtures.id2, Fixtures.id3)
-    tx.path shouldReturn path
-
-    txService.contains(tx.transaction.hash) shouldReturnF false
-    txService.update(*, *) shouldReturnF Unit
+    val t = constellation.createTransaction("a", "b", 1L, Fixtures.tempKey, false)
+    val tx = TransactionCacheData(transaction = t, path = Set(Fixtures.id2, Fixtures.id3))
 
     gossiping.observe(tx).unsafeRunSync
 
-    txService.update(tx.transaction.hash, *).was(called)
+    txService.lookup(tx.transaction.hash, TransactionStatus.Unknown).map(_.map(_.path)).unsafeRunSync shouldBe Some(
+      Set(Fixtures.id2, Fixtures.id3, dao.id)
+    )
   }
 
-  test("it should not update the transaction path if it's not the first time the tx is being observed") {
+  test("it should merge the transaction path if it's not the first time the tx is being observed") {
     val dao = mockDAO
     val txService = mockTxService
-    val gossiping = new TransactionGossiping[IO](txService, dao)
+    val gossiping = new TransactionGossiping[IO](txService, 2, dao)
 
     val tx = mock[TransactionCacheData]
 
@@ -69,14 +68,17 @@ class TransactionGossipingTest
 
     txService.contains(tx.transaction.hash) shouldReturnF true
     txService.update(*, *) shouldReturnF Unit
+    txService.lookup(*) shouldReturnF Some(tx)
 
     gossiping.observe(tx).unsafeRunSync
 
-    txService.update(tx.transaction.hash, *).wasNever(called)
+    txService.update(tx.transaction.hash, *).was(called)
   }
 
   private def mockDAO: DAO = {
     val dao = mock[DAO]
+
+    dao.id shouldReturn Fixtures.id5
 
     val peerA = Fixtures.id1 -> mock[PeerData]
     val peerB = Fixtures.id2 -> mock[PeerData]

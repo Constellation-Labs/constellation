@@ -165,7 +165,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
     dao.transactionService.returnTransactionsToPending(transactionsToReturn).unsafeRunAsync {
       case Right(Nil) => ()
       case Right(txs) =>
-        log.info(
+        log.debug(
           s"Transactions returned to pending state ${txs.map(_.transaction.hash)} in round $roundId"
         )
       case Left(value) =>

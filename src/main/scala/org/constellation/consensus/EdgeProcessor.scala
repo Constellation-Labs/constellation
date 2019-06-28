@@ -419,7 +419,7 @@ object Snapshot extends StrictLogging {
           val start = System.currentTimeMillis()
           dao.snapshotService.attemptSnapshot().value.unsafeRunSync()
           val elapsed = System.currentTimeMillis() - start
-          logger.info(s"Attempt snapshot took: $elapsed millis")
+          logger.debug(s"Attempt snapshot took: $elapsed millis")
         },
         "snapshotAttempt",
         60

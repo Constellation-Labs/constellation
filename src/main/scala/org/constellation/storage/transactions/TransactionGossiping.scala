@@ -9,9 +9,9 @@ import org.constellation.storage.TransactionService
 
 import scala.util.Random
 
-class TransactionGossiping[F[_]: Sync: LiftIO](transactionService: TransactionService[F], dao: DAO) {
+class TransactionGossiping[F[_]: Sync: LiftIO](transactionService: TransactionService[F], fanout: Int, dao: DAO) {
 
-  def selectPeers(tx: TransactionCacheData, fanout: Int)(implicit random: Random): F[Set[Id]] =
+  def selectPeers(tx: TransactionCacheData)(implicit random: Random): F[Set[Id]] =
     for {
       peers <- getDiffPeers(tx)
       randomPeers <- Sync[F].delay(random.shuffle(peers))
@@ -26,13 +26,17 @@ class TransactionGossiping[F[_]: Sync: LiftIO](transactionService: TransactionSe
   private def getUsedPeers(tx: TransactionCacheData): F[Set[Id]] =
     tx.path.pure[F]
 
-  def observe(tx: TransactionCacheData): F[Unit] =
+  def observe(tx: TransactionCacheData): F[TransactionCacheData] =
     for {
       isKnown <- transactionService.contains(tx.transaction.hash)
-      _ <- if (isKnown) Sync[F].unit else updateTxPath(tx)
-    } yield ()
+      updated <- if (isKnown) updateTxPath(tx) else setTxWithPath(tx)
+    } yield updated
 
-  private def updateTxPath(tx: TransactionCacheData): F[Unit] =
-    transactionService.update(tx.transaction.hash, t => t.copy(path = t.path))
+  private def setTxWithPath(tx: TransactionCacheData): F[TransactionCacheData] =
+    transactionService.put(tx.copy(path = tx.path + dao.id), TransactionStatus.Unknown)
+
+  private def updateTxPath(tx: TransactionCacheData): F[TransactionCacheData] =
+    transactionService.update(tx.transaction.hash, t => t.copy(path = t.path ++ tx.path)) *>
+      transactionService.lookup(tx.transaction.hash).map(_.get) // unsafe get but checked before if it exists
 
 }

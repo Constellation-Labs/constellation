@@ -94,7 +94,7 @@ class TransactionService[F[_]: Sync: Concurrent](dao: DAO, pullSemaphore: Semaph
     pending
       .pull(minCount)
       .map(_.getOrElse(List()))
-      .flatTap(txs => Sync[F].delay(logger.info(s"Pulling txs=${txs.size} for consensus with minCount: $minCount")))
+      .flatTap(txs => Sync[F].delay(logger.debug(s"Pulling txs=${txs.size} for consensus with minCount: $minCount")))
       .flatMap(
         txs => txs.map(tx => inConsensus.put(tx.transaction.hash, tx)).sequence
       )

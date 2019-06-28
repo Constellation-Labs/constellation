@@ -207,7 +207,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
       pendingAcceptance.synchronized {
         pendingAcceptance.contains(cb.baseHash).flatMap {
           case false => pendingAcceptance.put(cb.baseHash, cb)
-          case _    => throw PendingAcceptance(cb)
+          case _     => throw PendingAcceptance(cb)
         }
       }
     }
@@ -275,6 +275,6 @@ class CheckpointService[F[_]: Sync: LiftIO](
           .void
       }
 
-    Sync[F].delay { logger.info(s"Accepting transactions ${cb.transactions.size}") } >> insertTX
+    Sync[F].delay { logger.debug(s"Accepting transactions ${cb.transactions.size}") } >> insertTX
   }
 }

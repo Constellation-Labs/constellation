@@ -9,11 +9,19 @@ import cats.effect.IO
 import com.softwaremill.sttp.Response
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.DAO
+import org.constellation.{DAO, Fixtures}
 import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointAck, FinishedCheckpointResponse}
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.{ConcurrentTipService, IPManager}
+import org.constellation.primitives.{
+  ConcurrentTipService,
+  IPManager,
+  PeerData,
+  Transaction,
+  TransactionCacheData,
+  TransactionGossip
+}
 import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
+import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.storage.{
   AddressService,
   CheckpointService,
@@ -21,18 +29,18 @@ import org.constellation.storage.{
   SnapshotService,
   TransactionService
 }
-import org.constellation.util.Metrics
+import org.constellation.util.{APIClient, Metrics}
 import org.json4s.native
 import org.json4s.native.Serialization
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito, Mockito}
-import org.scalatest.{BeforeAndAfter, Matchers, WordSpec}
+import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers, WordSpec}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
 
 class PeerAPITest
-    extends WordSpec
+    extends FreeSpec
     with Matchers
     with ScalatestRouteTest
     with IdiomaticMockito
@@ -56,11 +64,11 @@ class PeerAPITest
     peerAPI = new PeerAPI(new IPManager, TestProbe().ref)(system, 10.seconds, dao)
   }
 
-  "The PeerAPI" should {
+  "The PeerAPI" - {
     /*
         Unfortunately ScalatestRouteTest instansiate it's own class of PeerAPI thus we can't spy on it
      */
-    "return acknowledge message on finishing checkpoint and reply with callback" ignore {
+    "should return acknowledge message on finishing checkpoint and reply with callback" ignore {
       val reply = "http://originator:9001/peer-api/finished/checkpoint/reply"
       val fakeResp = Future.successful(mock[Response[Unit]])
       Mockito
@@ -79,20 +87,20 @@ class PeerAPITest
       //      peerAPI.makeCallback(*, *) wasCalled (once within 2.seconds)
     }
 
-    "return acknowledge message on finishing checkpoint and make no reply with callback" in {
+    "should return acknowledge message on finishing checkpoint and make no reply with callback" in {
       val req = FinishedCheckpoint(CheckpointCache(None), Set.empty)
       Post("/finished/checkpoint", req) ~> peerAPI.postEndpoints ~> check {
         status shouldEqual StatusCodes.OK
         responseAs[FinishedCheckpointAck] shouldEqual FinishedCheckpointAck(true)
       }
     }
-    "handle reply message" in {
+    "should handle reply message" in {
       Post("/finished/reply", FinishedCheckpointResponse(true)) ~> peerAPI.postEndpoints ~> check {
         status shouldEqual StatusCodes.OK
       }
     }
 
-    "return snapshot bytes when stored snapshot exist" in {
+    "should return snapshot bytes when stored snapshot exist" in {
       dao.snapshotService shouldReturn mock[SnapshotService[IO]]
       dao.snapshotService.exists(*) shouldReturnF true
 
@@ -109,7 +117,7 @@ class PeerAPITest
 
     }
 
-    "return snapshot not found when snapshot does not exist" in {
+    "should return snapshot not found when snapshot does not exist" in {
       dao.snapshotService shouldReturn mock[SnapshotService[IO]]
       dao.snapshotService.exists(*) shouldReturnF false
 
@@ -124,6 +132,65 @@ class PeerAPITest
         }
       }
 
+    }
+
+    "mixedEndpoints" - {
+      "PUT transaction" - {
+
+        "should observe received transaction" in {
+          dao.transactionGossiping shouldReturn mock[TransactionGossiping[IO]]
+          dao.transactionGossiping.observe(*) shouldReturnF mock[TransactionCacheData]
+          dao.transactionGossiping.selectPeers(*)(scala.util.Random) shouldReturnF Set()
+          dao.peerInfo shouldReturnF Map()
+
+          val a = KeyUtils.makeKeyPair()
+          val b = KeyUtils.makeKeyPair()
+
+          val tx = createTransaction(a.address, b.address, 5L, a)
+
+          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints ~> check {
+            dao.transactionGossiping.observe(*).was(called)
+          }
+        }
+
+        "should broadcast transaction to others" in {
+          val a = KeyUtils.makeKeyPair()
+          val b = KeyUtils.makeKeyPair()
+
+          val tx = createTransaction(a.address, b.address, 5L, a)
+          val tcd = mock[TransactionCacheData]
+
+          val id = Fixtures.id2
+          val peerData = mock[PeerData]
+          peerData.client shouldReturn mock[APIClient]
+          peerData.client.putAsync(*, *, *)(*) shouldReturnF mock[Response[String]]
+
+          dao.transactionGossiping shouldReturn mock[TransactionGossiping[IO]]
+          dao.transactionGossiping.observe(*) shouldReturnF tcd
+          dao.transactionGossiping.selectPeers(tcd)(scala.util.Random) shouldReturnF Set(id)
+          dao.peerInfo shouldReturnF Map(id -> peerData)
+
+          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints ~> check {
+            peerData.client.putAsync(*, *, *)(*).was(called)
+          }
+        }
+
+        "should return StatusCodes.OK" in {
+          dao.transactionGossiping shouldReturn mock[TransactionGossiping[IO]]
+          dao.transactionGossiping.observe(*) shouldReturnF mock[TransactionCacheData]
+          dao.transactionGossiping.selectPeers(*)(scala.util.Random) shouldReturnF Set()
+          dao.peerInfo shouldReturnF Map()
+
+          val a = KeyUtils.makeKeyPair()
+          val b = KeyUtils.makeKeyPair()
+
+          val tx = createTransaction(a.address, b.address, 5L, a)
+
+          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints ~> check {
+            status shouldEqual StatusCodes.OK
+          }
+        }
+      }
     }
   }
 

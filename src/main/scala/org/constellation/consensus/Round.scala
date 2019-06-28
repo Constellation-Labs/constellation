@@ -209,7 +209,7 @@ class Round(
       unionProposals()
 
     case UnionProposals(state) =>
-      log.info(s"[${dao.id.short}] ${roundData.roundId} self send UnionState ${state}")
+      log.debug(s"[${dao.id.short}] ${roundData.roundId} self send UnionState ${state}")
 
       verifyRoundStage(
         Set(

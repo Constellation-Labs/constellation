@@ -101,7 +101,8 @@ case class ProcessingConfig(
   snapshotInterval: Int = 25,
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,
-  roundsPerMessage: Int = 10
+  roundsPerMessage: Int = 10,
+  txGossipingFanout: Int = 2
 ) {}
 
 case class ChannelUIOutput(channels: Seq[String])

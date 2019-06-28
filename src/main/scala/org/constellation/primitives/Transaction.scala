@@ -39,11 +39,6 @@ case class TransactionCacheData(
 
 case class Transaction(edge: Edge[TransactionEdgeData]) {
 
-  def store(cache: TransactionCacheData)(implicit dao: DAO): Unit = {
-    // mwadon: What about transactionService?
-//      dao.acceptedTransactionService.putSync(this.hash, cache)
-  }
-
   def valid(implicit dao: DAO): Boolean =
     TransactionValidatorNel.validateTransaction(this).isValid
 
@@ -68,6 +63,15 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
   def withSignatureFrom(keyPair: KeyPair): Transaction = this.copy(
     edge = edge.withSignatureFrom(keyPair)
   )
+}
+
+case class TransactionGossip(tx: Transaction, path: Set[Schema.Id]) {
+  def hash: String = tx.hash
+}
+
+object TransactionGossip {
+  def apply(tcd: TransactionCacheData): TransactionGossip = TransactionGossip(tcd.transaction, tcd.path)
+  def apply(tx: Transaction): TransactionGossip = TransactionGossip(tx, Set())
 }
 
 case class TransactionSerialized(
