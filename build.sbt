@@ -88,6 +88,7 @@ lazy val coreDependencies = Seq(
   "com.roundeights" %% "hasher" % "1.2.0",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "io.chrisdavenport" %% "log4cats-slf4j" % "0.4.0-M1",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
   "com.typesafe.akka" %% "akka-slf4j" % versions.akka,

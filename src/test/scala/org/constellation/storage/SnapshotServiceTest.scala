@@ -31,6 +31,7 @@ class SnapshotServiceTest
     val checkpointService = mock[CheckpointService[IO]]
     val messageService = mock[MessageService[IO]]
     val transactionService = mock[TransactionService[IO]]
+    val rateLimiting = mock[RateLimiting[IO]]
 
     snapshotService = new SnapshotService[IO](
       cts,
@@ -38,6 +39,7 @@ class SnapshotServiceTest
       checkpointService,
       messageService,
       transactionService,
+      rateLimiting,
       dao
     )
   }

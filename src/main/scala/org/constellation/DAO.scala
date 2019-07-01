@@ -7,9 +7,10 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import cats.effect.concurrent.Semaphore
-import cats.effect.{Concurrent, IO}
+import cats.effect.{Concurrent, ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.primitives.Schema.NodeState.NodeState
@@ -92,13 +93,21 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
+    implicit def unsafeLogger = Slf4jLogger.getLogger[IO]
+
     val semaphore = Semaphore[IO](1)(ConstellationConcurrentEffect.edge).unsafeRunSync()
     transactionService = new TransactionService[IO](this, semaphore)(
       Concurrent(ConstellationConcurrentEffect.edge),
       ConstellationConcurrentEffect.edge
     )
-    checkpointService =
-      new CheckpointService[IO](this, transactionService, messageService, notificationService, concurrentTipService)
+    checkpointService = new CheckpointService[IO](
+      this,
+      transactionService,
+      messageService,
+      notificationService,
+      concurrentTipService,
+      rateLimiting
+    )
     addressService = new AddressService[IO]()(Concurrent(ConstellationConcurrentEffect.edge), () => metrics)
 
     snapshotService = SnapshotService[IO](
@@ -107,11 +116,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       checkpointService,
       messageService,
       transactionService,
+      rateLimiting,
       this
-    )(
-      Concurrent(ConstellationConcurrentEffect.edge),
-      Concurrent(ConstellationConcurrentEffect.edge),
-      IO.timer(ConstellationExecutionContext.edge)
     )
   }
 

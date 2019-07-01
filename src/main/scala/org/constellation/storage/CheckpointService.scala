@@ -58,7 +58,8 @@ class CheckpointService[F[_]: Sync: LiftIO](
   transactionService: TransactionService[F],
   messageService: MessageService[F],
   notificationService: NotificationService[F],
-  concurrentTipService: ConcurrentTipService
+  concurrentTipService: ConcurrentTipService,
+  rateLimiting: RateLimiting[F]
 ) extends StrictLogging {
 
   val memPool = new CheckpointBlocksMemPool[F](
@@ -255,6 +256,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
           _ <- Sync[F].delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
           _ <- acceptMessages(cb)
           _ <- acceptTransactions(cb)
+          _ <- updateRateLimiting(cb)
           _ <- Sync[F].delay {
             logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
           }
@@ -363,4 +365,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
 
     insertTX
   }
+
+  private def updateRateLimiting(cb: CheckpointBlock): F[Unit] =
+    rateLimiting.update(cb.transactions.toList)
 }

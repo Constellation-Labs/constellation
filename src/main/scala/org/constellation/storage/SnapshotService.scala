@@ -1,7 +1,7 @@
 package org.constellation.storage
 
 import cats.data.EitherT
-import cats.effect.{Clock, LiftIO, Sync, Timer}
+import cats.effect.{LiftIO, Sync}
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
@@ -16,20 +16,19 @@ import org.constellation.primitives.{
   ConcurrentTipService,
   TransactionCacheData
 }
-import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
+import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.util.Metrics
 
-import scala.collection.concurrent.TrieMap
-import scala.concurrent.duration._
 import scala.util.Try
 
-class SnapshotService[F[_]: Sync: LiftIO: Timer](
+class SnapshotService[F[_]: Sync: LiftIO](
   concurrentTipService: ConcurrentTipService,
   addressService: AddressService[F],
   checkpointService: CheckpointService[F],
   messageService: MessageService[F],
   transactionService: TransactionService[F],
+  rateLimiting: RateLimiting[F],
   dao: DAO
 ) extends StrictLogging {
   import constellation._
@@ -42,6 +41,8 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
 
   val totalNumCBsInSnapshots: Ref[F, Long] = Ref.unsafe(0L)
   val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
+
+  val count: Ref[F, Map[Id, Long]] = Ref.unsafe(Map())
 
   def exists(hash: String): F[Boolean] =
     for {
@@ -122,6 +123,7 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
 
       _ <- EitherT.liftF(lastSnapshotHeight.set(nextHeightInterval.toInt))
       _ <- EitherT.liftF(acceptedCBSinceSnapshot.update(_.filterNot(hashesForNextSnapshot.contains)))
+      _ <- EitherT.liftF(calculateAcceptedTransactionsSinceSnapshot())
       _ <- EitherT.liftF(updateMetricsAfterSnapshot())
 
       _ <- EitherT.liftF(snapshot.set(nextSnapshot))
@@ -137,6 +139,12 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
         }
       }
     }
+
+  def calculateAcceptedTransactionsSinceSnapshot(): F[Unit] =
+    for {
+      cbHashes <- acceptedCBSinceSnapshot.get.map(_.toList)
+      _ <- rateLimiting.reset(cbHashes)(checkpointService)
+    } yield ()
 
   private def validateMaxAcceptedCBHashesInMemory(): EitherT[F, SnapshotError, Unit] = EitherT {
     acceptedCBSinceSnapshot.get.map { accepted =>
@@ -207,7 +215,7 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
     for {
       height <- lastSnapshotHeight.get
 
-      maybeDatas <- acceptedCBSinceSnapshot.get.flatMap(_.toList.map(checkpointService.fullData).sequence)
+      maybeDatas <- acceptedCBSinceSnapshot.get.flatMap(_.toList.traverse(checkpointService.fullData))
 
       blocks = maybeDatas.filter {
         _.exists(_.height.exists { h =>
@@ -275,6 +283,8 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
   private def applyAfterSnapshot(currentSnapshot: Snapshot): F[Unit] =
     for {
       _ <- acceptSnapshot(currentSnapshot)
+      _ <- count.get.flatTap(m => Sync[F].delay(println(m)))
+      _ <- count.set(Map())
 
       _ <- totalNumCBsInSnapshots.update(_ + currentSnapshot.checkpointBlocks.size)
       _ <- totalNumCBsInSnapshots.get.flatTap { total =>
@@ -360,12 +370,13 @@ class SnapshotService[F[_]: Sync: LiftIO: Timer](
 
 object SnapshotService {
 
-  def apply[F[_]: Sync: LiftIO: Timer](
+  def apply[F[_]: Sync: LiftIO](
     concurrentTipService: ConcurrentTipService,
     addressService: AddressService[F],
     checkpointService: CheckpointService[F],
     messageService: MessageService[F],
     transactionService: TransactionService[F],
+    rateLimiting: RateLimiting[F],
     dao: DAO
   ) =
     new SnapshotService[F](
@@ -374,6 +385,7 @@ object SnapshotService {
       checkpointService,
       messageService,
       transactionService,
+      rateLimiting,
       dao
     )
 }
