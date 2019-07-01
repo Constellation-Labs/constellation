@@ -123,6 +123,7 @@ trait EdgeDAO {
   var transactionGossiping: TransactionGossiping[IO] = _
   var checkpointService: CheckpointService[IO] = _
   var snapshotService: SnapshotService[IO] = _
+  var rateLimiting: RateLimiting[IO] = _
   var addressService: AddressService[IO] = _
 
   val notificationService = new NotificationService[IO]()

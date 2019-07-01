@@ -54,6 +54,8 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
 
   def amount: Long = edge.data.amount
 
+  def fee: Option[Long] = edge.data.fee
+
   def baseHash: String = edge.signedObservationEdge.baseHash
 
   def hash: String = edge.signedObservationEdge.hash

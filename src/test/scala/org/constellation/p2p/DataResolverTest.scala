@@ -2,7 +2,7 @@ package org.constellation.p2p
 
 import java.util.concurrent.Executors
 
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import org.constellation.{DAO, Fixtures}
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.{APIClient, PeerApiClient}
@@ -16,6 +16,7 @@ import scala.concurrent.{ExecutionContext, Future, TimeoutException}
 class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
 
   implicit val dao: DAO = mock(classOf[DAO])
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   val storageMock: StorageMock = mock(classOf[StorageMock])
   val badNode: APIClient = mock(classOf[APIClient])

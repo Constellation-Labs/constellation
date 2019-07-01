@@ -2,7 +2,7 @@ package org.constellation.util
 
 import akka.http.scaladsl.coding.Gzip
 import akka.util.ByteString
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import com.softwaremill.sttp._
 import com.softwaremill.sttp.json4s.asJson
 import com.typesafe.config.ConfigFactory
@@ -50,6 +50,8 @@ class APIClient private (
   implicit override val executionContext: ExecutionContext,
   dao: DAO = null
 ) extends APIClientBase(host, port, authEnabled, authId, authPassword) {
+
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
 
   var id: Id = _
 
