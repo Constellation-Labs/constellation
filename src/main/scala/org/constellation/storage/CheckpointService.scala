@@ -345,11 +345,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
   def acceptTransactions(cb: CheckpointBlock)(implicit dao: DAO): F[Unit] = {
     def toCacheData(tx: Transaction) = TransactionCacheData(
       tx,
-      valid = true,
-      inMemPool = false,
-      inDAG = true,
       Map(cb.baseHash -> true),
-      resolved = true,
       cbBaseHash = Some(cb.baseHash)
     )
 

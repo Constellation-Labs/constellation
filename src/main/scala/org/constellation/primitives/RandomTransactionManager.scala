@@ -170,7 +170,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 10)(
                 dao.metrics.incrementMetric("sentTransactions")
 
                 dao.transactionService
-                  .put(TransactionCacheData(tx, valid = true, inMemPool = true))
+                  .put(TransactionCacheData(tx))
                   .unsafeRunSync()
 
                 dao

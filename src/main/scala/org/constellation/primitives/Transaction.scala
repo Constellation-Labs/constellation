@@ -12,11 +12,7 @@ import org.constellation.util.HashSignature
 
 case class TransactionCacheData(
   transaction: Transaction,
-  valid: Boolean = true,
-  inMemPool: Boolean = false,
-  inDAG: Boolean = false,
   inDAGByAncestor: Map[String, Boolean] = Map(),
-  resolved: Boolean = true,
   cbBaseHash: Option[String] = None,
   cbForkBaseHashes: Set[String] = Set(),
   signatureForks: Set[Transaction] = Set(),
@@ -35,6 +31,10 @@ case class TransactionCacheData(
       signatureForks = (signatureForks ++ previous.signatureForks) - transaction,
       rxTime = previous.rxTime
     )
+}
+
+object TransactionCacheData {
+  def apply(tx: Transaction): TransactionCacheData = TransactionCacheData(transaction = tx)
 }
 
 case class Transaction(edge: Edge[TransactionEdgeData]) {
