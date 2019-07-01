@@ -526,7 +526,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             )
 
             dao.transactionService
-              .put(TransactionCacheData(tx, inMemPool = true))
+              .put(TransactionCacheData(tx))
               .unsafeRunSync()
 
             complete(tx.hash)
