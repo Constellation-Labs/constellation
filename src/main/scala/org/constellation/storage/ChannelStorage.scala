@@ -2,13 +2,11 @@ package org.constellation.storage
 
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import org.constellation.DAO
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.primitives.ChannelMessageMetadata
 import slick.dbio.{DBIOAction, NoStream}
 import slick.jdbc.H2Profile.api._
 import slick.lifted.ProvenShape
-
-import scala.concurrent.ExecutionContext.Implicits.global
 
 case class MessageResponse(id: Long, channelId: String, hash: Option[String], body: String)
 
@@ -66,11 +64,12 @@ class ChannelStorage(implicit dao: DAO) extends StrictLogging {
   }
 
   def printMessages(): Unit =
-    db.run(messages.result).foreach { msgs =>
-      msgs.foreach { m =>
-        logger.info(m.toString)
-      }
-    }
+    db.run(messages.result)
+      .foreach { msgs =>
+        msgs.foreach { m =>
+          logger.info(m.toString)
+        }
+      }(ConstellationExecutionContext.global)
 
 }
 

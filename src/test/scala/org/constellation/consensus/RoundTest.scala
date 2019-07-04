@@ -98,9 +98,6 @@ class RoundTest
     msgService.lookup(*) shouldReturn IO.pure(None)
     dao.messageService shouldReturn msgService
 
-    dao.edgeExecutionContext shouldReturn ExecutionContext.fromExecutor(
-      Executors.newWorkStealingPool(8)
-    )
     val metrics = new Metrics()
     dao.metrics shouldReturn metrics
 

@@ -130,9 +130,6 @@ class PeerAPITest
   private def prepareDao(): DAO = {
     val dao: DAO = mock[DAO]
 
-    dao.finishedExecutionContext shouldReturn executionContext
-    dao.edgeExecutionContext shouldReturn executionContext
-
     val id = Id("node1")
     dao.id shouldReturn id
 

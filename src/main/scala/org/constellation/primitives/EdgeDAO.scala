@@ -142,18 +142,6 @@ trait EdgeDAO {
 
   val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
 
-  val edgeExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
-
-  val apiClientExecutionContext: ExecutionContextExecutor =
-    edgeExecutionContext
-
-  val signatureExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
-
-  val finishedExecutionContext: ExecutionContextExecutor =
-    ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
-
   def pullMessages(minimumCount: Int): Option[Seq[ChannelMessage]] =
     threadSafeMessageMemPool.pull(minimumCount)
 

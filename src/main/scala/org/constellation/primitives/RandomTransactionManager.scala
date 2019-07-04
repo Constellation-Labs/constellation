@@ -6,7 +6,7 @@ import java.util.concurrent.Semaphore
 import akka.actor.ActorRef
 import com.softwaremill.sttp.Response
 import constellation._
-import org.constellation.DAO
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.consensus.CrossTalkConsensus.StartNewBlockCreationRound
 import org.constellation.primitives.Schema.{InternalHeartbeat, NodeState, _}
 import org.constellation.storage.transactions.TransactionStatus
@@ -76,7 +76,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 10)(
 
   def generateLoop(): Future[Try[Unit]] = {
 
-    implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
+    implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.edge
 
     futureTryWithTimeoutMetric(
       {

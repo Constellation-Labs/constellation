@@ -98,7 +98,6 @@ class RoundManagerTest
   val tips = (Seq(soe), readyFacilitators)
 
   dao.id shouldReturn daoId
-  dao.edgeExecutionContext shouldReturn system.dispatcher
   dao.minCheckpointFormationThreshold shouldReturn checkpointFormationThreshold
 
   dao.readyFacilitatorsAsync shouldReturn IO.pure(readyFacilitators)
@@ -364,8 +363,7 @@ class RoundManagerTest
   }
 
   test("it should remove not accepted transactions") {
-    implicit val context: ContextShift[IO] =
-      IO.contextShift(scala.concurrent.ExecutionContext.Implicits.global)
+    implicit val context: ContextShift[IO] = ConstellationContextShift.global
 
     val semaphore = cats.effect.concurrent.Semaphore[IO](1).unsafeRunSync()
     dao.transactionService shouldReturn new TransactionService[IO](dao, semaphore)

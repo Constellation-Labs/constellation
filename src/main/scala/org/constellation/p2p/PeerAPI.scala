@@ -23,11 +23,11 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util._
+import org.constellation.ConstellationExecutionContext
 import org.constellation.{DAO, ResourceInfo}
 import org.json4s.native
 import org.json4s.native.Serialization
 
-import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
 case class PeerAuthSignRequest(salt: Long)
@@ -57,8 +57,7 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
 
   implicit val serialization: Serialization.type = native.Serialization
 
-  implicit val executionContext: ExecutionContext =
-    dao.edgeExecutionContext // system.dispatchers.lookup("peer-api-dispatcher")
+  implicit val executionContext = ConstellationExecutionContext.edge
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller

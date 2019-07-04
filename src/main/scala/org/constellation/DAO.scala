@@ -7,7 +7,7 @@ import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import cats.effect.concurrent.Semaphore
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.{Concurrent, IO}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.crypto.SimpleWalletLike
@@ -17,7 +17,7 @@ import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObservationEdge}
 import org.constellation.primitives._
 import org.constellation.storage._
-import org.constellation.util.{HostPort, Metrics}
+import org.constellation.util.HostPort
 
 class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike with StrictLogging {
 
@@ -92,16 +92,15 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
     messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
-    implicit val edgeContextShift: ContextShift[IO] = IO.contextShift(edgeExecutionContext)
-    val semaphore = Semaphore[IO](1).unsafeRunSync()
-    transactionService = new TransactionService[IO](this, semaphore)
+    val semaphore = Semaphore[IO](1)(ConstellationConcurrentEffect.edge).unsafeRunSync()
+    transactionService = new TransactionService[IO](this, semaphore)(
+      Concurrent(ConstellationConcurrentEffect.edge),
+      ConstellationConcurrentEffect.edge
+    )
     checkpointService =
       new CheckpointService[IO](this, transactionService, messageService, notificationService, concurrentTipService)
-    addressService = {
-      implicit val implMetrics: () => Metrics = () => metrics
-      new AddressService[IO]()
-    }
-    implicit val timer: Timer[IO] = IO.timer(edgeExecutionContext)
+    addressService = new AddressService[IO]()(Concurrent(ConstellationConcurrentEffect.edge), () => metrics)
+
     snapshotService = SnapshotService[IO](
       concurrentTipService,
       addressService,
@@ -109,6 +108,10 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
       messageService,
       transactionService,
       this
+    )(
+      Concurrent(ConstellationConcurrentEffect.edge),
+      Concurrent(ConstellationConcurrentEffect.edge),
+      IO.timer(ConstellationExecutionContext.edge)
     )
   }
 
@@ -132,7 +135,7 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
       .onComplete {
         case Success(peerInfo) => cb(Right(peerInfo))
         case Failure(error)    => cb(Left(error))
-      }(edgeExecutionContext)
+      }(ConstellationExecutionContext.edge)
   }
 
   private def eqNodeType(nodeType: NodeType)(m: (Id, PeerData)) = m._2.peerMetadata.nodeType == nodeType

@@ -16,6 +16,7 @@ import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Validation.EnrichedFuture
 import org.constellation.util._
 import org.constellation.{ConfigUtil, DAO}
+import org.constellation.ConstellationExecutionContext
 
 import scala.async.Async.{async, await}
 import scala.concurrent.duration._
@@ -91,7 +92,7 @@ object EdgeProcessor extends StrictLogging {
     implicit dao: DAO
   ) = {
 
-    implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
+    implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.edge
 
     val transactions = dao.transactionService
       .pullForConsensus(dao.minCheckpointFormationThreshold)
@@ -213,7 +214,7 @@ object EdgeProcessor extends StrictLogging {
         SignatureResponse(updated)
       },
       "handleSignatureRequest"
-    )(dao.signatureExecutionContext, dao)
+    )(ConstellationExecutionContext.signature, dao)
 
   def acceptWithResolveAttempt(
     checkpointCacheData: CheckpointCache,
@@ -288,7 +289,7 @@ object EdgeProcessor extends StrictLogging {
         }
       },
       "handleFinishedCheckpoint"
-    )(dao.finishedExecutionContext, dao)
+    )(ConstellationExecutionContext.finished, dao)
 
 }
 
@@ -423,7 +424,7 @@ object Snapshot extends StrictLogging {
         },
         "snapshotAttempt",
         60
-      )(dao.edgeExecutionContext, dao)
+      )(ConstellationExecutionContext.edge, dao)
     } else Future.successful(Try(()))
 
   val snapshotZero = Snapshot("", Seq())

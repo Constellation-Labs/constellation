@@ -2,14 +2,12 @@ package org.constellation.storage
 
 import better.files.File
 import cats.effect.{ContextShift, IO, Timer}
-import org.constellation.DAO
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.consensus.Snapshot
 import org.constellation.primitives.ConcurrentTipService
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
-
-import scala.concurrent.ExecutionContext
 
 class SnapshotServiceTest
     extends FreeSpec
@@ -19,8 +17,8 @@ class SnapshotServiceTest
     with ArgumentMatchersSugar
     with BeforeAndAfter {
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
-  implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.global)
+  implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.global)
 
   var dao: DAO = _
   var snapshotService: SnapshotService[IO] = _

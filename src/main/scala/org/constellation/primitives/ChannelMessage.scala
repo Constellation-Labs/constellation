@@ -8,7 +8,7 @@ import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.{JsonSchemaFactory, JsonValidator}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import org.constellation.DAO
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
 import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
 
@@ -104,7 +104,7 @@ object ChannelMessage extends StrictLogging {
               "Success"
             }
           ChannelOpenResponse(response, genesisHashChannelId)
-        }(dao.edgeExecutionContext)
+        }(ConstellationExecutionContext.edge)
       }
   }
 

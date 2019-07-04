@@ -1,7 +1,7 @@
 package org.constellation.primitives
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
-import org.constellation.{DAO, Fixtures}
+import org.constellation.{ConstellationContextShift, DAO, Fixtures}
 import org.constellation.consensus.TipData
 import org.constellation.util.Metrics
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -10,8 +10,7 @@ import org.scalatest.{FunSpecLike, Matchers}
 class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatchersSugar with Matchers {
 
   implicit val dao: DAO = prepareDAO()
-  implicit val ioContextShift: ContextShift[IO] =
-    IO.contextShift(scala.concurrent.ExecutionContext.Implicits.global)
+  implicit val ioContextShift: ContextShift[IO] = ConstellationContextShift.global
 
   def prepareDAO(): DAO = {
     val dao = mock[DAO]
