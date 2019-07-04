@@ -31,8 +31,9 @@ class PendingTransactionsMemPool[F[_]: Sync]() extends LookupAlgebra[F, String, 
       if (txs.size < minCount) {
         (txs, none[List[TransactionCacheData]])
       } else {
-        val (left, right) = txs.splitAt(minCount)
-        (right, left.toList.map(_._2).some)
+        val sorted = txs.toList.sortWith(_._2.transaction.edge.data.fee > _._2.transaction.edge.data.fee)
+        val (left, right) = sorted.splitAt(minCount)
+        (right.toMap, left.map(_._2).some)
       }
     }
 
