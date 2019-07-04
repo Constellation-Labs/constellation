@@ -42,8 +42,6 @@ class SnapshotService[F[_]: Sync: LiftIO](
   val totalNumCBsInSnapshots: Ref[F, Long] = Ref.unsafe(0L)
   val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
 
-  val count: Ref[F, Map[Id, Long]] = Ref.unsafe(Map())
-
   def exists(hash: String): F[Boolean] =
     for {
       last <- snapshot.get
@@ -283,8 +281,6 @@ class SnapshotService[F[_]: Sync: LiftIO](
   private def applyAfterSnapshot(currentSnapshot: Snapshot): F[Unit] =
     for {
       _ <- acceptSnapshot(currentSnapshot)
-      _ <- count.get.flatTap(m => Sync[F].delay(println(m)))
-      _ <- count.set(Map())
 
       _ <- totalNumCBsInSnapshots.update(_ + currentSnapshot.checkpointBlocks.size)
       _ <- totalNumCBsInSnapshots.get.flatTap { total =>
