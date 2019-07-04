@@ -96,6 +96,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     implicit def unsafeLogger = Slf4jLogger.getLogger[IO]
 
+    rateLimiting = new RateLimiting[IO]
+
     val semaphore = Semaphore[IO](1)(ConstellationConcurrentEffect.edge).unsafeRunSync()
     transactionService = new TransactionService[IO](this, semaphore)(
       Concurrent(ConstellationConcurrentEffect.edge),

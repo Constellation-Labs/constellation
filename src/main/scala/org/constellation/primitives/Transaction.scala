@@ -134,6 +134,14 @@ object NonPositiveAmount {
   def apply(tx: Transaction) = new NonPositiveAmount(tx.hash, tx.amount)
 }
 
+case class NonPositiveFee(txHash: String, fee: Option[Long]) extends TransactionValidation {
+  def errorMessage: String = s"Transaction tx=$txHash has a non-positive fee=${fee.toString}"
+}
+
+object NonPositiveFee {
+  def apply(tx: Transaction) = new NonPositiveFee(tx.hash, tx.fee)
+}
+
 case class HashDuplicateFound(txHash: String) extends TransactionValidation {
   def errorMessage: String = s"Transaction tx=$txHash already exists"
 }
@@ -167,6 +175,12 @@ sealed trait TransactionValidatorNel {
   def validateAmount(tx: Transaction): ValidationResult[Transaction] =
     if (tx.amount > 0) tx.validNel else NonPositiveAmount(tx).invalidNel
 
+  def validateFee(tx: Transaction): ValidationResult[Transaction] =
+    tx.fee match {
+      case Some(fee) if fee <= 0 => NonPositiveFee(tx).invalidNel
+      case _                     => tx.validNel
+    }
+
   import org.constellation.datastore.swaydb.SwayDbConversions._
 
   // TODO: get rid of unsafeRunSync() and make whole validation async with IO[ValidationResult[Transaction]]
@@ -182,6 +196,7 @@ sealed trait TransactionValidatorNel {
       .product(validateEmptyDestinationAddress(tx))
       .product(validateDestinationAddress(tx))
       .product(validateAmount(tx))
+      .product(validateFee(tx))
       .product(validateDuplicate(tx))
       .map(_ ⇒ tx)
 }
