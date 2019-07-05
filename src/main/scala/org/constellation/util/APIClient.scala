@@ -60,9 +60,6 @@ class APIClient private (
       Map("Remote-Address" -> d.externalHostString, "X-Real-IP" -> d.externalHostString)
     }.getOrElse(Map())
 
-  def metrics: Map[String, String] =
-    getBlocking[MetricsResult]("metrics", timeout = 15.seconds).metrics
-
   def metricsAsync: Future[Map[String, String]] =
     getNonBlocking[MetricsResult]("metrics", timeout = 15.seconds).map(_.metrics)
 
@@ -103,33 +100,6 @@ class APIClient private (
     f: Formats = constellation.constellationFormats
   ): IO[T] =
     IO.fromFuture(IO { postNonBlocking[T](suffix, b, timeout, headers) })
-
-  def getSnapshotInfo(): SnapshotInfo = getBlocking[SnapshotInfo]("info")
-
-  def getSnapshots(): Seq[Snapshot] = {
-
-    val snapshotInfo = getSnapshotInfo()
-
-    val startingSnapshot = snapshotInfo.snapshot
-
-    def getSnapshots(hash: String, snapshots: Seq[Snapshot] = Seq()): Seq[Snapshot] = {
-      val sn = getBlocking[Option[Snapshot]]("snapshot/" + hash)
-      sn match {
-        case Some(snapshot) =>
-          if (snapshot.lastSnapshot == "" || snapshot.lastSnapshot == Snapshot.snapshotZeroHash) {
-            snapshots :+ snapshot
-          } else {
-            getSnapshots(snapshot.lastSnapshot, snapshots :+ snapshot)
-          }
-        case None =>
-          logger.warn("MISSING SNAPSHOT")
-          snapshots
-      }
-    }
-
-    val snapshots = getSnapshots(startingSnapshot.lastSnapshot, Seq(startingSnapshot))
-    snapshots
-  }
 
   def simpleDownload(): Seq[StoredSnapshot] = {
 

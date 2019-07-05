@@ -11,7 +11,7 @@ import org.constellation.primitives._
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.Random
 
 object Simulation {
@@ -23,10 +23,10 @@ object Simulation {
 
   def healthy(apis: Seq[APIClient]): Boolean = {
     val responses = apis.map(a => {
-      val res = a.getString("health", timeout = 100.seconds)
+      val res = a.getString("health", timeout = 5.seconds)
       res
     })
-    Future.sequence(responses).map(_.forall(_.isSuccess)).get(120)
+    Future.sequence(responses).map(_.forall(_.isSuccess)).get(15)
   }
 
   def hasGenesis(apis: Seq[APIClient]): Boolean = {
@@ -394,7 +394,26 @@ object Simulation {
 
     assert(awaitCheckpointsAccepted(apis, numAccepted = 3))
 
+    Simulation.triggerRandom(apis)
+    Simulation.triggerCheckpointFormation(apis)
+
+    Simulation.logger.info("Stopping transactions to run parity check")
+
+    Simulation.awaitConditionMet(
+      "Accepted checkpoint blocks number differs across the nodes",
+      apis.map { p =>
+        val n = Await.result(p.metricsAsync, 4 seconds)(Metrics.checkpointAccepted)
+        Simulation.logger.info(s"peer ${p.id} has $n accepted cbs")
+        n
+      }.distinct.size == 1,
+      maxRetries = 3,
+      delay = 5000
+    )
+
     logger.info("Checkpoint validation passed")
+
+    Simulation.triggerRandom(apis)
+    Simulation.triggerCheckpointFormation(apis)
 
     var debugChannelName = "debug"
     var attempt = 0

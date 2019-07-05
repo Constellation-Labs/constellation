@@ -34,7 +34,7 @@ object Genesis {
     //val genesis = createGenesisBlock(dao.keyPair)
     val fakeIdToGenerateTips = KeyUtils.makeKeyPair().getPublic.toId
     val go = createGenesisAndInitialDistributionDirect(dao.selfAddressStr, Set(fakeIdToGenerateTips), dao.keyPair)
-    dao.acceptGenesis(go, setAsTips = true)
+    acceptGenesis(go, setAsTips = true)
 
   }
 
@@ -81,13 +81,7 @@ object Genesis {
     GenesisObservation(genesisCBO, distr1CBO, distr2CBO)
   }
 
-}
-
-import org.constellation.primitives.Genesis._
-
-trait Genesis extends NodeData with EdgeDAO {
-
-  def createGenesisAndInitialDistribution(ids: Set[Id]): GenesisObservation =
+  def createGenesisAndInitialDistribution(selfAddressStr: String, ids: Set[Id], keyPair: KeyPair): GenesisObservation =
     createGenesisAndInitialDistributionDirect(selfAddressStr, ids, keyPair)
 
   def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = false)(implicit dao: DAO): Unit = {
@@ -120,8 +114,8 @@ trait Genesis extends NodeData with EdgeDAO {
     //  metricsManager ! UpdateMetric("validTransactions", numTX)
     //  metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
 
-    genesisObservation = Some(go)
-    genesisBlock = Some(go.genesis)
+    dao.genesisObservation = Some(go)
+    dao.genesisBlock = Some(go.genesis)
     /*
 
     // Dumb way to set these as active tips, won't pass a double validation but no big deal.

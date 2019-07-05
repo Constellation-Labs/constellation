@@ -30,7 +30,7 @@ object SnapshotsDownloader {
 
     def makeAttempt(index: Int): IO[StoredSnapshot] =
       getSnapshot(hash, poolArray(index)).handleErrorWith {
-        case e if index == stopAt => IO.raiseError(e)
+        case e if index == stopAt => IO.raiseError[StoredSnapshot](e)
         case _                    => makeAttempt((index + 1) % poolArray.length)
       }
 
@@ -43,10 +43,10 @@ object SnapshotsDownloader {
     def makeAttempt(sortedPeers: Iterable[APIClient]): IO[StoredSnapshot] =
       sortedPeers match {
         case Nil =>
-          IO.raiseError(new RuntimeException("Unable to download Snapshot from empty peer list"))
+          IO.raiseError[StoredSnapshot](new RuntimeException("Unable to download Snapshot from empty peer list"))
         case head :: tail =>
           getSnapshot(hash, head).handleErrorWith {
-            case e if tail.isEmpty => IO.raiseError(e)
+            case e if tail.isEmpty => IO.raiseError[StoredSnapshot](e)
             case _                 => makeAttempt(sortedPeers.tail)
           }
       }
@@ -151,7 +151,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .map(_.find(_.nonEmpty).flatten.get)
       .toIO
       .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadedGenesis", "true"))
-      .flatTap(genesis => IO(dao.acceptGenesis(genesis)))
+      .flatTap(genesis => IO(Genesis.acceptGenesis(genesis)))
 
   private def waitForPeers(): IO[Unit] =
     IO(logger.debug(s"Waiting ${waitForPeersDelay.toString()} for peers"))

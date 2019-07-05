@@ -9,22 +9,20 @@ import akka.http.scaladsl.server.Directives.{path, _}
 import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.util.Timeout
-import cats.data.Validated.{Invalid, Valid}
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import cats.implicits._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
-import org.constellation.consensus.EdgeProcessor.logger
 import org.constellation.consensus._
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util._
-import org.constellation.ConstellationExecutionContext
-import org.constellation.{DAO, ResourceInfo}
+import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, ResourceInfo}
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -91,7 +89,6 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
                 case Some(PeerIPData(host, _)) =>
                   logger.debug("Parsed host and port, sending peer manager request")
                   dao.peerManager ! PendingRegistration(host, request)
-                  pendingRegistrations = pendingRegistrations.updated(host, request)
                   complete(StatusCodes.OK)
                 case None =>
                   logger.warn(s"Failed to parse host and port for $request")
@@ -182,30 +179,29 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
         pathPrefix("finished") {
           path("checkpoint") {
 
-            extractClientIP { ip =>
-              /*
-            ip.toOption.foreach { inet =>
-              val hp = HostPort(inet.getHostAddress, 9001) // TODO: Change this to non-hardcoded port and send a response telling other node to re-register
-              PeerManager.attemptRegisterPeer(hp)
-            }
-               */
+            val cs: ContextShift[IO] = ConstellationContextShift.finished
 
+            extractClientIP { ip =>
               entity(as[FinishedCheckpoint]) { fc =>
                 optionalHeaderValueByName("ReplyTo") { replyToOpt =>
-                  val maybeData = getHostAndPortFromRemoteAddress(ip)
-                  val knownHost = maybeData.exists(
-                    i => dao.peerInfo.unsafeRunSync().exists(_._2.client.hostName == i.canonicalHostName)
+                  logger.debug(
+                    s"Handle finished checkpoint for cb: ${fc.checkpointCacheData.checkpointBlock.map(_.baseHash)} and replyTo: $replyToOpt"
                   )
+
                   dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
-                  EdgeProcessor.handleFinishedCheckpoint(fc).map { result =>
+
+                  (cs.shift *> dao.checkpointService.accept(fc)).unsafeToFuture().onComplete { result =>
                     replyToOpt
                       .map(URI.create)
                       .map { u =>
+                        logger.debug(
+                          s"Making callback to: ${u.toURL} acceptance of cb: ${fc.checkpointCacheData.checkpointBlock
+                            .map(_.baseHash)} performed $result"
+                        )
                         makeCallback(u, FinishedCheckpointResponse(result.isSuccess))
                       }
                   }
-                  // TODO: wkoszycki should we allow requests from strangers?
-                  complete(FinishedCheckpointAck(!knownHost))
+                  complete(StatusCodes.Accepted)
                 }
               }
             }
@@ -256,10 +252,9 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
       }
     }
   }
-  private var pendingRegistrations = Map[String, PeerRegistrationRequest]()
 
   def routes(address: InetSocketAddress): Route = withTimer("peer-api") {
-    val id = ipLookup(address)
+//    val id = ipLookup(address) causes circular dependencies and cluster with 6 nodes unable to start due to timeouts. Consider reopen #391
     // TODO: pass id down and use it if needed
 
     decodeRequest {

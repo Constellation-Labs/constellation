@@ -19,7 +19,7 @@ import org.constellation.primitives._
 import org.constellation.storage._
 import org.constellation.util.HostPort
 
-class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike with StrictLogging {
+class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLogging {
 
   var initialNodeConfig: NodeConfig = _
   @volatile var nodeConfig: NodeConfig = _

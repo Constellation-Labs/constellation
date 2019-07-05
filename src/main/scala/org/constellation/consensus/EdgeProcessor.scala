@@ -5,11 +5,9 @@ import java.nio.file.Path
 
 import cats.data.NonEmptyList
 import cats.data.Validated.{Invalid, Valid}
-import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
@@ -36,7 +34,6 @@ case class SignatureResponse(signature: Option[HashSignature], reRegister: Boole
 case class FinishedCheckpoint(checkpointCacheData: CheckpointCache, facilitators: Set[Id])
 
 case class FinishedCheckpointResponse(isSuccess: Boolean = false)
-case class FinishedCheckpointAck(reRegister: Boolean = false)
 
 object EdgeProcessor extends StrictLogging {
 
@@ -72,7 +69,7 @@ object EdgeProcessor extends StrictLogging {
 
     val responses = dao.peerInfo.unsafeRunSync().values.toList.map { peer =>
       wrapFutureWithMetric(
-        peer.client.postNonBlocking[FinishedCheckpointAck](
+        peer.client.postNonBlockingUnit(
           "finished/checkpoint",
           FinishedCheckpoint(cache, finalFacilitators),
           timeout = 8.seconds,
@@ -216,81 +213,6 @@ object EdgeProcessor extends StrictLogging {
       "handleSignatureRequest"
     )(ConstellationExecutionContext.signature, dao)
 
-  def acceptWithResolveAttempt(
-    checkpointCacheData: CheckpointCache,
-    nestedAcceptCount: Int = 0
-  )(implicit dao: DAO): Unit = {
-
-    val block = checkpointCacheData.checkpointBlock.get
-    val parents = block.parentSOEBaseHashes()
-    dao.miscLogger.warn(
-      s"[${dao.id.short}] acceptWithResolveAttempt block.parentSOEBaseHashes $parents"
-    )
-
-    val parentExists: Seq[(String, Boolean)] = parents.map { h =>
-      h -> dao.checkpointService.contains(h).unsafeRunSync()
-    }
-
-    if (parentExists.nonEmpty && parentExists.forall(_._2 == true)) {
-      dao.metrics.incrementMetricAsync[IO]("resolveFinishedCheckpointParentsPresent").unsafeRunSync()
-      dao.checkpointService
-        .accept(checkpointCacheData)
-        .map { _ =>
-          Option(checkpointCacheData)
-        }
-        .recoverWith {
-          case error @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
-            logger.warn(s"Accepting cb from other node failed due to: ${error.getMessage}")
-            IO.pure(None)
-        }
-    } else {
-      dao.metrics.incrementMetricAsync[IO]("resolveFinishedCheckpointParentMissing").unsafeRunSync()
-      parentExists.filterNot(_._2 == true).foreach {
-        case (h, _) =>
-          DataResolver
-            .resolveCheckpointDefaults(h)
-            .flatMap { ccd =>
-              IO {
-                ccd.foreach { cd =>
-                  cd.checkpointBlock.foreach { cb =>
-                    if (cd.children < 2) {
-                      dao.concurrentTipService.update(cb)(dao).unsafeRunSync()
-                    }
-                    if (!dao.checkpointService
-                          .contains(cd.checkpointBlock.get.baseHash)
-                          .unsafeRunSync()) {
-                      dao.metrics.incrementMetric("resolveAcceptCBCall")
-                      acceptWithResolveAttempt(cd, nestedAcceptCount + 1)
-                    }
-                  }
-                }
-              }
-            }
-            .unsafeRunAsyncAndForget()
-      }
-
-    }
-
-  }
-
-  def handleFinishedCheckpoint(fc: FinishedCheckpoint)(implicit dao: DAO): Future[Try[Unit]] =
-    futureTryWithTimeoutMetric(
-      {
-        val timer = dao.metrics.startTimer
-        val ccd = fc.checkpointCacheData
-        if (dao.nodeState == NodeState.DownloadCompleteAwaitingFinalSync) {
-          dao.snapshotService.syncBufferAccept(ccd).unsafeRunSync()
-          dao.metrics.stopTimer("handleFinishedCheckpoint_downloadCompleteAwaiting", timer)
-        } else if (dao.nodeState == NodeState.Ready) {
-          if (ccd.checkpointBlock.exists(_.simpleValidation())) {
-            acceptWithResolveAttempt(ccd)
-            dao.metrics.stopTimer("handleFinishedCheckpoint_simpleValidation", timer)
-          }
-        }
-      },
-      "handleFinishedCheckpoint"
-    )(ConstellationExecutionContext.finished, dao)
-
 }
 
 case class TipData(checkpointBlock: CheckpointBlock, numUses: Int)
@@ -420,7 +342,7 @@ object Snapshot extends StrictLogging {
           val start = System.currentTimeMillis()
           dao.snapshotService.attemptSnapshot().value.unsafeRunSync()
           val elapsed = System.currentTimeMillis() - start
-          logger.info(s"Attempt snapshot took: $elapsed millis")
+          logger.debug(s"Attempt snapshot took: $elapsed millis")
         },
         "snapshotAttempt",
         60

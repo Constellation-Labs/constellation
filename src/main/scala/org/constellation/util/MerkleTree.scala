@@ -67,7 +67,6 @@ object MerkleTree extends StrictLogging {
       throw new Exception("Merkle function call on empty collection of hashes")
     }
     val even = if (hashes.size % 2 != 0) hashes :+ hashes.last else hashes
-    logger.debug(s"Creating Merkle tree on ${even.length} hashes")
 
     val zero = applyRound(even)
     MerkleResult(hashes, merkleIteration(Seq(), zero))
@@ -76,15 +75,13 @@ object MerkleTree extends StrictLogging {
   def merkleHashFunc(left: String, right: String): String =
     (left + right).sha256
 
-  def applyRound(level: Seq[String]): Seq[MerkleNode] = {
-    logger.debug(s"Applying Merkle round on ${level.length} level length")
+  def applyRound(level: Seq[String]): Seq[MerkleNode] =
     level.grouped(2).toSeq.map {
       case Seq(l, r) =>
         MerkleNode(merkleHashFunc(l, r), l, r)
       case Seq(l) =>
         MerkleNode(merkleHashFunc(l, l), l, l)
     }
-  }
 
   def merkleIteration(agg: Seq[MerkleNode], currentLevel: Seq[MerkleNode]): Seq[MerkleNode] =
     if (currentLevel.size == 1) {

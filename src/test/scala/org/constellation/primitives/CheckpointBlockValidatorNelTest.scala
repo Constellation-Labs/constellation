@@ -492,9 +492,9 @@ class ValidationSpec
           CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7).foreach { cb =>
-          dao.checkpointService
-            .accept(CheckpointCache(Some(cb), 0, Some(Height(1, 2))))
-            .unsafeRunSync()
+          cb.store(CheckpointCache(cb.some))
+//          // TODO: wkoszycki #420 enable recursive validation transactions shouldn't be required to be stored to run validation
+          dao.checkpointService.acceptTransactions(cb).unsafeRunSync()
         }
 
         assert(!cb7.simpleValidation())

@@ -102,7 +102,7 @@ class RoundTest
     dao.metrics shouldReturn metrics
 
     dao.checkpointService shouldReturn cbService
-    dao.checkpointService.accept(*) shouldAnswer ((a: CheckpointCache) => IO.unit)
+    dao.checkpointService.accept(any[CheckpointCache]) shouldAnswer ((a: CheckpointCache) => IO.unit)
   }
 
   val shortTimeouts = ConfigFactory.parseString(

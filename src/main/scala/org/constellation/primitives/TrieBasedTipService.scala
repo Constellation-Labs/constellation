@@ -99,7 +99,7 @@ class TrieBasedTipService(sizeLimit: Int, maxWidth: Int, numFacilitatorPeers: In
           dao.metrics
             .incrementMetricAsync[IO]("memoryExceeded_thresholdMetCheckpoints")
             .flatMap(_ => dao.metrics.updateMetricAsync[IO]("activeTips", tips.size))
-            .flatMap(_ => IO.raiseError(err))
+            .flatMap(_ => IO.raiseError[Option[TipData]](err))
       }
   }
 

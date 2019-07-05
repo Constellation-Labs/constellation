@@ -70,7 +70,6 @@ class APIClientBase(
 
   def udpAddress: String = hostName + ":" + udpPort
 
-  def setExternalIP(): Boolean = postSync("ip", hostName + ":" + udpPort).isSuccess
 
   def baseURI: String = {
     val uri = s"http://$hostName:$apiPort"
@@ -138,10 +137,6 @@ class APIClientBase(
   ): Response[String] =
     post(suffix, b, timeout).blocking(timeout)
 
-  def putSync(suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
-    implicit f: Formats = constellation.constellationFormats
-  ): Response[String] =
-    put(suffix, b, timeout).blocking(timeout)
 
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
     implicit m: Manifest[T],
@@ -170,7 +165,7 @@ class APIClientBase(
       .map(_.unsafeBody)
   }
 
-  def postNonBlockingUnit(suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
+  def postNonBlockingUnit(suffix: String, b: AnyRef, timeout: Duration = 15.seconds, headers: Map[String, String] = Map.empty)(
     implicit f: Formats = constellation.constellationFormats
   ): Future[Response[Unit]] = {
     val ser = Serialization.write(b)
@@ -179,16 +174,9 @@ class APIClientBase(
       .body(gzipped)
       .contentType("application/json")
       .header("Content-Encoding", "gzip")
+      .headers(headers)
       .response(ignore)
       .send()
-  }
-
-  def postBlockingEmpty[T <: AnyRef](
-    suffix: String,
-    timeout: Duration = 15.seconds
-  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): T = {
-    val res = postEmpty(suffix, timeout)
-    Serialization.read[T](res.unsafeBody)
   }
 
   def postNonBlockingEmpty[T <: AnyRef](
@@ -216,13 +204,6 @@ class APIClientBase(
     timeout: Duration = 15.seconds
   ): Future[Response[String]] =
     httpWithAuth(suffix, queryParams, timeout)(Method.GET).send()
-
-  def getSync(
-    suffix: String,
-    queryParams: Map[String, String] = Map(),
-    timeout: Duration = 15.seconds
-  ): Response[String] =
-    getString(suffix, queryParams, timeout).blocking(timeout)
 
   def getBlocking[T <: AnyRef](
     suffix: String,
