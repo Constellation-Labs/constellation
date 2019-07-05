@@ -328,37 +328,30 @@ class TransactionServiceTest
 
       val totalExpected = pullsIteration * pullsMinCount
 
-      val puts = for (_ <- 1 to totalExpected) yield {
-        IO.shift *>
-          txService
-            .put(TransactionCacheData(
-                   constellation.createTransaction(Fixtures.id1.address, Fixtures.id2.address, 1L, Fixtures.tempKey)
-                 ),
-                 TransactionStatus.Pending)
+      val puts = (1 to totalExpected).toList
+        .map(_ => constellation.createTransaction(Fixtures.id1.address, Fixtures.id2.address, 1L, Fixtures.tempKey))
+        .map(TransactionCacheData(_))
+        .traverse(tx => IO.shift *> txService.put(tx))
 
-      }
-
-      val pulls = for (_ <- 1 to pullsIteration) yield {
-        IO.shift *>
-          txService.pullForConsensusSafe(pullsMinCount)
-      }
+      val pulls = (1 to pullsIteration).toList
+        .map(_ => IO.shift *> txService.pullForConsensus(pullsMinCount))
 
       // Fill minimum txs required
-      puts.toList.sequence.unsafeRunSync()
+      puts.unsafeRunSync()
       txService.pending.size().unsafeRunSync() shouldBe totalExpected
 
       // Run puts in background
-      puts.toList.sequence.unsafeRunAsyncAndForget()
+      puts.unsafeRunAsyncAndForget()
 
-      implicit val ec = ExecutionContext.global
-      val results =
+      val results = {
+        implicit val ec: ExecutionContext = ExecutionContext.global
         Await.result(Future.sequence(pulls.map(_.unsafeToFuture())), 5 seconds).map(_.map(_.transaction.hash))
+      }
 
       // Should always pull txs
       results.count(_.isEmpty) shouldBe 0
-      results.toList.flatten.size shouldBe totalExpected
-      results.toList.flatten.distinct.size shouldBe totalExpected
-
+      results.flatten.size shouldBe totalExpected
+      results.flatten.distinct.size shouldBe totalExpected
     }
   }
 

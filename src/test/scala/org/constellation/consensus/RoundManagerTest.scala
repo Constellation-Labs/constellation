@@ -119,7 +119,7 @@ class RoundManagerTest
   dao.transactionService shouldReturn mock[TransactionService[IO]]
   dao.transactionService.getArbitrary shouldReturn IO.pure(Map.empty)
   dao.transactionService.returnTransactionsToPending(*) shouldReturn IO.pure(List.empty)
-  dao.transactionService.pullForConsensusSafe(checkpointFormationThreshold, *) shouldReturn IO(
+  dao.transactionService.pullForConsensus(checkpointFormationThreshold, *) shouldReturn IO(
     List(tx1, tx2).map(TransactionCacheData(_))
   )
 

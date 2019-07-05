@@ -82,7 +82,7 @@ class RoundTest
     dao.threadSafeMessageMemPool shouldReturn mock[ThreadSafeMessageMemPool]
     dao.threadSafeMessageMemPool.pull(1) shouldReturn None
     dao.readyPeers(NodeType.Light) shouldReturn IO.pure(Map())
-    txService.pullForConsensusSafe(checkpointFormationThreshold) shouldReturn IO.pure(
+    txService.pullForConsensus(checkpointFormationThreshold) shouldReturn IO.pure(
       List(tx1, tx2).map(TransactionCacheData(_))
     )
     txService.contains(*) shouldReturn IO.pure(true)

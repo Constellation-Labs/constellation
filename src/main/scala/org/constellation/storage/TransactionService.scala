@@ -11,7 +11,7 @@ import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 import org.constellation.storage.transactions.TransactionStatus.TransactionStatus
 import org.constellation.storage.transactions.{PendingTransactionsMemPool, TransactionStatus}
 
-class TransactionService[F[_]: Sync: Concurrent](dao: DAO, pullSemaphore: Semaphore[F])
+class TransactionService[F[_]: Sync: Concurrent](dao: DAO, semaphore: Semaphore[F])
     extends MerkleStorageAlgebra[F, String, TransactionCacheData]
     with StrictLogging {
 
@@ -23,33 +23,34 @@ class TransactionService[F[_]: Sync: Concurrent](dao: DAO, pullSemaphore: Semaph
   private[storage] val accepted = new StorageService[F, TransactionCacheData](Some(240))
   private[storage] val unknown = new StorageService[F, TransactionCacheData](Some(240))
 
+  private def withLock[R](name: String, thunk: F[R]) = new SingleLock[F, R](name, semaphore).use(thunk)
+
   def getArbitrary = arbitrary.toMap()
 
   def put(tx: TransactionCacheData): F[TransactionCacheData] = put(tx, TransactionStatus.Pending)
 
   def put(tx: TransactionCacheData, as: TransactionStatus): F[TransactionCacheData] = as match {
-    case TransactionStatus.Pending   => pending.put(tx.transaction.hash, tx)
-    case TransactionStatus.Arbitrary => arbitrary.put(tx.transaction.hash, tx)
-    case TransactionStatus.Accepted  => accepted.put(tx.transaction.hash, tx)
-    case TransactionStatus.Unknown   => unknown.put(tx.transaction.hash, tx)
+    case TransactionStatus.Pending   => withLock("pendingPut", pending.put(tx.transaction.hash, tx))
+    case TransactionStatus.Arbitrary => withLock("arbitraryPut", arbitrary.put(tx.transaction.hash, tx))
+    case TransactionStatus.Accepted  => withLock("acceptedPut", accepted.put(tx.transaction.hash, tx))
+    case TransactionStatus.Unknown   => withLock("unknownPut", unknown.put(tx.transaction.hash, tx))
     case _                           => new Exception("Unknown transaction status").raiseError[F, TransactionCacheData]
   }
 
   def update(key: String, fn: TransactionCacheData => TransactionCacheData): F[Unit] =
     for {
-      _ <- pending.update(key, fn)
-      _ <- arbitrary.update(key, fn)
-      _ <- inConsensus.update(key, fn)
-      _ <- accepted.update(key, fn)
-      _ <- unknown.update(key, fn)
+      _ <- withLock("pendingUpdate", pending.update(key, fn))
+      _ <- withLock("arbitraryUpdate", arbitrary.update(key, fn))
+      _ <- withLock("inConsensusUpdate", inConsensus.update(key, fn))
+      _ <- withLock("acceptedUpdate", accepted.update(key, fn))
+      _ <- withLock("unknownUpdate", unknown.update(key, fn))
     } yield ()
 
   def accept(tx: TransactionCacheData): F[Unit] =
-    accepted.put(tx.transaction.hash, tx) *>
-      inConsensus.remove(tx.transaction.hash) *>
-      unknown.remove(tx.transaction.hash) *>
-      arbitrary
-        .remove(tx.transaction.hash)
+    put(tx, TransactionStatus.Accepted) *>
+      withLock("inConsensusRemove", inConsensus.remove(tx.transaction.hash)) *>
+      withLock("unknownRemove", unknown.remove(tx.transaction.hash)) *>
+      withLock("arbitraryRemove", arbitrary.remove(tx.transaction.hash))
         .flatTap(_ => Sync[F].delay(dao.metrics.incrementMetric("transactionAccepted")))
 
   def lookup(key: String): F[Option[TransactionCacheData]] =
@@ -75,29 +76,23 @@ class TransactionService[F[_]: Sync: Concurrent](dao: DAO, pullSemaphore: Semaph
   def isAccepted(hash: String): F[Boolean] = accepted.contains(hash)
 
   def applySnapshot(txs: List[TransactionCacheData], merkleRoot: String): F[Unit] =
-    merklePool.remove(merkleRoot) *>
-      txs.map(tx => accepted.remove(tx.transaction.hash)).sequence.void
+    withLock("merklePoolRemove", merklePool.remove(merkleRoot)) *>
+      txs.traverse(tx => withLock("acceptedRemove", accepted.remove(tx.transaction.hash))).void
 
   def returnTransactionsToPending(txs: Seq[String]): F[List[TransactionCacheData]] =
     txs.toList
       .traverse(inConsensus.lookup)
       .map(_.flatten)
       .flatMap { txs =>
-        txs.traverse(tx => inConsensus.remove(tx.transaction.hash)) *>
-          txs.traverse(tx => pending.put(tx.transaction.hash, tx))
+        txs.traverse(tx => withLock("inConsensusRemove", inConsensus.remove(tx.transaction.hash))) *>
+          txs.traverse(tx => put(tx))
       }
 
-  def pullForConsensusSafe(minCount: Int, roundId: String = "roundId"): F[List[TransactionCacheData]] =
-    new SingleLock[F, List[TransactionCacheData]](roundId, pullSemaphore).use(pullForConsensus(minCount, roundId))
-
   def pullForConsensus(minCount: Int, roundId: String = "roundId"): F[List[TransactionCacheData]] =
-    pending
-      .pull(minCount)
+    withLock("pullForConsensus", pending.pull(minCount))
       .map(_.getOrElse(List()))
       .flatTap(txs => Sync[F].delay(logger.info(s"Pulling txs=${txs.size} for consensus with minCount: $minCount")))
-      .flatMap(
-        txs => txs.map(tx => inConsensus.put(tx.transaction.hash, tx)).sequence
-      )
+      .flatMap(_.traverse(tx => withLock("inConsensusPut", inConsensus.put(tx.transaction.hash, tx))))
 
   def getLast20Accepted: F[List[TransactionCacheData]] =
     accepted.getLast20()
