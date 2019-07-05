@@ -3,7 +3,7 @@ package org.constellation.storage
 import cats.effect.{ContextShift, IO}
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
-import org.constellation.DAO
+import org.constellation.{DAO, Fixtures}
 import org.constellation.primitives.{Transaction, TransactionCacheData}
 import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.storage.transactions.TransactionStatus.TransactionStatus
@@ -11,8 +11,9 @@ import org.constellation.util.Metrics
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import scala.concurrent.duration._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 class TransactionServiceTest
     extends FreeSpec
@@ -317,6 +318,40 @@ class TransactionServiceTest
 
       txService.lookup(hash, TransactionStatus.Unknown).unsafeRunSync shouldBe Some(tx)
       txService.lookup(hash, TransactionStatus.Pending).unsafeRunSync shouldBe None
+    }
+  }
+
+  "pullForConsensusSafe" - {
+    "should be safe to use concurrently" in {
+      val pullsIteration = 100
+      val pullsMinCount = 50
+
+      val totalExpected = pullsIteration * pullsMinCount
+
+      val puts = (1 to totalExpected).toList
+        .map(_ => constellation.createTransaction(Fixtures.id1.address, Fixtures.id2.address, 1L, Fixtures.tempKey))
+        .map(TransactionCacheData(_))
+        .traverse(tx => IO.shift *> txService.put(tx))
+
+      val pulls = (1 to pullsIteration).toList
+        .map(_ => IO.shift *> txService.pullForConsensus(pullsMinCount))
+
+      // Fill minimum txs required
+      puts.unsafeRunSync()
+      txService.pending.size().unsafeRunSync() shouldBe totalExpected
+
+      // Run puts in background
+      puts.unsafeRunAsyncAndForget()
+
+      val results = {
+        implicit val ec: ExecutionContext = ExecutionContext.global
+        Await.result(Future.sequence(pulls.map(_.unsafeToFuture())), 5 seconds).map(_.map(_.transaction.hash))
+      }
+
+      // Should always pull txs
+      results.count(_.isEmpty) shouldBe 0
+      results.flatten.size shouldBe totalExpected
+      results.flatten.distinct.size shouldBe totalExpected
     }
   }
 

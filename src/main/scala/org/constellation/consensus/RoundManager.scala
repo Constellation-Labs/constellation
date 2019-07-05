@@ -274,7 +274,7 @@ object RoundManager {
 
     val transactions =
       dao.transactionService
-        .pullForConsensusSafe(dao.minCheckpointFormationThreshold)
+        .pullForConsensus(dao.minCheckpointFormationThreshold)
         .unsafeRunSync()
     if (transactions.nonEmpty) {
       dao

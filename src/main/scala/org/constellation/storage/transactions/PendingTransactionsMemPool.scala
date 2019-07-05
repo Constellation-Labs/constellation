@@ -12,7 +12,7 @@ class PendingTransactionsMemPool[F[_]: Sync]() extends LookupAlgebra[F, String, 
     Ref.unsafe[F, Map[String, TransactionCacheData]](Map())
 
   def put(key: String, value: TransactionCacheData): F[TransactionCacheData] =
-    txRef.get.flatMap(txs => txRef.set(txs + (key -> value)).map(_ => value))
+    txRef.modify(txs => (txs + (key -> value), value))
 
   def update(key: String, fn: TransactionCacheData => TransactionCacheData): F[Unit] =
     txRef.update { txs =>
@@ -27,11 +27,12 @@ class PendingTransactionsMemPool[F[_]: Sync]() extends LookupAlgebra[F, String, 
 
   // TODO: Rethink - use queue
   def pull(minCount: Int): F[Option[List[TransactionCacheData]]] =
-    txRef.get.flatMap { txs =>
-      if (txs.size < minCount) none[List[TransactionCacheData]].pure[F]
-      else {
+    txRef.modify { txs =>
+      if (txs.size < minCount) {
+        (txs, none[List[TransactionCacheData]])
+      } else {
         val (left, right) = txs.splitAt(minCount)
-        txRef.set(right).map(_ => left.toList.map(_._2).some)
+        (right, left.toList.map(_._2).some)
       }
     }
 

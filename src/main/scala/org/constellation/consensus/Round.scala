@@ -66,7 +66,7 @@ class Round(
     case StartTransactionProposal(_) =>
       sendArbitraryDataProposalsTikTok.cancel()
       val transactions = dao.transactionService
-        .pullForConsensusSafe(1)
+        .pullForConsensus(1)
         .map(_.map(_.transaction))
         .unsafeRunSync()
 
