@@ -3,7 +3,7 @@ package org.constellation.storage
 import cats.effect.{ContextShift, IO}
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
-import org.constellation.{DAO, Fixtures}
+import org.constellation.{ConstellationContextShift, DAO, Fixtures}
 import org.constellation.primitives.{Transaction, TransactionCacheData}
 import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.storage.transactions.TransactionStatus.TransactionStatus
@@ -22,7 +22,7 @@ class TransactionServiceTest
     with Matchers
     with ArgumentMatchersSugar
     with BeforeAndAfter {
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  implicit val contextShift: ContextShift[IO] = ConstellationContextShift.global
 
   var dao: DAO = _
   var semaphore: Semaphore[IO] = _

@@ -13,7 +13,7 @@ import org.constellation.primitives.Schema.{CheckpointCache, Height, SignedObser
 import org.constellation.primitives._
 import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.Metrics
-import org.constellation.{DAO, Fixtures, PeerMetadata}
+import org.constellation.{ConstellationContextShift, DAO, Fixtures, PeerMetadata}
 import org.mockito.Mockito.doNothing
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
@@ -150,9 +150,6 @@ class CheckpointServiceTest
 
     dao.id shouldReturn Fixtures.id
 
-    val ec = ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
-    dao.edgeExecutionContext shouldReturn ec
-
     val ss = new SOEService[IO]()
     dao.soeService shouldReturn ss
 
@@ -165,7 +162,7 @@ class CheckpointServiceTest
     }
     dao.messageService shouldReturn ms
 
-    implicit val contextShift = IO.contextShift(ExecutionContext.global)
+    implicit val contextShift = ConstellationContextShift.global
     val semaphore = Semaphore[IO](1).unsafeRunSync()
     val ts = new TransactionService[IO](dao, semaphore)
     dao.transactionService shouldReturn ts

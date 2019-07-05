@@ -137,7 +137,7 @@ object ConstellationNode extends StrictLogging {
 
       implicit val system: ActorSystem = ActorSystem("Constellation")
       implicit val materializer: ActorMaterializer = ActorMaterializer()
-      implicit val executionContext: ExecutionContext = ExecutionContext.global
+      implicit val executionContext: ExecutionContext = ConstellationExecutionContext.global
 
       val constellationConfig = config.getConfig("constellation")
 
@@ -335,7 +335,7 @@ class ConstellationNode(
     nodeConfig.seeds.foreach {
       dao.peerManager ! _
     }
-    PeerManager.initiatePeerReload()(dao, dao.edgeExecutionContext)
+    PeerManager.initiatePeerReload()(dao, ConstellationExecutionContext.edge)
   }
 
   // TODO: Use this for full flow, right now this only works as a debugging measure, does not integrate properly

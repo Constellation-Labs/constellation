@@ -15,19 +15,17 @@ import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeType}
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications, _}
 import org.constellation.storage.StorageService
-import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.{Distance, PeerApiClient}
-import org.constellation.{ConfigUtil, DAO}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
 class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLogging {
   import RoundManager._
 
-  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
   override val supervisorStrategy: OneForOneStrategy = {
 
     import akka.actor.SupervisorStrategy.Stop
@@ -79,7 +77,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
             log.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}")
             dao.blockFormationInProgress = true
             dao.metrics.updateMetric("blockFormationInProgress", dao.blockFormationInProgress.toString)
-        }
+        }(ConstellationExecutionContext.global)
       }
 
     case cmd: ParticipateInBlockCreationRound =>
@@ -100,7 +98,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
           messagesWithoutRound.lookup(cmd.roundData.roundId.id).unsafeRunSync().foreach { commands =>
             commands.foreach(passToRoundActor)
           }
-      }
+      }(ConstellationExecutionContext.global)
 
     case cmd: LightTransactionsProposal =>
       passToRoundActor(cmd)
@@ -198,8 +196,6 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
     roundData: RoundData
   )(implicit dao: DAO): Future[List[Option[CheckpointCache]]] = {
 
-    implicit val ec = dao.edgeExecutionContext
-
     val cbToResolve = roundData.tipsSOE
       .filterNot(t => dao.checkpointService.contains(t.baseHash).unsafeRunSync())
       .map(_.baseHash)
@@ -228,7 +224,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with ActorLo
         ConfigUtil.getDurationFromConfig("constellation.consensus.form-checkpoint-blocks-timeout", 60 seconds, config),
         self,
         ConsensusTimeout(roundData.roundId)
-      ),
+      )(ConstellationExecutionContext.apiClient),
       startedByThisNode,
       dao.metrics.startTimer
     )

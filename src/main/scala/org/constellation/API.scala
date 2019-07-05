@@ -434,7 +434,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         } ~
         pathPrefix("download") {
           path("start") {
-            Future { Download.download() }(dao.edgeExecutionContext)
+            Future { Download.download() }(ConstellationExecutionContext.edge)
             complete(StatusCodes.OK)
           }
         } ~

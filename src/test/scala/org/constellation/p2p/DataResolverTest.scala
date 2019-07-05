@@ -26,8 +26,6 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
   before {
     when(dao.id)
       .thenReturn(Id("node1"))
-    when(dao.edgeExecutionContext)
-      .thenReturn(ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8)))
 
     when(badNode.id)
       .thenReturn(Id("unresponsiveNode"))

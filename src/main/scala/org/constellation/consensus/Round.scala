@@ -17,7 +17,7 @@ import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
 import org.constellation.util.PeerApiClient
-import org.constellation.{ConfigUtil, DAO}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
@@ -35,7 +35,7 @@ class Round(
     with ActorLogging {
 
   implicit val shadedDao: DAO = dao
-  implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
+  implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.edge
 
   private[consensus] val transactionProposals: mutable.Map[FacilitatorId, LightTransactionsProposal] =
     mutable.Map()
