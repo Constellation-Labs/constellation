@@ -3,7 +3,7 @@ package org.constellation.storage
 import cats.effect.{ContextShift, IO}
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
-import org.constellation.{ConstellationContextShift, DAO, Fixtures}
+import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, Fixtures}
 import org.constellation.primitives.{Transaction, TransactionCacheData}
 import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.storage.transactions.TransactionStatus.TransactionStatus
@@ -11,8 +11,8 @@ import org.constellation.util.Metrics
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
-import scala.concurrent.duration._
 
+import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 class TransactionServiceTest
@@ -344,7 +344,7 @@ class TransactionServiceTest
       puts.unsafeRunAsyncAndForget()
 
       val results = {
-        implicit val ec: ExecutionContext = ExecutionContext.global
+        implicit val ec: ExecutionContext = ConstellationExecutionContext.global
         Await.result(Future.sequence(pulls.map(_.unsafeToFuture())), 5 seconds).map(_.map(_.transaction.hash))
       }
 

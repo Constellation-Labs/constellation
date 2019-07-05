@@ -1,6 +1,6 @@
 package org.constellation.consensus
 
-import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Cancellable, OneForOneStrategy, Props}
+import akka.actor.{Actor, ActorContext, ActorRef, Cancellable, OneForOneStrategy, Props}
 import cats.effect.IO
 import cats.implicits._
 import com.typesafe.config.Config
@@ -164,7 +164,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
     dao.transactionService.returnTransactionsToPending(transactionsToReturn).unsafeRunAsync {
       case Right(Nil) => ()
       case Right(txs) =>
-        logger.info(
+        logger.debug(
           s"Transactions returned to pending state ${txs.map(_.transaction.hash)} in round $roundId"
         )
       case Left(value) =>

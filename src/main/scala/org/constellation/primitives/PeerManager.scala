@@ -141,20 +141,20 @@ object PeerManager extends StrictLogging {
     val discover: IO[List[String]] = for {
       peersMetadata <- client.getNonBlockingIO[Seq[PeerMetadata]]("peers").recoverWith {
         case err =>
-          dao.metrics.incrementMetricAsync[IO]("peerDiscoveryQueryFailed") *> IO.raiseError(err)
+          dao.metrics.incrementMetricAsync[IO]("peerDiscoveryQueryFailed") *> IO.raiseError[Seq[PeerMetadata]](err)
       }
       peers <- dao.peerInfo
-      filteredPeers <- IO(
-        peersMetadata.filter(p => p.id != dao.id && validPeerAddition(HostPort(p.host, p.httpPort), peers))
+      filteredPeers = peersMetadata.filter(
+        p => p.id != dao.id && validPeerAddition(HostPort(p.host, p.httpPort), peers)
       )
       register <- filteredPeers.toList
         .traverse(
           md =>
             APIClient(md.host, md.httpPort)
               .getNonBlockingIO[PeerRegistrationRequest]("registration/request")
-              .map(req => (md, req))
+              .map((md, _))
         )
-      _ <- IO(register.foreach(r => dao.peerManager ! PendingRegistration(r._1.host, r._2)))
+      _ <- register.traverse(r => IO(dao.peerManager ! PendingRegistration(r._1.host, r._2)))
       registerResponse <- register
         .map(
           md => APIClient(md._1.host, md._1.httpPort).postNonBlockingIO[String]("register", dao.peerRegistrationRequest)

@@ -148,7 +148,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
     }
 
     (dao.nodeState, checkpoint.checkpointCacheData.checkpointBlock) match {
-      case (_, None) => Sync[F].raiseError(MissingCheckpointBlockException)
+      case (_, None) => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
       case (NodeState.Ready, Some(cb)) =>
         val acceptance = for {
           _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)
@@ -169,7 +169,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
         acceptance
       case (NodeState.DownloadCompleteAwaitingFinalSync, Some(_)) =>
         LiftIO[F].liftIO(dao.snapshotService.syncBufferAccept(checkpoint.checkpointCacheData))
-      case (_, Some(_)) => Sync[F].raiseError(PendingDownloadException(dao.id))
+      case (_, Some(_)) => Sync[F].raiseError[Unit](PendingDownloadException(dao.id))
     }
   }
 
@@ -178,7 +178,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
   ): F[List[CheckpointCache]] = {
 
     val checkError = if (depth >= maxDepth) {
-      Sync[F].raiseError(new Exception("Max depth reached when resolving data."))
+      Sync[F].raiseError[Unit](new Exception("Max depth reached when resolving data."))
     } else Sync[F].unit
 
     val resolveSoe = cb.parentSOEBaseHashes() match {
@@ -191,7 +191,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
         cb.parentSOEBaseHashes().toList
       )
       .map(
-        parents => parents.traverse(h => LiftIO[F].liftIO(dao.checkpointService.contains(h)).map(exist => (h, exist)))
+        parents => parents.traverse(h => contains(h).map(exist => (h, exist)))
       )
       .flatten
       .flatMap {
@@ -214,7 +214,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
   def accept(checkpoint: CheckpointCache)(implicit dao: DAO): F[Unit] = {
 
     val acceptCheckpoint: F[Unit] = checkpoint.checkpointBlock match {
-      case None => Sync[F].raiseError(MissingCheckpointBlockException)
+      case None => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
 
       case Some(cb) if dao.checkpointService.contains(cb.baseHash).unsafeRunSync() =>
         for {
@@ -234,13 +234,13 @@ class CheckpointService[F[_]: Sync: LiftIO](
               LiftIO[F].liftIO {
                 concurrentTipService
                   .putConflicting(cb.baseHash, cb)
-                  .flatMap(_ => IO.raiseError(TipConflictException(cb, conflicts)))
+                  .flatMap(_ => IO.raiseError[Unit](TipConflictException(cb, conflicts)))
                   .void
               }
           }
 
           valid <- Sync[F].delay(cb.simpleValidation())
-          _ <- if (!valid) Sync[F].raiseError(new Exception("CB to accept not valid")) else Sync[F].unit
+          _ <- if (!valid) Sync[F].raiseError[Unit](new Exception("CB to accept not valid")) else Sync[F].unit
           _ <- LiftIO[F].liftIO(cb.storeSOE())
           maybeHeight <- calculateHeight(checkpoint)
 
@@ -342,7 +342,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
       }.toList.sequence
     }
 
-  private def acceptTransactions(cb: CheckpointBlock)(implicit dao: DAO): F[Unit] = {
+  def acceptTransactions(cb: CheckpointBlock)(implicit dao: DAO): F[Unit] = {
     def toCacheData(tx: Transaction) = TransactionCacheData(
       tx,
       valid = true,

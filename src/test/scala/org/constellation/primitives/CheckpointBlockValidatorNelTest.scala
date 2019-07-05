@@ -433,7 +433,7 @@ class ValidationSpec
 
   "two groups of checkpoint blocks lower blocks beyond the snapshot" when {
     "first group is internally inconsistent" should {
-      "not pass validation" ignore { // TODO: wkoszycki #420 enable recursive validation
+      "not pass validation" in {
         val kp = keyPairs.take(6)
         val _ :: a :: b :: c :: d :: e :: _ = kp
 
@@ -491,9 +491,11 @@ class ValidationSpec
         val cb7 =
           CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))
 
-
-        Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
-          .foreach(cb => cb.store(CheckpointCache(Some(cb))))
+        Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7).foreach { cb =>
+          cb.store(CheckpointCache(cb.some))
+//          // TODO: wkoszycki #420 enable recursive validation transactions shouldn't be required to be stored to run validation
+          dao.checkpointService.acceptTransactions(cb).unsafeRunSync()
+        }
 
         assert(!cb7.simpleValidation())
       }

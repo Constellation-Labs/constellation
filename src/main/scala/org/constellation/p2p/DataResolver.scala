@@ -17,7 +17,7 @@ class DataResolver extends StrictLogging {
     hash: String,
     priorityClient: Option[PeerApiClient] = None
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[ChannelMessageMetadata] =
-    resolveMessages(hash, getReadyPeers(dao).unsafeRunSync(), priorityClient)
+    getReadyPeers(dao).flatMap(resolveMessages(hash, _, priorityClient))
 
   def resolveMessages(
     hash: String,
@@ -41,8 +41,6 @@ class DataResolver extends StrictLogging {
     priorityClient: Option[PeerApiClient] = None
   )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): List[IO[T]] =
     hashes.map { hash =>
-      val dataHash = BigInt(hash.getBytes)
-
       resolveData[T](hash, endpoint, priorityClient.toList ++ pool.sortBy { p =>
         Distance.calculate(hash, p.id)
       }, store)
@@ -56,14 +54,16 @@ class DataResolver extends StrictLogging {
     maxErrors: Int = 10
   )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[T] = {
 
-    def makeAttempt(innerPeers: Iterable[PeerApiClient],
-                    allPeers: Iterable[PeerApiClient],
-                    errorsSoFar: Int = 0): IO[T] =
+    def makeAttempt(
+      innerPeers: Iterable[PeerApiClient],
+      allPeers: Iterable[PeerApiClient],
+      errorsSoFar: Int = 0
+    ): IO[T] =
       innerPeers match {
         case _ if errorsSoFar >= maxErrors =>
-          IO.raiseError(DataResolutionMaxErrors(endpoint, hash))
+          IO.raiseError[T](DataResolutionMaxErrors(endpoint, hash))
         case Nil =>
-          IO.raiseError(
+          IO.raiseError[T](
             DataResolutionOutOfPeers(dao.id.short, endpoint, hash, allPeers.map(_.id.short))
           )
         case head :: tail =>
@@ -71,7 +71,7 @@ class DataResolver extends StrictLogging {
             case Some(a) => IO.pure(a)
             case None    => makeAttempt(tail, allPeers, errorsSoFar + 1)
           }.handleErrorWith {
-            case e if tail.isEmpty => IO.raiseError(e)
+            case e if tail.isEmpty => IO.raiseError[T](e)
             case e =>
               logger.error(
                 s"Failed to resolve with host=${head.client.hostPortForLogging}, trying next peer",
@@ -103,7 +103,7 @@ class DataResolver extends StrictLogging {
     hash: String,
     priorityClient: Option[PeerApiClient] = None
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
-    getReadyPeers(dao).flatMap(peers => resolveTransactions(hash, peers, priorityClient))
+    getReadyPeers(dao).flatMap(resolveTransactions(hash, _, priorityClient))
 
   def resolveTransactions(
     hash: String,
@@ -125,14 +125,13 @@ class DataResolver extends StrictLogging {
     priorityClient: Option[PeerApiClient] = None
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[CheckpointCache] =
     getReadyPeers(dao).flatMap(
-      peers =>
-        resolveDataByDistance[CheckpointCache](
-          List(hash),
-          "checkpoint",
-          peers,
-          (t: CheckpointCache) => t.checkpointBlock.foreach(cb => cb.store(t)),
-          priorityClient
-        ).head
+      resolveDataByDistance[CheckpointCache](
+        List(hash),
+        "checkpoint",
+        _,
+        (t: CheckpointCache) => t.checkpointBlock.foreach(cb => cb.store(t)),
+        priorityClient
+      ).head
     )
 
   def resolveCheckpoint(
@@ -158,7 +157,6 @@ class DataResolver extends StrictLogging {
       "soe",
       pool,
       (t: SignedObservationEdgeCache) => {
-        logger.info(s"storing soe=${t.signedObservationEdge.hash}")
         dao.soeService.put(t.signedObservationEdge.hash, t).unsafeRunSync()
       },
       priorityClient

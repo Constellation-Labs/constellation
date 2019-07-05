@@ -6,6 +6,7 @@ import better.files.File
 import cats.effect.IO
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
+import com.typesafe.scalalogging.Logger
 import constellation.createTransaction
 import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.crypto.KeyUtils.makeKeyPair
@@ -16,10 +17,10 @@ import org.constellation.util.{APIClient, HostPort, Metrics}
 import org.constellation.{ConstellationContextShift, DAO, Fixtures, PeerMetadata}
 import org.mockito.Mockito.doNothing
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, FreeSpec, FunSuite, Matchers}
 
 class CheckpointServiceTest
-    extends FunSuite
+    extends FreeSpec
     with IdiomaticMockito
     with ArgumentMatchersSugar
     with Matchers
@@ -29,88 +30,96 @@ class CheckpointServiceTest
   val soe: SignedObservationEdge = mock[SignedObservationEdge]
 
   implicit val kp: KeyPair = makeKeyPair()
-  implicit var dao: DAO = prepareDao()
+  implicit var dao: DAO = _
 
   before {
     soe.baseHash shouldReturn "abc"
   }
 
-  test("should convert CB to merkle roots when all data is filled") {
+  "with mocked dao" - {
+    dao = preparMockedDao()
 
-    val cbProposal = CheckpointBlock
-      .createCheckpointBlockSOE(prepareTransactions(), Seq(soe), prepareMessages(), prepareNotifications())
+    "should convert CB to merkle roots when all data is filled" in {
 
-    val cbProposalCache = CheckpointCache(Some(cbProposal), 3, Some(Height(2, 4)))
-    dao.checkpointService.memPool.put(cbProposal.baseHash, cbProposalCache).unsafeRunSync()
+      val cbProposal = CheckpointBlock
+        .createCheckpointBlockSOE(prepareTransactions(), Seq(soe), prepareMessages(), prepareNotifications())
 
-    val storedCB = dao.checkpointService.memPool.lookup(cbProposal.baseHash).unsafeRunSync().get
+      val cbProposalCache = CheckpointCache(Some(cbProposal), 3, Some(Height(2, 4)))
+      dao.checkpointService.memPool.put(cbProposal.baseHash, cbProposalCache).unsafeRunSync()
 
-    dao.checkpointService.convert(storedCB).unsafeRunSync() shouldBe cbProposalCache
-  }
+      val storedCB = dao.checkpointService.memPool.lookup(cbProposal.baseHash).unsafeRunSync().get
 
-  test("should convert CB to merkle roots when minimum data is filled") {
-    val fullData = storeCheckpointBlock(prepareTransactions(), Seq.empty, Seq.empty)
-    val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
-
-    dao.checkpointService.convert(storedCB).unsafeRunSync() shouldBe fullData
-  }
-
-  test("should fetch messages when they exist") {
-    val msgs = prepareMessages()
-    val fullData = storeCheckpointBlock(prepareTransactions(), msgs, Seq.empty)
-    val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
-
-    dao.checkpointService
-      .fetchMessages(storedCB.checkpointBlock.messagesMerkleRoot.get)
-      .unsafeRunSync() shouldBe msgs
-  }
-
-  test("should fetch transactions when they exist") {
-    val txs = prepareTransactions()
-    val fullData = storeCheckpointBlock(txs, Seq.empty, Seq.empty)
-    val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
-
-    dao.checkpointService
-      .fetchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot.get)
-      .unsafeRunSync() shouldBe txs
-  }
-
-  test("should fetch notifications when they exist") {
-    val notifications = prepareNotifications()
-    val fullData = storeCheckpointBlock(prepareTransactions(), Seq.empty, notifications)
-    val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
-
-    dao.checkpointService
-      .fetchNotifications(storedCB.checkpointBlock.notificationsMerkleRoot.get)
-      .unsafeRunSync() shouldBe notifications
-  }
-
-  test("should accept cb resolving parents soeHashes and cb baseHashes recursively ") {
-    val go = Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair)
-    Genesis.acceptGenesis(go, setAsTips = true)
-
-    val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
-
-    val cb1 = makeBlock(startingTips)
-
-    val cb2 = makeBlock(startingTips)
-    val cb3 = makeBlock(Seq(cb1.soe, cb2.soe))
-
-    val peer = readyFacilitators(Id("b")).client
-    val blocks = Seq(cb1, cb2)
-
-    blocks.foreach { c =>
-      peer.getNonBlockingIO[Option[SignedObservationEdgeCache]](eqTo(s"soe/${c.soeHash}"), *, *)(*, *) shouldReturn IO
-        .pure(Some(SignedObservationEdgeCache(c.soe)))
-
-      peer.getNonBlockingIO[Option[CheckpointCache]](eqTo(s"checkpoint/${c.baseHash}"), *, *)(*, *) shouldReturn IO
-        .pure(Some(CheckpointCache(Some(c))))
+      dao.checkpointService.convert(storedCB).unsafeRunSync() shouldBe cbProposalCache
     }
 
-    dao.checkpointService
-      .accept(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
-      .unsafeRunSync()
-    dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
+    "should convert CB to merkle roots when minimum data is filled" in {
+      val fullData = storeCheckpointBlock(prepareTransactions(), Seq.empty, Seq.empty)
+      val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
+
+      dao.checkpointService.convert(storedCB).unsafeRunSync() shouldBe fullData
+    }
+
+    "should fetch messages when they exist" in {
+      val msgs = prepareMessages()
+      val fullData = storeCheckpointBlock(prepareTransactions(), msgs, Seq.empty)
+      val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
+
+      dao.checkpointService
+        .fetchMessages(storedCB.checkpointBlock.messagesMerkleRoot.get)
+        .unsafeRunSync() shouldBe msgs
+    }
+
+    "should fetch transactions when they exist" in {
+      val txs = prepareTransactions()
+      val fullData = storeCheckpointBlock(txs, Seq.empty, Seq.empty)
+      val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
+
+      dao.checkpointService
+        .fetchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot.get)
+        .unsafeRunSync() shouldBe txs
+    }
+
+    "should fetch notifications when they exist" in {
+      val notifications = prepareNotifications()
+      val fullData = storeCheckpointBlock(prepareTransactions(), Seq.empty, notifications)
+      val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
+
+      dao.checkpointService
+        .fetchNotifications(storedCB.checkpointBlock.notificationsMerkleRoot.get)
+        .unsafeRunSync() shouldBe notifications
+    }
+  }
+
+  "with real dao" - {
+    dao = prepareRealDao()
+
+    "should accept cb resolving parents soeHashes and cb baseHashes recursively" in {
+      val go = Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair)
+      Genesis.acceptGenesis(go, setAsTips = true)
+
+      val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
+
+      val cb1 = makeBlock(startingTips)
+
+      val cb2 = makeBlock(startingTips)
+      val cb3 = makeBlock(Seq(cb1.soe, cb2.soe))
+
+      val peer = readyFacilitators(Id("b")).client
+      val blocks = Seq(cb1, cb2)
+
+      blocks.foreach { c =>
+        peer.getNonBlockingIO[Option[SignedObservationEdgeCache]](eqTo(s"soe/${c.soeHash}"), *, *)(*, *) shouldReturn IO
+          .pure(Some(SignedObservationEdgeCache(c.soe)))
+
+        peer.getNonBlockingIO[Option[CheckpointCache]](eqTo(s"checkpoint/${c.baseHash}"), *, *)(*, *) shouldReturn IO
+          .pure(Some(CheckpointCache(Some(c))))
+      }
+
+      dao.checkpointService
+        .accept(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
+        .unsafeRunSync()
+      dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
+    }
   }
 
   private def makeBlock(tips: Seq[SignedObservationEdge]): CheckpointBlock =
@@ -178,7 +187,9 @@ class CheckpointServiceTest
     Seq(msg1, msg2)
   }
 
-  private def prepareDao(): DAO = {
+  private def preparMockedDao(): DAO = {
+    import constellation._
+
     val dao: DAO = mock[DAO]
 
     val f = File(s"tmp/${kp.getPublic.toId.medium}/db")
@@ -215,8 +226,22 @@ class CheckpointServiceTest
 
     dao.nodeState shouldReturn NodeState.Ready
 
+    dao.miscLogger shouldReturn Logger("miscLogger")
+
     dao.readyPeers shouldReturn IO.pure(readyFacilitators)
 
+    dao
+  }
+
+  private def prepareRealDao(): DAO = {
+    val dao: DAO = new DAO {
+      override def readyPeers: IO[
+        Map[Id, PeerData]
+      ] = IO.pure(readyFacilitators)
+    }
+    dao.initialize()
+    dao.metrics = new Metrics()(dao)
+    dao.nodeState = NodeState.Ready
     dao
   }
 

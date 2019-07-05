@@ -12,15 +12,9 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
 import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointResponse}
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.{ConcurrentTipService, IPManager}
+import org.constellation.primitives.IPManager
 import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
-import org.constellation.storage.{
-  AddressService,
-  CheckpointService,
-  MessageService,
-  SnapshotService,
-  TransactionService
-}
+import org.constellation.storage.{CheckpointService, SnapshotService}
 import org.constellation.util.Metrics
 import org.json4s.native
 import org.json4s.native.Serialization
@@ -28,8 +22,8 @@ import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito, Mockito}
 import org.scalatest.{BeforeAndAfter, Matchers, WordSpec}
 
-import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class PeerAPITest
     extends WordSpec
@@ -60,7 +54,7 @@ class PeerAPITest
     /*
         Unfortunately ScalatestRouteTest instansiate it's own class of PeerAPI thus we can't spy on it
      */
-    "return accepted message on finishing checkpoint and reply with callback" ignore {
+    "return accepted on finishing checkpoint and reply with callback when header is defined".ignore {
       val reply = "http://originator:9001/peer-api/finished/checkpoint/reply"
       val fakeResp = Future.successful(mock[Response[Unit]])
       Mockito
