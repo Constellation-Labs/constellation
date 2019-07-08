@@ -5,7 +5,7 @@ import akka.actor.ActorRef
 import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
-import org.constellation.DAO
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.consensus.RoundManager.{ActiveTipMinHeight, GetActiveMinHeight}
 import org.constellation.consensus.TipData
 import org.constellation.primitives.Schema.{Height, Id, SignedObservationEdge}
@@ -143,7 +143,7 @@ class TrieBasedTipService(sizeLimit: Int,
           case Success(activeHeight) =>
             cb(Right(activeHeight))
           case Failure(error) => cb(Left(error))
-        }(dao.edgeExecutionContext)
+        }(ConstellationExecutionContext.edge)
     }
 
     for {

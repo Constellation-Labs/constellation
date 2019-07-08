@@ -2,6 +2,8 @@ package org.constellation.consensus
 
 import akka.actor.{Actor, ActorContext, ActorRef, Cancellable, OneForOneStrategy, Props}
 import cats.effect.{ContextShift, IO}
+import cats.effect.IO
+import cats.effect.IO.RaiseError
 import cats.implicits._
 import com.typesafe.config.Config
 import com.typesafe.scalalogging.StrictLogging
@@ -58,37 +60,38 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
 
     case StartNewBlockCreationRound if !ownRoundInProgress =>
       ownRoundInProgress = true
-      createRoundData(dao).fold {
-        logger.debug("Cannot create a round data do to no transactions")
-        ownRoundInProgress = false
-      } { tuple =>
-        val roundData = tuple._1
-        logger.debug(
-          s"node: ${dao.id.short} starting new round ${roundData.roundId} with facilis: ${roundData.peers
-            .map(_.peerMetadata.id.short)}"
-        )
-        resolveMissingParents(roundData).onComplete {
-          case Failure(e) =>
-            ownRoundInProgress = false
-            logger.error(s"unable to start block creation round due to: ${e.getMessage}", e)
-          case Success(_) =>
-            logger.debug(s"[${dao.id.short}] ${roundData.roundId} started round")
-            startRound(roundData, tuple._2, tuple._3, startedByThisNode = true)
-            passToParentActor(NotifyFacilitators(roundData))
-            passToRoundActor(
-              LightTransactionsProposal(
-                roundData.roundId,
-                FacilitatorId(dao.id),
-                roundData.transactions.map(_.hash) ++ tuple._2.filter(_._2 == 0).map(_._1.hash),
-                roundData.messages.map(_.signedMessageData.hash),
-                roundData.peers.flatMap(_.notification).toSeq
+      createRoundData(dao).onComplete {
+        case Failure(e) =>
+          logger.debug("Cannot create a round data do to no transactions")
+          ownRoundInProgress = false
+        case Success(Some(tuple)) =>
+          val roundData = tuple._1
+          logger.debug(
+            s"node: ${dao.id.short} starting new round ${roundData.roundId} with facilis: ${roundData.peers
+              .map(_.peerMetadata.id.short)}"
+          )
+          resolveMissingParents(roundData).onComplete {
+            case Failure(e) =>
+              ownRoundInProgress = false
+              logger.error(s"unable to start block creation round due to: ${e.getMessage}", e)
+            case Success(_) =>
+              logger.debug(s"[${dao.id.short}] ${roundData.roundId} started round")
+              startRound(roundData, tuple._2, tuple._3, startedByThisNode = true)
+              passToParentActor(NotifyFacilitators(roundData))
+              passToRoundActor(
+                LightTransactionsProposal(
+                  roundData.roundId,
+                  FacilitatorId(dao.id),
+                  roundData.transactions.map(_.hash) ++ tuple._2.filter(_._2 == 0).map(_._1.hash),
+                  roundData.messages.map(_.signedMessageData.hash),
+                  roundData.peers.flatMap(_.notification).toSeq
+                )
               )
-            )
-            logger.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}")
-            dao.blockFormationInProgress = true
-            dao.metrics.updateMetric("blockFormationInProgress", dao.blockFormationInProgress.toString)
-        }(ConstellationExecutionContext.global)
-      }
+              logger.debug(s"node: ${dao.id.short} starting new round: ${roundData.roundId}")
+              dao.blockFormationInProgress = true
+              dao.metrics.updateMetric("blockFormationInProgress", dao.blockFormationInProgress.toString)
+          }(ConstellationExecutionContext.global)
+      }(ConstellationExecutionContext.global)
 
     case cmd: ParticipateInBlockCreationRound =>
       resolveMissingParents(cmd.roundData).onComplete {
@@ -275,44 +278,42 @@ object RoundManager {
 
   def createRoundData(
     dao: DAO
-  ): Option[(RoundData, Seq[(Transaction, Int)], Seq[(ChannelMessage, Int)])] = {
+  ): Future[Option[(RoundData, Seq[(Transaction, Int)], Seq[(ChannelMessage, Int)])]] = {
 
-    val transactions =
-      dao.transactionService
-        .pullForConsensus(dao.minCheckpointFormationThreshold)
-        .unsafeRunSync()
-    if (transactions.nonEmpty) {
-      dao
-        .pullTips(dao.readyFacilitatorsAsync.unsafeRunSync())
-        .map { tips =>
-          val messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq()) // TODO: Choose more than one tx and light peers
-          val firstTx = transactions.headOption
-          val lightPeers =
-            if (firstTx.isDefined && dao.readyPeers(NodeType.Light).unsafeRunSync().nonEmpty) {
-              Set(
-                dao
-                  .readyPeers(NodeType.Light)
-                  .unsafeRunSync()
-                  .minBy(p => Distance.calculate(firstTx.get.transaction.baseHash, p._1))
-                  ._2
-              )
-            } else Set[PeerData]()
-          val allFacilitators = tips.peers.values.map(_.peerMetadata.id).toSet ++ Set(dao.id)
-          (
-            RoundData(
-              generateRoundId,
-              tips.peers.values.toSet,
-              lightPeers,
-              FacilitatorId(dao.id),
-              transactions.map(_.transaction),
-              tips.tipSoe,
-              messages
-            ),
-            getArbitraryTransactionsWithDistance(allFacilitators, dao).filter(t => t._2 == 1),
-            getArbitraryMessagesWithDistance(allFacilitators, dao).filter(t => t._2 == 1)
-          )
-        }
-    } else None
+    val task = for {
+      transactions <- dao.transactionService.pullForConsensus(dao.minCheckpointFormationThreshold)
+      _ <- if (transactions.isEmpty) IO.raiseError[Unit](NoTransactionsForConsensus) else IO.unit
+      facilitators <- dao.readyFacilitatorsAsync
+      tips = dao.pullTips(facilitators)
+      _ <- if (tips.isEmpty) IO.raiseError[Unit](NoTransactionsForConsensus) else IO.unit
+      messages = dao.threadSafeMessageMemPool.pull().getOrElse(Seq())
+      lightNodes <- dao.readyPeers(NodeType.Light)
+      lightPeers = if (lightNodes.isEmpty) Set.empty[PeerData]
+      else
+        Set(lightNodes.minBy(p => Distance.calculate(transactions.head.transaction.baseHash, p._1))._2) // TODO: Choose more than one tx and light peers
+      allFacilitators = tips.get.peers.values.map(_.peerMetadata.id).toSet ++ Set(dao.id)
+      roundData = (
+        RoundData(
+          generateRoundId,
+          tips.get.peers.values.toSet,
+          lightPeers,
+          FacilitatorId(dao.id),
+          transactions.map(_.transaction),
+          tips.get.tipSoe,
+          messages
+        ),
+        getArbitraryTransactionsWithDistance(allFacilitators, dao).filter(t => t._2 == 1),
+        getArbitraryMessagesWithDistance(allFacilitators, dao).filter(t => t._2 == 1)
+      )
+
+    } yield roundData.some
+
+    task.handleError {
+      case NoTransactionsForConsensus =>
+        println("catched")
+        None
+    }
+    task.unsafeToFuture()
   }
 
   def getArbitraryTransactionsWithDistance(facilitators: Set[Id], dao: DAO): Seq[(Transaction, Int)] = {
@@ -387,6 +388,7 @@ object RoundManager {
     transactionsProposal: LightTransactionsProposal
   )
 
+  case object NoTransactionsForConsensus extends Exception
   case class BroadcastUnionBlockProposal(roundId: RoundId, peers: Set[PeerData], proposal: UnionBlockProposal)
 
   case class BroadcastSelectedUnionBlock(roundId: RoundId, peers: Set[PeerData], cb: SelectedUnionBlock)
