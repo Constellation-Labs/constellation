@@ -1,11 +1,14 @@
 package org.constellation.storage
 
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import cats.implicits._
+import org.constellation.ConstellationContextShift
 import org.mockito.IdiomaticMockito
 import org.scalatest.{FunSuite, Matchers}
 
 class StorageServiceTest extends FunSuite with IdiomaticMockito with Matchers {
+
+  implicit val cs: ContextShift[IO] = ConstellationContextShift.global
 
   test("it should allow to put a new value") {
     val storage = new StorageService[IO, Int]()

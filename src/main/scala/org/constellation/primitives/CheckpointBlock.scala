@@ -422,8 +422,7 @@ sealed trait CheckpointBlockValidatorNel {
     }
 
     fullData
-      .map(_.flatMap(_.checkpointBlock))
-      .sequence[Option, CheckpointBlock]
+      .traverse(_.flatMap(_.checkpointBlock))
       .getOrElse(List())
   }
 
@@ -529,14 +528,13 @@ sealed trait CheckpointBlockValidatorNel {
   }
 
   def containsAlreadyAcceptedTx(cb: CheckpointBlock)(implicit dao: DAO): IO[List[String]] = {
-    val containsAccepted = cb.transactions
+    val containsAccepted = cb.transactions.toList
       .map(
         t =>
           dao.transactionService
             .isAccepted(t.hash)
             .map(b => (t.hash, b))
       )
-      .toList
       .sequence[IO, (String, Boolean)]
       .map(l => l.collect { case (h, true) => h })
 

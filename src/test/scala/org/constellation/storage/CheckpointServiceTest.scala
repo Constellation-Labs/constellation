@@ -3,7 +3,7 @@ package org.constellation.storage
 import java.security.KeyPair
 
 import better.files.File
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
@@ -192,6 +192,8 @@ class CheckpointServiceTest
 
     val dao: DAO = mock[DAO]
 
+    implicit val contextShift: ContextShift[IO] = ConstellationContextShift.global
+
     val f = File(s"tmp/${kp.getPublic.toId.medium}/db")
     f.createDirectoryIfNotExists()
     dao.dbPath shouldReturn f
@@ -210,9 +212,7 @@ class CheckpointServiceTest
     }
     dao.messageService shouldReturn ms
 
-    implicit val contextShift = ConstellationContextShift.global
-    val semaphore = Semaphore[IO](1).unsafeRunSync()
-    val ts = new TransactionService[IO](dao, semaphore)
+    val ts = new TransactionService[IO](dao)
     dao.transactionService shouldReturn ts
 
     val cts = mock[ConcurrentTipService]

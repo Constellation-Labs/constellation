@@ -1,6 +1,6 @@
 package org.constellation.storage.transactions
 
-import cats.effect.{LiftIO, Sync}
+import cats.effect.{Concurrent, LiftIO, Sync}
 import cats.implicits._
 import org.constellation.DAO
 import org.constellation.primitives.Schema.Id
@@ -9,7 +9,7 @@ import org.constellation.storage.TransactionService
 
 import scala.util.Random
 
-class TransactionGossiping[F[_]: Sync: LiftIO](transactionService: TransactionService[F], fanout: Int, dao: DAO) {
+class TransactionGossiping[F[_]: Concurrent](transactionService: TransactionService[F], fanout: Int, dao: DAO) {
 
   def selectPeers(tx: TransactionCacheData)(implicit random: Random): F[Set[Id]] =
     for {

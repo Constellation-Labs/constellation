@@ -289,8 +289,7 @@ object Download {
       dao.metrics.updateMetric("downloadedNearbyChannels", nearbyChannels.size.toString)
 
       nearbyChannels.toList
-        .map(cmd => dao.channelService.put(cmd.channelId, cmd))
-        .sequence
+        .traverse(cmd => dao.channelService.put(cmd.channelId, cmd))
         .unsafeRunSync()
 
       dao.setNodeState(NodeState.Ready)

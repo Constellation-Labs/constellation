@@ -1,15 +1,16 @@
 package org.constellation.storage.transactions
 
-import cats.effect.Sync
+import cats.effect.{Concurrent, Sync}
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import org.constellation.primitives.TransactionCacheData
+import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.algebra.LookupAlgebra
 
-class PendingTransactionsMemPool[F[_]: Sync]() extends LookupAlgebra[F, String, TransactionCacheData] {
+class PendingTransactionsMemPool[F[_]: Concurrent]() extends LookupAlgebra[F, String, TransactionCacheData] {
 
-  private val txRef: Ref[F, Map[String, TransactionCacheData]] =
-    Ref.unsafe[F, Map[String, TransactionCacheData]](Map())
+  private val txRef: SingleRef[F, Map[String, TransactionCacheData]] =
+    SingleRef[F, Map[String, TransactionCacheData]](Map())
 
   def put(key: String, value: TransactionCacheData): F[TransactionCacheData] =
     txRef.modify(txs => (txs + (key -> value), value))

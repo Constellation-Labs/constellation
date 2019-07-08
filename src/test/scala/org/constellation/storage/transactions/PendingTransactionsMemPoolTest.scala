@@ -1,13 +1,16 @@
 package org.constellation.storage.transactions
 
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import cats.implicits._
+import org.constellation.ConstellationContextShift
 import org.constellation.primitives.Schema.TransactionEdgeData
 import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
 import org.mockito.IdiomaticMockito
 import org.scalatest.{FreeSpec, FunSuite, Matchers}
 
 class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with Matchers {
+  implicit val cs: ContextShift[IO] = ConstellationContextShift.global
+
   "update" - {
     "it should update existing transaction" in {
       val memPool = new PendingTransactionsMemPool[IO]

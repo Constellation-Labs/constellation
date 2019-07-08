@@ -365,8 +365,7 @@ class RoundManagerTest
   test("it should remove not accepted transactions") {
     implicit val context: ContextShift[IO] = ConstellationContextShift.global
 
-    val semaphore = cats.effect.concurrent.Semaphore[IO](1).unsafeRunSync()
-    dao.transactionService shouldReturn new TransactionService[IO](dao, semaphore)
+    dao.transactionService shouldReturn new TransactionService[IO](dao)
 
     val tx3 = Fixtures.dummyTx(dao)
     dao.transactionService.put(TransactionCacheData(tx3), TransactionStatus.Pending).unsafeRunSync()

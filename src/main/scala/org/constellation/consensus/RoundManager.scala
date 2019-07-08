@@ -1,7 +1,7 @@
 package org.constellation.consensus
 
 import akka.actor.{Actor, ActorContext, ActorRef, Cancellable, OneForOneStrategy, Props}
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.config.Config
 import com.typesafe.scalalogging.StrictLogging
@@ -17,7 +17,7 @@ import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeType}
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications, _}
 import org.constellation.storage.StorageService
 import org.constellation.util.{Distance, PeerApiClient}
-import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
+import org.constellation.{ConfigUtil, ConstellationContextShift, ConstellationExecutionContext, DAO}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
@@ -26,6 +26,8 @@ import scala.util.{Failure, Success, Try}
 
 class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictLogging {
   import RoundManager._
+
+  implicit val contextShift: ContextShift[IO] = ConstellationContextShift.edge
 
   override val supervisorStrategy: OneForOneStrategy = {
 

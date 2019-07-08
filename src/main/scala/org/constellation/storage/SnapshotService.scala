@@ -1,7 +1,7 @@
 package org.constellation.storage
 
 import cats.data.EitherT
-import cats.effect.{LiftIO, Sync}
+import cats.effect.{Concurrent, LiftIO, Sync}
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
@@ -18,11 +18,12 @@ import org.constellation.primitives.{
 }
 import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
 import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.util.Metrics
 
 import scala.util.Try
 
-class SnapshotService[F[_]: Sync: LiftIO](
+class SnapshotService[F[_]: Concurrent](
   concurrentTipService: ConcurrentTipService,
   addressService: AddressService[F],
   checkpointService: CheckpointService[F],
@@ -35,12 +36,12 @@ class SnapshotService[F[_]: Sync: LiftIO](
 
   implicit val shadowDao: DAO = dao
 
-  val acceptedCBSinceSnapshot: Ref[F, Seq[String]] = Ref.unsafe(Seq())
-  val syncBuffer: Ref[F, Seq[CheckpointCache]] = Ref.unsafe(Seq())
-  val snapshot: Ref[F, Snapshot] = Ref.unsafe(Snapshot.snapshotZero)
+  val acceptedCBSinceSnapshot: SingleRef[F, Seq[String]] = SingleRef(Seq())
+  val syncBuffer: SingleRef[F, Seq[CheckpointCache]] = SingleRef(Seq())
+  val snapshot: SingleRef[F, Snapshot] = SingleRef(Snapshot.snapshotZero)
 
-  val totalNumCBsInSnapshots: Ref[F, Long] = Ref.unsafe(0L)
-  val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
+  val totalNumCBsInSnapshots: SingleRef[F, Long] = SingleRef(0L)
+  val lastSnapshotHeight: SingleRef[F, Int] = SingleRef(0)
 
   def exists(hash: String): F[Boolean] =
     for {
@@ -366,7 +367,7 @@ class SnapshotService[F[_]: Sync: LiftIO](
 
 object SnapshotService {
 
-  def apply[F[_]: Sync: LiftIO](
+  def apply[F[_]: Concurrent](
     concurrentTipService: ConcurrentTipService,
     addressService: AddressService[F],
     checkpointService: CheckpointService[F],

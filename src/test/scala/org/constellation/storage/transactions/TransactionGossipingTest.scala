@@ -5,7 +5,7 @@ import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import org.constellation.primitives.{PeerData, Transaction, TransactionCacheData}
 import org.constellation.storage.TransactionService
-import org.constellation.{DAO, Fixtures}
+import org.constellation.{ConstellationContextShift, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{FunSuite, Matchers}
@@ -19,6 +19,8 @@ class TransactionGossipingTest
     with IdiomaticMockitoCats
     with Matchers
     with ArgumentMatchersSugar {
+
+  implicit val cs: ContextShift[IO] = ConstellationContextShift.global
 
   test("it should randomly select the diff of all peer IDs and peers in the tx path") {
     val dao = mockDAO
@@ -36,11 +38,8 @@ class TransactionGossipingTest
   }
 
   test("it should update the transaction path if it's the first time the tx is being observed") {
-    implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
-
     val dao = mockDAO
-    val semaphore = Semaphore[IO](1).unsafeRunSync
-    val txService = spy(new TransactionService[IO](dao, semaphore))
+    val txService = spy(new TransactionService[IO](dao))
     val gossiping = new TransactionGossiping[IO](txService, 2, dao)
 
     val t = constellation.createTransaction("a", "b", 1L, Fixtures.tempKey, false)

@@ -94,16 +94,12 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
-    implicit def unsafeLogger = Slf4jLogger.getLogger[IO]
+    implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
 
     rateLimiting = new RateLimiting[IO]
 
-    val semaphore = Semaphore[IO](1)(ConstellationConcurrentEffect.edge).unsafeRunSync()
-    transactionService = new TransactionService[IO](this, semaphore)(
-      Concurrent(ConstellationConcurrentEffect.edge),
-      ConstellationConcurrentEffect.edge
-    )
-    transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this) // TODO: rethink if it shouldn't be inside the tx service
+    transactionService = new TransactionService[IO](this)
+    transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
     checkpointService = new CheckpointService[IO](
       this,
       transactionService,

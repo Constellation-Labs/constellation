@@ -12,7 +12,14 @@ import org.constellation.primitives.Schema._
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.Metrics
-import org.constellation.{ConfigUtil, DAO, NodeConfig, ProcessingConfig}
+import org.constellation.{
+  ConfigUtil,
+  ConstellationConcurrentEffect,
+  ConstellationContextShift,
+  DAO,
+  NodeConfig,
+  ProcessingConfig
+}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
@@ -112,6 +119,8 @@ trait EdgeDAO {
     _blockFormationInProgress = value
     metrics.updateMetric("blockFormationInProgress", blockFormationInProgress.toString)
   }
+
+  implicit val contextShift: ContextShift[IO] = ConstellationContextShift.edge
 
   // TODO: Put on Id keyed datastore (address? potentially) with other metadata
   val publicReputation: TrieMap[Id, Double] = TrieMap()

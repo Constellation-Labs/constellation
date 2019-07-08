@@ -25,7 +25,6 @@ class TransactionServiceTest
   implicit val contextShift: ContextShift[IO] = ConstellationContextShift.global
 
   var dao: DAO = _
-  var semaphore: Semaphore[IO] = _
   var txService: TransactionService[IO] = _
 
   val hash = "ipsum"
@@ -35,8 +34,7 @@ class TransactionServiceTest
 
   before {
     dao = mockDAO
-    semaphore = Semaphore[IO](1).unsafeRunSync
-    txService = new TransactionService[IO](dao, semaphore)
+    txService = new TransactionService[IO](dao)
   }
 
   "put" - {
