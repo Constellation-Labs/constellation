@@ -210,7 +210,7 @@ class SnapshotService[F[_]: Concurrent](
         }
     }
 
-  private def getNextHeightInterval: F[Long] =
+  def getNextHeightInterval: F[Long] =
     lastSnapshotHeight.get
       .map(_ + dao.processingConfig.snapshotHeightInterval)
 

@@ -62,7 +62,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
       ownRoundInProgress = true
       createRoundData(dao).onComplete {
         case Failure(e) =>
-          logger.debug("Cannot create a round data do to no transactions")
+          logger.debug("Cannot create a round data due to no transactions")
           ownRoundInProgress = false
         case Success(Some(tuple)) =>
           val roundData = tuple._1
@@ -94,6 +94,12 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
       }(ConstellationExecutionContext.global)
 
     case cmd: ParticipateInBlockCreationRound =>
+      val checkHeight = cmd.roundData.tipsSOE.minHeight.traverse { min =>
+        dao.snapshotService.lastSnapshotHeight.get
+          .flatMap(last => if (last >= min) IO.raiseError[Unit](SnapshotHeightAboveTip(last, min)) else IO.unit)
+      }
+      checkHeight.unsafeRunSync()
+
       resolveMissingParents(cmd.roundData).onComplete {
         case Failure(e) =>
           logger.error(
@@ -282,7 +288,7 @@ object RoundManager {
 
     val task = for {
       transactions <- dao.transactionService.pullForConsensus(dao.minCheckpointFormationThreshold)
-      _ <- if (transactions.isEmpty) IO.raiseError[Unit](NoTransactionsForConsensus) else IO.unit
+      _ <- if (transactions.isEmpty) NoTransactionsForConsensus.raiseError[IO, Unit] else IO.unit
       facilitators <- dao.readyFacilitatorsAsync
       tips = dao.pullTips(facilitators)
       _ <- if (tips.isEmpty) IO.raiseError[Unit](NoTransactionsForConsensus) else IO.unit
@@ -310,7 +316,6 @@ object RoundManager {
 
     task.handleError {
       case NoTransactionsForConsensus =>
-        println("catched")
         None
     }
     task.unsafeToFuture()
@@ -398,4 +403,6 @@ object RoundManager {
   case object GetActiveMinHeight
   case class GetActiveMinHeight(replyTo: ActorRef)
   case class ActiveTipMinHeight(minHeight: Option[Long])
+  case class SnapshotHeightAboveTip(snapHeight: Long, tipHeight: Long)
+      extends Exception(s"Snapshot height: $snapHeight is above or/equal proposed tip $tipHeight")
 }
