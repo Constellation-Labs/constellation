@@ -8,7 +8,7 @@ import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.softwaremill.sttp.Response
 import constellation._
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO}
 import org.constellation.consensus.CrossTalkConsensus.StartNewBlockCreationRound
 import org.constellation.primitives.Schema.{InternalHeartbeat, NodeState, _}
 import org.constellation.storage.transactions.TransactionStatus
@@ -174,7 +174,7 @@ class RandomTransactionManager[T](nodeActor: ActorRef, periodSeconds: Int = 10)(
                 dao.transactionService.put(TransactionCacheData(tx, path = Set(dao.id))).unsafeRunSync
 
                 implicit val random: Random = scala.util.Random
-                val contextShift: ContextShift[IO] = IO.contextShift(dao.edgeExecutionContext)
+                val contextShift: ContextShift[IO] = ConstellationContextShift.edge
 
                 val rebroadcast =
                   for {

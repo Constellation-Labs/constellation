@@ -239,7 +239,7 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
           dao.metrics.incrementMetric("transactionRXByPeerAPI")
 
           implicit val random: Random = scala.util.Random
-          val contextShift: ContextShift[IO] = IO.contextShift(dao.edgeExecutionContext)
+          val contextShift: ContextShift[IO] = ConstellationContextShift.edge
 
           val rebroadcast = for {
             tcd <- dao.transactionGossiping.observe(TransactionCacheData(gossip.tx, path = gossip.path))

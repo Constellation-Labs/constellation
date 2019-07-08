@@ -9,6 +9,7 @@ import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{CanLog, Logger}
+import org.constellation.ConstellationContextShift
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import org.slf4j.MDC
@@ -71,7 +72,6 @@ class APIClientBase(
 
   def udpAddress: String = hostName + ":" + udpPort
 
-
   def baseURI: String = {
     val uri = s"http://$hostName:$apiPort"
     uri
@@ -130,7 +130,7 @@ class APIClientBase(
 
   def putAsync(suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
     implicit f: Formats = constellation.constellationFormats
-  ): IO[Response[String]] = IO.fromFuture(IO(put(suffix, b, timeout)))
+  ): IO[Response[String]] = IO.fromFuture(IO(put(suffix, b, timeout)))(ConstellationContextShift.apiClient)
 
   def postEmpty(suffix: String, timeout: Duration = 15.seconds)(
     implicit f: Formats = constellation.constellationFormats
@@ -141,7 +141,6 @@ class APIClientBase(
     implicit f: Formats = constellation.constellationFormats
   ): Response[String] =
     post(suffix, b, timeout).blocking(timeout)
-
 
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
     implicit m: Manifest[T],
@@ -170,7 +169,12 @@ class APIClientBase(
       .map(_.unsafeBody)
   }
 
-  def postNonBlockingUnit(suffix: String, b: AnyRef, timeout: Duration = 15.seconds, headers: Map[String, String] = Map.empty)(
+  def postNonBlockingUnit(
+    suffix: String,
+    b: AnyRef,
+    timeout: Duration = 15.seconds,
+    headers: Map[String, String] = Map.empty
+  )(
     implicit f: Formats = constellation.constellationFormats
   ): Future[Response[Unit]] = {
     val ser = Serialization.write(b)
