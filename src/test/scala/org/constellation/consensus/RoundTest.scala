@@ -51,7 +51,7 @@ class RoundTest
   val tx3 = Fixtures.dummyTx(dao)
 
   val soe = mock[SignedObservationEdge]
-  val tips = (Seq(soe), readyFacilitators)
+  val tips = PulledTips(TipSoe(Seq(soe), None), readyFacilitators)
 
   val txService = mock[TransactionService[IO]]
   val msgService = mock[MessageService[IO]]
@@ -66,7 +66,7 @@ class RoundTest
     Set(),
     facilitatorId1,
     List(),
-    Seq(),
+    TipSoe(Seq(), None),
     Seq()
   )
   before {

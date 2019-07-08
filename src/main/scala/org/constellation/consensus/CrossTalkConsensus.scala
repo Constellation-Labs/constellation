@@ -13,7 +13,8 @@ import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{
   BroadcastLightTransactionProposal,
   BroadcastSelectedUnionBlock,
-  BroadcastUnionBlockProposal
+  BroadcastUnionBlockProposal,
+  GetActiveMinHeight
 }
 import org.constellation.{ConfigUtil, DAO}
 
@@ -61,6 +62,9 @@ class CrossTalkConsensus(remoteSenderSupervisor: ActorRef, config: Config)(impli
 
     case cmd: SelectedUnionBlock =>
       roundManager ! cmd
+
+    case GetActiveMinHeight =>
+      roundManager.forward(GetActiveMinHeight)
 
     case cmd: BroadcastUnionBlockProposal =>
       remoteSenderSupervisor ! cmd

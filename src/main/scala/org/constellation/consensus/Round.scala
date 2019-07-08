@@ -432,7 +432,7 @@ class Round(
 
     val cb = CheckpointBlock.createCheckpointBlock(
       transactions ++ resolvedTxs,
-      roundData.tipsSOE
+      roundData.tipsSOE.soe
         .map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash, Some(soe.baseHash))),
       messages ++ resolvedMessages,
       notifications
@@ -661,7 +661,7 @@ object Round {
     lightPeers: Set[PeerData],
     facilitatorId: FacilitatorId,
     transactions: List[Transaction],
-    tipsSOE: Seq[SignedObservationEdge],
+    tipsSOE: TipSoe,
     messages: Seq[ChannelMessage]
   )
 

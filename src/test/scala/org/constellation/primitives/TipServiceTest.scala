@@ -1,4 +1,5 @@
 package org.constellation.primitives
+import akka.testkit.TestProbe
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import org.constellation.{ConstellationContextShift, DAO, Fixtures}
@@ -30,7 +31,7 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
 
     it("limits maximum number of tips") {
       val limit = 6
-      val concurrentTipService = new TrieBasedTipService(limit, 10, 2, 30)
+      val concurrentTipService = new TrieBasedTipService(limit, 10, 2, 30, null)
 
       val cbs = createIndexedCBmocks(limit * 3, { i =>
         createCBMock(i.toString)

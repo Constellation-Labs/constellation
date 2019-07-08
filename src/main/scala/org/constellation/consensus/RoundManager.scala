@@ -13,7 +13,7 @@ import org.constellation.consensus.CrossTalkConsensus.{
 }
 import org.constellation.consensus.Round._
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeType}
+import org.constellation.primitives.Schema.{CheckpointCache, Height, Id, NodeType}
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications, _}
 import org.constellation.storage.StorageService
 import org.constellation.util.{Distance, PeerApiClient}
@@ -44,6 +44,13 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
   private[consensus] var ownRoundInProgress: Boolean = false
 
   override def receive: Receive = {
+    case GetActiveMinHeight =>
+      val replyTo = sender()
+      val minHeight = rounds.flatMap(_._2.tipMinHeight).toList match {
+        case Nil  => None
+        case list => Some(list.min)
+      }
+      replyTo ! ActiveTipMinHeight(minHeight)
     case StartNewBlockCreationRound if ownRoundInProgress =>
       logger.warn(
         s"Unable to initiate new round another round: ${rounds.filter(_._2.startedByThisNode)} is in progress"
@@ -135,7 +142,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
               dao.threadSafeMessageMemPool.activeChannels
                 .get(message.signedMessageData.data.channelId)
                 .foreach(_.release())
-          )
+        )
       )
       returnTransactionsToPending(cmd.transactionsToReturn, cmd.roundId)
       cmd.maybeCB.foreach(cb => dao.peerManager ! UpdatePeerNotifications(cb.notifications))
@@ -198,7 +205,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
   private[consensus] def resolveMissingParents(
     roundData: RoundData
   )(implicit dao: DAO): Future[List[CheckpointCache]] =
-    roundData.tipsSOE
+    roundData.tipsSOE.soe
       .filterNot(t => dao.checkpointService.contains(t.baseHash).unsafeRunSync())
       .map(_.baseHash) match {
       case Nil => Future.successful(List.empty)
@@ -227,6 +234,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
         ConsensusTimeout(roundData.roundId)
       )(ConstellationExecutionContext.apiClient),
       startedByThisNode,
+      roundData.tipsSOE.minHeight,
       dao.metrics.startTimer
     )
     logger.debug(s"Started round=${roundData.roundId}")
@@ -289,15 +297,15 @@ object RoundManager {
                   ._2
               )
             } else Set[PeerData]()
-          val allFacilitators = tips._2.values.map(_.peerMetadata.id).toSet ++ Set(dao.id)
+          val allFacilitators = tips.peers.values.map(_.peerMetadata.id).toSet ++ Set(dao.id)
           (
             RoundData(
               generateRoundId,
-              tips._2.values.toSet,
+              tips.peers.values.toSet,
               lightPeers,
               FacilitatorId(dao.id),
               transactions.map(_.transaction),
-              tips._1,
+              tips.tipSoe,
               messages
             ),
             getArbitraryTransactionsWithDistance(allFacilitators, dao).filter(t => t._2 == 1),
@@ -314,7 +322,8 @@ object RoundManager {
         ConfigUtil.config.getString("constellation.consensus.arbitrary-tx-distance-base")
       ).getOrElse("hash") match {
         case "id" =>
-          (id: Id, tx: Transaction) => Distance.calculate(tx.src.address, id)
+          (id: Id, tx: Transaction) =>
+            Distance.calculate(tx.src.address, id)
         case "hash" =>
           (id: Id, tx: Transaction) =>
             val idBi = BigInt(id.hex.getBytes())
@@ -368,6 +377,7 @@ object RoundManager {
     roundActor: ActorRef,
     timeoutScheduler: Cancellable,
     startedByThisNode: Boolean = false,
+    tipMinHeight: Option[Long],
     timer: Timer.Sample
   )
 
@@ -382,4 +392,8 @@ object RoundManager {
   case class BroadcastSelectedUnionBlock(roundId: RoundId, peers: Set[PeerData], cb: SelectedUnionBlock)
 
   case class ConsensusTimeout(roundId: RoundId)
+
+  case object GetActiveMinHeight
+  case class GetActiveMinHeight(replyTo: ActorRef)
+  case class ActiveTipMinHeight(minHeight: Option[Long])
 }
