@@ -4,18 +4,23 @@ import cats.effect._
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
-import org.constellation.DAO
+import org.constellation.{ConstellationContextShift, DAO}
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.primitives.concurrency.SingleLock
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 import org.constellation.storage.transactions.TransactionStatus.TransactionStatus
 import org.constellation.storage.transactions.{PendingTransactionsMemPool, TransactionStatus}
 
-class TransactionService[F[_]: Sync: Concurrent](dao: DAO, semaphore: Semaphore[F])
+class TransactionService[F[_]: Concurrent](dao: DAO)
     extends MerkleStorageAlgebra[F, String, TransactionCacheData]
     with StrictLogging {
 
   val merklePool = new StorageService[F, Seq[String]]()
+
+  val semaphore: Semaphore[F] = {
+    implicit val cs: ContextShift[IO] = ConstellationContextShift.edge
+    Semaphore.in[IO, F](1).unsafeRunSync()
+  }
 
   private[storage] val pending = new PendingTransactionsMemPool[F]()
   private[storage] val arbitrary = new StorageService[F, TransactionCacheData](Some(240))

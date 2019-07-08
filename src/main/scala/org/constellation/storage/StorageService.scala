@@ -1,16 +1,18 @@
 package org.constellation.storage
 
 import cats.effect.concurrent.Ref
-import cats.effect.Sync
+import cats.effect.{Concurrent, Sync}
 import cats.implicits._
 import com.github.blemale.scaffeine.{Cache, Scaffeine}
+import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.algebra.StorageAlgebra
 import org.constellation.util.Metrics
 
 import scala.collection.immutable.Queue
 import scala.concurrent.duration._
 
-class StorageService[F[_]: Sync, V](expireAfterMinutes: Option[Int] = Some(240)) extends StorageAlgebra[F, String, V] {
+class StorageService[F[_]: Concurrent, V](expireAfterMinutes: Option[Int] = Some(240))
+    extends StorageAlgebra[F, String, V] {
   private val lruCache: Cache[String, V] = {
     val cacheWithStats = Scaffeine().recordStats()
 
@@ -21,7 +23,7 @@ class StorageService[F[_]: Sync, V](expireAfterMinutes: Option[Int] = Some(240))
     cache.build[String, V]()
   }
 
-  private val queueRef: Ref[F, Queue[V]] = Ref.unsafe[F, Queue[V]](Queue[V]())
+  private val queueRef: SingleRef[F, Queue[V]] = SingleRef[F, Queue[V]](Queue[V]())
   private val maxQueueSize = 20
 
   Metrics.cacheMetrics.addCache(this.getClass.getSimpleName, lruCache.underlying)

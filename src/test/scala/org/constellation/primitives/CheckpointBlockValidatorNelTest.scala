@@ -5,16 +5,17 @@ import java.security.KeyPair
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestKit, TestProbe}
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import constellation.createTransaction
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
 import org.constellation.primitives.CheckpointBlockValidatorNel._
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, Height, Id}
+import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.{CheckpointBlocksMemPool, CheckpointService, SnapshotService, TransactionService}
 import org.constellation.util.{HashSignature, Metrics}
-import org.constellation.{DAO, NodeConfig}
+import org.constellation.{ConstellationContextShift, DAO, NodeConfig}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{mock => _, _}
@@ -27,6 +28,7 @@ class CheckpointBlockValidatorNelTest
     with BeforeAndAfter {
 
   implicit val dao: DAO = mock[DAO]
+  implicit val cs: ContextShift[IO] = ConstellationContextShift.global
 
   val snapService: SnapshotService[IO] = mock[SnapshotService[IO]]
   val checkpointService: CheckpointService[IO] = mock[CheckpointService[IO]]
@@ -87,7 +89,7 @@ class CheckpointBlockValidatorNelTest
     dao.metrics shouldReturn metrics
 
     val cbNotInSnapshot = Seq(leftBlock.baseHash, rightBlock.baseHash, leftParent.baseHash, rightParent.baseHash)
-    snapService.acceptedCBSinceSnapshot shouldReturn Ref.unsafe[IO, Seq[String]](cbNotInSnapshot)
+    snapService.acceptedCBSinceSnapshot shouldReturn SingleRef[IO, Seq[String]](cbNotInSnapshot)
   }
 
   test("it should detect no internal conflict and return None") {

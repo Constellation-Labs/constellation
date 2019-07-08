@@ -1,15 +1,16 @@
 package org.constellation.storage.transactions
 
-import cats.effect.Sync
+import cats.effect.{Concurrent, Sync}
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import org.constellation.primitives.TransactionCacheData
+import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.algebra.LookupAlgebra
 
-class PendingTransactionsMemPool[F[_]: Sync]() extends LookupAlgebra[F, String, TransactionCacheData] {
+class PendingTransactionsMemPool[F[_]: Concurrent]() extends LookupAlgebra[F, String, TransactionCacheData] {
 
-  private val txRef: Ref[F, Map[String, TransactionCacheData]] =
-    Ref.unsafe[F, Map[String, TransactionCacheData]](Map())
+  private val txRef: SingleRef[F, Map[String, TransactionCacheData]] =
+    SingleRef[F, Map[String, TransactionCacheData]](Map())
 
   def put(key: String, value: TransactionCacheData): F[TransactionCacheData] =
     txRef.modify(txs => (txs + (key -> value), value))
@@ -31,8 +32,9 @@ class PendingTransactionsMemPool[F[_]: Sync]() extends LookupAlgebra[F, String, 
       if (txs.size < minCount) {
         (txs, none[List[TransactionCacheData]])
       } else {
-        val (left, right) = txs.splitAt(minCount)
-        (right, left.toList.map(_._2).some)
+        val sorted = txs.toList.sortWith(_._2.transaction.edge.data.fee > _._2.transaction.edge.data.fee)
+        val (left, right) = sorted.splitAt(minCount)
+        (right.toMap, left.map(_._2).some)
       }
     }
 

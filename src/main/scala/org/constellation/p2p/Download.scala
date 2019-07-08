@@ -24,6 +24,8 @@ object SnapshotsDownloader {
   implicit val getSnapshotTimeout: FiniteDuration =
     ConfigUtil.config.getInt("download.getSnapshotTimeout").seconds
 
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+
   def downloadSnapshotRandomly(hash: String, pool: Iterable[APIClient]): IO[StoredSnapshot] = {
     val poolArray = pool.toArray
     val stopAt = Random.nextInt(poolArray.length)
@@ -109,7 +111,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   private implicit val ioTimer: Timer[IO] = IO.timer(ec)
 
   final implicit class FutureOps[+T](f: Future[T]) {
-    def toIO: IO[T] = IO.fromFuture(IO(f))
+    def toIO: IO[T] = IO.fromFuture(IO(f))(IO.contextShift(ec))
   }
 
   val config: Config = ConfigFactory.load()
@@ -287,8 +289,7 @@ object Download {
       dao.metrics.updateMetric("downloadedNearbyChannels", nearbyChannels.size.toString)
 
       nearbyChannels.toList
-        .map(cmd => dao.channelService.put(cmd.channelId, cmd))
-        .sequence
+        .traverse(cmd => dao.channelService.put(cmd.channelId, cmd))
         .unsafeRunSync()
 
       dao.setNodeState(NodeState.Ready)

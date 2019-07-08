@@ -10,8 +10,16 @@ import com.typesafe.scalalogging.{Logger, StrictLogging}
 import org.constellation.consensus._
 import org.constellation.primitives.Schema._
 import org.constellation.storage._
+import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.Metrics
-import org.constellation.{ConfigUtil, DAO, NodeConfig, ProcessingConfig}
+import org.constellation.{
+  ConfigUtil,
+  ConstellationConcurrentEffect,
+  ConstellationContextShift,
+  DAO,
+  NodeConfig,
+  ProcessingConfig
+}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
@@ -112,6 +120,8 @@ trait EdgeDAO {
     metrics.updateMetric("blockFormationInProgress", blockFormationInProgress.toString)
   }
 
+  implicit val contextShift: ContextShift[IO] = ConstellationContextShift.edge
+
   // TODO: Put on Id keyed datastore (address? potentially) with other metadata
   val publicReputation: TrieMap[Id, Double] = TrieMap()
   val secretReputation: TrieMap[Id, Double] = TrieMap()
@@ -119,8 +129,10 @@ trait EdgeDAO {
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
   var transactionService: TransactionService[IO] = _
+  var transactionGossiping: TransactionGossiping[IO] = _
   var checkpointService: CheckpointService[IO] = _
   var snapshotService: SnapshotService[IO] = _
+  var rateLimiting: RateLimiting[IO] = _
   var addressService: AddressService[IO] = _
 
   val notificationService = new NotificationService[IO]()

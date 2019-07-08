@@ -9,7 +9,9 @@ import akka.http.scaladsl.server.Directives.{path, _}
 import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.util.Timeout
+import cats.data.Validated.{Invalid, Valid}
 import cats.effect.{ContextShift, IO}
+import cats.implicits._
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
@@ -26,7 +28,7 @@ import org.constellation.{ConstellationContextShift, ConstellationExecutionConte
 import org.json4s.native
 import org.json4s.native.Serialization
 
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Random, Success}
 
 case class PeerAuthSignRequest(salt: Long)
 
@@ -228,26 +230,28 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
     createRoute(BlockBuildingRoundRoute.pathPrefix)(
       () => new BlockBuildingRoundRoute(nodeActor).createBlockBuildingRoundRoutes()
     )
-  private val mixedEndpoints = {
+
+  private[p2p] val mixedEndpoints = {
     path("transaction") {
       put {
-        entity(as[Transaction]) { tx =>
+        entity(as[TransactionGossip]) { gossip =>
+          logger.debug(s"Received transaction tx=${gossip.hash} with path=${gossip.path}")
           dao.metrics.incrementMetric("transactionRXByPeerAPI")
 
-          onComplete {
-            dao.transactionService
-              .contains(tx.hash)
-              .flatMap {
-                case false => dao.transactionService.put(TransactionCacheData(tx), as = TransactionStatus.Unknown)
-                case _     => IO.unit
-              }
-              // TODO: Respond with initial tx validation
-              .map(_ => StatusCodes.OK)
-              .unsafeToFuture()
-          } {
-            case Success(statusCode) => complete(statusCode)
-            case Failure(_)          => complete(StatusCodes.InternalServerError)
-          }
+          implicit val random: Random = scala.util.Random
+          val contextShift: ContextShift[IO] = ConstellationContextShift.edge
+
+          val rebroadcast = for {
+            tcd <- dao.transactionGossiping.observe(TransactionCacheData(gossip.tx, path = gossip.path))
+            peers <- dao.transactionGossiping.selectPeers(tcd)
+            peerData <- dao.peerInfo.map(_.filterKeys(peers.contains).values.toList)
+            _ <- contextShift.shift *> peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd)))
+            _ <- dao.metrics.incrementMetricAsync[IO]("transactionGossipingSent")
+          } yield ()
+
+          rebroadcast.unsafeRunAsyncAndForget()
+
+          complete(StatusCodes.OK)
         }
       }
     }

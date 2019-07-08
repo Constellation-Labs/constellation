@@ -1,7 +1,7 @@
 package org.constellation.storage
 
 import cats.effect.concurrent.Ref
-import cats.effect.{IO, LiftIO, Sync}
+import cats.effect.{Concurrent, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
@@ -10,55 +10,17 @@ import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 import org.constellation.util.{MerkleTree, Metrics, PeerApiClient}
 
-class CheckpointBlocksMemPool[F[_]: Sync](
-  dao: DAO,
-  transactionsMerklePool: StorageService[F, Seq[String]],
-  messagesMerklePool: StorageService[F, Seq[String]],
-  notificationsMerklePool: StorageService[F, Seq[String]]
-) extends StorageService[F, CheckpointCacheMetadata]() {
-
-  def put(
-    key: String,
-    value: CheckpointCache
-  ): F[CheckpointCacheMetadata] =
-    value.checkpointBlock
-      .map(cb => incrementChildrenCount(cb.parentSOEBaseHashes()(dao)))
-      .sequence *>
-      storeMerkleRoots(value.checkpointBlock.get)
-        .flatMap(ccm => {
-          super.put(key, CheckpointCacheMetadata(ccm, value.children, value.height))
-        })
-
-  def storeMerkleRoots(data: CheckpointBlock): F[CheckpointBlockMetadata] =
-    for {
-      t <- store(data.transactions.map(_.hash), transactionsMerklePool)
-      m <- store(data.messages.map(_.signedMessageData.hash), messagesMerklePool)
-      n <- store(data.notifications.map(_.hash), notificationsMerklePool)
-    } yield CheckpointBlockMetadata(t, data.checkpoint, m, n)
-
-  private def store(data: Seq[String], ss: StorageService[F, Seq[String]]): F[Option[String]] =
-    data match {
-      case Seq() => none[String].pure[F]
-      case _ =>
-        val rootHash = MerkleTree(data).rootHash
-        ss.put(rootHash, data).map(_ => rootHash.some)
-    }
-
-  def incrementChildrenCount(hashes: Seq[String]): F[Unit] =
-    hashes.toList.map { hash =>
-      update(hash, (cd: CheckpointCacheMetadata) => cd.copy(children = cd.children + 1))
-    }.sequence.void
-}
-
-class CheckpointService[F[_]: Sync: LiftIO](
+class CheckpointService[F[_]: Concurrent](
   dao: DAO,
   transactionService: TransactionService[F],
   messageService: MessageService[F],
   notificationService: NotificationService[F],
-  concurrentTipService: ConcurrentTipService
+  concurrentTipService: ConcurrentTipService,
+  rateLimiting: RateLimiting[F]
 ) extends StrictLogging {
 
   val memPool = new CheckpointBlocksMemPool[F](
@@ -67,8 +29,8 @@ class CheckpointService[F[_]: Sync: LiftIO](
     messageService.merklePool,
     notificationService.merklePool
   )
-  val pendingAcceptance: Ref[F, Set[String]] = Ref.unsafe(Set())
-  val pendingAcceptanceFromOthers: Ref[F, Set[String]] = Ref.unsafe(Set())
+  val pendingAcceptance: SingleRef[F, Set[String]] = SingleRef(Set())
+  val pendingAcceptanceFromOthers: SingleRef[F, Set[String]] = SingleRef(Set())
   val maxDepth: Int = 10
 
   def applySnapshot(cbs: List[String]): F[Unit] =
@@ -255,6 +217,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
           _ <- Sync[F].delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
           _ <- acceptMessages(cb)
           _ <- acceptTransactions(cb)
+          _ <- updateRateLimiting(cb)
           _ <- Sync[F].delay {
             logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
           }
@@ -293,7 +256,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
       }
     }
 
-  private[storage] def syncPending(storage: Ref[F, Set[String]], baseHash: String)(implicit dao: DAO): F[Unit] =
+  private[storage] def syncPending(storage: SingleRef[F, Set[String]], baseHash: String)(implicit dao: DAO): F[Unit] =
     storage.update { hashes =>
       if (hashes.contains(baseHash)) {
         throw PendingAcceptance(baseHash)
@@ -345,11 +308,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
   def acceptTransactions(cb: CheckpointBlock)(implicit dao: DAO): F[Unit] = {
     def toCacheData(tx: Transaction) = TransactionCacheData(
       tx,
-      valid = true,
-      inMemPool = false,
-      inDAG = true,
       Map(cb.baseHash -> true),
-      resolved = true,
       cbBaseHash = Some(cb.baseHash)
     )
 
@@ -367,4 +326,7 @@ class CheckpointService[F[_]: Sync: LiftIO](
 
     insertTX
   }
+
+  private def updateRateLimiting(cb: CheckpointBlock): F[Unit] =
+    rateLimiting.update(cb.transactions.toList)
 }

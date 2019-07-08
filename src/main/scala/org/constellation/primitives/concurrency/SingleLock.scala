@@ -6,6 +6,9 @@ import cats.implicits._
 
 class SingleLock[F[_], R](name: String, lock: Semaphore[F])(implicit F: Concurrent[F]) {
 
+  def acquire: F[Unit] = lock.acquire
+  def release: F[Unit] = lock.release
+
   def use(thunk: => F[R]): F[R] =
     for {
       _ <- lock.acquire

@@ -2,7 +2,7 @@ package org.constellation.util
 
 import akka.http.scaladsl.coding.Gzip
 import akka.util.ByteString
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import com.softwaremill.sttp._
 import com.softwaremill.sttp.json4s.asJson
 import com.typesafe.config.ConfigFactory
@@ -51,6 +51,8 @@ class APIClient private (
   dao: DAO = null
 ) extends APIClientBase(host, port, authEnabled, authId, authPassword) {
 
+  val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
+
   var id: Id = _
 
   val daoOpt = Option(dao)
@@ -88,7 +90,7 @@ class APIClient private (
     queryParams: Map[String, String] = Map(),
     timeout: Duration = 15.seconds
   )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): IO[T] =
-    IO.fromFuture(IO { getNonBlocking[T](suffix, queryParams, timeout) })
+    IO.fromFuture(IO { getNonBlocking[T](suffix, queryParams, timeout) })(contextShift)
 
   def postNonBlockingIO[T <: AnyRef](
     suffix: String,
@@ -99,7 +101,7 @@ class APIClient private (
     implicit m: Manifest[T],
     f: Formats = constellation.constellationFormats
   ): IO[T] =
-    IO.fromFuture(IO { postNonBlocking[T](suffix, b, timeout, headers) })
+    IO.fromFuture(IO { postNonBlocking[T](suffix, b, timeout, headers) })(contextShift)
 
   def simpleDownload(): Seq[StoredSnapshot] = {
 
