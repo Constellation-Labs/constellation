@@ -1,5 +1,7 @@
 package org.constellation.storage
 
+import java.util.concurrent.Executors
+
 import cats.effect.{ContextShift, IO}
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
@@ -326,13 +328,16 @@ class TransactionServiceTest
 
       val totalExpected = pullsIteration * pullsMinCount
 
+      val ec = ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
+      val cs = IO.contextShift(ec)
+
       val puts = (1 to totalExpected).toList
         .map(_ => constellation.createTransaction(Fixtures.id1.address, Fixtures.id2.address, 1L, Fixtures.tempKey))
         .map(TransactionCacheData(_))
-        .traverse(tx => IO.shift *> txService.put(tx))
+        .traverse(tx => cs.shift *> txService.put(tx))
 
       val pulls = (1 to pullsIteration).toList
-        .map(_ => IO.shift *> txService.pullForConsensus(pullsMinCount))
+        .map(_ => cs.shift *> txService.pullForConsensus(pullsMinCount))
 
       // Fill minimum txs required
       puts.unsafeRunSync()
@@ -342,7 +347,7 @@ class TransactionServiceTest
       puts.unsafeRunAsyncAndForget()
 
       val results = {
-        implicit val ec: ExecutionContext = ConstellationExecutionContext.global
+        implicit val shadedEc: ExecutionContext = ec
         Await.result(Future.sequence(pulls.map(_.unsafeToFuture())), 5 seconds).map(_.map(_.transaction.hash))
       }
 
