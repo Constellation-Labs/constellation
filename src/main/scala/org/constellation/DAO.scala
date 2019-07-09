@@ -13,13 +13,15 @@ import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
+import org.constellation.p2p.{DownloadProcess, SnapshotsDownloader, SnapshotsProcessor}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.util.HostPort
+import org.constellation.util.{HealthChecker, HostPort}
 
 class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLogging {
 
@@ -56,13 +58,20 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     f
   }
 
-  @volatile var nodeState: NodeState = NodeState.PendingDownload
+  @volatile var nodeState: NodeState = NodeState.PendingDownload // TODO: wkoszycki make atomic
 
   @volatile var nodeType: NodeType = NodeType.Full
 
   lazy val messageService: MessageService[IO] = {
     implicit val daoImpl: DAO = this
     new MessageService[IO]()
+  }
+
+  val snapshotBroadcastService: SnapshotBroadcastService[IO] = {
+    val snapshotProcessor =
+      new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotByDistance)(this, ConstellationExecutionContext.global)
+    val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.global)
+    new SnapshotBroadcastService[IO](new HealthChecker[IO](this, downloadProcess), this)
   }
 
   def setNodeState(
@@ -117,6 +126,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       messageService,
       transactionService,
       rateLimiting,
+      snapshotBroadcastService,
       this
     )
   }

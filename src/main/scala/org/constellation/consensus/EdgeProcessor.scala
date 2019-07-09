@@ -262,10 +262,16 @@ object Snapshot extends StrictLogging {
 
   def removeOldSnapshots()(implicit dao: DAO): Unit = {
     val sortedHashes = snapshotHashes().sortBy(Distance.calculate(_, dao.id))
-    sortedHashes
-      .slice(ConfigUtil.snapshotClosestFractionSize, sortedHashes.size)
-      .foreach(snapId => Files.delete(Paths.get(dao.snapshotPath.pathAsString, snapId)))
+    removeSnapshots(
+      sortedHashes
+        .slice(ConfigUtil.snapshotClosestFractionSize, sortedHashes.size),
+      dao.snapshotPath.pathAsString
+    )
   }
+
+  def removeSnapshots(snapshots: List[String], snapshotPath: String): Unit =
+    snapshots
+      .foreach(snapId => Files.delete(Paths.get(snapshotPath, snapId)))
 
   def isOverDiskCapacity(bytesLengthToAdd: Long)(implicit dao: DAO): Boolean = {
     val storageDir = new java.io.File(dao.snapshotPath.pathAsString)

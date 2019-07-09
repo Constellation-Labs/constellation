@@ -14,6 +14,7 @@ import org.constellation.DAO
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.serializer.KryoSerializer
+import org.constellation.storage.VerificationStatus
 import org.constellation.util.{KeySerializeJSON, POWExt, SignHelpExt}
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.ext.EnumNameSerializer
@@ -76,6 +77,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     new InetSocketAddressSerializer +
     new EnumNameSerializer(EdgeHashType) +
     new EnumNameSerializer(NodeState) +
+    new EnumNameSerializer(VerificationStatus) +
     new EnumNameSerializer(NodeType)
 
   def caseClassToJson(message: Any): String =

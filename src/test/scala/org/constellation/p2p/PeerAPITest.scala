@@ -14,8 +14,9 @@ import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointRespon
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.{IPManager, PeerData, TransactionCacheData, TransactionGossip}
 import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
+import org.constellation.storage.VerificationStatus.{SnapshotCorrect, SnapshotHeightAbove, SnapshotInvalid}
 import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.storage.{CheckpointService, SnapshotService}
+import org.constellation.storage._
 import org.constellation.util.{APIClient, Metrics}
 import org.json4s.native
 import org.json4s.native.Serialization
@@ -48,6 +49,7 @@ class PeerAPITest
 
   before {
     dao = prepareDao()
+    dao.snapshotBroadcastService shouldReturn mock[SnapshotBroadcastService[IO]]
     peerAPI = new PeerAPI(new IPManager, TestProbe().ref)(system, 10.seconds, dao)
   }
 
@@ -117,6 +119,39 @@ class PeerAPITest
         }
       }
 
+    }
+
+    "snapshot/verify endpoint" - {
+      val request = SnapshotCreated("snap1", 2)
+      val path = "/snapshot/verify"
+
+      "should return correct state" in {
+        dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF List(RecentSnapshot("snap2", 4),
+                                                                           RecentSnapshot("snap1", 2))
+
+        Post(path, request) ~> peerAPI.postEndpoints ~> check {
+          status shouldEqual StatusCodes.OK
+          responseAs[SnapshotVerification] shouldBe SnapshotVerification(SnapshotCorrect)
+        }
+      }
+
+      "should return invalid state when there no recent snapshots given" in {
+        dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF List.empty
+
+        Post(path, request) ~> peerAPI.postEndpoints ~> check {
+          status shouldEqual StatusCodes.OK
+          responseAs[SnapshotVerification] shouldBe SnapshotVerification(SnapshotInvalid)
+        }
+      }
+
+      "should return height above state when given height is above current" in {
+        dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF List(RecentSnapshot("snap2", 1))
+
+        Post(path, request) ~> peerAPI.postEndpoints ~> check {
+          status shouldEqual StatusCodes.OK
+          responseAs[SnapshotVerification] shouldBe SnapshotVerification(SnapshotHeightAbove)
+        }
+      }
     }
 
     "mixedEndpoints" - {

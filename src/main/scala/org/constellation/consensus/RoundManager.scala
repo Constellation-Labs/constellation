@@ -15,7 +15,7 @@ import org.constellation.consensus.CrossTalkConsensus.{
 }
 import org.constellation.consensus.Round._
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCache, Height, Id, NodeType}
+import org.constellation.primitives.Schema.{CheckpointCache, Height, Id, NodeState, NodeType}
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications, _}
 import org.constellation.storage.StorageService
 import org.constellation.util.{Distance, PeerApiClient}
@@ -57,8 +57,11 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
       logger.warn(
         s"Unable to initiate new round another round: ${rounds.filter(_._2.startedByThisNode)} is in progress"
       )
-
-    case StartNewBlockCreationRound if !ownRoundInProgress =>
+    case StartNewBlockCreationRound if dao.nodeState != NodeState.Ready =>
+      logger.warn(
+        s"Unable to initiate new round node not ready: ${dao.nodeState}"
+      )
+    case StartNewBlockCreationRound if !ownRoundInProgress && dao.nodeState == NodeState.Ready =>
       ownRoundInProgress = true
       createRoundData(dao).onComplete {
         case Failure(e) =>
@@ -93,7 +96,11 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
           }(ConstellationExecutionContext.global)
       }(ConstellationExecutionContext.global)
 
-    case cmd: ParticipateInBlockCreationRound =>
+    case _: ParticipateInBlockCreationRound if dao.nodeState != NodeState.Ready =>
+      logger.warn(
+        s"Unable to initiate new round node not ready: ${dao.nodeState}"
+      )
+    case cmd: ParticipateInBlockCreationRound if dao.nodeState == NodeState.Ready =>
       val checkHeight = cmd.roundData.tipsSOE.minHeight.traverse { min =>
         dao.snapshotService.lastSnapshotHeight.get
           .flatMap(last => if (last >= min) IO.raiseError[Unit](SnapshotHeightAboveTip(last, min)) else IO.unit)

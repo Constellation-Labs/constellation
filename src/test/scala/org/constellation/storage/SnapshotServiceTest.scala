@@ -2,7 +2,7 @@ package org.constellation.storage
 
 import better.files.File
 import cats.effect.{ContextShift, IO, Timer}
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.{ConstellationExecutionContext, DAO, NodeConfig, ProcessingConfig}
 import org.constellation.consensus.Snapshot
 import org.constellation.primitives.ConcurrentTipService
 import org.mockito.cats.IdiomaticMockitoCats
@@ -32,6 +32,7 @@ class SnapshotServiceTest
     val messageService = mock[MessageService[IO]]
     val transactionService = mock[TransactionService[IO]]
     val rateLimiting = mock[RateLimiting[IO]]
+    val broadcastService = mock[SnapshotBroadcastService[IO]]
 
     snapshotService = new SnapshotService[IO](
       cts,
@@ -40,6 +41,7 @@ class SnapshotServiceTest
       messageService,
       transactionService,
       rateLimiting,
+      broadcastService,
       dao
     )
   }
@@ -76,6 +78,7 @@ class SnapshotServiceTest
         }
       }
     }
+
   }
 
   private def mockDAO: DAO = mock[DAO]

@@ -1,7 +1,7 @@
 package org.constellation
 
 import java.io.{StringWriter, Writer}
-import java.net.InetSocketAddress
+import java.net.{InetSocketAddress, URI}
 import java.security.KeyPair
 
 import akka.actor.ActorSystem
@@ -22,7 +22,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
-import org.constellation.consensus.{Snapshot, StoredSnapshot}
+import org.constellation.consensus.{FinishedCheckpointResponse, Snapshot, StoredSnapshot}
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.Download
 import org.constellation.primitives.Schema.NodeState.NodeState
@@ -30,6 +30,7 @@ import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
+import org.constellation.storage._
 import org.constellation.util._
 import org.json4s.native.Serialization
 import org.json4s.{JValue, native}
@@ -103,6 +104,8 @@ case class ProcessingConfig(
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,
   roundsPerMessage: Int = 10,
+  recentSnapshotNumber: Int = 10,
+  maxInvalidSnapshotRate: Int = 51,
   txGossipingFanout: Int = 2
 ) {}
 

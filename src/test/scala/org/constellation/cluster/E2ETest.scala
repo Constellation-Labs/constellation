@@ -5,11 +5,12 @@ import java.util.concurrent.TimeUnit
 import akka.util.Timeout
 import com.softwaremill.sttp.{Response, StatusCodes}
 import org.constellation._
-import org.constellation.consensus.StoredSnapshot
+import org.constellation.consensus.{FinishedCheckpoint, StoredSnapshot}
+import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, Metrics, Simulation}
-import scala.concurrent.duration._
+import org.constellation.util.{APIClient, HostPort, Metrics, Simulation}
 
+import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
 class E2ETest extends E2E {
@@ -98,7 +99,7 @@ class E2ETest extends E2E {
     // messageSim.postDownload(apis.head)
 
     // TODO: Change to wait for the download node to participate in several blocks.
-    Thread.sleep(20 * 1000)
+//    Thread.sleep(20 * 1000)
 
 //    val allNodes = nodes :+ downloadNode
     val allNodes = nodes

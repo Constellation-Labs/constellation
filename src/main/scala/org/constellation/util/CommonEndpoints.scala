@@ -66,6 +66,11 @@ trait CommonEndpoints extends Json4sSupport {
       path("snapshotHashes") {
         complete(Snapshot.snapshotHashes())
       } ~
+      path("snapshot/recent") {
+        onSuccess(dao.snapshotBroadcastService.getRecentSnapshots.map(_.map(_.hash)).unsafeToFuture()) { res =>
+          complete(res)
+        }
+      } ~
       path("info") {
         val info = dao.snapshotService.getSnapshotInfo().unsafeRunSync()
         val res =

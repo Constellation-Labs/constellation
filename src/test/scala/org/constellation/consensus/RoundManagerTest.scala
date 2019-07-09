@@ -89,6 +89,7 @@ class RoundManagerTest
   val readyFacilitators = Map(facilitatorId1 -> peerData1, facilitatorId2 -> peerData2)
 
   dao.keyPair shouldReturn Fixtures.tempKey
+  dao.nodeState shouldReturn NodeState.Ready
 
   val tx1 = Fixtures.dummyTx(dao)
   val tx2 = Fixtures.dummyTx(dao)

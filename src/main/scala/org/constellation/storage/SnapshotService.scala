@@ -2,22 +2,14 @@ package org.constellation.storage
 
 import cats.data.EitherT
 import cats.effect.{Concurrent, LiftIO, Sync}
-import cats.effect.concurrent.Ref
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.{
-  ChannelMessage,
-  ChannelMessageMetadata,
-  CheckpointBlock,
-  CheckpointBlockMetadata,
-  ConcurrentTipService,
-  TransactionCacheData
-}
-import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
 import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
+import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.util.Metrics
 
@@ -30,6 +22,7 @@ class SnapshotService[F[_]: Concurrent](
   messageService: MessageService[F],
   transactionService: TransactionService[F],
   rateLimiting: RateLimiting[F],
+  broadcastService: SnapshotBroadcastService[F],
   dao: DAO
 ) extends StrictLogging {
   import constellation._
@@ -127,6 +120,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- EitherT.liftF(updateMetricsAfterSnapshot())
 
       _ <- EitherT.liftF(snapshot.set(nextSnapshot))
+      _ <- EitherT.liftF(broadcastService.broadcastSnapshot(nextSnapshot.lastSnapshot, nextHeightInterval))
     } yield ()
 
   def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock): F[Unit] =
@@ -378,6 +372,7 @@ object SnapshotService {
     messageService: MessageService[F],
     transactionService: TransactionService[F],
     rateLimiting: RateLimiting[F],
+    broadcastService: SnapshotBroadcastService[F],
     dao: DAO
   ) =
     new SnapshotService[F](
@@ -387,6 +382,7 @@ object SnapshotService {
       messageService,
       transactionService,
       rateLimiting,
+      broadcastService,
       dao
     )
 }

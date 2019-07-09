@@ -87,7 +87,7 @@ class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[S
         dao.metrics.incrementMetric("downloadedSnapshots")
         dao.metrics.incrementMetric(Metrics.snapshotCount)
       }
-    }.flatMap(acceptSnapshot)
+    }.flatMap(acceptSnapshot) // TODO: wkoszycki shouldn't we accept sequentially ?
   }
 
   private def acceptSnapshot(snapshot: StoredSnapshot): IO[Unit] = IO {
@@ -117,6 +117,26 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   val config: Config = ConfigFactory.load()
   private val waitForPeersDelay = config.getInt("download.waitForPeers").seconds
 
+  def reDownload(snapshotHashes: List[String], peers: Map[Id, PeerData]): IO[Unit] =
+    for {
+      snapshotClient <- getSnapshotClient(peers)
+      majoritySnapshot <- getMajoritySnapshot(peers)
+      _ <- if (majoritySnapshot.snapshotHashes.startsWith(snapshotHashes)) IO.unit
+      else
+        UnexpectedSnapshotState(snapshotHashes, majoritySnapshot.snapshotHashes.slice(0, snapshotHashes.size))
+          .raiseError[IO, Unit]
+      alreadyDownloaded <- downloadAndProcessSnapshotsFirstPass(snapshotHashes)(
+        snapshotClient,
+        peers
+      )
+      _ <- downloadAndProcessSnapshotsSecondPass(snapshotHashes.filterNot(alreadyDownloaded.contains))(
+        snapshotClient,
+        peers
+      )
+      _ <- finishDownload(majoritySnapshot)
+      _ <- setAcceptedTransactionsAfterDownload()
+    } yield ()
+
   def download(): IO[Unit] =
     for {
       _ <- initDownloadingProcess
@@ -125,15 +145,17 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       peers <- getReadyPeers()
       snapshotClient <- getSnapshotClient(peers)
       majoritySnapshot <- getMajoritySnapshot(peers)
-      snapshotHashes <- downloadAndProcessSnapshotsFirstPass(majoritySnapshot)(
+      hashes <- getSnapshotHashes(majoritySnapshot)
+      snapshotHashes <- downloadAndProcessSnapshotsFirstPass(hashes)(
         snapshotClient,
         peers
       )
-      snapshot <- downloadAndProcessSnapshotsSecondPass(majoritySnapshot, snapshotHashes)(
+      missingHashes <- getSnapshotHashes(majoritySnapshot)
+      _ <- downloadAndProcessSnapshotsSecondPass(missingHashes.filterNot(snapshotHashes.contains))(
         snapshotClient,
         peers
       )
-      _ <- finishDownload(snapshot)
+      _ <- finishDownload(majoritySnapshot)
       _ <- setAcceptedTransactionsAfterDownload()
     } yield ()
 
@@ -176,32 +198,23 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       )
       .map(snapshots => snapshots.groupBy(_.snapshot.hash).maxBy(_._2.size)._2.head)
 
-  private def downloadAndProcessSnapshotsFirstPass(snapshotInfo: SnapshotInfo)(
+  private def downloadAndProcessSnapshotsFirstPass(snapshotHashes: Seq[String])(
     implicit snapshotClient: APIClient,
     peers: Peers
   ): IO[Seq[String]] =
     for {
-      snapshotHashes <- getSnapshotHashes(snapshotInfo)
       _ <- snapshotsProcessor.processSnapshots(snapshotHashes)
       _ <- dao.metrics.updateMetricAsync[IO]("downloadFirstPassComplete", "true")
       _ <- setNodeState(NodeState.DownloadCompleteAwaitingFinalSync)
     } yield snapshotHashes
 
   private def downloadAndProcessSnapshotsSecondPass(
-    snapshotInfo: SnapshotInfo,
     hashes: Seq[String]
-  )(implicit snapshotClient: APIClient, peers: Peers): IO[SnapshotInfo] =
-    getSnapshotHashes(snapshotInfo)
-      .map(_.filterNot(hashes.contains))
-      .flatMap(
-        hashes =>
-          dao.metrics
-            .updateMetricAsync[IO]("downloadExpectedNumSnapshotsSecondPass", hashes.size.toString)
-            .map(_ => hashes)
-      )
-      .flatMap(snapshotsProcessor.processSnapshots)
+  )(implicit snapshotClient: APIClient, peers: Peers): IO[Unit] =
+    dao.metrics
+      .updateMetricAsync[IO]("downloadExpectedNumSnapshotsSecondPass", hashes.size.toString)
+      .flatMap(_ => snapshotsProcessor.processSnapshots(hashes))
       .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadSecondPassComplete", "true"))
-      .map(_ => snapshotInfo)
 
   private def finishDownload(snapshot: SnapshotInfo): IO[Unit] =
     for {
@@ -219,7 +232,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   }
 
   /** **/
-  private def setNodeState(nodeState: NodeState): IO[Unit] =
+  def setNodeState(nodeState: NodeState): IO[Unit] =
     IO(dao.nodeState = nodeState)
       .flatTap(_ => dao.metrics.updateMetricAsync[IO]("nodeState", nodeState.toString))
       .flatMap(_ => IO(PeerManager.broadcastNodeState()))
@@ -296,3 +309,6 @@ object Download {
 
     }
 }
+
+case class UnexpectedSnapshotState(expected: Seq[String], actual: Seq[String])
+    extends Exception(s"Re-download process has received different state than expected: $expected actual: $actual")
