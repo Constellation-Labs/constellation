@@ -107,7 +107,8 @@ class SnapshotService[F[_]: Concurrent](
       _ <- validateAcceptedCBsSinceSnapshot()
 
       nextHeightInterval <- EitherT.liftF(getNextHeightInterval)
-      _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval)
+      minTipHeight <- EitherT.liftF(LiftIO[F].liftIO(concurrentTipService.getMinTipHeight()))
+      _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval, minTipHeight)
       blocksWithinHeightInterval <- EitherT.liftF(getBlocksWithinHeightInterval(nextHeightInterval))
       _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
       allBlocks = blocksWithinHeightInterval.map(_.get)
@@ -183,14 +184,17 @@ class SnapshotService[F[_]: Concurrent](
     }
   }
 
-  private def validateSnapshotHeightIntervalCondition(nextHeightInterval: Long): EitherT[F, SnapshotError, Unit] =
+  private def validateSnapshotHeightIntervalCondition(nextHeightInterval: Long,
+                                                      minTipHeight: Long): EitherT[F, SnapshotError, Unit] =
     EitherT {
-      val minTipHeight = Try { concurrentTipService.getMinTipHeight() }.getOrElse(0L)
       val snapshotHeightDelayInterval = dao.processingConfig.snapshotHeightDelayInterval
 
       dao.metrics.updateMetricAsync[F]("minTipHeight", minTipHeight.toString) *>
         Sync[F].pure {
           if (minTipHeight > (nextHeightInterval + snapshotHeightDelayInterval)) {
+            logger.debug(
+              s"height interval met minTipHeight: $minTipHeight nextHeightInterval: $nextHeightInterval and ${nextHeightInterval + snapshotHeightDelayInterval}"
+            )
             Right(())
           } else {
             Left(HeightIntervalConditionNotMet)
@@ -206,7 +210,7 @@ class SnapshotService[F[_]: Concurrent](
         }
     }
 
-  private def getNextHeightInterval: F[Long] =
+  def getNextHeightInterval: F[Long] =
     lastSnapshotHeight.get
       .map(_ + dao.processingConfig.snapshotHeightInterval)
 

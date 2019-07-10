@@ -207,6 +207,14 @@ class ConstellationNode(
 ) {
 
   implicit val dao: DAO = new DAO()
+
+  val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
+
+  val crossTalkConsensusActor: ActorRef =
+    system.actorOf(CrossTalkConsensus.props(remoteSenderActor, ConfigFactory.load().resolve()))
+
+  dao.consensusManager = crossTalkConsensusActor
+
   dao.initialize(nodeConfig)
 
   val logger = Logger(s"ConstellationNode_${dao.publicKeyHash}")
@@ -217,11 +225,6 @@ class ConstellationNode(
   )
 
   dao.metrics = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
-
-  val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
-
-  val crossTalkConsensusActor: ActorRef =
-    system.actorOf(CrossTalkConsensus.props(remoteSenderActor, ConfigFactory.load().resolve()))
 
   val checkpointFormationManager = new CheckpointFormationManager(
     dao.processingConfig.checkpointFormationTimeSeconds,

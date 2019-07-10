@@ -15,7 +15,7 @@ import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
-import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObservationEdge}
+import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
@@ -125,12 +125,13 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     processingConfig.maxActiveTipsAllowedInMemory,
     processingConfig.maxWidth,
     processingConfig.numFacilitatorPeers,
-    processingConfig.minPeerTimeAddedSeconds
+    processingConfig.minPeerTimeAddedSeconds,
+    consensusManager
   )(this)
 
   def pullTips(
     readyFacilitators: Map[Id, PeerData]
-  ): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] =
+  ): Option[PulledTips] =
     concurrentTipService.pull(readyFacilitators)(this.metrics)
 
   def peerInfo: IO[Map[Id, PeerData]] = IO.async { cb =>

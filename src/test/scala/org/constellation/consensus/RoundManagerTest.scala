@@ -2,7 +2,7 @@ package org.constellation.consensus
 
 import java.util.concurrent.Semaphore
 
-import akka.actor.{ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import cats.effect.{ContextShift, IO}
@@ -95,7 +95,7 @@ class RoundManagerTest
 
   val soe = mock[SignedObservationEdge]
   soe.baseHash shouldReturn "abc"
-  val tips = (Seq(soe), readyFacilitators)
+  val tips = PulledTips(TipSoe(Seq(soe), None), readyFacilitators)
 
   dao.id shouldReturn daoId
   dao.minCheckpointFormationThreshold shouldReturn checkpointFormationThreshold
@@ -177,7 +177,7 @@ class RoundManagerTest
       Set(),
       FacilitatorId(facilitatorId1),
       List(),
-      Seq(),
+      TipSoe(Seq(), None),
       Seq()
     )
     val cmd = mock[ParticipateInBlockCreationRound]
@@ -202,7 +202,7 @@ class RoundManagerTest
       Set(),
       FacilitatorId(facilitatorId1),
       List(),
-      Seq(),
+      TipSoe(Seq(), None),
       Seq()
     )
     val cmd = mock[ParticipateInBlockCreationRound]
