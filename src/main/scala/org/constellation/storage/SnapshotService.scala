@@ -24,7 +24,7 @@ import org.constellation.util.Metrics
 import scala.util.Try
 
 class SnapshotService[F[_]: Concurrent](
-  concurrentTipService: ConcurrentTipService,
+  concurrentTipService: ConcurrentTipService[F],
   addressService: AddressService[F],
   checkpointService: CheckpointService[F],
   messageService: MessageService[F],
@@ -56,7 +56,7 @@ class SnapshotService[F[_]: Concurrent](
       lastHeight <- lastSnapshotHeight.get
       hashes = dao.snapshotHashes
       addressCacheData <- addressService.toMap()
-      tips = concurrentTipService.toMap
+      tips <- concurrentTipService.toMap
       snapshotCache <- s.checkpointBlocks.toList
         .map(checkpointService.fullData)
         .sequence
@@ -107,7 +107,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- validateAcceptedCBsSinceSnapshot()
 
       nextHeightInterval <- EitherT.liftF(getNextHeightInterval)
-      minTipHeight <- EitherT.liftF(LiftIO[F].liftIO(concurrentTipService.getMinTipHeight()))
+      minTipHeight <- EitherT.liftF(concurrentTipService.getMinTipHeight())
       _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval, minTipHeight)
       blocksWithinHeightInterval <- EitherT.liftF(getBlocksWithinHeightInterval(nextHeightInterval))
       _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
@@ -372,7 +372,7 @@ class SnapshotService[F[_]: Concurrent](
 object SnapshotService {
 
   def apply[F[_]: Concurrent](
-    concurrentTipService: ConcurrentTipService,
+    concurrentTipService: ConcurrentTipService[F],
     addressService: AddressService[F],
     checkpointService: CheckpointService[F],
     messageService: MessageService[F],

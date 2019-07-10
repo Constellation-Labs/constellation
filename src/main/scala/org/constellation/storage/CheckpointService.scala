@@ -19,7 +19,7 @@ class CheckpointService[F[_]: Concurrent](
   transactionService: TransactionService[F],
   messageService: MessageService[F],
   notificationService: NotificationService[F],
-  concurrentTipService: ConcurrentTipService,
+  concurrentTipService: ConcurrentTipService[F],
   rateLimiting: RateLimiting[F]
 ) extends StrictLogging {
 
@@ -193,12 +193,10 @@ class CheckpointService[F[_]: Concurrent](
           _ <- conflicts match {
             case Nil => Sync[F].unit
             case _ =>
-              LiftIO[F].liftIO {
-                concurrentTipService
-                  .putConflicting(cb.baseHash, cb)
-                  .flatMap(_ => IO.raiseError[Unit](TipConflictException(cb, conflicts)))
-                  .void
-              }
+              concurrentTipService
+                .putConflicting(cb.baseHash, cb)
+                .flatMap(_ => Sync[F].raiseError[Unit](TipConflictException(cb, conflicts)))
+                .void
           }
 
           valid <- Sync[F].delay(cb.simpleValidation())
@@ -221,7 +219,7 @@ class CheckpointService[F[_]: Concurrent](
           _ <- Sync[F].delay {
             logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
           }
-          _ <- LiftIO[F].liftIO(concurrentTipService.update(cb))
+          _ <- concurrentTipService.update(cb)
           _ <- LiftIO[F].liftIO(dao.snapshotService.updateAcceptedCBSinceSnapshot(cb))
           _ <- dao.metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
           _ <- pendingAcceptance.update(_.filterNot(_ == cb.baseHash))

@@ -74,6 +74,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
   def peerHostPort = HostPort(nodeConfig.hostName, nodeConfig.peerHttpPort)
 
+  implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
+
   def initialize(
     nodeConfigInit: NodeConfig = NodeConfig()
   )(implicit materialize: ActorMaterializer = null): Unit = {
@@ -93,8 +95,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     idDir.createDirectoryIfNotExists(createParents = true)
     messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
-
-    implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
 
     rateLimiting = new RateLimiting[IO]
 
@@ -121,18 +121,22 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     )
   }
 
-  lazy val concurrentTipService: ConcurrentTipService = new TrieBasedTipService(
+  implicit val context: ContextShift[IO] = ConstellationContextShift.global
+
+  lazy val concurrentTipService: ConcurrentTipService[IO] = new ConcurrentTipService[IO](
     processingConfig.maxActiveTipsAllowedInMemory,
+    processingConfig.maxWidth,
     processingConfig.maxWidth,
     processingConfig.numFacilitatorPeers,
     processingConfig.minPeerTimeAddedSeconds,
+    this,
     consensusManager
-  )(this)
+  )
 
   def pullTips(
     readyFacilitators: Map[Id, PeerData]
   ): Option[PulledTips] =
-    concurrentTipService.pull(readyFacilitators)(this.metrics)
+    concurrentTipService.pull(readyFacilitators)(this.metrics).unsafeRunSync()
 
   def peerInfo: IO[Map[Id, PeerData]] = IO.async { cb =>
     import scala.util.{Failure, Success}

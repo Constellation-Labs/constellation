@@ -26,7 +26,7 @@ class SnapshotServiceTest
   before {
     dao = mockDAO
 
-    val cts = mock[ConcurrentTipService]
+    val cts = mock[ConcurrentTipService[IO]]
     val addressService = mock[AddressService[IO]]
     val checkpointService = mock[CheckpointService[IO]]
     val messageService = mock[MessageService[IO]]
