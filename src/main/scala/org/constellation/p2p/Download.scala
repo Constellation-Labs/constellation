@@ -233,9 +233,9 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   }
 
   /** **/
-  def setNodeState(nodeState: NodeState): IO[Unit] =
-    IO(dao.nodeState = nodeState)
-      .flatTap(_ => dao.metrics.updateMetricAsync[IO]("nodeState", nodeState.toString))
+  private def setNodeState(nodeState: NodeState): IO[Unit] =
+    dao.cluster
+      .setNodeState(nodeState)
       .flatMap(_ => IO(PeerManager.broadcastNodeState()))
 
   private def requestForFaucet: IO[Iterable[Response[String]]] =
@@ -313,7 +313,7 @@ object Download {
         .traverse(cmd => dao.channelService.put(cmd.channelId, cmd))
         .unsafeRunSync()
 
-      dao.setNodeState(NodeState.Ready)
+      dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
 
     }
 }

@@ -109,7 +109,9 @@ class CheckpointService[F[_]: Concurrent](
         .toList
     }
 
-    (dao.nodeState, checkpoint.checkpointCacheData.checkpointBlock) match {
+    val nodeState = dao.cluster.getNodeState.unsafeRunSync // TODO: use polymorphic type F[_]
+
+    (nodeState, checkpoint.checkpointCacheData.checkpointBlock) match {
       case (_, None) => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
       case (NodeState.Ready, Some(cb)) =>
         val acceptance = for {

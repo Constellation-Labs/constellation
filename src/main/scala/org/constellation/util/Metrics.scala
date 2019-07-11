@@ -121,7 +121,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) extends Periodic[Unit](
   // Init
   updateMetric("id", dao.id.hex)
   val registry = Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
-  updateMetric("nodeState", dao.nodeState.toString)
+  updateMetric("nodeState", dao.cluster.getNodeState.unsafeRunSync.toString)
   updateMetric("address", dao.selfAddressStr)
   updateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
   updateMetric("nodeStartDate", new DateTime(System.currentTimeMillis()).toString)

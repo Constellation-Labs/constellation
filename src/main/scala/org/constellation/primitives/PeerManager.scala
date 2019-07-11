@@ -80,7 +80,7 @@ object PeerManager extends StrictLogging {
   }
 
   def broadcastNodeState()(implicit dao: DAO, ec: ExecutionContext): Unit =
-    broadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
+    broadcast(_.post("status", SetNodeStatus(dao.id, dao.cluster.getNodeState.unsafeRunSync)))
 
   def attemptRegisterSelfWithPeer(hp: HostPort)(implicit dao: DAO): Future[Any] = {
 

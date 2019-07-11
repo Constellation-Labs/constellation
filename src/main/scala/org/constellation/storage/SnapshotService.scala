@@ -6,7 +6,7 @@ import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
-import org.constellation.p2p.DataResolver
+import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
 import org.constellation.primitives._
@@ -97,7 +97,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", buffer.size.toString)
     } yield ()
 
-  def attemptSnapshot(): EitherT[F, SnapshotError, Unit] =
+  def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, Unit] =
     for {
       _ <- validateMaxAcceptedCBHashesInMemory()
       _ <- validateNodeState(NodeState.Ready)
@@ -125,8 +125,10 @@ class SnapshotService[F[_]: Concurrent](
 
       _ <- EitherT.liftF(snapshot.set(nextSnapshot))
       _ <- EitherT.liftF(
-        broadcastService.broadcastSnapshot(nextSnapshot.lastSnapshot,
-                                           nextHeightInterval - dao.processingConfig.snapshotHeightDelayInterval)
+        broadcastService.broadcastSnapshot(
+          nextSnapshot.lastSnapshot,
+          nextHeightInterval - dao.processingConfig.snapshotHeightDelayInterval
+        )
       )
     } yield ()
 
@@ -166,9 +168,11 @@ class SnapshotService[F[_]: Concurrent](
     }
   }
 
-  private def validateNodeState(requiredState: NodeState): EitherT[F, SnapshotError, Unit] = EitherT {
-    Sync[F].delay {
-      if (dao.nodeState == requiredState) {
+  private def validateNodeState(
+    requiredState: NodeState
+  )(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, Unit] = EitherT {
+    cluster.getNodeState.map { state =>
+      if (state == requiredState) {
         Right(())
       } else {
         Left(NodeNotReadyForSnapshots)
@@ -185,8 +189,10 @@ class SnapshotService[F[_]: Concurrent](
     }
   }
 
-  private def validateSnapshotHeightIntervalCondition(nextHeightInterval: Long,
-                                                      minTipHeight: Long): EitherT[F, SnapshotError, Unit] =
+  private def validateSnapshotHeightIntervalCondition(
+    nextHeightInterval: Long,
+    minTipHeight: Long
+  ): EitherT[F, SnapshotError, Unit] =
     EitherT {
       val snapshotHeightDelayInterval = dao.processingConfig.snapshotHeightDelayInterval
 

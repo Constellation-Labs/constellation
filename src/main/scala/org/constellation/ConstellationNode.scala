@@ -283,7 +283,7 @@ class ConstellationNode(
     })
 
   def shutdown(): Unit = {
-    dao.nodeState = NodeState.Offline
+    dao.cluster.setNodeState(NodeState.Offline).unsafeRunSync
     bindingFuture
       .foreach(_.unbind())
 
@@ -345,7 +345,7 @@ class ConstellationNode(
     logger.info("Creating genesis block")
     Genesis.start()
     logger.info(s"Genesis block hash ${dao.genesisBlock.map { _.soeHash }.getOrElse("")}")
-    dao.setNodeState(NodeState.Ready)
+    dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
     dao.generateRandomTX = true
   }
 //  Keeping disabled for now -- going to only use midDb for the time being.

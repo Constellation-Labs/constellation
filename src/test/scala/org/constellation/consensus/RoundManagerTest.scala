@@ -7,6 +7,8 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import cats.effect.{ContextShift, IO}
 import com.typesafe.config.ConfigFactory
+import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation._
 import org.constellation.consensus.CrossTalkConsensus.{
   NotifyFacilitators,
@@ -19,6 +21,7 @@ import org.constellation.consensus.RoundManager.{
   BroadcastSelectedUnionBlock,
   BroadcastUnionBlockProposal
 }
+import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage._
@@ -41,6 +44,8 @@ class RoundManagerTest
 
   implicit val dao: DAO = mock[DAO]
   implicit val materialize: ActorMaterializer = ActorMaterializer()
+  implicit val logger: Logger[IO] = Slf4jLogger.getLogger
+  implicit val cs = ConstellationContextShift.global
 
   val roundManagerProbe = TestProbe("roundManagerSupervisor")
 
@@ -108,6 +113,9 @@ class RoundManagerTest
   dao.threadSafeMessageMemPool.pull(1) shouldReturn None
   dao.checkpointService shouldReturn mock[CheckpointService[IO]]
   dao.checkpointService.contains(*) shouldReturn IO.pure(true)
+
+  val cluster = new Cluster[IO](() => null)
+  dao.cluster shouldReturn cluster
 
   val metrics = new Metrics()
   dao.metrics shouldReturn metrics
@@ -364,8 +372,6 @@ class RoundManagerTest
   }
 
   test("it should remove not accepted transactions") {
-    implicit val context: ContextShift[IO] = ConstellationContextShift.global
-
     dao.transactionService shouldReturn new TransactionService[IO](dao)
 
     val tx3 = Fixtures.dummyTx(dao)

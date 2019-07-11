@@ -355,11 +355,11 @@ object Snapshot extends StrictLogging {
 
   def triggerSnapshot(round: Long)(implicit dao: DAO): Future[Try[Unit]] =
     // TODO: Refactor round into InternalHeartbeat
-    if (round % dao.processingConfig.snapshotInterval == 0 && dao.nodeState == NodeState.Ready) {
+    if (round % dao.processingConfig.snapshotInterval == 0 && dao.cluster.isNodeReady.unsafeRunSync) {
       futureTryWithTimeoutMetric(
         {
           val start = System.currentTimeMillis()
-          dao.snapshotService.attemptSnapshot().value.unsafeRunSync()
+          dao.snapshotService.attemptSnapshot()(dao.cluster).value.unsafeRunSync()
           val elapsed = System.currentTimeMillis() - start
           logger.debug(s"Attempt snapshot took: $elapsed millis")
         },

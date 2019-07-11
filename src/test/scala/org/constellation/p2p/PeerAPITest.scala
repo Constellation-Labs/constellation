@@ -9,7 +9,9 @@ import cats.effect.IO
 import com.softwaremill.sttp.Response
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.{DAO, Fixtures}
+import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.{ConstellationContextShift, DAO, Fixtures}
 import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointResponse}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.{IPManager, PeerData, TransactionCacheData, TransactionGossip}
@@ -18,6 +20,7 @@ import org.constellation.storage.VerificationStatus.{SnapshotCorrect, SnapshotHe
 import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.storage._
 import org.constellation.util.{APIClient, Metrics}
+import org.constellation.p2p.Cluster
 import org.json4s.native
 import org.json4s.native.Serialization
 import org.mockito.cats.IdiomaticMockitoCats
@@ -41,7 +44,8 @@ class PeerAPITest
   implicit val s: ActorSystem = system
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-  implicit val contextShift = IO.contextShift(executionContext)
+  implicit val logger: Logger[IO] = Slf4jLogger.getLogger
+  implicit val cs = IO.contextShift(executionContext)
   implicit val timer = IO.timer(executionContext)
 
   var dao: DAO = _
@@ -245,10 +249,15 @@ class PeerAPITest
     val keyPair = KeyUtils.makeKeyPair()
     dao.keyPair shouldReturn keyPair
 
-    dao.nodeState shouldReturn NodeState.Ready
+    dao.cluster shouldReturn mock[Cluster[IO]]
+    dao.cluster.getNodeState shouldReturn IO.pure(NodeState.Ready)
 
     val metrics = new Metrics(1)(dao)
     dao.metrics shouldReturn metrics
+
+    val cluster = new Cluster[IO](() => metrics)
+    dao.cluster shouldReturn cluster
+    dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
 
     dao.checkpointService shouldReturn mock[CheckpointService[IO]]
     dao.checkpointService.accept(any[FinishedCheckpoint])(dao) shouldReturn IO({

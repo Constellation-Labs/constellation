@@ -8,6 +8,7 @@ import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import org.constellation.consensus._
+import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
@@ -128,6 +129,7 @@ trait EdgeDAO {
 
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
+  var cluster: Cluster[IO] = _
   var transactionService: TransactionService[IO] = _
   var transactionGossiping: TransactionGossiping[IO] = _
   var transactionGenerator: TransactionGenerator[IO] = _

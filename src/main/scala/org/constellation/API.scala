@@ -459,13 +459,16 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           }
         } ~
         path("ready") { // Temp
-          if (dao.nodeState != NodeState.Ready) {
-            dao.nodeState = NodeState.Ready
-          } else {
-            dao.nodeState = NodeState.PendingDownload
-          }
-          val res = PeerManager.broadcast(_.post("status", SetNodeStatus(dao.id, dao.nodeState)))
-          dao.metrics.updateMetric("nodeState", dao.nodeState.toString)
+          dao.cluster.isNodeReady
+            .ifM(
+              dao.cluster.setNodeState(NodeState.PendingDownload),
+              dao.cluster.setNodeState(NodeState.Ready)
+            )
+            .unsafeRunSync
+
+          val res =
+            PeerManager.broadcast(_.post("status", SetNodeStatus(dao.id, dao.cluster.getNodeState.unsafeRunSync)))
+          dao.metrics.updateMetric("nodeState", dao.cluster.getNodeState.unsafeRunSync.toString)
           onComplete(res) { t =>
             t.foreach(_.filter(_._2.isInvalid).foreach {
               case (id, e) => logger.warn(s"Unable to propogate status to node ID: $id", e)
