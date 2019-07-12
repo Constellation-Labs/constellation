@@ -10,6 +10,8 @@ import akka.http.scaladsl.server.{Directive0, Route}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import better.files._
+import cats.effect.IO
+import cats.implicits._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import constellation._
@@ -283,9 +285,12 @@ class ConstellationNode(
     })
 
   def shutdown(): Unit = {
-    dao.cluster.setNodeState(NodeState.Offline).unsafeRunSync
-    bindingFuture
-      .foreach(_.unbind())
+    val gracefulShutdown = IO.delay(bindingFuture.foreach(_.unbind())) *>
+      IO.delay(logger.info("Node shutdown completed"))
+
+    dao.cluster
+      .leave(gracefulShutdown)
+      .unsafeRunSync()
 
     // TODO: we should add this back but it currently causes issues in the integration test
     //.onComplete(_ => system.terminate())

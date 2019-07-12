@@ -46,6 +46,7 @@ class RoundManagerTest
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger
   implicit val cs = ConstellationContextShift.global
+  implicit val timer = IO.timer(ConstellationExecutionContext.edge)
 
   val roundManagerProbe = TestProbe("roundManagerSupervisor")
 
@@ -114,7 +115,7 @@ class RoundManagerTest
   dao.checkpointService shouldReturn mock[CheckpointService[IO]]
   dao.checkpointService.contains(*) shouldReturn IO.pure(true)
 
-  val cluster = new Cluster[IO](() => null)
+  val cluster = new Cluster[IO](() => null, dao)
   dao.cluster shouldReturn cluster
 
   val metrics = new Metrics()

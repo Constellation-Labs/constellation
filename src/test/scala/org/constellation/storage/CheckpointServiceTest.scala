@@ -17,7 +17,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.{APIClient, HostPort, Metrics}
-import org.constellation.{ConstellationContextShift, DAO, Fixtures, PeerMetadata}
+import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, Fixtures, PeerMetadata}
 import org.mockito.Mockito.doNothing
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -234,6 +234,7 @@ class CheckpointServiceTest
 
     implicit val logger: io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger
     implicit val contextShift = ConstellationContextShift.global
+    implicit val timer = IO.timer(ConstellationExecutionContext.edge)
 
     val dao: DAO = mock[DAO]
 
@@ -273,7 +274,7 @@ class CheckpointServiceTest
     val metrics = new Metrics(1)(dao)
     dao.metrics shouldReturn metrics
 
-    val cluster = new Cluster[IO](() => metrics)
+    val cluster = new Cluster[IO](() => metrics, dao)
     dao.cluster shouldReturn cluster
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
 

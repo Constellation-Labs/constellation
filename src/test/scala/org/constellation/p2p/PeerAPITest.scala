@@ -11,7 +11,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.{ConstellationContextShift, DAO, Fixtures}
+import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, Fixtures}
 import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointResponse}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.{IPManager, PeerData, TransactionCacheData, TransactionGossip}
@@ -255,7 +255,7 @@ class PeerAPITest
     val metrics = new Metrics(1)(dao)
     dao.metrics shouldReturn metrics
 
-    val cluster = new Cluster[IO](() => metrics)
+    val cluster = new Cluster[IO](() => metrics, dao)
     dao.cluster shouldReturn cluster
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
 

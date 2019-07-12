@@ -4,6 +4,7 @@ import java.security.KeyPair
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+import cats.implicits._
 import org.constellation.crypto.KeyUtils
 import org.constellation.{ConstellationNode, NodeConfig, ProcessingConfig}
 
@@ -54,9 +55,7 @@ object TestNode {
 
   def clearNodes(): Unit =
     Try {
-      nodes.foreach { node =>
-        node.shutdown()
-      }
+      nodes.par.foreach(_.shutdown())
       nodes = Seq()
     }
 

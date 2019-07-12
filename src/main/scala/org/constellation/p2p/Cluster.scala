@@ -1,9 +1,10 @@
 package org.constellation.p2p
 
 import cats.data.ValidatedNel
-import cats.effect.Concurrent
+import cats.effect.{Concurrent, Sync, Timer}
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
+import org.constellation.DAO
 import org.constellation.primitives.PeerData
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
@@ -11,9 +12,11 @@ import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.util.{APIClient, Metrics}
 
-class Cluster[F[_]: Concurrent: Logger](metrics: () => Metrics) {
+import scala.concurrent.duration._
+
+class Cluster[F[_]: Concurrent: Logger: Timer](metrics: () => Metrics, dao: DAO) {
   private val nodeState: SingleRef[F, NodeState] = SingleRef[F, NodeState](NodeState.PendingDownload)
-  private val peers: SingleRef[F, Map[Id, PeerData]] = SingleRef[F, Map[Id, PeerData]](Map.empty)
+//  private val peers: SingleRef[F, Map[Id, PeerData]] = SingleRef[F, Map[Id, PeerData]](Map.empty)
 
   def getNodeState: F[NodeState] = nodeState.get
 
@@ -24,9 +27,7 @@ class Cluster[F[_]: Concurrent: Logger](metrics: () => Metrics) {
       Logger[F].debug(s"Changing node state from $oldState to $state")
     } *> metrics().updateMetricAsync[F]("nodeState", state.toString)
 
-//  def broadcast(): F[Unit] = broadcast(NodeType.Full)
-//  def broadcast(to: NodeType): F[Unit] = ???
-
+  /*
   def broadcast[T](
     f: APIClient => F[T],
     skip: Set[Id] = Set.empty,
@@ -50,10 +51,18 @@ class Cluster[F[_]: Concurrent: Logger](metrics: () => Metrics) {
         }
         .map(v => keys.zip(v).toMap)
     } yield res
+   */
 
   // register & deregister
 
   def join(): F[Unit] = ???
 
-  def leave(): F[Unit] = ???
+  def leave(gracefulShutdown: => F[Unit]): F[Unit] =
+    for {
+      _ <- Logger[F].info("Trying to gracefully leave the cluster")
+      // _ <- broadcast leave request
+      _ <- Timer[F].sleep(dao.processingConfig.leavingStandbyTimeout.seconds) // TODO: use wkoszycki changes for waiting for last n snapshots
+      _ <- setNodeState(NodeState.Offline)
+      _ <- gracefulShutdown
+    } yield ()
 }

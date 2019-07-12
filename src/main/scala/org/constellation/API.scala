@@ -74,7 +74,8 @@ object ProcessingConfig {
     snapshotInterval = 2,
     snapshotHeightInterval = 2,
     snapshotHeightDelayInterval = 1,
-    roundsPerMessage = 1
+    roundsPerMessage = 1,
+    leavingStandbyTimeout = 2
   )
 
 }

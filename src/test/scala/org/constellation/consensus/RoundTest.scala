@@ -18,7 +18,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage.{CheckpointService, MessageService, TransactionService}
 import org.constellation.util.Metrics
-import org.constellation.{ConstellationContextShift, DAO, Fixtures, PeerMetadata}
+import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, Fixtures, PeerMetadata}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers}
 
@@ -33,6 +33,8 @@ class RoundTest
   implicit val dao: DAO = mock[DAO]
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger
   implicit val cs = ConstellationContextShift.global
+  implicit val timer = IO.timer(ConstellationExecutionContext.edge)
+
   dao.keyPair shouldReturn Fixtures.tempKey
 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
@@ -100,7 +102,7 @@ class RoundTest
     msgService.lookup(*) shouldReturn IO.pure(None)
     dao.messageService shouldReturn msgService
 
-    val cluster = new Cluster[IO](() => null)
+    val cluster = new Cluster[IO](() => null, dao)
     dao.cluster shouldReturn cluster
 
     val metrics = new Metrics()
