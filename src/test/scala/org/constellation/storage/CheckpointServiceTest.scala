@@ -215,7 +215,7 @@ class CheckpointServiceTest
     val ts = new TransactionService[IO](dao)
     dao.transactionService shouldReturn ts
 
-    val cts = mock[ConcurrentTipService]
+    val cts = mock[ConcurrentTipService[IO]]
 
     val rl = mock[RateLimiting[IO]]
     val cs = new CheckpointService[IO](dao, ts, ms, ns, cts, rl)
