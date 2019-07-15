@@ -1,17 +1,25 @@
 package org.constellation.datastore
 
 import cats.effect.IO
+import cats.implicits._
 import org.constellation.DAO
+import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.util.{Metrics, PeriodicIO}
 
 import scala.concurrent.duration._
 
-class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO) extends PeriodicIO("SnapshotTrigger") {
+class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluster[IO])
+    extends PeriodicIO("SnapshotTrigger") {
+
+  private val preconditions = dao.cluster.isNodeReady.map {
+    _ && executionNumber.get() % dao.processingConfig.snapshotInterval == 0
+  }
 
   override def trigger(): IO[Unit] =
-    if (executionNumber.get() % dao.processingConfig.snapshotInterval == 0 && dao.nodeState == NodeState.Ready) {
+    preconditions.ifM(
       for {
+        _ <- dao.cluster.isNodeReady.ifM(IO.unit, IO.raiseError(new Throwable("Node is not ready")))
         startTime <- IO(System.currentTimeMillis())
         snapshotResult <- dao.snapshotService.attemptSnapshot().value
         elapsed <- IO(System.currentTimeMillis() - startTime)
@@ -22,10 +30,9 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO) extends Periodi
               .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.failure))
           case Right(_) => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success)
         }
-      } yield ()
-    } else {
+      } yield (),
       IO.unit
-    }
+    )
 
   schedule(periodSeconds seconds)
 }

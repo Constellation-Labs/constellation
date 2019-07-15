@@ -12,7 +12,7 @@ import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.util.Metrics
+import org.constellation.util.{Metrics, SnapshotWatcher}
 import org.constellation.{
   ConfigUtil,
   ConstellationConcurrentEffect,
@@ -129,6 +129,7 @@ trait EdgeDAO {
 
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
+  var ipManager: IPManager = _
   var cluster: Cluster[IO] = _
   var transactionService: TransactionService[IO] = _
   var transactionGossiping: TransactionGossiping[IO] = _
@@ -137,6 +138,8 @@ trait EdgeDAO {
   var snapshotService: SnapshotService[IO] = _
   var rateLimiting: RateLimiting[IO] = _
   var addressService: AddressService[IO] = _
+  var snapshotBroadcastService: SnapshotBroadcastService[IO] = _
+  var snapshotWatcher: SnapshotWatcher = _
 
   val notificationService = new NotificationService[IO]()
   val messageService: MessageService[IO]

@@ -6,10 +6,13 @@ import akka.event.LoggingAdapter
 import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.RouteResult.{Complete, Rejected}
-import akka.http.scaladsl.server.{Directive0, RouteResult}
+import akka.http.scaladsl.server.{Directive, Directive0, Directive1, RouteResult}
+import cats.effect.IO
 import com.google.common.util.concurrent.RateLimiter
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import org.constellation.primitives.IPManager
+
+import scala.util.Try
 
 object CustomDirectives {
 

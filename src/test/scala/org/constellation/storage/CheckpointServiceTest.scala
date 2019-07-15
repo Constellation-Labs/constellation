@@ -12,12 +12,19 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.makeKeyPair
-import org.constellation.p2p.Cluster
+import org.constellation.p2p.{Cluster, PeerData, PeerNotification}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.{APIClient, HostPort, Metrics}
-import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, Fixtures, PeerMetadata}
+import org.constellation.{
+  ConstellationContextShift,
+  ConstellationExecutionContext,
+  DAO,
+  Fixtures,
+  NodeConfig,
+  PeerMetadata
+}
 import org.mockito.Mockito.doNothing
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -238,6 +245,8 @@ class CheckpointServiceTest
 
     val dao: DAO = mock[DAO]
 
+    dao.nodeConfig shouldReturn NodeConfig()
+
     val f = File(s"tmp/${kp.getPublic.toId.medium}/db")
     f.createDirectoryIfNotExists()
     dao.dbPath shouldReturn f
@@ -274,7 +283,8 @@ class CheckpointServiceTest
     val metrics = new Metrics(1)(dao)
     dao.metrics shouldReturn metrics
 
-    val cluster = new Cluster[IO](() => metrics, dao)
+    val ipManager = new IPManager
+    val cluster = Cluster[IO](() => metrics, ipManager, dao)
     dao.cluster shouldReturn cluster
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
 
@@ -293,6 +303,13 @@ class CheckpointServiceTest
     }
     dao.initialize()
     dao.metrics = new Metrics()(dao)
+    dao.ipManager = new IPManager
+
+    implicit val logger: io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger
+    implicit val contextShift = ConstellationContextShift.global
+    implicit val timer = IO.timer(ConstellationExecutionContext.edge)
+
+    dao.cluster = Cluster[IO](() => dao.metrics, dao.ipManager, dao)
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
     dao
   }

@@ -7,7 +7,7 @@ import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.consensus._
-import org.constellation.primitives.PeerManager.Peers
+import org.constellation.p2p.Cluster.Peers
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -170,11 +170,10 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .map(_ => ())
 
   private def downloadAndAcceptGenesis =
-    PeerManager
-      .broadcast(_.getNonBlocking[Option[GenesisObservation]]("genesis"))
+    dao.cluster
+      .broadcast(_.getNonBlockingIO[Option[GenesisObservation]]("genesis"))
       .map(_.values.flatMap(_.toOption))
       .map(_.find(_.nonEmpty).flatten.get)
-      .toIO
       .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadedGenesis", "true"))
       .flatTap(genesis => IO(Genesis.acceptGenesis(genesis)))
 
@@ -232,11 +231,8 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
     logger.info("download process has been finished")
   }
 
-  /** **/
-  private def setNodeState(nodeState: NodeState): IO[Unit] =
-    dao.cluster
-      .setNodeState(nodeState)
-      .flatMap(_ => IO(PeerManager.broadcastNodeState()))
+  def setNodeState(nodeState: NodeState): IO[Unit] =
+    dao.cluster.setNodeState(nodeState) *> dao.cluster.broadcastNodeState()
 
   private def requestForFaucet: IO[Iterable[Response[String]]] =
     for {

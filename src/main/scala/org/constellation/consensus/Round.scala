@@ -15,8 +15,8 @@ import org.constellation.consensus.RoundManager.{
   BroadcastSelectedUnionBlock,
   BroadcastUnionBlockProposal
 }
-import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, TypedEdgeHash}
+import org.constellation.p2p.{DataResolver, PeerData, PeerNotification}
+import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.primitives._
 import org.constellation.util.PeerApiClient
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}

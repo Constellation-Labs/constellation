@@ -21,7 +21,6 @@ trait NodeData {
 
   @volatile var nodeConfig: NodeConfig
   // var dbActor : SwayDBDatastore = _
-  var peerManager: ActorRef = _
   var consensusManager: ActorRef = _
   var metrics: Metrics = _
   var messageHashStore: swaydb.Set[String] = _

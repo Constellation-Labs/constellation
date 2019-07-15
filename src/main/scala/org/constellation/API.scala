@@ -24,7 +24,7 @@ import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
 import org.constellation.consensus.{FinishedCheckpointResponse, Snapshot, StoredSnapshot}
 import org.constellation.crypto.KeyUtils
-import org.constellation.p2p.Download
+import org.constellation.p2p.{ChangePeerState, Download, SetNodeStatus}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
@@ -34,6 +34,7 @@ import org.constellation.storage._
 import org.constellation.util._
 import org.json4s.native.Serialization
 import org.json4s.{JValue, native}
+import org.constellation.CustomDirectives._
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -75,7 +76,7 @@ object ProcessingConfig {
     snapshotHeightInterval = 2,
     snapshotHeightDelayInterval = 1,
     roundsPerMessage = 1,
-    leavingStandbyTimeout = 2
+    leavingStandbyTimeout = 3
   )
 
 }
@@ -107,7 +108,8 @@ case class ProcessingConfig(
   roundsPerMessage: Int = 10,
   recentSnapshotNumber: Int = 12,
   maxInvalidSnapshotRate: Int = 51,
-  txGossipingFanout: Int = 2
+  txGossipingFanout: Int = 2,
+  leavingStandbyTimeout: Int = 30
 ) {}
 
 case class ChannelUIOutput(channels: Seq[String])
@@ -424,13 +426,14 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         pathPrefix("peer") {
           path("remove") {
             entity(as[ChangePeerState]) { e =>
-              dao.peerManager ! e
-              complete(StatusCodes.OK)
+              onSuccess(dao.cluster.setNodeStatus(e.id, e.state).unsafeToFuture) {
+                complete(StatusCodes.OK)
+              }
             }
           } ~
             path("add") {
               entity(as[HostPort]) { hp =>
-                onSuccess(PeerManager.attemptRegisterPeer(hp)) { result =>
+                onSuccess(dao.cluster.attemptRegisterPeer(hp).unsafeToFuture) { result =>
                   logger.debug(s"Add Peer Request: $hp. Result: $result")
                   complete(StatusCode.int2StatusCode(result.code))
                 }
@@ -459,21 +462,24 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             }
           }
         } ~
-        path("ready") { // Temp
-          dao.cluster.isNodeReady
-            .ifM(
-              dao.cluster.setNodeState(NodeState.PendingDownload),
-              dao.cluster.setNodeState(NodeState.Ready)
-            )
-            .unsafeRunSync
+        path("ready") {
+          def setNodeState =
+            dao.cluster.isNodeReady
+              .ifM(
+                dao.cluster.setNodeState(NodeState.PendingDownload),
+                dao.cluster.setNodeState(NodeState.Ready)
+              )
 
-          val res =
-            PeerManager.broadcast(_.post("status", SetNodeStatus(dao.id, dao.cluster.getNodeState.unsafeRunSync)))
-          dao.metrics.updateMetric("nodeState", dao.cluster.getNodeState.unsafeRunSync.toString)
-          onComplete(res) { t =>
-            t.foreach(_.filter(_._2.isInvalid).foreach {
-              case (id, e) => logger.warn(s"Unable to propogate status to node ID: $id", e)
-            })
+          def broadcastNodeState =
+            dao.cluster.getNodeState.flatMap { nodeState =>
+              dao.cluster.broadcast(_.postNonBlockingIOUnit("status", SetNodeStatus(dao.id, nodeState)))
+            }.flatTap {
+              _.filter(_._2.isLeft).toList.traverse {
+                case (id, e) => IO.delay(logger.warn(s"Unable to propagate status to node ID: $id", e))
+              }
+            }
+
+          onSuccess((setNodeState *> broadcastNodeState).unsafeToFuture) { _ =>
             complete(StatusCodes.OK)
           }
         } ~
@@ -491,9 +497,9 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           val resetTimeout = 1.second
           val breaker = new CircuitBreaker(system.scheduler, maxFailures = 1, callTimeout = 5.seconds, resetTimeout)
 
-          val response = PeerManager.broadcast(_.getString("health"))
+          val response = dao.cluster.broadcast(_.getStringIO("health"))
 
-          onCompleteWithBreaker(breaker)(response) {
+          onCompleteWithBreaker(breaker)(response.unsafeToFuture) {
             case Success(idMap) =>
               val res = idMap.map {
                 case (id, validatedResp) =>
@@ -541,10 +547,9 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           }
         } ~
         path("addPeer") {
-          entity(as[PeerMetadata]) { e =>
-            Future {
-              peerManager ! e
-            }
+          entity(as[PeerMetadata]) { pm =>
+            // TODO: check if it can be handled in onSuccess
+            dao.cluster.addPeerMetadata(pm).unsafeToFuture
 
             complete(StatusCodes.OK)
           }

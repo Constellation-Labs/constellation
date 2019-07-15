@@ -16,9 +16,9 @@ import org.constellation.consensus.CrossTalkConsensus.{
   StartNewBlockCreationRound
 }
 import org.constellation.consensus.Round._
-import org.constellation.p2p.DataResolver
+import org.constellation.p2p.{DataResolver, PeerData}
 import org.constellation.primitives.Schema.{CheckpointCache, Height, Id, NodeState, NodeType}
-import org.constellation.primitives.{PeerData, UpdatePeerNotifications, _}
+import org.constellation.primitives.{ChannelMessage, Transaction}
 import org.constellation.storage.StorageService
 import org.constellation.util.{Distance, PeerApiClient}
 import org.constellation.{ConfigUtil, ConstellationContextShift, ConstellationExecutionContext, DAO}
@@ -59,11 +59,11 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
       logger.warn(
         s"Unable to initiate new round another round: ${rounds.filter(_._2.startedByThisNode)} is in progress"
       )
-    case StartNewBlockCreationRound if dao.nodeState != NodeState.Ready =>
+    case StartNewBlockCreationRound if !dao.cluster.isNodeReady.unsafeRunSync =>
       logger.warn(
-        s"Unable to initiate new round node not ready: ${dao.nodeState}"
+        s"Unable to initiate new round node not ready: ${dao.cluster.getNodeState.unsafeRunSync}"
       )
-    case StartNewBlockCreationRound if !ownRoundInProgress.get() && dao.nodeState == NodeState.Ready =>
+    case StartNewBlockCreationRound if !ownRoundInProgress.get() && dao.cluster.isNodeReady.unsafeRunSync =>
       ownRoundInProgress.compareAndSet(false, true)
       createRoundData(dao).onComplete {
         case Failure(e) =>
@@ -98,11 +98,11 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
           }(ConstellationExecutionContext.global)
       }(ConstellationExecutionContext.global)
 
-    case _: ParticipateInBlockCreationRound if dao.nodeState != NodeState.Ready =>
+    case _: ParticipateInBlockCreationRound if !dao.cluster.isNodeReady.unsafeRunSync =>
       logger.warn(
-        s"Unable to initiate new round node not ready: ${dao.nodeState}"
+        s"Unable to initiate new round node not ready: ${dao.cluster.getNodeState.unsafeRunSync}"
       )
-    case cmd: ParticipateInBlockCreationRound if dao.nodeState == NodeState.Ready =>
+    case cmd: ParticipateInBlockCreationRound if dao.cluster.isNodeReady.unsafeRunSync =>
       val checkHeight = cmd.roundData.tipsSOE.minHeight.traverse { min =>
         dao.snapshotService.lastSnapshotHeight.get
           .flatMap(last => if (last >= min) IO.raiseError[Unit](SnapshotHeightAboveTip(last, min)) else IO.unit)
@@ -160,10 +160,10 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
               dao.threadSafeMessageMemPool.activeChannels
                 .get(message.signedMessageData.data.channelId)
                 .foreach(_.release())
-        )
+          )
       )
       returnTransactionsToPending(cmd.transactionsToReturn, cmd.roundId)
-      cmd.maybeCB.foreach(cb => dao.peerManager ! UpdatePeerNotifications(cb.notifications))
+      cmd.maybeCB.traverse(cb => dao.cluster.updatePeerNotifications(cb.notifications.toList)).unsafeRunSync
 
       dao.blockFormationInProgress = false
       dao.metrics.updateMetric("blockFormationInProgress", dao.blockFormationInProgress.toString)
@@ -337,8 +337,7 @@ object RoundManager {
         ConfigUtil.config.getString("constellation.consensus.arbitrary-tx-distance-base")
       ).getOrElse("hash") match {
         case "id" =>
-          (id: Id, tx: Transaction) =>
-            Distance.calculate(tx.src.address, id)
+          (id: Id, tx: Transaction) => Distance.calculate(tx.src.address, id)
         case "hash" =>
           (id: Id, tx: Transaction) =>
             val xorIdTx = Distance.calculate(tx.hash, id)

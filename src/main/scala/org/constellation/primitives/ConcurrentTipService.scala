@@ -10,6 +10,7 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.consensus.RoundManager.{ActiveTipMinHeight, GetActiveMinHeight}
 import org.constellation.consensus.TipData
+import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema.{Id, SignedObservationEdge}
 import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
 import org.constellation.util.Metrics
@@ -28,13 +29,15 @@ case class TipThresholdException(cb: CheckpointBlock, limit: Int)
       s"Unable to add CB with baseHash: ${cb.baseHash} as tip. Current tips limit met: $limit"
     )
 
-class ConcurrentTipService[F[_]: Concurrent: Logger](sizeLimit: Int,
-                                                     maxWidth: Int,
-                                                     maxTipUsage: Int,
-                                                     numFacilitatorPeers: Int,
-                                                     minPeerTimeAddedSeconds: Int,
-                                                     dao: DAO,
-                                                     consensusActor: ActorRef) {
+class ConcurrentTipService[F[_]: Concurrent: Logger](
+  sizeLimit: Int,
+  maxWidth: Int,
+  maxTipUsage: Int,
+  numFacilitatorPeers: Int,
+  minPeerTimeAddedSeconds: Int,
+  dao: DAO,
+  consensusActor: ActorRef
+) {
 
   private val conflictingTips: SingleRef[F, Map[String, CheckpointBlock]] = SingleRef(Map.empty)
   private val tipsRef: SingleRef[F, Map[String, TipData]] = SingleRef(Map.empty)

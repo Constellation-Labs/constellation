@@ -4,6 +4,7 @@ import cats.effect.{Concurrent, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
+import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.VerificationStatus.VerificationStatus
@@ -13,6 +14,7 @@ import scala.concurrent.duration._
 
 class SnapshotBroadcastService[F[_]: Concurrent](
   healthChecker: HealthChecker[F],
+  cluster: Cluster[F],
   dao: DAO
 ) extends StrictLogging {
 
@@ -43,13 +45,12 @@ class SnapshotBroadcastService[F[_]: Concurrent](
   def getRecentSnapshots: F[List[RecentSnapshot]] = recentSnapshots.getUnsafe
 
   def runClusterCheck: F[Unit] =
-    if (dao.nodeState == NodeState.Ready) {
+    cluster.isNodeReady.ifM(
       getRecentSnapshots
         .flatMap(healthChecker.checkClusterConsistency)
-        .flatMap(maybeUpdate => maybeUpdate.fold(Sync[F].unit)(recent => recentSnapshots.set(recent)))
-    } else {
+        .flatMap(maybeUpdate => maybeUpdate.fold(Sync[F].unit)(recent => recentSnapshots.set(recent))),
       Sync[F].unit
-    }
+    )
 
   def updateRecentSnapshots(hash: String, height: Long): F[Unit] =
     recentSnapshots.update(

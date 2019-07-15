@@ -7,6 +7,7 @@ import cats.effect.IO
 import cats.implicits._
 import constellation.signedObservationEdge
 import org.constellation.DAO
+import org.constellation.p2p.PeerNotification
 import org.constellation.primitives.Schema._
 import org.constellation.util.{HashSignature, Metrics}
 

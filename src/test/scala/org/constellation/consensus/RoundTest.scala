@@ -13,12 +13,19 @@ import org.constellation.consensus.RoundManager.{
   BroadcastSelectedUnionBlock,
   BroadcastUnionBlockProposal
 }
-import org.constellation.p2p.{Cluster, DataResolver}
+import org.constellation.p2p.{Cluster, DataResolver, PeerData}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage.{CheckpointService, MessageService, TransactionService}
 import org.constellation.util.Metrics
-import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, Fixtures, PeerMetadata}
+import org.constellation.{
+  ConstellationContextShift,
+  ConstellationExecutionContext,
+  DAO,
+  Fixtures,
+  NodeConfig,
+  PeerMetadata
+}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers}
 
@@ -102,7 +109,10 @@ class RoundTest
     msgService.lookup(*) shouldReturn IO.pure(None)
     dao.messageService shouldReturn msgService
 
-    val cluster = new Cluster[IO](() => null, dao)
+    dao.nodeConfig shouldReturn NodeConfig()
+
+    val ipManager = new IPManager
+    val cluster = Cluster[IO](() => dao.metrics, ipManager, dao)
     dao.cluster shouldReturn cluster
 
     val metrics = new Metrics()

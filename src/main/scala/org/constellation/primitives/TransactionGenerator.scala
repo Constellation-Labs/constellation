@@ -7,6 +7,7 @@ import cats.effect.{Async, Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.Logger
+import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{AddressCacheData, Id, NodeState, NodeType}
 import org.constellation.storage.transactions.TransactionStatus.TransactionStatus
@@ -21,6 +22,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
   addressService: AddressService[F],
   transactionGossiping: TransactionGossiping[F],
   transactionService: TransactionService[F],
+  cluster: Cluster[F],
   dao: DAO
 ) {
 
@@ -30,7 +32,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
 
   def generate(): EitherT[F, TransactionGeneratorError, Unit] =
     for {
-      _ <- EitherT.fromEither[F](validateNodeState(requiredState = NodeState.Ready))
+      _ <- validateNodeState(requiredState = NodeState.Ready)
       _ <- EitherT.fromEither[F](validateNodeIsPermitToGenerateRandomTransaction)
 
       addressData <- EitherT.liftF(getAddressData)
@@ -67,7 +69,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
       _ <- if (lightPeers.nonEmpty) broadcastLightNode(lightPeers, transaction) else Sync[F].unit
     } yield ()
 
-    List.fill(numberOfTransaction)(transaction).traverse(a => a)
+    List.fill(numberOfTransaction)(transaction).sequence
   }
 
   private def broadcastLightNode(lightPeers: Map[Id, PeerData], tx: Transaction) = {
@@ -221,8 +223,16 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
   ): Either[TransactionGeneratorError, Unit] =
     if (pendingCount < dao.processingConfig.maxMemPoolSize) Right(()) else Left(NodeHasToManyPendingTransactions)
 
-  private def validateNodeState(requiredState: NodeState): Either[TransactionGeneratorError, Unit] =
-    if (dao.nodeState == requiredState) Right(()) else Left(NodeIsNotInRequiredState)
+  private def validateNodeState(requiredState: NodeState): EitherT[F, TransactionGeneratorError, Unit] =
+    EitherT {
+      cluster.getNodeState.map { nodeState =>
+        if (nodeState == requiredState) {
+          ().asRight[TransactionGeneratorError]
+        } else {
+          NodeIsNotInRequiredState.asLeft[Unit]
+        }
+      }
+    }
 
   private def validateNodeIsPermitToGenerateRandomTransaction: Either[TransactionGeneratorError, Unit] =
     if (dao.generateRandomTX) Right(()) else Left(NodeIsNotPermitToGenerateRandomTransaction)
@@ -235,8 +245,9 @@ object TransactionGenerator {
     addressService: AddressService[F],
     transactionGossiping: TransactionGossiping[F],
     transactionService: TransactionService[F],
+    cluster: Cluster[F],
     dao: DAO
-  ) = new TransactionGenerator[F](addressService, transactionGossiping, transactionService, dao)
+  ) = new TransactionGenerator[F](addressService, transactionGossiping, transactionService, cluster, dao)
 }
 
 sealed trait TransactionGeneratorError

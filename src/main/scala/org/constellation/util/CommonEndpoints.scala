@@ -121,7 +121,9 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.addressService.lookup(a).unsafeRunSync().map { _.balanceByLatestSnapshot })
       } ~
       path("state") {
-        complete(NodeStateInfo(dao.cluster.getNodeState.unsafeRunSync, dao.addresses, dao.nodeType))
+        onSuccess(dao.cluster.getNodeState.unsafeToFuture) { nodeState =>
+          complete(NodeStateInfo(nodeState, dao.addresses, dao.nodeType))
+        }
       } ~
       path("peers") {
         val peers = dao.peerInfo.map(_.map(_._2.peerMetadata).toSeq)
