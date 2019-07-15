@@ -126,7 +126,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   lazy val concurrentTipService: ConcurrentTipService[IO] = new ConcurrentTipService[IO](
     processingConfig.maxActiveTipsAllowedInMemory,
     processingConfig.maxWidth,
-    processingConfig.maxWidth,
+    processingConfig.maxTipUsage,
     processingConfig.numFacilitatorPeers,
     processingConfig.minPeerTimeAddedSeconds,
     this,
