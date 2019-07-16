@@ -10,5 +10,5 @@ class SnapshotWatcher(snapshotBroadcastService: SnapshotBroadcastService[IO])
     with StrictLogging {
 
   override def trigger(): IO[Unit] =
-    IO(logger.debug(s"triggering snapshotClusterCheck $round last execution: ${lastExecution.isCompleted}")) *> snapshotBroadcastService.runClusterCheck
+    snapshotBroadcastService.runClusterCheck
 }

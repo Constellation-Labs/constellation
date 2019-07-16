@@ -2,10 +2,11 @@ package org.constellation.util
 import java.util.concurrent.{ScheduledThreadPoolExecutor, TimeUnit}
 
 import cats.effect.IO
+import com.typesafe.scalalogging.StrictLogging
 
 import scala.concurrent.Future
 
-abstract class PeriodicIO[T](threadName: String, periodSeconds: Int = 1) {
+abstract class PeriodicIO[T](threadName: String, periodSeconds: Int = 1) extends StrictLogging {
   private val executor = new ScheduledThreadPoolExecutor(1)
 
   var round: Long = 0L
@@ -19,6 +20,7 @@ abstract class PeriodicIO[T](threadName: String, periodSeconds: Int = 1) {
     def run(): Unit = {
       round += 1
       Thread.currentThread().setName(threadName)
+      logger.debug(s"triggering ${threadName} round: $round last execution was completed: ${lastExecution.isCompleted}")
       if (lastExecution.isCompleted) {
         lastExecution = trigger().unsafeToFuture
       }
