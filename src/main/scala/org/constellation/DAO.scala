@@ -132,6 +132,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       snapshotBroadcastService,
       this
     )
+
+    transactionGenerator = TransactionGenerator[IO](addressService, transactionGossiping, transactionService, this)
   }
 
   implicit val context: ContextShift[IO] = ConstellationContextShift.global
