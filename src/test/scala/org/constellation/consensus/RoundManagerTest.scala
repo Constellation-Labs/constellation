@@ -276,7 +276,7 @@ class RoundManagerTest
 
       roundManager ! StopBlockCreationRound(round._1, None, Seq.empty)
 
-      roundManager.underlyingActor.ownRoundInProgress = false
+      !roundManager.underlyingActor.ownRoundInProgress.get()
     }
   }
 
