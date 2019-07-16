@@ -13,8 +13,6 @@ import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.util.Metrics
 
-import scala.util.Try
-
 class SnapshotService[F[_]: Concurrent](
   concurrentTipService: ConcurrentTipService[F],
   addressService: AddressService[F],
@@ -120,7 +118,10 @@ class SnapshotService[F[_]: Concurrent](
       _ <- EitherT.liftF(updateMetricsAfterSnapshot())
 
       _ <- EitherT.liftF(snapshot.set(nextSnapshot))
-      _ <- EitherT.liftF(broadcastService.broadcastSnapshot(nextSnapshot.lastSnapshot, nextHeightInterval))
+      _ <- EitherT.liftF(
+        broadcastService.broadcastSnapshot(nextSnapshot.lastSnapshot,
+                                           nextHeightInterval - dao.processingConfig.snapshotHeightDelayInterval)
+      )
     } yield ()
 
   def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock): F[Unit] =
@@ -191,6 +192,9 @@ class SnapshotService[F[_]: Concurrent](
             )
             Right(())
           } else {
+            logger.debug(
+              s"height interval not met minTipHeight: $minTipHeight nextHeightInterval: $nextHeightInterval and ${nextHeightInterval + snapshotHeightDelayInterval}"
+            )
             Left(HeightIntervalConditionNotMet)
           }
         }.flatMap { e =>

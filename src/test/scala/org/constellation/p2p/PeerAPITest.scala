@@ -154,6 +154,28 @@ class PeerAPITest
       }
     }
 
+    "snapshot/recent endpoint" - {
+      val path = "/snapshot/recent"
+
+      "should return list of recent snapshots" in {
+        dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF List(RecentSnapshot("snap2", 4),
+                                                                           RecentSnapshot("snap1", 2))
+        Get(path) ~> peerAPI.commonEndpoints ~> check {
+          status shouldEqual StatusCodes.OK
+          responseAs[List[RecentSnapshot]] shouldBe List(RecentSnapshot("snap2", 4), RecentSnapshot("snap1", 2))
+        }
+      }
+
+      "should return empty list" in {
+        dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF List.empty
+
+        Get(path) ~> peerAPI.commonEndpoints ~> check {
+          status shouldEqual StatusCodes.OK
+          responseAs[List[RecentSnapshot]] shouldBe List.empty
+        }
+      }
+    }
+
     "mixedEndpoints" - {
       "PUT transaction" - {
 

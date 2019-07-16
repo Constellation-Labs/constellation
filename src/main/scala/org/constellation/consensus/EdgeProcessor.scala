@@ -269,9 +269,16 @@ object Snapshot extends StrictLogging {
     )
   }
 
-  def removeSnapshots(snapshots: List[String], snapshotPath: String): Unit =
-    snapshots
-      .foreach(snapId => Files.delete(Paths.get(snapshotPath, snapId)))
+  def removeSnapshots(snapshots: List[String], snapshotPath: String)(implicit dao: DAO): Unit =
+    snapshots.foreach { snapId =>
+      tryWithMetric(
+        {
+          logger.debug(s"[${dao.id.short}] removing snapshot: ${snapId} at path ${snapshotPath}")
+          Files.delete(Paths.get(snapshotPath, snapId))
+        },
+        "deleteSnapshot"
+      )
+    }
 
   def isOverDiskCapacity(bytesLengthToAdd: Long)(implicit dao: DAO): Boolean = {
     val storageDir = new java.io.File(dao.snapshotPath.pathAsString)

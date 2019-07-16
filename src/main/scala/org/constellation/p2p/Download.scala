@@ -119,12 +119,8 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
 
   def reDownload(snapshotHashes: List[String], peers: Map[Id, PeerData]): IO[Unit] =
     for {
-      snapshotClient <- getSnapshotClient(peers)
       majoritySnapshot <- getMajoritySnapshot(peers)
-      _ <- if (majoritySnapshot.snapshotHashes.startsWith(snapshotHashes)) IO.unit
-      else
-        UnexpectedSnapshotState(snapshotHashes, majoritySnapshot.snapshotHashes.slice(0, snapshotHashes.size))
-          .raiseError[IO, Unit]
+      snapshotClient <- getSnapshotClient(peers)
       alreadyDownloaded <- downloadAndProcessSnapshotsFirstPass(snapshotHashes)(
         snapshotClient,
         peers

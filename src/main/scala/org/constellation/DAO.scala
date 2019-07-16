@@ -21,7 +21,7 @@ import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.util.{HealthChecker, HostPort}
+import org.constellation.util.{HealthChecker, HostPort, SnapshotWatcher}
 
 class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLogging {
 
@@ -73,6 +73,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.global)
     new SnapshotBroadcastService[IO](new HealthChecker[IO](this, downloadProcess), this)
   }
+
+  val snapshotWatcher = new SnapshotWatcher(snapshotBroadcastService)
 
   def setNodeState(
     nodeState_ : NodeState

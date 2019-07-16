@@ -18,19 +18,23 @@ case class CheckPointValidationFailures(nodeId: String)
     )
 case class InconsistentSnapshotHash(nodeId: String, hashes: Set[String])
     extends MetricFailure(s"Node: $nodeId last snapshot hash differs: $hashes")
-case class SnapshotDiff(snapshotsToDelete: List[String], snapshotsToDownload: List[String], peers: Set[Id])
+case class SnapshotDiff(snapshotsToDelete: List[RecentSnapshot],
+                        snapshotsToDownload: List[RecentSnapshot],
+                        peers: List[Id])
 
 object HealthChecker {
 
-  private def choseMajorityState(clusterSnapshots: List[(Id, List[String])]): (List[String], Set[Id]) =
+  private def choseMajorityState(clusterSnapshots: List[(Id, List[RecentSnapshot])]): (List[RecentSnapshot], Set[Id]) =
     clusterSnapshots
       .groupBy(_._2)
       .maxBy(_._2.size)
       .map(_.map(_._1).toSet)
 
-  def compareSnapshotState(ownSnapshots: List[String], clusterSnapshots: List[(Id, List[String])]): SnapshotDiff =
+  def compareSnapshotState(ownSnapshots: List[RecentSnapshot],
+                           clusterSnapshots: List[(Id, List[RecentSnapshot])]): SnapshotDiff =
     choseMajorityState(clusterSnapshots) match {
-      case (snapshots, peers) => SnapshotDiff(ownSnapshots.diff(snapshots), snapshots.diff(ownSnapshots).reverse, peers)
+      case (snapshots, peers) =>
+        SnapshotDiff(ownSnapshots.diff(snapshots), snapshots.diff(ownSnapshots).reverse, peers.toList)
     }
 
   def checkAllMetrics(apis: Seq[APIClient]): Either[MetricFailure, Unit] = {
@@ -65,27 +69,71 @@ class HealthChecker[F[_]: Concurrent](
   downloader: DownloadProcess
 ) extends StrictLogging {
 
-  def checkClusterConsistency(ownSnapshots: List[String]): F[Unit] =
-    for {
-      _ <- Sync[F].delay { logger.debug(s"[${dao.id.short}] checking cluster consistency") }
+  def checkClusterConsistency(ownSnapshots: List[RecentSnapshot]): F[Option[List[RecentSnapshot]]] = {
+    val check = for {
+      _ <- Sync[F].delay {
+        logger.info(s"[${dao.id.short}] re-download checking cluster consistency")
+      }
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       majoritySnapshots <- LiftIO[F].liftIO(collectSnapshot(peers))
       diff = compareSnapshotState(ownSnapshots, majoritySnapshots)
-      _ <- if (diff.snapshotsToDelete.isEmpty && diff.snapshotsToDownload.isEmpty)
-        startReDownload(diff, peers.filterKeys(diff.peers.contains))
-      else Sync[F].unit
-    } yield ()
+      _ <- Sync[F].delay {
+        logger.info(
+          s"[${dao.id.short}] re-download cluster diff $diff and own $ownSnapshots"
+        )
+      }
+      result <- if (shouldReDownload(ownSnapshots, diff)) {
+        val x = startReDownload(diff, peers.filterKeys(diff.peers.contains))
+          .flatMap(
+            _ =>
+              Sync[F].delay[Option[List[RecentSnapshot]]](Some(HealthChecker.choseMajorityState(majoritySnapshots)._1))
+          )
+        x
+      } else { Sync[F].pure[Option[List[RecentSnapshot]]](None) }
+    } yield result
+    check.recoverWith {
+      case err =>
+        Sync[F]
+          .delay(logger.error(s"Unexpected error during re-download process: ${err.getMessage}", err))
+          .flatMap(_ => Sync[F].pure[Option[List[RecentSnapshot]]](None))
+    }
+    check
+  }
+
+  def shouldReDownload(ownSnapshots: List[RecentSnapshot], diff: SnapshotDiff): Boolean =
+    diff match {
+      case SnapshotDiff(_, _, Nil)         => false
+      case SnapshotDiff(_, Nil, _)         => false
+      case SnapshotDiff(_ :: _, _ :: _, _) => true
+      case SnapshotDiff(_, snapshotToDownload :: _, _) =>
+        (ownSnapshots.headOption
+          .map(_.height)
+          .getOrElse(0L) + dao.processingConfig.snapshotHeightDelayInterval) < snapshotToDownload.height
+    }
 
   def startReDownload(diff: SnapshotDiff, peers: Map[Id, PeerData]): F[Unit] =
     for {
-      _ <- Sync[F].delay { logger.debug(s"[${dao.id.short}] starting re-download process $diff") }
+      _ <- Sync[F].delay {
+        logger.info(
+          s"[${dao.id.short}] starting re-download process with diff: $diff"
+        )
+      }
       _ <- LiftIO[F].liftIO(downloader.setNodeState(NodeState.DownloadInProgress))
-      _ <- LiftIO[F].liftIO(downloader.reDownload(diff.snapshotsToDownload, peers.filterKeys(diff.peers.contains)))
-      _ = Snapshot.removeSnapshots(diff.snapshotsToDelete, dao.snapshotPath.pathAsString)
-      _ <- Sync[F].delay { logger.debug(s"[${dao.id.short}] re-download process finished") }
+      _ <- LiftIO[F].liftIO(
+        downloader.reDownload(diff.snapshotsToDownload.map(_.hash), peers.filterKeys(diff.peers.contains))
+      )
+      _ <- Sync[F].delay {
+        Snapshot.removeSnapshots(diff.snapshotsToDelete.map(_.hash), dao.snapshotPath.pathAsString)(dao)
+      }
+      _ <- Sync[F].delay {
+        logger.info(
+          s"[${dao.id.short}] re-download process finished"
+        )
+      }
+      _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadFinished)
     } yield ()
 
   private def collectSnapshot(peers: Map[Id, PeerData]) =
-    peers.toList.traverse(p => (p._1, p._2.client.getNonBlockingIO[List[String]]("snapshot/recent")).sequence)
+    peers.toList.traverse(p => (p._1, p._2.client.getNonBlockingIO[List[RecentSnapshot]]("snapshot/recent")).sequence)
 
 }
