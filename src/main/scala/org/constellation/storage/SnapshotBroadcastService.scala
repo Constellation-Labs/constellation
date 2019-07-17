@@ -27,15 +27,15 @@ class SnapshotBroadcastService[F[_]: Concurrent](
           .traverse(
             _.client
               .postNonBlockingIO[SnapshotVerification]("snapshot/verify", SnapshotCreated(hash, height), 5 second)
+              .map(_.some)
               .handleErrorWith(
                 t =>
                   IO(logger.warn(s"error while verifying snapshot $hash msg: ${t.getMessage}"))
-                    .flatMap(_ => IO.pure(SnapshotVerification(VerificationStatus.SnapshotInvalid)))
+                    .flatMap(_ => IO.pure[Option[SnapshotVerification]](None))
               )
           )
       )
-      isInvalid = hasInvalidSnapshot(responses)
-      _ <- if (isInvalid)
+      _ <- if (shouldRunClusterCheck(responses))
         runClusterCheck
       else Sync[F].unit
     } yield ()
@@ -56,8 +56,8 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       snaps => (RecentSnapshot(hash, height) :: snaps).slice(0, dao.processingConfig.recentSnapshotNumber)
     )
 
-  def hasInvalidSnapshot(responses: List[SnapshotVerification]): Boolean =
-    responses.nonEmpty && ((responses.count(_.status == VerificationStatus.SnapshotInvalid) * 100) / responses.size) >= dao.processingConfig.maxInvalidSnapshotRate
+  def shouldRunClusterCheck(responses: List[Option[SnapshotVerification]]): Boolean =
+    responses.nonEmpty && ((responses.count(r => r.nonEmpty && r.get.status == VerificationStatus.SnapshotInvalid) * 100) / responses.size) >= dao.processingConfig.maxInvalidSnapshotRate
 }
 
 case class RecentSnapshot(hash: String, height: Long)

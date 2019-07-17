@@ -4,7 +4,7 @@ import java.net.SocketTimeoutException
 
 import cats.implicits._
 import cats.effect.{ContextShift, IO, Timer}
-import org.constellation.primitives.Schema.{Id, NodeType}
+import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
 import org.constellation.primitives.{PeerData, Schema}
 import org.constellation.util.{APIClient, HealthChecker, HostPort}
 import org.constellation.{ConstellationExecutionContext, DAO, PeerMetadata, ProcessingConfig}
@@ -45,6 +45,7 @@ class SnapshotBroadcastServiceTest
       val readyFacilitators: Map[Schema.Id, PeerData] = Map(prepareFacilitator("a"), prepareFacilitator("b"))
       dao.readyPeers(NodeType.Full) shouldReturnF readyFacilitators
       dao.processingConfig shouldReturn ProcessingConfig(maxInvalidSnapshotRate = 20)
+      dao.nodeState shouldReturn NodeState.Ready
 
       readyFacilitators(Id("a")).client
         .postNonBlockingIO[SnapshotVerification](*, *, *, *)(*, *) shouldReturn IO.fromFuture(IO {
@@ -65,25 +66,34 @@ class SnapshotBroadcastServiceTest
       val response = snapshotBroadcastService.broadcastSnapshot("snap1", 2)
       response.unsafeRunSync()
 
-      healthChecker.checkClusterConsistency(*).wasCalled(once)
+      healthChecker.checkClusterConsistency(*).wasNever(called)
     }
   }
-  "hasInvalidSnapshot" - {
+  "shouldRunClusterCheck" - {
 
     "should return true when minimum invalid response were reached" in {
-      snapshotBroadcastService.hasInvalidSnapshot(
+      snapshotBroadcastService.shouldRunClusterCheck(
         List(
-          SnapshotVerification(VerificationStatus.SnapshotCorrect),
-          SnapshotVerification(VerificationStatus.SnapshotInvalid),
-          SnapshotVerification(VerificationStatus.SnapshotInvalid)
+          SnapshotVerification(VerificationStatus.SnapshotCorrect).some,
+          SnapshotVerification(VerificationStatus.SnapshotInvalid).some,
+          SnapshotVerification(VerificationStatus.SnapshotInvalid).some
         )
       ) shouldBe true
     }
     "should return false when minimum invalid response were not reached" in {
-      snapshotBroadcastService.hasInvalidSnapshot(
+      snapshotBroadcastService.shouldRunClusterCheck(
         List(
-          SnapshotVerification(VerificationStatus.SnapshotCorrect),
-          SnapshotVerification(VerificationStatus.SnapshotInvalid)
+          SnapshotVerification(VerificationStatus.SnapshotCorrect).some,
+          SnapshotVerification(VerificationStatus.SnapshotInvalid).some
+        )
+      ) shouldBe false
+    }
+    "should return false when minimum invalid response can't be determined" in {
+      snapshotBroadcastService.shouldRunClusterCheck(
+        List(
+          None,
+          None,
+          SnapshotVerification(VerificationStatus.SnapshotInvalid).some
         )
       ) shouldBe false
     }

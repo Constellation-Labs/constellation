@@ -2,6 +2,7 @@ package org.constellation.util
 import cats.effect.{Concurrent, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
+import io.chrisdavenport.log4cats.Logger
 import org.constellation.consensus.Snapshot
 import org.constellation.p2p.DownloadProcess
 import org.constellation.primitives.PeerData
@@ -64,40 +65,33 @@ object HealthChecker {
 
 }
 
-class HealthChecker[F[_]: Concurrent](
+class HealthChecker[F[_]: Concurrent: Logger](
   dao: DAO,
   downloader: DownloadProcess
 ) extends StrictLogging {
 
   def checkClusterConsistency(ownSnapshots: List[RecentSnapshot]): F[Option[List[RecentSnapshot]]] = {
     val check = for {
-      _ <- Sync[F].delay {
-        logger.info(s"[${dao.id.short}] re-download checking cluster consistency")
-      }
+      _ <- Logger[F].info(s"[${dao.id.short}] re-download checking cluster consistency")
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       majoritySnapshots <- LiftIO[F].liftIO(collectSnapshot(peers))
       diff = compareSnapshotState(ownSnapshots, majoritySnapshots)
-      _ <- Sync[F].delay {
-        logger.info(
-          s"[${dao.id.short}] re-download cluster diff $diff and own $ownSnapshots"
-        )
-      }
+      _ <- Logger[F].debug(s"[${dao.id.short}] re-download cluster diff $diff and own $ownSnapshots")
       result <- if (shouldReDownload(ownSnapshots, diff)) {
-        val x = startReDownload(diff, peers.filterKeys(diff.peers.contains))
+        startReDownload(diff, peers.filterKeys(diff.peers.contains))
           .flatMap(
             _ =>
               Sync[F].delay[Option[List[RecentSnapshot]]](Some(HealthChecker.choseMajorityState(majoritySnapshots)._1))
           )
-        x
       } else { Sync[F].pure[Option[List[RecentSnapshot]]](None) }
     } yield result
+
     check.recoverWith {
       case err =>
-        Sync[F]
-          .delay(logger.error(s"Unexpected error during re-download process: ${err.getMessage}", err))
+        Logger[F]
+          .error(err)(s"Unexpected error during re-download process: ${err.getMessage}")
           .flatMap(_ => Sync[F].pure[Option[List[RecentSnapshot]]](None))
     }
-    check
   }
 
   def shouldReDownload(ownSnapshots: List[RecentSnapshot], diff: SnapshotDiff): Boolean =
@@ -105,19 +99,15 @@ class HealthChecker[F[_]: Concurrent](
       case SnapshotDiff(_, _, Nil)         => false
       case SnapshotDiff(_, Nil, _)         => false
       case SnapshotDiff(_ :: _, _ :: _, _) => true
-      case SnapshotDiff(_, snapshotToDownload :: _, _) =>
+      case SnapshotDiff(_, snapshotsToDownload, _) =>
         (ownSnapshots.headOption
           .map(_.height)
-          .getOrElse(0L) + dao.processingConfig.snapshotHeightDelayInterval) < snapshotToDownload.height
+          .getOrElse(0L) + dao.processingConfig.snapshotHeightDelayInterval) < snapshotsToDownload.map(_.height).max
     }
 
-  def startReDownload(diff: SnapshotDiff, peers: Map[Id, PeerData]): F[Unit] =
-    for {
-      _ <- Sync[F].delay {
-        logger.info(
-          s"[${dao.id.short}] starting re-download process with diff: $diff"
-        )
-      }
+  def startReDownload(diff: SnapshotDiff, peers: Map[Id, PeerData]): F[Unit] = {
+    val reDownload = for {
+      _ <- Logger[F].info(s"[${dao.id.short}] starting re-download process with diff: $diff")
       _ <- LiftIO[F].liftIO(downloader.setNodeState(NodeState.DownloadInProgress))
       _ <- LiftIO[F].liftIO(
         downloader.reDownload(diff.snapshotsToDownload.map(_.hash), peers.filterKeys(diff.peers.contains))
@@ -125,13 +115,20 @@ class HealthChecker[F[_]: Concurrent](
       _ <- Sync[F].delay {
         Snapshot.removeSnapshots(diff.snapshotsToDelete.map(_.hash), dao.snapshotPath.pathAsString)(dao)
       }
-      _ <- Sync[F].delay {
-        logger.info(
-          s"[${dao.id.short}] re-download process finished"
-        )
-      }
+      _ <- Logger[F].info(s"[${dao.id.short}] re-download process finished")
       _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadFinished)
     } yield ()
+
+    reDownload.recoverWith {
+      case err =>
+        for {
+          _ <- LiftIO[F].liftIO(downloader.setNodeState(NodeState.Ready))
+          _ <- Logger[F].error(err)(s"[${dao.id.short}] re-download process error: ${err.getMessage}")
+          _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadError)
+          _ <- Sync[F].raiseError[Unit](err)
+        } yield ()
+    }
+  }
 
   private def collectSnapshot(peers: Map[Id, PeerData]) =
     peers.toList.traverse(p => (p._1, p._2.client.getNonBlockingIO[List[RecentSnapshot]]("snapshot/recent")).sequence)

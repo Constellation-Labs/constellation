@@ -26,6 +26,7 @@ import scala.concurrent.Future
 object Metrics {
 
   val reDownloadFinished = "reDownloadFinished"
+  val reDownloadError = "reDownloadError"
   val checkpointAccepted = "checkpointAccepted"
   val snapshotCount = "snapshotCount"
   val lastSnapshotHash = "lastSnapshotHash"

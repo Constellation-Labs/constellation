@@ -305,6 +305,3 @@ object Download {
 
     }
 }
-
-case class UnexpectedSnapshotState(expected: Seq[String], actual: Seq[String])
-    extends Exception(s"Re-download process has received different state than expected: $expected actual: $actual")

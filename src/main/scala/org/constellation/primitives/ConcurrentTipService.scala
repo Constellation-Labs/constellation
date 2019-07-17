@@ -143,7 +143,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](sizeLimit: Int,
 
     for {
       minActiveTipHeight <- LiftIO[F].liftIO(minimumActiveTipHeightTask)
-      _ = Logger[F].info(s"Active tip height: ${minActiveTipHeight.minHeight}")
+      _ <- Logger[F].debug(s"Active tip height: ${minActiveTipHeight.minHeight}")
       keys <- tipsRef.get.map(_.keys.toList)
       maybeData <- LiftIO[F].liftIO(keys.traverse(dao.checkpointService.lookup(_)))
       heights = maybeData.flatMap {

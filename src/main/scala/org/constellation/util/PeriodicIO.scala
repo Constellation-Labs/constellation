@@ -1,33 +1,35 @@
 package org.constellation.util
-import java.util.concurrent.{ScheduledThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.Executors
 
 import cats.effect.IO
 import com.typesafe.scalalogging.StrictLogging
 
-import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
-abstract class PeriodicIO[T](threadName: String, periodSeconds: Int = 1) extends StrictLogging {
-  private val executor = new ScheduledThreadPoolExecutor(1)
+abstract class PeriodicIO(taskName: String) extends StrictLogging {
 
-  var round: Long = 0L
+  val timerPool: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))
 
-  var lastExecution: Future[T] = Future.failed(new RuntimeException("No executions yet"))
+  def trigger(): IO[Unit]
 
-  def trigger(): IO[T]
-
-  private val task = new Runnable {
-
-    def run(): Unit = {
-      round += 1
-      Thread.currentThread().setName(threadName)
-      logger.debug(s"triggering ${threadName} round: $round last execution was completed: ${lastExecution.isCompleted}")
-      if (lastExecution.isCompleted) {
-        lastExecution = trigger().unsafeToFuture
-      }
-    }
+  def schedule(duration: FiniteDuration): Unit = {
+    val delayedTask = IO
+      .timer(timerPool)
+      .sleep(duration)
+      .flatMap(_ => IO(logger.debug(s"triggering periodic task ${taskName}")))
+      .flatMap(
+        _ =>
+          trigger().handleErrorWith { ex =>
+            IO(logger.error(s"Error when executing periodic task: $taskName due: ${ex.getMessage}", ex))
+        }
+      )
+    delayedTask
+      .unsafeToFuture()
+      .onComplete { res =>
+        logger.info(s"Periodic task: $taskName has finished ${res}")
+        schedule(duration)
+      }(timerPool)
   }
 
-  private val scheduledFuture = executor.scheduleAtFixedRate(task, 1, periodSeconds, TimeUnit.SECONDS)
-
-  def shutdown(): Boolean = scheduledFuture.cancel(false)
 }

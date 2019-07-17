@@ -10,6 +10,7 @@ import cats.effect.concurrent.Semaphore
 import cats.effect.{Concurrent, ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
@@ -67,6 +68,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     new MessageService[IO]()
   }
 
+  implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
+
   val snapshotBroadcastService: SnapshotBroadcastService[IO] = {
     val snapshotProcessor =
       new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotByDistance)(this, ConstellationExecutionContext.global)
@@ -84,8 +87,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   }
 
   def peerHostPort = HostPort(nodeConfig.hostName, nodeConfig.peerHttpPort)
-
-  implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
 
   def initialize(
     nodeConfigInit: NodeConfig = NodeConfig()

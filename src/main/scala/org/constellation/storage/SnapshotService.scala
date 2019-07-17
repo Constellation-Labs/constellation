@@ -67,7 +67,7 @@ class SnapshotService[F[_]: Concurrent](
     for {
       _ <- snapshot.set(snapshotInfo.snapshot)
       _ <- lastSnapshotHeight.set(snapshotInfo.lastSnapshotHeight)
-      _ <- Sync[F].delay(concurrentTipService.set(snapshotInfo.tips))
+      _ <- concurrentTipService.set(snapshotInfo.tips)
       _ <- acceptedCBSinceSnapshot.set(snapshotInfo.acceptedCBSinceSnapshot)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.put(k, v) }.toList.sequence
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.map { h =>
