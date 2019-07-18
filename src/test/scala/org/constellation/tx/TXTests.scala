@@ -27,7 +27,6 @@ class TXTests extends FlatSpec {
 
   "Message distance" should "match threshold" in {
 
-
     Seq.tabulate(100) { i =>
       val channelOpenRequest = ChannelOpen(i.toString)
       val genesisMessageStr = channelOpenRequest.json
@@ -52,7 +51,5 @@ class TXTests extends FlatSpec {
   }
 
   // distances.foreach{println}
-
-
 
 }

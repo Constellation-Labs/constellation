@@ -4,7 +4,7 @@ import swaydb.data.config.MMAP
 
 import scala.concurrent.ExecutionContextExecutor
 import constellation._
-import org.constellation.DAO
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.datastore.{KVDB, KVDBDatastoreImpl}
 import org.constellation.serializer.KryoSerializer
 
@@ -15,15 +15,17 @@ class SwayDBImpl(dao: DAO) extends KVDB {
   import swaydb._
   import swaydb.serializers.Default._ //import default serializers
 
-  private implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
+  private implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.edge
 
   //Create a persistent database. If the directories do not exist, they will be created.
-    private val db =
-      persistent.Map[String, Array[Byte]](
+  private val db =
+    persistent
+      .Map[String, Array[Byte]](
         dir = (dao.dbPath / "disk1").path,
         mmapMaps = false,
         mmapSegments = MMAP.Disabled,
-        mmapAppendix = false)
+        mmapAppendix = false
+      )
       .get
 
   override def put(key: String, obj: AnyRef): Boolean = {
@@ -59,9 +61,8 @@ class SwayDBImpl(dao: DAO) extends KVDB {
     }
   }
 
-  override def delete(key: String): Boolean = {
+  override def delete(key: String): Boolean =
     db.remove(key).isSuccess
-  }
 
   override def restart(): Unit = {}
 }
@@ -83,7 +84,8 @@ object SwayDBDatastore {
     import swaydb._
     import swaydb.serializers.Default._ //import default serializers
 
-    persistent.Set[String](
+    persistent
+      .Set[String](
         dir = (dao.dbPath / path).path,
         mmapMaps = false,
         mmapSegments = MMAP.Disabled,

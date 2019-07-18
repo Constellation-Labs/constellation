@@ -13,6 +13,8 @@ import akka.http.scaladsl.server.directives.Credentials
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.CircuitBreaker
 import akka.util.Timeout
+import cats.effect.IO
+import cats.implicits._
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
@@ -48,9 +50,11 @@ case class PeerMetadata(
   resourceInfo: ResourceInfo
 )
 
-case class ResourceInfo(maxMemory: Long = Runtime.getRuntime.maxMemory(),
-                        cpuNumber: Int = Runtime.getRuntime.availableProcessors(),
-                        diskUsableBytes: Long)
+case class ResourceInfo(
+  maxMemory: Long = Runtime.getRuntime.maxMemory(),
+  cpuNumber: Int = Runtime.getRuntime.availableProcessors(),
+  diskUsableBytes: Long
+)
 
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
 
@@ -76,6 +80,7 @@ object ProcessingConfig {
 
 case class ProcessingConfig(
   maxWidth: Int = 10,
+  maxTipUsage: Int = 2,
   minCheckpointFormationThreshold: Int = 50,
   maxTXInBlock: Int = 50,
   maxMessagesInBlock: Int = 1,
@@ -97,7 +102,8 @@ case class ProcessingConfig(
   snapshotInterval: Int = 25,
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,
-  roundsPerMessage: Int = 10
+  roundsPerMessage: Int = 10,
+  txGossipingFanout: Int = 2
 ) {}
 
 case class ChannelUIOutput(channels: Seq[String])
@@ -108,7 +114,7 @@ case class BlockUIOutput(
   id: String,
   height: Long,
   parents: Seq[String],
-  channels: Seq[ChannelValidationInfo],
+  channels: Seq[ChannelValidationInfo]
 )
 
 class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
@@ -144,7 +150,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
             } ~
               path("channel" / Segment / "info") { channelId =>
-                complete(dao.channelService.getSync(channelId).map { cmd =>
+                complete(dao.channelService.lookup(channelId).unsafeRunSync().map { cmd =>
                   SingleChannelUIOutput(
                     cmd.channelOpen,
                     cmd.totalNumMessages,
@@ -156,7 +162,8 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               path("channel" / Segment / "schema") { channelId =>
                 complete(
                   dao.channelService
-                    .getSync(channelId)
+                    .lookup(channelId)
+                    .unsafeRunSync()
                     .flatMap { cmd =>
                       cmd.channelOpen.jsonSchema
                     }
@@ -172,7 +179,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
             } ~
               path("channel" / Segment / "info") { channelId =>
-                complete(dao.channelService.getSync(channelId).map { cmd =>
+                complete(dao.channelService.lookup(channelId).unsafeRunSync().map { cmd =>
                   SingleChannelUIOutput(
                     cmd.channelOpen,
                     cmd.totalNumMessages,
@@ -184,7 +191,8 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               path("channel" / Segment / "schema") { channelId =>
                 complete(
                   dao.channelService
-                    .getSync(channelId)
+                    .lookup(channelId)
+                    .unsafeRunSync()
                     .flatMap { cmd =>
                       cmd.channelOpen.jsonSchema
                     }
@@ -208,9 +216,8 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                     cb.soeHash,
                     ccd.height.get.min,
                     cb.parentSOEHashes,
-                    cb.messages.map { _.signedMessageData.data.channelId }.distinct.map {
-                      channelId =>
-                        ChannelValidationInfo(channelId, true)
+                    cb.messages.map { _.signedMessageData.data.channelId }.distinct.map { channelId =>
+                      ChannelValidationInfo(channelId, true)
                     }
                   )
                 })
@@ -220,58 +227,70 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             complete(dao.messageService.lookup(channelId).unsafeRunSync())
           } ~
           path("channelKeys") {
-            complete(dao.channelService.toMapSync().keys.toSeq)
+            complete(dao.channelService.toMap().unsafeRunSync().keys.toSeq)
           } ~
           path("channel" / "genesis" / Segment) { channelId =>
-            complete(dao.channelService.getSync(channelId))
+            complete(dao.channelService.lookup(channelId).unsafeRunSync())
           } ~
           path("channel" / Segment) { channelHash =>
-            val msg = dao.messageService.memPool.getSync(channelHash)
-            val channelRes =
-              Snapshot.findLatestMessageWithSnapshotHash(0, msg)
+            def makeProof(cmd: ChannelMessageMetadata, storedSnapshot: StoredSnapshot) = {
+              val blocksInSnapshot = storedSnapshot.snapshot.checkpointBlocks.toList
+              val blockHashForMessage = cmd.blockHash.get
 
-            val res = if(channelRes.isDefined || msg.isEmpty) channelRes
-            else Snapshot.findLatestMessageWithSnapshotHash(0, dao.messageService.lookup(msg.get.channelMessage.signedMessageData.hash).unsafeRunSync())
-
-            val proof = res.flatMap { cmd =>
-              cmd.snapshotHash.flatMap { snapshotHash =>
-                tryWithMetric({
-                  import better.files._
-                  KryoSerializer.deserializeCast[StoredSnapshot](
-                    File(dao.snapshotPath, snapshotHash).byteArray
-                  )
-                }, "readSnapshotForMessage").toOption.map { storedSnapshot =>
-                  val blocksInSnapshot = storedSnapshot.snapshot.checkpointBlocks.toList
-                  val blockHashForMessage = cmd.blockHash.get
-
-                  if (!blocksInSnapshot.contains(blockHashForMessage)) {
-                    logger.error("Message block hash not in snapshot")
-                  }
-                  val blockProof = MerkleTree(blocksInSnapshot)
-                    .createProof(blockHashForMessage)
-                  val block = storedSnapshot.checkpointCache
-                    .filter {
-                      _.checkpointBlock.get.baseHash == blockHashForMessage
-                    }
-                    .head
-                    .checkpointBlock
-                    .get
-                  val messageProofInput = block.transactions.map { _.hash } ++ block.messages
-                    .map { _.signedMessageData.signatures.hash }
-                  val messageProof = MerkleTree(messageProofInput.toList)
-                    .createProof(cmd.channelMessage.signedMessageData.signatures.hash)
-                  ChannelProof(
-                    cmd,
-                    blockProof,
-                    messageProof
-                  )
-                }
-
+              if (!blocksInSnapshot.contains(blockHashForMessage)) {
+                logger.error("Message block hash not in snapshot")
               }
 
+              val blockProof = MerkleTree(blocksInSnapshot).createProof(blockHashForMessage)
+
+              val block = storedSnapshot.checkpointCache.filter {
+                _.checkpointBlock.get.baseHash == blockHashForMessage
+              }.head.checkpointBlock.get
+
+              val messageProofInput = block.transactions.map { _.hash } ++ block.messages.map {
+                _.signedMessageData.signatures.hash
+              }
+
+              val messageProof = MerkleTree(messageProofInput.toList)
+                .createProof(cmd.channelMessage.signedMessageData.signatures.hash)
+
+              ChannelProof(
+                cmd,
+                blockProof,
+                messageProof
+              )
             }
 
-            complete(proof)
+            val proof = for {
+              msg <- dao.messageService.memPool.lookup(channelHash)
+              channelRes = Snapshot.findLatestMessageWithSnapshotHash(0, msg)
+
+              res <- if (channelRes.isDefined || msg.isEmpty) {
+                channelRes.pure[IO]
+              } else {
+                dao.messageService
+                  .lookup(msg.get.channelMessage.signedMessageData.hash)
+                  .map(Snapshot.findLatestMessageWithSnapshotHash(0, _))
+              }
+
+              exists <- res.flatMap(_.snapshotHash.map(dao.snapshotService.exists)).sequence.map(_.forall(_ == true))
+
+              proof = if (exists) {
+                res.flatMap { cmd =>
+                  cmd.snapshotHash.flatMap { snapshotHash =>
+                    tryWithMetric(
+                      {
+                        import better.files._
+                        KryoSerializer.deserializeCast[StoredSnapshot](File(dao.snapshotPath, snapshotHash).byteArray)
+                      },
+                      "readSnapshotForMessage"
+                    ).toOption.map(makeProof(cmd, _))
+                  }
+                }
+              } else None
+            } yield proof
+
+            onSuccess(proof.unsafeToFuture())(complete(_))
           } ~
           path("messages") {
             complete(dao.channelStorage.getLastNMessages(20))
@@ -346,7 +365,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               dao.externalPeerHTTPPort
             )
 
-            val peerMap = dao.peerInfoAsync.map {
+            val peerMap = dao.peerInfo.map {
               _.toSeq.map {
                 case (id, pd) => Node(id.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
               } :+ self
@@ -408,16 +427,15 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             path("add") {
               entity(as[HostPort]) { hp =>
                 onSuccess(PeerManager.attemptRegisterPeer(hp)) { result =>
-                  logger.info(s"Add Peer Request: $hp. Result: $result")
+                  logger.debug(s"Add Peer Request: $hp. Result: $result")
                   complete(StatusCode.int2StatusCode(result.code))
                 }
-
               }
             }
         } ~
         pathPrefix("download") {
           path("start") {
-            Future { Download.download() }(dao.edgeExecutionContext)
+            Future { Download.download() }(ConstellationExecutionContext.edge)
             complete(StatusCodes.OK)
           }
         } ~
@@ -464,10 +482,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         } ~
         path("peerHealthCheck") {
           val resetTimeout = 1.second
-          val breaker = new CircuitBreaker(system.scheduler,
-                                           maxFailures = 1,
-                                           callTimeout = 5.seconds,
-                                           resetTimeout)
+          val breaker = new CircuitBreaker(system.scheduler, maxFailures = 1, callTimeout = 5.seconds, resetTimeout)
 
           val response = PeerManager.broadcast(_.getString("health"))
 
@@ -488,12 +503,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         pathPrefix("genesis") {
           path("create") {
             entity(as[Set[Id]]) { ids =>
-              complete(createGenesisAndInitialDistribution(ids))
+              complete(Genesis.createGenesisAndInitialDistribution(dao.selfAddressStr, ids, dao.keyPair))
             }
           } ~
             path("accept") {
               entity(as[GenesisObservation]) { go =>
-                dao.acceptGenesis(go, setAsTips = true)
+                Genesis.acceptGenesis(go, setAsTips = true)
                 // TODO: Report errors and add validity check
                 complete(StatusCodes.OK)
               }
@@ -508,10 +523,11 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               sendRequest.dst,
               sendRequest.amountActual,
               dao.keyPair,
-              normalized = false)
+              normalized = false
+            )
 
             dao.transactionService
-              .put(TransactionCacheData(tx, inMemPool = true), true)
+              .put(TransactionCacheData(tx))
               .unsafeRunSync()
 
             complete(tx.hash)
@@ -581,13 +597,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
     }
   }
 
-  private def myUserPassAuthenticator(credentials: Credentials): Option[String] = {
+  private def myUserPassAuthenticator(credentials: Credentials): Option[String] =
     credentials match {
       case p @ Credentials.Provided(id) if id == authId && p.verify(authPassword) =>
         Some(id)
       case _ => None
     }
-  }
 
   val routes = withTimer("api") {
     if (authEnabled) {

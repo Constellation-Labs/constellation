@@ -11,12 +11,7 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
 import scala.util.Try
 
-trait E2E
-  extends AsyncFlatSpecLike
-    with Matchers
-    with BeforeAndAfterAll
-    with BeforeAndAfterEach
-    with StrictLogging {
+trait E2E extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach with StrictLogging {
 
   implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
@@ -24,12 +19,10 @@ trait E2E
 
   val tmpDir = "tmp"
 
-  override def beforeAll(): Unit = {
+  override def beforeAll(): Unit =
     // Cleanup DBs
     //Try{File(tmpDir).delete()}
     Try { File(tmpDir).createDirectories() }
-
-  }
 
   override def afterAll() {
     // Cleanup DBs
@@ -39,12 +32,12 @@ trait E2E
   }
 
   def createNode(
-                  randomizePorts: Boolean = true,
-                  seedHosts: Seq[HostPort] = Seq(),
-                  portOffset: Int = 0,
-                  isGenesisNode: Boolean = false,
-                  isLightNode: Boolean = false
-                ): ConstellationNode = {
+    randomizePorts: Boolean = true,
+    seedHosts: Seq[HostPort] = Seq(),
+    portOffset: Int = 0,
+    isGenesisNode: Boolean = false,
+    isLightNode: Boolean = false
+  ): ConstellationNode = {
     implicit val executionContext: ExecutionContextExecutorService =
       ExecutionContext.fromExecutorService(new ForkJoinPool(100))
 

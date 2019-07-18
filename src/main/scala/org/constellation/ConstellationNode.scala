@@ -24,7 +24,7 @@ import org.constellation.trust.TrustManager
 import org.constellation.util.{APIClient, HostPort, Metrics}
 import org.slf4j.MDC
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
 
 // scopt requires default args for all properties.
@@ -99,14 +99,14 @@ object ConstellationNode extends StrictLogging {
     }
 
     val config = ConfigFactory.load()
-    logger.info("Config loaded")
+    logger.debug("Config loaded")
 
     Try {
 
       // TODO: Move to scopt above.
       val seedsFromConfig: Seq[HostPort] = PeerManager.loadSeedsFromConfig(config)
 
-      logger.info(s"Seeds: $seedsFromConfig")
+      logger.debug(s"Seeds: $seedsFromConfig")
 
       // TODO: This should be unified as a single conf file
       val hostName = Option(cliConfig.externalIp).map(_.toString).getOrElse {
@@ -125,24 +125,20 @@ object ConstellationNode extends StrictLogging {
       val peerHttpPortFromArg = portOffset.map { _ + 2 }
 
       val httpPort = httpPortFromArg.getOrElse(
-        Option(System.getenv("DAG_HTTP_PORT"))
-          .map {
-            _.toInt
-          }
-          .getOrElse(config.getInt("http.port"))
+        Option(System.getenv("DAG_HTTP_PORT")).map {
+          _.toInt
+        }.getOrElse(config.getInt("http.port"))
       )
 
       val peerHttpPort = peerHttpPortFromArg.getOrElse(
-        Option(System.getenv("DAG_PEER_HTTP_PORT"))
-          .map {
-            _.toInt
-          }
-          .getOrElse(config.getInt("http.peer-port"))
+        Option(System.getenv("DAG_PEER_HTTP_PORT")).map {
+          _.toInt
+        }.getOrElse(config.getInt("http.peer-port"))
       )
 
       implicit val system: ActorSystem = ActorSystem("Constellation")
       implicit val materializer: ActorMaterializer = ActorMaterializer()
-      implicit val executionContext: ExecutionContext = ExecutionContext.global
+      implicit val executionContext: ExecutionContext = ConstellationExecutionContext.global
 
       val constellationConfig = config.getConfig("constellation")
 
@@ -172,7 +168,7 @@ object ConstellationNode extends StrictLogging {
     } match {
       case Failure(e) => e.printStackTrace()
       case Success(_) =>
-        logger.info("success")
+        logger.debug("success")
 
         // To stop daemon threads
         while (true) {
@@ -213,6 +209,15 @@ class ConstellationNode(
 ) {
 
   implicit val dao: DAO = new DAO()
+  implicit val edgeEC: ExecutionContextExecutor = ConstellationExecutionContext.edge
+
+  val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
+
+  val crossTalkConsensusActor: ActorRef =
+    system.actorOf(CrossTalkConsensus.props(remoteSenderActor, ConfigFactory.load().resolve()))
+
+  dao.consensusManager = crossTalkConsensusActor
+
   dao.initialize(nodeConfig)
 
   val logger = Logger(s"ConstellationNode_${dao.publicKeyHash}")
@@ -223,10 +228,6 @@ class ConstellationNode(
   )
 
   dao.metrics = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
-
-  val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
-  val crossTalkConsensusActor: ActorRef =
-    system.actorOf(CrossTalkConsensus.props(remoteSenderActor))
 
   val checkpointFormationManager = new CheckpointFormationManager(
     dao.processingConfig.checkpointFormationTimeSeconds,
@@ -264,24 +265,23 @@ class ConstellationNode(
     Http().bindAndHandle(routes, nodeConfig.httpInterface, nodeConfig.httpPort)
 
   val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
+
   val randomTXManager = new RandomTransactionManager(
     crossTalkConsensusActor,
     dao.processingConfig.randomTransactionLoopTimeSeconds
   )
 
-  def getIPData: ValidPeerIPData = {
+  def getIPData: ValidPeerIPData =
     ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)
-  }
 
-  def getInetSocketAddress: InetSocketAddress = {
+  def getInetSocketAddress: InetSocketAddress =
     new InetSocketAddress(nodeConfig.hostName, nodeConfig.peerHttpPort)
-  }
 
   // Setup http server for peer API
   // TODO: Add shutdown mechanism
   Http()
     .bind(nodeConfig.httpInterface, nodeConfig.peerHttpPort)
-    .runWith(Sink foreach { conn =>
+    .runWith(Sink.foreach { conn =>
       val address = conn.remoteAddress
       conn.handleWith(peerAPI.routes(address))
     })
@@ -303,8 +303,7 @@ class ConstellationNode(
   // We could also consider creating a 'Remote Proxy class' that represents a foreign
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
 
-  def getAPIClient(host: String = nodeConfig.hostName,
-                   port: Int = nodeConfig.httpPort): APIClient = {
+  def getAPIClient(host: String = nodeConfig.hostName, port: Int = nodeConfig.httpPort): APIClient = {
     val api = APIClient(host, port)
     api.id = dao.id
     api
@@ -317,7 +316,7 @@ class ConstellationNode(
   }
 
   // TODO: Change E2E to not use this but instead rely on peer discovery, need to send addresses there too
-  def getAddPeerRequest: PeerMetadata = {
+  def getAddPeerRequest: PeerMetadata =
     PeerMetadata(
       nodeConfig.hostName,
       nodeConfig.peerHttpPort,
@@ -328,7 +327,6 @@ class ConstellationNode(
         diskUsableBytes = new java.io.File(dao.snapshotPath.pathAsString).getUsableSpace
       )
     )
-  }
 
   def getAPIClientForNode(node: ConstellationNode): APIClient = {
     val ipData = node.getIPData
@@ -343,7 +341,7 @@ class ConstellationNode(
     nodeConfig.seeds.foreach {
       dao.peerManager ! _
     }
-    PeerManager.initiatePeerReload()(dao, dao.edgeExecutionContext)
+    PeerManager.initiatePeerReload()(dao, edgeEC)
   }
 
   // TODO: Use this for full flow, right now this only works as a debugging measure, does not integrate properly

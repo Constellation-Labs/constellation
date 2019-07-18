@@ -6,19 +6,22 @@ import akka.pattern.ask
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import cats.effect.IO
+import cats.effect.concurrent.Semaphore
+import cats.effect.{Concurrent, ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
-import org.constellation.primitives.Schema.{Id, NodeState, NodeType, SignedObservationEdge}
+import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage._
+import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.HostPort
 
-class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike with StrictLogging {
+class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLogging {
 
   var initialNodeConfig: NodeConfig = _
   @volatile var nodeConfig: NodeConfig = _
@@ -40,9 +43,8 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
     f
   }
 
-  def snapshotHashes: Seq[String] = {
+  def snapshotHashes: Seq[String] =
     snapshotPath.list.toSeq.map { _.name }
-  }
 
   def peersInfoPath: File = {
     val f = File(s"tmp/${id.medium}/peers")
@@ -58,7 +60,10 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
 
   @volatile var nodeType: NodeType = NodeType.Full
 
-  lazy val messageService = new MessageService()(this)
+  lazy val messageService: MessageService[IO] = {
+    implicit val daoImpl: DAO = this
+    new MessageService[IO]()
+  }
 
   def setNodeState(
     nodeState_ : NodeState
@@ -68,6 +73,8 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
   }
 
   def peerHostPort = HostPort(nodeConfig.hostName, nodeConfig.peerHttpPort)
+
+  implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
 
   def initialize(
     nodeConfigInit: NodeConfig = NodeConfig()
@@ -89,70 +96,73 @@ class DAO() extends NodeData with Genesis with EdgeDAO with SimpleWalletLike wit
     messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
-    transactionService = new DefaultTransactionService(this) //, processingConfig.transactionLRUMaxSize)
-    checkpointService = CheckpointService(this)
-    snapshotService = SnapshotService(this)
-    addressService = new AddressService()(() => metrics)
+    rateLimiting = new RateLimiting[IO]
+
+    transactionService = new TransactionService[IO](this)
+    transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
+    checkpointService = new CheckpointService[IO](
+      this,
+      transactionService,
+      messageService,
+      notificationService,
+      concurrentTipService,
+      rateLimiting
+    )
+    addressService = new AddressService[IO]()(Concurrent(ConstellationConcurrentEffect.edge), () => metrics)
+
+    snapshotService = SnapshotService[IO](
+      concurrentTipService,
+      addressService,
+      checkpointService,
+      messageService,
+      transactionService,
+      rateLimiting,
+      this
+    )
   }
 
-  lazy val concurrentTipService: ConcurrentTipService = new TrieBasedTipService(
+  implicit val context: ContextShift[IO] = ConstellationContextShift.global
+
+  lazy val concurrentTipService: ConcurrentTipService[IO] = new ConcurrentTipService[IO](
     processingConfig.maxActiveTipsAllowedInMemory,
     processingConfig.maxWidth,
+    processingConfig.maxWidth,
     processingConfig.numFacilitatorPeers,
-    processingConfig.minPeerTimeAddedSeconds
-  )(this)
-
-  lazy val threadSafeSnapshotService = new ThreadSafeSnapshotService(concurrentTipService)
+    processingConfig.minPeerTimeAddedSeconds,
+    this,
+    consensusManager
+  )
 
   def pullTips(
     readyFacilitators: Map[Id, PeerData]
-  ): Option[(Seq[SignedObservationEdge], Map[Id, PeerData])] = {
-    concurrentTipService.pull(readyFacilitators)(this.metrics)
-  }
+  ): Option[PulledTips] =
+    concurrentTipService.pull(readyFacilitators)(this.metrics).unsafeRunSync()
 
-//  def peerInfo: Map[Id, PeerData] = {
-//    // TODO: fix it to be Future
-//    Await.result((peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]], 10.seconds)
-//  }
-
-  def peerInfoAsync: IO[Map[Id, PeerData]] = IO.async { cb =>
+  def peerInfo: IO[Map[Id, PeerData]] = IO.async { cb =>
     import scala.util.{Failure, Success}
 
-    (peerManager ? GetPeerInfo).mapTo[Map[Id, PeerData]].onComplete {
-      case Success(peerInfo) => cb(Right(peerInfo))
-      case Failure(error) => cb(Left(error))
-    }(edgeExecutionContext)
+    (peerManager ? GetPeerInfo)
+      .mapTo[Map[Id, PeerData]]
+      .onComplete {
+        case Success(peerInfo) => cb(Right(peerInfo))
+        case Failure(error)    => cb(Left(error))
+      }(ConstellationExecutionContext.edge)
   }
 
   private def eqNodeType(nodeType: NodeType)(m: (Id, PeerData)) = m._2.peerMetadata.nodeType == nodeType
   private def isNodeReady(m: (Id, PeerData)) = m._2.peerMetadata.nodeState == NodeState.Ready
 
-//  def peerInfo(nodeType: NodeType): Map[Id, PeerData] =
-//    peerInfo.filter(eqNodeType(nodeType))
+  def peerInfo(nodeType: NodeType): IO[Map[Id, PeerData]] =
+    peerInfo.map(_.filter(eqNodeType(nodeType)))
 
-  def peerInfoAsync(nodeType: NodeType): IO[Map[Id, PeerData]] =
-    peerInfoAsync.map(_.filter(eqNodeType(nodeType)))
+  def readyPeers: IO[Map[Id, PeerData]] =
+    peerInfo.map(_.filter(isNodeReady))
 
-//  def readyPeers: Map[Id, PeerData] =
-//    peerInfo.filter(isNodeReady)
-
-  def readyPeersAsync: IO[Map[Id, PeerData]] =
-    peerInfoAsync.map(_.filter(isNodeReady))
-
-//  def readyPeers(nodeType: NodeType): Map[Schema.Id, PeerData] =
-//    peerInfo.filter(_._2.peerMetadata.nodeType == nodeType)
-
-  def readyPeersAsync(nodeType: NodeType): IO[Map[Id, PeerData]] =
-    readyPeersAsync.map(_.filter(eqNodeType(nodeType)))
-
-//  def readyFacilitators(): Map[Id, PeerData] = readyPeers(NodeType.Full).filter {
-//    case (_, pd) =>
-//      pd.peerMetadata.timeAdded < (System
-//        .currentTimeMillis() - processingConfig.minPeerTimeAddedSeconds * 1000)
-//  }
+  def readyPeers(nodeType: NodeType): IO[Map[Id, PeerData]] =
+    readyPeers.map(_.filter(eqNodeType(nodeType)))
 
   def readyFacilitatorsAsync: IO[Map[Id, PeerData]] =
-    readyPeersAsync(NodeType.Full).map(_.filter {
+    readyPeers(NodeType.Full).map(_.filter {
       case (_, pd) =>
         pd.peerMetadata.timeAdded < (System
           .currentTimeMillis() - processingConfig.minPeerTimeAddedSeconds * 1000)

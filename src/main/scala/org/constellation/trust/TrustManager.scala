@@ -15,17 +15,17 @@ import scala.util.Try
   * @param periodSeconds: Time to re-run batch calculation
   * @param dao: Data access object
   */
-class TrustManager(periodSeconds: Int = 120)(implicit dao: DAO)
+class TrustManager(periodSeconds: Int = 120)(implicit dao: DAO, ec: ExecutionContextExecutor)
   extends Periodic[Try[Unit]]("DataPollingManager", periodSeconds)
     with StrictLogging {
 
-  implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
+//  implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.edge
 
   private def execute() = {
     futureTryWithTimeoutMetric(
       {
 
-        val peers = dao.readyPeersAsync.unsafeRunSync().toSeq
+        val peers = dao.readyPeers.unsafeRunSync().toSeq
 
         if (peers.nonEmpty) {
 
@@ -69,7 +69,7 @@ class TrustManager(periodSeconds: Int = 120)(implicit dao: DAO)
   }
 
   override def trigger(): Future[Try[Unit]] = {
-    if (dao.readyPeersAsync.unsafeRunSync().nonEmpty) {
+    if (dao.readyPeers.unsafeRunSync().nonEmpty) {
       execute()
     } else Future.successful(Try(Unit))
   }

@@ -1,14 +1,7 @@
 package org.constellation.util
 
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
-import akka.http.scaladsl.server.Directives.{
-  complete,
-  extractUnmatchedPath,
-  get,
-  getFromResource,
-  pathPrefix,
-  _
-}
+import akka.http.scaladsl.server.Directives.{complete, extractUnmatchedPath, get, getFromResource, pathPrefix, _}
 import akka.http.scaladsl.server.{Route, StandardRoute}
 import com.typesafe.scalalogging.Logger
 import org.constellation.DAO
@@ -154,14 +147,13 @@ trait ServeUI {
   // TODO: Split these up into separate navBar views when we have enough that it makes more sense.
 
   def leftNav(activePage: String): TypedTag[String] = {
-    def element(name: String): TypedTag[String] = {
+    def element(name: String): TypedTag[String] =
       a(
         MyStyles.leftNavLink,
         href := s"/view/${name.toLowerCase}",
         name,
         if (name.toLowerCase == activePage) backgroundColor := Colors.ansiDarkGrey else div()
       )
-    }
     div(
       id := "left",
       float.left,
@@ -173,7 +165,7 @@ trait ServeUI {
     )
   }
 
-  def defaultIndexPage(activePage: String, optPrimary: Option[TypedTag[String]] = None): String = {
+  def defaultIndexPage(activePage: String, optPrimary: Option[TypedTag[String]] = None): String =
     html(
       scalatags.Text.all.head(
         scalatags.Text.tags2.title(pageTitle),
@@ -212,9 +204,8 @@ trait ServeUI {
         script(jsApplicationMain, `type` := "text/javascript")
       )
     ).render
-  }
 
-  def jsRequest: Route = {
+  def jsRequest: Route =
     pathPrefix("ui") {
       get {
         extractUnmatchedPath { path =>
@@ -226,7 +217,6 @@ trait ServeUI {
         }
       }
     }
-  }
 
   def servePage(page: String, optPrimary: Option[TypedTag[String]] = None): StandardRoute = {
     logger.info(s"Serving page $page")

@@ -1,23 +1,36 @@
 package org.constellation.consensus
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import akka.actor.{Actor, ActorRef, Props}
 import akka.pattern.{BackoffOpts, BackoffSupervisor}
-import org.constellation.consensus.CrossTalkConsensus.{NotifyFacilitators, ParticipateInBlockCreationRound, StartNewBlockCreationRound}
+import com.typesafe.config.Config
+import com.typesafe.scalalogging.StrictLogging
+import org.constellation.consensus.CrossTalkConsensus.{
+  NotifyFacilitators,
+  ParticipateInBlockCreationRound,
+  StartNewBlockCreationRound
+}
 import org.constellation.consensus.Round._
-import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{
+  BroadcastLightTransactionProposal,
+  BroadcastSelectedUnionBlock,
+  BroadcastUnionBlockProposal,
+  GetActiveMinHeight
+}
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.duration._
 
-class CrossTalkConsensus(remoteSenderSupervisor: ActorRef)(implicit dao: DAO)
+class CrossTalkConsensus(remoteSenderSupervisor: ActorRef, config: Config)(implicit dao: DAO)
     extends Actor
-    with ActorLogging {
+    with StrictLogging {
+
   val roundTimeout: FiniteDuration = ConfigUtil.getDurationFromConfig(
     "constellation.consensus.form-checkpoint-blocks-timeout",
     60.second
   )
 
-  val roundManagerProps: Props = RoundManager.props(roundTimeout)
+  val roundManagerProps: Props = RoundManager.props(config)
+
   val roundManagerSupervisor = BackoffSupervisor.props(
     BackoffOpts.onFailure(
       roundManagerProps,
@@ -50,6 +63,9 @@ class CrossTalkConsensus(remoteSenderSupervisor: ActorRef)(implicit dao: DAO)
     case cmd: SelectedUnionBlock =>
       roundManager ! cmd
 
+    case GetActiveMinHeight =>
+      roundManager.forward(GetActiveMinHeight)
+
     case cmd: BroadcastUnionBlockProposal =>
       remoteSenderSupervisor ! cmd
 
@@ -59,13 +75,14 @@ class CrossTalkConsensus(remoteSenderSupervisor: ActorRef)(implicit dao: DAO)
     case cmd: BroadcastSelectedUnionBlock =>
       remoteSenderSupervisor ! cmd
 
-    case cmd => log.warning(s"Received unknown message $cmd")
+    case cmd => logger.warn(s"Received unknown message $cmd")
   }
 }
 
 object CrossTalkConsensus {
-  def props(remoteSenderSupervisor: ActorRef)(implicit dao: DAO): Props =
-    Props(new CrossTalkConsensus(remoteSenderSupervisor))
+
+  def props(remoteSenderSupervisor: ActorRef, config: Config)(implicit dao: DAO): Props =
+    Props(new CrossTalkConsensus(remoteSenderSupervisor, config))
 
   sealed trait CrossTalkConsensusCommand
 

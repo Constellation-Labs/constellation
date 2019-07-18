@@ -11,7 +11,7 @@ import org.constellation.primitives._
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.Random
 
 object Simulation {
@@ -23,10 +23,10 @@ object Simulation {
 
   def healthy(apis: Seq[APIClient]): Boolean = {
     val responses = apis.map(a => {
-      val res = a.getString("health", timeout = 100.seconds)
+      val res = a.getString("health", timeout = 5.seconds)
       res
     })
-    Future.sequence(responses).map(_.forall(_.isSuccess)).get(120)
+    Future.sequence(responses).map(_.forall(_.isSuccess)).get(15)
   }
 
   def hasGenesis(apis: Seq[APIClient]): Boolean = {
@@ -85,16 +85,14 @@ object Simulation {
   def addPeer(
     api: APIClient,
     peer: PeerMetadata
-  )(implicit executionContext: ExecutionContext): Future[Response[String]] = {
-    api.post("addPeer", peer, 30.seconds)
-  }
+  )(implicit executionContext: ExecutionContext): Future[Response[String]] =
+    api.post("addPeer", peer, 60.seconds)
 
   def addPeerWithRegistrationFlow(
     api: APIClient,
     peer: HostPort
-  )(implicit executionContext: ExecutionContext): Future[Response[String]] = {
-    api.post("peer/add", peer, 30.seconds)
-  }
+  )(implicit executionContext: ExecutionContext): Future[Response[String]] =
+    api.post("peer/add", peer, 60.seconds)
 
   def assignReputations(apis: Seq[APIClient]): Unit = {
     val responses =
@@ -124,7 +122,7 @@ object Simulation {
     apis: Seq[APIClient],
     maxRetries: Int = 10,
     delay: Long = 3000
-  ): Boolean = {
+  ): Boolean =
     awaitConditionMet(
       s"Genesis not stored", {
         val responses = apis.map { a =>
@@ -140,13 +138,12 @@ object Simulation {
       maxRetries,
       delay
     )
-  }
 
   def checkReady(
     apis: Seq[APIClient],
     maxRetries: Int = 20,
     delay: Long = 3000
-  ): Boolean = {
+  ): Boolean =
     awaitMetric(
       "Node state not ready",
       _.get("nodeState").contains("Ready"),
@@ -154,7 +151,6 @@ object Simulation {
       maxRetries,
       delay
     )
-  }
 
   def awaitMetric(
     err: String,
@@ -162,7 +158,7 @@ object Simulation {
     apis: Seq[APIClient],
     maxRetries: Int = 10,
     delay: Long = 3000
-  ): Boolean = {
+  ): Boolean =
     awaitConditionMet(
       err, {
         val responses = apis.map { a =>
@@ -177,13 +173,11 @@ object Simulation {
       delay
     )
 
-  }
-
   def checkPeersHealthy(
     apis: Seq[APIClient],
     maxRetries: Int = 10,
     delay: Long = 3000
-  ): Boolean = {
+  ): Boolean =
     awaitConditionMet(
       s"Peer health checks failed", {
         val responses = apis.map { a =>
@@ -203,19 +197,18 @@ object Simulation {
             s =>
               s.forall { res =>
                 res.forall(_._2) && res.size == apis.size - 1
-            }
+              }
           )
       },
       maxRetries,
       delay
     )
-  }
 
   def checkHealthy(
     apis: Seq[APIClient],
     maxRetries: Int = 30,
     delay: Long = 5000
-  ): Boolean = {
+  ): Boolean =
     awaitConditionMet(
       s"Unhealthy nodes", {
         val futures = apis.map { a =>
@@ -231,14 +224,13 @@ object Simulation {
       maxRetries,
       delay
     )
-  }
 
   def checkSnapshot(
     apis: Seq[APIClient],
     num: Int = 2,
     maxRetries: Int = 100,
     delay: Long = 10000
-  ): Boolean = {
+  ): Boolean =
     awaitConditionMet(
       s"Less than $num snapshots", {
         val responses = apis.map { a =>
@@ -257,7 +249,6 @@ object Simulation {
       maxRetries,
       delay
     )
-  }
 
   def awaitConditionMet(
     err: String,
@@ -284,7 +275,7 @@ object Simulation {
     numAccepted: Int = 5,
     maxRetries: Int = 30,
     delay: Long = 5000
-  ): Boolean = {
+  ): Boolean =
     awaitConditionMet(
       s"Accepted checkpoints below $numAccepted", {
         val responses = apis.map { a =>
@@ -302,7 +293,6 @@ object Simulation {
       maxRetries,
       delay
     )
-  }
 
   def sendRandomTransaction(apis: Seq[APIClient]): Future[Response[String]] = {
     val src = randomNode(apis)
@@ -344,8 +334,7 @@ object Simulation {
     assert(results.forall(_.isSuccess))
   }
 
-  def addPeersFromRegistrationRequest(apis: Seq[APIClient],
-                                      addPeerRequests: Seq[PeerMetadata]): Unit = {
+  def addPeersFromRegistrationRequest(apis: Seq[APIClient], addPeerRequests: Seq[PeerMetadata]): Unit = {
 
     val addPeers = apis.flatMap { a =>
       addPeerRequests.zip(apis).filter(_._2 != a).map {
@@ -405,7 +394,26 @@ object Simulation {
 
     assert(awaitCheckpointsAccepted(apis, numAccepted = 3))
 
+    Simulation.triggerRandom(apis)
+    Simulation.triggerCheckpointFormation(apis)
+
+    Simulation.logger.info("Stopping transactions to run parity check")
+
+    Simulation.awaitConditionMet(
+      "Accepted checkpoint blocks number differs across the nodes",
+      apis.map { p =>
+        val n = Await.result(p.metricsAsync, 4 seconds)(Metrics.checkpointAccepted)
+        Simulation.logger.info(s"peer ${p.id} has $n accepted cbs")
+        n
+      }.distinct.size == 1,
+      maxRetries = 3,
+      delay = 5000
+    )
+
     logger.info("Checkpoint validation passed")
+
+    Simulation.triggerRandom(apis)
+    Simulation.triggerCheckpointFormation(apis)
 
     var debugChannelName = "debug"
     var attempt = 0
