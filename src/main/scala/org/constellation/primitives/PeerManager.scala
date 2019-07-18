@@ -3,6 +3,7 @@ package org.constellation.primitives
 import akka.actor.{Actor, ActorSystem}
 import akka.stream.ActorMaterializer
 import cats.data.ValidatedNel
+import cats.effect.IO
 import cats.implicits._
 import com.softwaremill.sttp.Response
 import com.typesafe.config.Config
@@ -14,12 +15,12 @@ import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{Id, InternalHeartbeat, NodeState}
 import org.constellation.util.Validation._
 import org.constellation.util._
-import org.constellation.{DAO, PeerMetadata, RemovePeerRequest}
+import org.constellation.{ConstellationExecutionContext, DAO, PeerMetadata, RemovePeerRequest}
 import org.joda.time.LocalDateTime
 
 import scala.collection.Set
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.{Random, Success, Try}
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 
@@ -83,14 +84,13 @@ object PeerManager extends StrictLogging {
 
   def attemptRegisterSelfWithPeer(hp: HostPort)(implicit dao: DAO): Future[Any] = {
 
-    implicit val ec: ExecutionContextExecutor = dao.apiClientExecutionContext
+    implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.apiClient
     // if (!dao.peerInfo.exists(_._2.client.hostName == hp.host)) {
 
     futureTryWithTimeoutMetric(
       {
         logger.info(s"Attempting to register with $hp")
-
-        APIClient(hp.host, hp.port).postSync(
+        APIClient(hp.host, hp.port).post(
           "register",
           dao.peerRegistrationRequest
         )
@@ -106,7 +106,7 @@ object PeerManager extends StrictLogging {
 
   def attemptRegisterPeer(hp: HostPort)(implicit dao: DAO): Future[Response[String]] = {
 
-    implicit val ec: ExecutionContextExecutor = dao.apiClientExecutionContext
+    implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.apiClient
     // if (!dao.peerInfo.exists(_._2.client.hostName == hp.host)) {
 
     wrapFutureWithMetric(
@@ -114,7 +114,7 @@ object PeerManager extends StrictLogging {
         logger.info(s"Attempting to register with $hp")
 
         val client =
-          APIClient(hp.host, hp.port)(dao.apiClientExecutionContext, dao)
+          APIClient(hp.host, hp.port)(ConstellationExecutionContext.apiClient, dao)
 
         client
           .getNonBlocking[PeerRegistrationRequest]("registration/request")
@@ -134,30 +134,37 @@ object PeerManager extends StrictLogging {
 
   }
 
-  def peerDiscovery(client: APIClient)(implicit dao: DAO): Unit =
-    client
-      .getNonBlocking[Seq[PeerMetadata]]("peers")
-      .onComplete {
-        case Success(pmd) =>
-          pmd.foreach { md =>
-            if (dao.id != md.id && validPeerAddition(HostPort(md.host, md.httpPort), dao.peerInfo.unsafeRunSync())) {
-              val client =
-                APIClient(md.host, md.httpPort)(dao.apiClientExecutionContext, dao)
-              client
-                .getNonBlocking[PeerRegistrationRequest]("registration/request")
-                .onComplete {
-                  case Success(registrationRequest) =>
-                    dao.peerManager ! PendingRegistration(md.host, registrationRequest)
-                    client.post("register", dao.peerRegistrationRequest)
-                  case Failure(e) =>
-                    dao.metrics.incrementMetric("peerGetRegistrationRequestFailed")
-                }(dao.apiClientExecutionContext)
-            }
-          }
-        case Failure(e) =>
-          dao.metrics.incrementMetric("peerDiscoveryQueryFailed")
+  def peerDiscovery(client: APIClient)(implicit dao: DAO): Unit = {
 
-      }(dao.apiClientExecutionContext)
+    implicit val ec = ConstellationExecutionContext.apiClient
+
+    val discover: IO[List[String]] = for {
+      peersMetadata <- client.getNonBlockingIO[Seq[PeerMetadata]]("peers").recoverWith {
+        case err =>
+          dao.metrics.incrementMetricAsync[IO]("peerDiscoveryQueryFailed") *> IO.raiseError[Seq[PeerMetadata]](err)
+      }
+      peers <- dao.peerInfo
+      filteredPeers = peersMetadata.filter(
+        p => p.id != dao.id && validPeerAddition(HostPort(p.host, p.httpPort), peers)
+      )
+      register <- filteredPeers.toList
+        .traverse(
+          md =>
+            APIClient(md.host, md.httpPort)
+              .getNonBlockingIO[PeerRegistrationRequest]("registration/request")
+              .map((md, _))
+        )
+      _ <- register.traverse(r => IO(dao.peerManager ! PendingRegistration(r._1.host, r._2)))
+      registerResponse <- register
+        .map(
+          md => APIClient(md._1.host, md._1.httpPort).postNonBlockingIO[String]("register", dao.peerRegistrationRequest)
+        )
+        .sequence
+    } yield registerResponse
+
+    discover.unsafeRunAsyncAndForget()
+
+  }
 
   def validWithLoopbackGuard(host: String)(implicit dao: DAO): Boolean =
     (host != dao.externalHostString && host != "127.0.0.1" && host != "localhost") || !dao.preventLocalhostAsPeer
@@ -241,7 +248,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
               case _ =>
                 dao.metrics.incrementMetric("peerHealthCheckFailed")
                 self ! ChangePeerState(d.peerMetadata.id, NodeState.Offline)
-            }(dao.apiClientExecutionContext)
+            }(ConstellationExecutionContext.apiClient)
         }
       }
       if (round % dao.processingConfig.peerDiscoveryInterval == 0) {
@@ -305,7 +312,7 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 
         val adjustedHost = if (auxHost.nonEmpty) auxHost else host
         val client =
-          APIClient(adjustedHost, port)(dao.apiClientExecutionContext, dao)
+          APIClient(adjustedHost, port)(ConstellationExecutionContext.apiClient, dao)
         client.id = id
 
         PeerManager.peerDiscovery(client)
@@ -353,10 +360,9 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
       if (badAttempt) {
         dao.metrics.incrementMetric("duplicatePeerAdditionAttempt")
       } else {
-        implicit val ec: ExecutionContextExecutor =
-          dao.apiClientExecutionContext
+        implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.apiClient
 
-        val client = APIClient(request.host, request.port)(dao.apiClientExecutionContext, dao)
+        val client = APIClient(request.host, request.port)(ConstellationExecutionContext.apiClient, dao)
 
         val authSignRequest = PeerAuthSignRequest(Random.nextLong())
         val req =
@@ -435,7 +441,6 @@ class PeerManager(ipManager: IPManager)(implicit val materialize: ActorMateriali
 // TODO: use swayDB when ready
 
     dao.peersInfoPath.write(updatedPeerInfo.values.toSeq.map { _.peerMetadata }.json)
-
   }
 
   private def updatePeerInfo(peerData: PeerData): Unit = {

@@ -9,7 +9,7 @@ import org.constellation.consensus.RoundManager.{
 }
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema.SignedObservationEdge
-import org.constellation.primitives.{ChannelMessage, PeerData, Transaction}
+import org.constellation.primitives.{ChannelMessage, PeerData, TipSoe, Transaction}
 import org.constellation.{DAO, PeerMetadata}
 
 case class RoundDataRemote(
@@ -18,7 +18,7 @@ case class RoundDataRemote(
   lightPeers: Set[PeerMetadata],
   facilitatorId: FacilitatorId,
   transactions: List[Transaction],
-  tipsSOE: Seq[SignedObservationEdge],
+  tipsSOE: TipSoe,
   messages: Seq[ChannelMessage]
 )
 

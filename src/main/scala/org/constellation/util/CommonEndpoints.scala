@@ -54,10 +54,14 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.concurrentTipService.toMap)
       } ~
       path("heights") {
-        val maybeHeights = dao.concurrentTipService.toMap.flatMap {
-          case (k, _) => dao.checkpointService.lookup(k).unsafeRunSync().flatMap { _.height }
-        }.toSeq
-        complete(maybeHeights)
+        val calculateHeights = for {
+          tips <- dao.concurrentTipService.toMap
+          maybeHeights <- tips.toList.traverse(t => dao.checkpointService.lookup(t._1))
+        } yield maybeHeights.flatMap(_.flatMap(_.height))
+
+        onSuccess(calculateHeights.unsafeToFuture()) { res =>
+          complete(res)
+        }
       } ~
       path("snapshotHashes") {
         complete(Snapshot.snapshotHashes())
@@ -126,7 +130,18 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.messageService.memPool.lookup(h).unsafeRunSync())
       } ~
       path("checkpoint" / Segment) { h =>
-        complete(dao.checkpointService.lookup(h).unsafeRunSync())
+        onComplete(dao.checkpointService.fullData(h).unsafeToFuture()) {
+          case Failure(err)           => complete(HttpResponse(StatusCodes.InternalServerError, entity = err.getMessage))
+          case Success(None)          => complete(StatusCodes.NotFound)
+          case Success(Some(cbCache)) => complete(cbCache)
+        }
+      } ~
+      path("soe" / Segment) { h =>
+        onComplete(dao.soeService.lookup(h).unsafeToFuture()) {
+          case Failure(err)       => complete(HttpResponse(StatusCodes.InternalServerError, entity = err.getMessage))
+          case Success(None)      => complete(StatusCodes.NotFound)
+          case Success(Some(soe)) => complete(soe)
+        }
       }
 
   }

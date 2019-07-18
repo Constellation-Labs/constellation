@@ -6,7 +6,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorRef
 import akka.util.Timeout
 import constellation.{EasyFutureBlock, futureTryWithTimeoutMetric}
-import org.constellation.DAO
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.consensus.CrossTalkConsensus.StartNewBlockCreationRound
 import org.constellation.consensus.EdgeProcessor
 import org.constellation.primitives.Schema.NodeState
@@ -26,7 +26,7 @@ class CheckpointFormationManager(
 
   def toFiniteDuration(d: java.time.Duration): FiniteDuration = Duration.fromNanos(d.toNanos)
 
-  implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
+  implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.edge
 
   private var formEmptyCheckpointAfterThreshold: FiniteDuration =
     undersizedCheckpointThresholdSeconds.seconds

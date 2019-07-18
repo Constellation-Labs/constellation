@@ -4,17 +4,17 @@ import java.util.concurrent.atomic.AtomicInteger
 import cats.effect.concurrent.Semaphore
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
+import org.constellation.{ConstellationContextShift, ConstellationExecutionContext}
 import org.scalatest.{Matchers, WordSpec}
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, Future}
 
 class SingleLockTest extends WordSpec with Matchers {
   "SingleLock" should {
-    implicit val ioContextShift: ContextShift[IO] =
-      IO.contextShift(scala.concurrent.ExecutionContext.Implicits.global)
-    implicit val timer = IO.timer(ExecutionContext.global)
+    implicit val ec = ConstellationExecutionContext.global
+    implicit val ioContextShift: ContextShift[IO] = ConstellationContextShift.global
+    implicit val timer = IO.timer(ConstellationExecutionContext.global)
 
     "not allow concurrent modifications of same resource" in {
       val items = scala.collection.mutable.Stack[Int](1, 2, 3)
@@ -40,7 +40,7 @@ class SingleLockTest extends WordSpec with Matchers {
       lazy val throwError = IO {
         throw new RuntimeException("throwError")
       }
-      implicit val timer = IO.timer(ExecutionContext.global)
+      implicit val timer = IO.timer(ConstellationExecutionContext.global)
       val items = scala.collection.mutable.Stack[Int](1, 2, 3)
       val processedItems = scala.collection.mutable.Stack[Int]()
       val op = IO {

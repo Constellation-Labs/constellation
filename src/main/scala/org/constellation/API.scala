@@ -14,11 +14,11 @@ import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromE
 import akka.pattern.CircuitBreaker
 import akka.util.Timeout
 import cats.effect.IO
+import cats.implicits._
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import cats.implicits._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
@@ -80,6 +80,7 @@ object ProcessingConfig {
 
 case class ProcessingConfig(
   maxWidth: Int = 10,
+  maxTipUsage: Int = 2,
   minCheckpointFormationThreshold: Int = 50,
   maxTXInBlock: Int = 50,
   maxMessagesInBlock: Int = 1,
@@ -101,7 +102,8 @@ case class ProcessingConfig(
   snapshotInterval: Int = 25,
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,
-  roundsPerMessage: Int = 10
+  roundsPerMessage: Int = 10,
+  txGossipingFanout: Int = 2
 ) {}
 
 case class ChannelUIOutput(channels: Seq[String])
@@ -428,13 +430,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                   logger.debug(s"Add Peer Request: $hp. Result: $result")
                   complete(StatusCode.int2StatusCode(result.code))
                 }
-
               }
             }
         } ~
         pathPrefix("download") {
           path("start") {
-            Future { Download.download() }(dao.edgeExecutionContext)
+            Future { Download.download() }(ConstellationExecutionContext.edge)
             complete(StatusCodes.OK)
           }
         } ~
@@ -502,12 +503,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         pathPrefix("genesis") {
           path("create") {
             entity(as[Set[Id]]) { ids =>
-              complete(createGenesisAndInitialDistribution(ids))
+              complete(Genesis.createGenesisAndInitialDistribution(dao.selfAddressStr, ids, dao.keyPair))
             }
           } ~
             path("accept") {
               entity(as[GenesisObservation]) { go =>
-                dao.acceptGenesis(go, setAsTips = true)
+                Genesis.acceptGenesis(go, setAsTips = true)
                 // TODO: Report errors and add validity check
                 complete(StatusCodes.OK)
               }
@@ -526,7 +527,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             )
 
             dao.transactionService
-              .put(TransactionCacheData(tx, inMemPool = true))
+              .put(TransactionCacheData(tx))
               .unsafeRunSync()
 
             complete(tx.hash)

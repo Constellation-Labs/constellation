@@ -1,9 +1,9 @@
 package org.constellation.storage
-import cats.effect.{IO, Sync}
+import cats.effect.Concurrent
 import org.constellation.primitives.PeerNotification
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 
-class NotificationService[F[_]: Sync]() extends MerkleStorageAlgebra[F, String, PeerNotification] {
+class NotificationService[F[_]: Concurrent]() extends MerkleStorageAlgebra[F, String, PeerNotification] {
   val merklePool = new StorageService[F, Seq[String]]()
   val memPool = new StorageService[F, PeerNotification]()
 

@@ -1,12 +1,13 @@
 package org.constellation.storage
 
-import cats.effect.Sync
+import cats.effect.{Concurrent, Sync}
 import cats.implicits._
 import org.constellation.DAO
 import org.constellation.primitives.{ChannelMessageMetadata, ChannelMetadata}
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 
-class MessageService[F[_]: Sync]()(implicit dao: DAO) extends MerkleStorageAlgebra[F, String, ChannelMessageMetadata] {
+class MessageService[F[_]: Concurrent]()(implicit dao: DAO)
+    extends MerkleStorageAlgebra[F, String, ChannelMessageMetadata] {
   val merklePool = new StorageService[F, Seq[String]]()
   val arbitraryPool = new StorageService[F, ChannelMessageMetadata]()
   val memPool = new StorageService[F, ChannelMessageMetadata]()
@@ -28,4 +29,4 @@ class MessageService[F[_]: Sync]()(implicit dao: DAO) extends MerkleStorageAlgeb
     merklePool.lookup(merkleRoot)
 }
 
-class ChannelService[F[_]: Sync]() extends StorageService[F, ChannelMetadata]()
+class ChannelService[F[_]: Concurrent]() extends StorageService[F, ChannelMetadata]()

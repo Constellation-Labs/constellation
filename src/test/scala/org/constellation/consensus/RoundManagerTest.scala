@@ -2,7 +2,7 @@ package org.constellation.consensus
 
 import java.util.concurrent.Semaphore
 
-import akka.actor.{ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import cats.effect.{ContextShift, IO}
@@ -95,10 +95,9 @@ class RoundManagerTest
 
   val soe = mock[SignedObservationEdge]
   soe.baseHash shouldReturn "abc"
-  val tips = (Seq(soe), readyFacilitators)
+  val tips = PulledTips(TipSoe(Seq(soe), None), readyFacilitators)
 
   dao.id shouldReturn daoId
-  dao.edgeExecutionContext shouldReturn system.dispatcher
   dao.minCheckpointFormationThreshold shouldReturn checkpointFormationThreshold
 
   dao.readyFacilitatorsAsync shouldReturn IO.pure(readyFacilitators)
@@ -119,7 +118,7 @@ class RoundManagerTest
   dao.transactionService shouldReturn mock[TransactionService[IO]]
   dao.transactionService.getArbitrary shouldReturn IO.pure(Map.empty)
   dao.transactionService.returnTransactionsToPending(*) shouldReturn IO.pure(List.empty)
-  dao.transactionService.pullForConsensusSafe(checkpointFormationThreshold, *) shouldReturn IO(
+  dao.transactionService.pullForConsensus(checkpointFormationThreshold, *) shouldReturn IO(
     List(tx1, tx2).map(TransactionCacheData(_))
   )
 
@@ -178,7 +177,7 @@ class RoundManagerTest
       Set(),
       FacilitatorId(facilitatorId1),
       List(),
-      Seq(),
+      TipSoe(Seq(), None),
       Seq()
     )
     val cmd = mock[ParticipateInBlockCreationRound]
@@ -203,7 +202,7 @@ class RoundManagerTest
       Set(),
       FacilitatorId(facilitatorId1),
       List(),
-      Seq(),
+      TipSoe(Seq(), None),
       Seq()
     )
     val cmd = mock[ParticipateInBlockCreationRound]
@@ -364,11 +363,9 @@ class RoundManagerTest
   }
 
   test("it should remove not accepted transactions") {
-    implicit val context: ContextShift[IO] =
-      IO.contextShift(scala.concurrent.ExecutionContext.Implicits.global)
+    implicit val context: ContextShift[IO] = ConstellationContextShift.global
 
-    val semaphore = cats.effect.concurrent.Semaphore[IO](1).unsafeRunSync()
-    dao.transactionService shouldReturn new TransactionService[IO](dao, semaphore)
+    dao.transactionService shouldReturn new TransactionService[IO](dao)
 
     val tx3 = Fixtures.dummyTx(dao)
     dao.transactionService.put(TransactionCacheData(tx3), TransactionStatus.Pending).unsafeRunSync()

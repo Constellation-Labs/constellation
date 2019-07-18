@@ -2,12 +2,14 @@ package org.constellation.util
 
 import akka.http.scaladsl.coding.Gzip
 import akka.util.ByteString
+import cats.effect.IO
 import com.softwaremill.sttp._
 import com.softwaremill.sttp.json4s._
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{CanLog, Logger}
+import org.constellation.ConstellationContextShift
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import org.slf4j.MDC
@@ -70,8 +72,6 @@ class APIClientBase(
 
   def udpAddress: String = hostName + ":" + udpPort
 
-  def setExternalIP(): Boolean = postSync("ip", hostName + ":" + udpPort).isSuccess
-
   def baseURI: String = {
     val uri = s"http://$hostName:$apiPort"
     uri
@@ -128,6 +128,10 @@ class APIClientBase(
       .send()
   }
 
+  def putAsync(suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
+    implicit f: Formats = constellation.constellationFormats
+  ): IO[Response[String]] = IO.fromFuture(IO(put(suffix, b, timeout)))(ConstellationContextShift.apiClient)
+
   def postEmpty(suffix: String, timeout: Duration = 15.seconds)(
     implicit f: Formats = constellation.constellationFormats
   ): Response[String] =
@@ -137,11 +141,6 @@ class APIClientBase(
     implicit f: Formats = constellation.constellationFormats
   ): Response[String] =
     post(suffix, b, timeout).blocking(timeout)
-
-  def putSync(suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
-    implicit f: Formats = constellation.constellationFormats
-  ): Response[String] =
-    put(suffix, b, timeout).blocking(timeout)
 
   def postBlocking[T <: AnyRef](suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
     implicit m: Manifest[T],
@@ -170,7 +169,12 @@ class APIClientBase(
       .map(_.unsafeBody)
   }
 
-  def postNonBlockingUnit(suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
+  def postNonBlockingUnit(
+    suffix: String,
+    b: AnyRef,
+    timeout: Duration = 15.seconds,
+    headers: Map[String, String] = Map.empty
+  )(
     implicit f: Formats = constellation.constellationFormats
   ): Future[Response[Unit]] = {
     val ser = Serialization.write(b)
@@ -179,16 +183,9 @@ class APIClientBase(
       .body(gzipped)
       .contentType("application/json")
       .header("Content-Encoding", "gzip")
+      .headers(headers)
       .response(ignore)
       .send()
-  }
-
-  def postBlockingEmpty[T <: AnyRef](
-    suffix: String,
-    timeout: Duration = 15.seconds
-  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): T = {
-    val res = postEmpty(suffix, timeout)
-    Serialization.read[T](res.unsafeBody)
   }
 
   def postNonBlockingEmpty[T <: AnyRef](
@@ -216,13 +213,6 @@ class APIClientBase(
     timeout: Duration = 15.seconds
   ): Future[Response[String]] =
     httpWithAuth(suffix, queryParams, timeout)(Method.GET).send()
-
-  def getSync(
-    suffix: String,
-    queryParams: Map[String, String] = Map(),
-    timeout: Duration = 15.seconds
-  ): Response[String] =
-    getString(suffix, queryParams, timeout).blocking(timeout)
 
   def getBlocking[T <: AnyRef](
     suffix: String,

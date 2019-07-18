@@ -137,7 +137,7 @@ object ConstellationNode extends StrictLogging {
 
       implicit val system: ActorSystem = ActorSystem("Constellation")
       implicit val materializer: ActorMaterializer = ActorMaterializer()
-      implicit val executionContext: ExecutionContext = ExecutionContext.global
+      implicit val executionContext: ExecutionContext = ConstellationExecutionContext.global
 
       val constellationConfig = config.getConfig("constellation")
 
@@ -207,6 +207,14 @@ class ConstellationNode(
 ) {
 
   implicit val dao: DAO = new DAO()
+
+  val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
+
+  val crossTalkConsensusActor: ActorRef =
+    system.actorOf(CrossTalkConsensus.props(remoteSenderActor, ConfigFactory.load().resolve()))
+
+  dao.consensusManager = crossTalkConsensusActor
+
   dao.initialize(nodeConfig)
 
   val logger = Logger(s"ConstellationNode_${dao.publicKeyHash}")
@@ -217,11 +225,6 @@ class ConstellationNode(
   )
 
   dao.metrics = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
-
-  val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
-
-  val crossTalkConsensusActor: ActorRef =
-    system.actorOf(CrossTalkConsensus.props(remoteSenderActor, ConfigFactory.load().resolve()))
 
   val checkpointFormationManager = new CheckpointFormationManager(
     dao.processingConfig.checkpointFormationTimeSeconds,
@@ -335,7 +338,7 @@ class ConstellationNode(
     nodeConfig.seeds.foreach {
       dao.peerManager ! _
     }
-    PeerManager.initiatePeerReload()(dao, dao.edgeExecutionContext)
+    PeerManager.initiatePeerReload()(dao, ConstellationExecutionContext.edge)
   }
 
   // TODO: Use this for full flow, right now this only works as a debugging measure, does not integrate properly

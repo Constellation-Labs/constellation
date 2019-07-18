@@ -24,13 +24,15 @@ object SnapshotsDownloader {
   implicit val getSnapshotTimeout: FiniteDuration =
     ConfigUtil.config.getInt("download.getSnapshotTimeout").seconds
 
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+
   def downloadSnapshotRandomly(hash: String, pool: Iterable[APIClient]): IO[StoredSnapshot] = {
     val poolArray = pool.toArray
     val stopAt = Random.nextInt(poolArray.length)
 
     def makeAttempt(index: Int): IO[StoredSnapshot] =
       getSnapshot(hash, poolArray(index)).handleErrorWith {
-        case e if index == stopAt => IO.raiseError(e)
+        case e if index == stopAt => IO.raiseError[StoredSnapshot](e)
         case _                    => makeAttempt((index + 1) % poolArray.length)
       }
 
@@ -43,10 +45,10 @@ object SnapshotsDownloader {
     def makeAttempt(sortedPeers: Iterable[APIClient]): IO[StoredSnapshot] =
       sortedPeers match {
         case Nil =>
-          IO.raiseError(new RuntimeException("Unable to download Snapshot from empty peer list"))
+          IO.raiseError[StoredSnapshot](new RuntimeException("Unable to download Snapshot from empty peer list"))
         case head :: tail =>
           getSnapshot(hash, head).handleErrorWith {
-            case e if tail.isEmpty => IO.raiseError(e)
+            case e if tail.isEmpty => IO.raiseError[StoredSnapshot](e)
             case _                 => makeAttempt(sortedPeers.tail)
           }
       }
@@ -109,7 +111,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   private implicit val ioTimer: Timer[IO] = IO.timer(ec)
 
   final implicit class FutureOps[+T](f: Future[T]) {
-    def toIO: IO[T] = IO.fromFuture(IO(f))
+    def toIO: IO[T] = IO.fromFuture(IO(f))(IO.contextShift(ec))
   }
 
   val config: Config = ConfigFactory.load()
@@ -151,7 +153,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .map(_.find(_.nonEmpty).flatten.get)
       .toIO
       .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadedGenesis", "true"))
-      .flatTap(genesis => IO(dao.acceptGenesis(genesis)))
+      .flatTap(genesis => IO(Genesis.acceptGenesis(genesis)))
 
   private def waitForPeers(): IO[Unit] =
     IO(logger.debug(s"Waiting ${waitForPeersDelay.toString()} for peers"))
@@ -287,8 +289,7 @@ object Download {
       dao.metrics.updateMetric("downloadedNearbyChannels", nearbyChannels.size.toString)
 
       nearbyChannels.toList
-        .map(cmd => dao.channelService.put(cmd.channelId, cmd))
-        .sequence
+        .traverse(cmd => dao.channelService.put(cmd.channelId, cmd))
         .unsafeRunSync()
 
       dao.setNodeState(NodeState.Ready)

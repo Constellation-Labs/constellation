@@ -1,8 +1,9 @@
 package org.constellation.consensus
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import akka.actor.{Actor, ActorRef, Props}
 import akka.pattern.{BackoffOpts, BackoffSupervisor}
 import com.typesafe.config.Config
+import com.typesafe.scalalogging.StrictLogging
 import org.constellation.consensus.CrossTalkConsensus.{
   NotifyFacilitators,
   ParticipateInBlockCreationRound,
@@ -12,7 +13,8 @@ import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{
   BroadcastLightTransactionProposal,
   BroadcastSelectedUnionBlock,
-  BroadcastUnionBlockProposal
+  BroadcastUnionBlockProposal,
+  GetActiveMinHeight
 }
 import org.constellation.{ConfigUtil, DAO}
 
@@ -20,7 +22,7 @@ import scala.concurrent.duration._
 
 class CrossTalkConsensus(remoteSenderSupervisor: ActorRef, config: Config)(implicit dao: DAO)
     extends Actor
-    with ActorLogging {
+    with StrictLogging {
 
   val roundTimeout: FiniteDuration = ConfigUtil.getDurationFromConfig(
     "constellation.consensus.form-checkpoint-blocks-timeout",
@@ -61,6 +63,9 @@ class CrossTalkConsensus(remoteSenderSupervisor: ActorRef, config: Config)(impli
     case cmd: SelectedUnionBlock =>
       roundManager ! cmd
 
+    case GetActiveMinHeight =>
+      roundManager.forward(GetActiveMinHeight)
+
     case cmd: BroadcastUnionBlockProposal =>
       remoteSenderSupervisor ! cmd
 
@@ -70,7 +75,7 @@ class CrossTalkConsensus(remoteSenderSupervisor: ActorRef, config: Config)(impli
     case cmd: BroadcastSelectedUnionBlock =>
       remoteSenderSupervisor ! cmd
 
-    case cmd => log.warning(s"Received unknown message $cmd")
+    case cmd => logger.warn(s"Received unknown message $cmd")
   }
 }
 

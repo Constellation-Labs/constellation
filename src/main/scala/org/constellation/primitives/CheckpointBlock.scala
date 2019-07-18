@@ -202,7 +202,7 @@ case class CheckpointBlock(
       } else {
         val parent = dao.soeService.lookup(soeHash).unsafeRunSync()
         if (parent.isEmpty) {
-          println(s"ERROR: SOEHash $soeHash missing from soeService for cb: $baseHash")
+          dao.miscLogger.debug(s"SOEHash $soeHash missing from soeService for cb: $baseHash")
           dao.metrics.incrementMetric("parentSOEServiceQueryFailed")
           // Temporary
           val parentDirect = checkpoint.edge.observationEdge.parents.find(_.hash == soeHash).flatMap { _.baseHash }
@@ -422,8 +422,7 @@ sealed trait CheckpointBlockValidatorNel {
     }
 
     fullData
-      .map(_.flatMap(_.checkpointBlock))
-      .sequence[Option, CheckpointBlock]
+      .traverse(_.flatMap(_.checkpointBlock))
       .getOrElse(List())
   }
 
@@ -529,15 +528,13 @@ sealed trait CheckpointBlockValidatorNel {
   }
 
   def containsAlreadyAcceptedTx(cb: CheckpointBlock)(implicit dao: DAO): IO[List[String]] = {
-    val cbs = dao.checkpointService.memPool.size().unsafeRunSync()
-    val containsAccepted = cb.transactions
+    val containsAccepted = cb.transactions.toList
       .map(
         t =>
           dao.transactionService
             .isAccepted(t.hash)
             .map(b => (t.hash, b))
       )
-      .toList
       .sequence[IO, (String, Boolean)]
       .map(l => l.collect { case (h, true) => h })
 

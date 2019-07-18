@@ -2,7 +2,7 @@ package org.constellation.util
 
 import akka.http.scaladsl.coding.Gzip
 import akka.util.ByteString
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import com.softwaremill.sttp._
 import com.softwaremill.sttp.json4s.asJson
 import com.typesafe.config.ConfigFactory
@@ -51,6 +51,8 @@ class APIClient private (
   dao: DAO = null
 ) extends APIClientBase(host, port, authEnabled, authId, authPassword) {
 
+  val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
+
   var id: Id = _
 
   val daoOpt = Option(dao)
@@ -59,9 +61,6 @@ class APIClient private (
     daoOpt.map { d =>
       Map("Remote-Address" -> d.externalHostString, "X-Real-IP" -> d.externalHostString)
     }.getOrElse(Map())
-
-  def metrics: Map[String, String] =
-    getBlocking[MetricsResult]("metrics", timeout = 15.seconds).metrics
 
   def metricsAsync: Future[Map[String, String]] =
     getNonBlocking[MetricsResult]("metrics", timeout = 15.seconds).map(_.metrics)
@@ -91,7 +90,7 @@ class APIClient private (
     queryParams: Map[String, String] = Map(),
     timeout: Duration = 15.seconds
   )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): IO[T] =
-    IO.fromFuture(IO { getNonBlocking[T](suffix, queryParams, timeout) })
+    IO.fromFuture(IO { getNonBlocking[T](suffix, queryParams, timeout) })(contextShift)
 
   def postNonBlockingIO[T <: AnyRef](
     suffix: String,
@@ -102,34 +101,7 @@ class APIClient private (
     implicit m: Manifest[T],
     f: Formats = constellation.constellationFormats
   ): IO[T] =
-    IO.fromFuture(IO { postNonBlocking[T](suffix, b, timeout, headers) })
-
-  def getSnapshotInfo(): SnapshotInfo = getBlocking[SnapshotInfo]("info")
-
-  def getSnapshots(): Seq[Snapshot] = {
-
-    val snapshotInfo = getSnapshotInfo()
-
-    val startingSnapshot = snapshotInfo.snapshot
-
-    def getSnapshots(hash: String, snapshots: Seq[Snapshot] = Seq()): Seq[Snapshot] = {
-      val sn = getBlocking[Option[Snapshot]]("snapshot/" + hash)
-      sn match {
-        case Some(snapshot) =>
-          if (snapshot.lastSnapshot == "" || snapshot.lastSnapshot == Snapshot.snapshotZeroHash) {
-            snapshots :+ snapshot
-          } else {
-            getSnapshots(snapshot.lastSnapshot, snapshots :+ snapshot)
-          }
-        case None =>
-          logger.warn("MISSING SNAPSHOT")
-          snapshots
-      }
-    }
-
-    val snapshots = getSnapshots(startingSnapshot.lastSnapshot, Seq(startingSnapshot))
-    snapshots
-  }
+    IO.fromFuture(IO { postNonBlocking[T](suffix, b, timeout, headers) })(contextShift)
 
   def simpleDownload(): Seq[StoredSnapshot] = {
 

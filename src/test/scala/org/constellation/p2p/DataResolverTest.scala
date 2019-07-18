@@ -2,8 +2,8 @@ package org.constellation.p2p
 
 import java.util.concurrent.Executors
 
-import cats.effect.IO
-import org.constellation.DAO
+import cats.effect.{ContextShift, IO}
+import org.constellation.{DAO, Fixtures}
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.{APIClient, PeerApiClient}
 import org.mockito.ArgumentMatchers
@@ -16,6 +16,7 @@ import scala.concurrent.{ExecutionContext, Future, TimeoutException}
 class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
 
   implicit val dao: DAO = mock(classOf[DAO])
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   val storageMock: StorageMock = mock(classOf[StorageMock])
   val badNode: APIClient = mock(classOf[APIClient])
@@ -26,14 +27,12 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
   before {
     when(dao.id)
       .thenReturn(Id("node1"))
-    when(dao.edgeExecutionContext)
-      .thenReturn(ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8)))
 
     when(badNode.id)
-      .thenReturn(Id("unresponsiveNode"))
+      .thenReturn(Fixtures.id)
 
     when(goodNode.id)
-      .thenReturn(Id("responsiveNode"))
+      .thenReturn(Fixtures.id2)
 
     when(
       goodNode.getNonBlockingIO[Option[String]](ArgumentMatchers.eq(s"$endpoint/hash1"), any(), any())(any(), any())
@@ -60,7 +59,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
         storageMock.loopbackStore
       )
       .unsafeRunSync()
-    result shouldBe List(Some("resolved hash1"), Some("resolved hash2"))
+    result shouldBe List("resolved hash1", "resolved hash2")
 
     verify(storageMock, times(1)).loopbackStore("resolved hash1")
     verify(storageMock, times(1)).loopbackStore("resolved hash2")
@@ -76,10 +75,9 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
         storageMock.loopbackStore
       )
 
-    resolverIO.attempt.unsafeRunSync() should matchPattern {
-      case Left(_: TimeoutException) => ()
+    assertThrows[TimeoutException] {
+      resolverIO.unsafeRunSync()
     }
-
     verify(storageMock, never()).loopbackStore(anyString())
   }
 

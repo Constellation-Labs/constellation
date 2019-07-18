@@ -12,11 +12,7 @@ import org.constellation.util.HashSignature
 
 case class TransactionCacheData(
   transaction: Transaction,
-  valid: Boolean = true,
-  inMemPool: Boolean = false,
-  inDAG: Boolean = false,
   inDAGByAncestor: Map[String, Boolean] = Map(),
-  resolved: Boolean = true,
   cbBaseHash: Option[String] = None,
   cbForkBaseHashes: Set[String] = Set(),
   signatureForks: Set[Transaction] = Set(),
@@ -37,12 +33,11 @@ case class TransactionCacheData(
     )
 }
 
-case class Transaction(edge: Edge[TransactionEdgeData]) {
+object TransactionCacheData {
+  def apply(tx: Transaction): TransactionCacheData = TransactionCacheData(transaction = tx)
+}
 
-  def store(cache: TransactionCacheData)(implicit dao: DAO): Unit = {
-    // mwadon: What about transactionService?
-//      dao.acceptedTransactionService.putSync(this.hash, cache)
-  }
+case class Transaction(edge: Edge[TransactionEdgeData]) {
 
   def valid(implicit dao: DAO): Boolean =
     TransactionValidatorNel.validateTransaction(this).isValid
@@ -59,6 +54,8 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
 
   def amount: Long = edge.data.amount
 
+  def fee: Option[Long] = edge.data.fee
+
   def baseHash: String = edge.signedObservationEdge.baseHash
 
   def hash: String = edge.signedObservationEdge.hash
@@ -68,6 +65,15 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
   def withSignatureFrom(keyPair: KeyPair): Transaction = this.copy(
     edge = edge.withSignatureFrom(keyPair)
   )
+}
+
+case class TransactionGossip(tx: Transaction, path: Set[Schema.Id]) {
+  def hash: String = tx.hash
+}
+
+object TransactionGossip {
+  def apply(tcd: TransactionCacheData): TransactionGossip = TransactionGossip(tcd.transaction, tcd.path)
+  def apply(tx: Transaction): TransactionGossip = TransactionGossip(tx, Set())
 }
 
 case class TransactionSerialized(
@@ -128,6 +134,14 @@ object NonPositiveAmount {
   def apply(tx: Transaction) = new NonPositiveAmount(tx.hash, tx.amount)
 }
 
+case class NonPositiveFee(txHash: String, fee: Option[Long]) extends TransactionValidation {
+  def errorMessage: String = s"Transaction tx=$txHash has a non-positive fee=${fee.toString}"
+}
+
+object NonPositiveFee {
+  def apply(tx: Transaction) = new NonPositiveFee(tx.hash, tx.fee)
+}
+
 case class HashDuplicateFound(txHash: String) extends TransactionValidation {
   def errorMessage: String = s"Transaction tx=$txHash already exists"
 }
@@ -161,6 +175,12 @@ sealed trait TransactionValidatorNel {
   def validateAmount(tx: Transaction): ValidationResult[Transaction] =
     if (tx.amount > 0) tx.validNel else NonPositiveAmount(tx).invalidNel
 
+  def validateFee(tx: Transaction): ValidationResult[Transaction] =
+    tx.fee match {
+      case Some(fee) if fee <= 0 => NonPositiveFee(tx).invalidNel
+      case _                     => tx.validNel
+    }
+
   import org.constellation.datastore.swaydb.SwayDbConversions._
 
   // TODO: get rid of unsafeRunSync() and make whole validation async with IO[ValidationResult[Transaction]]
@@ -176,6 +196,7 @@ sealed trait TransactionValidatorNel {
       .product(validateEmptyDestinationAddress(tx))
       .product(validateDestinationAddress(tx))
       .product(validateAmount(tx))
+      .product(validateFee(tx))
       .product(validateDuplicate(tx))
       .map(_ ⇒ tx)
 }

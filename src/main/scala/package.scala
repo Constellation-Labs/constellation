@@ -159,12 +159,6 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
 
   }
 
-  implicit class ActorQuery(a: ActorRef) {
-    import akka.pattern.ask
-
-    def query[T: ClassTag](m: Any): T = (a ? m).mapTo[T].get()
-  }
-
   def signHashWithKey(hash: String, privateKey: PrivateKey): String =
     bytes2hex(signData(hash.getBytes())(privateKey))
 

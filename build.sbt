@@ -3,6 +3,7 @@ import sbt.Keys.mainClass
 
 enablePlugins(JavaAgent, JavaAppPackaging)
 //addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
+addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3")
 
 scalacOptions :=
   Seq(
@@ -23,14 +24,14 @@ lazy val _version = "1.0.12"
 lazy val versions = new {
   val akka = "2.5.23"
   val akkaHttp = "10.1.8"
-  val akkaHttpCors = "0.4.0"
+  val akkaHttpCors = "0.4.1"
   val spongyCastle = "1.58.0.0"
-  val micrometer = "1.1.4"
+  val micrometer = "1.2.0"
   val prometheus = "0.6.0"
-  val sttp = "1.5.19"
+  val sttp = "1.6.1"
   val cats = "1.6.1"
-  val json4s = "3.6.6"
-  val mockito = "1.5.9"
+  val json4s = "3.6.7"
+  val mockito = "1.5.11"
 }
 
 lazy val sttpDependencies = Seq(
@@ -88,11 +89,12 @@ lazy val coreDependencies = Seq(
   "com.roundeights" %% "hasher" % "1.2.0",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "io.chrisdavenport" %% "log4cats-slf4j" % "0.4.0-M1",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
   "com.typesafe.akka" %% "akka-slf4j" % versions.akka,
   "ch.megard" %% "akka-http-cors" % versions.akkaHttpCors,
-  "de.heikoseeberger" %% "akka-http-json4s" % "1.26.0",
+  "de.heikoseeberger" %% "akka-http-json4s" % "1.27.0",
   "org.json4s" %% "json4s-native" % versions.json4s,
   "org.json4s" %% "json4s-ext" % versions.json4s,
   "org.json4s" %% "json4s-jackson" % versions.json4s,
@@ -121,8 +123,8 @@ lazy val coreDependencies = Seq(
   "com.github.java-json-tools" % "json-schema-validator" % "2.2.10",
   "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.6",
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
-  ("com.github.blemale" %% "scaffeine" % "2.6.0").withSources().withJavadoc(),
-  ("com.typesafe.slick" %% "slick" % "3.3.1").withSources().withJavadoc(),
+  ("com.github.blemale" %% "scaffeine" % "3.0.0").withSources().withJavadoc(),
+  ("com.typesafe.slick" %% "slick" % "3.3.2").withSources().withJavadoc(),
   "com.h2database" % "h2" % "1.4.199"
 ) ++ sttpDependencies
 
@@ -131,7 +133,7 @@ lazy val testDependencies = Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.0",
   "org.scalatest" %% "scalatest" % "3.0.8",
   "org.scalactic" %% "scalactic" % "3.0.8",
-  "org.scalamock" %% "scalamock" % "4.2.0",
+  "org.scalamock" %% "scalamock" % "4.3.0",
   "org.mockito" %% "mockito-scala" % versions.mockito,
   "org.mockito" %% "mockito-scala-cats" % versions.mockito,
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,

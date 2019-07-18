@@ -1,27 +1,26 @@
 package org.constellation.storage
 
 import java.security.KeyPair
-import java.util.concurrent.Executors
 
 import better.files.File
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
-import constellation._
+import com.typesafe.scalalogging.Logger
+import constellation.createTransaction
+import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.crypto.KeyUtils.makeKeyPair
-import org.constellation.primitives.Schema.{CheckpointCache, Height, SignedObservationEdge}
+import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage.transactions.TransactionStatus
-import org.constellation.util.Metrics
-import org.constellation.{DAO, Fixtures, PeerMetadata}
+import org.constellation.util.{APIClient, HostPort, Metrics}
+import org.constellation.{ConstellationContextShift, DAO, Fixtures, PeerMetadata}
 import org.mockito.Mockito.doNothing
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
-
-import scala.concurrent.ExecutionContext
+import org.scalatest.{BeforeAndAfter, FreeSpec, FunSuite, Matchers}
 
 class CheckpointServiceTest
-    extends FunSuite
+    extends FreeSpec
     with IdiomaticMockito
     with ArgumentMatchersSugar
     with Matchers
@@ -31,61 +30,107 @@ class CheckpointServiceTest
   val soe: SignedObservationEdge = mock[SignedObservationEdge]
 
   implicit val kp: KeyPair = makeKeyPair()
-  implicit var dao: DAO = prepareDao()
+  implicit var dao: DAO = _
 
   before {
     soe.baseHash shouldReturn "abc"
   }
 
-  test("should convert CB to merkle roots when all data is filled") {
+  "with mocked dao" - {
+    dao = preparMockedDao()
 
-    val cbProposal = CheckpointBlock
-      .createCheckpointBlockSOE(prepareTransactions(), Seq(soe), prepareMessages(), prepareNotifications())
+    "should convert CB to merkle roots when all data is filled" in {
 
-    val cbProposalCache = CheckpointCache(Some(cbProposal), 3, Some(Height(2, 4)))
-    dao.checkpointService.memPool.put(cbProposal.baseHash, cbProposalCache).unsafeRunSync()
+      val cbProposal = CheckpointBlock
+        .createCheckpointBlockSOE(prepareTransactions(), Seq(soe), prepareMessages(), prepareNotifications())
 
-    val storedCB = dao.checkpointService.memPool.lookup(cbProposal.baseHash).unsafeRunSync().get
+      val cbProposalCache = CheckpointCache(Some(cbProposal), 3, Some(Height(2, 4)))
+      dao.checkpointService.memPool.put(cbProposal.baseHash, cbProposalCache).unsafeRunSync()
 
-    dao.checkpointService.convert(storedCB).unsafeRunSync() shouldBe cbProposalCache
+      val storedCB = dao.checkpointService.memPool.lookup(cbProposal.baseHash).unsafeRunSync().get
+
+      dao.checkpointService.convert(storedCB).unsafeRunSync() shouldBe cbProposalCache
+    }
+
+    "should convert CB to merkle roots when minimum data is filled" in {
+      val fullData = storeCheckpointBlock(prepareTransactions(), Seq.empty, Seq.empty)
+      val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
+
+      dao.checkpointService.convert(storedCB).unsafeRunSync() shouldBe fullData
+    }
+
+    "should fetch messages when they exist" in {
+      val msgs = prepareMessages()
+      val fullData = storeCheckpointBlock(prepareTransactions(), msgs, Seq.empty)
+      val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
+
+      dao.checkpointService
+        .fetchMessages(storedCB.checkpointBlock.messagesMerkleRoot.get)
+        .unsafeRunSync() shouldBe msgs
+    }
+
+    "should fetch transactions when they exist" in {
+      val txs = prepareTransactions()
+      val fullData = storeCheckpointBlock(txs, Seq.empty, Seq.empty)
+      val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
+
+      dao.checkpointService
+        .fetchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot.get)
+        .unsafeRunSync() shouldBe txs
+    }
+
+    "should fetch notifications when they exist" in {
+      val notifications = prepareNotifications()
+      val fullData = storeCheckpointBlock(prepareTransactions(), Seq.empty, notifications)
+      val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
+
+      dao.checkpointService
+        .fetchNotifications(storedCB.checkpointBlock.notificationsMerkleRoot.get)
+        .unsafeRunSync() shouldBe notifications
+    }
   }
 
-  test("should convert CB to merkle roots when minimum data is filled") {
-    val fullData = storeCheckpointBlock(prepareTransactions(), Seq.empty, Seq.empty)
-    val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
+  "with real dao" - {
+    dao = prepareRealDao()
 
-    dao.checkpointService.convert(storedCB).unsafeRunSync() shouldBe fullData
+    "should accept cb resolving parents soeHashes and cb baseHashes recursively" in {
+      val go = Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair)
+      Genesis.acceptGenesis(go, setAsTips = true)
+
+      val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
+
+      val cb1 = makeBlock(startingTips)
+
+      val cb2 = makeBlock(startingTips)
+      val cb3 = makeBlock(Seq(cb1.soe, cb2.soe))
+
+      val peer = readyFacilitators(Id("b")).client
+      val blocks = Seq(cb1, cb2)
+
+      blocks.foreach { c =>
+        peer.getNonBlockingIO[Option[SignedObservationEdgeCache]](eqTo(s"soe/${c.soeHash}"), *, *)(*, *) shouldReturn IO
+          .pure(Some(SignedObservationEdgeCache(c.soe)))
+
+        peer.getNonBlockingIO[Option[CheckpointCache]](eqTo(s"checkpoint/${c.baseHash}"), *, *)(*, *) shouldReturn IO
+          .pure(Some(CheckpointCache(Some(c))))
+      }
+
+      dao.checkpointService
+        .accept(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
+        .unsafeRunSync()
+      dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
+    }
   }
 
-  test("should fetch messages when they exist") {
-    val msgs = prepareMessages()
-    val fullData = storeCheckpointBlock(prepareTransactions(), msgs, Seq.empty)
-    val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
-
-    dao.checkpointService
-      .fetchMessages(storedCB.checkpointBlock.messagesMerkleRoot.get)
-      .unsafeRunSync() shouldBe msgs
-  }
-
-  test("should fetch transactions when they exist") {
-    val txs = prepareTransactions()
-    val fullData = storeCheckpointBlock(txs, Seq.empty, Seq.empty)
-    val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
-
-    dao.checkpointService
-      .fetchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot.get)
-      .unsafeRunSync() shouldBe txs
-  }
-
-  test("should fetch notifications when they exist") {
-    val notifications = prepareNotifications()
-    val fullData = storeCheckpointBlock(prepareTransactions(), Seq.empty, notifications)
-    val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
-
-    dao.checkpointService
-      .fetchNotifications(storedCB.checkpointBlock.notificationsMerkleRoot.get)
-      .unsafeRunSync() shouldBe notifications
-  }
+  private def makeBlock(tips: Seq[SignedObservationEdge]): CheckpointBlock =
+    CheckpointBlock.createCheckpointBlock(
+      Seq(createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair)),
+      tips.map { s =>
+        TypedEdgeHash(s.hash, EdgeHashType.CheckpointHash)
+      },
+      Seq(),
+      Seq()
+    )
 
   private def storeCheckpointBlock(
     txs: Seq[Transaction],
@@ -142,16 +187,18 @@ class CheckpointServiceTest
     Seq(msg1, msg2)
   }
 
-  private def prepareDao(): DAO = {
+  private def preparMockedDao(): DAO = {
+    import constellation._
+
     val dao: DAO = mock[DAO]
+
+    implicit val contextShift: ContextShift[IO] = ConstellationContextShift.global
+
     val f = File(s"tmp/${kp.getPublic.toId.medium}/db")
     f.createDirectoryIfNotExists()
     dao.dbPath shouldReturn f
 
     dao.id shouldReturn Fixtures.id
-
-    val ec = ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
-    dao.edgeExecutionContext shouldReturn ec
 
     val ss = new SOEService[IO]()
     dao.soeService shouldReturn ss
@@ -165,38 +212,50 @@ class CheckpointServiceTest
     }
     dao.messageService shouldReturn ms
 
-    implicit val contextShift = IO.contextShift(ExecutionContext.global)
-    val semaphore = Semaphore[IO](1).unsafeRunSync()
-    val ts = new TransactionService[IO](dao, semaphore)
+    val ts = new TransactionService[IO](dao)
     dao.transactionService shouldReturn ts
 
-    val cts = mock[ConcurrentTipService]
+    val cts = mock[ConcurrentTipService[IO]]
 
-    val cs = new CheckpointService[IO](dao, ts, ms, ns, cts)
+    val rl = mock[RateLimiting[IO]]
+    val cs = new CheckpointService[IO](dao, ts, ms, ns, cts, rl)
     dao.checkpointService shouldReturn cs
 
     val metrics = mock[Metrics]
     doNothing().when(metrics).incrementMetric(*)
     dao.metrics shouldReturn metrics
 
-    dao.readyPeers shouldReturn IO.pure(Map())
+    dao.nodeState shouldReturn NodeState.Ready
+
+    dao.miscLogger shouldReturn Logger("miscLogger")
+
+    dao.readyPeers shouldReturn IO.pure(readyFacilitators)
 
     dao
   }
 
+  private def prepareRealDao(): DAO = {
+    val dao: DAO = new DAO {
+      override def readyPeers: IO[
+        Map[Id, PeerData]
+      ] = IO.pure(readyFacilitators)
+    }
+    dao.initialize()
+    dao.metrics = new Metrics()(dao)
+    dao.nodeState = NodeState.Ready
+    dao
+  }
+
   private def prepareFacilitators(): Map[Schema.Id, PeerData] = {
+
     val facilitatorId1 = Schema.Id("b")
     val peerData1: PeerData = mock[PeerData]
     peerData1.peerMetadata shouldReturn mock[PeerMetadata]
     peerData1.peerMetadata.id shouldReturn facilitatorId1
     peerData1.notification shouldReturn Seq()
+    peerData1.client shouldReturn mock[APIClient]
+    peerData1.client.hostPortForLogging shouldReturn HostPort("http://b", 9000)
 
-    val facilitatorId2 = Schema.Id("c")
-    val peerData2: PeerData = mock[PeerData]
-    peerData2.peerMetadata shouldReturn mock[PeerMetadata]
-    peerData2.peerMetadata.id shouldReturn facilitatorId2
-    peerData2.notification shouldReturn Seq()
-
-    Map(facilitatorId1 -> peerData1, facilitatorId2 -> peerData2)
+    Map(facilitatorId1 -> peerData1)
   }
 }

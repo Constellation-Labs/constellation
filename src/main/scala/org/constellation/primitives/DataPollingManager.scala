@@ -2,7 +2,7 @@ package org.constellation.primitives
 
 import com.typesafe.scalalogging.StrictLogging
 import constellation.futureTryWithTimeoutMetric
-import org.constellation.DAO
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.extension.TransitService
 import org.constellation.util.Periodic
 
@@ -14,7 +14,7 @@ class DataPollingManager(periodSeconds: Int = 60)(implicit dao: DAO)
     extends Periodic[Try[Unit]]("DataPollingManager", periodSeconds)
     with StrictLogging {
 
-  implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
+  implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.edge
 
   private val transitService = new TransitService()
 
