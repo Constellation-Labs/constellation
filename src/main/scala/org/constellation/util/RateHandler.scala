@@ -1,7 +1,7 @@
 package org.constellation.util
 import org.constellation.util.Rewards.{rewardDistribution, shannonEntropy}
 
-class RateHandler {
+class RewardsBasedRateLimiter {
 
   case class DummyFeeTx(id: String, ammt: Double, fee: Option[Double])
 
