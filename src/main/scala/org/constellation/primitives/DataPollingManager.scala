@@ -2,7 +2,7 @@ package org.constellation.primitives
 
 import com.typesafe.scalalogging.StrictLogging
 import constellation.futureTryWithTimeoutMetric
-import org.constellation.DAO
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.extension.TransitService
 import org.constellation.util.Periodic
 
@@ -14,7 +14,7 @@ class DataPollingManager(periodSeconds: Int = 60)(implicit dao: DAO)
     extends Periodic[Try[Unit]]("DataPollingManager", periodSeconds)
     with StrictLogging {
 
-  implicit val ec: ExecutionContextExecutor = dao.edgeExecutionContext
+  implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.edge
 
   private val transitService = new TransitService()
 
@@ -29,7 +29,7 @@ class DataPollingManager(periodSeconds: Int = 60)(implicit dao: DAO)
   // Need a better way to manage these, but hardcode for now.
   private val bartTransitUrl = "https://api.bart.gov/gtfsrt/tripupdate.aspx"
 
-  private def execute(channelId: String) = {
+  private def execute(channelId: String) =
     futureTryWithTimeoutMetric(
       {
         val latest = transitService.pollJson(bartTransitUrl)
@@ -43,11 +43,9 @@ class DataPollingManager(periodSeconds: Int = 60)(implicit dao: DAO)
         dao.metrics.incrementMetric("dataPollingFailure")
       }
     )
-  }
 
-  override def trigger(): Future[Try[Unit]] = {
+  override def trigger(): Future[Try[Unit]] =
     if (channelId != null) {
       execute(channelId)
     } else Future.successful(Try(Unit))
-  }
 }

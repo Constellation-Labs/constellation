@@ -18,36 +18,41 @@ case class Edge[+D <: Signable](
 
   def parents: Seq[TypedEdgeHash] = observationEdge.parents
 
-  def storeTransactionCacheData(db: Datastore,
-                                update: TransactionCacheData => TransactionCacheData,
-                                empty: TransactionCacheData,
-                                resolved: Boolean = false): Unit = {
+  def storeTransactionCacheData(
+    db: Datastore,
+    update: TransactionCacheData => TransactionCacheData,
+    empty: TransactionCacheData,
+    resolved: Boolean = false
+  ): Unit = {
     db.updateTransactionCacheData(signedObservationEdge.baseHash, update, empty)
-    db.putSignedObservationEdgeCache(signedObservationEdge.hash,
-                                     SignedObservationEdgeCache(signedObservationEdge, resolved))
+    db.putSignedObservationEdgeCache(
+      signedObservationEdge.hash,
+      SignedObservationEdgeCache(signedObservationEdge, resolved)
+    )
     db.putTransactionEdgeData(data.hash, data.asInstanceOf[TransactionEdgeData])
   }
 
-  def storeCheckpointData(db: Datastore,
-                          update: CheckpointCacheData => CheckpointCacheData,
-                          empty: CheckpointCacheData,
-                          resolved: Boolean = false): Unit = {
+  def storeCheckpointData(
+    db: Datastore,
+    update: CheckpointCache => CheckpointCache,
+    empty: CheckpointCache,
+    resolved: Boolean = false
+  ): Unit = {
     db.updateCheckpointCacheData(signedObservationEdge.baseHash, update, empty)
-    db.putSignedObservationEdgeCache(signedObservationEdge.hash,
-                                     SignedObservationEdgeCache(signedObservationEdge, resolved))
+    db.putSignedObservationEdgeCache(
+      signedObservationEdge.hash,
+      SignedObservationEdgeCache(signedObservationEdge, resolved)
+    )
     db.putCheckpointEdgeData(data.hash, data.asInstanceOf[CheckpointEdgeData])
   }
 
-  def withSignatureFrom(keyPair: KeyPair): Edge[D] = {
+  def withSignatureFrom(keyPair: KeyPair): Edge[D] =
     this.copy(signedObservationEdge = signedObservationEdge.withSignatureFrom(keyPair))
-  }
 
-  def withSignature(hs: HashSignature): Edge[D] = {
+  def withSignature(hs: HashSignature): Edge[D] =
     this.copy(signedObservationEdge = signedObservationEdge.withSignature(hs))
-  }
 
-  def plus(other: Edge[_]): Edge[D] = {
+  def plus(other: Edge[_]): Edge[D] =
     this.copy(signedObservationEdge = signedObservationEdge.plus(other.signedObservationEdge))
-  }
 
 }

@@ -16,11 +16,10 @@ class SimpleKVDBImpl extends KVDB {
       store(key) = bytes
     }.isSuccess
 
-  override def get[T <: AnyRef](key: String): Option[T] = {
+  override def get[T <: AnyRef](key: String): Option[T] =
     store.get(key).map { v =>
       KryoSerializer.deserialize(v).asInstanceOf[T]
     }
-  }
 
   override def update[T <: AnyRef](key: String, updateF: T => T, empty: T): T = {
     val res = get(key).map { updateF }
@@ -34,13 +33,11 @@ class SimpleKVDBImpl extends KVDB {
     }
   }
 
-  override def delete(key: String): Boolean = {
+  override def delete(key: String): Boolean =
     Try { store.remove(key) }.isSuccess
-  }
 
-  override def restart(): Unit = {
+  override def restart(): Unit =
     store.clear()
-  }
 }
 
 class SimpleKVDatastore(dao: DAO) extends KVDBDatastoreImpl {

@@ -1,0 +1,202 @@
+package org.constellation.p2p
+
+import akka.actor.ActorSystem
+import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.testkit.TestProbe
+import better.files.File
+import cats.effect.IO
+import com.softwaremill.sttp.Response
+import constellation._
+import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+import org.constellation.{DAO, Fixtures}
+import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointResponse}
+import org.constellation.crypto.KeyUtils
+import org.constellation.primitives.{IPManager, PeerData, TransactionCacheData, TransactionGossip}
+import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
+import org.constellation.storage.transactions.TransactionGossiping
+import org.constellation.storage.{CheckpointService, SnapshotService}
+import org.constellation.util.{APIClient, Metrics}
+import org.json4s.native
+import org.json4s.native.Serialization
+import org.mockito.cats.IdiomaticMockitoCats
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito, Mockito}
+import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers, WordSpec}
+
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContextExecutor, Future}
+
+class PeerAPITest
+    extends FreeSpec
+    with Matchers
+    with ScalatestRouteTest
+    with IdiomaticMockito
+    with IdiomaticMockitoCats
+    with ArgumentMatchersSugar
+    with Json4sSupport
+    with BeforeAndAfter {
+
+  implicit val serialization: Serialization.type = native.Serialization
+  implicit val s: ActorSystem = system
+  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+
+  implicit val contextShift = IO.contextShift(executionContext)
+  implicit val timer = IO.timer(executionContext)
+
+  var dao: DAO = _
+  var peerAPI: PeerAPI = _
+
+  before {
+    dao = prepareDao()
+    peerAPI = new PeerAPI(new IPManager, TestProbe().ref)(system, 10.seconds, dao)
+  }
+
+  "The PeerAPI" - {
+    /*
+        Unfortunately ScalatestRouteTest instansiate it's own class of PeerAPI thus we can't spy on it
+     */
+    "return accepted on finishing checkpoint and reply with callback when header is defined".ignore {
+      val reply = "http://originator:9001/peer-api/finished/checkpoint/reply"
+      val fakeResp = Future.successful(mock[Response[Unit]])
+      Mockito
+        .doReturn(fakeResp, fakeResp)
+        .when(peerAPI)
+        .makeCallback(*, *)
+
+      val req = FinishedCheckpoint(CheckpointCache(None), Set.empty)
+
+      Post("/finished/checkpoint", req) ~> addHeader("ReplyTo", reply) ~> peerAPI.postEndpoints ~> check {
+        status shouldEqual StatusCodes.Accepted
+      }
+
+      //      requires mockito 1.4.x and migrating all IdiomaticMockitos
+      //      peerAPI.makeCallback(*, *) wasCalled (once within 2.seconds)
+    }
+
+    "return accepted on finishing checkpoint and make no reply with callback" in {
+      val req = FinishedCheckpoint(CheckpointCache(None), Set.empty)
+      Post("/finished/checkpoint", req) ~> peerAPI.postEndpoints ~> check {
+        status shouldEqual StatusCodes.Accepted
+      }
+    }
+    "should handle reply message" in {
+      Post("/finished/reply", FinishedCheckpointResponse(true)) ~> peerAPI.postEndpoints ~> check {
+        status shouldEqual StatusCodes.OK
+      }
+    }
+
+    "should return snapshot bytes when stored snapshot exist" in {
+      dao.snapshotService shouldReturn mock[SnapshotService[IO]]
+      dao.snapshotService.exists(*) shouldReturnF true
+
+      File.usingTemporaryDirectory() { dir =>
+        File.usingTemporaryFile("", "", Some(dir)) { file =>
+          val snapshotHash = file.name
+          dao.snapshotPath shouldReturn dir
+
+          Get(s"/storedSnapshot/$snapshotHash") ~> peerAPI.commonEndpoints ~> check {
+            status shouldEqual StatusCodes.OK
+          }
+        }
+      }
+
+    }
+
+    "should return snapshot not found when snapshot does not exist" in {
+      dao.snapshotService shouldReturn mock[SnapshotService[IO]]
+      dao.snapshotService.exists(*) shouldReturnF false
+
+      File.usingTemporaryDirectory() { dir =>
+        File.usingTemporaryFile("", "", Some(dir)) { _ =>
+          val snapshotHash = "other_file"
+          dao.snapshotPath shouldReturn dir
+
+          Get(s"/storedSnapshot/$snapshotHash") ~> peerAPI.commonEndpoints ~> check {
+            status shouldEqual StatusCodes.NotFound
+          }
+        }
+      }
+
+    }
+
+    "mixedEndpoints" - {
+      "PUT transaction" - {
+
+        "should observe received transaction" in {
+          dao.transactionGossiping shouldReturn mock[TransactionGossiping[IO]]
+          dao.transactionGossiping.observe(*) shouldReturnF mock[TransactionCacheData]
+          dao.transactionGossiping.selectPeers(*)(scala.util.Random) shouldReturnF Set()
+          dao.peerInfo shouldReturnF Map()
+
+          val a = KeyUtils.makeKeyPair()
+          val b = KeyUtils.makeKeyPair()
+
+          val tx = createTransaction(a.address, b.address, 5L, a)
+
+          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints ~> check {
+            dao.transactionGossiping.observe(*).was(called)
+          }
+        }
+
+        "should broadcast transaction to others" in {
+          val a = KeyUtils.makeKeyPair()
+          val b = KeyUtils.makeKeyPair()
+
+          val tx = createTransaction(a.address, b.address, 5L, a)
+          val tcd = mock[TransactionCacheData]
+
+          val id = Fixtures.id2
+          val peerData = mock[PeerData]
+          peerData.client shouldReturn mock[APIClient]
+          peerData.client.putAsync(*, *, *)(*) shouldReturnF mock[Response[String]]
+
+          dao.transactionGossiping shouldReturn mock[TransactionGossiping[IO]]
+          dao.transactionGossiping.observe(*) shouldReturnF tcd
+          dao.transactionGossiping.selectPeers(tcd)(scala.util.Random) shouldReturnF Set(id)
+          dao.peerInfo shouldReturnF Map(id -> peerData)
+
+          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints ~> check {
+            peerData.client.putAsync(*, *, *)(*).was(called)
+          }
+        }
+
+        "should return StatusCodes.OK" in {
+          dao.transactionGossiping shouldReturn mock[TransactionGossiping[IO]]
+          dao.transactionGossiping.observe(*) shouldReturnF mock[TransactionCacheData]
+          dao.transactionGossiping.selectPeers(*)(scala.util.Random) shouldReturnF Set()
+          dao.peerInfo shouldReturnF Map()
+
+          val a = KeyUtils.makeKeyPair()
+          val b = KeyUtils.makeKeyPair()
+
+          val tx = createTransaction(a.address, b.address, 5L, a)
+
+          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints ~> check {
+            status shouldEqual StatusCodes.OK
+          }
+        }
+      }
+    }
+  }
+
+  private def prepareDao(): DAO = {
+    val dao: DAO = mock[DAO]
+
+    val id = Id("node1")
+    dao.id shouldReturn id
+
+    val keyPair = KeyUtils.makeKeyPair()
+    dao.keyPair shouldReturn keyPair
+
+    dao.nodeState shouldReturn NodeState.Ready
+
+    val metrics = new Metrics(1)(dao)
+    dao.metrics shouldReturn metrics
+
+    dao.checkpointService shouldReturn mock[CheckpointService[IO]]
+    dao.checkpointService.accept(any[FinishedCheckpoint])(dao) shouldReturn IO({
+      Thread.sleep(2000)
+    })
+    dao
+  }
+}

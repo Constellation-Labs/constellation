@@ -2,7 +2,8 @@ package org.constellation.p2p
 
 import java.util.concurrent.Executors
 
-import org.constellation.DAO
+import cats.effect.{ContextShift, IO}
+import org.constellation.{DAO, Fixtures}
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.{APIClient, PeerApiClient}
 import org.mockito.ArgumentMatchers
@@ -15,6 +16,7 @@ import scala.concurrent.{ExecutionContext, Future, TimeoutException}
 class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
 
   implicit val dao: DAO = mock(classOf[DAO])
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   val storageMock: StorageMock = mock(classOf[StorageMock])
   val badNode: APIClient = mock(classOf[APIClient])
@@ -23,41 +25,41 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
   val endpoint: String = "endpoint"
 
   before {
-    when(dao.edgeExecutionContext)
-      .thenReturn(ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8)))
+    when(dao.id)
+      .thenReturn(Id("node1"))
 
     when(badNode.id)
-      .thenReturn(Id("unresponsiveNode"))
+      .thenReturn(Fixtures.id)
 
     when(goodNode.id)
-      .thenReturn(Id("responsiveNode"))
+      .thenReturn(Fixtures.id2)
 
     when(
-      goodNode.getNonBlocking[Option[String]](ArgumentMatchers.eq(s"$endpoint/hash1"),
-                                              any(),
-                                              any())(any(), any())
-    ).thenReturn(Future.successful(Some("resolved hash1")))
+      goodNode.getNonBlockingIO[Option[String]](ArgumentMatchers.eq(s"$endpoint/hash1"), any(), any())(any(), any())
+    ).thenReturn(IO { Some("resolved hash1") })
 
     when(
-      goodNode.getNonBlocking[Option[String]](ArgumentMatchers.eq(s"$endpoint/hash2"),
-                                              any(),
-                                              any())(any(), any())
-    ).thenReturn(Future.successful(Some("resolved hash2")))
+      goodNode.getNonBlockingIO[Option[String]](ArgumentMatchers.eq(s"$endpoint/hash2"), any(), any())(any(), any())
+    ).thenReturn(IO { Some("resolved hash2") })
 
-    when(badNode.getNonBlocking(anyString(), any(), any())(any(), any()))
-      .thenReturn(Future.failed(new TimeoutException("Whoops")))
+    when(badNode.getNonBlockingIO(anyString(), any(), any())(any(), any()))
+      .thenReturn(IO.fromFuture(IO {
+        Future.failed(new TimeoutException("Testing timeout, case just ignore this message."))
+      }))
     reset(storageMock)
   }
 
   test("it should resolve and store data from responsive node") {
 
     val result = DataResolver
-      .resolveDataByDistanceFlat[String](hashes,
-                                         endpoint,
-                                         List(PeerApiClient(badNode.id,badNode), PeerApiClient(goodNode.id,goodNode)),
-                                         storageMock.loopbackStore)
+      .resolveDataByDistanceFlat[String](
+        hashes,
+        endpoint,
+        List(PeerApiClient(badNode.id, badNode), PeerApiClient(goodNode.id, goodNode)),
+        storageMock.loopbackStore
+      )
       .unsafeRunSync()
-    result shouldBe List(Some("resolved hash1"), Some("resolved hash2"))
+    result shouldBe List("resolved hash1", "resolved hash2")
 
     verify(storageMock, times(1)).loopbackStore("resolved hash1")
     verify(storageMock, times(1)).loopbackStore("resolved hash2")
@@ -66,29 +68,35 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
   test("it should throw an exception when bad node is unresponsive") {
 
     val resolverIO = DataResolver
-      .resolveDataByDistanceFlat[String](hashes,
-                                         endpoint,
-                                         List(PeerApiClient(badNode.id,badNode)),
-                                         storageMock.loopbackStore)
+      .resolveDataByDistanceFlat[String](
+        hashes,
+        endpoint,
+        List(PeerApiClient(badNode.id, badNode)),
+        storageMock.loopbackStore
+      )
 
-    resolverIO.attempt.unsafeRunSync() should matchPattern {
-      case Left(_: TimeoutException) => ()
+    assertThrows[TimeoutException] {
+      resolverIO.unsafeRunSync()
     }
-
     verify(storageMock, never()).loopbackStore(anyString())
   }
 
   test(
     "it should throw an exception when bad node returns empty response"
   ) {
-    when(badNode.getNonBlocking[Option[String]](anyString(), any(), any())(any(), any()))
-      .thenReturn(Future.successful(None))
+    when(badNode.getNonBlockingIO[Option[String]](anyString(), any(), any())(any(), any()))
+      .thenReturn(IO { None })
 
     val resolverIO = DataResolver
-      .resolveDataByDistanceFlat[String](hashes, endpoint, List(PeerApiClient(badNode.id,badNode)), storageMock.loopbackStore)
+      .resolveDataByDistanceFlat[String](
+        hashes,
+        endpoint,
+        List(PeerApiClient(badNode.id, badNode)),
+        storageMock.loopbackStore
+      )
 
     resolverIO.attempt.unsafeRunSync() should matchPattern {
-      case Left(DataResolutionOutOfPeers("endpoint", _)) => ()
+      case Left(DataResolutionOutOfPeers("node1", "endpoint", _, _)) => ()
     }
     verify(storageMock, never()).loopbackStore(anyString())
   }
@@ -98,7 +106,13 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
   ) {
 
     val resolverIO = DataResolver
-      .resolveData[String]("hash1", endpoint, List(PeerApiClient(badNode.id, badNode),PeerApiClient(badNode.id, badNode)), storageMock.loopbackStore, 1)
+      .resolveData[String](
+        "hash1",
+        endpoint,
+        List(PeerApiClient(badNode.id, badNode), PeerApiClient(badNode.id, badNode)),
+        storageMock.loopbackStore,
+        1
+      )
 
     resolverIO.attempt.unsafeRunSync() should matchPattern {
       case Left(DataResolutionMaxErrors("endpoint", "hash1")) => ()
@@ -109,7 +123,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
 }
 
 class StorageMock {
-  def loopbackStore[T](item: T): Any = {
+
+  def loopbackStore[T](item: T): Any =
     item
-  }
 }

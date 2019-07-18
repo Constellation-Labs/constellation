@@ -9,7 +9,6 @@ import scala.scalajs.js
 import scala.scalajs.js.{Date, JSApp}
 import scala.scalajs.js.annotation.JSExport
 import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
 import scalatags.JsDom.all._
 
 import scala.concurrent.duration._

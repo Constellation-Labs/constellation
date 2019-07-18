@@ -15,7 +15,7 @@ trait MetricTimerDirective extends BasicDirectives {
   def withTimer(name: String): Directive0 =
     timer(name)
 
-  private[util] def timer(name: String): Directive0 = {
+  private[util] def timer(name: String): Directive0 =
     extractRequestContext.flatMap { ctx ⇒
       val timer = findAndRegisterTimer(getMetricName(name, ctx))
       mapRouteResult { result ⇒
@@ -23,26 +23,24 @@ trait MetricTimerDirective extends BasicDirectives {
         result
       }
     }
-  }
 
   protected def findAndRegisterTimer(name: String): MetricTimer = {
-    Try(io.micrometer.core.instrument.Metrics.globalRegistry.get(name).timer()) recover  {
+    Try(io.micrometer.core.instrument.Metrics.globalRegistry.get(name).timer()).recover {
       case _: MeterNotFoundException => io.micrometer.core.instrument.Metrics.globalRegistry.timer(name)
-      case e: Exception => logger.error(e.getMessage)
+      case e: Exception              => logger.error(e.getMessage)
     }
     new MetricTimer(io.micrometer.core.instrument.Metrics.timer(name))
   }
 
-  protected def getMetricName(name: String, ctx: RequestContext): String = {
-    name + "."  +
+  protected def getMetricName(name: String, ctx: RequestContext): String =
+    name + "." +
       ctx.request.method.value.toLowerCase + "." +
       ctx.request.uri.path.toString.drop(1).split("/").take(2).mkString(".")
-  }
 
   class MetricTimer(t: Timer) {
     val timer = t
     val startTimeMs = System.currentTimeMillis()
-    def stop() = {timer.record(System.currentTimeMillis() - startTimeMs, TimeUnit.MILLISECONDS) }
+    def stop() = timer.record(System.currentTimeMillis() - startTimeMs, TimeUnit.MILLISECONDS)
   }
 
 }

@@ -19,11 +19,14 @@ object ConfigUtil {
   val maxNestedCBresolution: Int = Try(config.getInt("constellation.max-nested-cb-resolution"))
     .getOrElse(100)
 
-  def getDurationFromConfig(path: String): FiniteDuration = {
-    FiniteDuration(config.getDuration(path, TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
-  }
-  def getDurationFromConfig(path: String, default: FiniteDuration): FiniteDuration = {
-    Try(FiniteDuration(config.getDuration(path, TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS))
+  def getOrElse(path: String, default: Int): Int =
+    Try(config.getInt(path))
       .getOrElse(default)
-  }
+
+  def getDurationFromConfig(path: String): FiniteDuration =
+    FiniteDuration(config.getDuration(path, TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
+
+  def getDurationFromConfig(path: String, default: FiniteDuration, ownConfig: Config = config): FiniteDuration =
+    Try(FiniteDuration(ownConfig.getDuration(path, TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS))
+      .getOrElse(default)
 }

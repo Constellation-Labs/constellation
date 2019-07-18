@@ -148,7 +148,7 @@ object KeyUtils extends StrictLogging {
     kf.generatePrivate(spec)
   }
 
-  def hex2bytes(hex: String): Array[Byte] = {
+  def hex2bytes(hex: String): Array[Byte] =
     if (hex.contains(" ")) {
       hex.split(" ").map(Integer.parseInt(_, 16).toByte)
     } else if (hex.contains("-")) {
@@ -156,44 +156,38 @@ object KeyUtils extends StrictLogging {
     } else {
       hex.sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toByte)
     }
-  }
 
-  def bytes2hex(bytes: Array[Byte], sep: Option[String] = None): String = {
+  def bytes2hex(bytes: Array[Byte], sep: Option[String] = None): String =
     sep match {
       case None => bytes.map("%02x".format(_)).mkString
       case _    => bytes.map("%02x".format(_)).mkString(sep.get)
     }
-  }
 
   def publicKeyToHex(publicKey: PublicKey): String = {
     val hex = bytes2hex(publicKey.getEncoded)
     hex.slice(PublicKeyHexPrefixLength, hex.length)
   }
 
-  def hexToPublicKey(hex: String): PublicKey = {
+  def hexToPublicKey(hex: String): PublicKey =
     bytesToPublicKey(hex2bytes(PublicKeyHexPrefix + hex))
-  }
 
   def privateKeyToHex(privateKey: PrivateKey): String = {
     val hex = bytes2hex(privateKey.getEncoded)
     hex.slice(PrivateKeyHexPrefixLength, hex.length)
   }
 
-  def hexToPrivateKey(hex: String): PrivateKey = {
+  def hexToPrivateKey(hex: String): PrivateKey =
     bytesToPrivateKey(hex2bytes(PrivateKeyHexPrefix + hex))
-  }
 
   // convert normal string to hex bytes string
 
-  def string2hex(str: String): String = {
+  def string2hex(str: String): String =
     str.toList.map(_.toInt.toHexString).mkString
-  }
 
   // convert hex bytes string to normal string
 
-  def hex2string(hex: String): String = {
+  def hex2string(hex: String): String =
     hex.sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toChar).mkString
-  }
 
   def keyHashToAddress(hash: String): String = {
     val end = hash.slice(hash.length - 36, hash.length)
@@ -215,7 +209,6 @@ object KeyUtils extends StrictLogging {
     val keyHash = Base58.encode(Hashing.sha256().hashBytes(key.getEncoded).asBytes())
     keyHashToAddress(keyHash)
   }
-
 
   // TODO: Update to use encrypted wallet see below
   def loadDefaultKeyPair(): KeyPair = {
@@ -243,7 +236,6 @@ object KeyUtils extends StrictLogging {
       }
     keyPair
   }
-
 
 }
 

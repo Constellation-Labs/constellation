@@ -2,9 +2,11 @@ package org.constellation.consensus
 
 import java.util.concurrent.Semaphore
 
-import akka.actor.{ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
+import cats.effect.{ContextShift, IO}
+import com.typesafe.config.ConfigFactory
 import org.constellation._
 import org.constellation.consensus.CrossTalkConsensus.{
   NotifyFacilitators,
@@ -14,12 +16,15 @@ import org.constellation.consensus.CrossTalkConsensus.{
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{
   BroadcastLightTransactionProposal,
+  BroadcastSelectedUnionBlock,
   BroadcastUnionBlockProposal
 }
-import org.constellation.primitives.Schema.{NodeType, SignedObservationEdge}
+import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.primitives.storage.CheckpointService
-import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
+import org.constellation.storage._
+import org.constellation.storage.transactions.TransactionStatus
+import org.constellation.util.Metrics
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers, OneInstancePerTest}
 
 import scala.collection.concurrent.TrieMap
@@ -29,16 +34,42 @@ class RoundManagerTest
     extends TestKit(ActorSystem("RoundManagerTest"))
     with FunSuiteLike
     with Matchers
-    with IdiomaticMockitoFixture
+    with IdiomaticMockito
+    with ArgumentMatchersSugar
     with BeforeAndAfter
     with OneInstancePerTest {
 
   implicit val dao: DAO = mock[DAO]
   implicit val materialize: ActorMaterializer = ActorMaterializer()
 
-  val roundManagerProbe = TestProbe()
+  val roundManagerProbe = TestProbe("roundManagerSupervisor")
+
+  val shortTimeouts = ConfigFactory.parseString(
+    """constellation {
+      consensus {
+          union-proposals-timeout = 2s
+          arbitrary-data-proposals-timeout = 2s
+          checkpoint-block-resolve-majority-timeout = 2s
+          accept-resolved-majority-block-timeout = 2s
+          form-checkpoint-blocks-timeout = 40s
+       }
+      }"""
+  )
+
+  val conf = ConfigFactory.parseString(
+    """constellation {
+      consensus {
+          union-proposals-timeout = 8s
+          arbitrary-data-proposals-timeout = 8s
+          checkpoint-block-resolve-majority-timeout = 8s
+          accept-resolved-majority-block-timeout = 8s
+          form-checkpoint-blocks-timeout = 40s
+       }
+      }"""
+  )
+
   val roundManager: TestActorRef[RoundManager] =
-    TestActorRef(Props(spy(new RoundManager(60 seconds))), roundManagerProbe.ref)
+    TestActorRef(Props(spy(new RoundManager(conf))), roundManagerProbe.ref)
 
   val checkpointFormationThreshold = 1
   val daoId = Schema.Id("a")
@@ -64,19 +95,34 @@ class RoundManagerTest
 
   val soe = mock[SignedObservationEdge]
   soe.baseHash shouldReturn "abc"
-  val tips = (Seq(soe), readyFacilitators)
+  val tips = PulledTips(TipSoe(Seq(soe), None), readyFacilitators)
 
   dao.id shouldReturn daoId
   dao.minCheckpointFormationThreshold shouldReturn checkpointFormationThreshold
-  dao.pullTransactions(checkpointFormationThreshold) shouldReturn Some(Seq(tx1, tx2))
-  dao.readyFacilitators() shouldReturn readyFacilitators
-  dao.peerInfo shouldReturn readyFacilitators
+
+  dao.readyFacilitatorsAsync shouldReturn IO.pure(readyFacilitators)
+  dao.peerInfo shouldReturn IO.pure(readyFacilitators)
   dao.pullTips(readyFacilitators) shouldReturn Some(tips)
   dao.threadSafeMessageMemPool shouldReturn mock[ThreadSafeMessageMemPool]
   dao.threadSafeMessageMemPool.pull(1) shouldReturn None
-  dao.checkpointService shouldReturn mock[CheckpointService]
-  dao.checkpointService.contains(*) shouldReturn true
-  dao.readyPeers(NodeType.Light) shouldReturn Map()
+  dao.checkpointService shouldReturn mock[CheckpointService[IO]]
+  dao.checkpointService.contains(*) shouldReturn IO.pure(true)
+
+  val metrics = new Metrics()
+  dao.metrics shouldReturn metrics
+
+  dao.messageService shouldReturn mock[MessageService[IO]]
+  dao.messageService.arbitraryPool shouldReturn mock[StorageService[IO, ChannelMessageMetadata]]
+  dao.messageService.arbitraryPool.toMap() shouldReturn IO.pure(Map.empty)
+
+  dao.transactionService shouldReturn mock[TransactionService[IO]]
+  dao.transactionService.getArbitrary shouldReturn IO.pure(Map.empty)
+  dao.transactionService.returnTransactionsToPending(*) shouldReturn IO.pure(List.empty)
+  dao.transactionService.pullForConsensus(checkpointFormationThreshold, *) shouldReturn IO(
+    List(tx1, tx2).map(TransactionCacheData(_))
+  )
+
+  dao.readyPeers(NodeType.Light) shouldReturn IO.pure(Map())
 
   val peerManagerProbe = TestProbe()
   val ipManager = mock[IPManager]
@@ -111,7 +157,7 @@ class RoundManagerTest
 
     within(2 seconds) {
       expectNoMessage
-      roundManager.underlyingActor.passToParentActor(any[NotifyFacilitators]) was called
+      roundManager.underlyingActor.passToParentActor(any[NotifyFacilitators]).was(called)
     }
   }
 
@@ -120,18 +166,18 @@ class RoundManagerTest
 
     within(2 seconds) {
       expectNoMessage
-      roundManager.underlyingActor.passToRoundActor(any[LightTransactionsProposal]) was called
+      roundManager.underlyingActor.passToRoundActor(any[LightTransactionsProposal]).was(called)
     }
   }
 
   test("it should participate in a new round on ParticipateInBlockCreationRound") {
-    val roundData = new RoundData(
+    val roundData = RoundData(
       RoundId("round1"),
       Set(peerData1, peerData2),
       Set(),
       FacilitatorId(facilitatorId1),
-      Seq(),
-      Seq(),
+      List(),
+      TipSoe(Seq(), None),
       Seq()
     )
     val cmd = mock[ParticipateInBlockCreationRound]
@@ -150,13 +196,13 @@ class RoundManagerTest
   test(
     "it should pass StartTransactionProposal to round manager if has participated in a new round"
   ) {
-    val roundData = new RoundData(
+    val roundData = RoundData(
       RoundId("round1"),
       Set(peerData1, peerData2),
       Set(),
       FacilitatorId(facilitatorId1),
-      Seq(),
-      Seq(),
+      List(),
+      TipSoe(Seq(), None),
       Seq()
     )
     val cmd = mock[ParticipateInBlockCreationRound]
@@ -166,7 +212,7 @@ class RoundManagerTest
 
     within(2 seconds) {
       expectNoMessage
-      roundManager.underlyingActor.passToRoundActor(any[StartTransactionProposal]) was called
+      roundManager.underlyingActor.passToRoundActor(any[StartTransactionProposal]).was(called)
     }
   }
 
@@ -176,18 +222,19 @@ class RoundManagerTest
 
     roundManager ! cmd
 
-    roundManager.underlyingActor.passToRoundActor(cmd) was called
+    roundManager.underlyingActor.passToRoundActor(cmd).was(called)
   }
 
   test("it should send ResolveMajorityCheckpointBlock to round actor when round timeout has passed") {
     val timersRoundManagerProbe = TestProbe()
     val timersRoundManager: TestActorRef[RoundManager] =
-      TestActorRef(Props(spy(new RoundManager(3 second), true)), timersRoundManagerProbe.ref)
+      TestActorRef(Props(spy(new RoundManager(conf), true)), timersRoundManagerProbe.ref)
 
     timersRoundManager ! StartNewBlockCreationRound
 
+    timersRoundManagerProbe.expectMsgType[NotifyFacilitators]
     Thread.sleep(5000)
-    timersRoundManager.underlyingActor.passToRoundActor(any[ResolveMajorityCheckpointBlock]) wasCalled atLeastOnce
+    timersRoundManager.underlyingActor.passToRoundActor(any[ResolveMajorityCheckpointBlock]).wasCalled(atLeastOnce)
   }
 
   test("it should cancel round timeout scheduler on StopBlockCreationRound") {
@@ -198,7 +245,7 @@ class RoundManagerTest
 
       val round = roundManager.underlyingActor.rounds.head
 
-      roundManager ! StopBlockCreationRound(round._1, None)
+      roundManager ! StopBlockCreationRound(round._1, None, Seq.empty)
 
       round._2.timeoutScheduler.isCancelled shouldBe true
     }
@@ -212,7 +259,7 @@ class RoundManagerTest
 
       val round = roundManager.underlyingActor.rounds.head
 
-      roundManager ! StopBlockCreationRound(round._1, None)
+      roundManager ! StopBlockCreationRound(round._1, None, Seq.empty)
 
       roundManager.underlyingActor.rounds.size shouldBe 0
     }
@@ -226,7 +273,7 @@ class RoundManagerTest
 
       val round = roundManager.underlyingActor.rounds.head
 
-      roundManager ! StopBlockCreationRound(round._1, None)
+      roundManager ! StopBlockCreationRound(round._1, None, Seq.empty)
 
       roundManager.underlyingActor.ownRoundInProgress = false
     }
@@ -253,9 +300,9 @@ class RoundManagerTest
       activeChannels.put("channel-id", semaphore)
       dao.threadSafeMessageMemPool.activeChannels shouldReturn activeChannels
 
-      roundManager ! StopBlockCreationRound(round._1, Some(cb))
+      roundManager ! StopBlockCreationRound(round._1, Some(cb), Seq.empty)
 
-      semaphore.release() was called
+      semaphore.release().was(called)
     }
   }
 
@@ -264,7 +311,7 @@ class RoundManagerTest
 
     roundManager ! cmd
 
-    roundManager.underlyingActor.passToParentActor(cmd) was called
+    roundManager.underlyingActor.passToParentActor(cmd).was(called)
   }
 
   test("it should pass BroadcastUnionBlockProposal to parent actor") {
@@ -272,7 +319,7 @@ class RoundManagerTest
 
     roundManager ! cmd
 
-    roundManager.underlyingActor.passToParentActor(cmd) was called
+    roundManager.underlyingActor.passToParentActor(cmd).was(called)
   }
 
   test("it should pass UnionBlockProposal to round actor") {
@@ -281,7 +328,7 @@ class RoundManagerTest
 
     roundManager ! cmd
 
-    roundManager.underlyingActor.passToRoundActor(cmd) was called
+    roundManager.underlyingActor.passToRoundActor(cmd).was(called)
   }
 
   test("it should close round actor when the round has been finished") {
@@ -292,9 +339,52 @@ class RoundManagerTest
 
       val round = roundManager.underlyingActor.rounds.head
 
-      roundManager ! StopBlockCreationRound(round._1, None)
+      roundManager ! StopBlockCreationRound(round._1, None, Seq.empty)
 
-      roundManager.underlyingActor.closeRoundActor(round._1) was called
+      roundManager.underlyingActor.closeRoundActor(round._1).was(called)
     }
   }
+
+  test("it should pass BroadcastSelectedUnionBlock to parent actor") {
+    val cmd = mock[BroadcastSelectedUnionBlock]
+
+    roundManager ! cmd
+
+    roundManager.underlyingActor.passToParentActor(cmd).was(called)
+  }
+
+  test("it should pass SelectedUnionBlock to round actor") {
+    val cmd = mock[SelectedUnionBlock]
+    cmd.roundId shouldReturn RoundId("round1")
+
+    roundManager ! cmd
+
+    roundManager.underlyingActor.passToRoundActor(cmd).was(called)
+  }
+
+  test("it should remove not accepted transactions") {
+    implicit val context: ContextShift[IO] = ConstellationContextShift.global
+
+    dao.transactionService shouldReturn new TransactionService[IO](dao)
+
+    val tx3 = Fixtures.dummyTx(dao)
+    dao.transactionService.put(TransactionCacheData(tx3), TransactionStatus.Pending).unsafeRunSync()
+    dao.transactionService.pullForConsensus(1).unsafeRunSync()
+    dao.transactionService
+      .lookup(tx3.hash, TransactionStatus.InConsensus)
+      .unsafeRunSync()
+      .map(_.transaction) shouldBe Some(tx3)
+
+    val cb = mock[CheckpointBlock]
+    cb.transactions shouldReturn Seq(tx1, tx2)
+    cb.messages shouldReturn Seq.empty
+    cb.notifications shouldReturn Seq.empty
+
+    roundManager ! StopBlockCreationRound(RoundId("round1"), Some(cb), Seq(tx3.hash))
+    dao.transactionService
+      .lookup(tx3.hash, TransactionStatus.Pending)
+      .unsafeRunSync()
+      .map(_.transaction) shouldBe Some(tx3)
+  }
+
 }

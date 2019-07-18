@@ -2,355 +2,277 @@ package org.constellation.consensus
 
 import java.util.concurrent.Executors
 
-import akka.actor.{ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import cats.effect.IO
+import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{
   BroadcastLightTransactionProposal,
+  BroadcastSelectedUnionBlock,
   BroadcastUnionBlockProposal
 }
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCacheData, NodeType, SignedObservationEdge}
+import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.primitives.storage.{MessageService, TransactionService}
+import org.constellation.storage.{CheckpointService, MessageService, TransactionService}
 import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures, PeerMetadata}
-import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
-import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers, OneInstancePerTest}
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
+import org.scalatest.{BeforeAndAfter, FunSuiteLike, Ignore, Matchers}
 
 import scala.concurrent.ExecutionContext
-import scala.concurrent.duration._
 
 class RoundTest
     extends TestKit(ActorSystem("RoundTest"))
     with FunSuiteLike
     with Matchers
-    with IdiomaticMockitoFixture
-    with BeforeAndAfter
-    with OneInstancePerTest {
+    with IdiomaticMockito
+    with ArgumentMatchersSugar
+    with BeforeAndAfter {
 
   implicit val dao: DAO = mock[DAO]
-  implicit val materialize: ActorMaterializer = ActorMaterializer()
-
-  val checkpointFormationThreshold = 1
-  val daoId = Schema.Id("a")
-
-  val facilitatorId1 = FacilitatorId(Schema.Id("b"))
-  val peerData1 = mock[PeerData]
-  peerData1.peerMetadata shouldReturn mock[PeerMetadata]
-  peerData1.peerMetadata.id shouldReturn facilitatorId1.id
-  peerData1.notification shouldReturn Seq()
-
-  val facilitatorId2 = FacilitatorId(Schema.Id("c"))
-  val peerData2 = mock[PeerData]
-  peerData2.peerMetadata shouldReturn mock[PeerMetadata]
-  peerData2.peerMetadata.id shouldReturn facilitatorId2.id
-  peerData2.notification shouldReturn Seq()
-
-  val readyFacilitators = Map(facilitatorId1.id -> peerData1, facilitatorId2.id -> peerData2)
-
   dao.keyPair shouldReturn Fixtures.tempKey
 
+  implicit val materialize: ActorMaterializer = ActorMaterializer()
+  val checkpointFormationThreshold = 1
+  val facilitatorId1 = FacilitatorId(Schema.Id("a"))
+  val peerData1 = mock[PeerData]
+
+  val facilitatorId2 = FacilitatorId(Schema.Id("b"))
+  val facilitatorId3 = FacilitatorId(Schema.Id("c"))
+  val peerData2 = mock[PeerData]
+
+  val readyFacilitators = Map(facilitatorId1.id -> peerData1, facilitatorId2.id -> peerData2)
   val tx1 = Fixtures.dummyTx(dao)
   val tx2 = Fixtures.dummyTx(dao)
   val tx3 = Fixtures.dummyTx(dao)
 
   val soe = mock[SignedObservationEdge]
-  val tips = (Seq(soe), readyFacilitators)
+  val tips = PulledTips(TipSoe(Seq(soe), None), readyFacilitators)
 
-  dao.id shouldReturn daoId
-  dao.pullTransactions(checkpointFormationThreshold) shouldReturn Some(Seq(tx1, tx2))
-  dao.readyFacilitators() shouldReturn readyFacilitators
-  dao.peerInfo shouldReturn readyFacilitators
-  dao.pullTips(readyFacilitators) shouldReturn Some(tips)
-  dao.threadSafeMessageMemPool shouldReturn mock[ThreadSafeMessageMemPool]
-  dao.threadSafeMessageMemPool.pull(1) shouldReturn None
-  dao.readyPeers(NodeType.Light) shouldReturn Map()
-
-  val peerManagerProbe = TestProbe()
-  val ipManager = mock[IPManager]
-  val peerManager = TestActorRef(Props(new PeerManager(ipManager)))
-  dao.peerManager shouldReturn peerManager
-
-  val txService = mock[TransactionService]
-  txService.contains shouldReturn (_ => IO.pure(true))
-  txService.lookup shouldReturn (_ => IO.pure(None))
-  dao.transactionService shouldReturn txService
-  dao.readyPeers shouldReturn readyFacilitators
-
-  val msgService = mock[MessageService]
-  msgService.contains(*) shouldReturn IO.pure(true)
-  msgService.lookup(*) shouldReturn IO.pure(None)
-  dao.messageService shouldReturn msgService
-
-  dao.edgeExecutionContext shouldReturn ExecutionContext.fromExecutor(
-    Executors.newWorkStealingPool(8)
-  )
-  val metrics = new Metrics()
-  dao.metrics shouldReturn metrics
-
-  dao.threadSafeSnapshotService shouldReturn mock[ThreadSafeSnapshotService]
-  dao.threadSafeSnapshotService.accept(*) shouldAnswer ((a: CheckpointCacheData) => ())
-
+  val txService = mock[TransactionService[IO]]
+  val msgService = mock[MessageService[IO]]
+  val cbService = mock[CheckpointService[IO]]
   val roundId = RoundId("round1")
 
-  val roundData = new RoundData(
+  val dataResolver = mock[DataResolver]
+
+  val roundData = RoundData(
     roundId,
     Set(peerData1, peerData2),
     Set(),
     facilitatorId1,
-    Seq(),
-    Seq(),
+    List(),
+    TipSoe(Seq(), None),
     Seq()
   )
+  before {
+    peerData1.peerMetadata shouldReturn mock[PeerMetadata]
+    peerData1.peerMetadata.id shouldReturn facilitatorId1.id
+    peerData1.notification shouldReturn Seq()
+    peerData2.peerMetadata shouldReturn mock[PeerMetadata]
+    peerData2.peerMetadata.id shouldReturn facilitatorId2.id
+    peerData2.notification shouldReturn Seq()
 
-  val cb1 = CheckpointBlock.createCheckpointBlock(Seq(tx1), Seq(), Seq(), Seq())(dao.keyPair)
-  val cb2 = CheckpointBlock.createCheckpointBlock(Seq(tx2), Seq(), Seq(), Seq())(dao.keyPair)
-  val cb3 = CheckpointBlock.createCheckpointBlock(Seq(tx3), Seq(), Seq(), Seq())(dao.keyPair)
+    dao.readyFacilitatorsAsync shouldReturn IO.pure(readyFacilitators)
+    dao.pullTips(readyFacilitators) shouldReturn Some(tips)
+    dao.threadSafeMessageMemPool shouldReturn mock[ThreadSafeMessageMemPool]
+    dao.threadSafeMessageMemPool.pull(1) shouldReturn None
+    dao.readyPeers(NodeType.Light) shouldReturn IO.pure(Map())
+    txService.pullForConsensus(checkpointFormationThreshold) shouldReturn IO.pure(
+      List(tx1, tx2).map(TransactionCacheData(_))
+    )
+    txService.contains(*) shouldReturn IO.pure(true)
+    txService.lookup(*) shouldReturn IO.pure(None)
+    dao.transactionService shouldReturn txService
+    dao.readyPeers shouldReturn IO.pure(readyFacilitators)
+    dao.peerInfo shouldReturn IO.pure(readyFacilitators)
+    dao.id shouldReturn facilitatorId1.id
+    dao.miscLogger shouldReturn Logger("MiscLogger")
 
-  val dataResolver = mock[DataResolver]
-  val roundProbe = TestProbe()
-  val round: TestActorRef[Round] = TestActorRef(Props(spy(new Round(roundData, dao, dataResolver))))
+    val msgService = mock[MessageService[IO]]
+    msgService.contains(*) shouldReturn IO.pure(true)
+    msgService.lookup(*) shouldReturn IO.pure(None)
+    dao.messageService shouldReturn msgService
 
-  after {
-    TestKit.shutdownActorSystem(system)
+    val metrics = new Metrics()
+    dao.metrics shouldReturn metrics
+
+    dao.checkpointService shouldReturn cbService
+    dao.checkpointService.accept(any[CheckpointCache]) shouldAnswer ((a: CheckpointCache) => IO.unit)
+  }
+
+  val shortTimeouts = ConfigFactory.parseString(
+    """constellation {
+      consensus {
+          union-proposals-timeout = 2s
+          arbitrary-data-proposals-timeout = 2s
+          checkpoint-block-resolve-majority-timeout = 2s
+          accept-resolved-majority-block-timeout = 2s
+          form-checkpoint-blocks-timeout = 40s
+       }
+      }"""
+  )
+
+  def createRoundActor(config: Config, parent: ActorRef): TestActorRef[Round] =
+    TestActorRef(Round.props(roundData, Seq.empty, Seq.empty, dao, dataResolver, config), parent)
+
+  test("it should send EmptyProposals when transaction proposals are missing") {
+    val parentActor = TestProbe()
+    createRoundActor(shortTimeouts, parentActor.ref)
+    parentActor.expectMsg(EmptyProposals(roundId, "unionProposals", Seq()))
+    parentActor.expectNoMessage()
   }
 
   test(
-    "it should pass BroadcastLightTransactionProposal to parent when requested for StartTransactionProposal"
+    "it should send NotEnoughProposals when txs proposals are received partially and round started by others"
   ) {
-    round ! mock[StartTransactionProposal]
+    dao.id shouldReturn facilitatorId2.id
 
-    within(2 seconds) {
-      expectNoMessage
-      round.underlyingActor.passToParentActor(any[BroadcastLightTransactionProposal]) was called
-    }
-  }
+    val parentActor = TestProbe()
+    val roundParticipant = createRoundActor(shortTimeouts, parentActor.ref)
 
-  test("it should combine all received light transactions proposals") {
-    val cmd1 = LightTransactionsProposal(
-      roundId,
-      facilitatorId1,
-      Seq(tx1.hash),
-      Seq(),
-      Seq()
-    )
-
-    val cmd2 = LightTransactionsProposal(
-      roundId,
-      facilitatorId2,
-      Seq(tx2.hash),
-      Seq(),
-      Seq(),
-    )
-
-    round ! cmd1
-    round ! cmd2
-
-    round.underlyingActor.transactionProposals.size shouldBe 2
-  }
-
-  test("it should cancel union transaction proposals timer when received all transaction proposals") {
-    round ! LightTransactionsProposal(
-      roundId,
-      facilitatorId1,
-      Seq(tx1.hash),
-      Seq(),
-      Seq()
-    )
-    round ! LightTransactionsProposal(
-      roundId,
-      facilitatorId2,
-      Seq(tx2.hash),
-      Seq(),
-      Seq()
-    )
-    round ! LightTransactionsProposal(
-      roundId,
-      FacilitatorId(daoId),
-      Seq(tx3.hash),
-      Seq(),
-      Seq()
-    )
-
-    round.underlyingActor.cancelUnionTransactionProposalsTikTok() was called
-  }
-
-  test("it should send UnionProposals to self when received all transaction proposals") {
-    round ! LightTransactionsProposal(
-      roundId,
-      facilitatorId1,
-      Seq(tx1.hash),
-      Seq(),
-      Seq()
-    )
-    round ! LightTransactionsProposal(
-      roundId,
-      facilitatorId2,
-      Seq(tx2.hash),
-      Seq(),
-      Seq()
-    )
-    round ! LightTransactionsProposal(
-      roundId,
-      FacilitatorId(daoId),
-      Seq(tx3.hash),
-      Seq(),
-      Seq()
-    )
-
-    round.underlyingActor.unionProposals() was called
-  }
-
-  test("it should resolve missing transactions on union block proposals step") {
-    dao.readyPeers shouldReturn Map()
-
-    dao.transactionService.contains shouldReturn ((hash: String) => {
-      if (hash == tx3.hash || hash == tx2.hash)
-        IO.pure(true)
-      else
-        IO.pure(false)
-    })
-
-    dataResolver.resolveTransactions(*, *, *)(3 seconds, dao) shouldReturn IO.pure(None)
-
-    round ! LightTransactionsProposal(
-      roundId,
-      FacilitatorId(daoId),
-      Seq(tx3.hash),
-      Seq(),
-      Seq()
-    )
-    round ! LightTransactionsProposal(
-      roundId,
-      facilitatorId1,
-      Seq(tx1.hash),
-      Seq(),
-      Seq()
-    )
-    round ! LightTransactionsProposal(
-      roundId,
-      facilitatorId2,
-      Seq(tx2.hash),
-      Seq(),
-      Seq()
-    )
-
-    dataResolver.resolveTransactions(*, List(), None)(3 seconds, dao) was called
-  }
-
-  test("it should resolve missing messages on union block proposals step") {
-    dao.readyPeers shouldReturn Map()
-
-    dao.messageService.contains(*) shouldReturn IO.pure(false)
-
-    dataResolver.resolveMessages(*, *, *)(3 seconds, dao) shouldReturn IO.pure(None)
-
-    round ! LightTransactionsProposal(
-      roundId,
-      FacilitatorId(daoId),
-      Seq(tx3.hash),
-      Seq(),
-      Seq()
-    )
-    round ! LightTransactionsProposal(
-      roundId,
-      facilitatorId1,
-      Seq(tx1.hash),
-      Seq(),
-      Seq()
-    )
-    round ! LightTransactionsProposal(
-      roundId,
-      facilitatorId2,
-      Seq(tx2.hash),
-      Seq("msg-hash"),
-      Seq()
-    )
-
-    dataResolver.resolveMessages("msg-hash", List(), None)(3 seconds, dao) was called
-  }
-
-  test("it should broadcast union block proposal after union block proposals step") {
-    round ! LightTransactionsProposal(
-      roundId,
-      FacilitatorId(daoId),
-      Seq(tx3.hash),
-      Seq(),
-      Seq()
-    )
-    round ! LightTransactionsProposal(
-      roundId,
-      facilitatorId1,
-      Seq(tx1.hash),
-      Seq(),
-      Seq()
-    )
-    round ! LightTransactionsProposal(
-      roundId,
-      facilitatorId2,
-      Seq(tx2.hash),
-      Seq(),
-      Seq()
-    )
-
-    round.underlyingActor.passToParentActor(any[BroadcastUnionBlockProposal]) was called
-  }
-
-  test("it should combine all received union block proposals") {
-    val cmd1 = UnionBlockProposal(
-      roundId,
-      facilitatorId1,
-      mock[CheckpointBlock]
-    )
-
-    val cmd2 = UnionBlockProposal(
-      roundId,
-      facilitatorId2,
-      mock[CheckpointBlock]
-    )
-
-    round ! cmd1
-    round ! cmd2
-
-    within(3 seconds) {
-      expectNoMessage
-      round.underlyingActor.checkpointBlockProposals.size shouldBe 2
-    }
+    roundParticipant ! StartTransactionProposal(roundId)
+    parentActor.expectMsgType[BroadcastLightTransactionProposal]
+    parentActor.expectMsg(EmptyProposals(roundId, "unionProposals", Seq(tx1.hash, tx2.hash)))
+    parentActor.expectNoMessage()
   }
 
   test(
-    "it should send ResolveMajorityCheckpointBlock to self when received all union block proposals"
+    "it should send NotEnoughProposals when cbs proposals are received partially and round started by others"
   ) {
-    round ! UnionBlockProposal(
-      roundId,
-      FacilitatorId(daoId),
-      cb1,
-    )
-    round ! UnionBlockProposal(
-      roundId,
-      facilitatorId1,
-      cb2,
-    )
-    round ! UnionBlockProposal(
-      roundId,
-      facilitatorId2,
-      cb3
-    )
+    dao.id shouldReturn facilitatorId2.id
 
-    round.underlyingActor.resolveMajorityCheckpointBlock() was called
+    val parentActor = TestProbe()
+    val roundParticipant = createRoundActor(shortTimeouts, parentActor.ref)
+    val underlyingActor = roundParticipant.underlyingActor
+
+    roundParticipant ! StartTransactionProposal(roundId)
+    parentActor.expectMsgType[BroadcastLightTransactionProposal]
+    roundParticipant ! LightTransactionsProposal(roundId, facilitatorId3, Seq(tx2.hash), Seq(), Seq())
+    underlyingActor.unionTransactionProposalsTikTok.isCancelled shouldBe true
+    val unionBlock = parentActor.expectMsgType[BroadcastUnionBlockProposal]
+
+    parentActor.expectMsg(EmptyProposals(roundId, "resolveMajorityCheckpointBlock", Seq(tx1.hash, tx2.hash)))
+    parentActor.expectNoMessage()
   }
 
-  test("it should resolve majority checkpoint block") {
-    round ! mock[ResolveMajorityCheckpointBlock]
+  test("it shouldn't proceed when txs proposals are not received but all peers have sent unions") {
+    dao.id shouldReturn facilitatorId2.id
 
-    // TODO: verify accepted block
-    round.underlyingActor.passToParentActor(any[StopBlockCreationRound]) was called
+    val parentActor = TestProbe()
+    val roundParticipant = createRoundActor(shortTimeouts, parentActor.ref)
+    val underlyingActor = roundParticipant.underlyingActor
+
+    roundParticipant ! StartTransactionProposal(roundId)
+    parentActor.expectMsgType[BroadcastLightTransactionProposal]
+
+    underlyingActor.unionTransactionProposalsTikTok.isCancelled shouldBe false
+
+    val cb1 = CheckpointBlock.createCheckpointBlock(Seq(tx1), Seq(), Seq(), Seq())(dao.keyPair)
+    val cb2 = CheckpointBlock.createCheckpointBlock(Seq(tx2), Seq(), Seq(), Seq())(dao.keyPair)
+
+    roundParticipant ! UnionBlockProposal(roundId, facilitatorId1, cb1)
+    roundParticipant ! UnionBlockProposal(roundId, facilitatorId3, cb2)
+
+    parentActor.expectMsg(EmptyProposals(roundId, "unionProposals", Seq(tx1.hash, tx2.hash)))
+    parentActor.expectNoMessage()
   }
 
-  // TODO: verify accepted block, then write this unit tests
-  ignore("it should broadcast signed block to non facilitators") {}
+  test(
+    "it shouldn't proceed when union proposals are not received but all peers have sent selected"
+  ) {
+    dao.id shouldReturn facilitatorId2.id
+
+    val parentActor = TestProbe()
+    val roundParticipant = createRoundActor(shortTimeouts, parentActor.ref)
+    val underlyingActor = roundParticipant.underlyingActor
+
+    roundParticipant ! StartTransactionProposal(roundId)
+    parentActor.expectMsgType[BroadcastLightTransactionProposal]
+
+    underlyingActor.unionTransactionProposalsTikTok.isCancelled shouldBe false
+
+    roundParticipant ! LightTransactionsProposal(roundId, facilitatorId3, Seq(tx2.hash), Seq(), Seq())
+
+    val cb1 = CheckpointBlock.createCheckpointBlock(Seq(tx1), Seq(), Seq(), Seq())(dao.keyPair)
+
+    parentActor.expectMsgType[BroadcastUnionBlockProposal]
+
+    roundParticipant ! SelectedUnionBlock(roundId, facilitatorId1, cb1)
+    roundParticipant ! SelectedUnionBlock(roundId, facilitatorId3, cb1)
+
+    parentActor.expectMsg(EmptyProposals(roundId, "resolveMajorityCheckpointBlock", Seq(tx1.hash, tx2.hash)))
+    parentActor.expectNoMessage()
+  }
+
+  test("it should make the whole flow when receiving proposal at each stage") {
+    val parentActor = TestProbe()
+    val roundInitiator = createRoundActor(shortTimeouts, parentActor.ref)
+    val underlyingActor = roundInitiator.underlyingActor
+
+    //self normally send by RoundManager
+    roundInitiator ! LightTransactionsProposal(roundId, facilitatorId1, Seq(tx1.hash), Seq(), Seq())
+    //facilitators
+    roundInitiator ! LightTransactionsProposal(roundId, facilitatorId2, Seq(tx2.hash), Seq(), Seq())
+    roundInitiator ! LightTransactionsProposal(roundId, facilitatorId3, Seq(tx3.hash), Seq(), Seq())
+
+    val unionBlock = parentActor.expectMsgType[BroadcastUnionBlockProposal]
+    underlyingActor.unionTransactionProposalsTikTok.isCancelled shouldBe true
+    underlyingActor.resolveMajorityCheckpointBlockTikTok.isCancelled shouldBe false
+    unionBlock.roundId shouldBe roundId
+    unionBlock.peers shouldBe Set(peerData1, peerData2)
+
+    val cb1 = CheckpointBlock.createCheckpointBlock(Seq(tx1), Seq(), Seq(), Seq())(dao.keyPair)
+    val cb2 = CheckpointBlock.createCheckpointBlock(Seq(tx2), Seq(), Seq(), Seq())(dao.keyPair)
+
+    roundInitiator ! UnionBlockProposal(roundId, facilitatorId2, cb1)
+    roundInitiator ! UnionBlockProposal(roundId, facilitatorId3, cb2)
+
+    underlyingActor.resolveMajorityCheckpointBlockTikTok.isCancelled shouldBe true
+    underlyingActor.acceptMajorityCheckpointBlockTikTok.isCancelled shouldBe false
+
+    val selectedBlock = parentActor.expectMsgType[BroadcastSelectedUnionBlock]
+    selectedBlock.roundId shouldBe roundId
+    selectedBlock.peers shouldBe Set(peerData1, peerData2)
+
+    roundInitiator ! SelectedUnionBlock(roundId, facilitatorId2, cb1)
+    roundInitiator ! SelectedUnionBlock(roundId, facilitatorId3, cb2)
+
+    underlyingActor.acceptMajorityCheckpointBlockTikTok.isCancelled shouldBe true
+    underlyingActor.resolveMajorityCheckpointBlockTikTok.isCancelled shouldBe true
+    val finalBlock = parentActor.expectMsgType[StopBlockCreationRound]
+    finalBlock.roundId shouldBe roundId
+    finalBlock.maybeCB.isDefined shouldBe true
+    underlyingActor.unionTransactionProposalsTikTok.isCancelled shouldBe true
+    underlyingActor.acceptMajorityCheckpointBlockTikTok.isCancelled shouldBe true
+    underlyingActor.resolveMajorityCheckpointBlockTikTok.isCancelled shouldBe true
+    parentActor.expectNoMessage()
+  }
+
+  test("it should throw an exception when received a message from previous round stage") {
+    val parentActor = TestProbe()
+    val roundInitiator = createRoundActor(shortTimeouts, parentActor.ref)
+    val underlyingActor = roundInitiator.underlyingActor
+
+    roundInitiator ! LightTransactionsProposal(roundId, facilitatorId1, Seq(tx1.hash), Seq(), Seq())
+    roundInitiator ! LightTransactionsProposal(roundId, facilitatorId2, Seq(tx2.hash), Seq(), Seq())
+    roundInitiator ! LightTransactionsProposal(roundId, facilitatorId3, Seq(tx3.hash), Seq(), Seq())
+
+    val cb1 = CheckpointBlock.createCheckpointBlock(Seq(tx1), Seq(), Seq(), Seq())(dao.keyPair)
+    val cb2 = CheckpointBlock.createCheckpointBlock(Seq(tx2), Seq(), Seq(), Seq())(dao.keyPair)
+
+    roundInitiator ! UnionBlockProposal(roundId, facilitatorId2, cb1)
+    roundInitiator ! UnionBlockProposal(roundId, facilitatorId3, cb2)
+
+    an[RuntimeException] should be thrownBy {
+      intercept[RuntimeException] {
+        roundInitiator ! LightTransactionsProposal(roundId, facilitatorId1, Seq(tx1.hash), Seq(), Seq())
+      }
+    }
+  }
 
 }

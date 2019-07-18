@@ -9,7 +9,7 @@ class LoggingSttpBackend[R[_], S](delegate: SttpBackend[R, S])(
 ) extends SttpBackend[R, S]
     with StrictLogging {
 
-  override def send[T](request: Request[T, S]): R[Response[T]] = {
+  override def send[T](request: Request[T, S]): R[Response[T]] =
     responseMonad.map(responseMonad.handleError(delegate.send(request)) {
       case e: Exception =>
         apiLogger.error(s"Exception when sending request: $request", e)
@@ -37,7 +37,6 @@ class LoggingSttpBackend[R[_], S](delegate: SttpBackend[R, S])(
       }
       response
     }
-  }
 
   override def close(): Unit = delegate.close()
 

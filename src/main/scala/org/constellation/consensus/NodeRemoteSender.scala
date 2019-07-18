@@ -2,7 +2,11 @@ package org.constellation.consensus
 
 import akka.actor.{Actor, Props}
 import org.constellation.consensus.CrossTalkConsensus.NotifyFacilitators
-import org.constellation.consensus.RoundManager.{BroadcastLightTransactionProposal, BroadcastUnionBlockProposal}
+import org.constellation.consensus.RoundManager.{
+  BroadcastLightTransactionProposal,
+  BroadcastSelectedUnionBlock,
+  BroadcastUnionBlockProposal
+}
 
 object NodeRemoteSender {
 
@@ -16,6 +20,8 @@ trait NodeRemoteSender {
   def broadcastLightTransactionProposal(cmd: BroadcastLightTransactionProposal): Unit
 
   def broadcastBlockUnion(cmd: BroadcastUnionBlockProposal): Unit
+
+  def broadcastSelectedUnionBlock(cmd: BroadcastSelectedUnionBlock): Unit
 }
 
 class ForwardingNodeSender(nodeRemoteSender: NodeRemoteSender) extends NodeRemoteSender with Actor {
@@ -29,6 +35,9 @@ class ForwardingNodeSender(nodeRemoteSender: NodeRemoteSender) extends NodeRemot
 
     case cmd: BroadcastUnionBlockProposal =>
       broadcastBlockUnion(cmd)
+
+    case cmd: BroadcastSelectedUnionBlock =>
+      broadcastSelectedUnionBlock(cmd)
   }
 
   def notifyFacilitators(cmd: NotifyFacilitators): Unit =
@@ -39,4 +48,7 @@ class ForwardingNodeSender(nodeRemoteSender: NodeRemoteSender) extends NodeRemot
 
   def broadcastBlockUnion(cmd: BroadcastUnionBlockProposal): Unit =
     nodeRemoteSender.broadcastBlockUnion(cmd)
+
+  def broadcastSelectedUnionBlock(cmd: BroadcastSelectedUnionBlock): Unit =
+    nodeRemoteSender.broadcastSelectedUnionBlock(cmd)
 }

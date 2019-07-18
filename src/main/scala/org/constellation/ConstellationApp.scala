@@ -35,12 +35,12 @@ class ConstellationApp(
     }
   }
 
-  def broadcast[T](messages: Seq[T], msgType: String)(implicit ec: ExecutionContext) = {
+  def broadcast[T](messages: Seq[T], channelId: String)(implicit ec: ExecutionContext) = {
     val serializedMessages = messages.map(_.json)
-    logger.info(s"messages: ${messages} message type: ${msgType}")
+    logger.info(s"messages: ${messages} channelId: ${channelId}")
     clientApi.postNonBlocking[ChannelSendResponse](
       "channel/send",
-      ChannelSendRequest(msgType, serializedMessages),
+      ChannelSendRequest(channelId, serializedMessages),
       timeout = 120.seconds
     )
   }

@@ -6,9 +6,7 @@ variable "ssh_user" {
   type = "string"
 }
 
-variable "network_name" {
-  type = "string"
-}
+variable "network" {}
 
 variable "random_id" {
   type = "string"
@@ -18,39 +16,32 @@ variable "ips_for_grafana" {
   type = "string"
 }
 
-data "template_file" "prometheus" {
-  template = "${file("modules/grafana/templates/prometheus.yml.tpl")}"
-  vars {
-    ips_for_grafana = "${var.ips_for_grafana}"
-  }
-}
-
 output "grafana_ip" {
-  value = "${google_compute_instance.grafana.*.network_interface.0.access_config.0.nat_ip}"
+  value = google_compute_instance.grafana.*.network_interface.0.access_config.0.nat_ip
 }
 
 // Grafana GCP Instance
 resource "google_compute_instance" "grafana" {
- count          = 1
- name = "grafana-${var.random_id}-${count.index}"
- machine_type   = "n1-standard-1"
- zone           = "${var.zone}"
- can_ip_forward = true
- allow_stopping_for_update = true
+  count                     = 1
+  name                      = "grafana-${var.random_id}-${count.index}"
+  machine_type              = "n1-standard-1"
+  zone                      = var.zone
+  can_ip_forward            = true
+  allow_stopping_for_update = true
 
 
- tags = ["constellation-vm-${var.random_id}", "grafana-vm-${var.random_id}"]
+  tags = ["constellation-vm-${var.random_id}", "grafana-vm-${var.random_id}"]
 
- boot_disk {
-   initialize_params {
-     image = "ubuntu-os-cloud/ubuntu-1604-lts",
-     size = 100
-   }
-   auto_delete = true
- }
+  boot_disk {
+    initialize_params {
+      image = "ubuntu-os-cloud/ubuntu-1804-lts"
+      size  = 100
+    }
+    auto_delete = true
+  }
 
-// Make sure needed apps are installed on all new instances for later steps
- metadata_startup_script = <<SCRIPT
+  // Make sure needed apps are installed on all new instances for later steps
+  metadata_startup_script = <<SCRIPT
  sudo apt update
  sudo apt install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
@@ -64,72 +55,77 @@ resource "google_compute_instance" "grafana" {
  sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
  SCRIPT
 
- service_account {
+  service_account {
     scopes = ["compute-ro", "storage-full", "monitoring-write", "logging-write"]
   }
 
- network_interface {
-   network = "${var.network_name}"
+  network_interface {
+    network = var.network.name
 
-   access_config {
-     // Include this section to give the VM an external ip address
-   }
- }
-
- scheduling {
-  preemptible = "false"
-  automatic_restart = "false"
- }
-
- provisioner "remote-exec" {
-  inline = [
-    "until gsutil -v; do echo 'waiting for gsutil...'; sleep 5; done",
-    "until java -version; do echo 'waiting for java...'; sleep 5; done"
-  ]
-  connection {
-    type = "ssh"
-    user = "${var.ssh_user}"
+    access_config {
+      // Include this section to give the VM an external ip address
+    }
   }
- }
 
- provisioner "remote-exec" {
-   inline = ["curl -sSO https://dl.google.com/cloudagents/install-monitoring-agent.sh", 
-             "sudo bash install-monitoring-agent.sh"]
-   connection {
-     type = "ssh"
-     user = "${var.ssh_user}"
-   }
- }
+  scheduling {
+    preemptible = "false"
+    automatic_restart = "false"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "until gsutil -v; do echo 'waiting for gsutil...'; sleep 5; done",
+      "until java -version; do echo 'waiting for java...'; sleep 5; done"
+    ]
+    connection {
+      host = self.network_interface.0.access_config.0.nat_ip
+      type = "ssh"
+      user = var.ssh_user
+    }
+  }
+
+  provisioner "remote-exec" {
+    inline = ["curl -sSO https://dl.google.com/cloudagents/install-monitoring-agent.sh",
+    "sudo bash install-monitoring-agent.sh"]
+    connection {
+      host = self.network_interface.0.access_config.0.nat_ip
+      type = "ssh"
+      user = var.ssh_user
+    }
+  }
 
   provisioner "file" {
-    source      = "docker-compose.yml"
+    source = "docker-compose.yml"
     destination = "~/docker-compose.yml"
 
     connection {
+      host = self.network_interface.0.access_config.0.nat_ip
       type = "ssh"
-      user = "${var.ssh_user}"
+      user = var.ssh_user
       timeout = "90s"
     }
   }
 
   provisioner "file" {
-    source      = "grafana-dashboard"
+    source = "grafana-dashboard"
     destination = "~/grafana-dashboard"
 
     connection {
+      host = self.network_interface.0.access_config.0.nat_ip
       type = "ssh"
-      user = "${var.ssh_user}"
+      user = var.ssh_user
       timeout = "90s"
     }
   }
 
   provisioner "file" {
-    content      = "${data.template_file.prometheus.rendered}"
+    content = templatefile("modules/grafana/templates/prometheus.yml.tpl", { ips_for_grafana = var.ips_for_grafana })
     destination = "~/grafana-dashboard/prometheus/prometheus.yml"
 
     connection {
+      host = self.network_interface.0.access_config.0.nat_ip
       type = "ssh"
-      user = "${var.ssh_user}"
+      user = var.ssh_user
       timeout = "90s"
     }
   }
@@ -137,8 +133,9 @@ resource "google_compute_instance" "grafana" {
   provisioner "remote-exec" {
     inline = ["sudo docker-compose up -d"]
     connection {
+      host = self.network_interface.0.access_config.0.nat_ip
       type = "ssh"
-      user = "${var.ssh_user}"
+      user = var.ssh_user
       timeout = "90s"
     }
   }

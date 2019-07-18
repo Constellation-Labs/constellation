@@ -6,8 +6,9 @@ import akka.http.scaladsl.server.Directives.{extractRequestContext, path, _}
 import akka.http.scaladsl.server.{RequestContext, Route}
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.ParticipateInBlockCreationRound
-import org.constellation.consensus.Round.{LightTransactionsProposal, RoundData, UnionBlockProposal}
+import org.constellation.consensus.Round.{LightTransactionsProposal, RoundData, SelectedUnionBlock, UnionBlockProposal}
 import org.constellation.consensus.RoundDataRemote
 import org.constellation.primitives.PeerData
 import org.constellation.util.APIClient
@@ -25,8 +26,10 @@ object BlockBuildingRoundRoute {
   val unionFullPath = s"$pathPrefix/$unionPath"
   val newRoundPath = "new-round"
   val newRoundFullPath = s"$pathPrefix/$newRoundPath"
+  val selectedPath = "selected"
+  val selectedFullPath = s"$pathPrefix/$selectedPath"
 
-  def convert(r: RoundDataRemote)(implicit executionContext: ExecutionContext): RoundData = {
+  def convert(r: RoundDataRemote)(implicit executionContext: ExecutionContext): RoundData =
     RoundData(
       r.roundId,
       r.peers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort))),
@@ -36,12 +39,13 @@ object BlockBuildingRoundRoute {
       r.tipsSOE,
       r.messages
     )
-  }
 }
 
-class BlockBuildingRoundRoute(nodeActor: ActorRef)(implicit system: ActorSystem,
-                                                   executionContext: ExecutionContext)
-    extends Json4sSupport {
+class BlockBuildingRoundRoute(nodeActor: ActorRef)(
+  implicit system: ActorSystem,
+  dao: DAO,
+  executionContext: ExecutionContext
+) extends Json4sSupport {
 
   val logger: Logger = LoggerFactory.getLogger(getClass)
 
@@ -50,10 +54,11 @@ class BlockBuildingRoundRoute(nodeActor: ActorRef)(implicit system: ActorSystem,
   def createBlockBuildingRoundRoutes(): Route = extractRequestContext { ctx =>
     participateInNewRound(ctx) ~
       addTransactionsProposal(ctx) ~
-      addUnionBlock(ctx)
+      addUnionBlock(ctx) ~
+      addSelectedUnionBlock(ctx)
   }
 
-  protected def participateInNewRound(ctx: RequestContext): Route = {
+  protected def participateInNewRound(ctx: RequestContext): Route =
     post {
       path(BlockBuildingRoundRoute.newRoundPath) {
         entity(as[RoundDataRemote]) { cmd =>
@@ -62,28 +67,44 @@ class BlockBuildingRoundRoute(nodeActor: ActorRef)(implicit system: ActorSystem,
         }
       }
     }
-  }
 
-  protected def addTransactionsProposal(ctx: RequestContext): Route = {
+  protected def addTransactionsProposal(ctx: RequestContext): Route =
     post {
       path(BlockBuildingRoundRoute.proposalPath) {
         entity(as[LightTransactionsProposal]) { proposal =>
+          logger.debug(
+            s"[${dao.id.short}] Received LightTransactionsProposal for round ${proposal.roundId} from ${proposal.facilitatorId}"
+          )
           nodeActor ! proposal
           complete(StatusCodes.Created)
         }
       }
     }
-  }
 
-  protected def addUnionBlock(ctx: RequestContext): Route = {
+  protected def addUnionBlock(ctx: RequestContext): Route =
     post {
       path(BlockBuildingRoundRoute.unionPath) {
         entity(as[UnionBlockProposal]) { proposal =>
+          logger.debug(
+            s"[${dao.id.short}] Received UnionBlockProposal for round ${proposal.roundId} from ${proposal.facilitatorId}"
+          )
           nodeActor ! proposal
           complete(StatusCodes.Created)
         }
       }
     }
-  }
+
+  protected def addSelectedUnionBlock(ctx: RequestContext): Route =
+    post {
+      path(BlockBuildingRoundRoute.selectedPath) {
+        entity(as[SelectedUnionBlock]) { sub =>
+          logger.debug(
+            s"[${dao.id.short}] Received SelectedUnionBlock for round ${sub.roundId} from ${sub.facilitatorId}"
+          )
+          nodeActor ! sub
+          complete(StatusCodes.Created)
+        }
+      }
+    }
 
 }
