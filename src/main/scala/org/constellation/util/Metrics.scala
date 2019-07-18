@@ -27,11 +27,14 @@ object Metrics {
 
   val reDownloadFinished = "reDownloadFinished"
   val reDownloadError = "reDownloadError"
+  val snapshotWriteToDisk = "snapshotWriteToDisk"
   val checkpointAccepted = "checkpointAccepted"
   val snapshotCount = "snapshotCount"
   val lastSnapshotHash = "lastSnapshotHash"
   val heightEmpty = "heightEmpty"
   val checkpointValidationFailure = "checkpointValidationFailure"
+
+  val success = "_success"
 
   val cacheMetrics = new CacheMetricsCollector()
   cacheMetrics.register()

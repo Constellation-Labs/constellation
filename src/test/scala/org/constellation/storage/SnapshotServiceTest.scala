@@ -2,9 +2,12 @@ package org.constellation.storage
 
 import better.files.File
 import cats.effect.{ContextShift, IO, Timer}
-import org.constellation.{ConstellationExecutionContext, DAO, NodeConfig, ProcessingConfig}
-import org.constellation.consensus.Snapshot
-import org.constellation.primitives.ConcurrentTipService
+import org.constellation._
+import cats.implicits._
+import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
+import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
+import org.constellation.primitives.{ConcurrentTipService, PeerData}
+import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -58,27 +61,45 @@ class SnapshotServiceTest
         }
       }
     }
+  }
 
-    "should return true if snapshot hash exists" in {
-      File.usingTemporaryDirectory() { dir =>
-        File.usingTemporaryFile("", "", Some(dir)) { file =>
-          dao.snapshotPath shouldReturn dir
+  "should return true if snapshot hash exists" in {
+    File.usingTemporaryDirectory() { dir =>
+      File.usingTemporaryFile("", "", Some(dir)) { file =>
+        dao.snapshotPath shouldReturn dir
 
-          snapshotService.exists(file.name).unsafeRunSync shouldBe true
-        }
+        snapshotService.exists(file.name).unsafeRunSync shouldBe true
       }
     }
+  }
 
-    "should return false if snapshot hash does not exist" in {
-      File.usingTemporaryDirectory() { dir =>
-        File.usingTemporaryFile("", "", Some(dir)) { _ =>
-          dao.snapshotPath shouldReturn dir
+  "should return false if snapshot hash does not exist" in {
+    File.usingTemporaryDirectory() { dir =>
+      File.usingTemporaryFile("", "", Some(dir)) { _ =>
+        dao.snapshotPath shouldReturn dir
 
-          snapshotService.exists("dontexist").unsafeRunSync shouldBe false
-        }
+        snapshotService.exists("dontexist").unsafeRunSync shouldBe false
       }
     }
+  }
 
+  "set snapshot state" - {
+    "should set necessary data to perform apply function " in {
+      val dao = TestHelpers.prepareRealDao()
+      val snapshotService = dao.snapshotService
+
+      val cb1 = RandomData.randomBlock(RandomData.startingTips)
+      val cb2 = RandomData.randomBlock(RandomData.startingTips)
+      val cbs = Seq(CheckpointCache(cb1.some, 0, None), CheckpointCache(cb2.some, 0, None))
+
+      val snapshot = Snapshot("lastSnapHash", cbs.flatMap(_.checkpointBlock.map(_.baseHash)))
+      val info: SnapshotInfo = SnapshotInfo(snapshot, snapshotCache = cbs)
+      snapshotService.setSnapshot(info).unsafeRunSync()
+      snapshotService.applySnapshot().unsafeRunSync()
+
+      dao.metrics.getCountMetric(Metrics.snapshotCount) shouldBe 1.some
+      dao.metrics.getCountMetric(Metrics.snapshotWriteToDisk + Metrics.success) shouldBe 1.some
+    }
   }
 
   private def mockDAO: DAO = mock[DAO]

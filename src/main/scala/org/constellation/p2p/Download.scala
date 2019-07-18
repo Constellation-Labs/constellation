@@ -74,8 +74,6 @@ class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[S
 ) {
   implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ec)
 
-  import SnapshotsDownloader.getSnapshotTimeout
-
   def processSnapshots(hashes: Seq[String])(implicit peers: Peers): IO[Unit] =
     hashes.map(processSnapshot).toList.parSequence.map(_ => ())
 

@@ -11,6 +11,7 @@ import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
+import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.Metrics
 
 class SnapshotService[F[_]: Concurrent](
@@ -75,7 +76,12 @@ class SnapshotService[F[_]: Concurrent](
           checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h) *>
           dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) *>
           h.checkpointBlock.get.transactions.toList
-            .map(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
+            .map(
+              tx =>
+                transactionService
+                  .put(TransactionCacheData(tx), TransactionStatus.Unknown)
+                  .flatTap(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
+            )
             .sequence
       }.sequence
       _ <- dao.metrics.updateMetricAsync[F](
@@ -251,7 +257,7 @@ class SnapshotService[F[_]: Concurrent](
       .map(_.hash)
       .map(hash => Snapshot(hash, hashesForNextSnapshot))
 
-  private def applySnapshot(): F[Unit] =
+  private[storage] def applySnapshot(): F[Unit] =
     snapshot.get.flatMap { currentSnapshot =>
       if (currentSnapshot == Snapshot.snapshotZero) {
         Sync[F].unit
@@ -266,17 +272,18 @@ class SnapshotService[F[_]: Concurrent](
     currentSnapshot.checkpointBlocks.toList
       .traverse(checkpointService.fullData)
       .flatMap {
-        case maybeBlocks if maybeBlocks.exists(_.exists(_.checkpointBlock.isEmpty)) =>
+        case maybeBlocks
+            if maybeBlocks.exists(maybeCache => maybeCache.isEmpty || maybeCache.exists(_.checkpointBlock.isEmpty)) =>
           // TODO : This should never happen, if it does we need to reset the node state and redownload
           dao.metrics
             .incrementMetricAsync("snapshotWriteToDiskMissingData")
-
+            .flatMap(_ => Sync[F].raiseError[Unit](new IllegalStateException("Snapshot data is missing")))
         case maybeBlocks =>
           val flatten = maybeBlocks.flatten.sortBy(_.checkpointBlock.map(_.baseHash))
           Sync[F].delay {
             tryWithMetric(
               Snapshot.writeSnapshot(StoredSnapshot(currentSnapshot, flatten)),
-              "snapshotWriteToDisk"
+              Metrics.snapshotWriteToDisk
             )
           }.void
       }
