@@ -27,7 +27,7 @@ abstract class PeriodicIO(taskName: String) extends StrictLogging {
     delayedTask
       .unsafeToFuture()
       .onComplete { res =>
-        logger.info(s"Periodic task: $taskName has finished ${res}")
+        logger.debug(s"Periodic task: $taskName has finished ${res}")
         schedule(duration)
       }(timerPool)
   }

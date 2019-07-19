@@ -112,10 +112,10 @@ class SnapshotService[F[_]: Concurrent](
 
       hashesForNextSnapshot = allBlocks.flatMap(_.checkpointBlock.map(_.baseHash)).sorted
       nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot))
-      _ <- EitherT.liftF(
-        Sync[F].delay(logger.debug(s"nextSnapshot: ${nextSnapshot.hash} with cbs: $hashesForNextSnapshot"))
-      )
 
+      _ <- EitherT.liftF(
+        Sync[F].delay(logger.info(s"conclude snapshot: ${nextSnapshot.lastSnapshot} "))
+      )
       _ <- EitherT.liftF(applySnapshot())
 
       _ <- EitherT.liftF(lastSnapshotHeight.set(nextHeightInterval.toInt))

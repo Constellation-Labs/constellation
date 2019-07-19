@@ -104,7 +104,7 @@ case class ProcessingConfig(
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,
   roundsPerMessage: Int = 10,
-  recentSnapshotNumber: Int = 10,
+  recentSnapshotNumber: Int = 12,
   maxInvalidSnapshotRate: Int = 51,
   txGossipingFanout: Int = 2
 ) {}

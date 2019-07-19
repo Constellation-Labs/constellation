@@ -118,6 +118,13 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   def reDownload(snapshotHashes: List[String], peers: Map[Id, PeerData]): IO[Unit] =
     for {
       majoritySnapshot <- getMajoritySnapshot(peers)
+      _ <- if (snapshotHashes.forall(majoritySnapshot.snapshotHashes.contains)) IO.unit
+      else
+        IO.raiseError[Unit](
+          new RuntimeException(
+            s"Inconsistent state majority snapshot doesn't contain: ${snapshotHashes.filterNot(majoritySnapshot.snapshotHashes.contains)}"
+          )
+        )
       snapshotClient <- getSnapshotClient(peers)
       alreadyDownloaded <- downloadAndProcessSnapshotsFirstPass(snapshotHashes)(
         snapshotClient,

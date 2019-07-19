@@ -14,7 +14,7 @@ object ConfigUtil {
     .getOrElse(26214400)
 
   val snapshotClosestFractionSize: Int = Try(config.getInt("constellation.snapshot-closest-fraction-size"))
-    .getOrElse(50)
+    .getOrElse(12)
 
   val maxNestedCBresolution: Int = Try(config.getInt("constellation.max-nested-cb-resolution"))
     .getOrElse(100)

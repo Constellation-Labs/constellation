@@ -368,7 +368,7 @@ class Round(
             .lookup(hash)
             .map(
               _.map(_.transaction)
-            )
+          )
       )
       .toList
       .sequence[IO, Option[Transaction]]
@@ -400,7 +400,7 @@ class Round(
             .lookup(hash)
             .map(
               _.map(_.channelMessage)
-            )
+          )
       )
       .toList
       .sequence[IO, Option[ChannelMessage]]
@@ -550,11 +550,11 @@ class Round(
             peer.client.postNonBlockingUnit(
               "finished/checkpoint",
               finishedCheckpoint,
-              timeout = 10.seconds,
-              Map(
-                "ReplyTo" -> APIClient(dao.nodeConfig.hostName, dao.nodeConfig.peerHttpPort)
-                  .base("finished/reply")
-              )
+              timeout = 10.seconds
+//              Map(
+//                "ReplyTo" -> APIClient(dao.nodeConfig.hostName, dao.nodeConfig.peerHttpPort)
+//                  .base("finished/reply")
+//              )
             ),
             "finishedCheckpointBroadcast"
           )(dao, ec).recoverWith {
@@ -623,7 +623,7 @@ object Round {
     type RoundStage = Value
 
     val STARTING, WAITING_FOR_PROPOSALS, WAITING_FOR_BLOCK_PROPOSALS, RESOLVING_MAJORITY_CB,
-      WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
+    WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
       Value
   }
 
