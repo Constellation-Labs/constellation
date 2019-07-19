@@ -262,14 +262,11 @@ object Snapshot extends StrictLogging {
         )
     }
 
-  def removeOldSnapshots()(implicit dao: DAO): Unit = {
-    val sortedHashes = snapshotHashes().sortBy(Distance.calculate(_, dao.id))
+  def removeOldSnapshots()(implicit dao: DAO): Unit =
     removeSnapshots(
-      sortedHashes
-        .slice(ConfigUtil.snapshotClosestFractionSize, sortedHashes.size),
+      dao.snapshotBroadcastService.getRecentSnapshots.map(_.map(_.hash)).unsafeRunSync().diff(snapshotHashes()),
       dao.snapshotPath.pathAsString
     )
-  }
 
   def removeSnapshots(snapshots: List[String], snapshotPath: String)(implicit dao: DAO): Unit =
     snapshots.foreach { snapId =>
@@ -288,7 +285,13 @@ object Snapshot extends StrictLogging {
     val storageDir = new java.io.File(dao.snapshotPath.pathAsString)
     val usableSpace = storageDir.getUsableSpace
     val occupiedSpace = dao.snapshotPath.size
-    occupiedSpace + bytesLengthToAdd >= ConfigUtil.snapshotSizeDiskLimit || usableSpace <= bytesLengthToAdd
+    val isOver = occupiedSpace + bytesLengthToAdd >= ConfigUtil.snapshotSizeDiskLimit || usableSpace <= bytesLengthToAdd
+    if (isOver) {
+      logger.warn(
+        s"[${dao.id.short}] isOverDiskCapacity bytes to write ${bytesLengthToAdd} configured space : ${ConfigUtil.snapshotSizeDiskLimit} usable space: $usableSpace"
+      )
+    }
+    isOver
   }
 
   def loadSnapshot(snapshotHash: String)(implicit dao: DAO): Try[StoredSnapshot] =

@@ -34,6 +34,13 @@ class HealthCheckerTest
     val state = List(node1, node2)
     val ids = List(Id("node1"), Id("node2"))
 
+    it("should return empty list hashes to be deleted but not below given height") {
+      val ownSnapshots = List(6, 5, 4, 3).map(i => RecentSnapshot(s"$i", i))
+
+      val diff = compareSnapshotState(ownSnapshots, state)
+      healthChecker.shouldReDownload(ownSnapshots, diff) shouldBe false
+    }
+
     it("should return part hashes to be deleted and to be downloaded") {
       val ownSnapshots = List(6, 5, 2, 1).map(i => RecentSnapshot(s"$i", i))
 
@@ -42,7 +49,6 @@ class HealthCheckerTest
         List(RecentSnapshot("3", 3), RecentSnapshot("4", 4)),
         ids
       )
-
     }
     it("should return all snapshots to be deleted and download") {
       val ownSnapshots = List(7, 8, 6, 5).map(i => RecentSnapshot(s"$i", i))
