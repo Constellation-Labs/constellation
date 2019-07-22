@@ -96,14 +96,16 @@ class HealthChecker[F[_]: Concurrent: Logger](
 
   def shouldReDownload(ownSnapshots: List[RecentSnapshot], diff: SnapshotDiff): Boolean =
     diff match {
-      case SnapshotDiff(_, _, Nil)         => false
-      case SnapshotDiff(_, Nil, _)         => false
-      case SnapshotDiff(_ :: _, _ :: _, _) => true
-      case SnapshotDiff(_, snapshotsToDownload, _) =>
-        (ownSnapshots.headOption
-          .map(_.height)
-          .getOrElse(0L) + dao.processingConfig.snapshotHeightDelayInterval) < snapshotsToDownload.map(_.height).max
+      case SnapshotDiff(_, _, Nil) => false
+      case SnapshotDiff(_, Nil, _) => false
+      case SnapshotDiff(Nil, snapshotsToDownload, _) =>
+        (max(ownSnapshots) + dao.processingConfig.snapshotHeightDelayInterval) < max(snapshotsToDownload)
+      case SnapshotDiff(snapshotsToDelete, snapshotsToDownload, _) =>
+        val ownSnapshotsMax = max(ownSnapshots)
+        ownSnapshotsMax <= max(snapshotsToDelete) && max(snapshotsToDownload) >= ownSnapshotsMax
     }
+
+  private def max(list: List[RecentSnapshot]): Long = list.map(_.height).max
 
   def startReDownload(diff: SnapshotDiff, peers: Map[Id, PeerData]): F[Unit] = {
     val reDownload = for {
