@@ -264,7 +264,14 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
     dao.snapshotService.syncBuffer.get
       .flatMap(_.toList.map { h =>
         if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache.contains(h)) {
-          dao.metrics.incrementMetricAsync[IO]("SyncBufferCBAccepted") *> dao.checkpointService.accept(h)
+          dao.metrics.incrementMetricAsync[IO]("SyncBufferCBAccepted") *> dao.checkpointService.accept(h).recoverWith {
+            case _ @(CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
+              IO.pure(None)
+            case unknownError =>
+              IO {
+                logger.error(s"[${dao.id.short}] Failed to accept majority checkpoint block", unknownError)
+              } >> IO.pure(None)
+          }
         } else {
           IO.unit
         }

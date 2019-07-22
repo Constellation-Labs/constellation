@@ -1,5 +1,6 @@
 package org.constellation.util
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
 
 import cats.effect.IO
 import com.typesafe.scalalogging.StrictLogging
@@ -10,6 +11,7 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 abstract class PeriodicIO(taskName: String) extends StrictLogging {
 
   val timerPool: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))
+  val executionNumber: AtomicLong = new AtomicLong(0)
 
   def trigger(): IO[Unit]
 
@@ -27,7 +29,8 @@ abstract class PeriodicIO(taskName: String) extends StrictLogging {
     delayedTask
       .unsafeToFuture()
       .onComplete { res =>
-        logger.debug(s"Periodic task: $taskName has finished ${res}")
+        val currNumber = executionNumber.incrementAndGet()
+        logger.debug(s"Periodic task: $taskName has finished $res execution number: $currNumber")
         schedule(duration)
       }(timerPool)
   }

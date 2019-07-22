@@ -1,16 +1,16 @@
 package org.constellation.datastore
 
-import scala.concurrent.Future
-import org.constellation.DAO
+import cats.effect.IO
+import cats.implicits._
 import org.constellation.consensus.Snapshot
-import org.constellation.util.Periodic
+import org.constellation.util.PeriodicIO
+import org.constellation.{ConstellationContextShift, DAO}
+import scala.concurrent.duration._
 
-import scala.util.Try
+class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO) extends PeriodicIO("SnapshotTrigger") {
 
-class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO)
-    extends Periodic[Try[Unit]]("SnapshotTrigger", periodSeconds) {
+  override def trigger(): IO[Unit] =
+    IO.fromFuture(IO(Snapshot.triggerSnapshot(executionNumber.get())))(ConstellationContextShift.global).void
 
-  override def trigger(): Future[Try[Unit]] =
-    Snapshot.triggerSnapshot(round)
-
+  schedule(periodSeconds seconds)
 }
