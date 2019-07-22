@@ -79,7 +79,7 @@ class SnapshotService[F[_]: Concurrent](
             .map(
               tx =>
                 transactionService
-                  .put(TransactionCacheData(tx), TransactionStatus.Unknown)
+                  .accept(TransactionCacheData(tx))
                   .flatTap(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
             )
             .sequence
