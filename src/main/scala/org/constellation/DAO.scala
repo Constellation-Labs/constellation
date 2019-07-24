@@ -10,16 +10,19 @@ import cats.effect.concurrent.Semaphore
 import cats.effect.{Concurrent, ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
+import org.constellation.p2p.{DownloadProcess, SnapshotsDownloader, SnapshotsProcessor}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.util.HostPort
+import org.constellation.util.{HealthChecker, HostPort, SnapshotWatcher}
 
 class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLogging {
 
@@ -56,7 +59,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     f
   }
 
-  @volatile var nodeState: NodeState = NodeState.PendingDownload
+  @volatile var nodeState: NodeState = NodeState.PendingDownload // TODO: wkoszycki make atomic
 
   @volatile var nodeType: NodeType = NodeType.Full
 
@@ -64,6 +67,17 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     implicit val daoImpl: DAO = this
     new MessageService[IO]()
   }
+
+  implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
+
+  val snapshotBroadcastService: SnapshotBroadcastService[IO] = {
+    val snapshotProcessor =
+      new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotByDistance)(this, ConstellationExecutionContext.global)
+    val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.global)
+    new SnapshotBroadcastService[IO](new HealthChecker[IO](this, downloadProcess), this)
+  }
+
+  val snapshotWatcher = new SnapshotWatcher(snapshotBroadcastService)
 
   def setNodeState(
     nodeState_ : NodeState
@@ -73,8 +87,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   }
 
   def peerHostPort = HostPort(nodeConfig.hostName, nodeConfig.peerHttpPort)
-
-  implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
 
   def initialize(
     nodeConfigInit: NodeConfig = NodeConfig()
@@ -117,6 +129,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       messageService,
       transactionService,
       rateLimiting,
+      snapshotBroadcastService,
       this
     )
   }
@@ -126,7 +139,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   lazy val concurrentTipService: ConcurrentTipService[IO] = new ConcurrentTipService[IO](
     processingConfig.maxActiveTipsAllowedInMemory,
     processingConfig.maxWidth,
-    processingConfig.maxWidth,
+    processingConfig.maxTipUsage,
     processingConfig.numFacilitatorPeers,
     processingConfig.minPeerTimeAddedSeconds,
     this,

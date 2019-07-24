@@ -22,6 +22,7 @@ import org.constellation.consensus._
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util._
 import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, ResourceInfo}
@@ -109,17 +110,36 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
       }
   private[p2p] val postEndpoints =
     post {
-      pathPrefix("channel") {
-        path("neighborhood") {
-          entity(as[Id]) { peerId =>
-            val distanceSorted = dao.channelService.toMap().unsafeRunSync().toSeq.sortBy {
-              case (channelId, meta) =>
-                Distance.calculate(meta.channelId, peerId)
-            } // TODO: Determine appropriate fraction to respond with.
-            complete(Seq(distanceSorted.head._2))
+      pathPrefix("snapshot") {
+        path("verify") {
+          entity(as[SnapshotCreated]) { s =>
+            onSuccess(
+              dao.snapshotBroadcastService.getRecentSnapshots
+                .unsafeToFuture()
+            ) { result =>
+              val response = result match {
+                case lastSnap :: _ if lastSnap.height < s.height =>
+                  SnapshotVerification(VerificationStatus.SnapshotHeightAbove)
+                case list if list.contains(RecentSnapshot(s.snapshot, s.height)) =>
+                  SnapshotVerification(VerificationStatus.SnapshotCorrect)
+                case _ => SnapshotVerification(VerificationStatus.SnapshotInvalid)
+              }
+              complete(response)
+            }
           }
         }
       } ~
+        pathPrefix("channel") {
+          path("neighborhood") {
+            entity(as[Id]) { peerId =>
+              val distanceSorted = dao.channelService.toMap().unsafeRunSync().toSeq.sortBy {
+                case (channelId, meta) =>
+                  Distance.calculate(meta.channelId, peerId)
+              } // TODO: Determine appropriate fraction to respond with.
+              complete(Seq(distanceSorted.head._2))
+            }
+          }
+        } ~
         path("faucet") {
           entity(as[SendToAddress]) { sendRequest =>
             // TODO: Add limiting

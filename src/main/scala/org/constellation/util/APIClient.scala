@@ -103,6 +103,14 @@ class APIClient private (
   ): IO[T] =
     IO.fromFuture(IO { postNonBlocking[T](suffix, b, timeout, headers) })(contextShift)
 
+  def postNonBlockingIOUnit(
+    suffix: String,
+    b: AnyRef,
+    timeout: Duration = 15.seconds,
+    headers: Map[String, String] = Map.empty
+  )(implicit f: Formats = constellation.constellationFormats): IO[Response[Unit]] =
+    IO.fromFuture(IO { postNonBlockingUnit(suffix, b, timeout, headers) })(contextShift)
+
   def simpleDownload(): Seq[StoredSnapshot] = {
 
     val hashes = getBlocking[Seq[String]]("snapshotHashes")

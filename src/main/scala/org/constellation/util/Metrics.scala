@@ -25,11 +25,18 @@ import scala.concurrent.Future
 /** For Grafana usage. */
 object Metrics {
 
+  val snapshotAttempt = "snapshotAttempt"
+  val reDownloadFinished = "reDownloadFinished"
+  val reDownloadError = "reDownloadError"
+  val snapshotWriteToDisk = "snapshotWriteToDisk"
   val checkpointAccepted = "checkpointAccepted"
   val snapshotCount = "snapshotCount"
   val lastSnapshotHash = "lastSnapshotHash"
   val heightEmpty = "heightEmpty"
   val checkpointValidationFailure = "checkpointValidationFailure"
+
+  val success = "_success"
+  val failure = "_failure"
 
   val cacheMetrics = new CacheMetricsCollector()
   cacheMetrics.register()

@@ -5,6 +5,7 @@ import java.nio.file.Path
 
 import cats.data.NonEmptyList
 import cats.data.Validated.{Invalid, Valid}
+import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
@@ -240,7 +241,9 @@ object Snapshot extends StrictLogging {
 
   def writeSnapshot(storedSnapshot: StoredSnapshot)(implicit dao: DAO): Try[Path] = {
     val serialized = KryoSerializer.serializeAnyRef(storedSnapshot)
-    writeSnapshot(storedSnapshot, serialized)
+    val write = writeSnapshot(storedSnapshot, serialized)
+    logger.info(s"[${dao.id.short}] written snapshot at path ${write.map(_.toAbsolutePath.toString)}")
+    write
   }
 
   private def writeSnapshot(storedSnapshot: StoredSnapshot, serialized: Array[Byte], trialNumber: Int = 0)(
@@ -260,18 +263,36 @@ object Snapshot extends StrictLogging {
         )
     }
 
-  def removeOldSnapshots()(implicit dao: DAO): Unit = {
-    val sortedHashes = snapshotHashes().sortBy(Distance.calculate(_, dao.id))
-    sortedHashes
-      .slice(ConfigUtil.snapshotClosestFractionSize, sortedHashes.size)
-      .foreach(snapId => Files.delete(Paths.get(dao.snapshotPath.pathAsString, snapId)))
-  }
+  def removeOldSnapshots()(implicit dao: DAO): Unit =
+    removeSnapshots(
+      snapshotHashes().diff(dao.snapshotBroadcastService.getRecentSnapshots.map(_.map(_.hash)).unsafeRunSync()),
+      dao.snapshotPath.pathAsString
+    )
+
+  def removeSnapshots(snapshots: List[String], snapshotPath: String)(implicit dao: DAO): Unit =
+    snapshots.foreach { snapId =>
+      tryWithMetric(
+        {
+          logger.info(
+            s"[${dao.id.short}] removing snapshot at path ${Paths.get(snapshotPath, snapId).toAbsolutePath.toString}"
+          )
+          Files.delete(Paths.get(snapshotPath, snapId))
+        },
+        "deleteSnapshot"
+      )
+    }
 
   def isOverDiskCapacity(bytesLengthToAdd: Long)(implicit dao: DAO): Boolean = {
     val storageDir = new java.io.File(dao.snapshotPath.pathAsString)
     val usableSpace = storageDir.getUsableSpace
     val occupiedSpace = dao.snapshotPath.size
-    occupiedSpace + bytesLengthToAdd >= ConfigUtil.snapshotSizeDiskLimit || usableSpace <= bytesLengthToAdd
+    val isOver = occupiedSpace + bytesLengthToAdd > ConfigUtil.snapshotSizeDiskLimit || usableSpace < bytesLengthToAdd
+    if (isOver) {
+      logger.warn(
+        s"[${dao.id.short}] isOverDiskCapacity bytes to write ${bytesLengthToAdd} configured space: ${ConfigUtil.snapshotSizeDiskLimit} occupied space: $occupiedSpace usable space: $usableSpace"
+      )
+    }
+    isOver
   }
 
   def loadSnapshot(snapshotHash: String)(implicit dao: DAO): Try[StoredSnapshot] =

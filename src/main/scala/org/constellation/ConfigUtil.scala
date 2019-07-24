@@ -1,4 +1,5 @@
 package org.constellation
+import java.lang
 import java.util.concurrent.TimeUnit
 
 import com.typesafe.config.{Config, ConfigFactory}
@@ -10,11 +11,11 @@ object ConfigUtil {
 
   val config: Config = ConfigFactory.load().resolve()
 
-  val snapshotSizeDiskLimit: Long = Try(config.getLong("constellation.snapshot-size-disk-limit"))
-    .getOrElse(26214400)
+  val snapshotSizeDiskLimit: lang.Long =
+    Try(config.getBytes("constellation.snapshot-size-disk-limit")).getOrElse(java.lang.Long.valueOf(1000000))
 
   val snapshotClosestFractionSize: Int = Try(config.getInt("constellation.snapshot-closest-fraction-size"))
-    .getOrElse(50)
+    .getOrElse(12)
 
   val maxNestedCBresolution: Int = Try(config.getInt("constellation.max-nested-cb-resolution"))
     .getOrElse(100)

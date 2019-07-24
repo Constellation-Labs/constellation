@@ -1,5 +1,7 @@
 package org.constellation.consensus
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import akka.actor.{Actor, ActorContext, ActorRef, Cancellable, OneForOneStrategy, Props}
 import cats.effect.{ContextShift, IO}
 import cats.effect.IO
@@ -15,7 +17,7 @@ import org.constellation.consensus.CrossTalkConsensus.{
 }
 import org.constellation.consensus.Round._
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCache, Height, Id, NodeType}
+import org.constellation.primitives.Schema.{CheckpointCache, Height, Id, NodeState, NodeType}
 import org.constellation.primitives.{PeerData, UpdatePeerNotifications, _}
 import org.constellation.storage.StorageService
 import org.constellation.util.{Distance, PeerApiClient}
@@ -43,7 +45,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
 
   private val messagesWithoutRound =
     new StorageService[IO, Seq[RoundCommand]](expireAfterMinutes = Some(2))
-  private[consensus] var ownRoundInProgress: Boolean = false
+  private[consensus] var ownRoundInProgress: AtomicBoolean = new AtomicBoolean(false)
 
   override def receive: Receive = {
     case GetActiveMinHeight =>
@@ -53,17 +55,20 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
         case list => Some(list.min)
       }
       replyTo ! ActiveTipMinHeight(minHeight)
-    case StartNewBlockCreationRound if ownRoundInProgress =>
+    case StartNewBlockCreationRound if ownRoundInProgress.get() =>
       logger.warn(
         s"Unable to initiate new round another round: ${rounds.filter(_._2.startedByThisNode)} is in progress"
       )
-
-    case StartNewBlockCreationRound if !ownRoundInProgress =>
-      ownRoundInProgress = true
+    case StartNewBlockCreationRound if dao.nodeState != NodeState.Ready =>
+      logger.warn(
+        s"Unable to initiate new round node not ready: ${dao.nodeState}"
+      )
+    case StartNewBlockCreationRound if !ownRoundInProgress.get() && dao.nodeState == NodeState.Ready =>
+      ownRoundInProgress.compareAndSet(false, true)
       createRoundData(dao).onComplete {
         case Failure(e) =>
           logger.debug("Cannot create a round data due to no transactions")
-          ownRoundInProgress = false
+          ownRoundInProgress.compareAndSet(true, false)
         case Success(Some(tuple)) =>
           val roundData = tuple._1
           logger.debug(
@@ -72,7 +77,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
           )
           resolveMissingParents(roundData).onComplete {
             case Failure(e) =>
-              ownRoundInProgress = false
+              ownRoundInProgress.compareAndSet(true, false)
               logger.error(s"unable to start block creation round due to: ${e.getMessage}", e)
             case Success(_) =>
               logger.debug(s"[${dao.id.short}] ${roundData.roundId} started round")
@@ -93,7 +98,11 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
           }(ConstellationExecutionContext.global)
       }(ConstellationExecutionContext.global)
 
-    case cmd: ParticipateInBlockCreationRound =>
+    case _: ParticipateInBlockCreationRound if dao.nodeState != NodeState.Ready =>
+      logger.warn(
+        s"Unable to initiate new round node not ready: ${dao.nodeState}"
+      )
+    case cmd: ParticipateInBlockCreationRound if dao.nodeState == NodeState.Ready =>
       val checkHeight = cmd.roundData.tipsSOE.minHeight.traverse { min =>
         dao.snapshotService.lastSnapshotHeight.get
           .flatMap(last => if (last >= min) IO.raiseError[Unit](SnapshotHeightAboveTip(last, min)) else IO.unit)
@@ -138,7 +147,7 @@ class RoundManager(config: Config)(implicit dao: DAO) extends Actor with StrictL
 
         round.timeoutScheduler.cancel()
         if (round.startedByThisNode) {
-          ownRoundInProgress = false
+          ownRoundInProgress.compareAndSet(true, false)
         }
       }
       closeRoundActor(cmd.roundId)

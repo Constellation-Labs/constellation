@@ -2,26 +2,17 @@ package org.constellation.storage
 
 import cats.data.EitherT
 import cats.effect.{Concurrent, LiftIO, Sync}
-import cats.effect.concurrent.Ref
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.{
-  ChannelMessage,
-  ChannelMessageMetadata,
-  CheckpointBlock,
-  CheckpointBlockMetadata,
-  ConcurrentTipService,
-  TransactionCacheData
-}
-import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
 import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
+import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
+import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.Metrics
-
-import scala.util.Try
 
 class SnapshotService[F[_]: Concurrent](
   concurrentTipService: ConcurrentTipService[F],
@@ -30,6 +21,7 @@ class SnapshotService[F[_]: Concurrent](
   messageService: MessageService[F],
   transactionService: TransactionService[F],
   rateLimiting: RateLimiting[F],
+  broadcastService: SnapshotBroadcastService[F],
   dao: DAO
 ) extends StrictLogging {
   import constellation._
@@ -76,7 +68,7 @@ class SnapshotService[F[_]: Concurrent](
     for {
       _ <- snapshot.set(snapshotInfo.snapshot)
       _ <- lastSnapshotHeight.set(snapshotInfo.lastSnapshotHeight)
-      _ <- Sync[F].delay(concurrentTipService.set(snapshotInfo.tips))
+      _ <- concurrentTipService.set(snapshotInfo.tips)
       _ <- acceptedCBSinceSnapshot.set(snapshotInfo.acceptedCBSinceSnapshot)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.put(k, v) }.toList.sequence
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.map { h =>
@@ -84,7 +76,12 @@ class SnapshotService[F[_]: Concurrent](
           checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h) *>
           dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) *>
           h.checkpointBlock.get.transactions.toList
-            .map(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
+            .map(
+              tx =>
+                transactionService
+                  .accept(TransactionCacheData(tx))
+                  .flatTap(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
+            )
             .sequence
       }.sequence
       _ <- dao.metrics.updateMetricAsync[F](
@@ -115,10 +112,10 @@ class SnapshotService[F[_]: Concurrent](
 
       hashesForNextSnapshot = allBlocks.flatMap(_.checkpointBlock.map(_.baseHash)).sorted
       nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot))
-      _ <- EitherT.liftF(
-        Sync[F].delay(logger.debug(s"nextSnapshot: ${nextSnapshot.hash} with cbs: $hashesForNextSnapshot"))
-      )
 
+      _ <- EitherT.liftF(
+        Sync[F].delay(logger.info(s"conclude snapshot: ${nextSnapshot.lastSnapshot} "))
+      )
       _ <- EitherT.liftF(applySnapshot())
 
       _ <- EitherT.liftF(lastSnapshotHeight.set(nextHeightInterval.toInt))
@@ -127,6 +124,10 @@ class SnapshotService[F[_]: Concurrent](
       _ <- EitherT.liftF(updateMetricsAfterSnapshot())
 
       _ <- EitherT.liftF(snapshot.set(nextSnapshot))
+      _ <- EitherT.liftF(
+        broadcastService.broadcastSnapshot(nextSnapshot.lastSnapshot,
+                                           nextHeightInterval - dao.processingConfig.snapshotHeightDelayInterval)
+      )
     } yield ()
 
   def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock): F[Unit] =
@@ -197,6 +198,9 @@ class SnapshotService[F[_]: Concurrent](
             )
             Right(())
           } else {
+            logger.debug(
+              s"height interval not met minTipHeight: $minTipHeight nextHeightInterval: $nextHeightInterval and ${nextHeightInterval + snapshotHeightDelayInterval}"
+            )
             Left(HeightIntervalConditionNotMet)
           }
         }.flatMap { e =>
@@ -253,7 +257,7 @@ class SnapshotService[F[_]: Concurrent](
       .map(_.hash)
       .map(hash => Snapshot(hash, hashesForNextSnapshot))
 
-  private def applySnapshot(): F[Unit] =
+  private[storage] def applySnapshot(): F[Unit] =
     snapshot.get.flatMap { currentSnapshot =>
       if (currentSnapshot == Snapshot.snapshotZero) {
         Sync[F].unit
@@ -268,17 +272,18 @@ class SnapshotService[F[_]: Concurrent](
     currentSnapshot.checkpointBlocks.toList
       .traverse(checkpointService.fullData)
       .flatMap {
-        case maybeBlocks if maybeBlocks.exists(_.exists(_.checkpointBlock.isEmpty)) =>
+        case maybeBlocks
+            if maybeBlocks.exists(maybeCache => maybeCache.isEmpty || maybeCache.exists(_.checkpointBlock.isEmpty)) =>
           // TODO : This should never happen, if it does we need to reset the node state and redownload
           dao.metrics
             .incrementMetricAsync("snapshotWriteToDiskMissingData")
-
+            .flatMap(_ => Sync[F].raiseError[Unit](new IllegalStateException("Snapshot data is missing")))
         case maybeBlocks =>
           val flatten = maybeBlocks.flatten.sortBy(_.checkpointBlock.map(_.baseHash))
           Sync[F].delay {
             tryWithMetric(
               Snapshot.writeSnapshot(StoredSnapshot(currentSnapshot, flatten)),
-              "snapshotWriteToDisk"
+              Metrics.snapshotWriteToDisk
             )
           }.void
       }
@@ -378,6 +383,7 @@ object SnapshotService {
     messageService: MessageService[F],
     transactionService: TransactionService[F],
     rateLimiting: RateLimiting[F],
+    broadcastService: SnapshotBroadcastService[F],
     dao: DAO
   ) =
     new SnapshotService[F](
@@ -387,6 +393,7 @@ object SnapshotService {
       messageService,
       transactionService,
       rateLimiting,
+      broadcastService,
       dao
     )
 }

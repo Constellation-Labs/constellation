@@ -20,7 +20,6 @@ import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.serializer.KryoSerializer
 import org.json4s.native.Serialization
 
-import scala.concurrent.Future
 import scala.util.{Failure, Success}
 
 case class NodeStateInfo(
@@ -51,7 +50,9 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.id)
       } ~
       path("tips") {
-        complete(dao.concurrentTipService.toMap)
+        onSuccess(dao.concurrentTipService.toMap.unsafeToFuture()) { res =>
+          complete(res)
+        }
       } ~
       path("heights") {
         val calculateHeights = for {
@@ -65,6 +66,11 @@ trait CommonEndpoints extends Json4sSupport {
       } ~
       path("snapshotHashes") {
         complete(Snapshot.snapshotHashes())
+      } ~
+      path("snapshot" / "recent") {
+        onSuccess(dao.snapshotBroadcastService.getRecentSnapshots.unsafeToFuture()) { res =>
+          complete(res)
+        }
       } ~
       path("info") {
         val info = dao.snapshotService.getSnapshotInfo().unsafeRunSync()
