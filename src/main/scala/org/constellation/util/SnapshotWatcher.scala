@@ -13,6 +13,6 @@ class SnapshotWatcher(snapshotBroadcastService: SnapshotBroadcastService[IO])
   override def trigger(): IO[Unit] =
     snapshotBroadcastService.runClusterCheck
 
-  schedule(60 seconds)
+  schedule(90 seconds)
 
 }

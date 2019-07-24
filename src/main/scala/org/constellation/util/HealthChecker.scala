@@ -103,14 +103,26 @@ class HealthChecker[F[_]: Concurrent: Logger](
     diff match {
       case SnapshotDiff(_, _, Nil) => false
       case SnapshotDiff(_, Nil, _) => false
-      case SnapshotDiff(Nil, snapshotsToDownload, _) =>
-        (max(ownSnapshots) + dao.processingConfig.snapshotHeightDelayInterval) < max(snapshotsToDownload)
       case SnapshotDiff(snapshotsToDelete, snapshotsToDownload, _) =>
-        val ownSnapshotsMax = max(ownSnapshots)
-        ownSnapshotsMax <= max(snapshotsToDelete) && max(snapshotsToDownload) >= ownSnapshotsMax
+        isBelowInterval(ownSnapshots, snapshotsToDownload) || isMisaligned(
+          ownSnapshots,
+          (snapshotsToDelete ++ snapshotsToDownload).map(r => (r.height, r.hash)).toMap
+        )
     }
 
-  private def max(list: List[RecentSnapshot]): Long = list.map(_.height).max
+  private def isMisaligned(ownSnapshots: List[RecentSnapshot], recent: Map[Long, String]) =
+    ownSnapshots.exists(r => recent.get(r.height).exists(_ != r.hash))
+
+  private def isBelowInterval(ownSnapshots: List[RecentSnapshot], snapshotsToDownload: List[RecentSnapshot]) =
+    (maxOrZero(ownSnapshots) + dao.processingConfig.snapshotHeightRedownloadDelayInterval) < maxOrZero(
+      snapshotsToDownload
+    )
+
+  private def maxOrZero(list: List[RecentSnapshot]): Long =
+    list match {
+      case Nil      => 0
+      case nonEmpty => nonEmpty.map(_.height).max
+    }
 
   def startReDownload(diff: SnapshotDiff, peers: Map[Id, PeerData]): F[Unit] = {
     val reDownload = for {

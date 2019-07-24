@@ -1,20 +1,17 @@
 package org.constellation.util
 
-import akka.http.scaladsl.coding.Gzip
-import akka.util.ByteString
-import cats.effect.{ContextShift, IO, LiftIO, Sync}
+import cats.effect.{ContextShift, IO, LiftIO}
 import com.softwaremill.sttp._
-import com.softwaremill.sttp.json4s.asJson
 import com.typesafe.config.ConfigFactory
 import org.constellation.DAO
-import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.Schema.{Id, MetricsResult}
 import org.constellation.serializer.KryoSerializer
 import org.json4s.Formats
-import org.json4s.native.Serialization
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
 object APIClient {
 
@@ -83,6 +80,20 @@ class APIClient private (
       .response(asByteArray)
       .send()
       .map(resp => KryoSerializer.deserializeCast[T](resp.unsafeBody))
+
+  def getNonBlockingBytesKryoTry[T <: AnyRef](
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds
+  ): Future[Try[T]] =
+    httpWithAuth(suffix, queryParams, timeout)(Method.GET)
+      .response(asByteArray)
+      .send()
+      .map(
+        resp =>
+          if (resp.isSuccess) Success(KryoSerializer.deserializeCast[T](resp.unsafeBody))
+          else Failure(new Exception(s"Invalid response code ${resp.code} and status ${resp.statusText}"))
+      )
 
   def getNonBlockingIO[T <: AnyRef](
     suffix: String,

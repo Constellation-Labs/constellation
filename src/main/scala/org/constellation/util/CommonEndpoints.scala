@@ -13,9 +13,9 @@ import cats.implicits._
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
-import org.constellation.consensus.Snapshot
+import org.constellation.consensus.{Snapshot, SnapshotInfo}
 import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.NodeType
+import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.serializer.KryoSerializer
 import org.json4s.native.Serialization
@@ -73,14 +73,23 @@ trait CommonEndpoints extends Json4sSupport {
         }
       } ~
       path("info") {
-        val info = dao.snapshotService.getSnapshotInfo().unsafeRunSync()
-        val res =
-          KryoSerializer.serializeAnyRef(
-            info.copy(acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshot.flatMap {
-              dao.checkpointService.fullData(_).unsafeRunSync()
-            })
-          )
-        complete(res)
+
+        val getInfo = dao.cluster.isNodeReady.ifM(
+          dao.snapshotService.getSnapshotInfo().map(_.some),
+          IO.pure(none[SnapshotInfo])
+        )
+
+        onSuccess(getInfo.unsafeToFuture()) { maybeInfo =>
+          maybeInfo.fold(complete(StatusCodes.NotFound)) { info =>
+            val res =
+              KryoSerializer.serializeAnyRef(
+                info.copy(acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshot.flatMap {
+                  dao.checkpointService.fullData(_).unsafeRunSync()
+                })
+              )
+            complete(res)
+          }
+        }
       } ~
 /*      path("snapshot" / Segment) {s =>
         complete(dao.dbActor.getSnapshot(s))

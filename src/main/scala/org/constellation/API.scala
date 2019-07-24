@@ -102,6 +102,7 @@ case class ProcessingConfig(
   peerDiscoveryInterval: Int = 60,
   snapshotHeightInterval: Int = 2,
   snapshotHeightDelayInterval: Int = 2,
+  snapshotHeightRedownloadDelayInterval: Int = 2,
   snapshotInterval: Int = 25,
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,

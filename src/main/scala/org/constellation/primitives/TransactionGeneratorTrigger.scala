@@ -1,30 +1,19 @@
 package org.constellation.primitives
 
-import com.typesafe.scalalogging.StrictLogging
-import constellation.futureTryWithTimeoutMetric
-import org.constellation.primitives.Schema.NodeState
-import org.constellation.util.Periodic
-import org.constellation.{ConstellationExecutionContext, DAO}
+import cats.effect.IO
+import cats.implicits._
+import org.constellation.DAO
+import org.constellation.util.PeriodicIO
 
-import scala.concurrent.Future
-import scala.util.Try
+import scala.concurrent.duration._
 
 class TransactionGeneratorTrigger(periodSeconds: Int = 10)(implicit dao: DAO)
-    extends Periodic[Try[Unit]]("TransactionGeneratorTrigger", periodSeconds)
-    with StrictLogging {
+    extends PeriodicIO("TransactionGeneratorTrigger") {
 
-  override def trigger(): Future[Try[Unit]] =
-    if (nodeIsReady) {
-      futureTryWithTimeoutMetric(
-        {
-          val start = System.currentTimeMillis()
-          dao.transactionGenerator.generate().value.unsafeRunSync
-          val elapsed = System.currentTimeMillis() - start
-          logger.debug(s"Attempt generate transaction took : $elapsed ms")
-        },
-        "generateTransactionsAttempt"
-      )(ConstellationExecutionContext.edge, dao)
-    } else Future.successful(Try(()))
+  override def trigger(): IO[Unit] =
+    nodeIsReady.flatMap(isReady => if (isReady) dao.transactionGenerator.generate().value.void else IO.unit)
 
-  private def nodeIsReady: Boolean = dao.cluster.isNodeReady.unsafeRunSync
+  private def nodeIsReady: IO[Boolean] = dao.cluster.isNodeReady
+
+  schedule(periodSeconds seconds)
 }
