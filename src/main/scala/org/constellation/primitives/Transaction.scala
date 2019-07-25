@@ -67,6 +67,18 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
   )
 }
 
+class DummyTransaction(edge: Edge[TransactionEdgeData]) extends Transaction(edge) {
+
+  override def valid(implicit dao: DAO): Boolean =
+    TransactionValidatorNel.validateDummyTransaction(this).isValid
+
+  override def amount: Long = 0L
+}
+
+object DummyTransaction {
+  def apply(edge: Edge[TransactionEdgeData]) = new DummyTransaction(edge)
+}
+
 case class TransactionGossip(tx: Transaction, path: Set[Schema.Id]) {
   def hash: String = tx.hash
 }
@@ -134,6 +146,14 @@ object NonPositiveAmount {
   def apply(tx: Transaction) = new NonPositiveAmount(tx.hash, tx.amount)
 }
 
+case class NonZeroAmount(txHash: String, amount: Long) extends TransactionValidation {
+  def errorMessage: String = s"Transaction tx=$txHash has a non-zero amount=${amount.toString}"
+}
+
+object NonZeroAmount {
+  def apply(tx: Transaction) = new NonZeroAmount(tx.hash, tx.amount)
+}
+
 case class NonPositiveFee(txHash: String, fee: Option[Long]) extends TransactionValidation {
   def errorMessage: String = s"Transaction tx=$txHash has a non-positive fee=${fee.toString}"
 }
@@ -175,6 +195,9 @@ sealed trait TransactionValidatorNel {
   def validateAmount(tx: Transaction): ValidationResult[Transaction] =
     if (tx.amount > 0) tx.validNel else NonPositiveAmount(tx).invalidNel
 
+  def validateAmountEqZero(tx: Transaction): ValidationResult[Transaction] =
+    if (tx.amount == 0) tx.validNel else NonZeroAmount(tx).invalidNel
+
   def validateFee(tx: Transaction): ValidationResult[Transaction] =
     tx.fee match {
       case Some(fee) if fee <= 0 => NonPositiveFee(tx).invalidNel
@@ -196,6 +219,15 @@ sealed trait TransactionValidatorNel {
       .product(validateEmptyDestinationAddress(tx))
       .product(validateDestinationAddress(tx))
       .product(validateAmount(tx))
+      .product(validateFee(tx))
+      .product(validateDuplicate(tx))
+      .map(_ ⇒ tx)
+
+  def validateDummyTransaction(tx: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
+    validateSourceSignature(tx)
+      .product(validateAmountEqZero(tx))
+      .product(validateEmptyDestinationAddress(tx))
+      .product(validateDestinationAddress(tx))
       .product(validateFee(tx))
       .product(validateDuplicate(tx))
       .map(_ ⇒ tx)

@@ -16,9 +16,9 @@ import org.constellation.consensus.RoundManager.{
   BroadcastUnionBlockProposal
 }
 import org.constellation.p2p.DataResolver
-import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, TypedEdgeHash}
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, PeerApiClient}
+import org.constellation.util.PeerApiClient
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.collection.mutable
@@ -67,8 +67,9 @@ class Round(
       throw new RuntimeException("Received message from different round.")
     case StartTransactionProposal(_) =>
       sendArbitraryDataProposalsTikTok.cancel()
+
       val transactions = dao.transactionService
-        .pullForConsensus(1)
+        .pullForConsensusWithDummy(1)
         .map(_.map(_.transaction))
         .unsafeRunSync()
 
@@ -368,7 +369,7 @@ class Round(
             .lookup(hash)
             .map(
               _.map(_.transaction)
-          )
+            )
       )
       .toList
       .sequence[IO, Option[Transaction]]
@@ -400,7 +401,7 @@ class Round(
             .lookup(hash)
             .map(
               _.map(_.channelMessage)
-          )
+            )
       )
       .toList
       .sequence[IO, Option[ChannelMessage]]
@@ -623,7 +624,7 @@ object Round {
     type RoundStage = Value
 
     val STARTING, WAITING_FOR_PROPOSALS, WAITING_FOR_BLOCK_PROPOSALS, RESOLVING_MAJORITY_CB,
-    WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
+      WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
       Value
   }
 
