@@ -20,7 +20,7 @@ class TransactionGeneratorTrigger(periodSeconds: Int = 10)(implicit dao: DAO)
           val start = System.currentTimeMillis()
           dao.transactionGenerator.generate().value.unsafeRunSync
           val elapsed = System.currentTimeMillis() - start
-          logger.info(s"Attempt generate transaction took : $elapsed ms")
+          logger.debug(s"Attempt generate transaction took : $elapsed ms")
         },
         "generateTransactionsAttempt"
       )(ConstellationExecutionContext.edge, dao)
