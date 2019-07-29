@@ -30,8 +30,8 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
 
   def generate(): EitherT[F, TransactionGeneratorError, Unit] =
     for {
-      _ <- validateNodeState(requiredState = NodeState.Ready)
-      _ <- validateNodeIsPermitToGenerateRandomTransaction
+      _ <- EitherT.fromEither[F](validateNodeState(requiredState = NodeState.Ready))
+      _ <- EitherT.fromEither[F](validateNodeIsPermitToGenerateRandomTransaction)
 
       addressData <- EitherT.liftF(getAddressData)
       _ <- EitherT.fromEither[F](validateNodeHasBalance(addressData))
@@ -47,7 +47,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
     } yield ()
 
   private def generateTransactions(peers: Seq[(Id, PeerData)], numberOfTransaction: Int) = {
-    val transaction: F[_] = for {
+    val transaction = for {
       transaction <- generateTransaction(peers)
       _ <- dao.metrics.incrementMetricAsync("signaturesPerformed")
       _ <- dao.metrics.incrementMetricAsync("randomTransactionsGenerated")
@@ -198,11 +198,10 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
   private def peersNotOlderThan(timeInMillis: Long)(m: (Id, PeerData)): Boolean =
     m._2.peerMetadata.timeAdded < timeInMillis
 
-  private def getCountTransactionsWithStatus(transactionStatus: TransactionStatus): F[Long] = {
-    val pendingTransactionCount = transactionService.count(transactionStatus)
-    pendingTransactionCount.map(f => dao.metrics.updateMetricAsync("transactionPendingSize", f.toString))
-    pendingTransactionCount
-  }
+  private def getCountTransactionsWithStatus(transactionStatus: TransactionStatus): F[Long] =
+    transactionService
+      .count(transactionStatus)
+      .flatTap(c => dao.metrics.updateMetricAsync("transactionPendingSize", c.toString))
 
   private def getAddressData: F[Option[AddressCacheData]] =
     addressService.lookup(dao.selfAddressStr)
@@ -222,19 +221,12 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
   ): Either[TransactionGeneratorError, Unit] =
     if (pendingCount < dao.processingConfig.maxMemPoolSize) Right(()) else Left(NodeHasToManyPendingTransactions)
 
-  private def validateNodeState(requiredState: NodeState): EitherT[F, TransactionGeneratorError, Unit] =
-    EitherT {
-      Sync[F].delay {
-        if (dao.nodeState == requiredState) Right(()) else Left(NodeIsNotInRequiredState)
-      }
-    }
+  private def validateNodeState(requiredState: NodeState): Either[TransactionGeneratorError, Unit] =
+    if (dao.nodeState == requiredState) Right(()) else Left(NodeIsNotInRequiredState)
 
-  private def validateNodeIsPermitToGenerateRandomTransaction: EitherT[F, TransactionGeneratorError, Unit] =
-    EitherT {
-      Sync[F].delay {
-        if (dao.generateRandomTX) Right(()) else Left(NodeIsNotPermitToGenerateRandomTransaction)
-      }
-    }
+  private def validateNodeIsPermitToGenerateRandomTransaction: Either[TransactionGeneratorError, Unit] =
+    if (dao.generateRandomTX) Right(()) else Left(NodeIsNotPermitToGenerateRandomTransaction)
+
 }
 
 object TransactionGenerator {
