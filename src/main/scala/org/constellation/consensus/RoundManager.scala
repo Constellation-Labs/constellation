@@ -341,10 +341,9 @@ object RoundManager {
             Distance.calculate(tx.src.address, id)
         case "hash" =>
           (id: Id, tx: Transaction) =>
-            val idBi = BigInt(id.hex.getBytes())
-            val txBi = BigInt(tx.hash.getBytes())
-            val srcBi = BigInt(tx.src.address.getBytes())
-            (idBi ^ txBi) + (idBi ^ srcBi)
+            val xorIdTx = Distance.calculate(tx.hash, id)
+            val xorIdSrc = Distance.calculate(tx.src.address, id)
+            xorIdTx + xorIdSrc
       }
 
     dao.transactionService.getArbitrary
