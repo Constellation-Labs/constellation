@@ -236,6 +236,10 @@ class ConstellationNode(
     dao.processingConfig.snapshotTriggeringTimeSeconds
   )
 
+  val transactionGeneratorTrigger = new TransactionGeneratorTrigger(
+    dao.processingConfig.randomTransactionLoopTimeSeconds
+  )
+
   val ipManager = IPManager()
 
   nodeConfig.seeds.foreach { peer =>
@@ -263,11 +267,6 @@ class ConstellationNode(
 
   val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
 
-  val randomTXManager = new RandomTransactionManager(
-    crossTalkConsensusActor,
-    dao.processingConfig.randomTransactionLoopTimeSeconds
-  )
-
   def getIPData: ValidPeerIPData =
     ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)
 
@@ -285,7 +284,6 @@ class ConstellationNode(
 
   def shutdown(): Unit = {
     dao.nodeState = NodeState.Offline
-    randomTXManager.shutdown()
     bindingFuture
       .foreach(_.unbind())
 
