@@ -4,10 +4,10 @@ import java.security.KeyPair
 
 import better.files.File
 import cats.effect.{ContextShift, IO}
-import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import constellation.createTransaction
+import constellation.createDummyTransaction
 import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.crypto.KeyUtils.makeKeyPair
 import org.constellation.primitives.Schema._
@@ -17,7 +17,7 @@ import org.constellation.util.{APIClient, HostPort, Metrics}
 import org.constellation.{ConstellationContextShift, DAO, Fixtures, PeerMetadata}
 import org.mockito.Mockito.doNothing
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{BeforeAndAfter, FreeSpec, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 class CheckpointServiceTest
     extends FreeSpec
@@ -99,8 +99,44 @@ class CheckpointServiceTest
 
       val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
 
-      val cb1 = makeBlock(startingTips)
+      val cb1 = makeBlock(
+        startingTips,
+        transactions = Seq(createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
+      )
 
+      val cb2 = makeBlock(
+        startingTips,
+        transactions = Seq(createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
+      )
+      val cb3 = makeBlock(
+        Seq(cb1.soe, cb2.soe),
+        transactions = Seq(createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
+      )
+
+      val peer = readyFacilitators(Id("b")).client
+      val blocks = Seq(cb1, cb2)
+
+      blocks.foreach { c =>
+        peer.getNonBlockingIO[Option[SignedObservationEdgeCache]](eqTo(s"soe/${c.soeHash}"), *, *)(*, *) shouldReturn IO
+          .pure(Some(SignedObservationEdgeCache(c.soe)))
+
+        peer.getNonBlockingIO[Option[CheckpointCache]](eqTo(s"checkpoint/${c.baseHash}"), *, *)(*, *) shouldReturn IO
+          .pure(Some(CheckpointCache(Some(c))))
+      }
+
+      dao.checkpointService
+        .accept(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
+        .unsafeRunSync()
+      dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
+    }
+
+    "should accept cb resolving parents created with dummy transactions" in {
+      val go = Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair)
+      Genesis.acceptGenesis(go, setAsTips = true)
+
+      val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
+
+      val cb1 = makeBlock(startingTips)
       val cb2 = makeBlock(startingTips)
       val cb3 = makeBlock(Seq(cb1.soe, cb2.soe))
 
@@ -122,9 +158,12 @@ class CheckpointServiceTest
     }
   }
 
-  private def makeBlock(tips: Seq[SignedObservationEdge]): CheckpointBlock =
+  private def makeBlock(
+    tips: Seq[SignedObservationEdge],
+    transactions: Seq[Transaction] = Seq(createDummyTransaction(dao.selfAddressStr, dao.dummyAddress, dao.keyPair))
+  ): CheckpointBlock =
     CheckpointBlock.createCheckpointBlock(
-      Seq(createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair)),
+      transactions,
       tips.map { s =>
         TypedEdgeHash(s.hash, EdgeHashType.CheckpointHash)
       },

@@ -7,7 +7,7 @@ import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{Edge, Schema, Transaction}
+import org.constellation.primitives.{DummyTransaction, Edge, Schema, Transaction}
 
 trait Signable {
 
@@ -127,6 +127,25 @@ trait SignHelpExt {
     Transaction(Edge(oe, soe, txData))
   }
 
+  def createDummyTransaction(
+    srcAddress: String,
+    dstAddress: String,
+    keyPair: KeyPair
+  ): Transaction = {
+    val txData = TransactionEdgeData(amount = 0L)
+
+    val oe = ObservationEdge(
+      Seq(
+        TypedEdgeHash(srcAddress, EdgeHashType.AddressHash),
+        TypedEdgeHash(dstAddress, EdgeHashType.AddressHash)
+      ),
+      TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
+    )
+
+    val soe = signedObservationEdge(oe)(keyPair)
+
+    DummyTransaction(Edge(oe, soe, txData))
+  }
 }
 
 object SignHelp extends SignHelpExt

@@ -1,7 +1,5 @@
 package org.constellation.consensus
 
-import java.util.concurrent.Executors
-
 import akka.actor.{ActorRef, ActorSystem}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
@@ -21,9 +19,7 @@ import org.constellation.storage.{CheckpointService, MessageService, Transaction
 import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures, PeerMetadata}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{BeforeAndAfter, FunSuiteLike, Ignore, Matchers}
-
-import scala.concurrent.ExecutionContext
+import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers}
 
 class RoundTest
     extends TestKit(ActorSystem("RoundTest"))
@@ -83,6 +79,9 @@ class RoundTest
     dao.threadSafeMessageMemPool.pull(1) shouldReturn None
     dao.readyPeers(NodeType.Light) shouldReturn IO.pure(Map())
     txService.pullForConsensus(checkpointFormationThreshold) shouldReturn IO.pure(
+      List(tx1, tx2).map(TransactionCacheData(_))
+    )
+    txService.pullForConsensusWithDummy(checkpointFormationThreshold) shouldReturn IO.pure(
       List(tx1, tx2).map(TransactionCacheData(_))
     )
     txService.contains(*) shouldReturn IO.pure(true)
