@@ -3,7 +3,7 @@ import java.net.SocketException
 
 import cats.effect.IO
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.p2p.DownloadProcess
+import org.constellation.p2p.{Cluster, DownloadProcess}
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
 import org.constellation.storage.RecentSnapshot
 import org.constellation.util.HealthChecker.compareSnapshotState
@@ -22,6 +22,7 @@ class HealthCheckerTest
   val dao: DAO = mock[DAO]
   dao.id shouldReturn Fixtures.id
   dao.processingConfig shouldReturn ProcessingConfig()
+
   val downloadProcess: DownloadProcess = mock[DownloadProcess]
 
   val healthChecker =
@@ -72,9 +73,11 @@ class HealthCheckerTest
     val interval = dao.processingConfig.snapshotHeightDelayInterval
     it("should return true when there are snaps to delete and to download") {
       val diff =
-        SnapshotDiff(List(RecentSnapshot("someSnap", height)),
-                     List(RecentSnapshot("someSnap", height)),
-                     List(Id("peer")))
+        SnapshotDiff(
+          List(RecentSnapshot("someSnap", height)),
+          List(RecentSnapshot("someSnap", height)),
+          List(Id("peer"))
+        )
 
       healthChecker.shouldReDownload(ownSnapshots, diff) shouldBe true
     }
@@ -112,6 +115,8 @@ class HealthCheckerTest
   describe("startReDownload function") {
     it("should set node state in case of error") {
       dao.keyPair shouldReturn Fixtures.kp
+      dao.cluster shouldReturn mock[Cluster[IO]]
+      dao.cluster.getNodeState shouldReturnF NodeState.Ready
       val metrics = new Metrics(2)(dao)
       dao.metrics shouldReturn metrics
 

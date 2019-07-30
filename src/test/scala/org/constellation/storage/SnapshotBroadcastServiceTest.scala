@@ -4,8 +4,9 @@ import java.net.SocketTimeoutException
 
 import cats.implicits._
 import cats.effect.{ContextShift, IO, Timer}
+import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
-import org.constellation.primitives.{PeerData, Schema}
+import org.constellation.primitives.Schema
 import org.constellation.util.{APIClient, HealthChecker, HostPort}
 import org.constellation.{ConstellationExecutionContext, DAO, PeerMetadata, ProcessingConfig}
 import org.mockito.cats.IdiomaticMockitoCats
@@ -32,9 +33,11 @@ class SnapshotBroadcastServiceTest
   before {
     dao = mockDAO
     dao.processingConfig shouldReturn ProcessingConfig(recentSnapshotNumber = 3)
+    dao.cluster shouldReturn mock[Cluster[IO]]
     healthChecker.checkClusterConsistency(*) shouldReturn IO.pure[Option[List[RecentSnapshot]]](None)
     snapshotBroadcastService = new SnapshotBroadcastService[IO](
       healthChecker,
+      dao.cluster,
       dao
     )
   }
@@ -45,7 +48,7 @@ class SnapshotBroadcastServiceTest
       val readyFacilitators: Map[Schema.Id, PeerData] = Map(prepareFacilitator("a"), prepareFacilitator("b"))
       dao.readyPeers(NodeType.Full) shouldReturnF readyFacilitators
       dao.processingConfig shouldReturn ProcessingConfig(maxInvalidSnapshotRate = 20)
-      dao.nodeState shouldReturn NodeState.Ready
+      dao.cluster.getNodeState shouldReturnF NodeState.Ready
 
       readyFacilitators(Id("a")).client
         .postNonBlockingIO[SnapshotVerification](*, *, *, *)(*, *) shouldReturn IO.fromFuture(IO {

@@ -10,7 +10,7 @@ import org.constellation.DAO
 import org.constellation.consensus.CrossTalkConsensus.ParticipateInBlockCreationRound
 import org.constellation.consensus.Round.{LightTransactionsProposal, RoundData, SelectedUnionBlock, UnionBlockProposal}
 import org.constellation.consensus.RoundDataRemote
-import org.constellation.primitives.PeerData
+import org.constellation.p2p.PeerData
 import org.constellation.util.APIClient
 import org.json4s.native
 import org.json4s.native.Serialization

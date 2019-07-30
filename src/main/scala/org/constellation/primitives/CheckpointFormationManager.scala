@@ -41,7 +41,7 @@ class CheckpointFormationManager(
 
     if ((memPoolCount >= minTXInBlock || (elapsedTime >= formEmptyCheckpointAfterThreshold)) &&
         dao.formCheckpoints &&
-        dao.nodeState == NodeState.Ready &&
+        dao.cluster.isNodeReady.unsafeRunSync &&
         !dao.blockFormationInProgress) {
 
       if (elapsedTime >= formEmptyCheckpointAfterThreshold) {

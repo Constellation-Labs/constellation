@@ -68,8 +68,9 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
     post {
       path("status") {
         entity(as[SetNodeStatus]) { sns =>
-          dao.peerManager ! sns
-          complete(StatusCodes.OK)
+          onSuccess(dao.cluster.setNodeStatus(sns.id, sns.nodeStatus).unsafeToFuture) {
+            complete(StatusCodes.OK)
+          }
         }
       } ~
         path("sign") {
@@ -91,8 +92,9 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
               maybeData match {
                 case Some(PeerIPData(host, _)) =>
                   logger.debug("Parsed host and port, sending peer manager request")
-                  dao.peerManager ! PendingRegistration(host, request)
-                  complete(StatusCodes.OK)
+                  onSuccess(dao.cluster.pendingRegistration(host, request).unsafeToFuture) {
+                    complete(StatusCodes.OK)
+                  }
                 case None =>
                   logger.warn(s"Failed to parse host and port for $request")
                   complete(StatusCodes.BadRequest)
@@ -177,8 +179,9 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
               val maybeData = getHostAndPortFromRemoteAddress(clientIP)
               maybeData match {
                 case Some(PeerIPData(host, portOption)) =>
-                  dao.peerManager ! Deregistration(request.host, request.port, request.id)
-                  complete(StatusCodes.OK)
+                  onSuccess(dao.cluster.deregistration(request.host, request.port, request.id).unsafeToFuture) {
+                    complete(StatusCodes.OK)
+                  }
                 case None =>
                   complete(StatusCodes.BadRequest)
               }

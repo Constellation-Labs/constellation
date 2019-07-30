@@ -1,6 +1,7 @@
 package org.constellation
 import cats.effect.IO
-import org.constellation.primitives.{PeerData, Schema}
+import org.constellation.p2p.PeerData
+import org.constellation.primitives.Schema
 import org.constellation.primitives.Schema.{Id, NodeState}
 import org.constellation.util.{APIClient, HostPort, Metrics}
 import org.mockito.IdiomaticMockito
@@ -15,7 +16,7 @@ object TestHelpers extends IdiomaticMockito {
     }
     dao.initialize()
     dao.metrics = new Metrics()(dao)
-    dao.nodeState = NodeState.Ready
+    dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
     dao
   }
 

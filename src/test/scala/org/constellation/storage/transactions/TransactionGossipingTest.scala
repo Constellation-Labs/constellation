@@ -3,7 +3,8 @@ package org.constellation.storage.transactions
 import cats.effect.{ContextShift, IO}
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
-import org.constellation.primitives.{PeerData, Transaction, TransactionCacheData}
+import org.constellation.p2p.PeerData
+import org.constellation.primitives.{Transaction, TransactionCacheData}
 import org.constellation.storage.TransactionService
 import org.constellation.{ConstellationContextShift, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats

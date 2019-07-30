@@ -10,12 +10,13 @@ import cats.effect.concurrent.Ref
 import cats.implicits._
 import constellation.createTransaction
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
+import org.constellation.p2p.Cluster
 import org.constellation.primitives.CheckpointBlockValidatorNel._
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, Height, Id}
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.{CheckpointBlocksMemPool, CheckpointService, SnapshotService, TransactionService}
 import org.constellation.util.{HashSignature, Metrics}
-import org.constellation.{ConstellationContextShift, DAO, NodeConfig}
+import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, NodeConfig}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{mock => _, _}
@@ -181,8 +182,14 @@ class ValidationSpec
   dao.initialize(NodeConfig())
   implicit val keyPair: KeyPair = keyPairs.head
   dao.metrics = new Metrics()
-  val peerProbe = TestProbe.apply("peerManager")
-  dao.peerManager = peerProbe.ref
+
+  implicit val logger = dao.unsafeLogger
+  implicit val timer = IO.timer(ConstellationExecutionContext.edge)
+  implicit val cs = ConstellationContextShift.edge
+
+  val ipManager = new IPManager
+  val cluster = Cluster[IO](() => dao.metrics, ipManager, dao)
+  dao.cluster = cluster
 
   go.genesis.store(CheckpointCache(Some(go.genesis)))
   go.initialDistribution.store(CheckpointCache(Some(go.initialDistribution)))

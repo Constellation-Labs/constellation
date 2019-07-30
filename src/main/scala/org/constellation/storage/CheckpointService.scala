@@ -7,7 +7,7 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.FinishedCheckpoint
-import org.constellation.p2p.DataResolver
+import org.constellation.p2p.{DataResolver, PeerNotification}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
@@ -109,29 +109,31 @@ class CheckpointService[F[_]: Concurrent](
         .toList
     }
 
-    (dao.nodeState, checkpoint.checkpointCacheData.checkpointBlock) match {
-      case (_, None) => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
-      case (NodeState.Ready, Some(cb)) =>
-        val acceptance = for {
-          _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)
-          _ <- Sync[F].delay { logger.debug(s"[${dao.id.short}] starting accept block: ${cb.baseHash} from others") }
-          peers <- LiftIO[F].liftIO(obtainPeers)
-          _ <- resolveMissingParents(cb, peers)
-          _ <- accept(checkpoint.checkpointCacheData)
-          _ <- pendingAcceptanceFromOthers.update(_.filterNot(_ == cb.baseHash))
-        } yield ()
+    LiftIO[F].liftIO(dao.cluster.getNodeState).flatMap { nodeState =>
+      (nodeState, checkpoint.checkpointCacheData.checkpointBlock) match {
+        case (_, None) => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
+        case (NodeState.Ready, Some(cb)) =>
+          val acceptance = for {
+            _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)
+            _ <- Sync[F].delay { logger.debug(s"[${dao.id.short}] starting accept block: ${cb.baseHash} from others") }
+            peers <- LiftIO[F].liftIO(obtainPeers)
+            _ <- resolveMissingParents(cb, peers)
+            _ <- accept(checkpoint.checkpointCacheData)
+            _ <- pendingAcceptanceFromOthers.update(_.filterNot(_ == cb.baseHash))
+          } yield ()
 
-        acceptance.recoverWith {
-          case ex: PendingAcceptance =>
-            acceptErrorHandler(ex)
-          case error =>
-            pendingAcceptanceFromOthers.update(_.filterNot(_ == cb.baseHash)) *> acceptErrorHandler(error)
-        }
+          acceptance.recoverWith {
+            case ex: PendingAcceptance =>
+              acceptErrorHandler(ex)
+            case error =>
+              pendingAcceptanceFromOthers.update(_.filterNot(_ == cb.baseHash)) *> acceptErrorHandler(error)
+          }
 
-        acceptance
-      case (NodeState.DownloadCompleteAwaitingFinalSync, Some(_)) =>
-        LiftIO[F].liftIO(dao.snapshotService.syncBufferAccept(checkpoint.checkpointCacheData))
-      case (_, Some(_)) => Sync[F].raiseError[Unit](PendingDownloadException(dao.id))
+          acceptance
+        case (NodeState.DownloadCompleteAwaitingFinalSync, Some(_)) =>
+          LiftIO[F].liftIO(dao.snapshotService.syncBufferAccept(checkpoint.checkpointCacheData))
+        case (_, Some(_)) => Sync[F].raiseError[Unit](PendingDownloadException(dao.id))
+      }
     }
   }
 

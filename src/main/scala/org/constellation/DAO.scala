@@ -10,11 +10,10 @@ import cats.effect.concurrent.Semaphore
 import cats.effect.{Concurrent, ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
-import org.constellation.p2p.{DownloadProcess, SnapshotsDownloader, SnapshotsProcessor}
+import org.constellation.p2p.{Cluster, DownloadProcess, PeerData, SnapshotsDownloader, SnapshotsProcessor}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
@@ -59,8 +58,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     f
   }
 
-  @volatile var nodeState: NodeState = NodeState.PendingDownload // TODO: wkoszycki make atomic
-
   @volatile var nodeType: NodeType = NodeType.Full
 
   lazy val messageService: MessageService[IO] = {
@@ -68,23 +65,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     new MessageService[IO]()
   }
 
-  implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
-
-  val snapshotBroadcastService: SnapshotBroadcastService[IO] = {
-    val snapshotProcessor =
-      new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotByDistance)(this, ConstellationExecutionContext.global)
-    val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.global)
-    new SnapshotBroadcastService[IO](new HealthChecker[IO](this, downloadProcess), this)
-  }
-
-  val snapshotWatcher = new SnapshotWatcher(snapshotBroadcastService)
-
-  def setNodeState(
-    nodeState_ : NodeState
-  ): Unit = {
-    nodeState = nodeState_
-    metrics.updateMetric("nodeState", nodeState.toString)
-  }
+  implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
 
   def peerHostPort = HostPort(nodeConfig.hostName, nodeConfig.peerHttpPort)
 
@@ -96,10 +77,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     actorMaterializer = materialize
     standardTimeout = Timeout(nodeConfig.defaultTimeoutSeconds, TimeUnit.SECONDS)
 
-    if (nodeConfig.cliConfig.startOfflineMode) {
-      nodeState = NodeState.Offline
-    }
-
     if (nodeConfig.isLightNode) {
       nodeType = NodeType.Light
     }
@@ -107,6 +84,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     idDir.createDirectoryIfNotExists(createParents = true)
     messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
+
+    implicit val ioTimer = IO.timer(ConstellationExecutionContext.edge)
 
     rateLimiting = new RateLimiting[IO]
 
@@ -122,6 +101,20 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     )
     addressService = new AddressService[IO]()(Concurrent(ConstellationConcurrentEffect.edge), () => metrics)
 
+    ipManager = IPManager()
+    cluster = Cluster[IO](() => metrics, ipManager, this)
+
+    snapshotBroadcastService = {
+      val snapshotProcessor =
+        new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotByDistance)(
+          this,
+          ConstellationExecutionContext.global
+        )
+      val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.global)
+      new SnapshotBroadcastService[IO](new HealthChecker[IO](this, downloadProcess), cluster, this)
+    }
+    snapshotWatcher = new SnapshotWatcher(snapshotBroadcastService)
+
     snapshotService = SnapshotService[IO](
       concurrentTipService,
       addressService,
@@ -133,7 +126,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       this
     )
 
-    transactionGenerator = TransactionGenerator[IO](addressService, transactionGossiping, transactionService, this)
+    transactionGenerator =
+      TransactionGenerator[IO](addressService, transactionGossiping, transactionService, cluster, this)
   }
 
   implicit val context: ContextShift[IO] = ConstellationContextShift.global
@@ -153,16 +147,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   ): Option[PulledTips] =
     concurrentTipService.pull(readyFacilitators)(this.metrics).unsafeRunSync()
 
-  def peerInfo: IO[Map[Id, PeerData]] = IO.async { cb =>
-    import scala.util.{Failure, Success}
-
-    (peerManager ? GetPeerInfo)
-      .mapTo[Map[Id, PeerData]]
-      .onComplete {
-        case Success(peerInfo) => cb(Right(peerInfo))
-        case Failure(error)    => cb(Left(error))
-      }(ConstellationExecutionContext.edge)
-  }
+  def peerInfo: IO[Map[Id, PeerData]] = cluster.getPeerInfo
 
   private def eqNodeType(nodeType: NodeType)(m: (Id, PeerData)) = m._2.peerMetadata.nodeType == nodeType
   private def isNodeReady(m: (Id, PeerData)) = m._2.peerMetadata.nodeState == NodeState.Ready

@@ -9,10 +9,12 @@ import cats.effect.IO
 import com.softwaremill.sttp.Response
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.{DAO, Fixtures}
+import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, Fixtures, NodeConfig}
 import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointResponse}
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.{IPManager, PeerData, TransactionCacheData, TransactionGossip}
+import org.constellation.primitives.{IPManager, TransactionCacheData, TransactionGossip}
 import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
 import org.constellation.storage.VerificationStatus.{SnapshotCorrect, SnapshotHeightAbove, SnapshotInvalid}
 import org.constellation.storage.transactions.TransactionGossiping
@@ -41,7 +43,8 @@ class PeerAPITest
   implicit val s: ActorSystem = system
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-  implicit val contextShift = IO.contextShift(executionContext)
+  implicit val logger: Logger[IO] = Slf4jLogger.getLogger
+  implicit val cs = IO.contextShift(executionContext)
   implicit val timer = IO.timer(executionContext)
 
   var dao: DAO = _
@@ -126,8 +129,10 @@ class PeerAPITest
       val path = "/snapshot/verify"
 
       "should return correct state" in {
-        dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF List(RecentSnapshot("snap2", 4),
-                                                                           RecentSnapshot("snap1", 2))
+        dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF List(
+          RecentSnapshot("snap2", 4),
+          RecentSnapshot("snap1", 2)
+        )
 
         Post(path, request) ~> peerAPI.postEndpoints ~> check {
           status shouldEqual StatusCodes.OK
@@ -158,8 +163,10 @@ class PeerAPITest
       val path = "/snapshot/recent"
 
       "should return list of recent snapshots" in {
-        dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF List(RecentSnapshot("snap2", 4),
-                                                                           RecentSnapshot("snap1", 2))
+        dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF List(
+          RecentSnapshot("snap2", 4),
+          RecentSnapshot("snap1", 2)
+        )
         Get(path) ~> peerAPI.commonEndpoints ~> check {
           status shouldEqual StatusCodes.OK
           responseAs[List[RecentSnapshot]] shouldBe List(RecentSnapshot("snap2", 4), RecentSnapshot("snap1", 2))
@@ -239,16 +246,24 @@ class PeerAPITest
   private def prepareDao(): DAO = {
     val dao: DAO = mock[DAO]
 
+    dao.nodeConfig shouldReturn NodeConfig()
+
     val id = Id("node1")
     dao.id shouldReturn id
 
     val keyPair = KeyUtils.makeKeyPair()
     dao.keyPair shouldReturn keyPair
 
-    dao.nodeState shouldReturn NodeState.Ready
+    dao.cluster shouldReturn mock[Cluster[IO]]
+    dao.cluster.getNodeState shouldReturn IO.pure(NodeState.Ready)
 
     val metrics = new Metrics(1)(dao)
     dao.metrics shouldReturn metrics
+
+    val ipManager = new IPManager
+    val cluster = Cluster[IO](() => metrics, ipManager, dao)
+    dao.cluster shouldReturn cluster
+    dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
 
     dao.checkpointService shouldReturn mock[CheckpointService[IO]]
     dao.checkpointService.accept(any[FinishedCheckpoint])(dao) shouldReturn IO({

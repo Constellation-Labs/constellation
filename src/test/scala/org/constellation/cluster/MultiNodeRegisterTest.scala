@@ -25,9 +25,11 @@ class MultiNodeRegisterTest extends FunSpecLike with Matchers with BeforeAndAfte
   implicit val system: ActorSystem = ActorSystem("ConstellationTestNode")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
-  override def beforeEach(): Unit =
+  override def beforeEach(): Unit = {
     // Cleanup DBs
     Try { File(tmpDir).delete() }
+    TestNode.clearNodes()
+  }
 
   override def afterEach() {
     // Cleanup DBs
@@ -56,7 +58,7 @@ class MultiNodeRegisterTest extends FunSpecLike with Matchers with BeforeAndAfte
 
       nodes.foreach { n =>
         assert(n.dao.peerInfo.unsafeRunSync().isEmpty)
-        assert(n.ipManager.listKnownIPs.isEmpty)
+        assert(n.dao.ipManager.listKnownIPs.isEmpty)
       }
 
       nodes.combinations(otherNodesSize).foreach {

@@ -16,11 +16,11 @@ import io.micrometer.core.instrument.{Clock, Counter, Tag, Timer}
 import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.cache.caffeine.CacheMetricsCollector
-import org.constellation.{BuildInfo, DAO}
+import org.constellation.{BuildInfo, ConstellationExecutionContext, DAO}
 import org.joda.time.DateTime
 
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.Future
+import scala.concurrent.{Future, duration}
 
 /** For Grafana usage. */
 object Metrics {
@@ -119,14 +119,23 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) extends Periodic[Unit](
 //  val micrometerTimer = new TrieMap[String, Timer]
 
   // Init
-  updateMetric("id", dao.id.hex)
+
   val registry = Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
-  updateMetric("nodeState", dao.nodeState.toString)
-  updateMetric("address", dao.selfAddressStr)
-  updateMetric("nodeStartTimeMS", System.currentTimeMillis().toString)
-  updateMetric("nodeStartDate", new DateTime(System.currentTimeMillis()).toString)
-  updateMetric("externalHost", dao.externalHostString)
-  updateMetric("version", BuildInfo.version)
+
+  implicit val timer: cats.effect.Timer[IO] = IO.timer(ConstellationExecutionContext.global)
+
+  val init = for {
+    currentTime <- cats.effect.Clock[IO].realTime(duration.MILLISECONDS)
+    _ <- updateMetricAsync[IO]("id", dao.id.hex)
+    _ <- dao.cluster.getNodeState.map(_.toString).flatMap(updateMetricAsync[IO]("nodeState", _))
+    _ <- updateMetricAsync[IO]("address", dao.selfAddressStr)
+    _ <- updateMetricAsync[IO]("nodeStartTimeMS", currentTime.toString)
+    _ <- updateMetricAsync[IO]("nodeStartDate", new DateTime(currentTime).toString)
+    _ <- updateMetricAsync[IO]("externalHost", dao.externalHostString)
+    _ <- updateMetricAsync[IO]("version", BuildInfo.version)
+  } yield ()
+
+  init.unsafeRunSync
 
   private def guagedAtomicLong(key: String): AtomicLong = {
     import scala.collection.JavaConverters._

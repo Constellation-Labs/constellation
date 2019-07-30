@@ -26,5 +26,5 @@ class TransactionGeneratorTrigger(periodSeconds: Int = 10)(implicit dao: DAO)
       )(ConstellationExecutionContext.edge, dao)
     } else Future.successful(Try(()))
 
-  private def nodeIsReady: Boolean = dao.nodeState == NodeState.Ready
+  private def nodeIsReady: Boolean = dao.cluster.isNodeReady.unsafeRunSync
 }

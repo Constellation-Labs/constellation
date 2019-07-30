@@ -5,19 +5,27 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import cats.effect.IO
 import com.typesafe.config.{Config, ConfigFactory}
-import com.typesafe.scalalogging.Logger
+import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.Round._
 import org.constellation.consensus.RoundManager.{
   BroadcastLightTransactionProposal,
   BroadcastSelectedUnionBlock,
   BroadcastUnionBlockProposal
 }
-import org.constellation.p2p.DataResolver
+import org.constellation.p2p.{Cluster, DataResolver, PeerData}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage.{CheckpointService, MessageService, TransactionService}
 import org.constellation.util.Metrics
-import org.constellation.{DAO, Fixtures, PeerMetadata}
+import org.constellation.{
+  ConstellationContextShift,
+  ConstellationExecutionContext,
+  DAO,
+  Fixtures,
+  NodeConfig,
+  PeerMetadata
+}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike, Matchers}
 
@@ -30,6 +38,10 @@ class RoundTest
     with BeforeAndAfter {
 
   implicit val dao: DAO = mock[DAO]
+  implicit val logger: Logger[IO] = Slf4jLogger.getLogger
+  implicit val cs = ConstellationContextShift.global
+  implicit val timer = IO.timer(ConstellationExecutionContext.edge)
+
   dao.keyPair shouldReturn Fixtures.tempKey
 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
@@ -90,12 +102,18 @@ class RoundTest
     dao.readyPeers shouldReturn IO.pure(readyFacilitators)
     dao.peerInfo shouldReturn IO.pure(readyFacilitators)
     dao.id shouldReturn facilitatorId1.id
-    dao.miscLogger shouldReturn Logger("MiscLogger")
+    dao.miscLogger shouldReturn com.typesafe.scalalogging.Logger("MiscLogger")
 
     val msgService = mock[MessageService[IO]]
     msgService.contains(*) shouldReturn IO.pure(true)
     msgService.lookup(*) shouldReturn IO.pure(None)
     dao.messageService shouldReturn msgService
+
+    dao.nodeConfig shouldReturn NodeConfig()
+
+    val ipManager = new IPManager
+    val cluster = Cluster[IO](() => dao.metrics, ipManager, dao)
+    dao.cluster shouldReturn cluster
 
     val metrics = new Metrics()
     dao.metrics shouldReturn metrics

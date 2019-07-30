@@ -10,14 +10,17 @@ import akka.http.scaladsl.server.{Directive0, Route}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import better.files._
+import cats.effect.IO
+import cats.implicits._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import constellation._
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.consensus.{CrossTalkConsensus, HTTPNodeRemoteSender, NodeRemoteSender}
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.SnapshotTrigger
-import org.constellation.p2p.PeerAPI
+import org.constellation.p2p.{Cluster, PeerAPI}
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, HostPort, Metrics}
@@ -103,7 +106,7 @@ object ConstellationNode extends StrictLogging {
     Try {
 
       // TODO: Move to scopt above.
-      val seedsFromConfig: Seq[HostPort] = PeerManager.loadSeedsFromConfig(config)
+      val seedsFromConfig: Seq[HostPort] = Cluster.loadSeedsFromConfig(config)
 
       logger.debug(s"Seeds: $seedsFromConfig")
 
@@ -234,7 +237,7 @@ class ConstellationNode(
 
   val snapshotTrigger = new SnapshotTrigger(
     dao.processingConfig.snapshotTriggeringTimeSeconds
-  )
+  )(dao, dao.cluster)
 
   val transactionGeneratorTrigger = new TransactionGeneratorTrigger(
     dao.processingConfig.randomTransactionLoopTimeSeconds
@@ -243,13 +246,8 @@ class ConstellationNode(
   val ipManager = IPManager()
 
   nodeConfig.seeds.foreach { peer =>
-    ipManager.addKnownIP(peer.host)
+    dao.ipManager.addKnownIP(peer.host)
   }
-
-  dao.peerManager = system.actorOf(
-    Props(new PeerManager(ipManager)),
-    s"PeerManager_${dao.publicKeyHash}"
-  )
 
   // TODO: Unused, can be used for timing information but adds a lot to logs
   private val logReqResp: Directive0 = DebuggingDirectives.logRequestResult(
@@ -265,7 +263,7 @@ class ConstellationNode(
   private val bindingFuture: Future[Http.ServerBinding] =
     Http().bindAndHandle(routes, nodeConfig.httpInterface, nodeConfig.httpPort)
 
-  val peerAPI = new PeerAPI(ipManager, crossTalkConsensusActor)
+  val peerAPI = new PeerAPI(dao.ipManager, crossTalkConsensusActor)
 
   def getIPData: ValidPeerIPData =
     ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)
@@ -283,9 +281,12 @@ class ConstellationNode(
     })
 
   def shutdown(): Unit = {
-    dao.nodeState = NodeState.Offline
-    bindingFuture
-      .foreach(_.unbind())
+    val gracefulShutdown = IO.delay(bindingFuture.foreach(_.unbind())) *>
+      IO.delay(logger.info("Node shutdown completed"))
+
+    dao.cluster
+      .leave(gracefulShutdown)
+      .unsafeRunSync()
 
     // TODO: we should add this back but it currently causes issues in the integration test
     //.onComplete(_ => system.terminate())
@@ -333,10 +334,7 @@ class ConstellationNode(
   logger.info("Node started")
 
   if (nodeConfig.attemptDownload) {
-    nodeConfig.seeds.foreach {
-      dao.peerManager ! _
-    }
-    PeerManager.initiatePeerReload()(dao, ConstellationExecutionContext.edge)
+    (nodeConfig.seeds.toList.traverse(dao.cluster.hostPort) *> dao.cluster.initiatePeerReload()).unsafeRunSync
   }
 
   // TODO: Use this for full flow, right now this only works as a debugging measure, does not integrate properly
@@ -345,7 +343,7 @@ class ConstellationNode(
     logger.info("Creating genesis block")
     Genesis.start()
     logger.info(s"Genesis block hash ${dao.genesisBlock.map { _.soeHash }.getOrElse("")}")
-    dao.setNodeState(NodeState.Ready)
+    dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
     dao.generateRandomTX = true
   }
 //  Keeping disabled for now -- going to only use midDb for the time being.

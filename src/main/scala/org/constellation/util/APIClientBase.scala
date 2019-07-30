@@ -214,6 +214,15 @@ class APIClientBase(
   ): Future[Response[String]] =
     httpWithAuth(suffix, queryParams, timeout)(Method.GET).send()
 
+  def getStringIO(
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds
+  ): IO[Response[String]] =
+    IO.fromFuture(IO(httpWithAuth(suffix, queryParams, timeout)(Method.GET).send()))(
+      ConstellationContextShift.apiClient
+    )
+
   def getBlocking[T <: AnyRef](
     suffix: String,
     queryParams: Map[String, String] = Map(),

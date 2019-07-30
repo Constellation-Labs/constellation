@@ -17,12 +17,8 @@ class InternalHeartbeatTrigger[T](nodeActor: ActorRef, periodSeconds: Int = 10)(
     with StrictLogging {
 
   def trigger(): Future[Try[Unit]] = {
-    Option(dao.peerManager).foreach {
-      _ ! InternalHeartbeat(round)
-    }
     Thread.currentThread().setName("InternalHeartbeatTrigger")
-
-    Future.successful(Try())
+    dao.cluster.internalHearthbeat(round).map(_ => Try(())).unsafeToFuture
   }
 
   // TODO: Config

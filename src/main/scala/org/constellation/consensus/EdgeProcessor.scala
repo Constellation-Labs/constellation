@@ -16,6 +16,7 @@ import org.constellation.util.Validation.EnrichedFuture
 import org.constellation.util._
 import org.constellation.{ConfigUtil, DAO}
 import org.constellation.ConstellationExecutionContext
+import org.constellation.p2p.PeerData
 
 import scala.async.Async.{async, await}
 import scala.concurrent.duration._
@@ -352,21 +353,6 @@ object Snapshot extends StrictLogging {
 
     findLatestMessageWithSnapshotHashInner(depth, lastMessage)
   }
-
-  def triggerSnapshot(round: Long)(implicit dao: DAO): Future[Try[Unit]] =
-    // TODO: Refactor round into InternalHeartbeat
-    if (round % dao.processingConfig.snapshotInterval == 0 && dao.nodeState == NodeState.Ready) {
-      futureTryWithTimeoutMetric(
-        {
-          val start = System.currentTimeMillis()
-          dao.snapshotService.attemptSnapshot().value.unsafeRunSync()
-          val elapsed = System.currentTimeMillis() - start
-          logger.debug(s"Attempt snapshot took: $elapsed millis")
-        },
-        "snapshotAttempt",
-        60
-      )(ConstellationExecutionContext.edge, dao)
-    } else Future.successful(Try(()))
 
   val snapshotZero = Snapshot("", Seq())
   val snapshotZeroHash: String = Snapshot("", Seq()).hash

@@ -1,6 +1,6 @@
 package org.constellation.storage
 import cats.effect.Concurrent
-import org.constellation.primitives.PeerNotification
+import org.constellation.p2p.PeerNotification
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 
 class NotificationService[F[_]: Concurrent]() extends MerkleStorageAlgebra[F, String, PeerNotification] {

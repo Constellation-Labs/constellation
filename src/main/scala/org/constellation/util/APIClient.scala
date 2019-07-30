@@ -2,13 +2,12 @@ package org.constellation.util
 
 import akka.http.scaladsl.coding.Gzip
 import akka.util.ByteString
-import cats.effect.{ContextShift, IO}
+import cats.effect.{ContextShift, IO, LiftIO, Sync}
 import com.softwaremill.sttp._
 import com.softwaremill.sttp.json4s.asJson
 import com.typesafe.config.ConfigFactory
 import org.constellation.DAO
 import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
-import org.constellation.primitives.PeerData
 import org.constellation.primitives.Schema.{Id, MetricsResult}
 import org.constellation.serializer.KryoSerializer
 import org.json4s.Formats
@@ -92,16 +91,44 @@ class APIClient private (
   )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): IO[T] =
     IO.fromFuture(IO { getNonBlocking[T](suffix, queryParams, timeout) })(contextShift)
 
+  def getNonBlockingF[F[_]: LiftIO, T <: AnyRef](
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds
+  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): F[T] =
+    LiftIO[F].liftIO(getNonBlockingIO(suffix, queryParams, timeout))
+
   def postNonBlockingIO[T <: AnyRef](
     suffix: String,
     b: AnyRef,
     timeout: Duration = 15.seconds,
     headers: Map[String, String] = Map.empty
-  )(
-    implicit m: Manifest[T],
-    f: Formats = constellation.constellationFormats
-  ): IO[T] =
+  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): IO[T] =
     IO.fromFuture(IO { postNonBlocking[T](suffix, b, timeout, headers) })(contextShift)
+
+  def postNonBlockingF[F[_]: LiftIO, T <: AnyRef](
+    suffix: String,
+    b: AnyRef,
+    timeout: Duration = 15.seconds,
+    headers: Map[String, String] = Map.empty
+  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): F[T] =
+    LiftIO[F].liftIO(postNonBlockingIO(suffix, b, timeout, headers))
+
+  def postNonBlockingUnitF[F[_]: LiftIO](
+    suffix: String,
+    b: AnyRef,
+    timeout: Duration = 15.seconds,
+    headers: Map[String, String] = Map.empty
+  )(
+    implicit f: Formats = constellation.constellationFormats
+  ) = LiftIO[F].liftIO(IO.fromFuture(IO(postNonBlockingUnit(suffix, b, timeout)))(contextShift))
+
+  def getStringF[F[_]: LiftIO](
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds
+  )(): F[Response[String]] =
+    LiftIO[F].liftIO(getStringIO(suffix, queryParams))
 
   def postNonBlockingIOUnit(
     suffix: String,

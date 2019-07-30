@@ -7,9 +7,10 @@ import org.constellation.consensus.RoundManager.{
   BroadcastSelectedUnionBlock,
   BroadcastUnionBlockProposal
 }
+import org.constellation.p2p.PeerData
 import org.constellation.p2p.routes.BlockBuildingRoundRoute
 import org.constellation.primitives.Schema.SignedObservationEdge
-import org.constellation.primitives.{ChannelMessage, PeerData, TipSoe, Transaction}
+import org.constellation.primitives.{ChannelMessage, TipSoe, Transaction}
 import org.constellation.{DAO, PeerMetadata}
 
 case class RoundDataRemote(

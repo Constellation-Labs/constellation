@@ -7,6 +7,8 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
 import cats.effect.{ContextShift, IO}
 import com.typesafe.config.ConfigFactory
+import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation._
 import org.constellation.consensus.CrossTalkConsensus.{
   NotifyFacilitators,
@@ -19,6 +21,7 @@ import org.constellation.consensus.RoundManager.{
   BroadcastSelectedUnionBlock,
   BroadcastUnionBlockProposal
 }
+import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage._
@@ -41,6 +44,9 @@ class RoundManagerTest
 
   implicit val dao: DAO = mock[DAO]
   implicit val materialize: ActorMaterializer = ActorMaterializer()
+  implicit val logger: Logger[IO] = Slf4jLogger.getLogger
+  implicit val cs = ConstellationContextShift.global
+  implicit val timer = IO.timer(ConstellationExecutionContext.edge)
 
   val roundManagerProbe = TestProbe("roundManagerSupervisor")
 
@@ -89,7 +95,6 @@ class RoundManagerTest
   val readyFacilitators = Map(facilitatorId1 -> peerData1, facilitatorId2 -> peerData2)
 
   dao.keyPair shouldReturn Fixtures.tempKey
-  dao.nodeState shouldReturn NodeState.Ready
 
   val tx1 = Fixtures.dummyTx(dao)
   val tx2 = Fixtures.dummyTx(dao)
@@ -109,8 +114,15 @@ class RoundManagerTest
   dao.checkpointService shouldReturn mock[CheckpointService[IO]]
   dao.checkpointService.contains(*) shouldReturn IO.pure(true)
 
+  dao.nodeConfig shouldReturn NodeConfig()
+  val ipManager = mock[IPManager]
+  val cluster = Cluster[IO](() => dao.metrics, ipManager, dao) // TODO: mwadon revisit if mock is not needed
+  dao.cluster shouldReturn cluster
+
   val metrics = new Metrics()
   dao.metrics shouldReturn metrics
+
+  dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
 
   dao.messageService shouldReturn mock[MessageService[IO]]
   dao.messageService.arbitraryPool shouldReturn mock[StorageService[IO, ChannelMessageMetadata]]
@@ -124,11 +136,6 @@ class RoundManagerTest
   )
 
   dao.readyPeers(NodeType.Light) shouldReturn IO.pure(Map())
-
-  val peerManagerProbe = TestProbe()
-  val ipManager = mock[IPManager]
-  val peerManager = TestActorRef(Props(new PeerManager(ipManager)))
-  dao.peerManager shouldReturn peerManager
 
   after {
     TestKit.shutdownActorSystem(system)
@@ -364,8 +371,6 @@ class RoundManagerTest
   }
 
   test("it should remove not accepted transactions") {
-    implicit val context: ContextShift[IO] = ConstellationContextShift.global
-
     dao.transactionService shouldReturn new TransactionService[IO](dao)
 
     val tx3 = Fixtures.dummyTx(dao)

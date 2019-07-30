@@ -4,8 +4,7 @@ import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.consensus.Snapshot
-import org.constellation.p2p.DownloadProcess
-import org.constellation.primitives.PeerData
+import org.constellation.p2p.{DownloadProcess, PeerData}
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
 import org.constellation.storage._
 import org.constellation.util.HealthChecker.compareSnapshotState
@@ -19,9 +18,11 @@ case class CheckPointValidationFailures(nodeId: String)
     )
 case class InconsistentSnapshotHash(nodeId: String, hashes: Set[String])
     extends MetricFailure(s"Node: $nodeId last snapshot hash differs: $hashes")
-case class SnapshotDiff(snapshotsToDelete: List[RecentSnapshot],
-                        snapshotsToDownload: List[RecentSnapshot],
-                        peers: List[Id])
+case class SnapshotDiff(
+  snapshotsToDelete: List[RecentSnapshot],
+  snapshotsToDownload: List[RecentSnapshot],
+  peers: List[Id]
+)
 
 object HealthChecker {
 
@@ -31,8 +32,10 @@ object HealthChecker {
       .maxBy(_._2.size)
       .map(_.map(_._1).toSet)
 
-  def compareSnapshotState(ownSnapshots: List[RecentSnapshot],
-                           clusterSnapshots: List[(Id, List[RecentSnapshot])]): SnapshotDiff =
+  def compareSnapshotState(
+    ownSnapshots: List[RecentSnapshot],
+    clusterSnapshots: List[(Id, List[RecentSnapshot])]
+  ): SnapshotDiff =
     choseMajorityState(clusterSnapshots) match {
       case (snapshots, peers) =>
         SnapshotDiff(ownSnapshots.diff(snapshots), snapshots.diff(ownSnapshots).reverse, peers.toList)
@@ -83,7 +86,9 @@ class HealthChecker[F[_]: Concurrent: Logger](
             _ =>
               Sync[F].delay[Option[List[RecentSnapshot]]](Some(HealthChecker.choseMajorityState(majoritySnapshots)._1))
           )
-      } else { Sync[F].pure[Option[List[RecentSnapshot]]](None) }
+      } else {
+        Sync[F].pure[Option[List[RecentSnapshot]]](None)
+      }
     } yield result
 
     check.recoverWith {
