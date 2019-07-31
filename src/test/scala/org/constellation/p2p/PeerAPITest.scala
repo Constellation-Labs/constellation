@@ -3,7 +3,6 @@ package org.constellation.p2p
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import akka.testkit.TestProbe
 import better.files.File
 import cats.effect.IO
 import com.softwaremill.sttp.Response
@@ -11,20 +10,20 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, Fixtures, NodeConfig}
 import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointResponse}
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.{IPManager, TransactionCacheData, TransactionGossip}
 import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
+import org.constellation.primitives.{IPManager, TransactionCacheData, TransactionGossip}
 import org.constellation.storage.VerificationStatus.{SnapshotCorrect, SnapshotHeightAbove, SnapshotInvalid}
-import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.storage._
+import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.{APIClient, Metrics}
+import org.constellation.{DAO, Fixtures, NodeConfig}
 import org.json4s.native
 import org.json4s.native.Serialization
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito, Mockito}
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers, WordSpec}
+import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -53,7 +52,7 @@ class PeerAPITest
   before {
     dao = prepareDao()
     dao.snapshotBroadcastService shouldReturn mock[SnapshotBroadcastService[IO]]
-    peerAPI = new PeerAPI(IPManager[IO], TestProbe().ref)(system, 10.seconds, dao)
+    peerAPI = new PeerAPI(IPManager[IO])(system, 10.seconds, dao)
   }
 
   "The PeerAPI" - {

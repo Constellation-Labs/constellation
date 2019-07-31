@@ -4,7 +4,7 @@ import better.files.File
 import cats.effect.{ContextShift, IO, Timer}
 import org.constellation._
 import cats.implicits._
-import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
+import org.constellation.consensus.{ConsensusManager, RandomData, Snapshot, SnapshotInfo}
 import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.util.Metrics
@@ -36,6 +36,7 @@ class SnapshotServiceTest
     val transactionService = mock[TransactionService[IO]]
     val rateLimiting = mock[RateLimiting[IO]]
     val broadcastService = mock[SnapshotBroadcastService[IO]]
+    val consensusManager = mock[ConsensusManager[IO]]
 
     snapshotService = new SnapshotService[IO](
       cts,
@@ -45,6 +46,7 @@ class SnapshotServiceTest
       transactionService,
       rateLimiting,
       broadcastService,
+      consensusManager,
       dao
     )
   }

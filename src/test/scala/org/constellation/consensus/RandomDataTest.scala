@@ -76,9 +76,7 @@ object RandomData {
   }
 
   def setupSnapshot(cb: Seq[CheckpointBlock])(implicit dao: DAO): Seq[CheckpointBlock] = {
-    // Get snapshot uses iterator while set snapshot updates underlying map causing ConcurrentModificationException
-    dao.snapshotService
-      .getSnapshotInfo()
+    dao.snapshotService.getSnapshotInfo
       .map(_.snapshot)
       .flatMap { snapshot =>
         dao.snapshotService.setSnapshot(

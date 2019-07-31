@@ -1,20 +1,17 @@
 package org.constellation.primitives
 import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorRef
-import akka.pattern.ask
 import akka.util.Timeout
 import cats.effect.concurrent.Semaphore
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
-import org.constellation.consensus.RoundManager.{ActiveTipMinHeight, GetActiveMinHeight}
 import org.constellation.consensus.TipData
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema.{Id, SignedObservationEdge}
 import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
 import org.constellation.util.Metrics
-import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO}
+import org.constellation.{ConstellationContextShift, DAO}
 
 import scala.util.Random
 
@@ -35,8 +32,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
   maxTipUsage: Int,
   numFacilitatorPeers: Int,
   minPeerTimeAddedSeconds: Int,
-  dao: DAO,
-  consensusActor: ActorRef
+  dao: DAO
 ) {
 
   private val conflictingTips: SingleRef[F, Map[String, CheckpointBlock]] = SingleRef(Map.empty)
@@ -130,23 +126,9 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
         else Sync[F].raiseError[Unit](TipThresholdException(v.checkpointBlock, sizeLimit))
     )
 
-  def getMinTipHeight()(implicit dao: DAO): F[Long] = {
-
-    val minimumActiveTipHeightTask: IO[ActiveTipMinHeight] = IO.async { cb =>
-      import scala.util.{Failure, Success}
-
-      (consensusActor ? GetActiveMinHeight)
-        .mapTo[ActiveTipMinHeight]
-        .onComplete {
-          case Success(activeHeight) =>
-            cb(Right(activeHeight))
-          case Failure(error) => cb(Left(error))
-        }(ConstellationExecutionContext.edge)
-    }
-
+  def getMinTipHeight(minActiveTipHeight: Option[Long])(implicit dao: DAO): F[Long] =
     for {
-      minActiveTipHeight <- LiftIO[F].liftIO(minimumActiveTipHeightTask)
-      _ <- Logger[F].debug(s"Active tip height: ${minActiveTipHeight.minHeight}")
+      _ <- Logger[F].debug(s"Active tip height: $minActiveTipHeight")
       keys <- tipsRef.get.map(_.keys.toList)
       maybeData <- LiftIO[F].liftIO(keys.traverse(dao.checkpointService.lookup(_)))
       heights = maybeData.flatMap {
@@ -155,10 +137,9 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
             _.min
           }
         }
-      } ++ minActiveTipHeight.minHeight.toList
+      } ++ minActiveTipHeight.toList
       minHeight = if (heights.isEmpty) 0 else heights.min
     } yield minHeight
-  }
 
   def pull(readyFacilitators: Map[Id, PeerData])(implicit metrics: Metrics): F[Option[PulledTips]] =
     tipsRef.get.map { tips =>

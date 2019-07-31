@@ -36,7 +36,7 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
 
     it("limits maximum number of tips") {
       val limit = 6
-      val concurrentTipService = new ConcurrentTipService[IO](limit, 10, 2, 2, 30, dao, null)
+      val concurrentTipService = new ConcurrentTipService[IO](limit, 10, 2, 2, 30, dao)
 
       val cbs = createIndexedCBmocks(limit * 3, { i =>
         createCBMock(i.toString)
@@ -52,7 +52,7 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
 
     it("safely updates a tip ") {
       val maxTipUsage = 40
-      val concurrentTipService = new ConcurrentTipService[IO](6, 10, maxTipUsage, 2, 30, dao, null)
+      val concurrentTipService = new ConcurrentTipService[IO](6, 10, maxTipUsage, 2, 30, dao)
 
       RandomData.go.initialDistribution
         .storeSOE()

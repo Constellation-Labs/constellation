@@ -1,30 +1,18 @@
 package org.constellation.primitives
 
-import java.util.concurrent.{Executors, Semaphore, TimeUnit}
+import java.util.concurrent.Semaphore
 
-import akka.util.Timeout
-import cats.effect.IO.RaiseError
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
-import com.typesafe.scalalogging.{Logger, StrictLogging}
+import com.typesafe.scalalogging.StrictLogging
 import org.constellation.consensus._
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.{Metrics, SnapshotWatcher}
-import org.constellation.{
-  ConfigUtil,
-  ConstellationConcurrentEffect,
-  ConstellationContextShift,
-  DAO,
-  NodeConfig,
-  ProcessingConfig
-}
+import org.constellation.{ConstellationContextShift, DAO, NodeConfig, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
-import scala.util.Try
 
 class ThreadSafeMessageMemPool() extends StrictLogging {
 
@@ -87,8 +75,6 @@ class ThreadSafeMessageMemPool() extends StrictLogging {
   def unsafeCount: Int = messages.size
 
 }
-
-import constellation._
 // TODO: wkoszycki this one is temporary till (#412 Flatten checkpointBlock in CheckpointCache) is finished
 case class PendingDownloadException(id: Id)
     extends Exception(s"Node [${id.short}] is not ready to accept blocks from others.")
@@ -107,19 +93,6 @@ trait EdgeDAO {
   @volatile var nodeConfig: NodeConfig
 
   def processingConfig: ProcessingConfig = nodeConfig.processingConfig
-
-  private val blockFormationLock: Any = new Object()
-
-  private[this] var _blockFormationInProgress: Boolean = false
-
-  def blockFormationInProgress: Boolean = blockFormationLock.synchronized {
-    _blockFormationInProgress
-  }
-
-  def blockFormationInProgress_=(value: Boolean): Unit = blockFormationLock.synchronized {
-    _blockFormationInProgress = value
-    metrics.updateMetric("blockFormationInProgress", blockFormationInProgress.toString)
-  }
 
   implicit val contextShift: ContextShift[IO] = ConstellationContextShift.edge
 
@@ -141,6 +114,10 @@ trait EdgeDAO {
   var snapshotBroadcastService: SnapshotBroadcastService[IO] = _
   var snapshotWatcher: SnapshotWatcher = _
 
+  var consensusRemoteSender: ConsensusRemoteSender[IO] = _
+  var consensusManager: ConsensusManager[IO] = _
+  var consensusWatcher: ConsensusWatcher = _
+  var consensusScheduler: ConsensusScheduler = _
   val notificationService = new NotificationService[IO]()
   val messageService: MessageService[IO]
   val channelService = new ChannelService[IO]()

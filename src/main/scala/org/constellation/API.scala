@@ -1,7 +1,7 @@
 package org.constellation
 
 import java.io.{StringWriter, Writer}
-import java.net.{InetSocketAddress, URI}
+import java.net.InetSocketAddress
 import java.security.KeyPair
 
 import akka.actor.ActorSystem
@@ -22,7 +22,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
-import org.constellation.consensus.{FinishedCheckpointResponse, Snapshot, StoredSnapshot}
+import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.{ChangePeerState, Download, SetNodeStatus}
 import org.constellation.primitives.Schema.NodeState.NodeState
@@ -30,11 +30,9 @@ import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.storage._
 import org.constellation.util._
 import org.json4s.native.Serialization
 import org.json4s.{JValue, native}
-import org.constellation.CustomDirectives._
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -78,7 +76,6 @@ object ProcessingConfig {
     roundsPerMessage = 1,
     leavingStandbyTimeout = 3
   )
-
 }
 
 case class ProcessingConfig(
@@ -87,7 +84,7 @@ case class ProcessingConfig(
   minCheckpointFormationThreshold: Int = 50,
   maxTXInBlock: Int = 50,
   maxMessagesInBlock: Int = 1,
-  checkpointFormationTimeSeconds: Int = 2,
+  peerInfoTimeout: Int = 3,
   randomTransactionLoopTimeSeconds: Int = 2,
   snapshotTriggeringTimeSeconds: Int = 2,
   formUndersizedCheckpointAfterSeconds: Int = 30,

@@ -2,34 +2,30 @@ package org.constellation.p2p
 
 import java.net.{InetSocketAddress, URI}
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
 import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.util.Timeout
-import cats.data.Validated.{Invalid, Valid}
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import cats.implicits._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
-import org.constellation.consensus._
-import org.constellation.p2p.routes.BlockBuildingRoundRoute
+import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage._
-import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util._
 import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, ResourceInfo}
 import org.json4s.native
 import org.json4s.native.Serialization
 
-import scala.util.{Failure, Random, Success}
+import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long)
 
@@ -46,7 +42,7 @@ object PeerAPI {
 
 }
 
-class PeerAPI(override val ipManager: IPManager[IO], nodeActor: ActorRef)(
+class PeerAPI(override val ipManager: IPManager[IO])(
   implicit system: ActorSystem,
   val timeout: Timeout,
   val dao: DAO
@@ -250,8 +246,8 @@ class PeerAPI(override val ipManager: IPManager[IO], nodeActor: ActorRef)(
       .postNonBlockingUnit(u.getPath, entity)
 
   private val blockBuildingRoundRoute =
-    createRoute(BlockBuildingRoundRoute.pathPrefix)(
-      () => new BlockBuildingRoundRoute(nodeActor).createBlockBuildingRoundRoutes()
+    createRoute(ConsensusRoute.pathPrefix)(
+      () => new ConsensusRoute(dao.consensusManager, dao.snapshotService).createBlockBuildingRoundRoutes()
     )
 
   private[p2p] val mixedEndpoints = {
