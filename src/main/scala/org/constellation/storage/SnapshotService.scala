@@ -64,8 +64,19 @@ class SnapshotService[F[_]: Concurrent](
         snapshotCache = snapshotCache
       )
 
+  def retainOldData(): F[Unit] =
+    for {
+      snap <- snapshot.get
+      accepted <- acceptedCBSinceSnapshot.get
+      cbs = (snap.checkpointBlocks ++ accepted).toList
+      fetched <- getCheckpointBlocksFromSnapshot(cbs)
+      _ <- fetched.traverse(_.transactionsMerkleRoot.traverse(transactionService.applySnapshot))
+      _ <- checkpointService.applySnapshot(cbs)
+    } yield ()
+
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
+      _ <- retainOldData()
       _ <- snapshot.set(snapshotInfo.snapshot)
       _ <- lastSnapshotHeight.set(snapshotInfo.lastSnapshotHeight)
       _ <- concurrentTipService.set(snapshotInfo.tips)
@@ -320,7 +331,7 @@ class SnapshotService[F[_]: Concurrent](
 
   private def acceptSnapshot(s: Snapshot): F[Unit] =
     for {
-      cbs <- getCheckpointBlocksFromSnapshot(s)
+      cbs <- getCheckpointBlocksFromSnapshot(s.checkpointBlocks.toList)
       _ <- cbs.traverse(applySnapshotMessages(s, _))
 
       _ <- applySnapshotTransactions(s, cbs)
@@ -328,11 +339,9 @@ class SnapshotService[F[_]: Concurrent](
       _ <- checkpointService.applySnapshot(cbs.map(_.baseHash))
     } yield ()
 
-  private def getCheckpointBlocksFromSnapshot(s: Snapshot): F[List[CheckpointBlockMetadata]] =
+  private def getCheckpointBlocksFromSnapshot(blocks: List[String]): F[List[CheckpointBlockMetadata]] =
     for {
-      cbData <- s.checkpointBlocks.toList
-        .map(checkpointService.lookup)
-        .sequence
+      cbData <- blocks.map(checkpointService.lookup).sequence
 
       _ <- if (cbData.exists(_.isEmpty)) {
         dao.metrics.incrementMetricAsync("snapshotCBAcceptQueryFailed")

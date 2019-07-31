@@ -85,6 +85,10 @@ class TransactionService[F[_]: Concurrent](dao: DAO)
     withLock("merklePoolRemove", merklePool.remove(merkleRoot)) *>
       txs.traverse(tx => withLock("acceptedRemove", accepted.remove(tx.transaction.hash))).void
 
+  def applySnapshot(merkleRoot: String): F[Unit] =
+    findHashesByMerkleRoot(merkleRoot).flatMap(tx => withLock("acceptedRemove", accepted.remove(tx.toSet.flatten))) *>
+      withLock("merklePoolRemove", merklePool.remove(merkleRoot))
+
   def returnTransactionsToPending(txs: Seq[String]): F[List[TransactionCacheData]] =
     txs.toList
       .traverse(inConsensus.lookup)
@@ -102,7 +106,7 @@ class TransactionService[F[_]: Concurrent](dao: DAO)
 
   def pullForConsensusWithDummy(minCount: Int, roundId: String = "roundId"): F[List[TransactionCacheData]] =
     count(status = TransactionStatus.Pending).flatMap {
-      case 0L => dummyTransaction()
+      case 0L => Sync[F].pure(List.empty[TransactionCacheData])
       case _  => pullForConsensus(minCount, roundId)
     }
 

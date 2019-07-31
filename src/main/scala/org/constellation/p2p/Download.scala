@@ -186,17 +186,22 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
 
   private def getSnapshotClient(peers: Peers) = IO(peers.head._2.client)
 
-  private def getMajoritySnapshot(peers: Peers): IO[SnapshotInfo] =
+  private[p2p] def getMajoritySnapshot(peers: Peers): IO[SnapshotInfo] =
     peers.values
       .map(peerData => peerData.client)
       .toList
       .traverse(
         client =>
           client
-            .getNonBlockingBytesKryo[SnapshotInfo]("info", timeout = 15.seconds)
+            .getNonBlockingBytesKryoTry[SnapshotInfo]("info", timeout = 15.seconds)
             .toIO
       )
-      .map(snapshots => snapshots.groupBy(_.snapshot.hash).maxBy(_._2.size)._2.head)
+      .map(
+        snapshots =>
+          if (snapshots.count(_.isFailure) > (snapshots.size / 2))
+            throw new Exception(s"Unable to get majority snapshot ${snapshots.filter(_.isFailure)}")
+          else snapshots.flatMap(_.toOption).groupBy(_.snapshot.hash).maxBy(_._2.size)._2.head
+      )
 
   private def downloadAndProcessSnapshotsFirstPass(snapshotHashes: Seq[String])(
     implicit snapshotClient: APIClient,
@@ -261,7 +266,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .flatMap(_.toList.map { h =>
         if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache.contains(h)) {
           dao.metrics.incrementMetricAsync[IO]("SyncBufferCBAccepted") *> dao.checkpointService.accept(h).recoverWith {
-            case _ @(CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
+            case _ @(CheckpointAcceptBlockAlreadyStored(_) | TipConflictException(_, _)) =>
               IO.pure(None)
             case unknownError =>
               IO {

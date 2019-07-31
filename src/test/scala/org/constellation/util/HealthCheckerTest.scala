@@ -70,7 +70,7 @@ class HealthCheckerTest
   describe("shouldDownload function") {
     val height = 2
     val ownSnapshots = List(height).map(i => RecentSnapshot(s"$i", i))
-    val interval = dao.processingConfig.snapshotHeightDelayInterval
+    val interval = dao.processingConfig.snapshotHeightRedownloadDelayInterval
     it("should return true when there are snaps to delete and to download") {
       val diff =
         SnapshotDiff(
@@ -90,7 +90,7 @@ class HealthCheckerTest
 
     it("should return false when height is too small") {
       val diff =
-        SnapshotDiff(List.empty, List(RecentSnapshot("someSnap", height)), List(Id("peer")))
+        SnapshotDiff(List.empty, List(RecentSnapshot(height.toString, height)), List(Id("peer")))
 
       healthChecker.shouldReDownload(ownSnapshots, diff) shouldBe false
     }
@@ -98,7 +98,6 @@ class HealthCheckerTest
     it("should return true when height below interval") {
       val diff =
         SnapshotDiff(List.empty, List(RecentSnapshot("someSnap", height + (interval * 2))), List(Id("peer")))
-
       healthChecker.shouldReDownload(ownSnapshots, diff) shouldBe true
     }
 
