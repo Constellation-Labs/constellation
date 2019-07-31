@@ -5,6 +5,7 @@ import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.primitives.concurrency.SingleLock
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
@@ -106,14 +107,19 @@ class TransactionService[F[_]: Concurrent](dao: DAO)
 
   def pullForConsensusWithDummy(minCount: Int, roundId: String = "roundId"): F[List[TransactionCacheData]] =
     count(status = TransactionStatus.Pending).flatMap {
-      case 0L => Sync[F].pure(List.empty[TransactionCacheData])
+      case 0L => dummyTransaction(minCount, roundId)
       case _  => pullForConsensus(minCount, roundId)
     }
 
-  def dummyTransaction(): F[List[TransactionCacheData]] =
-    List(createDummyTransaction(dao.selfAddressStr, dao.dummyAddress, dao.keyPair))
-      .map(TransactionCacheData(_))
+  def dummyTransaction(minCount: Int, roundId: String): F[List[TransactionCacheData]] =
+    List
+      .fill(minCount)(
+        TransactionCacheData(
+          createDummyTransaction(dao.selfAddressStr, KeyUtils.makeKeyPair().getPublic.toId.address, dao.keyPair)
+        )
+      )
       .traverse(put)
+      .flatMap(_ => pullForConsensus(minCount, roundId))
 
   def getLast20Accepted: F[List[TransactionCacheData]] =
     accepted.getLast20()

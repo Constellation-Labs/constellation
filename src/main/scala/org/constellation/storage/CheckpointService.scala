@@ -1,6 +1,5 @@
 package org.constellation.storage
 
-import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
@@ -12,7 +11,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
-import org.constellation.util.{MerkleTree, Metrics, PeerApiClient}
+import org.constellation.util.{Metrics, PeerApiClient}
 
 class CheckpointService[F[_]: Concurrent](
   dao: DAO,

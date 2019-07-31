@@ -7,7 +7,7 @@ import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{DummyTransaction, Edge, Schema, Transaction}
+import org.constellation.primitives.{Edge, Schema, Transaction}
 
 trait Signable {
 
@@ -108,7 +108,8 @@ trait SignHelpExt {
     dst: String,
     amount: Long,
     keyPair: KeyPair,
-    normalized: Boolean = true
+    normalized: Boolean = true,
+    dummy: Boolean = false
   ): Transaction = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
@@ -124,28 +125,11 @@ trait SignHelpExt {
 
     val soe = signedObservationEdge(oe)(keyPair)
 
-    Transaction(Edge(oe, soe, txData))
+    Transaction(Edge(oe, soe, txData), dummy)
   }
 
-  def createDummyTransaction(
-    srcAddress: String,
-    dstAddress: String,
-    keyPair: KeyPair
-  ): Transaction = {
-    val txData = TransactionEdgeData(amount = 0L)
-
-    val oe = ObservationEdge(
-      Seq(
-        TypedEdgeHash(srcAddress, EdgeHashType.AddressHash),
-        TypedEdgeHash(dstAddress, EdgeHashType.AddressHash)
-      ),
-      TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
-    )
-
-    val soe = signedObservationEdge(oe)(keyPair)
-
-    DummyTransaction(Edge(oe, soe, txData))
-  }
+  def createDummyTransaction(src: String, dst: String, keyPair: KeyPair): Transaction =
+    createTransaction(src, dst, 0L, keyPair, normalized = false, dummy = true)
 }
 
 object SignHelp extends SignHelpExt
