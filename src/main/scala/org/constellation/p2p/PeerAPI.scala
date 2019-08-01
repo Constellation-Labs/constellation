@@ -179,7 +179,7 @@ class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
               val maybeData = getHostAndPortFromRemoteAddress(clientIP)
               maybeData match {
                 case Some(PeerIPData(host, portOption)) =>
-                  onSuccess(dao.cluster.deregistration(request.host, request.port, request.id).unsafeToFuture) {
+                  onSuccess(dao.cluster.deregister(request.host, request.port, request.id).unsafeToFuture) {
                     complete(StatusCodes.OK)
                   }
                 case None =>

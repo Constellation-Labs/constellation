@@ -4,7 +4,6 @@ import cats.effect.IO
 import cats.implicits._
 import org.constellation.DAO
 import org.constellation.p2p.Cluster
-import org.constellation.primitives.Schema.NodeState
 import org.constellation.util.{Metrics, PeriodicIO}
 
 import scala.concurrent.duration._

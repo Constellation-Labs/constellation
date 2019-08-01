@@ -135,6 +135,9 @@ class SnapshotService[F[_]: Concurrent](
       _ <- EitherT.liftF(updateMetricsAfterSnapshot())
 
       _ <- EitherT.liftF(snapshot.set(nextSnapshot))
+
+      _ <- EitherT.liftF(removeLeavingPeers())
+
       _ <- EitherT.liftF(
         broadcastService.broadcastSnapshot(
           nextSnapshot.lastSnapshot,
@@ -387,6 +390,9 @@ class SnapshotService[F[_]: Concurrent](
         _.transactionsMerkleRoot.traverse(transactionService.applySnapshot(txs.map(TransactionCacheData(_)), _))
       )
     } yield ()
+
+  private def removeLeavingPeers(): F[Unit] =
+    LiftIO[F].liftIO(dao.leavingPeers.flatMap(_.values.toList.traverse(dao.cluster.forgetPeer))).void
 }
 
 object SnapshotService {

@@ -17,7 +17,7 @@ class DataResolver extends StrictLogging {
     hash: String,
     priorityClient: Option[PeerApiClient] = None
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[ChannelMessageMetadata] =
-    getReadyPeers(dao).flatMap(resolveMessages(hash, _, priorityClient))
+    getPeersForResolving(dao).flatMap(resolveMessages(hash, _, priorityClient))
 
   def resolveMessages(
     hash: String,
@@ -103,7 +103,7 @@ class DataResolver extends StrictLogging {
     hash: String,
     priorityClient: Option[PeerApiClient] = None
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
-    getReadyPeers(dao).flatMap(resolveTransactions(hash, _, priorityClient))
+    getPeersForResolving(dao).flatMap(resolveTransactions(hash, _, priorityClient))
 
   def resolveTransactions(
     hash: String,
@@ -124,7 +124,7 @@ class DataResolver extends StrictLogging {
     hash: String,
     priorityClient: Option[PeerApiClient] = None
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[CheckpointCache] =
-    getReadyPeers(dao).flatMap(
+    getPeersForResolving(dao).flatMap(
       resolveDataByDistance[CheckpointCache](
         List(hash),
         "checkpoint",
@@ -186,8 +186,13 @@ class DataResolver extends StrictLogging {
   )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[List[T]] =
     resolveDataByDistance[T](hashes, endpoint, pool, store, priorityClient).sequence
 
-  def getReadyPeers(dao: DAO): IO[List[PeerApiClient]] =
-    dao.readyPeers.map(_.map(p => PeerApiClient(p._1, p._2.client)).toList)
+  def getPeersForResolving(dao: DAO): IO[List[PeerApiClient]] = {
+    val peers = for {
+      ready <- dao.readyPeers
+      leaving <- dao.leavingPeers
+    } yield (ready ++ leaving)
+    peers.map(_.map(p => PeerApiClient(p._1, p._2.client)).toList)
+  }
 
 }
 
