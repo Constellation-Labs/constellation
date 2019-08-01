@@ -53,7 +53,7 @@ class PeerAPITest
   before {
     dao = prepareDao()
     dao.snapshotBroadcastService shouldReturn mock[SnapshotBroadcastService[IO]]
-    peerAPI = new PeerAPI(new IPManager, TestProbe().ref)(system, 10.seconds, dao)
+    peerAPI = new PeerAPI(IPManager[IO], TestProbe().ref)(system, 10.seconds, dao)
   }
 
   "The PeerAPI" - {
@@ -260,7 +260,7 @@ class PeerAPITest
     val metrics = new Metrics(1)(dao)
     dao.metrics shouldReturn metrics
 
-    val ipManager = new IPManager
+    val ipManager = IPManager[IO]()
     val cluster = Cluster[IO](() => metrics, ipManager, dao)
     dao.cluster shouldReturn cluster
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync

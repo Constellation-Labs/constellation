@@ -111,7 +111,7 @@ class RoundTest
 
     dao.nodeConfig shouldReturn NodeConfig()
 
-    val ipManager = new IPManager
+    val ipManager = IPManager[IO]()
     val cluster = Cluster[IO](() => dao.metrics, ipManager, dao)
     dao.cluster shouldReturn cluster
 

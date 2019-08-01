@@ -1,33 +1,37 @@
 package org.constellation.primitives
 
+import cats.effect.Concurrent
+import cats.implicits._
+import org.constellation.primitives.IPManager.IP
+import org.constellation.primitives.concurrency.SingleRef
+
 import scala.collection.Set
 
-class IPManager {
-  // Keep these private to allow for change of implementation later.
-  private var bannedIPs: Set[String] = Set.empty[String]
-  //    val knownIPs: concurrent.Map[RemoteAddress, String] =
-  //      concurrent.TrieMap[RemoteAddress, String]()
-  private var knownIPs: Set[String] = Set.empty[String]
+class IPManager[F[_]: Concurrent] {
+  private val bannedIPs: SingleRef[F, Set[IP]] = SingleRef(Set.empty[IP])
+  private val knownIPs: SingleRef[F, Set[IP]] = SingleRef(Set.empty[IP])
 
-  def knownIP(addr: String): Boolean =
-    knownIPs.contains(addr)
+  def knownIP(addr: IP): F[Boolean] =
+    knownIPs.getUnsafe.map(_.contains(addr))
 
-  def bannedIP(addr: String): Boolean =
-    bannedIPs.contains(addr)
+  def bannedIP(addr: String): F[Boolean] =
+    bannedIPs.getUnsafe.map(_.contains(addr))
 
-  def listBannedIPs: Set[String] = bannedIPs
+  def listBannedIPs(): F[Set[IP]] =
+    bannedIPs.getUnsafe
 
-  def addKnownIP(addr: String): Unit =
-    knownIPs = knownIPs + addr
+  def addKnownIP(addr: IP): F[Unit] =
+    knownIPs.modify(ips => (ips + addr, ()))
 
-  def removeKnownIP(addr: String): Unit =
-    knownIPs = knownIPs - addr
+  def removeKnownIP(addr: IP): F[Unit] =
+    knownIPs.modify(ips => (ips - addr, ()))
 
-  def listKnownIPs: Set[String] = knownIPs
-
+  def listKnownIPs: F[Set[IP]] =
+    knownIPs.getUnsafe
 }
 
 object IPManager {
+  def apply[F[_]: Concurrent]() = new IPManager[F]()
 
-  def apply() = new IPManager()
+  type IP = String
 }

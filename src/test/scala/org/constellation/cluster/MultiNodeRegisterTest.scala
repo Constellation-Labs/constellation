@@ -57,8 +57,8 @@ class MultiNodeRegisterTest extends FunSpecLike with Matchers with BeforeAndAfte
       val nodes = Seq(n1) ++ Seq.fill(otherNodesSize)(createNode())
 
       nodes.foreach { n =>
-        assert(n.dao.peerInfo.unsafeRunSync().isEmpty)
-        assert(n.dao.ipManager.listKnownIPs.isEmpty)
+        assert(n.dao.peerInfo.map(_.isEmpty).unsafeRunSync())
+        assert(n.dao.ipManager.listKnownIPs.map(_.isEmpty).unsafeRunSync)
       }
 
       nodes.combinations(otherNodesSize).foreach {

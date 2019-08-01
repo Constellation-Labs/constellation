@@ -46,7 +46,7 @@ object PeerState extends Enumeration {
 }
 case class UpdatePeerNotifications(notifications: Seq[PeerNotification])
 
-class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManager, dao: DAO)(
+class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManager[F], dao: DAO)(
   implicit C: ContextShift[F]
 ) {
   private val initialState: NodeState =
@@ -228,7 +228,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     for {
       p <- peers.getUnsafe
       pm = pd.peerMetadata
-      _ <- Sync[F].delay(ipManager.removeKnownIP(pm.host))
+      _ <- ipManager.removeKnownIP(pm.host)
       _ <- p.get(pm.id).traverse { peer =>
         updatePeerInfo(
           peer.copy(notification = peer.notification ++ Seq(PeerNotification(pm.id, PeerState.Leave)))
@@ -240,7 +240,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     for {
       _ <- peers.modify(p => (p + (peerData.client.id -> peerData), p))
       ip = peerData.client.hostName
-      _ <- Sync[F].delay(ipManager.addKnownIP(ip))
+      _ <- ipManager.addKnownIP(ip)
       _ <- Logger[F].info(s"Added $ip to known peers.")
       _ <- updateMetrics()
       _ <- updatePersistentStore()
@@ -439,7 +439,7 @@ object Cluster {
 
   type Peers = Map[Schema.Id, PeerData]
 
-  def apply[F[_]: Concurrent: Logger: Timer: ContextShift](metrics: () => Metrics, ipManager: IPManager, dao: DAO) =
+  def apply[F[_]: Concurrent: Logger: Timer: ContextShift](metrics: () => Metrics, ipManager: IPManager[F], dao: DAO) =
     new Cluster(ipManager, dao)
 
   def loadSeedsFromConfig(config: Config): Seq[HostPort] =
