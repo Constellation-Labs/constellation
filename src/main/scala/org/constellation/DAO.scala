@@ -13,6 +13,7 @@ import org.constellation.consensus.{ConsensusManager, ConsensusRemoteSender, Con
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.p2p._
+import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -102,14 +103,16 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     cluster = Cluster[IO](() => metrics, ipManager, this)
 
     consensusRemoteSender = new ConsensusRemoteSender[IO]()
-    consensusManager = new ConsensusManager[IO](transactionService,
-                                                concurrentTipService,
-                                                checkpointService,
-                                                messageService,
-                                                consensusRemoteSender,
-                                                cluster,
-                                                this,
-                                                ConfigUtil.config)
+    consensusManager = new ConsensusManager[IO](
+      transactionService,
+      concurrentTipService,
+      checkpointService,
+      messageService,
+      consensusRemoteSender,
+      cluster,
+      this,
+      ConfigUtil.config
+    )
 
     consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
 

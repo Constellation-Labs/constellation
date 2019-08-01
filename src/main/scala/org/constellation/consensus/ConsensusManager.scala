@@ -215,12 +215,11 @@ class ConsensusManager[F[_]: Concurrent](
   def passMissed(roundId: RoundId, consensus: Consensus[F]): F[Unit] =
     for {
       missed <- proposals.lookup(roundId.toString).map(_.toList.flatten)
-      passed <- missed.traverse {
+      _ <- missed.traverse {
         case proposal: LightTransactionsProposal => consensus.addTransactionProposal(proposal)
         case proposal: SelectedUnionBlock        => consensus.addSelectedBlockProposal(proposal)
         case proposal: UnionBlockProposal        => consensus.addBlockProposal(proposal)
       }
-      _ <- logger.debug(s"[${dao.id.short}] Passed  ${passed.size} missed proposals in round $roundId")
     } yield ()
 
   def stopBlockCreationRound(cmd: StopBlockCreationRound): F[Unit] =
@@ -230,7 +229,9 @@ class ConsensusManager[F[_]: Concurrent](
       _ <- transactionService.returnTransactionsToPending(cmd.transactionsToReturn)
       _ <- updateNotifications(cmd.maybeCB.map(_.notifications.toList))
       _ = releaseMessages(cmd.maybeCB)
-      _ <- logger.debug(s"[${dao.id.short}] Consensus ${cmd.roundId} stopped")
+      _ <- logger.debug(
+        s"[${dao.id.short}] Consensus stopped ${cmd.roundId} with block: ${cmd.maybeCB.map(_.baseHash).getOrElse("empty")}"
+      )
     } yield ()
 
   def updateNotifications(notifications: Option[List[PeerNotification]]): F[Unit] =
@@ -259,7 +260,8 @@ class ConsensusManager[F[_]: Concurrent](
       ownRound <- ownConsensus.getUnsafe.map(_.flatMap(o => o.consensusInfo.map(i => o.roundId -> i)))
       toClean = (runningConsensuses ++ ownRound.toMap).filter(r => (currentTime - r._2.startTime) > timeout).toList
       stopData <- toClean.traverse(r => r._2.consensus.getOwnTransactionsToReturn.map(txs => (r._1, txs)))
-      _ <- logger.warn(s"Cleaning consensuses with roundId: ${stopData.map(_._1)}")
+      _ <- if (stopData.nonEmpty) logger.warn(s"Cleaning timeout consensuses with roundId: ${stopData.map(_._1)}")
+      else Sync[F].unit
       _ <- stopData.traverse(s => stopBlockCreationRound(StopBlockCreationRound(s._1, None, s._2)))
     } yield ()
 

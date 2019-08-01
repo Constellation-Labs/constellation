@@ -69,8 +69,8 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
             }
             .flatMap(_ => consensusManager.participateInBlockCreationRound(ConsensusRoute.convert(cmd)))
           onComplete(participate.unsafeToFuture()) {
-            case Failure(SnapshotHeightAboveTip(_, _)) =>
-              complete(StatusCodes.BadRequest)
+            case Failure(err: SnapshotHeightAboveTip) =>
+              complete(StatusCodes.custom(400, err.getMessage))
             case Failure(_) =>
               complete(StatusCodes.InternalServerError)
             case Success(res) =>

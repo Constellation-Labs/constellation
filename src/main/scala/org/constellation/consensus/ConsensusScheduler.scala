@@ -25,7 +25,7 @@ class ConsensusScheduler(
 
   val crossTalkConsensus: IO[Unit] = consensusManager.startOwnConsensus().void.handleErrorWith {
     case error: ConsensusStartError =>
-      IO(logger.warn(error.getMessage))
+      IO(logger.debug(error.getMessage))
     case error: ConsensusError => IO(logger.warn(error.getMessage))
   }
   val skip: IO[Unit] = IO(logger.debug("Start consensus skipped"))
