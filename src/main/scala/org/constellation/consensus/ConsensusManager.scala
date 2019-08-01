@@ -91,7 +91,7 @@ class ConsensusManager[F[_]: Concurrent](
       _ <- ownConsensus.updateUnsafe(d => d.map(o => o.copy(consensusInfo = roundInfo.some)))
       responses <- remoteSender.notifyFacilitators(roundData._1)
       _ <- if (responses.forall(_.isSuccess)) Sync[F].unit
-      else Sync[F].raiseError[Unit](NotAllPeersParticipate(roundId))
+      else Sync[F].raiseError[Unit](NotAllPeersParticipate(roundId, roundData._1.transactions.map(_.hash)))
       _ <- roundInfo.consensus.addTransactionProposal(
         LightTransactionsProposal(
           roundData._1.roundId,
@@ -110,12 +110,7 @@ class ConsensusManager[F[_]: Concurrent](
         logger
           .debug(error.getMessage)
           .flatMap(
-            _ =>
-              ownConsensus.update(
-                curr =>
-                  if (curr.isDefined && curr.get.roundId == error.roundId) None
-                  else curr
-              )
+            _ => stopBlockCreationRound(StopBlockCreationRound(error.roundId, None, error.transactions))
           )
           .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](error))
       case unknown =>
@@ -144,8 +139,11 @@ class ConsensusManager[F[_]: Concurrent](
       _ <- if (transactions.isEmpty) NoTransactionsForConsensus(roundId).raiseError[F, Unit] else Sync[F].unit
       facilitators <- LiftIO[F].liftIO(dao.readyFacilitatorsAsync)
       tips <- concurrentTipService.pull(facilitators)(dao.metrics)
-      _ <- if (tips.isEmpty) Sync[F].raiseError[Unit](NoTipsForConsensus(roundId)) else Sync[F].unit
-      _ <- if (tips.get.peers.isEmpty) Sync[F].raiseError[Unit](NoPeersForConsensus(roundId)) else Sync[F].unit
+      _ <- if (tips.isEmpty) Sync[F].raiseError[Unit](NoTipsForConsensus(roundId, transactions.map(_.transaction.hash)))
+      else Sync[F].unit
+      _ <- if (tips.get.peers.isEmpty)
+        Sync[F].raiseError[Unit](NoPeersForConsensus(roundId, transactions.map(_.transaction.hash)))
+      else Sync[F].unit
       messages <- Sync[F].delay(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))
       lightNodes <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Light))
       lightPeers = if (lightNodes.isEmpty) Set.empty[PeerData]
@@ -251,7 +249,7 @@ class ConsensusManager[F[_]: Concurrent](
             dao.threadSafeMessageMemPool.activeChannels
               .get(message.signedMessageData.data.channelId)
               .foreach(_.release())
-        )
+      )
     )
 
   def cleanUpLongRunningConsensus: F[Unit] =
@@ -314,7 +312,8 @@ class ConsensusManager[F[_]: Concurrent](
         ConfigUtil.config.getString("constellation.consensus.arbitrary-tx-distance-base")
       ).getOrElse("hash") match {
         case "id" =>
-          (id: Id, tx: Transaction) => Distance.calculate(tx.src.address, id)
+          (id: Id, tx: Transaction) =>
+            Distance.calculate(tx.src.address, id)
         case "hash" =>
           (id: Id, tx: Transaction) =>
             val xorIdTx = Distance.calculate(tx.hash, id)
@@ -382,13 +381,17 @@ object ConsensusManager {
   case object OwnRoundAlreadyInProgress extends ConsensusStartError("Node has already start own consensus")
 
   class ConsensusStartError(message: String) extends Exception(message)
-  class ConsensusError(val roundId: RoundId, message: String) extends Exception(message)
 
-  case class NoTipsForConsensus(id: RoundId) extends ConsensusError(id, "No tips to start consensus")
-  case class NoPeersForConsensus(id: RoundId) extends ConsensusError(id, "No active peers to start consensus")
-  case class NotAllPeersParticipate(id: RoundId)
-      extends ConsensusError(id, "Not all of the peers has participated in consensus")
-  case class NoTransactionsForConsensus(id: RoundId) extends ConsensusError(id, "No transactions to start consensus")
+  class ConsensusError(val roundId: RoundId, val transactions: List[String], message: String) extends Exception(message)
+
+  case class NoTipsForConsensus(id: RoundId, txs: List[String])
+      extends ConsensusError(id, txs, "No tips to start consensus")
+  case class NoPeersForConsensus(id: RoundId, txs: List[String])
+      extends ConsensusError(id, txs, "No active peers to start consensus")
+  case class NotAllPeersParticipate(id: RoundId, txs: List[String])
+      extends ConsensusError(id, txs, "Not all of the peers has participated in consensus")
+  case class NoTransactionsForConsensus(id: RoundId)
+      extends ConsensusError(id, List.empty[String], "No transactions to start consensus")
 
   case class BroadcastUnionBlockProposal(roundId: RoundId, peers: Set[PeerData], proposal: UnionBlockProposal)
   case class BroadcastSelectedUnionBlock(roundId: RoundId, peers: Set[PeerData], cb: SelectedUnionBlock)
