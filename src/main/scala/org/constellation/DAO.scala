@@ -150,16 +150,19 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   def peerInfo: IO[Map[Id, PeerData]] = cluster.getPeerInfo
 
   private def eqNodeType(nodeType: NodeType)(m: (Id, PeerData)) = m._2.peerMetadata.nodeType == nodeType
-  private def isNodeReady(m: (Id, PeerData)) = m._2.peerMetadata.nodeState == NodeState.Ready
+  private def eqNodeState(nodeState: NodeState)(m: (Id, PeerData)) = m._2.peerMetadata.nodeState == nodeState
 
   def peerInfo(nodeType: NodeType): IO[Map[Id, PeerData]] =
     peerInfo.map(_.filter(eqNodeType(nodeType)))
 
   def readyPeers: IO[Map[Id, PeerData]] =
-    peerInfo.map(_.filter(isNodeReady))
+    peerInfo.map(_.filter(eqNodeState(NodeState.Ready)))
 
   def readyPeers(nodeType: NodeType): IO[Map[Id, PeerData]] =
     readyPeers.map(_.filter(eqNodeType(nodeType)))
+
+  def leavingPeers: IO[Map[Id, PeerData]] =
+    peerInfo.map(_.filter(eqNodeState(NodeState.Leaving)))
 
   def readyFacilitatorsAsync: IO[Map[Id, PeerData]] =
     readyPeers(NodeType.Full).map(_.filter {

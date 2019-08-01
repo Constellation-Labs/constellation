@@ -30,7 +30,7 @@ object Schema {
   object NodeState extends Enumeration {
     type NodeState = Value
 
-    val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, Ready, Offline =
+    val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, Ready, Leaving, Offline =
       Value
   }
 

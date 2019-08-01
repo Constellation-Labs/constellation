@@ -212,14 +212,26 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       }
     } yield ()
 
-  def deregistration(ip: String, port: Int, id: Id): F[Unit] =
+  def deregister(ip: String, port: Int, id: Id): F[Unit] =
     for {
-      p <- peers.get
-      peerO = p.get(id)
-      _ <- Sync[F].delay(ipManager.removeKnownIP(ip))
-      _ <- peerO.traverse { peer =>
+      p <- peers.getUnsafe
+      _ <- p.get(id).traverse { peer =>
         updatePeerInfo(
-          peer.copy(notification = peer.notification ++ Seq(PeerNotification(id, PeerState.Leave)))
+          peer.copy(
+            peerMetadata = peer.peerMetadata.copy(nodeState = NodeState.Leaving)
+          )
+        )
+      }
+    } yield ()
+
+  def forgetPeer(pd: PeerData): F[Unit] =
+    for {
+      p <- peers.getUnsafe
+      pm = pd.peerMetadata
+      _ <- Sync[F].delay(ipManager.removeKnownIP(pm.host))
+      _ <- p.get(pm.id).traverse { peer =>
+        updatePeerInfo(
+          peer.copy(notification = peer.notification ++ Seq(PeerNotification(pm.id, PeerState.Leave)))
         )
       }
     } yield ()
@@ -382,16 +394,30 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         .map(v => keys.zip(v).toMap)
     } yield res
 
-  def join(): F[Unit] = ???
+  def join(hp: HostPort): F[Response[Unit]] =
+    attemptRegisterPeer(hp)
 
   def leave(gracefulShutdown: => F[Unit]): F[Unit] =
     for {
       _ <- Logger[F].info("Trying to gracefully leave the cluster")
-      // _ <- broadcast leave request
-      _ <- Timer[F].sleep(dao.processingConfig.leavingStandbyTimeout.seconds) // TODO: use wkoszycki changes for waiting for last n snapshots
+
+      _ <- C.shift *> broadcastLeaveRequest()
+      _ <- setNodeState(NodeState.Leaving)
+      _ <- broadcastNodeState()
+
+      // TODO: use wkoszycki changes for waiting for last n snapshots
+      _ <- Timer[F].sleep(dao.processingConfig.leavingStandbyTimeout.seconds)
+
       _ <- setNodeState(NodeState.Offline)
+      _ <- broadcastNodeState()
+
       _ <- gracefulShutdown
     } yield ()
+
+  private def broadcastLeaveRequest(): F[Unit] = {
+    def peerUnregister(c: APIClient) = PeerUnregister(c.hostName, c.apiPort, c.id)
+    broadcast(c => c.postNonBlockingUnitF("deregister", peerUnregister(c))).void
+  }
 
   def setNodeState(state: NodeState): F[Unit] =
     nodeState.modify(oldState => (state, oldState)).flatMap { oldState =>
