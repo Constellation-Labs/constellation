@@ -5,13 +5,12 @@ import cats.effect.{Concurrent, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
-import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.consensus.{ConsensusManager, Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
-import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.Metrics
 
 class SnapshotService[F[_]: Concurrent](
@@ -22,6 +21,7 @@ class SnapshotService[F[_]: Concurrent](
   transactionService: TransactionService[F],
   rateLimiting: RateLimiting[F],
   broadcastService: SnapshotBroadcastService[F],
+  consensusManager: ConsensusManager[F],
   dao: DAO
 ) extends StrictLogging {
   import constellation._
@@ -41,7 +41,9 @@ class SnapshotService[F[_]: Concurrent](
       hashes = Snapshot.snapshotHashes()
     } yield last.hash == hash || hashes.contains(hash)
 
-  def getSnapshotInfo(): F[SnapshotInfo] =
+  def getLastSnapshotHeight: F[Int] = lastSnapshotHeight.get
+
+  def getSnapshotInfo: F[SnapshotInfo] =
     for {
       s <- snapshot.get
       accepted <- acceptedCBSinceSnapshot.get
@@ -115,7 +117,8 @@ class SnapshotService[F[_]: Concurrent](
       _ <- validateAcceptedCBsSinceSnapshot()
 
       nextHeightInterval <- EitherT.liftF(getNextHeightInterval)
-      minTipHeight <- EitherT.liftF(concurrentTipService.getMinTipHeight())
+      minActiveTipHeight <- EitherT.liftF(consensusManager.getActiveMinHeight)
+      minTipHeight <- EitherT.liftF(concurrentTipService.getMinTipHeight(minActiveTipHeight))
       _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval, minTipHeight)
       blocksWithinHeightInterval <- EitherT.liftF(getBlocksWithinHeightInterval(nextHeightInterval))
       _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
@@ -125,7 +128,11 @@ class SnapshotService[F[_]: Concurrent](
       nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot))
 
       _ <- EitherT.liftF(
-        Sync[F].delay(logger.info(s"conclude snapshot: ${nextSnapshot.lastSnapshot} "))
+        Sync[F].delay(
+          logger.info(
+            s"conclude snapshot: ${nextSnapshot.lastSnapshot} with height ${nextHeightInterval - dao.processingConfig.snapshotHeightDelayInterval}"
+          )
+        )
       )
       _ <- EitherT.liftF(applySnapshot())
 
@@ -405,6 +412,7 @@ object SnapshotService {
     transactionService: TransactionService[F],
     rateLimiting: RateLimiting[F],
     broadcastService: SnapshotBroadcastService[F],
+    consensusManager: ConsensusManager[F],
     dao: DAO
   ) =
     new SnapshotService[F](
@@ -415,6 +423,7 @@ object SnapshotService {
       transactionService,
       rateLimiting,
       broadcastService,
+      consensusManager,
       dao
     )
 }

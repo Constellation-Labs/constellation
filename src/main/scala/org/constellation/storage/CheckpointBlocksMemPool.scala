@@ -26,7 +26,7 @@ class CheckpointBlocksMemPool[F[_]: Concurrent](
           super.put(key, CheckpointCacheMetadata(ccm, value.children, value.height))
         })
 
-  def storeMerkleRoots(data: CheckpointBlock): F[CheckpointBlockMetadata] =
+  private def storeMerkleRoots(data: CheckpointBlock): F[CheckpointBlockMetadata] =
     for {
       t <- store(data.transactions.map(_.hash), transactionsMerklePool)
       m <- store(data.messages.map(_.signedMessageData.hash), messagesMerklePool)

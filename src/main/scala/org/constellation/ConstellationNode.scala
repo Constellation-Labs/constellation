@@ -3,7 +3,7 @@ package org.constellation
 import java.net.InetSocketAddress
 import java.security.KeyPair
 
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LoggingMagnet}
 import akka.http.scaladsl.server.{Directive0, Route}
@@ -15,9 +15,7 @@ import cats.implicits._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import constellation._
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.CustomDirectives.printResponseTime
-import org.constellation.consensus.{CrossTalkConsensus, HTTPNodeRemoteSender, NodeRemoteSender}
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.p2p.{Cluster, PeerAPI}
@@ -211,13 +209,6 @@ class ConstellationNode(
 
   implicit val dao: DAO = new DAO()
 
-  val remoteSenderActor: ActorRef = system.actorOf(NodeRemoteSender.props(new HTTPNodeRemoteSender))
-
-  val crossTalkConsensusActor: ActorRef =
-    system.actorOf(CrossTalkConsensus.props(remoteSenderActor, ConfigFactory.load().resolve()))
-
-  dao.consensusManager = crossTalkConsensusActor
-
   dao.initialize(nodeConfig)
 
   val logger = Logger(s"ConstellationNode_${dao.publicKeyHash}")
@@ -228,12 +219,6 @@ class ConstellationNode(
   )
 
   dao.metrics = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
-
-  val checkpointFormationManager = new CheckpointFormationManager(
-    dao.processingConfig.checkpointFormationTimeSeconds,
-    dao.processingConfig.formUndersizedCheckpointAfterSeconds,
-    crossTalkConsensusActor
-  )
 
   val snapshotTrigger = new SnapshotTrigger(
     dao.processingConfig.snapshotTriggeringTimeSeconds
@@ -265,7 +250,7 @@ class ConstellationNode(
   private val bindingFuture: Future[Http.ServerBinding] =
     Http().bindAndHandle(routes, nodeConfig.httpInterface, nodeConfig.httpPort)
 
-  val peerAPI = new PeerAPI(dao.ipManager, crossTalkConsensusActor)
+  val peerAPI = new PeerAPI(dao.ipManager)
 
   def getIPData: ValidPeerIPData =
     ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)

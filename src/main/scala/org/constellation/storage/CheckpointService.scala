@@ -187,7 +187,7 @@ class CheckpointService[F[_]: Concurrent](
 
       case Some(cb) =>
         for {
-          _ <- syncPending(pendingAcceptance, cb.baseHash) // TODO: wkoszycki validation required but what if we lack address data?
+          _ <- syncPending(pendingAcceptance, cb.baseHash)
 
           conflicts <- LiftIO[F].liftIO(CheckpointBlockValidatorNel.containsAlreadyAcceptedTx(cb))
 

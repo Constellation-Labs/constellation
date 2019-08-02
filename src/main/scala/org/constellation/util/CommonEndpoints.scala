@@ -75,7 +75,7 @@ trait CommonEndpoints extends Json4sSupport {
       path("info") {
 
         val getInfo = dao.cluster.isNodeReady.ifM(
-          dao.snapshotService.getSnapshotInfo().map(_.some),
+          dao.snapshotService.getSnapshotInfo.map(_.some),
           IO.pure(none[SnapshotInfo])
         )
 

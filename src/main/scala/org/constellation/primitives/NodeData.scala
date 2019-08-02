@@ -3,7 +3,6 @@ package org.constellation.primitives
 import java.net.InetSocketAddress
 import java.security.KeyPair
 
-import akka.actor.ActorRef
 import better.files.File
 import com.typesafe.scalalogging.Logger
 import constellation._
@@ -21,7 +20,6 @@ trait NodeData {
 
   @volatile var nodeConfig: NodeConfig
   // var dbActor : SwayDBDatastore = _
-  var consensusManager: ActorRef = _
   var metrics: Metrics = _
   var messageHashStore: swaydb.Set[String] = _
   var checkpointHashStore: swaydb.Set[String] = _

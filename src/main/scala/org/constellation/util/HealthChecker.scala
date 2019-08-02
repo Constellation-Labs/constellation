@@ -129,7 +129,8 @@ class HealthChecker[F[_]: Concurrent: Logger](
       _ <- Logger[F].info(s"[${dao.id.short}] starting re-download process with diff: $diff")
       _ <- LiftIO[F].liftIO(downloader.setNodeState(NodeState.DownloadInProgress))
       _ <- LiftIO[F].liftIO(
-        downloader.reDownload(diff.snapshotsToDownload.map(_.hash), peers.filterKeys(diff.peers.contains))
+        downloader.reDownload(diff.snapshotsToDownload.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),
+                              peers.filterKeys(diff.peers.contains))
       )
       _ <- Sync[F].delay {
         Snapshot.removeSnapshots(diff.snapshotsToDelete.map(_.hash), dao.snapshotPath.pathAsString)(dao)

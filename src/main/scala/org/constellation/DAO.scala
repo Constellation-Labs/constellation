@@ -2,23 +2,21 @@ package org.constellation
 
 import java.util.concurrent.TimeUnit
 
-import akka.pattern.ask
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import cats.effect.concurrent.Semaphore
 import cats.effect.{Concurrent, ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.consensus.{ConsensusManager, ConsensusRemoteSender, ConsensusScheduler, ConsensusWatcher}
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
-import org.constellation.p2p.{Cluster, DownloadProcess, PeerData, SnapshotsDownloader, SnapshotsProcessor}
+import org.constellation.p2p._
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.{HealthChecker, HostPort, SnapshotWatcher}
@@ -104,6 +102,20 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     ipManager = IPManager[IO]()
     cluster = Cluster[IO](() => metrics, ipManager, this)
 
+    consensusRemoteSender = new ConsensusRemoteSender[IO]()
+    consensusManager = new ConsensusManager[IO](
+      transactionService,
+      concurrentTipService,
+      checkpointService,
+      messageService,
+      consensusRemoteSender,
+      cluster,
+      this,
+      ConfigUtil.config
+    )
+
+    consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
+
     snapshotBroadcastService = {
       val snapshotProcessor =
         new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotByDistance)(
@@ -123,11 +135,13 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       transactionService,
       rateLimiting,
       snapshotBroadcastService,
+      consensusManager,
       this
     )
 
     transactionGenerator =
       TransactionGenerator[IO](addressService, transactionGossiping, transactionService, cluster, this)
+    consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this)
   }
 
   implicit val context: ContextShift[IO] = ConstellationContextShift.global
@@ -138,8 +152,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     processingConfig.maxTipUsage,
     processingConfig.numFacilitatorPeers,
     processingConfig.minPeerTimeAddedSeconds,
-    this,
-    consensusManager
+    this
   )
 
   def pullTips(
