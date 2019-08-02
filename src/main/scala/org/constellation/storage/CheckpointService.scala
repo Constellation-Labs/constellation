@@ -223,6 +223,7 @@ class CheckpointService[F[_]: Concurrent](
           _ <- concurrentTipService.update(cb)
           _ <- LiftIO[F].liftIO(dao.snapshotService.updateAcceptedCBSinceSnapshot(cb))
           _ <- dao.metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
+          _ <- incrementMetricIfDummy(cb)
           _ <- pendingAcceptance.update(_.filterNot(_ == cb.baseHash))
         } yield ()
 
@@ -236,13 +237,20 @@ class CheckpointService[F[_]: Concurrent](
     }
   }
 
-  def acceptErrorHandler(err: Throwable) =
+  def acceptErrorHandler(err: Throwable): F[Unit] =
     err match {
       case knownError @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
         knownError.raiseError[F, Unit]
       case otherError =>
         Sync[F].delay(logger.error("Error when accepting block", otherError)) *> dao.metrics
           .incrementMetricAsync[F]("acceptCheckpoint_failure") *> otherError.raiseError[F, Unit]
+    }
+
+  private def incrementMetricIfDummy(checkpointBlock: CheckpointBlock) =
+    if (checkpointBlock.transactions.forall(_.isDummy)) {
+      dao.metrics.incrementMetricAsync[F]("checkpointsAcceptedWithDummyTxs")
+    } else {
+      Sync[F].unit
     }
 
   private def calculateHeight(checkpointCacheData: CheckpointCache)(implicit dao: DAO): F[Option[Height]] =
