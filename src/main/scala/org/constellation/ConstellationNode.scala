@@ -10,7 +10,7 @@ import akka.http.scaladsl.server.{Directive0, Route}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import better.files._
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{Logger, StrictLogging}
@@ -243,7 +243,9 @@ class ConstellationNode(
     dao.processingConfig.randomTransactionLoopTimeSeconds
   )
 
-  val ipManager = IPManager()
+  implicit val cs: ContextShift[IO] = ConstellationContextShift.global
+
+  val ipManager = IPManager[IO]()
 
   nodeConfig.seeds.foreach { peer =>
     dao.ipManager.addKnownIP(peer.host)

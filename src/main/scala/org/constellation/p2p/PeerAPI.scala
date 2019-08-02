@@ -46,7 +46,7 @@ object PeerAPI {
 
 }
 
-class PeerAPI(override val ipManager: IPManager, nodeActor: ActorRef)(
+class PeerAPI(override val ipManager: IPManager[IO], nodeActor: ActorRef)(
   implicit system: ActorSystem,
   val timeout: Timeout,
   val dao: DAO

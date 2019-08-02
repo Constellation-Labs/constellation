@@ -49,11 +49,13 @@ object CustomDirectives {
 
   trait IPEnforcer extends StrictLogging {
 
-    val ipManager: IPManager
+    val ipManager: IPManager[IO]
 
     def rejectBannedIP(address: InetSocketAddress): Directive0 = {
       val ip = address.getAddress.getHostAddress
-      if (ipManager.bannedIP(ip)) {
+      val isBannedIP = ipManager.bannedIP(ip).unsafeRunSync
+
+      if (isBannedIP) {
         logger.info(s"Reject banned ip: $ip")
         complete(StatusCodes.Forbidden)
       } else {
@@ -63,7 +65,9 @@ object CustomDirectives {
 
     def enforceKnownIP(address: InetSocketAddress): Directive0 = {
       val ip = address.getAddress.getHostAddress
-      if (ipManager.knownIP(ip)) {
+      val isKnownIP = ipManager.knownIP(ip).unsafeRunSync
+
+      if (isKnownIP) {
         pass
       } else {
         logger.info(s"Reject unknown ip: $ip")

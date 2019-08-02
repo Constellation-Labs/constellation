@@ -129,7 +129,7 @@ trait EdgeDAO {
 
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
 
-  var ipManager: IPManager = _
+  var ipManager: IPManager[IO] = _
   var cluster: Cluster[IO] = _
   var transactionService: TransactionService[IO] = _
   var transactionGossiping: TransactionGossiping[IO] = _

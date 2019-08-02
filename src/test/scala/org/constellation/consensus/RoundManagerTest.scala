@@ -115,7 +115,7 @@ class RoundManagerTest
   dao.checkpointService.contains(*) shouldReturn IO.pure(true)
 
   dao.nodeConfig shouldReturn NodeConfig()
-  val ipManager = mock[IPManager]
+  val ipManager = mock[IPManager[IO]]
   val cluster = Cluster[IO](() => dao.metrics, ipManager, dao) // TODO: mwadon revisit if mock is not needed
   dao.cluster shouldReturn cluster
 

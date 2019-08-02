@@ -187,7 +187,7 @@ class ValidationSpec
   implicit val timer = IO.timer(ConstellationExecutionContext.edge)
   implicit val cs = ConstellationContextShift.edge
 
-  val ipManager = new IPManager
+  val ipManager = IPManager[IO]()
   val cluster = Cluster[IO](() => dao.metrics, ipManager, dao)
   dao.cluster = cluster
 

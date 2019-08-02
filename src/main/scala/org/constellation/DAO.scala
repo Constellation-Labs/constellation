@@ -101,7 +101,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     )
     addressService = new AddressService[IO]()(Concurrent(ConstellationConcurrentEffect.edge), () => metrics)
 
-    ipManager = IPManager()
+    ipManager = IPManager[IO]()
     cluster = Cluster[IO](() => metrics, ipManager, this)
 
     snapshotBroadcastService = {

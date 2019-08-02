@@ -283,7 +283,7 @@ class CheckpointServiceTest
     val metrics = new Metrics(1)(dao)
     dao.metrics shouldReturn metrics
 
-    val ipManager = new IPManager
+    val ipManager = IPManager[IO]()
     val cluster = Cluster[IO](() => metrics, ipManager, dao)
     dao.cluster shouldReturn cluster
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
@@ -303,11 +303,12 @@ class CheckpointServiceTest
     }
     dao.initialize()
     dao.metrics = new Metrics()(dao)
-    dao.ipManager = new IPManager
 
     implicit val logger: io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger
     implicit val contextShift = ConstellationContextShift.global
     implicit val timer = IO.timer(ConstellationExecutionContext.edge)
+
+    dao.ipManager = IPManager[IO]()
 
     dao.cluster = Cluster[IO](() => dao.metrics, dao.ipManager, dao)
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
