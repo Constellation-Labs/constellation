@@ -37,7 +37,7 @@ object TransactionCacheData {
   def apply(tx: Transaction): TransactionCacheData = TransactionCacheData(transaction = tx)
 }
 
-case class Transaction(edge: Edge[TransactionEdgeData]) {
+case class Transaction(edge: Edge[TransactionEdgeData], isDummy: Boolean = false) {
 
   def valid(implicit dao: DAO): Boolean =
     TransactionValidatorNel.validateTransaction(this).isValid
@@ -67,18 +67,6 @@ case class Transaction(edge: Edge[TransactionEdgeData]) {
   )
 }
 
-class DummyTransaction(edge: Edge[TransactionEdgeData]) extends Transaction(edge) {
-
-  override def valid(implicit dao: DAO): Boolean =
-    TransactionValidatorNel.validateDummyTransaction(this).isValid
-
-  override def amount: Long = 0L
-}
-
-object DummyTransaction {
-  def apply(edge: Edge[TransactionEdgeData]) = new DummyTransaction(edge)
-}
-
 case class TransactionGossip(tx: Transaction, path: Set[Schema.Id]) {
   def hash: String = tx.hash
 }
@@ -94,7 +82,8 @@ case class TransactionSerialized(
   receiver: String,
   amount: Long,
   signers: Set[String],
-  time: Long
+  time: Long,
+  isDummy: Boolean
 ) {}
 
 object TransactionSerialized {
@@ -106,7 +95,8 @@ object TransactionSerialized {
       tx.dst.address,
       tx.amount,
       tx.signatures.map(_.address).toSet,
-      Instant.now.getEpochSecond
+      Instant.now.getEpochSecond,
+      tx.isDummy
     )
 }
 
@@ -193,18 +183,17 @@ sealed trait TransactionValidatorNel {
       InvalidDestinationAddress(tx).invalidNel
 
   def validateAmount(tx: Transaction): ValidationResult[Transaction] =
-    if (tx.amount > 0) tx.validNel else NonPositiveAmount(tx).invalidNel
-
-  def validateAmountEqZero(tx: Transaction): ValidationResult[Transaction] =
-    if (tx.amount == 0) tx.validNel else NonZeroAmount(tx).invalidNel
+    if (tx.isDummy) {
+      if (tx.amount == 0) tx.validNel else NonZeroAmount(tx).invalidNel
+    } else {
+      if (tx.amount > 0) tx.validNel else NonPositiveAmount(tx).invalidNel
+    }
 
   def validateFee(tx: Transaction): ValidationResult[Transaction] =
     tx.fee match {
       case Some(fee) if fee <= 0 => NonPositiveFee(tx).invalidNel
       case _                     => tx.validNel
     }
-
-  import org.constellation.datastore.swaydb.SwayDbConversions._
 
   // TODO: get rid of unsafeRunSync() and make whole validation async with IO[ValidationResult[Transaction]]
   def validateDuplicate(tx: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
@@ -219,15 +208,6 @@ sealed trait TransactionValidatorNel {
       .product(validateEmptyDestinationAddress(tx))
       .product(validateDestinationAddress(tx))
       .product(validateAmount(tx))
-      .product(validateFee(tx))
-      .product(validateDuplicate(tx))
-      .map(_ ⇒ tx)
-
-  def validateDummyTransaction(tx: Transaction)(implicit dao: DAO): ValidationResult[Transaction] =
-    validateSourceSignature(tx)
-      .product(validateAmountEqZero(tx))
-      .product(validateEmptyDestinationAddress(tx))
-      .product(validateDestinationAddress(tx))
       .product(validateFee(tx))
       .product(validateDuplicate(tx))
       .map(_ ⇒ tx)
