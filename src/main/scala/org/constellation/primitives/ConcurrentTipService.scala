@@ -87,9 +87,9 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
         reuseTips = size < maxWidth
         _ <- tipData match {
           case None => Sync[F].unit
-          case Some(TipData(block, numUses)) if !reuseTips || numUses >= maxTipUsage =>
+          case Some(TipData(block, numUses)) if numUses >= maxTipUsage || !reuseTips =>
             remove(block.baseHash)(dao.metrics)
-          case Some(TipData(block, numUses)) if reuseTips && numUses <= maxTipUsage =>
+          case Some(TipData(block, numUses)) =>
             putUnsafe(block.baseHash, TipData(block, numUses + 1))(dao.metrics)
               .flatMap(_ => dao.metrics.incrementMetricAsync("checkpointTipsIncremented"))
         }
