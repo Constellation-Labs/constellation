@@ -64,7 +64,7 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
             .fold(IO.unit) { min =>
               snapshotService.getLastSnapshotHeight
                 .map(
-                  last => if (last >= min) throw SnapshotHeightAboveTip(last, min)
+                  last => if (last > min) throw SnapshotHeightAboveTip(last, min)
                 )
             }
             .flatMap(_ => consensusManager.participateInBlockCreationRound(ConsensusRoute.convert(cmd)))
