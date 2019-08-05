@@ -150,7 +150,7 @@ class Consensus[F[_]: Concurrent](
   private[consensus] def validateAndMergeBlockProposals(): F[Unit] =
     for {
       proposals <- checkpointBlockProposals.getUnsafe
-      validationResult <- validateReceivedProposals(proposals, "blockProposals", countSelfAsPeer = roundStartedByMe)
+      validationResult <- validateReceivedProposals(proposals, "blockProposals")
       _ <- validationResult match {
         case Left(exception) => consensusManager.handleRoundError(exception)
         case Right(_)        => mergeBlockProposalsToMajorityBlock(proposals)
@@ -160,7 +160,8 @@ class Consensus[F[_]: Concurrent](
   private[consensus] def validateAndAcceptMajorityBlockProposals(): F[Unit] =
     for {
       proposals <- selectedCheckpointBlocks.getUnsafe
-      validationResult <- validateReceivedProposals(proposals, "majorityProposals", 100, roundStartedByMe)
+      _ <- logger.debug("validate majority block proposal")
+      validationResult <- validateReceivedProposals(proposals, "majorityProposals", 100)
       _ <- validationResult match {
         case Left(exception) => consensusManager.handleRoundError(exception)
         case Right(_)        => acceptMajorityCheckpointBlock(proposals)
@@ -233,7 +234,11 @@ class Consensus[F[_]: Concurrent](
               )
               .flatMap(_ => Sync[F].pure[(Option[CheckpointBlock], Seq[String])]((None, Seq.empty[String])))
         }
-      _ <- broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, proposals.keySet.map(_.id)))
+      _ <- if (acceptedBlock._1.isEmpty) Sync[F].pure(List.empty[Response[Unit]])
+      else
+        broadcastSignedBlockToNonFacilitators(
+          FinishedCheckpoint(cache, proposals.keySet.map(_.id))
+        )
       ownTransactions <- getOwnTransactionsToReturn
       ownObservations <- getOwnObservationsToReturn
       transactionsToReturn = ownTransactions
@@ -266,6 +271,9 @@ class Consensus[F[_]: Concurrent](
       nonFacilitators <- LiftIO[F]
         .liftIO(dao.peerInfo)
         .map(info => info.values.toList.filterNot(pd => allFacilitators.contains(pd.peerMetadata.id)))
+      _ <- logger.debug(
+        s"[${dao.id.short}] ${roundData.roundId} Broadcasting checkpoint block with baseHash ${finishedCheckpoint.checkpointCacheData.checkpointBlock.get.baseHash}"
+      )
       responses <- LiftIO[F].liftIO(
         nonFacilitators.traverse(
           pd => pd.client.postNonBlockingIOUnit("finished/checkpoint", finishedCheckpoint, timeout = 10.seconds)
@@ -324,7 +332,7 @@ class Consensus[F[_]: Concurrent](
                   None
                 )
                 .map(_.transaction)
-            )
+          )
         )
       _ <- logger.debug(
         s"transactions proposal_size ${proposals.size} values size ${idsTxs._2.size} lookup size ${txs.size} resolved ${resolved.size}"
@@ -345,7 +353,7 @@ class Consensus[F[_]: Concurrent](
                   None
                 )
                 .map(_.channelMessage)
-            )
+          )
         )
       notifications = proposals
         .flatMap(_._2.notifications)
@@ -409,7 +417,7 @@ class Consensus[F[_]: Concurrent](
                 txs =>
                   getOwnObservationsToReturn.flatMap(
                     exs => consensusManager.handleRoundError(PreviousStage(roundData.roundId, stage, txs, exs))
-                  )
+                )
               )
           else Sync[F].unit
       )
@@ -457,8 +465,8 @@ class Consensus[F[_]: Concurrent](
               exs =>
                 Left(
                   NotEnoughProposals(roundData.roundId, proposals.size, peerSize, stage, txs, exs)
-                )
-            )
+              )
+          )
         )
       case _ => Sync[F].pure(Right(()))
     }
@@ -480,7 +488,7 @@ object Consensus {
     type ConsensusStage = Value
 
     val STARTING, WAITING_FOR_PROPOSALS, WAITING_FOR_BLOCK_PROPOSALS, RESOLVING_MAJORITY_CB,
-      WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
+    WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
       Value
   }
 

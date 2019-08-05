@@ -67,6 +67,9 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
   def remove(key: String)(implicit metrics: Metrics): F[Unit] =
     tipsRef.update(_ - key).flatTap(_ => metrics.incrementMetricAsync("checkpointTipsRemoved"))
 
+  def removeUnsafe(key: String)(implicit metrics: Metrics): F[Unit] =
+    tipsRef.updateUnsafe(_ - key).flatTap(_ => metrics.incrementMetricAsync("checkpointTipsRemoved"))
+
   def markAsConflict(key: String)(implicit metrics: Metrics): F[Unit] =
     get(key).flatMap { m =>
       if (m.isDefined)
@@ -90,7 +93,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
         _ <- tipData match {
           case None => Sync[F].unit
           case Some(TipData(block, numUses)) if numUses >= maxTipUsage || !reuseTips =>
-            remove(block.baseHash)(dao.metrics)
+            removeUnsafe(block.baseHash)(dao.metrics)
           case Some(TipData(block, numUses)) =>
             putUnsafe(block.baseHash, TipData(block, numUses + 1))(dao.metrics)
               .flatMap(_ => dao.metrics.incrementMetricAsync("checkpointTipsIncremented"))

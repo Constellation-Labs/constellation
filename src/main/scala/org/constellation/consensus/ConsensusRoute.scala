@@ -86,6 +86,7 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
     post {
       path(ConsensusRoute.proposalPath) {
         entity(as[LightTransactionsProposal]) { proposal =>
+          logger.debug(s"LightTransactionsProposal adding proposal for round ${proposal.roundId} ")
           handleProposal(proposal)
         }
       }
@@ -94,8 +95,8 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
   protected def addUnionBlock(ctx: RequestContext): Route =
     post {
       path(ConsensusRoute.unionPath) {
-
         entity(as[UnionBlockProposal]) { proposal =>
+          logger.debug(s"UnionBlockProposal adding proposal for round ${proposal.roundId} ")
           handleProposal(proposal)
         }
       }
@@ -105,6 +106,7 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
     post {
       path(ConsensusRoute.selectedPath) {
         entity(as[SelectedUnionBlock]) { proposal =>
+          logger.debug(s"SelectedUnionBlock adding proposal for round ${proposal.roundId} ")
           handleProposal(proposal)
         }
       }
