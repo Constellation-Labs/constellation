@@ -1,6 +1,7 @@
 package org.constellation.primitives
 
 import java.security.KeyPair
+import java.util.concurrent.atomic.AtomicInteger
 
 import cats.data.EitherT
 import cats.effect.{Async, Concurrent, ContextShift, IO, LiftIO, Sync}
@@ -25,6 +26,10 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
   cluster: Cluster[F],
   dao: DAO
 ) {
+
+  private final val roundCounter = new AtomicInteger(0)
+  private final val emptyRounds = dao.processingConfig.emptyTransactionsRounds
+  private final val transactionsRounds = dao.processingConfig.amountTransactionsRounds
 
   val multiAddressGenerationMode = false
   val requiredBalance = 10000000
@@ -154,7 +159,13 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
     transactionService.put(TransactionCacheData(tx, path = Set(dao.id)))
 
   private def numberOfTransaction(peers: Seq[(Id, PeerData)]): F[Int] =
-    Sync[F].pure { (dao.processingConfig.randomTXPerRoundPerPeer / peers.size + 1) + 1 }
+    roundCounter.getAndIncrement() match {
+      case x if x < transactionsRounds                 => dao.processingConfig.maxTransactionsPerRound.pure[F]
+      case y if y < (transactionsRounds + emptyRounds) => 0.pure[F]
+      case _ =>
+        roundCounter.set(0)
+        0.pure[F]
+    }
 
   private def keyPairForSource(sourceAddress: String): KeyPair =
     (dao.addressToKeyPair + (dao.selfAddressStr -> dao.keyPair))(sourceAddress)
