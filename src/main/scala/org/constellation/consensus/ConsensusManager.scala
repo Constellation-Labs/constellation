@@ -136,7 +136,6 @@ class ConsensusManager[F[_]: Concurrent](
     for {
       transactions <- transactionService.pullForConsensus(dao.minCheckpointFormationThreshold)
 
-      _ <- if (transactions.isEmpty) NoTransactionsForConsensus(roundId).raiseError[F, Unit] else Sync[F].unit
       facilitators <- LiftIO[F].liftIO(dao.readyFacilitatorsAsync)
       tips <- concurrentTipService.pull(facilitators)(dao.metrics)
       _ <- if (tips.isEmpty) Sync[F].raiseError[Unit](NoTipsForConsensus(roundId, transactions.map(_.transaction.hash)))
@@ -250,7 +249,7 @@ class ConsensusManager[F[_]: Concurrent](
             dao.threadSafeMessageMemPool.activeChannels
               .get(message.signedMessageData.data.channelId)
               .foreach(_.release())
-      )
+        )
     )
 
   def cleanUpLongRunningConsensus: F[Unit] =
@@ -314,8 +313,7 @@ class ConsensusManager[F[_]: Concurrent](
         ConfigUtil.config.getString("constellation.consensus.arbitrary-tx-distance-base")
       ).getOrElse("hash") match {
         case "id" =>
-          (id: Id, tx: Transaction) =>
-            Distance.calculate(tx.src.address, id)
+          (id: Id, tx: Transaction) => Distance.calculate(tx.src.address, id)
         case "hash" =>
           (id: Id, tx: Transaction) =>
             val xorIdTx = Distance.calculate(tx.hash, id)
@@ -392,8 +390,6 @@ object ConsensusManager {
       extends ConsensusError(id, txs, "No active peers to start consensus")
   case class NotAllPeersParticipate(id: RoundId, txs: List[String])
       extends ConsensusError(id, txs, "Not all of the peers has participated in consensus")
-  case class NoTransactionsForConsensus(id: RoundId)
-      extends ConsensusError(id, List.empty[String], "No transactions to start consensus")
 
   case class BroadcastUnionBlockProposal(roundId: RoundId, peers: Set[PeerData], proposal: UnionBlockProposal)
   case class BroadcastSelectedUnionBlock(roundId: RoundId, peers: Set[PeerData], cb: SelectedUnionBlock)
