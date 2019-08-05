@@ -70,7 +70,7 @@ class ConsensusManager[F[_]: Concurrent](
       _ <- logger.debug(s"[${dao.id.short}] Starting own consensus $roundId")
       roundData <- createRoundData(roundId)
       missing <- resolveMissingParents(roundData._1)
-      _ <- logger.debug(s"[${dao.id.short}] Resolved missing parents size: ${missing.size}")
+      _ <- logger.debug(s"[${dao.id.short}] Resolved missing parents size: ${missing.size} for round $roundId")
       roundInfo = ConsensusInfo[F](
         new Consensus[F](
           roundData._1,
@@ -89,6 +89,8 @@ class ConsensusManager[F[_]: Concurrent](
         System.currentTimeMillis()
       )
       _ <- ownConsensus.updateUnsafe(d => d.map(o => o.copy(consensusInfo = roundInfo.some)))
+      _ <- logger.debug(s"[${dao.id.short}] created data for round: ${roundId} with facilitators: ${roundData._1.peers
+        .map(_.peerMetadata.id.short)}")
       responses <- remoteSender.notifyFacilitators(roundData._1)
       _ <- if (responses.forall(_.isSuccess)) Sync[F].unit
       else Sync[F].raiseError[Unit](NotAllPeersParticipate(roundId, roundData._1.transactions.map(_.hash)))
@@ -250,7 +252,7 @@ class ConsensusManager[F[_]: Concurrent](
             dao.threadSafeMessageMemPool.activeChannels
               .get(message.signedMessageData.data.channelId)
               .foreach(_.release())
-      )
+        )
     )
 
   def cleanUpLongRunningConsensus: F[Unit] =
@@ -314,8 +316,7 @@ class ConsensusManager[F[_]: Concurrent](
         ConfigUtil.config.getString("constellation.consensus.arbitrary-tx-distance-base")
       ).getOrElse("hash") match {
         case "id" =>
-          (id: Id, tx: Transaction) =>
-            Distance.calculate(tx.src.address, id)
+          (id: Id, tx: Transaction) => Distance.calculate(tx.src.address, id)
         case "hash" =>
           (id: Id, tx: Transaction) =>
             val xorIdTx = Distance.calculate(tx.hash, id)

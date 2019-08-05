@@ -4,8 +4,8 @@ import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.RandomData
-import org.constellation.primitives.Schema.{EdgeHashType, Height, TypedEdgeHash}
-import org.constellation.storage.SOEService
+import org.constellation.primitives.Schema.{CheckpointCacheMetadata, EdgeHashType, Height, TypedEdgeHash}
+import org.constellation.storage.{CheckpointService, SOEService}
 import org.constellation.util.Metrics
 import org.constellation.{ConstellationContextShift, DAO, Fixtures}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -20,6 +20,8 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
   def prepareDAO(): DAO = {
     val dao = mock[DAO]
 
+    val checkpointService = mock[CheckpointService[IO]]
+    checkpointService.lookup(*) shouldReturn IO.pure[Option[CheckpointCacheMetadata]](None)
     val metrics = mock[Metrics]
     metrics.incrementMetricAsync[IO](*)(*) shouldReturn IO.unit
     metrics.updateMetricAsync[IO](*, any[Int])(*) shouldReturn IO.unit
@@ -29,6 +31,7 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
     dao.metrics shouldReturn metrics
     dao.miscLogger shouldReturn Logger("MiscLogger")
     dao.soeService shouldReturn new SOEService[IO]()
+    dao.checkpointService shouldReturn checkpointService
     dao
   }
 
@@ -50,9 +53,31 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
       concurrentTipService.size.unsafeRunSync() shouldBe limit
     }
 
-    it("safely updates a tip ") {
-      val maxTipUsage = 40
+    it("removes the tip ") {
+      val maxTipUsage = 500
       val concurrentTipService = new ConcurrentTipService[IO](6, 10, maxTipUsage, 2, 30, dao)
+
+      RandomData.go.initialDistribution
+        .storeSOE()
+        .flatMap(_ => RandomData.go.initialDistribution2.storeSOE())
+        .unsafeRunSync()
+
+      List(RandomData.go.initialDistribution, RandomData.go.initialDistribution2)
+        .map(concurrentTipService.update(_, Height(1, 1)))
+        .sequence
+        .unsafeRunSync()
+
+      concurrentTipService
+        .remove(RandomData.go.initialDistribution.baseHash)(dao.metrics)
+        .flatMap(_ => concurrentTipService.remove(RandomData.go.initialDistribution2.baseHash)(dao.metrics))
+        .unsafeRunSync()
+
+      concurrentTipService.toMap.unsafeRunSync() shouldBe Map()
+
+    }
+    it("safely updates a tip ") {
+      val maxTipUsage = 10
+      val concurrentTipService = new ConcurrentTipService[IO](6, 4, maxTipUsage, 2, 30, dao)
 
       RandomData.go.initialDistribution
         .storeSOE()
@@ -68,14 +93,16 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
         TypedEdgeHash(s.hash, EdgeHashType.CheckpointHash)
       })(Fixtures.tempKey)
 
-      val tasks = createShiftedTasks(List.fill(maxTipUsage)(cb), { cb =>
+      val tasks = createShiftedTasks(List.fill(maxTipUsage + 1)(cb), { cb =>
         concurrentTipService.update(cb, Height(1, 1))
       })
-      tasks.par.foreach(_.unsafeRunAsyncAndForget)
+      tasks.par.foreach(_.unsafeToFuture())
       Thread.sleep(2000)
-      concurrentTipService.toMap
-        .unsafeRunSync()(RandomData.go.initialDistribution.baseHash)
-        .numUses shouldBe maxTipUsage
+      val tips = concurrentTipService.toMap
+        .unsafeRunSync()
+//      tips shouldBe Map.empty
+      tips.get(RandomData.go.initialDistribution.baseHash) shouldBe None
+      tips.get(RandomData.go.initialDistribution2.baseHash) shouldBe None
     }
 
   }
