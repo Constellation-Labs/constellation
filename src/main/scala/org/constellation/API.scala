@@ -64,7 +64,7 @@ object ProcessingConfig {
 
   val testProcessingConfig = ProcessingConfig(
     numFacilitatorPeers = 2,
-    minCheckpointFormationThreshold = 3,
+    minCheckpointFormationThreshold = 0,
     randomTXPerRoundPerPeer = 2,
     metricCheckInterval = 10,
     maxWidth = 4,
@@ -81,7 +81,7 @@ object ProcessingConfig {
 case class ProcessingConfig(
   maxWidth: Int = 10,
   maxTipUsage: Int = 2,
-  minCheckpointFormationThreshold: Int = 50,
+  minCheckpointFormationThreshold: Int = 0,
   maxTXInBlock: Int = 50,
   maxMessagesInBlock: Int = 1,
   peerInfoTimeout: Int = 3,
