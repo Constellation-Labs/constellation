@@ -409,16 +409,18 @@ object ConsensusManager {
   ) extends Exception(message)
 
   case class NoTipsForConsensus(id: RoundId, txs: List[String], obs: List[String])
-      extends ConsensusError(id, txs, obs, "No tips to start consensus")
+      extends ConsensusError(id, txs, obs, s"No tips to start consensus $id")
   case class NoPeersForConsensus(id: RoundId, txs: List[String], obs: List[String])
-      extends ConsensusError(id, txs, obs, "No active peers to start consensus")
+      extends ConsensusError(id, txs, obs, s"No active peers to start consensus $id")
   case class NotAllPeersParticipate(id: RoundId, txs: List[String], obs: List[String])
-      extends ConsensusError(id, txs, obs, "Not all of the peers has participated in consensus")
+      extends ConsensusError(id, txs, obs, s"Not all of the peers has participated in consensus $id")
 
   case class BroadcastUnionBlockProposal(roundId: RoundId, peers: Set[PeerData], proposal: UnionBlockProposal)
   case class BroadcastSelectedUnionBlock(roundId: RoundId, peers: Set[PeerData], cb: SelectedUnionBlock)
   case class ConsensusTimeout(roundId: RoundId)
 
-  case class SnapshotHeightAboveTip(snapHeight: Long, tipHeight: Long)
-      extends Exception(s"Snapshot height: $snapHeight is above or/equal proposed tip $tipHeight")
+  case class SnapshotHeightAboveTip(id: RoundId, snapHeight: Long, tipHeight: Long)
+      extends Exception(
+        s"Can't participate in round $id snapshot height: $snapHeight is above or/equal proposed tip $tipHeight"
+      )
 }
