@@ -207,12 +207,11 @@ class CheckpointService[F[_]: Concurrent](
           _ <- LiftIO[F].liftIO(cb.storeSOE())
           maybeHeight <- calculateHeight(checkpoint)
 
-          _ <- if (maybeHeight.isEmpty) {
+          height <- if (maybeHeight.isEmpty) {
             dao.metrics
               .incrementMetricAsync[F](Metrics.heightEmpty)
-              .flatMap(_ => MissingHeightException(cb).raiseError[F, Unit])
-              .void
-          } else Sync[F].unit
+              .flatMap(_ => MissingHeightException(cb).raiseError[F, Height])
+          } else Sync[F].pure(maybeHeight.get)
 
           _ <- memPool.put(cb.baseHash, checkpoint.copy(height = maybeHeight))
           _ <- Sync[F].delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
@@ -222,7 +221,7 @@ class CheckpointService[F[_]: Concurrent](
           _ <- Sync[F].delay {
             logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
           }
-          _ <- concurrentTipService.update(cb)
+          _ <- concurrentTipService.update(cb, height)
           _ <- LiftIO[F].liftIO(dao.snapshotService.updateAcceptedCBSinceSnapshot(cb))
           _ <- dao.metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
           _ <- incrementMetricIfDummy(cb)

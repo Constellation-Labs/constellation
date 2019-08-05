@@ -4,7 +4,7 @@ import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.RandomData
-import org.constellation.primitives.Schema.{EdgeHashType, TypedEdgeHash}
+import org.constellation.primitives.Schema.{EdgeHashType, Height, TypedEdgeHash}
 import org.constellation.storage.SOEService
 import org.constellation.util.Metrics
 import org.constellation.{ConstellationContextShift, DAO, Fixtures}
@@ -43,7 +43,7 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
       })
 
       val tasks = createShiftedTasks(cbs.toList, { cb =>
-        concurrentTipService.update(cb)
+        concurrentTipService.update(cb, Height(1, 1))
       })
       tasks.par.foreach(_.unsafeRunAsyncAndForget)
       Thread.sleep(2000)
@@ -60,7 +60,7 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
         .unsafeRunSync()
 
       List(RandomData.go.initialDistribution, RandomData.go.initialDistribution2)
-        .map(concurrentTipService.update)
+        .map(concurrentTipService.update(_, Height(1, 1)))
         .sequence
         .unsafeRunSync()
 
@@ -69,7 +69,7 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
       })(Fixtures.tempKey)
 
       val tasks = createShiftedTasks(List.fill(maxTipUsage)(cb), { cb =>
-        concurrentTipService.update(cb)
+        concurrentTipService.update(cb, Height(1, 1))
       })
       tasks.par.foreach(_.unsafeRunAsyncAndForget)
       Thread.sleep(2000)
