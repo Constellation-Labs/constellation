@@ -8,7 +8,7 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.consensus.TipData
 import org.constellation.p2p.PeerData
-import org.constellation.primitives.Schema.{Id, SignedObservationEdge}
+import org.constellation.primitives.Schema.{Height, Id, SignedObservationEdge}
 import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
 import org.constellation.util.Metrics
 import org.constellation.{ConstellationContextShift, DAO}
@@ -76,10 +76,12 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
       else Sync[F].unit
     }
 
-  def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): F[Unit] =
-    withLock("updateTips", updateUnsafe(checkpointBlock))
+  def update(checkpointBlock: CheckpointBlock, height: Height, isGenesis: Boolean = false)(implicit dao: DAO): F[Unit] =
+    withLock("updateTips", updateUnsafe(checkpointBlock, height: Height, isGenesis))
 
-  def updateUnsafe(checkpointBlock: CheckpointBlock)(implicit dao: DAO): F[Unit] = {
+  def updateUnsafe(checkpointBlock: CheckpointBlock, height: Height, isGenesis: Boolean = false)(
+    implicit dao: DAO
+  ): F[Unit] = {
     val tipUpdates = checkpointBlock.parentSOEBaseHashes.distinct.toList.traverse { h =>
       for {
         tipData <- getUnsafe(h)
@@ -97,7 +99,13 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
     }
 
     tipUpdates
-      .flatMap(_ => putUnsafe(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics))
+      .flatMap(_ => getMinTipHeight(None))
+      .flatMap(
+        min =>
+          if (isGenesis || min < height.min)
+            putUnsafe(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics)
+          else Logger[F].info(s"Block height: ${height.min} below min tip: $min update skipped")
+      )
       .recoverWith {
         case err: TipThresholdException =>
           dao.metrics
