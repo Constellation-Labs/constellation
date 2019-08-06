@@ -8,6 +8,7 @@ import cats.implicits._
 import constellation._
 import org.constellation.DAO
 import org.constellation.primitives.Schema.{Address, Id, TransactionEdgeData}
+import org.constellation.storage.ConsensusObject
 import org.constellation.util.HashSignature
 
 case class TransactionCacheData(
@@ -19,7 +20,7 @@ case class TransactionCacheData(
   knownPeers: Set[Id] = Set(),
   rxTime: Long = System.currentTimeMillis(),
   path: Set[Id] = Set()
-) {
+) extends ConsensusObject {
 
   def plus(previous: TransactionCacheData): TransactionCacheData =
     this.copy(
@@ -31,6 +32,8 @@ case class TransactionCacheData(
       signatureForks = (signatureForks ++ previous.signatureForks) - transaction,
       rxTime = previous.rxTime
     )
+
+  def hash = transaction.hash
 }
 
 object TransactionCacheData {

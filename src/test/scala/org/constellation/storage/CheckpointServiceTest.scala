@@ -200,8 +200,8 @@ class CheckpointServiceTest
     val tx2 = mock[Transaction]
     tx2.hash shouldReturn "tx2"
 
-    (dao.transactionService.put(TransactionCacheData(tx1), TransactionStatus.Accepted) *>
-      dao.transactionService.put(TransactionCacheData(tx2), TransactionStatus.Accepted))
+    (dao.transactionService.put(TransactionCacheData(tx1), ConsensusStatus.Accepted) *>
+      dao.transactionService.put(TransactionCacheData(tx2), ConsensusStatus.Accepted))
       .unsafeRunSync()
 
     Seq(tx1, tx2)
@@ -270,8 +270,11 @@ class CheckpointServiceTest
 
     val cts = mock[ConcurrentTipService[IO]]
 
+    val es = new ExperienceService[IO](dao)
+    dao.experienceService shouldReturn es
+
     val rl = mock[RateLimiting[IO]]
-    val cs = new CheckpointService[IO](dao, ts, ms, ns, cts, rl)
+    val cs = new CheckpointService[IO](dao, ts, ms, ns, es, cts, rl)
     dao.checkpointService shouldReturn cs
 
     val keyPair = KeyUtils.makeKeyPair()

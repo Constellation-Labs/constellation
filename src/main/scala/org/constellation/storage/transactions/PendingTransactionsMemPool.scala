@@ -1,16 +1,15 @@
 package org.constellation.storage.transactions
 
 import cats.effect.{Concurrent, Sync}
-import cats.effect.concurrent.Ref
 import cats.implicits._
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.primitives.concurrency.SingleRef
-import org.constellation.storage.algebra.LookupAlgebra
+import org.constellation.storage.PendingMemPool
 
-class PendingTransactionsMemPool[F[_]: Concurrent]() extends LookupAlgebra[F, String, TransactionCacheData] {
+class PendingTransactionsMemPool[F[_]: Concurrent]() extends PendingMemPool[F, TransactionCacheData] {
 
   private val txRef: SingleRef[F, Map[String, TransactionCacheData]] =
-    SingleRef[F, Map[String, TransactionCacheData]](Map())
+    SingleRef[F, Map[String, TransactionCacheData]](Map.empty)
 
   def put(key: String, value: TransactionCacheData): F[TransactionCacheData] =
     txRef.modify(txs => (txs + (key -> value), value))
@@ -21,10 +20,10 @@ class PendingTransactionsMemPool[F[_]: Concurrent]() extends LookupAlgebra[F, St
     }
 
   def lookup(key: String): F[Option[TransactionCacheData]] =
-    txRef.get.map(_.find(_._2.transaction.hash == key).map(_._2))
+    txRef.get.map(_.find(_._2.hash == key).map(_._2))
 
   def contains(key: String): F[Boolean] =
-    txRef.get.map(_.exists(_._2.transaction.hash == key))
+    txRef.get.map(_.exists(_._2.hash == key))
 
   // TODO: Rethink - use queue
   def pull(minCount: Int): F[Option[List[TransactionCacheData]]] =

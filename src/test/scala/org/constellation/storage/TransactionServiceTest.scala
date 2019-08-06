@@ -5,8 +5,11 @@ import java.util.concurrent.Executors
 import cats.effect.{ContextShift, IO}
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
+import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, Fixtures}
 import org.constellation.primitives.{Transaction, TransactionCacheData}
+import org.constellation.storage.ConsensusStatus.ConsensusStatus
 import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.storage.transactions.TransactionStatus.TransactionStatus
 import org.constellation.util.Metrics
@@ -25,14 +28,14 @@ class TransactionServiceTest
     with ArgumentMatchersSugar
     with BeforeAndAfter {
   implicit val contextShift: ContextShift[IO] = ConstellationContextShift.global
+  implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
 
   var dao: DAO = _
   var txService: TransactionService[IO] = _
 
   val hash = "ipsum"
   val tx = mock[TransactionCacheData]
-  tx.transaction shouldReturn mock[Transaction]
-  tx.transaction.hash shouldReturn hash
+  tx.hash shouldReturn hash
 
   before {
     dao = mockDAO
@@ -43,49 +46,49 @@ class TransactionServiceTest
     "should add a transaction as pending by default" in {
       txService.put(tx).unsafeRunSync
 
-      txService.pending.lookup(tx.transaction.hash).unsafeRunSync shouldBe Some(tx)
+      txService.pending.lookup(tx.hash).unsafeRunSync shouldBe Some(tx)
     }
 
     "should allow to add a pending transaction" in {
-      txService.put(tx, TransactionStatus.Pending).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Pending).unsafeRunSync
 
-      txService.pending.lookup(tx.transaction.hash).unsafeRunSync shouldBe Some(tx)
+      txService.pending.lookup(tx.hash).unsafeRunSync shouldBe Some(tx)
     }
 
     "should allow to add an arbitrary transaction" in {
-      txService.put(tx, TransactionStatus.Arbitrary).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Arbitrary).unsafeRunSync
 
-      txService.arbitrary.lookup(tx.transaction.hash).unsafeRunSync shouldBe Some(tx)
+      txService.arbitrary.lookup(tx.hash).unsafeRunSync shouldBe Some(tx)
     }
 
     "should allow to add an accepted transaction" in {
-      txService.put(tx, TransactionStatus.Accepted).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Accepted).unsafeRunSync
 
-      txService.accepted.lookup(tx.transaction.hash).unsafeRunSync shouldBe Some(tx)
+      txService.accepted.lookup(tx.hash).unsafeRunSync shouldBe Some(tx)
     }
 
     "should allow to add an unknown transaction" in {
-      txService.put(tx, TransactionStatus.Unknown).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Unknown).unsafeRunSync
 
-      txService.unknown.lookup(tx.transaction.hash).unsafeRunSync shouldBe Some(tx)
+      txService.unknown.lookup(tx.hash).unsafeRunSync shouldBe Some(tx)
     }
 
     "should not allow to add an inConsensus transaction" in {
-      an[Exception] should be thrownBy txService.put(tx, TransactionStatus.InConsensus).unsafeRunSync
+      an[Exception] should be thrownBy txService.put(tx, ConsensusStatus.InConsensus).unsafeRunSync
     }
 
     "should raise an exception if transaction status is unknown" in {
-      an[Exception] should be thrownBy txService.put(tx, "foo".asInstanceOf[TransactionStatus]).unsafeRunSync
+      an[Exception] should be thrownBy txService.put(tx, "foo".asInstanceOf[ConsensusStatus]).unsafeRunSync
     }
   }
 
   "update" - {
     val tx2 = mock[TransactionCacheData]
     tx2.transaction shouldReturn mock[Transaction]
-    tx2.transaction.hash shouldReturn hash
+    tx2.hash shouldReturn hash
 
     "should update a pending transaction" in {
-      txService.put(tx, TransactionStatus.Pending).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Pending).unsafeRunSync
 
       txService.update(hash, _ => tx2).unsafeRunSync
 
@@ -93,7 +96,7 @@ class TransactionServiceTest
     }
 
     "should update an arbitrary transaction" in {
-      txService.put(tx, TransactionStatus.Arbitrary).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Arbitrary).unsafeRunSync
 
       txService.update(hash, _ => tx2).unsafeRunSync
 
@@ -109,7 +112,7 @@ class TransactionServiceTest
     }
 
     "should update an accepted transaction" in {
-      txService.put(tx, TransactionStatus.Accepted).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Accepted).unsafeRunSync
 
       txService.update(hash, _ => tx2).unsafeRunSync
 
@@ -117,7 +120,7 @@ class TransactionServiceTest
     }
 
     "should update an unknown transaction" in {
-      txService.put(tx, TransactionStatus.Unknown).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Unknown).unsafeRunSync
 
       txService.update(hash, _ => tx2).unsafeRunSync
 
@@ -127,13 +130,13 @@ class TransactionServiceTest
 
   "lookup" - {
     "should lookup for a pending transaction" in {
-      txService.put(tx, TransactionStatus.Pending).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Pending).unsafeRunSync
 
       txService.lookup(hash).unsafeRunSync shouldBe Some(tx)
     }
 
     "should lookup for an arbitrary transaction" in {
-      txService.put(tx, TransactionStatus.Arbitrary).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Arbitrary).unsafeRunSync
 
       txService.lookup(hash).unsafeRunSync shouldBe Some(tx)
     }
@@ -145,13 +148,13 @@ class TransactionServiceTest
     }
 
     "should lookup for an accepted transaction" in {
-      txService.put(tx, TransactionStatus.Accepted).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Accepted).unsafeRunSync
 
       txService.lookup(hash).unsafeRunSync shouldBe Some(tx)
     }
 
     "should lookup for an unknown transaction" in {
-      txService.put(tx, TransactionStatus.Unknown).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Unknown).unsafeRunSync
 
       txService.lookup(hash).unsafeRunSync shouldBe Some(tx)
     }
@@ -161,44 +164,44 @@ class TransactionServiceTest
     }
 
     "should allow to lookup for pending transaction only" in {
-      txService.lookup(hash, TransactionStatus.Pending).unsafeRunSync shouldBe None
-      txService.put(tx, TransactionStatus.Pending).unsafeRunSync
-      txService.lookup(hash, TransactionStatus.Pending).unsafeRunSync shouldBe Some(tx)
+      txService.lookup(hash, ConsensusStatus.Pending).unsafeRunSync shouldBe None
+      txService.put(tx, ConsensusStatus.Pending).unsafeRunSync
+      txService.lookup(hash, ConsensusStatus.Pending).unsafeRunSync shouldBe Some(tx)
     }
 
     "should allow to lookup for arbitrary transaction only" in {
-      txService.lookup(hash, TransactionStatus.Arbitrary).unsafeRunSync shouldBe None
-      txService.put(tx, TransactionStatus.Arbitrary).unsafeRunSync
-      txService.lookup(hash, TransactionStatus.Arbitrary).unsafeRunSync shouldBe Some(tx)
+      txService.lookup(hash, ConsensusStatus.Arbitrary).unsafeRunSync shouldBe None
+      txService.put(tx, ConsensusStatus.Arbitrary).unsafeRunSync
+      txService.lookup(hash, ConsensusStatus.Arbitrary).unsafeRunSync shouldBe Some(tx)
     }
 
     "should allow to lookup for inConsensus transaction only" in {
-      txService.lookup(hash, TransactionStatus.InConsensus).unsafeRunSync shouldBe None
+      txService.lookup(hash, ConsensusStatus.InConsensus).unsafeRunSync shouldBe None
       txService.inConsensus.put(hash, tx).unsafeRunSync
-      txService.lookup(hash, TransactionStatus.InConsensus).unsafeRunSync shouldBe Some(tx)
+      txService.lookup(hash, ConsensusStatus.InConsensus).unsafeRunSync shouldBe Some(tx)
     }
 
     "should allow to lookup for accepted transaction only" in {
-      txService.lookup(hash, TransactionStatus.Accepted).unsafeRunSync shouldBe None
-      txService.put(tx, TransactionStatus.Accepted).unsafeRunSync
-      txService.lookup(hash, TransactionStatus.Accepted).unsafeRunSync shouldBe Some(tx)
+      txService.lookup(hash, ConsensusStatus.Accepted).unsafeRunSync shouldBe None
+      txService.put(tx, ConsensusStatus.Accepted).unsafeRunSync
+      txService.lookup(hash, ConsensusStatus.Accepted).unsafeRunSync shouldBe Some(tx)
     }
 
     "should allow to lookup for unknown transaction only" in {
-      txService.lookup(hash, TransactionStatus.Unknown).unsafeRunSync shouldBe None
-      txService.put(tx, TransactionStatus.Unknown).unsafeRunSync
-      txService.lookup(hash, TransactionStatus.Unknown).unsafeRunSync shouldBe Some(tx)
+      txService.lookup(hash, ConsensusStatus.Unknown).unsafeRunSync shouldBe None
+      txService.put(tx, ConsensusStatus.Unknown).unsafeRunSync
+      txService.lookup(hash, ConsensusStatus.Unknown).unsafeRunSync shouldBe Some(tx)
     }
 
     "should raise an exception if transaction status is unknown" in {
-      an[Exception] should be thrownBy txService.lookup(hash, "foo".asInstanceOf[TransactionStatus]).unsafeRunSync
+      an[Exception] should be thrownBy txService.lookup(hash, "foo".asInstanceOf[ConsensusStatus]).unsafeRunSync
     }
 
   }
 
   "getArbitrary" - {
     "should return all arbitrary transactions" in {
-      txService.put(tx, TransactionStatus.Arbitrary).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Arbitrary).unsafeRunSync
 
       txService.getArbitrary.unsafeRunSync shouldBe Map(hash -> tx)
     }
@@ -206,13 +209,13 @@ class TransactionServiceTest
 
   "contains" - {
     "should return true if transaction exists as pending transaction" in {
-      txService.put(tx, TransactionStatus.Pending).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Pending).unsafeRunSync
 
       txService.contains(hash).unsafeRunSync shouldBe true
     }
 
     "should return true if transaction exists as arbitrary transaction" in {
-      txService.put(tx, TransactionStatus.Arbitrary).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Arbitrary).unsafeRunSync
 
       txService.contains(hash).unsafeRunSync shouldBe true
     }
@@ -224,13 +227,13 @@ class TransactionServiceTest
     }
 
     "should return true if transaction exists as accepted transaction" in {
-      txService.put(tx, TransactionStatus.Accepted).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Accepted).unsafeRunSync
 
       txService.contains(hash).unsafeRunSync shouldBe true
     }
 
     "should return true if transaction exists as unknown transaction" in {
-      txService.put(tx, TransactionStatus.Unknown).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Unknown).unsafeRunSync
 
       txService.contains(hash).unsafeRunSync shouldBe true
     }
@@ -242,7 +245,7 @@ class TransactionServiceTest
 
   "isAccepted" - {
     "should return true if transaction is accepted" in {
-      txService.put(tx, TransactionStatus.Accepted).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Accepted).unsafeRunSync
 
       txService.isAccepted(hash).unsafeRunSync shouldBe true
     }
@@ -256,7 +259,7 @@ class TransactionServiceTest
     "should put transaction to accepted storage" in {
       txService.accept(tx).unsafeRunSync
 
-      txService.lookup(hash, TransactionStatus.Accepted).unsafeRunSync shouldBe Some(tx)
+      txService.lookup(hash, ConsensusStatus.Accepted).unsafeRunSync shouldBe Some(tx)
     }
 
     "should remove transaction from inConsensus storage" in {
@@ -264,23 +267,23 @@ class TransactionServiceTest
 
       txService.accept(tx).unsafeRunSync
 
-      txService.lookup(hash, TransactionStatus.InConsensus).unsafeRunSync shouldBe None
+      txService.lookup(hash, ConsensusStatus.InConsensus).unsafeRunSync shouldBe None
     }
 
     "should remove transaction from unknown storage" in {
-      txService.put(tx, TransactionStatus.Unknown).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Unknown).unsafeRunSync
 
       txService.accept(tx).unsafeRunSync
 
-      txService.lookup(hash, TransactionStatus.Unknown).unsafeRunSync shouldBe None
+      txService.lookup(hash, ConsensusStatus.Unknown).unsafeRunSync shouldBe None
     }
 
     "should remove transaction from arbitrary storage" in {
-      txService.put(tx, TransactionStatus.Arbitrary).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Arbitrary).unsafeRunSync
 
       txService.accept(tx).unsafeRunSync
 
-      txService.lookup(hash, TransactionStatus.Arbitrary).unsafeRunSync shouldBe None
+      txService.lookup(hash, ConsensusStatus.Arbitrary).unsafeRunSync shouldBe None
     }
   }
 
@@ -295,29 +298,29 @@ class TransactionServiceTest
     }
 
     "should remove accepted transactions" in {
-      txService.put(tx, TransactionStatus.Accepted).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Accepted).unsafeRunSync
 
       txService.applySnapshot(List(tx), "aaa").unsafeRunSync
 
-      txService.lookup(hash, TransactionStatus.Accepted).unsafeRunSync shouldBe None
+      txService.lookup(hash, ConsensusStatus.Accepted).unsafeRunSync shouldBe None
     }
   }
 
   "returnTransactionsToPending" - {
     "should move transactions from inConsensus to pending storage" in {
       txService.inConsensus.put(hash, tx).unsafeRunSync
-      txService.returnTransactionsToPending(List(hash)).unsafeRunSync
+      txService.returnToPending(List(hash)).unsafeRunSync
 
-      txService.lookup(hash, TransactionStatus.InConsensus).unsafeRunSync shouldBe None
-      txService.lookup(hash, TransactionStatus.Pending).unsafeRunSync shouldBe Some(tx)
+      txService.lookup(hash, ConsensusStatus.InConsensus).unsafeRunSync shouldBe None
+      txService.lookup(hash, ConsensusStatus.Pending).unsafeRunSync shouldBe Some(tx)
     }
 
     "should not move transactions from other than inConsensus storage" in {
-      txService.put(tx, TransactionStatus.Unknown).unsafeRunSync
-      txService.returnTransactionsToPending(List(hash)).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Unknown).unsafeRunSync
+      txService.returnToPending(List(hash)).unsafeRunSync
 
-      txService.lookup(hash, TransactionStatus.Unknown).unsafeRunSync shouldBe Some(tx)
-      txService.lookup(hash, TransactionStatus.Pending).unsafeRunSync shouldBe None
+      txService.lookup(hash, ConsensusStatus.Unknown).unsafeRunSync shouldBe Some(tx)
+      txService.lookup(hash, ConsensusStatus.Pending).unsafeRunSync shouldBe None
     }
   }
 
@@ -360,25 +363,25 @@ class TransactionServiceTest
 
   "pullForConsensus" - {
     "should remove a transaction from pending storage" in {
-      txService.put(tx, TransactionStatus.Pending).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Pending).unsafeRunSync
 
       txService.pullForConsensus(1).unsafeRunSync
 
-      txService.lookup(hash, TransactionStatus.Pending).unsafeRunSync shouldBe None
+      txService.lookup(hash, ConsensusStatus.Pending).unsafeRunSync shouldBe None
     }
 
     "should add a transaction to inConsensus storage" in {
-      txService.put(tx, TransactionStatus.Pending).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Pending).unsafeRunSync
 
       txService.pullForConsensus(1).unsafeRunSync
 
-      txService.lookup(hash, TransactionStatus.InConsensus).unsafeRunSync shouldBe Some(tx)
+      txService.lookup(hash, ConsensusStatus.InConsensus).unsafeRunSync shouldBe Some(tx)
     }
   }
 
   "getLast20Accepted" - {
     "should return last 20 accepted transactions" in {
-      txService.put(tx, TransactionStatus.Accepted).unsafeRunSync
+      txService.put(tx, ConsensusStatus.Accepted).unsafeRunSync
 
       def mockTx(n: Int): TransactionCacheData = {
         val tcd = mock[TransactionCacheData]
@@ -391,7 +394,7 @@ class TransactionServiceTest
 
       val txs = (1 to 30).toList.map(mockTx)
 
-      txs.traverse(tx => txService.put(tx, TransactionStatus.Accepted)).unsafeRunSync
+      txs.traverse(tx => txService.put(tx, ConsensusStatus.Accepted)).unsafeRunSync
 
       txService.getLast20Accepted.unsafeRunSync shouldBe txs.reverse.take(20).toList
     }

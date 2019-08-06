@@ -40,14 +40,16 @@ case class CheckpointBlockMetadata(
   transactionsMerkleRoot: Option[String],
   checkpointEdge: CheckpointEdge,
   messagesMerkleRoot: Option[String],
-  notificationsMerkleRoot: Option[String]
+  notificationsMerkleRoot: Option[String],
+  experiencesMerkleRoot: Option[String]
 ) extends CheckpointEdgeLike(checkpointEdge)
 
 case class CheckpointBlock(
   transactions: Seq[Transaction],
   checkpoint: CheckpointEdge,
   messages: Seq[ChannelMessage] = Seq(),
-  notifications: Seq[PeerNotification] = Seq()
+  notifications: Seq[PeerNotification] = Seq(),
+  experiences: Seq[Experience] = Seq()
 ) {
 
   def storeSOE()(implicit dao: DAO): IO[SignedObservationEdgeCache] =

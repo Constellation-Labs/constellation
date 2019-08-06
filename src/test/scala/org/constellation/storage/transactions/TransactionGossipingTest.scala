@@ -3,9 +3,11 @@ package org.constellation.storage.transactions
 import cats.effect.{ContextShift, IO}
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
+import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.{Transaction, TransactionCacheData}
-import org.constellation.storage.TransactionService
+import org.constellation.storage.{ConsensusStatus, TransactionService}
 import org.constellation.{ConstellationContextShift, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -22,6 +24,7 @@ class TransactionGossipingTest
     with ArgumentMatchersSugar {
 
   implicit val cs: ContextShift[IO] = ConstellationContextShift.global
+  implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
 
   test("it should randomly select the diff of all peer IDs and peers in the tx path") {
     val dao = mockDAO
@@ -48,7 +51,7 @@ class TransactionGossipingTest
 
     gossiping.observe(tx).unsafeRunSync
 
-    txService.lookup(tx.transaction.hash, TransactionStatus.Unknown).map(_.map(_.path)).unsafeRunSync shouldBe Some(
+    txService.lookup(tx.transaction.hash, ConsensusStatus.Unknown).map(_.map(_.path)).unsafeRunSync shouldBe Some(
       Set(Fixtures.id2, Fixtures.id3, dao.id)
     )
   }
