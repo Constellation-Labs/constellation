@@ -11,9 +11,10 @@ import io.chrisdavenport.log4cats.Logger
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{AddressCacheData, Id, NodeState, NodeType}
+import org.constellation.storage.ConsensusStatus.ConsensusStatus
 import org.constellation.storage.transactions.TransactionStatus.TransactionStatus
 import org.constellation.storage.transactions.{TransactionGossiping, TransactionStatus}
-import org.constellation.storage.{AddressService, TransactionService}
+import org.constellation.storage.{AddressService, ConsensusStatus, TransactionService}
 import org.constellation.util.Distance
 import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO}
 
@@ -43,7 +44,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
       addressData <- EitherT.liftF(getAddressData)
       _ <- EitherT.fromEither[F](validateNodeHasBalance(addressData))
 
-      pendingTransactionCount <- EitherT.liftF(getCountTransactionsWithStatus(TransactionStatus.Pending))
+      pendingTransactionCount <- EitherT.liftF(getCountTransactionsWithStatus(ConsensusStatus.Pending))
       _ <- EitherT.fromEither[F](validatePendingNumberOfTransactionIsLessThanMemPool(pendingTransactionCount))
 
       readyPeers <- EitherT.liftF(getReadyPeers)
@@ -211,7 +212,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
   private def peersNotOlderThan(timeInMillis: Long)(m: (Id, PeerData)): Boolean =
     m._2.peerMetadata.timeAdded < timeInMillis
 
-  private def getCountTransactionsWithStatus(transactionStatus: TransactionStatus): F[Long] =
+  private def getCountTransactionsWithStatus(transactionStatus: ConsensusStatus): F[Long] =
     transactionService
       .count(transactionStatus)
       .flatTap(c => dao.metrics.updateMetricAsync("transactionPendingSize", c.toString))

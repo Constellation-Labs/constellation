@@ -107,6 +107,7 @@ trait EdgeDAO {
   var transactionService: TransactionService[IO] = _
   var transactionGossiping: TransactionGossiping[IO] = _
   var transactionGenerator: TransactionGenerator[IO] = _
+  var experienceService: ExperienceService[IO] = _
   var checkpointService: CheckpointService[IO] = _
   var snapshotService: SnapshotService[IO] = _
   var rateLimiting: RateLimiting[IO] = _

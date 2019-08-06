@@ -20,9 +20,11 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
 
       val tx1 = mock[TransactionCacheData]
       tx1.transaction shouldReturn tx
+      tx1.hash shouldReturn "lorem"
 
       val tx2 = mock[TransactionCacheData]
       tx2.transaction shouldReturn tx
+      tx2.hash shouldReturn "lorem"
 
       memPool.put("lorem", tx1).unsafeRunSync
 

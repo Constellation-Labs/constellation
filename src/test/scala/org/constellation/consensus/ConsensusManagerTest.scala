@@ -78,11 +78,11 @@ class ConsensusManagerTest
         .unsafeRunSync()
 
       consensus.getOwnTransactionsToReturn shouldReturnF Seq("someTx")
-      dao.transactionService.returnTransactionsToPending(*) shouldReturnF List.empty
+      dao.transactionService.returnToPending(*) shouldReturnF List.empty
 
       consensusManager.cleanUpLongRunningConsensus.unsafeRunSync()
 
-      dao.transactionService.returnTransactionsToPending(Seq("someTx")).wasCalled(twice)
+      dao.transactionService.returnToPending(Seq("someTx")).wasCalled(twice)
       consensusManager.consensuses.get.unsafeRunSync() shouldBe Map(active)
       consensusManager.ownConsensus.get.unsafeRunSync() shouldBe None
     }

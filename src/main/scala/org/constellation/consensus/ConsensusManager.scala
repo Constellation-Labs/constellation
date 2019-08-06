@@ -225,7 +225,7 @@ class ConsensusManager[F[_]: Concurrent](
     for {
       _ <- consensuses.update(curr => curr - cmd.roundId)
       _ <- ownConsensus.update(curr => if (curr.isDefined && curr.get.roundId == cmd.roundId) None else curr)
-      _ <- transactionService.returnTransactionsToPending(cmd.transactionsToReturn)
+      _ <- transactionService.returnToPending(cmd.transactionsToReturn)
       _ <- updateNotifications(cmd.maybeCB.map(_.notifications.toList))
       _ = releaseMessages(cmd.maybeCB)
       _ <- logger.debug(

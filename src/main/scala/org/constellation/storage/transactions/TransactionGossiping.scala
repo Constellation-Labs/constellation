@@ -5,7 +5,7 @@ import cats.implicits._
 import org.constellation.DAO
 import org.constellation.primitives.Schema.Id
 import org.constellation.primitives.TransactionCacheData
-import org.constellation.storage.TransactionService
+import org.constellation.storage.{ConsensusStatus, TransactionService}
 
 import scala.util.Random
 
@@ -33,7 +33,7 @@ class TransactionGossiping[F[_]: Concurrent](transactionService: TransactionServ
     } yield updated
 
   private def setTxWithPath(tx: TransactionCacheData): F[TransactionCacheData] =
-    transactionService.put(tx.copy(path = tx.path + dao.id), TransactionStatus.Unknown)
+    transactionService.put(tx.copy(path = tx.path + dao.id), ConsensusStatus.Unknown)
 
   private def updateTxPath(tx: TransactionCacheData): F[TransactionCacheData] =
     transactionService.update(tx.transaction.hash, t => t.copy(path = t.path ++ tx.path)) *>

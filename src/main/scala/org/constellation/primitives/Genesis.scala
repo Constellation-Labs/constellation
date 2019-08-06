@@ -8,6 +8,7 @@ import constellation._
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
+import org.constellation.storage.ConsensusStatus
 import org.constellation.storage.transactions.TransactionStatus
 
 object Genesis {
@@ -144,7 +145,7 @@ object Genesis {
       cb =>
         cb.transactions
           .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
-          .map(tcd => dao.transactionService.put(tcd, TransactionStatus.Accepted))
+          .map(tcd => dao.transactionService.put(tcd, ConsensusStatus.Accepted))
     }.toList.sequence.void
       .unsafeRunSync()
 
