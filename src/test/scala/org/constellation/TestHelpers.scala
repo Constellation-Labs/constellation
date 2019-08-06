@@ -53,7 +53,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
 
   def randomHash: String = Hashing.sha256.hashBytes(UUID.randomUUID().toString.getBytes).toString
 
-  def preparMockedDao(facilitators: Map[Schema.Id, PeerData] = prepareFacilitators(1)): DAO = {
+  def prepareMockedDAO(facilitators: Map[Schema.Id, PeerData] = prepareFacilitators(1)): DAO = {
     import constellation._
 
     implicit val kp: KeyPair = makeKeyPair()
@@ -91,6 +91,9 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
 
     val cs = mock[CheckpointService[IO]]
     dao.checkpointService shouldReturn cs
+
+    val es = mock[ExperienceService[IO]]
+    dao.experienceService shouldReturn es
 
     val keyPair = KeyUtils.makeKeyPair()
     dao.keyPair shouldReturn keyPair
