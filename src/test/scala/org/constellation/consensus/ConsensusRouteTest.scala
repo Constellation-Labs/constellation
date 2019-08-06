@@ -10,7 +10,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.PeerMetadata
 import org.constellation.consensus.Consensus.FacilitatorId
 import org.constellation.primitives.Schema.{Id, SignedObservationEdge}
-import org.constellation.primitives.{ChannelMessage, TipSoe, Transaction}
+import org.constellation.primitives.{ChannelMessage, Experience, TipSoe, Transaction}
 import org.constellation.storage.SnapshotService
 import org.json4s.native
 import org.json4s.native.Serialization
@@ -46,7 +46,8 @@ class ConsensusRouteTest
       FacilitatorId(Id("foo")),
       List.empty[Transaction],
       TipSoe(Seq.empty[SignedObservationEdge], 2L.some),
-      Seq.empty[ChannelMessage]
+      Seq.empty[ChannelMessage],
+      List.empty[Experience]
     )
     snapshotService.getLastSnapshotHeight shouldReturnF 2
 

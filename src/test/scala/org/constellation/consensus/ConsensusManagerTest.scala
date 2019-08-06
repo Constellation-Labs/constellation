@@ -35,7 +35,7 @@ class ConsensusManagerTest
   var consensusManager: ConsensusManager[IO] = _
   val consensus: Consensus[IO] = mock[Consensus[IO]]
 
-  val dao: DAO = TestHelpers.preparMockedDao()
+  val dao: DAO = TestHelpers.prepareMockedDAO()
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
@@ -45,6 +45,7 @@ class ConsensusManagerTest
       dao.concurrentTipService,
       dao.checkpointService,
       dao.messageService,
+      dao.experienceService,
       dao.consensusRemoteSender,
       dao.cluster,
       dao,
@@ -78,11 +79,14 @@ class ConsensusManagerTest
         .unsafeRunSync()
 
       consensus.getOwnTransactionsToReturn shouldReturnF Seq("someTx")
+      consensus.getOwnExperiencesToReturn shouldReturnF Seq("someEx")
       dao.transactionService.returnToPending(*) shouldReturnF List.empty
+      dao.experienceService.returnToPending(*) shouldReturnF List.empty
 
       consensusManager.cleanUpLongRunningConsensus.unsafeRunSync()
 
       dao.transactionService.returnToPending(Seq("someTx")).wasCalled(twice)
+      dao.experienceService.returnToPending(Seq("someEx")).wasCalled(twice)
       consensusManager.consensuses.get.unsafeRunSync() shouldBe Map(active)
       consensusManager.ownConsensus.get.unsafeRunSync() shouldBe None
     }

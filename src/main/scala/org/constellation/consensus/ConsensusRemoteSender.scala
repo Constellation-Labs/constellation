@@ -11,7 +11,7 @@ import org.constellation.consensus.ConsensusManager.{
   BroadcastUnionBlockProposal
 }
 import org.constellation.p2p.PeerData
-import org.constellation.primitives.{ChannelMessage, TipSoe, Transaction}
+import org.constellation.primitives.{ChannelMessage, Experience, TipSoe, Transaction}
 
 class ConsensusRemoteSender[F[_]: Concurrent]() {
 
@@ -27,7 +27,8 @@ class ConsensusRemoteSender[F[_]: Concurrent]() {
         roundData.facilitatorId,
         roundData.transactions,
         roundData.tipsSOE,
-        roundData.messages
+        roundData.messages,
+        roundData.experiences
       ),
       "NotifyFacilitators"
     )
@@ -76,5 +77,6 @@ case class RoundDataRemote(
   facilitatorId: FacilitatorId,
   transactions: List[Transaction],
   tipsSOE: TipSoe,
-  messages: Seq[ChannelMessage]
+  messages: Seq[ChannelMessage],
+  experiences: List[Experience]
 )

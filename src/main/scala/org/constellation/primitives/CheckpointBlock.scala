@@ -238,7 +238,8 @@ object CheckpointBlock {
     transactions: Seq[Transaction],
     tips: Seq[TypedEdgeHash],
     messages: Seq[ChannelMessage] = Seq.empty,
-    peers: Seq[PeerNotification] = Seq.empty
+    peers: Seq[PeerNotification] = Seq.empty,
+    experiences: Seq[Experience] = Seq.empty
   )(implicit keyPair: KeyPair): CheckpointBlock = {
 
     val checkpointEdgeData =
@@ -257,7 +258,7 @@ object CheckpointBlock {
       Edge(observationEdge, soe, checkpointEdgeData)
     )
 
-    CheckpointBlock(transactions, checkpointEdge, messages, peers)
+    CheckpointBlock(transactions, checkpointEdge, messages, peers, experiences)
   }
 
 }

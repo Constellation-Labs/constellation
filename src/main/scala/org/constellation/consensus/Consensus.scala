@@ -32,6 +32,7 @@ class Consensus[F[_]: Concurrent](
   transactionService: TransactionService[F],
   checkpointService: CheckpointService[F],
   messageService: MessageService[F],
+  experienceService: ExperienceService[F],
   remoteSender: ConsensusRemoteSender[F],
   consensusManager: ConsensusManager[F],
   dao: DAO,
@@ -58,6 +59,7 @@ class Consensus[F[_]: Concurrent](
         .map(_.map(_.transaction))
       messages <- Sync[F].delay(dao.threadSafeMessageMemPool.pull())
       notifications <- LiftIO[F].liftIO(dao.peerInfo.map(_.values.flatMap(_.notification).toSeq))
+      experiences <- experienceService.pullForConsensus(0)
       proposal = LightTransactionsProposal(
         roundData.roundId,
         FacilitatorId(dao.id),
@@ -68,7 +70,8 @@ class Consensus[F[_]: Concurrent](
           .getOrElse(Seq()) ++ arbitraryMessages
           .filter(_._2 == 0)
           .map(_._1.signedMessageData.hash),
-        notifications
+        notifications,
+        experiences.map(_.hash)
       )
       _ <- addTransactionProposal(proposal)
       _ <- remoteSender.broadcastLightTransactionProposal(
@@ -204,6 +207,7 @@ class Consensus[F[_]: Concurrent](
       _ <- logger.debug(
         s"[${dao.id.short}] accepting majority checkpoint block ${checkpointBlock.baseHash}  " +
           s" with txs ${checkpointBlock.transactions.map(_.hash)} " +
+          s" with exs ${checkpointBlock.experiences.map(_.hash)} " +
           s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height}"
       )
       acceptedBlock <- checkpointService
@@ -231,14 +235,19 @@ class Consensus[F[_]: Concurrent](
         }
       _ <- broadcastSignedBlockToNonFacilitators(FinishedCheckpoint(cache, proposals.keySet.map(_.id)))
       ownTransactions <- getOwnTransactionsToReturn
+      ownExperiences <- getOwnExperiencesToReturn
       transactionsToReturn = ownTransactions
         .diff(acceptedBlock._1.map(_.transactions.map(_.hash)).getOrElse(Seq.empty))
+        .filterNot(acceptedBlock._2.contains)
+      experiencesToReturn = ownExperiences
+        .diff(acceptedBlock._1.map(_.experiences.map(_.hash)).getOrElse(Seq.empty))
         .filterNot(acceptedBlock._2.contains)
       _ <- consensusManager.stopBlockCreationRound(
         StopBlockCreationRound(
           roundData.roundId,
           acceptedBlock._1,
-          transactionsToReturn
+          transactionsToReturn,
+          experiencesToReturn
         )
       )
       _ <- logger.debug(
@@ -343,6 +352,21 @@ class Consensus[F[_]: Concurrent](
         .toSet
         .union(roundData.peers.flatMap(_.notification))
         .toSeq
+      experiences <- proposals
+        .flatMap(_._2.exHashes)
+        .toList
+        .traverse(e => experienceService.lookup(e).map((e, _)))
+      resolvedExs <- experiences
+        .filter(_._2.isEmpty)
+        .traverse { ex =>
+          LiftIO[F].liftIO(
+            dataResolver.resolveExperience(
+              ex._1,
+              readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList,
+              None
+            )
+          )
+        }
       proposal = UnionBlockProposal(
         roundData.roundId,
         FacilitatorId(dao.id),
@@ -351,7 +375,8 @@ class Consensus[F[_]: Concurrent](
           roundData.tipsSOE.soe
             .map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash, Some(soe.baseHash))),
           resolvedMsg.union(msgs.flatMap(_._2.map(_.channelMessage))).union(roundData.messages).distinct,
-          notifications
+          notifications,
+          experiences.flatMap(_._2) ++ resolvedExs
         )(dao.keyPair)
       )
       _ <- remoteSender.broadcastBlockUnion(
@@ -380,12 +405,20 @@ class Consensus[F[_]: Concurrent](
         stage =>
           if (forbiddenStages.contains(stage))
             getOwnTransactionsToReturn
-              .flatMap(txs => consensusManager.handleRoundError(PreviousStage(roundData.roundId, stage, txs)))
+              .flatMap(
+                txs =>
+                  getOwnExperiencesToReturn.flatMap(
+                    exs => consensusManager.handleRoundError(PreviousStage(roundData.roundId, stage, txs, exs))
+                  )
+              )
           else Sync[F].unit
       )
 
   private[consensus] def getOwnTransactionsToReturn: F[Seq[String]] =
     transactionProposals.get.map(_.get(FacilitatorId(dao.id)).map(_.txHashes).getOrElse(Seq.empty))
+
+  private[consensus] def getOwnExperiencesToReturn: F[Seq[String]] =
+    transactionProposals.get.map(_.get(FacilitatorId(dao.id)).map(_.exHashes).getOrElse(Seq.empty))
 
   private def roundStartedByMe: Boolean = roundData.facilitatorId.id == dao.id
 
@@ -410,14 +443,21 @@ class Consensus[F[_]: Concurrent](
     val proposalPercentage: Float = proposals.size * 100 / peerSize
     (proposalPercentage, proposals.size) match {
       case (0, _) =>
-        getOwnTransactionsToReturn.map(txs => Left(EmptyProposals(roundData.roundId, stage, txs)))
+        getOwnTransactionsToReturn.flatMap(
+          txs => getOwnExperiencesToReturn.map(exs => Left(EmptyProposals(roundData.roundId, stage, txs, exs)))
+        )
       case (_, size) if size == 1 =>
-        getOwnTransactionsToReturn.map(txs => Left(EmptyProposals(roundData.roundId, stage, txs)))
+        getOwnTransactionsToReturn.flatMap(
+          txs => getOwnExperiencesToReturn.map(exs => Left(EmptyProposals(roundData.roundId, stage, txs, exs)))
+        )
       case (p, _) if p < minimumPercentage =>
-        getOwnTransactionsToReturn.map(
+        getOwnTransactionsToReturn.flatMap(
           txs =>
-            Left(
-              NotEnoughProposals(roundData.roundId, proposals.size, peerSize, stage, txs)
+            getOwnExperiencesToReturn.map(
+              exs =>
+                Left(
+                  NotEnoughProposals(roundData.roundId, proposals.size, peerSize, stage, txs, exs)
+                )
             )
         )
       case _ => Sync[F].pure(Right(()))
@@ -433,6 +473,7 @@ object Consensus {
   abstract class ConsensusException(msg: String) extends Exception(msg) {
     def roundId: RoundId
     def transactionsToReturn: Seq[String]
+    def experiencesToReturn: Seq[String]
   }
 
   object ConsensusStage extends Enumeration {
@@ -465,7 +506,8 @@ object Consensus {
     facilitatorId: FacilitatorId,
     txHashes: Seq[String],
     messages: Seq[String] = Seq(),
-    notifications: Seq[PeerNotification] = Seq()
+    notifications: Seq[PeerNotification] = Seq(),
+    exHashes: Seq[String] = Seq()
   ) extends RoundCommand
 
   case class UnionBlockProposal(
@@ -481,27 +523,38 @@ object Consensus {
     facilitatorId: FacilitatorId,
     transactions: List[Transaction],
     tipsSOE: TipSoe,
-    messages: Seq[ChannelMessage]
+    messages: Seq[ChannelMessage],
+    experiences: List[Experience]
   )
 
   case class StopBlockCreationRound(
     roundId: RoundId,
     maybeCB: Option[CheckpointBlock],
-    transactionsToReturn: Seq[String]
+    transactionsToReturn: Seq[String],
+    experiencesToReturn: Seq[String]
   ) extends RoundCommand
 
-  case class EmptyProposals(roundId: RoundId, stage: String, transactionsToReturn: Seq[String])
-      extends ConsensusException(s"Proposals for stage: $stage and round: $roundId are empty.")
+  case class EmptyProposals(
+    roundId: RoundId,
+    stage: String,
+    transactionsToReturn: Seq[String],
+    experiencesToReturn: Seq[String]
+  ) extends ConsensusException(s"Proposals for stage: $stage and round: $roundId are empty.")
 
-  case class PreviousStage(roundId: RoundId, stage: ConsensusStage, transactionsToReturn: Seq[String])
-      extends ConsensusException(s"Received message from previous round stage. Current round stage is $stage")
+  case class PreviousStage(
+    roundId: RoundId,
+    stage: ConsensusStage,
+    transactionsToReturn: Seq[String],
+    experiencesToReturn: Seq[String]
+  ) extends ConsensusException(s"Received message from previous round stage. Current round stage is $stage")
 
   case class NotEnoughProposals(
     roundId: RoundId,
     proposals: Int,
     facilitators: Int,
     stage: String,
-    transactionsToReturn: Seq[String]
+    transactionsToReturn: Seq[String],
+    experiencesToReturn: Seq[String]
   ) extends ConsensusException(
         s"Proposals number: $proposals for stage: $stage and round: $roundId are below given percentage. Number of facilitators: $facilitators"
       )
