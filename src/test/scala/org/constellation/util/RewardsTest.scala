@@ -107,7 +107,7 @@ class RewardsTest extends FlatSpec {
       neighborhoodReputationMatrix,
       partitonChart)
     val totalDistributionSum = rewardsDistro.values.sum
-    println(totalDistributionSum - epochOneRewards)
+//    println(totalDistributionSum - epochOneRewards)
     assert(totalDistributionSum - epochOneRewards <= roundingError)
   }
 
@@ -145,7 +145,7 @@ class RewardsTest extends FlatSpec {
     assert(trustMap2.filterKeys(_ > 20).forall{ case (id, rank) =>
       val diff = trustMap(id) - rank
 //      println(s"diff: $diff >= trustRoundingError: ${diff >= trustRoundingError} - rank: $rank - trustMap: ${trustMap(id)}")
-      trustMap(id) - rank >= EigenTrust.trustRoundingError})
+      diff >= EigenTrust.trustRoundingError})
   }
 
   "Performance" should "accurately calculate diffs as Experiences" in {
