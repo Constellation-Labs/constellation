@@ -14,7 +14,7 @@ import scala.collection.JavaConverters._
 
 object EigenTrust {
 
-
+  val trustRoundingError = 0.001
 //  def main(args: Array[String]): Unit = {
 
 
