@@ -14,6 +14,7 @@ import scala.collection.JavaConverters._
   * See example usage here : https://github.com/djelenc/alpha-testbed/blob/83e669e69463872aa84017051392c885d4183d1d/src/test/java/atb/trustmodel/EigenTrustTMTest.java#L24
   */
 object EigenTrust {
+  val trustRoundingError = 0.001
 
   val nodesWithEdges: List[TrustNode] = DataGeneration.generateTestData()
 
@@ -40,6 +41,6 @@ object EigenTrust {
 
   val trustMap: Map[Integer, lang.Double] = eigenTrust.getTrust(0).asScala.toMap
 
-  trustMap.toSeq.sortBy(_._1).foreach { println }
+//  trustMap.toSeq.sortBy(_._1).foreach { println }
 
 }

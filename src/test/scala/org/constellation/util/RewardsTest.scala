@@ -47,7 +47,7 @@ class RewardsTest extends FlatSpec {
   val epochThreeRandom = epochTwo + r.nextInt(epochOne)
   val epochFourRandom = epochThree + r.nextInt(epochOne)
 
-  val trustRoundingError = 0.001
+
 
   /*
     Should come from reputation, partition management services
@@ -72,7 +72,7 @@ class RewardsTest extends FlatSpec {
     nodesWithEdges.foreach{ node: TrustNode =>
       node.edges.foreach{ edge =>
         val trust = edge.trust / 2 + 0.5 // Revert from -1 to 1 => 0 to 1
-        println(trust)
+//        println(trust)
         opinionsInput.add(new Opinion(edge.src, edge.dst, 0, time, trust, Random.nextDouble() / 10 ))
       }
     }
@@ -142,15 +142,10 @@ class RewardsTest extends FlatSpec {
     et.processExperiences(experiences)
     et.calculateTrust()
     val trustMap2 = et.getTrust(0).asScala.toMap
-    trustMap2.filterKeys(_ > 20).foreach {
-      case (id, rank) =>
-      println(
-        s"rank <= trustMap(id): ${trustMap(id) - rank <= trustRoundingError} - rank: $rank - trustMap: ${trustMap(id)}"
-      )
-    }
     assert(trustMap2.filterKeys(_ > 20).forall{ case (id, rank) =>
-      println(s"rank <= trustMap(id): ${trustMap(id) - rank <= trustRoundingError} - rank: $rank - trustMap: ${trustMap(id)}")
-      rank <= trustMap(id)})
+      val diff = trustMap(id) - rank
+//      println(s"diff: $diff >= trustRoundingError: ${diff >= trustRoundingError} - rank: $rank - trustMap: ${trustMap(id)}")
+      trustMap(id) - rank >= EigenTrust.trustRoundingError})
   }
 
   "Performance" should "accurately calculate diffs as Experiences" in {
