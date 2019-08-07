@@ -92,8 +92,8 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
     val cs = mock[CheckpointService[IO]]
     dao.checkpointService shouldReturn cs
 
-    val es = mock[ExperienceService[IO]]
-    dao.experienceService shouldReturn es
+    val os = mock[ObservationService[IO]]
+    dao.observationService shouldReturn os
 
     val keyPair = KeyUtils.makeKeyPair()
     dao.keyPair shouldReturn keyPair

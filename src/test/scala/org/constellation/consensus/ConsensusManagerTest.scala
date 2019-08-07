@@ -45,7 +45,7 @@ class ConsensusManagerTest
       dao.concurrentTipService,
       dao.checkpointService,
       dao.messageService,
-      dao.experienceService,
+      dao.observationService,
       dao.consensusRemoteSender,
       dao.cluster,
       dao,
@@ -79,14 +79,14 @@ class ConsensusManagerTest
         .unsafeRunSync()
 
       consensus.getOwnTransactionsToReturn shouldReturnF Seq("someTx")
-      consensus.getOwnExperiencesToReturn shouldReturnF Seq("someEx")
+      consensus.getOwnObservationsToReturn shouldReturnF Seq("someOb")
       dao.transactionService.returnToPending(*) shouldReturnF List.empty
-      dao.experienceService.returnToPending(*) shouldReturnF List.empty
+      dao.observationService.returnToPending(*) shouldReturnF List.empty
 
       consensusManager.cleanUpLongRunningConsensus.unsafeRunSync()
 
       dao.transactionService.returnToPending(Seq("someTx")).wasCalled(twice)
-      dao.experienceService.returnToPending(Seq("someEx")).wasCalled(twice)
+      dao.observationService.returnToPending(Seq("someOb")).wasCalled(twice)
       consensusManager.consensuses.get.unsafeRunSync() shouldBe Map(active)
       consensusManager.ownConsensus.get.unsafeRunSync() shouldBe None
     }

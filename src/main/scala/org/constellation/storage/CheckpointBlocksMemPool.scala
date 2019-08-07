@@ -12,7 +12,7 @@ class CheckpointBlocksMemPool[F[_]: Concurrent](
   transactionsMerklePool: StorageService[F, Seq[String]],
   messagesMerklePool: StorageService[F, Seq[String]],
   notificationsMerklePool: StorageService[F, Seq[String]],
-  experiencesMerklePool: StorageService[F, Seq[String]]
+  observationsMerklePool: StorageService[F, Seq[String]]
 ) extends StorageService[F, CheckpointCacheMetadata]() {
 
   def put(
@@ -32,7 +32,7 @@ class CheckpointBlocksMemPool[F[_]: Concurrent](
       t <- store(data.transactions.map(_.hash), transactionsMerklePool)
       m <- store(data.messages.map(_.signedMessageData.hash), messagesMerklePool)
       n <- store(data.notifications.map(_.hash), notificationsMerklePool)
-      e <- store(data.experiences.map(_.hash), experiencesMerklePool)
+      e <- store(data.observations.map(_.hash), observationsMerklePool)
     } yield CheckpointBlockMetadata(t, data.checkpoint, m, n, e)
 
   private def store(data: Seq[String], ss: StorageService[F, Seq[String]]): F[Option[String]] =

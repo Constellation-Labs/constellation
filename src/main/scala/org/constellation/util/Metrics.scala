@@ -228,16 +228,16 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) extends Periodic[Unit](
       .flatMap(_.sequence)
       .void
 
-  private def updateExperienceServiceMetrics(): IO[Unit] =
-    dao.experienceService.getMetricsMap
-      .map(_.toList.map { case (k, v) => updateMetricAsync[IO](s"experienceService_${k}_size", v) })
+  private def updateObservationServiceMetrics(): IO[Unit] =
+    dao.observationService.getMetricsMap
+      .map(_.toList.map { case (k, v) => updateMetricAsync[IO](s"observationService_${k}_size", v) })
       .flatMap(_.sequence)
       .void
 
   private def updatePeriodicMetrics(): IO[Unit] =
     IO { updateBalanceMetrics() } *>
       updateTransactionAcceptedMetrics() *>
-      updateExperienceServiceMetrics() *>
+      updateObservationServiceMetrics() *>
       updateMetricAsync[IO]("nodeCurrentTimeMS", System.currentTimeMillis().toString) *>
       updateMetricAsync[IO]("nodeCurrentDate", new DateTime().toString()) *>
       updateMetricAsync[IO]("metricsRound", round) *>

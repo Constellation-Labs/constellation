@@ -270,11 +270,11 @@ class CheckpointServiceTest
 
     val cts = mock[ConcurrentTipService[IO]]
 
-    val es = new ExperienceService[IO](dao)
-    dao.experienceService shouldReturn es
+    val os = new ObservationService[IO](dao)
+    dao.observationService shouldReturn os
 
     val rl = mock[RateLimiting[IO]]
-    val cs = new CheckpointService[IO](dao, ts, ms, ns, es, cts, rl)
+    val cs = new CheckpointService[IO](dao, ts, ms, ns, os, cts, rl)
     dao.checkpointService shouldReturn cs
 
     val keyPair = KeyUtils.makeKeyPair()

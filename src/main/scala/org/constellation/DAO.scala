@@ -89,13 +89,13 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     transactionService = new TransactionService[IO](this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
-    experienceService = new ExperienceService[IO](this)
+    observationService = new ObservationService[IO](this)
     checkpointService = new CheckpointService[IO](
       this,
       transactionService,
       messageService,
       notificationService,
-      experienceService,
+      observationService,
       concurrentTipService,
       rateLimiting
     )
@@ -110,7 +110,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       concurrentTipService,
       checkpointService,
       messageService,
-      experienceService,
+      observationService,
       consensusRemoteSender,
       cluster,
       this,

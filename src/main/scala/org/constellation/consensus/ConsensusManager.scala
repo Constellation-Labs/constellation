@@ -22,7 +22,7 @@ class ConsensusManager[F[_]: Concurrent](
   concurrentTipService: ConcurrentTipService[F],
   checkpointService: CheckpointService[F],
   messageService: MessageService[F],
-  experienceService: ExperienceService[F],
+  observationService: ObservationService[F],
   remoteSender: ConsensusRemoteSender[F],
   cluster: Cluster[F],
   dao: DAO,
@@ -81,7 +81,7 @@ class ConsensusManager[F[_]: Concurrent](
           transactionService,
           checkpointService,
           messageService,
-          experienceService,
+          observationService,
           remoteSender,
           this,
           shadowDAO,
@@ -95,7 +95,7 @@ class ConsensusManager[F[_]: Concurrent](
       _ <- if (responses.forall(_.isSuccess)) Sync[F].unit
       else
         Sync[F].raiseError[Unit](
-          NotAllPeersParticipate(roundId, roundData._1.transactions.map(_.hash), roundData._1.experiences.map(_.hash))
+          NotAllPeersParticipate(roundId, roundData._1.transactions.map(_.hash), roundData._1.observations.map(_.hash))
         )
       _ <- roundInfo.consensus.addTransactionProposal(
         LightTransactionsProposal(
@@ -104,7 +104,7 @@ class ConsensusManager[F[_]: Concurrent](
           roundData._1.transactions.map(_.hash) ++ roundData._2.filter(_._2 == 0).map(_._1.hash),
           roundData._1.messages.map(_.signedMessageData.hash),
           roundData._1.peers.flatMap(_.notification).toSeq,
-          roundData._1.experiences.map(_.hash).toSeq
+          roundData._1.observations.map(_.hash).toSeq
         )
       )
     } yield roundInfo
@@ -117,7 +117,9 @@ class ConsensusManager[F[_]: Concurrent](
           .debug(error.getMessage)
           .flatMap(
             _ =>
-              stopBlockCreationRound(StopBlockCreationRound(error.roundId, None, error.transactions, error.experiences))
+              stopBlockCreationRound(
+                StopBlockCreationRound(error.roundId, None, error.transactions, error.observations)
+              )
           )
           .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](error))
       case unknown =>
@@ -151,7 +153,7 @@ class ConsensusManager[F[_]: Concurrent](
         Sync[F].raiseError[Unit](NoPeersForConsensus(roundId, transactions.map(_.transaction.hash), List.empty[String]))
       else Sync[F].unit
       messages <- Sync[F].delay(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))
-      experiences <- experienceService.pullForConsensus(0)
+      observations <- observationService.pullForConsensus(0)
       lightNodes <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Light))
       lightPeers = if (lightNodes.isEmpty) Set.empty[PeerData]
       else
@@ -168,7 +170,7 @@ class ConsensusManager[F[_]: Concurrent](
           transactions.map(_.transaction),
           tips.get.tipSoe,
           messages,
-          experiences
+          observations
         ),
         arbitraryTx,
         arbitraryMsgs
@@ -192,7 +194,7 @@ class ConsensusManager[F[_]: Concurrent](
           transactionService,
           checkpointService,
           messageService,
-          experienceService,
+          observationService,
           remoteSender,
           this,
           shadowDAO,
@@ -236,7 +238,7 @@ class ConsensusManager[F[_]: Concurrent](
       _ <- consensuses.update(curr => curr - cmd.roundId)
       _ <- ownConsensus.update(curr => if (curr.isDefined && curr.get.roundId == cmd.roundId) None else curr)
       _ <- transactionService.returnToPending(cmd.transactionsToReturn)
-      _ <- experienceService.returnToPending(cmd.experiencesToReturn)
+      _ <- observationService.returnToPending(cmd.observationsToReturn)
       _ <- updateNotifications(cmd.maybeCB.map(_.notifications.toList))
       _ = releaseMessages(cmd.maybeCB)
       _ <- logger.debug(
@@ -272,7 +274,7 @@ class ConsensusManager[F[_]: Concurrent](
       stopData <- toClean.traverse(
         r =>
           r._2.consensus.getOwnTransactionsToReturn
-            .flatMap(txs => r._2.consensus.getOwnExperiencesToReturn.map(exs => (r._1, txs, exs)))
+            .flatMap(txs => r._2.consensus.getOwnObservationsToReturn.map(exs => (r._1, txs, exs)))
       )
       _ <- if (stopData.nonEmpty) logger.warn(s"Cleaning timeout consensuses with roundId: ${stopData.map(_._1)}")
       else Sync[F].unit
@@ -283,7 +285,7 @@ class ConsensusManager[F[_]: Concurrent](
     for {
       _ <- logger.error(cmd)(s"Consensus with roundId: ${cmd.roundId} finished with error: ${cmd.getMessage}")
       _ <- stopBlockCreationRound(
-        StopBlockCreationRound(cmd.roundId, None, cmd.transactionsToReturn, cmd.experiencesToReturn)
+        StopBlockCreationRound(cmd.roundId, None, cmd.transactionsToReturn, cmd.observationsToReturn)
       )
     } yield ()
 
@@ -402,16 +404,16 @@ object ConsensusManager {
   class ConsensusError(
     val roundId: RoundId,
     val transactions: List[String],
-    val experiences: List[String],
+    val observations: List[String],
     message: String
   ) extends Exception(message)
 
-  case class NoTipsForConsensus(id: RoundId, txs: List[String], exs: List[String])
-      extends ConsensusError(id, txs, exs, "No tips to start consensus")
-  case class NoPeersForConsensus(id: RoundId, txs: List[String], exs: List[String])
-      extends ConsensusError(id, txs, exs, "No active peers to start consensus")
-  case class NotAllPeersParticipate(id: RoundId, txs: List[String], exs: List[String])
-      extends ConsensusError(id, txs, exs, "Not all of the peers has participated in consensus")
+  case class NoTipsForConsensus(id: RoundId, txs: List[String], obs: List[String])
+      extends ConsensusError(id, txs, obs, "No tips to start consensus")
+  case class NoPeersForConsensus(id: RoundId, txs: List[String], obs: List[String])
+      extends ConsensusError(id, txs, obs, "No active peers to start consensus")
+  case class NotAllPeersParticipate(id: RoundId, txs: List[String], obs: List[String])
+      extends ConsensusError(id, txs, obs, "Not all of the peers has participated in consensus")
 
   case class BroadcastUnionBlockProposal(roundId: RoundId, peers: Set[PeerData], proposal: UnionBlockProposal)
   case class BroadcastSelectedUnionBlock(roundId: RoundId, peers: Set[PeerData], cb: SelectedUnionBlock)

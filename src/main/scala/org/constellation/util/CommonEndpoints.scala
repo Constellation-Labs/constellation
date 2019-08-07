@@ -160,11 +160,11 @@ trait CommonEndpoints extends Json4sSupport {
           case Success(Some(soe)) => complete(soe)
         }
       } ~
-      path("experience" / Segment) { h =>
-        onComplete(dao.experienceService.lookup(h).unsafeToFuture) {
+      path("observation" / Segment) { h =>
+        onComplete(dao.observationService.lookup(h).unsafeToFuture) {
           case Failure(err)       => complete(HttpResponse(StatusCodes.InternalServerError, entity = err.getMessage))
           case Success(None)      => complete(StatusCodes.NotFound)
-          case Success(Some(exp)) => complete(exp)
+          case Success(Some(obs)) => complete(obs)
         }
       }
 
