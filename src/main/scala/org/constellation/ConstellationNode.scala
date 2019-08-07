@@ -21,7 +21,7 @@ import org.constellation.datastore.SnapshotTrigger
 import org.constellation.p2p.{Cluster, PeerAPI}
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, HostPort, Metrics}
+import org.constellation.util.{APIClient, AccountBalance, AccountBalanceCSVReader, HostPort, Metrics}
 import org.slf4j.MDC
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -32,6 +32,7 @@ import scala.util.{Failure, Success, Try}
 case class CliConfig(
   externalIp: java.net.InetAddress = null,
   externalPort: Int = 0,
+  allocFilePath: String = null,
   debug: Boolean = false,
   startOfflineMode: Boolean = false,
   lightNode: Boolean = false,
@@ -64,6 +65,9 @@ object ConstellationNode extends StrictLogging {
         opt[Int]('p', "port")
           .action((x, c) => c.copy(externalPort = x))
           .text("the port you can be reached from outside"),
+        opt[String]('f', "path to file with allocation account balances")
+          .action((x, c) => c.copy(allocFilePath = x))
+          .text("path to file with allocation account balances"),
         opt[Unit]('d', "debug")
           .action((x, c) => c.copy(debug = true))
           .text("run the node in debug mode"),
@@ -114,6 +118,10 @@ object ConstellationNode extends StrictLogging {
           .getOrElse("127.0.0.1")
       }
 
+      val allocAccountBalances: Seq[AccountBalance] =
+        Try(new AccountBalanceCSVReader(cliConfig.allocFilePath).read()).getOrElse(Seq.empty)
+      logger.debug(s"Alloc: $allocAccountBalances")
+
       val preferencesPath = File(".dag")
       preferencesPath.createDirectoryIfNotExists()
 
@@ -162,7 +170,8 @@ object ConstellationNode extends StrictLogging {
           processingConfig =
             if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10)
             else processingConfig,
-          dataPollingManagerOn = config.getBoolean("constellation.dataPollingManagerOn")
+          dataPollingManagerOn = config.getBoolean("constellation.dataPollingManagerOn"),
+          allocAccountBalances = allocAccountBalances
         )
       )
     } match {
@@ -196,7 +205,8 @@ case class NodeConfig(
   allowLocalhostPeers: Boolean = false,
   cliConfig: CliConfig = CliConfig(),
   processingConfig: ProcessingConfig = ProcessingConfig(),
-  dataPollingManagerOn: Boolean = false
+  dataPollingManagerOn: Boolean = false,
+  allocAccountBalances: Seq[AccountBalance] = Seq.empty
 )
 
 class ConstellationNode(

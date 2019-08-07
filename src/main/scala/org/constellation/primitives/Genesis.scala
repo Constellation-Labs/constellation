@@ -26,9 +26,7 @@ object Genesis {
   }
 
   def createGenesisBlock(keyPair: KeyPair): CheckpointBlock =
-    CheckpointBlock.createCheckpointBlock(Seq(createGenesisTransaction(keyPair)), GenesisTips)(
-      keyPair
-    )
+    CheckpointBlock.createCheckpointBlock(Seq(createGenesisTransaction(keyPair)), GenesisTips)(keyPair)
 
   def start()(implicit dao: DAO): Unit = {
     // TODO: Remove initial distribution
@@ -126,9 +124,8 @@ object Genesis {
     checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = go.initialDistribution2 -> 0
      */
 
-    // metricsManager ! UpdateMetric("activeTips", "2")
     dao.metrics.updateMetric("genesisAccepted", "true")
-    //   metricsManager ! UpdateMetric("z_genesisBlock", go.json)
+
     if (setAsTips) {
       List(go.initialDistribution, go.initialDistribution2)
         .map(dao.concurrentTipService.update)
@@ -136,8 +133,8 @@ object Genesis {
         .unsafeRunSync()
     }
     storeTransactions(go)
+
     dao.metrics.updateMetric("genesisHash", go.genesis.soeHash)
-    // println(s"accept genesis = ", go)
   }
 
   private def storeTransactions(genesisObservation: GenesisObservation)(implicit dao: DAO): Unit =
