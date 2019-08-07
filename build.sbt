@@ -81,6 +81,7 @@ lazy val coreSettings = Seq(
   resolvers += "Artima Maven Repository".at("http://repo.artima.com/releases"),
   resolvers += "Typesafe Releases".at("http://repo.typesafe.com/typesafe/maven-releases/"),
   resolvers += "jitpack".at("https://jitpack.io")
+  
 )
 
 lazy val coreDependencies = Seq(
@@ -122,6 +123,7 @@ lazy val coreDependencies = Seq(
   "io.prometheus" % "simpleclient_logback" % versions.prometheus,
   "com.github.java-json-tools" % "json-schema-validator" % "2.2.10",
   "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.6",
+  "com.github.djelenc" % "alpha-testbed" % "1.0.3",
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
   ("com.github.blemale" %% "scaffeine" % "3.0.0").withSources().withJavadoc(),
   ("com.typesafe.slick" %% "slick" % "3.3.2").withSources().withJavadoc(),
@@ -131,7 +133,7 @@ lazy val coreDependencies = Seq(
 //Test dependencies
 lazy val testDependencies = Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.0",
-  "org.scalatest" %% "scalatest" % "3.0.8",
+  "org.scalatest" %% "scalatest" % "3.0.6",
   "org.scalactic" %% "scalactic" % "3.0.8",
   "org.scalamock" %% "scalamock" % "4.3.0",
   "org.mockito" %% "mockito-scala" % versions.mockito,

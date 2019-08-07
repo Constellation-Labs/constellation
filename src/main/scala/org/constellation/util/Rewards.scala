@@ -1,4 +1,8 @@
 package org.constellation.util
+import org.constellation.p2p.PeerNotification
+import org.constellation.primitives.Schema.CheckpointEdge
+import org.constellation.primitives.{ChannelMessage, Transaction}
+import org.constellation.trust.TrustEdge
 
 object Rewards {
   val roundingError = 0.000000000001
@@ -77,4 +81,35 @@ object Rewards {
     val totalEntropy = weightedEntropy.values.sum
     weightedEntropy.mapValues(_ / totalEntropy) // Scale by entropy magnitude
   }
+
+  /*
+ If nodes deviate more than x% from the accepted checkpoint block, drop to 0?
+  */
+  def performanceExperience(cps: Seq[MetaCheckpointBlock]): Map[Int, Double] = {
+    val facilDiffsPerRound = cps.flatMap { cb =>
+      val acceptedCbHashes = cb.transactions.map(_.hash).toSet //todo combine in all data hashes, currently tx check
+      cb.proposals.mapValues { proposedCb: Set[String] =>
+        val diff = acceptedCbHashes diff proposedCb
+        diff.size
+      }
+    }
+    val facilDiffs: Map[Int, Seq[(Int, Int)]] = facilDiffsPerRound.groupBy { case (facilitator, diff) => facilitator}//.mapValues(v => v / cpb.size.toDouble)
+    facilDiffs.mapValues {
+      fd =>
+        val acceptedCbTxHashes = cps.flatMap(_.transactions.map(_.hash).toSet)
+        fd.map(_._2).sum / acceptedCbTxHashes.size.toDouble
+
+    }
+  }
+
+  case class TestCheckpointBlock(proposals: Map[Int, Set[String]], acceptedCb: Set[String])
+
+  case class MetaCheckpointBlock(
+                                  proposals: Map[Int, Set[String]],//todo use Id instead of Int, see below
+                                  trustEdges: Option[Map[Int, Seq[TrustEdge]]],//todo use actual Ids in SAW
+                                  transactions: Seq[Transaction],
+                                  checkpoint: CheckpointEdge,
+                                  messages: Seq[ChannelMessage] = Seq(),
+                                  notifications: Seq[PeerNotification] = Seq()
+                                ) //extends CheckpointBlock(transactions, checkpoint)
 }
