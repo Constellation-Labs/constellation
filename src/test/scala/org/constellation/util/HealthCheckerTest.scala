@@ -4,19 +4,21 @@ import java.net.SocketException
 import cats.effect.IO
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.p2p.{Cluster, DownloadProcess}
+import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
 import org.constellation.storage.RecentSnapshot
 import org.constellation.util.HealthChecker.compareSnapshotState
 import org.constellation.{ConstellationConcurrentEffect, DAO, Fixtures, ProcessingConfig}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{FunSpecLike, Matchers}
+import org.scalatest.{BeforeAndAfterEach, FunSpecLike, Matchers}
 
 class HealthCheckerTest
     extends FunSpecLike
     with Matchers
     with IdiomaticMockito
     with IdiomaticMockitoCats
+    with BeforeAndAfterEach
     with ArgumentMatchersSugar {
 
   val dao: DAO = mock[DAO]
@@ -24,9 +26,13 @@ class HealthCheckerTest
   dao.processingConfig shouldReturn ProcessingConfig()
 
   val downloadProcess: DownloadProcess = mock[DownloadProcess]
+  val concurrentTipService: ConcurrentTipService[IO] = mock[ConcurrentTipService[IO]]
 
   val healthChecker =
-    new HealthChecker[IO](dao, downloadProcess)(ConstellationConcurrentEffect.global, Slf4jLogger.getLogger[IO])
+    new HealthChecker[IO](dao, concurrentTipService, downloadProcess)(
+      ConstellationConcurrentEffect.global,
+      Slf4jLogger.getLogger[IO]
+    )
 
   describe("compareSnapshotState util function") {
 
@@ -67,6 +73,90 @@ class HealthCheckerTest
       compareSnapshotState(ownSnapshots, state) shouldBe SnapshotDiff(List.empty, List.empty, ids)
     }
   }
+  describe("clear stale tips") {
+    it(
+      s"should run tips removal with max height of minimum nodes required to make consensus"
+    ) {
+
+      concurrentTipService.clearStaleTips(*) shouldReturn IO.unit
+
+      val cluster = List(
+        (Id("1"), List(RecentSnapshot("snap4", 4), RecentSnapshot("snap2", 2), RecentSnapshot("snap0", 0))),
+        (
+          Id("2"),
+          List(
+            RecentSnapshot("snap4", 6),
+            RecentSnapshot("snap4", 4),
+            RecentSnapshot("snap2", 2),
+            RecentSnapshot("snap0", 0)
+          )
+        ),
+        (
+          Id("3"),
+          List(
+            RecentSnapshot("snap4", 6),
+            RecentSnapshot("snap4", 4),
+            RecentSnapshot("snap2", 2),
+            RecentSnapshot("snap0", 0)
+          )
+        ),
+        (
+          Id("4"),
+          List(
+            RecentSnapshot("snap8", 8),
+            RecentSnapshot("snap6", 6),
+            RecentSnapshot("snap4", 4),
+            RecentSnapshot("snap2", 2),
+            RecentSnapshot("snap0", 0)
+          )
+        ),
+        (
+          Id("5"),
+          List(
+            RecentSnapshot("snap8", 8),
+            RecentSnapshot("snap6", 6),
+            RecentSnapshot("snap4", 4),
+            RecentSnapshot("snap2", 2),
+            RecentSnapshot("snap0", 0)
+          )
+        ),
+        (
+          Id("6"),
+          List.empty
+        )
+      )
+      healthChecker.clearStaleTips(cluster).unsafeRunSync()
+      concurrentTipService.clearStaleTips(6).wasCalled(once)
+    }
+    it("should not run tips removal when there is not enough data") {
+
+      concurrentTipService.clearStaleTips(*) shouldReturn IO.unit
+
+      val cluster = List(
+        (Id("1"), List(RecentSnapshot("snap4", 4), RecentSnapshot("snap2", 2), RecentSnapshot("snap0", 0))),
+        (
+          Id("2"),
+          List(
+            RecentSnapshot("snap4", 6),
+            RecentSnapshot("snap4", 4),
+            RecentSnapshot("snap2", 2),
+            RecentSnapshot("snap0", 0)
+          )
+        )
+      )
+      healthChecker.clearStaleTips(cluster).unsafeRunSync()
+      concurrentTipService.clearStaleTips(*).wasNever(called)
+    }
+    it("should not run tips removal when cluster info is empty") {
+      reset(concurrentTipService)
+      concurrentTipService.clearStaleTips(*) shouldReturn IO.unit
+
+      healthChecker.clearStaleTips(List.empty).unsafeRunSync()
+      concurrentTipService.clearStaleTips(*).wasNever(called)
+    }
+
+  }
+
   describe("shouldDownload function") {
     val height = 2
     val ownSnapshots = List(height).map(i => RecentSnapshot(s"$i", i))
@@ -131,4 +221,8 @@ class HealthCheckerTest
     }
   }
 
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+    reset(concurrentTipService)
+  }
 }

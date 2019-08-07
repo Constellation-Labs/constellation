@@ -215,7 +215,7 @@ object EdgeProcessor extends StrictLogging {
 
 }
 
-case class TipData(checkpointBlock: CheckpointBlock, numUses: Int)
+case class TipData(checkpointBlock: CheckpointBlock, numUses: Int, height: Height)
 
 case class SnapshotInfo(
   snapshot: Snapshot,

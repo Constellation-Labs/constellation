@@ -35,6 +35,13 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
   dao: DAO
 ) {
 
+  def clearStaleTips(min: Long): F[Unit] =
+    tipsRef.get.map(tips => tips.filter(_._2.height.min < min)).flatMap { toRemove =>
+      Logger[F]
+        .info(s"Removing tips that are below cluster height: $min to remove ${toRemove.map(t => (t._1, t._2.height))}")
+        .flatMap(_ => tipsRef.update(curr => curr -- toRemove.keySet))
+    }
+
   private val conflictingTips: SingleRef[F, Map[String, CheckpointBlock]] = SingleRef(Map.empty)
   private val tipsRef: SingleRef[F, Map[String, TipData]] = SingleRef(Map.empty)
   private val semaphore: Semaphore[F] = {
@@ -92,10 +99,10 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
         reuseTips = size < maxWidth
         _ <- tipData match {
           case None => Sync[F].unit
-          case Some(TipData(block, numUses)) if numUses >= maxTipUsage || !reuseTips =>
+          case Some(TipData(block, numUses, _)) if numUses >= maxTipUsage || !reuseTips =>
             removeUnsafe(block.baseHash)(dao.metrics)
-          case Some(TipData(block, numUses)) =>
-            putUnsafe(block.baseHash, TipData(block, numUses + 1))(dao.metrics)
+          case Some(TipData(block, numUses, tipHeight)) =>
+            putUnsafe(block.baseHash, TipData(block, numUses + 1, tipHeight))(dao.metrics)
               .flatMap(_ => dao.metrics.incrementMetricAsync("checkpointTipsIncremented"))
         }
       } yield ()
@@ -106,7 +113,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
       .flatMap(
         min =>
           if (isGenesis || min < height.min)
-            putUnsafe(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics)
+            putUnsafe(checkpointBlock.baseHash, TipData(checkpointBlock, 0, height))(dao.metrics)
           else Logger[F].info(s"Block height: ${height.min} below min tip: $min update skipped")
       )
       .recoverWith {
@@ -142,6 +149,8 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
       _ <- Logger[F].debug(s"Active tip height: $minActiveTipHeight")
       keys <- tipsRef.get.map(_.keys.toList)
       maybeData <- LiftIO[F].liftIO(keys.traverse(dao.checkpointService.lookup(_)))
+      diff = keys.diff(maybeData.flatMap(_.map(_.checkpointBlock.baseHash)))
+      _ <- if (diff.nonEmpty) Logger[F].info(s"wkoszycki not_mapped ${diff}") else Sync[F].unit
       heights = maybeData.flatMap {
         _.flatMap {
           _.height.map {

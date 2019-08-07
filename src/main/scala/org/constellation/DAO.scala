@@ -89,6 +89,16 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     transactionService = new TransactionService[IO](this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
+
+    concurrentTipService = new ConcurrentTipService[IO](
+      processingConfig.maxActiveTipsAllowedInMemory,
+      processingConfig.maxWidth,
+      processingConfig.maxTipUsage,
+      processingConfig.numFacilitatorPeers,
+      processingConfig.minPeerTimeAddedSeconds,
+      this
+    )
+
     checkpointService = new CheckpointService[IO](
       this,
       transactionService,
@@ -123,7 +133,9 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
           ConstellationExecutionContext.global
         )
       val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.global)
-      new SnapshotBroadcastService[IO](new HealthChecker[IO](this, downloadProcess), cluster, this)
+      new SnapshotBroadcastService[IO](new HealthChecker[IO](this, concurrentTipService, downloadProcess),
+                                       cluster,
+                                       this)
     }
     snapshotWatcher = new SnapshotWatcher(snapshotBroadcastService)
 
@@ -145,20 +157,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   }
 
   implicit val context: ContextShift[IO] = ConstellationContextShift.global
-
-  lazy val concurrentTipService: ConcurrentTipService[IO] = new ConcurrentTipService[IO](
-    processingConfig.maxActiveTipsAllowedInMemory,
-    processingConfig.maxWidth,
-    processingConfig.maxTipUsage,
-    processingConfig.numFacilitatorPeers,
-    processingConfig.minPeerTimeAddedSeconds,
-    this
-  )
-
-  def pullTips(
-    readyFacilitators: Map[Id, PeerData]
-  ): Option[PulledTips] =
-    concurrentTipService.pull(readyFacilitators)(this.metrics).unsafeRunSync()
 
   def peerInfo: IO[Map[Id, PeerData]] = cluster.getPeerInfo
 

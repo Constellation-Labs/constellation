@@ -109,6 +109,7 @@ trait EdgeDAO {
   var transactionGenerator: TransactionGenerator[IO] = _
   var checkpointService: CheckpointService[IO] = _
   var snapshotService: SnapshotService[IO] = _
+  var concurrentTipService: ConcurrentTipService[IO] = _
   var rateLimiting: RateLimiting[IO] = _
   var addressService: AddressService[IO] = _
   var snapshotBroadcastService: SnapshotBroadcastService[IO] = _

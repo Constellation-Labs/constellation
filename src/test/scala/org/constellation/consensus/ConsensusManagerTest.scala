@@ -8,6 +8,8 @@ import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfterEach, FunSpecLike, Matchers}
 
+import scala.io.Source
+
 class ConsensusManagerTest
     extends FunSpecLike
     with Matchers
