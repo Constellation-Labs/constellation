@@ -5,7 +5,7 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.DAO
 import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEdgeCache}
-import org.constellation.primitives.{ChannelMessageMetadata, TransactionCacheData}
+import org.constellation.primitives.{ChannelMessageMetadata, Observation, TransactionCacheData}
 import org.constellation.storage.ConsensusStatus
 import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.{Distance, PeerApiClient}
@@ -177,6 +177,21 @@ class DataResolver extends StrictLogging {
       },
       priorityClient
     )
+
+  def resolveObservation(
+    hash: String,
+    pool: List[PeerApiClient],
+    priorityClient: Option[PeerApiClient]
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Observation] =
+    resolveDataByDistance[Observation](
+      List(hash),
+      "observation",
+      pool,
+      (t: Observation) => {
+        dao.observationService.put(t, ConsensusStatus.Unknown).unsafeRunSync()
+      },
+      priorityClient
+    ).head
 
   def resolveDataByDistanceFlat[T <: AnyRef](
     hashes: List[String],

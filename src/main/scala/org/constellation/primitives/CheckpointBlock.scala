@@ -41,7 +41,7 @@ case class CheckpointBlockMetadata(
   checkpointEdge: CheckpointEdge,
   messagesMerkleRoot: Option[String],
   notificationsMerkleRoot: Option[String],
-  experiencesMerkleRoot: Option[String]
+  observationsMerkleRoot: Option[String]
 ) extends CheckpointEdgeLike(checkpointEdge)
 
 case class CheckpointBlock(
@@ -49,7 +49,7 @@ case class CheckpointBlock(
   checkpoint: CheckpointEdge,
   messages: Seq[ChannelMessage] = Seq(),
   notifications: Seq[PeerNotification] = Seq(),
-  experiences: Seq[Experience] = Seq()
+  observations: Seq[Observation] = Seq()
 ) {
 
   def storeSOE()(implicit dao: DAO): IO[SignedObservationEdgeCache] =
@@ -238,7 +238,8 @@ object CheckpointBlock {
     transactions: Seq[Transaction],
     tips: Seq[TypedEdgeHash],
     messages: Seq[ChannelMessage] = Seq.empty,
-    peers: Seq[PeerNotification] = Seq.empty
+    peers: Seq[PeerNotification] = Seq.empty,
+    observations: Seq[Observation] = Seq.empty
   )(implicit keyPair: KeyPair): CheckpointBlock = {
 
     val checkpointEdgeData =
@@ -257,7 +258,7 @@ object CheckpointBlock {
       Edge(observationEdge, soe, checkpointEdgeData)
     )
 
-    CheckpointBlock(transactions, checkpointEdge, messages, peers)
+    CheckpointBlock(transactions, checkpointEdge, messages, peers, observations)
   }
 
 }

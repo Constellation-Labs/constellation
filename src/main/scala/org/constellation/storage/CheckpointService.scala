@@ -18,7 +18,7 @@ class CheckpointService[F[_]: Concurrent](
   transactionService: TransactionService[F],
   messageService: MessageService[F],
   notificationService: NotificationService[F],
-  experienceService: ExperienceService[F],
+  observationService: ObservationService[F],
   concurrentTipService: ConcurrentTipService[F],
   rateLimiting: RateLimiting[F]
 ) extends StrictLogging {
@@ -28,7 +28,7 @@ class CheckpointService[F[_]: Concurrent](
     transactionService.merklePool,
     messageService.merklePool,
     notificationService.merklePool,
-    experienceService.merklePool
+    observationService.merklePool
   )
   val pendingAcceptance: SingleRef[F, Set[String]] = SingleRef(Set())
   val pendingAcceptanceFromOthers: SingleRef[F, Set[String]] = SingleRef(Set())
