@@ -183,11 +183,8 @@ object ConstellationNode extends StrictLogging {
         while (true) {
           Thread.sleep(60 * 1000)
         }
-
     }
-
   }
-
 }
 
 case class NodeConfig(

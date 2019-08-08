@@ -9,32 +9,35 @@ import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.storage.ConsensusStatus
-import org.constellation.storage.transactions.TransactionStatus
+import org.constellation.util.AccountBalance
 
 object Genesis {
 
   final val CoinBaseHash = "coinbase"
+  final val DebtKey = KeyUtils.makeKeyPair()
 
   private final val GenesisTips = Seq(
     TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash),
     TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash)
   )
 
-  def createGenesisTransaction(keyPair: KeyPair): Transaction = {
-    val debtAddress = KeyUtils.makeKeyPair().address
-    createTransaction(debtAddress, keyPair.getPublic.toId.address, 4e9.toLong, keyPair)
-  }
+  def createGenesisTransaction(keyPair: KeyPair, allocAccountBalances: Seq[AccountBalance]): Seq[Transaction] =
+    allocAccountBalances.map(t => createTransaction(DebtKey.address, t.accountHash, t.balance, DebtKey)) :+
+      createTransaction(DebtKey.address, keyPair.getPublic.toId.address, 4e9.toLong, keyPair)
 
-  def createGenesisBlock(keyPair: KeyPair): CheckpointBlock =
-    CheckpointBlock.createCheckpointBlock(Seq(createGenesisTransaction(keyPair)), GenesisTips)(keyPair)
+  def createGenesisBlock(keyPair: KeyPair, allocAccountBalances: Seq[AccountBalance]): CheckpointBlock =
+    CheckpointBlock.createCheckpointBlock(createGenesisTransaction(keyPair, allocAccountBalances), GenesisTips)(keyPair)
 
   def start()(implicit dao: DAO): Unit = {
     // TODO: Remove initial distribution
-    //val genesis = createGenesisBlock(dao.keyPair)
     val fakeIdToGenerateTips = KeyUtils.makeKeyPair().getPublic.toId
-    val go = createGenesisAndInitialDistributionDirect(dao.selfAddressStr, Set(fakeIdToGenerateTips), dao.keyPair)
+    val go = createGenesisAndInitialDistributionDirect(
+      dao.selfAddressStr,
+      Set(fakeIdToGenerateTips),
+      dao.keyPair,
+      dao.nodeConfig.allocAccountBalances
+    )
     acceptGenesis(go, setAsTips = true)
-
   }
 
   // TODO: Get rid of this, need to add edge case for handling tips at beginning to avoid this
@@ -68,10 +71,11 @@ object Genesis {
   def createGenesisAndInitialDistributionDirect(
     selfAddressStr: String,
     ids: Set[Id],
-    keyPair: KeyPair
+    keyPair: KeyPair,
+    allocAccountBalances: Seq[AccountBalance] = Seq.empty
   ): GenesisObservation = {
 
-    val genesisCBO = createGenesisBlock(keyPair)
+    val genesisCBO = createGenesisBlock(keyPair, allocAccountBalances)
     val soe = genesisCBO.soe
 
     val distr1CBO = createDistribution(selfAddressStr, ids.toSeq, soe, keyPair)
@@ -95,7 +99,7 @@ object Genesis {
       .unsafeRunSync()
 
     // Store the balance for the genesis TX minus the distribution along with starting rep score.
-    go.genesis.transactions.foreach { rtx =>
+    go.genesis.transactions.find(_.dst.address == dao.selfAddressStr).foreach { rtx =>
       val bal = rtx.amount - (go.initialDistribution.transactions.map { _.amount }.sum * 2)
       dao.addressService
         .put(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
@@ -109,14 +113,19 @@ object Genesis {
         .put(t.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
         .unsafeRunSync()
     }
-    val numTX = (1 + go.initialDistribution.transactions.size * 2).toString
-    //  metricsManager ! UpdateMetric("validTransactions", numTX)
-    //  metricsManager ! UpdateMetric("uniqueAddressesInLedger", numTX)
+
+    // Store the balance for the initial transaction from alloc file.
+    go.genesis.transactions.filter(_.dst.address != dao.selfAddressStr).foreach { rtx =>
+      val bal = rtx.amount
+      dao.addressService
+        .put(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
+        .unsafeRunSync()
+    }
 
     dao.genesisObservation = Some(go)
     dao.genesisBlock = Some(go.genesis)
-    /*
 
+    /*
     // Dumb way to set these as active tips, won't pass a double validation but no big deal.
     checkpointMemPool(go.initialDistribution.baseHash) = go.initialDistribution
     checkpointMemPool(go.initialDistribution2.baseHash) = go.initialDistribution2
@@ -143,7 +152,5 @@ object Genesis {
         cb.transactions
           .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
           .map(tcd => dao.transactionService.put(tcd, ConsensusStatus.Accepted))
-    }.toList.sequence.void
-      .unsafeRunSync()
-
+    }.toList.sequence.void.unsafeRunSync()
 }
