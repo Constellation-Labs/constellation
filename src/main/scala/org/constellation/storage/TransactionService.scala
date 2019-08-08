@@ -19,12 +19,12 @@ class TransactionService[F[_]: Concurrent: Logger](dao: DAO) extends ConsensusSe
       .flatTap(_ => Sync[F].delay(dao.metrics.incrementMetric("transactionAccepted")))
 
   def applySnapshot(txs: List[TransactionCacheData], merkleRoot: String): F[Unit] =
-    withLock("merklePoolRemove", merklePool.remove(merkleRoot)) *>
-      txs.traverse(tx => withLock("acceptedRemove", accepted.remove(tx.hash))).void
+    withLock("merklePoolUpdate", merklePool.remove(merkleRoot)) *>
+      txs.traverse(tx => withLock("acceptedUpdate", accepted.remove(tx.hash))).void
 
   def applySnapshot(merkleRoot: String): F[Unit] =
-    findHashesByMerkleRoot(merkleRoot).flatMap(tx => withLock("acceptedRemove", accepted.remove(tx.toSet.flatten))) *>
-      withLock("merklePoolRemove", merklePool.remove(merkleRoot))
+    findHashesByMerkleRoot(merkleRoot).flatMap(tx => withLock("acceptedUpdate", accepted.remove(tx.toSet.flatten))) *>
+      withLock("merklePoolUpdate", merklePool.remove(merkleRoot))
 
   def pullForConsensusWithDummy(minCount: Int, roundId: String = "roundId"): F[List[TransactionCacheData]] =
     count(status = ConsensusStatus.Pending).flatMap {
@@ -41,4 +41,5 @@ class TransactionService[F[_]: Concurrent: Logger](dao: DAO) extends ConsensusSe
       )
       .traverse(put)
       .flatMap(_ => pullForConsensus(minCount))
+
 }
