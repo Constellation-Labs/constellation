@@ -44,14 +44,14 @@ class TransactionService[F[_]: Concurrent](dao: DAO)
     case _                           => new Exception("Unknown transaction status").raiseError[F, TransactionCacheData]
   }
 
-  def update(key: String, fn: TransactionCacheData => TransactionCacheData): F[Unit] =
+  def update(key: String, fn: TransactionCacheData => TransactionCacheData): F[Option[TransactionCacheData]] =
     for {
-      _ <- withLock("pendingUpdate", pending.update(key, fn))
-      _ <- withLock("arbitraryUpdate", arbitrary.update(key, fn))
-      _ <- withLock("inConsensusUpdate", inConsensus.update(key, fn))
-      _ <- withLock("acceptedUpdate", accepted.update(key, fn))
-      _ <- withLock("unknownUpdate", unknown.update(key, fn))
-    } yield ()
+      p <- withLock("pendingUpdate", pending.update(key, fn))
+      i <- p.fold(withLock("inConsensusUpdate", inConsensus.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
+      ac <- i.fold(withLock("acceptedUpdate", accepted.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
+      a <- ac.fold(withLock("arbitraryUpdate", arbitrary.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
+      result <- a.fold(withLock("unknownUpdate", unknown.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
+    } yield result
 
   def accept(tx: TransactionCacheData): F[Unit] =
     put(tx, TransactionStatus.Accepted) *>

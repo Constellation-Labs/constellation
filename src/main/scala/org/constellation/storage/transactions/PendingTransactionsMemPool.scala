@@ -15,9 +15,14 @@ class PendingTransactionsMemPool[F[_]: Concurrent]() extends LookupAlgebra[F, St
   def put(key: String, value: TransactionCacheData): F[TransactionCacheData] =
     txRef.modify(txs => (txs + (key -> value), value))
 
-  def update(key: String, fn: TransactionCacheData => TransactionCacheData): F[Unit] =
-    txRef.update { txs =>
-      txs.get(key).map(fn).map(t => txs ++ List(key -> t)).getOrElse(txs)
+  def update(key: String, fn: TransactionCacheData => TransactionCacheData): F[Option[TransactionCacheData]] =
+    txRef.modify { txs =>
+      txs.get(key) match {
+        case None => (txs, None)
+        case Some(value) =>
+          val update = fn(value)
+          (txs + (key -> update), Some(update))
+      }
     }
 
   def lookup(key: String): F[Option[TransactionCacheData]] =

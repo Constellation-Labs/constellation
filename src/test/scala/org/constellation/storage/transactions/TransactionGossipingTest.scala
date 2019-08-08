@@ -67,7 +67,7 @@ class TransactionGossipingTest
     tx.path shouldReturn path
 
     txService.contains(tx.transaction.hash) shouldReturnF true
-    txService.update(*, *) shouldReturnF Unit
+    txService.update(*, *) shouldReturnF Some(tx)
     txService.lookup(*) shouldReturnF Some(tx)
 
     gossiping.observe(tx).unsafeRunSync
