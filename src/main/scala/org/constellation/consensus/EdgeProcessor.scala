@@ -225,7 +225,8 @@ case class SnapshotInfo(
   snapshotHashes: Seq[String] = Seq(),
   addressCacheData: Map[String, AddressCacheData] = Map(),
   tips: Map[String, TipData] = Map(),
-  snapshotCache: Seq[CheckpointCache] = Seq()
+  snapshotCache: Seq[CheckpointCache] = Seq(),
+  soeCache: List[SignedObservationEdgeCache] = List.empty[SignedObservationEdgeCache]
 )
 
 case object GetMemPool

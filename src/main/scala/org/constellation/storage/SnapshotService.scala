@@ -22,6 +22,7 @@ class SnapshotService[F[_]: Concurrent](
   rateLimiting: RateLimiting[F],
   broadcastService: SnapshotBroadcastService[F],
   consensusManager: ConsensusManager[F],
+  soeService: SOEService[F],
   dao: DAO
 ) extends StrictLogging {
   import constellation._
@@ -55,6 +56,10 @@ class SnapshotService[F[_]: Concurrent](
         .map(checkpointService.fullData)
         .sequence
         .map(_.flatten)
+      soeData <- snapshotCache
+        .flatMap(_.checkpointBlock.map(_.checkpoint.edge.parentHashes))
+        .flatten
+        .traverse(soeService.lookup)
     } yield
       SnapshotInfo(
         s,
@@ -63,7 +68,8 @@ class SnapshotService[F[_]: Concurrent](
         snapshotHashes = hashes,
         addressCacheData = addressCacheData,
         tips = tips,
-        snapshotCache = snapshotCache
+        snapshotCache = snapshotCache,
+        soeCache = soeData.flatten
       )
 
   def retainOldData(): F[Unit] =
@@ -74,6 +80,7 @@ class SnapshotService[F[_]: Concurrent](
       fetched <- getCheckpointBlocksFromSnapshot(cbs)
       _ <- fetched.traverse(_.transactionsMerkleRoot.traverse(transactionService.applySnapshot))
       _ <- checkpointService.applySnapshot(cbs)
+      _ <- soeService.remove(fetched.flatMap(_.parentSOEHashes))
     } yield ()
 
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
@@ -84,6 +91,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- concurrentTipService.set(snapshotInfo.tips)
       _ <- acceptedCBSinceSnapshot.set(snapshotInfo.acceptedCBSinceSnapshot)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.put(k, v) }.toList.sequence
+      _ <- snapshotInfo.soeCache.traverse(soe => soeService.put(soe.signedObservationEdge.hash, soe))
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.map { h =>
         LiftIO[F].liftIO(h.checkpointBlock.get.storeSOE()) *>
           checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h) *>
@@ -324,7 +332,6 @@ class SnapshotService[F[_]: Concurrent](
         dao.metrics.updateMetricAsync("totalNumCBsInShapshots", total.toString)
       }
 
-      _ <- checkpointService.applySnapshot(currentSnapshot.checkpointBlocks.toList)
       _ <- dao.metrics.updateMetricAsync(Metrics.lastSnapshotHash, currentSnapshot.hash)
     } yield ()
 
@@ -346,6 +353,7 @@ class SnapshotService[F[_]: Concurrent](
 
       _ <- applySnapshotTransactions(s, cbs)
 
+      _ <- soeService.remove(cbs.flatMap(_.parentSOEHashes))
       _ <- checkpointService.applySnapshot(cbs.map(_.baseHash))
     } yield ()
 
@@ -413,6 +421,7 @@ object SnapshotService {
     rateLimiting: RateLimiting[F],
     broadcastService: SnapshotBroadcastService[F],
     consensusManager: ConsensusManager[F],
+    soeService: SOEService[F],
     dao: DAO
   ) =
     new SnapshotService[F](
@@ -424,6 +433,7 @@ object SnapshotService {
       rateLimiting,
       broadcastService,
       consensusManager,
+      soeService,
       dao
     )
 }

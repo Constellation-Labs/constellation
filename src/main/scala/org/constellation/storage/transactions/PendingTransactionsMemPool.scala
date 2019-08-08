@@ -26,10 +26,10 @@ class PendingTransactionsMemPool[F[_]: Concurrent]() extends LookupAlgebra[F, St
     }
 
   def lookup(key: String): F[Option[TransactionCacheData]] =
-    txRef.get.map(_.find(_._2.transaction.hash == key).map(_._2))
+    txRef.get.map(_.get(key))
 
   def contains(key: String): F[Boolean] =
-    txRef.get.map(_.exists(_._2.transaction.hash == key))
+    txRef.get.map(_.contains(key))
 
   // TODO: Rethink - use queue
   def pull(minCount: Int): F[Option[List[TransactionCacheData]]] =

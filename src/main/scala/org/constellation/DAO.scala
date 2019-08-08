@@ -133,9 +133,11 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
           ConstellationExecutionContext.global
         )
       val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.global)
-      new SnapshotBroadcastService[IO](new HealthChecker[IO](this, concurrentTipService, downloadProcess),
-                                       cluster,
-                                       this)
+      new SnapshotBroadcastService[IO](
+        new HealthChecker[IO](this, concurrentTipService, downloadProcess),
+        cluster,
+        this
+      )
     }
     snapshotWatcher = new SnapshotWatcher(snapshotBroadcastService)
 
@@ -148,6 +150,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       rateLimiting,
       snapshotBroadcastService,
       consensusManager,
+      soeService,
       this
     )
 

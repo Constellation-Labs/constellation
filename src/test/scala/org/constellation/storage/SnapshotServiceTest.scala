@@ -37,6 +37,7 @@ class SnapshotServiceTest
     val rateLimiting = mock[RateLimiting[IO]]
     val broadcastService = mock[SnapshotBroadcastService[IO]]
     val consensusManager = mock[ConsensusManager[IO]]
+    val soeService = mock[SOEService[IO]]
 
     snapshotService = new SnapshotService[IO](
       cts,
@@ -47,6 +48,7 @@ class SnapshotServiceTest
       rateLimiting,
       broadcastService,
       consensusManager,
+      soeService,
       dao
     )
   }
@@ -87,8 +89,9 @@ class SnapshotServiceTest
 
   "set snapshot state" - {
     "should set necessary data to perform apply function " in {
-      val dao = TestHelpers.prepareRealDao()
+      implicit val dao = TestHelpers.prepareRealDao()
       val snapshotService = dao.snapshotService
+      List(RandomData.go.initialDistribution, RandomData.go.initialDistribution2).traverse(_.storeSOE()).unsafeRunSync()
 
       val cb1 = RandomData.randomBlock(RandomData.startingTips)
       val cb2 = RandomData.randomBlock(RandomData.startingTips)
@@ -96,6 +99,7 @@ class SnapshotServiceTest
 
       val snapshot = Snapshot("lastSnapHash", cbs.flatMap(_.checkpointBlock.map(_.baseHash)))
       val info: SnapshotInfo = SnapshotInfo(snapshot, snapshotCache = cbs)
+
       snapshotService.setSnapshot(info).unsafeRunSync()
       snapshotService.applySnapshot().unsafeRunSync()
 
