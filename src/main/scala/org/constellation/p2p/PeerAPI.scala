@@ -6,7 +6,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
-import akka.http.scaladsl.server.{ExceptionHandler, Route}
+import akka.http.scaladsl.server.{Directive0, ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.util.Timeout
 import cats.effect.{ContextShift, IO}
@@ -25,6 +25,7 @@ import org.constellation.{ConstellationContextShift, ConstellationExecutionConte
 import org.json4s.native
 import org.json4s.native.Serialization
 
+import scala.concurrent.Future
 import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long)
@@ -50,7 +51,8 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     with CommonEndpoints
     with IPEnforcer
     with StrictLogging
-    with MetricTimerDirective {
+    with MetricTimerDirective
+    with SimulateTimeoutDirective {
 
   implicit val serialization: Serialization.type = native.Serialization
 
@@ -277,15 +279,17 @@ class PeerAPI(override val ipManager: IPManager[IO])(
   }
 
   def routes(address: InetSocketAddress): Route = withTimer("peer-api") {
-//    val id = ipLookup(address) causes circular dependencies and cluster with 6 nodes unable to start due to timeouts. Consider reopen #391
+    // val id = ipLookup(address) causes circular dependencies and cluster with 6 nodes unable to start due to timeouts. Consider reopen #391
     // TODO: pass id down and use it if needed
-
     decodeRequest {
       encodeResponse {
         // rejectBannedIP {
-        signEndpoints ~ commonEndpoints ~ enforceKnownIP(address) {
-          getEndpoints(address) ~ postEndpoints ~ mixedEndpoints ~ blockBuildingRoundRoute
-        }
+        signEndpoints ~ commonEndpoints ~
+          withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.edge) {
+            enforceKnownIP(address) {
+              getEndpoints(address) ~ postEndpoints ~ mixedEndpoints ~ blockBuildingRoundRoute
+            }
+          }
       }
     }
   }
@@ -325,5 +329,4 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           complete(HttpResponse(StatusCodes.InternalServerError))
         }
     }
-
 }
