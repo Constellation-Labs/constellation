@@ -38,7 +38,7 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
   private[storage] def withLock[R](semaphoreName: String, thunk: F[R]) =
     new SingleLock[F, R](semaphoreName, semaphores(semaphoreName)).use(thunk)
 
-  protected[storage] val pending: PendingMemPool[F, A]
+  protected[storage] val pending: PendingMemPool[F, String, A]
   protected[storage] val arbitrary = new StorageService[F, A](Some(240))
   protected[storage] val inConsensus = new StorageService[F, A](Some(240))
   protected[storage] val accepted = new StorageService[F, A](Some(240))
