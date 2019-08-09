@@ -332,6 +332,9 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             )
             complete(response)
           } ~
+          path("timeout") {
+            complete(dao.simulateEndpointTimeout.toString)
+          } ~
           path("micrometer-metrics") {
             val writer: Writer = new StringWriter()
             TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
@@ -390,7 +393,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
       }
     }
 
-  private val postEndpoints =
+  val postEndpoints =
     post {
       pathPrefix("channel") {
         path("open") {
@@ -488,6 +491,11 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         path("random") { // Temporary
           dao.generateRandomTX = !dao.generateRandomTX
           dao.metrics.updateMetric("generateRandomTX", dao.generateRandomTX.toString)
+          complete(StatusCodes.OK)
+        } ~
+        path("timeout") {
+          dao.toggleSimulateEndpointTimeout()
+          dao.metrics.updateMetric("simulateEndpointTimeout", dao.simulateEndpointTimeout.toString)
           complete(StatusCodes.OK)
         } ~
         path("checkpointFormation") { // Temporary
@@ -627,5 +635,4 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
       noAuthRoutes ~ mainRoutes
     }
   }
-
 }

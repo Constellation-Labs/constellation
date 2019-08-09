@@ -30,6 +30,7 @@ trait NodeData {
   @volatile var downloadInProgress: Boolean = false
   @volatile var generateRandomTX: Boolean = false
   @volatile var formCheckpoints: Boolean = true
+  @volatile var simulateEndpointTimeout: Boolean = false
   var heartbeatEnabled: Boolean = true
 
   var lastConfirmationUpdateTime: Long = System.currentTimeMillis()
@@ -67,4 +68,5 @@ trait NodeData {
   def updateKeyPair(kp: KeyPair): Unit =
     nodeConfig = nodeConfig.copy(primaryKeyPair = kp)
 
+  def toggleSimulateEndpointTimeout(): Unit = simulateEndpointTimeout = !simulateEndpointTimeout
 }
