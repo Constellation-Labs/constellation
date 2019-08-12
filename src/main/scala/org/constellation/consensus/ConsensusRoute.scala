@@ -112,7 +112,7 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
       }
     }
 
-  private def handleProposal(proposal: RoundCommand): Route =
+  private def handleProposal(proposal: ConsensusProposal): Route =
     onSuccess(consensusManager.getRound(proposal.roundId).unsafeToFuture()) {
       case None =>
         consensusManager.addMissed(proposal.roundId, proposal).unsafeRunAsyncAndForget()

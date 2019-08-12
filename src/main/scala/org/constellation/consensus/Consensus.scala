@@ -475,7 +475,7 @@ class Consensus[F[_]: Concurrent](
 }
 
 object Consensus {
-  sealed trait RoundCommand {
+  sealed trait ConsensusProposal {
     def roundId: RoundId
   }
   abstract class ConsensusException(msg: String) extends Exception(msg) {
@@ -503,11 +503,11 @@ object Consensus {
   case class UnionProposals(state: StageState)
   case class ArbitraryDataProposals(distance: Int)
 
-  case class ResolveMajorityCheckpointBlock(roundId: RoundId, stageState: StageState) extends RoundCommand
+  case class ResolveMajorityCheckpointBlock(roundId: RoundId, stageState: StageState)
 
-  case class AcceptMajorityCheckpointBlock(roundId: RoundId) extends RoundCommand
+  case class AcceptMajorityCheckpointBlock(roundId: RoundId)
 
-  case class StartTransactionProposal(roundId: RoundId) extends RoundCommand
+  case class StartTransactionProposal(roundId: RoundId)
 
   case class LightTransactionsProposal(
     roundId: RoundId,
@@ -516,13 +516,13 @@ object Consensus {
     messages: Seq[String] = Seq(),
     notifications: Seq[PeerNotification] = Seq(),
     exHashes: Seq[String] = Seq()
-  ) extends RoundCommand
+  ) extends ConsensusProposal
 
   case class UnionBlockProposal(
     roundId: RoundId,
     facilitatorId: FacilitatorId,
     checkpointBlock: CheckpointBlock
-  ) extends RoundCommand
+  ) extends ConsensusProposal
 
   case class RoundData(
     roundId: RoundId,
@@ -540,7 +540,7 @@ object Consensus {
     maybeCB: Option[CheckpointBlock],
     transactionsToReturn: Seq[String],
     observationsToReturn: Seq[String]
-  ) extends RoundCommand
+  )
 
   case class EmptyProposals(
     roundId: RoundId,
@@ -571,6 +571,6 @@ object Consensus {
     roundId: RoundId,
     facilitatorId: FacilitatorId,
     checkpointBlock: CheckpointBlock
-  ) extends RoundCommand
+  ) extends ConsensusProposal
 
 }

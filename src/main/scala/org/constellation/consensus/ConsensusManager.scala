@@ -49,7 +49,7 @@ class ConsensusManager[F[_]: Concurrent](
     Map.empty[RoundId, ConsensusInfo[F]]
   )
   private[consensus] val ownConsensus: SingleRef[F, Option[OwnConsensus[F]]] = SingleRef(None)
-  private[consensus] val proposals: StorageService[F, List[RoundCommand]] = new StorageService(Some(2))
+  private[consensus] val proposals: StorageService[F, List[ConsensusProposal]] = new StorageService(Some(2))
 
   def getRound(roundId: RoundId): F[Option[Consensus[F]]] =
     for {
@@ -121,7 +121,7 @@ class ConsensusManager[F[_]: Concurrent](
             _ =>
               stopBlockCreationRound(
                 StopBlockCreationRound(error.roundId, None, error.transactions, error.observations)
-              )
+            )
           )
           .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](error))
       case unknown =>
@@ -216,10 +216,10 @@ class ConsensusManager[F[_]: Concurrent](
       _ <- roundInfo.consensus.startTransactionProposal()
     } yield ()
 
-  def addMissed(roundId: RoundId, roundCommand: RoundCommand): F[Unit] =
+  def addMissed(roundId: RoundId, roundCommand: ConsensusProposal): F[Unit] =
     withLock(roundId.toString, addMissedUnsafe(roundId, roundCommand))
 
-  private def addMissedUnsafe(roundId: RoundId, roundCommand: RoundCommand): F[Unit] =
+  private def addMissedUnsafe(roundId: RoundId, roundCommand: ConsensusProposal): F[Unit] =
     for {
       missed <- proposals.lookup(roundId.toString).map(_.toList.flatten)
       _ <- proposals.put(roundId.toString, missed :+ roundCommand)
@@ -264,7 +264,7 @@ class ConsensusManager[F[_]: Concurrent](
             dao.threadSafeMessageMemPool.activeChannels
               .get(message.signedMessageData.data.channelId)
               .foreach(_.release())
-        )
+      )
     )
 
   def cleanUpLongRunningConsensus: F[Unit] =
@@ -334,7 +334,8 @@ class ConsensusManager[F[_]: Concurrent](
         ConfigUtil.config.getString("constellation.consensus.arbitrary-tx-distance-base")
       ).getOrElse("hash") match {
         case "id" =>
-          (id: Id, tx: Transaction) => Distance.calculate(tx.src.address, id)
+          (id: Id, tx: Transaction) =>
+            Distance.calculate(tx.src.address, id)
         case "hash" =>
           (id: Id, tx: Transaction) =>
             val xorIdTx = Distance.calculate(tx.hash, id)
