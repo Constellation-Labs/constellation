@@ -19,7 +19,7 @@ case class LocalNodeConfig(
 trait NodeData {
 
   @volatile var nodeConfig: NodeConfig
-  // var dbActor : SwayDBDatastore = _
+
   var metrics: Metrics = _
   var messageHashStore: swaydb.Set[String] = _
   var checkpointHashStore: swaydb.Set[String] = _
@@ -32,6 +32,8 @@ trait NodeData {
   @volatile var formCheckpoints: Boolean = true
   @volatile var simulateEndpointTimeout: Boolean = false
   var heartbeatEnabled: Boolean = true
+
+  var remotes: Seq[InetSocketAddress] = Seq()
 
   var lastConfirmationUpdateTime: Long = System.currentTimeMillis()
 
@@ -58,15 +60,12 @@ trait NodeData {
       )
     )
 
-  def snapshotPath: File = {
-    val f = File(s"tmp/${id.medium}/snapshots")
-    f.createDirectoryIfNotExists()
-    f
-  }
-  var remotes: Seq[InetSocketAddress] = Seq()
+  def snapshotPath: File =
+    File(s"tmp/${id.medium}/snapshots").createDirectoryIfNotExists()
 
   def updateKeyPair(kp: KeyPair): Unit =
     nodeConfig = nodeConfig.copy(primaryKeyPair = kp)
 
-  def toggleSimulateEndpointTimeout(): Unit = simulateEndpointTimeout = !simulateEndpointTimeout
+  def toggleSimulateEndpointTimeout(): Unit =
+    simulateEndpointTimeout = !simulateEndpointTimeout
 }

@@ -500,7 +500,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         } ~
         path("checkpointFormation") { // Temporary
           dao.formCheckpoints = !dao.formCheckpoints
-          dao.metrics.updateMetric("checkpointFormation", dao.generateRandomTX.toString)
+          dao.metrics.updateMetric("checkpointFormation", dao.formCheckpoints.toString)
           complete(StatusCodes.OK)
         } ~
         path("peerHealthCheck") {
