@@ -150,7 +150,10 @@ class HealthChecker[F[_]: Concurrent: Logger](
         )
       )
       _ <- Sync[F].delay {
-        Snapshot.removeSnapshots(diff.snapshotsToDelete.map(_.hash), dao.snapshotPath.pathAsString)(dao)
+        Snapshot.removeSnapshots(
+          diff.snapshotsToDelete.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),
+          dao.snapshotPath.pathAsString
+        )(dao)
       }
       _ <- Logger[F].info(s"[${dao.id.short}] re-download process finished")
       _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadFinished)

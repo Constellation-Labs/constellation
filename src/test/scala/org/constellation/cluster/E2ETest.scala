@@ -9,7 +9,10 @@ import org.constellation._
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives._
 import org.constellation.storage.RecentSnapshot
-import org.constellation.util.{APIClient, Simulation}
+import org.constellation.util.{APIClient, Metrics, Simulation}
+import scala.concurrent.duration._
+
+import scala.concurrent.Await
 
 class E2ETest extends E2E {
 
@@ -144,8 +147,8 @@ class E2ETest extends E2E {
         .unsafeRunSync()
         .distinct
         .size == 1,
-      maxRetries = 6,
-      delay = 10000
+      maxRetries = 30,
+      delay = 5000
     )
 
     val storedSnapshots = allAPIs.map {
