@@ -77,7 +77,7 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
     }
     it("safely updates a tip ") {
       val maxTipUsage = 10
-      val concurrentTipService = new ConcurrentTipService[IO](6, 4, maxTipUsage, 2, 30, dao)
+      val concurrentTipService = new ConcurrentTipService[IO](6, 4, maxTipUsage, 0, 30, dao)
 
       RandomData.go.initialDistribution
         .storeSOE()

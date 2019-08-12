@@ -97,9 +97,10 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
         tipData <- getUnsafe(h)
         size <- sizeUnsafe
         reuseTips = size < maxWidth
+        aboveMinimumTip = size > numFacilitatorPeers
         _ <- tipData match {
           case None => Sync[F].unit
-          case Some(TipData(block, numUses, _)) if numUses >= maxTipUsage || !reuseTips =>
+          case Some(TipData(block, numUses, _)) if aboveMinimumTip && (numUses >= maxTipUsage || !reuseTips) =>
             removeUnsafe(block.baseHash)(dao.metrics)
           case Some(TipData(block, numUses, tipHeight)) =>
             putUnsafe(block.baseHash, TipData(block, numUses + 1, tipHeight))(dao.metrics)
@@ -165,10 +166,10 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
     tipsRef.get.map { tips =>
       metrics.updateMetric("activeTips", tips.size)
       (tips.size, readyFacilitators) match {
-        case (size, facilitators) if size >= 2 && facilitators.nonEmpty =>
+        case (size, facilitators) if size >= numFacilitatorPeers && facilitators.nonEmpty =>
           val tipSOE = calculateTipsSOE(tips)
           Some(PulledTips(tipSOE, calculateFinalFacilitators(facilitators, tipSOE.soe.map(_.hash).reduce(_ + _))))
-        case (size, _) if size >= 2 =>
+        case (size, _) if size >= numFacilitatorPeers =>
           Some(PulledTips(calculateTipsSOE(tips), Map.empty[Id, PeerData]))
         case (_, _) => None
       }
@@ -177,7 +178,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
   private def calculateTipsSOE(tips: Map[String, TipData]): TipSoe = {
     val r = Random
       .shuffle(if (tips.size > 50) tips.slice(0, 50).toSeq else tips.toSeq)
-      .take(2)
+      .take(numFacilitatorPeers)
       .map { t =>
         (t._2.checkpointBlock.calculateHeight()(dao), t._2.checkpointBlock.checkpoint.edge.signedObservationEdge)
       }
