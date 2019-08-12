@@ -338,13 +338,20 @@ class ConstellationNode(
     Genesis.start()
     logger.info(s"Genesis block hash ${dao.genesisBlock.map { _.soeHash }.getOrElse("")}")
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
-    dao.generateRandomTX = true
+    enableTransactionGenerator()
   }
+
 //  Keeping disabled for now -- going to only use midDb for the time being.
 //  private val txMigrator = new TransactionPeriodicMigration
 
   var dataPollingManager: DataPollingManager = _
   if (nodeConfig.dataPollingManagerOn) {
     dataPollingManager = new DataPollingManager(60)
+  }
+
+  private def enableTransactionGenerator(): Unit = {
+    dao.generateRandomTX = true
+    dao.metrics.updateMetric("generateRandomTX", dao.generateRandomTX.toString)
+    logger.info("TransactionGenerator is enabled")
   }
 }
