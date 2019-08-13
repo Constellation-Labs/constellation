@@ -28,11 +28,10 @@ class TransactionGossiping[F[_]: Concurrent](transactionService: TransactionServ
 
   def observe(tx: TransactionCacheData): F[TransactionCacheData] =
     for {
-      maybeUpdated <- transactionService.update(tx.transaction.hash, t => t.copy(path = t.path ++ tx.path))
-      updated <- if (maybeUpdated.nonEmpty) Sync[F].pure(maybeUpdated.get) else setTxWithPath(tx)
+      updated <- transactionService.update(tx.transaction.hash,
+                                           t => t.copy(path = t.path ++ tx.path),
+                                           tx.copy(path = tx.path + dao.id),
+                                           ConsensusStatus.Unknown)
     } yield updated
-
-  private def setTxWithPath(tx: TransactionCacheData): F[TransactionCacheData] =
-    transactionService.put(tx.copy(path = tx.path + dao.id), ConsensusStatus.Unknown)
 
 }

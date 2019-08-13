@@ -56,6 +56,15 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
     case _                         => new Exception("Unknown consensus status").raiseError[F, A]
   }
 
+  def update(key: String, fn: A => A, empty: => A, as: ConsensusStatus): F[A] = as match {
+    case ConsensusStatus.Pending     => pending.update(key, fn, empty)
+    case ConsensusStatus.InConsensus => withLock("inConsensusUpdate", inConsensus.update(key, fn, empty))
+    case ConsensusStatus.Arbitrary   => withLock("arbitraryUpdate", arbitrary.update(key, fn, empty))
+    case ConsensusStatus.Accepted    => withLock("acceptedUpdate", accepted.update(key, fn, empty))
+    case ConsensusStatus.Unknown     => withLock("unknownUpdate", unknown.update(key, fn, empty))
+    case _                           => new Exception("Unknown consensus status").raiseError[F, A]
+  }
+
   def update(key: String, fn: A => A): F[Option[A]] =
     for {
       p <- pending.update(key, fn)

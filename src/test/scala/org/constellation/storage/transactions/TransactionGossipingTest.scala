@@ -70,12 +70,12 @@ class TransactionGossipingTest
     tx.path shouldReturn path
 
     txService.contains(tx.transaction.hash) shouldReturnF true
-    txService.update(*, *) shouldReturnF Some(tx)
+    txService.update(*, *, *, *) shouldReturnF tx
     txService.lookup(*) shouldReturnF Some(tx)
 
     gossiping.observe(tx).unsafeRunSync
 
-    txService.update(tx.transaction.hash, *).was(called)
+    txService.update(tx.transaction.hash, *, *, ConsensusStatus.Unknown).was(called)
   }
 
   private def mockDAO: DAO = {
