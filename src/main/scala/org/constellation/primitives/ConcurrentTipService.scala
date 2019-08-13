@@ -8,7 +8,7 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.consensus.TipData
 import org.constellation.p2p.PeerData
-import org.constellation.primitives.Schema.{Id, SignedObservationEdge}
+import org.constellation.primitives.Schema.{Height, Id, SignedObservationEdge}
 import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
 import org.constellation.util.Metrics
 import org.constellation.{ConstellationContextShift, DAO}
@@ -34,6 +34,13 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
   minPeerTimeAddedSeconds: Int,
   dao: DAO
 ) {
+
+  def clearStaleTips(min: Long): F[Unit] =
+    tipsRef.get.map(tips => tips.filter(_._2.height.min < min)).flatMap { toRemove =>
+      Logger[F]
+        .info(s"Removing tips that are below cluster height: $min to remove ${toRemove.map(t => (t._1, t._2.height))}")
+        .flatMap(_ => tipsRef.update(curr => curr -- toRemove.keySet))
+    }
 
   private val conflictingTips: SingleRef[F, Map[String, CheckpointBlock]] = SingleRef(Map.empty)
   private val tipsRef: SingleRef[F, Map[String, TipData]] = SingleRef(Map.empty)
@@ -67,6 +74,9 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
   def remove(key: String)(implicit metrics: Metrics): F[Unit] =
     tipsRef.update(_ - key).flatTap(_ => metrics.incrementMetricAsync("checkpointTipsRemoved"))
 
+  def removeUnsafe(key: String)(implicit metrics: Metrics): F[Unit] =
+    tipsRef.updateUnsafe(_ - key).flatTap(_ => metrics.incrementMetricAsync("checkpointTipsRemoved"))
+
   def markAsConflict(key: String)(implicit metrics: Metrics): F[Unit] =
     get(key).flatMap { m =>
       if (m.isDefined)
@@ -76,28 +86,37 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
       else Sync[F].unit
     }
 
-  def update(checkpointBlock: CheckpointBlock)(implicit dao: DAO): F[Unit] =
-    withLock("updateTips", updateUnsafe(checkpointBlock))
+  def update(checkpointBlock: CheckpointBlock, height: Height, isGenesis: Boolean = false)(implicit dao: DAO): F[Unit] =
+    withLock("updateTips", updateUnsafe(checkpointBlock, height: Height, isGenesis))
 
-  def updateUnsafe(checkpointBlock: CheckpointBlock)(implicit dao: DAO): F[Unit] = {
+  def updateUnsafe(checkpointBlock: CheckpointBlock, height: Height, isGenesis: Boolean = false)(
+    implicit dao: DAO
+  ): F[Unit] = {
     val tipUpdates = checkpointBlock.parentSOEBaseHashes.distinct.toList.traverse { h =>
       for {
         tipData <- getUnsafe(h)
         size <- sizeUnsafe
         reuseTips = size < maxWidth
+        aboveMinimumTip = size > numFacilitatorPeers
         _ <- tipData match {
           case None => Sync[F].unit
-          case Some(TipData(block, numUses)) if !reuseTips || numUses >= maxTipUsage =>
-            remove(block.baseHash)(dao.metrics)
-          case Some(TipData(block, numUses)) if reuseTips && numUses <= maxTipUsage =>
-            putUnsafe(block.baseHash, TipData(block, numUses + 1))(dao.metrics)
+          case Some(TipData(block, numUses, _)) if aboveMinimumTip && (numUses >= maxTipUsage || !reuseTips) =>
+            removeUnsafe(block.baseHash)(dao.metrics)
+          case Some(TipData(block, numUses, tipHeight)) =>
+            putUnsafe(block.baseHash, TipData(block, numUses + 1, tipHeight))(dao.metrics)
               .flatMap(_ => dao.metrics.incrementMetricAsync("checkpointTipsIncremented"))
         }
       } yield ()
     }
 
     tipUpdates
-      .flatMap(_ => putUnsafe(checkpointBlock.baseHash, TipData(checkpointBlock, 0))(dao.metrics))
+      .flatMap(_ => getMinTipHeight(None))
+      .flatMap(
+        min =>
+          if (isGenesis || min < height.min)
+            putUnsafe(checkpointBlock.baseHash, TipData(checkpointBlock, 0, height))(dao.metrics)
+          else Logger[F].info(s"Block height: ${height.min} below min tip: $min update skipped")
+      )
       .recoverWith {
         case err: TipThresholdException =>
           dao.metrics
@@ -131,6 +150,8 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
       _ <- Logger[F].debug(s"Active tip height: $minActiveTipHeight")
       keys <- tipsRef.get.map(_.keys.toList)
       maybeData <- LiftIO[F].liftIO(keys.traverse(dao.checkpointService.lookup(_)))
+      diff = keys.diff(maybeData.flatMap(_.map(_.checkpointBlock.baseHash)))
+      _ <- if (diff.nonEmpty) Logger[F].info(s"wkoszycki not_mapped ${diff}") else Sync[F].unit
       heights = maybeData.flatMap {
         _.flatMap {
           _.height.map {
@@ -145,10 +166,10 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
     tipsRef.get.map { tips =>
       metrics.updateMetric("activeTips", tips.size)
       (tips.size, readyFacilitators) match {
-        case (size, facilitators) if size >= 2 && facilitators.nonEmpty =>
+        case (size, facilitators) if size >= numFacilitatorPeers && facilitators.nonEmpty =>
           val tipSOE = calculateTipsSOE(tips)
           Some(PulledTips(tipSOE, calculateFinalFacilitators(facilitators, tipSOE.soe.map(_.hash).reduce(_ + _))))
-        case (size, _) if size >= 2 =>
+        case (size, _) if size >= numFacilitatorPeers =>
           Some(PulledTips(calculateTipsSOE(tips), Map.empty[Id, PeerData]))
         case (_, _) => None
       }
@@ -157,7 +178,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
   private def calculateTipsSOE(tips: Map[String, TipData]): TipSoe = {
     val r = Random
       .shuffle(if (tips.size > 50) tips.slice(0, 50).toSeq else tips.toSeq)
-      .take(2)
+      .take(numFacilitatorPeers)
       .map { t =>
         (t._2.checkpointBlock.calculateHeight()(dao), t._2.checkpointBlock.checkpoint.edge.signedObservationEdge)
       }

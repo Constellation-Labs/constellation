@@ -49,7 +49,7 @@ class ConsensusManager[F[_]: Concurrent](
     Map.empty[RoundId, ConsensusInfo[F]]
   )
   private[consensus] val ownConsensus: SingleRef[F, Option[OwnConsensus[F]]] = SingleRef(None)
-  private[consensus] val proposals: StorageService[F, List[RoundCommand]] = new StorageService(Some(2))
+  private[consensus] val proposals: StorageService[F, List[ConsensusProposal]] = new StorageService(Some(2))
 
   def getRound(roundId: RoundId): F[Option[Consensus[F]]] =
     for {
@@ -71,7 +71,7 @@ class ConsensusManager[F[_]: Concurrent](
       _ <- logger.debug(s"[${dao.id.short}] Starting own consensus $roundId")
       roundData <- createRoundData(roundId)
       missing <- resolveMissingParents(roundData._1)
-      _ <- logger.debug(s"[${dao.id.short}] Resolved missing parents size: ${missing.size}")
+      _ <- logger.debug(s"[${dao.id.short}] Resolved missing parents size: ${missing.size} for round $roundId")
       roundInfo = ConsensusInfo[F](
         new Consensus[F](
           roundData._1,
@@ -91,6 +91,8 @@ class ConsensusManager[F[_]: Concurrent](
         System.currentTimeMillis()
       )
       _ <- ownConsensus.updateUnsafe(d => d.map(o => o.copy(consensusInfo = roundInfo.some)))
+      _ <- logger.debug(s"[${dao.id.short}] created data for round: ${roundId} with facilitators: ${roundData._1.peers
+        .map(_.peerMetadata.id.short)}")
       responses <- remoteSender.notifyFacilitators(roundData._1)
       _ <- if (responses.forall(_.isSuccess)) Sync[F].unit
       else
@@ -119,7 +121,7 @@ class ConsensusManager[F[_]: Concurrent](
             _ =>
               stopBlockCreationRound(
                 StopBlockCreationRound(error.roundId, None, error.transactions, error.observations)
-              )
+            )
           )
           .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](error))
       case unknown =>
@@ -214,10 +216,10 @@ class ConsensusManager[F[_]: Concurrent](
       _ <- roundInfo.consensus.startTransactionProposal()
     } yield ()
 
-  def addMissed(roundId: RoundId, roundCommand: RoundCommand): F[Unit] =
+  def addMissed(roundId: RoundId, roundCommand: ConsensusProposal): F[Unit] =
     withLock(roundId.toString, addMissedUnsafe(roundId, roundCommand))
 
-  private def addMissedUnsafe(roundId: RoundId, roundCommand: RoundCommand): F[Unit] =
+  private def addMissedUnsafe(roundId: RoundId, roundCommand: ConsensusProposal): F[Unit] =
     for {
       missed <- proposals.lookup(roundId.toString).map(_.toList.flatten)
       _ <- proposals.put(roundId.toString, missed :+ roundCommand)
@@ -262,7 +264,7 @@ class ConsensusManager[F[_]: Concurrent](
             dao.threadSafeMessageMemPool.activeChannels
               .get(message.signedMessageData.data.channelId)
               .foreach(_.release())
-        )
+      )
     )
 
   def cleanUpLongRunningConsensus: F[Unit] =
@@ -332,7 +334,8 @@ class ConsensusManager[F[_]: Concurrent](
         ConfigUtil.config.getString("constellation.consensus.arbitrary-tx-distance-base")
       ).getOrElse("hash") match {
         case "id" =>
-          (id: Id, tx: Transaction) => Distance.calculate(tx.src.address, id)
+          (id: Id, tx: Transaction) =>
+            Distance.calculate(tx.src.address, id)
         case "hash" =>
           (id: Id, tx: Transaction) =>
             val xorIdTx = Distance.calculate(tx.hash, id)
@@ -409,16 +412,18 @@ object ConsensusManager {
   ) extends Exception(message)
 
   case class NoTipsForConsensus(id: RoundId, txs: List[String], obs: List[String])
-      extends ConsensusError(id, txs, obs, "No tips to start consensus")
+      extends ConsensusError(id, txs, obs, s"No tips to start consensus $id")
   case class NoPeersForConsensus(id: RoundId, txs: List[String], obs: List[String])
-      extends ConsensusError(id, txs, obs, "No active peers to start consensus")
+      extends ConsensusError(id, txs, obs, s"No active peers to start consensus $id")
   case class NotAllPeersParticipate(id: RoundId, txs: List[String], obs: List[String])
-      extends ConsensusError(id, txs, obs, "Not all of the peers has participated in consensus")
+      extends ConsensusError(id, txs, obs, s"Not all of the peers has participated in consensus $id")
 
   case class BroadcastUnionBlockProposal(roundId: RoundId, peers: Set[PeerData], proposal: UnionBlockProposal)
   case class BroadcastSelectedUnionBlock(roundId: RoundId, peers: Set[PeerData], cb: SelectedUnionBlock)
   case class ConsensusTimeout(roundId: RoundId)
 
-  case class SnapshotHeightAboveTip(snapHeight: Long, tipHeight: Long)
-      extends Exception(s"Snapshot height: $snapHeight is above or/equal proposed tip $tipHeight")
+  case class SnapshotHeightAboveTip(id: RoundId, snapHeight: Long, tipHeight: Long)
+      extends Exception(
+        s"Can't participate in round $id snapshot height: $snapHeight is above or/equal proposed tip $tipHeight"
+      )
 }

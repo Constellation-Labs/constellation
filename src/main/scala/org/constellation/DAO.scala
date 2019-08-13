@@ -8,6 +8,7 @@ import better.files.File
 import cats.effect.{Concurrent, ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.{ConsensusManager, ConsensusRemoteSender, ConsensusScheduler, ConsensusWatcher}
 import org.constellation.crypto.SimpleWalletLike
@@ -63,13 +64,13 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     new MessageService[IO]()
   }
 
-  implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
-
   def peerHostPort = HostPort(nodeConfig.hostName, nodeConfig.peerHttpPort)
 
   def initialize(
     nodeConfigInit: NodeConfig = NodeConfig()
   )(implicit materialize: ActorMaterializer = null): Unit = {
+    implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
+
     initialNodeConfig = nodeConfigInit
     nodeConfig = nodeConfigInit
     actorMaterializer = materialize
@@ -89,6 +90,16 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     transactionService = new TransactionService[IO](this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
+
+    concurrentTipService = new ConcurrentTipService[IO](
+      processingConfig.maxActiveTipsAllowedInMemory,
+      processingConfig.maxWidth,
+      processingConfig.maxTipUsage,
+      processingConfig.numFacilitatorPeers,
+      processingConfig.minPeerTimeAddedSeconds,
+      this
+    )
+
     observationService = new ObservationService[IO](this)
     checkpointService = new CheckpointService[IO](
       this,
@@ -126,7 +137,11 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
           ConstellationExecutionContext.global
         )
       val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.global)
-      new SnapshotBroadcastService[IO](new HealthChecker[IO](this, downloadProcess), cluster, this)
+      new SnapshotBroadcastService[IO](
+        new HealthChecker[IO](this, concurrentTipService, downloadProcess),
+        cluster,
+        this
+      )
     }
     snapshotWatcher = new SnapshotWatcher(snapshotBroadcastService)
 
@@ -148,20 +163,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   }
 
   implicit val context: ContextShift[IO] = ConstellationContextShift.global
-
-  lazy val concurrentTipService: ConcurrentTipService[IO] = new ConcurrentTipService[IO](
-    processingConfig.maxActiveTipsAllowedInMemory,
-    processingConfig.maxWidth,
-    processingConfig.maxTipUsage,
-    processingConfig.numFacilitatorPeers,
-    processingConfig.minPeerTimeAddedSeconds,
-    this
-  )
-
-  def pullTips(
-    readyFacilitators: Map[Id, PeerData]
-  ): Option[PulledTips] =
-    concurrentTipService.pull(readyFacilitators)(this.metrics).unsafeRunSync()
 
   def peerInfo: IO[Map[Id, PeerData]] = cluster.getPeerInfo
 

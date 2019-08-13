@@ -341,7 +341,7 @@
           "expr": "dag_checkpointAccepted_total{application=\"$application\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "$instance",
+          "legendFormat": "{{instance}}",
           "refId": "C"
         }
       ],
@@ -866,7 +866,7 @@
           "expr": "dag_parentSOEServiceQueryFailed_total{application=\"$application\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "$instance",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -951,7 +951,7 @@
           "expr": "dag_memoryExceeded_thresholdMetCheckpoints_total{application=\"$application\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "$instance",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -1036,7 +1036,7 @@
           "expr": "dag_activeTips{application=\"$application\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "$instance",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -1134,7 +1134,7 @@
           "expr": "dag_transactionService_accepted_size",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "$instance",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -1219,7 +1219,7 @@
           "expr": "dag_transactionService_Arbitrary_size",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "$instance",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -1304,7 +1304,7 @@
           "expr": "dag_transactionService_inConsensus_size",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "$instance",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -1389,7 +1389,7 @@
           "expr": "dag_transactionService_pending_size",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "$instance",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -1474,7 +1474,7 @@
           "expr": "dag_transactionService_unknown_size",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "$instance",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],

@@ -137,7 +137,7 @@ object Genesis {
 
     if (setAsTips) {
       List(go.initialDistribution, go.initialDistribution2)
-        .map(dao.concurrentTipService.update)
+        .map(dao.concurrentTipService.update(_, Height(1, 1), isGenesis = true))
         .sequence
         .unsafeRunSync()
     }

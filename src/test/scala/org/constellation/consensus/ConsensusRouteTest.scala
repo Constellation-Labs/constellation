@@ -34,8 +34,6 @@ class ConsensusRouteTest
   val consensusManager = mock[ConsensusManager[IO]]
   val snapshotService = mock[SnapshotService[IO]]
 
-//  implicit val concurrent = ConstellationConcurrentEffect.global
-
   val consensusRoute = new ConsensusRoute(consensusManager, snapshotService)
 
   "participate route  " - {
@@ -49,7 +47,7 @@ class ConsensusRouteTest
       Seq.empty[ChannelMessage],
       List.empty[Observation]
     )
-    snapshotService.getLastSnapshotHeight shouldReturnF 2
+    snapshotService.getLastSnapshotHeight shouldReturnF 4
 
     "return error when snapshot height is above tip" in {
       Post("/" + ConsensusRoute.newRoundPath, data) ~> consensusRoute.createBlockBuildingRoundRoutes() ~> check {

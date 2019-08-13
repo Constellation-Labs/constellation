@@ -65,7 +65,7 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
             .fold(IO.unit) { min =>
               snapshotService.getLastSnapshotHeight
                 .map(
-                  last => if (last >= min) throw SnapshotHeightAboveTip(last, min)
+                  last => if (last > min) throw SnapshotHeightAboveTip(cmd.roundId, last, min)
                 )
             }
             .flatMap(_ => consensusManager.participateInBlockCreationRound(ConsensusRoute.convert(cmd)))
@@ -86,6 +86,7 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
     post {
       path(ConsensusRoute.proposalPath) {
         entity(as[LightTransactionsProposal]) { proposal =>
+          logger.debug(s"LightTransactionsProposal adding proposal for round ${proposal.roundId} ")
           handleProposal(proposal)
         }
       }
@@ -94,8 +95,8 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
   protected def addUnionBlock(ctx: RequestContext): Route =
     post {
       path(ConsensusRoute.unionPath) {
-
         entity(as[UnionBlockProposal]) { proposal =>
+          logger.debug(s"UnionBlockProposal adding proposal for round ${proposal.roundId} ")
           handleProposal(proposal)
         }
       }
@@ -105,12 +106,13 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
     post {
       path(ConsensusRoute.selectedPath) {
         entity(as[SelectedUnionBlock]) { proposal =>
+          logger.debug(s"SelectedUnionBlock adding proposal for round ${proposal.roundId} ")
           handleProposal(proposal)
         }
       }
     }
 
-  private def handleProposal(proposal: RoundCommand): Route =
+  private def handleProposal(proposal: ConsensusProposal): Route =
     onSuccess(consensusManager.getRound(proposal.roundId).unsafeToFuture()) {
       case None =>
         consensusManager.addMissed(proposal.roundId, proposal).unsafeRunAsyncAndForget()

@@ -9,6 +9,8 @@ import cats.effect.{ContextShift, IO}
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import constellation.createTransaction
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.CheckpointBlockValidatorNel._
@@ -183,7 +185,7 @@ class ValidationSpec
   implicit val keyPair: KeyPair = keyPairs.head
   dao.metrics = new Metrics()
 
-  implicit val logger = dao.unsafeLogger
+  implicit val logger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
   implicit val timer = IO.timer(ConstellationExecutionContext.edge)
   implicit val cs = ConstellationContextShift.edge
 

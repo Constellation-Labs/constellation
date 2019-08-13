@@ -116,7 +116,7 @@ class CheckpointService[F[_]: Concurrent](
         case (NodeState.Ready, Some(cb)) =>
           val acceptance = for {
             _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)
-            _ <- Sync[F].delay { logger.debug(s"[${dao.id.short}] starting accept block: ${cb.baseHash} from others") }
+            _ <- Sync[F].delay { logger.info(s"[${dao.id.short}] starting accept block: ${cb.baseHash} from others") }
             peers <- LiftIO[F].liftIO(obtainPeers)
             _ <- resolveMissingParents(cb, peers)
             _ <- accept(checkpoint.checkpointCacheData)
@@ -207,12 +207,11 @@ class CheckpointService[F[_]: Concurrent](
           _ <- LiftIO[F].liftIO(cb.storeSOE())
           maybeHeight <- calculateHeight(checkpoint)
 
-          _ <- if (maybeHeight.isEmpty) {
+          height <- if (maybeHeight.isEmpty) {
             dao.metrics
               .incrementMetricAsync[F](Metrics.heightEmpty)
-              .flatMap(_ => MissingHeightException(cb).raiseError[F, Unit])
-              .void
-          } else Sync[F].unit
+              .flatMap(_ => MissingHeightException(cb).raiseError[F, Height])
+          } else Sync[F].pure(maybeHeight.get)
 
           _ <- memPool.put(cb.baseHash, checkpoint.copy(height = maybeHeight))
           _ <- Sync[F].delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
@@ -220,9 +219,9 @@ class CheckpointService[F[_]: Concurrent](
           _ <- acceptTransactions(cb)
           _ <- updateRateLimiting(cb)
           _ <- Sync[F].delay {
-            logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
+            logger.info(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
           }
-          _ <- concurrentTipService.update(cb)
+          _ <- concurrentTipService.update(cb, height)
           _ <- LiftIO[F].liftIO(dao.snapshotService.updateAcceptedCBSinceSnapshot(cb))
           _ <- dao.metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
           _ <- incrementMetricIfDummy(cb)
