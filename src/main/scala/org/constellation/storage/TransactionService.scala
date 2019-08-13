@@ -26,10 +26,12 @@ class TransactionService[F[_]: Concurrent: Logger](dao: DAO) extends ConsensusSe
     findHashesByMerkleRoot(merkleRoot).flatMap(tx => withLock("acceptedUpdate", accepted.remove(tx.toSet.flatten))) *>
       withLock("merklePoolUpdate", merklePool.remove(merkleRoot))
 
-  def pullForConsensusWithDummy(minCount: Int, roundId: String = "roundId"): F[List[TransactionCacheData]] =
+  def pullForConsensusWithDummy(minCount: Int,
+                                maxCount: Int,
+                                roundId: String = "roundId"): F[List[TransactionCacheData]] =
     count(status = ConsensusStatus.Pending).flatMap {
       case 0L => dummyTransaction(minCount)
-      case _  => pullForConsensus(minCount)
+      case _  => pullForConsensus(minCount, maxCount)
     }
 
   def dummyTransaction(minCount: Int): F[List[TransactionCacheData]] =
@@ -40,6 +42,6 @@ class TransactionService[F[_]: Concurrent: Logger](dao: DAO) extends ConsensusSe
         )
       )
       .traverse(put)
-      .flatMap(_ => pullForConsensus(minCount))
+      .flatMap(_ => pullForConsensus(minCount, minCount))
 
 }
