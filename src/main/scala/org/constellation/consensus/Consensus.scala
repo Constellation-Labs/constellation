@@ -55,11 +55,11 @@ class Consensus[F[_]: Concurrent](
   def startTransactionProposal(): F[Unit] =
     for {
       transactions <- transactionService
-        .pullForConsensusWithDummy(1)
+        .pullForConsensusWithDummy(1, 1)
         .map(_.map(_.transaction))
       messages <- Sync[F].delay(dao.threadSafeMessageMemPool.pull())
       notifications <- LiftIO[F].liftIO(dao.peerInfo.map(_.values.flatMap(_.notification).toSeq))
-      observations <- observationService.pullForConsensus(0)
+      observations <- observationService.pullForConsensus(0, 0)
       proposal = LightTransactionsProposal(
         roundData.roundId,
         FacilitatorId(dao.id),

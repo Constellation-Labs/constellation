@@ -340,7 +340,7 @@ class TransactionServiceTest
         .traverse(tx => cs.shift *> txService.put(tx))
 
       val pulls = (1 to pullsIteration).toList
-        .map(_ => cs.shift *> txService.pullForConsensus(pullsMinCount))
+        .map(_ => cs.shift *> txService.pullForConsensus(pullsMinCount, pullsMinCount))
 
       // Fill minimum txs required
       puts.unsafeRunSync()
@@ -365,7 +365,7 @@ class TransactionServiceTest
     "should remove a transaction from pending storage" in {
       txService.put(tx, ConsensusStatus.Pending).unsafeRunSync
 
-      txService.pullForConsensus(1).unsafeRunSync
+      txService.pullForConsensus(1, 1).unsafeRunSync
 
       txService.lookup(hash, ConsensusStatus.Pending).unsafeRunSync shouldBe None
     }
@@ -373,7 +373,7 @@ class TransactionServiceTest
     "should add a transaction to inConsensus storage" in {
       txService.put(tx, ConsensusStatus.Pending).unsafeRunSync
 
-      txService.pullForConsensus(1).unsafeRunSync
+      txService.pullForConsensus(1, 1).unsafeRunSync
 
       txService.lookup(hash, ConsensusStatus.InConsensus).unsafeRunSync shouldBe Some(tx)
     }

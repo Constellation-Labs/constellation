@@ -8,12 +8,12 @@ import org.constellation.primitives.concurrency.SingleRef
 class PendingObservationsMemPool[F[_]: Concurrent]() extends PendingMemPool[F, String, Observation] {
 
   // TODO: Rethink - use queue
-  def pull(minCount: Int): F[Option[List[Observation]]] =
+  def pull(minCount: Int, maxCount: Int): F[Option[List[Observation]]] =
     ref.modify { exs =>
       if (exs.size < minCount) {
         (exs, none[List[Observation]])
       } else {
-        val (left, right) = exs.toList.splitAt(minCount)
+        val (left, right) = exs.toList.splitAt(maxCount)
         (right.toMap, left.map(_._2).some)
       }
     }

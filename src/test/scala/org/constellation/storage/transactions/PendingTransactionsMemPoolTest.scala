@@ -59,7 +59,7 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
     "it should return None if there are less txs than min required count" in {
       val memPool = new PendingTransactionsMemPool[IO]
 
-      memPool.pull(10).unsafeRunSync shouldBe none
+      memPool.pull(10, 10).unsafeRunSync shouldBe none
     }
 
     "it should return min required count of txs" in {
@@ -73,7 +73,7 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
         memPool.put("b", tx2) *>
         memPool.put("c", tx3)).unsafeRunSync
 
-      memPool.pull(2).unsafeRunSync shouldBe List(tx1, tx2).some
+      memPool.pull(2, 2).unsafeRunSync shouldBe List(tx1, tx2).some
     }
 
     "it should return transactions sorted by the fee" in {
@@ -87,7 +87,7 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
         memPool.put("b", tx2) *>
         memPool.put("c", tx3)).unsafeRunSync
 
-      memPool.pull(2).unsafeRunSync shouldBe List(tx3, tx1).some
+      memPool.pull(2, 2).unsafeRunSync shouldBe List(tx3, tx1).some
     }
   }
 
