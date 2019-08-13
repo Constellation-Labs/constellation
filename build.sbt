@@ -81,7 +81,6 @@ lazy val coreSettings = Seq(
   resolvers += "Artima Maven Repository".at("http://repo.artima.com/releases"),
   resolvers += "Typesafe Releases".at("http://repo.typesafe.com/typesafe/maven-releases/"),
   resolvers += "jitpack".at("https://jitpack.io")
-  
 )
 
 lazy val coreDependencies = Seq(
@@ -127,7 +126,8 @@ lazy val coreDependencies = Seq(
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
   ("com.github.blemale" %% "scaffeine" % "3.0.0").withSources().withJavadoc(),
   ("com.typesafe.slick" %% "slick" % "3.3.2").withSources().withJavadoc(),
-  "com.h2database" % "h2" % "1.4.199"
+  "com.h2database" % "h2" % "1.4.199",
+  ("com.lihaoyi" % "ammonite-sshd" % "1.6.9").cross(CrossVersion.full)
 ) ++ sttpDependencies
 
 //Test dependencies

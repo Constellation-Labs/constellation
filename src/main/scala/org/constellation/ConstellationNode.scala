@@ -23,6 +23,10 @@ import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, AccountBalance, AccountBalanceCSVReader, HostPort, Metrics}
 import org.slf4j.MDC
+import ammonite.sshd._
+import org.apache.sshd.client.auth.password.UserAuthPassword
+import org.apache.sshd.server.auth.password.PasswordAuthenticator
+import org.apache.sshd.server.session.ServerSession
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -46,6 +50,8 @@ case class CliConfig(
 object ConstellationNode extends StrictLogging {
 
   final val LocalConfigFile = "local_config"
+
+  var node: ConstellationNode = _
 
   //noinspection ScalaStyle
   def main(args: Array[String]): Unit = {
@@ -154,7 +160,7 @@ object ConstellationNode extends StrictLogging {
         maxWidth = constellationConfig.getInt("max-width")
         // TODO: Finish porting configs from application conf
       )
-      new ConstellationNode(
+      node = new ConstellationNode(
         NodeConfig(
           seeds = seedsFromConfig,
           primaryKeyPair = keyPair,
@@ -174,6 +180,7 @@ object ConstellationNode extends StrictLogging {
           allocAccountBalances = allocAccountBalances
         )
       )
+      node
     } match {
       case Failure(e) => e.printStackTrace()
       case Success(_) =>
@@ -251,6 +258,20 @@ class ConstellationNode(
   // If we are exposing rpc then create routes
   val routes: Route = new API()(system, constellation.standardTimeout, dao).routes // logReqResp { }
 
+  object passwordChecker extends PasswordAuthenticator {
+    def authenticate(username: String, password: String, session: ServerSession): Boolean = true
+  }
+
+  val replServer = new SshdRepl(
+    SshServerConfig(
+      address = "0.0.0.0",
+      port = nodeConfig.httpPort + 100,
+      passwordAuthenticator = Some(passwordChecker)
+    )
+  )
+
+  replServer.start()
+
   logger.info("Binding API")
 
   // Setup http server for internal API
@@ -276,6 +297,7 @@ class ConstellationNode(
 
   def shutdown(): Unit = {
     val gracefulShutdown = IO.delay(bindingFuture.foreach(_.unbind())) *>
+      IO.delay(replServer.stop()) *>
       IO.delay(logger.info("Node shutdown completed"))
 
     dao.cluster
