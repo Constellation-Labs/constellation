@@ -40,7 +40,7 @@ class AppE2ETest extends E2E {
   val goe = constellationAppSim.sim.genesis(apis)
   apis.foreach { _.post("genesis/accept", goe) }
 
-  constellationAppSim.sim.triggerRandom(apis)
+  constellationAppSim.sim.enableRandomTransactions(apis)
   constellationAppSim.sim.setReady(apis)
 
   val channelOpenResponse = testApp.deploy(schemaStr, testChannelName)

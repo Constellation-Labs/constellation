@@ -113,8 +113,7 @@ class E2ETest extends E2E {
     assert(Simulation.healthy(allAPIs))
     //  Thread.sleep(1000*1000)
 
-    // Stop transactions
-    Simulation.triggerRandom(allAPIs)
+    Simulation.disableRandomTransactions(allAPIs)
     Simulation.triggerCheckpointFormation(allAPIs)
 
     Simulation.logger.info("Stopping transactions to run parity check")

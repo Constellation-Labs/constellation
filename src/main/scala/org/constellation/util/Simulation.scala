@@ -302,13 +302,18 @@ object Simulation {
     src.post("send", s)
   }
 
-  def triggerRandom(apis: Seq[APIClient]): Seq[Response[String]] = {
+  def triggerCheckpointFormation(apis: Seq[APIClient]): Seq[Response[String]] = {
+    val responses = apis.map(_.postNonBlockingEmptyString("checkpointFormation"))
+    Future.sequence(responses).get()
+  }
+
+  def enableRandomTransactions(apis: Seq[APIClient]): Seq[Response[String]] = {
     val responses = apis.map(_.postNonBlockingEmptyString("random"))
     Future.sequence(responses).get()
   }
 
-  def triggerCheckpointFormation(apis: Seq[APIClient]): Seq[Response[String]] = {
-    val responses = apis.map(_.postNonBlockingEmptyString("checkpointFormation"))
+  def disableRandomTransactions(apis: Seq[APIClient]): Seq[Response[String]] = {
+    val responses = apis.map(_.deleteNonBlockingEmptyString("random"))
     Future.sequence(responses).get()
   }
 
@@ -388,16 +393,16 @@ object Simulation {
     assert(checkGenesis(apis))
     logger.info("Genesis validation passed")
 
-    triggerRandom(apis)
+    enableRandomTransactions(apis)
+    logger.info("Starting random transactions")
 
     setReady(apis)
 
     assert(awaitCheckpointsAccepted(apis, numAccepted = 3))
 
-    Simulation.triggerRandom(apis)
+    disableRandomTransactions(apis)
+    logger.info("Stopping random transactions to run parity check")
     Simulation.triggerCheckpointFormation(apis)
-
-    Simulation.logger.info("Stopping transactions to run parity check")
 
     Simulation.awaitConditionMet(
       "Accepted checkpoint blocks number differs across the nodes",
@@ -412,7 +417,8 @@ object Simulation {
 
     logger.info("Checkpoint validation passed")
 
-    Simulation.triggerRandom(apis)
+    enableRandomTransactions(apis)
+    logger.info("Starting random transactions")
     Simulation.triggerCheckpointFormation(apis)
 
     var debugChannelName = "debug"

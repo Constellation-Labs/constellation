@@ -129,6 +129,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
     extends Json4sSupport
     with ServeUI
     with CommonEndpoints
+    with ConfigEndpoints
     with StrictLogging
     with MetricTimerDirective {
 
@@ -332,9 +333,6 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             )
             complete(response)
           } ~
-          path("timeout") {
-            complete(dao.simulateEndpointTimeout.toString)
-          } ~
           path("micrometer-metrics") {
             val writer: Writer = new StringWriter()
             TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
@@ -488,16 +486,6 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             complete(StatusCodes.OK)
           }
         } ~
-        path("random") { // Temporary
-          dao.generateRandomTX = !dao.generateRandomTX
-          dao.metrics.updateMetric("generateRandomTX", dao.generateRandomTX.toString)
-          complete(StatusCodes.OK)
-        } ~
-        path("timeout") {
-          dao.toggleSimulateEndpointTimeout()
-          dao.metrics.updateMetric("simulateEndpointTimeout", dao.simulateEndpointTimeout.toString)
-          complete(StatusCodes.OK)
-        } ~
         path("checkpointFormation") { // Temporary
           dao.formCheckpoints = !dao.formCheckpoints
           dao.metrics.updateMetric("checkpointFormation", dao.formCheckpoints.toString)
@@ -614,7 +602,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   private val mainRoutes: Route = cors() {
     decodeRequest {
       encodeResponse {
-        getEndpoints ~ postEndpoints ~ jsRequest ~ imageRoute ~ commonEndpoints ~ serveMainPage
+        getEndpoints ~ postEndpoints ~ configEndpoints ~ jsRequest ~ imageRoute ~ commonEndpoints ~ serveMainPage
       }
     }
   }
