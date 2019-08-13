@@ -224,7 +224,6 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   private def finishDownload(snapshot: SnapshotInfo): IO[Unit] =
     for {
       _ <- setSnapshot(snapshot)
-      _ <- enableRandomTX
       _ <- acceptSnapshotCacheData(snapshot)
       _ <- setNodeState(NodeState.Ready)
       _ <- clearSyncBuffer
@@ -256,10 +255,6 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
 
   private def setSnapshot(snapshotInfo: SnapshotInfo): IO[Unit] =
     dao.snapshotService.setSnapshot(snapshotInfo)
-
-  private def enableRandomTX: IO[Unit] = IO {
-    dao.generateRandomTX = true
-  }
 
   private def acceptSnapshotCacheData(snapshotInfo: SnapshotInfo): IO[Unit] =
     dao.snapshotService.syncBuffer.get

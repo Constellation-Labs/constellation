@@ -17,7 +17,7 @@ import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 import scala.concurrent.ExecutionContextExecutor
 
-class TimeoutEndpointApiTest
+class ConfigEndpointsApiTest
     extends FreeSpec
     with ScalatestRouteTest
     with Matchers
@@ -36,18 +36,32 @@ class TimeoutEndpointApiTest
     api = new API()(system, Timeout(10, TimeUnit.SECONDS), dao)
   }
 
-  "Timeout Endpoints" - {
-    "should get current value simulateEndpointTimeout variable" in {
-      Get("/timeout") ~> api.getEndpoints ~> check {
+  "SimulateTimeout Endpoints" - {
+    "should allow to enable simulating timeouts" in {
+      Post("/timeout") ~> api.configEndpoints ~> check {
         status.isSuccess() shouldEqual true
-        responseAs[String] shouldBe dao.simulateEndpointTimeout.toString
+        dao.enableSimulateEndpointTimeout().wasCalled(once)
       }
     }
-
-    "should change value simulateEndpointTimeout variable" in {
-      Post("/timeout") ~> api.postEndpoints ~> check {
+    "should allow to disable simulating timeouts" in {
+      Delete("/timeout") ~> api.configEndpoints ~> check {
         status.isSuccess() shouldEqual true
-        dao.toggleSimulateEndpointTimeout().wasCalled(once)
+        dao.disableSimulateEndpointTimeout().wasCalled(once)
+      }
+    }
+  }
+
+  "RandomTransaction Endpoints" - {
+    "should allow to enable random transactions" in {
+      Post("/random") ~> api.configEndpoints ~> check {
+        status.isSuccess() shouldEqual true
+        dao.enableRandomTransactions().wasCalled(once)
+      }
+    }
+    "should allow to disable random transactions" in {
+      Delete("/random") ~> api.configEndpoints ~> check {
+        status.isSuccess() shouldEqual true
+        dao.disableRandomTransactions().wasCalled(once)
       }
     }
   }

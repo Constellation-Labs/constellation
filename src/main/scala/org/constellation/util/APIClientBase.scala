@@ -200,6 +200,12 @@ class APIClientBase(
   )(implicit f: Formats = constellation.constellationFormats): Future[Response[String]] =
     httpWithAuth(suffix, timeout = timeout)(Method.POST).send()
 
+  def deleteNonBlockingEmptyString(
+    suffix: String,
+    timeout: Duration = 15.seconds
+  )(implicit f: Formats = constellation.constellationFormats): Future[Response[String]] =
+    httpWithAuth(suffix, timeout = timeout)(Method.DELETE).send()
+
   def getBytes(
     suffix: String,
     queryParams: Map[String, String] = Map(),
