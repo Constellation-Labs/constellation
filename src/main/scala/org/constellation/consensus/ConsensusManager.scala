@@ -39,7 +39,7 @@ class ConsensusManager[F[_]: Concurrent](
     ConfigUtil.getDurationFromConfig("constellation.consensus.form-checkpoint-blocks-timeout").toMillis
 
   private val semaphore: Semaphore[F] = {
-    implicit val cs: ContextShift[IO] = ConstellationContextShift.edge
+    implicit val cs: ContextShift[IO] = ConstellationContextShift.global
     Semaphore.in[IO, F](1).unsafeRunSync()
   }
 
@@ -121,7 +121,7 @@ class ConsensusManager[F[_]: Concurrent](
             _ =>
               stopBlockCreationRound(
                 StopBlockCreationRound(error.roundId, None, error.transactions, error.observations)
-            )
+              )
           )
           .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](error))
       case unknown =>
@@ -265,7 +265,7 @@ class ConsensusManager[F[_]: Concurrent](
             dao.threadSafeMessageMemPool.activeChannels
               .get(message.signedMessageData.data.channelId)
               .foreach(_.release())
-      )
+        )
     )
 
   def cleanUpLongRunningConsensus: F[Unit] =
@@ -335,8 +335,7 @@ class ConsensusManager[F[_]: Concurrent](
         ConfigUtil.config.getString("constellation.consensus.arbitrary-tx-distance-base")
       ).getOrElse("hash") match {
         case "id" =>
-          (id: Id, tx: Transaction) =>
-            Distance.calculate(tx.src.address, id)
+          (id: Id, tx: Transaction) => Distance.calculate(tx.src.address, id)
         case "hash" =>
           (id: Id, tx: Transaction) =>
             val xorIdTx = Distance.calculate(tx.hash, id)

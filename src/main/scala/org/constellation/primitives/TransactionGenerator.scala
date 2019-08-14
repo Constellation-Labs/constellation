@@ -88,7 +88,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
         .onComplete {
           case Success(value) => cb(Right(value.body))
           case Failure(error) => cb(Left(error))
-        }(ConstellationExecutionContext.edge)
+        }(ConstellationExecutionContext.callbacks)
     }
     for {
       _ <- broadcastLightNode
@@ -143,7 +143,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
     LiftIO[F].liftIO(dao.peerInfo(NodeType.Light))
 
   private def broadcastTransaction(tcd: TransactionCacheData, peerData: List[PeerData]) = {
-    val contextShift: ContextShift[IO] = ConstellationContextShift.edge
+    val contextShift: ContextShift[IO] = ConstellationContextShift.global
     LiftIO[F].liftIO(contextShift.shift *> peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd))))
   }
 

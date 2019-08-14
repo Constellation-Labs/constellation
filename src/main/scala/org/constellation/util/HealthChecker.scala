@@ -48,7 +48,7 @@ object HealthChecker {
     var lastCheck: Either[MetricFailure, Unit] = Right(())
     while (it.hasNext && lastCheck.isRight) {
       val a = it.next()
-      val metrics = IO.fromFuture(IO { a.metricsAsync })(ConstellationContextShift.edge).unsafeRunSync() // TODO: wkoszycki revisit
+      val metrics = IO.fromFuture(IO { a.metricsAsync })(ConstellationContextShift.apiClient).unsafeRunSync() // TODO: wkoszycki revisit
       lastCheck = checkLocalMetrics(metrics, a.baseURI).orElse {
         hashes ++= Set(metrics.getOrElse(Metrics.lastSnapshotHash, "no_snap"))
         Either.cond(hashes.size == 1, (), InconsistentSnapshotHash(a.baseURI, hashes))

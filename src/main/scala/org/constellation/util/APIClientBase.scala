@@ -9,7 +9,7 @@ import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{CanLog, Logger}
-import org.constellation.ConstellationContextShift
+import org.constellation.{ConstellationContextShift, ConstellationExecutionContext}
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import org.slf4j.MDC
@@ -61,7 +61,7 @@ class APIClientBase(
   implicit val logger = Logger.takingImplicit[HostPort]("APIClient")
 
   implicit val backend = new LoggingSttpBackend[Future, Nothing](
-    PrometheusBackend[Future, Nothing](OkHttpFutureBackend())
+    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
   )
   implicit val serialization = native.Serialization
 

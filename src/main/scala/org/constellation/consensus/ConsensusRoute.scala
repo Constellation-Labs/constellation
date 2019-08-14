@@ -6,13 +6,14 @@ import akka.http.scaladsl.server.Directives.{extractRequestContext, path, _}
 import akka.http.scaladsl.server.{RequestContext, Route}
 import cats.effect.IO
 import constellation._
+import cats.implicits._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.consensus.Consensus._
 import org.constellation.consensus.ConsensusManager.SnapshotHeightAboveTip
 import org.constellation.p2p.PeerData
 import org.constellation.storage.SnapshotService
 import org.constellation.util.APIClient
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO}
 import org.json4s.native
 import org.json4s.native.Serialization
 import org.slf4j.{Logger, LoggerFactory}
@@ -69,13 +70,14 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
                 )
             }
             .flatMap(_ => consensusManager.participateInBlockCreationRound(ConsensusRoute.convert(cmd)))
-          onComplete(participate.unsafeToFuture()) {
+          onComplete((ConstellationContextShift.edge.shift *> participate).unsafeToFuture()) {
             case Failure(err: SnapshotHeightAboveTip) =>
               complete(StatusCodes.custom(400, err.getMessage))
             case Failure(_) =>
               complete(StatusCodes.InternalServerError)
             case Success(res) =>
-              consensusManager.continueRoundParticipation(res._1, res._2).unsafeRunAsyncAndForget()
+              (ConstellationContextShift.edge.shift *> consensusManager.continueRoundParticipation(res._1, res._2))
+                .unsafeRunAsyncAndForget()
               complete(StatusCodes.Created)
           }
         }
@@ -123,7 +125,7 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
           case proposal: UnionBlockProposal        => consensus.addBlockProposal(proposal)
           case proposal: SelectedUnionBlock        => consensus.addSelectedBlockProposal(proposal)
         }
-        add.unsafeRunAsyncAndForget()
+        (ConstellationContextShift.edge.shift *> add).unsafeRunAsyncAndForget()
         complete(StatusCodes.Created)
     }
 
