@@ -115,9 +115,10 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
     }
 
   private def handleProposal(proposal: ConsensusProposal): Route =
-    onSuccess(consensusManager.getRound(proposal.roundId).unsafeToFuture()) {
+    onSuccess((ConstellationContextShift.edge.shift *> consensusManager.getRound(proposal.roundId)).unsafeToFuture()) {
       case None =>
-        consensusManager.addMissed(proposal.roundId, proposal).unsafeRunAsyncAndForget()
+        (ConstellationContextShift.edge.shift *> consensusManager.addMissed(proposal.roundId, proposal))
+          .unsafeRunAsyncAndForget()
         complete(StatusCodes.Accepted)
       case Some(consensus) =>
         val add = proposal match {

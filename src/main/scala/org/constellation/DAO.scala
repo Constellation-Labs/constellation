@@ -125,7 +125,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       consensusRemoteSender,
       cluster,
       this,
-      ConfigUtil.config
+      ConfigUtil.config,
+      ConstellationContextShift.edge
     )
 
     consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)

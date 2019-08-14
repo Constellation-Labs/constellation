@@ -13,7 +13,7 @@ import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
 import org.constellation.primitives.{ChannelMessage, CheckpointBlock, ConcurrentTipService, Transaction}
 import org.constellation.storage._
 import org.constellation.util.{Distance, PeerApiClient}
-import org.constellation.{ConfigUtil, ConstellationContextShift, DAO}
+import org.constellation.{ConfigUtil, ConstellationContextShift, ConstellationExecutionContext, DAO}
 
 import scala.util.Try
 
@@ -26,7 +26,8 @@ class ConsensusManager[F[_]: Concurrent](
   remoteSender: ConsensusRemoteSender[F],
   cluster: Cluster[F],
   dao: DAO,
-  config: Config
+  config: Config,
+  calculationContext: ContextShift[F]
 ) {
 
   import ConsensusManager._
@@ -85,7 +86,8 @@ class ConsensusManager[F[_]: Concurrent](
           remoteSender,
           this,
           shadowDAO,
-          config
+          config,
+          calculationContext
         ),
         roundData._1.tipsSOE.minHeight,
         System.currentTimeMillis()
@@ -93,7 +95,9 @@ class ConsensusManager[F[_]: Concurrent](
       _ <- ownConsensus.updateUnsafe(d => d.map(o => o.copy(consensusInfo = roundInfo.some)))
       _ <- logger.debug(s"[${dao.id.short}] created data for round: ${roundId} with facilitators: ${roundData._1.peers
         .map(_.peerMetadata.id.short)}")
-      responses <- remoteSender.notifyFacilitators(roundData._1)
+      responses <- calculationContext.evalOn(ConstellationExecutionContext.unbounded)(
+        remoteSender.notifyFacilitators(roundData._1)
+      )
       _ <- if (responses.forall(_.isSuccess)) Sync[F].unit
       else
         Sync[F].raiseError[Unit](
@@ -201,7 +205,8 @@ class ConsensusManager[F[_]: Concurrent](
           remoteSender,
           this,
           shadowDAO,
-          config
+          config,
+          calculationContext
         ),
         roundData.tipsSOE.minHeight,
         System.currentTimeMillis()
