@@ -25,6 +25,16 @@ abstract class PendingMemPool[F[_]: Concurrent, K, V]() extends LookupAlgebra[F,
       }
     }
 
+  def update(key: K, fn: V => V, empty: => V): F[V] =
+    ref.modify { as =>
+      as.get(key) match {
+        case None => (as + (key -> empty), empty)
+        case Some(value) =>
+          val update = fn(value)
+          (as + (key -> update), update)
+      }
+    }
+
   def lookup(key: K): F[Option[V]] = ref.get.map(_.get(key))
 
   def contains(key: K): F[Boolean] =
