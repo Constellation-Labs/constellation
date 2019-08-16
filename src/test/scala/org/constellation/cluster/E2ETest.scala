@@ -114,9 +114,9 @@ class E2ETest extends E2E {
     //  Thread.sleep(1000*1000)
 
     Simulation.disableRandomTransactions(allAPIs)
-    Simulation.triggerCheckpointFormation(allAPIs)
-
     Simulation.logger.info("Stopping transactions to run parity check")
+    Simulation.disableCheckpointFormation(allAPIs)
+    Simulation.logger.info("Stopping checkpoint formation to run parity check")
 
 //    TODO: Fix when  issue #527 is finished
 //    Simulation.awaitConditionMet(
