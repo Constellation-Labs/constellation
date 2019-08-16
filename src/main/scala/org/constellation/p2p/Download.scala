@@ -232,7 +232,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
 
   private def setAcceptedTransactionsAfterDownload(): IO[Unit] = IO {
     dao.transactionAcceptedAfterDownload = dao.metrics.getMetrics.get("transactionAccepted").map(_.toLong).getOrElse(0L)
-    logger.info("download process has been finished")
+    logger.debug("download process has been finished")
   }
 
   def setNodeState(nodeState: NodeState): IO[Unit] =

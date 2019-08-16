@@ -157,7 +157,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                 dao.keyPair,
                 normalized = false
               )
-              logger.info(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
+              logger.debug(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
 
               dao.transactionService.put(TransactionCacheData(tx)).unsafeRunSync()
 

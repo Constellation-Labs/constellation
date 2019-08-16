@@ -243,7 +243,7 @@ object Snapshot extends StrictLogging {
   def writeSnapshot(storedSnapshot: StoredSnapshot)(implicit dao: DAO): Try[Path] = {
     val serialized = KryoSerializer.serializeAnyRef(storedSnapshot)
     val write = writeSnapshot(storedSnapshot, serialized)
-    logger.info(s"[${dao.id.short}] written snapshot at path ${write.map(_.toAbsolutePath.toString)}")
+    logger.debug(s"[${dao.id.short}] written snapshot at path ${write.map(_.toAbsolutePath.toString)}")
     write
   }
 
@@ -274,7 +274,7 @@ object Snapshot extends StrictLogging {
     snapshots.foreach { snapId =>
       tryWithMetric(
         {
-          logger.info(
+          logger.debug(
             s"[${dao.id.short}] removing snapshot at path ${Paths.get(snapshotPath, snapId).toAbsolutePath.toString}"
           )
           Files.delete(Paths.get(snapshotPath, snapId))

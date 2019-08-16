@@ -1,10 +1,10 @@
 <configuration>
     <jmxConfigurator/>
 
-    <appender name="METRICS" class="io.prometheus.client.logback.InstrumentedAppender" />
+    <appender name="metrics" class="io.prometheus.client.logback.InstrumentedAppender" />
 
-    <root level="INFO">
-        <appender-ref ref="METRICS" />
+    <root level="info">
+        <appender-ref ref="metrics" />
     </root>
 
     <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
@@ -19,7 +19,7 @@
         </encoder>
     </appender>
 
-    <logger level="warn" name="APIClient" additivity="false">
+    <logger level="debug" name="APIClient" additivity="false">
         <appender-ref ref="apiclient"/>
     </logger>
 
@@ -30,7 +30,7 @@
     <logger level="debug" name="akka.monitor.instrumentation" />
     <logger level="debug" name="io.kontainers.micrometer" />
 
-    <root level="info">
+    <root level="debug">
         <appender-ref ref="console"/>
     </root>
 </configuration>

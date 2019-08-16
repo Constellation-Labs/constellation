@@ -44,7 +44,7 @@ class ThreadSafeMessageMemPool() extends StrictLogging {
     messages = Seq()
     if (flat.isEmpty) None
     else {
-      logger.info(s"Pulled messages from mempool: ${flat.map {
+      logger.debug(s"Pulled messages from mempool: ${flat.map {
         _.signedMessageData.hash
       }}")
       Some(flat)

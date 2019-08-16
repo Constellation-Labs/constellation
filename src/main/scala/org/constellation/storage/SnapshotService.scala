@@ -129,7 +129,7 @@ class SnapshotService[F[_]: Concurrent](
 
       _ <- EitherT.liftF(
         Sync[F].delay(
-          logger.info(
+          logger.debug(
             s"conclude snapshot: ${nextSnapshot.lastSnapshot} with height ${nextHeightInterval - dao.processingConfig.snapshotHeightDelayInterval}"
           )
         )

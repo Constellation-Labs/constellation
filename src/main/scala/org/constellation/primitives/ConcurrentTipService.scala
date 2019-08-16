@@ -38,7 +38,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
   def clearStaleTips(min: Long): F[Unit] =
     tipsRef.get.map(tips => tips.filter(_._2.height.min < min)).flatMap { toRemove =>
       Logger[F]
-        .info(s"Removing tips that are below cluster height: $min to remove ${toRemove.map(t => (t._1, t._2.height))}")
+        .debug(s"Removing tips that are below cluster height: $min to remove ${toRemove.map(t => (t._1, t._2.height))}")
         .flatMap(_ => tipsRef.update(curr => curr -- toRemove.keySet))
     }
 
@@ -115,7 +115,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
         min =>
           if (isGenesis || min < height.min)
             putUnsafe(checkpointBlock.baseHash, TipData(checkpointBlock, 0, height))(dao.metrics)
-          else Logger[F].info(s"Block height: ${height.min} below min tip: $min update skipped")
+          else Logger[F].debug(s"Block height: ${height.min} below min tip: $min update skipped")
       )
       .recoverWith {
         case err: TipThresholdException =>
@@ -151,7 +151,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
       keys <- tipsRef.get.map(_.keys.toList)
       maybeData <- LiftIO[F].liftIO(keys.traverse(dao.checkpointService.lookup(_)))
       diff = keys.diff(maybeData.flatMap(_.map(_.checkpointBlock.baseHash)))
-      _ <- if (diff.nonEmpty) Logger[F].info(s"wkoszycki not_mapped ${diff}") else Sync[F].unit
+      _ <- if (diff.nonEmpty) Logger[F].debug(s"wkoszycki not_mapped ${diff}") else Sync[F].unit
       heights = maybeData.flatMap {
         _.flatMap {
           _.height.map {

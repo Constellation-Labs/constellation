@@ -77,7 +77,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
 
   def checkClusterConsistency(ownSnapshots: List[RecentSnapshot]): F[Option[List[RecentSnapshot]]] = {
     val check = for {
-      _ <- Logger[F].info(s"[${dao.id.short}] re-download checking cluster consistency")
+      _ <- Logger[F].debug(s"[${dao.id.short}] re-download checking cluster consistency")
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       peersSnapshots <- LiftIO[F].liftIO(collectSnapshot(peers))
       _ <- clearStaleTips(peersSnapshots)
@@ -141,7 +141,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
 
   def startReDownload(diff: SnapshotDiff, peers: Map[Id, PeerData]): F[Unit] = {
     val reDownload = for {
-      _ <- Logger[F].info(s"[${dao.id.short}] starting re-download process with diff: $diff")
+      _ <- Logger[F].debug(s"[${dao.id.short}] starting re-download process with diff: $diff")
       _ <- LiftIO[F].liftIO(downloader.setNodeState(NodeState.DownloadInProgress))
       _ <- LiftIO[F].liftIO(
         downloader.reDownload(
@@ -155,7 +155,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
           dao.snapshotPath.pathAsString
         )(dao)
       }
-      _ <- Logger[F].info(s"[${dao.id.short}] re-download process finished")
+      _ <- Logger[F].debug(s"[${dao.id.short}] re-download process finished")
       _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadFinished)
     } yield ()
 
