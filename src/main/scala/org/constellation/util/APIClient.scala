@@ -4,8 +4,8 @@ import cats.effect.{ContextShift, IO, LiftIO}
 import com.softwaremill.sttp._
 import com.typesafe.config.ConfigFactory
 import org.constellation.DAO
-import org.constellation.consensus.StoredSnapshot
-import org.constellation.primitives.Schema.{Id, MetricsResult}
+import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
+import org.constellation.primitives.Schema.{GenesisObservation, Id, MetricsResult}
 import org.constellation.serializer.KryoSerializer
 import org.json4s.Formats
 
@@ -150,13 +150,13 @@ class APIClient private (
     IO.fromFuture(IO { postNonBlockingUnit(suffix, b, timeout, headers) })(contextShift)
 
   def simpleDownload(): Seq[StoredSnapshot] = {
-
     val hashes = getBlocking[Seq[String]]("snapshotHashes")
-
-    hashes.map { h =>
-      getBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + h)
-    }
-
+    hashes.map(hash => getBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash))
   }
 
+  def snapshotsInfoDownload(): SnapshotInfo =
+    getBlockingBytesKryo[SnapshotInfo]("info")
+
+  def genesisDownload(): IO[Option[GenesisObservation]] =
+    getNonBlockingIO[Option[GenesisObservation]]("genesis")
 }

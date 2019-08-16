@@ -46,6 +46,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[TransactionEdgeData])
     kryo.register(classOf[CheckpointEdgeData])
     kryo.register(classOf[Snapshot])
+    kryo.register(classOf[GenesisObservation])
 
     kryo.register(classOf[Set[String]])
 
