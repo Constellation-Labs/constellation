@@ -134,7 +134,6 @@ trait EdgeDAO {
 
   def maxWidth: Int = processingConfig.maxWidth
 
-  def minCheckpointFormationThreshold: Int = processingConfig.minCheckpointFormationThreshold
   def maxTXInBlock: Int = processingConfig.maxTXInBlock
 
   def minCBSignatureThreshold: Int = processingConfig.numFacilitatorPeers

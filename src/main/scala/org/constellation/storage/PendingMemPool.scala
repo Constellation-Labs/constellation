@@ -10,7 +10,7 @@ abstract class PendingMemPool[F[_]: Concurrent, K, V]() extends LookupAlgebra[F,
   val ref: SingleRef[F, Map[K, V]] =
     SingleRef[F, Map[K, V]](Map.empty)
 
-  def pull(minCount: Int, maxCount: Int): F[Option[List[V]]]
+  def pull(maxCount: Int): F[Option[List[V]]]
 
   def put(key: K, value: V): F[V] =
     ref.modify(txs => (txs + (key -> value), value))

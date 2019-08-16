@@ -94,7 +94,7 @@ object EdgeProcessor extends StrictLogging {
     implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.edge
 
     val transactions = dao.transactionService
-      .pullForConsensus(dao.minCheckpointFormationThreshold, dao.processingConfig.maxCheckpointFormationThreshold)
+      .pullForConsensus(dao.processingConfig.maxCheckpointFormationThreshold)
       .map(_.map(_.transaction))
       .unsafeRunSync()
 

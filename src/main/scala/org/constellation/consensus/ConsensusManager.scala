@@ -150,7 +150,7 @@ class ConsensusManager[F[_]: Concurrent](
   def createRoundData(roundId: RoundId): F[(RoundData, Seq[(Transaction, Int)], Seq[(ChannelMessage, Int)])] =
     for {
       transactions <- transactionService
-        .pullForConsensus(dao.minCheckpointFormationThreshold, dao.processingConfig.maxCheckpointFormationThreshold)
+        .pullForConsensus(dao.processingConfig.maxCheckpointFormationThreshold)
       facilitators <- LiftIO[F].liftIO(dao.readyFacilitatorsAsync)
       tips <- concurrentTipService.pull(facilitators)(dao.metrics)
       _ <- if (tips.isEmpty)
@@ -160,7 +160,7 @@ class ConsensusManager[F[_]: Concurrent](
         Sync[F].raiseError[Unit](NoPeersForConsensus(roundId, transactions.map(_.transaction.hash), List.empty[String]))
       else Sync[F].unit
       messages <- Sync[F].delay(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))
-      observations <- observationService.pullForConsensus(0, 0)
+      observations <- observationService.pullForConsensus(1) // TODO: amount of observations
       lightNodes <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Light))
       lightPeers = if (lightNodes.isEmpty) Set.empty[PeerData]
       else

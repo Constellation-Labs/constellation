@@ -82,9 +82,9 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
 
   def isAccepted(hash: String): F[Boolean] = accepted.contains(hash)
 
-  def pullForConsensus(minCount: Int, maxCount: Int): F[List[A]] =
+  def pullForConsensus(count: Int): F[List[A]] =
     pending
-      .pull(minCount, maxCount)
+      .pull(count)
       .map(_.getOrElse(List()))
       .flatMap(_.traverse(a => withLock("inConsensusUpdate", inConsensus.put(a.hash, a))))
 

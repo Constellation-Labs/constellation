@@ -253,7 +253,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         p.map {
           case (idI, clientI) =>
             val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort - 1}"
-            s"${idI.short} API: $addr}"
+            s"${idI.short} API: $addr"
         }.mkString(" --- ")
       )
     }

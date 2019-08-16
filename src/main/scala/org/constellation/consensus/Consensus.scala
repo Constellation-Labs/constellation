@@ -56,11 +56,11 @@ class Consensus[F[_]: Concurrent](
   def startTransactionProposal(): F[Unit] =
     for {
       transactions <- transactionService
-        .pullForConsensusWithDummy(1, 1)
+        .pullForConsensus(dao.processingConfig.maxCheckpointFormationThreshold)
         .map(_.map(_.transaction))
       messages <- Sync[F].delay(dao.threadSafeMessageMemPool.pull())
       notifications <- LiftIO[F].liftIO(dao.peerInfo.map(_.values.flatMap(_.notification).toSeq))
-      observations <- observationService.pullForConsensus(0, 0)
+      observations <- observationService.pullForConsensus(1) // TODO: adjust size
       proposal = LightTransactionsProposal(
         roundData.roundId,
         FacilitatorId(dao.id),
@@ -211,7 +211,7 @@ class Consensus[F[_]: Concurrent](
       _ <- logger.debug(
         s"[${dao.id.short}] accepting majority checkpoint block ${checkpointBlock.baseHash}  " +
           s" with txs ${checkpointBlock.transactions.map(_.hash)} " +
-          s" with exs ${checkpointBlock.observations.map(_.hash)} " +
+          s" with obs ${checkpointBlock.observations.map(_.hash)} " +
           s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height}"
       )
       acceptedBlock <- checkpointService
@@ -339,7 +339,7 @@ class Consensus[F[_]: Concurrent](
                   None
                 )
                 .map(_.transaction)
-          )
+            )
         )
       _ <- logger.debug(
         s"transactions proposal_size ${proposals.size} values size ${idsTxs._2.size} lookup size ${txs.size} resolved ${resolved.size}"
@@ -360,7 +360,7 @@ class Consensus[F[_]: Concurrent](
                   None
                 )
                 .map(_.channelMessage)
-          )
+            )
         )
       notifications = proposals
         .flatMap(_._2.notifications)
@@ -426,7 +426,7 @@ class Consensus[F[_]: Concurrent](
                 txs =>
                   getOwnObservationsToReturn.flatMap(
                     exs => consensusManager.handleRoundError(PreviousStage(roundData.roundId, stage, txs, exs))
-                )
+                  )
               )
           else Sync[F].unit
       )
@@ -474,8 +474,8 @@ class Consensus[F[_]: Concurrent](
               exs =>
                 Left(
                   NotEnoughProposals(roundData.roundId, proposals.size, peerSize, stage, txs, exs)
-              )
-          )
+                )
+            )
         )
       case _ => Sync[F].pure(Right(()))
     }
@@ -497,7 +497,7 @@ object Consensus {
     type ConsensusStage = Value
 
     val STARTING, WAITING_FOR_PROPOSALS, WAITING_FOR_BLOCK_PROPOSALS, RESOLVING_MAJORITY_CB,
-    WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
+      WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
       Value
   }
 
