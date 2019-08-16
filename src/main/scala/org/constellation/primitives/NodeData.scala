@@ -85,4 +85,14 @@ trait NodeData {
     generateRandomTX = false
     metrics.updateMetric("generateRandomTX", generateRandomTX.toString)
   }
+
+  def enableCheckpointFormation(): Unit = {
+    formCheckpoints = true
+    metrics.updateMetric("checkpointFormation", formCheckpoints.toString)
+  }
+
+  def disableCheckpointFormation(): Unit = {
+    formCheckpoints = false
+    metrics.updateMetric("checkpointFormation", formCheckpoints.toString)
+  }
 }
