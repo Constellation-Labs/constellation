@@ -4,6 +4,7 @@ import java.security.{KeyPair, PublicKey}
 
 import cats.kernel.Monoid
 import constellation._
+import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
@@ -126,7 +127,7 @@ trait SignHelpExt {
 
     val soe = signedObservationEdge(oe)(keyPair)
 
-    Transaction(Edge(oe, soe, txData), dummy)
+    Transaction(Edge(oe, soe, txData), "", 0, dummy)
   }
 
   def createDummyTransaction(src: String, dst: String, keyPair: KeyPair): Transaction =
