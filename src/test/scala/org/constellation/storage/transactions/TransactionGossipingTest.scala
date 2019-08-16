@@ -7,7 +7,7 @@ import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.{Transaction, TransactionCacheData}
-import org.constellation.storage.{ConsensusStatus, TransactionService}
+import org.constellation.storage.{ConsensusStatus, TransactionChainService, TransactionService}
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -44,7 +44,8 @@ class TransactionGossipingTest
 
   test("it should update the transaction path if it's the first time the tx is being observed") {
     val dao = mockDAO
-    val txService = spy(new TransactionService[IO](dao))
+    val txChain = TransactionChainService[IO]
+    val txService = spy(new TransactionService[IO](txChain, dao))
     val gossiping = new TransactionGossiping[IO](txService, 2, dao)
 
     val t = constellation.createTransaction("a", "b", 1L, Fixtures.tempKey, false)

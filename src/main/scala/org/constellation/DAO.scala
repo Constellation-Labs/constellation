@@ -108,7 +108,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     rateLimiting = new RateLimiting[IO]
 
-    transactionService = new TransactionService[IO](this)
+    transactionChainService = TransactionChainService[IO]
+    transactionService = new TransactionService[IO](transactionChainService, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
 
     observationService = new ObservationService[IO](this)
