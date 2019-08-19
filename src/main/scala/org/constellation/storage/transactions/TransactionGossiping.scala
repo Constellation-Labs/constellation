@@ -28,10 +28,12 @@ class TransactionGossiping[F[_]: Concurrent](transactionService: TransactionServ
 
   def observe(tx: TransactionCacheData): F[TransactionCacheData] =
     for {
-      updated <- transactionService.update(tx.transaction.hash,
-                                           t => t.copy(path = t.path ++ tx.path),
-                                           tx.copy(path = tx.path + dao.id),
-                                           ConsensusStatus.Unknown)
+      updated <- transactionService.update(
+        tx.transaction.hash,
+        t => t.copy(path = t.path ++ tx.path),
+        tx.copy(path = tx.path + dao.id),
+        ConsensusStatus.Unknown
+      )
     } yield updated
 
 }
