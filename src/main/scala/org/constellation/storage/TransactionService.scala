@@ -39,4 +39,7 @@ class TransactionService[F[_]: Concurrent: Logger](dao: DAO) extends ConsensusSe
       )
       .map(TransactionCacheData(_))
       .traverse(tx => inConsensus.put(tx.hash, tx))
+
+  def removeConflicting(txs: List[String]): F[Unit] =
+    pending.remove(txs.toSet) *> unknown.remove(txs.toSet)
 }

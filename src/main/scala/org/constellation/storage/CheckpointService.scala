@@ -195,11 +195,11 @@ class CheckpointService[F[_]: Concurrent](
 
           _ <- conflicts match {
             case Nil => Sync[F].unit
-            case _ =>
+            case xs =>
               concurrentTipService
                 .putConflicting(cb.baseHash, cb)
+                .flatMap(_ => transactionService.removeConflicting(xs))
                 .flatMap(_ => Sync[F].raiseError[Unit](TipConflictException(cb, conflicts)))
-                .void
           }
 
           valid <- Sync[F].delay(cb.simpleValidation())

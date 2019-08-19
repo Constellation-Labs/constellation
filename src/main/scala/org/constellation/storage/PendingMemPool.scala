@@ -35,6 +35,16 @@ abstract class PendingMemPool[F[_]: Concurrent, K, V]() extends LookupAlgebra[F,
       }
     }
 
+  def remove(key: K): F[Unit] =
+    ref.modify { m =>
+      (m - key, m - key)
+    }.void
+
+  def remove(key: Set[K]): F[Unit] =
+    ref.modify { m =>
+      (m -- key, m -- key)
+    }
+
   def lookup(key: K): F[Option[V]] = ref.get.map(_.get(key))
 
   def contains(key: K): F[Boolean] =
