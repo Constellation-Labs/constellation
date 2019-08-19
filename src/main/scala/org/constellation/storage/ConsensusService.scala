@@ -28,11 +28,11 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
   }
 
   val semaphores = Map(
-    "arbitraryUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
-    "inConsensusUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
-    "acceptedUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
-    "unknownUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
-    "merklePoolUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync()
+    "arbitraryUpdate" -> semaphore,
+    "inConsensusUpdate" -> semaphore,
+    "acceptedUpdate" -> semaphore,
+    "unknownUpdate" -> semaphore,
+    "merklePoolUpdate" -> semaphore
   )
 
   private[storage] def withLock[R](semaphoreName: String, thunk: F[R]) =

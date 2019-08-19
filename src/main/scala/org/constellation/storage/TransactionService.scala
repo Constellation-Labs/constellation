@@ -11,7 +11,7 @@ import org.constellation.DAO
 
 class TransactionService[F[_]: Concurrent: Logger](dao: DAO) extends ConsensusService[F, TransactionCacheData] {
 
-  protected[storage] val pending = new PendingTransactionsMemPool[F]()
+  protected[storage] val pending = new PendingTransactionsMemPool[F](semaphore)
 
   override def accept(tx: TransactionCacheData): F[Unit] =
     super

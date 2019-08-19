@@ -2,13 +2,14 @@ package org.constellation.storage
 
 import cats.implicits._
 import cats.effect.Concurrent
+import cats.effect.concurrent.Semaphore
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.algebra.LookupAlgebra
 
-abstract class PendingMemPool[F[_]: Concurrent, K, V]() extends LookupAlgebra[F, K, V] {
+abstract class PendingMemPool[F[_]: Concurrent, K, V](semaphore: Semaphore[F] = null) extends LookupAlgebra[F, K, V] {
 
   val ref: SingleRef[F, Map[K, V]] =
-    SingleRef[F, Map[K, V]](Map.empty)
+    SingleRef[F, Map[K, V]](Map.empty, semaphore)
 
   def pull(maxCount: Int): F[Option[List[V]]]
 

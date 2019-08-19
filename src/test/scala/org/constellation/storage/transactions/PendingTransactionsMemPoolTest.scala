@@ -1,5 +1,6 @@
 package org.constellation.storage.transactions
 
+import cats.effect.concurrent.Semaphore
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import org.constellation.ConstellationContextShift
@@ -13,7 +14,8 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
 
   "update" - {
     "it should update existing transaction" in {
-      val memPool = new PendingTransactionsMemPool[IO]
+      val semaphore = Semaphore[IO](1).unsafeRunSync()
+      val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
       val tx = mock[Transaction]
       tx.hash shouldReturn "lorem"
@@ -36,7 +38,8 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
     }
 
     "it should not update transaction if it does not exist" in {
-      val memPool = new PendingTransactionsMemPool[IO]
+      val semaphore = Semaphore[IO](1).unsafeRunSync()
+      val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
       val tx = mock[Transaction]
       tx.hash shouldReturn "lorem"
@@ -57,13 +60,15 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
 
   "pull" - {
     "it should return None if there are less txs than min required count" in {
-      val memPool = new PendingTransactionsMemPool[IO]
+      val semaphore = Semaphore[IO](1).unsafeRunSync()
+      val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
       memPool.pull(10).unsafeRunSync shouldBe none
     }
 
     "it should return min required count of txs" in {
-      val memPool = new PendingTransactionsMemPool[IO]
+      val semaphore = Semaphore[IO](1).unsafeRunSync()
+      val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
       val tx1 = createTransaction("a")
       val tx2 = createTransaction("b")
@@ -77,7 +82,8 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
     }
 
     "it should return transactions sorted by the fee" in {
-      val memPool = new PendingTransactionsMemPool[IO]
+      val semaphore = Semaphore[IO](1).unsafeRunSync()
+      val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
       val tx1 = createTransaction("a", fee = 3L.some)
       val tx2 = createTransaction("b", fee = 1L.some)
