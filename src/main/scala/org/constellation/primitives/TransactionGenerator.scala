@@ -144,7 +144,11 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
 
   private def broadcastTransaction(tcd: TransactionCacheData, peerData: List[PeerData]) = {
     val contextShift: ContextShift[IO] = ConstellationContextShift.global
-    LiftIO[F].liftIO(contextShift.shift *> peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd))))
+    LiftIO[F].liftIO(
+      contextShift.evalOn(ConstellationExecutionContext.callbacks)(
+        peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd)))
+      )
+    )
   }
 
   private def peerData(peers: Set[Schema.Id]): F[List[PeerData]] =

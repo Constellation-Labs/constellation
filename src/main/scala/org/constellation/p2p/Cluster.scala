@@ -14,7 +14,7 @@ import org.constellation.primitives.Schema.{Id, NodeState}
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.primitives.{IPManager, Schema}
 import org.constellation.util._
-import org.constellation.{ConstellationExecutionContext, DAO, PeerMetadata}
+import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, PeerMetadata}
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -143,7 +143,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       adjustedHost <- (if (pm.auxHost.nonEmpty) pm.auxHost else pm.host).pure[F]
       client = APIClient(adjustedHost, pm.httpPort)(ConstellationExecutionContext.apiClient, dao)
 
-      _ <- C.shift *> peerDiscovery(client) // mwadon: make sure it works as expected
+      _ <- C.evalOn(ConstellationExecutionContext.callbacks)(peerDiscovery(client))
 
       _ <- Sync[F].delay(client.id = pm.id)
 
@@ -202,7 +202,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
             )
             client.id = id
             val peerData = PeerData(add, client)
-            updatePeerInfo(peerData) *> C.shift *> peerDiscovery(client)
+            updatePeerInfo(peerData) *> C.evalOn(ConstellationExecutionContext.callbacks)(peerDiscovery(client))
           }.void
 
         }.handleErrorWith { err =>
@@ -322,7 +322,9 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       _ <- Timer[F].sleep(15.seconds)
 
       _ <- if (dao.peersInfoPath.nonEmpty || dao.seedsPath.nonEmpty) {
-        C.shift *> Sync[F].delay(Download.download()(dao, ConstellationExecutionContext.edge))
+        C.evalOn(ConstellationExecutionContext.callbacks)(
+          Sync[F].delay(Download.download()(dao, ConstellationExecutionContext.edge))
+        )
       } else {
         Logger[F].warn("No peers or seeds configured yet. Skipping initial download.")
       }
@@ -401,7 +403,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     for {
       _ <- Logger[F].info("Trying to gracefully leave the cluster")
 
-      _ <- C.shift *> broadcastLeaveRequest()
+      _ <- C.evalOn(ConstellationExecutionContext.callbacks)(broadcastLeaveRequest())
       _ <- setNodeState(NodeState.Leaving)
       _ <- broadcastNodeState()
 

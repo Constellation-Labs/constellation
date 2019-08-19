@@ -213,17 +213,20 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
                   dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
 
-                  (cs.shift *> dao.checkpointService.accept(fc)).unsafeToFuture().onComplete { result =>
-                    replyToOpt
-                      .map(URI.create)
-                      .map { u =>
-                        logger.debug(
-                          s"Making callback to: ${u.toURL} acceptance of cb: ${fc.checkpointCacheData.checkpointBlock
-                            .map(_.baseHash)} performed $result"
-                        )
-                        makeCallback(u, FinishedCheckpointResponse(result.isSuccess))
-                      }
-                  }
+                  (cs
+                    .evalOn(ConstellationExecutionContext.callbacks)(dao.checkpointService.accept(fc)))
+                    .unsafeToFuture()
+                    .onComplete { result =>
+                      replyToOpt
+                        .map(URI.create)
+                        .map { u =>
+                          logger.debug(
+                            s"Making callback to: ${u.toURL} acceptance of cb: ${fc.checkpointCacheData.checkpointBlock
+                              .map(_.baseHash)} performed $result"
+                          )
+                          makeCallback(u, FinishedCheckpointResponse(result.isSuccess))
+                        }
+                    }
                   complete(StatusCodes.Accepted)
                 }
               }
@@ -266,7 +269,9 @@ class PeerAPI(override val ipManager: IPManager[IO])(
             tcd <- dao.transactionGossiping.observe(TransactionCacheData(gossip.tx, path = gossip.path))
             peers <- dao.transactionGossiping.selectPeers(tcd)
             peerData <- dao.peerInfo.map(_.filterKeys(peers.contains).values.toList)
-            _ <- contextShift.shift *> peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd)))
+            _ <- contextShift.evalOn(ConstellationExecutionContext.callbacks)(
+              peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd)))
+            )
             _ <- dao.metrics.incrementMetricAsync[IO]("transactionGossipingSent")
           } yield ()
 
