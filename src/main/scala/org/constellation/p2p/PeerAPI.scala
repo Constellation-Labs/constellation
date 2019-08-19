@@ -56,7 +56,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
   implicit val serialization: Serialization.type = native.Serialization
 
-  implicit val executionContext = ConstellationExecutionContext.edge
+  implicit val executionContext = ConstellationExecutionContext.callbacks
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
@@ -260,7 +260,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           dao.metrics.incrementMetric("transactionRXByPeerAPI")
 
           implicit val random: Random = scala.util.Random
-          val contextShift: ContextShift[IO] = ConstellationContextShift.edge
+          val contextShift: ContextShift[IO] = ConstellationContextShift.global
 
           val rebroadcast = for {
             tcd <- dao.transactionGossiping.observe(TransactionCacheData(gossip.tx, path = gossip.path))

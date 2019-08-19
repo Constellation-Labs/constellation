@@ -235,9 +235,7 @@ class ConstellationNode(
     dao.processingConfig.randomTransactionLoopTimeSeconds
   )
 
-  implicit val cs: ContextShift[IO] = ConstellationContextShift.global
-
-  val ipManager = IPManager[IO]()
+  val ipManager = IPManager[IO]()(ConstellationConcurrentEffect.global)
 
   nodeConfig.seeds.foreach { peer =>
     dao.ipManager.addKnownIP(peer.host)

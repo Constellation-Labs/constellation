@@ -1,12 +1,12 @@
 package org.constellation.consensus
 
-import cats.effect.{Concurrent, LiftIO, Sync}
+import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.implicits._
 import com.softwaremill.sttp.Response
 import com.typesafe.config.Config
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.DAO
+import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO}
 import org.constellation.consensus.Consensus.ConsensusStage.ConsensusStage
 import org.constellation.consensus.Consensus.StageState.StageState
 import org.constellation.consensus.Consensus._
@@ -36,7 +36,8 @@ class Consensus[F[_]: Concurrent](
   remoteSender: ConsensusRemoteSender[F],
   consensusManager: ConsensusManager[F],
   dao: DAO,
-  config: Config
+  config: Config,
+  calculationContext: ContextShift[F]
 ) {
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
@@ -74,8 +75,10 @@ class Consensus[F[_]: Concurrent](
         observations.map(_.hash)
       )
       _ <- addTransactionProposal(proposal)
-      _ <- remoteSender.broadcastLightTransactionProposal(
-        BroadcastLightTransactionProposal(roundData.roundId, roundData.peers, proposal)
+      _ <- calculationContext.evalOn(ConstellationExecutionContext.unbounded)(
+        remoteSender.broadcastLightTransactionProposal(
+          BroadcastLightTransactionProposal(roundData.roundId, roundData.peers, proposal)
+        )
       )
     } yield ()
 
@@ -236,8 +239,10 @@ class Consensus[F[_]: Concurrent](
         }
       _ <- if (acceptedBlock._1.isEmpty) Sync[F].pure(List.empty[Response[Unit]])
       else
-        broadcastSignedBlockToNonFacilitators(
-          FinishedCheckpoint(cache, proposals.keySet.map(_.id))
+        calculationContext.evalOn(ConstellationExecutionContext.unbounded)(
+          broadcastSignedBlockToNonFacilitators(
+            FinishedCheckpoint(cache, proposals.keySet.map(_.id))
+          )
         )
       ownTransactions <- getOwnTransactionsToReturn
       ownObservations <- getOwnObservationsToReturn
@@ -304,8 +309,10 @@ class Consensus[F[_]: Concurrent](
       _ <- dao.metrics.incrementMetricAsync(
         "resolveMajorityCheckpointBlockUniquesCount_" + uniques
       )
-      _ <- remoteSender.broadcastSelectedUnionBlock(
-        BroadcastSelectedUnionBlock(roundData.roundId, roundData.peers, selectedCheckpointBlock)
+      _ <- calculationContext.evalOn(ConstellationExecutionContext.unbounded)(
+        remoteSender.broadcastSelectedUnionBlock(
+          BroadcastSelectedUnionBlock(roundData.roundId, roundData.peers, selectedCheckpointBlock)
+        )
       )
       _ <- addSelectedBlockProposal(selectedCheckpointBlock)
     } yield ()
@@ -387,8 +394,10 @@ class Consensus[F[_]: Concurrent](
           observations.flatMap(_._2) ++ resolvedObs
         )(dao.keyPair)
       )
-      _ <- remoteSender.broadcastBlockUnion(
-        BroadcastUnionBlockProposal(roundData.roundId, roundData.peers, proposal)
+      _ <- calculationContext.evalOn(ConstellationExecutionContext.unbounded)(
+        remoteSender.broadcastBlockUnion(
+          BroadcastUnionBlockProposal(roundData.roundId, roundData.peers, proposal)
+        )
       )
       _ <- addBlockProposal(proposal)
     } yield ()

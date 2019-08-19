@@ -84,7 +84,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
-    implicit val ioTimer = IO.timer(ConstellationExecutionContext.edge)
+    implicit val ioTimer = IO.timer(ConstellationExecutionContext.unbounded)
 
     rateLimiting = new RateLimiting[IO]
 
@@ -110,7 +110,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       concurrentTipService,
       rateLimiting
     )
-    addressService = new AddressService[IO]()(Concurrent(ConstellationConcurrentEffect.edge), () => metrics)
+    addressService = new AddressService[IO]()(Concurrent(ConstellationConcurrentEffect.global), () => metrics)
 
     ipManager = IPManager[IO]()
     cluster = Cluster[IO](() => metrics, ipManager, this)
@@ -125,7 +125,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       consensusRemoteSender,
       cluster,
       this,
-      ConfigUtil.config
+      ConfigUtil.config,
+      ConstellationContextShift.edge
     )
 
     consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)

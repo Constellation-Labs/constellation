@@ -51,7 +51,8 @@ class ConsensusManagerTest
       dao.consensusRemoteSender,
       dao.cluster,
       dao,
-      conf
+      conf,
+      ConstellationContextShift.edge
     )
   }
   describe("syncRoundInProgress") {
