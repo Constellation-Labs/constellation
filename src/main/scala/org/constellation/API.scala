@@ -487,11 +487,6 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             complete(StatusCodes.OK)
           }
         } ~
-        path("checkpointFormation") { // Temporary
-          dao.formCheckpoints = !dao.formCheckpoints
-          dao.metrics.updateMetric("checkpointFormation", dao.formCheckpoints.toString)
-          complete(StatusCodes.OK)
-        } ~
         path("peerHealthCheck") {
           val resetTimeout = 1.second
           val breaker = new CircuitBreaker(system.scheduler, maxFailures = 1, callTimeout = 5.seconds, resetTimeout)

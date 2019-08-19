@@ -302,8 +302,13 @@ object Simulation {
     src.post("send", s)
   }
 
-  def triggerCheckpointFormation(apis: Seq[APIClient]): Seq[Response[String]] = {
+  def enableCheckpointFormation(apis: Seq[APIClient]): Seq[Response[String]] = {
     val responses = apis.map(_.postNonBlockingEmptyString("checkpointFormation"))
+    Future.sequence(responses).get()
+  }
+
+  def disableCheckpointFormation(apis: Seq[APIClient]): Seq[Response[String]] = {
+    val responses = apis.map(_.deleteNonBlockingEmptyString("random"))
     Future.sequence(responses).get()
   }
 
@@ -402,7 +407,8 @@ object Simulation {
 
     disableRandomTransactions(apis)
     logger.info("Stopping random transactions to run parity check")
-    Simulation.triggerCheckpointFormation(apis)
+    disableCheckpointFormation(apis)
+    logger.info("Stopping checkpoint formation to run parity check")
 
     Simulation.awaitConditionMet(
       "Accepted checkpoint blocks number differs across the nodes",
@@ -419,7 +425,8 @@ object Simulation {
 
     enableRandomTransactions(apis)
     logger.info("Starting random transactions")
-    Simulation.triggerCheckpointFormation(apis)
+    enableCheckpointFormation(apis)
+    logger.info("Starting checkpoint formation")
 
     var debugChannelName = "debug"
     var attempt = 0

@@ -18,6 +18,10 @@ trait ConfigEndpoints {
       path("timeout") {
         dao.enableSimulateEndpointTimeout()
         complete(StatusCodes.OK)
+      } ~
+      path("checkpointFormation") {
+        dao.enableCheckpointFormation()
+        complete(StatusCodes.OK)
       }
   }
 
@@ -28,6 +32,10 @@ trait ConfigEndpoints {
     } ~
       path("timeout") {
         dao.disableSimulateEndpointTimeout()
+        complete(StatusCodes.OK)
+      } ~
+      path("checkpointFormation") {
+        dao.disableCheckpointFormation()
         complete(StatusCodes.OK)
       }
   }
