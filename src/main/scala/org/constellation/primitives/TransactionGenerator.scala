@@ -60,12 +60,12 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
       _ <- dao.metrics.incrementMetricAsync("signaturesPerformed")
       _ <- dao.metrics.incrementMetricAsync("randomTransactionsGenerated")
       _ <- dao.metrics.incrementMetricAsync("sentTransactions")
-//      _ <- putTransaction(transaction)
+      _ <- putTransaction(transaction)
 
-      transactionCacheData <- observeTransaction(transaction)
-      _ <- Logger[F].debug(
-        s"Rebroadcast transaction=${transactionCacheData.transaction.hash}, initial path=${transactionCacheData.path}"
-      )
+//      transactionCacheData <- observeTransaction(transaction)
+//      _ <- Logger[F].debug(
+//        s"Rebroadcast transaction=${transactionCacheData.transaction.hash}, initial path=${transactionCacheData.path}"
+//      )
 //      peers <- selectPeers(transactionCacheData)
 //      peerData <- peerData(peers)
 
