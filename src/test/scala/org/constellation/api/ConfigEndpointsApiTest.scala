@@ -66,6 +66,21 @@ class ConfigEndpointsApiTest
     }
   }
 
+  "CheckpointFormation Endpoints" - {
+    "should allow to enable checkpoint formation" in {
+      Post("/checkpointFormation") ~> api.configEndpoints ~> check {
+        status.isSuccess() shouldEqual true
+        dao.enableCheckpointFormation().wasCalled(once)
+      }
+    }
+    "should allow to disable checkpoint formation" in {
+      Delete("/checkpointFormation") ~> api.configEndpoints ~> check {
+        status.isSuccess() shouldEqual true
+        dao.disableCheckpointFormation().wasCalled(once)
+      }
+    }
+  }
+
   private def prepareDao(): DAO = {
     val dao: DAO = mock[DAO]
 
