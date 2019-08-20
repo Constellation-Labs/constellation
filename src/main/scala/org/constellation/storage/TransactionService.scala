@@ -17,6 +17,7 @@ class TransactionService[F[_]: Concurrent: Logger](dao: DAO) extends ConsensusSe
     super
       .accept(tx)
       .flatTap(_ => Sync[F].delay(dao.metrics.incrementMetric("transactionAccepted")))
+      .flatTap(_ => Logger[F].debug(s"Accepting transaction=${tx.hash}"))
 
   def applySnapshot(txs: List[TransactionCacheData], merkleRoot: String): F[Unit] =
     withLock("merklePoolUpdate", merklePool.remove(merkleRoot)) *>

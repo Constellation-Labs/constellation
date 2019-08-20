@@ -134,6 +134,8 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
         snapshotClient,
         peers
       )
+      _ <- dao.metrics.updateMetricAsync[IO]("transactionAccepted", 0)
+      _ <- dao.metrics.updateMetricAsync[IO]("checkpointAccepted", 0)
       _ <- finishDownload(majoritySnapshot)
       _ <- setAcceptedTransactionsAfterDownload()
     } yield ()
