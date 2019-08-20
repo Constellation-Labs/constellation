@@ -32,7 +32,7 @@ class DataResolver extends StrictLogging {
       (t: ChannelMessageMetadata) =>
         dao.messageService.memPool.put(t.channelMessage.signedMessageData.hash, t).unsafeRunSync(),
       priorityClient
-    ).head
+    ).head.flatTap(m => IO.delay(logger.debug(s"Resolving message=${m.channelMessage.signedMessageData.hash}")))
 
   def resolveTransactionDefaults(
     hash: String,
@@ -54,6 +54,7 @@ class DataResolver extends StrictLogging {
       },
       priorityClient
     ).head
+      .flatTap(tx => IO.delay(logger.debug(s"Resolving transaction=${tx.hash}")))
 
   def resolveCheckpointDefaults(
     hash: String,
@@ -72,7 +73,9 @@ class DataResolver extends StrictLogging {
       pool,
       (t: CheckpointCache) => t.checkpointBlock.foreach(cb => cb.store(t)),
       priorityClient
-    ).head
+    ).head.flatTap(
+      cb => IO.delay(logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.map(_.baseHash)}"))
+    )
 
   def resolveSoeDefaults(
     hashes: List[String],
@@ -129,7 +132,7 @@ class DataResolver extends StrictLogging {
         dao.observationService.put(t, ConsensusStatus.Unknown).unsafeRunSync()
       },
       priorityClient
-    ).head
+    ).head.flatTap(o => IO.delay(logger.debug(s"Resolving observation=${o.hash}")))
 
   private def resolveDataByDistance[T <: AnyRef](
     hashes: List[String],
