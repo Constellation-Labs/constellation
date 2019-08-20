@@ -36,7 +36,8 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
   )
 
   private[storage] def withLock[R](semaphoreName: String, thunk: F[R]) =
-    new SingleLock[F, R](semaphoreName, semaphores(semaphoreName)).use(thunk)
+    new SingleLock[F, R](semaphoreName, semaphores(semaphoreName))
+      .use(thunk)
 
   protected[storage] val pending: PendingMemPool[F, String, A]
   protected[storage] val arbitrary = new StorageService[F, A](Some(240))
@@ -49,36 +50,64 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
   def put(a: A): F[A] = put(a, ConsensusStatus.Pending)
 
   def put(a: A, as: ConsensusStatus): F[A] = as match {
-    case ConsensusStatus.Pending   => pending.put(a.hash, a)
-    case ConsensusStatus.Arbitrary => withLock("arbitraryUpdate", arbitrary.put(a.hash, a))
-    case ConsensusStatus.Accepted  => withLock("acceptedUpdate", accepted.put(a.hash, a))
-    case ConsensusStatus.Unknown   => withLock("unknownUpdate", unknown.put(a.hash, a))
-    case _                         => new Exception("Unknown consensus status").raiseError[F, A]
+    case ConsensusStatus.Pending =>
+      pending.put(a.hash, a).flatTap(_ => Logger[F].debug(s"ConsensusService pendingPut with hash=${a.hash}"))
+    case ConsensusStatus.Arbitrary =>
+      withLock("arbitraryUpdate", arbitrary.put(a.hash, a))
+        .flatTap(_ => Logger[F].debug(s"ConsensusService arbitraryPut with hash=${a.hash}"))
+    case ConsensusStatus.Accepted =>
+      withLock("acceptedUpdate", accepted.put(a.hash, a))
+        .flatTap(_ => Logger[F].debug(s"ConsensusService acceptedPut with hash=${a.hash}"))
+    case ConsensusStatus.Unknown =>
+      withLock("unknownUpdate", unknown.put(a.hash, a))
+        .flatTap(_ => Logger[F].debug(s"ConsensusService unknownPut with hash=${a.hash}"))
+    case _ => new Exception("Unknown consensus status").raiseError[F, A]
   }
 
   def update(key: String, fn: A => A, empty: => A, as: ConsensusStatus): F[A] = as match {
-    case ConsensusStatus.Pending     => pending.update(key, fn, empty)
-    case ConsensusStatus.InConsensus => withLock("inConsensusUpdate", inConsensus.update(key, fn, empty))
-    case ConsensusStatus.Arbitrary   => withLock("arbitraryUpdate", arbitrary.update(key, fn, empty))
-    case ConsensusStatus.Accepted    => withLock("acceptedUpdate", accepted.update(key, fn, empty))
-    case ConsensusStatus.Unknown     => withLock("unknownUpdate", unknown.update(key, fn, empty))
-    case _                           => new Exception("Unknown consensus status").raiseError[F, A]
+    case ConsensusStatus.Pending =>
+      pending.update(key, fn, empty).flatTap(_ => Logger[F].debug(s"ConsensusService pendingUpdate with hash=${key}"))
+    case ConsensusStatus.InConsensus =>
+      withLock("inConsensusUpdate", inConsensus.update(key, fn, empty))
+        .flatTap(_ => Logger[F].debug(s"ConsensusService inConsensusUpdate with hash=${key}"))
+    case ConsensusStatus.Arbitrary =>
+      withLock("arbitraryUpdate", arbitrary.update(key, fn, empty))
+        .flatTap(_ => Logger[F].debug(s"ConsensusService arbitraryUpdate with hash=${key}"))
+    case ConsensusStatus.Accepted =>
+      withLock("acceptedUpdate", accepted.update(key, fn, empty))
+        .flatTap(_ => Logger[F].debug(s"ConsensusService acceptedUpdate with hash=${key}"))
+    case ConsensusStatus.Unknown =>
+      withLock("unknownUpdate", unknown.update(key, fn, empty))
+        .flatTap(_ => Logger[F].debug(s"ConsensusService unknownUpdate with hash=${key}"))
+
+    case _ => new Exception("Unknown consensus status").raiseError[F, A]
   }
 
   def update(key: String, fn: A => A): F[Option[A]] =
     for {
-      p <- pending.update(key, fn)
-      i <- p.fold(withLock("inConsensusUpdate", inConsensus.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
-      ac <- i.fold(withLock("acceptedUpdate", accepted.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
-      a <- ac.fold(withLock("arbitraryUpdate", arbitrary.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
-      result <- a.fold(withLock("unknownUpdate", unknown.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
+      p <- pending.update(key, fn).flatTap(_ => Logger[F].debug(s"ConsensusService pendingUpdate with hash=${key}"))
+      i <- p
+        .fold(withLock("inConsensusUpdate", inConsensus.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
+        .flatTap(_ => Logger[F].debug(s"ConsensusService inConsensusUpdate with hash=${key}"))
+      ac <- i
+        .fold(withLock("acceptedUpdate", accepted.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
+        .flatTap(_ => Logger[F].debug(s"ConsensusService acceptedUpdate with hash=${key}"))
+      a <- ac
+        .fold(withLock("arbitraryUpdate", arbitrary.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
+        .flatTap(_ => Logger[F].debug(s"ConsensusService arbitraryUpdate with hash=${key}"))
+      result <- a
+        .fold(withLock("unknownUpdate", unknown.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
+        .flatTap(_ => Logger[F].debug(s"ConsensusService unknownUpdate with hash=${key}"))
     } yield result
 
   def accept(a: A): F[Unit] =
     put(a, ConsensusStatus.Accepted) *>
-      withLock("inConsensusUpdate", inConsensus.remove(a.hash)) *>
-      withLock("unknownUpdate", unknown.remove(a.hash)) *>
+      withLock("inConsensusUpdate", inConsensus.remove(a.hash))
+        .flatTap(_ => Logger[F].debug(s"ConsensusService inConsensusRemove with hash=${a.hash}")) *>
+      withLock("unknownUpdate", unknown.remove(a.hash))
+        .flatTap(_ => Logger[F].debug(s"ConsensusService unknownRemove with hash=${a.hash}")) *>
       withLock("arbitraryUpdate", arbitrary.remove(a.hash))
+        .flatTap(_ => Logger[F].debug(s"ConsensusService arbitraryRemove with hash=${a.hash}"))
 
   def isAccepted(hash: String): F[Boolean] = accepted.contains(hash)
 
@@ -86,7 +115,13 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
     pending
       .pull(count)
       .map(_.getOrElse(List()))
-      .flatMap(_.traverse(a => withLock("inConsensusUpdate", inConsensus.put(a.hash, a))))
+      .flatMap(
+        _.traverse(
+          a =>
+            withLock("inConsensusUpdate", inConsensus.put(a.hash, a))
+              .flatTap(_ => Logger[F].debug(s"ConsensusService pulling for consensus with hash=${a.hash}"))
+        )
+      )
 
   def lookup(key: String): F[Option[A]] =
     Lookup.extendedLookup[F, String, A](List(accepted, arbitrary, inConsensus, pending, unknown))(
@@ -116,6 +151,7 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
         txs.traverse(tx => withLock("inConsensusUpdate", inConsensus.remove(tx.hash))) *>
           txs.traverse(tx => put(tx))
       }
+      .flatTap(txs => Logger[F].debug(s"ConsensusService returningToPending with hashes=${txs.map(_.hash)}"))
 
   def getLast20Accepted: F[List[A]] =
     accepted.getLast20()
