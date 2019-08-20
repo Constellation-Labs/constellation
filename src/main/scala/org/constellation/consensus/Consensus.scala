@@ -333,10 +333,9 @@ class Consensus[F[_]: Concurrent](
           t =>
             LiftIO[F].liftIO(
               dataResolver
-                .resolveTransactions(
+                .resolveTransactionDefaults(
                   t._1,
-                  readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList,
-                  None
+                  readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList.headOption
                 )
                 .map(_.transaction)
             )
@@ -354,10 +353,9 @@ class Consensus[F[_]: Concurrent](
           t =>
             LiftIO[F].liftIO(
               dataResolver
-                .resolveMessages(
+                .resolveMessageDefaults(
                   t._1,
-                  readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList,
-                  None
+                  readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList.headOption
                 )
                 .map(_.channelMessage)
             )

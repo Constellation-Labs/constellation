@@ -314,7 +314,10 @@ class ConsensusManager[F[_]: Concurrent](
 
   private[consensus] def resolveMissingParents(
     roundData: RoundData
-  )(implicit dao: DAO): F[List[CheckpointCache]] =
+  )(implicit dao: DAO): F[List[CheckpointCache]] = {
+    def resolve(hash: String, peer: Option[PeerApiClient]): F[CheckpointCache] =
+      LiftIO[F].liftIO(DataResolver.resolveCheckpointDefaults(hash, peer)(dao = shadowDAO))
+
     for {
       filtered <- roundData.tipsSOE.soe.toList.traverse(
         t =>
@@ -326,12 +329,10 @@ class ConsensusManager[F[_]: Concurrent](
         case Nil => Sync[F].pure[List[CheckpointCache]](List.empty)
         case nel =>
           val peers = roundData.peers.map(p => PeerApiClient(p.peerMetadata.id, p.client))
-          LiftIO[F].liftIO(
-            DataResolver
-              .resolveCheckpoints(nel, peers.toList, peers.find(_.id == roundData.facilitatorId.id))(dao = shadowDAO)
-          )
+          nel.traverse(resolve(_, peers.find(_.id == roundData.facilitatorId.id)))
       }
     } yield resolved
+  }
 
   def getArbitraryTransactionsWithDistance(facilitators: Set[Id]): F[Seq[(Transaction, Int)]] = {
 

@@ -82,7 +82,7 @@ class CheckpointService[F[_]: Concurrent](
       merkleRoot,
       transactionService,
       (x: TransactionCacheData) => x.transaction,
-      (s: String) => LiftIO[F].liftIO(DataResolver.resolveTransactionsDefaults(s))
+      (s: String) => LiftIO[F].liftIO(DataResolver.resolveTransactionDefaults(s))
     )
 
   def fetchMessages(merkleRoot: String)(implicit dao: DAO): F[List[ChannelMessage]] =
@@ -90,7 +90,7 @@ class CheckpointService[F[_]: Concurrent](
       merkleRoot,
       messageService,
       (x: ChannelMessageMetadata) => x.channelMessage,
-      (s: String) => LiftIO[F].liftIO(DataResolver.resolveMessagesDefaults(s))
+      (s: String) => LiftIO[F].liftIO(DataResolver.resolveMessageDefaults(s))
     )
 
   def fetchNotifications(merkleRoot: String)(implicit dao: DAO): F[List[PeerNotification]] =

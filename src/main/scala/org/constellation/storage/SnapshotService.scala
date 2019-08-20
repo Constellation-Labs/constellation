@@ -379,7 +379,7 @@ class SnapshotService[F[_]: Concurrent](
         .flatMap(_.get.toList.traverse { msgHash =>
           dao.metrics.incrementMetricAsync("messageSnapshotHashUpdated") *>
             LiftIO[F]
-              .liftIO(DataResolver.resolveMessagesDefaults(msgHash).map(_.channelMessage))
+              .liftIO(DataResolver.resolveMessageDefaults(msgHash).map(_.channelMessage))
               .flatMap(updateMessage(msgHash, _))
         })
     }.void
