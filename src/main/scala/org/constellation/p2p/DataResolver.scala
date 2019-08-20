@@ -152,7 +152,7 @@ class DataResolver extends StrictLogging {
     endpoint: String,
     sortedPeers: List[PeerApiClient],
     store: T => Any,
-    maxErrors: Int = 10
+    maxErrors: Int = 25
   )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[T] = {
 
     def makeAttempt(
