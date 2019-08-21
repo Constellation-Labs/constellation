@@ -3,39 +3,36 @@ package org.constellation.cluster
 import java.util.concurrent.TimeUnit
 
 import akka.util.Timeout
+import better.files.File
 import cats.implicits._
 import com.softwaremill.sttp.{Response, StatusCodes}
 import org.constellation._
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives._
+import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.RecentSnapshot
-import org.constellation.util.{APIClient, Metrics, Simulation}
-import scala.concurrent.duration._
-
-import scala.concurrent.Await
+import org.constellation.util.{APIClient, Simulation}
 
 class E2ETest extends E2E {
 
-  val updatePasswordReq = UpdatePassword(
+  implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
+
+  private val updatePasswordReq = UpdatePassword(
     Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
   )
-  val totalNumNodes = 4
+  private val totalNumNodes = 4
 
-  implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
   private val n1 = createNode(randomizePorts = false)
   private val nodes = Seq(n1) ++ Seq.tabulate(totalNumNodes - 1)(
     i => createNode(seedHosts = Seq(), randomizePorts = false, portOffset = (i * 2) + 2)
   )
 
-  private val apis: Seq[APIClient] = nodes.map {
-    _.getAPIClient()
-  }
-  private val addPeerRequests = nodes.map {
-    _.getAddPeerRequest
-  }
+  private val apis: Seq[APIClient] = nodes.map(_.getAPIClient())
   private val initialAPIs = apis
+  private val addPeerRequests = nodes.map(_.getAddPeerRequest)
+  private val storeData = false
 
-  def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
+  private def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
     apiClients.map { client =>
       val response = client.postSync("password/update", updatePasswordReq)
       client.setPassword(updatePasswordReq.password)
@@ -43,16 +40,14 @@ class E2ETest extends E2E {
     }
 
   "E2E Run" should "demonstrate full flow" in {
-    logger.info("API Ports: " + apis.map {
-      _.apiPort
-    })
+    logger.info("API Ports: " + apis.map(_.apiPort))
 
     assert(Simulation.run(initialAPIs, addPeerRequests))
 
     val metadatas =
       n1.getPeerAPIClient.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", n1.dao.id)
 
-    println(s"Metadata: $metadatas")
+    logger.info(s"Metadata: $metadatas")
 
     assert(
       metadatas.nonEmpty,
@@ -155,6 +150,7 @@ class E2ETest extends E2E {
     }
 
     // constellationAppSim.dumpJson(storedSnapshots)
+    if (storeData) storeData(allAPIs)
 
     // TODO: Move to separate test
 
@@ -174,7 +170,43 @@ class E2ETest extends E2E {
     // Obviously figuring out why this randomly fails would be even better, but we're working on that.
     val sizeEqualOnes = snaps.size == 1
     assert(sizeEqualOnes)
+  }
 
+  private def storeData(allAPIs: Seq[APIClient]): Unit = {
+    File("rollback_data/snapshots").createDirectoryIfNotExists().clear()
+    storeSnapshotInfo(allAPIs)
+    storeSnapshots(allAPIs)
+    storeGenesis(allAPIs)
+  }
+
+  private def storeSnapshots(allAPIs: Seq[APIClient]) {
+    val snapshots: Seq[StoredSnapshot] = allAPIs.flatMap(_.simpleDownload())
+
+    snapshots.foreach(s => {
+      better.files
+        .File("rollback_data/snapshots", s.snapshot.hash)
+        .writeByteArray(KryoSerializer.serializeAnyRef(s))
+    })
+  }
+
+  private def storeSnapshotInfo(allAPIs: Seq[APIClient]): Unit = {
+    val snapshotInfo = allAPIs.map(_.snapshotsInfoDownload())
+
+    snapshotInfo.foreach(s => {
+      better.files
+        .File("rollback_data", "rollback_info")
+        .writeByteArray(KryoSerializer.serializeAnyRef(s))
+    })
+  }
+
+  private def storeGenesis(allAPIs: Seq[APIClient]): Unit = {
+    val genesis = allAPIs.flatMap(_.genesisDownload().unsafeRunSync())
+
+    genesis.foreach(s => {
+      better.files
+        .File("rollback_data", "rollback_genesis")
+        .writeByteArray(KryoSerializer.serializeAnyRef(s))
+    })
   }
 }
 

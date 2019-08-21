@@ -1,0 +1,11 @@
+package org.constellation.rollback
+
+sealed trait RollbackException
+
+object InvalidBalances extends RollbackException
+
+object CannotCalculate extends RollbackException
+
+object CannotLoadSnapshots extends RollbackException
+object CannotLoadGenesisObservationFile extends RollbackException
+object CannotLoadSnapshotInfoFile extends RollbackException
