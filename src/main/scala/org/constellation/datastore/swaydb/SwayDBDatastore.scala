@@ -15,7 +15,7 @@ class SwayDBImpl(dao: DAO) extends KVDB {
   import swaydb._
   import swaydb.serializers.Default._ //import default serializers
 
-  private implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.edge
+  private implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.unbounded
 
   //Create a persistent database. If the directories do not exist, they will be created.
   private val db =

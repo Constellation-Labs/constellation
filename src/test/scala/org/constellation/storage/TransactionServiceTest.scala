@@ -7,11 +7,9 @@ import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, Fixtures}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.constellation.primitives.{Transaction, TransactionCacheData}
 import org.constellation.storage.ConsensusStatus.ConsensusStatus
-import org.constellation.storage.transactions.TransactionStatus
-import org.constellation.storage.transactions.TransactionStatus.TransactionStatus
 import org.constellation.util.Metrics
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
@@ -27,7 +25,7 @@ class TransactionServiceTest
     with Matchers
     with ArgumentMatchersSugar
     with BeforeAndAfter {
-  implicit val contextShift: ContextShift[IO] = ConstellationContextShift.global
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
 
   var dao: DAO = _

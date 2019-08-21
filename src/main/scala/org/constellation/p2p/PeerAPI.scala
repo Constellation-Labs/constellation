@@ -21,7 +21,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage._
 import org.constellation.util._
-import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, ResourceInfo}
+import org.constellation.{ConstellationExecutionContext, DAO, ResourceInfo}
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -202,8 +202,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         pathPrefix("finished") {
           path("checkpoint") {
 
-            val cs: ContextShift[IO] = ConstellationContextShift.finished
-
             extractClientIP { ip =>
               entity(as[FinishedCheckpoint]) { fc =>
                 optionalHeaderValueByName("ReplyTo") { replyToOpt =>
@@ -213,20 +211,17 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
                   dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
 
-                  (cs
-                    .evalOn(ConstellationExecutionContext.callbacks)(dao.checkpointService.accept(fc)))
-                    .unsafeToFuture()
-                    .onComplete { result =>
-                      replyToOpt
-                        .map(URI.create)
-                        .map { u =>
-                          logger.debug(
-                            s"Making callback to: ${u.toURL} acceptance of cb: ${fc.checkpointCacheData.checkpointBlock
-                              .map(_.baseHash)} performed $result"
-                          )
-                          makeCallback(u, FinishedCheckpointResponse(result.isSuccess))
-                        }
-                    }
+                  dao.checkpointService.accept(fc).unsafeToFuture.onComplete { result =>
+                    replyToOpt
+                      .map(URI.create)
+                      .map { u =>
+                        logger.debug(
+                          s"Making callback to: ${u.toURL} acceptance of cb: ${fc.checkpointCacheData.checkpointBlock
+                            .map(_.baseHash)} performed $result"
+                        )
+                        makeCallback(u, FinishedCheckpointResponse(result.isSuccess))
+                      }
+                  }
                   complete(StatusCodes.Accepted)
                 }
               }
@@ -295,7 +290,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
       encodeResponse {
         // rejectBannedIP {
         signEndpoints ~ commonEndpoints ~
-          withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.edge) {
+          withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.unbounded) {
             enforceKnownIP(address) {
               getEndpoints(address) ~ postEndpoints ~ mixedEndpoints ~ blockBuildingRoundRoute
             }

@@ -1,4 +1,5 @@
 package org.constellation.util
+
 import org.constellation.p2p.PeerNotification
 import org.constellation.primitives.Schema.CheckpointEdge
 import org.constellation.primitives.{ChannelMessage, Transaction}
@@ -26,7 +27,7 @@ object Rewards {
   val epochFourRewards = 0.08561643835 // = epochThreeRewards / 2
 
   /*
-  Partitioning of address space, light nodes have smaller basis that full. 
+  Partitioning of address space, light nodes have smaller basis that full.
   Normalizes rewards based on node size.
    */
   val partitonChart = Map[String, Set[String]]()
@@ -49,11 +50,11 @@ object Rewards {
   }
 
   def rewardDuringEpoch(curShapshot: Int) = curShapshot match {
-    case num if num >= 0 && num < epochOne => epochOneRewards
-    case num if num >= epochOne && num < epochTwo => epochTwoRewards
-    case num if num >= epochTwo && num < epochThree => epochThreeRewards
+    case num if num >= 0 && num < epochOne           => epochOneRewards
+    case num if num >= epochOne && num < epochTwo    => epochTwoRewards
+    case num if num >= epochTwo && num < epochThree  => epochThreeRewards
     case num if num >= epochThree && num < epochFour => epochFourRewards
-    case _ => 0d
+    case _                                           => 0d
   }
 
   def shannonEntropy(
@@ -65,18 +66,19 @@ object Rewards {
         val neighborView = view.map { case (neighbor, score) => neighborhoodReputationMatrix(key) * score }.sum
         (key, neighborView)
     }
-    weightedTransitiveReputation.mapValues{ trust =>
+    weightedTransitiveReputation.mapValues { trust =>
       if (trust == 0.0) 0.0
-      else - trust * math.log(trust)/math.log(2) }
+      else -trust * math.log(trust) / math.log(2)
+    }
   }
 
   def rewardDistribution(partitonChart: Map[String, Set[String]], trustEntropyMap: Map[String, Double]) = {
     val totalSpace = partitonChart.values.map(_.size).max
-    val contributions = partitonChart.mapValues( partiton => partiton.size / totalSpace )
-    val weightedEntropy = contributions.map { 
-		case (address, partitonSize) => 
-			val reward = partitonSize * (1 - trustEntropyMap(address)) // Normalize wrt total partition space
-      	  	(address, reward)
+    val contributions = partitonChart.mapValues(partiton => partiton.size / totalSpace)
+    val weightedEntropy = contributions.map {
+      case (address, partitonSize) =>
+        val reward = partitonSize * (1 - trustEntropyMap(address)) // Normalize wrt total partition space
+        (address, reward)
     }
     val totalEntropy = weightedEntropy.values.sum
     weightedEntropy.mapValues(_ / totalEntropy) // Scale by entropy magnitude
@@ -84,20 +86,20 @@ object Rewards {
 
   /*
  If nodes deviate more than x% from the accepted checkpoint block, drop to 0?
-  */
+   */
   def performanceExperience(cps: Seq[MetaCheckpointBlock]): Map[Int, Double] = {
     val facilDiffsPerRound = cps.flatMap { cb =>
       val acceptedCbHashes = cb.transactions.map(_.hash).toSet //todo combine in all data hashes, currently tx check
       cb.proposals.mapValues { proposedCb: Set[String] =>
-        val diff = acceptedCbHashes diff proposedCb
+        val diff = acceptedCbHashes.diff(proposedCb)
         diff.size
       }
     }
-    val facilDiffs: Map[Int, Seq[(Int, Int)]] = facilDiffsPerRound.groupBy { case (facilitator, diff) => facilitator}//.mapValues(v => v / cpb.size.toDouble)
-    facilDiffs.mapValues {
-      fd =>
-        val acceptedCbTxHashes = cps.flatMap(_.transactions.map(_.hash).toSet)
-        fd.map(_._2).sum / acceptedCbTxHashes.size.toDouble
+    val facilDiffs
+      : Map[Int, Seq[(Int, Int)]] = facilDiffsPerRound.groupBy { case (facilitator, diff) => facilitator } //.mapValues(v => v / cpb.size.toDouble)
+    facilDiffs.mapValues { fd =>
+      val acceptedCbTxHashes = cps.flatMap(_.transactions.map(_.hash).toSet)
+      fd.map(_._2).sum / acceptedCbTxHashes.size.toDouble
 
     }
   }
@@ -105,11 +107,11 @@ object Rewards {
   case class TestCheckpointBlock(proposals: Map[Int, Set[String]], acceptedCb: Set[String])
 
   case class MetaCheckpointBlock(
-                                  proposals: Map[Int, Set[String]],//todo use Id instead of Int, see below
-                                  trustEdges: Option[Map[Int, Seq[TrustEdge]]],//todo use actual Ids in SAW
-                                  transactions: Seq[Transaction],
-                                  checkpoint: CheckpointEdge,
-                                  messages: Seq[ChannelMessage] = Seq(),
-                                  notifications: Seq[PeerNotification] = Seq()
-                                ) //extends CheckpointBlock(transactions, checkpoint)
+    proposals: Map[Int, Set[String]], //todo use Id instead of Int, see below
+    trustEdges: Option[Map[Int, Seq[TrustEdge]]], //todo use actual Ids in SAW
+    transactions: Seq[Transaction],
+    checkpoint: CheckpointEdge,
+    messages: Seq[ChannelMessage] = Seq(),
+    notifications: Seq[PeerNotification] = Seq()
+  ) //extends CheckpointBlock(transactions, checkpoint)
 }

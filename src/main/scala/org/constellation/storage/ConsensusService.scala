@@ -4,7 +4,7 @@ import cats.effect.{Concurrent, ContextShift, IO, Sync}
 import cats.effect.concurrent.Semaphore
 import io.chrisdavenport.log4cats.Logger
 import cats.implicits._
-import org.constellation.ConstellationContextShift
+import org.constellation.ConstellationExecutionContext
 import org.constellation.primitives.concurrency.SingleLock
 import org.constellation.storage.ConsensusStatus.ConsensusStatus
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
@@ -23,7 +23,7 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
   val merklePool = new StorageService[F, Seq[String]]()
 
   val semaphore: Semaphore[F] = {
-    implicit val cs: ContextShift[IO] = ConstellationContextShift.global
+    implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
     Semaphore.in[IO, F](1).unsafeRunSync
   }
 

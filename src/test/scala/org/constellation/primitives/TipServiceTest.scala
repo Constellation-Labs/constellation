@@ -7,14 +7,14 @@ import org.constellation.consensus.RandomData
 import org.constellation.primitives.Schema.{CheckpointCacheMetadata, EdgeHashType, Height, TypedEdgeHash}
 import org.constellation.storage.{CheckpointService, SOEService}
 import org.constellation.util.Metrics
-import org.constellation.{ConstellationContextShift, DAO, Fixtures}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{FunSpecLike, Matchers}
 
 class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatchersSugar with Matchers {
 
   implicit val dao: DAO = prepareDAO()
-  implicit val ioContextShift: ContextShift[IO] = ConstellationContextShift.global
+  implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
   implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
 
   def prepareDAO(): DAO = {

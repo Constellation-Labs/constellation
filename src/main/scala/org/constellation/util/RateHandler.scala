@@ -1,11 +1,12 @@
 package org.constellation.util
+
 import org.constellation.util.Rewards.{rewardDistribution, shannonEntropy}
 
 class RewardsBasedRateLimiter {
 
   case class DummyFeeTx(id: String, ammt: Double, fee: Option[Double])
 
-  val totalThroughput = 1000D
+  val totalThroughput = 1000d
   val offlineTxThroughput = 0.5
   val validatorThroughput: Double = (1 - offlineTxThroughput) * totalThroughput
 
@@ -17,10 +18,10 @@ class RewardsBasedRateLimiter {
   def remainingAllowance(id: DummyFeeTx): Int = 0
 
   def validatorRateAllowance(
-                        transitiveReputationMatrix: Map[String, Map[String, Double]],
-                        neighborhoodReputationMatrix: Map[String, Double],
-                        partitonChart: Map[String, Set[String]]
-                      )= {
+    transitiveReputationMatrix: Map[String, Map[String, Double]],
+    neighborhoodReputationMatrix: Map[String, Double],
+    partitonChart: Map[String, Set[String]]
+  ) = {
     val trustEntropyMap = shannonEntropy(transitiveReputationMatrix, neighborhoodReputationMatrix)
     val distro = rewardDistribution(partitonChart, trustEntropyMap)
     distro.mapValues(_ * validatorThroughput)

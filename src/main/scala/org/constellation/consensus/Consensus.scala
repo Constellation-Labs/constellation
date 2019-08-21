@@ -6,7 +6,7 @@ import com.softwaremill.sttp.Response
 import com.typesafe.config.Config
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO}
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.consensus.Consensus.ConsensusStage.ConsensusStage
 import org.constellation.consensus.Consensus.StageState.StageState
 import org.constellation.consensus.Consensus._

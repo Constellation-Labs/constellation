@@ -4,7 +4,6 @@ import cats.effect.concurrent.Semaphore
 import cats.effect.{Concurrent, Sync}
 import cats.implicits._
 import org.constellation.primitives.TransactionCacheData
-import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.PendingMemPool
 
 class PendingTransactionsMemPool[F[_]: Concurrent](semaphore: Semaphore[F])

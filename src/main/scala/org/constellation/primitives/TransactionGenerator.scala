@@ -12,11 +12,10 @@ import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{AddressCacheData, Id, NodeState, NodeType}
 import org.constellation.storage.ConsensusStatus.ConsensusStatus
-import org.constellation.storage.transactions.TransactionStatus.TransactionStatus
-import org.constellation.storage.transactions.{TransactionGossiping, TransactionStatus}
+import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.storage.{AddressService, ConsensusStatus, TransactionService}
 import org.constellation.util.Distance
-import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO}
+import org.constellation.{ConstellationExecutionContext, DAO}
 
 import scala.util.{Failure, Random, Success}
 
@@ -142,14 +141,10 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
   private def peerDataNodeTypeLight(): F[Map[Id, PeerData]] =
     LiftIO[F].liftIO(dao.peerInfo(NodeType.Light))
 
-  private def broadcastTransaction(tcd: TransactionCacheData, peerData: List[PeerData]) = {
-    val contextShift: ContextShift[IO] = ConstellationContextShift.global
+  private def broadcastTransaction(tcd: TransactionCacheData, peerData: List[PeerData]) =
     LiftIO[F].liftIO(
-      contextShift.evalOn(ConstellationExecutionContext.callbacks)(
-        peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd)))
-      )
+      peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd)))
     )
-  }
 
   private def peerData(peers: Set[Schema.Id]): F[List[PeerData]] =
     LiftIO[F].liftIO(dao.peerInfo(NodeType.Full).map(_.filterKeys(peers.contains).values.toList))

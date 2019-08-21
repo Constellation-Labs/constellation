@@ -13,7 +13,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{APIClient, Distance, Metrics}
-import org.constellation.{ConfigUtil, DAO}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -24,7 +24,7 @@ object SnapshotsDownloader {
   implicit val getSnapshotTimeout: FiniteDuration =
     ConfigUtil.config.getInt("download.getSnapshotTimeout").seconds
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
 
   def downloadSnapshotRandomly(hash: String, pool: Iterable[APIClient]): IO[StoredSnapshot] = {
     val poolArray = pool.toArray

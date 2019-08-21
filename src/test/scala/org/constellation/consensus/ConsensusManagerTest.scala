@@ -32,12 +32,12 @@ class ConsensusManagerTest
       }"""
   )
 
-  implicit val concurrent = ConstellationConcurrentEffect.global
-
   var consensusManager: ConsensusManager[IO] = _
   val consensus: Consensus[IO] = mock[Consensus[IO]]
 
   val dao: DAO = TestHelpers.prepareMockedDAO()
+
+  implicit val concurrent = IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.unbounded))
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
@@ -52,7 +52,7 @@ class ConsensusManagerTest
       dao.cluster,
       dao,
       conf,
-      ConstellationContextShift.edge
+      IO.contextShift(ConstellationExecutionContext.unbounded)
     )
   }
   describe("syncRoundInProgress") {

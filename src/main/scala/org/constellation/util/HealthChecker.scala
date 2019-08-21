@@ -1,4 +1,5 @@
 package org.constellation.util
+
 import cats.effect.{Concurrent, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
@@ -9,7 +10,7 @@ import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
 import org.constellation.storage._
 import org.constellation.util.HealthChecker.compareSnapshotState
-import org.constellation.{ConstellationContextShift, DAO}
+import org.constellation.{ConstellationExecutionContext, DAO}
 
 class MetricFailure(message: String) extends Exception(message)
 case class HeightEmpty(nodeId: String) extends MetricFailure(s"Empty height found for node: $nodeId")
@@ -48,7 +49,9 @@ object HealthChecker {
     var lastCheck: Either[MetricFailure, Unit] = Right(())
     while (it.hasNext && lastCheck.isRight) {
       val a = it.next()
-      val metrics = IO.fromFuture(IO { a.metricsAsync })(ConstellationContextShift.apiClient).unsafeRunSync() // TODO: wkoszycki revisit
+      val metrics = IO
+        .fromFuture(IO { a.metricsAsync })(IO.contextShift(ConstellationExecutionContext.unbounded))
+        .unsafeRunSync() // TODO: wkoszycki revisit
       lastCheck = checkLocalMetrics(metrics, a.baseURI).orElse {
         hashes ++= Set(metrics.getOrElse(Metrics.lastSnapshotHash, "no_snap"))
         Either.cond(hashes.size == 1, (), InconsistentSnapshotHash(a.baseURI, hashes))

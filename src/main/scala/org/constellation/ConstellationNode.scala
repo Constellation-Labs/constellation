@@ -146,7 +146,7 @@ object ConstellationNode extends StrictLogging {
 
       implicit val system: ActorSystem = ActorSystem("Constellation")
       implicit val materializer: ActorMaterializer = ActorMaterializer()
-      implicit val executionContext: ExecutionContext = ConstellationExecutionContext.global
+      implicit val executionContext: ExecutionContext = ConstellationExecutionContext.unbounded
 
       val constellationConfig = config.getConfig("constellation")
 
@@ -235,7 +235,7 @@ class ConstellationNode(
     dao.processingConfig.randomTransactionLoopTimeSeconds
   )
 
-  val ipManager = IPManager[IO]()(ConstellationConcurrentEffect.global)
+  val ipManager = IPManager[IO]()(IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.unbounded)))
 
   nodeConfig.seeds.foreach { peer =>
     dao.ipManager.addKnownIP(peer.host)

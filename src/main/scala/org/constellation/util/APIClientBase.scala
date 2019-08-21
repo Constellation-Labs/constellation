@@ -9,7 +9,7 @@ import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.{CanLog, Logger}
-import org.constellation.{ConstellationContextShift, ConstellationExecutionContext}
+import org.constellation.ConstellationExecutionContext
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import org.slf4j.MDC
@@ -130,7 +130,8 @@ class APIClientBase(
 
   def putAsync(suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
     implicit f: Formats = constellation.constellationFormats
-  ): IO[Response[String]] = IO.fromFuture(IO(put(suffix, b, timeout)))(ConstellationContextShift.apiClient)
+  ): IO[Response[String]] =
+    IO.fromFuture(IO(put(suffix, b, timeout)))(IO.contextShift(ConstellationExecutionContext.unbounded))
 
   def postEmpty(suffix: String, timeout: Duration = 15.seconds)(
     implicit f: Formats = constellation.constellationFormats
@@ -226,7 +227,7 @@ class APIClientBase(
     timeout: Duration = 15.seconds
   ): IO[Response[String]] =
     IO.fromFuture(IO(httpWithAuth(suffix, queryParams, timeout)(Method.GET).send()))(
-      ConstellationContextShift.apiClient
+      IO.contextShift(ConstellationExecutionContext.unbounded)
     )
 
   def getBlocking[T <: AnyRef](

@@ -7,7 +7,6 @@ import org.constellation.DAO
 import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEdgeCache}
 import org.constellation.primitives.{ChannelMessageMetadata, Observation, TransactionCacheData}
 import org.constellation.storage.ConsensusStatus
-import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.{Distance, PeerApiClient}
 
 import scala.concurrent.duration._
@@ -134,7 +133,7 @@ class DataResolver extends StrictLogging {
       priorityClient
     ).head.flatTap(o => IO.delay(logger.debug(s"Resolving observation=${o.hash}")))
 
-  private def resolveDataByDistance[T <: AnyRef](
+  private[p2p] def resolveDataByDistance[T <: AnyRef](
     hashes: List[String],
     endpoint: String,
     pool: List[PeerApiClient],
@@ -147,7 +146,7 @@ class DataResolver extends StrictLogging {
       }, store)
     }
 
-  private def resolveData[T <: AnyRef](
+  private[p2p] def resolveData[T <: AnyRef](
     hash: String,
     endpoint: String,
     sortedPeers: List[PeerApiClient],
@@ -191,7 +190,7 @@ class DataResolver extends StrictLogging {
     } yield t
   }
 
-  private def getData[T <: AnyRef](
+  private[p2p] def getData[T <: AnyRef](
     hash: String,
     endpoint: String,
     peerApiClient: PeerApiClient,
@@ -200,7 +199,7 @@ class DataResolver extends StrictLogging {
     peerApiClient.client
       .getNonBlockingIO[Option[T]](s"$endpoint/$hash", timeout = apiTimeout)
 
-  private def resolveDataByDistanceFlat[T <: AnyRef](
+  private[p2p] def resolveDataByDistanceFlat[T <: AnyRef](
     hashes: List[String],
     endpoint: String,
     pool: List[PeerApiClient],
@@ -209,7 +208,7 @@ class DataResolver extends StrictLogging {
   )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[List[T]] =
     resolveDataByDistance[T](hashes, endpoint, pool, store, priorityClient).sequence
 
-  private def getPeersForResolving(dao: DAO): IO[List[PeerApiClient]] = {
+  private[p2p] def getPeersForResolving(dao: DAO): IO[List[PeerApiClient]] = {
     val peers = for {
       ready <- dao.readyPeers
       leaving <- dao.leavingPeers

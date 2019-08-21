@@ -29,8 +29,8 @@ class RollbackService[F[_]: Concurrent](
   private def validateAccountBalance(accountBalances: AccountBalances): Either[RollbackException, Unit] =
     accountBalances.count(_._2 < 0) match {
       case 0 =>
-        logger.info("Valid account balnces from rollback data")
-        Right()
+        logger.info("Valid account balances from rollback data")
+        Right(())
       case _ =>
         logger.error("Invalid account balances from rollback data")
         Left(InvalidBalances)

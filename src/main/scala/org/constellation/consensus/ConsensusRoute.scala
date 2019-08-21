@@ -13,7 +13,7 @@ import org.constellation.consensus.ConsensusManager.SnapshotHeightAboveTip
 import org.constellation.p2p.PeerData
 import org.constellation.storage.SnapshotService
 import org.constellation.util.APIClient
-import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO}
+import org.constellation.ConstellationExecutionContext
 import org.json4s.native
 import org.json4s.native.Serialization
 import org.slf4j.{Logger, LoggerFactory}
@@ -34,8 +34,8 @@ object ConsensusRoute {
   def convert(r: RoundDataRemote): RoundData =
     RoundData(
       r.roundId,
-      r.peers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort)(ConstellationExecutionContext.apiClient))),
-      r.lightPeers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort)(ConstellationExecutionContext.apiClient))),
+      r.peers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort)(ConstellationExecutionContext.unbounded))),
+      r.lightPeers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort)(ConstellationExecutionContext.unbounded))),
       r.facilitatorId,
       r.transactions,
       r.tipsSOE,
@@ -70,21 +70,14 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
                 )
             }
             .flatMap(_ => consensusManager.participateInBlockCreationRound(ConsensusRoute.convert(cmd)))
-          onComplete(
-            (ConstellationContextShift.edge
-              .evalOn(ConstellationExecutionContext.callbacks)(participate))
-              .unsafeToFuture()
-          ) {
+
+          onComplete(participate.unsafeToFuture()) {
             case Failure(err: SnapshotHeightAboveTip) =>
               complete(StatusCodes.custom(400, err.getMessage))
             case Failure(_) =>
               complete(StatusCodes.InternalServerError)
             case Success(res) =>
-              (ConstellationContextShift.edge
-                .evalOn(ConstellationExecutionContext.callbacks)(
-                  consensusManager.continueRoundParticipation(res._1, res._2)
-                ))
-                .unsafeRunAsyncAndForget()
+              consensusManager.continueRoundParticipation(res._1, res._2).unsafeRunAsyncAndForget()
               complete(StatusCodes.Created)
           }
         }
@@ -123,13 +116,13 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
 
   private def handleProposal(proposal: ConsensusProposal): Route =
     onSuccess(
-      (ConstellationContextShift.edge
-        .evalOn(ConstellationExecutionContext.callbacks)(consensusManager.getRound(proposal.roundId)))
+      consensusManager
+        .getRound(proposal.roundId)
         .unsafeToFuture()
     ) {
       case None =>
-        (ConstellationContextShift.edge
-          .evalOn(ConstellationExecutionContext.callbacks)(consensusManager.addMissed(proposal.roundId, proposal)))
+        consensusManager
+          .addMissed(proposal.roundId, proposal)
           .unsafeRunAsyncAndForget()
         complete(StatusCodes.Accepted)
       case Some(consensus) =>
@@ -138,7 +131,7 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
           case proposal: UnionBlockProposal        => consensus.addBlockProposal(proposal)
           case proposal: SelectedUnionBlock        => consensus.addSelectedBlockProposal(proposal)
         }
-        (ConstellationContextShift.edge.evalOn(ConstellationExecutionContext.callbacks)(add)).unsafeRunAsyncAndForget()
+        add.unsafeRunAsyncAndForget()
         complete(StatusCodes.Created)
     }
 

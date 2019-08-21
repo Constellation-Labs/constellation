@@ -15,16 +15,8 @@ import org.constellation.crypto.KeyUtils.makeKeyPair
 import org.constellation.p2p.{Cluster, PeerData, PeerNotification}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.{APIClient, HostPort, Metrics}
-import org.constellation.{
-  ConstellationContextShift,
-  ConstellationExecutionContext,
-  DAO,
-  Fixtures,
-  NodeConfig,
-  PeerMetadata
-}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, NodeConfig, PeerMetadata}
 import org.mockito.Mockito.doNothing
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -240,8 +232,8 @@ class CheckpointServiceTest
     import constellation._
 
     implicit val logger: io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger
-    implicit val contextShift = ConstellationContextShift.global
-    implicit val timer = IO.timer(ConstellationExecutionContext.edge)
+    implicit val contextShift = IO.contextShift(ConstellationExecutionContext.unbounded)
+    implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
 
     val dao: DAO = mock[DAO]
 
@@ -308,8 +300,8 @@ class CheckpointServiceTest
     dao.metrics = new Metrics()(dao)
 
     implicit val logger: io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger
-    implicit val contextShift = ConstellationContextShift.global
-    implicit val timer = IO.timer(ConstellationExecutionContext.edge)
+    implicit val contextShift = IO.contextShift(ConstellationExecutionContext.unbounded)
+    implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
 
     dao.ipManager = IPManager[IO]()
 

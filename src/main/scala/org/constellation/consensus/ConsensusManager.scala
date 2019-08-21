@@ -13,7 +13,7 @@ import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
 import org.constellation.primitives.{ChannelMessage, CheckpointBlock, ConcurrentTipService, Transaction}
 import org.constellation.storage._
 import org.constellation.util.{Distance, PeerApiClient}
-import org.constellation.{ConfigUtil, ConstellationContextShift, ConstellationExecutionContext, DAO}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.util.Try
 
@@ -40,7 +40,7 @@ class ConsensusManager[F[_]: Concurrent](
     ConfigUtil.getDurationFromConfig("constellation.consensus.form-checkpoint-blocks-timeout").toMillis
 
   private val semaphore: Semaphore[F] = {
-    implicit val cs: ContextShift[IO] = ConstellationContextShift.global
+    implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
     Semaphore.in[IO, F](1).unsafeRunSync()
   }
 

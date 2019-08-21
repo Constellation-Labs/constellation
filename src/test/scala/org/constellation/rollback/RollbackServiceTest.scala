@@ -1,13 +1,13 @@
 package org.constellation.rollback
 
 import cats.effect.{ContextShift, IO}
-import org.constellation.ConstellationContextShift
+import org.constellation.ConstellationExecutionContext
 import org.mockito.ArgumentMatchersSugar
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 
 class RollbackServiceTest extends FunSuite with BeforeAndAfter with Matchers with ArgumentMatchersSugar {
 
-  implicit val contextShift: ContextShift[IO] = ConstellationContextShift.global
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
 
   var rollbackAccountBalances: RollbackAccountBalances[IO] = _
   var rollbackLoader: RollbackLoader[IO] = _

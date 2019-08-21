@@ -1,4 +1,5 @@
 package org.constellation.primitives
+
 import java.util.concurrent.TimeUnit
 
 import akka.util.Timeout
@@ -11,7 +12,7 @@ import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema.{Height, Id, SignedObservationEdge}
 import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
 import org.constellation.util.Metrics
-import org.constellation.{ConstellationContextShift, DAO}
+import org.constellation.{ConstellationExecutionContext, DAO}
 
 import scala.util.Random
 
@@ -45,7 +46,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
   private val conflictingTips: SingleRef[F, Map[String, CheckpointBlock]] = SingleRef(Map.empty)
   private val tipsRef: SingleRef[F, Map[String, TipData]] = SingleRef(Map.empty)
   private val semaphore: Semaphore[F] = {
-    implicit val cs: ContextShift[IO] = ConstellationContextShift.global
+    implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
     Semaphore.in[IO, F](1).unsafeRunSync()
   }
 

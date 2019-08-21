@@ -10,7 +10,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.{Metrics, SnapshotWatcher}
-import org.constellation.{ConstellationContextShift, DAO, NodeConfig, ProcessingConfig}
+import org.constellation.{ConstellationExecutionContext, DAO, NodeConfig, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 
@@ -94,7 +94,7 @@ trait EdgeDAO {
 
   def processingConfig: ProcessingConfig = nodeConfig.processingConfig
 
-  implicit val contextShift: ContextShift[IO] = ConstellationContextShift.edge
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
 
   // TODO: Put on Id keyed datastore (address? potentially) with other metadata
   val publicReputation: TrieMap[Id, Double] = TrieMap()

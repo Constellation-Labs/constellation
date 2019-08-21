@@ -1,4 +1,5 @@
 package org.constellation.storage
+
 import java.util.concurrent.ConcurrentLinkedQueue
 
 // TODO: Put transaction tracker / block tracker here
