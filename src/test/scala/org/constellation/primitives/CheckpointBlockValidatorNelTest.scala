@@ -31,7 +31,7 @@ class CheckpointBlockValidatorNelTest
     with BeforeAndAfter {
 
   implicit val dao: DAO = mock[DAO]
-  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   val snapService: SnapshotService[IO] = mock[SnapshotService[IO]]
   val checkpointService: CheckpointService[IO] = mock[CheckpointService[IO]]
@@ -186,8 +186,8 @@ class ValidationSpec
   dao.metrics = new Metrics()
 
   implicit val logger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
-  implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
-  implicit val cs = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val timer = IO.timer(ConstellationExecutionContext.bounded)
+  implicit val cs = IO.contextShift(ConstellationExecutionContext.bounded)
 
   val ipManager = IPManager[IO]()
   val cluster = Cluster[IO](() => dao.metrics, ipManager, dao)

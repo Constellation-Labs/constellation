@@ -11,8 +11,8 @@ import scala.concurrent.Future
 class MultiLockTest extends WordSpec with Matchers {
   "MultiLock" should {
     "not allow concurrent modifications on same keys" in {
-      implicit val ec = ConstellationExecutionContext.unbounded
-      implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+      implicit val ec = ConstellationExecutionContext.bounded
+      implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
       val counter = new AtomicInteger()
       counter.set(0)

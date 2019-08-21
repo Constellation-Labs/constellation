@@ -84,7 +84,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
-    implicit val ioTimer = IO.timer(ConstellationExecutionContext.unbounded)
+    implicit val ioTimer = IO.timer(ConstellationExecutionContext.bounded)
 
     rateLimiting = new RateLimiting[IO]
 
@@ -126,7 +126,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       cluster,
       this,
       ConfigUtil.config,
-      IO.contextShift(ConstellationExecutionContext.unbounded)
+      IO.contextShift(ConstellationExecutionContext.bounded)
     )
 
     consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
@@ -135,9 +135,9 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       val snapshotProcessor =
         new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotByDistance)(
           this,
-          ConstellationExecutionContext.unbounded
+          ConstellationExecutionContext.bounded
         )
-      val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.unbounded)
+      val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.bounded)
       new SnapshotBroadcastService[IO](
         new HealthChecker[IO](this, concurrentTipService, downloadProcess),
         cluster,
@@ -163,7 +163,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this)
   }
 
-  implicit val context: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val context: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   def peerInfo: IO[Map[Id, PeerData]] = cluster.getPeerInfo
 

@@ -20,8 +20,8 @@ class SnapshotServiceTest
     with ArgumentMatchersSugar
     with BeforeAndAfter {
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
-  implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.bounded)
 
   var dao: DAO = _
   var snapshotService: SnapshotService[IO] = _

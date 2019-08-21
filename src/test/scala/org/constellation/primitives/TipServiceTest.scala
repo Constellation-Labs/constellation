@@ -14,7 +14,7 @@ import org.scalatest.{FunSpecLike, Matchers}
 class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatchersSugar with Matchers {
 
   implicit val dao: DAO = prepareDAO()
-  implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
 
   def prepareDAO(): DAO = {

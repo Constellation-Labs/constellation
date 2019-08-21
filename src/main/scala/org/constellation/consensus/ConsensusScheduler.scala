@@ -20,7 +20,7 @@ class ConsensusScheduler(
   val edgeConsensus: IO[Unit] = IO
     .fromFuture(IO {
       EdgeProcessor.formCheckpoint(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))(dao)
-    })(IO.contextShift(ConstellationExecutionContext.unbounded))
+    })(IO.contextShift(ConstellationExecutionContext.bounded))
     .void
 
   val crossTalkConsensus: IO[Unit] = consensusManager.startOwnConsensus().void.handleErrorWith {

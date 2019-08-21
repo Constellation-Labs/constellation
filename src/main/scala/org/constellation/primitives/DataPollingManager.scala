@@ -14,7 +14,7 @@ class DataPollingManager(periodSeconds: Int = 60)(implicit dao: DAO)
     extends Periodic[Try[Unit]]("DataPollingManager", periodSeconds)
     with StrictLogging {
 
-  implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.unbounded
+  implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.bounded
 
   private val transitService = new TransitService()
 

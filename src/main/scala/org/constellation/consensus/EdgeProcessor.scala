@@ -91,7 +91,7 @@ object EdgeProcessor extends StrictLogging {
     implicit dao: DAO
   ) = {
 
-    implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.unbounded
+    implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.bounded
 
     val transactions = dao.transactionService
       .pullForConsensus(dao.processingConfig.maxCheckpointFormationThreshold)
@@ -211,7 +211,7 @@ object EdgeProcessor extends StrictLogging {
         SignatureResponse(updated)
       },
       "handleSignatureRequest"
-    )(ConstellationExecutionContext.unbounded, dao)
+    )(ConstellationExecutionContext.bounded, dao)
 
 }
 

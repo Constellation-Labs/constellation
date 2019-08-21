@@ -7,7 +7,7 @@ import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 
 class RollbackServiceTest extends FunSuite with BeforeAndAfter with Matchers with ArgumentMatchersSugar {
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   var rollbackAccountBalances: RollbackAccountBalances[IO] = _
   var rollbackLoader: RollbackLoader[IO] = _

@@ -23,7 +23,7 @@ class TransactionGossipingTest
     with Matchers
     with ArgumentMatchersSugar {
 
-  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
 
   test("it should randomly select the diff of all peer IDs and peers in the tx path") {

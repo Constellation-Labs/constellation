@@ -19,11 +19,11 @@ class TransitService extends StrictLogging {
   def poll(feedUrl: String): Future[FeedMessage] = {
 
     val w = new java.net.URL(feedUrl)
-    val apiClient = APIClientBase(w.getHost, httpPort)(ConstellationExecutionContext.unbounded)
+    val apiClient = APIClientBase(w.getHost, httpPort)(ConstellationExecutionContext.callbacks)
     val respF = apiClient.getBytes(w.getPath)
     val message = respF.map { r =>
       FeedMessage.parseFrom(r.unsafeBody)
-    }(ConstellationExecutionContext.unbounded)
+    }(ConstellationExecutionContext.bounded)
 
     message
   }
@@ -32,7 +32,7 @@ class TransitService extends StrictLogging {
     val msgF = poll(feedUrl)
     msgF.map { msg =>
       Serialization.write(Extraction.decompose(msg))
-    }(ConstellationExecutionContext.unbounded)
+    }(ConstellationExecutionContext.bounded)
   }
 
 }

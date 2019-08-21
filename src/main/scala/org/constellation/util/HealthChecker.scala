@@ -50,7 +50,7 @@ object HealthChecker {
     while (it.hasNext && lastCheck.isRight) {
       val a = it.next()
       val metrics = IO
-        .fromFuture(IO { a.metricsAsync })(IO.contextShift(ConstellationExecutionContext.unbounded))
+        .fromFuture(IO { a.metricsAsync })(IO.contextShift(ConstellationExecutionContext.bounded))
         .unsafeRunSync() // TODO: wkoszycki revisit
       lastCheck = checkLocalMetrics(metrics, a.baseURI).orElse {
         hashes ++= Set(metrics.getOrElse(Metrics.lastSnapshotHash, "no_snap"))

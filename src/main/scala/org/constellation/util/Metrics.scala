@@ -122,7 +122,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) extends Periodic[Unit](
 
   val registry = Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
 
-  implicit val timer: cats.effect.Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+  implicit val timer: cats.effect.Timer[IO] = IO.timer(ConstellationExecutionContext.bounded)
 
   val init = for {
     currentTime <- cats.effect.Clock[IO].realTime(duration.MILLISECONDS)

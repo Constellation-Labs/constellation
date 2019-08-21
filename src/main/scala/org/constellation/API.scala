@@ -139,7 +139,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-  implicit val executionContext: ExecutionContext = ConstellationExecutionContext.unbounded
+  implicit val executionContext: ExecutionContext = ConstellationExecutionContext.bounded
 
   val config: Config = ConfigFactory.load()
 
@@ -444,7 +444,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         } ~
         pathPrefix("download") {
           path("start") {
-            Future { Download.download() }(ConstellationExecutionContext.unbounded)
+            Future { Download.download() }(ConstellationExecutionContext.bounded)
             complete(StatusCodes.OK)
           }
         } ~

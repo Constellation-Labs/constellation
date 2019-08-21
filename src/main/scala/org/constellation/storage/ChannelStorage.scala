@@ -69,7 +69,7 @@ class ChannelStorage(implicit dao: DAO) extends StrictLogging {
         msgs.foreach { m =>
           logger.info(m.toString)
         }
-      }(ConstellationExecutionContext.unbounded)
+      }(ConstellationExecutionContext.bounded)
 
 }
 

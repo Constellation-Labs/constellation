@@ -23,7 +23,7 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
   val merklePool = new StorageService[F, Seq[String]]()
 
   val semaphore: Semaphore[F] = {
-    implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+    implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
     Semaphore.in[IO, F](1).unsafeRunSync
   }
 

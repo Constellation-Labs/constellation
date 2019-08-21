@@ -34,8 +34,8 @@ object ConsensusRoute {
   def convert(r: RoundDataRemote): RoundData =
     RoundData(
       r.roundId,
-      r.peers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort)(ConstellationExecutionContext.unbounded))),
-      r.lightPeers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort)(ConstellationExecutionContext.unbounded))),
+      r.peers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort)(ConstellationExecutionContext.callbacks))),
+      r.lightPeers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort)(ConstellationExecutionContext.callbacks))),
       r.facilitatorId,
       r.transactions,
       r.tipsSOE,

@@ -30,7 +30,7 @@ class HealthCheckerTest
 
   val healthChecker =
     new HealthChecker[IO](dao, concurrentTipService, downloadProcess)(
-      IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.unbounded)),
+      IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)),
       Slf4jLogger.getLogger[IO]
     )
 

@@ -290,7 +290,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
       encodeResponse {
         // rejectBannedIP {
         signEndpoints ~ commonEndpoints ~
-          withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.unbounded) {
+          withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.bounded) {
             enforceKnownIP(address) {
               getEndpoints(address) ~ postEndpoints ~ mixedEndpoints ~ blockBuildingRoundRoute
             }

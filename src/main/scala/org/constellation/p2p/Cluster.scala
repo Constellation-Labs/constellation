@@ -123,13 +123,13 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         p.id != dao.id && validPeerAddition(HostPort(p.host, p.httpPort), peers)
       }
       register <- filteredPeers.toList.traverse { md =>
-        APIClient(md.host, md.httpPort)(ConstellationExecutionContext.unbounded)
+        APIClient(md.host, md.httpPort)(ConstellationExecutionContext.callbacks)
           .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")
           .map((md, _))
       }
       _ <- register.traverse(r => pendingRegistration(r._1.host, r._2))
       registerResponse <- register.traverse { md =>
-        APIClient(md._1.host, md._1.httpPort)(ConstellationExecutionContext.unbounded)
+        APIClient(md._1.host, md._1.httpPort)(ConstellationExecutionContext.callbacks)
           .postNonBlockingUnitF[F]("register", dao.peerRegistrationRequest)
       }.void
     } yield registerResponse
@@ -167,7 +167,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       _ <- if (badAttempt) {
         dao.metrics.incrementMetricAsync[F]("duplicatePeerAdditionAttempt")
       } else {
-        val client = APIClient(request.host, request.port)(ConstellationExecutionContext.unbounded, dao)
+        val client = APIClient(request.host, request.port)(ConstellationExecutionContext.callbacks, dao)
         val authSignRequest = PeerAuthSignRequest(Random.nextLong())
         val req = client.postNonBlockingF[F, SingleHashSignature]("sign", authSignRequest)
 
@@ -323,7 +323,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
       _ <- if (dao.peersInfoPath.nonEmpty || dao.seedsPath.nonEmpty) {
         C.evalOn(ConstellationExecutionContext.callbacks)(
-          Sync[F].delay(Download.download()(dao, ConstellationExecutionContext.unbounded))
+          Sync[F].delay(Download.download()(dao, ConstellationExecutionContext.bounded))
         )
       } else {
         Logger[F].warn("No peers or seeds configured yet. Skipping initial download.")
@@ -334,7 +334,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     for {
       _ <- Logger[F].info(s"Attempting to register with $hp")
       _ <- withMetric(
-        APIClient(hp.host, hp.port)(ConstellationExecutionContext.unbounded, dao)
+        APIClient(hp.host, hp.port)(ConstellationExecutionContext.callbacks, dao)
           .postNonBlockingUnitF("register", dao.peerRegistrationRequest),
         "addPeerWithRegistration"
       )
@@ -349,7 +349,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def attemptRegisterPeer(hp: HostPort): F[Response[Unit]] =
     withMetric(
       {
-        val client = APIClient(hp.host, hp.port)(ConstellationExecutionContext.unbounded, dao)
+        val client = APIClient(hp.host, hp.port)(ConstellationExecutionContext.callbacks, dao)
 
         client
           .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")

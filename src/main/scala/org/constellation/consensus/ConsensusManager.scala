@@ -40,7 +40,7 @@ class ConsensusManager[F[_]: Concurrent](
     ConfigUtil.getDurationFromConfig("constellation.consensus.form-checkpoint-blocks-timeout").toMillis
 
   private val semaphore: Semaphore[F] = {
-    implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+    implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
     Semaphore.in[IO, F](1).unsafeRunSync()
   }
 
@@ -95,7 +95,7 @@ class ConsensusManager[F[_]: Concurrent](
       _ <- ownConsensus.updateUnsafe(d => d.map(o => o.copy(consensusInfo = roundInfo.some)))
       _ <- logger.debug(s"[${dao.id.short}] created data for round: ${roundId} with facilitators: ${roundData._1.peers
         .map(_.peerMetadata.id.short)}")
-      responses <- calculationContext.evalOn(ConstellationExecutionContext.unbounded)(
+      responses <- calculationContext.evalOn(ConstellationExecutionContext.bounded)(
         remoteSender.notifyFacilitators(roundData._1)
       )
       _ <- if (responses.forall(_.isSuccess)) Sync[F].unit

@@ -94,7 +94,7 @@ trait EdgeDAO {
 
   def processingConfig: ProcessingConfig = nodeConfig.processingConfig
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   // TODO: Put on Id keyed datastore (address? potentially) with other metadata
   val publicReputation: TrieMap[Id, Double] = TrieMap()

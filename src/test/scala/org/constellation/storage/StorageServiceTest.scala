@@ -8,7 +8,7 @@ import org.scalatest.{FunSuite, Matchers}
 
 class StorageServiceTest extends FunSuite with IdiomaticMockito with Matchers {
 
-  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   test("it should allow to put a new value") {
     val storage = new StorageService[IO, Int]()

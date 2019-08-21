@@ -24,7 +24,7 @@ object SnapshotsDownloader {
   implicit val getSnapshotTimeout: FiniteDuration =
     ConfigUtil.config.getInt("download.getSnapshotTimeout").seconds
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   def downloadSnapshotRandomly(hash: String, pool: Iterable[APIClient]): IO[StoredSnapshot] = {
     val poolArray = pool.toArray

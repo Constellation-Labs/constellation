@@ -46,7 +46,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger](
   private val conflictingTips: SingleRef[F, Map[String, CheckpointBlock]] = SingleRef(Map.empty)
   private val tipsRef: SingleRef[F, Map[String, TipData]] = SingleRef(Map.empty)
   private val semaphore: Semaphore[F] = {
-    implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+    implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
     Semaphore.in[IO, F](1).unsafeRunSync()
   }
 

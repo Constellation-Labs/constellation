@@ -61,7 +61,7 @@ class APIClientBase(
   implicit val logger = Logger.takingImplicit[HostPort]("APIClient")
 
   implicit val backend = new LoggingSttpBackend[Future, Nothing](
-    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
+    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.bounded))
   )
   implicit val serialization = native.Serialization
 
@@ -131,7 +131,7 @@ class APIClientBase(
   def putAsync(suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
     implicit f: Formats = constellation.constellationFormats
   ): IO[Response[String]] =
-    IO.fromFuture(IO(put(suffix, b, timeout)))(IO.contextShift(ConstellationExecutionContext.unbounded))
+    IO.fromFuture(IO(put(suffix, b, timeout)))(IO.contextShift(ConstellationExecutionContext.bounded))
 
   def postEmpty(suffix: String, timeout: Duration = 15.seconds)(
     implicit f: Formats = constellation.constellationFormats
@@ -227,7 +227,7 @@ class APIClientBase(
     timeout: Duration = 15.seconds
   ): IO[Response[String]] =
     IO.fromFuture(IO(httpWithAuth(suffix, queryParams, timeout)(Method.GET).send()))(
-      IO.contextShift(ConstellationExecutionContext.unbounded)
+      IO.contextShift(ConstellationExecutionContext.bounded)
     )
 
   def getBlocking[T <: AnyRef](

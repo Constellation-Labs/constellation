@@ -104,7 +104,7 @@ object ChannelMessage extends StrictLogging {
               "Success"
             }
           ChannelOpenResponse(response, genesisHashChannelId)
-        }(ConstellationExecutionContext.unbounded)
+        }(ConstellationExecutionContext.bounded)
       }
   }
 

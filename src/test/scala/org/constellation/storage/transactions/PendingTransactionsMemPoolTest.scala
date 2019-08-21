@@ -10,7 +10,7 @@ import org.mockito.IdiomaticMockito
 import org.scalatest.{FreeSpec, FunSuite, Matchers}
 
 class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with Matchers {
-  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   "update" - {
     "it should update existing transaction" in {
