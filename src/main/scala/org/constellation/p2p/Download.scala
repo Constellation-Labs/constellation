@@ -106,7 +106,7 @@ class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[S
 
 class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO, ec: ExecutionContext)
     extends StrictLogging {
-  private implicit val ioTimer: Timer[IO] = IO.timer(ec)
+  private implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
   final implicit class FutureOps[+T](f: Future[T]) {
     def toIO: IO[T] = IO.fromFuture(IO(f))(IO.contextShift(ec))

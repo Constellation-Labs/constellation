@@ -233,7 +233,7 @@ class CheckpointServiceTest
 
     implicit val logger: io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger
     implicit val contextShift = IO.contextShift(ConstellationExecutionContext.bounded)
-    implicit val timer = IO.timer(ConstellationExecutionContext.bounded)
+    implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
 
     val dao: DAO = mock[DAO]
 
@@ -301,7 +301,7 @@ class CheckpointServiceTest
 
     implicit val logger: io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger
     implicit val contextShift = IO.contextShift(ConstellationExecutionContext.bounded)
-    implicit val timer = IO.timer(ConstellationExecutionContext.bounded)
+    implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
 
     dao.ipManager = IPManager[IO]()
 

@@ -84,7 +84,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
     checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
-    implicit val ioTimer = IO.timer(ConstellationExecutionContext.bounded)
+    implicit val ioTimer = IO.timer(ConstellationExecutionContext.unbounded)
 
     rateLimiting = new RateLimiting[IO]
 

@@ -14,7 +14,7 @@ class SingleLockTest extends WordSpec with Matchers {
   "SingleLock" should {
     implicit val ec = ConstellationExecutionContext.bounded
     implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-    implicit val timer = IO.timer(ConstellationExecutionContext.bounded)
+    implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
 
     "not allow concurrent modifications of same resource" in {
       val items = scala.collection.mutable.Stack[Int](1, 2, 3)
@@ -40,7 +40,7 @@ class SingleLockTest extends WordSpec with Matchers {
       lazy val throwError = IO {
         throw new RuntimeException("throwError")
       }
-      implicit val timer = IO.timer(ConstellationExecutionContext.bounded)
+      implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
       val items = scala.collection.mutable.Stack[Int](1, 2, 3)
       val processedItems = scala.collection.mutable.Stack[Int]()
       val op = IO {

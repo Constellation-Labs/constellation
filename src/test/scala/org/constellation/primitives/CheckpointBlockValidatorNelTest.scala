@@ -186,7 +186,7 @@ class ValidationSpec
   dao.metrics = new Metrics()
 
   implicit val logger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
-  implicit val timer = IO.timer(ConstellationExecutionContext.bounded)
+  implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
   implicit val cs = IO.contextShift(ConstellationExecutionContext.bounded)
 
   val ipManager = IPManager[IO]()

@@ -21,7 +21,7 @@ class SnapshotServiceTest
     with BeforeAndAfter {
 
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-  implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.bounded)
+  implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
   var dao: DAO = _
   var snapshotService: SnapshotService[IO] = _
