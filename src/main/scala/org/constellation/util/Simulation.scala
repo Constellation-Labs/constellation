@@ -78,7 +78,9 @@ object Simulation {
   }
 
   def genesis(apis: Seq[APIClient]): GenesisObservation = {
-    val ids = apis.map { _.id }
+    val ids = apis.map {
+      _.id
+    }
     apis.head.postBlocking[GenesisObservation]("genesis/create", ids.tail.toSet)
   }
 
@@ -97,7 +99,9 @@ object Simulation {
   def assignReputations(apis: Seq[APIClient]): Unit = {
     val responses =
       apis.map { api =>
-        val others = apis.filter { _ != api }
+        val others = apis.filter {
+          _ != api
+        }
         val havePublic = Random.nextDouble() > 0.5
         val haveSecret = Random.nextDouble() > 0.5 || havePublic
         api.post("reputation", others.map { o =>
@@ -116,7 +120,9 @@ object Simulation {
   def randomNode(apis: Seq[APIClient]) = apis(Random.nextInt(apis.length))
 
   def randomOtherNode(not: APIClient, apis: Seq[APIClient]): APIClient =
-    apis.filter { _ != not }(Random.nextInt(apis.length - 1))
+    apis.filter {
+      _ != not
+    }(Random.nextInt(apis.length - 1))
 
   def checkGenesis(
     apis: Seq[APIClient],
@@ -398,7 +404,9 @@ object Simulation {
     logger.info("Peer validation passed")
 
     val goe = genesis(apis)
-    apis.foreach { _.post("genesis/accept", goe) }
+    apis.foreach {
+      _.post("genesis/accept", goe)
+    }
 
     assert(checkGenesis(apis))
     logger.info("Genesis validation passed")
@@ -409,6 +417,13 @@ object Simulation {
     setReady(apis)
 
     assert(awaitCheckpointsAccepted(apis, numAccepted = 3))
+
+    true
+
+  }
+}
+
+/*
 
     disableRandomTransactions(apis)
     logger.info("Stopping random transactions to run parity check")
@@ -502,7 +517,7 @@ object Simulation {
     /*
     val channelProof = apis.head.getBlocking[Option[ChannelProof]]("channel/" + channelId, timeout = 90.seconds)
     assert(channelProof.nonEmpty)
-     */
+ */
     logger.info("Snapshot validation passed")
 
     true
@@ -510,3 +525,5 @@ object Simulation {
   }
 
 }
+
+ */
