@@ -129,8 +129,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
     with ServeUI
     with CommonEndpoints
     with ConfigEndpoints
-    with StrictLogging
-    with MetricTimerDirective {
+    with StrictLogging {
 
   import dao._
 
@@ -608,7 +607,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
       case _ => None
     }
 
-  val routes = withTimer("api") {
+  val routes =
     if (authEnabled) {
       noAuthRoutes ~ authenticateBasic(realm = "secure site", myUserPassAuthenticator) { user =>
         mainRoutes
@@ -616,5 +615,4 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
     } else {
       noAuthRoutes ~ mainRoutes
     }
-  }
 }

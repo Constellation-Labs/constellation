@@ -51,7 +51,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     with CommonEndpoints
     with IPEnforcer
     with StrictLogging
-    with MetricTimerDirective
     with SimulateTimeoutDirective {
 
   implicit val serialization: Serialization.type = native.Serialization
@@ -283,7 +282,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     }
   }
 
-  def routes(address: InetSocketAddress): Route = withTimer("peer-api") {
+  def routes(address: InetSocketAddress): Route =
     // val id = ipLookup(address) causes circular dependencies and cluster with 6 nodes unable to start due to timeouts. Consider reopen #391
     // TODO: pass id down and use it if needed
     decodeRequest {
@@ -297,7 +296,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           }
       }
     }
-  }
 
   private def getEndpoints(address: InetSocketAddress) =
     get {
