@@ -64,7 +64,6 @@ object ProcessingConfig {
 
   val testProcessingConfig = ProcessingConfig(
     numFacilitatorPeers = 2,
-    minCheckpointFormationThreshold = 0,
     maxTransactionsPerRound = 2,
     emptyTransactionsRounds = 2,
     amountTransactionsRounds = 2,
@@ -83,7 +82,6 @@ object ProcessingConfig {
 case class ProcessingConfig(
   maxWidth: Int = 10,
   maxTipUsage: Int = 2,
-  minCheckpointFormationThreshold: Int = 0,
   maxCheckpointFormationThreshold: Int = 50,
   maxTXInBlock: Int = 50,
   maxMessagesInBlock: Int = 1,
@@ -92,7 +90,7 @@ case class ProcessingConfig(
   snapshotTriggeringTimeSeconds: Int = 2,
   formUndersizedCheckpointAfterSeconds: Int = 30,
   numFacilitatorPeers: Int = 2,
-  maxTransactionsPerRound: Int = 30,
+  maxTransactionsPerRound: Int = 10,
   emptyTransactionsRounds: Int = 5,
   amountTransactionsRounds: Int = 5,
   metricCheckInterval: Int = 10,
@@ -105,7 +103,7 @@ case class ProcessingConfig(
   snapshotHeightInterval: Int = 2,
   snapshotHeightDelayInterval: Int = 2,
   snapshotHeightRedownloadDelayInterval: Int = 4,
-  snapshotInterval: Int = 25,
+  snapshotInterval: Int = 10,
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,
   roundsPerMessage: Int = 10,
@@ -131,8 +129,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
     with ServeUI
     with CommonEndpoints
     with ConfigEndpoints
-    with StrictLogging
-    with MetricTimerDirective {
+    with StrictLogging {
 
   import dao._
 
@@ -141,7 +138,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("api-dispatcher")
+  implicit val executionContext: ExecutionContext = ConstellationExecutionContext.bounded
 
   val config: Config = ConfigFactory.load()
 
@@ -446,7 +443,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         } ~
         pathPrefix("download") {
           path("start") {
-            Future { Download.download() }(ConstellationExecutionContext.edge)
+            Future { Download.download() }(ConstellationExecutionContext.bounded)
             complete(StatusCodes.OK)
           }
         } ~
@@ -610,7 +607,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
       case _ => None
     }
 
-  val routes = withTimer("api") {
+  val routes =
     if (authEnabled) {
       noAuthRoutes ~ authenticateBasic(realm = "secure site", myUserPassAuthenticator) { user =>
         mainRoutes
@@ -618,5 +615,4 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
     } else {
       noAuthRoutes ~ mainRoutes
     }
-  }
 }

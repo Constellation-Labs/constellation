@@ -1,4 +1,5 @@
 package org.constellation.util
+
 import cats.data.{Validated, ValidatedNel}
 
 import scala.concurrent.{ExecutionContext, Future}

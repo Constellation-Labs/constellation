@@ -7,20 +7,19 @@ import org.constellation.DAO
 import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEdgeCache}
 import org.constellation.primitives.{ChannelMessageMetadata, Observation, TransactionCacheData}
 import org.constellation.storage.ConsensusStatus
-import org.constellation.storage.transactions.TransactionStatus
 import org.constellation.util.{Distance, PeerApiClient}
 
 import scala.concurrent.duration._
 
 class DataResolver extends StrictLogging {
 
-  def resolveMessagesDefaults(
+  def resolveMessageDefaults(
     hash: String,
     priorityClient: Option[PeerApiClient] = None
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[ChannelMessageMetadata] =
-    getPeersForResolving(dao).flatMap(resolveMessages(hash, _, priorityClient))
+    getPeersForResolving(dao).flatMap(resolveMessage(hash, _, priorityClient))
 
-  def resolveMessages(
+  def resolveMessage(
     hash: String,
     pool: List[PeerApiClient],
     priorityClient: Option[PeerApiClient]
@@ -32,9 +31,109 @@ class DataResolver extends StrictLogging {
       (t: ChannelMessageMetadata) =>
         dao.messageService.memPool.put(t.channelMessage.signedMessageData.hash, t).unsafeRunSync(),
       priorityClient
-    ).head
+    ).head.flatTap(m => IO.delay(logger.debug(s"Resolving message=${m.channelMessage.signedMessageData.hash}")))
 
-  def resolveDataByDistance[T <: AnyRef](
+  def resolveTransactionDefaults(
+    hash: String,
+    priorityClient: Option[PeerApiClient] = None
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
+    getPeersForResolving(dao).flatMap(resolveTransaction(hash, _, priorityClient))
+
+  def resolveTransaction(
+    hash: String,
+    pool: List[PeerApiClient],
+    priorityClient: Option[PeerApiClient]
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
+    resolveDataByDistance[TransactionCacheData](
+      List(hash),
+      "transaction",
+      pool,
+      (t: TransactionCacheData) => {
+        dao.transactionService.put(t, ConsensusStatus.Unknown).unsafeRunSync()
+      },
+      priorityClient
+    ).head
+      .flatTap(tx => IO.delay(logger.debug(s"Resolving transaction=${tx.hash}")))
+
+  def resolveCheckpointDefaults(
+    hash: String,
+    priorityClient: Option[PeerApiClient] = None
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[CheckpointCache] =
+    getPeersForResolving(dao).flatMap(resolveCheckpoint(hash, _, priorityClient))
+
+  def resolveCheckpoint(
+    hash: String,
+    pool: List[PeerApiClient],
+    priorityClient: Option[PeerApiClient] = None
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[CheckpointCache] =
+    resolveDataByDistance[CheckpointCache](
+      List(hash),
+      "checkpoint",
+      pool,
+      (t: CheckpointCache) => t.checkpointBlock.foreach(cb => cb.store(t)),
+      priorityClient
+    ).head.flatTap(
+      cb => IO.delay(logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.map(_.baseHash)}"))
+    )
+
+  def resolveSoeDefaults(
+    hashes: List[String],
+    priorityClient: Option[PeerApiClient] = None
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[SignedObservationEdgeCache]] =
+    getPeersForResolving(dao).flatMap(resolveSoe(hashes, _, priorityClient))
+
+  def resolveSoe(
+    hashes: List[String],
+    pool: List[PeerApiClient],
+    priorityClient: Option[PeerApiClient] = None
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[SignedObservationEdgeCache]] =
+    resolveDataByDistance[SignedObservationEdgeCache](
+      hashes,
+      "soe",
+      pool,
+      (t: SignedObservationEdgeCache) => {
+        dao.soeService.put(t.signedObservationEdge.hash, t).unsafeRunSync()
+      },
+      priorityClient
+    ).sequence
+
+  def resolveCheckpoints(
+    hashes: List[String],
+    pool: List[PeerApiClient],
+    priorityClient: Option[PeerApiClient] = None
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[CheckpointCache]] =
+    resolveDataByDistanceFlat[CheckpointCache](
+      hashes,
+      "checkpoint",
+      pool,
+      (t: CheckpointCache) => {
+        t.checkpointBlock.foreach(cb => cb.store(t))
+      },
+      priorityClient
+    )
+
+  def resolveObservationDefaults(
+    hash: String,
+    priorityClient: Option[PeerApiClient] = None
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Observation] =
+    getPeersForResolving(dao).flatMap(resolveObservation(hash, _, priorityClient))
+
+  def resolveObservation(
+    hash: String,
+    pool: List[PeerApiClient],
+    priorityClient: Option[PeerApiClient]
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Observation] =
+    resolveDataByDistance[Observation](
+      List(hash),
+      "observation",
+      pool,
+      (t: Observation) => {
+        dao.observationService.put(t, ConsensusStatus.Unknown).unsafeRunSync()
+      },
+      priorityClient
+    ).head.flatTap(o => IO.delay(logger.debug(s"Resolving observation=${o.hash}")))
+
+  private[p2p] def resolveDataByDistance[T <: AnyRef](
     hashes: List[String],
     endpoint: String,
     pool: List[PeerApiClient],
@@ -47,12 +146,12 @@ class DataResolver extends StrictLogging {
       }, store)
     }
 
-  def resolveData[T <: AnyRef](
+  private[p2p] def resolveData[T <: AnyRef](
     hash: String,
     endpoint: String,
     sortedPeers: List[PeerApiClient],
     store: T => Any,
-    maxErrors: Int = 10
+    maxErrors: Int = 25
   )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[T] = {
 
     def makeAttempt(
@@ -91,7 +190,7 @@ class DataResolver extends StrictLogging {
     } yield t
   }
 
-  private def getData[T <: AnyRef](
+  private[p2p] def getData[T <: AnyRef](
     hash: String,
     endpoint: String,
     peerApiClient: PeerApiClient,
@@ -100,100 +199,7 @@ class DataResolver extends StrictLogging {
     peerApiClient.client
       .getNonBlockingIO[Option[T]](s"$endpoint/$hash", timeout = apiTimeout)
 
-  def resolveTransactionsDefaults(
-    hash: String,
-    priorityClient: Option[PeerApiClient] = None
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
-    getPeersForResolving(dao).flatMap(resolveTransactions(hash, _, priorityClient))
-
-  def resolveTransactions(
-    hash: String,
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
-    resolveDataByDistance[TransactionCacheData](
-      List(hash),
-      "transaction",
-      pool,
-      (t: TransactionCacheData) => {
-        dao.transactionService.put(t, ConsensusStatus.Unknown).unsafeRunSync()
-      },
-      priorityClient
-    ).head
-
-  def resolveCheckpointDefaults(
-    hash: String,
-    priorityClient: Option[PeerApiClient] = None
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[CheckpointCache] =
-    getPeersForResolving(dao).flatMap(
-      resolveDataByDistance[CheckpointCache](
-        List(hash),
-        "checkpoint",
-        _,
-        (t: CheckpointCache) => t.checkpointBlock.foreach(cb => cb.store(t)),
-        priorityClient
-      ).head
-    )
-
-  def resolveCheckpoint(
-    hash: String,
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient] = None
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[CheckpointCache] =
-    resolveDataByDistance[CheckpointCache](
-      List(hash),
-      "checkpoint",
-      pool,
-      (t: CheckpointCache) => t.checkpointBlock.foreach(cb => cb.store(t)),
-      priorityClient
-    ).head
-
-  def resolveSoe(
-    hashes: List[String],
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient] = None
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[SignedObservationEdgeCache]] =
-    resolveDataByDistance[SignedObservationEdgeCache](
-      hashes,
-      "soe",
-      pool,
-      (t: SignedObservationEdgeCache) => {
-        dao.soeService.put(t.signedObservationEdge.hash, t).unsafeRunSync()
-      },
-      priorityClient
-    ).sequence
-
-  def resolveCheckpoints(
-    hashes: List[String],
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient] = None
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[CheckpointCache]] =
-    resolveDataByDistanceFlat[CheckpointCache](
-      hashes,
-      "checkpoint",
-      pool,
-      (t: CheckpointCache) => {
-        t.checkpointBlock.foreach(cb => cb.store(t))
-      },
-      priorityClient
-    )
-
-  def resolveObservation(
-    hash: String,
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Observation] =
-    resolveDataByDistance[Observation](
-      List(hash),
-      "observation",
-      pool,
-      (t: Observation) => {
-        dao.observationService.put(t, ConsensusStatus.Unknown).unsafeRunSync()
-      },
-      priorityClient
-    ).head
-
-  def resolveDataByDistanceFlat[T <: AnyRef](
+  private[p2p] def resolveDataByDistanceFlat[T <: AnyRef](
     hashes: List[String],
     endpoint: String,
     pool: List[PeerApiClient],
@@ -202,7 +208,7 @@ class DataResolver extends StrictLogging {
   )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[List[T]] =
     resolveDataByDistance[T](hashes, endpoint, pool, store, priorityClient).sequence
 
-  def getPeersForResolving(dao: DAO): IO[List[PeerApiClient]] = {
+  private[p2p] def getPeersForResolving(dao: DAO): IO[List[PeerApiClient]] = {
     val peers = for {
       ready <- dao.readyPeers
       leaving <- dao.leavingPeers

@@ -12,11 +12,10 @@ import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{AddressCacheData, Id, NodeState, NodeType}
 import org.constellation.storage.ConsensusStatus.ConsensusStatus
-import org.constellation.storage.transactions.TransactionStatus.TransactionStatus
-import org.constellation.storage.transactions.{TransactionGossiping, TransactionStatus}
+import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.storage.{AddressService, ConsensusStatus, TransactionService}
 import org.constellation.util.Distance
-import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO}
+import org.constellation.{ConstellationExecutionContext, DAO}
 
 import scala.util.{Failure, Random, Success}
 
@@ -62,17 +61,17 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
       _ <- dao.metrics.incrementMetricAsync("sentTransactions")
       _ <- putTransaction(transaction)
 
-      transactionCacheData <- observeTransaction(transaction)
-      _ <- Logger[F].debug(
-        s"Rebroadcast transaction=${transactionCacheData.transaction.hash}, initial path=${transactionCacheData.path}"
-      )
-      peers <- selectPeers(transactionCacheData)
-      peerData <- peerData(peers)
+//      transactionCacheData <- observeTransaction(transaction)
+//      _ <- Logger[F].debug(
+//        s"Rebroadcast transaction=${transactionCacheData.transaction.hash}, initial path=${transactionCacheData.path}"
+//      )
+//      peers <- selectPeers(transactionCacheData)
+//      peerData <- peerData(peers)
 
-      _ <- broadcastTransaction(transactionCacheData, peerData)
-      _ <- dao.metrics.incrementMetricAsync("transactionGossipingSent")
-      lightPeers <- peerDataNodeTypeLight()
-      _ <- if (lightPeers.nonEmpty) broadcastLightNode(lightPeers, transaction) else Sync[F].unit
+//      _ <- broadcastTransaction(transactionCacheData, peerData)
+//      _ <- dao.metrics.incrementMetricAsync("transactionGossipingSent")
+//      lightPeers <- peerDataNodeTypeLight()
+//      _ <- if (lightPeers.nonEmpty) broadcastLightNode(lightPeers, transaction) else Sync[F].unit
     } yield ()
 
     List.fill(numberOfTransaction)(transaction).sequence
@@ -142,10 +141,10 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
   private def peerDataNodeTypeLight(): F[Map[Id, PeerData]] =
     LiftIO[F].liftIO(dao.peerInfo(NodeType.Light))
 
-  private def broadcastTransaction(tcd: TransactionCacheData, peerData: List[PeerData]) = {
-    val contextShift: ContextShift[IO] = ConstellationContextShift.global
-    LiftIO[F].liftIO(contextShift.shift *> peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd))))
-  }
+  private def broadcastTransaction(tcd: TransactionCacheData, peerData: List[PeerData]) =
+    LiftIO[F].liftIO(
+      peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd)))
+    )
 
   private def peerData(peers: Set[Schema.Id]): F[List[PeerData]] =
     LiftIO[F].liftIO(dao.peerInfo(NodeType.Full).map(_.filterKeys(peers.contains).values.toList))

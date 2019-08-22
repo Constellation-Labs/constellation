@@ -82,7 +82,7 @@ class CheckpointService[F[_]: Concurrent](
       merkleRoot,
       transactionService,
       (x: TransactionCacheData) => x.transaction,
-      (s: String) => LiftIO[F].liftIO(DataResolver.resolveTransactionsDefaults(s))
+      (s: String) => LiftIO[F].liftIO(DataResolver.resolveTransactionDefaults(s))
     )
 
   def fetchMessages(merkleRoot: String)(implicit dao: DAO): F[List[ChannelMessage]] =
@@ -90,7 +90,7 @@ class CheckpointService[F[_]: Concurrent](
       merkleRoot,
       messageService,
       (x: ChannelMessageMetadata) => x.channelMessage,
-      (s: String) => LiftIO[F].liftIO(DataResolver.resolveMessagesDefaults(s))
+      (s: String) => LiftIO[F].liftIO(DataResolver.resolveMessageDefaults(s))
     )
 
   def fetchNotifications(merkleRoot: String)(implicit dao: DAO): F[List[PeerNotification]] =
@@ -116,7 +116,7 @@ class CheckpointService[F[_]: Concurrent](
         case (NodeState.Ready, Some(cb)) =>
           val acceptance = for {
             _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)
-            _ <- Sync[F].delay { logger.info(s"[${dao.id.short}] starting accept block: ${cb.baseHash} from others") }
+            _ <- Sync[F].delay { logger.debug(s"[${dao.id.short}] starting accept block: ${cb.baseHash} from others") }
             peers <- LiftIO[F].liftIO(obtainPeers)
             _ <- resolveMissingParents(cb, peers)
             _ <- accept(checkpoint.checkpointCacheData)
@@ -195,11 +195,11 @@ class CheckpointService[F[_]: Concurrent](
 
           _ <- conflicts match {
             case Nil => Sync[F].unit
-            case _ =>
+            case xs =>
               concurrentTipService
                 .putConflicting(cb.baseHash, cb)
+                .flatMap(_ => transactionService.removeConflicting(xs))
                 .flatMap(_ => Sync[F].raiseError[Unit](TipConflictException(cb, conflicts)))
-                .void
           }
 
           valid <- Sync[F].delay(cb.simpleValidation())
@@ -219,7 +219,7 @@ class CheckpointService[F[_]: Concurrent](
           _ <- acceptTransactions(cb)
           _ <- updateRateLimiting(cb)
           _ <- Sync[F].delay {
-            logger.info(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
+            logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
           }
           _ <- concurrentTipService.update(cb, height)
           _ <- LiftIO[F].liftIO(dao.snapshotService.updateAcceptedCBSinceSnapshot(cb))
@@ -243,7 +243,7 @@ class CheckpointService[F[_]: Concurrent](
       case knownError @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
         knownError.raiseError[F, Unit]
       case otherError =>
-        Sync[F].delay(logger.error("Error when accepting block", otherError)) *> dao.metrics
+        Sync[F].delay(logger.error(s"Error when accepting block: ${otherError.getMessage}")) *> dao.metrics
           .incrementMetricAsync[F]("acceptCheckpoint_failure") *> otherError.raiseError[F, Unit]
     }
 

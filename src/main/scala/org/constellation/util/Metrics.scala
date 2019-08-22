@@ -47,10 +47,8 @@ object Metrics {
 
     prometheusMeterRegistry.config().commonTags("application", "Constellation")
     globalRegistry.add(prometheusMeterRegistry)
-    io.kontainers.micrometer.akka.AkkaMetricRegistry.setRegistry(prometheusMeterRegistry)
     prometheusMeterRegistry.config().commonTags("application", s"Constellation_$keyHash")
     io.micrometer.core.instrument.Metrics.globalRegistry.add(prometheusMeterRegistry)
-    io.kontainers.micrometer.akka.AkkaMetricRegistry.setRegistry(prometheusMeterRegistry)
 
     new JvmMemoryMetrics().bindTo(prometheusMeterRegistry)
     new JvmGcMetrics().bindTo(prometheusMeterRegistry)
@@ -122,7 +120,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) extends Periodic[Unit](
 
   val registry = Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
 
-  implicit val timer: cats.effect.Timer[IO] = IO.timer(ConstellationExecutionContext.global)
+  implicit val timer: cats.effect.Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
   val init = for {
     currentTime <- cats.effect.Clock[IO].realTime(duration.MILLISECONDS)

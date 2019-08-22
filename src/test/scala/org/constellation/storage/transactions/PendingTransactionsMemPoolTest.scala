@@ -1,19 +1,21 @@
 package org.constellation.storage.transactions
 
+import cats.effect.concurrent.Semaphore
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
-import org.constellation.ConstellationContextShift
+import org.constellation.ConstellationExecutionContext
 import org.constellation.primitives.Schema.TransactionEdgeData
 import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
 import org.mockito.IdiomaticMockito
 import org.scalatest.{FreeSpec, FunSuite, Matchers}
 
 class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with Matchers {
-  implicit val cs: ContextShift[IO] = ConstellationContextShift.global
+  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   "update" - {
     "it should update existing transaction" in {
-      val memPool = new PendingTransactionsMemPool[IO]
+      val semaphore = Semaphore[IO](1).unsafeRunSync()
+      val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
       val tx = mock[Transaction]
       tx.hash shouldReturn "lorem"
@@ -36,7 +38,8 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
     }
 
     "it should not update transaction if it does not exist" in {
-      val memPool = new PendingTransactionsMemPool[IO]
+      val semaphore = Semaphore[IO](1).unsafeRunSync()
+      val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
       val tx = mock[Transaction]
       tx.hash shouldReturn "lorem"
@@ -57,13 +60,15 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
 
   "pull" - {
     "it should return None if there are less txs than min required count" in {
-      val memPool = new PendingTransactionsMemPool[IO]
+      val semaphore = Semaphore[IO](1).unsafeRunSync()
+      val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
-      memPool.pull(10, 10).unsafeRunSync shouldBe none
+      memPool.pull(10).unsafeRunSync shouldBe none
     }
 
     "it should return min required count of txs" in {
-      val memPool = new PendingTransactionsMemPool[IO]
+      val semaphore = Semaphore[IO](1).unsafeRunSync()
+      val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
       val tx1 = createTransaction("a")
       val tx2 = createTransaction("b")
@@ -73,11 +78,12 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
         memPool.put("b", tx2) *>
         memPool.put("c", tx3)).unsafeRunSync
 
-      memPool.pull(2, 2).unsafeRunSync shouldBe List(tx1, tx2).some
+      memPool.pull(2).unsafeRunSync shouldBe List(tx1, tx2).some
     }
 
     "it should return transactions sorted by the fee" in {
-      val memPool = new PendingTransactionsMemPool[IO]
+      val semaphore = Semaphore[IO](1).unsafeRunSync()
+      val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
       val tx1 = createTransaction("a", fee = 3L.some)
       val tx2 = createTransaction("b", fee = 1L.some)
@@ -87,7 +93,7 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
         memPool.put("b", tx2) *>
         memPool.put("c", tx3)).unsafeRunSync
 
-      memPool.pull(2, 2).unsafeRunSync shouldBe List(tx3, tx1).some
+      memPool.pull(2).unsafeRunSync shouldBe List(tx3, tx1).some
     }
   }
 

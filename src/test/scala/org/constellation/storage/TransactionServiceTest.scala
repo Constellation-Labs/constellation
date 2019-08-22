@@ -7,11 +7,9 @@ import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, Fixtures}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.constellation.primitives.{Transaction, TransactionCacheData}
 import org.constellation.storage.ConsensusStatus.ConsensusStatus
-import org.constellation.storage.transactions.TransactionStatus
-import org.constellation.storage.transactions.TransactionStatus.TransactionStatus
 import org.constellation.util.Metrics
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
@@ -27,7 +25,7 @@ class TransactionServiceTest
     with Matchers
     with ArgumentMatchersSugar
     with BeforeAndAfter {
-  implicit val contextShift: ContextShift[IO] = ConstellationContextShift.global
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
 
   var dao: DAO = _
@@ -327,9 +325,9 @@ class TransactionServiceTest
   "pullForConsensusSafe" - {
     "should be safe to use concurrently" in {
       val pullsIteration = 100
-      val pullsMinCount = 50
+      val pullsMaxCount = 50
 
-      val totalExpected = pullsIteration * pullsMinCount
+      val totalExpected = pullsIteration * pullsMaxCount
 
       val ec = ExecutionContext.fromExecutor(Executors.newWorkStealingPool(8))
       val cs = IO.contextShift(ec)
@@ -340,7 +338,7 @@ class TransactionServiceTest
         .traverse(tx => cs.shift *> txService.put(tx))
 
       val pulls = (1 to pullsIteration).toList
-        .map(_ => cs.shift *> txService.pullForConsensus(pullsMinCount, pullsMinCount))
+        .map(_ => cs.shift *> txService.pullForConsensus(pullsMaxCount))
 
       // Fill minimum txs required
       puts.unsafeRunSync()
@@ -365,7 +363,7 @@ class TransactionServiceTest
     "should remove a transaction from pending storage" in {
       txService.put(tx, ConsensusStatus.Pending).unsafeRunSync
 
-      txService.pullForConsensus(1, 1).unsafeRunSync
+      txService.pullForConsensus(1).unsafeRunSync
 
       txService.lookup(hash, ConsensusStatus.Pending).unsafeRunSync shouldBe None
     }
@@ -373,7 +371,7 @@ class TransactionServiceTest
     "should add a transaction to inConsensus storage" in {
       txService.put(tx, ConsensusStatus.Pending).unsafeRunSync
 
-      txService.pullForConsensus(1, 1).unsafeRunSync
+      txService.pullForConsensus(1).unsafeRunSync
 
       txService.lookup(hash, ConsensusStatus.InConsensus).unsafeRunSync shouldBe Some(tx)
     }

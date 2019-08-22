@@ -8,7 +8,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.{Transaction, TransactionCacheData}
 import org.constellation.storage.{ConsensusStatus, TransactionService}
-import org.constellation.{ConstellationContextShift, DAO, Fixtures}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{FunSuite, Matchers}
@@ -23,7 +23,7 @@ class TransactionGossipingTest
     with Matchers
     with ArgumentMatchersSugar {
 
-  implicit val cs: ContextShift[IO] = ConstellationContextShift.global
+  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
 
   test("it should randomly select the diff of all peer IDs and peers in the tx path") {

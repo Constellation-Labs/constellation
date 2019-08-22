@@ -1,4 +1,5 @@
 package org.constellation
+
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.primitives._

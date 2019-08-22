@@ -6,7 +6,7 @@ import com.typesafe.config.Config
 import org.constellation.consensus.ConsensusManager.{ConsensusError, ConsensusStartError}
 import org.constellation.p2p.Cluster
 import org.constellation.util.PeriodicIO
-import org.constellation.{ConfigUtil, ConstellationContextShift, DAO}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.concurrent.duration._
 
@@ -20,7 +20,7 @@ class ConsensusScheduler(
   val edgeConsensus: IO[Unit] = IO
     .fromFuture(IO {
       EdgeProcessor.formCheckpoint(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))(dao)
-    })(ConstellationContextShift.apiClient)
+    })(IO.contextShift(ConstellationExecutionContext.bounded))
     .void
 
   val crossTalkConsensus: IO[Unit] = consensusManager.startOwnConsensus().void.handleErrorWith {

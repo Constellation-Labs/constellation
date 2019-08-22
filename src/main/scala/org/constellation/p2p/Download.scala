@@ -13,7 +13,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{APIClient, Distance, Metrics}
-import org.constellation.{ConfigUtil, DAO}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -24,7 +24,7 @@ object SnapshotsDownloader {
   implicit val getSnapshotTimeout: FiniteDuration =
     ConfigUtil.config.getInt("download.getSnapshotTimeout").seconds
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   def downloadSnapshotRandomly(hash: String, pool: Iterable[APIClient]): IO[StoredSnapshot] = {
     val poolArray = pool.toArray
@@ -106,7 +106,7 @@ class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[S
 
 class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO, ec: ExecutionContext)
     extends StrictLogging {
-  private implicit val ioTimer: Timer[IO] = IO.timer(ec)
+  private implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
   final implicit class FutureOps[+T](f: Future[T]) {
     def toIO: IO[T] = IO.fromFuture(IO(f))(IO.contextShift(ec))
@@ -232,7 +232,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
 
   private def setAcceptedTransactionsAfterDownload(): IO[Unit] = IO {
     dao.transactionAcceptedAfterDownload = dao.metrics.getMetrics.get("transactionAccepted").map(_.toLong).getOrElse(0L)
-    logger.info("download process has been finished")
+    logger.debug("download process has been finished")
   }
 
   def setNodeState(nodeState: NodeState): IO[Unit] =

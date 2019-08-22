@@ -8,7 +8,7 @@ import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
 import org.constellation.storage.RecentSnapshot
 import org.constellation.util.HealthChecker.compareSnapshotState
-import org.constellation.{ConstellationConcurrentEffect, DAO, Fixtures, ProcessingConfig}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfterEach, FunSpecLike, Matchers}
@@ -30,7 +30,7 @@ class HealthCheckerTest
 
   val healthChecker =
     new HealthChecker[IO](dao, concurrentTipService, downloadProcess)(
-      ConstellationConcurrentEffect.global,
+      IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)),
       Slf4jLogger.getLogger[IO]
     )
 

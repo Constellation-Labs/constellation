@@ -110,7 +110,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       concurrentTipService,
       rateLimiting
     )
-    addressService = new AddressService[IO]()(Concurrent(ConstellationConcurrentEffect.global), () => metrics)
+    addressService = new AddressService[IO]()(Concurrent(IO.ioConcurrentEffect), () => metrics)
 
     ipManager = IPManager[IO]()
     cluster = Cluster[IO](() => metrics, ipManager, this)
@@ -126,7 +126,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       cluster,
       this,
       ConfigUtil.config,
-      ConstellationContextShift.edge
+      IO.contextShift(ConstellationExecutionContext.bounded)
     )
 
     consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
@@ -135,9 +135,9 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       val snapshotProcessor =
         new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotByDistance)(
           this,
-          ConstellationExecutionContext.global
+          ConstellationExecutionContext.bounded
         )
-      val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.global)
+      val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.bounded)
       new SnapshotBroadcastService[IO](
         new HealthChecker[IO](this, concurrentTipService, downloadProcess),
         cluster,
@@ -163,7 +163,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this)
   }
 
-  implicit val context: ContextShift[IO] = ConstellationContextShift.global
+  implicit val context: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   def peerInfo: IO[Map[Id, PeerData]] = cluster.getPeerInfo
 

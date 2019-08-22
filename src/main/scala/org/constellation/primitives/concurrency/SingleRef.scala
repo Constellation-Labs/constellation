@@ -3,12 +3,12 @@ package org.constellation.primitives.concurrency
 import cats.effect.concurrent.{Ref, Semaphore}
 import cats.effect.{Concurrent, IO}
 
-class SingleRef[F[_]: Concurrent, A](default: A) {
+class SingleRef[F[_]: Concurrent, A](default: A, s: Semaphore[F] = null) {
 
   private val ref = Ref.unsafe[F, A](default)
   private val semaphore: Semaphore[F] = Semaphore.in[IO, F](1).unsafeRunSync()
 
-  val lock = new SingleLock[F, A]("", semaphore)
+  val lock = new SingleLock[F, A]("", if (s != null) s else semaphore)
 
   def acquire: F[Unit] = lock.acquire
   def release: F[Unit] = lock.release
@@ -30,5 +30,7 @@ class SingleRef[F[_]: Concurrent, A](default: A) {
 }
 
 object SingleRef {
-  def apply[F[_]: Concurrent, A](default: A): SingleRef[F, A] = new SingleRef[F, A](default)
+
+  def apply[F[_]: Concurrent, A](default: A, semaphore: Semaphore[F] = null): SingleRef[F, A] =
+    new SingleRef[F, A](default, semaphore)
 }

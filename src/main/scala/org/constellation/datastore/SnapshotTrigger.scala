@@ -22,10 +22,10 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
         startTime <- IO(System.currentTimeMillis())
         snapshotResult <- dao.snapshotService.attemptSnapshot().value
         elapsed <- IO(System.currentTimeMillis() - startTime)
-        _ = logger.info(s"Attempt snapshot took: $elapsed millis")
+        _ = logger.debug(s"Attempt snapshot took: $elapsed millis")
         _ <- snapshotResult match {
           case Left(err) =>
-            IO(logger.info(s"Snapshot attempt error: $err"))
+            IO(logger.debug(s"Snapshot attempt error: $err"))
               .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.failure))
           case Right(_) => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success)
         }

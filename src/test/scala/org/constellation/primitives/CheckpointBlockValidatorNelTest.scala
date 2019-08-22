@@ -18,7 +18,7 @@ import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, H
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.{CheckpointBlocksMemPool, CheckpointService, SnapshotService, TransactionService}
 import org.constellation.util.{HashSignature, Metrics}
-import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, NodeConfig}
+import org.constellation.{ConstellationExecutionContext, DAO, NodeConfig}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{mock => _, _}
@@ -31,7 +31,7 @@ class CheckpointBlockValidatorNelTest
     with BeforeAndAfter {
 
   implicit val dao: DAO = mock[DAO]
-  implicit val cs: ContextShift[IO] = ConstellationContextShift.global
+  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   val snapService: SnapshotService[IO] = mock[SnapshotService[IO]]
   val checkpointService: CheckpointService[IO] = mock[CheckpointService[IO]]
@@ -186,8 +186,8 @@ class ValidationSpec
   dao.metrics = new Metrics()
 
   implicit val logger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
-  implicit val timer = IO.timer(ConstellationExecutionContext.edge)
-  implicit val cs = ConstellationContextShift.edge
+  implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
+  implicit val cs = IO.contextShift(ConstellationExecutionContext.bounded)
 
   val ipManager = IPManager[IO]()
   val cluster = Cluster[IO](() => dao.metrics, ipManager, dao)

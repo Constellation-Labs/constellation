@@ -21,7 +21,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage._
 import org.constellation.util._
-import org.constellation.{ConstellationContextShift, ConstellationExecutionContext, DAO, ResourceInfo}
+import org.constellation.{ConstellationExecutionContext, DAO, ResourceInfo}
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -51,7 +51,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     with CommonEndpoints
     with IPEnforcer
     with StrictLogging
-    with MetricTimerDirective
     with SimulateTimeoutDirective {
 
   implicit val serialization: Serialization.type = native.Serialization
@@ -157,7 +156,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                 dao.keyPair,
                 normalized = false
               )
-              logger.info(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
+              logger.debug(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
 
               dao.transactionService.put(TransactionCacheData(tx)).unsafeRunSync()
 
@@ -202,8 +201,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         pathPrefix("finished") {
           path("checkpoint") {
 
-            val cs: ContextShift[IO] = ConstellationContextShift.finished
-
             extractClientIP { ip =>
               entity(as[FinishedCheckpoint]) { fc =>
                 optionalHeaderValueByName("ReplyTo") { replyToOpt =>
@@ -213,7 +210,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
                   dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
 
-                  (cs.shift *> dao.checkpointService.accept(fc)).unsafeToFuture().onComplete { result =>
+                  dao.checkpointService.accept(fc).unsafeToFuture.onComplete { result =>
                     replyToOpt
                       .map(URI.create)
                       .map { u =>
@@ -260,17 +257,24 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           dao.metrics.incrementMetric("transactionRXByPeerAPI")
 
           implicit val random: Random = scala.util.Random
-          val contextShift: ContextShift[IO] = ConstellationContextShift.global
 
+          /* TEMPORARY DISABLED
           val rebroadcast = for {
             tcd <- dao.transactionGossiping.observe(TransactionCacheData(gossip.tx, path = gossip.path))
             peers <- dao.transactionGossiping.selectPeers(tcd)
             peerData <- dao.peerInfo.map(_.filterKeys(peers.contains).values.toList)
-            _ <- contextShift.shift *> peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd)))
+            _ <- contextShift.evalOn(ConstellationExecutionContext.callbacks)(
+              peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd)))
+            )
             _ <- dao.metrics.incrementMetricAsync[IO]("transactionGossipingSent")
           } yield ()
 
           rebroadcast.unsafeRunAsyncAndForget()
+           */
+
+          dao.transactionGossiping
+            .observe(TransactionCacheData(gossip.tx, path = gossip.path))
+            .unsafeRunAsyncAndForget()
 
           complete(StatusCodes.OK)
         }
@@ -278,21 +282,20 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     }
   }
 
-  def routes(address: InetSocketAddress): Route = withTimer("peer-api") {
+  def routes(address: InetSocketAddress): Route =
     // val id = ipLookup(address) causes circular dependencies and cluster with 6 nodes unable to start due to timeouts. Consider reopen #391
     // TODO: pass id down and use it if needed
     decodeRequest {
       encodeResponse {
         // rejectBannedIP {
         signEndpoints ~ commonEndpoints ~
-          withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.edge) {
+          withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.bounded) {
             enforceKnownIP(address) {
               getEndpoints(address) ~ postEndpoints ~ mixedEndpoints ~ blockBuildingRoundRoute
             }
           }
       }
     }
-  }
 
   private def getEndpoints(address: InetSocketAddress) =
     get {

@@ -2,6 +2,8 @@ package org.constellation.storage.transactions
 
 import cats.effect.{Concurrent, LiftIO, Sync}
 import cats.implicits._
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
 import org.constellation.primitives.Schema.Id
 import org.constellation.primitives.TransactionCacheData
@@ -10,6 +12,8 @@ import org.constellation.storage.{ConsensusStatus, TransactionService}
 import scala.util.Random
 
 class TransactionGossiping[F[_]: Concurrent](transactionService: TransactionService[F], fanout: Int, dao: DAO) {
+
+  val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   def selectPeers(tx: TransactionCacheData)(implicit random: Random): F[Set[Id]] =
     for {
@@ -28,10 +32,13 @@ class TransactionGossiping[F[_]: Concurrent](transactionService: TransactionServ
 
   def observe(tx: TransactionCacheData): F[TransactionCacheData] =
     for {
-      updated <- transactionService.update(tx.transaction.hash,
-                                           t => t.copy(path = t.path ++ tx.path),
-                                           tx.copy(path = tx.path + dao.id),
-                                           ConsensusStatus.Unknown)
+      _ <- logger.debug(s"Observing transaction=${tx.hash}")
+      updated <- transactionService.update(
+        tx.transaction.hash,
+        t => t.copy(path = t.path ++ tx.path),
+        tx.copy(path = tx.path + dao.id),
+        ConsensusStatus.Unknown
+      )
     } yield updated
 
 }

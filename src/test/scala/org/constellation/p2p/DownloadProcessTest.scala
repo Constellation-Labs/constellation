@@ -11,7 +11,7 @@ import scala.util.{Failure, Success}
 class DownloadProcessTest extends FunSuite with IdiomaticMockito with ArgumentMatchersSugar with Matchers {
 
   implicit val dao: DAO = mock[DAO]
-  implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.global
+  implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.bounded
 
   val snapInfo: SnapshotInfo = mock[SnapshotInfo]
   snapInfo.snapshot shouldReturn mock[Snapshot]

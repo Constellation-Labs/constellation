@@ -129,7 +129,7 @@ class SnapshotService[F[_]: Concurrent](
 
       _ <- EitherT.liftF(
         Sync[F].delay(
-          logger.info(
+          logger.debug(
             s"conclude snapshot: ${nextSnapshot.lastSnapshot} with height ${nextHeightInterval - dao.processingConfig.snapshotHeightDelayInterval}"
           )
         )
@@ -379,7 +379,7 @@ class SnapshotService[F[_]: Concurrent](
         .flatMap(_.get.toList.traverse { msgHash =>
           dao.metrics.incrementMetricAsync("messageSnapshotHashUpdated") *>
             LiftIO[F]
-              .liftIO(DataResolver.resolveMessagesDefaults(msgHash).map(_.channelMessage))
+              .liftIO(DataResolver.resolveMessageDefaults(msgHash).map(_.channelMessage))
               .flatMap(updateMessage(msgHash, _))
         })
     }.void

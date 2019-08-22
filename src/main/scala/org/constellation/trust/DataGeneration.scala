@@ -1,4 +1,5 @@
 package org.constellation.trust
+
 import scala.util.Random
 
 case class TrustEdge(src: Int, dst: Int, trust: Double, isLabel: Boolean = false) {
