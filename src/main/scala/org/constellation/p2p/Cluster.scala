@@ -355,8 +355,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
           .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")
           .flatMap { registrationRequest =>
             pendingRegistration(hp.host, registrationRequest) *>
-              client
-                .postNonBlockingUnitF("register", dao.peerRegistrationRequest)
+              client.postNonBlockingUnitF("register", dao.peerRegistrationRequest)
           }
           .handleErrorWith { err =>
             Logger[F].error(s"registration request failed: $err") *>
@@ -365,6 +364,16 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
           }
       },
       "addPeerWithRegistrationSymmetric"
+    )
+
+  def addToPeer(hp: HostPort): F[Response[Unit]] =
+    withMetric(
+      {
+        val client = APIClient(hp.host, hp.port)(ConstellationExecutionContext.callbacks, dao)
+
+        client.postNonBlockingUnitF("peer/add", dao.peerHostPort)
+      },
+      "addToPeer"
     )
 
   def broadcastNodeState(): F[Unit] =
@@ -400,8 +409,12 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         .map(v => keys.zip(v).toMap)
     } yield res
 
-  def join(hp: HostPort): F[Response[Unit]] =
-    attemptRegisterPeer(hp)
+  def join(hp: HostPort): F[Unit] = {
+    implicit val sDAO: DAO = dao
+    implicit val ec = ConstellationExecutionContext.bounded
+
+    attemptRegisterPeer(hp) *> addToPeer(hp) *> Sync[F].delay(Download.download())
+  }
 
   def leave(gracefulShutdown: => F[Unit]): F[Unit] =
     for {

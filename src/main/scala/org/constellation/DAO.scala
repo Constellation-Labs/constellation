@@ -28,6 +28,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   var initialNodeConfig: NodeConfig = _
   @volatile var nodeConfig: NodeConfig = _
 
+  var node: ConstellationNode = _
+
   var actorMaterializer: ActorMaterializer = _
 
   var transactionAcceptedAfterDownload: Long = 0L

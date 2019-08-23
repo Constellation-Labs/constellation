@@ -98,6 +98,16 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               }
             }
           }
+        } ~
+        path("join") {
+          entity(as[HostPort]) { hp =>
+            dao.cluster.join(hp).unsafeToFuture
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("leave") {
+          IO(dao.node.shutdown()).unsafeToFuture
+          complete(StatusCodes.OK)
         }
     } ~
       get {
