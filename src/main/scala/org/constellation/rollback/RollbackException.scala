@@ -6,6 +6,8 @@ object InvalidBalances extends RollbackException
 
 object CannotCalculate extends RollbackException
 
-object CannotLoadSnapshots extends RollbackException
+object CannotLoadSnapshotsFiles extends RollbackException
 object CannotLoadGenesisObservationFile extends RollbackException
 object CannotLoadSnapshotInfoFile extends RollbackException
+
+object CannotWriteToDisk extends RollbackException

@@ -150,7 +150,7 @@ class E2ETest extends E2E {
     }
 
     // constellationAppSim.dumpJson(storedSnapshots)
-    if (storeData) storeData(allAPIs)
+    if (storeData) saveState(allAPIs)
 
     // TODO: Move to separate test
 
@@ -172,7 +172,7 @@ class E2ETest extends E2E {
     assert(sizeEqualOnes)
   }
 
-  private def storeData(allAPIs: Seq[APIClient]): Unit = {
+  private def saveState(allAPIs: Seq[APIClient]): Unit = {
     File("rollback_data/snapshots").createDirectoryIfNotExists().clear()
     storeSnapshotInfo(allAPIs)
     storeSnapshots(allAPIs)

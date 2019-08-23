@@ -1,5 +1,7 @@
 package org.constellation.storage
 
+import java.nio.file.Path
+
 import cats.data.EitherT
 import cats.effect.{Concurrent, LiftIO, Sync}
 import cats.implicits._
@@ -12,6 +14,8 @@ import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.util.Metrics
+
+import scala.util.Try
 
 class SnapshotService[F[_]: Concurrent](
   concurrentTipService: ConcurrentTipService[F],
@@ -294,6 +298,9 @@ class SnapshotService[F[_]: Concurrent](
           dao.metrics.incrementMetricAsync(Metrics.snapshotCount)
       }
     }
+
+  def addSnapshotToDisk(snapshot: StoredSnapshot): Try[Path] =
+    Snapshot.writeSnapshot(snapshot)
 
   private def writeSnapshotToDisk(currentSnapshot: Snapshot) =
     currentSnapshot.checkpointBlocks.toList

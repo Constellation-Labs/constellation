@@ -7,6 +7,7 @@ import com.typesafe.scalalogging.StrictLogging
 import org.constellation.consensus._
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._
+import org.constellation.rollback.RollbackService
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.{Metrics, SnapshotWatcher}
@@ -115,6 +116,7 @@ trait EdgeDAO {
   var addressService: AddressService[IO] = _
   var snapshotBroadcastService: SnapshotBroadcastService[IO] = _
   var snapshotWatcher: SnapshotWatcher = _
+  var rollbackService: RollbackService[IO] = _
 
   var consensusRemoteSender: ConsensusRemoteSender[IO] = _
   var consensusManager: ConsensusManager[IO] = _

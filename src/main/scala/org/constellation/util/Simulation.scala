@@ -322,6 +322,11 @@ object Simulation {
     Future.sequence(responses).get()
   }
 
+  def restoreState(apis: Seq[APIClient]): Seq[Response[String]] = {
+    val responses = apis.map(_.postNonBlockingEmptyString("restore"))
+    Future.sequence(responses).get()
+  }
+
   def setReady(apis: Seq[APIClient]): Unit = {
     val responses = apis.map(_.postNonBlockingEmptyString("ready"))
     Future.sequence(responses).get()

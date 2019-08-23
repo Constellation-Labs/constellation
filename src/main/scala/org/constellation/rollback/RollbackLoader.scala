@@ -1,62 +1,43 @@
 package org.constellation.rollback
 
 import better.files.File
-import cats.data.EitherT
-import cats.effect.Concurrent
-import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
 import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.serializer.KryoSerializer
-import org.slf4j.LoggerFactory
 
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
-class RollbackLoader[F[_]: Concurrent](
+class RollbackLoader(
   rollbackDataDirectory: String = "rollback_data",
   snapshotDataDirectory: String = "snapshots",
   snapshotInfoFile: String = "rollback_info",
   genesisObservationFile: String = "rollback_genesis"
 ) {
 
-  val logger = Logger(LoggerFactory.getLogger(getClass.getName))
+  def loadSnapshotsFromFile(): Either[RollbackException, Seq[StoredSnapshot]] =
+    Try(deserializeAllFromDirectory[StoredSnapshot](s"$rollbackDataDirectory/$snapshotDataDirectory"))
+      .map(Right(_))
+      .getOrElse(Left(CannotLoadSnapshotsFiles))
 
-  def loadSnapshotsFromFile(): EitherT[F, RollbackException, Seq[StoredSnapshot]] = EitherT.fromEither[F] {
-    Try {
-      File(rollbackDataDirectory + "/" + snapshotDataDirectory).list.toSeq
-        .map(s => KryoSerializer.deserializeCast[StoredSnapshot](s.byteArray))
-    } match {
-      case Success(value) =>
-        logger.info(s"Snapshots loaded")
-        Right(value)
-      case Failure(exception) =>
-        logger.error(s"Cannot load snapshots : ${exception.getMessage}")
-        Left(CannotLoadSnapshots)
-    }
-  }
+  def loadSnapshotInfoFromFile(): Either[RollbackException, SnapshotInfo] =
+    Try(deserializeFromFile[SnapshotInfo](rollbackDataDirectory, snapshotInfoFile))
+      .map(Right(_))
+      .getOrElse(Left(CannotLoadSnapshotInfoFile))
 
-  def loadSnapshotInfoFromFile(): EitherT[F, RollbackException, SnapshotInfo] = EitherT.fromEither[F] {
-    Try {
-      KryoSerializer.deserializeCast[SnapshotInfo](File(rollbackDataDirectory, snapshotInfoFile).byteArray)
-    } match {
-      case Success(value) =>
-        logger.info(s"Snapshot Info loaded")
-        Right(value)
-      case Failure(exception) =>
-        logger.error(s"Cannot load snapshot info : ${exception.getMessage}")
-        Left(CannotLoadSnapshotInfoFile)
-    }
-  }
+  def loadGenesisObservation(): Either[RollbackException, GenesisObservation] =
+    Try(deserializeFromFile[GenesisObservation](rollbackDataDirectory, genesisObservationFile))
+      .map(Right(_))
+      .getOrElse(Left(CannotLoadGenesisObservationFile))
 
-  def loadGenesisObservation(): EitherT[F, RollbackException, GenesisObservation] = EitherT.fromEither[F] {
-    Try {
-      KryoSerializer.deserializeCast[GenesisObservation](File(rollbackDataDirectory, genesisObservationFile).byteArray)
-    } match {
-      case Success(value) =>
-        logger.info(s"Genesis Observation loaded")
-        Right(value)
-      case Failure(exception) =>
-        logger.error(s"Cannot load genesis observation : ${exception.getMessage}")
-        Left(CannotLoadGenesisObservationFile)
-    }
-  }
+  private def deserializeAllFromDirectory[T](directory: String): Seq[T] =
+    getListFilesFromDirectory(directory).map(s => deserializeFromFile[T](s))
+
+  private def getListFilesFromDirectory(directory: String): Seq[File] =
+    File(directory).list.toSeq
+
+  private def deserializeFromFile[T](file: File): T =
+    KryoSerializer.deserializeCast(file.byteArray)
+
+  private def deserializeFromFile[T](directory: String, fileName: String): T =
+    KryoSerializer.deserializeCast[T](File(directory, fileName).byteArray)
 }
