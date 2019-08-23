@@ -18,6 +18,7 @@ import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.{HealthChecker, HostPort, SnapshotWatcher}
@@ -161,6 +162,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     transactionGenerator =
       TransactionGenerator[IO](addressService, transactionGossiping, transactionService, cluster, this)
     consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this)
+
+    rollbackService = new RollbackService[IO](this, new RollbackAccountBalances, snapshotService)
   }
 
   implicit val context: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)

@@ -1,32 +1,22 @@
 package org.constellation.rollback
 
-import cats.effect.Concurrent
 import cats.implicits._
-import com.typesafe.scalalogging.Logger
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.util.AccountBalances
 import org.constellation.util.AccountBalances.AccountBalances
-import org.slf4j.LoggerFactory
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
-class RollbackAccountBalances[F[_]: Concurrent] {
-
-  val logger = Logger(LoggerFactory.getLogger(getClass.getName))
+class RollbackAccountBalances {
 
   private val zeroSnapshotHash = Snapshot("", Seq()).hash
 
   def calculate(snapshotHash: String, snapshots: Seq[StoredSnapshot]): Either[RollbackException, AccountBalances] =
-    Try {
-      calculateSnapshotsBalances(snapshotHash, snapshots)
-    } match {
-      case Success(value) => Right(value)
-      case Failure(exception) =>
-        logger.error(s"Cannot calculate account balances from snapshots ${exception.getMessage}")
-        Left(CannotCalculate)
-    }
+    Try(calculateSnapshotsBalances(snapshotHash, snapshots))
+      .map(Right(_))
+      .getOrElse(Left(CannotCalculate))
 
   @tailrec
   private def calculateSnapshotsBalances(
@@ -48,20 +38,13 @@ class RollbackAccountBalances[F[_]: Concurrent] {
   private def findSnapshot(hash: String, snapshots: Seq[StoredSnapshot]) =
     snapshots.find(_.snapshot.hash == hash) match {
       case Some(value) => value
-      case None =>
-        logger.error(s"Cannot find snapshot $hash")
-        throw new Exception(s"Cannot find snapshot $hash")
+      case None        => throw new Exception(s"Cannot find snapshot $hash")
     }
 
   def calculate(genesisObservation: GenesisObservation): Either[RollbackException, AccountBalances] =
-    Try {
-      calculateGenesisObservationBalances(genesisObservation)
-    } match {
-      case Success(value) => Right(value)
-      case Failure(exception) =>
-        logger.error(s"Cannot calculate account balances from genesis observation ${exception.getMessage}")
-        Left(CannotCalculate)
-    }
+    Try(calculateGenesisObservationBalances(genesisObservation))
+      .map(Right(_))
+      .getOrElse(Left(CannotCalculate))
 
   private def calculateGenesisObservationBalances(genesisObservation: GenesisObservation): AccountBalances = {
     val genesisBalances =

@@ -124,7 +124,8 @@ case class BlockUIOutput(
   channels: Seq[ChannelValidationInfo]
 )
 
-class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
+class
+API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
     extends Json4sSupport
     with ServeUI
     with CommonEndpoints
@@ -535,6 +536,14 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               .unsafeRunSync()
 
             complete(tx.hash)
+          }
+        } ~
+        path("restore") {
+          onComplete(dao.rollbackService.validateAndRestore().value.unsafeToFuture()) {
+            case Success(value) => complete(StatusCodes.OK)
+            case Failure(error) =>
+              logger.error(s"Restored error ${error}")
+              complete(StatusCodes.InternalServerError)
           }
         } ~
         path("addPeer") {
