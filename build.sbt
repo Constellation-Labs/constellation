@@ -81,7 +81,6 @@ lazy val coreSettings = Seq(
   resolvers += "Artima Maven Repository".at("http://repo.artima.com/releases"),
   resolvers += "Typesafe Releases".at("http://repo.typesafe.com/typesafe/maven-releases/"),
   resolvers += "jitpack".at("https://jitpack.io")
-  
 )
 
 lazy val coreDependencies = Seq(
@@ -133,7 +132,7 @@ lazy val coreDependencies = Seq(
 //Test dependencies
 lazy val testDependencies = Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.0",
-  "org.scalatest" %% "scalatest" % "3.0.6",
+  "org.scalatest" %% "scalatest" % "3.0.8",
   "org.scalactic" %% "scalactic" % "3.0.8",
   "org.scalamock" %% "scalamock" % "4.3.0",
   "org.mockito" %% "mockito-scala" % versions.mockito,
