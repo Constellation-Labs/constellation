@@ -82,7 +82,7 @@ object ProcessingConfig {
 case class ProcessingConfig(
   maxWidth: Int = 10,
   maxTipUsage: Int = 2,
-  maxCheckpointFormationThreshold: Int = 50,
+  maxCheckpointFormationThreshold: Int = 1000,
   maxTXInBlock: Int = 100,
   maxMessagesInBlock: Int = 1,
   peerInfoTimeout: Int = 3,
@@ -107,7 +107,7 @@ case class ProcessingConfig(
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,
   roundsPerMessage: Int = 10,
-  recentSnapshotNumber: Int = 12,
+  recentSnapshotNumber: Int = 100,
   maxInvalidSnapshotRate: Int = 51,
   txGossipingFanout: Int = 2,
   leavingStandbyTimeout: Int = 30
