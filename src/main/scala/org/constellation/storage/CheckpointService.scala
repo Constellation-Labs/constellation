@@ -216,7 +216,7 @@ class CheckpointService[F[_]: Concurrent](
           _ <- memPool.put(cb.baseHash, checkpoint.copy(height = maybeHeight))
           _ <- Sync[F].delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
           _ <- acceptMessages(cb)
-          _ <- acceptTransactions(cb)
+          _ <- acceptTransactions(cb, Some(checkpoint))
           _ <- updateRateLimiting(cb)
           _ <- Sync[F].delay {
             logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
