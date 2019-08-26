@@ -370,6 +370,10 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def broadcastNodeState(): F[Unit] =
     getNodeState.flatMap { nodeState =>
       broadcast(_.postNonBlockingUnitF("status", SetNodeStatus(dao.id, nodeState)))
+    }.flatTap {
+      _.filter(_._2.isLeft).toList.traverse {
+        case (id, e) => Logger[F].warn(s"Unable to propagate status to node ID: $id")
+      }
     }.void
 
   def getNodeState: F[NodeState] = nodeState.get
