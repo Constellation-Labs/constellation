@@ -124,8 +124,7 @@ case class BlockUIOutput(
   channels: Seq[ChannelValidationInfo]
 )
 
-class
-API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
+class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
     extends Json4sSupport
     with ServeUI
     with CommonEndpoints
@@ -465,24 +464,12 @@ API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           }
         } ~
         path("ready") {
-          def setNodeState =
-            dao.cluster.isNodeReady
-              .ifM(
-                dao.cluster.setNodeState(NodeState.PendingDownload),
-                dao.cluster.setNodeState(NodeState.Ready)
-              )
+          def changeStateToReady: IO[Unit] = dao.cluster.setNodeState(NodeState.Ready)
+          def broadcastState: IO[Unit] = dao.cluster.broadcastNodeState()
 
-          def broadcastNodeState =
-            dao.cluster.getNodeState.flatMap { nodeState =>
-              dao.cluster.broadcast(_.postNonBlockingIOUnit("status", SetNodeStatus(dao.id, nodeState)))
-            }.flatTap {
-              _.filter(_._2.isLeft).toList.traverse {
-                case (id, e) => IO.delay(logger.warn(s"Unable to propagate status to node ID: $id", e))
-              }
-            }
-
-          onSuccess((setNodeState *> broadcastNodeState).unsafeToFuture) { _ =>
-            complete(StatusCodes.OK)
+          onComplete((changeStateToReady *> broadcastState).unsafeToFuture()) {
+            case Success(_) => complete(StatusCodes.OK)
+            case Failure(_) => complete(StatusCodes.InternalServerError)
           }
         } ~
         path("peerHealthCheck") {
