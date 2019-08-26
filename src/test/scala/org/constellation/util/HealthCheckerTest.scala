@@ -221,6 +221,23 @@ class HealthCheckerTest
     }
   }
 
+  describe("choseMajorityState function") {
+    it("should choose higher height when network is partitioned equally") {
+      val foo = (Id("foo"), List(RecentSnapshot("b", 4), RecentSnapshot("a", 2)))
+      val foo2 = (Id("foo2"), List(RecentSnapshot("b", 4), RecentSnapshot("a", 2)))
+      val bar = (Id("bar"), List(RecentSnapshot("c", 6), RecentSnapshot("b", 4)))
+      val bar2 = (Id("bar2"), List(RecentSnapshot("c", 6), RecentSnapshot("b", 4)))
+      HealthChecker.choseMajorityState(List(bar, foo, bar2, foo2)) shouldBe (bar._2, Set(bar._1, bar2._1))
+    }
+
+    it("should choose majority even height is lower") {
+      val foo = (Id("foo"), List(RecentSnapshot("b", 4), RecentSnapshot("a", 2)))
+      val foo2 = (Id("foo2"), List(RecentSnapshot("b", 4), RecentSnapshot("a", 2)))
+      val bar = (Id("bar"), List(RecentSnapshot("c", 6), RecentSnapshot("b", 4)))
+      HealthChecker.choseMajorityState(List(bar, foo, foo2)) shouldBe (foo._2, Set(foo._1, foo2._1))
+    }
+  }
+
   override protected def beforeEach(): Unit = {
     super.beforeEach()
     reset(concurrentTipService)
