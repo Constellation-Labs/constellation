@@ -413,7 +413,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     implicit val sDAO: DAO = dao
     implicit val ec = ConstellationExecutionContext.bounded
 
-    attemptRegisterPeer(hp) *> addToPeer(hp) *> Sync[F].delay(Download.download())
+    attemptRegisterPeer(hp) *> Sync[F].delay(Download.download())
   }
 
   def leave(gracefulShutdown: => F[Unit]): F[Unit] =
