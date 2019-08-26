@@ -9,7 +9,7 @@ import org.constellation.p2p.{DownloadProcess, PeerData}
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
 import org.constellation.storage._
-import org.constellation.util.HealthChecker.compareSnapshotState
+import org.constellation.util.HealthChecker.{compareSnapshotState, maxOrZero}
 import org.constellation.{ConstellationExecutionContext, DAO}
 
 class MetricFailure(message: String) extends Exception(message)
@@ -28,11 +28,19 @@ case class SnapshotDiff(
 
 object HealthChecker {
 
-  private def choseMajorityState(clusterSnapshots: List[(Id, List[RecentSnapshot])]): (List[RecentSnapshot], Set[Id]) =
+  private[util] def choseMajorityState(
+    clusterSnapshots: List[(Id, List[RecentSnapshot])]
+  ): (List[RecentSnapshot], Set[Id]) =
     clusterSnapshots
       .groupBy(_._2)
-      .maxBy(_._2.size)
+      .maxBy(z => (z._2.size, maxOrZero(z._1)))
       .map(_.map(_._1).toSet)
+
+  private def maxOrZero(list: List[RecentSnapshot]): Long =
+    list match {
+      case Nil      => 0
+      case nonEmpty => nonEmpty.map(_.height).max
+    }
 
   def compareSnapshotState(
     ownSnapshots: List[RecentSnapshot],
@@ -135,12 +143,6 @@ class HealthChecker[F[_]: Concurrent: Logger](
     (maxOrZero(ownSnapshots) + dao.processingConfig.snapshotHeightRedownloadDelayInterval) < maxOrZero(
       snapshotsToDownload
     )
-
-  private def maxOrZero(list: List[RecentSnapshot]): Long =
-    list match {
-      case Nil      => 0
-      case nonEmpty => nonEmpty.map(_.height).max
-    }
 
   def startReDownload(diff: SnapshotDiff, peers: Map[Id, PeerData]): F[Unit] = {
     val reDownload = for {
