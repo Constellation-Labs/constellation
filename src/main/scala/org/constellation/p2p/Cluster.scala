@@ -410,7 +410,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     } yield res
 
   def join(hp: HostPort): F[Unit] = {
-    implicit val sDAO: DAO = dao
+    implicit val shadedDAO: DAO = dao
     implicit val ec = ConstellationExecutionContext.bounded
 
     attemptRegisterPeer(hp) *> Sync[F].delay(Download.download())
