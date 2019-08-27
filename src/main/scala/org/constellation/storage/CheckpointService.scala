@@ -181,16 +181,15 @@ class CheckpointService[F[_]: Concurrent](
     val acceptCheckpoint: F[Unit] = checkpoint.checkpointBlock match {
       case None => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
 
-      case Some(cb) if dao.checkpointService.contains(cb.baseHash).unsafeRunSync() =>
-        for {
-          _ <- dao.metrics.incrementMetricAsync[F]("checkpointAcceptBlockAlreadyStored")
-          _ <- CheckpointAcceptBlockAlreadyStored(cb).raiseError[F, Unit]
-        } yield ()
-
       case Some(cb) =>
         for {
           _ <- syncPending(pendingAcceptance, cb.baseHash)
-
+          _ <- contains(cb.baseHash).ifM(
+            dao.metrics
+              .incrementMetricAsync[F]("checkpointAcceptBlockAlreadyStored") *> CheckpointAcceptBlockAlreadyStored(cb)
+              .raiseError[F, Unit],
+            Sync[F].unit
+          )
           conflicts <- LiftIO[F].liftIO(CheckpointBlockValidatorNel.containsAlreadyAcceptedTx(cb))
 
           _ <- conflicts match {
