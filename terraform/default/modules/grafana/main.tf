@@ -12,10 +12,6 @@ variable "random_id" {
   type = "string"
 }
 
-variable "ips_for_grafana" {
-  type = "string"
-}
-
 output "grafana_ip" {
   value = google_compute_instance.grafana.*.network_interface.0.access_config.0.nat_ip
 }
@@ -53,6 +49,7 @@ resource "google_compute_instance" "grafana" {
  sudo curl -L "https://github.com/docker/compose/releases/download/1.23.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
  sudo chmod +x /usr/local/bin/docker-compose
  sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+ sudo sysctl -w vm.max_map_count=262144
  SCRIPT
 
   service_account {
@@ -110,28 +107,6 @@ resource "google_compute_instance" "grafana" {
     source = "grafana-dashboard"
     destination = "~/grafana-dashboard"
 
-    connection {
-      host = self.network_interface.0.access_config.0.nat_ip
-      type = "ssh"
-      user = var.ssh_user
-      timeout = "90s"
-    }
-  }
-
-  provisioner "file" {
-    content = templatefile("modules/grafana/templates/prometheus.yml.tpl", { ips_for_grafana = var.ips_for_grafana })
-    destination = "~/grafana-dashboard/prometheus/prometheus.yml"
-
-    connection {
-      host = self.network_interface.0.access_config.0.nat_ip
-      type = "ssh"
-      user = var.ssh_user
-      timeout = "90s"
-    }
-  }
-
-  provisioner "remote-exec" {
-    inline = ["sudo docker-compose up -d"]
     connection {
       host = self.network_interface.0.access_config.0.nat_ip
       type = "ssh"

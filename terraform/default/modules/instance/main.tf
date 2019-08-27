@@ -28,6 +28,8 @@ variable "random_id" {
   type = "string"
 }
 
+variable "grafana_ip" {}
+
 // Terraform plugin for creating random ids
 resource "random_id" "instance_id" {
   byte_length = 4
@@ -55,7 +57,11 @@ resource "google_compute_instance" "default" {
   // Make sure needed apps are installed on all new instances for later steps
   metadata_startup_script = <<SCRIPT
     sudo apt update
-    sudo apt install -yq build-essential haveged rsync google-cloud-sdk openjdk-8-jre-headless
+    sudo apt install -yq build-essential haveged rsync google-cloud-sdk openjdk-8-jre-headless apt-transport-https
+    wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo apt-key add -
+    echo "deb https://artifacts.elastic.co/packages/oss-7.x/apt stable main" | sudo tee -a /etc/apt/sources.list.d/elastic-7.x.list
+    sudo apt update
+    sudo apt install filebeat
   SCRIPT
 
   service_account {
@@ -88,6 +94,18 @@ resource "google_compute_instance" "default" {
   }
 
   provisioner "file" {
+    content = templatefile("modules/instance/templates/filebeat.yml.tpl", { es_ip = var.grafana_ip })
+    destination = "/etc/filebeat/filebeat.yml"
+
+    connection {
+      host = self.network_interface.0.access_config.0.nat_ip
+      type = "ssh"
+      user = var.ssh_user
+      timeout = "90s"
+    }
+  }
+
+  provisioner "file" {
     source = "constellation.service"
     destination = "/tmp/constellation.service"
 
@@ -97,7 +115,6 @@ resource "google_compute_instance" "default" {
       user = var.ssh_user
     }
   }
-
 
   provisioner "file" {
     source = "start"
@@ -123,6 +140,7 @@ resource "google_compute_instance" "default" {
 
   provisioner "remote-exec" {
     inline = [
+      "sudo service filebeat start",
       "until gsutil -v; do echo 'waiting for gsutil...'; sleep 5; done",
       "chmod +x /tmp/setup.sh",
       "/tmp/setup.sh"
