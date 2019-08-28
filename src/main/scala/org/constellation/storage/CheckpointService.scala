@@ -326,14 +326,16 @@ class CheckpointService[F[_]: Concurrent](
           .map(tx ⇒ (tx, toCacheData(tx)))
           .traverse {
             case (tx, txMetadata) =>
-              dao.transactionService.accept(txMetadata, cpc) *>
-                dao.addressService.transfer(tx)
+              dao.transactionService.accept(txMetadata, cpc) *> transferIfNotDummy(tx)
           }
           .void
       }
 
     insertTX
   }
+
+  private def transferIfNotDummy(transaction: Transaction): IO[Unit] =
+    if (!transaction.isDummy) dao.addressService.transfer(transaction).void else IO.unit
 
   private def updateRateLimiting(cb: CheckpointBlock): F[Unit] =
     rateLimiting.update(cb.transactions.toList)

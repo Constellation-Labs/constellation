@@ -398,7 +398,9 @@ class SnapshotService[F[_]: Concurrent](
         .traverse(_.transactionsMerkleRoot.traverse(checkpointService.fetchTransactions).map(_.getOrElse(List())))
         .map(_.flatten)
 
-      _ <- txs.traverse(t => addressService.lockForSnapshot(Set(t.src, t.dst), addressService.transferSnapshot(t).void))
+      _ <- txs
+        .filterNot(_.isDummy)
+        .traverse(t => addressService.lockForSnapshot(Set(t.src, t.dst), addressService.transferSnapshot(t).void))
 
       _ <- cbs.traverse(
         _.transactionsMerkleRoot.traverse(transactionService.applySnapshot(txs.map(TransactionCacheData(_)), _))
