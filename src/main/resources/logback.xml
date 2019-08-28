@@ -19,6 +19,21 @@
         </encoder>
     </appender>
 
+    <property name="HOME_LOG" value="logs/app.log"/>
+    <appender name="rollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${HOME_LOG}</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/archived/app.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>500MB</maxFileSize>
+            <totalSizeCap>20GB</totalSizeCap>
+            <maxHistory>60</maxHistory>
+        </rollingPolicy>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%date [%thread] [%X{node_id}] %-5level %logger{25} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+
     <logger level="debug" name="APIClient" additivity="false">
         <appender-ref ref="apiclient"/>
     </logger>
@@ -31,6 +46,6 @@
     <logger level="debug" name="io.kontainers.micrometer" />
 
     <root level="debug">
-        <appender-ref ref="console"/>
+        <appender-ref ref="rollingFile"/>
     </root>
 </configuration>
