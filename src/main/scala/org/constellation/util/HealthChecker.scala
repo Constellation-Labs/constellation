@@ -123,7 +123,10 @@ class HealthChecker[F[_]: Concurrent: Logger](
       if (maxHeightsOfMinimumFacilitators.size > dao.processingConfig.numFacilitatorPeers)
         concurrentTipService.clearStaleTips(maxHeightsOfMinimumFacilitators.min)
       else Logger[F].debug("Not enough data to determine height")
-    } else Sync[F].unit
+    } else
+      Logger[F].debug(
+        s"[Clear stale tips] ClusterSnapshots size=${clusterSnapshots.size} numFacilPeers=${dao.processingConfig.numFacilitatorPeers}"
+      ) *> Sync[F].unit
 
   def shouldReDownload(ownSnapshots: List[RecentSnapshot], diff: SnapshotDiff): Boolean =
     diff match {

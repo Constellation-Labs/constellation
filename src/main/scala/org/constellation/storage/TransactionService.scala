@@ -8,14 +8,15 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.storage.transactions.PendingTransactionsMemPool
 import org.constellation.DAO
+import org.constellation.primitives.Schema.CheckpointCache
 
 class TransactionService[F[_]: Concurrent: Logger](dao: DAO) extends ConsensusService[F, TransactionCacheData] {
 
   protected[storage] val pending = new PendingTransactionsMemPool[F](semaphore)
 
-  override def accept(tx: TransactionCacheData): F[Unit] =
+  override def accept(tx: TransactionCacheData, cpc: Option[CheckpointCache] = None): F[Unit] =
     super
-      .accept(tx)
+      .accept(tx, cpc)
       .flatTap(_ => Sync[F].delay(dao.metrics.incrementMetric("transactionAccepted")))
       .flatTap(_ => Logger[F].debug(s"Accepting transaction=${tx.hash}"))
 

@@ -7,7 +7,7 @@ import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.p2p.{DataResolver, PeerNotification}
-import org.constellation.primitives.Schema._
+import org.constellation.primitives.Schema.{CheckpointCache, _}
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
@@ -216,7 +216,7 @@ class CheckpointService[F[_]: Concurrent](
           _ <- memPool.put(cb.baseHash, checkpoint.copy(height = maybeHeight))
           _ <- Sync[F].delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
           _ <- acceptMessages(cb)
-          _ <- acceptTransactions(cb)
+          _ <- acceptTransactions(cb, Some(checkpoint))
           _ <- updateRateLimiting(cb)
           _ <- Sync[F].delay {
             logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
@@ -313,7 +313,7 @@ class CheckpointService[F[_]: Concurrent](
       }.toList.sequence
     }
 
-  def acceptTransactions(cb: CheckpointBlock)(implicit dao: DAO): F[Unit] = {
+  def acceptTransactions(cb: CheckpointBlock, cpc: Option[CheckpointCache] = None)(implicit dao: DAO): F[Unit] = {
     def toCacheData(tx: Transaction) = TransactionCacheData(
       tx,
       Map(cb.baseHash -> true),
@@ -326,7 +326,7 @@ class CheckpointService[F[_]: Concurrent](
           .map(tx ⇒ (tx, toCacheData(tx)))
           .traverse {
             case (tx, txMetadata) =>
-              dao.transactionService.accept(txMetadata) *>
+              dao.transactionService.accept(txMetadata, cpc) *>
                 dao.addressService.transfer(tx)
           }
           .void

@@ -98,6 +98,20 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               }
             }
           }
+        } ~
+        path("join") {
+          entity(as[HostPort]) { hp =>
+            (IO
+              .contextShift(ConstellationExecutionContext.bounded)
+              .shift *> dao.cluster.join(hp)).unsafeRunAsyncAndForget
+            complete(StatusCodes.OK)
+          }
+        } ~
+        path("leave") {
+          (IO
+            .contextShift(ConstellationExecutionContext.bounded)
+            .shift *> IO(dao.node.shutdown())).unsafeRunAsyncAndForget
+          complete(StatusCodes.OK)
         }
     } ~
       get {

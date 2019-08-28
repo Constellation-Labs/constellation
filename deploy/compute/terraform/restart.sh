@@ -11,4 +11,4 @@ pssh -h $HOSTS_FILE -O StrictHostKeyChecking=no -i "sudo systemctl restart const
 echo "Done restarting"
 
 export HOSTS_FILE=$HOSTS_FILE
-sbt "it:testOnly org.constellation.ClusterComputeManualTest"
+sbt "it:testOnly org.constellation.ClusterStartTest"

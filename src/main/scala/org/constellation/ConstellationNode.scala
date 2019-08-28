@@ -218,6 +218,8 @@ class ConstellationNode(
 
   dao.initialize(nodeConfig)
 
+  dao.node = this
+
   val logger = Logger(s"ConstellationNode_${dao.publicKeyHash}")
   MDC.put("node_id", dao.id.short)
 

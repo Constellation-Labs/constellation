@@ -81,7 +81,6 @@ lazy val coreSettings = Seq(
   resolvers += "Artima Maven Repository".at("http://repo.artima.com/releases"),
   resolvers += "Typesafe Releases".at("http://repo.typesafe.com/typesafe/maven-releases/"),
   resolvers += "jitpack".at("https://jitpack.io")
-  
 )
 
 lazy val coreDependencies = Seq(

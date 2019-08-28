@@ -78,7 +78,9 @@ object Simulation {
   }
 
   def genesis(apis: Seq[APIClient]): GenesisObservation = {
-    val ids = apis.map { _.id }
+    val ids = apis.map {
+      _.id
+    }
     apis.head.postBlocking[GenesisObservation]("genesis/create", ids.tail.toSet)
   }
 
@@ -97,7 +99,9 @@ object Simulation {
   def assignReputations(apis: Seq[APIClient]): Unit = {
     val responses =
       apis.map { api =>
-        val others = apis.filter { _ != api }
+        val others = apis.filter {
+          _ != api
+        }
         val havePublic = Random.nextDouble() > 0.5
         val haveSecret = Random.nextDouble() > 0.5 || havePublic
         api.post("reputation", others.map { o =>
@@ -116,7 +120,9 @@ object Simulation {
   def randomNode(apis: Seq[APIClient]) = apis(Random.nextInt(apis.length))
 
   def randomOtherNode(not: APIClient, apis: Seq[APIClient]): APIClient =
-    apis.filter { _ != not }(Random.nextInt(apis.length - 1))
+    apis.filter {
+      _ != not
+    }(Random.nextInt(apis.length - 1))
 
   def checkGenesis(
     apis: Seq[APIClient],
@@ -373,6 +379,7 @@ object Simulation {
     addPeerRequests: Seq[PeerMetadata],
     attemptSetExternalIP: Boolean = false,
     useRegistrationFlow: Boolean = false,
+    useStartFlowOnly: Boolean = false,
     snapshotCount: Int = 2
   )(implicit executionContext: ExecutionContext): Boolean = {
 
@@ -398,7 +405,9 @@ object Simulation {
     logger.info("Peer validation passed")
 
     val goe = genesis(apis)
-    apis.foreach { _.post("genesis/accept", goe) }
+    apis.foreach {
+      _.post("genesis/accept", goe)
+    }
 
     assert(checkGenesis(apis))
     logger.info("Genesis validation passed")
@@ -410,102 +419,105 @@ object Simulation {
 
     assert(awaitCheckpointsAccepted(apis, numAccepted = 3))
 
-    disableRandomTransactions(apis)
-    logger.info("Stopping random transactions to run parity check")
-    disableCheckpointFormation(apis)
-    logger.info("Stopping checkpoint formation to run parity check")
+    if (!useStartFlowOnly) {
 
-    Simulation.awaitConditionMet(
-      "Accepted checkpoint blocks number differs across the nodes",
-      apis.map { p =>
-        val n = Await.result(p.metricsAsync, 4 seconds)(Metrics.checkpointAccepted)
-        Simulation.logger.info(s"peer ${p.id} has $n accepted cbs")
-        n
-      }.distinct.size == 1,
-      maxRetries = 3,
-      delay = 5000
-    )
+      disableRandomTransactions(apis)
+      logger.info("Stopping random transactions to run parity check")
+      disableCheckpointFormation(apis)
+      logger.info("Stopping checkpoint formation to run parity check")
 
-    logger.info("Checkpoint validation passed")
+      Simulation.awaitConditionMet(
+        "Accepted checkpoint blocks number differs across the nodes",
+        apis.map { p =>
+          val n = Await.result(p.metricsAsync, 4 seconds)(Metrics.checkpointAccepted)
+          Simulation.logger.info(s"peer ${p.id} has $n accepted cbs")
+          n
+        }.distinct.size == 1,
+        maxRetries = 3,
+        delay = 5000
+      )
 
-    enableRandomTransactions(apis)
-    logger.info("Starting random transactions")
-    enableCheckpointFormation(apis)
-    logger.info("Starting checkpoint formation")
+      logger.info("Checkpoint validation passed")
 
-    var debugChannelName = "debug"
-    var attempt = 0
+      enableRandomTransactions(apis)
+      logger.info("Starting random transactions")
+      enableCheckpointFormation(apis)
+      logger.info("Starting checkpoint formation")
 
-    var channelId: String = ""
+      var debugChannelName = "debug"
+      var attempt = 0
 
-    // TODO: Remove after fixing dropped messages
-    Simulation.awaitConditionMet(
-      "Unable to open channel", {
+      var channelId: String = ""
 
-        debugChannelName = "debug" + attempt
+      // TODO: Remove after fixing dropped messages
+      Simulation.awaitConditionMet(
+        "Unable to open channel", {
 
-        val channelOpenResponse = apis.head.postBlocking[ChannelOpenResponse](
-          "channel/open",
-          ChannelOpen(debugChannelName, jsonSchema = Some(SensorData.jsonSchema)),
-          timeout = 90.seconds
-        )
-        attempt += 1
-        logger.info(s"Channel open response: ${channelOpenResponse.errorMessage}")
-        if (channelOpenResponse.errorMessage == "Success") {
-          channelId = channelOpenResponse.genesisHash
-          true
-        } else false
-      }
-    )
+          debugChannelName = "debug" + attempt
 
-    logger.info(s"Channel opened with hash $channelId")
-
-    // TODO: Remove after fixing dropped messages
-    Simulation.awaitConditionMet(
-      "Unable to send message", {
-
-        val csr =
-          apis.head.postBlocking[ChannelSendResponse](
-            "channel/send",
-            ChannelSendRequest(channelId, Seq.fill(2) {
-              SensorData.generateRandomValidMessage().json
-            })
+          val channelOpenResponse = apis.head.postBlocking[ChannelOpenResponse](
+            "channel/open",
+            ChannelOpen(debugChannelName, jsonSchema = Some(SensorData.jsonSchema)),
+            timeout = 90.seconds
           )
-        Simulation.awaitConditionMet(
-          "Unable to find sent message", {
+          attempt += 1
+          logger.info(s"Channel open response: ${channelOpenResponse.errorMessage}")
+          if (channelOpenResponse.errorMessage == "Success") {
+            channelId = channelOpenResponse.genesisHash
+            true
+          } else false
+        }
+      )
 
-            val cmds = csr.messageHashes.map { h =>
-              apis.head.getBlocking[Option[ChannelMessageMetadata]]("messageService/" + h)
-            }
+      logger.info(s"Channel opened with hash $channelId")
 
-            val done = cmds.forall(_.nonEmpty)
-            if (done) {
-              cmds.flatten.foreach { cmd =>
-                val prev = cmd.channelMessage.signedMessageData.data.previousMessageHash
-                logger.info(
-                  s"msg hash: ${cmd.channelMessage.signedMessageData.hash} previous: $prev"
-                )
+      // TODO: Remove after fixing dropped messages
+      Simulation.awaitConditionMet(
+        "Unable to send message", {
+
+          val csr =
+            apis.head.postBlocking[ChannelSendResponse](
+              "channel/send",
+              ChannelSendRequest(channelId, Seq.fill(2) {
+                SensorData.generateRandomValidMessage().json
+              })
+            )
+          Simulation.awaitConditionMet(
+            "Unable to find sent message", {
+
+              val cmds = csr.messageHashes.map { h =>
+                apis.head.getBlocking[Option[ChannelMessageMetadata]]("messageService/" + h)
               }
+
+              val done = cmds.forall(_.nonEmpty)
+              if (done) {
+                cmds.flatten.foreach { cmd =>
+                  val prev = cmd.channelMessage.signedMessageData.data.previousMessageHash
+                  logger.info(
+                    s"msg hash: ${cmd.channelMessage.signedMessageData.hash} previous: $prev"
+                  )
+                }
+              }
+
+              done
             }
+          )
+        }
+      )
 
-            done
-          }
-        )
-      }
-    )
+      assert(awaitCheckpointsAccepted(apis))
 
-    assert(awaitCheckpointsAccepted(apis))
+      assert(checkSnapshot(apis, num = snapshotCount))
 
-    assert(checkSnapshot(apis, num = snapshotCount))
-
-    // TODO: Fix problem with snapshots before enabling this, causes flakiness
-    /*
+      // TODO: Fix problem with snapshots before enabling this, causes flakiness
+      /*
     val channelProof = apis.head.getBlocking[Option[ChannelProof]]("channel/" + channelId, timeout = 90.seconds)
     assert(channelProof.nonEmpty)
-     */
-    logger.info("Snapshot validation passed")
+       */
+      logger.info("Snapshot validation passed")
 
-    true
+      true
+    } else true
 
   }
 

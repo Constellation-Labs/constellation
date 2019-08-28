@@ -19,6 +19,7 @@ import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.{CheckpointBlocksMemPool, CheckpointService, SnapshotService, TransactionService}
 import org.constellation.util.{HashSignature, Metrics}
 import org.constellation.{ConstellationExecutionContext, DAO, NodeConfig}
+import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{mock => _, _}
@@ -26,6 +27,7 @@ import org.scalatest.{mock => _, _}
 class CheckpointBlockValidatorNelTest
     extends FunSuite
     with IdiomaticMockito
+    with IdiomaticMockitoCats
     with ArgumentMatchersSugar
     with Matchers
     with BeforeAndAfter {
@@ -80,6 +82,7 @@ class CheckpointBlockValidatorNelTest
     checkpointService.memPool shouldReturn mock[CheckpointBlocksMemPool[IO]]
     checkpointService.memPool.size() shouldReturn IO.pure(0)
     dao.transactionService shouldReturn mock[TransactionService[IO]]
+    dao.transactionService.lookup(*) shouldReturnF none
     dao.transactionService.isAccepted(*) shouldReturn IO.pure(false)
 
     leftBlock.transactions shouldReturn Seq(tx1, tx2)
