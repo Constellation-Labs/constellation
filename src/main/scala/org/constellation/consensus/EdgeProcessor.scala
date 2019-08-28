@@ -284,10 +284,13 @@ object Snapshot extends StrictLogging {
     }
 
   def isOverDiskCapacity(bytesLengthToAdd: Long)(implicit dao: DAO): Boolean = {
+    val sizeDiskLimit = ConfigUtil.snapshotSizeDiskLimit
+    if (sizeDiskLimit == 0) return false
+
     val storageDir = new java.io.File(dao.snapshotPath.pathAsString)
     val usableSpace = storageDir.getUsableSpace
     val occupiedSpace = dao.snapshotPath.size
-    val isOver = occupiedSpace + bytesLengthToAdd > ConfigUtil.snapshotSizeDiskLimit || usableSpace < bytesLengthToAdd
+    val isOver = occupiedSpace + bytesLengthToAdd > sizeDiskLimit || usableSpace < bytesLengthToAdd
     if (isOver) {
       logger.warn(
         s"[${dao.id.short}] isOverDiskCapacity bytes to write ${bytesLengthToAdd} configured space: ${ConfigUtil.snapshotSizeDiskLimit} occupied space: $occupiedSpace usable space: $usableSpace"

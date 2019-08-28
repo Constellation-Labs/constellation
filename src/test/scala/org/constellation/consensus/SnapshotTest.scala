@@ -38,6 +38,11 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
     dao.snapshotPath.delete()
   }
 
+  override protected def afterEach(): Unit = {
+    super.afterEach()
+    dao.snapshotPath.delete()
+  }
+
   private def randomHash = Hashing.sha256.hashBytes(UUID.randomUUID().toString.getBytes).toString
   private def randomCB =
     CheckpointBlock
