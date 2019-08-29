@@ -20,7 +20,7 @@ class TransactionService[F[_]: Concurrent: Logger](transactionChainService: Tran
   override def accept(tx: TransactionCacheData, cpc: Option[CheckpointCache] = None): F[Unit] =
     super
       .accept(tx, cpc)
-      .flatMap(_ => transactionChainService.observeTransaction(tx.transaction.src.address, tx.transaction.hash))
+//      .flatMap(_ => transactionChainService.observeTransaction(tx.transaction.src.address, tx.transaction.hash)) // TODO: Uncomment for transaction chain validation
       .void
       .flatTap(_ => Sync[F].delay(dao.metrics.incrementMetric("transactionAccepted")))
       .flatTap(_ => Logger[F].debug(s"Accepting transaction=${tx.hash}"))
@@ -39,6 +39,8 @@ class TransactionService[F[_]: Concurrent: Logger](transactionChainService: Tran
       case _  => super.pullForConsensus(maxCount)
     }
 
+  // TODO: Uncomment for transaction chain validation
+  /*
   override def put(
     tx: TransactionCacheData,
     as: ConsensusStatus,
@@ -54,6 +56,7 @@ class TransactionService[F[_]: Concurrent: Logger](transactionChainService: Tran
 
       case _ => super.put(tx, as, cpc)
     }
+   */
 
   def dummyTransaction(count: Int): F[List[TransactionCacheData]] =
     List
