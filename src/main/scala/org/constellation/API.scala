@@ -82,8 +82,8 @@ object ProcessingConfig {
 case class ProcessingConfig(
   maxWidth: Int = 10,
   maxTipUsage: Int = 2,
-  maxCheckpointFormationThreshold: Int = 1000,
-  maxTXInBlock: Int = 100,
+  maxCheckpointFormationThreshold: Int = 50,
+  maxTXInBlock: Int = 50,
   maxMessagesInBlock: Int = 1,
   peerInfoTimeout: Int = 3,
   randomTransactionLoopTimeSeconds: Int = 2,
