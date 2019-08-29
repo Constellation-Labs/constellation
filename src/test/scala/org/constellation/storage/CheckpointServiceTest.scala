@@ -3,11 +3,10 @@ package org.constellation.storage
 import java.security.KeyPair
 
 import better.files.File
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
-import constellation.createTransaction
-import constellation.createDummyTransaction
+import constellation.{createDummyTransaction, createTransaction}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.crypto.KeyUtils
@@ -16,8 +15,7 @@ import org.constellation.p2p.{Cluster, PeerData, PeerNotification}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, HostPort, Metrics}
-import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, NodeConfig, PeerMetadata}
-import org.mockito.Mockito.doNothing
+import org.constellation._
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
@@ -36,6 +34,10 @@ class CheckpointServiceTest
 
   before {
     soe.baseHash shouldReturn "abc"
+  }
+
+  after {
+    dao.genesisObservationPath.delete()
   }
 
   "with mocked dao" - {
@@ -157,6 +159,15 @@ class CheckpointServiceTest
         .accept(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
         .unsafeRunSync()
       dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
+    }
+
+    "should store genesis observation on disk during acceptance step" in {
+      Genesis.acceptGenesis(
+        Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair),
+        setAsTips = true
+      )
+
+      File(dao.genesisObservationPath, GenesisObservationWriter.FILE_NAME).exists shouldBe true
     }
   }
 

@@ -5,18 +5,16 @@ import java.nio.file.Path
 
 import cats.data.NonEmptyList
 import cats.data.Validated.{Invalid, Valid}
-import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Validation.EnrichedFuture
 import org.constellation.util._
-import org.constellation.{ConfigUtil, DAO}
-import org.constellation.ConstellationExecutionContext
-import org.constellation.p2p.PeerData
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.async.Async.{async, await}
 import scala.concurrent.duration._
