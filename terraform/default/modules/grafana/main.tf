@@ -20,7 +20,7 @@ output "grafana_ip" {
 resource "google_compute_instance" "grafana" {
   count                     = 1
   name                      = "grafana-${var.random_id}-${count.index}"
-  machine_type              = "n1-standard-1"
+  machine_type              = "n1-highcpu-4"
   zone                      = var.zone
   can_ip_forward            = true
   allow_stopping_for_update = true

@@ -2,7 +2,9 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /var/log/syslog
+    - /tmp/*.log
+  json.keys_under_root: true
+  json.add_error_key: true
 output.elasticsearch:
   hosts: ["${es_ip}"]
 setup.kibana:

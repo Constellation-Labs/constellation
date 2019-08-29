@@ -61,7 +61,7 @@ resource "google_compute_instance" "default" {
     wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo apt-key add -
     echo "deb https://artifacts.elastic.co/packages/oss-7.x/apt stable main" | sudo tee -a /etc/apt/sources.list.d/elastic-7.x.list
     sudo apt update
-    sudo apt install filebeat
+    sudo apt install -yq filebeat
   SCRIPT
 
   service_account {
@@ -95,7 +95,7 @@ resource "google_compute_instance" "default" {
 
   provisioner "file" {
     content = templatefile("modules/instance/templates/filebeat.yml.tpl", { es_ip = var.grafana_ip })
-    destination = "/etc/filebeat/filebeat.yml"
+    destination = "/tmp/filebeat.yml"
 
     connection {
       host = self.network_interface.0.access_config.0.nat_ip
@@ -140,7 +140,6 @@ resource "google_compute_instance" "default" {
 
   provisioner "remote-exec" {
     inline = [
-      "sudo service filebeat start",
       "until gsutil -v; do echo 'waiting for gsutil...'; sleep 5; done",
       "chmod +x /tmp/setup.sh",
       "/tmp/setup.sh"
@@ -163,6 +162,8 @@ resource "google_compute_instance" "default" {
 
   provisioner "remote-exec" {
     inline = [
+      "sudo cp /tmp/filebeat.yml /etc/filebeat/filebeat.yml",
+      "sudo service filebeat restart",
       "sudo systemctl start constellation"
     ]
     connection {
