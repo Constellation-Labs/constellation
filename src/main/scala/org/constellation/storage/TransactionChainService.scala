@@ -6,6 +6,7 @@ import io.chrisdavenport.log4cats.Logger
 import org.constellation.primitives.concurrency.SingleRef
 
 class TransactionChainService[F[_]: Concurrent: Logger] {
+  // TODO: Make sure to clean-up those properly
   private[storage] val lastTransactionCount: SingleRef[F, Long] = SingleRef(0)
   private[storage] val addressCount: SingleRef[F, Map[String, Long]] = SingleRef(Map.empty[String, Long])
   private[storage] val lastTxHash: SingleRef[F, Map[String, String]] = SingleRef(Map.empty[String, String])
