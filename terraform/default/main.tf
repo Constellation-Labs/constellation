@@ -53,21 +53,27 @@ module "network" {
   random_id = random_id.instance_id.hex
 }
 
+module "grafana" {
+  source          = "./modules/grafana"
+  zone            = var.zone
+  ssh_user        = var.ssh_user
+  network         = module.network.network
+  random_id       = random_id.instance_id.hex
+}
+
 module "nodes" {
   source         = "./modules/instance"
   zone           = var.zone
   instance_count = 3
   ssh_user       = var.ssh_user
-  network   = module.network.network
+  network        = module.network.network
   random_id      = random_id.instance_id.hex
+  grafana_ip     = module.grafana.grafana_ip.0
 }
 
-module "grafana" {
-  source          = "./modules/grafana"
-  zone            = var.zone
+module "provisioner" {
+  source          = "./modules/provisioner"
   ssh_user        = var.ssh_user
-  network    = module.network.network
-  random_id       = random_id.instance_id.hex
   ips_for_grafana = module.nodes.ips_for_grafana
+  grafana_ip      = module.grafana.grafana_ip.0
 }
-
