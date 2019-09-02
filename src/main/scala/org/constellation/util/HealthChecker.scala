@@ -121,8 +121,10 @@ class HealthChecker[F[_]: Concurrent: Logger](
         .filter(t => t._2.size >= dao.processingConfig.numFacilitatorPeers)
         .values
         .flatten
-      if (maxHeightsOfMinimumFacilitators.size > dao.processingConfig.numFacilitatorPeers)
-        concurrentTipService.clearStaleTips(maxHeightsOfMinimumFacilitators.min)
+      if (maxHeightsOfMinimumFacilitators.size > dao.processingConfig.numFacilitatorPeers && maxHeightsOfMinimumFacilitators.min != 0)
+        concurrentTipService.clearStaleTips(
+          maxHeightsOfMinimumFacilitators.min + dao.processingConfig.snapshotHeightInterval
+        )
       else Logger[F].debug("Not enough data to determine height")
     } else
       Logger[F].debug(

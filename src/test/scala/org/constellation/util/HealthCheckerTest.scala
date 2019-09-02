@@ -128,7 +128,7 @@ class HealthCheckerTest
         )
       )
       healthChecker.clearStaleTips(cluster).unsafeRunSync()
-      concurrentTipService.clearStaleTips(6).wasCalled(once)
+      concurrentTipService.clearStaleTips(6 + dao.processingConfig.snapshotHeightInterval).wasCalled(once)
     }
     it("should not run tips removal when there is not enough data") {
 
@@ -206,6 +206,7 @@ class HealthCheckerTest
   describe("startReDownload function") {
     it("should set node state in case of error") {
       dao.keyPair shouldReturn Fixtures.kp
+      consensusManager.terminateConsensuses() shouldReturnF Unit
       dao.cluster shouldReturn mock[Cluster[IO]]
       dao.cluster.getNodeState shouldReturnF NodeState.Ready
       val metrics = new Metrics(2)(dao)
