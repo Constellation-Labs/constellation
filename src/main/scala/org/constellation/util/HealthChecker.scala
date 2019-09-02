@@ -26,15 +26,18 @@ case class SnapshotDiff(
   peers: List[Id]
 )
 
-object HealthChecker {
+object HealthChecker extends StrictLogging {
 
   private[util] def choseMajorityState(
     clusterSnapshots: List[(Id, List[RecentSnapshot])]
-  ): (List[RecentSnapshot], Set[Id]) =
-    clusterSnapshots
+  ): (List[RecentSnapshot], Set[Id]) = {
+    val majority = clusterSnapshots
       .groupBy(_._2)
       .maxBy(z => (z._2.size, maxOrZero(z._1)))
       .map(_.map(_._1).toSet)
+    logger.debug(s"re-download clusterSnapshots: ${clusterSnapshots} and majority: ${majority} ")
+    majority
+  }
 
   private def maxOrZero(list: List[RecentSnapshot]): Long =
     list match {
@@ -125,10 +128,10 @@ class HealthChecker[F[_]: Concurrent: Logger](
         concurrentTipService.clearStaleTips(
           maxHeightsOfMinimumFacilitators.min + dao.processingConfig.snapshotHeightInterval
         )
-      else Logger[F].debug("Not enough data to determine height")
+      else Logger[F].debug("staletips Not enough data to determine height")
     } else
       Logger[F].debug(
-        s"[Clear stale tips] ClusterSnapshots size=${clusterSnapshots.size} numFacilPeers=${dao.processingConfig.numFacilitatorPeers}"
+        s"[Clear staletips] ClusterSnapshots size=${clusterSnapshots.size} numFacilPeers=${dao.processingConfig.numFacilitatorPeers}"
       ) *> Sync[F].unit
 
   def shouldReDownload(ownSnapshots: List[RecentSnapshot], diff: SnapshotDiff): Boolean =

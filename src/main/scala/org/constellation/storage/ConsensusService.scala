@@ -20,7 +20,7 @@ trait ConsensusObject {
 }
 
 abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
-    extends MerkleStorageAlgebra[F, String, A] {
+  extends MerkleStorageAlgebra[F, String, A] {
   val merklePool = new StorageService[F, Seq[String]]()
 
   val semaphore: Semaphore[F] = {
@@ -52,16 +52,34 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
 
   def put(a: A, as: ConsensusStatus, cpc: Option[CheckpointCache] = None): F[A] = as match {
     case ConsensusStatus.Pending =>
-      pending.put(a.hash, a).flatTap(_ => Logger[F].debug(s"ConsensusService pendingPut with hash=${a.hash} - with checkpoint hash=${cpc.map(c => c.checkpointBlock.map(_.baseHash))}"))
+      pending
+        .put(a.hash, a)
+        .flatTap(
+          _ =>
+            Logger[F].debug(s"ConsensusService pendingPut with hash=${a.hash} - with checkpoint hash=${cpc
+              .map(c => c.checkpointBlock.map(_.baseHash))}")
+        )
     case ConsensusStatus.Arbitrary =>
       withLock("arbitraryUpdate", arbitrary.put(a.hash, a))
-        .flatTap(_ => Logger[F].debug(s"ConsensusService arbitraryPut with hash=${a.hash} - with checkpoint hash=${cpc.map(c => c.checkpointBlock.map(_.baseHash))}"))
+        .flatTap(
+          _ =>
+            Logger[F].debug(s"ConsensusService arbitraryPut with hash=${a.hash} - with checkpoint hash=${cpc
+              .map(c => c.checkpointBlock.map(_.baseHash))}")
+        )
     case ConsensusStatus.Accepted =>
       withLock("acceptedUpdate", accepted.put(a.hash, a))
-        .flatTap(_ => Logger[F].debug(s"ConsensusService acceptedPut with hash=${a.hash} - with checkpoint hash=${cpc.map(c => c.checkpointBlock.map(_.baseHash))}"))
+        .flatTap(
+          _ =>
+            Logger[F].debug(s"ConsensusService acceptedPut with hash=${a.hash} - with checkpoint hash=${cpc
+              .map(c => c.checkpointBlock.map(_.baseHash))}")
+        )
     case ConsensusStatus.Unknown =>
       withLock("unknownUpdate", unknown.put(a.hash, a))
-        .flatTap(_ => Logger[F].debug(s"ConsensusService unknownPut with hash=${a.hash} - with checkpoint hash=${cpc.map(c => c.checkpointBlock.map(_.baseHash))}"))
+        .flatTap(
+          _ =>
+            Logger[F].debug(s"ConsensusService unknownPut with hash=${a.hash} - with checkpoint hash=${cpc
+              .map(c => c.checkpointBlock.map(_.baseHash))}")
+        )
     case _ => new Exception("Unknown consensus status").raiseError[F, A]
   }
 
@@ -88,27 +106,41 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
     for {
       p <- pending.update(key, fn).flatTap(_ => Logger[F].debug(s"ConsensusService pendingUpdate with hash=${key}"))
       i <- p
-        .fold(withLock("inConsensusUpdate", inConsensus.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
-        .flatTap(_ => Logger[F].debug(s"ConsensusService inConsensusUpdate with hash=${key}"))
+        .fold(
+          Logger[F].debug(s"ConsensusService inConsensusUpdate with hash=${key}") *> withLock(
+            "inConsensusUpdate",
+            inConsensus.update(key, fn)
+          )
+        )(curr => Sync[F].pure(Some(curr)))
       ac <- i
-        .fold(withLock("acceptedUpdate", accepted.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
-        .flatTap(_ => Logger[F].debug(s"ConsensusService acceptedUpdate with hash=${key}"))
+        .fold(
+          Logger[F].debug(s"ConsensusService acceptedUpdate with hash=${key}") *> withLock(
+            "acceptedUpdate",
+            accepted.update(key, fn)
+          )
+        )(curr => Sync[F].pure(Some(curr)))
       a <- ac
-        .fold(withLock("arbitraryUpdate", arbitrary.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
-        .flatTap(_ => Logger[F].debug(s"ConsensusService arbitraryUpdate with hash=${key}"))
+        .fold(
+          Logger[F].debug(s"ConsensusService arbitraryUpdate with hash=${key}") *> withLock("arbitraryUpdate",
+                                                                                            arbitrary.update(key, fn))
+        )(curr => Sync[F].pure(Some(curr)))
       result <- a
-        .fold(withLock("unknownUpdate", unknown.update(key, fn)))(curr => Sync[F].pure(Some(curr)))
-        .flatTap(_ => Logger[F].debug(s"ConsensusService unknownUpdate with hash=${key}"))
+        .fold(
+          Logger[F].debug(s"ConsensusService unknownUpdate with hash=${key}") *> withLock("unknownUpdate",
+                                                                                          unknown.update(key, fn))
+        )(curr => Sync[F].pure(Some(curr)))
     } yield result
 
   def accept(a: A, cpc: Option[CheckpointCache] = None): F[Unit] =
     put(a, ConsensusStatus.Accepted, cpc) *>
-      withLock("inConsensusUpdate", inConsensus.remove(a.hash))
-        .flatTap(_ => Logger[F].debug(s"ConsensusService inConsensusRemove with hash=${a.hash} - with checkpoint hash=${cpc.map(c => c.checkpointBlock.map(_.baseHash))}")) *>
-      withLock("unknownUpdate", unknown.remove(a.hash))
-        .flatTap(_ => Logger[F].debug(s"ConsensusService unknownRemove with hash=${a.hash} - with checkpoint hash=${cpc.map(c => c.checkpointBlock.map(_.baseHash))}")) *>
+      withLock("inConsensusUpdate", inConsensus.remove(a.hash)) *>
+      withLock("unknownUpdate", unknown.remove(a.hash)) *>
       withLock("arbitraryUpdate", arbitrary.remove(a.hash))
-        .flatTap(_ => Logger[F].debug(s"ConsensusService arbitraryRemove with hash=${a.hash} - with checkpoint hash=${cpc.map(c => c.checkpointBlock.map(_.baseHash))}"))
+        .flatTap(
+          _ =>
+            Logger[F].debug(s"ConsensusService remove with hash=${a.hash} - with checkpoint hash=${cpc
+              .map(c => c.checkpointBlock.map(_.baseHash))}")
+        )
 
   def isAccepted(hash: String): F[Boolean] = accepted.contains(hash)
 

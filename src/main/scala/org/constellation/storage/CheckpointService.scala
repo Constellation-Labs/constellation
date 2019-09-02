@@ -35,7 +35,8 @@ class CheckpointService[F[_]: Concurrent](
   val maxDepth: Int = 10
 
   def applySnapshot(cbs: List[String]): F[Unit] =
-    cbs.map(memPool.remove).sequence.void
+    Sync[F].delay { logger.debug(s"[${dao.id.short}] applying snapshot for blocks: $cbs from others") }
+      .flatMap(_ => cbs.map(memPool.remove).sequence.void)
 
   def fullData(key: String): F[Option[CheckpointCache]] =
     lookup(key).flatMap(_.map(convert(_)(dao)).sequence)
