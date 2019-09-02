@@ -2,16 +2,25 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
-import cats.effect.IO
+import better.files.File
+import cats.effect.{ContextShift, IO}
 import cats.implicits._
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import org.constellation.DAO
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
+import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.ConsensusStatus
 import org.constellation.util.AccountBalance
+import org.constellation.{ConstellationExecutionContext, DAO}
 
-object Genesis {
+import scala.util.{Failure, Success, Try}
+
+object Genesis extends StrictLogging {
+
+  implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
   final val CoinBaseHash = "coinbase"
   final val DebtKey = KeyUtils.makeKeyPair()
@@ -144,6 +153,14 @@ object Genesis {
     storeTransactions(go)
 
     dao.metrics.updateMetric("genesisHash", go.genesis.soeHash)
+
+    GenesisObservationWriter
+      .writeToDisk(go, dao.genesisObservationPath)(IO.contextShift(ConstellationExecutionContext.bounded))
+      .flatTap {
+        case Success(value)     => Logger[IO].info(s"Genesis observation saved successfully ${value.pathAsString}")
+        case Failure(exception) => Logger[IO].error(s"Cannot save genesis observation to disk ${exception.getMessage}")
+      }
+      .unsafeRunSync()
   }
 
   private def storeTransactions(genesisObservation: GenesisObservation)(implicit dao: DAO): Unit =
@@ -153,4 +170,14 @@ object Genesis {
           .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
           .map(tcd => dao.transactionService.put(tcd, ConsensusStatus.Accepted))
     }.toList.sequence.void.unsafeRunSync()
+}
+
+object GenesisObservationWriter {
+
+  final val FILE_NAME: String = "genesisObservation"
+
+  def writeToDisk(genesisObservation: GenesisObservation, path: File)(implicit cs: ContextShift[IO]): IO[Try[File]] =
+    cs.evalOn(ConstellationExecutionContext.unbounded) {
+      IO(Try(File(path, FILE_NAME).writeByteArray(KryoSerializer.serializeAnyRef(genesisObservation))))
+    }
 }
