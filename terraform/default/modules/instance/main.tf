@@ -61,7 +61,7 @@ resource "google_compute_instance" "default" {
     wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo apt-key add -
     echo "deb https://artifacts.elastic.co/packages/oss-7.x/apt stable main" | sudo tee -a /etc/apt/sources.list.d/elastic-7.x.list
     sudo apt update
-    sudo apt install -yq filebeat
+    sudo apt -yq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confnew install filebeat
   SCRIPT
 
   service_account {

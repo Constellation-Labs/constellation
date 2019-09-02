@@ -1,6 +1,6 @@
 package org.constellation
 
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import java.util.concurrent.{
   Executors,
   ForkJoinPool,
@@ -13,35 +13,37 @@ import java.util.concurrent.{
 
 import scala.concurrent.ExecutionContext
 
+sealed class DefaultThreadFactory(prefix: String) extends ThreadFactory {
+  private val poolNumber: AtomicInteger = new AtomicInteger(1)
+  private val threadNumber: AtomicInteger = new AtomicInteger(1)
+
+  val s: SecurityManager = System.getSecurityManager
+  val group: ThreadGroup = if (s != null) s.getThreadGroup else Thread.currentThread().getThreadGroup
+  val namePrefix: String = prefix + "-pool-" + poolNumber.getAndIncrement() + "-thread-"
+
+  def newThread(r: Runnable): Thread = {
+    val t = new Thread(group, r, namePrefix + threadNumber.getAndIncrement(), 0);
+    if (t.isDaemon)
+      t.setDaemon(false);
+    if (t.getPriority != Thread.NORM_PRIORITY)
+      t.setPriority(Thread.NORM_PRIORITY);
+
+    t
+  }
+}
+
 object ConstellationExecutionContext {
 
   /*
   // By default number of available cpus use for CPU-intensive work
   val bounded = ExecutionContext.fromExecutor(Executors.newWorkStealingPool())
   //  an unbounded thread pool for executing blocking I/O calls
-  val unbounded = ExecutionContext.fromExecutor(Executors.newCachedThreadPool()
+  val unbounded = ExecutionContext.fromExecutor(Executors.newCachedThreadPool())
   //  a bounded thread pool for non-blocking I/O callbacks
   val callbacks = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(4))
    */
 
-  def threadFactory(prefix: String): ThreadFactory = new ThreadFactory() {
-    private val threadIndex = new AtomicLong(0)
-
-    override def newThread(runnable: Runnable): Thread = {
-      val thread = new Thread(runnable)
-      thread.setName(s"${prefix}-" + threadIndex.getAndIncrement())
-      thread
-    }
-  }
-
-  val bounded = ExecutionContext.fromExecutor(
-    new ForkJoinPool(
-      Runtime.getRuntime.availableProcessors,
-      ForkJoinPool.defaultForkJoinWorkerThreadFactory,
-      null,
-      true
-    )
-  )
+  val bounded = ExecutionContext.fromExecutor(Executors.newWorkStealingPool())
 
   val unbounded = ExecutionContext.fromExecutor(
     new ThreadPoolExecutor(
@@ -50,7 +52,7 @@ object ConstellationExecutionContext {
       60L,
       TimeUnit.SECONDS,
       new SynchronousQueue[Runnable],
-      threadFactory("unbounded")
+      new DefaultThreadFactory("unbounded")
     )
   )
 
@@ -61,7 +63,7 @@ object ConstellationExecutionContext {
       0L,
       TimeUnit.MILLISECONDS,
       new LinkedBlockingQueue[Runnable],
-      threadFactory("callbacks")
+      new DefaultThreadFactory("callbacks")
     )
   )
 }
