@@ -242,6 +242,15 @@ class ConsensusManager[F[_]: Concurrent](
       }
     } yield ()
 
+  def terminateConsensuses(): F[Unit] =
+    for {
+      _ <- logger.debug(
+        s"[${dao.id.short}] Terminating all consensuses"
+      )
+      _ <- consensuses.set(Map.empty[RoundId, ConsensusInfo[F]])
+      _ <- ownConsensus.set(None)
+    } yield ()
+
   def stopBlockCreationRound(cmd: StopBlockCreationRound): F[Unit] =
     for {
       _ <- consensuses.update(curr => curr - cmd.roundId)

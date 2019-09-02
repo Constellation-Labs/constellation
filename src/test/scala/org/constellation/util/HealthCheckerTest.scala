@@ -3,6 +3,7 @@ import java.net.SocketException
 
 import cats.effect.IO
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.consensus.ConsensusManager
 import org.constellation.p2p.{Cluster, DownloadProcess}
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
@@ -26,10 +27,11 @@ class HealthCheckerTest
   dao.processingConfig shouldReturn ProcessingConfig()
 
   val downloadProcess: DownloadProcess = mock[DownloadProcess]
+  val consensusManager: ConsensusManager[IO] = mock[ConsensusManager[IO]]
   val concurrentTipService: ConcurrentTipService[IO] = mock[ConcurrentTipService[IO]]
 
   val healthChecker =
-    new HealthChecker[IO](dao, concurrentTipService, downloadProcess)(
+    new HealthChecker[IO](dao, concurrentTipService, consensusManager, downloadProcess)(
       IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)),
       Slf4jLogger.getLogger[IO]
     )

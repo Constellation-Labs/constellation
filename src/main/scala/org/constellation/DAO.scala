@@ -143,7 +143,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         )
       val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.bounded)
       new SnapshotBroadcastService[IO](
-        new HealthChecker[IO](this, concurrentTipService, downloadProcess),
+        new HealthChecker[IO](this, concurrentTipService, consensusManager, downloadProcess),
         cluster,
         this
       )

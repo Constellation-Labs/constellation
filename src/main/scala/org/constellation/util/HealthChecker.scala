@@ -4,7 +4,7 @@ import cats.effect.{Concurrent, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.Logger
-import org.constellation.consensus.Snapshot
+import org.constellation.consensus.{ConsensusManager, Snapshot}
 import org.constellation.p2p.{DownloadProcess, PeerData}
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
@@ -83,6 +83,7 @@ object HealthChecker {
 class HealthChecker[F[_]: Concurrent: Logger](
   dao: DAO,
   concurrentTipService: ConcurrentTipService[F],
+  consensusManager: ConsensusManager[F],
   downloader: DownloadProcess
 ) extends StrictLogging {
 
@@ -151,6 +152,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
     val reDownload = for {
       _ <- Logger[F].debug(s"[${dao.id.short}] starting re-download process with diff: $diff")
       _ <- LiftIO[F].liftIO(downloader.setNodeState(NodeState.DownloadInProgress))
+      _ <- consensusManager.terminateConsensuses()
       _ <- LiftIO[F].liftIO(
         downloader.reDownload(
           diff.snapshotsToDownload.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),
