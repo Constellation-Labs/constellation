@@ -12,7 +12,7 @@ import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointResponse}
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
+import org.constellation.primitives.Schema.{CheckpointCache, Height, Id, NodeState}
 import org.constellation.primitives.{IPManager, TransactionCacheData, TransactionGossip}
 import org.constellation.storage.VerificationStatus.{SnapshotCorrect, SnapshotHeightAbove, SnapshotInvalid}
 import org.constellation.storage._
@@ -78,7 +78,8 @@ class PeerAPITest
     }
 
     "return accepted on finishing checkpoint and make no reply with callback" in {
-      val req = FinishedCheckpoint(CheckpointCache(None), Set.empty)
+      dao.snapshotService.getNextHeightInterval shouldReturnF 2
+      val req = FinishedCheckpoint(CheckpointCache(None, 0, Some(Height(1, 1))), Set.empty)
       Post("/finished/checkpoint", req) ~> peerAPI.postEndpoints ~> check {
         status shouldEqual StatusCodes.Accepted
       }
@@ -201,7 +202,7 @@ class PeerAPITest
           }
         }
 
-        "should broadcast transaction to others" ignore {
+        "should broadcast transaction to others".ignore {
           val a = KeyUtils.makeKeyPair()
           val b = KeyUtils.makeKeyPair()
 
@@ -264,6 +265,7 @@ class PeerAPITest
     dao.cluster shouldReturn cluster
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
 
+    dao.snapshotService shouldReturn mock[SnapshotService[IO]]
     dao.checkpointService shouldReturn mock[CheckpointService[IO]]
     dao.checkpointService.accept(any[FinishedCheckpoint])(dao) shouldReturn IO({
       Thread.sleep(2000)
