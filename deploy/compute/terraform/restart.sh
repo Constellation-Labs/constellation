@@ -7,6 +7,7 @@ cat $HOSTS_FILE
 
 pssh -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo rm -rf /home/ubuntu/constellation/tmp'
 pssh -h $HOSTS_FILE -O StrictHostKeyChecking=no -i "sudo systemctl restart constellation"
+pssh -h $HOSTS_FILE -O StrictHostKeyChecking=no -i "sudo service filebeat restart"
 
 echo "Done restarting"
 
