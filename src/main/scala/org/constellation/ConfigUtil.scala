@@ -25,6 +25,8 @@ object ConfigUtil {
     Try(config.getInt(path))
       .getOrElse(default)
 
+  def get(path: String): Try[String] = Try(config.getString(path))
+
   def getDurationFromConfig(path: String): FiniteDuration =
     FiniteDuration(config.getDuration(path, TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
 

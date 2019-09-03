@@ -127,7 +127,8 @@ lazy val coreDependencies = Seq(
   ("com.github.blemale" %% "scaffeine" % "3.0.0").withSources().withJavadoc(),
   ("com.typesafe.slick" %% "slick" % "3.3.2").withSources().withJavadoc(),
   "com.h2database" % "h2" % "1.4.199",
-  "net.logstash.logback" % "logstash-logback-encoder" % "5.1"
+  "net.logstash.logback" % "logstash-logback-encoder" % "5.1",
+  "com.google.cloud" % "google-cloud-storage" % "1.88.0"
 ) ++ sttpDependencies
 
 //Test dependencies
