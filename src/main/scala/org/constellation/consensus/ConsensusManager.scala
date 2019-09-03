@@ -8,7 +8,7 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.{Cluster, DataResolver, PeerData, PeerNotification}
-import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeType}
+import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeType, SignedObservationEdgeCache}
 import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
 import org.constellation.primitives.{ChannelMessage, CheckpointBlock, ConcurrentTipService, Transaction}
 import org.constellation.storage._
@@ -21,6 +21,7 @@ class ConsensusManager[F[_]: Concurrent](
   transactionService: TransactionService[F],
   concurrentTipService: ConcurrentTipService[F],
   checkpointService: CheckpointService[F],
+  soeService: SOEService[F],
   messageService: MessageService[F],
   observationService: ObservationService[F],
   remoteSender: ConsensusRemoteSender[F],
@@ -72,7 +73,6 @@ class ConsensusManager[F[_]: Concurrent](
       _ <- logger.debug(s"[${dao.id.short}] Starting own consensus $roundId")
       roundData <- createRoundData(roundId)
       missing <- resolveMissingParents(roundData._1)
-      _ <- logger.debug(s"[${dao.id.short}] Resolved missing parents size: ${missing.size} for round $roundId")
       roundInfo = ConsensusInfo[F](
         new Consensus[F](
           roundData._1,
@@ -241,6 +241,15 @@ class ConsensusManager[F[_]: Concurrent](
       }
     } yield ()
 
+  def terminateConsensuses(): F[Unit] =
+    for {
+      _ <- logger.debug(
+        s"[${dao.id.short}] Terminating all consensuses"
+      )
+      _ <- consensuses.set(Map.empty[RoundId, ConsensusInfo[F]])
+      _ <- ownConsensus.set(None)
+    } yield ()
+
   def stopBlockCreationRound(cmd: StopBlockCreationRound): F[Unit] =
     for {
       _ <- consensuses.update(curr => curr - cmd.roundId)
@@ -319,6 +328,9 @@ class ConsensusManager[F[_]: Concurrent](
       LiftIO[F].liftIO(DataResolver.resolveCheckpointDefaults(hash, peer)(dao = shadowDAO))
 
     for {
+      _ <- roundData.tipsSOE.soe.toList.traverse(
+        soe => soeService.put(soe.hash, SignedObservationEdgeCache(soe, resolved = true))
+      )
       filtered <- roundData.tipsSOE.soe.toList.traverse(
         t =>
           checkpointService
@@ -331,6 +343,9 @@ class ConsensusManager[F[_]: Concurrent](
           val peers = roundData.peers.map(p => PeerApiClient(p.peerMetadata.id, p.client))
           nel.traverse(resolve(_, peers.find(_.id == roundData.facilitatorId.id)))
       }
+      _ <- logger.debug(
+        s"[${dao.id.short}] Resolved missing parents size: ${resolved.size} for round ${roundData.roundId}"
+      )
     } yield resolved
   }
 

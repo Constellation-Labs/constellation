@@ -26,7 +26,7 @@ import org.json4s.native
 import org.json4s.native.Serialization
 
 import scala.concurrent.Future
-import scala.util.Random
+import scala.util.{Failure, Random, Success}
 
 case class PeerAuthSignRequest(salt: Long)
 
@@ -218,13 +218,14 @@ class PeerAPI(override val ipManager: IPManager[IO])(
             extractClientIP { ip =>
               entity(as[FinishedCheckpoint]) { fc =>
                 optionalHeaderValueByName("ReplyTo") { replyToOpt =>
+                  val baseHash = fc.checkpointCacheData.checkpointBlock.map(_.baseHash)
                   logger.debug(
-                    s"Handle finished checkpoint for cb: ${fc.checkpointCacheData.checkpointBlock.map(_.baseHash)} and replyTo: $replyToOpt"
+                    s"Handle finished checkpoint for cb: ${baseHash} and replyTo: $replyToOpt"
                   )
 
                   dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
 
-                  dao.checkpointService.accept(fc).unsafeToFuture.onComplete { result =>
+                  val callback = dao.checkpointService.accept(fc).map { result =>
                     replyToOpt
                       .map(URI.create)
                       .map { u =>
@@ -232,10 +233,30 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                           s"Making callback to: ${u.toURL} acceptance of cb: ${fc.checkpointCacheData.checkpointBlock
                             .map(_.baseHash)} performed $result"
                         )
-                        makeCallback(u, FinishedCheckpointResponse(result.isSuccess))
+                        makeCallback(u, FinishedCheckpointResponse(true))
                       }
                   }
-                  complete(StatusCodes.Accepted)
+
+                  onSuccess(dao.snapshotService.getNextHeightInterval.unsafeToFuture()) { res =>
+                    (res, fc.checkpointCacheData.height) match {
+                      case (_, None) =>
+                        logger.warn(s"Missing height when accepting block $baseHash")
+                        complete(StatusCodes.BadRequest)
+                      case (2, _) =>
+                        callback.unsafeToFuture()
+                        complete(StatusCodes.Accepted)
+                      case (nextHeight, Some(Height(min, max))) if nextHeight > min =>
+                        logger.debug(
+                          s"Handle finished checkpoint for cb: ${fc.checkpointCacheData.checkpointBlock
+                            .map(_.baseHash)} height condition not met next interval: ${nextHeight} received: ${fc.checkpointCacheData.height.get.min}"
+                        )
+                        complete(StatusCodes.Conflict)
+                      case (_, _) =>
+                        callback.unsafeToFuture()
+                        complete(StatusCodes.Accepted)
+                    }
+                  }
+
                 }
               }
             }

@@ -4,7 +4,7 @@ import cats.effect.{Concurrent, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.Logger
-import org.constellation.consensus.Snapshot
+import org.constellation.consensus.{ConsensusManager, Snapshot}
 import org.constellation.p2p.{DownloadProcess, PeerData}
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
@@ -26,15 +26,18 @@ case class SnapshotDiff(
   peers: List[Id]
 )
 
-object HealthChecker {
+object HealthChecker extends StrictLogging {
 
   private[util] def choseMajorityState(
     clusterSnapshots: List[(Id, List[RecentSnapshot])]
-  ): (List[RecentSnapshot], Set[Id]) =
-    clusterSnapshots
+  ): (List[RecentSnapshot], Set[Id]) = {
+    val majority = clusterSnapshots
       .groupBy(_._2)
       .maxBy(z => (z._2.size, maxOrZero(z._1)))
       .map(_.map(_._1).toSet)
+    logger.debug(s"re-download clusterSnapshots: ${clusterSnapshots} and majority: ${majority} ")
+    majority
+  }
 
   private def maxOrZero(list: List[RecentSnapshot]): Long =
     list match {
@@ -83,6 +86,7 @@ object HealthChecker {
 class HealthChecker[F[_]: Concurrent: Logger](
   dao: DAO,
   concurrentTipService: ConcurrentTipService[F],
+  consensusManager: ConsensusManager[F],
   downloader: DownloadProcess
 ) extends StrictLogging {
 
@@ -120,12 +124,14 @@ class HealthChecker[F[_]: Concurrent: Logger](
         .filter(t => t._2.size >= dao.processingConfig.numFacilitatorPeers)
         .values
         .flatten
-      if (maxHeightsOfMinimumFacilitators.size > dao.processingConfig.numFacilitatorPeers)
-        concurrentTipService.clearStaleTips(maxHeightsOfMinimumFacilitators.min)
-      else Logger[F].debug("Not enough data to determine height")
+      if (maxHeightsOfMinimumFacilitators.size > dao.processingConfig.numFacilitatorPeers && maxHeightsOfMinimumFacilitators.min != 0)
+        concurrentTipService.clearStaleTips(
+          maxHeightsOfMinimumFacilitators.min + dao.processingConfig.snapshotHeightInterval
+        )
+      else Logger[F].debug("staletips Not enough data to determine height")
     } else
       Logger[F].debug(
-        s"[Clear stale tips] ClusterSnapshots size=${clusterSnapshots.size} numFacilPeers=${dao.processingConfig.numFacilitatorPeers}"
+        s"[Clear staletips] ClusterSnapshots size=${clusterSnapshots.size} numFacilPeers=${dao.processingConfig.numFacilitatorPeers}"
       ) *> Sync[F].unit
 
   def shouldReDownload(ownSnapshots: List[RecentSnapshot], diff: SnapshotDiff): Boolean =
@@ -151,6 +157,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
     val reDownload = for {
       _ <- Logger[F].debug(s"[${dao.id.short}] starting re-download process with diff: $diff")
       _ <- LiftIO[F].liftIO(downloader.setNodeState(NodeState.DownloadInProgress))
+      _ <- consensusManager.terminateConsensuses()
       _ <- LiftIO[F].liftIO(
         downloader.reDownload(
           diff.snapshotsToDownload.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),

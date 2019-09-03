@@ -64,9 +64,9 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
         entity(as[RoundDataRemote]) { cmd =>
           val participate = cmd.tipsSOE.minHeight
             .fold(IO.unit) { min =>
-              snapshotService.getLastSnapshotHeight
+              snapshotService.getNextHeightInterval
                 .map(
-                  last => if (last > min) throw SnapshotHeightAboveTip(cmd.roundId, last, min)
+                  last => if (last != 2 && last > min) throw SnapshotHeightAboveTip(cmd.roundId, last, min)
                 )
             }
             .flatMap(_ => consensusManager.participateInBlockCreationRound(ConsensusRoute.convert(cmd)))
