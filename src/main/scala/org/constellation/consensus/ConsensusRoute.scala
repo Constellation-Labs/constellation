@@ -12,7 +12,7 @@ import org.constellation.consensus.Consensus._
 import org.constellation.consensus.ConsensusManager.SnapshotHeightAboveTip
 import org.constellation.p2p.PeerData
 import org.constellation.storage.SnapshotService
-import org.constellation.util.APIClient
+import org.constellation.util.{APIClient, APIDirective}
 import org.constellation.ConstellationExecutionContext
 import org.json4s.native
 import org.json4s.native.Serialization
@@ -71,13 +71,14 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
             }
             .flatMap(_ => consensusManager.participateInBlockCreationRound(ConsensusRoute.convert(cmd)))
 
-          onComplete(participate.unsafeToFuture()) {
+          APIDirective.onHandle(participate) {
             case Failure(err: SnapshotHeightAboveTip) =>
               complete(StatusCodes.custom(400, err.getMessage))
             case Failure(_) =>
               complete(StatusCodes.InternalServerError)
             case Success(res) =>
-              consensusManager.continueRoundParticipation(res._1, res._2).unsafeRunAsyncAndForget()
+              (IO.contextShift(ConstellationExecutionContext.bounded).shift *> consensusManager
+                .continueRoundParticipation(res._1, res._2)).unsafeRunAsyncAndForget()
               complete(StatusCodes.Created)
           }
         }
@@ -115,14 +116,10 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
     }
 
   private def handleProposal(proposal: ConsensusProposal): Route =
-    onSuccess(
-      consensusManager
-        .getRound(proposal.roundId)
-        .unsafeToFuture()
-    ) {
+    APIDirective.handle(consensusManager.getRound(proposal.roundId)) {
       case None =>
-        consensusManager
-          .addMissed(proposal.roundId, proposal)
+        (IO.contextShift(ConstellationExecutionContext.bounded).shift *> consensusManager
+          .addMissed(proposal.roundId, proposal))
           .unsafeRunAsyncAndForget()
         complete(StatusCodes.Accepted)
       case Some(consensus) =>
@@ -131,7 +128,7 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
           case proposal: UnionBlockProposal        => consensus.addBlockProposal(proposal)
           case proposal: SelectedUnionBlock        => consensus.addSelectedBlockProposal(proposal)
         }
-        add.unsafeRunAsyncAndForget()
+        (IO.contextShift(ConstellationExecutionContext.bounded).shift *> add).unsafeRunAsyncAndForget()
         complete(StatusCodes.Created)
     }
 

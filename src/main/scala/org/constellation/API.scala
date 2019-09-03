@@ -35,7 +35,7 @@ import org.json4s.native.Serialization
 import org.json4s.{JValue, native}
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
 case class PeerMetadata(
@@ -138,7 +138,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-  implicit val executionContext: ExecutionContext = ConstellationExecutionContext.bounded
+//  implicit val executionContext: ExecutionContext = ConstellationExecutionContext.bounded
 
   val config: Config = ConfigFactory.load()
 
@@ -231,13 +231,13 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               }
           } ~
           path("messageService" / Segment) { channelId =>
-            complete(dao.messageService.lookup(channelId).unsafeRunSync())
+            APIDirective.handle(dao.messageService.lookup(channelId))(complete(_))
           } ~
           path("channelKeys") {
-            complete(dao.channelService.toMap().unsafeRunSync().keys.toSeq)
+            APIDirective.handle(dao.channelService.toMap().map(_.keys.toSeq))(complete(_))
           } ~
           path("channel" / "genesis" / Segment) { channelId =>
-            complete(dao.channelService.lookup(channelId).unsafeRunSync())
+            APIDirective.handle(dao.channelService.lookup(channelId))(complete(_))
           } ~
           path("channel" / Segment) { channelHash =>
             def makeProof(cmd: ChannelMessageMetadata, storedSnapshot: StoredSnapshot) = {
@@ -297,13 +297,13 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               } else None
             } yield proof
 
-            onSuccess(proof.unsafeToFuture())(complete(_))
+            APIDirective.handle(proof)(complete(_))
           } ~
           path("messages") {
-            complete(dao.channelStorage.getLastNMessages(20))
+            APIDirective.handle(IO { dao.channelStorage.getLastNMessages(20) })(complete(_))
           } ~
           path("messages" / Segment) { channelId =>
-            complete(dao.channelStorage.getLastNMessages(20, Some(channelId)))
+            APIDirective.handle(IO { dao.channelStorage.getLastNMessages(20, Some(channelId)) })(complete(_))
           } ~
           path("restart") { // TODO: Revisit / fix
             System.exit(0)
@@ -394,20 +394,20 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
       pathPrefix("channel") {
         path("open") {
           entity(as[ChannelOpen]) { request =>
-            onComplete(
-              ChannelMessage.createGenesis(request)
-            ) { res =>
-              complete(res.getOrElse(ChannelOpenResponse("Failed to open channel")))
-            }
+            val ioa = IO
+              .fromFuture(IO(ChannelMessage.createGenesis(request)))
+              .handleErrorWith(_ => IO(ChannelOpenResponse("Failed to open channel")))
+
+            APIDirective.handle(ioa)(complete(_))
           }
         } ~
           path("send") {
             entity(as[ChannelSendRequest]) { send =>
-              onComplete(ChannelMessage.createMessages(send)) { res =>
-                complete(
-                  res.getOrElse(ChannelSendResponse("Failed to create messages", Seq())).json
-                )
-              }
+              val ioa = IO
+                .fromFuture(IO(ChannelMessage.createMessages(send)))
+                .map(_.json)
+                .handleErrorWith(_ => IO(ChannelSendResponse("Failed to create messages", Seq()).json))
+              APIDirective.handle(ioa)(complete(_))
             }
           } ~
           path("send" / "json") {
@@ -418,32 +418,38 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                 send.messages.x[Seq[JValue]].map { _.json }
               )
 
-              onComplete(ChannelMessage.createMessages(amended)) { res =>
-                complete(res.getOrElse(ChannelOpenResponse("Failed to send raw json")).json)
-              }
+              val ioa = IO
+                .fromFuture(IO(ChannelMessage.createMessages(amended)))
+                .map(_.json)
+                .handleErrorWith(_ => IO(ChannelOpenResponse("Failed to send raw json").json))
+              APIDirective.handle(ioa)(complete(_))
             }
           }
       } ~
         pathPrefix("peer") {
           path("remove") {
             entity(as[ChangePeerState]) { e =>
-              onSuccess(dao.cluster.setNodeStatus(e.id, e.state).unsafeToFuture) {
-                complete(StatusCodes.OK)
-              }
+              APIDirective.handle(dao.cluster.setNodeStatus(e.id, e.state).map(_ => StatusCodes.OK))(complete(_))
             }
           } ~
             path("add") {
               entity(as[HostPort]) { hp =>
-                onSuccess(dao.cluster.attemptRegisterPeer(hp).unsafeToFuture) { result =>
-                  logger.debug(s"Add Peer Request: $hp. Result: $result")
-                  complete(StatusCode.int2StatusCode(result.code))
-                }
+                APIDirective.handle(
+                  dao.cluster
+                    .attemptRegisterPeer(hp)
+                    .map(result => {
+                      logger.debug(s"Add Peer Request: $hp. Result: $result")
+                      StatusCode.int2StatusCode(result.code)
+                    })
+                )(complete(_))
               }
             }
         } ~
         pathPrefix("download") {
           path("start") {
-            Future { Download.download() }(ConstellationExecutionContext.bounded)
+            Future { Download.download()(dao, ConstellationExecutionContext.bounded) }(
+              ConstellationExecutionContext.bounded
+            )
             complete(StatusCodes.OK)
           }
         } ~
@@ -467,14 +473,13 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           def changeStateToReady: IO[Unit] = dao.cluster.setNodeState(NodeState.Ready)
           def broadcastState: IO[Unit] = dao.cluster.broadcastNodeState()
 
-          onComplete((changeStateToReady *> broadcastState).unsafeToFuture()) {
-            case Success(_) => complete(StatusCodes.OK)
-            case Failure(_) => complete(StatusCodes.InternalServerError)
-          }
+          APIDirective.handle(changeStateToReady *> broadcastState)(_ => complete(StatusCodes.OK))
         } ~
         path("peerHealthCheck") {
           val resetTimeout = 1.second
-          val breaker = new CircuitBreaker(system.scheduler, maxFailures = 1, callTimeout = 5.seconds, resetTimeout)
+          val breaker = new CircuitBreaker(system.scheduler, maxFailures = 1, callTimeout = 5.seconds, resetTimeout)(
+            ConstellationExecutionContext.unbounded
+          )
 
           val response = dao.cluster.broadcast(_.getStringIO("health"))
 
@@ -526,7 +531,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           }
         } ~
         path("restore") {
-          onComplete(dao.rollbackService.validateAndRestore().value.unsafeToFuture()) {
+          APIDirective.onHandle(dao.rollbackService.validateAndRestore().value) {
             case Success(value) => complete(StatusCodes.OK)
             case Failure(error) =>
               logger.error(s"Restored error ${error}")
@@ -535,8 +540,9 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         } ~
         path("addPeer") {
           entity(as[PeerMetadata]) { pm =>
-            // TODO: check if it can be handled in onSuccess
-            dao.cluster.addPeerMetadata(pm).unsafeToFuture
+            (IO
+              .contextShift(ConstellationExecutionContext.bounded)
+              .shift *> dao.cluster.addPeerMetadata(pm)).unsafeRunAsyncAndForget
 
             complete(StatusCodes.OK)
           }
