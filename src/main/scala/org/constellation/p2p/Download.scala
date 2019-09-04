@@ -259,22 +259,21 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   private def acceptSnapshotCacheData(snapshotInfo: SnapshotInfo): IO[Unit] =
     dao.snapshotService.syncBuffer.get
       .flatMap(
-        _.toList.map {
-          h =>
-            if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache.contains(h)) {
-              IO(
-                logger.debug(s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointBlock.get.baseHash}")
-              ) *> dao.checkpointService.accept(h).recoverWith {
-                case _ @(CheckpointAcceptBlockAlreadyStored(_) | TipConflictException(_, _)) =>
-                  IO.pure(None)
-                case unknownError =>
-                  IO {
-                    logger.error(s"[${dao.id.short}] Failed to accept majority checkpoint block", unknownError)
-                  } >> IO.pure(None)
-              }
-            } else {
-              IO.unit
+        _.toList.map { h =>
+          if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache.contains(h)) {
+            IO(
+              logger.debug(s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointBlock.get.baseHash}")
+            ) *> dao.checkpointService.accept(h).recoverWith {
+              case _ @(CheckpointAcceptBlockAlreadyStored(_) | TipConflictException(_, _)) =>
+                IO.pure(None)
+              case unknownError =>
+                IO {
+                  logger.error(s"[${dao.id.short}] Failed to accept majority checkpoint block", unknownError)
+                } >> IO.pure(None)
             }
+          } else {
+            IO.unit
+          }
         }.sequence[IO, Unit]
       )
       .void
@@ -289,6 +288,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
 
 object Download {
 
+  // TODO: Remove Try/Future and make it properly chainable
   def download()(implicit dao: DAO, ec: ExecutionContext): Unit =
     if (dao.nodeType == NodeType.Full) {
       tryWithMetric(

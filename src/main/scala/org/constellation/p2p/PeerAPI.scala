@@ -55,8 +55,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
   implicit val serialization: Serialization.type = native.Serialization
 
-  implicit val executionContext = ConstellationExecutionContext.callbacks
-
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
@@ -65,9 +63,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     post {
       path("status") {
         entity(as[SetNodeStatus]) { sns =>
-          onSuccess(dao.cluster.setNodeStatus(sns.id, sns.nodeStatus).unsafeToFuture) {
-            complete(StatusCodes.OK)
-          }
+          APIDirective.handle(dao.cluster.setNodeStatus(sns.id, sns.nodeStatus))(_ => complete(StatusCodes.OK))
         }
       } ~
         path("sign") {
@@ -89,9 +85,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               maybeData match {
                 case Some(PeerIPData(host, _)) =>
                   logger.debug("Parsed host and port, sending peer manager request")
-                  onSuccess(dao.cluster.pendingRegistration(host, request).unsafeToFuture) {
-                    complete(StatusCodes.OK)
-                  }
+                  APIDirective.handle(dao.cluster.pendingRegistration(host, request))(_ => complete(StatusCodes.OK))
                 case None =>
                   logger.warn(s"Failed to parse host and port for $request")
                   complete(StatusCodes.BadRequest)
@@ -126,9 +120,8 @@ class PeerAPI(override val ipManager: IPManager[IO])(
       pathPrefix("snapshot") {
         path("verify") {
           entity(as[SnapshotCreated]) { s =>
-            onSuccess(
+            APIDirective.handle(
               dao.snapshotBroadcastService.getRecentSnapshots
-                .unsafeToFuture()
             ) { result =>
               val response = result match {
                 case lastSnap :: _ if lastSnap.height < s.height =>
@@ -145,11 +138,13 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         pathPrefix("channel") {
           path("neighborhood") {
             entity(as[Id]) { peerId =>
-              val distanceSorted = dao.channelService.toMap().unsafeRunSync().toSeq.sortBy {
-                case (channelId, meta) =>
-                  Distance.calculate(meta.channelId, peerId)
-              } // TODO: Determine appropriate fraction to respond with.
-              complete(Seq(distanceSorted.head._2))
+              val distanceSorted = dao.channelService
+                .toMap()
+                .map(_.toSeq.sortBy {
+                  case (channelId, meta) =>
+                    Distance.calculate(meta.channelId, peerId)
+                }) // TODO: Determine appropriate fraction to respond with.
+              APIDirective.handle(distanceSorted.map(d => Seq(d.head._2)))(complete(_))
             }
           }
         } ~
@@ -190,7 +185,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               val maybeData = getHostAndPortFromRemoteAddress(clientIP)
               maybeData match {
                 case Some(PeerIPData(host, portOption)) =>
-                  onSuccess(dao.cluster.deregister(request.host, request.port, request.id).unsafeToFuture) {
+                  APIDirective.handle(dao.cluster.deregister(request.host, request.port, request.id)) { _ =>
                     complete(StatusCodes.OK)
                   }
                 case None =>
@@ -276,7 +271,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     }
 
   private[p2p] def makeCallback(u: URI, entity: AnyRef) =
-    APIClient(u.getHost, u.getPort)
+    APIClient(u.getHost, u.getPort)(ConstellationExecutionContext.callbacks)
       .postNonBlockingUnit(u.getPath, entity)
 
   private val blockBuildingRoundRoute =
@@ -307,9 +302,9 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           rebroadcast.unsafeRunAsyncAndForget()
            */
 
-          dao.transactionGossiping
-            .observe(TransactionCacheData(gossip.tx, path = gossip.path))
-            .unsafeRunAsyncAndForget()
+          (IO.contextShift(ConstellationExecutionContext.bounded).shift *> dao.transactionGossiping.observe(
+            TransactionCacheData(gossip.tx, path = gossip.path)
+          )).unsafeRunAsyncAndForget()
 
           complete(StatusCodes.OK)
         }
@@ -324,7 +319,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
       encodeResponse {
         // rejectBannedIP {
         signEndpoints ~ commonEndpoints ~
-          withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.bounded) {
+          withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.unbounded) {
             enforceKnownIP(address) {
               getEndpoints(address) ~ postEndpoints ~ mixedEndpoints ~ blockBuildingRoundRoute
             }
