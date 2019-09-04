@@ -20,6 +20,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
 import org.constellation.storage._
+import org.constellation.storage.external.{CloudStorage, GcpStorage}
 import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.{HealthChecker, HostPort, SnapshotWatcher}
 
@@ -167,6 +168,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this)
 
     rollbackService = new RollbackService[IO](this, new RollbackAccountBalances, snapshotService)
+
+    cloudStorage = new GcpStorage[IO]
   }
 
   implicit val context: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)

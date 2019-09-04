@@ -9,6 +9,7 @@ import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._
 import org.constellation.rollback.RollbackService
 import org.constellation.storage._
+import org.constellation.storage.external.CloudStorage
 import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.{Metrics, SnapshotWatcher}
 import org.constellation.{ConstellationExecutionContext, DAO, NodeConfig, ProcessingConfig}
@@ -117,6 +118,7 @@ trait EdgeDAO {
   var snapshotBroadcastService: SnapshotBroadcastService[IO] = _
   var snapshotWatcher: SnapshotWatcher = _
   var rollbackService: RollbackService[IO] = _
+  var cloudStorage: CloudStorage[IO] = _
 
   var consensusRemoteSender: ConsensusRemoteSender[IO] = _
   var consensusManager: ConsensusManager[IO] = _

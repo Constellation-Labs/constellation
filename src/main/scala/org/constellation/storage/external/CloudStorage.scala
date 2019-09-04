@@ -14,12 +14,12 @@ import scala.util.{Failure, Success, Try}
 
 sealed trait CloudStorage[F[_]] {
 
-  def upload(files: Seq[File]): F[List[Blob]]
+  def upload(files: Seq[File]): F[List[String]]
 }
 
 class GcpStorage[F[_]: Concurrent: Logger] extends CloudStorage[F] {
 
-  override def upload(files: Seq[File]): F[List[Blob]] = {
+  override def upload(files: Seq[File]): F[List[String]] = {
     val upload = for {
       credentials <- createCredentials()
       _ <- Logger[F].debug("Credentials created successfully")
@@ -32,10 +32,10 @@ class GcpStorage[F[_]: Concurrent: Logger] extends CloudStorage[F] {
 
       blobs <- saveToBucket(bucket, files)
       _ <- Logger[F].debug("Files saved successfully")
-    } yield blobs
+    } yield blobs.map(b => b.getName)
 
     upload.handleErrorWith(
-      err => Logger[F].error(s"Cannot upload files : ${err.getMessage}") *> Sync[F].pure(List.empty[Blob])
+      err => Logger[F].error(s"Cannot upload files : ${err.getMessage}") *> Sync[F].pure(List.empty[String])
     )
   }
 
@@ -78,5 +78,5 @@ class GcpStorage[F[_]: Concurrent: Logger] extends CloudStorage[F] {
 
 class AwsStorage[F[_]: Concurrent: Logger] extends CloudStorage[F] {
 
-  override def upload(files: Seq[File]): F[List[Blob]] = ???
+  override def upload(files: Seq[File]): F[List[String]] = ???
 }
