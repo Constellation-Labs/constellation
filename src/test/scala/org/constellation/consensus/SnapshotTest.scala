@@ -33,6 +33,16 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
     File(dao.snapshotPath.path, snaps.last.snapshot.hash).exists shouldBe true
   }
 
+  ignore("should send snapshots to the cloud and delete them") {
+    val snaps = Seq.fill(10)(
+      StoredSnapshot(Snapshot(randomHash, Seq.fill(10)(randomHash)), Seq.fill(10)(CheckpointCache(Some(randomCB))))
+    )
+
+    snaps.map(s => Snapshot.writeSnapshot(s)).map(_.isSuccess)
+
+    File(dao.snapshotPath.path).children.size shouldBe 2
+  }
+
   override protected def beforeEach(): Unit = {
     super.beforeEach()
     dao.snapshotPath.delete()

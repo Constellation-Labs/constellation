@@ -3,8 +3,10 @@ package org.constellation.consensus
 import java.io.IOException
 import java.nio.file.Path
 
+import better.files.File
 import cats.data.NonEmptyList
 import cats.data.Validated.{Invalid, Valid}
+import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
@@ -254,6 +256,8 @@ object Snapshot extends StrictLogging {
         removeOldSnapshots()
         writeSnapshot(storedSnapshot, serialized, trialNumber + 1)
       case _ =>
+        if (shouldSendSnapshotsToCloud(dao.snapshotPath.pathAsString))
+          sendSnapshotsToCloud()(dao, IO.contextShift(ConstellationExecutionContext.bounded)).unsafeRunSync()
         tryWithMetric(
           {
             Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash), serialized)
@@ -280,6 +284,38 @@ object Snapshot extends StrictLogging {
         "deleteSnapshot"
       )
     }
+
+  private def sendSnapshotsToCloud()(implicit dao: DAO, cs: ContextShift[IO]): IO[Unit] =
+    for {
+      files <- cs.evalOn(ConstellationExecutionContext.unbounded)(getSnapshotsFiles(dao.snapshotPath.pathAsString))
+      _ <- IO.delay(logger.debug(s"Snapshots amount : ${files.size}"))
+
+      filesNames <- cs.evalOn(ConstellationExecutionContext.unbounded)(dao.cloudStorage.upload(files))
+      _ <- IO.delay(logger.debug(s"Snapshots send to cloud amount : ${filesNames.size}"))
+
+      _ <- cs.evalOn(ConstellationExecutionContext.unbounded)(
+        removeSnapshots(dao.snapshotPath.pathAsString, filesNames)
+      )
+      _ <- IO.delay(logger.debug(s"Snapshots removed amount : ${filesNames.size}"))
+    } yield ()
+
+  private def getSnapshotsFiles(snapshotsPath: String): IO[Seq[File]] =
+    IO.delay(File(snapshotsPath).children.toSeq)
+
+  private def removeSnapshots(snapshotsPath: String, fileNames: Seq[String]): IO[Unit] =
+    IO.delay(fileNames.foreach(fileName => File(snapshotsPath, fileName).delete()))
+
+  private def shouldSendSnapshotsToCloud(snapshotsPath: String): Boolean =
+    isEnabledSendToCloud && snapshotsAmountOnDisk(snapshotsPath)
+
+  private def isEnabledSendToCloud: Boolean =
+    ConfigUtil.getOrElse("constellation.storage.enabled", default = false)
+
+  private def getSnapshotsLimitOnDisk: Int =
+    ConfigUtil.getOrElse("constellation.storage.snapshots-limit-on-disk", 100)
+
+  private def snapshotsAmountOnDisk(snapshotsPath: String): Boolean =
+    File(snapshotsPath).children.size >= getSnapshotsLimitOnDisk
 
   def isOverDiskCapacity(bytesLengthToAdd: Long)(implicit dao: DAO): Boolean = {
     val sizeDiskLimit = ConfigUtil.snapshotSizeDiskLimit
