@@ -1,6 +1,7 @@
 package org.constellation.storage
 
 import cats.effect._
+import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.Logger
@@ -12,7 +13,7 @@ import org.constellation.primitives.Schema.CheckpointCache
 
 class TransactionService[F[_]: Concurrent: Logger](dao: DAO) extends ConsensusService[F, TransactionCacheData] {
 
-  protected[storage] val pending = new PendingTransactionsMemPool[F](semaphore)
+  protected[storage] val pending = new PendingTransactionsMemPool[F](Semaphore.in[IO, F](1).unsafeRunSync())
 
   override def accept(tx: TransactionCacheData, cpc: Option[CheckpointCache] = None): F[Unit] =
     super
