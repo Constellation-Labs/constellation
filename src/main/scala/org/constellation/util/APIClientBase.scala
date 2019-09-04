@@ -2,7 +2,7 @@ package org.constellation.util
 
 import akka.http.scaladsl.coding.Gzip
 import akka.util.ByteString
-import cats.effect.IO
+import cats.effect.{Async, IO}
 import com.softwaremill.sttp._
 import com.softwaremill.sttp.json4s._
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
@@ -16,6 +16,7 @@ import org.slf4j.MDC
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.{Failure, Success}
 
 case class HostPort(host: String, port: Int)
 
@@ -226,9 +227,12 @@ class APIClientBase(
     queryParams: Map[String, String] = Map(),
     timeout: Duration = 15.seconds
   ): IO[Response[String]] =
-    IO.fromFuture(IO(httpWithAuth(suffix, queryParams, timeout)(Method.GET).send()))(
-      IO.contextShift(ConstellationExecutionContext.bounded)
-    )
+    Async[IO].async { cb =>
+      httpWithAuth(suffix, queryParams, timeout)(Method.GET).send().onComplete {
+        case Success(value) => cb(Right(value))
+        case Failure(error) => cb(Left(error))
+      }
+    }
 
   def getBlocking[T <: AnyRef](
     suffix: String,
