@@ -20,23 +20,20 @@ trait ConsensusObject {
 }
 
 abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
-  extends MerkleStorageAlgebra[F, String, A] {
+    extends MerkleStorageAlgebra[F, String, A] {
   val merklePool = new StorageService[F, Seq[String]]()
 
-  val semaphore: Semaphore[F] = {
-    implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-    Semaphore.in[IO, F](1).unsafeRunSync
-  }
+  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   val semaphores = Map(
-    "arbitraryUpdate" -> semaphore,
-    "inConsensusUpdate" -> semaphore,
-    "acceptedUpdate" -> semaphore,
-    "unknownUpdate" -> semaphore,
-    "merklePoolUpdate" -> semaphore
+    "arbitraryUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
+    "inConsensusUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
+    "acceptedUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
+    "unknownUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
+    "merklePoolUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync()
   )
 
-  private[storage] def withLock[R](semaphoreName: String, thunk: F[R]) =
+  private[storage] def withLock[R](semaphoreName: String, thunk: F[R]): F[R] =
     new SingleLock[F, R](semaphoreName, semaphores(semaphoreName))
       .use(thunk)
 
@@ -121,13 +118,17 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
         )(curr => Sync[F].pure(Some(curr)))
       a <- ac
         .fold(
-          Logger[F].debug(s"ConsensusService arbitraryUpdate with hash=${key}") *> withLock("arbitraryUpdate",
-                                                                                            arbitrary.update(key, fn))
+          Logger[F].debug(s"ConsensusService arbitraryUpdate with hash=${key}") *> withLock(
+            "arbitraryUpdate",
+            arbitrary.update(key, fn)
+          )
         )(curr => Sync[F].pure(Some(curr)))
       result <- a
         .fold(
-          Logger[F].debug(s"ConsensusService unknownUpdate with hash=${key}") *> withLock("unknownUpdate",
-                                                                                          unknown.update(key, fn))
+          Logger[F].debug(s"ConsensusService unknownUpdate with hash=${key}") *> withLock(
+            "unknownUpdate",
+            unknown.update(key, fn)
+          )
         )(curr => Sync[F].pure(Some(curr)))
     } yield result
 

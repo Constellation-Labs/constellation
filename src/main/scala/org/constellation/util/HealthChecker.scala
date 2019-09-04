@@ -124,7 +124,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
         .filter(t => t._2.size >= dao.processingConfig.numFacilitatorPeers)
         .values
         .flatten
-      if (maxHeightsOfMinimumFacilitators.size > dao.processingConfig.numFacilitatorPeers && maxHeightsOfMinimumFacilitators.min != 0)
+      if (maxHeightsOfMinimumFacilitators.size > dao.processingConfig.numFacilitatorPeers)
         concurrentTipService.clearStaleTips(
           maxHeightsOfMinimumFacilitators.min + dao.processingConfig.snapshotHeightInterval
         )
