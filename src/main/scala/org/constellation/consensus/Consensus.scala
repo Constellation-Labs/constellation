@@ -217,14 +217,14 @@ class Consensus[F[_]: Concurrent](
       acceptedBlock <- checkpointService
         .accept(cache)
         .map { _ =>
-          (Option(checkpointBlock), Seq.empty[String], false)
+          (Option(checkpointBlock), Seq.empty[String])
         }
         .handleErrorWith {
           case error @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
             logger
               .warn(error.getMessage)
               .flatMap(
-                _ => Sync[F].pure[(Option[CheckpointBlock], Seq[String], Boolean)]((None, Seq.empty[String], false))
+                _ => Sync[F].pure[(Option[CheckpointBlock], Seq[String])]((None, Seq.empty[String]))
               )
           case tipConflict: TipConflictException =>
             logger
@@ -234,7 +234,7 @@ class Consensus[F[_]: Concurrent](
               .flatMap(
                 _ =>
                   Sync[F]
-                    .pure[(Option[CheckpointBlock], Seq[String], Boolean)]((None, tipConflict.conflictingTxs, true))
+                    .pure[(Option[CheckpointBlock], Seq[String])]((None, tipConflict.conflictingTxs))
               )
           case unknownError =>
             logger
@@ -242,7 +242,7 @@ class Consensus[F[_]: Concurrent](
                 s"[${dao.id.short}] Failed to accept majority checkpoint block due: ${unknownError.getMessage}"
               )
               .flatMap(
-                _ => Sync[F].pure[(Option[CheckpointBlock], Seq[String], Boolean)]((None, Seq.empty[String], true))
+                _ => Sync[F].pure[(Option[CheckpointBlock], Seq[String])]((None, Seq.empty[String]))
               )
         }
       _ <- if (acceptedBlock._1.isEmpty) Sync[F].pure(List.empty[Response[Unit]])
@@ -252,22 +252,18 @@ class Consensus[F[_]: Concurrent](
             FinishedCheckpoint(cache, proposals.keySet.map(_.id))
           )
         )
-      transactionsToReturn <- if (acceptedBlock._3)
-        getOwnTransactionsToReturn.map(
-          txs =>
-            txs
-              .diff(acceptedBlock._1.map(_.transactions.map(_.hash)).getOrElse(Seq.empty))
-              .filterNot(acceptedBlock._2.contains)
-        )
-      else Sync[F].pure(Seq.empty[String])
-      observationsToReturn <- if (acceptedBlock._3)
-        getOwnObservationsToReturn.map(
-          obs =>
-            obs
-              .diff(acceptedBlock._1.map(_.observations.map(_.hash)).getOrElse(Seq.empty))
-              .filterNot(acceptedBlock._2.contains)
-        )
-      else Sync[F].pure(Seq.empty[String])
+      transactionsToReturn <- getOwnTransactionsToReturn.map(
+        txs =>
+          txs
+            .diff(acceptedBlock._1.map(_.transactions.map(_.hash)).getOrElse(Seq.empty))
+            .filterNot(acceptedBlock._2.contains)
+      )
+      observationsToReturn <- getOwnObservationsToReturn.map(
+        obs =>
+          obs
+            .diff(acceptedBlock._1.map(_.observations.map(_.hash)).getOrElse(Seq.empty))
+            .filterNot(acceptedBlock._2.contains)
+      )
       _ <- consensusManager.stopBlockCreationRound(
         StopBlockCreationRound(
           roundData.roundId,
@@ -354,7 +350,7 @@ class Consensus[F[_]: Concurrent](
                   readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList.headOption
                 )
                 .map(_.transaction)
-          )
+            )
         )
       _ <- logger.debug(
         s"transactions proposal_size ${proposals.size} values size ${idsTxs._2.size} lookup size ${txs.size} resolved ${resolved.size}"
@@ -374,7 +370,7 @@ class Consensus[F[_]: Concurrent](
                   readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList.headOption
                 )
                 .map(_.channelMessage)
-          )
+            )
         )
       notifications = proposals
         .flatMap(_._2.notifications)
@@ -440,7 +436,7 @@ class Consensus[F[_]: Concurrent](
                 txs =>
                   getOwnObservationsToReturn.flatMap(
                     exs => consensusManager.handleRoundError(PreviousStage(roundData.roundId, stage, txs, exs))
-                )
+                  )
               )
           else Sync[F].unit
       )
@@ -488,8 +484,8 @@ class Consensus[F[_]: Concurrent](
               exs =>
                 Left(
                   NotEnoughProposals(roundData.roundId, proposals.size, peerSize, stage, txs, exs)
-              )
-          )
+                )
+            )
         )
       case _ => Sync[F].pure(Right(()))
     }
@@ -511,7 +507,7 @@ object Consensus {
     type ConsensusStage = Value
 
     val STARTING, WAITING_FOR_PROPOSALS, WAITING_FOR_BLOCK_PROPOSALS, RESOLVING_MAJORITY_CB,
-    WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
+      WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
       Value
   }
 

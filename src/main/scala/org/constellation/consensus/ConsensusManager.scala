@@ -254,8 +254,10 @@ class ConsensusManager[F[_]: Concurrent](
     for {
       _ <- consensuses.update(curr => curr - cmd.roundId)
       _ <- ownConsensus.update(curr => if (curr.isDefined && curr.get.roundId == cmd.roundId) None else curr)
-      _ <- transactionService.returnToPending(cmd.transactionsToReturn)
-      _ <- observationService.returnToPending(cmd.observationsToReturn)
+//      _ <- transactionService.returnToPending(cmd.transactionsToReturn) // TODO: wkoszycki temporally discard transactions/observations
+//      _ <- observationService.returnToPending(cmd.observationsToReturn)
+      _ <- transactionService.clearInConsensus(cmd.transactionsToReturn)
+      _ <- observationService.clearInConsensus(cmd.observationsToReturn)
       _ <- updateNotifications(cmd.maybeCB.map(_.notifications.toList))
       _ = releaseMessages(cmd.maybeCB)
       _ <- logger.debug(
