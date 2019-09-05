@@ -16,6 +16,14 @@ abstract class PeriodicIO(taskName: String) extends StrictLogging {
 
   def trigger(): IO[Unit]
 
+  def schedule(initialDelay: FiniteDuration, duration: FiniteDuration): Unit =
+    IO.timer(timerPool)
+      .sleep(initialDelay)
+      .unsafeRunAsync {
+        case Left(_)  => logger.error(s"Unexpected error while triggering periodic task ${taskName} with initial delay")
+        case Right(_) => schedule(duration)
+      }
+
   def schedule(duration: FiniteDuration): Unit = {
     val delayedTask = IO
       .timer(timerPool)
