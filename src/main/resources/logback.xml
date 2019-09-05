@@ -61,11 +61,6 @@
         <appender-ref ref="json"/>
     </logger>
 
-    <root level="debug">
-        <appender-ref ref="rollingFile"/>
-        <appender-ref ref="json"/>
-    </root>
-
     <root level="info">
         <appender-ref ref="metrics" />
     </root>
