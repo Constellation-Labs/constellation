@@ -11,7 +11,7 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
 abstract class PeriodicIO(taskName: String) extends StrictLogging {
 
-  val timerPool: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newCachedThreadPool())
+  val timerPool: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newSingleThreadExecutor())
   val executionNumber: AtomicLong = new AtomicLong(0)
 
   def trigger(): IO[Unit]
