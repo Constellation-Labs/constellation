@@ -116,23 +116,24 @@ class HealthChecker[F[_]: Concurrent: Logger](
     }
   }
 
-  def clearStaleTips(clusterSnapshots: List[(Id, List[RecentSnapshot])]): F[Unit] =
-    if (clusterSnapshots.size > dao.processingConfig.numFacilitatorPeers) {
-      val maxHeightsOfMinimumFacilitators = clusterSnapshots
-        .map(x => (0L :: x._2.map(_.height)).max)
+  def clearStaleTips(clusterSnapshots: List[(Id, List[RecentSnapshot])]): F[Unit] = {
+    val nodesWithHeights = clusterSnapshots.filter(_._2.nonEmpty)
+    if (clusterSnapshots.size - nodesWithHeights.size < dao.processingConfig.numFacilitatorPeers && nodesWithHeights.size >= dao.processingConfig.numFacilitatorPeers) {
+      val maxHeightsOfMinimumFacilitators = nodesWithHeights
+        .map(x => x._2.map(_.height).max)
         .groupBy(x => x)
         .filter(t => t._2.size >= dao.processingConfig.numFacilitatorPeers)
-        .values
-        .flatten
-      if (maxHeightsOfMinimumFacilitators.size > dao.processingConfig.numFacilitatorPeers)
+
+      if (maxHeightsOfMinimumFacilitators.nonEmpty)
         concurrentTipService.clearStaleTips(
-          maxHeightsOfMinimumFacilitators.min + dao.processingConfig.snapshotHeightInterval
+          maxHeightsOfMinimumFacilitators.keySet.min + dao.processingConfig.snapshotHeightInterval
         )
       else Logger[F].debug("staletips Not enough data to determine height")
     } else
       Logger[F].debug(
         s"[Clear staletips] ClusterSnapshots size=${clusterSnapshots.size} numFacilPeers=${dao.processingConfig.numFacilitatorPeers}"
       ) *> Sync[F].unit
+  }
 
   def shouldReDownload(ownSnapshots: List[RecentSnapshot], diff: SnapshotDiff): Boolean =
     diff match {
