@@ -1,9 +1,9 @@
 package org.constellation.storage.transactions
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.{ContextShift, IO, Timer}
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
-import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.{Transaction, TransactionCacheData}
@@ -24,7 +24,8 @@ class TransactionGossipingTest
     with ArgumentMatchersSugar {
 
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-  implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
+  implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+  implicit val implicitLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
   test("it should randomly select the diff of all peer IDs and peers in the tx path") {
     val dao = mockDAO

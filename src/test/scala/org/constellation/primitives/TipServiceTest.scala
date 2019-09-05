@@ -1,5 +1,5 @@
 package org.constellation.primitives
-import cats.effect.{ContextShift, IO}
+import cats.effect.{ContextShift, IO, Timer}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -15,6 +15,7 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
 
   implicit val dao: DAO = prepareDAO()
   implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
   implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
 
   def prepareDAO(): DAO = {

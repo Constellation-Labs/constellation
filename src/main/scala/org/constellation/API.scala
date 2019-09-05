@@ -24,7 +24,7 @@ import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.crypto.KeyUtils
-import org.constellation.p2p.{ChangePeerState, Download, SetNodeStatus}
+import org.constellation.p2p.{ChangePeerState, Download}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._

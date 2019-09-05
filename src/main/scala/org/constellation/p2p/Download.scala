@@ -6,6 +6,8 @@ import com.softwaremill.sttp.Response
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus._
 import org.constellation.p2p.Cluster.Peers
 import org.constellation.primitives.Schema.NodeState.NodeState
@@ -13,6 +15,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{APIClient, Distance, Metrics}
+import org.constellation.util.Logging.logThread
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.concurrent.duration._
@@ -70,6 +73,7 @@ class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[S
   ec: ExecutionContext
 ) {
   implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ec)
+  implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
   def processSnapshots(hashes: Seq[String])(implicit peers: Peers): IO[Unit] =
     hashes.map(processSnapshot).toList.parSequence.map(_ => ())
@@ -77,33 +81,41 @@ class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[S
   private def processSnapshot(hash: String)(implicit peers: Peers): IO[Unit] = {
     val clients = peers.values.map(_.client)
 
-    downloadSnapshot(hash, clients).flatTap { _ =>
+    logThread(
+      downloadSnapshot(hash, clients).flatTap { _ =>
+        IO {
+          dao.metrics.incrementMetric("downloadedSnapshots")
+          dao.metrics.incrementMetric(Metrics.snapshotCount)
+        }
+      }.flatMap(acceptSnapshot),
+      "download_processSnapshot"
+    ) // TODO: wkoszycki shouldn't we accept sequentially ?
+  }
+
+  private def acceptSnapshot(snapshot: StoredSnapshot): IO[Unit] =
+    logThread(
       IO {
-        dao.metrics.incrementMetric("downloadedSnapshots")
-        dao.metrics.incrementMetric(Metrics.snapshotCount)
-      }
-    }.flatMap(acceptSnapshot) // TODO: wkoszycki shouldn't we accept sequentially ?
-  }
+        snapshot.checkpointCache.foreach { c =>
+          dao.metrics.incrementMetric("downloadedBlocks")
+          dao.metrics.incrementMetric(Metrics.checkpointAccepted)
 
-  private def acceptSnapshot(snapshot: StoredSnapshot): IO[Unit] = IO {
-    snapshot.checkpointCache.foreach { c =>
-      dao.metrics.incrementMetric("downloadedBlocks")
-      dao.metrics.incrementMetric(Metrics.checkpointAccepted)
+          c.checkpointBlock.foreach(_.transactions.foreach { _ =>
+            dao.metrics.incrementMetric("transactionAccepted")
+          })
 
-      c.checkpointBlock.foreach(_.transactions.foreach { _ =>
-        dao.metrics.incrementMetric("transactionAccepted")
-      })
-
-      better.files
-        .File(dao.snapshotPath, snapshot.snapshot.hash)
-        .writeByteArray(KryoSerializer.serializeAnyRef(snapshot))
-    }
-  }
+          better.files
+            .File(dao.snapshotPath, snapshot.snapshot.hash)
+            .writeByteArray(KryoSerializer.serializeAnyRef(snapshot))
+        }
+      },
+      "download_acceptSnapshot"
+    )
 }
 
 class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO, ec: ExecutionContext)
     extends StrictLogging {
-  private implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+  implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+  implicit val implicitLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ec)
 
@@ -115,49 +127,55 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   private val waitForPeersDelay = config.getInt("download.waitForPeers").seconds
 
   def reDownload(snapshotHashes: List[String], peers: Map[Id, PeerData]): IO[Unit] =
-    for {
-      majoritySnapshot <- getMajoritySnapshot(peers)
-      _ <- if (snapshotHashes.forall(majoritySnapshot.snapshotHashes.contains)) IO.unit
-      else
-        IO.raiseError[Unit](
-          new RuntimeException(
-            s"Inconsistent state majority snapshot doesn't contain: ${snapshotHashes.filterNot(majoritySnapshot.snapshotHashes.contains)}"
+    logThread(
+      for {
+        majoritySnapshot <- getMajoritySnapshot(peers)
+        _ <- if (snapshotHashes.forall(majoritySnapshot.snapshotHashes.contains)) IO.unit
+        else
+          IO.raiseError[Unit](
+            new RuntimeException(
+              s"Inconsistent state majority snapshot doesn't contain: ${snapshotHashes.filterNot(majoritySnapshot.snapshotHashes.contains)}"
+            )
           )
+        snapshotClient <- getSnapshotClient(peers)
+        alreadyDownloaded <- downloadAndProcessSnapshotsFirstPass(snapshotHashes)(
+          snapshotClient,
+          peers
         )
-      snapshotClient <- getSnapshotClient(peers)
-      alreadyDownloaded <- downloadAndProcessSnapshotsFirstPass(snapshotHashes)(
-        snapshotClient,
-        peers
-      )
-      _ <- downloadAndProcessSnapshotsSecondPass(snapshotHashes.filterNot(alreadyDownloaded.contains))(
-        snapshotClient,
-        peers
-      )
-      _ <- finishDownload(majoritySnapshot)
-      _ <- setAcceptedTransactionsAfterDownload()
-    } yield ()
+        _ <- downloadAndProcessSnapshotsSecondPass(snapshotHashes.filterNot(alreadyDownloaded.contains))(
+          snapshotClient,
+          peers
+        )
+        _ <- finishDownload(majoritySnapshot)
+        _ <- setAcceptedTransactionsAfterDownload()
+      } yield (),
+      "download_reDownload"
+    )
 
   def download(): IO[Unit] =
-    for {
-      _ <- initDownloadingProcess
-      _ <- downloadAndAcceptGenesis
-      _ <- waitForPeers()
-      peers <- getReadyPeers()
-      snapshotClient <- getSnapshotClient(peers)
-      majoritySnapshot <- getMajoritySnapshot(peers)
-      hashes <- getSnapshotHashes(majoritySnapshot)
-      snapshotHashes <- downloadAndProcessSnapshotsFirstPass(hashes)(
-        snapshotClient,
-        peers
-      )
-      missingHashes <- getSnapshotHashes(majoritySnapshot)
-      _ <- downloadAndProcessSnapshotsSecondPass(missingHashes.filterNot(snapshotHashes.contains))(
-        snapshotClient,
-        peers
-      )
-      _ <- finishDownload(majoritySnapshot)
-      _ <- setAcceptedTransactionsAfterDownload()
-    } yield ()
+    logThread(
+      for {
+        _ <- initDownloadingProcess
+        _ <- downloadAndAcceptGenesis
+        _ <- waitForPeers()
+        peers <- getReadyPeers()
+        snapshotClient <- getSnapshotClient(peers)
+        majoritySnapshot <- getMajoritySnapshot(peers)
+        hashes <- getSnapshotHashes(majoritySnapshot)
+        snapshotHashes <- downloadAndProcessSnapshotsFirstPass(hashes)(
+          snapshotClient,
+          peers
+        )
+        missingHashes <- getSnapshotHashes(majoritySnapshot)
+        _ <- downloadAndProcessSnapshotsSecondPass(missingHashes.filterNot(snapshotHashes.contains))(
+          snapshotClient,
+          peers
+        )
+        _ <- finishDownload(majoritySnapshot)
+        _ <- setAcceptedTransactionsAfterDownload()
+      } yield (),
+      "download_download"
+    )
 
   private def initDownloadingProcess: IO[Unit] =
     IO(logger.debug("Download started"))
@@ -178,7 +196,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
 
   private def waitForPeers(): IO[Unit] =
     IO(logger.debug(s"Waiting ${waitForPeersDelay.toString()} for peers"))
-      .flatMap(_ => IO.sleep(waitForPeersDelay))
+      .flatMap(_ => IO.sleep(waitForPeersDelay)) // mwadon: Should we block the thread by sleep here?
 
   private def getReadyPeers() =
     dao.readyPeers(NodeType.Full)

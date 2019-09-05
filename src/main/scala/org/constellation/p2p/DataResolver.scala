@@ -1,4 +1,5 @@
 package org.constellation.p2p
+
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
@@ -8,6 +9,7 @@ import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEd
 import org.constellation.primitives.{ChannelMessageMetadata, Observation, TransactionCacheData}
 import org.constellation.storage.ConsensusStatus
 import org.constellation.util.{Distance, PeerApiClient}
+import org.constellation.util.Logging._
 
 import scala.concurrent.duration._
 
@@ -28,15 +30,19 @@ class DataResolver extends StrictLogging {
   )(
     contextToReturn: ContextShift[IO]
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[ChannelMessageMetadata] =
-    resolveDataByDistance[ChannelMessageMetadata](
-      List(hash),
-      "message",
-      pool,
-      (t: ChannelMessageMetadata) =>
-        dao.messageService.memPool.put(t.channelMessage.signedMessageData.hash, t).unsafeRunSync(),
-      priorityClient
-    )(contextToReturn).head
-      .flatTap(m => IO.delay(logger.debug(s"Resolving message=${m.channelMessage.signedMessageData.hash}")))
+    logThread(
+      resolveDataByDistance[ChannelMessageMetadata](
+        List(hash),
+        "message",
+        pool,
+        (t: ChannelMessageMetadata) =>
+          dao.messageService.memPool.put(t.channelMessage.signedMessageData.hash, t).unsafeRunSync(),
+        priorityClient
+      )(contextToReturn).head
+        .flatTap(m => IO.delay(logger.debug(s"Resolving message=${m.channelMessage.signedMessageData.hash}"))),
+      s"dataResolver_resolveMessage [$hash]",
+      logger
+    )
 
   def resolveTransactionDefaults(
     hash: String,
@@ -49,16 +55,20 @@ class DataResolver extends StrictLogging {
     pool: List[PeerApiClient],
     priorityClient: Option[PeerApiClient]
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
-    resolveDataByDistance[TransactionCacheData](
-      List(hash),
-      "transaction",
-      pool,
-      (t: TransactionCacheData) => {
-        dao.transactionService.put(t, ConsensusStatus.Unknown).unsafeRunSync()
-      },
-      priorityClient
-    )(contextToReturn).head
-      .flatTap(tx => IO.delay(logger.debug(s"Resolving transaction=${tx.hash}")))
+    logThread(
+      resolveDataByDistance[TransactionCacheData](
+        List(hash),
+        "transaction",
+        pool,
+        (t: TransactionCacheData) => {
+          dao.transactionService.put(t, ConsensusStatus.Unknown).unsafeRunSync()
+        },
+        priorityClient
+      )(contextToReturn).head
+        .flatTap(tx => IO.delay(logger.debug(s"Resolving transaction=${tx.hash}"))),
+      s"dataResolver_resolveTransaction [${hash}]",
+      logger
+    )
 
   def resolveCheckpointDefaults(
     hash: String,
@@ -71,14 +81,18 @@ class DataResolver extends StrictLogging {
     pool: List[PeerApiClient],
     priorityClient: Option[PeerApiClient] = None
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[CheckpointCache] =
-    resolveDataByDistance[CheckpointCache](
-      List(hash),
-      "checkpoint",
-      pool,
-      (t: CheckpointCache) => t.checkpointBlock.foreach(cb => cb.store(t)),
-      priorityClient
-    )(contextToReturn).head.flatTap(
-      cb => IO.delay(logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.map(_.baseHash)}"))
+    logThread(
+      resolveDataByDistance[CheckpointCache](
+        List(hash),
+        "checkpoint",
+        pool,
+        (t: CheckpointCache) => t.checkpointBlock.foreach(cb => cb.store(t)),
+        priorityClient
+      )(contextToReturn).head.flatTap(
+        cb => IO.delay(logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.map(_.baseHash)}"))
+      ),
+      s"dataResolver_resolveCheckpoint [${hash}]",
+      logger
     )
 
   def resolveSoeDefaults(
@@ -96,30 +110,38 @@ class DataResolver extends StrictLogging {
   )(
     contextToReturn: ContextShift[IO]
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[SignedObservationEdgeCache]] =
-    resolveDataByDistance[SignedObservationEdgeCache](
-      hashes,
-      "soe",
-      pool,
-      (t: SignedObservationEdgeCache) => {
-        dao.soeService.put(t.signedObservationEdge.hash, t).unsafeRunSync()
-      },
-      priorityClient
-    )(contextToReturn).sequence
+    logThread(
+      resolveDataByDistance[SignedObservationEdgeCache](
+        hashes,
+        "soe",
+        pool,
+        (t: SignedObservationEdgeCache) => {
+          dao.soeService.put(t.signedObservationEdge.hash, t).unsafeRunSync()
+        },
+        priorityClient
+      )(contextToReturn).sequence,
+      s"dataResolver_resolveSoe [${hashes}]",
+      logger
+    )
 
   def resolveCheckpoints(
     hashes: List[String],
     pool: List[PeerApiClient],
     priorityClient: Option[PeerApiClient] = None
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[CheckpointCache]] =
-    resolveDataByDistanceFlat[CheckpointCache](
-      hashes,
-      "checkpoint",
-      pool,
-      (t: CheckpointCache) => {
-        t.checkpointBlock.foreach(cb => cb.store(t))
-      },
-      priorityClient
-    )(contextToReturn)
+    logThread(
+      resolveDataByDistanceFlat[CheckpointCache](
+        hashes,
+        "checkpoint",
+        pool,
+        (t: CheckpointCache) => {
+          t.checkpointBlock.foreach(cb => cb.store(t))
+        },
+        priorityClient
+      )(contextToReturn),
+      s"dataResolver_resolveCheckpoints [${hashes}]",
+      logger
+    )
 
   def resolveObservationDefaults(
     hash: String,
@@ -132,15 +154,19 @@ class DataResolver extends StrictLogging {
     pool: List[PeerApiClient],
     priorityClient: Option[PeerApiClient]
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Observation] =
-    resolveDataByDistance[Observation](
-      List(hash),
-      "observation",
-      pool,
-      (t: Observation) => {
-        dao.observationService.put(t, ConsensusStatus.Unknown).unsafeRunSync()
-      },
-      priorityClient
-    )(contextToReturn).head.flatTap(o => IO.delay(logger.debug(s"Resolving observation=${o.hash}")))
+    logThread(
+      resolveDataByDistance[Observation](
+        List(hash),
+        "observation",
+        pool,
+        (t: Observation) => {
+          dao.observationService.put(t, ConsensusStatus.Unknown).unsafeRunSync()
+        },
+        priorityClient
+      )(contextToReturn).head.flatTap(o => IO.delay(logger.debug(s"Resolving observation=${o.hash}"))),
+      s"dataResolver_resolveObservation [${hash}]",
+      logger
+    )
 
   private[p2p] def resolveDataByDistance[T <: AnyRef](
     hashes: List[String],

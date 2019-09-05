@@ -15,6 +15,7 @@ import org.constellation.storage.ConsensusStatus.ConsensusStatus
 import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.storage.{AddressService, ConsensusStatus, TransactionService}
 import org.constellation.util.Distance
+import org.constellation.util.Logging._
 import org.constellation.{ConstellationExecutionContext, DAO}
 
 import scala.util.{Failure, Random, Success}
