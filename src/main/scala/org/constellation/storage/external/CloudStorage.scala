@@ -49,7 +49,7 @@ class GcpStorage[F[_]: Concurrent: Logger] extends CloudStorage[F] {
     }
 
   private def createCredentials(): F[GoogleCredentials] =
-    getConfig("constellation.storage.path-to-permission-file").flatMap {
+    getConfig("constellation.storage.gcp.path-to-permission-file").flatMap {
       case Success(filePath)  => createGoogleCredentials(filePath)
       case Failure(exception) => CannotGetConfigProperty(exception).raiseError[F, GoogleCredentials]
     }
@@ -67,7 +67,7 @@ class GcpStorage[F[_]: Concurrent: Logger] extends CloudStorage[F] {
     Sync[F].delay(Try(StorageOptions.newBuilder().setCredentials(credentials).build().getService))
 
   private def getBucket(service: Storage): F[Bucket] =
-    getConfig("constellation.storage.bucket-name").flatMap {
+    getConfig("constellation.storage.gcp.bucket-name").flatMap {
       case Success(bucketName) => Sync[F].pure(service.get(bucketName))
       case Failure(exception)  => CannotGetBucket(exception).raiseError[F, Bucket]
     }
