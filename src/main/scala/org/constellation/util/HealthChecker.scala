@@ -39,6 +39,43 @@ object HealthChecker extends StrictLogging {
     majority
   }
 
+  private[util] def choseMajority(clusterSnapshots: List[(Id, List[RecentSnapshot])]) =
+    chooseSnapshotAndNodeIds(clusterSnapshots) match {
+      case Some(value) => nodesWithMajorityState(clusterSnapshots, value)
+      case None        => (List.empty, Set.empty)
+    }
+
+  private[util] def nodesWithMajorityState(
+    clusterSnapshots: List[(Id, List[RecentSnapshot])],
+    node: (RecentSnapshot, Set[Id])
+  ) =
+    clusterSnapshots.find(f => f._1 == node._2.head) match {
+      case Some(value) => (value._2.sortBy(_.height).reverse.dropWhile(_ != node._1), node._2)
+      case None        => (List.empty, Set.empty)
+    }
+
+  private[util] def dropToCurrentState(snapshot: (Id, List[RecentSnapshot]), majorityState: RecentSnapshot) =
+    (snapshot._2.dropWhile(_ != majorityState), snapshot._2)
+
+  private[util] def chooseSnapshotAndNodeIds(clusterSnapshots: List[(Id, List[RecentSnapshot])]) = {
+    val sort = sortSnapshotsAndNodeIds(clusterSnapshots)
+      .filter(_._2.lengthCompare(clusterSnapshots.size / 2) > 0)
+
+    if (sort.nonEmpty) {
+      Some(sort.head._1, sort.head._2.map(_._1).toSet)
+    } else {
+      None
+    }
+  }
+
+  private[util] def sortSnapshotsAndNodeIds(clusterSnapshots: List[(Id, List[RecentSnapshot])]) =
+    clusterSnapshots
+      .flatMap(c => c._2.map((c._1, _)))
+      .groupBy(_._2)
+      .toList
+      .sortBy(_._1.height)
+      .reverse
+
   private def maxOrZero(list: List[RecentSnapshot]): Long =
     list match {
       case Nil      => 0
@@ -46,12 +83,17 @@ object HealthChecker extends StrictLogging {
     }
 
   def compareSnapshotState(
-    ownSnapshots: List[RecentSnapshot],
+    ownSnapshots: (Id, List[RecentSnapshot]),
     clusterSnapshots: List[(Id, List[RecentSnapshot])]
   ): SnapshotDiff =
-    choseMajorityState(clusterSnapshots) match {
+    choseMajority(clusterSnapshots :+ ownSnapshots) match {
       case (snapshots, peers) =>
-        SnapshotDiff(ownSnapshots.diff(snapshots), snapshots.diff(ownSnapshots).reverse, peers.toList)
+        logger.debug(s"Selected major state : $snapshots")
+        SnapshotDiff(
+          ownSnapshots._2.diff(snapshots).sortBy(_.height).reverse,
+          snapshots.diff(ownSnapshots._2).sortBy(_.height).reverse,
+          peers.toList
+        )
     }
 
   def checkAllMetrics(apis: Seq[APIClient]): Either[MetricFailure, Unit] = {
@@ -83,6 +125,8 @@ object HealthChecker extends StrictLogging {
 
 }
 
+case class RecentSync(hash: String, height: Long)
+
 class HealthChecker[F[_]: Concurrent: Logger](
   dao: DAO,
   concurrentTipService: ConcurrentTipService[F],
@@ -97,12 +141,14 @@ class HealthChecker[F[_]: Concurrent: Logger](
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       peersSnapshots <- collectSnapshot(peers)
       _ <- clearStaleTips(peersSnapshots)
-      diff = compareSnapshotState(ownSnapshots, peersSnapshots)
+      diff = compareSnapshotState((dao.id, ownSnapshots), peersSnapshots)
       _ <- Logger[F].debug(s"[${dao.id.short}] re-download cluster diff $diff and own $ownSnapshots")
       result <- if (shouldReDownload(ownSnapshots, diff)) {
         startReDownload(diff, peers.filterKeys(diff.peers.contains))
           .flatMap(
-            _ => Sync[F].delay[Option[List[RecentSnapshot]]](Some(HealthChecker.choseMajorityState(peersSnapshots)._1))
+            _ =>
+              Sync[F]
+                .delay[Option[List[RecentSnapshot]]](Some(HealthChecker.choseMajority(peersSnapshots)._1))
           )
       } else {
         Sync[F].pure[Option[List[RecentSnapshot]]](None)
@@ -119,17 +165,19 @@ class HealthChecker[F[_]: Concurrent: Logger](
 
   def clearStaleTips(clusterSnapshots: List[(Id, List[RecentSnapshot])]): F[Unit] = {
     val nodesWithHeights = clusterSnapshots.filter(_._2.nonEmpty)
+    logger.info(s"[Clear staletips] Nodes with heights: ${nodesWithHeights.size}")
     if (clusterSnapshots.size - nodesWithHeights.size < dao.processingConfig.numFacilitatorPeers && nodesWithHeights.size >= dao.processingConfig.numFacilitatorPeers) {
       val maxHeightsOfMinimumFacilitators = nodesWithHeights
         .map(x => x._2.map(_.height).max)
         .groupBy(x => x)
         .filter(t => t._2.size >= dao.processingConfig.numFacilitatorPeers)
+      logger.info(s"[Clear staletips] Max Heights Of Minimum Facilitators>: ${maxHeightsOfMinimumFacilitators.size}")
 
       if (maxHeightsOfMinimumFacilitators.nonEmpty)
         concurrentTipService.clearStaleTips(
           maxHeightsOfMinimumFacilitators.keySet.min + dao.processingConfig.snapshotHeightInterval
         )
-      else Logger[F].debug("staletips Not enough data to determine height")
+      else Logger[F].debug("[Clear staletips] staletips Not enough data to determine height")
     } else
       Logger[F].debug(
         s"[Clear staletips] ClusterSnapshots size=${clusterSnapshots.size} numFacilPeers=${dao.processingConfig.numFacilitatorPeers}"
@@ -141,10 +189,11 @@ class HealthChecker[F[_]: Concurrent: Logger](
       case SnapshotDiff(_, _, Nil) => false
       case SnapshotDiff(_, Nil, _) => false
       case SnapshotDiff(snapshotsToDelete, snapshotsToDownload, _) =>
-        isBelowInterval(ownSnapshots, snapshotsToDownload) || isMisaligned(
-          ownSnapshots,
-          (snapshotsToDelete ++ snapshotsToDownload).map(r => (r.height, r.hash)).toMap
-        )
+        val below = isBelowInterval(ownSnapshots, snapshotsToDownload)
+        val misaligned =
+          isMisaligned(ownSnapshots, (snapshotsToDelete ++ snapshotsToDownload).map(r => (r.height, r.hash)).toMap)
+        logger.debug(s"Should re-download isBelow : $below : isMisaligned : $misaligned")
+        below || misaligned
     }
 
   private def isMisaligned(ownSnapshots: List[RecentSnapshot], recent: Map[Long, String]) =
