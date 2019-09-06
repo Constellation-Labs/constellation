@@ -3,8 +3,10 @@ package org.constellation.consensus
 import java.io.IOException
 import java.nio.file.Path
 
+import better.files.File
 import cats.data.NonEmptyList
 import cats.data.Validated.{Invalid, Valid}
+import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
@@ -268,7 +270,11 @@ object Snapshot extends StrictLogging {
       dao.snapshotPath.pathAsString
     )
 
-  def removeSnapshots(snapshots: List[String], snapshotPath: String)(implicit dao: DAO): Unit =
+  def removeSnapshots(snapshots: List[String], snapshotPath: String)(implicit dao: DAO): Unit = {
+    if (shouldSendSnapshotsToCloud(snapshotPath)) {
+      sendSnapshotsToCloud(snapshots)(dao, IO.contextShift(ConstellationExecutionContext.bounded)).unsafeRunSync()
+    }
+
     snapshots.foreach { snapId =>
       tryWithMetric(
         {
@@ -280,6 +286,22 @@ object Snapshot extends StrictLogging {
         "deleteSnapshot"
       )
     }
+  }
+
+  private def sendSnapshotsToCloud(snapshotsHash: List[String])(implicit dao: DAO, cs: ContextShift[IO]): IO[Unit] =
+    for {
+      files <- cs.evalOn(ConstellationExecutionContext.unbounded)(
+        getFiles(snapshotsHash, dao.snapshotPath.pathAsString)
+      )
+      blobsNames <- cs.evalOn(ConstellationExecutionContext.unbounded)(dao.cloudStorage.upload(files))
+      _ <- IO.delay(logger.debug(s"Snapshots send to cloud amount : ${blobsNames.size}"))
+    } yield ()
+
+  private def getFiles(snapshotsHash: List[String], snapshotPath: String): IO[List[File]] =
+    snapshotsHash.traverse(hash => IO.delay(File(snapshotPath, hash)))
+
+  private def shouldSendSnapshotsToCloud(snapshotsPath: String): Boolean =
+    ConfigUtil.getOrElse("constellation.storage.enabled", default = false)
 
   def isOverDiskCapacity(bytesLengthToAdd: Long)(implicit dao: DAO): Boolean = {
     val sizeDiskLimit = ConfigUtil.snapshotSizeDiskLimit
