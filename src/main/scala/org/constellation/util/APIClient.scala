@@ -4,7 +4,7 @@ import cats.effect.{Async, ContextShift, IO, LiftIO}
 import cats.implicits._
 import com.softwaremill.sttp._
 import com.typesafe.config.ConfigFactory
-import org.constellation.DAO
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
 import org.constellation.primitives.Schema.{GenesisObservation, Id, MetricsResult}
 import org.constellation.serializer.KryoSerializer
@@ -58,7 +58,8 @@ class APIClient private (
     }.getOrElse(Map())
 
   def metricsAsync: Future[Map[String, String]] =
-    getNonBlocking[MetricsResult]("metrics", timeout = 15.seconds).map(_.metrics)
+    getNonBlocking[MetricsResult]("metrics", timeout = 15.seconds)
+      .map(_.metrics)(ConstellationExecutionContext.callbacks)
 
   def getBlockingBytesKryo[T <: AnyRef](
     suffix: String,
@@ -78,7 +79,7 @@ class APIClient private (
     httpWithAuth(suffix, queryParams, timeout)(Method.GET)
       .response(asByteArray)
       .send()
-      .map(resp => KryoSerializer.deserializeCast[T](resp.unsafeBody))
+      .map(resp => KryoSerializer.deserializeCast[T](resp.unsafeBody))(ConstellationExecutionContext.callbacks)
 
   def getNonBlockingBytesKryoTry[T <: AnyRef](
     suffix: String,
@@ -92,7 +93,7 @@ class APIClient private (
         resp =>
           if (resp.isSuccess) Success(KryoSerializer.deserializeCast[T](resp.unsafeBody))
           else Failure(new Exception(s"Invalid response code ${resp.code} and status ${resp.statusText}"))
-      )
+      )(ConstellationExecutionContext.callbacks)
 
   def getNonBlockingIO[T <: AnyRef](
     suffix: String,
@@ -103,7 +104,7 @@ class APIClient private (
       getNonBlocking[T](suffix, queryParams, timeout).onComplete {
         case Success(value) => cb(Right(value))
         case Failure(error) => cb(Left(error))
-      }
+      }(ConstellationExecutionContext.callbacks)
     }
 
   def getNonBlockingF[F[_]: Async, T <: AnyRef](
@@ -123,7 +124,7 @@ class APIClient private (
       postNonBlocking[T](suffix, b, timeout, headers).onComplete {
         case Success(value) => cb(Right(value))
         case Failure(error) => cb(Left(error))
-      }
+      }(ConstellationExecutionContext.callbacks)
     }
 
   def postNonBlockingF[F[_]: LiftIO, T <: AnyRef](
@@ -144,7 +145,7 @@ class APIClient private (
       postNonBlockingUnit(suffix, b, timeout).onComplete {
         case Success(value) => cb(Right(value))
         case Failure(error) => cb(Left(error))
-      }
+      }(ConstellationExecutionContext.callbacks)
     }
 
   def getStringF[F[_]: LiftIO](
@@ -164,7 +165,7 @@ class APIClient private (
       postNonBlockingUnit(suffix, b, timeout, headers).onComplete {
         case Success(value) => cb(Right(value))
         case Failure(error) => cb(Left(error))
-      }
+      }(ConstellationExecutionContext.callbacks)
     }
 
   def simpleDownload(): Seq[StoredSnapshot] = {
