@@ -14,7 +14,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.ConsensusStatus
 import org.constellation.util.AccountBalance
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.util.{Failure, Success, Try}
 
@@ -161,7 +161,15 @@ object Genesis extends StrictLogging {
         case Failure(exception) => Logger[IO].error(s"Cannot save genesis observation to disk ${exception.getMessage}")
       }
       .unsafeRunSync()
+
+    if (shouldSendGenesisObservationToCloud()) {
+      GenesisObservationWriter
+        .writeToCloud(dao.genesisObservationPath)(dao, IO.contextShift(ConstellationExecutionContext.bounded))
+    }
   }
+
+  private def shouldSendGenesisObservationToCloud(): Boolean =
+    ConfigUtil.getOrElse("constellation.storage.enabled", default = false)
 
   private def storeTransactions(genesisObservation: GenesisObservation)(implicit dao: DAO): Unit =
     Seq(genesisObservation.genesis, genesisObservation.initialDistribution, genesisObservation.initialDistribution2).flatMap {
@@ -179,5 +187,10 @@ object GenesisObservationWriter {
   def writeToDisk(genesisObservation: GenesisObservation, path: File)(implicit cs: ContextShift[IO]): IO[Try[File]] =
     cs.evalOn(ConstellationExecutionContext.unbounded) {
       IO(Try(File(path, FILE_NAME).writeByteArray(KryoSerializer.serializeAnyRef(genesisObservation))))
+    }
+
+  def writeToCloud(path: File)(implicit dao: DAO, cs: ContextShift[IO]): IO[List[String]] =
+    cs.evalOn(ConstellationExecutionContext.unbounded) {
+      dao.cloudStorage.upload(Seq(File(path, FILE_NAME)))
     }
 }
