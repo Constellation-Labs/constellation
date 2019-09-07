@@ -276,6 +276,7 @@ class TrustTest extends FlatSpec {
     //(31,4)
     //(25,12)
     //third (13,100)
+    //fourth (0,100)
 
 
 
@@ -296,7 +297,7 @@ class TrustTest extends FlatSpec {
 
 
     def normalize = {
-
+      //hadamard of distro over range of generators, sorted randomly
     }
 
     val dummyWalk = Array.fill[Double](numNodes)(Random.nextDouble())
