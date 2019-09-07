@@ -54,5 +54,48 @@ object DataGeneration {
     nodesWithEdges
   }
 
+  def generateFullyConnectedTestData(numNodes: Int = 30, labeled: Boolean = Random.nextBoolean()): List[TrustNode] = {
+
+    val nodes = (0 until numNodes).toList.map{ id =>
+      TrustNode(id, Random.nextDouble(), Random.nextDouble())
+    }
+
+    // TODO: Distance should influence trust score to simulate modularity
+    val nodesWithEdges = nodes.map{ n =>
+      val edges = nodes.filterNot(_.id == n.id).flatMap{ n2 =>
+
+//        val distance = n.distance(n2)
+//        if (Random.nextDouble() > distance && Random.nextDouble() < 0.5) {
+          val trustZeroToOne = Random.nextDouble()
+          Some(TrustEdge(n.id, n2.id, 2*(trustZeroToOne - 0.5), isLabel = labeled))
+//        } else None
+      }
+      println(s"Num edges ${edges.length}")
+      n.copy(edges = edges)
+    }
+    nodesWithEdges
+  }
+
+  def generateFullyConnectedDataWithSeedClique(numNodes: Int = 30, maxSeedNodeIdx: Int, trustZeroToOne: Random): List[TrustNode] = {
+
+    val nodes = (0 until numNodes).toList.map{ id =>
+      TrustNode(id, Random.nextDouble(), Random.nextDouble())
+    }
+    // TODO: Distance should influence trust score to simulate modularity
+    val nodesWithEdges = nodes.map{ n: TrustNode =>
+      val edges = nodes.filterNot(_.id == n.id).flatMap{ n2 =>
+        if (n.id <= maxSeedNodeIdx) Some(TrustEdge(n.id, n2.id, 1.0, isLabel = true))
+        else {
+          val next = trustZeroToOne.nextDouble()
+//          val test = next == NaN
+          println("NaN test" +n.id + n2.id + next + {2*(next - 0.5)})
+          Some(TrustEdge(n.id, n2.id, 2*(next - 0.5)))
+        }
+      }
+      println(s"Num edges ${edges.length}")
+      n.copy(edges = edges)
+    }
+    nodesWithEdges
+  }
 
 }

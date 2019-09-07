@@ -19,8 +19,6 @@ class TrustManager(periodSeconds: Int = 120)(implicit dao: DAO, ec: ExecutionCon
   extends Periodic[Try[Unit]]("DataPollingManager", periodSeconds)
     with StrictLogging {
 
-//  implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.edge
-
   private def execute() = {
     futureTryWithTimeoutMetric(
       {
@@ -36,7 +34,7 @@ class TrustManager(periodSeconds: Int = 120)(implicit dao: DAO, ec: ExecutionCon
 
           val selfLabels = dao.publicReputation.toMap
 
-          val scores = peerTrustScores :+ (dao.id -> selfLabels)
+          val scores: Seq[(Id, Map[Id, Double])] = peerTrustScores :+ (dao.id -> selfLabels)
 
           val idMap = (peers.map { _._1 } :+ dao.id).sortBy{_.hex}.zipWithIndex.toMap
           val idxMap = idMap.map { case (k, v) => v -> k }

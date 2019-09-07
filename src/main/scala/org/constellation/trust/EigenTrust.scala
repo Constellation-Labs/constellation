@@ -46,5 +46,6 @@ object EigenTrust {
     trustMap.toSeq.sortBy(_._1).foreach{println}
 
 
+
 //  }
 }

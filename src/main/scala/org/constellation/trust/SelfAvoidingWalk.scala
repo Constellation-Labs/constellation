@@ -196,8 +196,11 @@ object SelfAvoidingWalk {
     val negativeScores = merged.zipWithIndex.filterNot{_._2 == selfId}.flatMap{ case (score, id) =>
       val other = others(id)
       val negativeEdges = other.negativeEdges
+      println(s"selfId: $selfId - negativeEdges: $negativeEdges")
       negativeEdges.filterNot{_.dst == selfId}.map{ ne =>
-        ne.dst -> (ne.trust * score / negativeEdges.size)
+      val nanTest = (ne.trust * score / negativeEdges.size)
+//        println("nanTest =>" + nanTest)
+        ne.dst -> nanTest
       }
     }.groupBy(_._1).mapValues(_.map{_._2}.sum)
 
@@ -304,9 +307,8 @@ object SelfAvoidingWalk {
         println(s"feedback cycle $cycle for node $selfId")
         nodesCycle = runWalkBatchesFeedback(selfId, nodes, batchIterationSize, epsilon, maxIterations)
     }
-
-    nodesCycle.filter(_.id == selfId).head
-
+    val res: TrustNode = nodesCycle.filter(_.id == selfId).head
+    res
   }
 
   def debugRunner(): Unit = {
