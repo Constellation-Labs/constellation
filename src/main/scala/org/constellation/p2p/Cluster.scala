@@ -106,7 +106,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
               }
               .getOrElse(p),
             p
-        )
+          )
       )
 
       _ <- updateMetrics()
@@ -143,7 +143,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       adjustedHost <- (if (pm.auxHost.nonEmpty) pm.auxHost else pm.host).pure[F]
       client = APIClient(adjustedHost, pm.httpPort)(ConstellationExecutionContext.unbounded, dao)
 
-      _ <- C.evalOn(ConstellationExecutionContext.bounded)(peerDiscovery(client))
+      _ <- peerDiscovery(client)
 
       _ <- Sync[F].delay(client.id = pm.id)
 
@@ -420,7 +420,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     for {
       _ <- Logger[F].info("Trying to gracefully leave the cluster")
 
-      _ <- C.evalOn(ConstellationExecutionContext.callbacks)(broadcastLeaveRequest())
+      _ <- broadcastLeaveRequest()
       _ <- setNodeState(NodeState.Leaving)
       _ <- broadcastNodeState()
 

@@ -78,10 +78,8 @@ class Consensus[F[_]: Concurrent](
         observations.map(_.hash)
       )
       _ <- addTransactionProposal(proposal)
-      _ <- calculationContext.evalOn(ConstellationExecutionContext.bounded)(
-        remoteSender.broadcastLightTransactionProposal(
-          BroadcastLightTransactionProposal(roundData.roundId, roundData.peers, proposal)
-        )
+      _ <- remoteSender.broadcastLightTransactionProposal(
+        BroadcastLightTransactionProposal(roundData.roundId, roundData.peers, proposal)
       )
     } yield ()
 
@@ -250,10 +248,8 @@ class Consensus[F[_]: Concurrent](
         }
       _ <- if (acceptedBlock._1.isEmpty) Sync[F].pure(List.empty[Response[Unit]])
       else
-        calculationContext.evalOn(ConstellationExecutionContext.bounded)(
-          broadcastSignedBlockToNonFacilitators(
-            FinishedCheckpoint(cache, proposals.keySet.map(_.id))
-          )
+        broadcastSignedBlockToNonFacilitators(
+          FinishedCheckpoint(cache, proposals.keySet.map(_.id))
         )
       transactionsToReturn <- getOwnTransactionsToReturn.map(
         txs =>
@@ -325,10 +321,8 @@ class Consensus[F[_]: Concurrent](
       _ <- dao.metrics.incrementMetricAsync(
         "resolveMajorityCheckpointBlockUniquesCount_" + uniques
       )
-      _ <- calculationContext.evalOn(ConstellationExecutionContext.bounded)(
-        remoteSender.broadcastSelectedUnionBlock(
-          BroadcastSelectedUnionBlock(roundData.roundId, roundData.peers, selectedCheckpointBlock)
-        )
+      _ <- remoteSender.broadcastSelectedUnionBlock(
+        BroadcastSelectedUnionBlock(roundData.roundId, roundData.peers, selectedCheckpointBlock)
       )
       _ <- addSelectedBlockProposal(selectedCheckpointBlock)
     } yield ()
@@ -408,10 +402,8 @@ class Consensus[F[_]: Concurrent](
           observations.flatMap(_._2) ++ resolvedObs
         )(dao.keyPair)
       )
-      _ <- calculationContext.evalOn(ConstellationExecutionContext.bounded)(
-        remoteSender.broadcastBlockUnion(
-          BroadcastUnionBlockProposal(roundData.roundId, roundData.peers, proposal)
-        )
+      _ <- remoteSender.broadcastBlockUnion(
+        BroadcastUnionBlockProposal(roundData.roundId, roundData.peers, proposal)
       )
       _ <- addBlockProposal(proposal)
     } yield ()
