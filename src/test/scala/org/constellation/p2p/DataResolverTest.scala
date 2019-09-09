@@ -1,11 +1,9 @@
 package org.constellation.p2p
 
-import java.util.concurrent.Executors
-
 import cats.effect.{ContextShift, IO}
-import org.constellation.{DAO, Fixtures}
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.{APIClient, PeerApiClient}
+import org.constellation.{DAO, Fixtures}
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -18,7 +16,6 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
   implicit val dao: DAO = mock(classOf[DAO])
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
-  val storageMock: StorageMock = mock(classOf[StorageMock])
   val badNode: APIClient = mock(classOf[APIClient])
   val goodNode: APIClient = mock(classOf[APIClient])
   val hashes: List[String] = List("hash1", "hash2")
@@ -35,20 +32,19 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
       .thenReturn(Fixtures.id2)
 
     when(
-      goodNode.getNonBlockingIO[Option[String]](ArgumentMatchers.eq(s"$endpoint/hash1"), any(), any())(any())(any(),
-                                                                                                              any())
+      goodNode
+        .getNonBlockingIO[Option[String]](ArgumentMatchers.eq(s"$endpoint/hash1"), any(), any())(any())(any(), any())
     ).thenReturn(IO { Some("resolved hash1") })
 
     when(
-      goodNode.getNonBlockingIO[Option[String]](ArgumentMatchers.eq(s"$endpoint/hash2"), any(), any())(any())(any(),
-                                                                                                              any())
+      goodNode
+        .getNonBlockingIO[Option[String]](ArgumentMatchers.eq(s"$endpoint/hash2"), any(), any())(any())(any(), any())
     ).thenReturn(IO { Some("resolved hash2") })
 
     when(badNode.getNonBlockingIO(anyString(), any(), any())(any())(any(), any()))
       .thenReturn(IO.fromFuture(IO {
         Future.failed(new TimeoutException("Testing timeout, case just ignore this message."))
       }))
-    reset(storageMock)
   }
 
   test("it should resolve and store data from responsive node") {
@@ -57,14 +53,11 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
       .resolveDataByDistanceFlat[String](
         hashes,
         endpoint,
-        List(PeerApiClient(badNode.id, badNode), PeerApiClient(goodNode.id, goodNode)),
-        storageMock.loopbackStore
+        List(PeerApiClient(badNode.id, badNode), PeerApiClient(goodNode.id, goodNode))
       )(contextShift)
       .unsafeRunSync()
     result shouldBe List("resolved hash1", "resolved hash2")
 
-    verify(storageMock, times(1)).loopbackStore("resolved hash1")
-    verify(storageMock, times(1)).loopbackStore("resolved hash2")
   }
 
   test("it should throw an exception when bad node is unresponsive") {
@@ -73,14 +66,12 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
       .resolveDataByDistanceFlat[String](
         hashes,
         endpoint,
-        List(PeerApiClient(badNode.id, badNode)),
-        storageMock.loopbackStore
+        List(PeerApiClient(badNode.id, badNode))
       )(contextShift)
 
     assertThrows[TimeoutException] {
       resolverIO.unsafeRunSync()
     }
-    verify(storageMock, never()).loopbackStore(anyString())
   }
 
   test(
@@ -93,14 +84,12 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
       .resolveDataByDistanceFlat[String](
         hashes,
         endpoint,
-        List(PeerApiClient(badNode.id, badNode)),
-        storageMock.loopbackStore
+        List(PeerApiClient(badNode.id, badNode))
       )(contextShift)
 
     resolverIO.attempt.unsafeRunSync() should matchPattern {
       case Left(DataResolutionOutOfPeers("node1", "endpoint", _, _)) => ()
     }
-    verify(storageMock, never()).loopbackStore(anyString())
   }
 
   test(
@@ -112,20 +101,12 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
         "hash1",
         endpoint,
         List(PeerApiClient(badNode.id, badNode), PeerApiClient(badNode.id, badNode)),
-        storageMock.loopbackStore,
         1
       )(contextShift)
 
     resolverIO.attempt.unsafeRunSync() should matchPattern {
       case Left(DataResolutionMaxErrors("endpoint", "hash1")) => ()
     }
-    verify(storageMock, never()).loopbackStore(anyString())
   }
 
-}
-
-class StorageMock {
-
-  def loopbackStore[T](item: T): Any =
-    item
 }
