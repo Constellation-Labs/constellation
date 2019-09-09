@@ -5,6 +5,7 @@ import cats.implicits._
 import org.constellation.DAO
 import org.constellation.p2p.Cluster
 import org.constellation.util.{Metrics, PeriodicIO}
+import org.constellation.util.Logging._
 
 import scala.concurrent.duration._
 
@@ -15,7 +16,7 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
     _ && executionNumber.get() % dao.processingConfig.snapshotInterval == 0
   }
 
-  override def trigger(): IO[Unit] =
+  private def triggerSnapshot(): IO[Unit] =
     preconditions.ifM(
       for {
         _ <- dao.cluster.isNodeReady.ifM(IO.unit, IO.raiseError(new Throwable("Node is not ready")))
@@ -32,6 +33,8 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
       } yield (),
       IO.unit
     )
+
+  override def trigger(): IO[Unit] = logThread(triggerSnapshot(), "triggerSnapshot", logger)
 
   schedule(periodSeconds seconds)
 }
