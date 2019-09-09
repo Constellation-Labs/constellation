@@ -113,7 +113,7 @@ object ConstellationNode extends StrictLogging {
       logger.debug(s"Seeds: $seedsFromConfig")
 
       // TODO: This should be unified as a single conf file
-      val hostName = Option(cliConfig.externalIp).map(_.toString).getOrElse {
+      val hostName = Option(cliConfig.externalIp).map(_.getHostName).getOrElse {
         Try { File(LocalConfigFile).lines.mkString.x[LocalNodeConfig].externalIP }
           .getOrElse("127.0.0.1")
       }

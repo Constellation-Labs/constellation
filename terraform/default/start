@@ -9,5 +9,5 @@ java "-Dcom.sun.management.jmxremote" \
 "-Xmx2G" \
 -Djava.rmi.server.hostname=$(cat external_host_ip) \
 -agentlib:jdwp=transport=dt_socket,server=y,address=8000,suspend=n \
--jar dag.jar
+-jar dag.jar --ip=$(cat external_host_ip) --port=8999
 
