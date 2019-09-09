@@ -202,7 +202,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
             )
             client.id = id
             val peerData = PeerData(add, client)
-            updatePeerInfo(peerData) *> peerDiscovery(client) // TODO: make in background
+            updatePeerInfo(peerData) *> C.shift *> peerDiscovery(client) // TODO: make in background
           }.void
 
         }.handleErrorWith { err =>
