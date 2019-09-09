@@ -177,10 +177,15 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
       key
     )
 
-  def clearInConsensus(as: Seq[String]): F[Unit] =
-    as.toList.traverse { tx =>
-      withLock("inConsensusUpdate", inConsensus.remove(tx))
-    } *> Logger[F].debug(s"ConsensusService clear in consensus with hashes=$as")
+  def clearInConsensus(as: Seq[String]): F[List[A]] =
+    as.toList
+      .traverse(inConsensus.lookup)
+      .map(_.flatten)
+      .flatMap { txs =>
+        txs.traverse(tx => withLock("inConsensusUpdate", inConsensus.remove(tx.hash))) *>
+          txs.traverse(tx => put(tx, ConsensusStatus.Unknown))
+      }
+      .flatTap(txs => Logger[F].debug(s"ConsensusService clear and add to unknown  with hashes=${txs.map(_.hash)}"))
 
   def returnToPending(as: Seq[String]): F[List[A]] =
     as.toList
