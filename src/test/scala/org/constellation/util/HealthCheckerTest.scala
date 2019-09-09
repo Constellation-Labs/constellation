@@ -31,7 +31,11 @@ class HealthCheckerTest
   val concurrentTipService: ConcurrentTipService[IO] = mock[ConcurrentTipService[IO]]
 
   val healthChecker =
-    new HealthChecker[IO](dao, concurrentTipService, consensusManager, downloadProcess)(
+    new HealthChecker[IO](dao,
+                          concurrentTipService,
+                          consensusManager,
+                          IO.contextShift(ConstellationExecutionContext.bounded),
+                          downloadProcess)(
       IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)),
       Slf4jLogger.getLogger[IO]
     )
@@ -149,11 +153,63 @@ class HealthCheckerTest
       healthChecker.clearStaleTips(cluster).unsafeRunSync()
       concurrentTipService.clearStaleTips(*).wasNever(called)
     }
+    it("should not run tips removal when there are empty heights at least big as minimum facilitators") {
+
+      concurrentTipService.clearStaleTips(*) shouldReturn IO.unit
+
+      val cluster = List(
+        (Id("1"), List(RecentSnapshot("snap4", 4), RecentSnapshot("snap2", 2), RecentSnapshot("snap0", 0))),
+        (
+          Id("2"),
+          List(
+            RecentSnapshot("snap4", 4),
+            RecentSnapshot("snap2", 2),
+            RecentSnapshot("snap0", 0)
+          )
+        ),
+        (
+          Id("2"),
+          List(
+            RecentSnapshot("snap4", 6),
+            RecentSnapshot("snap2", 2),
+            RecentSnapshot("snap0", 0)
+          )
+        ),
+        (
+          Id("2"),
+          List(
+            RecentSnapshot("snap4", 6),
+            RecentSnapshot("snap2", 2),
+            RecentSnapshot("snap0", 0)
+          )
+        ),
+        (
+          Id("3"),
+          List.empty
+        ),
+        (
+          Id("4"),
+          List.empty
+        )
+      )
+      healthChecker.clearStaleTips(cluster).unsafeRunSync()
+      concurrentTipService.clearStaleTips(*).wasNever(called)
+    }
     it("should not run tips removal when cluster info is empty") {
       reset(concurrentTipService)
       concurrentTipService.clearStaleTips(*) shouldReturn IO.unit
 
       healthChecker.clearStaleTips(List.empty).unsafeRunSync()
+      concurrentTipService.clearStaleTips(*).wasNever(called)
+    }
+
+    it("should not run tips removal when cluster height info is missing") {
+      reset(concurrentTipService)
+      concurrentTipService.clearStaleTips(*) shouldReturn IO.unit
+
+      val cluster = List((Id("1"), List()), (Id("1"), List()), (Id("1"), List()))
+
+      healthChecker.clearStaleTips(cluster).unsafeRunSync()
       concurrentTipService.clearStaleTips(*).wasNever(called)
     }
 

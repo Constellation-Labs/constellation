@@ -38,6 +38,7 @@ class SnapshotBroadcastServiceTest
     snapshotBroadcastService = new SnapshotBroadcastService[IO](
       healthChecker,
       dao.cluster,
+      contextShift,
       dao
     )
   }
@@ -51,7 +52,7 @@ class SnapshotBroadcastServiceTest
       dao.cluster.getNodeState shouldReturnF NodeState.Ready
 
       readyFacilitators(Id("a")).client
-        .postNonBlockingIO[SnapshotVerification](*, *, *, *)(*, *) shouldReturn IO.fromFuture(IO {
+        .postNonBlockingIO[SnapshotVerification](*, *, *, *)(*)(*, *) shouldReturn IO.fromFuture(IO {
         Future.successful(
           SnapshotVerification(
             VerificationStatus.SnapshotCorrect
@@ -60,7 +61,7 @@ class SnapshotBroadcastServiceTest
       })
 
       readyFacilitators(Id("b")).client
-        .postNonBlockingIO[SnapshotVerification](*, *, *, *)(*, *) shouldReturn IO.fromFuture(IO {
+        .postNonBlockingIO[SnapshotVerification](*, *, *, *)(*)(*, *) shouldReturn IO.fromFuture(IO {
         Future.failed(
           new SocketTimeoutException("timeout")
         )

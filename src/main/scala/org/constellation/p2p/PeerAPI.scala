@@ -271,7 +271,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     }
 
   private[p2p] def makeCallback(u: URI, entity: AnyRef) =
-    APIClient(u.getHost, u.getPort)(ConstellationExecutionContext.callbacks)
+    APIClient(u.getHost, u.getPort)(ConstellationExecutionContext.unbounded)
       .postNonBlockingUnit(u.getPath, entity)
 
   private val blockBuildingRoundRoute =

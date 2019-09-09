@@ -58,14 +58,11 @@ object SnapshotsDownloader {
 
   private def getSnapshot(hash: String, client: APIClient)(
     implicit snapshotTimeout: Duration
-  ): IO[StoredSnapshot] = IO.fromFuture {
-    IO {
-      client.getNonBlockingBytesKryo[StoredSnapshot](
-        "storedSnapshot/" + hash,
-        timeout = snapshotTimeout
-      )
-    }
-  }
+  ): IO[StoredSnapshot] =
+    client.getNonBlockingBytesKryo[StoredSnapshot](
+      "storedSnapshot/" + hash,
+      timeout = snapshotTimeout
+    )(contextShift)
 }
 
 class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[StoredSnapshot])(
@@ -107,6 +104,8 @@ class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[S
 class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO, ec: ExecutionContext)
     extends StrictLogging {
   private implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ec)
 
   final implicit class FutureOps[+T](f: Future[T]) {
     def toIO: IO[T] = IO.fromFuture(IO(f))(IO.contextShift(ec))
@@ -171,7 +170,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
 
   private def downloadAndAcceptGenesis =
     dao.cluster
-      .broadcast(_.getNonBlockingIO[Option[GenesisObservation]]("genesis"))
+      .broadcast(_.getNonBlockingIO[Option[GenesisObservation]]("genesis")(contextShift))
       .map(_.values.flatMap(_.toOption))
       .map(_.find(_.nonEmpty).flatten.get)
       .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadedGenesis", "true"))
@@ -193,14 +192,15 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .traverse(
         client =>
           client
-            .getNonBlockingBytesKryoTry[SnapshotInfo]("info", timeout = 15.seconds)
-            .toIO
+            .getNonBlockingBytesKryo[SnapshotInfo]("info", timeout = 15.seconds)(contextShift)
+            .map(_.some)
+            .handleErrorWith(_ => IO.pure[Option[SnapshotInfo]](None))
       )
       .map(
         snapshots =>
-          if (snapshots.count(_.isFailure) > (snapshots.size / 2))
-            throw new Exception(s"Unable to get majority snapshot ${snapshots.filter(_.isFailure)}")
-          else snapshots.flatMap(_.toOption).groupBy(_.snapshot.hash).maxBy(_._2.size)._2.head
+          if (snapshots.count(_.isEmpty) > (snapshots.size / 2))
+            throw new Exception(s"Unable to get majority snapshot ${snapshots.filter(_.isEmpty)}")
+          else snapshots.flatten.groupBy(_.snapshot.hash).maxBy(_._2.size)._2.head
       )
 
   private def downloadAndProcessSnapshotsFirstPass(snapshotHashes: Seq[String])(

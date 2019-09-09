@@ -2,7 +2,7 @@ package org.constellation.util
 
 import akka.http.scaladsl.coding.Gzip
 import akka.util.ByteString
-import cats.effect.{Async, IO}
+import cats.effect.{Async, ContextShift, IO}
 import com.softwaremill.sttp._
 import com.softwaremill.sttp.json4s._
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
@@ -31,7 +31,7 @@ object APIClientBase {
   )(
     implicit executionContext: ExecutionContext
   ): APIClientBase =
-    new APIClientBase(host, port, authEnabled, authId, authPassword)(executionContext)
+    new APIClientBase(host, port, authEnabled, authId, authPassword)
 }
 
 class APIClientBase(
@@ -168,7 +168,7 @@ class APIClientBase(
       .headers(headers)
       .response(asJson[T])
       .send()
-      .map(_.unsafeBody)
+      .map(_.unsafeBody)(ConstellationExecutionContext.callbacks)
   }
 
   def postNonBlockingUnit(
@@ -194,7 +194,10 @@ class APIClientBase(
     suffix: String,
     timeout: Duration = 15.seconds
   )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): Future[T] =
-    httpWithAuth(suffix, timeout = timeout)(Method.POST).response(asJson[T]).send().map(_.unsafeBody)
+    httpWithAuth(suffix, timeout = timeout)(Method.POST)
+      .response(asJson[T])
+      .send()
+      .map(_.unsafeBody)(ConstellationExecutionContext.callbacks)
 
   def postNonBlockingEmptyString(
     suffix: String,
@@ -226,13 +229,15 @@ class APIClientBase(
     suffix: String,
     queryParams: Map[String, String] = Map(),
     timeout: Duration = 15.seconds
-  ): IO[Response[String]] =
-    Async[IO].async { cb =>
-      httpWithAuth(suffix, queryParams, timeout)(Method.GET).send().onComplete {
-        case Success(value) => cb(Right(value))
-        case Failure(error) => cb(Left(error))
-      }
-    }
+  )(contextToReturn: ContextShift[IO]): IO[Response[String]] =
+    contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[IO].async { cb =>
+      httpWithAuth(suffix, queryParams, timeout)(Method.GET)
+        .send()
+        .onComplete {
+          case Success(value) => cb(Right(value))
+          case Failure(error) => cb(Left(error))
+        }(ConstellationExecutionContext.callbacks)
+    })
 
   def getBlocking[T <: AnyRef](
     suffix: String,
@@ -241,7 +246,7 @@ class APIClientBase(
   )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): T =
     getNonBlocking[T](suffix, queryParams, timeout).blocking(timeout)
 
-  def getNonBlocking[T <: AnyRef](
+  private[util] def getNonBlocking[T <: AnyRef](
     suffix: String,
     queryParams: Map[String, String] = Map(),
     timeout: Duration = 15.seconds
@@ -249,15 +254,6 @@ class APIClientBase(
     httpWithAuth(suffix, queryParams, timeout)(Method.GET)
       .response(asJson[T])
       .send()
-      .map(_.unsafeBody)
-
-  def getNonBlockingStr(
-    suffix: String,
-    queryParams: Map[String, String] = Map(),
-    timeout: Duration = 15.seconds
-  ): Future[String] =
-    httpWithAuth(suffix, queryParams, timeout)(Method.GET).send().map { x =>
-      x.unsafeBody
-    }
+      .map(_.unsafeBody)(ConstellationExecutionContext.callbacks)
 
 }

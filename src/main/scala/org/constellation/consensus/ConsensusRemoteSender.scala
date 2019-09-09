@@ -1,6 +1,6 @@
 package org.constellation.consensus
 
-import cats.effect.{Concurrent, LiftIO}
+import cats.effect.{Concurrent, ContextShift, LiftIO}
 import cats.implicits._
 import com.softwaremill.sttp.Response
 import org.constellation.PeerMetadata
@@ -13,7 +13,9 @@ import org.constellation.consensus.ConsensusManager.{
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.{ChannelMessage, Observation, TipSoe, Transaction}
 
-class ConsensusRemoteSender[F[_]: Concurrent]() {
+class ConsensusRemoteSender[F[_]: Concurrent](
+  contextShift: ContextShift[F]
+) {
 
   def notifyFacilitators(roundData: RoundData): F[List[Response[Unit]]] =
     sendToAll(
@@ -67,7 +69,7 @@ class ConsensusRemoteSender[F[_]: Concurrent]() {
     cmd: AnyRef,
     msg: String
   ): F[List[Response[Unit]]] =
-    LiftIO[F].liftIO(peers.traverse(pd => pd.client.postNonBlockingIOUnit(path, cmd)))
+    peers.traverse(pd => pd.client.postNonBlockingUnitF(path, cmd)(contextShift))
 }
 
 case class RoundDataRemote(

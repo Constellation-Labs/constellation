@@ -115,7 +115,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
   def peerDiscovery(client: APIClient): F[Unit] =
     for {
-      peersMetadata <- client.getNonBlockingF[F, Seq[PeerMetadata]]("peers").handleErrorWith { err =>
+      peersMetadata <- client.getNonBlockingF[F, Seq[PeerMetadata]]("peers")(C).handleErrorWith { err =>
         dao.metrics.incrementMetricAsync[F]("peerDiscoveryQueryFailed") *> err.raiseError[F, Seq[PeerMetadata]]
       }
       peers <- getPeerInfo
@@ -123,14 +123,14 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         p.id != dao.id && validPeerAddition(HostPort(p.host, p.httpPort), peers)
       }
       register <- filteredPeers.toList.traverse { md =>
-        APIClient(md.host, md.httpPort)(ConstellationExecutionContext.callbacks)
-          .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")
+        APIClient(md.host, md.httpPort)(ConstellationExecutionContext.unbounded)
+          .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")(C)
           .map((md, _))
       }
       _ <- register.traverse(r => pendingRegistration(r._1.host, r._2))
       registerResponse <- register.traverse { md =>
-        APIClient(md._1.host, md._1.httpPort)(ConstellationExecutionContext.callbacks)
-          .postNonBlockingUnitF[F]("register", dao.peerRegistrationRequest)
+        APIClient(md._1.host, md._1.httpPort)(ConstellationExecutionContext.unbounded)
+          .postNonBlockingUnitF[F]("register", dao.peerRegistrationRequest)(C)
       }.void
     } yield registerResponse
 
@@ -141,9 +141,9 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
     for {
       adjustedHost <- (if (pm.auxHost.nonEmpty) pm.auxHost else pm.host).pure[F]
-      client = APIClient(adjustedHost, pm.httpPort)(ConstellationExecutionContext.callbacks, dao)
+      client = APIClient(adjustedHost, pm.httpPort)(ConstellationExecutionContext.unbounded, dao)
 
-      _ <- C.evalOn(ConstellationExecutionContext.callbacks)(peerDiscovery(client))
+      _ <- peerDiscovery(client)
 
       _ <- Sync[F].delay(client.id = pm.id)
 
@@ -167,9 +167,9 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       _ <- if (badAttempt) {
         dao.metrics.incrementMetricAsync[F]("duplicatePeerAdditionAttempt")
       } else {
-        val client = APIClient(request.host, request.port)(ConstellationExecutionContext.callbacks, dao)
+        val client = APIClient(request.host, request.port)(ConstellationExecutionContext.unbounded, dao)
         val authSignRequest = PeerAuthSignRequest(Random.nextLong())
-        val req = client.postNonBlockingF[F, SingleHashSignature]("sign", authSignRequest)
+        val req = client.postNonBlockingF[F, SingleHashSignature]("sign", authSignRequest)(C)
 
         req.flatTap { sig =>
           if (sig.hashSignature.id != request.id) {
@@ -186,7 +186,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
             Logger[F].debug(s"Valid peer signature $request $authSignRequest $sig")
         }.flatMap { sig =>
           val state = withMetric(
-            client.getNonBlockingF[F, NodeStateInfo]("state"),
+            client.getNonBlockingF[F, NodeStateInfo]("state")(C),
             "nodeState"
           )
 
@@ -279,7 +279,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
       _ <- if (round % dao.processingConfig.peerHealthCheckInterval == 0) {
         peers.values.toList.traverse { d =>
-          d.client.getStringF("health").flatTap { x =>
+          d.client.getStringF("health")(C).flatTap { x =>
             if (x.isSuccess) {
               dao.metrics.incrementMetricAsync[F]("peerHealthCheckPassed")
             } else {
@@ -322,7 +322,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       _ <- Timer[F].sleep(15.seconds)
 
       _ <- if (dao.peersInfoPath.nonEmpty || dao.seedsPath.nonEmpty) {
-        C.evalOn(ConstellationExecutionContext.callbacks)(
+        C.evalOn(ConstellationExecutionContext.bounded)(
           Sync[F].delay(Download.download()(dao, ConstellationExecutionContext.bounded))
         )
       } else {
@@ -334,8 +334,8 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     for {
       _ <- Logger[F].info(s"Attempting to register with $hp")
       _ <- withMetric(
-        APIClient(hp.host, hp.port)(ConstellationExecutionContext.callbacks, dao)
-          .postNonBlockingUnitF("register", dao.peerRegistrationRequest),
+        APIClient(hp.host, hp.port)(ConstellationExecutionContext.unbounded, dao)
+          .postNonBlockingUnitF("register", dao.peerRegistrationRequest)(C),
         "addPeerWithRegistration"
       )
     } yield ()
@@ -352,10 +352,10 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         val client = APIClient(hp.host, hp.port)(ConstellationExecutionContext.callbacks, dao)
 
         client
-          .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")
+          .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")(C)
           .flatMap { registrationRequest =>
             pendingRegistration(hp.host, registrationRequest) *>
-              client.postNonBlockingUnitF("register", dao.peerRegistrationRequest)
+              client.postNonBlockingUnitF("register", dao.peerRegistrationRequest)(C)
           }
           .handleErrorWith { err =>
             Logger[F].error(s"registration request failed: $err") *>
@@ -369,16 +369,16 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def addToPeer(hp: HostPort): F[Response[Unit]] =
     withMetric(
       {
-        val client = APIClient(hp.host, hp.port)(ConstellationExecutionContext.callbacks, dao)
+        val client = APIClient(hp.host, hp.port)(ConstellationExecutionContext.unbounded, dao)
 
-        client.postNonBlockingUnitF("peer/add", dao.peerHostPort)
+        client.postNonBlockingUnitF("peer/add", dao.peerHostPort)(C)
       },
       "addToPeer"
     )
 
   def broadcastNodeState(): F[Unit] =
     getNodeState.flatMap { nodeState =>
-      broadcast(_.postNonBlockingUnitF("status", SetNodeStatus(dao.id, nodeState)))
+      broadcast(_.postNonBlockingUnitF("status", SetNodeStatus(dao.id, nodeState))(C))
     }.flatTap {
       _.filter(_._2.isLeft).toList.traverse {
         case (id, e) => Logger[F].warn(s"Unable to propagate status to node ID: $id")
@@ -420,7 +420,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     for {
       _ <- Logger[F].info("Trying to gracefully leave the cluster")
 
-      _ <- C.evalOn(ConstellationExecutionContext.callbacks)(broadcastLeaveRequest())
+      _ <- broadcastLeaveRequest()
       _ <- setNodeState(NodeState.Leaving)
       _ <- broadcastNodeState()
 
@@ -435,7 +435,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
   private def broadcastLeaveRequest(): F[Unit] = {
     def peerUnregister(c: APIClient) = PeerUnregister(c.hostName, c.apiPort, c.id)
-    broadcast(c => c.postNonBlockingUnitF("deregister", peerUnregister(c))).void
+    broadcast(c => c.postNonBlockingUnitF("deregister", peerUnregister(c))(C)).void
   }
 
   def setNodeState(state: NodeState): F[Unit] =

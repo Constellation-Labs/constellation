@@ -29,17 +29,11 @@
         </encoder>
     </appender>
 
-    <appender name="json" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <appender name="json" class="ch.qos.logback.core.FileAppender">
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
             <level>DEBUG</level>
         </filter>
-        <file>/tmp/dag.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>/tmp/dag.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
-            <maxFileSize>100MB</maxFileSize>
-            <totalSizeCap>1GB</totalSizeCap>
-            <maxHistory>5</maxHistory>
-        </rollingPolicy>
+        <file>logs/json_logs/dag.log</file>
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
             <includeCallerData>true</includeCallerData>
         </encoder>
@@ -60,11 +54,6 @@
         <appender-ref ref="rollingFile"/>
         <appender-ref ref="json"/>
     </logger>
-
-    <root level="debug">
-        <appender-ref ref="rollingFile"/>
-        <appender-ref ref="json"/>
-    </root>
 
     <root level="info">
         <appender-ref ref="metrics" />

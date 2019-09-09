@@ -50,9 +50,7 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.id)
       } ~
       path("tips") {
-        onSuccess(dao.concurrentTipService.toMap.unsafeToFuture()) { res =>
-          complete(res)
-        }
+        APIDirective.handle(dao.concurrentTipService.toMap)(complete(_))
       } ~
       path("heights") {
         val calculateHeights = for {
@@ -60,40 +58,30 @@ trait CommonEndpoints extends Json4sSupport {
           maybeHeights <- tips.toList.traverse(t => dao.checkpointService.lookup(t._1))
         } yield maybeHeights.flatMap(_.flatMap(_.height))
 
-        onSuccess(calculateHeights.unsafeToFuture()) { res =>
-          complete(res)
-        }
+        APIDirective.handle(calculateHeights)(complete(_))
       } ~
       path("snapshotHashes") {
         complete(Snapshot.snapshotHashes())
       } ~
       path("snapshot" / "recent") {
-        onSuccess(dao.snapshotBroadcastService.getRecentSnapshots.unsafeToFuture()) { res =>
-          complete(res)
-        }
+        APIDirective.handle(
+          dao.snapshotBroadcastService.getRecentSnapshots
+        )(complete(_))
       } ~
       path("info") {
-
-        val getInfo = dao.cluster.isNodeReady.ifM(
-          dao.snapshotService.getSnapshotInfo.map(_.some),
-          IO.pure(none[SnapshotInfo])
-        )
-
-        onSuccess(getInfo.unsafeToFuture()) { maybeInfo =>
-          maybeInfo.fold(complete(StatusCodes.NotFound)) { info =>
-            val res =
-              KryoSerializer.serializeAnyRef(
-                info.copy(acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshot.flatMap {
-                  dao.checkpointService.fullData(_).unsafeRunSync()
-                })
-              )
-            complete(res)
-          }
+        val getInfo = dao.snapshotService.getSnapshotInfo.flatMap { info =>
+          info.acceptedCBSinceSnapshot.toList.traverse {
+            dao.checkpointService.fullData(_)
+          }.map(cbs => KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some)
         }
+
+        APIDirective.handle(
+          dao.cluster.isNodeReady.ifM(
+            getInfo,
+            IO.pure(none[Array[Byte]])
+          )
+        )(complete(_))
       } ~
-/*      path("snapshot" / Segment) {s =>
-        complete(dao.dbActor.getSnapshot(s))
-      } ~*/
       path("storedSnapshot" / Segment) { s =>
         val getSnapshot = for {
           exists <- dao.snapshotService.exists(s)
@@ -102,9 +90,7 @@ trait CommonEndpoints extends Json4sSupport {
           } else None.pure[IO]
         } yield bytes
 
-        onComplete {
-          getSnapshot.unsafeToFuture()
-        } { res =>
+        APIDirective.onHandle(getSnapshot) { res =>
           val httpResponse: HttpResponse = res match {
             case Failure(_) =>
               HttpResponse(StatusCodes.NotFound)
@@ -124,49 +110,31 @@ trait CommonEndpoints extends Json4sSupport {
         complete(dao.genesisObservation)
       } ~
       pathPrefix("address" / Segment) { a =>
-        complete(dao.addressService.lookup(a).unsafeRunSync())
+        APIDirective.handle(dao.addressService.lookup(a))(complete(_))
       } ~
       pathPrefix("balance" / Segment) { a =>
-        complete(dao.addressService.lookup(a).unsafeRunSync().map { _.balanceByLatestSnapshot })
+        APIDirective.handle(dao.addressService.lookup(a).map(_.map(_.balanceByLatestSnapshot)))(complete(_))
       } ~
       path("state") {
-        onSuccess(dao.cluster.getNodeState.unsafeToFuture) { nodeState =>
-          complete(NodeStateInfo(nodeState, dao.addresses, dao.nodeType))
-        }
+        APIDirective.handle(dao.cluster.getNodeState)(res => complete(NodeStateInfo(res, dao.addresses, dao.nodeType)))
       } ~
       path("peers") {
-        val peers = dao.peerInfo.map(_.map(_._2.peerMetadata).toSeq)
-        onComplete(peers.unsafeToFuture) { a =>
-          complete(a.toOption.getOrElse(Seq()))
-        }
+        APIDirective.handle(dao.peerInfo.map(_.map(_._2.peerMetadata).toSeq))(complete(_))
       } ~
       path("transaction" / Segment) { h =>
-        complete(dao.transactionService.lookup(h).unsafeRunSync())
+        APIDirective.handle(dao.transactionService.lookup(h))(complete(_))
       } ~
       path("message" / Segment) { h =>
-        complete(dao.messageService.memPool.lookup(h).unsafeRunSync())
+        APIDirective.handle(dao.messageService.memPool.lookup(h))(complete(_))
       } ~
       path("checkpoint" / Segment) { h =>
-        onComplete(dao.checkpointService.fullData(h).unsafeToFuture()) {
-          case Failure(err)           => complete(HttpResponse(StatusCodes.InternalServerError, entity = err.getMessage))
-          case Success(None)          => complete(StatusCodes.NotFound)
-          case Success(Some(cbCache)) => complete(cbCache)
-        }
+        APIDirective.handle(dao.checkpointService.fullData(h))(complete(_))
       } ~
       path("soe" / Segment) { h =>
-        onComplete(dao.soeService.lookup(h).unsafeToFuture()) {
-          case Failure(err)       => complete(HttpResponse(StatusCodes.InternalServerError, entity = err.getMessage))
-          case Success(None)      => complete(StatusCodes.NotFound)
-          case Success(Some(soe)) => complete(soe)
-        }
+        APIDirective.handle(dao.soeService.lookup(h))(complete(_))
       } ~
       path("observation" / Segment) { h =>
-        onComplete(dao.observationService.lookup(h).unsafeToFuture) {
-          case Failure(err)       => complete(HttpResponse(StatusCodes.InternalServerError, entity = err.getMessage))
-          case Success(None)      => complete(StatusCodes.NotFound)
-          case Success(Some(obs)) => complete(obs)
-        }
+        APIDirective.handle(dao.observationService.lookup(h))(complete(_))
       }
-
   }
 }

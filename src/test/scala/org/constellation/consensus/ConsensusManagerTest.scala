@@ -86,11 +86,13 @@ class ConsensusManagerTest
       consensus.getOwnObservationsToReturn shouldReturnF Seq("someOb")
       dao.transactionService.returnToPending(*) shouldReturnF List.empty
       dao.observationService.returnToPending(*) shouldReturnF List.empty
+      dao.transactionService.clearInConsensus(*) shouldReturnF List.empty
+      dao.observationService.clearInConsensus(*) shouldReturnF List.empty
 
       consensusManager.cleanUpLongRunningConsensus.unsafeRunSync()
 
-      dao.transactionService.returnToPending(Seq("someTx")).wasCalled(twice)
-      dao.observationService.returnToPending(Seq("someOb")).wasCalled(twice)
+      dao.transactionService.clearInConsensus(Seq("someTx")).wasCalled(twice)
+      dao.observationService.clearInConsensus(Seq("someOb")).wasCalled(twice)
       consensusManager.consensuses.get.unsafeRunSync() shouldBe Map(active)
       consensusManager.ownConsensus.get.unsafeRunSync() shouldBe None
     }

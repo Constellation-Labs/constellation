@@ -1,6 +1,6 @@
 package org.constellation.consensus
 
-import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.softwaremill.sttp.Response
 import com.typesafe.config.Config
@@ -42,6 +42,9 @@ class Consensus[F[_]: Concurrent](
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
+  implicit val contextShift
+    : ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki apply from calculationContext[F]
+
   implicit val shadowDAO: DAO = dao
 
   private[consensus] val transactionProposals: SingleRef[F, Map[FacilitatorId, LightTransactionsProposal]] =
@@ -75,10 +78,8 @@ class Consensus[F[_]: Concurrent](
         observations.map(_.hash)
       )
       _ <- addTransactionProposal(proposal)
-      _ <- calculationContext.evalOn(ConstellationExecutionContext.bounded)(
-        remoteSender.broadcastLightTransactionProposal(
-          BroadcastLightTransactionProposal(roundData.roundId, roundData.peers, proposal)
-        )
+      _ <- remoteSender.broadcastLightTransactionProposal(
+        BroadcastLightTransactionProposal(roundData.roundId, roundData.peers, proposal)
       )
     } yield ()
 
@@ -217,14 +218,14 @@ class Consensus[F[_]: Concurrent](
       acceptedBlock <- checkpointService
         .accept(cache)
         .map { _ =>
-          (Option(checkpointBlock), Seq.empty[String], false)
+          (Option(checkpointBlock), Seq.empty[String])
         }
         .handleErrorWith {
           case error @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
             logger
               .warn(error.getMessage)
               .flatMap(
-                _ => Sync[F].pure[(Option[CheckpointBlock], Seq[String], Boolean)]((None, Seq.empty[String], false))
+                _ => Sync[F].pure[(Option[CheckpointBlock], Seq[String])]((None, Seq.empty[String]))
               )
           case tipConflict: TipConflictException =>
             logger
@@ -234,7 +235,7 @@ class Consensus[F[_]: Concurrent](
               .flatMap(
                 _ =>
                   Sync[F]
-                    .pure[(Option[CheckpointBlock], Seq[String], Boolean)]((None, tipConflict.conflictingTxs, true))
+                    .pure[(Option[CheckpointBlock], Seq[String])]((None, tipConflict.conflictingTxs))
               )
           case unknownError =>
             logger
@@ -242,32 +243,26 @@ class Consensus[F[_]: Concurrent](
                 s"[${dao.id.short}] Failed to accept majority checkpoint block due: ${unknownError.getMessage}"
               )
               .flatMap(
-                _ => Sync[F].pure[(Option[CheckpointBlock], Seq[String], Boolean)]((None, Seq.empty[String], true))
+                _ => Sync[F].pure[(Option[CheckpointBlock], Seq[String])]((None, Seq.empty[String]))
               )
         }
       _ <- if (acceptedBlock._1.isEmpty) Sync[F].pure(List.empty[Response[Unit]])
       else
-        calculationContext.evalOn(ConstellationExecutionContext.bounded)(
-          broadcastSignedBlockToNonFacilitators(
-            FinishedCheckpoint(cache, proposals.keySet.map(_.id))
-          )
+        broadcastSignedBlockToNonFacilitators(
+          FinishedCheckpoint(cache, proposals.keySet.map(_.id))
         )
-      transactionsToReturn <- if (acceptedBlock._3)
-        getOwnTransactionsToReturn.map(
-          txs =>
-            txs
-              .diff(acceptedBlock._1.map(_.transactions.map(_.hash)).getOrElse(Seq.empty))
-              .filterNot(acceptedBlock._2.contains)
-        )
-      else Sync[F].pure(Seq.empty[String])
-      observationsToReturn <- if (acceptedBlock._3)
-        getOwnObservationsToReturn.map(
-          obs =>
-            obs
-              .diff(acceptedBlock._1.map(_.observations.map(_.hash)).getOrElse(Seq.empty))
-              .filterNot(acceptedBlock._2.contains)
-        )
-      else Sync[F].pure(Seq.empty[String])
+      transactionsToReturn <- getOwnTransactionsToReturn.map(
+        txs =>
+          txs
+            .diff(acceptedBlock._1.map(_.transactions.map(_.hash)).getOrElse(Seq.empty))
+            .filterNot(acceptedBlock._2.contains)
+      )
+      observationsToReturn <- getOwnObservationsToReturn.map(
+        obs =>
+          obs
+            .diff(acceptedBlock._1.map(_.observations.map(_.hash)).getOrElse(Seq.empty))
+            .filterNot(acceptedBlock._2.contains)
+      )
       _ <- consensusManager.stopBlockCreationRound(
         StopBlockCreationRound(
           roundData.roundId,
@@ -295,9 +290,10 @@ class Consensus[F[_]: Concurrent](
       _ <- logger.debug(
         s"[${dao.id.short}] ${roundData.roundId} Broadcasting checkpoint block with baseHash ${finishedCheckpoint.checkpointCacheData.checkpointBlock.get.baseHash}"
       )
-      responses <- LiftIO[F].liftIO(
-        nonFacilitators.traverse(
-          pd => pd.client.postNonBlockingIOUnit("finished/checkpoint", finishedCheckpoint, timeout = 10.seconds)
+      responses <- nonFacilitators.traverse(
+        pd =>
+          pd.client.postNonBlockingUnitF("finished/checkpoint", finishedCheckpoint, timeout = 10.seconds)(
+            calculationContext
         )
       )
     } yield responses
@@ -325,10 +321,8 @@ class Consensus[F[_]: Concurrent](
       _ <- dao.metrics.incrementMetricAsync(
         "resolveMajorityCheckpointBlockUniquesCount_" + uniques
       )
-      _ <- calculationContext.evalOn(ConstellationExecutionContext.bounded)(
-        remoteSender.broadcastSelectedUnionBlock(
-          BroadcastSelectedUnionBlock(roundData.roundId, roundData.peers, selectedCheckpointBlock)
-        )
+      _ <- remoteSender.broadcastSelectedUnionBlock(
+        BroadcastSelectedUnionBlock(roundData.roundId, roundData.peers, selectedCheckpointBlock)
       )
       _ <- addSelectedBlockProposal(selectedCheckpointBlock)
     } yield ()
@@ -352,7 +346,7 @@ class Consensus[F[_]: Concurrent](
                 .resolveTransactionDefaults(
                   t._1,
                   readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList.headOption
-                )
+                )(contextShift)
                 .map(_.transaction)
           )
         )
@@ -372,7 +366,7 @@ class Consensus[F[_]: Concurrent](
                 .resolveMessageDefaults(
                   t._1,
                   readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList.headOption
-                )
+                )(contextShift)
                 .map(_.channelMessage)
           )
         )
@@ -393,7 +387,7 @@ class Consensus[F[_]: Concurrent](
               ex._1,
               readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList,
               None
-            )
+            )(contextShift)
           )
         }
       proposal = UnionBlockProposal(
@@ -408,10 +402,8 @@ class Consensus[F[_]: Concurrent](
           observations.flatMap(_._2) ++ resolvedObs
         )(dao.keyPair)
       )
-      _ <- calculationContext.evalOn(ConstellationExecutionContext.bounded)(
-        remoteSender.broadcastBlockUnion(
-          BroadcastUnionBlockProposal(roundData.roundId, roundData.peers, proposal)
-        )
+      _ <- remoteSender.broadcastBlockUnion(
+        BroadcastUnionBlockProposal(roundData.roundId, roundData.peers, proposal)
       )
       _ <- addBlockProposal(proposal)
     } yield ()

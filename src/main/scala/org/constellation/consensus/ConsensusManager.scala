@@ -95,9 +95,7 @@ class ConsensusManager[F[_]: Concurrent](
       _ <- ownConsensus.updateUnsafe(d => d.map(o => o.copy(consensusInfo = roundInfo.some)))
       _ <- logger.debug(s"[${dao.id.short}] created data for round: ${roundId} with facilitators: ${roundData._1.peers
         .map(_.peerMetadata.id.short)}")
-      responses <- calculationContext.evalOn(ConstellationExecutionContext.bounded)(
-        remoteSender.notifyFacilitators(roundData._1)
-      )
+      responses <- remoteSender.notifyFacilitators(roundData._1)
       _ <- if (responses.forall(_.isSuccess)) Sync[F].unit
       else
         Sync[F].raiseError[Unit](
@@ -254,8 +252,10 @@ class ConsensusManager[F[_]: Concurrent](
     for {
       _ <- consensuses.update(curr => curr - cmd.roundId)
       _ <- ownConsensus.update(curr => if (curr.isDefined && curr.get.roundId == cmd.roundId) None else curr)
-      _ <- transactionService.returnToPending(cmd.transactionsToReturn)
-      _ <- observationService.returnToPending(cmd.observationsToReturn)
+//      _ <- transactionService.returnToPending(cmd.transactionsToReturn) // TODO: wkoszycki temporally discard transactions/observations
+//      _ <- observationService.returnToPending(cmd.observationsToReturn)
+      _ <- transactionService.clearInConsensus(cmd.transactionsToReturn)
+      _ <- observationService.clearInConsensus(cmd.observationsToReturn)
       _ <- updateNotifications(cmd.maybeCB.map(_.notifications.toList))
       _ = releaseMessages(cmd.maybeCB)
       _ <- logger.debug(
@@ -325,7 +325,11 @@ class ConsensusManager[F[_]: Concurrent](
     roundData: RoundData
   )(implicit dao: DAO): F[List[CheckpointCache]] = {
     def resolve(hash: String, peer: Option[PeerApiClient]): F[CheckpointCache] =
-      LiftIO[F].liftIO(DataResolver.resolveCheckpointDefaults(hash, peer)(dao = shadowDAO))
+      LiftIO[F].liftIO(
+        DataResolver.resolveCheckpointDefaults(hash, peer)(IO.contextShift(ConstellationExecutionContext.bounded))(
+          dao = shadowDAO
+        )
+      )
 
     for {
       _ <- roundData.tipsSOE.soe.toList.traverse(

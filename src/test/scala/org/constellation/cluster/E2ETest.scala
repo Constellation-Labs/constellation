@@ -4,10 +4,12 @@ import java.util.concurrent.TimeUnit
 
 import akka.util.Timeout
 import better.files.File
+import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.softwaremill.sttp.{Response, StatusCodes}
 import org.constellation._
 import org.constellation.consensus.StoredSnapshot
+import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.RecentSnapshot
@@ -16,6 +18,7 @@ import org.constellation.util.{APIClient, Simulation}
 class E2ETest extends E2E {
 
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
+  val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   private val updatePasswordReq = UpdatePassword(
     Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
@@ -137,7 +140,9 @@ class E2ETest extends E2E {
     Simulation.awaitConditionMet(
       "Snapshot hashes differs across cluster",
       allAPIs.toList
-        .traverse(a => a.getNonBlockingIO[List[RecentSnapshot]]("snapshot/recent"))
+        .traverse(
+          a => a.getNonBlockingIO[List[RecentSnapshot]]("snapshot/recent")(contextShift)
+        )
         .unsafeRunSync()
         .distinct
         .size == 1,
@@ -200,7 +205,8 @@ class E2ETest extends E2E {
   }
 
   private def storeGenesis(allAPIs: Seq[APIClient]): Unit = {
-    val genesis = allAPIs.flatMap(_.genesisDownload().unsafeRunSync())
+    val genesis =
+      allAPIs.flatMap(_.getNonBlockingIO[Option[GenesisObservation]]("genesis")(contextShift).unsafeRunSync())
 
     genesis.foreach(s => {
       better.files
