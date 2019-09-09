@@ -182,7 +182,9 @@ class DataResolver extends StrictLogging {
             case Some(a) => IO.pure(a)
             case None    => makeAttempt(tail, allPeers, errorsSoFar + 1)
           }.handleErrorWith {
-            case e if tail.isEmpty => IO.raiseError[T](e)
+            case e: DataResolutionMaxErrors  => IO.raiseError[T](e)
+            case e: DataResolutionOutOfPeers => IO.raiseError[T](e)
+            case e if tail.isEmpty           => IO.raiseError[T](e)
             case e =>
               logger.error(
                 s"Failed to resolve with host=${head.client.hostPortForLogging}, trying next peer",
