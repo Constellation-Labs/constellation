@@ -314,7 +314,7 @@ object Download {
           val snapshotsProcessor =
             new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotRandomly)
           val process = new DownloadProcess(snapshotsProcessor)
-          process.download().unsafeRunSync()
+          process.download().unsafeRunAsync(_ => ())
         },
         "download"
       )
