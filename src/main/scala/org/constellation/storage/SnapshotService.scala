@@ -3,10 +3,10 @@ package org.constellation.storage
 import java.nio.file.Path
 
 import cats.data.EitherT
-import cats.effect.{Concurrent, LiftIO, Sync}
+import cats.effect.{Concurrent, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
-import org.constellation.DAO
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.consensus.{ConsensusManager, Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.NodeState.NodeState
@@ -386,7 +386,11 @@ class SnapshotService[F[_]: Concurrent](
         .flatMap(_.get.toList.traverse { msgHash =>
           dao.metrics.incrementMetricAsync("messageSnapshotHashUpdated") *>
             LiftIO[F]
-              .liftIO(DataResolver.resolveMessageDefaults(msgHash).map(_.channelMessage))
+              .liftIO(
+                DataResolver
+                  .resolveMessageDefaults(msgHash)(IO.contextShift(ConstellationExecutionContext.bounded))
+                  .map(_.channelMessage)
+              )
               .flatMap(updateMessage(msgHash, _))
         })
     }.void

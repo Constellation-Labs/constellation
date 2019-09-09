@@ -1,6 +1,6 @@
 package org.constellation.consensus
 
-import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.softwaremill.sttp.Response
 import com.typesafe.config.Config
@@ -41,6 +41,9 @@ class Consensus[F[_]: Concurrent](
 ) {
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+
+  implicit val contextShift
+    : ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki apply from calculationContext[F]
 
   implicit val shadowDAO: DAO = dao
 
@@ -291,9 +294,10 @@ class Consensus[F[_]: Concurrent](
       _ <- logger.debug(
         s"[${dao.id.short}] ${roundData.roundId} Broadcasting checkpoint block with baseHash ${finishedCheckpoint.checkpointCacheData.checkpointBlock.get.baseHash}"
       )
-      responses <- LiftIO[F].liftIO(
-        nonFacilitators.traverse(
-          pd => pd.client.postNonBlockingIOUnit("finished/checkpoint", finishedCheckpoint, timeout = 10.seconds)
+      responses <- nonFacilitators.traverse(
+        pd =>
+          pd.client.postNonBlockingUnitF("finished/checkpoint", finishedCheckpoint, timeout = 10.seconds)(
+            calculationContext
         )
       )
     } yield responses
@@ -348,9 +352,9 @@ class Consensus[F[_]: Concurrent](
                 .resolveTransactionDefaults(
                   t._1,
                   readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList.headOption
-                )
+                )(contextShift)
                 .map(_.transaction)
-            )
+          )
         )
       _ <- logger.debug(
         s"transactions proposal_size ${proposals.size} values size ${idsTxs._2.size} lookup size ${txs.size} resolved ${resolved.size}"
@@ -368,9 +372,9 @@ class Consensus[F[_]: Concurrent](
                 .resolveMessageDefaults(
                   t._1,
                   readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList.headOption
-                )
+                )(contextShift)
                 .map(_.channelMessage)
-            )
+          )
         )
       notifications = proposals
         .flatMap(_._2.notifications)
@@ -389,7 +393,7 @@ class Consensus[F[_]: Concurrent](
               ex._1,
               readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList,
               None
-            )
+            )(contextShift)
           )
         }
       proposal = UnionBlockProposal(
@@ -436,7 +440,7 @@ class Consensus[F[_]: Concurrent](
                 txs =>
                   getOwnObservationsToReturn.flatMap(
                     exs => consensusManager.handleRoundError(PreviousStage(roundData.roundId, stage, txs, exs))
-                  )
+                )
               )
           else Sync[F].unit
       )
@@ -484,8 +488,8 @@ class Consensus[F[_]: Concurrent](
               exs =>
                 Left(
                   NotEnoughProposals(roundData.roundId, proposals.size, peerSize, stage, txs, exs)
-                )
-            )
+              )
+          )
         )
       case _ => Sync[F].pure(Right(()))
     }
@@ -507,7 +511,7 @@ object Consensus {
     type ConsensusStage = Value
 
     val STARTING, WAITING_FOR_PROPOSALS, WAITING_FOR_BLOCK_PROPOSALS, RESOLVING_MAJORITY_CB,
-      WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
+    WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
       Value
   }
 

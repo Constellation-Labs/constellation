@@ -75,98 +75,110 @@ class APIClient private (
     suffix: String,
     queryParams: Map[String, String] = Map(),
     timeout: Duration = 15.seconds
-  ): Future[T] =
-    httpWithAuth(suffix, queryParams, timeout)(Method.GET)
-      .response(asByteArray)
-      .send()
-      .map(resp => KryoSerializer.deserializeCast[T](resp.unsafeBody))(ConstellationExecutionContext.callbacks)
-
-  def getNonBlockingBytesKryoTry[T <: AnyRef](
-    suffix: String,
-    queryParams: Map[String, String] = Map(),
-    timeout: Duration = 15.seconds
-  ): Future[Try[T]] =
-    httpWithAuth(suffix, queryParams, timeout)(Method.GET)
-      .response(asByteArray)
-      .send()
-      .map(
-        resp =>
-          if (resp.isSuccess) Success(KryoSerializer.deserializeCast[T](resp.unsafeBody))
-          else Failure(new Exception(s"Invalid response code ${resp.code} and status ${resp.statusText}"))
-      )(ConstellationExecutionContext.callbacks)
+  )(contextToReturn: ContextShift[IO]): IO[T] =
+    contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[IO].async { cb =>
+      httpWithAuth(suffix, queryParams, timeout)(Method.GET)
+        .response(asByteArray)
+        .send()
+        .onComplete {
+          case Success(value) => cb(Right(KryoSerializer.deserializeCast[T](value.unsafeBody)))
+          case Failure(error) => cb(Left(error))
+        }(ConstellationExecutionContext.callbacks)
+    })
 
   def getNonBlockingIO[T <: AnyRef](
     suffix: String,
     queryParams: Map[String, String] = Map(),
     timeout: Duration = 15.seconds
+  )(
+    contextToReturn: ContextShift[IO]
   )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): IO[T] =
-    Async[IO].async { cb =>
+    contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[IO].async { cb =>
       getNonBlocking[T](suffix, queryParams, timeout).onComplete {
         case Success(value) => cb(Right(value))
         case Failure(error) => cb(Left(error))
       }(ConstellationExecutionContext.callbacks)
-    }
+    })
 
   def getNonBlockingF[F[_]: Async, T <: AnyRef](
     suffix: String,
     queryParams: Map[String, String] = Map(),
     timeout: Duration = 15.seconds
-  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): F[T] =
-    LiftIO[F].liftIO(getNonBlockingIO(suffix, queryParams, timeout))
+  )(contextToReturn: ContextShift[F])(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): F[T] =
+    contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[F].async { cb =>
+      getNonBlocking[T](suffix, queryParams, timeout).onComplete {
+        case Success(value) => cb(Right(value))
+        case Failure(error) => cb(Left(error))
+      }(ConstellationExecutionContext.callbacks)
+    })
 
   def postNonBlockingIO[T <: AnyRef](
     suffix: String,
     b: AnyRef,
     timeout: Duration = 15.seconds,
     headers: Map[String, String] = Map.empty
+  )(
+    contextToReturn: ContextShift[IO]
   )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): IO[T] =
-    Async[IO].async { cb =>
+    contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[IO].async { cb =>
       postNonBlocking[T](suffix, b, timeout, headers).onComplete {
         case Success(value) => cb(Right(value))
         case Failure(error) => cb(Left(error))
       }(ConstellationExecutionContext.callbacks)
-    }
+    })
 
-  def postNonBlockingF[F[_]: LiftIO, T <: AnyRef](
+  def postNonBlockingF[F[_]: Async, T <: AnyRef](
     suffix: String,
     b: AnyRef,
     timeout: Duration = 15.seconds,
     headers: Map[String, String] = Map.empty
-  )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): F[T] =
-    LiftIO[F].liftIO(postNonBlockingIO(suffix, b, timeout, headers))
+  )(contextToReturn: ContextShift[F])(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): F[T] =
+    contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[F].async { cb =>
+      postNonBlocking[T](suffix, b, timeout, headers).onComplete {
+        case Success(value) => cb(Right(value))
+        case Failure(error) => cb(Left(error))
+      }(ConstellationExecutionContext.callbacks)
+    })
 
   def postNonBlockingUnitF[F[_]: Async](
     suffix: String,
     b: AnyRef,
     timeout: Duration = 15.seconds,
     headers: Map[String, String] = Map.empty
-  )(implicit f: Formats = constellation.constellationFormats): F[Response[Unit]] =
-    Async[F].async { cb =>
+  )(contextToReturn: ContextShift[F])(implicit f: Formats = constellation.constellationFormats): F[Response[Unit]] =
+    contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[F].async { cb =>
       postNonBlockingUnit(suffix, b, timeout).onComplete {
         case Success(value) => cb(Right(value))
         case Failure(error) => cb(Left(error))
       }(ConstellationExecutionContext.callbacks)
-    }
+    })
 
-  def getStringF[F[_]: LiftIO](
+  def getStringF[F[_]: Async](
     suffix: String,
     queryParams: Map[String, String] = Map(),
     timeout: Duration = 15.seconds
-  )(): F[Response[String]] =
-    LiftIO[F].liftIO(getStringIO(suffix, queryParams))
+  )(contextToReturn: ContextShift[F]): F[Response[String]] =
+    contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[F].async { cb =>
+      httpWithAuth(suffix, queryParams, timeout)(Method.GET)
+        .send()
+        .onComplete {
+          case Success(value) => cb(Right(value))
+          case Failure(error) => cb(Left(error))
+        }(ConstellationExecutionContext.callbacks)
+    })
 
   def postNonBlockingIOUnit(
     suffix: String,
     b: AnyRef,
     timeout: Duration = 15.seconds,
     headers: Map[String, String] = Map.empty
-  )(implicit f: Formats = constellation.constellationFormats): IO[Response[Unit]] =
-    Async[IO].async { cb =>
+  )(contextToReturn: ContextShift[IO])(implicit f: Formats = constellation.constellationFormats): IO[Response[Unit]] =
+    contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[IO].async { cb =>
       postNonBlockingUnit(suffix, b, timeout, headers).onComplete {
         case Success(value) => cb(Right(value))
         case Failure(error) => cb(Left(error))
       }(ConstellationExecutionContext.callbacks)
-    }
+    })
 
   def simpleDownload(): Seq[StoredSnapshot] = {
     val hashes = getBlocking[Seq[String]]("snapshotHashes")
@@ -176,6 +188,4 @@ class APIClient private (
   def snapshotsInfoDownload(): SnapshotInfo =
     getBlockingBytesKryo[SnapshotInfo]("info")
 
-  def genesisDownload(): IO[Option[GenesisObservation]] =
-    getNonBlockingIO[Option[GenesisObservation]]("genesis")
 }

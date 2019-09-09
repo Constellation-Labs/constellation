@@ -31,7 +31,11 @@ class HealthCheckerTest
   val concurrentTipService: ConcurrentTipService[IO] = mock[ConcurrentTipService[IO]]
 
   val healthChecker =
-    new HealthChecker[IO](dao, concurrentTipService, consensusManager, downloadProcess)(
+    new HealthChecker[IO](dao,
+                          concurrentTipService,
+                          consensusManager,
+                          IO.contextShift(ConstellationExecutionContext.bounded),
+                          downloadProcess)(
       IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)),
       Slf4jLogger.getLogger[IO]
     )

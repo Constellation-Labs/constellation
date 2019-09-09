@@ -119,7 +119,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     ipManager = IPManager[IO]()
     cluster = Cluster[IO](() => metrics, ipManager, this)
 
-    consensusRemoteSender = new ConsensusRemoteSender[IO]()
+    consensusRemoteSender = new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded))
     consensusManager = new ConsensusManager[IO](
       transactionService,
       concurrentTipService,
@@ -144,8 +144,15 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         )
       val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.bounded)
       new SnapshotBroadcastService[IO](
-        new HealthChecker[IO](this, concurrentTipService, consensusManager, downloadProcess),
+        new HealthChecker[IO](
+          this,
+          concurrentTipService,
+          consensusManager,
+          IO.contextShift(ConstellationExecutionContext.bounded),
+          downloadProcess
+        ),
         cluster,
+        IO.contextShift(ConstellationExecutionContext.bounded),
         this
       )
     }

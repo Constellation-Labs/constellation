@@ -1,11 +1,11 @@
 package org.constellation.storage
 
-import cats.effect.{Concurrent, IO, LiftIO, Sync}
+import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
 import org.constellation.p2p.Cluster
-import org.constellation.primitives.Schema.{NodeState, NodeType}
+import org.constellation.primitives.Schema.NodeType
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.VerificationStatus.VerificationStatus
 import org.constellation.util.HealthChecker
@@ -15,6 +15,7 @@ import scala.concurrent.duration._
 class SnapshotBroadcastService[F[_]: Concurrent](
   healthChecker: HealthChecker[F],
   cluster: Cluster[F],
+  contextShift: ContextShift[F],
   dao: DAO
 ) extends StrictLogging {
 
@@ -24,19 +25,20 @@ class SnapshotBroadcastService[F[_]: Concurrent](
     for {
       _ <- updateRecentSnapshots(hash, height)
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
-      responses <- LiftIO[F].liftIO(
-        peers.values.toList
-          .traverse(
-            _.client
-              .postNonBlockingIO[SnapshotVerification]("snapshot/verify", SnapshotCreated(hash, height), 5 second)
-              .map(_.some)
-              .handleErrorWith(
-                t =>
-                  IO(logger.warn(s"error while verifying snapshot $hash msg: ${t.getMessage}"))
-                    .flatMap(_ => IO.pure[Option[SnapshotVerification]](None))
-              )
-          )
-      )
+      responses <- peers.values.toList
+        .traverse(
+          _.client
+            .postNonBlockingF[F, SnapshotVerification]("snapshot/verify", SnapshotCreated(hash, height), 5 second)(
+              contextShift
+            )
+            .map(_.some)
+            .handleErrorWith(
+              t =>
+                Sync[F]
+                  .delay(logger.warn(s"error while verifying snapshot $hash msg: ${t.getMessage}"))
+                  .flatMap(_ => Sync[F].pure[Option[SnapshotVerification]](None))
+            )
+        )
       _ <- if (shouldRunClusterCheck(responses))
         runClusterCheck
       else Sync[F].unit

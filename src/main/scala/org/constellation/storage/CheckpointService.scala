@@ -1,10 +1,10 @@
 package org.constellation.storage
 
-import cats.effect.{Concurrent, IO, LiftIO, Sync}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import org.constellation.DAO
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.p2p.{DataResolver, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, _}
@@ -33,6 +33,9 @@ class CheckpointService[F[_]: Concurrent](
   val pendingAcceptance: SingleRef[F, Set[String]] = SingleRef(Set())
   val pendingAcceptanceFromOthers: SingleRef[F, Set[String]] = SingleRef(Set())
   val maxDepth: Int = 10
+
+  val contextShift
+    : ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki pass from F
 
   def applySnapshot(cbs: List[String]): F[Unit] =
     Sync[F].delay { logger.debug(s"[${dao.id.short}] applying snapshot for blocks: $cbs from others") }
@@ -83,7 +86,7 @@ class CheckpointService[F[_]: Concurrent](
       merkleRoot,
       transactionService,
       (x: TransactionCacheData) => x.transaction,
-      (s: String) => LiftIO[F].liftIO(DataResolver.resolveTransactionDefaults(s))
+      (s: String) => LiftIO[F].liftIO(DataResolver.resolveTransactionDefaults(s)(contextShift))
     )
 
   def fetchMessages(merkleRoot: String)(implicit dao: DAO): F[List[ChannelMessage]] =
@@ -91,7 +94,7 @@ class CheckpointService[F[_]: Concurrent](
       merkleRoot,
       messageService,
       (x: ChannelMessageMetadata) => x.channelMessage,
-      (s: String) => LiftIO[F].liftIO(DataResolver.resolveMessageDefaults(s))
+      (s: String) => LiftIO[F].liftIO(DataResolver.resolveMessageDefaults(s)(contextShift))
     )
 
   def fetchNotifications(merkleRoot: String)(implicit dao: DAO): F[List[PeerNotification]] =
@@ -149,7 +152,7 @@ class CheckpointService[F[_]: Concurrent](
 
     val resolveSoe = cb.parentSOEBaseHashes() match {
       case List(_, _) => Sync[F].unit
-      case _          => LiftIO[F].liftIO(DataResolver.resolveSoe(cb.parentSOEHashes.toList, peers).void)
+      case _          => LiftIO[F].liftIO(DataResolver.resolveSoe(cb.parentSOEHashes.toList, peers)(contextShift).void)
     }
 
     val resolveCheckpoint = Sync[F]
@@ -165,7 +168,7 @@ class CheckpointService[F[_]: Concurrent](
           Sync[F]
             .raiseError[List[CheckpointCache]](new RuntimeException("Soe hashes are empty even resolved previously"))
         case List((_, true), (_, true)) => Sync[F].pure(List[CheckpointCache]())
-        case missing                    => LiftIO[F].liftIO(DataResolver.resolveCheckpoints(missing.map(_._1), peers))
+        case missing                    => LiftIO[F].liftIO(DataResolver.resolveCheckpoints(missing.map(_._1), peers)(contextShift))
       }
 
     for {

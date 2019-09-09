@@ -481,7 +481,8 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             ConstellationExecutionContext.unbounded
           )
 
-          val response = dao.cluster.broadcast(_.getStringIO("health"))
+          val response =
+            dao.cluster.broadcast(_.getStringIO("health")(IO.contextShift(ConstellationExecutionContext.bounded)))
 
           onCompleteWithBreaker(breaker)(response.unsafeToFuture) {
             case Success(idMap) =>
