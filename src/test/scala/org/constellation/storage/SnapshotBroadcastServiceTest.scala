@@ -52,20 +52,15 @@ class SnapshotBroadcastServiceTest
       dao.cluster.getNodeState shouldReturnF NodeState.Ready
 
       readyFacilitators(Id("a")).client
-        .postNonBlockingIO[SnapshotVerification](*, *, *, *)(*)(*, *) shouldReturn IO.fromFuture(IO {
-        Future.successful(
-          SnapshotVerification(
-            VerificationStatus.SnapshotCorrect
-          )
+        .postNonBlockingF[IO, SnapshotVerification](*, *, *, *)(*)(*, *, *) shouldReturn IO.pure(
+        SnapshotVerification(
+          VerificationStatus.SnapshotCorrect
         )
-      })
+      )
 
       readyFacilitators(Id("b")).client
-        .postNonBlockingIO[SnapshotVerification](*, *, *, *)(*)(*, *) shouldReturn IO.fromFuture(IO {
-        Future.failed(
-          new SocketTimeoutException("timeout")
-        )
-      })
+        .postNonBlockingF[IO, SnapshotVerification](*, *, *, *)(*)(*, *, *) shouldReturn IO
+        .raiseError[SnapshotVerification](new SocketTimeoutException("timeout"))
 
       val response = snapshotBroadcastService.broadcastSnapshot("snap1", 2)
       response.unsafeRunSync()
