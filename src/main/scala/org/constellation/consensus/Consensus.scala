@@ -78,6 +78,7 @@ class Consensus[F[_]: Concurrent](
         notifications,
         observations.map(_.hash)
       )
+      _ <- addTransactionProposal(proposal)
       _ <- remoteCall.shift *> remoteSender.broadcastLightTransactionProposal(
         BroadcastLightTransactionProposal(roundData.roundId, roundData.peers, proposal)
       )
