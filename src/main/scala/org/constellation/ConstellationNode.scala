@@ -248,7 +248,7 @@ class ConstellationNode(
   )
 
   // If we are exposing rpc then create routes
-  val routes: Route = new API()(system, constellation.standardTimeout, dao).routes
+  val routes: Route = logReqResp { new API()(system, constellation.standardTimeout, dao).routes }
 
   logger.info("Binding API")
 
