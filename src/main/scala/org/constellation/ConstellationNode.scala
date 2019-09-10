@@ -212,7 +212,7 @@ class ConstellationNode(
   implicit val system: ActorSystem,
   implicit val materialize: ActorMaterializer,
   implicit val executionContext: ExecutionContext
-) {
+) extends StrictLogging {
 
   implicit val dao: DAO = new DAO()
 
@@ -220,7 +220,6 @@ class ConstellationNode(
 
   dao.node = this
 
-  val logger = Logger(s"ConstellationNode_${dao.publicKeyHash}")
   MDC.put("node_id", dao.id.short)
 
   logger.info(
@@ -249,7 +248,7 @@ class ConstellationNode(
   )
 
   // If we are exposing rpc then create routes
-  val routes: Route = new API()(system, constellation.standardTimeout, dao).routes // logReqResp { }
+  val routes: Route = logReqResp { new API()(system, constellation.standardTimeout, dao).routes }
 
   logger.info("Binding API")
 
