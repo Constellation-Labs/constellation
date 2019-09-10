@@ -131,6 +131,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       cluster,
       this,
       ConfigUtil.config,
+      IO.contextShift(ConstellationExecutionContext.unbounded),
       IO.contextShift(ConstellationExecutionContext.bounded)
     )
 

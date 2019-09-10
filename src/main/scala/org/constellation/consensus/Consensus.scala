@@ -37,6 +37,7 @@ class Consensus[F[_]: Concurrent](
   consensusManager: ConsensusManager[F],
   dao: DAO,
   config: Config,
+  remoteCall: ContextShift[F],
   calculationContext: ContextShift[F]
 ) {
 
@@ -78,7 +79,7 @@ class Consensus[F[_]: Concurrent](
         observations.map(_.hash)
       )
       _ <- addTransactionProposal(proposal)
-      _ <- remoteSender.broadcastLightTransactionProposal(
+      _ <- remoteCall.shift *> remoteSender.broadcastLightTransactionProposal(
         BroadcastLightTransactionProposal(roundData.roundId, roundData.peers, proposal)
       )
     } yield ()
@@ -294,7 +295,7 @@ class Consensus[F[_]: Concurrent](
         pd =>
           pd.client.postNonBlockingUnitF("finished/checkpoint", finishedCheckpoint, timeout = 10.seconds)(
             calculationContext
-        )
+          )
       )
     } yield responses
   }
@@ -321,7 +322,7 @@ class Consensus[F[_]: Concurrent](
       _ <- dao.metrics.incrementMetricAsync(
         "resolveMajorityCheckpointBlockUniquesCount_" + uniques
       )
-      _ <- remoteSender.broadcastSelectedUnionBlock(
+      _ <- remoteCall.shift *> remoteSender.broadcastSelectedUnionBlock(
         BroadcastSelectedUnionBlock(roundData.roundId, roundData.peers, selectedCheckpointBlock)
       )
       _ <- addSelectedBlockProposal(selectedCheckpointBlock)
@@ -402,7 +403,7 @@ class Consensus[F[_]: Concurrent](
           observations.flatMap(_._2) ++ resolvedObs
         )(dao.keyPair)
       )
-      _ <- remoteSender.broadcastBlockUnion(
+      _ <- remoteCall.shift *> remoteSender.broadcastBlockUnion(
         BroadcastUnionBlockProposal(roundData.roundId, roundData.peers, proposal)
       )
       _ <- addBlockProposal(proposal)
