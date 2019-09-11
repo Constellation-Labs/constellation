@@ -104,7 +104,7 @@ lazy val coreDependencies = Seq(
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.62",
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.63",
   "com.twitter" %% "chill" % "0.9.3",
   "com.twitter" %% "algebird-core" % "0.13.5",
   ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
