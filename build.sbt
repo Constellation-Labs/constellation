@@ -124,7 +124,7 @@ lazy val coreDependencies = Seq(
   "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.6",
   "com.github.djelenc" % "alpha-testbed" % "1.0.3",
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
-  ("com.github.blemale" %% "scaffeine" % "3.0.0").withSources().withJavadoc(),
+  ("com.github.blemale" %% "scaffeine" % "3.1.0").withSources().withJavadoc(),
   ("com.typesafe.slick" %% "slick" % "3.3.2").withSources().withJavadoc(),
   "com.h2database" % "h2" % "1.4.199",
   "net.logstash.logback" % "logstash-logback-encoder" % "5.1",
