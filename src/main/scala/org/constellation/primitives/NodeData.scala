@@ -79,9 +79,10 @@ trait NodeData {
     metrics.updateMetric("simulateEndpointTimeout", simulateEndpointTimeout.toString)
   }
 
-  def enableRandomTransactions(): Unit =
-//    generateRandomTX = true
+  def enableRandomTransactions(): Unit = {
+    generateRandomTX = true
     metrics.updateMetric("generateRandomTX", generateRandomTX.toString)
+  }
 
   def disableRandomTransactions(): Unit = {
     generateRandomTX = false

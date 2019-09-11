@@ -412,14 +412,14 @@ object Simulation {
     assert(checkGenesis(apis))
     logger.info("Genesis validation passed")
 
-    enableRandomTransactions(apis)
-    logger.info("Starting random transactions")
+//    enableRandomTransactions(apis)
+//    logger.info("Starting random transactions")
 
     setReady(apis)
 
-    assert(awaitCheckpointsAccepted(apis, numAccepted = 3))
-
     if (!useStartFlowOnly) {
+
+      assert(awaitCheckpointsAccepted(apis, numAccepted = 3))
 
       disableRandomTransactions(apis)
       logger.info("Stopping random transactions to run parity check")

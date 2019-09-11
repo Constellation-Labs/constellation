@@ -91,8 +91,8 @@ class DataResolver extends StrictLogging {
       )(contextToReturn).head
         .flatTap(
           cpc =>
-            cpc.checkpointBlock.get.storeSOE() *> dao.checkpointService.memPool.put(cpc.checkpointBlock.get.baseHash,
-                                                                                    cpc)
+            cpc.checkpointBlock.get.storeSOE() *> dao.checkpointService.memPool
+              .put(cpc.checkpointBlock.get.baseHash, cpc)
         )
         .flatTap(
           cb =>
@@ -145,7 +145,7 @@ class DataResolver extends StrictLogging {
             cb =>
               cb.checkpointBlock.get.storeSOE() *> dao.checkpointService.memPool
                 .put(cb.checkpointBlock.get.baseHash, cb)
-        )
+          )
       ),
       s"dataResolver_resolveCheckpoints [${hashes}]",
       logger
@@ -211,7 +211,12 @@ class DataResolver extends StrictLogging {
         case head :: tail =>
           getData[T](hash, endpoint, head)(contextToReturn).flatMap {
             case Some(a) => IO.pure(a)
-            case None    => makeAttempt(tail, allPeers, errorsSoFar + 1)
+            case None =>
+              IO.raiseError[T](
+                new Throwable(
+                  s"Failed to resolve with host=${head.client.hostPortForLogging}, returned None, trying next peer"
+                )
+              )
           }.handleErrorWith {
             case e: DataResolutionMaxErrors  => IO.raiseError[T](e)
             case e: DataResolutionOutOfPeers => IO.raiseError[T](e)
