@@ -64,9 +64,18 @@ class DataResolver extends StrictLogging {
           "transaction",
           pool,
           priorityClient
-        )(contextToReturn).head
-          .flatTap(tcd => dao.transactionService.put(tcd, ConsensusStatus.Unknown))
-          .flatTap(tx => IO.delay(logger.debug(s"Resolving transaction=${tx.hash}"))),
+        )(contextToReturn).sequence.flatMap { txs =>
+          txs.headOption match {
+            case Some(tcd) =>
+              dao.transactionService
+                .put(tcd, ConsensusStatus.Unknown)
+                .flatTap(_ => IO.delay(logger.debug(s"Stored resolved transaction=${tcd.hash} for roundId=${roundId}")))
+            case _ =>
+              IO.raiseError[TransactionCacheData](
+                new Throwable(s"Failed with resolving transaction=${hash} for roundId=${roundId}")
+              )
+          }
+        },
       s"dataResolver_resolveTransaction [${hash}]",
       logger
     )
