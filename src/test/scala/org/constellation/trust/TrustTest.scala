@@ -224,7 +224,109 @@ class TrustTest extends FlatSpec {
 
   }
 
+
+
   "Convergence test" should "run and plot convergence" in {
+    def generateRun = {
+      val numNodes = 100
+      //    val maliciousRate = 0.3//use to have them collude on lower scoring hash
+      val failureRate = 0.3//how many nodes can fail before diverging
+      val (seedNodes, totalNodes) = (-1, 100)//ratio of seedNodes/generatorNodes = centrality
+
+      def generateRandomHashes(maxProposals: Int = numNodes) = {
+        val numDistinct = Random.nextInt(maxProposals) + 1
+        (0 until numDistinct).map(_.toString).toArray
+      }
+
+      val hashes = generateRandomHashes()
+
+      def getRandomHash(hashes: Array[String] = hashes) = {
+        val max = hashes.length
+        val selection = Random.nextInt(max)
+        hashes(selection)
+      }
+
+
+
+      def powerLaw(operand: Double)(scalingFactor: Double = 3.0) = scala.math.pow(operand, -scalingFactor)
+      def exponential(operand: Double)(scalingFactor: Double = 3.0) = scalingFactor * scala.math.exp(-scalingFactor*operand)
+      def linear(operand: Double)(scalingFactor: Double = 0.5) = 1-scalingFactor*operand//todo, still need to normalize by dividing by sum after
+
+
+      def getRange(numNodes: Int = numNodes) = {
+        val tempArray = Array.fill[Double](numNodes)(0D)
+        tempArray.zipWithIndex.map{ case (zero, idx) => idx.toDouble}
+      }
+
+      def weightProposals(edge: TrustEdge, selfAvoidingWalks: Map[Int, TrustNode]) = {
+        if (edge.dst < seedNodes) 1.0
+        else selfAvoidingWalks(edge.src).edges.filter(_.dst == edge.dst).map(_.trust).headOption.getOrElse(0.0)
+      }
+
+      var nodesWithEdges = DataGeneration.generateFullyConnectedTestData(numNodes)
+
+      val iterations = 1
+      //first 94, 100
+      //second (17,78)
+      //(55,6)
+      //(31,4)
+      //(25,12)
+      //third (13,100)
+      //fourth (0,100)
+      //fifth (8,2)
+      //(11,9)
+      //(13,23)
+      //(10,4)
+      //(6,1)
+      //(1,60)
+      //(3,1)
+      //six (66,1)
+      //(62,2)
+      //(11,1)
+      //(26,3)
+      //(32,40)
+      //(36,3)
+      //(27,1)
+      //(38,49)
+      //seven (41,100)
+      //eight (77,100)
+      //nineMap(44 -> 100)
+      //ten Map(46 -> 100)
+
+
+
+      (0 until iterations).foreach{ i =>
+
+        nodesWithEdges = nodesWithEdges.map{
+          node =>
+            println(s"DebugView ${node.edges}") // Debug view
+            SelfAvoidingWalk.runWalkFeedbackUpdateSingleNode(node.id, nodesWithEdges)
+        }
+
+      }
+
+
+      //    val nodesWithEdges: Seq[TrustNode] = DataGeneration.generateFullyConnectedTestData(numNodes)
+      val nodeProposals = nodesWithEdges.map(tn => (tn.id, getRandomHash())).toMap
+      val hashCounts = nodeProposals.values.groupBy(hash => hash).mapValues(_.size)//todo do I need?
+
+
+      def normalize = {
+        //hadamard of distro over range of generators, sorted randomly
+      }
+
+      val dummyWalk = Array.fill[Double](numNodes)(Random.nextDouble())
+      val selfAvoidingWalks: Map[Int, TrustNode] = nodesWithEdges.map(tn => (tn.id, tn)).toMap
+      val nodeViews = selfAvoidingWalks.values.map{ tn =>
+        val dstsToWeights = tn.edges.map(e => (e.dst, weightProposals(e, selfAvoidingWalks)))
+        val normalize = 1.0//todo multiply by normalization: sort dsts by all scores, then multiply by exponential(idx) of idx of dst in range of sorted by scores
+      val hashesToWeights = dstsToWeights.map{ case (dst, weight) => (nodeProposals(dst), weight*normalize) }
+        val scoredHashes = hashesToWeights.groupBy { case (dst, weight) => dst}.map{ case (dst, dstWeights) => (dst, dstWeights.map(_._2).sum) }
+        (tn.id, scoredHashes)
+      }
+      nodeViews.map { case (id, scoredHashes) => (id, scoredHashes.maxBy(_._2))}
+    }
+
     //We need a normalization parameter the score for selecting a common proposal. Should be ratio of seed nodes
     //Define another normalization parameter, centrality: the seed node to generator node ratio
     //We normalize generator nodes so that the
@@ -232,114 +334,41 @@ class TrustTest extends FlatSpec {
     //normalization to 1 for linear is 1/int = 1/normParam
     //
     //iterate over proposals and weight by reputation/constant for generator/seed nodes. See and what centrality does convergence break down
-    val numNodes = 100
-//    val maliciousRate = 0.3//use to have them collude on lower scoring hash
-    val failureRate = 0.3//how many nodes can fail before diverging
-    val (seedNodes, generatorNodes) = (30, 100)//ratio of seedNodes/generatorNodes = centrality
 
-    def generateRandomHashes(maxProposals: Int = numNodes) = {
-      val numDistinct = Random.nextInt(maxProposals) + 1
-      (0 until numDistinct).map(_.toString).toArray
-    }
+    val finalViews = (0 until 10).toList.map(i => generateRun)
 
-    val hashes = generateRandomHashes()
-
-    def getRandomHash(hashes: Array[String] = hashes) = {
-      val max = hashes.length
-      val selection = Random.nextInt(max)
-      hashes(selection)
-    }
-
-
-
-    def powerLaw(operand: Double)(scalingFactor: Double = 3.0) = scala.math.pow(operand, -scalingFactor)
-    def exponential(operand: Double)(scalingFactor: Double = 3.0) = scalingFactor * scala.math.exp(-scalingFactor*operand)
-    def linear(operand: Double)(scalingFactor: Double = 0.5) = 1-scalingFactor*operand//todo, still need to normalize by dividing by sum after
-
-
-    def getRange(numNodes: Int = numNodes) = {
-      val tempArray = Array.fill[Double](numNodes)(0D)
-      tempArray.zipWithIndex.map{ case (zero, idx) => idx.toDouble}
-    }
-
-    def weightProposals(edge: TrustEdge, selfAvoidingWalks: Map[Int, TrustNode]) = {
-      if (edge.dst < seedNodes) 1.0
-      else selfAvoidingWalks(edge.src).edges.filter(_.dst == edge.dst).map(_.trust).headOption.getOrElse(0.0)
-    }
-
-    var nodesWithEdges = DataGeneration.generateFullyConnectedTestData(numNodes)
-
-    val iterations = 1
-    //first 94, 100
-    //second (17,78)
-    //(55,6)
-    //(31,4)
-    //(25,12)
-    //third (13,100)
-    //fourth (0,100)
-
-
-
-    (0 until iterations).foreach{ i =>
-
-      nodesWithEdges = nodesWithEdges.map{
-        node =>
-          println(s"DebugView ${node.edges}") // Debug view
-          SelfAvoidingWalk.runWalkFeedbackUpdateSingleNode(node.id, nodesWithEdges)
-      }
-
-    }
-
-
-//    val nodesWithEdges: Seq[TrustNode] = DataGeneration.generateFullyConnectedTestData(numNodes)
-    val nodeProposals = nodesWithEdges.map(tn => (tn.id, getRandomHash())).toMap
-    val hashCounts = nodeProposals.values.groupBy(hash => hash).mapValues(_.size)//todo do I need?
-
-
-    def normalize = {
-      //hadamard of distro over range of generators, sorted randomly
-    }
-
-    val dummyWalk = Array.fill[Double](numNodes)(Random.nextDouble())
-    val selfAvoidingWalks: Map[Int, TrustNode] = nodesWithEdges.map(tn => (tn.id, tn)).toMap
-    val nodeViews = selfAvoidingWalks.values.map{ tn =>
-      val dstsToWeights = tn.edges.map(e => (e.dst, weightProposals(e, selfAvoidingWalks)))
-      val normalize = 1.0//todo multiply by normalization: sort dsts by all scores, then multiply by exponential(idx) of idx of dst in range of sorted by scores
-      val hashesToWeights = dstsToWeights.map{ case (dst, weight) => (nodeProposals(dst), weight*normalize) }
-      val scoredHashes = hashesToWeights.groupBy { case (dst, weight) => dst}.map{ case (dst, dstWeights) => (dst, dstWeights.map(_._2).sum) }
-      (tn.id, scoredHashes)
-    }
-    val finalViews = nodeViews.map { case (id, scoredHashes) => (id, scoredHashes.maxBy(_._2))}
-
-    finalViews.foreach(println)
-    finalViews.map( t => t._2._1).groupBy(k => k).map{ case (s, ss) => (s, ss.size)}.foreach(println)
+    val proposalDist = finalViews.map(fv => fv.map( t => t._2._1).groupBy(k => k).map{ case (s, ss) => (s, ss.size)})
+    proposalDist.foreach(println)
+//    finalViews.map( t => t._2._1).groupBy(k => k).map{ case (s, ss) => (s, ss.size)}.foreach(println)
     //todo: Define converge as >50% of cluster agrees on same hash. Minority then accepts majority
-    println("nodeViews: " + nodeViews)
-    val dummyWalkVec: DenseVector[Double] = DenseVector(dummyWalk)
+//    println("nodeViews: " + nodeViews)
+//    println("hashes: " + hashes.distinct.length.toString)
+
+//    val dummyWalkVec: DenseVector[Double] = DenseVector(dummyWalk)
 
 //    val dummyPowerLawGradient: DenseVector[Double] = DenseVector(getRange(numNodes).map(powerLaw(_)(3.0)))
-    val dummyExpGradient: DenseVector[Double] = DenseVector(getRange(numNodes).map(exponential(_)(3.0)))
+//    val dummyExpGradient: DenseVector[Double] = DenseVector(getRange(numNodes).map(exponential(_)(3.0)))
 //    val dummyLinearGradient: DenseVector[Double] = DenseVector(getRange(numNodes).map(linear(_)(0.5)))
 
 //    val linearRes = dummyLinearGradient * dummyWalkVec
 //    val powerLawRes = dummyPowerLawGradient * dummyWalkVec
-    val exponentialRes = dummyExpGradient * dummyWalkVec
-
-    val f = Figure()
-    val p = f.subplot(0)
-    val x = linspace(-5.0, 5.0, 10)
-
-    p += plot(x, exponentialRes)
-    p.title = "exponentialRes gradient"
-
-//    println("powerLaw: " + powerLawRes)
-    println("exponential: " + exponentialRes)
+//    val exponentialRes = dummyExpGradient * dummyWalkVec
+//    val dv = DenseVector(Array(0.0))
+//    val f = Figure()
+//    val p = f.subplot(0)
+//    val x = linspace(-5.0, 5.0, 10)
+//
+//    p += plot(x, dv)
+//    p.title = "exponentialRes gradient"
+//
+////    println("powerLaw: " + powerLawRes)
+//    println("exponential: " + dv)
 //    println("linear: " + linearRes)
 
-
+    assert(true)
   }
 
-//  "plot" should "plot" in {
+  "plot" should "plot" in {
 //    val numNodes = 10
 //
 //    def generateRandomHashes(maxProposals: Int = numNodes) = {
@@ -417,15 +446,16 @@ class TrustTest extends FlatSpec {
 //    println("linear: " + linearRes)
 //
 ////    val getDist = expo.cdf(1d)
-//    val f = Figure()
-//    val p = f.subplot(0)
-//    val x = linspace(-5.0, 5.0, 10)
+    val dv = DenseVector(10.5, 9.1, 4.4, 2.6)
+    val f = Figure()
+    val p = f.subplot(0)
+    val x = linspace(0.0, 30.0, 4)//length = dv.length
 //    println(x)
 ////    val x = linspace(0.0, 1.0)
-////    p += plot(x, x.:^=(2.0))
+    p += plot(x, dv)
 ////    p += plot(x, x.:^=(3.0), '.')
-//    p.xlabel = "x axis"
-//    p.ylabel = "y axis"
+    p.xlabel = "Seed nodes (out of 100)"
+    p.ylabel = "Unique proposal count avg"
 ////    f.saveas("lines.png")
 ////    val p2 = f.subplot(1)
 ////    val p3 = f.subplot(2)
@@ -439,8 +469,8 @@ class TrustTest extends FlatSpec {
 //
 //
 //    //    p2 += hist(g.sample(100000),100)
-//    f.saveas("subplots.png")
-//    assert(true)
-//  }
+    f.saveas("subplots.png")
+    assert(true)
+  }
 
   }
