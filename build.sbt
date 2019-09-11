@@ -42,7 +42,7 @@ lazy val sttpDependencies = Seq(
 
 lazy val commonSettings = Seq(
   version := _version,
-  scalaVersion := "2.12.8",
+  scalaVersion := "2.12.10",
   organization := "org.constellation",
   name := "constellation"
 )
