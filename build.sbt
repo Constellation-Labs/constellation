@@ -31,7 +31,7 @@ lazy val versions = new {
   val sttp = "1.6.6"
   val cats = "1.6.1"
   val json4s = "3.6.7"
-  val mockito = "1.5.11"
+  val mockito = "1.5.16"
 }
 
 lazy val sttpDependencies = Seq(
