@@ -78,8 +78,8 @@ lazy val coreSettings = Seq(
     "-Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false",
     """-DakkaActorSystemName="$AKKA_ACTOR_SYSTEM_NAME""""
   ),
-  resolvers += "Artima Maven Repository".at("http://repo.artima.com/releases"),
-  resolvers += "Typesafe Releases".at("http://repo.typesafe.com/typesafe/maven-releases/"),
+  resolvers += "Artima Maven Repository".at("https://repo.artima.com/releases"),
+  resolvers += "Typesafe Releases".at("https://repo.typesafe.com/typesafe/maven-releases/"),
   resolvers += "jitpack".at("https://jitpack.io")
 )
 
