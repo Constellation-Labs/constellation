@@ -78,10 +78,10 @@ class Consensus[F[_]: Concurrent](
         notifications,
         observations.map(_.hash)
       )
-      _ <- addTransactionProposal(proposal)
       _ <- remoteCall.shift *> remoteSender.broadcastLightTransactionProposal(
         BroadcastLightTransactionProposal(roundData.roundId, roundData.peers, proposal)
       )
+      _ <- addTransactionProposal(proposal)
     } yield ()
 
   def addBlockProposal(proposal: UnionBlockProposal): F[Unit] =
@@ -249,7 +249,7 @@ class Consensus[F[_]: Concurrent](
         }
       _ <- if (acceptedBlock._1.isEmpty) Sync[F].pure(List.empty[Response[Unit]])
       else
-        broadcastSignedBlockToNonFacilitators(
+        remoteCall.shift *> broadcastSignedBlockToNonFacilitators(
           FinishedCheckpoint(cache, proposals.keySet.map(_.id))
         )
       transactionsToReturn <- getOwnTransactionsToReturn.map(
@@ -331,6 +331,9 @@ class Consensus[F[_]: Concurrent](
 
   private[consensus] def mergeTxProposalsAndBroadcastBlock(): F[Unit] =
     for {
+      _ <- logger.debug(
+        s" ${roundData.roundId} merge transactions proposal"
+      )
       readyPeers <- LiftIO[F].liftIO(dao.readyPeers.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
       proposals <- transactionProposals.get
       idsTxs = (
@@ -338,6 +341,9 @@ class Consensus[F[_]: Concurrent](
         proposals.values.map(_.txHashes).toList.flatten.union(roundData.transactions.map(_.hash)).distinct
       )
       txs <- idsTxs._2.traverse(t => transactionService.lookup(t).map((t, _)))
+      _ <- logger.debug(
+        s" ${roundData.roundId} transactions proposal_size all txs ${idsTxs._2.size} lookup size ${txs.flatMap(_._2).size}"
+      )
       resolved <- txs
         .filter(_._2.isEmpty)
         .traverse(
@@ -346,13 +352,14 @@ class Consensus[F[_]: Concurrent](
               dataResolver
                 .resolveTransactionDefaults(
                   t._1,
-                  readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList.headOption
+                  readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList.headOption,
+                  roundData.roundId.some
                 )(contextShift)
                 .map(_.transaction)
             )
         )
       _ <- logger.debug(
-        s"transactions proposal_size ${proposals.size} values size ${idsTxs._2.size} lookup size ${txs.size} resolved ${resolved.size}"
+        s" ${roundData.roundId} transactions proposal_size ${proposals.size} values size ${idsTxs._2.size} lookup size ${txs.size} resolved ${resolved.size}"
       )
       msgs <- proposals.values
         .flatMap(_.messages)

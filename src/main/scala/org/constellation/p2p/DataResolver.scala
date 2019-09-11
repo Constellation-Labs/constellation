@@ -5,6 +5,7 @@ import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.DAO
+import org.constellation.consensus.Consensus.RoundId
 import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEdgeCache}
 import org.constellation.primitives.{ChannelMessageMetadata, Observation, TransactionCacheData}
 import org.constellation.storage.ConsensusStatus
@@ -45,24 +46,27 @@ class DataResolver extends StrictLogging {
 
   def resolveTransactionDefaults(
     hash: String,
-    priorityClient: Option[PeerApiClient] = None
+    priorityClient: Option[PeerApiClient] = None,
+    roundId: Option[RoundId] = None
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
-    getPeersForResolving(dao).flatMap(resolveTransaction(hash, _, priorityClient)(contextToReturn))
+    getPeersForResolving(dao).flatMap(resolveTransaction(hash, _, priorityClient, roundId)(contextToReturn))
 
   def resolveTransaction(
     hash: String,
     pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient]
+    priorityClient: Option[PeerApiClient],
+    roundId: Option[RoundId] = None
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
     logThread(
-      resolveDataByDistance[TransactionCacheData](
-        List(hash),
-        "transaction",
-        pool,
-        priorityClient
-      )(contextToReturn).head
-        .flatTap(tcd => dao.transactionService.put(tcd, ConsensusStatus.Unknown))
-        .flatTap(tx => IO.delay(logger.debug(s"Resolving transaction=${tx.hash}"))),
+      IO.delay(logger.debug(s"Start resolving transaction=${hash} for round $roundId")) *>
+        resolveDataByDistance[TransactionCacheData](
+          List(hash),
+          "transaction",
+          pool,
+          priorityClient
+        )(contextToReturn).head
+          .flatTap(tcd => dao.transactionService.put(tcd, ConsensusStatus.Unknown))
+          .flatTap(tx => IO.delay(logger.debug(s"Resolving transaction=${tx.hash}"))),
       s"dataResolver_resolveTransaction [${hash}]",
       logger
     )
