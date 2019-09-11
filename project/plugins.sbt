@@ -1,8 +1,7 @@
-resolvers += "Artima Maven Repository".at("http://repo.artima.com/releases")
+resolvers += "Artima Maven Repository".at("https://repo.artima.com/releases")
 
 // addSbtPlugin("org.scoverage" % "sbt-scoverage" % "1.5.1")
 addSbtPlugin("com.typesafe.sbt" % "sbt-native-packager" % "1.3.24")
-addSbtPlugin("io.get-coursier" % "sbt-coursier" % "2.0.0-RC2-1")
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.10")
 // addSbtPlugin("org.xerial.sbt" % "sbt-pack" % "0.11")
 // addSbtPlugin("com.github.gseitz" % "sbt-release" % "1.0.11")
