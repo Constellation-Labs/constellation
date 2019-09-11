@@ -23,7 +23,7 @@ object Simulation {
 
   def healthy(apis: Seq[APIClient]): Boolean = {
     val responses = apis.map(a => {
-      val res = a.getString("health", timeout = 5.seconds)
+      val res = a.getString("health", timeout = 15.seconds)
       res
     })
     Future.sequence(responses).map(_.forall(_.isSuccess)).get(15)
