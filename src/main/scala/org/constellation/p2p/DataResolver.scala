@@ -223,7 +223,7 @@ class DataResolver extends StrictLogging {
             case None =>
               IO.raiseError[T](
                 new Throwable(
-                  s"Failed to resolve with host=${head.client.hostPortForLogging}, returned None, trying next peer"
+                  s"Failed to resolve hash=${hash} with host=${head.client.hostPortForLogging}, returned None, trying next peer"
                 )
               )
           }.handleErrorWith {
@@ -232,7 +232,7 @@ class DataResolver extends StrictLogging {
             case e if tail.isEmpty           => IO.raiseError[T](e)
             case e =>
               logger.error(
-                s"Failed to resolve with host=${head.client.hostPortForLogging}, trying next peer",
+                s"Failed to resolve hash=${hash} with host=${head.client.hostPortForLogging}, trying next peer",
                 e
               )
               makeAttempt(tail, allPeers, errorsSoFar + 1)
