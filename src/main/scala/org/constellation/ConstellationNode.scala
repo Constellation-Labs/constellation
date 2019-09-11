@@ -270,7 +270,7 @@ class ConstellationNode(
     .bind(nodeConfig.httpInterface, nodeConfig.peerHttpPort)
     .runWith(Sink.foreach { conn =>
       val address = conn.remoteAddress
-      conn.handleWith(peerAPI.routes(address))
+      conn.handleWith(logReqResp { peerAPI.routes(address) })
     })
 
   def shutdown(): Unit = {
