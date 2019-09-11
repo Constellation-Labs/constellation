@@ -28,7 +28,7 @@ import scala.util.{Failure, Random, Success, Try}
 
 package object constellation extends POWExt with SignHelpExt with KeySerializeJSON {
 
-  implicit var standardTimeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+  implicit var standardTimeout: Timeout = Timeout(15, TimeUnit.SECONDS)
 
   final val MinimumTime: Long = 1518898908367L
 

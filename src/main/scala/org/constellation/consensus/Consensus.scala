@@ -44,7 +44,7 @@ class Consensus[F[_]: Concurrent](
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   implicit val contextShift
-    : ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki apply from calculationContext[F]
+    : ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded) // TODO: wkoszycki apply from calculationContext[F]
 
   implicit val shadowDAO: DAO = dao
 

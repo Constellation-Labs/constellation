@@ -232,7 +232,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                       }
                   }
 
-                  onSuccess(dao.snapshotService.getNextHeightInterval.unsafeToFuture()) { res =>
+                  APIDirective.handle(dao.snapshotService.getNextHeightInterval) { res =>
                     (res, fc.checkpointCacheData.height) match {
                       case (_, None) =>
                         logger.warn(s"Missing height when accepting block $baseHash")
