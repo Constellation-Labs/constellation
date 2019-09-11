@@ -29,7 +29,7 @@ lazy val versions = new {
   val micrometer = "1.2.0"
   val prometheus = "0.6.0"
   val sttp = "1.6.6"
-  val cats = "1.6.1"
+  val cats = "2.0.0"
   val json4s = "3.6.7"
   val mockito = "1.5.16"
 }
@@ -89,7 +89,7 @@ lazy val coreDependencies = Seq(
   "com.roundeights" %% "hasher" % "1.2.0",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "io.chrisdavenport" %% "log4cats-slf4j" % "0.4.0-M1",
+  "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
   "com.typesafe.akka" %% "akka-slf4j" % versions.akka,
@@ -109,7 +109,7 @@ lazy val coreDependencies = Seq(
   "com.twitter" %% "algebird-core" % "0.13.5",
   ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
   //  "org.typelevel" %% "alleycats-core" % versions.cats withSources() withJavadoc(),
-  ("org.typelevel" %% "cats-effect" % "1.3.1").withSources().withJavadoc(),
+  ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc(),
   "net.glxn" % "qrgen" % "1.4",
   //  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.twitter" %% "storehaus-cache" % "0.15.0",
