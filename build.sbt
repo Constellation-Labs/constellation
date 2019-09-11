@@ -136,7 +136,7 @@ lazy val testDependencies = Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.0",
   "org.scalatest" %% "scalatest" % "3.0.8",
   "org.scalactic" %% "scalactic" % "3.0.8",
-  "org.scalamock" %% "scalamock" % "4.3.0",
+  "org.scalamock" %% "scalamock" % "4.4.0",
   "org.mockito" %% "mockito-scala" % versions.mockito,
   "org.mockito" %% "mockito-scala-cats" % versions.mockito,
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
