@@ -22,8 +22,8 @@ javaAgents += "org.aspectj" % "aspectjweaver" % "1.9.4" % "runtime"
 lazy val _version = "1.0.12"
 
 lazy val versions = new {
-  val akka = "2.5.23"
-  val akkaHttp = "10.1.8"
+  val akka = "2.5.25"
+  val akkaHttp = "10.1.9"
   val akkaHttpCors = "0.4.1"
   val spongyCastle = "1.58.0.0"
   val micrometer = "1.2.0"
