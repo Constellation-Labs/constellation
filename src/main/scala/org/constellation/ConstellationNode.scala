@@ -197,7 +197,7 @@ case class NodeConfig(
   httpInterface: String = "0.0.0.0",
   httpPort: Int = 9000,
   peerHttpPort: Int = 9001,
-  defaultTimeoutSeconds: Int = 90,
+  defaultTimeoutSeconds: Int = 5,
   attemptDownload: Boolean = false,
   allowLocalhostPeers: Boolean = false,
   cliConfig: CliConfig = CliConfig(),
@@ -270,7 +270,7 @@ class ConstellationNode(
     .bind(nodeConfig.httpInterface, nodeConfig.peerHttpPort)
     .runWith(Sink.foreach { conn =>
       val address = conn.remoteAddress
-      conn.handleWith(peerAPI.routes(address))
+      conn.handleWith(logReqResp { peerAPI.routes(address) })
     })
 
   def shutdown(): Unit = {

@@ -229,7 +229,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   def withTimeoutSecondsAndMetric[T](
     fut: Future[T],
     metricPrefix: String,
-    timeoutSeconds: Int = 10,
+    timeoutSeconds: Int = 5,
     onError: => Unit = ()
   )(implicit ec: ExecutionContext, dao: DAO): Future[T] = {
     val prom = Promise[T]()
@@ -257,7 +257,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   def futureTryWithTimeoutMetric[T](
     t: => T,
     metricPrefix: String,
-    timeoutSeconds: Int = 10,
+    timeoutSeconds: Int = 5,
     onError: => Unit = ()
   )(implicit ec: ExecutionContext, dao: DAO): Future[Try[T]] =
     withTimeoutSecondsAndMetric(
