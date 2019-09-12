@@ -26,7 +26,6 @@ class ConfigEndpointsApiTest
     with IdiomaticMockitoCats {
 
   implicit val actorSystem: ActorSystem = system
-  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   var dao: DAO = _
   var api: API = _

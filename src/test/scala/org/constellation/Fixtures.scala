@@ -65,7 +65,7 @@ object Fixtures {
   }
 
   def getAPIClient(hostName: String, httpPort: Int)(implicit dao: DAO, executionContext: ExecutionContext) = {
-    val api = APIClient(host = hostName, port = httpPort)
+    val api = APIClient(host = hostName, port = httpPort)(dao.backend, dao)
     api.id = id
     api
   }

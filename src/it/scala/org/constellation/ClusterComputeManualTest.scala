@@ -4,11 +4,14 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import better.files._
+import com.softwaremill.sttp.SttpBackend
+import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
+import com.softwaremill.sttp.prometheus.PrometheusBackend
 import org.constellation.crypto.KeyUtils
 import org.constellation.util.{APIClient, Simulation}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.Try
 
 object ComputeTestUtil {
@@ -18,7 +21,7 @@ object ComputeTestUtil {
   def getAuxiliaryNodes(startMultiNodeMachines: Boolean = false)(
     implicit as: ActorSystem,
     mat: ActorMaterializer,
-    ec: ExecutionContextExecutor
+    backend: SttpBackend[Future, Nothing]
   ): (Seq[String], Seq[APIClient]) = {
 
     var ignoreIPs = Seq[String]()
@@ -71,7 +74,7 @@ object ComputeTestUtil {
 
   def createApisFromIpFile(
     ignoreIPs: Seq[String]
-  )(implicit ec: ExecutionContextExecutor): Seq[APIClient] = {
+  )(implicit backend: SttpBackend[Future, Nothing]): Seq[APIClient] = {
     val hostFile = {
       val defaultFile = File(System.getenv().getOrDefault("HOSTS_FILE", "hosts-2.txt"))
       if (defaultFile.exists) {
@@ -113,10 +116,7 @@ object ComputeTestUtil {
   * sbt docker image, needs to be fixed and then portions of this can be split into separate mains for init methods
   * vs actual test.
   */
-class ClusterComputeManualTest
-    extends TestKit(ActorSystem("ClusterTest"))
-    with FlatSpecLike
-    with BeforeAndAfterAll {
+class ClusterComputeManualTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
   override def afterAll {
     TestKit.shutdownActorSystem(system)
@@ -124,6 +124,8 @@ class ClusterComputeManualTest
 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+  implicit val backend: SttpBackend[Future, Nothing] =
+    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
 
   // For fixing some old bug, revisit later if necessary
   KeyUtils.makeKeyPair()

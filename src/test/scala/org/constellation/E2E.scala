@@ -37,10 +37,7 @@ trait E2E extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with Be
     portOffset: Int = 0,
     isGenesisNode: Boolean = false,
     isLightNode: Boolean = false
-  ): ConstellationNode = {
-    implicit val executionContext: ExecutionContextExecutorService =
-      ExecutionContext.fromExecutorService(new ForkJoinPool(100))
-
+  ): ConstellationNode =
     TestNode(
       randomizePorts = randomizePorts,
       portOffset = portOffset,
@@ -48,6 +45,5 @@ trait E2E extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with Be
       isGenesisNode = isGenesisNode,
       isLightNode = isLightNode
     )
-  }
 
 }

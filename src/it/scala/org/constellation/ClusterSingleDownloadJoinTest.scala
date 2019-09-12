@@ -4,11 +4,14 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import better.files._
+import com.softwaremill.sttp.SttpBackend
+import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
+import com.softwaremill.sttp.prometheus.PrometheusBackend
 import org.constellation.crypto.KeyUtils
 import org.constellation.util.{APIClient, HostPort, Simulation}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class ClusterSingleDownloadJoinTest
     extends TestKit(ActorSystem("ClusterTest"))
@@ -21,6 +24,9 @@ class ClusterSingleDownloadJoinTest
 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+
+  implicit val backend: SttpBackend[Future, Nothing] =
+    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
 
   // For fixing some old bug, revisit later if necessary
   KeyUtils.makeKeyPair()

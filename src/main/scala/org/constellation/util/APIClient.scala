@@ -17,7 +17,7 @@ import scala.util.{Failure, Success, Try}
 object APIClient {
 
   def apply(host: String = "127.0.0.1", port: Int, peerHTTPPort: Int = 9001, internalPeerHost: String = "")(
-    implicit executionContext: ExecutionContext,
+    implicit backend: SttpBackend[Future, Nothing],
     dao: DAO = null
   ): APIClient = {
 
@@ -28,7 +28,7 @@ object APIClient {
     val authPassword = config.getString("auth.password")
 
     new APIClient(host, port, peerHTTPPort, internalPeerHost, authEnabled, authId, authPassword)(
-      executionContext,
+      backend,
       dao
     )
   }
@@ -44,7 +44,7 @@ class APIClient private (
   val authId: String = null,
   authPassword: String = null
 )(
-  implicit override val executionContext: ExecutionContext,
+  implicit backend: SttpBackend[Future, Nothing],
   dao: DAO = null
 ) extends APIClientBase(host, port, authEnabled, authId, authPassword) {
 

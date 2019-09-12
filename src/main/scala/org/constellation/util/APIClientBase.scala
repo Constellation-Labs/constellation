@@ -29,7 +29,7 @@ object APIClientBase {
     authId: String = null,
     authPassword: String = null
   )(
-    implicit executionContext: ExecutionContext
+    implicit backend: SttpBackend[Future, Nothing]
   ): APIClientBase =
     new APIClientBase(host, port, authEnabled, authId, authPassword)
 }
@@ -41,7 +41,7 @@ class APIClientBase(
   authId: String = null,
   var authPassword: String = null
 )(
-  implicit val executionContext: ExecutionContext
+  implicit backend: SttpBackend[Future, Nothing]
 ) {
 
   implicit case object CanLogCorrelationId extends CanLog[HostPort] {
@@ -59,11 +59,9 @@ class APIClientBase(
 
   implicit val hostPortForLogging = HostPort(host, port)
 
-  implicit val logger = Logger.takingImplicit[HostPort]("APIClient")
-
-  implicit val backend = new LoggingSttpBackend[Future, Nothing](
-    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
-  )
+//  implicit val backend: SttpBackend[Future, Nothing] = new LoggingSttpBackend[Future, Nothing](
+//    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
+//  )
   implicit val serialization = native.Serialization
 
   val hostName: String = host

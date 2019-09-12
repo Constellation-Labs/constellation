@@ -76,7 +76,7 @@ object EdgeProcessor extends StrictLogging {
           FinishedCheckpoint(cache, finalFacilitators),
           timeout = 8.seconds,
           Map(
-            "ReplyTo" -> APIClient(dao.nodeConfig.hostName, dao.nodeConfig.peerHttpPort)
+            "ReplyTo" -> APIClient(dao.nodeConfig.hostName, dao.nodeConfig.peerHttpPort)(dao.backend)
               .base("finished/reply")
           )
         ),

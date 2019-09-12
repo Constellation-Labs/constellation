@@ -270,12 +270,12 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     }
 
   private[p2p] def makeCallback(u: URI, entity: AnyRef) =
-    APIClient(u.getHost, u.getPort)(ConstellationExecutionContext.unbounded)
+    APIClient(u.getHost, u.getPort)(dao.backend, dao)
       .postNonBlockingUnit(u.getPath, entity)
 
   private val blockBuildingRoundRoute =
     createRoute(ConsensusRoute.pathPrefix)(
-      () => new ConsensusRoute(dao.consensusManager, dao.snapshotService).createBlockBuildingRoundRoutes()
+      () => new ConsensusRoute(dao.consensusManager, dao.snapshotService, dao.backend).createBlockBuildingRoundRoutes()
     )
 
   private[p2p] val mixedEndpoints = {

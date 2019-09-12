@@ -203,7 +203,7 @@ object Simulation {
             s =>
               s.forall { res =>
                 res.forall(_._2) && res.size == apis.size - 1
-              }
+            }
           )
       },
       maxRetries,
@@ -381,7 +381,7 @@ object Simulation {
     useRegistrationFlow: Boolean = false,
     useStartFlowOnly: Boolean = false,
     snapshotCount: Int = 2
-  )(implicit executionContext: ExecutionContext): Boolean = {
+  ): Boolean = {
 
     assert(checkHealthy(apis))
     logger.info("Health validation passed")

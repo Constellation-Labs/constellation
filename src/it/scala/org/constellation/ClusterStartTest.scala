@@ -3,11 +3,14 @@ package org.constellation
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
+import com.softwaremill.sttp.SttpBackend
+import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
+import com.softwaremill.sttp.prometheus.PrometheusBackend
 import org.constellation.crypto.KeyUtils
 import org.constellation.util.Simulation
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class ClusterStartTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
@@ -16,7 +19,9 @@ class ClusterStartTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpec
   }
 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
-  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+
+  implicit val backend: SttpBackend[Future, Nothing] =
+    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
 
   // For fixing some old bug, revisit later if necessary
   KeyUtils.makeKeyPair()

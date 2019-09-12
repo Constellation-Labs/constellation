@@ -16,17 +16,16 @@ class TransitService extends StrictLogging {
   implicit val formats: Formats = org.json4s.DefaultFormats
   val httpPort = 80
 
-  def poll(feedUrl: String): Future[FeedMessage] = {
+  def poll(feedUrl: String): Future[Unit] =
+//    val w = new java.net.URL(feedUrl)
+//    val apiClient = APIClientBase(w.getHost, httpPort)(ConstellationExecutionContext.unbounded)
+//    val respF = apiClient.getBytes(w.getPath)
+//    val message = respF.map { r =>
+//      FeedMessage.parseFrom(r.unsafeBody)
+//    }(ConstellationExecutionContext.bounded)
 
-    val w = new java.net.URL(feedUrl)
-    val apiClient = APIClientBase(w.getHost, httpPort)(ConstellationExecutionContext.unbounded)
-    val respF = apiClient.getBytes(w.getPath)
-    val message = respF.map { r =>
-      FeedMessage.parseFrom(r.unsafeBody)
-    }(ConstellationExecutionContext.bounded)
-
-    message
-  }
+//    message
+    Future.successful(())
 
   def pollJson(feedUrl: String): Future[String] = {
     val msgF = poll(feedUrl)

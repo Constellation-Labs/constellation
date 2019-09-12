@@ -3,13 +3,16 @@ package org.constellation
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
+import com.softwaremill.sttp.SttpBackend
+import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
+import com.softwaremill.sttp.prometheus.PrometheusBackend
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.util.APIClient
 import org.json4s.JsonAST.JArray
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.sys.process._
 import scala.util.Try
 
@@ -24,9 +27,8 @@ object ClusterTest {
 
   case class KubeIPs(id: Int, rpcIP: String, udpIP: String) {
 
-    def valid: Boolean = {
+    def valid: Boolean =
       ipRegex.findAllIn(rpcIP).nonEmpty && ipRegex.findAllIn(udpIP).nonEmpty
-    }
   }
 
   // todo: Add documentation.
@@ -57,15 +59,11 @@ object ClusterTest {
           KubeIPs(
             k,
             vs.filter {
-                _._1.startsWith("rpc")
-              }
-              .head
-              ._2,
+              _._1.startsWith("rpc")
+            }.head._2,
             vs.filter {
-                _._1.startsWith("udp")
-              }
-              .head
-              ._2
+              _._1.startsWith("udp")
+            }.head._2
           )
       }
       .toList
@@ -109,21 +107,19 @@ object ClusterTest {
     val pods = ((kubectl ++ Seq("get", "-o", "json", "pods")).!!.jValue \ "items").extract[JArray]
     val nodes = getNodeIPs
 
-    val hostIPToName = pods
-      .filter { p =>
-        Try {
-          val name = (p \ "metadata" \ "name").extract[String]
-          name.split("-").dropRight(1).mkString("-") == namePrefix
-        }.getOrElse(false)
-      }
-      .map { p =>
-        //  val hostIPInternal = (p \ "status" \ "hostIP").extract[String]
-        val hostIPInternal = (p \ "spec" \ "nodeName").extract[String]
-        val externalIP = nodes.collectFirst {
-          case x if x.internalIP == hostIPInternal => x.externalIP
-        }.get
-        PodIPName((p \ "metadata" \ "name").extract[String], hostIPInternal, externalIP)
-      }
+    val hostIPToName = pods.filter { p =>
+      Try {
+        val name = (p \ "metadata" \ "name").extract[String]
+        name.split("-").dropRight(1).mkString("-") == namePrefix
+      }.getOrElse(false)
+    }.map { p =>
+      //  val hostIPInternal = (p \ "status" \ "hostIP").extract[String]
+      val hostIPInternal = (p \ "spec" \ "nodeName").extract[String]
+      val externalIP = nodes.collectFirst {
+        case x if x.internalIP == hostIPInternal => x.externalIP
+      }.get
+      PodIPName((p \ "metadata" \ "name").extract[String], hostIPInternal, externalIP)
+    }
 
     hostIPToName
   }
@@ -132,10 +128,7 @@ object ClusterTest {
 
 // TODO: Re-enable after doing kubernetes entropy / haveged fix
 
-class ClusterTest
-    extends TestKit(ActorSystem("ClusterTest"))
-    with FlatSpecLike
-    with BeforeAndAfterAll {
+class ClusterTest extends TestKit(ActorSystem("ClusterTest")) with FlatSpecLike with BeforeAndAfterAll {
 
   override def afterAll {
     TestKit.shutdownActorSystem(system)
@@ -143,6 +136,9 @@ class ClusterTest
 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+
+  implicit val backend: SttpBackend[Future, Nothing] =
+    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
 
   import ClusterTest._
 

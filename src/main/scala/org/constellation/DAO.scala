@@ -1,12 +1,13 @@
 package org.constellation
 
-import java.util.concurrent.TimeUnit
-
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
 import cats.effect.{Concurrent, ContextShift, IO}
-import com.typesafe.scalalogging.StrictLogging
+import com.softwaremill.sttp.SttpBackend
+import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
+import com.softwaremill.sttp.prometheus.PrometheusBackend
+import com.typesafe.scalalogging.{Logger, StrictLogging}
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -22,9 +23,14 @@ import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
 import org.constellation.storage._
 import org.constellation.storage.external.{CloudStorage, GcpStorage}
 import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.util.{HealthChecker, HostPort, SnapshotWatcher}
+import org.constellation.util.{HealthChecker, HostPort, LoggingSttpBackend, SnapshotWatcher}
+import scala.concurrent.duration._
+import scala.concurrent.Future
 
 class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLogging {
+
+  val backend: SttpBackend[Future, Nothing] =
+    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
 
   var initialNodeConfig: NodeConfig = _
   @volatile var nodeConfig: NodeConfig = _
@@ -78,7 +84,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     initialNodeConfig = nodeConfigInit
     nodeConfig = nodeConfigInit
     actorMaterializer = materialize
-    standardTimeout = Timeout(nodeConfig.defaultTimeoutSeconds, TimeUnit.SECONDS)
+    standardTimeout = Timeout(nodeConfig.defaultTimeoutSeconds seconds)
 
     if (nodeConfig.isLightNode) {
       nodeType = NodeType.Light
