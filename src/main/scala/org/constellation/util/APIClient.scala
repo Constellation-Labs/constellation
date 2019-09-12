@@ -58,13 +58,13 @@ class APIClient private (
     }.getOrElse(Map())
 
   def metricsAsync: Future[Map[String, String]] =
-    getNonBlocking[MetricsResult]("metrics", timeout = 15.seconds)
+    getNonBlocking[MetricsResult]("metrics", timeout = 5.seconds)
       .map(_.metrics)(ConstellationExecutionContext.unbounded)
 
   def getBlockingBytesKryo[T <: AnyRef](
     suffix: String,
     queryParams: Map[String, String] = Map(),
-    timeout: Duration = 15.seconds
+    timeout: Duration = 5.seconds
   ): T = {
     val resp =
       httpWithAuth(suffix, queryParams, timeout)(Method.GET).response(asByteArray).send().blocking()
@@ -74,7 +74,7 @@ class APIClient private (
   def getNonBlockingBytesKryo[T <: AnyRef](
     suffix: String,
     queryParams: Map[String, String] = Map(),
-    timeout: Duration = 15.seconds
+    timeout: Duration = 5.seconds
   )(contextToReturn: ContextShift[IO]): IO[T] =
     contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[IO].async { cb =>
       httpWithAuth(suffix, queryParams, timeout)(Method.GET)
@@ -89,7 +89,7 @@ class APIClient private (
   def getNonBlockingIO[T <: AnyRef](
     suffix: String,
     queryParams: Map[String, String] = Map(),
-    timeout: Duration = 15.seconds
+    timeout: Duration = 5.seconds
   )(
     contextToReturn: ContextShift[IO]
   )(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): IO[T] =
@@ -103,7 +103,7 @@ class APIClient private (
   def getNonBlockingF[F[_]: Async, T <: AnyRef](
     suffix: String,
     queryParams: Map[String, String] = Map(),
-    timeout: Duration = 15.seconds
+    timeout: Duration = 5.seconds
   )(contextToReturn: ContextShift[F])(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): F[T] =
     contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[F].async { cb =>
       getNonBlocking[T](suffix, queryParams, timeout).onComplete {
@@ -115,7 +115,7 @@ class APIClient private (
   def postNonBlockingIO[T <: AnyRef](
     suffix: String,
     b: AnyRef,
-    timeout: Duration = 15.seconds,
+    timeout: Duration = 5.seconds,
     headers: Map[String, String] = Map.empty
   )(
     contextToReturn: ContextShift[IO]
@@ -130,7 +130,7 @@ class APIClient private (
   def postNonBlockingF[F[_]: Async, T <: AnyRef](
     suffix: String,
     b: AnyRef,
-    timeout: Duration = 15.seconds,
+    timeout: Duration = 5.seconds,
     headers: Map[String, String] = Map.empty
   )(contextToReturn: ContextShift[F])(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): F[T] =
     contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[F].async { cb =>
@@ -143,7 +143,7 @@ class APIClient private (
   def postNonBlockingUnitF[F[_]: Async](
     suffix: String,
     b: AnyRef,
-    timeout: Duration = 15.seconds,
+    timeout: Duration = 5.seconds,
     headers: Map[String, String] = Map.empty
   )(contextToReturn: ContextShift[F])(implicit f: Formats = constellation.constellationFormats): F[Response[Unit]] =
     contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[F].async { cb =>
@@ -156,7 +156,7 @@ class APIClient private (
   def getStringF[F[_]: Async](
     suffix: String,
     queryParams: Map[String, String] = Map(),
-    timeout: Duration = 15.seconds
+    timeout: Duration = 5.seconds
   )(contextToReturn: ContextShift[F]): F[Response[String]] =
     contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[F].async { cb =>
       httpWithAuth(suffix, queryParams, timeout)(Method.GET)
@@ -170,7 +170,7 @@ class APIClient private (
   def postNonBlockingIOUnit(
     suffix: String,
     b: AnyRef,
-    timeout: Duration = 15.seconds,
+    timeout: Duration = 5.seconds,
     headers: Map[String, String] = Map.empty
   )(contextToReturn: ContextShift[IO])(implicit f: Formats = constellation.constellationFormats): IO[Response[Unit]] =
     contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[IO].async { cb =>

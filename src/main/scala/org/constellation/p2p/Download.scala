@@ -210,7 +210,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .traverse(
         client =>
           client
-            .getNonBlockingBytesKryo[SnapshotInfo]("info", timeout = 15.seconds)(contextShift)
+            .getNonBlockingBytesKryo[SnapshotInfo]("info", timeout = 5.seconds)(contextShift)
             .map(_.some)
             .handleErrorWith(_ => IO.pure[Option[SnapshotInfo]](None))
       )
