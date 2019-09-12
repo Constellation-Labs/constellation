@@ -3,7 +3,6 @@
 
     <appender name="metrics" class="io.prometheus.client.logback.InstrumentedAppender" />
 
-
     <property name="HOME_LOG" value="logs/app.log"/>
     <appender name="rollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${HOME_LOG}</file>

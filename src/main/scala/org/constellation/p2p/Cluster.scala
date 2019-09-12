@@ -388,7 +388,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     logThread(
       withMetric(
         {
-          val client = APIClient(hp.host, hp.port)(ConstellationExecutionContext.callbacks, dao)
+          val client = APIClient(hp.host, hp.port)(ConstellationExecutionContext.unbounded, dao)
 
           client
             .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")(C)
