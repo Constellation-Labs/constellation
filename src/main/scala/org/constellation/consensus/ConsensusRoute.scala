@@ -35,10 +35,11 @@ object ConsensusRoute {
 
 }
 
-class ConsensusRoute(consensusManager: ConsensusManager[IO],
-                     snapshotService: SnapshotService[IO],
-                     backend: SttpBackend[Future, Nothing])
-    extends Json4sSupport {
+class ConsensusRoute(
+  consensusManager: ConsensusManager[IO],
+  snapshotService: SnapshotService[IO],
+  backend: SttpBackend[Future, Nothing]
+) extends Json4sSupport {
 
   val logger: Logger = LoggerFactory.getLogger(getClass)
 
@@ -67,6 +68,10 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO],
     post {
       path(ConsensusRoute.newRoundPath) {
         entity(as[RoundDataRemote]) { cmd =>
+          // proposed minHeight
+          // getNextHeight (snapshotHeight + 2)
+          // if (last != 2) if (last > min)
+
           val participate = cmd.tipsSOE.minHeight
             .fold(IO.unit) { min =>
               snapshotService.getNextHeightInterval
