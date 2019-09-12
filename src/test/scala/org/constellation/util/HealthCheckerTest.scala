@@ -322,6 +322,145 @@ class HealthCheckerTest
       HealthChecker
         .choseMajority(List(foo, bar)) shouldBe (List.empty, Set.empty)
     }
+
+    it("aaa") {
+      val node1 = Id("node1") -> List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i))
+      val node2 = Id("node2") -> List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i))
+
+      HealthChecker
+        .compareSnapshotState((Id("ownNode"), List(0, 2).map(i => RecentSnapshot(s"$i", i))), List(node1, node2)) shouldBe
+        SnapshotDiff(
+          List(),
+          List(RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
+          List(Id("node1"), Id("node2"))
+        )
+    }
+
+    it("bbb") {
+      val node1 = Id("node1") -> List(6, 4, 2, 0).map(i => RecentSnapshot(s"$i", i))
+      val node2 = Id("node2") -> List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i))
+
+      HealthChecker
+        .compareSnapshotState((Id("ownNode"), List(0, 2).map(i => RecentSnapshot(s"$i", i))), List(node1, node2)) shouldBe
+        SnapshotDiff(
+          List(),
+          List(RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
+          List(Id("node1"), Id("node2"))
+        )
+    }
+
+    it("ccc") {
+      val node1 = Id("node1") -> List(6, 4, 2, 0).map(i => RecentSnapshot(s"$i", i))
+      val node2 = Id("node2") -> List(6, 4, 2, 0).map(i => RecentSnapshot(s"$i", i))
+
+      HealthChecker
+        .compareSnapshotState((Id("ownNode"), List(0, 2).map(i => RecentSnapshot(s"$i", i))), List(node1, node2)) shouldBe
+        SnapshotDiff(
+          List(),
+          List(RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
+          List(Id("node1"), Id("node2"))
+        )
+    }
+
+    it("ddd") {
+      val node1 = Id("node1") -> List(6, 4, 2, 0).map(i => RecentSnapshot(s"$i", i))
+      val node2 = Id("node2") -> List(6, 4, 2, 0).map(i => RecentSnapshot(s"$i", i))
+
+      HealthChecker
+        .compareSnapshotState((Id("ownNode"), List(0, 2).map(i => RecentSnapshot(s"$i", i))), List(node1, node2)) shouldBe
+        SnapshotDiff(
+          List(),
+          List(RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
+          List(Id("node1"), Id("node2"))
+        )
+    }
+
+    it("eee") {
+      val node1 = Id("node1") -> List(2, 0, 6, 4).map(i => RecentSnapshot(s"$i", i))
+      val node2 = Id("node2") -> List(4, 6, 2, 0).map(i => RecentSnapshot(s"$i", i))
+
+      HealthChecker
+        .compareSnapshotState((Id("ownNode"), List(0, 2).map(i => RecentSnapshot(s"$i", i))), List(node1, node2)) shouldBe
+        SnapshotDiff(
+          List(),
+          List(RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
+          List(Id("node1"), Id("node2"))
+        )
+    }
+
+    it("fff") {
+      val node1 = Id("node1") -> List(2, 0).map(i => RecentSnapshot(s"$i", i))
+      val node2 = Id("node2") -> List(2, 0).map(i => RecentSnapshot(s"$i", i))
+
+      HealthChecker
+        .compareSnapshotState((Id("ownNode"), List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i))), List(node1, node2)) shouldBe
+        SnapshotDiff(
+          List(RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
+          List(),
+          List(Id("node1"), Id("node2"), Id("ownNode"))
+        )
+    }
+
+    it("ggg") {
+      val node1 = Id("node1") -> List(12, 10, 8, 6, 4, 2, 0).map(i => RecentSnapshot(s"$i", i))
+      val node2 = Id("node2") -> List(2, 0).map(i => RecentSnapshot(s"$i", i))
+
+      HealthChecker
+        .compareSnapshotState((Id("ownNode"), List(0, 2, 6, 4).map(i => RecentSnapshot(s"$i", i))), List(node1, node2)) shouldBe
+        SnapshotDiff(
+          List(),
+          List(),
+          List(Id("node1"), Id("ownNode"))
+        )
+    }
+
+    it("hhh") {
+      val node1 = Id("node1") -> List(4, 2, 0).map(i => RecentSnapshot(s"$i", i))
+      val node2 = Id("node2") -> List(2, 0).map(i => RecentSnapshot(s"$i", i))
+
+      HealthChecker
+        .compareSnapshotState(
+          (Id("ownNode"), List(0, 2, 6, 4, 8).map(i => RecentSnapshot(s"$i", i))),
+          List(node1, node2)
+        ) shouldBe
+        SnapshotDiff(
+          List(RecentSnapshot("8", 8), RecentSnapshot("6", 6)),
+          List(),
+          List(Id("node1"), Id("ownNode"))
+        )
+    }
+
+    it("kkk") {
+      val node1 = Id("node1") -> List()
+      val node2 = Id("node2") -> List(2, 0).map(i => RecentSnapshot(s"$i", i))
+
+      HealthChecker
+        .compareSnapshotState(
+          (Id("ownNode"), List(0, 2, 6, 4, 8).map(i => RecentSnapshot(s"$i", i))),
+          List(node1, node2)
+        ) shouldBe
+        SnapshotDiff(
+          List(RecentSnapshot("8", 8), RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
+          List(),
+          List(Id("node2"), Id("ownNode"))
+        )
+    }
+
+    it("sss") {
+      val node1 = Id("node1") -> List(0).map(i => RecentSnapshot(s"$i", i))
+      val node2 = Id("node2") -> List(0, 2, 4, 6, 8, 10, 12, 14).map(i => RecentSnapshot(s"$i", i))
+
+      HealthChecker
+        .compareSnapshotState(
+          (Id("ownNode"), List(0, 2).map(i => RecentSnapshot(s"$i", i))),
+          List(node1, node2)
+        ) shouldBe
+        SnapshotDiff(
+          List(RecentSnapshot("8", 8), RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
+          List(),
+          List(Id("node2"), Id("ownNode"))
+        )
+    }
   }
 
   override protected def beforeEach(): Unit = {

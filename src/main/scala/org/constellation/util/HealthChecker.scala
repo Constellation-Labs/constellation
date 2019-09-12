@@ -39,6 +39,47 @@ object HealthChecker extends StrictLogging {
     majority
   }
 
+  private[util] def choseMajorityWithRecentSync(
+    clusterSnapshots: List[(Id, List[RecentSnapshot])],
+    ownHeight: Long
+  ): (List[RecentSnapshot], Set[_ <: Id]) = {
+    val mostRecentSnapshot = getMostRecentSnapshotAndNodeIds(clusterSnapshots)
+    if (mostRecentSnapshot.isEmpty) {
+      return (List.empty, Set.empty)
+    }
+
+    val recentSnapshotWithNodes =
+      if (shouldUseMostRecentSnapshot(mostRecentSnapshot.get, ownHeight)) mostRecentSnapshot
+      else chooseSnapshotAndNodeIds(clusterSnapshots)
+
+    if (recentSnapshotWithNodes.isEmpty) {
+      return (List.empty, Set.empty)
+    }
+    val recentSnapshot = recentSnapshotWithNodes.get
+
+    val nodeWithMajorityState = clusterSnapshots.find(f => f._1 == recentSnapshot._2.head)
+    nodeWithMajorityState match {
+      case Some(value) => (value._2.sortBy(_.height).reverse.dropWhile(_ != recentSnapshot._1), recentSnapshot._2)
+      case None        => (List.empty, Set.empty)
+    }
+  }
+
+  private[util] def getMostRecentSnapshotAndNodeIds(clusterSnapshots: List[(Id, List[RecentSnapshot])]) = {
+    val recentSnapshotWithNodes = sortSnapshotsAndNodeIds(clusterSnapshots)
+
+    if (recentSnapshotWithNodes.isEmpty) {
+      None
+    } else {
+      Some(recentSnapshotWithNodes.head._1, recentSnapshotWithNodes.head._2.map(_._1).toSet)
+    }
+  }
+
+  private[util] def shouldUseMostRecentSnapshot(
+    mostRecentSnapshots: (RecentSnapshot, Set[Id]),
+    ownHeight: Long
+  ): Boolean =
+    (mostRecentSnapshots._1.height - ownHeight) > 9
+
   private[util] def choseMajority(clusterSnapshots: List[(Id, List[RecentSnapshot])]) =
     chooseSnapshotAndNodeIds(clusterSnapshots) match {
       case Some(value) => nodesWithMajorityState(clusterSnapshots, value)
@@ -86,7 +127,7 @@ object HealthChecker extends StrictLogging {
     ownSnapshots: (Id, List[RecentSnapshot]),
     clusterSnapshots: List[(Id, List[RecentSnapshot])]
   ): SnapshotDiff =
-    choseMajority(clusterSnapshots :+ ownSnapshots) match {
+    choseMajorityWithRecentSync(clusterSnapshots :+ ownSnapshots, maxOrZero(ownSnapshots._2)) match {
       case (snapshots, peers) =>
         logger.debug(s"Selected major state : $snapshots")
         SnapshotDiff(
@@ -148,7 +189,9 @@ class HealthChecker[F[_]: Concurrent: Logger](
           .flatMap(
             _ =>
               Sync[F]
-                .delay[Option[List[RecentSnapshot]]](Some(HealthChecker.choseMajority(peersSnapshots)._1))
+                .delay[Option[List[RecentSnapshot]]](
+                  Some(HealthChecker.choseMajorityWithRecentSync(peersSnapshots, maxOrZero(ownSnapshots))._1)
+                )
           )
       } else {
         Sync[F].pure[Option[List[RecentSnapshot]]](None)
