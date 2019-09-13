@@ -120,5 +120,38 @@ class HealthCheckerChoseMajorTest extends FunSpecLike with ArgumentMatchersSugar
         List(Id("node1"), Id("node2"))
       )
     }
+
+    it("yyyy") {
+      val node1 = Id("node1") -> List(
+        RecentSnapshot("foo", 8),
+        RecentSnapshot("bar", 6),
+        RecentSnapshot("4", 4),
+        RecentSnapshot("2", 2),
+        RecentSnapshot("0", 0)
+      )
+      val node2 = Id("node2") -> List(
+        RecentSnapshot("foo", 8),
+        RecentSnapshot("bar", 6),
+        RecentSnapshot("4", 4),
+        RecentSnapshot("2", 2),
+        RecentSnapshot("0", 0)
+      )
+      val node3 = Id("node3") -> List(
+        RecentSnapshot("foo", 8),
+        RecentSnapshot("biz", 6),
+        RecentSnapshot("4", 4),
+        RecentSnapshot("2", 2),
+        RecentSnapshot("0", 0)
+      )
+      val state = List(node1, node2, node3)
+
+      val ownSnapshots = List(2, 0).map(i => RecentSnapshot(s"$i", i))
+
+      compareSnapshotState((Id("ownNode"), ownSnapshots), state) shouldBe SnapshotDiff(
+        List(),
+        List(RecentSnapshot("foo", 8), RecentSnapshot("bar", 6), RecentSnapshot("4", 4)),
+        List(Id("node1"))
+      )
+    }
   }
 }

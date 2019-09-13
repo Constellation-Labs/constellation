@@ -44,34 +44,24 @@ object HealthChecker extends StrictLogging {
     ownHeight: Long
   ): (List[RecentSnapshot], Set[_ <: Id]) = {
     val mostRecentSnapshot = getMostRecentSnapshotAndNodeIds(clusterSnapshots)
-    if (mostRecentSnapshot.isEmpty) {
-      return (List.empty, Set.empty)
-    }
 
-    val recentSnapshotWithNodes =
-      if (shouldUseMostRecentSnapshot(mostRecentSnapshot.get, ownHeight)) mostRecentSnapshot
+    val recentSnapshotWithNodes: (RecentSnapshot, Set[Id]) =
+      if (shouldUseMostRecentSnapshot(mostRecentSnapshot, ownHeight)) mostRecentSnapshot
       else chooseSnapshotAndNodeIds(clusterSnapshots)
 
-    if (recentSnapshotWithNodes.isEmpty) {
-      return (List.empty, Set.empty)
-    }
-    val recentSnapshot = recentSnapshotWithNodes.get
-
-    val nodeWithMajorityState = clusterSnapshots.find(f => f._1 == recentSnapshot._2.head)
+    val nodeWithMajorityState: Option[(Id, List[RecentSnapshot])] =
+      clusterSnapshots.find(f => f._1 == recentSnapshotWithNodes._2.head)
     nodeWithMajorityState match {
-      case Some(value) => (value._2.sortBy(_.height).reverse.dropWhile(_ != recentSnapshot._1), recentSnapshot._2)
-      case None        => (List.empty, Set.empty)
+      case Some(value) =>
+        (value._2.sortBy(_.height).reverse.dropWhile(_ != recentSnapshotWithNodes._1), Set(value._1))
+      case None => (List.empty, Set.empty)
     }
   }
 
   private[util] def getMostRecentSnapshotAndNodeIds(clusterSnapshots: List[(Id, List[RecentSnapshot])]) = {
-    val recentSnapshotWithNodes = sortSnapshotsAndNodeIds(clusterSnapshots)
+    val recentSnapshotWithNodes = sortSnapshotsAndNodeIds(clusterSnapshots).head
 
-    if (recentSnapshotWithNodes.isEmpty) {
-      None
-    } else {
-      Some(recentSnapshotWithNodes.head._1, recentSnapshotWithNodes.head._2.map(_._1).toSet)
-    }
+    (recentSnapshotWithNodes._1, recentSnapshotWithNodes._2.map(_._1).toSet)
   }
 
   private[util] def shouldUseMostRecentSnapshot(
@@ -80,21 +70,6 @@ object HealthChecker extends StrictLogging {
   ): Boolean =
     (mostRecentSnapshots._1.height - ownHeight) > 9
 
-  private[util] def choseMajority(clusterSnapshots: List[(Id, List[RecentSnapshot])]) =
-    chooseSnapshotAndNodeIds(clusterSnapshots) match {
-      case Some(value) => nodesWithMajorityState(clusterSnapshots, value)
-      case None        => (List.empty, Set.empty)
-    }
-
-  private[util] def nodesWithMajorityState(
-    clusterSnapshots: List[(Id, List[RecentSnapshot])],
-    node: (RecentSnapshot, Set[Id])
-  ) =
-    clusterSnapshots.find(f => f._1 == node._2.head) match {
-      case Some(value) => (value._2.sortBy(_.height).reverse.dropWhile(_ != node._1), node._2)
-      case None        => (List.empty, Set.empty)
-    }
-
   private[util] def dropToCurrentState(snapshot: (Id, List[RecentSnapshot]), majorityState: RecentSnapshot) =
     (snapshot._2.dropWhile(_ != majorityState), snapshot._2)
 
@@ -102,11 +77,7 @@ object HealthChecker extends StrictLogging {
     val sort = sortSnapshotsAndNodeIds(clusterSnapshots)
       .filter(_._2.lengthCompare(clusterSnapshots.size / 2) > 0)
 
-    if (sort.nonEmpty) {
-      Some(sort.head._1, sort.head._2.map(_._1).toSet)
-    } else {
-      None
-    }
+    (sort.head._1, sort.head._2.map(_._1).toSet)
   }
 
   private[util] def sortSnapshotsAndNodeIds(clusterSnapshots: List[(Id, List[RecentSnapshot])]) =
@@ -190,7 +161,11 @@ class HealthChecker[F[_]: Concurrent: Logger](
             _ =>
               Sync[F]
                 .delay[Option[List[RecentSnapshot]]](
-                  Some(HealthChecker.choseMajorityWithRecentSync(peersSnapshots, maxOrZero(ownSnapshots))._1)
+                  Some(
+                    HealthChecker
+                      .choseMajorityWithRecentSync(peersSnapshots, maxOrZero(ownSnapshots))
+                      ._1
+                  )
                 )
           )
       } else {
