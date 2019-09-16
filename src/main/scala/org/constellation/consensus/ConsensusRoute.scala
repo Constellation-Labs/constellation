@@ -7,6 +7,7 @@ import akka.http.scaladsl.server.{RequestContext, Route}
 import cats.effect.IO
 import constellation._
 import cats.implicits._
+import com.softwaremill.sttp.SttpBackend
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.consensus.Consensus._
 import org.constellation.consensus.ConsensusManager.SnapshotHeightAboveTip
@@ -18,6 +19,7 @@ import org.json4s.native
 import org.json4s.native.Serialization
 import org.slf4j.{Logger, LoggerFactory}
 
+import scala.concurrent.Future
 import scala.util.{Failure, Success}
 
 object ConsensusRoute {
@@ -31,25 +33,29 @@ object ConsensusRoute {
   val selectedPath = "selected"
   val selectedFullPath = s"$pathPrefix/$selectedPath"
 
+}
+
+class ConsensusRoute(
+  consensusManager: ConsensusManager[IO],
+  snapshotService: SnapshotService[IO],
+  backend: SttpBackend[Future, Nothing]
+) extends Json4sSupport {
+
+  val logger: Logger = LoggerFactory.getLogger(getClass)
+
+  implicit val serialization: Serialization.type = native.Serialization
+
   def convert(r: RoundDataRemote): RoundData =
     RoundData(
       r.roundId,
-      r.peers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort)(ConstellationExecutionContext.unbounded))),
-      r.lightPeers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort)(ConstellationExecutionContext.unbounded))),
+      r.peers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort)(backend))),
+      r.lightPeers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort)(backend))),
       r.facilitatorId,
       r.transactions,
       r.tipsSOE,
       r.messages,
       r.observations
     )
-}
-
-class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: SnapshotService[IO])
-    extends Json4sSupport {
-
-  val logger: Logger = LoggerFactory.getLogger(getClass)
-
-  implicit val serialization: Serialization.type = native.Serialization
 
   def createBlockBuildingRoundRoutes(): Route = extractRequestContext { ctx =>
     participateInNewRound(ctx) ~
@@ -62,6 +68,10 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
     post {
       path(ConsensusRoute.newRoundPath) {
         entity(as[RoundDataRemote]) { cmd =>
+          // proposed minHeight
+          // getNextHeight (snapshotHeight + 2)
+          // if (last != 2) if (last > min)
+
           val participate = cmd.tipsSOE.minHeight
             .fold(IO.unit) { min =>
               snapshotService.getNextHeightInterval
@@ -69,7 +79,7 @@ class ConsensusRoute(consensusManager: ConsensusManager[IO], snapshotService: Sn
                   last => if (last != 2 && last > min) throw SnapshotHeightAboveTip(cmd.roundId, last, min)
                 )
             }
-            .flatMap(_ => consensusManager.participateInBlockCreationRound(ConsensusRoute.convert(cmd)))
+            .flatMap(_ => consensusManager.participateInBlockCreationRound(convert(cmd)))
 
           APIDirective.onHandle(participate) {
             case Failure(err: SnapshotHeightAboveTip) =>

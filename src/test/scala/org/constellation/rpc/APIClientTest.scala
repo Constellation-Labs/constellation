@@ -2,19 +2,25 @@ package org.constellation.rpc
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+import com.softwaremill.sttp.SttpBackend
+import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
+import com.softwaremill.sttp.prometheus.PrometheusBackend
 import constellation._
+import org.constellation.ConstellationExecutionContext
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.Id
 import org.constellation.util.{APIClient, TestNode}
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with BeforeAndAfterAll {
 
   implicit val system: ActorSystem = ActorSystem("BlockChain")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
-  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+
+  implicit val backend: SttpBackend[Future, Nothing] =
+    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
 
   override def afterEach(): Unit =
     TestNode.clearNodes()

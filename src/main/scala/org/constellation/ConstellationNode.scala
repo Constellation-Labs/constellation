@@ -197,7 +197,7 @@ case class NodeConfig(
   httpInterface: String = "0.0.0.0",
   httpPort: Int = 9000,
   peerHttpPort: Int = 9001,
-  defaultTimeoutSeconds: Int = 90,
+  defaultTimeoutSeconds: Int = 5,
   attemptDownload: Boolean = false,
   allowLocalhostPeers: Boolean = false,
   cliConfig: CliConfig = CliConfig(),
@@ -210,9 +210,9 @@ class ConstellationNode(
   val nodeConfig: NodeConfig = NodeConfig()
 )(
   implicit val system: ActorSystem,
-  implicit val materialize: ActorMaterializer,
-  implicit val executionContext: ExecutionContext
-) {
+  implicit val materialize: ActorMaterializer
+//  implicit val executionContext: ExecutionContext
+) extends StrictLogging {
 
   implicit val dao: DAO = new DAO()
 
@@ -220,7 +220,6 @@ class ConstellationNode(
 
   dao.node = this
 
-  val logger = Logger(s"ConstellationNode_${dao.publicKeyHash}")
   MDC.put("node_id", dao.id.short)
 
   logger.info(
@@ -249,7 +248,7 @@ class ConstellationNode(
   )
 
   // If we are exposing rpc then create routes
-  val routes: Route = new API()(system, constellation.standardTimeout, dao).routes // logReqResp { }
+  val routes: Route = new API()(system, constellation.standardTimeout, dao).routes
 
   logger.info("Binding API")
 
@@ -275,7 +274,7 @@ class ConstellationNode(
     })
 
   def shutdown(): Unit = {
-    val gracefulShutdown = IO.delay(bindingFuture.foreach(_.unbind())) *>
+    val gracefulShutdown = IO.delay(bindingFuture.foreach(_.unbind())(ConstellationExecutionContext.callbacks)) *>
       IO.delay(logger.info("Node shutdown completed"))
 
     dao.cluster
@@ -294,13 +293,13 @@ class ConstellationNode(
   // ConstellationNode (i.e. the current Peer class) and have them under a common interface
 
   def getAPIClient(host: String = nodeConfig.hostName, port: Int = nodeConfig.httpPort): APIClient = {
-    val api = APIClient(host, port)
+    val api = APIClient(host, port)(dao.backend, dao)
     api.id = dao.id
     api
   }
 
   def getPeerAPIClient: APIClient = {
-    val api = APIClient(dao.nodeConfig.hostName, dao.nodeConfig.peerHttpPort)
+    val api = APIClient(dao.nodeConfig.hostName, dao.nodeConfig.peerHttpPort)(dao.backend, dao)
     api.id = dao.id
     api
   }
@@ -320,7 +319,7 @@ class ConstellationNode(
 
   def getAPIClientForNode(node: ConstellationNode): APIClient = {
     val ipData = node.getIPData
-    val api = APIClient(host = ipData.canonicalHostName, port = ipData.port)
+    val api = APIClient(host = ipData.canonicalHostName, port = ipData.port)(dao.backend, dao)
     api.id = dao.id
     api
   }

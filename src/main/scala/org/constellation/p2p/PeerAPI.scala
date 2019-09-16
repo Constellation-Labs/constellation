@@ -167,8 +167,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               )
               logger.debug(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
 
-              dao.transactionService.put(TransactionCacheData(tx)).unsafeRunSync()
-
+              dao.transactionService.put(TransactionCacheData(tx)).unsafeRunAsync(_ => ())
               dao.metrics.incrementMetric("faucetRequest")
 
               complete(Some(tx.hash))
@@ -232,7 +231,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                       }
                   }
 
-                  onSuccess(dao.snapshotService.getNextHeightInterval.unsafeToFuture()) { res =>
+                  APIDirective.handle(dao.snapshotService.getNextHeightInterval) { res =>
                     (res, fc.checkpointCacheData.height) match {
                       case (_, None) =>
                         logger.warn(s"Missing height when accepting block $baseHash")
@@ -271,12 +270,12 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     }
 
   private[p2p] def makeCallback(u: URI, entity: AnyRef) =
-    APIClient(u.getHost, u.getPort)(ConstellationExecutionContext.unbounded)
+    APIClient(u.getHost, u.getPort)(dao.backend, dao)
       .postNonBlockingUnit(u.getPath, entity)
 
   private val blockBuildingRoundRoute =
     createRoute(ConsensusRoute.pathPrefix)(
-      () => new ConsensusRoute(dao.consensusManager, dao.snapshotService).createBlockBuildingRoundRoutes()
+      () => new ConsensusRoute(dao.consensusManager, dao.snapshotService, dao.backend).createBlockBuildingRoundRoutes()
     )
 
   private[p2p] val mixedEndpoints = {

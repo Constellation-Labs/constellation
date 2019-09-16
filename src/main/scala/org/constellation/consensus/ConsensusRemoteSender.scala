@@ -1,8 +1,9 @@
 package org.constellation.consensus
 
-import cats.effect.{Concurrent, ContextShift, LiftIO}
+import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.implicits._
 import com.softwaremill.sttp.Response
+import com.typesafe.scalalogging.StrictLogging
 import org.constellation.PeerMetadata
 import org.constellation.consensus.Consensus.{FacilitatorId, RoundData, RoundId}
 import org.constellation.consensus.ConsensusManager.{
@@ -15,7 +16,7 @@ import org.constellation.primitives.{ChannelMessage, Observation, TipSoe, Transa
 
 class ConsensusRemoteSender[F[_]: Concurrent](
   contextShift: ContextShift[F]
-) {
+) extends StrictLogging {
 
   def notifyFacilitators(roundData: RoundData): F[List[Response[Unit]]] =
     sendToAll(
@@ -69,7 +70,17 @@ class ConsensusRemoteSender[F[_]: Concurrent](
     cmd: AnyRef,
     msg: String
   ): F[List[Response[Unit]]] =
-    peers.traverse(pd => pd.client.postNonBlockingUnitF(path, cmd)(contextShift))
+    peers.traverse(
+      pd =>
+        pd.client
+          .postNonBlockingUnitF(path, cmd)(contextShift)
+          .flatTap(
+            r =>
+              Sync[F]
+                .delay(logger.info(s"Consensus ${roundId} sending msg ${msg}  code ${r.code} and text ${r.statusText}"))
+          )
+    )
+
 }
 
 case class RoundDataRemote(

@@ -28,23 +28,23 @@ import scala.util.{Failure, Random, Success, Try}
 
 package object constellation extends POWExt with SignHelpExt with KeySerializeJSON {
 
-  implicit var standardTimeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+  implicit var standardTimeout: Timeout = Timeout(15, TimeUnit.SECONDS)
 
   final val MinimumTime: Long = 1518898908367L
 
   implicit class EasyFutureBlock[T](f: Future[T]) {
 
-    def get(t: Int = 30): T = {
+    def get(t: Int = 60): T = {
       import scala.concurrent.duration._
       Await.result(f, t.seconds)
     }
 
-    def getOpt(t: Int = 30): Option[T] = {
+    def getOpt(t: Int = 60): Option[T] = {
       import scala.concurrent.duration._
       Try { Await.result(f, t.seconds) }.toOption
     }
 
-    def getTry(t: Int = 30): Try[T] = {
+    def getTry(t: Int = 60): Try[T] = {
       import scala.concurrent.duration._
       Try { Await.result(f, t.seconds) }
     }
@@ -229,7 +229,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   def withTimeoutSecondsAndMetric[T](
     fut: Future[T],
     metricPrefix: String,
-    timeoutSeconds: Int = 10,
+    timeoutSeconds: Int = 5,
     onError: => Unit = ()
   )(implicit ec: ExecutionContext, dao: DAO): Future[T] = {
     val prom = Promise[T]()
@@ -257,7 +257,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   def futureTryWithTimeoutMetric[T](
     t: => T,
     metricPrefix: String,
-    timeoutSeconds: Int = 10,
+    timeoutSeconds: Int = 5,
     onError: => Unit = ()
   )(implicit ec: ExecutionContext, dao: DAO): Future[Try[T]] =
     withTimeoutSecondsAndMetric(

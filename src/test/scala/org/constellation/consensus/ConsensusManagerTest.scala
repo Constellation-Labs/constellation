@@ -53,6 +53,7 @@ class ConsensusManagerTest
       dao.cluster,
       dao,
       conf,
+      IO.contextShift(ConstellationExecutionContext.unbounded),
       IO.contextShift(ConstellationExecutionContext.bounded)
     )
   }

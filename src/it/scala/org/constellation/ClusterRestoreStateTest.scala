@@ -3,13 +3,16 @@ package org.constellation
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
+import com.softwaremill.sttp.SttpBackend
+import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
+import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.typesafe.scalalogging.Logger
 import org.constellation.util.APIClient
 import org.constellation.util.Simulation._
 import org.scalatest.{BeforeAndAfterAll, CancelAfterFailure, FlatSpecLike}
 import org.slf4j.LoggerFactory
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class ClusterRestoreStateTest
     extends TestKit(ActorSystem("ClusterRestoreStateTest"))
@@ -22,7 +25,9 @@ class ClusterRestoreStateTest
   }
 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
-  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+
+  implicit val backend: SttpBackend[Future, Nothing] =
+    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
 
   val logger = Logger(LoggerFactory.getLogger(getClass.getName))
 

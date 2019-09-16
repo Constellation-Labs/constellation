@@ -24,7 +24,7 @@ class ConstellationApp(
     val response = clientApi.postNonBlocking[Option[ChannelOpenResponse]](
       "channel/open",
       ChannelOpen(channelName, jsonSchema = Some(schemaStr)),
-      timeout = 120.seconds
+      timeout = 15.seconds
     )
     response.map { resp =>
       val channelMsg = resp.map { msg =>
@@ -42,7 +42,7 @@ class ConstellationApp(
     clientApi.postNonBlocking[ChannelSendResponse](
       "channel/send",
       ChannelSendRequest(channelId, serializedMessages),
-      timeout = 120.seconds
+      timeout = 15.seconds
     )
   }
 }

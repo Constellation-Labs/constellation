@@ -34,8 +34,6 @@ trait CommonEndpoints extends Json4sSupport {
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String]
 
-  implicit val _timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
-
   implicit val dao: DAO
 
   val commonEndpoints: Route = get {
