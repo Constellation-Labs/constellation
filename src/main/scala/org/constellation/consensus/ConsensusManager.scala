@@ -28,6 +28,7 @@ class ConsensusManager[F[_]: Concurrent](
   cluster: Cluster[F],
   dao: DAO,
   config: Config,
+  remoteCall: ContextShift[F],
   calculationContext: ContextShift[F]
 ) {
 
@@ -87,6 +88,7 @@ class ConsensusManager[F[_]: Concurrent](
           this,
           shadowDAO,
           config,
+          remoteCall,
           calculationContext
         ),
         roundData._1.tipsSOE.minHeight,
@@ -204,6 +206,7 @@ class ConsensusManager[F[_]: Concurrent](
           this,
           shadowDAO,
           config,
+          remoteCall,
           calculationContext
         ),
         roundData.tipsSOE.minHeight,

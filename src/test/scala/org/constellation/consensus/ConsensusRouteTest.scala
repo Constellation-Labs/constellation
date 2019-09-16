@@ -5,9 +5,12 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import cats.effect.IO
 import cats.implicits._
+import com.softwaremill.sttp.SttpBackend
+import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
+import com.softwaremill.sttp.prometheus.PrometheusBackend
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.PeerMetadata
+import org.constellation.{ConstellationExecutionContext, PeerMetadata}
 import org.constellation.consensus.Consensus.FacilitatorId
 import org.constellation.primitives.Schema.{Id, SignedObservationEdge}
 import org.constellation.primitives.{ChannelMessage, Observation, TipSoe, Transaction}
@@ -17,6 +20,8 @@ import org.json4s.native.Serialization
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+
+import scala.concurrent.Future
 
 class ConsensusRouteTest
     extends FreeSpec
@@ -31,10 +36,13 @@ class ConsensusRouteTest
   implicit val serialization: Serialization.type = native.Serialization
   implicit val s: ActorSystem = system
 
+  implicit val backend: SttpBackend[Future, Nothing] =
+    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
+
   val consensusManager = mock[ConsensusManager[IO]]
   val snapshotService = mock[SnapshotService[IO]]
 
-  val consensusRoute = new ConsensusRoute(consensusManager, snapshotService)
+  val consensusRoute = new ConsensusRoute(consensusManager, snapshotService, backend)
 
   "participate route  " - {
     val data = RoundDataRemote(

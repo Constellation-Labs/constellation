@@ -2,7 +2,7 @@ filebeat.inputs:
 - type: log
   enabled: true
   paths:
-    - /home/ubuntu/constellation/logs/json_logs/dag*.log
+    - /home/ubuntu/constellation/logs/json_logs/*.log
   json.keys_under_root: true
   json.add_error_key: true
 output.elasticsearch:

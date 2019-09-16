@@ -88,7 +88,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
         .onComplete {
           case Success(value) => cb(Right(value.body))
           case Failure(error) => cb(Left(error))
-        }(ConstellationExecutionContext.callbacks)
+        }(ConstellationExecutionContext.unbounded)
     }
     for {
       _ <- broadcastLightNode

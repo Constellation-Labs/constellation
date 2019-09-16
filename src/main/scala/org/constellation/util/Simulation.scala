@@ -23,7 +23,7 @@ object Simulation {
 
   def healthy(apis: Seq[APIClient]): Boolean = {
     val responses = apis.map(a => {
-      val res = a.getString("health", timeout = 5.seconds)
+      val res = a.getString("health", timeout = 15.seconds)
       res
     })
     Future.sequence(responses).map(_.forall(_.isSuccess)).get(15)
@@ -203,7 +203,7 @@ object Simulation {
             s =>
               s.forall { res =>
                 res.forall(_._2) && res.size == apis.size - 1
-              }
+            }
           )
       },
       maxRetries,
@@ -381,7 +381,7 @@ object Simulation {
     useRegistrationFlow: Boolean = false,
     useStartFlowOnly: Boolean = false,
     snapshotCount: Int = 2
-  )(implicit executionContext: ExecutionContext): Boolean = {
+  ): Boolean = {
 
     assert(checkHealthy(apis))
     logger.info("Health validation passed")
@@ -412,14 +412,14 @@ object Simulation {
     assert(checkGenesis(apis))
     logger.info("Genesis validation passed")
 
-    enableRandomTransactions(apis)
-    logger.info("Starting random transactions")
+//    enableRandomTransactions(apis)
+//    logger.info("Starting random transactions")
 
     setReady(apis)
 
-    assert(awaitCheckpointsAccepted(apis, numAccepted = 3))
-
     if (!useStartFlowOnly) {
+
+      assert(awaitCheckpointsAccepted(apis, numAccepted = 3))
 
       disableRandomTransactions(apis)
       logger.info("Stopping random transactions to run parity check")

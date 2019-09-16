@@ -17,7 +17,7 @@ import scala.util.{Failure, Success, Try}
 object APIClient {
 
   def apply(host: String = "127.0.0.1", port: Int, peerHTTPPort: Int = 9001, internalPeerHost: String = "")(
-    implicit executionContext: ExecutionContext,
+    implicit backend: SttpBackend[Future, Nothing],
     dao: DAO = null
   ): APIClient = {
 
@@ -28,7 +28,7 @@ object APIClient {
     val authPassword = config.getString("auth.password")
 
     new APIClient(host, port, peerHTTPPort, internalPeerHost, authEnabled, authId, authPassword)(
-      executionContext,
+      backend,
       dao
     )
   }
@@ -44,7 +44,7 @@ class APIClient private (
   val authId: String = null,
   authPassword: String = null
 )(
-  implicit override val executionContext: ExecutionContext,
+  implicit backend: SttpBackend[Future, Nothing],
   dao: DAO = null
 ) extends APIClientBase(host, port, authEnabled, authId, authPassword) {
 
@@ -59,7 +59,7 @@ class APIClient private (
 
   def metricsAsync: Future[Map[String, String]] =
     getNonBlocking[MetricsResult]("metrics", timeout = 15.seconds)
-      .map(_.metrics)(ConstellationExecutionContext.callbacks)
+      .map(_.metrics)(ConstellationExecutionContext.unbounded)
 
   def getBlockingBytesKryo[T <: AnyRef](
     suffix: String,
@@ -83,7 +83,7 @@ class APIClient private (
         .onComplete {
           case Success(value) => cb(Right(KryoSerializer.deserializeCast[T](value.unsafeBody)))
           case Failure(error) => cb(Left(error))
-        }(ConstellationExecutionContext.callbacks)
+        }(ConstellationExecutionContext.unbounded)
     })
 
   def getNonBlockingIO[T <: AnyRef](
@@ -97,7 +97,7 @@ class APIClient private (
       getNonBlocking[T](suffix, queryParams, timeout).onComplete {
         case Success(value) => cb(Right(value))
         case Failure(error) => cb(Left(error))
-      }(ConstellationExecutionContext.callbacks)
+      }(ConstellationExecutionContext.unbounded)
     })
 
   def getNonBlockingF[F[_]: Async, T <: AnyRef](
@@ -109,7 +109,7 @@ class APIClient private (
       getNonBlocking[T](suffix, queryParams, timeout).onComplete {
         case Success(value) => cb(Right(value))
         case Failure(error) => cb(Left(error))
-      }(ConstellationExecutionContext.callbacks)
+      }(ConstellationExecutionContext.unbounded)
     })
 
   def postNonBlockingIO[T <: AnyRef](
@@ -124,7 +124,7 @@ class APIClient private (
       postNonBlocking[T](suffix, b, timeout, headers).onComplete {
         case Success(value) => cb(Right(value))
         case Failure(error) => cb(Left(error))
-      }(ConstellationExecutionContext.callbacks)
+      }(ConstellationExecutionContext.unbounded)
     })
 
   def postNonBlockingF[F[_]: Async, T <: AnyRef](
@@ -137,7 +137,7 @@ class APIClient private (
       postNonBlocking[T](suffix, b, timeout, headers).onComplete {
         case Success(value) => cb(Right(value))
         case Failure(error) => cb(Left(error))
-      }(ConstellationExecutionContext.callbacks)
+      }(ConstellationExecutionContext.unbounded)
     })
 
   def postNonBlockingUnitF[F[_]: Async](
@@ -150,7 +150,7 @@ class APIClient private (
       postNonBlockingUnit(suffix, b, timeout).onComplete {
         case Success(value) => cb(Right(value))
         case Failure(error) => cb(Left(error))
-      }(ConstellationExecutionContext.callbacks)
+      }(ConstellationExecutionContext.unbounded)
     })
 
   def getStringF[F[_]: Async](
@@ -164,7 +164,7 @@ class APIClient private (
         .onComplete {
           case Success(value) => cb(Right(value))
           case Failure(error) => cb(Left(error))
-        }(ConstellationExecutionContext.callbacks)
+        }(ConstellationExecutionContext.unbounded)
     })
 
   def postNonBlockingIOUnit(
@@ -177,7 +177,7 @@ class APIClient private (
       postNonBlockingUnit(suffix, b, timeout, headers).onComplete {
         case Success(value) => cb(Right(value))
         case Failure(error) => cb(Left(error))
-      }(ConstellationExecutionContext.callbacks)
+      }(ConstellationExecutionContext.unbounded)
     })
 
   def simpleDownload(): Seq[StoredSnapshot] = {

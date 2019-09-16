@@ -29,7 +29,7 @@ object APIClientBase {
     authId: String = null,
     authPassword: String = null
   )(
-    implicit executionContext: ExecutionContext
+    implicit backend: SttpBackend[Future, Nothing]
   ): APIClientBase =
     new APIClientBase(host, port, authEnabled, authId, authPassword)
 }
@@ -41,7 +41,7 @@ class APIClientBase(
   authId: String = null,
   var authPassword: String = null
 )(
-  implicit val executionContext: ExecutionContext
+  implicit backend: SttpBackend[Future, Nothing]
 ) {
 
   implicit case object CanLogCorrelationId extends CanLog[HostPort] {
@@ -59,11 +59,9 @@ class APIClientBase(
 
   implicit val hostPortForLogging = HostPort(host, port)
 
-  implicit val logger = Logger.takingImplicit[HostPort]("APIClient")
-
-  implicit val backend = new LoggingSttpBackend[Future, Nothing](
-    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
-  )
+//  implicit val backend: SttpBackend[Future, Nothing] = new LoggingSttpBackend[Future, Nothing](
+//    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
+//  )
   implicit val serialization = native.Serialization
 
   val hostName: String = host
@@ -132,7 +130,7 @@ class APIClientBase(
   def putAsync(suffix: String, b: AnyRef, timeout: Duration = 15.seconds)(
     implicit f: Formats = constellation.constellationFormats
   ): IO[Response[String]] =
-    IO.fromFuture(IO(put(suffix, b, timeout)))(IO.contextShift(ConstellationExecutionContext.callbacks))
+    IO.fromFuture(IO(put(suffix, b, timeout)))(IO.contextShift(ConstellationExecutionContext.unbounded))
 
   def postEmpty(suffix: String, timeout: Duration = 15.seconds)(
     implicit f: Formats = constellation.constellationFormats
@@ -168,7 +166,7 @@ class APIClientBase(
       .headers(headers)
       .response(asJson[T])
       .send()
-      .map(_.unsafeBody)(ConstellationExecutionContext.callbacks)
+      .map(_.unsafeBody)(ConstellationExecutionContext.unbounded)
   }
 
   def postNonBlockingUnit(
@@ -197,7 +195,7 @@ class APIClientBase(
     httpWithAuth(suffix, timeout = timeout)(Method.POST)
       .response(asJson[T])
       .send()
-      .map(_.unsafeBody)(ConstellationExecutionContext.callbacks)
+      .map(_.unsafeBody)(ConstellationExecutionContext.unbounded)
 
   def postNonBlockingEmptyString(
     suffix: String,
@@ -236,7 +234,7 @@ class APIClientBase(
         .onComplete {
           case Success(value) => cb(Right(value))
           case Failure(error) => cb(Left(error))
-        }(ConstellationExecutionContext.callbacks)
+        }(ConstellationExecutionContext.unbounded)
     })
 
   def getBlocking[T <: AnyRef](
@@ -254,6 +252,6 @@ class APIClientBase(
     httpWithAuth(suffix, queryParams, timeout)(Method.GET)
       .response(asJson[T])
       .send()
-      .map(_.unsafeBody)(ConstellationExecutionContext.callbacks)
+      .map(_.unsafeBody)(ConstellationExecutionContext.unbounded)
 
 }

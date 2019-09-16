@@ -24,8 +24,8 @@ object TestNode {
     isLightNode: Boolean = false
   )(
     implicit system: ActorSystem,
-    materializer: ActorMaterializer,
-    executionContext: ExecutionContext
+    materializer: ActorMaterializer
+//    executionContext: ExecutionContext
   ): ConstellationNode = {
 
     val randomPort =
