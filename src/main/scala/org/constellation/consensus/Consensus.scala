@@ -15,7 +15,7 @@ import org.constellation.consensus.ConsensusManager.{
   BroadcastUnionBlockProposal
 }
 import org.constellation.p2p.{DataResolver, PeerData, PeerNotification}
-import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, TypedEdgeHash}
+import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, Id, TypedEdgeHash}
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage._
@@ -329,55 +329,80 @@ class Consensus[F[_]: Concurrent](
     } yield ()
   }
 
-  private[consensus] def mergeTxProposalsAndBroadcastBlock(): F[Unit] =
+  private[consensus] def prepareConsensusData[A, T <: AnyRef](
+    dataType: String,
+    proposals: Map[FacilitatorId, LightTransactionsProposal],
+    readyPeers: Map[Id, PeerApiClient],
+    mapHashes: LightTransactionsProposal => Seq[String],
+    startingHashes: Traversable[String],
+    lookupService: String => F[Option[A]],
+    resolvedMapper: T => A
+  )(implicit m: Manifest[T]): F[List[A]] =
     for {
       _ <- logger.debug(
-        s" ${roundData.roundId} merge transactions proposal"
+        s" ${roundData.roundId} preparing $dataType "
       )
+      hashes = proposals.mapValues(mapHashes)
+      combined <- (hashes + (roundData.facilitatorId -> (hashes
+        .getOrElse(roundData.facilitatorId, Seq.empty) ++ startingHashes)))
+        .map(x => x._2.map(t => (t, x._1)))
+        .flatten
+        .toList
+        .distinct
+        .traverse(x => lookupService(x._1).map((x, _)))
+      toResolve = combined.filter(_._2.isEmpty)
+      _ <- logger.debug(
+        s"Consensus with id ${roundData.roundId} $dataType to resolve size ${toResolve.size} total size ${combined.size}"
+      )
+      resolved <- toResolve
+        .traverse(
+          t =>
+            LiftIO[F].liftIO(
+              dataResolver
+                .resolveDataByDistance[T](
+                  List(t._1._1),
+                  dataType,
+                  readyPeers.values.toList,
+                  readyPeers.get(t._1._2.id)
+                )(contextShift)
+                .head
+            )
+        )
+      _ <- logger.debug(
+        s" ${roundData.roundId} $dataType resolved size ${resolved.size}"
+      )
+    } yield resolved.map(resolvedMapper) ++ combined.flatMap(_._2)
+
+  private[consensus] def mergeTxProposalsAndBroadcastBlock(): F[Unit] =
+    for {
       readyPeers <- LiftIO[F].liftIO(dao.readyPeers.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
       proposals <- transactionProposals.get
-      idsTxs = (
-        proposals.keySet,
-        proposals.values.map(_.txHashes).toList.flatten.union(roundData.transactions.map(_.hash)).distinct
+      transactions <- prepareConsensusData[Transaction, TransactionCacheData](
+        "transaction",
+        proposals,
+        readyPeers, { p =>
+          p.txHashes
+        },
+        roundData.transactions.map(_.hash), { s =>
+          transactionService.lookup(s).map(_.map(_.transaction))
+        }, { tcd =>
+          tcd.transaction
+        }
       )
-      txs <- idsTxs._2.traverse(t => transactionService.lookup(t).map((t, _)))
-      _ <- logger.debug(
-        s" ${roundData.roundId} transactions proposal_size all txs ${idsTxs._2.size} lookup size ${txs.flatMap(_._2).size}"
-      )
-      resolved <- txs
-        .filter(_._2.isEmpty)
-        .traverse(
-          t =>
-            LiftIO[F].liftIO(
-              dataResolver
-                .resolveTransactionDefaults(
-                  t._1,
-                  readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList.headOption,
-                  roundData.roundId.some
-                )(contextShift)
-                .map(_.transaction)
-            )
-        )
-      _ <- logger.debug(
-        s" ${roundData.roundId} transactions proposal_size ${proposals.size} values size ${idsTxs._2.size} lookup size ${txs.size} resolved ${resolved.size}"
-      )
-      msgs <- proposals.values
-        .flatMap(_.messages)
-        .toList
-        .traverse(m => messageService.lookup(m).map((m, _)))
-      resolvedMsg <- msgs
-        .filter(_._2.isEmpty)
-        .traverse(
-          t =>
-            LiftIO[F].liftIO(
-              dataResolver
-                .resolveMessageDefaults(
-                  t._1,
-                  readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList.headOption
-                )(contextShift)
-                .map(_.channelMessage)
-            )
-        )
+
+      messages <- prepareConsensusData[ChannelMessage, ChannelMessageMetadata](
+        "message",
+        proposals,
+        readyPeers, { p =>
+          p.messages
+        },
+        Seq.empty[String], { s =>
+          messageService.lookup(s).map(_.map(_.channelMessage))
+        }, { cmm =>
+          cmm.channelMessage
+        }
+      ).map(_.union(roundData.messages)) // TODO: wkoszycki include messages to resolve them
+
       notifications = proposals
         .flatMap(_._2.notifications)
         .toSet
@@ -387,25 +412,26 @@ class Consensus[F[_]: Concurrent](
         .flatMap(_._2.exHashes)
         .toList
         .traverse(o => observationService.lookup(o).map((o, _)))
-      resolvedObs <- observations
-        .filter(_._2.isEmpty)
-        .traverse { ex =>
-          LiftIO[F].liftIO(
-            dataResolver.resolveObservation(
-              ex._1,
-              readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList,
-              None
-            )(contextShift)
-          )
+      resolvedObs <- prepareConsensusData[Observation, Observation](
+        "observation",
+        proposals,
+        readyPeers, { p =>
+          p.exHashes
+        },
+        roundData.observations.map(_.hash), { s =>
+          observationService.lookup(s)
+        }, { o =>
+          o
         }
+      )
       proposal = UnionBlockProposal(
         roundData.roundId,
         FacilitatorId(dao.id),
         CheckpointBlock.createCheckpointBlock(
-          resolved ++ txs.flatMap(_._2.map(_.transaction)),
+          transactions,
           roundData.tipsSOE.soe
             .map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash, Some(soe.baseHash))),
-          resolvedMsg.union(msgs.flatMap(_._2.map(_.channelMessage))).union(roundData.messages).distinct,
+          messages,
           notifications,
           observations.flatMap(_._2) ++ resolvedObs
         )(dao.keyPair)

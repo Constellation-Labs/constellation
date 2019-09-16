@@ -154,7 +154,7 @@ class DataResolver extends StrictLogging {
             cb =>
               cb.checkpointBlock.get.storeSOE() *> dao.checkpointService.memPool
                 .put(cb.checkpointBlock.get.baseHash, cb)
-          )
+        )
       ),
       s"dataResolver_resolveCheckpoints [${hashes}]",
       logger
@@ -184,7 +184,7 @@ class DataResolver extends StrictLogging {
       logger
     )
 
-  private[p2p] def resolveDataByDistance[T <: AnyRef](
+  def resolveDataByDistance[T <: AnyRef](
     hashes: List[String],
     endpoint: String,
     pool: List[PeerApiClient],
@@ -223,7 +223,7 @@ class DataResolver extends StrictLogging {
             case None =>
               IO.raiseError[T](
                 new Throwable(
-                  s"Failed to resolve hash=${hash} with host=${head.client.hostPortForLogging}, returned None, trying next peer"
+                  s"Failed to resolve hash=${hash} on endpoint $endpoint with host=${head.client.hostPortForLogging}, returned None, trying next peer"
                 )
               )
           }.handleErrorWith {
