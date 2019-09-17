@@ -9,8 +9,8 @@ import org.constellation.consensus.Consensus.RoundId
 import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEdgeCache}
 import org.constellation.primitives.{ChannelMessageMetadata, Observation, TransactionCacheData}
 import org.constellation.storage.ConsensusStatus
-import org.constellation.util.{Distance, PeerApiClient}
 import org.constellation.util.Logging._
+import org.constellation.util.{Distance, PeerApiClient}
 
 import scala.concurrent.duration._
 
@@ -154,7 +154,7 @@ class DataResolver extends StrictLogging {
             cb =>
               cb.checkpointBlock.get.storeSOE() *> dao.checkpointService.memPool
                 .put(cb.checkpointBlock.get.baseHash, cb)
-          )
+        )
       ),
       s"dataResolver_resolveCheckpoints [${hashes}]",
       logger
@@ -184,7 +184,7 @@ class DataResolver extends StrictLogging {
       logger
     )
 
-  private[p2p] def resolveDataByDistance[T <: AnyRef](
+  def resolveDataByDistance[T <: AnyRef](
     hashes: List[String],
     endpoint: String,
     pool: List[PeerApiClient],
@@ -221,18 +221,17 @@ class DataResolver extends StrictLogging {
           getData[T](hash, endpoint, head)(contextToReturn).flatMap {
             case Some(a) => IO.pure(a)
             case None =>
-              IO.raiseError[T](
-                new Throwable(
-                  s"Failed to resolve hash=${hash} with host=${head.client.hostPortForLogging}, returned None, trying next peer"
-                )
-              )
+              IO.raiseError[T](DataResolutionNoneResponse(endpoint, hash, head))
           }.handleErrorWith {
             case e: DataResolutionMaxErrors  => IO.raiseError[T](e)
             case e: DataResolutionOutOfPeers => IO.raiseError[T](e)
             case e if tail.isEmpty           => IO.raiseError[T](e)
+            case e: DataResolutionNoneResponse =>
+              logger.warn(e.getMessage)
+              makeAttempt(tail, allPeers, errorsSoFar + 1)
             case e =>
               logger.error(
-                s"Failed to resolve hash=${hash} with host=${head.client.hostPortForLogging}, trying next peer",
+                s"Unexpected error while resolving hash=${hash} on endpoint $endpoint with host=${head.client.hostPortForLogging}, and id ${head.client.id} trying next peer",
                 e
               )
               makeAttempt(tail, allPeers, errorsSoFar + 1)
@@ -281,6 +280,10 @@ case class DataResolutionOutOfPeers(thisNode: String, endpoint: String, hash: St
       s"node [$thisNode] Run out of peers when resolving: $endpoint with hash: $hash following tried: $peers"
     )
 
+case class DataResolutionNoneResponse(endpoint: String, hash: String, client: PeerApiClient)
+    extends Exception(
+      s"Failed to resolve hash=${hash} on endpoint $endpoint with host=${client.client.hostPortForLogging} and id ${client.id.short}, returned None"
+    )
 case class DataResolutionMaxErrors(endpoint: String, hash: String)
     extends Exception(
       s"Max errors threshold reached when resolving: $endpoint and hash: $hash aborting"
