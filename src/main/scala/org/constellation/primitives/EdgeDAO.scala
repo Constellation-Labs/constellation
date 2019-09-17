@@ -11,7 +11,7 @@ import org.constellation.rollback.RollbackService
 import org.constellation.storage._
 import org.constellation.storage.external.CloudStorage
 import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.util.{Metrics, SnapshotWatcher}
+import org.constellation.util.{MajorityStateChooser, Metrics, SnapshotWatcher}
 import org.constellation.{ConstellationExecutionContext, DAO, NodeConfig, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
@@ -119,6 +119,7 @@ trait EdgeDAO {
   var snapshotWatcher: SnapshotWatcher = _
   var rollbackService: RollbackService[IO] = _
   var cloudStorage: CloudStorage[IO] = _
+  var majorityStateChooser: MajorityStateChooser[IO] = _
 
   var consensusRemoteSender: ConsensusRemoteSender[IO] = _
   var consensusManager: ConsensusManager[IO] = _
