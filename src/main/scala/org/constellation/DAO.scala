@@ -23,7 +23,8 @@ import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
 import org.constellation.storage._
 import org.constellation.storage.external.{CloudStorage, GcpStorage}
 import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.util.{HealthChecker, HostPort, LoggingSttpBackend, SnapshotWatcher}
+import org.constellation.util.{HealthChecker, HostPort, LoggingSttpBackend, MajorityStateChooser, SnapshotWatcher}
+
 import scala.concurrent.duration._
 import scala.concurrent.Future
 
@@ -142,6 +143,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     )
 
     consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
+    majorityStateChooser = new MajorityStateChooser[IO]()
 
     snapshotBroadcastService = {
       val snapshotProcessor =
@@ -156,7 +158,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
           concurrentTipService,
           consensusManager,
           IO.contextShift(ConstellationExecutionContext.bounded),
-          downloadProcess
+          downloadProcess,
+          majorityStateChooser
         ),
         cluster,
         IO.contextShift(ConstellationExecutionContext.bounded),

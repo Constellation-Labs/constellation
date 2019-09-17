@@ -8,7 +8,6 @@ import org.constellation.p2p.{Cluster, DownloadProcess}
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
 import org.constellation.storage.RecentSnapshot
-import org.constellation.util.HealthChecker.compareSnapshotState
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -29,6 +28,7 @@ class HealthCheckerTest
   val downloadProcess: DownloadProcess = mock[DownloadProcess]
   val consensusManager: ConsensusManager[IO] = mock[ConsensusManager[IO]]
   val concurrentTipService: ConcurrentTipService[IO] = mock[ConcurrentTipService[IO]]
+  val majorState: MajorityStateChooser[IO] = mock[MajorityStateChooser[IO]]
 
   val healthChecker =
     new HealthChecker[IO](
@@ -36,69 +36,38 @@ class HealthCheckerTest
       concurrentTipService,
       consensusManager,
       IO.contextShift(ConstellationExecutionContext.bounded),
-      downloadProcess
+      downloadProcess,
+      majorState
     )(
       IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)),
       Slf4jLogger.getLogger[IO]
     )
 
   describe("compareSnapshotState util function") {
-
-    val node1 = Id("node1") -> List(4, 3, 2, 1).map(i => RecentSnapshot(s"$i", i))
-    val node2 = Id("node2") -> List(4, 3, 2, 1).map(i => RecentSnapshot(s"$i", i))
-    val state = List(node1, node2)
-    val ids = List(Id("node1"), Id("node2"))
-
-    it("should return empty list hashes to be deleted but not below given height") {
+    it("should return empty list to be deleted but not below given height") {
       val ownSnapshots = List(6, 5, 4, 3).map(i => RecentSnapshot(s"$i", i))
+      val majorState = (List(7, 6, 5, 4, 3).map(i => RecentSnapshot(s"$i", i)), Set(Id("node1")))
 
-      val diff = compareSnapshotState((Id("ownNode"), ownSnapshots), state)
-      healthChecker.shouldReDownload(ownSnapshots, diff) shouldBe false
-    }
+      val diff = healthChecker.compareSnapshotState(majorState, ownSnapshots).unsafeRunSync()
 
-    it("should return empty list  to be deleted but not below given height") {
-      val ownSnapshots = List(6, 5, 4, 3).map(i => RecentSnapshot(s"$i", i))
-
-      val diff = compareSnapshotState((Id("ownNode"), ownSnapshots), state)
-      healthChecker.shouldReDownload(
-        ownSnapshots,
-        SnapshotDiff(List(), List(RecentSnapshot("11", 11)), List(Id("node1")))
-      ) shouldBe true
-    }
-
-    it("should return part hashes to be deleted and to be downloaded") {
-      val ownSnapshots = List(6, 5, 2, 1).map(i => RecentSnapshot(s"$i", i))
-
-      compareSnapshotState((Id("ownNode"), ownSnapshots), state) shouldBe SnapshotDiff(
-        List(RecentSnapshot("6", 6), RecentSnapshot("5", 5)),
-        List(RecentSnapshot("4", 4), RecentSnapshot("3", 3)),
-        ids
-      )
-    }
-    it("should return all snapshots to be deleted and download") {
-      val ownSnapshots = List(7, 8, 6, 5).map(i => RecentSnapshot(s"$i", i))
-
-      compareSnapshotState((Id("ownNode"), ownSnapshots), state) shouldBe SnapshotDiff(
-        List(RecentSnapshot("8", 8), RecentSnapshot("7", 7), RecentSnapshot("6", 6), RecentSnapshot("5", 5)),
-        List(RecentSnapshot("4", 4), RecentSnapshot("3", 3), RecentSnapshot("2", 2), RecentSnapshot("1", 1)),
-        ids
-      )
+      diff.snapshotsToDelete shouldBe List()
+      diff.snapshotsToDownload shouldBe List(RecentSnapshot("7", 7))
+      diff.peers.size shouldBe 1
     }
 
     it("should return no diff") {
       val ownSnapshots = List(4, 3, 2, 1).map(i => RecentSnapshot(s"$i", i))
+      val majorState = (List(4, 3, 2, 1).map(i => RecentSnapshot(s"$i", i)), Set[Id]())
 
-      compareSnapshotState((Id("ownNode"), ownSnapshots), state) shouldBe SnapshotDiff(
-        List.empty,
-        List.empty,
-        ids :+ Id("ownNode")
-      )
+      val diff = healthChecker.compareSnapshotState(majorState, ownSnapshots).unsafeRunSync()
+
+      diff.snapshotsToDelete shouldBe List()
+      diff.snapshotsToDownload shouldBe List()
     }
   }
+
   describe("clear stale tips") {
-    it(
-      s"should run tips removal with max height of minimum nodes required to make consensus"
-    ) {
+    it("should run tips removal with max height of minimum nodes required to make consensus") {
 
       concurrentTipService.clearStaleTips(*) shouldReturn IO.unit
 
@@ -232,9 +201,11 @@ class HealthCheckerTest
   }
 
   describe("shouldDownload function") {
+
     val height = 2
     val ownSnapshots = List(height).map(i => RecentSnapshot(s"$i", i))
     val interval = dao.processingConfig.snapshotHeightRedownloadDelayInterval
+
     it("should return true when there are snaps to delete and to download") {
       val diff =
         SnapshotDiff(
@@ -292,174 +263,6 @@ class HealthCheckerTest
 
       downloadProcess.setNodeState(NodeState.DownloadInProgress).wasCalled(once)
       downloadProcess.setNodeState(NodeState.Ready).wasCalled(once)
-    }
-  }
-
-  describe("choseMajorityState function") {
-    it("should choose higher height when network is partitioned equally") {
-      val foo = (Id("foo"), List(RecentSnapshot("b", 4), RecentSnapshot("a", 2)))
-      val foo2 = (Id("foo2"), List(RecentSnapshot("b", 4), RecentSnapshot("a", 2)))
-      val bar = (Id("bar"), List(RecentSnapshot("c", 6), RecentSnapshot("b", 4)))
-      val bar2 = (Id("bar2"), List(RecentSnapshot("c", 6), RecentSnapshot("b", 4)))
-      HealthChecker.choseMajorityState(List(bar, foo, bar2, foo2)) shouldBe (bar._2, Set(bar._1, bar2._1))
-    }
-
-    it("should choose majority even height is lower") {
-      val foo = (Id("foo"), List(RecentSnapshot("b", 4), RecentSnapshot("a", 2)))
-      val foo2 = (Id("foo2"), List(RecentSnapshot("b", 4), RecentSnapshot("a", 2)))
-      val bar = (Id("bar"), List(RecentSnapshot("c", 6), RecentSnapshot("b", 4)))
-      HealthChecker.choseMajorityState(List(bar, foo, foo2)) shouldBe (foo._2, Set(foo._1, foo2._1))
-    }
-
-//    it("should return empty when snapshots are empty") {
-//      HealthChecker.choseMajority(List.empty) shouldBe (List.empty, Set.empty)
-//    }
-//
-//    it("should return empty when one of peers return empty list") {
-//      val foo = (Id("foo"), List.empty)
-//      val bar = (Id("bar"), List(RecentSnapshot("b", 4), RecentSnapshot("a", 2)))
-//
-//      HealthChecker
-//        .choseMajority(List(foo, bar)) shouldBe (List.empty, Set.empty)
-//    }
-
-    it("aaa") {
-      val node1 = Id("node1") -> List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i))
-      val node2 = Id("node2") -> List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i))
-
-      HealthChecker
-        .compareSnapshotState((Id("ownNode"), List(0, 2).map(i => RecentSnapshot(s"$i", i))), List(node1, node2)) shouldBe
-        SnapshotDiff(
-          List(),
-          List(RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
-          List(Id("node1"), Id("node2"))
-        )
-    }
-
-    it("bbb") {
-      val node1 = Id("node1") -> List(6, 4, 2, 0).map(i => RecentSnapshot(s"$i", i))
-      val node2 = Id("node2") -> List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i))
-
-      HealthChecker
-        .compareSnapshotState((Id("ownNode"), List(0, 2).map(i => RecentSnapshot(s"$i", i))), List(node1, node2)) shouldBe
-        SnapshotDiff(
-          List(),
-          List(RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
-          List(Id("node1"), Id("node2"))
-        )
-    }
-
-    it("ccc") {
-      val node1 = Id("node1") -> List(6, 4, 2, 0).map(i => RecentSnapshot(s"$i", i))
-      val node2 = Id("node2") -> List(6, 4, 2, 0).map(i => RecentSnapshot(s"$i", i))
-
-      HealthChecker
-        .compareSnapshotState((Id("ownNode"), List(0, 2).map(i => RecentSnapshot(s"$i", i))), List(node1, node2)) shouldBe
-        SnapshotDiff(
-          List(),
-          List(RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
-          List(Id("node1"), Id("node2"))
-        )
-    }
-
-    it("ddd") {
-      val node1 = Id("node1") -> List(6, 4, 2, 0).map(i => RecentSnapshot(s"$i", i))
-      val node2 = Id("node2") -> List(6, 4, 2, 0).map(i => RecentSnapshot(s"$i", i))
-
-      HealthChecker
-        .compareSnapshotState((Id("ownNode"), List(0, 2).map(i => RecentSnapshot(s"$i", i))), List(node1, node2)) shouldBe
-        SnapshotDiff(
-          List(),
-          List(RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
-          List(Id("node1"), Id("node2"))
-        )
-    }
-
-    it("eee") {
-      val node1 = Id("node1") -> List(2, 0, 6, 4).map(i => RecentSnapshot(s"$i", i))
-      val node2 = Id("node2") -> List(4, 6, 2, 0).map(i => RecentSnapshot(s"$i", i))
-
-      HealthChecker
-        .compareSnapshotState((Id("ownNode"), List(0, 2).map(i => RecentSnapshot(s"$i", i))), List(node1, node2)) shouldBe
-        SnapshotDiff(
-          List(),
-          List(RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
-          List(Id("node1"), Id("node2"))
-        )
-    }
-
-    it("fff") {
-      val node1 = Id("node1") -> List(2, 0).map(i => RecentSnapshot(s"$i", i))
-      val node2 = Id("node2") -> List(2, 0).map(i => RecentSnapshot(s"$i", i))
-
-      HealthChecker
-        .compareSnapshotState((Id("ownNode"), List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i))), List(node1, node2)) shouldBe
-        SnapshotDiff(
-          List(RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
-          List(),
-          List(Id("node1"), Id("node2"), Id("ownNode"))
-        )
-    }
-
-    it("ggg") {
-      val node1 = Id("node1") -> List(12, 10, 8, 6, 4, 2, 0).map(i => RecentSnapshot(s"$i", i))
-      val node2 = Id("node2") -> List(2, 0).map(i => RecentSnapshot(s"$i", i))
-
-      HealthChecker
-        .compareSnapshotState((Id("ownNode"), List(0, 2, 6, 4).map(i => RecentSnapshot(s"$i", i))), List(node1, node2)) shouldBe
-        SnapshotDiff(
-          List(),
-          List(),
-          List(Id("node1"), Id("ownNode"))
-        )
-    }
-
-    it("hhh") {
-      val node1 = Id("node1") -> List(4, 2, 0).map(i => RecentSnapshot(s"$i", i))
-      val node2 = Id("node2") -> List(2, 0).map(i => RecentSnapshot(s"$i", i))
-
-      HealthChecker
-        .compareSnapshotState(
-          (Id("ownNode"), List(0, 2, 6, 4, 8).map(i => RecentSnapshot(s"$i", i))),
-          List(node1, node2)
-        ) shouldBe
-        SnapshotDiff(
-          List(RecentSnapshot("8", 8), RecentSnapshot("6", 6)),
-          List(),
-          List(Id("node1"), Id("ownNode"))
-        )
-    }
-
-    it("kkk") {
-      val node1 = Id("node1") -> List()
-      val node2 = Id("node2") -> List(2, 0).map(i => RecentSnapshot(s"$i", i))
-
-      HealthChecker
-        .compareSnapshotState(
-          (Id("ownNode"), List(0, 2, 6, 4, 8).map(i => RecentSnapshot(s"$i", i))),
-          List(node1, node2)
-        ) shouldBe
-        SnapshotDiff(
-          List(RecentSnapshot("8", 8), RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
-          List(),
-          List(Id("node2"), Id("ownNode"))
-        )
-    }
-
-    it("sss") {
-      val node1 = Id("node1") -> List(0).map(i => RecentSnapshot(s"$i", i))
-      val node2 = Id("node2") -> List(0, 2, 4, 6, 8, 10, 12, 14).map(i => RecentSnapshot(s"$i", i))
-
-      HealthChecker
-        .compareSnapshotState(
-          (Id("ownNode"), List(0, 2).map(i => RecentSnapshot(s"$i", i))),
-          List(node1, node2)
-        ) shouldBe
-        SnapshotDiff(
-          List(RecentSnapshot("8", 8), RecentSnapshot("6", 6), RecentSnapshot("4", 4)),
-          List(),
-          List(Id("node2"), Id("ownNode"))
-        )
     }
   }
 
