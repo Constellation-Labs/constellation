@@ -108,7 +108,11 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       processingConfig.maxTipUsage,
       processingConfig.numFacilitatorPeers,
       processingConfig.minPeerTimeAddedSeconds,
-      this
+      this,
+      new FacilitatorFilter[IO](
+        IO.contextShift(ConstellationExecutionContext.bounded),
+        this
+      )
     )
 
     observationService = new ObservationService[IO](this)
