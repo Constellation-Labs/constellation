@@ -92,13 +92,11 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
       "concurrentTipService_markAsConflict"
     )
 
-  def update(checkpointBlock: CheckpointBlock, height: Height, isGenesis: Boolean = false)(implicit dao: DAO): F[Unit] =
+  def update(checkpointBlock: CheckpointBlock, height: Height, isGenesis: Boolean = false): F[Unit] =
     withLock("updateTips", updateUnsafe(checkpointBlock, height: Height, isGenesis))
 
-  def updateUnsafe(checkpointBlock: CheckpointBlock, height: Height, isGenesis: Boolean = false)(
-    implicit dao: DAO
-  ): F[Unit] = {
-    val tipUpdates = checkpointBlock.parentSOEBaseHashes.distinct.toList.traverse { h =>
+  def updateUnsafe(checkpointBlock: CheckpointBlock, height: Height, isGenesis: Boolean = false): F[Unit] = {
+    val tipUpdates = checkpointBlock.parentSOEBaseHashes()(dao).distinct.toList.traverse { h =>
       for {
         tipData <- getUnsafe(h)
         size <- sizeUnsafe
@@ -136,7 +134,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
     )
   }
 
-  def putConflicting(k: String, v: CheckpointBlock)(implicit dao: DAO): F[Unit] = {
+  def putConflicting(k: String, v: CheckpointBlock): F[Unit] = {
     val unsafePut = for {
       size <- conflictingTips.getUnsafe.map(_.size)
       _ <- dao.metrics
@@ -154,7 +152,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
         else Sync[F].raiseError[Unit](TipThresholdException(v.checkpointBlock, sizeLimit))
     )
 
-  def getMinTipHeight(minActiveTipHeight: Option[Long])(implicit dao: DAO): F[Long] =
+  def getMinTipHeight(minActiveTipHeight: Option[Long]): F[Long] =
     logThread(
       for {
         _ <- Logger[F].debug(s"Active tip height: $minActiveTipHeight")

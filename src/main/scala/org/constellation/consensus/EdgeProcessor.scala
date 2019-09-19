@@ -124,7 +124,7 @@ object EdgeProcessor extends StrictLogging {
               height = checkpointBlock.calculateHeight()
             )
 
-          dao.checkpointService.accept(cache).unsafeRunSync()
+          dao.checkpointAcceptanceService.accept(cache).unsafeRunSync()
           dao.threadSafeMessageMemPool.release(messages)
 
         }
@@ -151,11 +151,11 @@ object EdgeProcessor extends StrictLogging {
               cb.plus(hs)
           }
         }.ensure(NonEmptyList.one(new Throwable("Invalid CheckpointBlock")))(
-            _.simpleValidation()
+            cb => dao.checkpointBlockValidator.simpleValidation(cb).unsafeRunSync().isValid
           )
           .traverse { finalCB =>
             val cache = CheckpointCache(finalCB.some, height = finalCB.calculateHeight())
-            dao.checkpointService.accept(cache).unsafeRunSync()
+            dao.checkpointAcceptanceService.accept(cache).unsafeRunSync()
             processSignedBlock(
               cache,
               finalFacilitators
@@ -203,7 +203,7 @@ object EdgeProcessor extends StrictLogging {
           }
         )
 
-        val updated = if (sr.checkpointBlock.simpleValidation()) {
+        val updated = if (dao.checkpointBlockValidator.simpleValidation(sr.checkpointBlock).unsafeRunSync().isValid) {
           Some(hashSign(sr.checkpointBlock.baseHash, dao.keyPair))
         } else {
           None

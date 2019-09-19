@@ -6,6 +6,7 @@ import cats.data.EitherT
 import cats.effect.{Concurrent, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
+import org.constellation.checkpoint.CheckpointService
 import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.consensus.{ConsensusManager, Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.p2p.{Cluster, DataResolver}
@@ -107,7 +108,7 @@ class SnapshotService[F[_]: Concurrent](
       )
     } yield ()
 
-  def syncBufferAccept(cb: CheckpointCache)(implicit dao: DAO): F[Unit] =
+  def syncBufferAccept(cb: CheckpointCache): F[Unit] =
     for {
       _ <- syncBuffer.update(_ ++ Seq(cb))
       buffer <- syncBuffer.get

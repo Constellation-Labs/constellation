@@ -1,111 +1,40 @@
-package org.constellation.storage
+package org.constellation.checkpoint
 
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
-import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import org.constellation.{ConstellationExecutionContext, DAO}
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.FinishedCheckpoint
-import org.constellation.p2p.{DataResolver, PeerNotification}
-import org.constellation.primitives.Schema.{CheckpointCache, _}
-import org.constellation.primitives._
+import org.constellation.p2p.DataResolver
+import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.primitives.concurrency.SingleRef
-import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
+import org.constellation.primitives._
+import org.constellation.storage._
 import org.constellation.util.{Metrics, PeerApiClient}
+import org.constellation.{ConstellationExecutionContext, DAO}
 
-class CheckpointService[F[_]: Concurrent](
-  dao: DAO,
+class CheckpointAcceptanceService[F[_]: Concurrent](
+  addressService: AddressService[F],
   transactionService: TransactionService[F],
-  messageService: MessageService[F],
-  notificationService: NotificationService[F],
-  observationService: ObservationService[F],
   concurrentTipService: ConcurrentTipService[F],
-  rateLimiting: RateLimiting[F]
-) extends StrictLogging {
-
-  val memPool = new CheckpointBlocksMemPool[F](
-    dao,
-    transactionService.merklePool,
-    messageService.merklePool,
-    notificationService.merklePool,
-    observationService.merklePool
-  )
-  val pendingAcceptance: SingleRef[F, Set[String]] = SingleRef(Set())
-  val pendingAcceptanceFromOthers: SingleRef[F, Set[String]] = SingleRef(Set())
-  val maxDepth: Int = 10
+  snapshotService: SnapshotService[F],
+  checkpointService: CheckpointService[F],
+  checkpointBlockValidator: CheckpointBlockValidator[F],
+  rateLimiting: RateLimiting[F],
+  dao: DAO
+) {
 
   val contextShift
     : ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki pass from F
 
-  def applySnapshot(cbs: List[String]): F[Unit] =
-    Sync[F].delay { logger.debug(s"[${dao.id.short}] applying snapshot for blocks: $cbs from others") }
-      .flatMap(_ => cbs.map(memPool.remove).sequence.void)
+  val pendingAcceptance: SingleRef[F, Set[String]] = SingleRef(Set())
+  val pendingAcceptanceFromOthers: SingleRef[F, Set[String]] = SingleRef(Set())
+  val maxDepth: Int = 10
 
-  def fullData(key: String): F[Option[CheckpointCache]] =
-    lookup(key).flatMap(_.map(convert(_)(dao)).sequence)
+  val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
-  def lookup(key: String): F[Option[CheckpointCacheMetadata]] =
-    Lookup.extendedLookup[F, String, CheckpointCacheMetadata](List(memPool))(key)
-
-  def contains(key: String): F[Boolean] = lookup(key).map(_.nonEmpty)
-
-  def convert(merkle: CheckpointCacheMetadata)(implicit dao: DAO): F[CheckpointCache] =
-    for {
-      txs <- merkle.checkpointBlock.transactionsMerkleRoot.fold(List[Transaction]().pure[F])(fetchTransactions)
-      msgs <- merkle.checkpointBlock.messagesMerkleRoot.fold(List[ChannelMessage]().pure[F])(fetchMessages)
-      notifications <- merkle.checkpointBlock.notificationsMerkleRoot
-        .fold(List[PeerNotification]().pure[F])(fetchNotifications)
-    } yield
-      CheckpointCache(
-        CheckpointBlock(txs, merkle.checkpointBlock.checkpoint, msgs, notifications).some,
-        merkle.children,
-        merkle.height
-      )
-
-  def fetch[T, R](
-    merkleRoot: String,
-    service: MerkleStorageAlgebra[F, String, T],
-    mapper: T => R,
-    resolver: String => F[T]
-  ): F[List[R]] =
-    service
-      .findHashesByMerkleRoot(merkleRoot)
-      .map(
-        _.get.map(
-          hash =>
-            service
-              .lookup(hash)
-              .flatMap(_.map(_.pure[F]).getOrElse(resolver(hash)).map(mapper))
-        )
-      )
-      .map(_.toList.sequence)
-      .flatten
-
-  def fetchTransactions(merkleRoot: String)(implicit dao: DAO): F[List[Transaction]] =
-    fetch[TransactionCacheData, Transaction](
-      merkleRoot,
-      transactionService,
-      (x: TransactionCacheData) => x.transaction,
-      (s: String) => LiftIO[F].liftIO(DataResolver.resolveTransactionDefaults(s)(contextShift))
-    )
-
-  def fetchMessages(merkleRoot: String)(implicit dao: DAO): F[List[ChannelMessage]] =
-    fetch[ChannelMessageMetadata, ChannelMessage](
-      merkleRoot,
-      messageService,
-      (x: ChannelMessageMetadata) => x.channelMessage,
-      (s: String) => LiftIO[F].liftIO(DataResolver.resolveMessageDefaults(s)(contextShift))
-    )
-
-  def fetchNotifications(merkleRoot: String)(implicit dao: DAO): F[List[PeerNotification]] =
-    fetch[PeerNotification, PeerNotification](
-      merkleRoot,
-      notificationService,
-      (x: PeerNotification) => x,
-      (s: String) => ???
-    )
-
-  def accept(checkpoint: FinishedCheckpoint)(implicit dao: DAO): F[Unit] = {
+  def accept(checkpoint: FinishedCheckpoint): F[Unit] = {
 
     val obtainPeers = dao.readyPeers.map { ready =>
       val filtered = ready.filter(t => checkpoint.facilitators.contains(t._1))
@@ -142,25 +71,28 @@ class CheckpointService[F[_]: Concurrent](
     }
   }
 
-  def resolveMissingParents(cb: CheckpointBlock, peers: List[PeerApiClient], depth: Int = 1)(
-    implicit dao: DAO
+  def resolveMissingParents(
+    cb: CheckpointBlock,
+    peers: List[PeerApiClient],
+    depth: Int = 1
   ): F[List[CheckpointCache]] = {
 
     val checkError = if (depth >= maxDepth) {
       Sync[F].raiseError[Unit](new Exception("Max depth reached when resolving data."))
     } else Sync[F].unit
 
-    val resolveSoe = cb.parentSOEBaseHashes() match {
+    val resolveSoe = cb.parentSOEBaseHashes()(dao) match {
       case List(_, _) => Sync[F].unit
-      case _          => LiftIO[F].liftIO(DataResolver.resolveSoe(cb.parentSOEHashes.toList, peers)(contextShift).void)
+      case _ =>
+        LiftIO[F].liftIO(DataResolver.resolveSoe(cb.parentSOEHashes.toList, peers)(contextShift)(dao = dao).void)
     }
 
     val resolveCheckpoint = Sync[F]
       .delay(
-        cb.parentSOEBaseHashes().toList
+        cb.parentSOEBaseHashes()(dao).toList
       )
       .map(
-        parents => parents.traverse(h => contains(h).map(exist => (h, exist)))
+        parents => parents.traverse(h => checkpointService.contains(h).map(exist => (h, exist)))
       )
       .flatten
       .flatMap {
@@ -168,7 +100,8 @@ class CheckpointService[F[_]: Concurrent](
           Sync[F]
             .raiseError[List[CheckpointCache]](new RuntimeException("Soe hashes are empty even resolved previously"))
         case List((_, true), (_, true)) => Sync[F].pure(List[CheckpointCache]())
-        case missing                    => LiftIO[F].liftIO(DataResolver.resolveCheckpoints(missing.map(_._1), peers)(contextShift))
+        case missing =>
+          LiftIO[F].liftIO(DataResolver.resolveCheckpoints(missing.map(_._1), peers)(contextShift)(dao = dao))
       }
 
     for {
@@ -180,7 +113,7 @@ class CheckpointService[F[_]: Concurrent](
 
   }
 
-  def accept(checkpoint: CheckpointCache)(implicit dao: DAO): F[Unit] = {
+  def accept(checkpoint: CheckpointCache): F[Unit] = {
 
     val acceptCheckpoint: F[Unit] = checkpoint.checkpointBlock match {
       case None => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
@@ -188,13 +121,15 @@ class CheckpointService[F[_]: Concurrent](
       case Some(cb) =>
         for {
           _ <- syncPending(pendingAcceptance, cb.baseHash)
-          _ <- contains(cb.baseHash).ifM(
-            dao.metrics
-              .incrementMetricAsync[F]("checkpointAcceptBlockAlreadyStored") *> CheckpointAcceptBlockAlreadyStored(cb)
-              .raiseError[F, Unit],
-            Sync[F].unit
-          )
-          conflicts <- LiftIO[F].liftIO(CheckpointBlockValidatorNel.containsAlreadyAcceptedTx(cb))
+          _ <- checkpointService
+            .contains(cb.baseHash)
+            .ifM(
+              dao.metrics
+                .incrementMetricAsync[F]("checkpointAcceptBlockAlreadyStored") *> CheckpointAcceptBlockAlreadyStored(cb)
+                .raiseError[F, Unit],
+              Sync[F].unit
+            )
+          conflicts <- LiftIO[F].liftIO(checkpointBlockValidator.containsAlreadyAcceptedTx(cb))
 
           _ <- conflicts match {
             case Nil => Sync[F].unit
@@ -205,9 +140,10 @@ class CheckpointService[F[_]: Concurrent](
                 .flatMap(_ => Sync[F].raiseError[Unit](TipConflictException(cb, conflicts)))
           }
 
-          valid <- Sync[F].delay(cb.simpleValidation())
-          _ <- if (!valid) Sync[F].raiseError[Unit](new Exception("CB to accept not valid")) else Sync[F].unit
-          _ <- LiftIO[F].liftIO(cb.storeSOE())
+          validation <- checkpointBlockValidator.simpleValidation(cb)
+          _ <- if (!validation.isValid) Sync[F].raiseError[Unit](new Exception("CB to accept not valid"))
+          else Sync[F].unit
+          _ <- LiftIO[F].liftIO(cb.storeSOE()(dao))
           maybeHeight <- calculateHeight(checkpoint)
 
           height <- if (maybeHeight.isEmpty) {
@@ -216,7 +152,7 @@ class CheckpointService[F[_]: Concurrent](
               .flatMap(_ => MissingHeightException(cb).raiseError[F, Height])
           } else Sync[F].pure(maybeHeight.get)
 
-          _ <- memPool.put(cb.baseHash, checkpoint.copy(height = maybeHeight))
+          _ <- checkpointService.put(checkpoint.copy(height = maybeHeight))
           _ <- Sync[F].delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
           _ <- acceptMessages(cb)
           _ <- acceptTransactions(cb, Some(checkpoint))
@@ -241,6 +177,15 @@ class CheckpointService[F[_]: Concurrent](
     }
   }
 
+  private[checkpoint] def syncPending(storage: SingleRef[F, Set[String]], baseHash: String): F[Unit] =
+    storage.update { hashes =>
+      if (hashes.contains(baseHash)) {
+        throw PendingAcceptance(baseHash)
+      } else {
+        hashes + baseHash
+      }
+    }
+
   def acceptErrorHandler(err: Throwable): F[Unit] =
     err match {
       case knownError @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
@@ -250,33 +195,51 @@ class CheckpointService[F[_]: Concurrent](
           .incrementMetricAsync[F]("acceptCheckpoint_failure") *> otherError.raiseError[F, Unit]
     }
 
-  private def incrementMetricIfDummy(checkpointBlock: CheckpointBlock) =
+  private def incrementMetricIfDummy(checkpointBlock: CheckpointBlock): F[Unit] =
     if (checkpointBlock.transactions.forall(_.isDummy)) {
       dao.metrics.incrementMetricAsync[F]("checkpointsAcceptedWithDummyTxs")
     } else {
       Sync[F].unit
     }
 
-  private def calculateHeight(checkpointCacheData: CheckpointCache)(implicit dao: DAO): F[Option[Height]] =
+  private def calculateHeight(checkpointCacheData: CheckpointCache): F[Option[Height]] =
     Sync[F].delay {
       checkpointCacheData.checkpointBlock.flatMap { cb =>
-        cb.calculateHeight() match {
+        cb.calculateHeight()(dao) match {
           case None       => checkpointCacheData.height
           case calculated => calculated
         }
       }
     }
 
-  private[storage] def syncPending(storage: SingleRef[F, Set[String]], baseHash: String)(implicit dao: DAO): F[Unit] =
-    storage.update { hashes =>
-      if (hashes.contains(baseHash)) {
-        throw PendingAcceptance(baseHash)
-      } else {
-        hashes + baseHash
-      }
-    }
+  def acceptTransactions(cb: CheckpointBlock, cpc: Option[CheckpointCache] = None): F[Unit] = {
+    def toCacheData(tx: Transaction) = TransactionCacheData(
+      tx,
+      Map(cb.baseHash -> true),
+      cbBaseHash = Some(cb.baseHash)
+    )
 
-  private def acceptMessages(cb: CheckpointBlock)(implicit dao: DAO): F[List[Unit]] =
+    val insertTX =
+      LiftIO[F].liftIO {
+        cb.transactions.toList
+          .map(tx ⇒ (tx, toCacheData(tx)))
+          .traverse {
+            case (tx, txMetadata) =>
+              dao.transactionService.accept(txMetadata, cpc) *> transferIfNotDummy(tx)
+          }
+          .void
+      }
+
+    insertTX
+  }
+
+  private def transferIfNotDummy(transaction: Transaction): IO[Unit] =
+    if (!transaction.isDummy) dao.addressService.transfer(transaction).void else IO.unit
+
+  private def updateRateLimiting(cb: CheckpointBlock): F[Unit] =
+    rateLimiting.update(cb.transactions.toList)
+
+  private def acceptMessages(cb: CheckpointBlock): F[List[Unit]] =
     LiftIO[F].liftIO {
       cb.messages.map { m =>
         val channelMessageMetadata = ChannelMessageMetadata(m, Some(cb.baseHash))
@@ -315,31 +278,4 @@ class CheckpointService[F[_]: Concurrent](
         } yield ()
       }.toList.sequence
     }
-
-  def acceptTransactions(cb: CheckpointBlock, cpc: Option[CheckpointCache] = None)(implicit dao: DAO): F[Unit] = {
-    def toCacheData(tx: Transaction) = TransactionCacheData(
-      tx,
-      Map(cb.baseHash -> true),
-      cbBaseHash = Some(cb.baseHash)
-    )
-
-    val insertTX =
-      LiftIO[F].liftIO {
-        cb.transactions.toList
-          .map(tx ⇒ (tx, toCacheData(tx)))
-          .traverse {
-            case (tx, txMetadata) =>
-              dao.transactionService.accept(txMetadata, cpc) *> transferIfNotDummy(tx)
-          }
-          .void
-      }
-
-    insertTX
-  }
-
-  private def transferIfNotDummy(transaction: Transaction): IO[Unit] =
-    if (!transaction.isDummy) dao.addressService.transfer(transaction).void else IO.unit
-
-  private def updateRateLimiting(cb: CheckpointBlock): F[Unit] =
-    rateLimiting.update(cb.transactions.toList)
 }

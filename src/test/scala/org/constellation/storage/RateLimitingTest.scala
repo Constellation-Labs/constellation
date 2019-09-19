@@ -8,6 +8,7 @@ import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{FreeSpec, Matchers}
 import constellation.createTransaction
 import org.constellation.Fixtures
+import org.constellation.checkpoint.CheckpointService
 import org.constellation.primitives.CheckpointBlock
 import org.constellation.primitives.Schema.{Address, CheckpointCache}
 

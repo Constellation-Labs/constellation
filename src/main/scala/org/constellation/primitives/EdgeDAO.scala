@@ -4,6 +4,7 @@ import java.util.concurrent.Semaphore
 
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
+import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointBlockValidator, CheckpointService}
 import org.constellation.consensus._
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._
@@ -111,8 +112,10 @@ trait EdgeDAO {
   var transactionGenerator: TransactionGenerator[IO] = _
   var observationService: ObservationService[IO] = _
   var checkpointService: CheckpointService[IO] = _
+  var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
   var snapshotService: SnapshotService[IO] = _
   var concurrentTipService: ConcurrentTipService[IO] = _
+  var checkpointBlockValidator: CheckpointBlockValidator[IO] = _
   var rateLimiting: RateLimiting[IO] = _
   var addressService: AddressService[IO] = _
   var snapshotBroadcastService: SnapshotBroadcastService[IO] = _

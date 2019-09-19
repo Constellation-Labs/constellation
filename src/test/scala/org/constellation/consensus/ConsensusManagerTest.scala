@@ -46,6 +46,7 @@ class ConsensusManagerTest
       dao.transactionService,
       dao.concurrentTipService,
       dao.checkpointService,
+      dao.checkpointAcceptanceService,
       dao.soeService,
       dao.messageService,
       dao.observationService,

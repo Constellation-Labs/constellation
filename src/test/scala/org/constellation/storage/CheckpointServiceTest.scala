@@ -8,6 +8,8 @@ import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import constellation.{createDummyTransaction, createTransaction}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation._
+import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.makeKeyPair
@@ -15,7 +17,6 @@ import org.constellation.p2p.{Cluster, PeerData, PeerNotification}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.{APIClient, HostPort, Metrics}
-import org.constellation._
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
@@ -128,7 +129,7 @@ class CheckpointServiceTest
           .pure(Some(CheckpointCache(Some(c))))
       }
 
-      dao.checkpointService
+      dao.checkpointAcceptanceService
         .accept(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
         .unsafeRunSync()
       dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
@@ -155,7 +156,7 @@ class CheckpointServiceTest
           .pure(Some(CheckpointCache(Some(c))))
       }
 
-      dao.checkpointService
+      dao.checkpointAcceptanceService
         .accept(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
         .unsafeRunSync()
       dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
@@ -277,7 +278,7 @@ class CheckpointServiceTest
     dao.observationService shouldReturn os
 
     val rl = mock[RateLimiting[IO]]
-    val cs = new CheckpointService[IO](dao, ts, ms, ns, os, cts, rl)
+    val cs = new CheckpointService[IO](dao, ts, ms, ns, os)
     dao.checkpointService shouldReturn cs
 
     val keyPair = KeyUtils.makeKeyPair()

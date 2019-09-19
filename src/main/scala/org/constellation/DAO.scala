@@ -7,10 +7,11 @@ import cats.effect.{Concurrent, ContextShift, IO}
 import com.softwaremill.sttp.SttpBackend
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
-import com.typesafe.scalalogging.{Logger, StrictLogging}
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointBlockValidator, CheckpointService}
 import org.constellation.consensus.{ConsensusManager, ConsensusRemoteSender, ConsensusScheduler, ConsensusWatcher}
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
@@ -21,12 +22,12 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
 import org.constellation.storage._
-import org.constellation.storage.external.{CloudStorage, GcpStorage}
+import org.constellation.storage.external.GcpStorage
 import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.util.{HealthChecker, HostPort, LoggingSttpBackend, MajorityStateChooser, SnapshotWatcher}
+import org.constellation.util.{HealthChecker, HostPort, MajorityStateChooser, SnapshotWatcher}
 
-import scala.concurrent.duration._
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLogging {
 
@@ -121,9 +122,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       transactionService,
       messageService,
       notificationService,
-      observationService,
-      concurrentTipService,
-      rateLimiting
+      observationService
     )
     addressService = new AddressService[IO]()(Concurrent(IO.ioConcurrentEffect), () => metrics)
 
@@ -131,20 +130,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     cluster = Cluster[IO](() => metrics, ipManager, this)
 
     consensusRemoteSender = new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded))
-    consensusManager = new ConsensusManager[IO](
-      transactionService,
-      concurrentTipService,
-      checkpointService,
-      soeService,
-      messageService,
-      observationService,
-      consensusRemoteSender,
-      cluster,
-      this,
-      ConfigUtil.config,
-      IO.contextShift(ConstellationExecutionContext.unbounded),
-      IO.contextShift(ConstellationExecutionContext.bounded)
-    )
 
     consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
     majorityStateChooser = new MajorityStateChooser[IO]()
@@ -182,6 +167,36 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       snapshotBroadcastService,
       consensusManager,
       this
+    )
+
+    checkpointBlockValidator =
+      new CheckpointBlockValidator[IO](addressService, snapshotService, checkpointService, this)
+
+    checkpointAcceptanceService = new CheckpointAcceptanceService[IO](
+      addressService,
+      transactionService,
+      concurrentTipService,
+      snapshotService,
+      checkpointService,
+      checkpointBlockValidator,
+      rateLimiting,
+      this
+    )
+
+    consensusManager = new ConsensusManager[IO](
+      transactionService,
+      concurrentTipService,
+      checkpointService,
+      checkpointAcceptanceService,
+      soeService,
+      messageService,
+      observationService,
+      consensusRemoteSender,
+      cluster,
+      this,
+      ConfigUtil.config,
+      IO.contextShift(ConstellationExecutionContext.unbounded),
+      IO.contextShift(ConstellationExecutionContext.bounded)
     )
 
     transactionGenerator =

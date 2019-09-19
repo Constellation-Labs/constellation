@@ -6,6 +6,7 @@ import com.softwaremill.sttp.Response
 import com.typesafe.config.Config
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.Consensus.ConsensusStage.ConsensusStage
 import org.constellation.consensus.Consensus.StageState.StageState
 import org.constellation.consensus.Consensus._
@@ -30,7 +31,7 @@ class Consensus[F[_]: Concurrent](
   arbitraryMessages: Seq[(ChannelMessage, Int)],
   dataResolver: DataResolver,
   transactionService: TransactionService[F],
-  checkpointService: CheckpointService[F],
+  checkpointAcceptanceService: CheckpointAcceptanceService[F],
   messageService: MessageService[F],
   observationService: ObservationService[F],
   remoteSender: ConsensusRemoteSender[F],
@@ -216,7 +217,7 @@ class Consensus[F[_]: Concurrent](
           s" with obs ${checkpointBlock.observations.map(_.hash)} " +
           s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height}"
       )
-      acceptedBlock <- checkpointService
+      acceptedBlock <- checkpointAcceptanceService
         .accept(cache)
         .map { _ =>
           (Option(checkpointBlock), Seq.empty[String])
@@ -295,7 +296,7 @@ class Consensus[F[_]: Concurrent](
         pd =>
           pd.client.postNonBlockingUnitF("finished/checkpoint", finishedCheckpoint, timeout = 30.seconds)(
             calculationContext
-          )
+        )
       )
     } yield responses
   }
@@ -366,7 +367,7 @@ class Consensus[F[_]: Concurrent](
                   readyPeers.get(t._1._2.id)
                 )(contextShift)
                 .head
-            )
+          )
         )
       _ <- logger.debug(
         s" ${roundData.roundId} $dataType resolved size ${resolved.size}"
@@ -466,7 +467,7 @@ class Consensus[F[_]: Concurrent](
                 txs =>
                   getOwnObservationsToReturn.flatMap(
                     exs => consensusManager.handleRoundError(PreviousStage(roundData.roundId, stage, txs, exs))
-                  )
+                )
               )
           else Sync[F].unit
       )
@@ -514,8 +515,8 @@ class Consensus[F[_]: Concurrent](
               exs =>
                 Left(
                   NotEnoughProposals(roundData.roundId, proposals.size, peerSize, stage, txs, exs)
-                )
-            )
+              )
+          )
         )
       case _ => Sync[F].pure(Right(()))
     }
@@ -537,7 +538,7 @@ object Consensus {
     type ConsensusStage = Value
 
     val STARTING, WAITING_FOR_PROPOSALS, WAITING_FOR_BLOCK_PROPOSALS, RESOLVING_MAJORITY_CB,
-      WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
+    WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
       Value
   }
 

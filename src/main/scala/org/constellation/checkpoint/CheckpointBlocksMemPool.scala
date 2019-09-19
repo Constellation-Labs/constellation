@@ -1,10 +1,11 @@
-package org.constellation.storage
+package org.constellation.checkpoint
 
 import cats.effect.Concurrent
 import cats.implicits._
 import org.constellation.DAO
-import org.constellation.primitives.{CheckpointBlock, CheckpointBlockMetadata}
 import org.constellation.primitives.Schema.{CheckpointCache, CheckpointCacheMetadata}
+import org.constellation.primitives.{CheckpointBlock, CheckpointBlockMetadata}
+import org.constellation.storage.StorageService
 import org.constellation.util.MerkleTree
 
 class CheckpointBlocksMemPool[F[_]: Concurrent](
