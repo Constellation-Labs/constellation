@@ -10,7 +10,8 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.primitives.Schema._
 import org.constellation.util.Metrics
-import org.constellation.{NodeConfig, ResourceInfo}
+import org.constellation.ResourceInfo
+import org.constellation.domain.configuration.NodeConfig
 
 case class LocalNodeConfig(
   externalIP: String

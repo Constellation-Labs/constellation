@@ -11,6 +11,7 @@ import org.constellation.checkpoint.{
   CheckpointService
 }
 import org.constellation.consensus._
+import org.constellation.domain.configuration.NodeConfig
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._
 import org.constellation.rollback.RollbackService
@@ -19,7 +20,7 @@ import org.constellation.storage.external.CloudStorage
 import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.transaction.TransactionValidator
 import org.constellation.util.{MajorityStateChooser, Metrics, SnapshotWatcher}
-import org.constellation.{ConstellationExecutionContext, DAO, NodeConfig, ProcessingConfig}
+import org.constellation.{ConstellationExecutionContext, DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 

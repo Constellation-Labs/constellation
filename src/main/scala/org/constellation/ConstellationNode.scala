@@ -1,7 +1,6 @@
 package org.constellation
 
 import java.net.InetSocketAddress
-import java.security.KeyPair
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
@@ -10,201 +9,120 @@ import akka.http.scaladsl.server.{Directive0, Route}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import better.files._
-import cats.effect.{ContextShift, IO}
+import cats.effect.{ExitCode, IO, IOApp, Sync}
 import cats.implicits._
-import com.typesafe.config.ConfigFactory
-import com.typesafe.scalalogging.{Logger, StrictLogging}
+import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.crypto.KeyUtils
 import org.constellation.datastore.SnapshotTrigger
-import org.constellation.p2p.{Cluster, PeerAPI}
+import org.constellation.domain.configuration.{CliConfig, NodeConfig}
+import org.constellation.infrastructure.configuration.CliConfigParser
+import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, AccountBalance, AccountBalanceCSVReader, HostPort, Metrics}
+import org.constellation.util.{APIClient, AccountBalance, AccountBalanceCSVReader, Metrics}
 import org.slf4j.MDC
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
-
-// scopt requires default args for all properties.
-// Make sure to check for null early -- don't propogate nulls anywhere else.
-case class CliConfig(
-  externalIp: java.net.InetAddress = null,
-  externalPort: Int = 0,
-  allocFilePath: String = null,
-  debug: Boolean = false,
-  startOfflineMode: Boolean = false,
-  lightNode: Boolean = false,
-  genesisNode: Boolean = false,
-  testMode: Boolean = false
-)
+import scala.util.Try
 
 /**
   * Main entry point for starting a node
   */
-object ConstellationNode extends StrictLogging {
+object ConstellationNode extends IOApp {
+  implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
 
   final val LocalConfigFile = "local_config"
+  final val preferencesPath = ".dag"
 
-  //noinspection ScalaStyle
-  def main(args: Array[String]): Unit = {
-    logger.info(s"Main init with args $args")
+  import constellation._
 
-    import scopt.OParser
-    val builder = OParser.builder[CliConfig]
-    val parser1 = {
-      import builder._
-      OParser.sequence(
-        programName("constellation"),
-        head("constellation", BuildInfo.version),
-        opt[java.net.InetAddress]("ip")
-          .action((x, c) => c.copy(externalIp = x))
-          .valueName("<ip address>")
-          .text("the ip you can be reached from outside"),
-        opt[Int]('p', "port")
-          .action((x, c) => c.copy(externalPort = x))
-          .text("the port you can be reached from outside"),
-        opt[String]('f', "path to file with allocation account balances")
-          .action((x, c) => c.copy(allocFilePath = x))
-          .text("path to file with allocation account balances"),
-        opt[Unit]('d', "debug")
-          .action((x, c) => c.copy(debug = true))
-          .text("run the node in debug mode"),
-        opt[Unit]('o', "offline")
-          .action((x, c) => c.copy(startOfflineMode = true))
-          .text("Start the node in offline mode. Won't connect automatically"),
-        opt[Unit]('l', "light")
-          .action((x, c) => c.copy(lightNode = true))
-          .text("Start a light node, only validates & stores portions of the graph"),
-        opt[Unit]('g', "genesis")
-          .action((x, c) => c.copy(genesisNode = true))
-          .text("Start in single node genesis mode"),
-        opt[Unit]('t', "test-mode")
-          .action((x, c) => c.copy(testMode = true))
-          .text("Run with test settings"),
-        help("help").text("prints this usage text"),
-        version("version").text(s"Constellation v${BuildInfo.version}"),
-        checkConfig(
-          c =>
-            if (c.externalIp == null ^ c.externalPort == 0) {
-              failure("ip and port must either both be set, or neither.")
-            } else success
-        )
-      )
-    }
+  implicit val system: ActorSystem = ActorSystem("Constellation")
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
+  implicit val executionContext: ExecutionContext = ConstellationExecutionContext.bounded
 
-    // OParser.parse returns Option[Config]
-    val cliConfig: CliConfig = OParser.parse(parser1, args, CliConfig()) match {
-      case Some(c) => c
-      case _       =>
-        // arguments are bad, error message will have been displayed
-        throw new RuntimeException("Invalid set of cli options")
-    }
+  def run(args: List[String]): IO[ExitCode] =
+    for {
+      _ <- logger.info(s"Main init with args $args")
 
-    val config = ConfigFactory.load()
-    logger.debug("Config loaded")
+      cliConfig <- CliConfigParser.parseCliConfig[IO](args)
+      _ <- logger.info(s"CliConfig: $cliConfig")
 
-    Try {
+      config = ConfigFactory.load() // TODO
 
-      // TODO: Move to scopt above.
-      val seedsFromConfig: Seq[HostPort] = Cluster.loadSeedsFromConfig(config)
+      _ <- createPreferencesPath[IO](preferencesPath)
 
-      logger.debug(s"Seeds: $seedsFromConfig")
+      nodeConfig <- getNodeConfig[IO](cliConfig, config)
+      _ = new ConstellationNode(nodeConfig)
 
-      // TODO: This should be unified as a single conf file
-      val hostName = Option(cliConfig.externalIp).map(_.getHostName).getOrElse {
-        Try { File(LocalConfigFile).lines.mkString.x[LocalNodeConfig].externalIP }
-          .getOrElse("127.0.0.1")
-      }
+      exitCode = ExitCode.Success
+    } yield exitCode
 
-      val allocAccountBalances: Seq[AccountBalance] =
-        Try(new AccountBalanceCSVReader(cliConfig.allocFilePath).read()).getOrElse(Seq.empty)
-      logger.debug(s"Alloc: $allocAccountBalances")
-
-      val preferencesPath = File(".dag")
-      preferencesPath.createDirectoryIfNotExists()
-
-      // TODO: update to take from config
-      val keyPair = KeyUtils.loadDefaultKeyPair()
-
-      val portOffset = Option(cliConfig.externalPort).filter(_ != 0)
-      val httpPortFromArg = portOffset.map { _ + 1 }
-      val peerHttpPortFromArg = portOffset.map { _ + 2 }
-
-      val httpPort = httpPortFromArg.getOrElse(
-        Option(System.getenv("DAG_HTTP_PORT")).map {
-          _.toInt
-        }.getOrElse(config.getInt("http.port"))
-      )
-
-      val peerHttpPort = peerHttpPortFromArg.getOrElse(
-        Option(System.getenv("DAG_PEER_HTTP_PORT")).map {
-          _.toInt
-        }.getOrElse(config.getInt("http.peer-port"))
-      )
-
-      implicit val system: ActorSystem = ActorSystem("Constellation")
-      implicit val materializer: ActorMaterializer = ActorMaterializer()
-      implicit val executionContext: ExecutionContext = ConstellationExecutionContext.bounded
-
-      val constellationConfig = config.getConfig("constellation")
-
-      val processingConfig = ProcessingConfig(
-        maxWidth = constellationConfig.getInt("max-width")
-        // TODO: Finish porting configs from application conf
-      )
-      new ConstellationNode(
-        NodeConfig(
-          seeds = seedsFromConfig,
-          primaryKeyPair = keyPair,
-          isGenesisNode = cliConfig.genesisNode,
-          isLightNode = cliConfig.lightNode,
-          hostName = hostName,
-          httpInterface = config.getString("http.interface"),
-          httpPort = httpPort,
-          peerHttpPort = peerHttpPort,
-          defaultTimeoutSeconds = config.getInt("default-timeout-seconds"),
-          attemptDownload = !cliConfig.genesisNode,
-          cliConfig = cliConfig,
-          processingConfig =
-            if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10)
-            else processingConfig,
-          dataPollingManagerOn = config.getBoolean("constellation.dataPollingManagerOn"),
-          allocAccountBalances = allocAccountBalances
-        )
-      )
-    } match {
-      case Failure(e) => e.printStackTrace()
-      case Success(_) =>
-        logger.debug("success")
-
-        // To stop daemon threads
-        while (true) {
-          Thread.sleep(60 * 1000)
-        }
-    }
+  private def getHostName[F[_]: Sync](cliConfig: CliConfig): F[String] = Sync[F].delay {
+    Option(cliConfig.externalIp)
+      .map(_.getHostName)
+      .getOrElse(Try(File(LocalConfigFile).lines.mkString.x[LocalNodeConfig].externalIP).getOrElse("127.0.0.1"))
   }
-}
 
-case class NodeConfig(
-  seeds: Seq[HostPort] = Seq(),
-  primaryKeyPair: KeyPair = KeyUtils.makeKeyPair(),
-  isGenesisNode: Boolean = false,
-  isLightNode: Boolean = false,
-  metricIntervalSeconds: Int = 60,
-  hostName: String = "127.0.0.1",
-  httpInterface: String = "0.0.0.0",
-  httpPort: Int = 9000,
-  peerHttpPort: Int = 9001,
-  defaultTimeoutSeconds: Int = 5,
-  attemptDownload: Boolean = false,
-  allowLocalhostPeers: Boolean = false,
-  cliConfig: CliConfig = CliConfig(),
-  processingConfig: ProcessingConfig = ProcessingConfig(),
-  dataPollingManagerOn: Boolean = false,
-  allocAccountBalances: Seq[AccountBalance] = Seq.empty
-)
+  private def getAllocAccountBalances[F[_]: Sync](cliConfig: CliConfig): F[Seq[AccountBalance]] = Sync[F].delay {
+    Try(new AccountBalanceCSVReader(cliConfig.allocFilePath).read()).getOrElse(Seq.empty)
+  }
+
+  private def createPreferencesPath[F[_]: Sync](path: String) = Sync[F].delay {
+    File(path).createDirectoryIfNotExists()
+  }
+
+  private def getPort[F[_]: Sync](config: Config, fromArg: Option[Int], env: String, configPath: String): F[Int] =
+    Sync[F].delay {
+      fromArg.getOrElse(Option(System.getenv(env)).map(_.toInt).getOrElse(config.getInt(configPath)))
+    }
+
+  private def getNodeConfig[F[_]: Sync](cliConfig: CliConfig, config: Config): F[NodeConfig] =
+    for {
+      seeds <- CliConfigParser.loadSeedsFromConfig(config)
+      logger <- Slf4jLogger.create[F]
+
+      _ <- logger.debug(s"Seeds: $seeds")
+
+      keyPair <- Sync[F].delay(KeyUtils.loadDefaultKeyPair())
+      hostName <- getHostName(cliConfig)
+
+      portOffset = Option(cliConfig.externalPort).filter(_ != 0)
+      httpPortFromArg = portOffset
+      peerHttpPortFromArg = portOffset.map(_ + 1)
+
+      httpPort <- getPort(config, httpPortFromArg, "DAG_HTTP_PORT", "http.port")
+      peerHttpPort <- getPort(config, peerHttpPortFromArg, "DAG_PEER_HTTP_PORT", "http.peer-port")
+
+      allocAccountBalances <- getAllocAccountBalances(cliConfig)
+      _ <- logger.debug(s"Alloc: $allocAccountBalances")
+
+      constellationConfig = config.getConfig("constellation")
+      processingConfig = ProcessingConfig(maxWidth = constellationConfig.getInt("max-width"))
+
+      nodeConfig = NodeConfig(
+        seeds = seeds,
+        primaryKeyPair = keyPair,
+        isGenesisNode = cliConfig.genesisNode,
+        isLightNode = cliConfig.lightNode,
+        hostName = hostName,
+        httpInterface = config.getString("http.interface"),
+        httpPort = httpPort,
+        peerHttpPort = peerHttpPort,
+        defaultTimeoutSeconds = config.getInt("default-timeout-seconds"),
+        attemptDownload = !cliConfig.genesisNode,
+        cliConfig = cliConfig,
+        processingConfig =
+          if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10) else processingConfig,
+        dataPollingManagerOn = config.getBoolean("constellation.dataPollingManagerOn"),
+        allocAccountBalances = allocAccountBalances
+      )
+    } yield nodeConfig
+}
 
 class ConstellationNode(
   val nodeConfig: NodeConfig = NodeConfig()

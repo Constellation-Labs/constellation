@@ -1,8 +1,9 @@
 package org.constellation.storage.external
 
 import better.files.File
+import org.constellation.domain.configuration.NodeConfig
 import org.constellation.util.Metrics
-import org.constellation.{DAO, Fixtures, NodeConfig}
+import org.constellation.{DAO, Fixtures}
 import org.scalatest.{FunSuite, Matchers}
 
 class GcpStorageUploadTest extends FunSuite with Matchers {

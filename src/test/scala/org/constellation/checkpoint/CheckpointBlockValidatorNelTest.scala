@@ -12,6 +12,7 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointBlockValidator._
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
+import org.constellation.domain.configuration.NodeConfig
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, Id}
 import org.constellation.primitives.concurrency.SingleRef
@@ -19,7 +20,7 @@ import org.constellation.primitives.{CheckpointBlock, IPManager, Transaction}
 import org.constellation.storage._
 import org.constellation.transaction.TransactionValidator
 import org.constellation.util.{HashSignature, Metrics}
-import org.constellation.{ConstellationExecutionContext, DAO, NodeConfig}
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalamock.scalatest.MockFactory

@@ -10,6 +10,7 @@ import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.ConsensusRemoteSender
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.makeKeyPair
+import org.constellation.domain.configuration.NodeConfig
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
 import org.constellation.primitives.{ConcurrentTipService, Schema}

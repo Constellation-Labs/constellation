@@ -7,7 +7,8 @@ import akka.testkit.TestKit
 import com.typesafe.scalalogging.Logger
 import io.prometheus.client.CollectorRegistry
 import org.constellation.util.Metrics
-import org.constellation.{DAO, NodeConfig}
+import org.constellation.DAO
+import org.constellation.domain.configuration.NodeConfig
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 
 class MetricsManagerTest()
