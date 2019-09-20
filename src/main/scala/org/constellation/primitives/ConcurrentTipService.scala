@@ -11,9 +11,9 @@ import org.constellation.consensus.TipData
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema.{Height, Id, SignedObservationEdge}
 import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
+import org.constellation.util.Logging._
 import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO}
-import org.constellation.util.Logging._
 
 import scala.util.Random
 
@@ -34,7 +34,8 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
   maxTipUsage: Int,
   numFacilitatorPeers: Int,
   minPeerTimeAddedSeconds: Int,
-  dao: DAO
+  dao: DAO,
+  facilitatorFilter: FacilitatorFilter[F]
 ) {
 
   def clearStaleTips(min: Long): F[Unit] =
@@ -175,15 +176,19 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
 
   def pull(readyFacilitators: Map[Id, PeerData])(implicit metrics: Metrics): F[Option[PulledTips]] =
     logThread(
-      tipsRef.get.map { tips =>
+      tipsRef.get.flatMap { tips =>
         metrics.updateMetric("activeTips", tips.size)
         (tips.size, readyFacilitators) match {
           case (size, facilitators) if size >= numFacilitatorPeers && facilitators.nonEmpty =>
             val tipSOE = calculateTipsSOE(tips)
-            Some(PulledTips(tipSOE, calculateFinalFacilitators(facilitators, tipSOE.soe.map(_.hash).reduce(_ + _))))
+            facilitatorFilter
+              .filterPeers(facilitators, tips, numFacilitatorPeers)
+              .map(f => {
+                Some(PulledTips(tipSOE, calculateFinalFacilitators(f, tipSOE.soe.map(_.hash).reduce(_ + _))))
+              })
           case (size, _) if size >= numFacilitatorPeers =>
-            Some(PulledTips(calculateTipsSOE(tips), Map.empty[Id, PeerData]))
-          case (_, _) => None
+            Sync[F].pure(Some(PulledTips(calculateTipsSOE(tips), Map.empty[Id, PeerData])))
+          case (_, _) => Sync[F].pure(None)
         }
       },
       "concurrentTipService_pull"
