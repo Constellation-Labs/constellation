@@ -227,6 +227,12 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   def leavingPeers: IO[Map[Id, PeerData]] =
     peerInfo.map(_.filter(eqNodeState(NodeState.Leaving)))
 
+  def terminateConsensuses(): IO[Unit] =
+    consensusManager.terminateConsensuses() // TODO: wkoszycki temporary fix to check cluster stability
+
+  def getActiveMinHeight: IO[Option[Long]] =
+    consensusManager.getActiveMinHeight // TODO: wkoszycki temporary fix to check cluster stability
+
   def readyFacilitatorsAsync: IO[Map[Id, PeerData]] =
     readyPeers(NodeType.Full).map(_.filter {
       case (_, pd) =>

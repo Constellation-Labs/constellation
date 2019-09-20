@@ -122,7 +122,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- validateAcceptedCBsSinceSnapshot()
 
       nextHeightInterval <- EitherT.liftF(getNextHeightInterval)
-      minActiveTipHeight <- EitherT.liftF(consensusManager.getActiveMinHeight)
+      minActiveTipHeight <- EitherT.liftF(LiftIO[F].liftIO(dao.getActiveMinHeight))
       minTipHeight <- EitherT.liftF(concurrentTipService.getMinTipHeight(minActiveTipHeight))
       _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval, minTipHeight)
       blocksWithinHeightInterval <- EitherT.liftF(getBlocksWithinHeightInterval(nextHeightInterval))

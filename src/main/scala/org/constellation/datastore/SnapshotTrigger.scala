@@ -12,14 +12,14 @@ import scala.concurrent.duration._
 class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluster[IO])
     extends PeriodicIO("SnapshotTrigger") {
 
-  private val preconditions = dao.cluster.isNodeReady.map {
+  private val preconditions = cluster.isNodeReady.map {
     _ && executionNumber.get() % dao.processingConfig.snapshotInterval == 0
   }
 
   private def triggerSnapshot(): IO[Unit] =
     preconditions.ifM(
       for {
-        _ <- dao.cluster.isNodeReady.ifM(IO.unit, IO.raiseError(new Throwable("Node is not ready")))
+        _ <- cluster.isNodeReady.ifM(IO.unit, IO.raiseError(new Throwable("Node is not ready")))
         startTime <- IO(System.currentTimeMillis())
         snapshotResult <- dao.snapshotService.attemptSnapshot().value
         elapsed <- IO(System.currentTimeMillis() - startTime)
