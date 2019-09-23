@@ -9,6 +9,7 @@ import org.constellation.DAO
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives.{CheckpointBlock, Transaction}
 import org.constellation.storage.{AddressService, SnapshotService}
+import org.constellation.transaction.TransactionValidator
 import org.constellation.util.{HashSignature, Metrics}
 
 object CheckpointBlockValidator {
@@ -108,7 +109,8 @@ object CheckpointBlockValidator {
 class CheckpointBlockValidator[F[_]: Sync](
   addressService: AddressService[F],
   snapshotService: SnapshotService[F],
-  checkpointService: CheckpointService[F],
+  checkpointParentService: CheckpointParentService[F],
+  transactionValidator: TransactionValidator[F],
   dao: DAO
 ) {
 
@@ -126,23 +128,22 @@ class CheckpointBlockValidator[F[_]: Sync](
           .flatTap(_ => logger.warn(s"Checkpoint block with baseHashe: ${cb.baseHash} is invalid $validation"))
     } yield validation
 
-  def validateTransactionIntegrity(t: Transaction): ValidationResult[Transaction] =
-    if (t.valid(dao)) t.validNel else InvalidTransaction(t).invalidNel
+  def validateTransactionIntegrity(t: Transaction): F[ValidationResult[Transaction]] =
+    transactionValidator
+      .validateTransaction(t)
+      .map(v => if (v.isValid) t.validNel else InvalidTransaction(t).invalidNel)
 
   def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): F[ValidationResult[Transaction]] =
     addressService
       .lookup(t.src.address)
       .map(_.fold[ValidationResult[Transaction]](NoAddressCacheFound(t).invalidNel)(_ => t.validNel))
 
-  def validateTransaction(t: Transaction): ValidationResult[Transaction] =
-    validateTransactionIntegrity(t)
-    //      .product(validateSourceAddressCache(t))
-      .map(_ => t)
+  def validateTransaction(t: Transaction): F[ValidationResult[Transaction]] = validateTransactionIntegrity(t)
 
   def validateTransactions(
     t: Iterable[Transaction]
-  ): ValidationResult[List[Transaction]] =
-    t.toList.map(validateTransaction(_).map(List(_))).combineAll
+  ): F[ValidationResult[List[Transaction]]] =
+    t.toList.traverse(validateTransaction(_)).map(x => x.map(_.map(List(_)))).map(_.combineAll)
 
   def validateDuplicatedTransactions(
     t: Iterable[Transaction]
@@ -187,24 +188,6 @@ class CheckpointBlockValidator[F[_]: Sync](
 
   }
 
-  def getParents(c: CheckpointBlock): List[CheckpointBlock] = {
-    val parentSOEBaseHashes = c.parentSOEBaseHashes()(dao).toList
-
-    if (parentSOEBaseHashes.size != 2) {
-      dao.metrics.incrementMetric("validationParentSOEBaseHashesMissing")
-    }
-
-    val fullData = parentSOEBaseHashes.map(dao.checkpointService.fullData(_).unsafeRunSync())
-
-    if (fullData.exists(_.isEmpty)) {
-      dao.metrics.incrementMetric("validationParentCBLookupMissing")
-    }
-
-    fullData
-      .traverse(_.flatMap(_.checkpointBlock))
-      .getOrElse(List())
-  }
-
   def isInSnapshot(c: CheckpointBlock): F[Boolean] =
     snapshotService.acceptedCBSinceSnapshot.get.map(!_.contains(c.baseHash))
 
@@ -219,9 +202,8 @@ class CheckpointBlockValidator[F[_]: Sync](
     cb: CheckpointBlock
   ): F[Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance]] = {
 
-    val parents = getParents(cb)
-
     val validate: F[Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance]] = for {
+      parents <- checkpointParentService.getParents(cb)
       x <- parents.traverse(z => validateCheckpointBlockTree(z))
       folded = x
         .foldLeft(Map.empty[String, Long].rightIor[NonEmptyList[CheckpointBlockValidation]])(
@@ -242,11 +224,11 @@ class CheckpointBlockValidator[F[_]: Sync](
         staticValidation <- Sync[F].delay(
           validateEmptySignatures(cb.signatures)
             .product(validateSignatures(cb.signatures, cb.baseHash))
-            .product(validateTransactions(cb.transactions))
-            .product(validateDuplicatedTransactions(cb.transactions))
         )
+        transactionValidation <- validateTransactions(cb.transactions)
+        duplicatedTransactions <- Sync[F].delay(validateDuplicatedTransactions(cb.transactions))
         balanceValidation <- validateSourceAddressBalances(cb.transactions)
-      } yield staticValidation.product(balanceValidation)
+      } yield staticValidation.product(transactionValidation).product(duplicatedTransactions).product(balanceValidation)
 
     snapshotService.lastSnapshotHeight.get
       .map(_ == 0)
@@ -273,11 +255,16 @@ class CheckpointBlockValidator[F[_]: Sync](
                 snapshotReached
               )
             } else {
-              getParentTransactions(
-                tail ++ getParents(cb),
-                accu ++ cb.transactions.map(_.hash),
-                isIn
-              )
+              checkpointParentService
+                .getParents(cb)
+                .flatMap(
+                  parents =>
+                    getParentTransactions(
+                      tail ++ parents,
+                      accu ++ cb.transactions.map(_.hash),
+                      isIn
+                  )
+                )
             }
 
           }
@@ -288,7 +275,12 @@ class CheckpointBlockValidator[F[_]: Sync](
       .flatMap(
         x =>
           x.filterNot(_._1)
-            .traverse(z => getParentTransactions(getParents(z._2), z._2.transactions.map(_.hash).toList))
+            .traverse(
+              z =>
+                checkpointParentService
+                  .getParents(z._2)
+                  .flatMap(parents => getParentTransactions(parents, z._2.transactions.map(_.hash).toList))
+            )
             .map(_.flatten)
       )
   }

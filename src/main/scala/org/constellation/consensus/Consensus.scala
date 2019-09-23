@@ -201,10 +201,9 @@ class Consensus[F[_]: Concurrent](
     val checkpointBlock = sameBlocks.head._2
     val uniques = proposals.groupBy(_._2.baseHash).size
 
-    val cache =
-      CheckpointCache(Some(checkpointBlock), height = checkpointBlock.calculateHeight())
-
     for {
+      maybeHeight <- checkpointAcceptanceService.calculateHeight(checkpointBlock)
+      cache = CheckpointCache(Some(checkpointBlock), height = maybeHeight)
       _ <- dao.metrics.incrementMetricAsync(
         "acceptMajorityCheckpointBlockSelectedCount_" + proposals.size
       )

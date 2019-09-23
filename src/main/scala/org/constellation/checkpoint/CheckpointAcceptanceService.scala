@@ -20,6 +20,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
   concurrentTipService: ConcurrentTipService[F],
   snapshotService: SnapshotService[F],
   checkpointService: CheckpointService[F],
+  checkpointParentService: CheckpointParentService[F],
   checkpointBlockValidator: CheckpointBlockValidator[F],
   rateLimiting: RateLimiting[F],
   dao: DAO
@@ -81,28 +82,29 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
       Sync[F].raiseError[Unit](new Exception("Max depth reached when resolving data."))
     } else Sync[F].unit
 
-    val resolveSoe = cb.parentSOEBaseHashes()(dao) match {
-      case List(_, _) => Sync[F].unit
-      case _ =>
-        LiftIO[F].liftIO(DataResolver.resolveSoe(cb.parentSOEHashes.toList, peers)(contextShift)(dao = dao).void)
-    }
+    val resolveSoe = checkpointParentService
+      .parentSOEBaseHashes(cb)
+      .flatMap({
+        case List(_, _) => Sync[F].unit
+        case _ =>
+          LiftIO[F].liftIO(DataResolver.resolveSoe(cb.parentSOEHashes.toList, peers)(contextShift)(dao = dao).void)
+      })
 
-    val resolveCheckpoint = Sync[F]
-      .delay(
-        cb.parentSOEBaseHashes()(dao).toList
-      )
-      .map(
-        parents => parents.traverse(h => checkpointService.contains(h).map(exist => (h, exist)))
-      )
-      .flatten
-      .flatMap {
-        case Nil =>
-          Sync[F]
-            .raiseError[List[CheckpointCache]](new RuntimeException("Soe hashes are empty even resolved previously"))
-        case List((_, true), (_, true)) => Sync[F].pure(List[CheckpointCache]())
-        case missing =>
-          LiftIO[F].liftIO(DataResolver.resolveCheckpoints(missing.map(_._1), peers)(contextShift)(dao = dao))
-      }
+    val resolveCheckpoint =
+      checkpointParentService
+        .parentSOEBaseHashes(cb)
+        .map(
+          parents => parents.traverse(h => checkpointService.contains(h).map(exist => (h, exist)))
+        )
+        .flatten
+        .flatMap {
+          case Nil =>
+            Sync[F]
+              .raiseError[List[CheckpointCache]](new RuntimeException("Soe hashes are empty even resolved previously"))
+          case List((_, true), (_, true)) => Sync[F].pure(List[CheckpointCache]())
+          case missing =>
+            LiftIO[F].liftIO(DataResolver.resolveCheckpoints(missing.map(_._1), peers)(contextShift)(dao = dao))
+        }
 
     for {
       _ <- checkError
@@ -144,7 +146,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
           _ <- if (!validation.isValid) Sync[F].raiseError[Unit](new Exception("CB to accept not valid"))
           else Sync[F].unit
           _ <- LiftIO[F].liftIO(cb.storeSOE()(dao))
-          maybeHeight <- calculateHeight(checkpoint)
+          maybeHeight <- checkpointParentService.calculateHeight(cb).map(h => if (h.isEmpty) checkpoint.height else h)
 
           height <- if (maybeHeight.isEmpty) {
             dao.metrics
@@ -153,6 +155,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
           } else Sync[F].pure(maybeHeight.get)
 
           _ <- checkpointService.put(checkpoint.copy(height = maybeHeight))
+          _ <- checkpointParentService.incrementChildrenCount(cb)
           _ <- Sync[F].delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
           _ <- acceptMessages(cb)
           _ <- acceptTransactions(cb, Some(checkpoint))
@@ -200,16 +203,6 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
       dao.metrics.incrementMetricAsync[F]("checkpointsAcceptedWithDummyTxs")
     } else {
       Sync[F].unit
-    }
-
-  private def calculateHeight(checkpointCacheData: CheckpointCache): F[Option[Height]] =
-    Sync[F].delay {
-      checkpointCacheData.checkpointBlock.flatMap { cb =>
-        cb.calculateHeight()(dao) match {
-          case None       => checkpointCacheData.height
-          case calculated => calculated
-        }
-      }
     }
 
   def acceptTransactions(cb: CheckpointBlock, cpc: Option[CheckpointCache] = None): F[Unit] = {
@@ -278,4 +271,6 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
         } yield ()
       }.toList.sequence
     }
+
+  def calculateHeight(cb: CheckpointBlock): F[Option[Height]] = checkpointParentService.calculateHeight(cb)
 }

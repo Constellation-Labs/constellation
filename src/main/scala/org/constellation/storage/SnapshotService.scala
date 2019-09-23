@@ -91,7 +91,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.put(k, v) }.toList.sequence
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.map { h =>
         LiftIO[F].liftIO(h.checkpointBlock.get.storeSOE()) *>
-          checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h) *>
+          checkpointService.put(h) *>
           dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) *>
           h.checkpointBlock.get.transactions.toList
             .map(

@@ -7,6 +7,7 @@ import cats.effect.concurrent.Semaphore
 import cats.effect.{Clock, Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
+import org.constellation.checkpoint.CheckpointParentService
 import org.constellation.consensus.TipData
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema.{Height, Id, SignedObservationEdge}
@@ -34,6 +35,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
   maxTipUsage: Int,
   numFacilitatorPeers: Int,
   minPeerTimeAddedSeconds: Int,
+  checkpointParentService: CheckpointParentService[F],
   dao: DAO,
   facilitatorFilter: FacilitatorFilter[F]
 ) {
@@ -96,22 +98,27 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
     withLock("updateTips", updateUnsafe(checkpointBlock, height: Height, isGenesis))
 
   def updateUnsafe(checkpointBlock: CheckpointBlock, height: Height, isGenesis: Boolean = false): F[Unit] = {
-    val tipUpdates = checkpointBlock.parentSOEBaseHashes()(dao).distinct.toList.traverse { h =>
-      for {
-        tipData <- getUnsafe(h)
-        size <- sizeUnsafe
-        reuseTips = size < maxWidth
-        aboveMinimumTip = size > numFacilitatorPeers
-        _ <- tipData match {
-          case None => Sync[F].unit
-          case Some(TipData(block, numUses, _)) if aboveMinimumTip && (numUses >= maxTipUsage || !reuseTips) =>
-            removeUnsafe(block.baseHash)(dao.metrics)
-          case Some(TipData(block, numUses, tipHeight)) =>
-            putUnsafe(block.baseHash, TipData(block, numUses + 1, tipHeight))(dao.metrics)
-              .flatMap(_ => dao.metrics.incrementMetricAsync("checkpointTipsIncremented"))
-        }
-      } yield ()
-    }
+    val tipUpdates = checkpointParentService
+      .parentSOEBaseHashes(checkpointBlock)
+      .flatMap(
+        l =>
+          l.distinct.traverse { h =>
+            for {
+              tipData <- getUnsafe(h)
+              size <- sizeUnsafe
+              reuseTips = size < maxWidth
+              aboveMinimumTip = size > numFacilitatorPeers
+              _ <- tipData match {
+                case None => Sync[F].unit
+                case Some(TipData(block, numUses, _)) if aboveMinimumTip && (numUses >= maxTipUsage || !reuseTips) =>
+                  removeUnsafe(block.baseHash)(dao.metrics)
+                case Some(TipData(block, numUses, tipHeight)) =>
+                  putUnsafe(block.baseHash, TipData(block, numUses + 1, tipHeight))(dao.metrics)
+                    .flatMap(_ => dao.metrics.incrementMetricAsync("checkpointTipsIncremented"))
+              }
+            } yield ()
+          }
+      )
 
     logThread(
       tipUpdates
@@ -157,7 +164,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
       for {
         _ <- Logger[F].debug(s"Active tip height: $minActiveTipHeight")
         keys <- tipsRef.get.map(_.keys.toList)
-        maybeData <- LiftIO[F].liftIO(keys.traverse(dao.checkpointService.lookup(_)))
+        maybeData <- keys.traverse(checkpointParentService.lookupCheckpoint)
         diff = keys.diff(maybeData.flatMap(_.map(_.checkpointBlock.baseHash)))
         _ <- if (diff.nonEmpty) Logger[F].debug(s"wkoszycki not_mapped ${diff}") else Sync[F].unit
         heights = maybeData.flatMap {
@@ -178,30 +185,35 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
         metrics.updateMetric("activeTips", tips.size)
         (tips.size, readyFacilitators) match {
           case (size, facilitators) if size >= numFacilitatorPeers && facilitators.nonEmpty =>
-            val tipSOE = calculateTipsSOE(tips)
-            facilitatorFilter
-              .filterPeers(facilitators, tips, numFacilitatorPeers)
-              .map(f => {
-                Some(PulledTips(tipSOE, calculateFinalFacilitators(f, tipSOE.soe.map(_.hash).reduce(_ + _))))
-              })
+            calculateTipsSOE(tips).flatMap(
+              tipSOE =>
+                facilitatorFilter
+                  .filterPeers(facilitators, tips, numFacilitatorPeers)
+                  .map(f => {
+                    Some(PulledTips(tipSOE, calculateFinalFacilitators(f, tipSOE.soe.map(_.hash).reduce(_ + _))))
+                  })
+            )
           case (size, _) if size >= numFacilitatorPeers =>
-            Sync[F].pure(Some(PulledTips(calculateTipsSOE(tips), Map.empty[Id, PeerData])))
-          case (_, _) => Sync[F].pure(None)
+            calculateTipsSOE(tips).map(t => Some(PulledTips(t, Map.empty[Id, PeerData])))
+          case (_, _) => none[PulledTips].pure[F]
         }
       },
       "concurrentTipService_pull"
     )
 
-  private def calculateTipsSOE(tips: Map[String, TipData]): TipSoe = {
-    val r = Random
+  private def calculateTipsSOE(tips: Map[String, TipData]): F[TipSoe] =
+    Random
       .shuffle(if (tips.size > 50) tips.slice(0, 50).toSeq else tips.toSeq)
       .take(numFacilitatorPeers)
-      .map { t =>
-        (t._2.checkpointBlock.calculateHeight()(dao), t._2.checkpointBlock.checkpoint.edge.signedObservationEdge)
+      .toList
+      .traverse { t =>
+        checkpointParentService
+          .calculateHeight(t._2.checkpointBlock)
+          .map(h => (h, t._2.checkpointBlock.checkpoint.edge.signedObservationEdge))
+
       }
-      .sortBy(_._2.hash)
-    TipSoe(r.map(_._2), r.map(_._1.map(_.min)).min)
-  }
+      .map(_.sortBy(_._2.hash))
+      .map(r => TipSoe(r.map(_._2), r.map(_._1.map(_.min)).min))
 
   private def calculateFinalFacilitators(facilitators: Map[Id, PeerData], mergedTipHash: String): Map[Id, PeerData] = {
     // TODO: Use XOR distance instead as it handles peer data mismatch cases better

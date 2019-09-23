@@ -29,8 +29,6 @@ class MetricsManagerTest()
   dao.initialize(NodeConfig(allowLocalhostPeers = true, hostName = "", peerHttpPort = 0))
   logger.info("DAO actor initialized")
 
-  dao.metrics = new Metrics()
-
   logger.info("MetricsManager actor initialized")
 
   "MetricsManager" should "report micrometer metrics" in {

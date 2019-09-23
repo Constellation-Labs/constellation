@@ -2,16 +2,13 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
-import cats.data.{Ior, NonEmptyList, ValidatedNel}
 import cats.effect.IO
 import cats.implicits._
 import constellation.signedObservationEdge
 import org.constellation.DAO
 import org.constellation.p2p.PeerNotification
 import org.constellation.primitives.Schema._
-import org.constellation.util.{HashSignature, Metrics}
-
-import scala.annotation.tailrec
+import org.constellation.util.HashSignature
 
 abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
   def baseHash: String = checkpoint.edge.baseHash
@@ -55,74 +52,6 @@ case class CheckpointBlock(
   def storeSOE()(implicit dao: DAO): IO[SignedObservationEdgeCache] =
     dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true))
 
-  def calculateHeight()(implicit dao: DAO): Option[Height] = {
-
-    val parents = parentSOEBaseHashes.map(dao.checkpointService.lookup(_).unsafeRunSync())
-
-    dao.miscLogger.debug(s"[CB baseHash=$baseHash] Height calculation parents ${parentSOEBaseHashes()}")
-
-    if (parents.exists(_.isEmpty)) {
-      dao.miscLogger.error(s"[CB baseHash=$baseHash] Height calculation parent missing")
-      dao.miscLogger.error(s"[CB baseHash=$baseHash] Height calculation parent are defined ${parents.map(_.isDefined)}")
-      dao.metrics.incrementMetric("heightCalculationParentMissing")
-    } else {
-      dao.miscLogger.debug(s"[CB baseHash=$baseHash] Height calculation parent exists")
-      dao.metrics.incrementMetric("heightCalculationParentsExist")
-    }
-
-    dao.metrics.incrementMetric("heightCalculationParentLength_" + parents.length)
-    dao.miscLogger.debug(s"[CB baseHash=$baseHash] Height calculation parents length ${parents.length}")
-
-    val maxHeight = if (parents.exists(_.isEmpty)) {
-      None
-    } else {
-
-      val parents2 = parents.map { _.get }
-      val heights = parents2.map { _.height.map { _.max } }
-
-      dao.miscLogger.debug(
-        s"[CB baseHash=$baseHash] Height calculation MAX parents are defined: ${parents.forall(_.isDefined)}"
-      )
-      dao.miscLogger.debug(s"[CB baseHash=$baseHash] Height calculation MAX heights ${heights}")
-
-      val nonEmptyHeights = heights.flatten
-      if (nonEmptyHeights.isEmpty) None
-      else {
-        Some(nonEmptyHeights.max + 1)
-      }
-    }
-
-    val minHeight = if (parents.exists(_.isEmpty)) {
-      None
-    } else {
-
-      val parents2 = parents.map { _.get }
-      val heights = parents2.map { _.height.map { _.min } }
-
-      dao.miscLogger.debug(
-        s"[CB baseHash=$baseHash] Height calculation MIN parents are defined: ${parents.forall(_.isDefined)}"
-      )
-      dao.miscLogger.debug(s"[CB baseHash=$baseHash] Height calculation MIN heights ${heights}")
-
-      val nonEmptyHeights = heights.flatten
-      if (nonEmptyHeights.isEmpty) None
-      else {
-        Some(nonEmptyHeights.min + 1)
-      }
-    }
-
-    val height = maxHeight.flatMap { max =>
-      minHeight.map { min =>
-        Height(min, max)
-      }
-    }
-
-    height
-
-  }
-
-  def transactionsValid(implicit dao: DAO): Boolean = transactions.nonEmpty && transactions.forall(_.valid)
-
   def uniqueSignatures: Boolean = signatures.groupBy(_.id).forall(_._2.size == 1)
 
   def signedBy(id: Id): Boolean = witnessIds.contains(id)
@@ -156,7 +85,7 @@ case class CheckpointBlock(
           }
      */
     // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
-    (cache.checkpointBlock.get.storeSOE() *> dao.checkpointService.memPool.put(baseHash, cache)).unsafeRunSync()
+    (cache.checkpointBlock.get.storeSOE() *> dao.checkpointService.put(cache)).unsafeRunSync()
     dao.recentBlockTracker.put(cache)
 
   }
@@ -176,26 +105,6 @@ case class CheckpointBlock(
   def parentSOE: Seq[TypedEdgeHash] = checkpoint.edge.parents
 
   def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
-
-  def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
-    parentSOEHashes.flatMap { soeHash =>
-      if (soeHash == Genesis.CoinBaseHash) {
-        Seq()
-      } else {
-        val parent = dao.soeService.lookup(soeHash).unsafeRunSync()
-        if (parent.isEmpty) {
-          dao.miscLogger.debug(s"SOEHash $soeHash missing from soeService for cb: $baseHash")
-          dao.metrics.incrementMetric("parentSOEServiceQueryFailed")
-          // Temporary
-          val parentDirect = checkpoint.edge.observationEdge.parents.find(_.hash == soeHash).flatMap { _.baseHash }
-          if (parentDirect.isEmpty) {
-            dao.metrics.incrementMetric("parentDirectTipReferenceMissing")
-            //    throw new Exception("Missing parent direct reference")
-          }
-          parentDirect
-        } else parent.map { _.signedObservationEdge.baseHash }
-      }
-    }
 
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 

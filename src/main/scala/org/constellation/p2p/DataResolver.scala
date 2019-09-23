@@ -100,8 +100,8 @@ class DataResolver extends StrictLogging {
       )(contextToReturn).head
         .flatTap(
           cpc =>
-            cpc.checkpointBlock.get.storeSOE() *> dao.checkpointService.memPool
-              .put(cpc.checkpointBlock.get.baseHash, cpc)
+            cpc.checkpointBlock.get.storeSOE() *> dao.checkpointService
+              .put(cpc)
         )
         .flatTap(
           cb =>
@@ -152,8 +152,8 @@ class DataResolver extends StrictLogging {
         cbs =>
           cbs.traverse(
             cb =>
-              cb.checkpointBlock.get.storeSOE() *> dao.checkpointService.memPool
-                .put(cb.checkpointBlock.get.baseHash, cb)
+              cb.checkpointBlock.get.storeSOE() *> dao.checkpointService
+                .put(cb)
         )
       ),
       s"dataResolver_resolveCheckpoints [${hashes}]",

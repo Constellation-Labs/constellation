@@ -1,4 +1,4 @@
-package org.constellation.storage
+package org.constellation.checkpoint
 
 import java.security.KeyPair
 
@@ -9,13 +9,13 @@ import com.typesafe.scalalogging.Logger
 import constellation.{createDummyTransaction, createTransaction}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation._
-import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.makeKeyPair
 import org.constellation.p2p.{Cluster, PeerData, PeerNotification}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.storage._
 import org.constellation.util.{APIClient, HostPort, Metrics}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}

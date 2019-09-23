@@ -1,6 +1,6 @@
 package org.constellation.checkpoint
 
-import cats.effect.{Concurrent, ContextShift, IO, LiftIO}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -8,7 +8,13 @@ import org.constellation.p2p.{DataResolver, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, _}
 import org.constellation.primitives._
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
-import org.constellation.storage.{MessageService, NotificationService, ObservationService, TransactionService}
+import org.constellation.storage.{
+  MessageService,
+  NotificationService,
+  ObservationService,
+  SOEService,
+  TransactionService
+}
 import org.constellation.{ConstellationExecutionContext, DAO}
 
 class CheckpointService[F[_]: Concurrent](
@@ -19,7 +25,7 @@ class CheckpointService[F[_]: Concurrent](
   observationService: ObservationService[F]
 ) {
 
-  val memPool = new CheckpointBlocksMemPool[F](
+  private[checkpoint] val memPool = new CheckpointBlocksMemPool[F](
     dao,
     transactionService.merklePool,
     messageService.merklePool,
@@ -31,6 +37,10 @@ class CheckpointService[F[_]: Concurrent](
 
   val contextShift
     : ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki pass from F
+
+  def update(baseHash: String,
+             update: CheckpointCacheMetadata => CheckpointCacheMetadata): F[Option[CheckpointCacheMetadata]] =
+    memPool.update(baseHash, update)
 
   def put(cbCache: CheckpointCache): F[CheckpointCacheMetadata] =
     memPool.put(cbCache.checkpointBlock.get.baseHash, cbCache)

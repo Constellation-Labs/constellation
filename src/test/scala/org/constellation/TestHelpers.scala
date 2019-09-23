@@ -27,7 +27,6 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
       ] = IO.pure(facilitators)
     }
     dao.initialize()
-    dao.metrics = new Metrics()(dao)
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
     dao
   }

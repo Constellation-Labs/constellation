@@ -20,13 +20,10 @@ class CheckpointBlocksMemPool[F[_]: Concurrent](
     key: String,
     value: CheckpointCache
   ): F[CheckpointCacheMetadata] =
-    value.checkpointBlock
-      .map(cb => incrementChildrenCount(cb.parentSOEBaseHashes()(dao)))
-      .sequence *>
-      storeMerkleRoots(value.checkpointBlock.get)
-        .flatMap(ccm => {
-          super.put(key, CheckpointCacheMetadata(ccm, value.children, value.height))
-        })
+    storeMerkleRoots(value.checkpointBlock.get)
+      .flatMap(ccm => {
+        super.put(key, CheckpointCacheMetadata(ccm, value.children, value.height))
+      })
 
   private def storeMerkleRoots(data: CheckpointBlock): F[CheckpointBlockMetadata] =
     for {
@@ -44,8 +41,4 @@ class CheckpointBlocksMemPool[F[_]: Concurrent](
         ss.put(rootHash, data).map(_ => rootHash.some)
     }
 
-  def incrementChildrenCount(hashes: Seq[String]): F[Unit] =
-    hashes.toList.traverse { hash =>
-      update(hash, (cd: CheckpointCacheMetadata) => cd.copy(children = cd.children + 1))
-    }.void
 }

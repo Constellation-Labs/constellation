@@ -11,7 +11,12 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointBlockValidator, CheckpointService}
+import org.constellation.checkpoint.{
+  CheckpointAcceptanceService,
+  CheckpointBlockValidator,
+  CheckpointParentService,
+  CheckpointService
+}
 import org.constellation.consensus.{ConsensusManager, ConsensusRemoteSender, ConsensusScheduler, ConsensusWatcher}
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
@@ -24,6 +29,7 @@ import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
 import org.constellation.storage._
 import org.constellation.storage.external.GcpStorage
 import org.constellation.storage.transactions.TransactionGossiping
+import org.constellation.transaction.TransactionValidator
 import org.constellation.util.{HealthChecker, HostPort, MajorityStateChooser, SnapshotWatcher}
 
 import scala.concurrent.Future
@@ -103,19 +109,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     transactionService = new TransactionService[IO](this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
 
-    concurrentTipService = new ConcurrentTipService[IO](
-      processingConfig.maxActiveTipsAllowedInMemory,
-      processingConfig.maxWidth,
-      processingConfig.maxTipUsage,
-      processingConfig.numFacilitatorPeers,
-      processingConfig.minPeerTimeAddedSeconds,
-      this,
-      new FacilitatorFilter[IO](
-        IO.contextShift(ConstellationExecutionContext.bounded),
-        this
-      )
-    )
-
     observationService = new ObservationService[IO](this)
     checkpointService = new CheckpointService[IO](
       this,
@@ -123,6 +116,20 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       messageService,
       notificationService,
       observationService
+    )
+    checkpointParentService = new CheckpointParentService(soeService, checkpointService, this)
+    concurrentTipService = new ConcurrentTipService[IO](
+      processingConfig.maxActiveTipsAllowedInMemory,
+      processingConfig.maxWidth,
+      processingConfig.maxTipUsage,
+      processingConfig.numFacilitatorPeers,
+      processingConfig.minPeerTimeAddedSeconds,
+      checkpointParentService,
+      this,
+      new FacilitatorFilter[IO](
+        IO.contextShift(ConstellationExecutionContext.bounded),
+        this
+      )
     )
     addressService = new AddressService[IO]()(Concurrent(IO.ioConcurrentEffect), () => metrics)
 
@@ -169,8 +176,14 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       this
     )
 
-    checkpointBlockValidator =
-      new CheckpointBlockValidator[IO](addressService, snapshotService, checkpointService, this)
+    transactionValidator = new TransactionValidator[IO](transactionService)
+    checkpointBlockValidator = new CheckpointBlockValidator[IO](
+      addressService,
+      snapshotService,
+      checkpointParentService,
+      transactionValidator,
+      this
+    )
 
     checkpointAcceptanceService = new CheckpointAcceptanceService[IO](
       addressService,
@@ -178,6 +191,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       concurrentTipService,
       snapshotService,
       checkpointService,
+      checkpointParentService,
       checkpointBlockValidator,
       rateLimiting,
       this
@@ -239,4 +253,34 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         pd.peerMetadata.timeAdded < (System
           .currentTimeMillis() - processingConfig.minPeerTimeAddedSeconds * 1000)
     })
+
+  def enableSimulateEndpointTimeout(): Unit = {
+    simulateEndpointTimeout = true
+    metrics.updateMetric("simulateEndpointTimeout", simulateEndpointTimeout.toString)
+  }
+
+  def disableSimulateEndpointTimeout(): Unit = {
+    simulateEndpointTimeout = false
+    metrics.updateMetric("simulateEndpointTimeout", simulateEndpointTimeout.toString)
+  }
+
+  def enableRandomTransactions(): Unit = {
+    generateRandomTX = true
+    metrics.updateMetric("generateRandomTX", generateRandomTX.toString)
+  }
+
+  def disableRandomTransactions(): Unit = {
+    generateRandomTX = false
+    metrics.updateMetric("generateRandomTX", generateRandomTX.toString)
+  }
+
+  def enableCheckpointFormation(): Unit = {
+    formCheckpoints = true
+    metrics.updateMetric("checkpointFormation", formCheckpoints.toString)
+  }
+
+  def disableCheckpointFormation(): Unit = {
+    formCheckpoints = false
+    metrics.updateMetric("checkpointFormation", formCheckpoints.toString)
+  }
 }
