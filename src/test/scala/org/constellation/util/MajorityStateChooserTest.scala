@@ -153,6 +153,18 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       result shouldBe None
     }
 
+    it("after receiving not consistent lists from all nodes") {
+      val node1 = Id("node1") -> List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i))
+      val node2 = Id("node2") -> List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i))
+      val node3 = Id("node3") -> List(0, 2, 6).map(i => RecentSnapshot(s"$i", i))
+      val ownNode = Id("ownNode") -> List(0, 2).map(i => RecentSnapshot(s"$i", i))
+      val nodeList = List(node1, node2, node3, ownNode)
+
+      val result = majorityState.chooseMajorityState(nodeList, maxOrZero(ownNode._2)).value.unsafeRunSync().get
+
+      result._2.subsetOf(Set(Id("node1"), Id("node2"))) shouldBe true
+    }
+
     it("after receiving snapshots with different hashes") {
       val clusterSnapshots = List(
         (

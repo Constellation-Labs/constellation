@@ -13,6 +13,7 @@ import org.constellation.p2p.Cluster.Peers
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.rollback.CannotLoadSnapshotInfoFile
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{APIClient, Distance, Metrics}
 import org.constellation.util.Logging.logThread
@@ -20,7 +21,7 @@ import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Random
+import scala.util.{Random, Try}
 
 object SnapshotsDownloader {
 
@@ -133,7 +134,8 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
         else
           IO.raiseError[Unit](
             new RuntimeException(
-              s"Inconsistent state majority snapshot doesn't contain: ${snapshotHashes.filterNot(majoritySnapshot.snapshotHashes.contains)}"
+              s"[${dao.id.short}] Inconsistent state majority snapshot doesn't contain: ${snapshotHashes
+                .filterNot(majoritySnapshot.snapshotHashes.contains)}"
             )
           )
         snapshotClient <- getSnapshotClient(peers)
@@ -209,16 +211,25 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       .traverse(
         client =>
           client
-            .getNonBlockingBytesKryo[SnapshotInfo]("info", timeout = 15.seconds)(contextShift)
-            .map(_.some)
-            .handleErrorWith(_ => IO.pure[Option[SnapshotInfo]](None))
+            .getNonBlockingArrayByteIO("info", timeout = 5.seconds)(contextShift)
+            .map(snapshotInfoArrayBytes => deserializeSnapshotInfo(snapshotInfoArrayBytes).some)
+            .handleErrorWith(e => {
+              IO.delay(logger.info(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) *>
+                IO.pure[Option[SnapshotInfo]](None)
+            })
       )
       .map(
         snapshots =>
           if (snapshots.count(_.isEmpty) > (snapshots.size / 2))
-            throw new Exception(s"Unable to get majority snapshot ${snapshots.filter(_.isEmpty)}")
+            throw new Exception(s"[${dao.id.short}] Unable to get majority snapshot ${snapshots.filter(_.isEmpty)}")
           else snapshots.flatten.groupBy(_.snapshot.hash).maxBy(_._2.size)._2.head
       )
+
+  private def deserializeSnapshotInfo(byteArray: Array[Byte]) =
+    Try(KryoSerializer.deserializeCast[SnapshotInfo](byteArray)).toOption match {
+      case Some(value) => value
+      case None        => throw new Exception(s"[${dao.id.short}] Unable to parse snapshotInfo")
+    }
 
   private def downloadAndProcessSnapshotsFirstPass(snapshotHashes: Seq[String])(
     implicit snapshotClient: APIClient,

@@ -75,7 +75,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
 
   def checkClusterConsistency(ownSnapshots: List[RecentSnapshot]): F[Option[List[RecentSnapshot]]] = {
     val check = for {
-      _ <- Logger[F].debug(s"[${dao.id.short}] re-download checking cluster consistency")
+      _ <- Logger[F].info(s"[${dao.id.short}] Re-download checking cluster consistency")
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       peersSnapshots <- collectSnapshot(peers)
       _ <- clearStaleTips(peersSnapshots)
@@ -85,10 +85,18 @@ class HealthChecker[F[_]: Concurrent: Logger](
         .getOrElse((Seq[RecentSnapshot](), Set[Id]()))
 
       diff <- compareSnapshotState(major, ownSnapshots)
-      _ <- Logger[F].debug(s"[${dao.id.short}] re-download cluster diff $diff and own $ownSnapshots")
+
       result <- if (shouldReDownload(ownSnapshots, diff)) {
-        startReDownload(diff, peers.filterKeys(diff.peers.contains))
-          .flatMap(_ => Sync[F].delay[Option[List[RecentSnapshot]]](Some(major._1.toList)))
+        Logger[F].info(
+          s"[${dao.id.short}] Re-download process with : " +
+            s"Snapshot to download : ${diff.snapshotsToDownload} " +
+            s"Snapshot to delete : ${diff.snapshotsToDelete} " +
+            s"From peers : ${diff.peers} " +
+            s"Own snapshots : $ownSnapshots " +
+            s"Major state : $major"
+        ) *>
+          startReDownload(diff, peers.filterKeys(diff.peers.contains))
+            .flatMap(_ => Sync[F].delay[Option[List[RecentSnapshot]]](Some(major._1.toList)))
       } else {
         Sync[F].pure[Option[List[RecentSnapshot]]](None)
       }
@@ -150,24 +158,34 @@ class HealthChecker[F[_]: Concurrent: Logger](
       snapshotsToDownload
     )
 
-  def startReDownload(diff: SnapshotDiff, peers: Map[Id, PeerData]): F[Unit] = {
+  def startReDownload(
+    diff: SnapshotDiff,
+    peers: Map[Id, PeerData]
+  ): F[Unit] = {
     val reDownload = for {
-      _ <- Logger[F].debug(s"[${dao.id.short}] starting re-download process with diff: $diff")
+      _ <- Logger[F].info(s"[${dao.id.short}] Starting re-download process")
+
       _ <- LiftIO[F].liftIO(downloader.setNodeState(NodeState.DownloadInProgress))
+      _ <- Logger[F].debug(s"[${dao.id.short}] NodeState set to DownloadInProgress")
+
       _ <- consensusManager.terminateConsensuses()
+      _ <- Logger[F].debug(s"[${dao.id.short}] Consensuses terminated")
+
       _ <- LiftIO[F].liftIO(
         downloader.reDownload(
           diff.snapshotsToDownload.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),
           peers.filterKeys(diff.peers.contains)
         )
       )
+
       _ <- Sync[F].delay {
         Snapshot.removeSnapshots(
           diff.snapshotsToDelete.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),
           dao.snapshotPath.pathAsString
         )(dao)
       }
-      _ <- Logger[F].debug(s"[${dao.id.short}] re-download process finished")
+
+      _ <- Logger[F].info(s"[${dao.id.short}] Re-download process finished")
       _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadFinished)
     } yield ()
 
