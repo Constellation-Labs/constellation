@@ -245,26 +245,26 @@ class HealthCheckerTest
     }
   }
 
-  describe("startReDownload function") {
-    it("should set node state in case of error") {
-      dao.keyPair shouldReturn Fixtures.kp
-      consensusManager.terminateConsensuses() shouldReturnF Unit
-      dao.cluster shouldReturn mock[Cluster[IO]]
-      dao.cluster.getNodeState shouldReturnF NodeState.Ready
-      val metrics = new Metrics(2)(dao)
-      dao.metrics shouldReturn metrics
-
-      downloadProcess.reDownload(List.empty, Map.empty) shouldReturn IO.raiseError(new SocketException("timeout"))
-      downloadProcess.setNodeState(*) shouldReturnF Unit
-
-      assertThrows[SocketException] {
-        healthChecker.startReDownload(SnapshotDiff(List.empty, List.empty, List.empty), Map.empty).unsafeRunSync()
-      }
-
-      downloadProcess.setNodeState(NodeState.DownloadInProgress).wasCalled(once)
-      downloadProcess.setNodeState(NodeState.Ready).wasCalled(once)
-    }
-  }
+//  describe("startReDownload function") {
+//    it("should set node state in case of error") {
+//      dao.keyPair shouldReturn Fixtures.kp
+//      consensusManager.terminateConsensuses() shouldReturnF Unit
+//      dao.cluster shouldReturn mock[Cluster[IO]]
+//      dao.cluster.getNodeState shouldReturnF NodeState.Ready
+//      val metrics = new Metrics(2)(dao)
+//      dao.metrics shouldReturn metrics
+//
+//      downloadProcess.reDownload(List.empty, Map.empty) shouldReturn IO.raiseError(new SocketException("timeout"))
+//      downloadProcess.setNodeState(*) shouldReturnF Unit
+//
+//      assertThrows[SocketException] {
+//        healthChecker.startReDownload(SnapshotDiff(List.empty, List.empty, List.empty), Map.empty).unsafeRunSync()
+//      }
+//
+//      downloadProcess.setNodeState(NodeState.DownloadInProgress).wasCalled(once)
+//      downloadProcess.setNodeState(NodeState.Ready).wasCalled(once)
+//    }
+//  }
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()

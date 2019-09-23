@@ -133,7 +133,8 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
         else
           IO.raiseError[Unit](
             new RuntimeException(
-              s"Inconsistent state majority snapshot doesn't contain: ${snapshotHashes.filterNot(majoritySnapshot.snapshotHashes.contains)}"
+              s"[${dao.id.short}] Inconsistent state majority snapshot doesn't contain: ${snapshotHashes
+                .filterNot(majoritySnapshot.snapshotHashes.contains)}"
             )
           )
         snapshotClient <- getSnapshotClient(peers)
@@ -211,7 +212,10 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
           client
             .getNonBlockingBytesKryo[SnapshotInfo]("info", timeout = 15.seconds)(contextShift)
             .map(_.some)
-            .handleErrorWith(_ => IO.pure[Option[SnapshotInfo]](None))
+            .handleErrorWith(e => {
+              IO.delay(logger.info(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : $e")) *>
+                IO.pure[Option[SnapshotInfo]](None)
+            })
       )
       .map(
         snapshots =>
