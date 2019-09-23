@@ -46,8 +46,8 @@
     </appender>
 
 
-    <logger level="info" name="akka.monitor.instrumentation" />
-    <logger level="info" name="io.kontainers.micrometer" />
+    <logger level="debug" name="akka.monitor.instrumentation" />
+    <logger level="debug" name="io.kontainers.micrometer" />
 
     <logger level="debug" name="APIClient" additivity="false">
         <appender-ref ref="apiclient"/>

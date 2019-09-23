@@ -1,14 +1,16 @@
 package org.constellation.primitives
+
 import cats.effect.{ContextShift, IO, Timer}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{CheckpointParentService, CheckpointService}
 import org.constellation.consensus.RandomData
+import org.constellation.domain.configuration.NodeConfig
 import org.constellation.primitives.Schema.{CheckpointCacheMetadata, EdgeHashType, Height, TypedEdgeHash}
 import org.constellation.storage.SOEService
 import org.constellation.util.Metrics
-import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, NodeConfig}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{FunSpecLike, Matchers}
