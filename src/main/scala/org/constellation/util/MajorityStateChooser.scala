@@ -21,7 +21,10 @@ class MajorityStateChooser[F[_]: Concurrent: Logger] {
     ownHeight: Long
   ): OptionT[F, (Seq[RecentSnapshot], Set[Id])] =
     for {
-      majorState <- chooseMajoritySnapshot(nodeSnapshots, ownHeight)
+      majorState <- chooseMajoritySnapshot(
+        nodeSnapshots.filter(checkIfNodeContainsSnapshotsInConsistentState),
+        ownHeight
+      )
       nodeId <- OptionT.fromOption[F](chooseNodeId(majorState))
       node: (Id, Seq[RecentSnapshot]) <- OptionT.fromOption[F](findNode(nodeSnapshots, nodeId))
       _ <- OptionT.liftF(Logger[F].debug(s"Re-download from node : ${node}"))
@@ -75,4 +78,26 @@ class MajorityStateChooser[F[_]: Concurrent: Logger] {
       .sortBy(_._1.height)
       .reverse
       .map(s => (s._1, s._2.map(_._1)))
+
+  private def checkIfNodeContainsSnapshotsInConsistentState(nodeSnapshots: NodeSnapshots) = {
+    val nodeSnapshotsHeights: Seq[Long] = nodeSnapshots._2.map(a => a.height)
+    val shouldContainsSnapshotsWithHeights: Set[Long] =
+      Seq.range(minOrZero(nodeSnapshotsHeights.toList), maxOrZero(nodeSnapshotsHeights.toList) + 1).filter(isEven).toSet
+
+    shouldContainsSnapshotsWithHeights.subsetOf(nodeSnapshotsHeights.toSet)
+  }
+
+  private def isEven(number: Long) = number % 2 == 0
+
+  private def maxOrZero(list: List[Long]): Long =
+    list match {
+      case Nil => 0
+      case _   => list.max
+    }
+
+  private def minOrZero(list: List[Long]): Long =
+    list match {
+      case Nil => 0
+      case _   => list.min
+    }
 }
