@@ -189,9 +189,11 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
               tipSOE =>
                 facilitatorFilter
                   .filterPeers(facilitators, tips, numFacilitatorPeers)
-                  .map(f => {
-                    Some(PulledTips(tipSOE, calculateFinalFacilitators(f, tipSOE.soe.map(_.hash).reduce(_ + _))))
-                  })
+                  .map {
+                    case f if f.size >= numFacilitatorPeers =>
+                      Some(PulledTips(tipSOE, calculateFinalFacilitators(f, tipSOE.soe.map(_.hash).reduce(_ + _))))
+                    case _ => None
+                  }
             )
           case (size, _) if size >= numFacilitatorPeers =>
             calculateTipsSOE(tips).map(t => Some(PulledTips(t, Map.empty[Id, PeerData])))
