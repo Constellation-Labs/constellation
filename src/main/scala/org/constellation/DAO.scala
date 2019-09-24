@@ -138,7 +138,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     consensusRemoteSender = new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded))
 
-    consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
     majorityStateChooser = new MajorityStateChooser[IO]()
 
     snapshotBroadcastService = {
@@ -212,6 +211,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       IO.contextShift(ConstellationExecutionContext.unbounded),
       IO.contextShift(ConstellationExecutionContext.bounded)
     )
+    consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
 
     transactionGenerator =
       TransactionGenerator[IO](addressService, transactionGossiping, transactionService, cluster, this)

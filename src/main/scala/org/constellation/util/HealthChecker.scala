@@ -168,7 +168,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
       _ <- LiftIO[F].liftIO(downloader.setNodeState(NodeState.DownloadInProgress))
       _ <- Logger[F].debug(s"[${dao.id.short}] NodeState set to DownloadInProgress")
 
-      _ <- consensusManager.terminateConsensuses()
+      _ <- LiftIO[F].liftIO(dao.terminateConsensuses())
       _ <- Logger[F].debug(s"[${dao.id.short}] Consensuses terminated")
 
       _ <- LiftIO[F].liftIO(
