@@ -105,7 +105,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
     check.recoverWith {
       case err =>
         Logger[F]
-          .error(err)(s"Unexpected error during re-download process: ${err.getMessage}")
+          .error(err)(s"[${dao.id.short}] Unexpected error during re-download process: ${err.getMessage}")
           .flatMap(_ => Sync[F].pure[Option[List[RecentSnapshot]]](None))
     }
   }

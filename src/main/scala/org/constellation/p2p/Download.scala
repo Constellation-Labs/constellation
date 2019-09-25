@@ -63,10 +63,15 @@ object SnapshotsDownloader {
   private def getSnapshot(hash: String, client: APIClient)(
     implicit snapshotTimeout: Duration
   ): IO[StoredSnapshot] =
-    client.getNonBlockingBytesKryo[StoredSnapshot](
-      "storedSnapshot/" + hash,
-      timeout = snapshotTimeout
-    )(contextShift)
+    client
+      .getNonBlockingArrayByteIO("storedSnapshot/" + hash, timeout = snapshotTimeout)(contextShift)
+      .map(s => deserializeStoredSnapshot(s))
+
+  private def deserializeStoredSnapshot(storedSnapshotArrayBytes: Array[Byte]) =
+    Try(KryoSerializer.deserializeCast[StoredSnapshot](storedSnapshotArrayBytes)).toOption match {
+      case Some(value) => value
+      case None        => throw new Exception(s"Unable to parse storedSnapshot")
+    }
 }
 
 class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[StoredSnapshot])(
