@@ -375,12 +375,12 @@ class Consensus[F[_]: Concurrent](
 
   private[consensus] def mergeTxProposalsAndBroadcastBlock(): F[Unit] =
     for {
-      readyPeers <- LiftIO[F].liftIO(dao.readyPeers.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
+      allPeers <- LiftIO[F].liftIO(dao.peerInfo.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
       proposals <- transactionProposals.get
       transactions <- prepareConsensusData[Transaction, TransactionCacheData](
         "transaction",
         proposals,
-        readyPeers, { p =>
+        allPeers, { p =>
           p.txHashes
         },
         roundData.transactions.map(_.hash), { s =>
@@ -393,7 +393,7 @@ class Consensus[F[_]: Concurrent](
       messages <- prepareConsensusData[ChannelMessage, ChannelMessageMetadata](
         "message",
         proposals,
-        readyPeers, { p =>
+        allPeers, { p =>
           p.messages
         },
         Seq.empty[String], { s =>
@@ -415,7 +415,7 @@ class Consensus[F[_]: Concurrent](
       resolvedObs <- prepareConsensusData[Observation, Observation](
         "observation",
         proposals,
-        readyPeers, { p =>
+        allPeers, { p =>
           p.exHashes
         },
         roundData.observations.map(_.hash), { s =>
