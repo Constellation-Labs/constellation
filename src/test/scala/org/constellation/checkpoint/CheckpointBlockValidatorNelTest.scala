@@ -1,22 +1,23 @@
-package org.constellation.primitives
+package org.constellation.checkpoint
 
 import java.security.KeyPair
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import akka.testkit.{TestKit, TestProbe}
+import akka.testkit.TestKit
 import cats.effect.{ContextShift, IO}
-import cats.effect.concurrent.Ref
 import cats.implicits._
 import constellation.createTransaction
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.checkpoint.CheckpointBlockValidator._
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
 import org.constellation.p2p.Cluster
-import org.constellation.primitives.CheckpointBlockValidatorNel._
-import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, Height, Id}
+import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, Id}
 import org.constellation.primitives.concurrency.SingleRef
-import org.constellation.storage.{CheckpointBlocksMemPool, CheckpointService, SnapshotService, TransactionService}
+import org.constellation.primitives.{CheckpointBlock, IPManager, Transaction}
+import org.constellation.storage._
+import org.constellation.transaction.TransactionValidator
 import org.constellation.util.{HashSignature, Metrics}
 import org.constellation.{ConstellationExecutionContext, DAO, NodeConfig}
 import org.mockito.cats.IdiomaticMockitoCats
@@ -36,7 +37,14 @@ class CheckpointBlockValidatorNelTest
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   val snapService: SnapshotService[IO] = mock[SnapshotService[IO]]
-  val checkpointService: CheckpointService[IO] = mock[CheckpointService[IO]]
+  val checkpointParentService: CheckpointParentService[IO] = mock[CheckpointParentService[IO]]
+  val addressService: AddressService[IO] = mock[AddressService[IO]]
+  val transactionService: TransactionService[IO] = mock[TransactionService[IO]]
+
+  val transactionValidator: TransactionValidator[IO] = new TransactionValidator[IO](transactionService)
+
+  val checkpointBlockValidator: CheckpointBlockValidator[IO] =
+    new CheckpointBlockValidator[IO](addressService, snapService, checkpointParentService, transactionValidator, dao)
 
   val leftBlock: CheckpointBlock = mock[CheckpointBlock]
   val leftParent: CheckpointBlock = mock[CheckpointBlock]
@@ -68,19 +76,18 @@ class CheckpointBlockValidatorNelTest
       HashSignature.apply("sig2", Id("id2"))
     )
 
-    rightBlock.parentSOEBaseHashes()(*) shouldReturn Seq("rightParent")
-    leftBlock.parentSOEBaseHashes()(*) shouldReturn Seq("leftParent")
-
-    leftParent.parentSOEBaseHashes()(*) shouldReturn Seq.empty
-    rightParent.parentSOEBaseHashes()(*) shouldReturn Seq.empty
+    checkpointParentService.parentSOEBaseHashes(rightBlock) shouldReturnF List("rightParent")
+    checkpointParentService.parentSOEBaseHashes(leftBlock) shouldReturnF List("leftParent")
+    checkpointParentService.parentSOEBaseHashes(leftParent) shouldReturnF List.empty[String]
+    checkpointParentService.parentSOEBaseHashes(rightParent) shouldReturnF List.empty[String]
 
     leftParent.transactions shouldReturn Seq.empty
     rightParent.transactions shouldReturn Seq.empty
 
-    checkpointService.fullData(rightParent.baseHash) shouldReturn IO.pure(Some(CheckpointCache(Some(rightParent))))
-    checkpointService.fullData(leftParent.baseHash) shouldReturn IO.pure(Some(CheckpointCache(Some(leftParent))))
-    checkpointService.memPool shouldReturn mock[CheckpointBlocksMemPool[IO]]
-    checkpointService.memPool.size() shouldReturn IO.pure(0)
+//    checkpointService.fullData(rightParent.baseHash) shouldReturn IO.pure(Some(CheckpointCache(Some(rightParent))))
+//    checkpointService.fullData(leftParent.baseHash) shouldReturn IO.pure(Some(CheckpointCache(Some(leftParent))))
+//    checkpointService.memPool shouldReturn mock[CheckpointBlocksMemPool[IO]]
+//    checkpointService.memPool.size() shouldReturn IO.pure(0)
     dao.transactionService shouldReturn mock[TransactionService[IO]]
     dao.transactionService.lookup(*) shouldReturnF none
     dao.transactionService.isAccepted(*) shouldReturn IO.pure(false)
@@ -89,7 +96,7 @@ class CheckpointBlockValidatorNelTest
     rightBlock.transactions shouldReturn Seq(tx3, tx4)
 
     dao.snapshotService shouldReturn snapService
-    dao.checkpointService shouldReturn checkpointService
+//    dao.checkpointService shouldReturn checkpointService
 
     val metrics = mock[Metrics]
     dao.metrics shouldReturn metrics
@@ -105,7 +112,7 @@ class CheckpointBlockValidatorNelTest
   }
 
   test("it should detect no conflict and return None") {
-    containsAlreadyAcceptedTx(leftBlock).unsafeRunSync() shouldBe List.empty
+    checkpointBlockValidator.containsAlreadyAcceptedTx(leftBlock).unsafeRunSync() shouldBe List.empty
   }
 
   test("it should detect direct internal conflict with other tip") {
@@ -129,23 +136,24 @@ class CheckpointBlockValidatorNelTest
     val conflictTx = leftBlock.transactions.head.hash
     dao.transactionService.isAccepted(conflictTx) shouldReturn IO.pure(true)
 
-    containsAlreadyAcceptedTx(leftBlock).unsafeRunSync() shouldBe List(conflictTx)
+    checkpointBlockValidator.containsAlreadyAcceptedTx(leftBlock).unsafeRunSync() shouldBe List(conflictTx)
   }
 
   test("it should get transactions from parent") {
     rightParent.transactions shouldReturn Seq(tx2)
-    val ancestors = Seq("ancestor_in_snap")
-    rightParent.parentSOEBaseHashes() shouldReturn ancestors
-    checkpointService.fullData("ancestor_in_snap") shouldReturn IO.pure(None)
+    val ancestors = List("ancestor_in_snap")
+    checkpointParentService.getParents(rightParent) shouldReturnF List()
+    checkpointParentService.getParents(rightBlock) shouldReturnF List(rightParent)
+//    checkpointService.fullData("ancestor_in_snap") shouldReturn IO.pure(None)
 
     val combinedTxs =
-      getTransactionsTillSnapshot(List(rightBlock))
+      checkpointBlockValidator.getTransactionsTillSnapshot(List(rightBlock)).unsafeRunSync()
     combinedTxs shouldBe (rightBlock.transactions ++ rightParent.transactions).map(_.hash)
   }
 
   test("it should return false for cb not in snap") {
-    isInSnapshot(rightParent) shouldBe false
-    isInSnapshot(leftParent) shouldBe false
+    checkpointBlockValidator.isInSnapshot(rightParent).unsafeRunSync() shouldBe false
+    checkpointBlockValidator.isInSnapshot(leftParent).unsafeRunSync() shouldBe false
   }
 
   test("it should return correct block to preserve with greater base hash") {
@@ -186,11 +194,19 @@ class ValidationSpec
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   dao.initialize(NodeConfig())
   implicit val keyPair: KeyPair = keyPairs.head
-  dao.metrics = new Metrics()
 
   implicit val logger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
   implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
   implicit val cs = IO.contextShift(ConstellationExecutionContext.bounded)
+
+  val checkpointBlockValidator: CheckpointBlockValidator[IO] =
+    new CheckpointBlockValidator[IO](
+      dao.addressService,
+      dao.snapshotService,
+      dao.checkpointParentService,
+      dao.transactionValidator,
+      dao
+    )
 
   val ipManager = IPManager[IO]()
   val cluster = Cluster[IO](() => dao.metrics, ipManager, dao)
@@ -281,7 +297,7 @@ class ValidationSpec
           .foreach(cb => cb.store(CheckpointCache(Some(cb))))
 
         println(dao.metrics)
-        assert(cb7.simpleValidation())
+        assert(checkpointBlockValidator.simpleValidation(cb7).unsafeRunSync().isValid)
       }
     }
 
@@ -304,7 +320,7 @@ class ValidationSpec
           )
         )
 
-        assert(!cb.simpleValidation())
+        assert(!checkpointBlockValidator.simpleValidation(cb).unsafeRunSync().isValid)
       }
     }
 
@@ -324,7 +340,7 @@ class ValidationSpec
           )
         )
 
-        assert(!cb.simpleValidation())
+        assert(!checkpointBlockValidator.simpleValidation(cb).unsafeRunSync().isValid)
       }
     }
 
@@ -347,7 +363,7 @@ class ValidationSpec
           )
         )
 
-        assert(!cb.simpleValidation())
+        assert(!checkpointBlockValidator.simpleValidation(cb).unsafeRunSync().isValid)
       }
     }
 
@@ -370,7 +386,7 @@ class ValidationSpec
           )
         )
 
-        assert(!cb.simpleValidation())
+        assert(!checkpointBlockValidator.simpleValidation(cb).unsafeRunSync().isValid)
       }
     }
 
@@ -386,7 +402,7 @@ class ValidationSpec
 
         val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)
 
-        assert(!cb.simpleValidation())
+        assert(!checkpointBlockValidator.simpleValidation(cb).unsafeRunSync().isValid)
       }
     }
 
@@ -408,7 +424,7 @@ class ValidationSpec
           )
         )
 
-        assert(!cb.simpleValidation())
+        assert(!checkpointBlockValidator.simpleValidation(cb).unsafeRunSync().isValid)
       }
     }
   }
@@ -433,14 +449,14 @@ class ValidationSpec
         val tx2 = createTransaction(getAddress(a), getAddress(c), 75L, a)
         val cb2 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx2), startingTips)
 
-        if (cb1.simpleValidation()) {
+        if (checkpointBlockValidator.simpleValidation(cb1).unsafeRunSync().isValid) {
           cb1.transactions.toList
             .map(dao.addressService.transfer)
             .sequence[IO, AddressCacheData]
             .unsafeRunSync()
         }
 
-        assert(!cb2.simpleValidation())
+        assert(!checkpointBlockValidator.simpleValidation(cb2).unsafeRunSync().isValid)
       }
     }
   }
@@ -508,10 +524,10 @@ class ValidationSpec
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7).foreach { cb =>
           cb.store(CheckpointCache(cb.some))
 //          // TODO: wkoszycki #420 enable recursive validation transactions shouldn't be required to be stored to run validation
-          dao.checkpointService.acceptTransactions(cb).unsafeRunSync()
+          dao.checkpointAcceptanceService.acceptTransactions(cb).unsafeRunSync()
         }
 
-        assert(!cb7.simpleValidation())
+        assert(!checkpointBlockValidator.simpleValidation(cb7).unsafeRunSync().isValid)
       }
     }
   }

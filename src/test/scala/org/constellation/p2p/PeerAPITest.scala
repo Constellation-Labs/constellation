@@ -10,6 +10,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointResponse}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.{CheckpointCache, Height, Id, NodeState}
@@ -266,8 +267,8 @@ class PeerAPITest
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
 
     dao.snapshotService shouldReturn mock[SnapshotService[IO]]
-    dao.checkpointService shouldReturn mock[CheckpointService[IO]]
-    dao.checkpointService.accept(any[FinishedCheckpoint])(dao) shouldReturn IO({
+    dao.checkpointAcceptanceService shouldReturn mock[CheckpointAcceptanceService[IO]]
+    dao.checkpointAcceptanceService.accept(any[FinishedCheckpoint]) shouldReturn IO({
       Thread.sleep(2000)
     })
     dao

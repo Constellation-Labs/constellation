@@ -219,7 +219,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
                   dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
 
-                  val callback = dao.checkpointService.accept(fc).map { result =>
+                  val callback = dao.checkpointAcceptanceService.accept(fc).map { result =>
                     replyToOpt
                       .map(URI.create)
                       .map { u =>

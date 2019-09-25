@@ -69,33 +69,4 @@ trait NodeData {
   def updateKeyPair(kp: KeyPair): Unit =
     nodeConfig = nodeConfig.copy(primaryKeyPair = kp)
 
-  def enableSimulateEndpointTimeout(): Unit = {
-    simulateEndpointTimeout = true
-    metrics.updateMetric("simulateEndpointTimeout", simulateEndpointTimeout.toString)
-  }
-
-  def disableSimulateEndpointTimeout(): Unit = {
-    simulateEndpointTimeout = false
-    metrics.updateMetric("simulateEndpointTimeout", simulateEndpointTimeout.toString)
-  }
-
-  def enableRandomTransactions(): Unit = {
-    generateRandomTX = true
-    metrics.updateMetric("generateRandomTX", generateRandomTX.toString)
-  }
-
-  def disableRandomTransactions(): Unit = {
-    generateRandomTX = false
-    metrics.updateMetric("generateRandomTX", generateRandomTX.toString)
-  }
-
-  def enableCheckpointFormation(): Unit = {
-    formCheckpoints = true
-    metrics.updateMetric("checkpointFormation", formCheckpoints.toString)
-  }
-
-  def disableCheckpointFormation(): Unit = {
-    formCheckpoints = false
-    metrics.updateMetric("checkpointFormation", formCheckpoints.toString)
-  }
 }

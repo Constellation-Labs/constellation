@@ -6,6 +6,7 @@ import cats.data.EitherT
 import cats.effect.{Concurrent, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
+import org.constellation.checkpoint.CheckpointService
 import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.consensus.{ConsensusManager, Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.p2p.{Cluster, DataResolver}
@@ -90,7 +91,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.put(k, v) }.toList.sequence
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.map { h =>
         LiftIO[F].liftIO(h.checkpointBlock.get.storeSOE()) *>
-          checkpointService.memPool.put(h.checkpointBlock.get.baseHash, h) *>
+          checkpointService.put(h) *>
           dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) *>
           h.checkpointBlock.get.transactions.toList
             .map(
@@ -107,7 +108,7 @@ class SnapshotService[F[_]: Concurrent](
       )
     } yield ()
 
-  def syncBufferAccept(cb: CheckpointCache)(implicit dao: DAO): F[Unit] =
+  def syncBufferAccept(cb: CheckpointCache): F[Unit] =
     for {
       _ <- syncBuffer.update(_ ++ Seq(cb))
       buffer <- syncBuffer.get
@@ -121,7 +122,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- validateAcceptedCBsSinceSnapshot()
 
       nextHeightInterval <- EitherT.liftF(getNextHeightInterval)
-      minActiveTipHeight <- EitherT.liftF(consensusManager.getActiveMinHeight)
+      minActiveTipHeight <- EitherT.liftF(LiftIO[F].liftIO(dao.getActiveMinHeight))
       minTipHeight <- EitherT.liftF(concurrentTipService.getMinTipHeight(minActiveTipHeight))
       _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval, minTipHeight)
       blocksWithinHeightInterval <- EitherT.liftF(getBlocksWithinHeightInterval(nextHeightInterval))

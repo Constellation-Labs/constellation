@@ -3,6 +3,7 @@ package org.constellation.storage
 import cats.effect.Concurrent
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
+import org.constellation.checkpoint.CheckpointService
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.primitives.{Schema, Transaction}
 

@@ -291,7 +291,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
           if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache.contains(h)) {
             IO(
               logger.debug(s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointBlock.get.baseHash}")
-            ) *> dao.checkpointService.accept(h).recoverWith {
+            ) *> dao.checkpointAcceptanceService.accept(h).recoverWith {
               case _ @(CheckpointAcceptBlockAlreadyStored(_) | TipConflictException(_, _)) =>
                 IO.pure(None)
               case unknownError =>

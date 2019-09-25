@@ -6,6 +6,7 @@ import better.files.File
 import cats.effect.IO
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.Logger
+import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.ConsensusRemoteSender
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.makeKeyPair
@@ -26,7 +27,6 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
       ] = IO.pure(facilitators)
     }
     dao.initialize()
-    dao.metrics = new Metrics()(dao)
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
     dao
   }
