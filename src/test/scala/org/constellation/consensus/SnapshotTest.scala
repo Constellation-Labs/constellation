@@ -4,6 +4,7 @@ import java.util.UUID
 import better.files.File
 import com.google.common.hash.Hashing
 import org.constellation._
+import org.constellation.domain.configuration.NodeConfig
 import org.constellation.primitives.CheckpointBlock
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.util.Metrics

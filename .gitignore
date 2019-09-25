@@ -13,3 +13,4 @@ swaydb-stress-test.log
 terraform/default-*
 .dag
 *.log
+/logs

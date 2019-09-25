@@ -13,13 +13,14 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointResponse}
 import org.constellation.crypto.KeyUtils
+import org.constellation.domain.configuration.NodeConfig
 import org.constellation.primitives.Schema.{CheckpointCache, Height, Id, NodeState}
 import org.constellation.primitives.{IPManager, TransactionCacheData, TransactionGossip}
 import org.constellation.storage.VerificationStatus.{SnapshotCorrect, SnapshotHeightAbove, SnapshotInvalid}
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.{APIClient, Metrics}
-import org.constellation.{DAO, Fixtures, NodeConfig}
+import org.constellation.{DAO, Fixtures}
 import org.json4s.native
 import org.json4s.native.Serialization
 import org.mockito.cats.IdiomaticMockitoCats

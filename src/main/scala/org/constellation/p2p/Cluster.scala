@@ -514,13 +514,4 @@ object Cluster {
   def apply[F[_]: Concurrent: Logger: Timer: ContextShift](metrics: () => Metrics, ipManager: IPManager[F], dao: DAO) =
     new Cluster(ipManager, dao)
 
-  def loadSeedsFromConfig(config: Config): Seq[HostPort] =
-    if (config.hasPath("seedPeers")) {
-      import scala.collection.JavaConverters._
-      val peersList = config.getStringList("seedPeers")
-      peersList.asScala
-        .map(_.split(":"))
-        .map(arr => HostPort(arr(0), arr(1).toInt))
-    } else Seq()
-
 }
