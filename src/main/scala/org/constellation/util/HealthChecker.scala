@@ -189,14 +189,13 @@ class HealthChecker[F[_]: Concurrent: Logger](
       _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadFinished)
     } yield ()
 
-    reDownload.recoverWith {
-      case err =>
-        for {
-          _ <- LiftIO[F].liftIO(downloader.setNodeState(NodeState.Ready))
-          _ <- Logger[F].error(err)(s"[${dao.id.short}] re-download process error: ${err.getMessage}")
-          _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadError)
-          _ <- Sync[F].raiseError[Unit](err)
-        } yield ()
+    reDownload.handleErrorWith { err =>
+      for {
+        _ <- LiftIO[F].liftIO(downloader.setNodeState(NodeState.Ready))
+        _ <- Logger[F].error(err)(s"[${dao.id.short}] re-download process error: ${err.getMessage}")
+        _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadError)
+        _ <- Sync[F].raiseError[Unit](err)
+      } yield ()
     }
   }
 
