@@ -2,6 +2,7 @@ package org.constellation.primitives
 
 import java.security.{KeyPair, PublicKey}
 
+import com.google.common.hash.Hashing
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.hexToPublicKey
@@ -266,6 +267,8 @@ object Schema {
     def bytes: Array[Byte] = KeyUtils.hex2bytes(hex)
 
     def bigInt: BigInt = BigInt(bytes)
+
+    val distance: BigInt = BigInt(Hashing.sha256.hashBytes(toPublicKey.getEncoded).asBytes())
 
   }
 
