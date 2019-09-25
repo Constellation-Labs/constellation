@@ -70,21 +70,6 @@ class APIClient private (
     KryoSerializer.deserializeCast[T](resp.unsafeBody)
   }
 
-  def getNonBlockingBytesKryo[T <: AnyRef](
-    suffix: String,
-    queryParams: Map[String, String] = Map(),
-    timeout: Duration = 15.seconds
-  )(contextToReturn: ContextShift[IO]): IO[T] =
-    contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[IO].async { cb =>
-      httpWithAuth(suffix, queryParams, timeout)(Method.GET)
-        .response(asByteArray)
-        .send()
-        .onComplete {
-          case Success(value) => cb(Right(KryoSerializer.deserializeCast[T](value.unsafeBody)))
-          case Failure(error) => cb(Left(error))
-        }(ConstellationExecutionContext.unbounded)
-    })
-
   def getNonBlockingArrayByteIO(
     suffix: String,
     queryParams: Map[String, String] = Map(),
