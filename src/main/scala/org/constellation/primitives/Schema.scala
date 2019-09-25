@@ -256,19 +256,26 @@ object Schema {
 
   case class Id(hex: String) {
 
-    def short: String = hex.toString.slice(0, 5)
+    @transient
+    val short: String = hex.toString.slice(0, 5)
 
-    def medium: String = hex.toString.slice(0, 10)
+    @transient
+    val medium: String = hex.toString.slice(0, 10)
 
-    def address: String = KeyUtils.publicKeyToAddressString(toPublicKey)
+    @transient
+    lazy val address: String = KeyUtils.publicKeyToAddressString(toPublicKey)
 
-    def toPublicKey: PublicKey = hexToPublicKey(hex)
+    @transient
+    lazy val toPublicKey: PublicKey = hexToPublicKey(hex)
 
-    def bytes: Array[Byte] = KeyUtils.hex2bytes(hex)
+    @transient
+    lazy val bytes: Array[Byte] = KeyUtils.hex2bytes(hex)
 
-    def bigInt: BigInt = BigInt(bytes)
+    @transient
+    lazy val bigInt: BigInt = BigInt(bytes)
 
-    val distance: BigInt = BigInt(Hashing.sha256.hashBytes(toPublicKey.getEncoded).asBytes())
+    @transient
+    lazy val distance: BigInt = BigInt(Hashing.sha256.hashBytes(toPublicKey.getEncoded).asBytes())
 
   }
 
