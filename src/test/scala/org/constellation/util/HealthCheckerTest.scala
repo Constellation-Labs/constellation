@@ -254,6 +254,8 @@ class HealthCheckerTest
       val metrics = new Metrics(2)(dao)
       dao.metrics shouldReturn metrics
 
+      dao.terminateConsensuses shouldReturnF Unit
+
       downloadProcess.reDownload(List.empty, Map.empty) shouldReturn IO.raiseError(new SocketException("timeout"))
       downloadProcess.setNodeState(*) shouldReturnF Unit
 

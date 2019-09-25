@@ -88,7 +88,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
       )(contextShift)
 
     resolverIO.attempt.unsafeRunSync() should matchPattern {
-      case Left(DataResolutionOutOfPeers("node1", "endpoint", _, _)) => ()
+      case Left(DataResolutionNoneResponse(_, _, _)) => ()
     }
   }
 

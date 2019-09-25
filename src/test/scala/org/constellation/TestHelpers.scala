@@ -26,8 +26,16 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
       override def readyPeers: IO[
         Map[Id, PeerData]
       ] = IO.pure(facilitators)
+      override val keyPair = Fixtures.tempKey
     }
+
     dao.initialize()
+
+    dao.metrics = {
+      implicit val d: DAO = dao
+      new Metrics()
+    }
+
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
     dao
   }
