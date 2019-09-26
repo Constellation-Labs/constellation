@@ -34,17 +34,17 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
 
   implicit class EasyFutureBlock[T](f: Future[T]) {
 
-    def get(t: Int = 60): T = {
+    def get(t: Int = 120): T = {
       import scala.concurrent.duration._
       Await.result(f, t.seconds)
     }
 
-    def getOpt(t: Int = 60): Option[T] = {
+    def getOpt(t: Int = 120): Option[T] = {
       import scala.concurrent.duration._
       Try { Await.result(f, t.seconds) }.toOption
     }
 
-    def getTry(t: Int = 60): Try[T] = {
+    def getTry(t: Int = 120): Try[T] = {
       import scala.concurrent.duration._
       Try { Await.result(f, t.seconds) }
     }

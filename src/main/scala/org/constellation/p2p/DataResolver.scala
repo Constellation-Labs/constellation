@@ -101,7 +101,13 @@ class DataResolver extends StrictLogging {
         .flatTap(
           cpc =>
             cpc.checkpointBlock.get.storeSOE() *> dao.checkpointService
-              .put(cpc)
+              .put(cpc) *> cpc.checkpointBlock.get.transactions.toList.traverse(
+              t =>
+                dao.transactionService.put(
+                  TransactionCacheData(t, cbBaseHash = Some(cpc.checkpointBlock.get.baseHash)),
+                  ConsensusStatus.Unknown
+              )
+          )
         )
         .flatTap(
           cb =>
@@ -153,7 +159,13 @@ class DataResolver extends StrictLogging {
           cbs.traverse(
             cb =>
               cb.checkpointBlock.get.storeSOE() *> dao.checkpointService
-                .put(cb)
+                .put(cb) *> cb.checkpointBlock.get.transactions.toList.traverse(
+                t =>
+                  dao.transactionService.put(
+                    TransactionCacheData(t, cbBaseHash = Some(cb.checkpointBlock.get.baseHash)),
+                    ConsensusStatus.Unknown
+                )
+            )
         )
       ),
       s"dataResolver_resolveCheckpoints [${hashes}]",
@@ -202,7 +214,7 @@ class DataResolver extends StrictLogging {
     hash: String,
     endpoint: String,
     sortedPeers: List[PeerApiClient],
-    maxErrors: Int = 31
+    maxErrors: Int = 100
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[T] = {
 
     def makeAttempt(
@@ -265,7 +277,7 @@ class DataResolver extends StrictLogging {
 
   private[p2p] def getPeersForResolving(dao: DAO): IO[List[PeerApiClient]] = {
     val peers = for {
-      ready <- dao.readyPeers
+      ready <- dao.peerInfo
       leaving <- dao.leavingPeers
     } yield (ready ++ leaving)
     peers.map(_.map(p => PeerApiClient(p._1, p._2.client)).toList)

@@ -37,7 +37,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
 
   def accept(checkpoint: FinishedCheckpoint): F[Unit] = {
 
-    val obtainPeers = dao.readyPeers.map { ready =>
+    val obtainPeers = dao.peerInfo.map { ready =>
       val filtered = ready.filter(t => checkpoint.facilitators.contains(t._1))
       (if (filtered.isEmpty) ready else filtered)
         .map(p => PeerApiClient(p._1, p._2.client))
