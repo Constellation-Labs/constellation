@@ -30,6 +30,8 @@ class FacilitatorFilterTest
   val checkpointServiceMock: CheckpointService[IO] = mock[CheckpointService[IO]]
   checkpointServiceMock.lookup(*) shouldReturn IO.pure { Some(CheckpointCacheMetadata(null, 0, Some(Height(1, 78)))) }
   dao.checkpointService shouldReturn checkpointServiceMock
+  val concurrentTipService: ConcurrentTipService[IO] = mock[ConcurrentTipService[IO]]
+  dao.concurrentTipService shouldReturn concurrentTipService
 
   val calculationContext: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
@@ -37,42 +39,43 @@ class FacilitatorFilterTest
 
   describe("filter facilitators") {
     it("should return 2 facilitators") {
-      val ownTips: Map[String, TipData] = Map("id1" -> null, "id2" -> null)
-      val peers: Map[Id, PeerData] = TestHelpers.prepareFacilitators(5)
-      peers.map(_._2.client).foreach { client =>
-        client.getNonBlockingF[IO, List[Height]](*, *, *)(*)(*, *, *) shouldReturn
-          List(Height(2, 70), Height(3, 72), Height(1, 45)).pure[IO]
-      }
+      dao.concurrentTipService.getMinTipHeight(*) shouldReturnF 2
+      val peers = TestHelpers.prepareFacilitators(5).toList
+      peers.get(0).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node0"), 3L)
+      peers.get(1).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node1"), 3L)
+      peers.get(2).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node2"), 2L)
+      peers.get(3).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node3"), 4L)
+      peers.get(4).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node4"), 4L)
 
-      val facilitators = facilitatorFilter.filterPeers(peers, ownTips, 2).unsafeRunSync()
+      val facilitators = facilitatorFilter.filterPeers(peers.toMap, 2).unsafeRunSync()
 
       facilitators.size shouldBe 2
     }
 
     it("should return 1 facilitator") {
-      val ownTips: Map[String, TipData] = Map("id1" -> null, "id2" -> null)
-      val peers: Map[Id, PeerData] = TestHelpers.prepareFacilitators(5)
-      peers.slice(0, 5).map(_._2.client).foreach { client =>
-        client.getNonBlockingF[IO, List[Height]](*, *, *)(*)(*, *, *) shouldReturn
-          List(Height(5, 70), Height(3, 72), Height(4, 45)).pure[IO]
-      }
-      peers.last._2.client.getNonBlockingF[IO, List[Height]](*, *, *)(*)(*, *, *) shouldReturn
-        List(Height(2, 70), Height(3, 72), Height(1, 45)).pure[IO]
+      dao.concurrentTipService.getMinTipHeight(*) shouldReturnF 1
+      val peers = TestHelpers.prepareFacilitators(5).toList
+      peers.get(0).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node0"), 4L)
+      peers.get(1).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node1"), 4L)
+      peers.get(2).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node2"), 2L)
+      peers.get(3).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node3"), 5L)
+      peers.get(4).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node4"), 6L)
 
-      val facilitators = facilitatorFilter.filterPeers(peers, ownTips, 2).unsafeRunSync()
+      val facilitators = facilitatorFilter.filterPeers(peers.toMap, 2).unsafeRunSync()
 
       facilitators.size shouldBe 1
     }
 
     it("should return 0 facilitators") {
-      val ownTips: Map[String, TipData] = Map("id1" -> null, "id2" -> null)
-      val peers: Map[Id, PeerData] = TestHelpers.prepareFacilitators(5)
-      peers.map(_._2.client).foreach { client =>
-        client.getNonBlockingF[IO, List[Height]](*, *, *)(*)(*, *, *) shouldReturn
-          List(Height(5, 70), Height(3, 72), Height(4, 45)).pure[IO]
-      }
+      dao.concurrentTipService.getMinTipHeight(*) shouldReturnF 2
+      val peers = TestHelpers.prepareFacilitators(5).toList
+      peers.get(0).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node0"), 5L)
+      peers.get(1).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node1"), 6L)
+      peers.get(2).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node2"), 7L)
+      peers.get(3).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node3"), 8L)
+      peers.get(4).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node4"), 9L)
 
-      val facilitators = facilitatorFilter.filterPeers(peers, ownTips, 2).unsafeRunSync()
+      val facilitators = facilitatorFilter.filterPeers(peers.toMap, 2).unsafeRunSync()
 
       facilitators.size shouldBe 0
     }
