@@ -82,8 +82,9 @@ class APIClient private (
         .response(asByteArray)
         .send()
         .onComplete {
-          case Success(value: Response[Array[Byte]]) => cb(Right(value.unsafeBody))
-          case Failure(error: Throwable)             => cb(Left(error))
+          case Success(value: Response[Array[Byte]]) =>
+            value.body.fold(err => cb(Left(new Exception(err))), body => cb(Right(body)))
+          case Failure(error: Throwable) => cb(Left(error))
         }(ConstellationExecutionContext.unbounded)
     })
 
