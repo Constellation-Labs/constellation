@@ -22,8 +22,6 @@ trait NodeData {
   @volatile var nodeConfig: NodeConfig
 
   var metrics: Metrics = _
-  var messageHashStore: swaydb.Set[String] = _
-  var checkpointHashStore: swaydb.Set[String] = _
 
   val miscLogger = Logger("MiscLogger")
 

@@ -3,7 +3,7 @@ package org.constellation.storage
 import java.nio.file.Path
 
 import cats.data.EitherT
-import cats.effect.{Concurrent, IO, LiftIO, Sync}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.checkpoint.CheckpointService
@@ -28,7 +28,8 @@ class SnapshotService[F[_]: Concurrent](
   broadcastService: SnapshotBroadcastService[F],
   consensusManager: ConsensusManager[F],
   dao: DAO
-) extends StrictLogging {
+)(implicit C: ContextShift[F])
+    extends StrictLogging {
   import constellation._
 
   implicit val shadowDao: DAO = dao
@@ -289,7 +290,7 @@ class SnapshotService[F[_]: Concurrent](
       .map(_.hash)
       .map(hash => Snapshot(hash, hashesForNextSnapshot))
 
-  private[storage] def applySnapshot(): F[Unit] =
+  private[storage] def applySnapshot()(implicit C: ContextShift[F]): F[Unit] =
     snapshot.get.flatMap { currentSnapshot =>
       if (currentSnapshot == Snapshot.snapshotZero) {
         Sync[F].unit
@@ -300,10 +301,10 @@ class SnapshotService[F[_]: Concurrent](
       }
     }
 
-  def addSnapshotToDisk(snapshot: StoredSnapshot): Try[Path] =
-    Snapshot.writeSnapshot(snapshot)
+  def addSnapshotToDisk(snapshot: StoredSnapshot): F[Path] =
+    Snapshot.writeSnapshot[F](snapshot)
 
-  private def writeSnapshotToDisk(currentSnapshot: Snapshot) =
+  private def writeSnapshotToDisk(currentSnapshot: Snapshot)(implicit C: ContextShift[F]): F[Unit] =
     currentSnapshot.checkpointBlocks.toList
       .traverse(checkpointService.fullData)
       .flatMap {
@@ -315,12 +316,10 @@ class SnapshotService[F[_]: Concurrent](
             .flatMap(_ => Sync[F].raiseError[Unit](new IllegalStateException("Snapshot data is missing")))
         case maybeBlocks =>
           val flatten = maybeBlocks.flatten.sortBy(_.checkpointBlock.map(_.baseHash))
-          Sync[F].delay {
-            tryWithMetric(
-              Snapshot.writeSnapshot(StoredSnapshot(currentSnapshot, flatten)),
-              Metrics.snapshotWriteToDisk
-            )
-          }.void
+          withMetric[F, Unit](
+            Snapshot.writeSnapshot(StoredSnapshot(currentSnapshot, flatten)).void,
+            Metrics.snapshotWriteToDisk
+          )
       }
 
   private def applyAfterSnapshot(currentSnapshot: Snapshot): F[Unit] =
@@ -428,7 +427,7 @@ object SnapshotService {
     broadcastService: SnapshotBroadcastService[F],
     consensusManager: ConsensusManager[F],
     dao: DAO
-  ) =
+  )(implicit C: ContextShift[F]) =
     new SnapshotService[F](
       concurrentTipService,
       addressService,

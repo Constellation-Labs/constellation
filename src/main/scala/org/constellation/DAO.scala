@@ -3,7 +3,7 @@ package org.constellation
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import cats.effect.{Concurrent, ContextShift, IO}
+import cats.effect.{Concurrent, ContextShift, IO, Timer}
 import com.softwaremill.sttp.SttpBackend
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
@@ -100,10 +100,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     }
 
     idDir.createDirectoryIfNotExists(createParents = true)
-    messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
-    checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
-    implicit val ioTimer = IO.timer(ConstellationExecutionContext.unbounded)
+    implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
     rateLimiting = new RateLimiting[IO]
 

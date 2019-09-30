@@ -9,7 +9,9 @@ import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
+import cats.effect.Sync
 import com.google.common.hash.Hashing
+import cats.implicits._
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
@@ -176,6 +178,11 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     }
     t
   }
+
+  def withMetric[F[_]: Sync, A](fa: F[A], prefix: String)(implicit dao: DAO): F[A] =
+    fa.flatTap(_ => dao.metrics.incrementMetricAsync[F](s"${prefix}_success")).handleErrorWith { err =>
+      dao.metrics.incrementMetricAsync[F](s"${prefix}_failure") *> err.raiseError[F, A]
+    }
 
   def tryWithMetric[T](t: => T, metricPrefix: String)(implicit dao: DAO): Try[T] = {
     val attempt = Try {

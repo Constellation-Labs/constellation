@@ -55,6 +55,8 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   private val nodeState: SingleRef[F, NodeState] = SingleRef[F, NodeState](initialState)
   private val peers: SingleRef[F, Map[Id, PeerData]] = SingleRef[F, Map[Id, PeerData]](Map.empty)
 
+  implicit val shadedDao: DAO = dao
+
   def isNodeReady: F[Boolean] = nodeState.get.map(_ == NodeState.Ready)
 
   def getPeerInfo: F[Map[Id, PeerData]] = peers.get
@@ -378,12 +380,6 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       "cluster_attemptRegisterSelfWithPeer"
     )
 
-  // TODO: move outside this class
-  def withMetric[A](fa: F[A], prefix: String): F[A] =
-    fa.flatTap(_ => dao.metrics.incrementMetricAsync[F](s"${prefix}_success")).handleErrorWith { err =>
-      dao.metrics.incrementMetricAsync[F](s"${prefix}_failure") *> err.raiseError[F, A]
-    }
-
   def attemptRegisterPeer(hp: HostPort): F[Response[Unit]] =
     logThread(
       withMetric(
@@ -460,7 +456,6 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     )
 
   def join(hp: HostPort): F[Unit] = {
-    implicit val shadedDAO: DAO = dao
     implicit val ec = ConstellationExecutionContext.bounded
 
     logThread(attemptRegisterPeer(hp) *> Sync[F].delay(Download.download()), "cluster_join")

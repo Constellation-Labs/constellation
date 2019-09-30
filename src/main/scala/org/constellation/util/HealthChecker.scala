@@ -71,7 +71,10 @@ class HealthChecker[F[_]: Concurrent: Logger](
   calculationContext: ContextShift[F],
   downloader: DownloadProcess,
   majorityStateChooser: MajorityStateChooser[F]
-) extends StrictLogging {
+)(implicit C: ContextShift[F])
+    extends StrictLogging {
+
+  implicit val shadedDao: DAO = dao
 
   def checkClusterConsistency(ownSnapshots: List[RecentSnapshot]): F[Option[List[RecentSnapshot]]] = {
     val check = for {
@@ -178,12 +181,10 @@ class HealthChecker[F[_]: Concurrent: Logger](
         )
       )
 
-      _ <- Sync[F].delay {
-        Snapshot.removeSnapshots(
-          diff.snapshotsToDelete.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),
-          dao.snapshotPath.pathAsString
-        )(dao)
-      }
+      _ <- Snapshot.removeSnapshots(
+        diff.snapshotsToDelete.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),
+        dao.snapshotPath.pathAsString
+      )
 
       _ <- Logger[F].info(s"[${dao.id.short}] Re-download process finished")
       _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadFinished)
