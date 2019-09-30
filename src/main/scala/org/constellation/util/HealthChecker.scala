@@ -69,7 +69,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
   concurrentTipService: ConcurrentTipService[F],
   consensusManager: ConsensusManager[F],
   calculationContext: ContextShift[F],
-  downloader: DownloadProcess,
+  downloader: DownloadProcess[F],
   majorityStateChooser: MajorityStateChooser[F]
 )(implicit C: ContextShift[F])
     extends StrictLogging {
@@ -168,17 +168,15 @@ class HealthChecker[F[_]: Concurrent: Logger](
     val reDownload = for {
       _ <- Logger[F].info(s"[${dao.id.short}] Starting re-download process")
 
-      _ <- LiftIO[F].liftIO(downloader.setNodeState(NodeState.DownloadInProgress))
+      _ <- downloader.setNodeState(NodeState.DownloadInProgress)
       _ <- Logger[F].debug(s"[${dao.id.short}] NodeState set to DownloadInProgress")
 
       _ <- LiftIO[F].liftIO(dao.terminateConsensuses())
       _ <- Logger[F].debug(s"[${dao.id.short}] Consensuses terminated")
 
-      _ <- LiftIO[F].liftIO(
-        downloader.reDownload(
-          diff.snapshotsToDownload.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),
-          peers.filterKeys(diff.peers.contains)
-        )
+      _ <- downloader.reDownload(
+        diff.snapshotsToDownload.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),
+        peers.filterKeys(diff.peers.contains)
       )
 
       _ <- Snapshot.removeSnapshots(
@@ -193,7 +191,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
     reDownload.recoverWith {
       case err =>
         for {
-          _ <- LiftIO[F].liftIO(downloader.setNodeState(NodeState.Ready))
+          _ <- downloader.setNodeState(NodeState.Ready)
           _ <- Logger[F].error(err)(s"[${dao.id.short}] re-download process error: ${err.getMessage}")
           _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadError)
           _ <- Sync[F].raiseError[Unit](err)

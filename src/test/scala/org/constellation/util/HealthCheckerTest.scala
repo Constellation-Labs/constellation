@@ -25,7 +25,7 @@ class HealthCheckerTest
   dao.id shouldReturn Fixtures.id
   dao.processingConfig shouldReturn ProcessingConfig()
 
-  val downloadProcess: DownloadProcess = mock[DownloadProcess]
+  val downloadProcess: DownloadProcess[IO] = mock[DownloadProcess[IO]]
   val consensusManager: ConsensusManager[IO] = mock[ConsensusManager[IO]]
   val concurrentTipService: ConcurrentTipService[IO] = mock[ConcurrentTipService[IO]]
   val majorState: MajorityStateChooser[IO] = mock[MajorityStateChooser[IO]]
