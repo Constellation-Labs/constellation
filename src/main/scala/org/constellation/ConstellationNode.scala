@@ -192,7 +192,7 @@ class ConstellationNode(
     })
 
   def shutdown(): Unit = {
-    val gracefulShutdown = IO.delay(bindingFuture.foreach(_.unbind())(ConstellationExecutionContext.callbacks)) *>
+    val gracefulShutdown = IO.delay(bindingFuture.foreach(_.unbind())(ConstellationExecutionContext.callbacks)) >>
       IO.delay(logger.info("Node shutdown completed"))
 
     dao.cluster
@@ -245,7 +245,7 @@ class ConstellationNode(
   logger.info("Node started")
 
   if (nodeConfig.attemptDownload) {
-    (nodeConfig.seeds.toList.traverse(dao.cluster.hostPort) *> dao.cluster.initiatePeerReload()).unsafeRunSync
+    (nodeConfig.seeds.toList.traverse(dao.cluster.hostPort) >> dao.cluster.initiatePeerReload()).unsafeRunSync
   }
 
   // TODO: Use this for full flow, right now this only works as a debugging measure, does not integrate properly

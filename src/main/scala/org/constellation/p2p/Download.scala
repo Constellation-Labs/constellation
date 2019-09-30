@@ -219,7 +219,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
             .getNonBlockingArrayByteIO("info", timeout = 5.seconds)(contextShift)
             .map(snapshotInfoArrayBytes => deserializeSnapshotInfo(snapshotInfoArrayBytes).some)
             .handleErrorWith(e => {
-              IO.delay(logger.info(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) *>
+              IO.delay(logger.info(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
                 IO.pure[Option[SnapshotInfo]](None)
             })
       )
@@ -269,7 +269,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   }
 
   def setNodeState(nodeState: NodeState): IO[Unit] =
-    dao.cluster.setNodeState(nodeState) *> dao.cluster.broadcastNodeState()
+    dao.cluster.setNodeState(nodeState) >> dao.cluster.broadcastNodeState()
 
   private def requestForFaucet: IO[Iterable[Response[String]]] =
     for {
@@ -296,7 +296,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
           if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache.contains(h)) {
             IO(
               logger.debug(s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointBlock.get.baseHash}")
-            ) *> dao.checkpointAcceptanceService.accept(h).recoverWith {
+            ) >> dao.checkpointAcceptanceService.accept(h).recoverWith {
               case _ @(CheckpointAcceptBlockAlreadyStored(_) | TipConflictException(_, _)) =>
                 IO.pure(None)
               case unknownError =>

@@ -44,8 +44,8 @@ class StorageService[F[_]: Concurrent, V](expireAfterMinutes: Option[Int] = Some
     queueRef.update {
       case q if q.size >= maxQueueSize => q.dequeue._2
       case q                           => q
-    } *>
-      queueRef.update(_.enqueue(value)) *>
+    } >>
+      queueRef.update(_.enqueue(value)) >>
       Sync[F].delay(lruCache.put(key, value)).map(_ => value)
 
   def lookup(key: String): F[Option[V]] =

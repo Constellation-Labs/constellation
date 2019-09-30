@@ -58,7 +58,7 @@ class DataResolver extends StrictLogging {
     roundId: Option[RoundId] = None
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
     logThread(
-      IO.delay(logger.debug(s"Start resolving transaction=${hash} for round $roundId")) *>
+      IO.delay(logger.debug(s"Start resolving transaction=${hash} for round $roundId")) >>
         resolveDataByDistance[TransactionCacheData](
           List(hash),
           "transaction",
@@ -123,8 +123,8 @@ class DataResolver extends StrictLogging {
       )(contextToReturn).head
         .flatTap(
           cpc =>
-            cpc.checkpointBlock.get.storeSOE() *> dao.checkpointService
-              .put(cpc) *> cpc.checkpointBlock.get.transactions.toList.traverse(
+            cpc.checkpointBlock.get.storeSOE() >> dao.checkpointService
+              .put(cpc) >> cpc.checkpointBlock.get.transactions.toList.traverse(
               t =>
                 dao.transactionService.put(
                   TransactionCacheData(t, cbBaseHash = Some(cpc.checkpointBlock.get.baseHash)),
@@ -181,8 +181,8 @@ class DataResolver extends StrictLogging {
         cbs =>
           cbs.traverse(
             cb =>
-              cb.checkpointBlock.get.storeSOE() *> dao.checkpointService
-                .put(cb) *> cb.checkpointBlock.get.transactions.toList.traverse(
+              cb.checkpointBlock.get.storeSOE() >> dao.checkpointService
+                .put(cb) >> cb.checkpointBlock.get.transactions.toList.traverse(
                 t =>
                   dao.transactionService.put(
                     TransactionCacheData(t, cbBaseHash = Some(cb.checkpointBlock.get.baseHash)),

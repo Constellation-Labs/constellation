@@ -128,7 +128,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def peerDiscovery(client: APIClient): F[Unit] =
     for {
       peersMetadata <- client.getNonBlockingF[F, Seq[PeerMetadata]]("peers")(C).handleErrorWith { err =>
-        dao.metrics.incrementMetricAsync[F]("peerDiscoveryQueryFailed") *> err.raiseError[F, Seq[PeerMetadata]]
+        dao.metrics.incrementMetricAsync[F]("peerDiscoveryQueryFailed") >> err.raiseError[F, Seq[PeerMetadata]]
       }
       peers <- getPeerInfo
       filteredPeers = peersMetadata.filter { p =>
@@ -189,16 +189,16 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
           req.flatTap { sig =>
             if (sig.hashSignature.id != request.id) {
-              Logger[F].warn(s"Keys should be the same: ${sig.hashSignature.id} != ${request.id}") *>
+              Logger[F].warn(s"Keys should be the same: ${sig.hashSignature.id} != ${request.id}") >>
                 dao.metrics.incrementMetricAsync[F]("peerKeyMismatch")
             } else Sync[F].unit
           }.flatTap { sig =>
             if (!sig.valid) {
-              Logger[F].warn(s"Invalid peer signature $request $authSignRequest $sig") *>
+              Logger[F].warn(s"Invalid peer signature $request $authSignRequest $sig") >>
                 dao.metrics.incrementMetricAsync[F]("invalidPeerRegistrationSignature")
             } else Sync[F].unit
           }.flatTap { sig =>
-            dao.metrics.incrementMetricAsync[F]("peerAddedFromRegistrationFlow") *>
+            dao.metrics.incrementMetricAsync[F]("peerAddedFromRegistrationFlow") >>
               Logger[F].debug(s"Valid peer signature $request $authSignRequest $sig")
           }.flatMap {
             sig =>
@@ -219,11 +219,11 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
                 )
                 client.id = id
                 val peerData = PeerData(add, client)
-                updatePeerInfo(peerData) *> C.shift *> implicitly[Concurrent[F]].start(peerDiscovery(client))
+                updatePeerInfo(peerData) >> C.shift >> implicitly[Concurrent[F]].start(peerDiscovery(client))
               }.void
 
           }.handleErrorWith { err =>
-            Logger[F].warn(s"Sign request to ${request.host}:${request.port} failed. $err") *>
+            Logger[F].warn(s"Sign request to ${request.host}:${request.port} failed. $err") >>
               dao.metrics.incrementMetricAsync[F]("peerSignatureRequestFailed")
           }
         }
@@ -315,7 +315,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
               if (x.isSuccess) {
                 dao.metrics.incrementMetricAsync[F]("peerHealthCheckPassed")
               } else {
-                dao.metrics.incrementMetricAsync[F]("peerHealthCheckFailed") *>
+                dao.metrics.incrementMetricAsync[F]("peerHealthCheckFailed") >>
                   setNodeStatus(d.peerMetadata.id, NodeState.Offline)
               }
             }
@@ -389,12 +389,12 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
           client
             .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")(C)
             .flatMap { registrationRequest =>
-              pendingRegistration(hp.host, registrationRequest) *>
+              pendingRegistration(hp.host, registrationRequest) >>
                 client.postNonBlockingUnitF("register", dao.peerRegistrationRequest)(C)
             }
             .handleErrorWith { err =>
-              Logger[F].error(s"registration request failed: $err") *>
-                dao.metrics.incrementMetricAsync[F]("peerGetRegistrationRequestFailed") *>
+              Logger[F].error(s"registration request failed: $err") >>
+                dao.metrics.incrementMetricAsync[F]("peerGetRegistrationRequestFailed") >>
                 err.raiseError[F, Response[Unit]]
             }
         },
@@ -458,7 +458,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def join(hp: HostPort): F[Unit] = {
     implicit val ec = ConstellationExecutionContext.bounded
 
-    logThread(attemptRegisterPeer(hp) *> Sync[F].delay(Download.download()), "cluster_join")
+    logThread(attemptRegisterPeer(hp) >> Sync[F].delay(Download.download()), "cluster_join")
   }
 
   def leave(gracefulShutdown: => F[Unit]): F[Unit] =
@@ -489,7 +489,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def setNodeState(state: NodeState): F[Unit] =
     nodeState.modify(oldState => (state, oldState)).flatMap { oldState =>
       Logger[F].debug(s"Changing node state from $oldState to $state")
-    } *> dao.metrics.updateMetricAsync[F]("nodeState", state.toString)
+    } >> dao.metrics.updateMetricAsync[F]("nodeState", state.toString)
 
   private def validWithLoopbackGuard(host: String): Boolean =
     (host != dao.externalHostString && host != "127.0.0.1" && host != "localhost") || !dao.preventLocalhostAsPeer

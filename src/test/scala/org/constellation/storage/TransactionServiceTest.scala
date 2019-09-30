@@ -335,10 +335,10 @@ class TransactionServiceTest
       val puts = (1 to totalExpected).toList
         .map(_ => constellation.createTransaction(Fixtures.id1.address, Fixtures.id2.address, 1L, Fixtures.tempKey))
         .map(TransactionCacheData(_))
-        .traverse(tx => cs.shift *> txService.put(tx))
+        .traverse(tx => cs.shift >> txService.put(tx))
 
       val pulls = (1 to pullsIteration).toList
-        .map(_ => cs.shift *> txService.pullForConsensus(pullsMaxCount))
+        .map(_ => cs.shift >> txService.pullForConsensus(pullsMaxCount))
 
       // Fill minimum txs required
       puts.unsafeRunSync()

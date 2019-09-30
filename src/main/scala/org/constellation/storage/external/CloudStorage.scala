@@ -35,7 +35,7 @@ class GcpStorage[F[_]: Concurrent: Logger] extends CloudStorage[F] {
     } yield blobs.map(b => b.getName)
 
     upload.handleErrorWith(
-      err => Logger[F].error(s"Cannot upload files : ${err.getMessage}") *> Sync[F].pure(List.empty[String])
+      err => Logger[F].error(s"Cannot upload files : ${err.getMessage}") >> Sync[F].pure(List.empty[String])
     )
   }
 

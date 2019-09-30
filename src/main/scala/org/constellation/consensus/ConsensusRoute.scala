@@ -87,7 +87,7 @@ class ConsensusRoute(
             case Failure(_) =>
               complete(StatusCodes.InternalServerError)
             case Success(res) =>
-              (IO.contextShift(ConstellationExecutionContext.bounded).shift *> consensusManager
+              (IO.contextShift(ConstellationExecutionContext.bounded).shift >> consensusManager
                 .continueRoundParticipation(res._1, res._2)).unsafeRunAsyncAndForget()
               complete(StatusCodes.Created)
           }
@@ -128,7 +128,7 @@ class ConsensusRoute(
   private def handleProposal(proposal: ConsensusProposal): Route =
     APIDirective.handle(consensusManager.getRound(proposal.roundId)) {
       case None =>
-        (IO.contextShift(ConstellationExecutionContext.bounded).shift *> consensusManager
+        (IO.contextShift(ConstellationExecutionContext.bounded).shift >> consensusManager
           .addMissed(proposal.roundId, proposal))
           .unsafeRunAsyncAndForget()
         complete(StatusCodes.Accepted)
@@ -138,7 +138,7 @@ class ConsensusRoute(
           case proposal: UnionBlockProposal        => consensus.addBlockProposal(proposal)
           case proposal: SelectedUnionBlock        => consensus.addSelectedBlockProposal(proposal)
         }
-        (IO.contextShift(ConstellationExecutionContext.bounded).shift *> add).unsafeRunAsyncAndForget()
+        (IO.contextShift(ConstellationExecutionContext.bounded).shift >> add).unsafeRunAsyncAndForget()
         complete(StatusCodes.Created)
     }
 

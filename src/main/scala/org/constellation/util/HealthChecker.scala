@@ -97,7 +97,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
             s"From peers : ${diff.peers} " +
             s"Own snapshots : $ownSnapshots " +
             s"Major state : $major"
-        ) *>
+        ) >>
           startReDownload(diff, peers.filterKeys(diff.peers.contains))
             .flatMap(_ => Sync[F].delay[Option[List[RecentSnapshot]]](Some(major._1.toList)))
       } else {
@@ -138,7 +138,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
     } else
       Logger[F].debug(
         s"[Clear staletips] ClusterSnapshots size=${clusterSnapshots.size} numFacilPeers=${dao.processingConfig.numFacilitatorPeers}"
-      ) *> Sync[F].unit
+      ) >> Sync[F].unit
   }
 
   def shouldReDownload(ownSnapshots: List[RecentSnapshot], diff: SnapshotDiff): Boolean =

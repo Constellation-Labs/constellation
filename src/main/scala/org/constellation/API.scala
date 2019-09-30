@@ -473,7 +473,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           def changeStateToReady: IO[Unit] = dao.cluster.setNodeState(NodeState.Ready)
           def broadcastState: IO[Unit] = dao.cluster.broadcastNodeState()
 
-          APIDirective.handle(changeStateToReady *> broadcastState)(_ => complete(StatusCodes.OK))
+          APIDirective.handle(changeStateToReady >> broadcastState)(_ => complete(StatusCodes.OK))
         } ~
         path("peerHealthCheck") {
           val resetTimeout = 1.second
@@ -543,7 +543,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           entity(as[PeerMetadata]) { pm =>
             (IO
               .contextShift(ConstellationExecutionContext.bounded)
-              .shift *> dao.cluster.addPeerMetadata(pm)).unsafeRunAsyncAndForget
+              .shift >> dao.cluster.addPeerMetadata(pm)).unsafeRunAsyncAndForget
 
             complete(StatusCodes.OK)
           }

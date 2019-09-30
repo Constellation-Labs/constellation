@@ -205,7 +205,7 @@ class CheckpointServiceTest
     val tx2 = mock[Transaction]
     tx2.hash shouldReturn "tx2"
 
-    (dao.transactionService.put(TransactionCacheData(tx1), ConsensusStatus.Accepted) *>
+    (dao.transactionService.put(TransactionCacheData(tx1), ConsensusStatus.Accepted) >>
       dao.transactionService.put(TransactionCacheData(tx2), ConsensusStatus.Accepted))
       .unsafeRunSync()
 
@@ -219,7 +219,7 @@ class CheckpointServiceTest
     val notification2 = mock[PeerNotification]
     notification2.hash shouldReturn "notification2"
 
-    (dao.notificationService.memPool.put(notification1.hash, notification1) *>
+    (dao.notificationService.memPool.put(notification1.hash, notification1) >>
       dao.notificationService.memPool.put(notification2.hash, notification2))
       .unsafeRunSync()
 
@@ -235,7 +235,7 @@ class CheckpointServiceTest
     msg2.signedMessageData shouldReturn mock[SignedData[ChannelMessageData]]
     msg2.signedMessageData.hash shouldReturn "msg2"
 
-    (dao.messageService.memPool.put(msg1.signedMessageData.hash, ChannelMessageMetadata(msg1)) *>
+    (dao.messageService.memPool.put(msg1.signedMessageData.hash, ChannelMessageMetadata(msg1)) >>
       dao.messageService.memPool.put(msg2.signedMessageData.hash, ChannelMessageMetadata(msg2)))
       .unsafeRunSync()
     Seq(msg1, msg2)

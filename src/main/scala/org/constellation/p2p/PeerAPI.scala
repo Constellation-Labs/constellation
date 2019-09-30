@@ -97,14 +97,14 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           entity(as[HostPort]) { hp =>
             (IO
               .contextShift(ConstellationExecutionContext.bounded)
-              .shift *> dao.cluster.join(hp)).unsafeRunAsyncAndForget
+              .shift >> dao.cluster.join(hp)).unsafeRunAsyncAndForget
             complete(StatusCodes.OK)
           }
         } ~
         path("leave") {
           (IO
             .contextShift(ConstellationExecutionContext.bounded)
-            .shift *> IO(dao.node.shutdown())).unsafeRunAsyncAndForget
+            .shift >> IO(dao.node.shutdown())).unsafeRunAsyncAndForget
           complete(StatusCodes.OK)
         }
     } ~
@@ -301,7 +301,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           rebroadcast.unsafeRunAsyncAndForget()
            */
 
-          (IO.contextShift(ConstellationExecutionContext.bounded).shift *> dao.transactionGossiping.observe(
+          (IO.contextShift(ConstellationExecutionContext.bounded).shift >> dao.transactionGossiping.observe(
             TransactionCacheData(gossip.tx, path = gossip.path)
           )).unsafeRunAsyncAndForget()
 

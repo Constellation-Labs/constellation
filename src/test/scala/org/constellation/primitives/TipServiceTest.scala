@@ -134,6 +134,6 @@ class TipServiceTest
     cbs: List[CheckpointBlock],
     func: CheckpointBlock => IO[Any]
   ) =
-    cbs.map(IO.shift *> func(_))
+    cbs.map(IO.shift >> func(_))
 
 }

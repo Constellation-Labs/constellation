@@ -85,7 +85,7 @@ case class CheckpointBlock(
           }
      */
     // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
-    (cache.checkpointBlock.get.storeSOE() *> dao.checkpointService.put(cache)).unsafeRunSync()
+    (cache.checkpointBlock.get.storeSOE() >> dao.checkpointService.put(cache)).unsafeRunSync()
     dao.recentBlockTracker.put(cache)
 
   }
