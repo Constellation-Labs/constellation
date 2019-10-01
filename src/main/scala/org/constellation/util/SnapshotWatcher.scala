@@ -10,8 +10,8 @@ class SnapshotWatcher(snapshotBroadcastService: SnapshotBroadcastService[IO])
     extends PeriodicIO("SnapshotWatcher")
     with StrictLogging {
 
-  override def trigger(): IO[Unit] = IO.unit // mwadon: Temp disable
-//    snapshotBroadcastService.runClusterCheck
+  override def trigger(): IO[Unit] =
+    snapshotBroadcastService.runClusterCheck
 
   schedule(3 minute, 10 seconds)
 
