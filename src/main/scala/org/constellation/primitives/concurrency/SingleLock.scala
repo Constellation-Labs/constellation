@@ -14,7 +14,7 @@ class SingleLock[F[_], R](name: String, lock: Semaphore[F])(implicit F: Concurre
       _ <- lock.acquire
 
       res <- thunk.handleErrorWith { error =>
-        lock.release *>
+        lock.release >>
           error.raiseError[F, R]
       }
 

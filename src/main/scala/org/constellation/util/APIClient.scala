@@ -1,6 +1,6 @@
 package org.constellation.util
 
-import cats.effect.{Async, ContextShift, IO}
+import cats.effect.{Async, ContextShift, Effect, IO}
 import com.softwaremill.sttp._
 import com.typesafe.config.ConfigFactory
 import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
@@ -78,6 +78,22 @@ class APIClient private (
     contextToReturn: ContextShift[IO]
   ): IO[Array[Byte]] =
     contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[IO].async { cb =>
+      httpWithAuth(suffix, queryParams, timeout)(Method.GET)
+        .response(asByteArray)
+        .send()
+        .onComplete {
+          case Success(value: Response[Array[Byte]]) =>
+            value.body.fold(err => cb(Left(new Exception(err))), body => cb(Right(body)))
+          case Failure(error: Throwable) => cb(Left(error))
+        }(ConstellationExecutionContext.unbounded)
+    })
+
+  def getNonBlockingArrayByteF[F[_]: Async](
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds
+  )(contextToReturn: ContextShift[F]): F[Array[Byte]] =
+    contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[F].async { cb =>
       httpWithAuth(suffix, queryParams, timeout)(Method.GET)
         .response(asByteArray)
         .send()

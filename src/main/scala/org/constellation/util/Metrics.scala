@@ -237,14 +237,14 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) extends Periodic[Unit](
       .void
 
   private def updatePeriodicMetrics(): IO[Unit] =
-    updateBalanceMetrics *>
-      updateTransactionAcceptedMetrics() *>
-      updateObservationServiceMetrics() *>
-      updateMetricAsync[IO]("nodeCurrentTimeMS", System.currentTimeMillis().toString) *>
-      updateMetricAsync[IO]("nodeCurrentDate", new DateTime().toString()) *>
-      updateMetricAsync[IO]("metricsRound", round) *>
-      dao.addressService.size().flatMap(size => updateMetricAsync[IO]("addressCount", size)) *>
-      updateMetricAsync[IO]("channelCount", dao.threadSafeMessageMemPool.activeChannels.size) *>
+    updateBalanceMetrics >>
+      updateTransactionAcceptedMetrics() >>
+      updateObservationServiceMetrics() >>
+      updateMetricAsync[IO]("nodeCurrentTimeMS", System.currentTimeMillis().toString) >>
+      updateMetricAsync[IO]("nodeCurrentDate", new DateTime().toString()) >>
+      updateMetricAsync[IO]("metricsRound", round) >>
+      dao.addressService.size().flatMap(size => updateMetricAsync[IO]("addressCount", size)) >>
+      updateMetricAsync[IO]("channelCount", dao.threadSafeMessageMemPool.activeChannels.size) >>
       updateTransactionServiceMetrics()
 
   /**

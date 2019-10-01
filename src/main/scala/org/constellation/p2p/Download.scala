@@ -1,6 +1,7 @@
 package org.constellation.p2p
 
-import cats.effect.{ContextShift, IO, Timer}
+import cats.Parallel
+import cats.effect.{Clock, Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
 import com.softwaremill.sttp.Response
 import com.typesafe.config.{Config, ConfigFactory}
@@ -28,31 +29,33 @@ object SnapshotsDownloader {
   implicit val getSnapshotTimeout: FiniteDuration =
     ConfigUtil.config.getInt("download.getSnapshotTimeout").seconds
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-
-  def downloadSnapshotRandomly(hash: String, pool: Iterable[APIClient]): IO[StoredSnapshot] = {
+  def downloadSnapshotRandomly[F[_]: Concurrent](hash: String, pool: Iterable[APIClient])(
+    implicit C: ContextShift[F]
+  ): F[StoredSnapshot] = {
     val poolArray = pool.toArray
     val stopAt = Random.nextInt(poolArray.length)
 
-    def makeAttempt(index: Int): IO[StoredSnapshot] =
+    def makeAttempt(index: Int): F[StoredSnapshot] =
       getSnapshot(hash, poolArray(index)).handleErrorWith {
-        case e if index == stopAt => IO.raiseError[StoredSnapshot](e)
+        case e if index == stopAt => Sync[F].raiseError[StoredSnapshot](e)
         case _                    => makeAttempt((index + 1) % poolArray.length)
       }
 
     makeAttempt((stopAt + 1) % poolArray.length)
   }
 
-  def downloadSnapshotByDistance(hash: String, pool: Iterable[APIClient]): IO[StoredSnapshot] = {
+  def downloadSnapshotByDistance[F[_]: Concurrent](hash: String, pool: Iterable[APIClient])(
+    implicit C: ContextShift[F]
+  ): F[StoredSnapshot] = {
     val sortedPeers = pool.toSeq.sortBy(p => Distance.calculate(hash, p.id))
 
-    def makeAttempt(sortedPeers: Iterable[APIClient]): IO[StoredSnapshot] =
+    def makeAttempt(sortedPeers: Iterable[APIClient]): F[StoredSnapshot] =
       sortedPeers match {
         case Nil =>
-          IO.raiseError[StoredSnapshot](new RuntimeException("Unable to download Snapshot from empty peer list"))
+          Sync[F].raiseError[StoredSnapshot](new RuntimeException("Unable to download Snapshot from empty peer list"))
         case head :: tail =>
           getSnapshot(hash, head).handleErrorWith {
-            case e if tail.isEmpty => IO.raiseError[StoredSnapshot](e)
+            case e if tail.isEmpty => Sync[F].raiseError[StoredSnapshot](e)
             case _                 => makeAttempt(sortedPeers.tail)
           }
       }
@@ -60,11 +63,12 @@ object SnapshotsDownloader {
     makeAttempt(sortedPeers)
   }
 
-  private def getSnapshot(hash: String, client: APIClient)(
-    implicit snapshotTimeout: Duration
-  ): IO[StoredSnapshot] =
+  private def getSnapshot[F[_]: Concurrent](hash: String, client: APIClient)(
+    implicit snapshotTimeout: Duration,
+    C: ContextShift[F]
+  ): F[StoredSnapshot] =
     client
-      .getNonBlockingArrayByteIO("storedSnapshot/" + hash, timeout = snapshotTimeout)(contextShift)
+      .getNonBlockingArrayByteF("storedSnapshot/" + hash, timeout = snapshotTimeout)(C)
       .map(s => deserializeStoredSnapshot(s))
 
   private def deserializeStoredSnapshot(storedSnapshotArrayBytes: Array[Byte]) =
@@ -74,55 +78,56 @@ object SnapshotsDownloader {
     }
 }
 
-class SnapshotsProcessor(downloadSnapshot: (String, Iterable[APIClient]) => IO[StoredSnapshot])(
+class SnapshotsProcessor[F[_]: Concurrent: Clock](
+  downloadSnapshot: (String, Iterable[APIClient]) => F[StoredSnapshot]
+)(
   implicit dao: DAO,
-  ec: ExecutionContext
+  ec: ExecutionContext,
+  C: ContextShift[F]
 ) {
-  implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ec)
-  implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
+  implicit val unsafeLogger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
-  def processSnapshots(hashes: Seq[String])(implicit peers: Peers): IO[Unit] =
-    hashes.map(processSnapshot).toList.parSequence.map(_ => ())
+  def processSnapshots(hashes: Seq[String])(implicit peers: Peers): F[Unit] =
+    hashes.toList.traverse(processSnapshot).void
 
-  private def processSnapshot(hash: String)(implicit peers: Peers): IO[Unit] = {
+  private def processSnapshot(hash: String)(implicit peers: Peers): F[Unit] = {
     val clients = peers.values.map(_.client)
 
     logThread(
       downloadSnapshot(hash, clients).flatTap { _ =>
-        IO {
-          dao.metrics.incrementMetric("downloadedSnapshots")
-          dao.metrics.incrementMetric(Metrics.snapshotCount)
-        }
+        dao.metrics.incrementMetricAsync("downloadedSnapshots") >> dao.metrics.incrementMetricAsync(
+          Metrics.snapshotCount
+        )
       }.flatMap(acceptSnapshot),
       "download_processSnapshot"
     ) // TODO: wkoszycki shouldn't we accept sequentially ?
   }
 
-  private def acceptSnapshot(snapshot: StoredSnapshot): IO[Unit] =
+  private def acceptSnapshot(snapshot: StoredSnapshot): F[Unit] =
     logThread(
-      IO {
-        snapshot.checkpointCache.foreach { c =>
-          dao.metrics.incrementMetric("downloadedBlocks")
-          dao.metrics.incrementMetric(Metrics.checkpointAccepted)
-
-          c.checkpointBlock.foreach(_.transactions.foreach { _ =>
-            dao.metrics.incrementMetric("transactionAccepted")
+      snapshot.checkpointCache.toList.traverse { c =>
+        dao.metrics.incrementMetricAsync[F]("downloadedBlocks") >>
+          dao.metrics.incrementMetricAsync[F](Metrics.checkpointAccepted) >>
+          c.checkpointBlock
+            .traverse(
+              _.transactions.toList.map(_ => dao.metrics.incrementMetricAsync("transactionAccepted")).sequence
+            ) >>
+          C.evalOn(ConstellationExecutionContext.unbounded)(Sync[F].delay {
+            better.files
+              .File(dao.snapshotPath, snapshot.snapshot.hash)
+              .writeByteArray(KryoSerializer.serializeAnyRef(snapshot))
           })
-
-          better.files
-            .File(dao.snapshotPath, snapshot.snapshot.hash)
-            .writeByteArray(KryoSerializer.serializeAnyRef(snapshot))
-        }
-      },
+      }.void,
       "download_acceptSnapshot"
     )
 }
 
-class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO, ec: ExecutionContext)
-    extends StrictLogging {
-  implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ec)
-  implicit val implicitLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
+class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: SnapshotsProcessor[F], cluster: Cluster[F])(
+  implicit dao: DAO,
+  ec: ExecutionContext,
+  C: ContextShift[F]
+) extends StrictLogging {
+  implicit val implicitLogger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   final implicit class FutureOps[+T](f: Future[T]) {
     def toIO: IO[T] = IO.fromFuture(IO(f))(IO.contextShift(ec))
@@ -131,13 +136,13 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   val config: Config = ConfigFactory.load()
   private val waitForPeersDelay = config.getInt("download.waitForPeers").seconds
 
-  def reDownload(snapshotHashes: List[String], peers: Map[Id, PeerData]): IO[Unit] =
+  def reDownload(snapshotHashes: List[String], peers: Map[Id, PeerData]): F[Unit] =
     logThread(
       for {
         majoritySnapshot <- getMajoritySnapshot(peers)
-        _ <- if (snapshotHashes.forall(majoritySnapshot.snapshotHashes.contains)) IO.unit
+        _ <- if (snapshotHashes.forall(majoritySnapshot.snapshotHashes.contains)) Sync[F].unit
         else
-          IO.raiseError[Unit](
+          Sync[F].raiseError[Unit](
             new RuntimeException(
               s"[${dao.id.short}] Inconsistent state majority snapshot doesn't contain: ${snapshotHashes
                 .filterNot(majoritySnapshot.snapshotHashes.contains)}"
@@ -158,7 +163,7 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       "download_reDownload"
     )
 
-  def download(): IO[Unit] =
+  def download(): F[Unit] =
     logThread(
       for {
         _ <- initDownloadingProcess
@@ -183,44 +188,47 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       "download_download"
     )
 
-  private def initDownloadingProcess: IO[Unit] =
-    IO(logger.debug("Download started"))
+  private def initDownloadingProcess: F[Unit] =
+    Sync[F]
+      .delay(logger.debug("Download started"))
       .flatMap(_ => setNodeState(NodeState.DownloadInProgress))
       .flatMap(_ => requestForFaucet)
       .flatMap(_ => requestForFaucet)
       .flatMap(_ => requestForFaucet)
-      .flatMap(_ => IO.sleep(10.seconds))
+      .flatMap(_ => Timer[F].sleep(10.seconds))
       .map(_ => ())
 
   private def downloadAndAcceptGenesis =
-    dao.cluster
-      .broadcast(_.getNonBlockingIO[Option[GenesisObservation]]("genesis")(contextShift))
+    cluster
+      .broadcast(_.getNonBlockingF[F, Option[GenesisObservation]]("genesis")(C))
       .map(_.values.flatMap(_.toOption))
       .map(_.find(_.nonEmpty).flatten.get)
-      .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadedGenesis", "true"))
-      .flatTap(genesis => IO(Genesis.acceptGenesis(genesis)))
+      .flatTap(_ => dao.metrics.updateMetricAsync("downloadedGenesis", "true"))
+      .flatTap(genesis => Sync[F].delay(Genesis.acceptGenesis(genesis)))
 
-  private def waitForPeers(): IO[Unit] =
-    IO(logger.debug(s"Waiting ${waitForPeersDelay.toString()} for peers"))
-      .flatMap(_ => IO.sleep(waitForPeersDelay)) // mwadon: Should we block the thread by sleep here?
+  private def waitForPeers(): F[Unit] =
+    Sync[F]
+      .delay(logger.debug(s"Waiting ${waitForPeersDelay.toString()} for peers"))
+      .flatMap(_ => Timer[F].sleep(waitForPeersDelay)) // mwadon: Should we block the thread by sleep here?
 
   private def getReadyPeers() =
-    dao.readyPeers(NodeType.Full)
+    LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
 
-  private def getSnapshotClient(peers: Peers) = IO(peers.head._2.client)
+  private def getSnapshotClient(peers: Peers) = peers.head._2.client.pure[F]
 
-  private[p2p] def getMajoritySnapshot(peers: Peers): IO[SnapshotInfo] =
+  private[p2p] def getMajoritySnapshot(peers: Peers): F[SnapshotInfo] =
     peers.values
       .map(peerData => peerData.client)
       .toList
       .traverse(
         client =>
           client
-            .getNonBlockingArrayByteIO("info", timeout = 5.seconds)(contextShift)
+            .getNonBlockingArrayByteF("info", timeout = 5.seconds)(C)
             .map(snapshotInfoArrayBytes => deserializeSnapshotInfo(snapshotInfoArrayBytes).some)
             .handleErrorWith(e => {
-              IO.delay(logger.info(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) *>
-                IO.pure[Option[SnapshotInfo]](None)
+              Sync[F]
+                .delay(logger.info(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
+                Sync[F].pure[Option[SnapshotInfo]](None)
             })
       )
       .map(
@@ -239,22 +247,22 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
   private def downloadAndProcessSnapshotsFirstPass(snapshotHashes: Seq[String])(
     implicit snapshotClient: APIClient,
     peers: Peers
-  ): IO[Seq[String]] =
+  ): F[Seq[String]] =
     for {
       _ <- snapshotsProcessor.processSnapshots(snapshotHashes)
-      _ <- dao.metrics.updateMetricAsync[IO]("downloadFirstPassComplete", "true")
+      _ <- dao.metrics.updateMetricAsync("downloadFirstPassComplete", "true")
       _ <- setNodeState(NodeState.DownloadCompleteAwaitingFinalSync)
     } yield snapshotHashes
 
   private def downloadAndProcessSnapshotsSecondPass(
     hashes: Seq[String]
-  )(implicit snapshotClient: APIClient, peers: Peers): IO[Unit] =
+  )(implicit snapshotClient: APIClient, peers: Peers): F[Unit] =
     dao.metrics
-      .updateMetricAsync[IO]("downloadExpectedNumSnapshotsSecondPass", hashes.size.toString)
+      .updateMetricAsync("downloadExpectedNumSnapshotsSecondPass", hashes.size.toString)
       .flatMap(_ => snapshotsProcessor.processSnapshots(hashes))
-      .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadSecondPassComplete", "true"))
+      .flatTap(_ => dao.metrics.updateMetricAsync("downloadSecondPassComplete", "true"))
 
-  private def finishDownload(snapshot: SnapshotInfo): IO[Unit] =
+  private def finishDownload(snapshot: SnapshotInfo): F[Unit] =
     for {
       _ <- setSnapshot(snapshot)
       _ <- acceptSnapshotCacheData(snapshot)
@@ -263,58 +271,60 @@ class DownloadProcess(snapshotsProcessor: SnapshotsProcessor)(implicit dao: DAO,
       _ <- setDownloadFinishedTime()
     } yield ()
 
-  private def setAcceptedTransactionsAfterDownload(): IO[Unit] = IO {
+  private def setAcceptedTransactionsAfterDownload(): F[Unit] = Sync[F].delay {
     dao.transactionAcceptedAfterDownload = dao.metrics.getMetrics.get("transactionAccepted").map(_.toLong).getOrElse(0L)
     logger.debug("download process has been finished")
   }
 
-  def setNodeState(nodeState: NodeState): IO[Unit] =
-    dao.cluster.setNodeState(nodeState) *> dao.cluster.broadcastNodeState()
+  def setNodeState(nodeState: NodeState): F[Unit] =
+    cluster.setNodeState(nodeState) >> cluster.broadcastNodeState()
 
-  private def requestForFaucet: IO[Iterable[Response[String]]] =
+  private def requestForFaucet: F[Iterable[Response[Unit]]] =
     for {
-      m <- dao.peerInfo
+      m <- cluster.getPeerInfo
       clients = m.toList.map(_._2.client)
-      resp <- clients.traverse(_.post("faucet", SendToAddress(dao.selfAddressStr, 500L)).toIO)
+      resp <- clients.traverse(_.postNonBlockingUnitF("faucet", SendToAddress(dao.selfAddressStr, 500L))(C))
     } yield resp
 
-  private def getSnapshotHashes(snapshotInfo: SnapshotInfo): IO[Seq[String]] = {
+  private def getSnapshotHashes(snapshotInfo: SnapshotInfo): F[Seq[String]] = {
     val preExistingSnapshots = dao.snapshotPath.list.toSeq.map(_.name)
     val snapshotHashes = snapshotInfo.snapshotHashes.filterNot(preExistingSnapshots.contains)
 
-    IO.pure(snapshotHashes)
-      .flatTap(_ => dao.metrics.updateMetricAsync[IO]("downloadExpectedNumSnapshots", snapshotHashes.size.toString))
+    snapshotHashes
+      .pure[F]
+      .flatTap(_ => dao.metrics.updateMetricAsync("downloadExpectedNumSnapshots", snapshotHashes.size.toString))
   }
 
-  private def setSnapshot(snapshotInfo: SnapshotInfo): IO[Unit] =
-    dao.snapshotService.setSnapshot(snapshotInfo)
+  private def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
+    LiftIO[F].liftIO(dao.snapshotService.setSnapshot(snapshotInfo))
 
-  private def acceptSnapshotCacheData(snapshotInfo: SnapshotInfo): IO[Unit] =
-    dao.snapshotService.syncBuffer.get
+  private def acceptSnapshotCacheData(snapshotInfo: SnapshotInfo): F[Unit] =
+    LiftIO[F]
+      .liftIO(dao.snapshotService.syncBuffer.get)
       .flatMap(
         _.toList.map { h =>
           if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache.contains(h)) {
-            IO(
+            Sync[F].delay(
               logger.debug(s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointBlock.get.baseHash}")
-            ) *> dao.checkpointAcceptanceService.accept(h).recoverWith {
+            ) >> LiftIO[F].liftIO(dao.checkpointAcceptanceService.accept(h)).recoverWith {
               case _ @(CheckpointAcceptBlockAlreadyStored(_) | TipConflictException(_, _)) =>
-                IO.pure(None)
+                Sync[F].pure(None)
               case unknownError =>
-                IO {
+                Sync[F].delay {
                   logger.error(s"[${dao.id.short}] Failed to accept majority checkpoint block", unknownError)
-                } >> IO.pure(None)
+                } >> Sync[F].pure(None)
             }
           } else {
-            IO.unit
+            Sync[F].unit
           }
-        }.sequence[IO, Unit]
+        }.sequence[F, Unit]
       )
       .void
 
-  private def clearSyncBuffer: IO[Unit] =
-    dao.snapshotService.syncBuffer.set(Seq())
+  private def clearSyncBuffer: F[Unit] =
+    LiftIO[F].liftIO(dao.snapshotService.syncBuffer.set(Seq()))
 
-  private def setDownloadFinishedTime(): IO[Unit] = IO {
+  private def setDownloadFinishedTime(): F[Unit] = Sync[F].delay {
     dao.downloadFinishedTime = System.currentTimeMillis()
   }
 }
@@ -326,9 +336,11 @@ object Download {
     if (dao.nodeType == NodeType.Full) {
       tryWithMetric(
         {
+          implicit val contextShift = IO.contextShift(ConstellationExecutionContext.bounded)
+          implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
           val snapshotsProcessor =
-            new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotRandomly)
-          val process = new DownloadProcess(snapshotsProcessor)
+            new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotRandomly[IO])
+          val process = new DownloadProcess[IO](snapshotsProcessor, dao.cluster)
           process.download().unsafeRunAsync(_ => ())
         },
         "download"

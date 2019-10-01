@@ -25,7 +25,7 @@ class SingleRef[F[_]: Concurrent, A](default: A, s: Semaphore[F] = null) {
   def modify[B](f: A => (A, B)): F[B] = withLock(ref.modify(f))
   def unsafeModify[B](f: A => (A, B)): F[B] = ref.modify(f)
 
-  private def withLock[R](thunk: => F[R]): F[R] = new SingleLock[F, R]("", semaphore).use(thunk)
+  private def withLock[R](thunk: => F[R]): F[R] = new SingleLock[F, R]("", if (s != null) s else semaphore).use(thunk)
 
 }
 

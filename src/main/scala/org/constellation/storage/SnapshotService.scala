@@ -3,7 +3,7 @@ package org.constellation.storage
 import java.nio.file.Path
 
 import cats.data.EitherT
-import cats.effect.{Concurrent, IO, LiftIO, Sync}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.checkpoint.CheckpointService
@@ -28,7 +28,8 @@ class SnapshotService[F[_]: Concurrent](
   broadcastService: SnapshotBroadcastService[F],
   consensusManager: ConsensusManager[F],
   dao: DAO
-) extends StrictLogging {
+)(implicit C: ContextShift[F])
+    extends StrictLogging {
   import constellation._
 
   implicit val shadowDao: DAO = dao
@@ -90,9 +91,9 @@ class SnapshotService[F[_]: Concurrent](
       _ <- acceptedCBSinceSnapshot.set(snapshotInfo.acceptedCBSinceSnapshot)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.put(k, v) }.toList.sequence
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.map { h =>
-        LiftIO[F].liftIO(h.checkpointBlock.get.storeSOE()) *>
-          checkpointService.put(h) *>
-          dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) *>
+        LiftIO[F].liftIO(h.checkpointBlock.get.storeSOE()) >>
+          checkpointService.put(h) >>
+          dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
           h.checkpointBlock.get.transactions.toList
             .map(
               tx =>
@@ -183,8 +184,8 @@ class SnapshotService[F[_]: Concurrent](
         Right(())
     }.flatMap { e =>
       val tap = if (e.isLeft) {
-        acceptedCBSinceSnapshot.update(accepted => accepted.slice(0, 100)) *>
-          dao.metrics.incrementMetricAsync[F]("memoryExceeded_acceptedCBSinceSnapshot") *>
+        acceptedCBSinceSnapshot.update(accepted => accepted.slice(0, 100)) >>
+          dao.metrics.incrementMetricAsync[F]("memoryExceeded_acceptedCBSinceSnapshot") >>
           acceptedCBSinceSnapshot.get.flatMap { accepted =>
             dao.metrics.updateMetricAsync[F]("acceptedCBSinceSnapshot", accepted.size.toString)
           }
@@ -222,7 +223,7 @@ class SnapshotService[F[_]: Concurrent](
     EitherT {
       val snapshotHeightDelayInterval = dao.processingConfig.snapshotHeightDelayInterval
 
-      dao.metrics.updateMetricAsync[F]("minTipHeight", minTipHeight.toString) *>
+      dao.metrics.updateMetricAsync[F]("minTipHeight", minTipHeight.toString) >>
         Sync[F].pure {
           if (minTipHeight > (nextHeightInterval + snapshotHeightDelayInterval)) {
             logger.debug(
@@ -289,21 +290,21 @@ class SnapshotService[F[_]: Concurrent](
       .map(_.hash)
       .map(hash => Snapshot(hash, hashesForNextSnapshot))
 
-  private[storage] def applySnapshot(): F[Unit] =
+  private[storage] def applySnapshot()(implicit C: ContextShift[F]): F[Unit] =
     snapshot.get.flatMap { currentSnapshot =>
       if (currentSnapshot == Snapshot.snapshotZero) {
         Sync[F].unit
       } else {
-        writeSnapshotToDisk(currentSnapshot) *>
-          applyAfterSnapshot(currentSnapshot) *>
+        writeSnapshotToDisk(currentSnapshot) >>
+          applyAfterSnapshot(currentSnapshot) >>
           dao.metrics.incrementMetricAsync(Metrics.snapshotCount)
       }
     }
 
-  def addSnapshotToDisk(snapshot: StoredSnapshot): Try[Path] =
-    Snapshot.writeSnapshot(snapshot)
+  def addSnapshotToDisk(snapshot: StoredSnapshot): F[Path] =
+    Snapshot.writeSnapshot[F](snapshot)
 
-  private def writeSnapshotToDisk(currentSnapshot: Snapshot) =
+  private def writeSnapshotToDisk(currentSnapshot: Snapshot)(implicit C: ContextShift[F]): F[Unit] =
     currentSnapshot.checkpointBlocks.toList
       .traverse(checkpointService.fullData)
       .flatMap {
@@ -315,12 +316,10 @@ class SnapshotService[F[_]: Concurrent](
             .flatMap(_ => Sync[F].raiseError[Unit](new IllegalStateException("Snapshot data is missing")))
         case maybeBlocks =>
           val flatten = maybeBlocks.flatten.sortBy(_.checkpointBlock.map(_.baseHash))
-          Sync[F].delay {
-            tryWithMetric(
-              Snapshot.writeSnapshot(StoredSnapshot(currentSnapshot, flatten)),
-              Metrics.snapshotWriteToDisk
-            )
-          }.void
+          withMetric[F, Unit](
+            Snapshot.writeSnapshot(StoredSnapshot(currentSnapshot, flatten)).void,
+            Metrics.snapshotWriteToDisk
+          )
       }
 
   private def applyAfterSnapshot(currentSnapshot: Snapshot): F[Unit] =
@@ -385,7 +384,7 @@ class SnapshotService[F[_]: Concurrent](
       messageService
         .findHashesByMerkleRoot(_)
         .flatMap(_.get.toList.traverse { msgHash =>
-          dao.metrics.incrementMetricAsync("messageSnapshotHashUpdated") *>
+          dao.metrics.incrementMetricAsync("messageSnapshotHashUpdated") >>
             LiftIO[F]
               .liftIO(
                 DataResolver
@@ -428,7 +427,7 @@ object SnapshotService {
     broadcastService: SnapshotBroadcastService[F],
     consensusManager: ConsensusManager[F],
     dao: DAO
-  ) =
+  )(implicit C: ContextShift[F]) =
     new SnapshotService[F](
       concurrentTipService,
       addressService,

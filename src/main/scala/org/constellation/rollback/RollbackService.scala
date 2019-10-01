@@ -1,7 +1,7 @@
 package org.constellation.rollback
 
 import cats.data.EitherT
-import cats.effect.{Concurrent, Sync}
+import cats.effect.{Concurrent, ContextShift, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.DAO
@@ -11,13 +11,11 @@ import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.storage.SnapshotService
 import org.constellation.util.AccountBalances.AccountBalances
 
-import scala.util.Try
-
 class RollbackService[F[_]: Concurrent: Logger](
   dao: DAO,
   rollbackBalances: RollbackAccountBalances,
   snapshotService: SnapshotService[F]
-) {
+)(implicit C: ContextShift[F]) {
 
   type RollbackData = (Seq[StoredSnapshot], SnapshotInfo, GenesisObservation)
 
@@ -46,7 +44,7 @@ class RollbackService[F[_]: Concurrent: Logger](
 
   def restore(rollbackData: RollbackData): EitherT[F, RollbackException, Unit] =
     for {
-      _ <- EitherT.fromEither[F](acceptSnapshots(rollbackData._1))
+      _ <- acceptSnapshots(rollbackData._1)
       _ <- EitherT.liftF(Logger[F].info("Snapshots restored on disk"))
 
       _ <- EitherT.liftF(acceptGenesis(rollbackData._3))
@@ -63,10 +61,14 @@ class RollbackService[F[_]: Concurrent: Logger](
   private def acceptSnapshotInfo(snapshotInfo: SnapshotInfo): F[Unit] =
     snapshotService.setSnapshot(snapshotInfo)
 
-  private def acceptSnapshots(snapshots: Seq[StoredSnapshot]): Either[RollbackException, Unit] =
-    Try(snapshots.foreach(snapshot => snapshotService.addSnapshotToDisk(snapshot)))
-      .map(Right(_))
-      .getOrElse(Left(CannotWriteToDisk))
+  private def acceptSnapshots(
+    snapshots: Seq[StoredSnapshot]
+  )(implicit C: ContextShift[F]): EitherT[F, RollbackException, Unit] = EitherT {
+    snapshots.toList
+      .traverse(snapshotService.addSnapshotToDisk)
+      .map(_ => ().asRight[RollbackException])
+      .handleErrorWith(_ => CannotWriteToDisk.asInstanceOf[RollbackException].asLeft[Unit].pure[F])
+  }
 
   private def validateAccountBalance(accountBalances: AccountBalances): Either[RollbackException, Unit] =
     accountBalances.count(_._2 < 0) match {

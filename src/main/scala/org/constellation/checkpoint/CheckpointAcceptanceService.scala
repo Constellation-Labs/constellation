@@ -61,7 +61,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
             case ex: PendingAcceptance =>
               acceptErrorHandler(ex)
             case error =>
-              pendingAcceptanceFromOthers.update(_.filterNot(_ == cb.baseHash)) *> acceptErrorHandler(error)
+              pendingAcceptanceFromOthers.update(_.filterNot(_ == cb.baseHash)) >> acceptErrorHandler(error)
           }
 
           acceptance
@@ -127,7 +127,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
             .contains(cb.baseHash)
             .ifM(
               dao.metrics
-                .incrementMetricAsync[F]("checkpointAcceptBlockAlreadyStored") *> CheckpointAcceptBlockAlreadyStored(cb)
+                .incrementMetricAsync[F]("checkpointAcceptBlockAlreadyStored") >> CheckpointAcceptBlockAlreadyStored(cb)
                 .raiseError[F, Unit],
               Sync[F].unit
             )
@@ -176,7 +176,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
       case ex @ (PendingAcceptance(_) | MissingCheckpointBlockException) =>
         acceptErrorHandler(ex)
       case error =>
-        pendingAcceptance.update(_.filterNot(_ == checkpoint.checkpointBlock.get.baseHash)) *> acceptErrorHandler(error)
+        pendingAcceptance.update(_.filterNot(_ == checkpoint.checkpointBlock.get.baseHash)) >> acceptErrorHandler(error)
     }
   }
 
@@ -194,8 +194,8 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
       case knownError @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
         knownError.raiseError[F, Unit]
       case otherError =>
-        Sync[F].delay(logger.error(s"Error when accepting block: ${otherError.getMessage}")) *> dao.metrics
-          .incrementMetricAsync[F]("acceptCheckpoint_failure") *> otherError.raiseError[F, Unit]
+        Sync[F].delay(logger.error(s"Error when accepting block: ${otherError.getMessage}")) >> dao.metrics
+          .incrementMetricAsync[F]("acceptCheckpoint_failure") >> otherError.raiseError[F, Unit]
     }
 
   private def incrementMetricIfDummy(checkpointBlock: CheckpointBlock): F[Unit] =
@@ -218,7 +218,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
           .map(tx ⇒ (tx, toCacheData(tx)))
           .traverse {
             case (tx, txMetadata) =>
-              dao.transactionService.accept(txMetadata, cpc) *> transferIfNotDummy(tx)
+              dao.transactionService.accept(txMetadata, cpc) >> transferIfNotDummy(tx)
           }
           .void
       }

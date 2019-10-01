@@ -3,7 +3,7 @@ package org.constellation
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import cats.effect.{Concurrent, ContextShift, IO}
+import cats.effect.{Concurrent, ContextShift, IO, Timer}
 import com.softwaremill.sttp.SttpBackend
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
@@ -100,10 +100,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     }
 
     idDir.createDirectoryIfNotExists(createParents = true)
-    messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
-    checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
-    implicit val ioTimer = IO.timer(ConstellationExecutionContext.unbounded)
+    implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
     rateLimiting = new RateLimiting[IO]
 
@@ -143,11 +141,21 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     snapshotBroadcastService = {
       val snapshotProcessor =
-        new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotByDistance)(
+        new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotByDistance[IO])(
+          Concurrent(IO.ioConcurrentEffect),
+          ioTimer.clock,
           this,
-          ConstellationExecutionContext.bounded
+          ConstellationExecutionContext.bounded,
+          IO.contextShift(ConstellationExecutionContext.bounded)
         )
-      val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.bounded)
+      val downloadProcess = new DownloadProcess[IO](snapshotProcessor, cluster)(
+        Concurrent(IO.ioConcurrentEffect),
+        ioTimer,
+        ioTimer.clock,
+        this,
+        ConstellationExecutionContext.bounded,
+        IO.contextShift(ConstellationExecutionContext.bounded)
+      )
       new SnapshotBroadcastService[IO](
         new HealthChecker[IO](
           this,

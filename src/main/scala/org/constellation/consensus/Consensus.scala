@@ -79,7 +79,7 @@ class Consensus[F[_]: Concurrent](
         notifications,
         observations.map(_.hash)
       )
-      _ <- remoteCall.shift *> remoteSender.broadcastLightTransactionProposal(
+      _ <- remoteCall.shift >> remoteSender.broadcastLightTransactionProposal(
         BroadcastLightTransactionProposal(roundData.roundId, roundData.peers, proposal)
       )
       _ <- addTransactionProposal(proposal)
@@ -249,7 +249,7 @@ class Consensus[F[_]: Concurrent](
         }
       _ <- if (acceptedBlock._1.isEmpty) Sync[F].pure(List.empty[Response[Unit]])
       else
-        remoteCall.shift *> broadcastSignedBlockToNonFacilitators(
+        remoteCall.shift >> broadcastSignedBlockToNonFacilitators(
           FinishedCheckpoint(cache, proposals.keySet.map(_.id))
         )
       transactionsToReturn <- getOwnTransactionsToReturn.map(
@@ -295,7 +295,7 @@ class Consensus[F[_]: Concurrent](
         pd =>
           pd.client.postNonBlockingUnitF("finished/checkpoint", finishedCheckpoint, timeout = 30.seconds)(
             calculationContext
-        )
+          )
       )
     } yield responses
   }
@@ -322,7 +322,7 @@ class Consensus[F[_]: Concurrent](
       _ <- dao.metrics.incrementMetricAsync(
         "resolveMajorityCheckpointBlockUniquesCount_" + uniques
       )
-      _ <- remoteCall.shift *> remoteSender.broadcastSelectedUnionBlock(
+      _ <- remoteCall.shift >> remoteSender.broadcastSelectedUnionBlock(
         BroadcastSelectedUnionBlock(roundData.roundId, roundData.peers, selectedCheckpointBlock)
       )
       _ <- addSelectedBlockProposal(selectedCheckpointBlock)
@@ -366,7 +366,7 @@ class Consensus[F[_]: Concurrent](
                   readyPeers.get(t._1._2.id)
                 )(contextShift)
                 .head
-          )
+            )
         )
       _ <- logger.debug(
         s" ${roundData.roundId} $dataType resolved size ${resolved.size}"
@@ -436,7 +436,7 @@ class Consensus[F[_]: Concurrent](
           observations.flatMap(_._2) ++ resolvedObs
         )(dao.keyPair)
       )
-      _ <- remoteCall.shift *> remoteSender.broadcastBlockUnion(
+      _ <- remoteCall.shift >> remoteSender.broadcastBlockUnion(
         BroadcastUnionBlockProposal(roundData.roundId, roundData.peers, proposal)
       )
       _ <- addBlockProposal(proposal)
@@ -466,7 +466,7 @@ class Consensus[F[_]: Concurrent](
                 txs =>
                   getOwnObservationsToReturn.flatMap(
                     exs => consensusManager.handleRoundError(PreviousStage(roundData.roundId, stage, txs, exs))
-                )
+                  )
               )
           else Sync[F].unit
       )
@@ -514,8 +514,8 @@ class Consensus[F[_]: Concurrent](
               exs =>
                 Left(
                   NotEnoughProposals(roundData.roundId, proposals.size, peerSize, stage, txs, exs)
-              )
-          )
+                )
+            )
         )
       case _ => Sync[F].pure(Right(()))
     }
@@ -537,7 +537,7 @@ object Consensus {
     type ConsensusStage = Value
 
     val STARTING, WAITING_FOR_PROPOSALS, WAITING_FOR_BLOCK_PROPOSALS, RESOLVING_MAJORITY_CB,
-    WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
+      WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
       Value
   }
 

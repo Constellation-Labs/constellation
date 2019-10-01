@@ -13,14 +13,18 @@ class DownloadProcessTest extends FunSuite with IdiomaticMockito with ArgumentMa
 
   implicit val dao: DAO = mock[DAO]
   implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.bounded
+  implicit val C = IO.contextShift(ec)
+  implicit val timer = IO.timer(ec)
 
   dao.id shouldReturn Fixtures.id
 
   val snapInfo: SnapshotInfo = SnapshotInfo(new Snapshot("abc", Seq.empty[String]))
 
   val peers: Map[Schema.Id, PeerData] = TestHelpers.prepareFacilitators(3)
-  val snapshotsProcessor: SnapshotsProcessor = new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotRandomly)
-  val downloader: DownloadProcess = new DownloadProcess(snapshotsProcessor)
+
+  val snapshotsProcessor: SnapshotsProcessor[IO] =
+    new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotRandomly[IO])
+  val downloader: DownloadProcess[IO] = new DownloadProcess(snapshotsProcessor, dao.cluster)
 
   test("should get majority snapshot when most of the cluster part is responsive") {
     peers.slice(0, 2).map(_._2.client).foreach { c =>

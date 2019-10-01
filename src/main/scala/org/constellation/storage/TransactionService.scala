@@ -22,11 +22,11 @@ class TransactionService[F[_]: Concurrent: Logger](dao: DAO) extends ConsensusSe
       .flatTap(_ => Logger[F].debug(s"Accepting transaction=${tx.hash}"))
 
   def applySnapshot(txs: List[TransactionCacheData], merkleRoot: String): F[Unit] =
-    withLock("merklePoolUpdate", merklePool.remove(merkleRoot)) *>
+    withLock("merklePoolUpdate", merklePool.remove(merkleRoot)) >>
       txs.traverse(tx => withLock("acceptedUpdate", accepted.remove(tx.hash))).void
 
   def applySnapshot(merkleRoot: String): F[Unit] =
-    findHashesByMerkleRoot(merkleRoot).flatMap(tx => withLock("acceptedUpdate", accepted.remove(tx.toSet.flatten))) *>
+    findHashesByMerkleRoot(merkleRoot).flatMap(tx => withLock("acceptedUpdate", accepted.remove(tx.toSet.flatten))) >>
       withLock("merklePoolUpdate", merklePool.remove(merkleRoot))
 
   override def pullForConsensus(maxCount: Int): F[List[TransactionCacheData]] =
@@ -44,5 +44,5 @@ class TransactionService[F[_]: Concurrent: Logger](dao: DAO) extends ConsensusSe
       .traverse(tx => inConsensus.put(tx.hash, tx))
 
   def removeConflicting(txs: List[String]): F[Unit] =
-    pending.remove(txs.toSet) *> unknown.remove(txs.toSet)
+    pending.remove(txs.toSet) >> unknown.remove(txs.toSet)
 }
