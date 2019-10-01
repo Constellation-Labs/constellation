@@ -80,6 +80,29 @@ class DataResolver extends StrictLogging {
       logger
     )
 
+  def resolveBatchTransaction(
+    hashes: List[String],
+    pool: List[PeerApiClient],
+    priorityClient: Option[PeerApiClient],
+    roundId: Option[RoundId] = None
+  )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
+    IO.delay(logger.debug(s"Start resolving transactions = ${hashes} for round = $roundId")) *>
+      resolveBatchData[TransactionCacheData](hashes, "transactions", pool ++ priorityClient)(contextToReturn).flatMap {
+        txs =>
+          txs.headOption match {
+            case Some(tcd) =>
+              dao.transactionService
+                .put(tcd, ConsensusStatus.Unknown)
+                .flatTap(
+                  _ => IO.delay(logger.debug(s"Stored resolved transactions = ${tcd.hash} for roundId = ${roundId}"))
+                )
+            case _ =>
+              IO.raiseError[TransactionCacheData](
+                new Throwable(s"Failed with resolving transactions = ${hashes} for roundId = ${roundId}")
+              )
+          }
+      }
+
   def resolveCheckpointDefaults(
     hash: String,
     priorityClient: Option[PeerApiClient] = None
@@ -106,8 +129,8 @@ class DataResolver extends StrictLogging {
                 dao.transactionService.put(
                   TransactionCacheData(t, cbBaseHash = Some(cpc.checkpointBlock.get.baseHash)),
                   ConsensusStatus.Unknown
-              )
-          )
+                )
+            )
         )
         .flatTap(
           cb =>
@@ -164,9 +187,9 @@ class DataResolver extends StrictLogging {
                   dao.transactionService.put(
                     TransactionCacheData(t, cbBaseHash = Some(cb.checkpointBlock.get.baseHash)),
                     ConsensusStatus.Unknown
-                )
-            )
-        )
+                  )
+              )
+          )
       ),
       s"dataResolver_resolveCheckpoints [${hashes}]",
       logger
@@ -227,7 +250,7 @@ class DataResolver extends StrictLogging {
           IO.raiseError[T](DataResolutionMaxErrors(endpoint, hash))
         case Nil =>
           IO.raiseError[T](
-            DataResolutionOutOfPeers(dao.id.short, endpoint, hash, allPeers.map(_.id.short))
+            DataResolutionOutOfPeers(dao.id.short, endpoint, List(hash), allPeers.map(_.id.short))
           )
         case head :: tail =>
           getData[T](hash, endpoint, head)(contextToReturn).flatMap {
@@ -257,6 +280,46 @@ class DataResolver extends StrictLogging {
     } yield t
   }
 
+  private[p2p] def resolveBatchData[T <: AnyRef](
+    hashes: List[String],
+    endpoint: String,
+    sortedPeers: List[PeerApiClient]
+  )(
+    contextToReturn: ContextShift[IO]
+  )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[List[T]] = {
+
+    def makeAttempt(
+      peers: List[PeerApiClient],
+      allHashes: List[String],
+      innerHashes: List[String] = List.empty[String],
+      response: List[T] = List.empty[T]
+    ): IO[List[T]] = {
+
+      if (peers.isEmpty && innerHashes.size != allHashes.size) {
+        return IO.raiseError(DataResolutionOutOfPeers(dao.id.short, endpoint, hashes, sortedPeers.map(_.id.short)))
+      }
+
+      if (innerHashes.size == allHashes.size) {
+        return response.pure[IO]
+      }
+
+      val peer = peers.head
+      val filteredPeers = peers.filterNot(_ == peer)
+      val requestHashes = allHashes.filterNot(innerHashes.toSet)
+
+      getBatchData[T](requestHashes, endpoint, peer)(contextToReturn).flatMap { data =>
+        logger.info(
+          s"Requested : ${peer.client.hostPortForLogging} : for hashes = $allHashes : and response hashes = ${data.map(_._1)}"
+        )
+        makeAttempt(filteredPeers, allHashes, innerHashes ++ data.map(_._1), response ++ data.map(_._2))
+      }
+    }
+
+    makeAttempt(sortedPeers, hashes).handleErrorWith(
+      e => IO.delay(logger.info(s"Unexpected error while resolving hashes ${e.getMessage}")) *> IO.raiseError(e)
+    )
+  }
+
   private[p2p] def getData[T <: AnyRef](
     hash: String,
     endpoint: String,
@@ -264,6 +327,16 @@ class DataResolver extends StrictLogging {
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[Option[T]] =
     peerApiClient.client
       .getNonBlockingIO[Option[T]](s"$endpoint/$hash", timeout = apiTimeout)(contextToReturn)
+
+  private[p2p] def getBatchData[T <: AnyRef](
+    hashes: List[String],
+    endpoint: String,
+    peerApiClient: PeerApiClient
+  )(
+    contextToReturn: ContextShift[IO]
+  )(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[List[(String, T)]] =
+    peerApiClient.client
+      .getNonBlockingIO[List[(String, T)]](s"batch/$endpoint", timeout = apiTimeout)(contextToReturn)
 
   private[p2p] def resolveDataByDistanceFlat[T <: AnyRef](
     hashes: List[String],
@@ -287,9 +360,9 @@ class DataResolver extends StrictLogging {
 
 object DataResolver extends DataResolver
 
-case class DataResolutionOutOfPeers(thisNode: String, endpoint: String, hash: String, peers: Iterable[String])
+case class DataResolutionOutOfPeers(thisNode: String, endpoint: String, hashes: List[String], peers: Iterable[String])
     extends Exception(
-      s"node [$thisNode] Run out of peers when resolving: $endpoint with hash: $hash following tried: $peers"
+      s"node [$thisNode] Run out of peers when resolving: $endpoint with hash: $hashes following tried: $peers"
     )
 
 case class DataResolutionNoneResponse(endpoint: String, hash: String, client: PeerApiClient)

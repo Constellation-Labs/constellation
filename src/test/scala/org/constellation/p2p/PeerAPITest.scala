@@ -15,7 +15,7 @@ import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointRespon
 import org.constellation.crypto.KeyUtils
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.primitives.Schema.{CheckpointCache, Height, Id, NodeState}
-import org.constellation.primitives.{IPManager, TransactionCacheData, TransactionGossip}
+import org.constellation.primitives.{IPManager, Transaction, TransactionCacheData, TransactionGossip}
 import org.constellation.storage.VerificationStatus.{SnapshotCorrect, SnapshotHeightAbove, SnapshotInvalid}
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
@@ -239,6 +239,39 @@ class PeerAPITest
 
           Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints ~> check {
             status shouldEqual StatusCodes.OK
+          }
+        }
+      }
+
+      "GET transactions" - {
+        "should return list of transactions if one of two transaction exists" in {
+          val a = KeyUtils.makeKeyPair()
+          val b = KeyUtils.makeKeyPair()
+          val tx = createTransaction(a.address, b.address, 5L, a)
+
+          dao.transactionService shouldReturn mock[TransactionService[IO]]
+          dao.transactionService.lookup("hash1") shouldReturnF Some(new TransactionCacheData(tx))
+          dao.transactionService.lookup("none") shouldReturnF None
+          dao.peerInfo shouldReturnF Map()
+
+          val hashes = List("hash1", "none").mkString(",")
+
+          Get(s"/batch/transactions?ids=$hashes") ~> peerAPI.commonEndpoints ~> check {
+            status shouldEqual StatusCodes.OK
+            responseAs[List[(String, Option[TransactionCacheData])]].size shouldEqual 1
+          }
+        }
+
+        "should return empty list if transactions are not exist" in {
+          dao.transactionService shouldReturn mock[TransactionService[IO]]
+          dao.transactionService.lookup(*) shouldReturnF None
+          dao.peerInfo shouldReturnF Map()
+
+          val hashes = List("none1", "none2").mkString(",")
+
+          Get(s"/batch/transactions?ids=$hashes") ~> peerAPI.commonEndpoints ~> check {
+            status shouldEqual StatusCodes.OK
+            responseAs[List[(String, Option[TransactionCacheData])]].size shouldEqual 0
           }
         }
       }
