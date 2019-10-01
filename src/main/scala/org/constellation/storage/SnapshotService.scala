@@ -154,7 +154,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- EitherT.liftF(
         broadcastService.broadcastSnapshot(
           nextSnapshot.lastSnapshot,
-          nextHeightInterval - dao.processingConfig.snapshotHeightDelayInterval
+          nextHeightInterval - dao.processingConfig.snapshotHeightInterval
         )
       )
     } yield ()
