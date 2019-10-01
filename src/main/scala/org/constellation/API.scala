@@ -101,7 +101,7 @@ case class ProcessingConfig(
   peerHealthCheckInterval: Int = 30,
   peerDiscoveryInterval: Int = 60,
   snapshotHeightInterval: Int = 2,
-  snapshotHeightDelayInterval: Int = 8,
+  snapshotHeightDelayInterval: Int = 20,
   snapshotHeightRedownloadDelayInterval: Int = 4,
   snapshotInterval: Int = 2,
   formCheckpointTimeout: Int = 60,
