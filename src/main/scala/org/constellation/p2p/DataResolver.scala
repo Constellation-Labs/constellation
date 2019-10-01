@@ -51,6 +51,15 @@ class DataResolver extends StrictLogging {
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
     getPeersForResolving(dao).flatMap(resolveTransaction(hash, _, priorityClient, roundId)(contextToReturn))
 
+  def resolveBatchTransactionsDefaults(
+    hashes: List[String],
+    priorityClient: Option[PeerApiClient] = None,
+    roundId: Option[RoundId] = None
+  )(
+    contextToReturn: ContextShift[IO]
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[TransactionCacheData]] =
+    getPeersForResolving(dao).flatMap(resolveBatchTransactions(hashes, _, priorityClient, roundId)(contextToReturn))
+
   def resolveTransaction(
     hash: String,
     pool: List[PeerApiClient],
@@ -80,28 +89,26 @@ class DataResolver extends StrictLogging {
       logger
     )
 
-  def resolveBatchTransaction(
+  def resolveBatchTransactions(
     hashes: List[String],
     pool: List[PeerApiClient],
     priorityClient: Option[PeerApiClient],
     roundId: Option[RoundId] = None
-  )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
+  )(
+    contextToReturn: ContextShift[IO]
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[TransactionCacheData]] =
     IO.delay(logger.debug(s"Start resolving transactions = ${hashes} for round = $roundId")) *>
-      resolveBatchData[TransactionCacheData](hashes, "transactions", pool ++ priorityClient)(contextToReturn).flatMap {
-        txs =>
-          txs.headOption match {
-            case Some(tcd) =>
+      resolveBatchData[TransactionCacheData](hashes, "transactions", pool ++ priorityClient)(contextToReturn)
+        .flatMap(
+          txs =>
+            txs.traverse { tcd =>
               dao.transactionService
                 .put(tcd, ConsensusStatus.Unknown)
                 .flatTap(
                   _ => IO.delay(logger.debug(s"Stored resolved transactions = ${tcd.hash} for roundId = ${roundId}"))
                 )
-            case _ =>
-              IO.raiseError[TransactionCacheData](
-                new Throwable(s"Failed with resolving transactions = ${hashes} for roundId = ${roundId}")
-              )
-          }
-      }
+            }
+        )
 
   def resolveCheckpointDefaults(
     hash: String,
@@ -233,6 +240,18 @@ class DataResolver extends StrictLogging {
       })(contextToReturn)
     }
 
+  def resolveBatchDataByDistance[T <: AnyRef](
+    hashes: List[String],
+    endpoint: String,
+    pool: List[PeerApiClient],
+    priorityClient: Option[PeerApiClient] = None
+  )(
+    contextToReturn: ContextShift[IO]
+  )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[List[T]] =
+    resolveBatchData[T](hashes, endpoint, priorityClient.toList ++ pool.sortBy { p =>
+      Distance.calculate(hashes.head, p.id)
+    })(contextToReturn)
+
   private[p2p] def resolveData[T <: AnyRef](
     hash: String,
     endpoint: String,
@@ -308,15 +327,16 @@ class DataResolver extends StrictLogging {
       val requestHashes = allHashes.filterNot(innerHashes.toSet)
 
       getBatchData[T](requestHashes, endpoint, peer)(contextToReturn).flatMap { data =>
-        logger.info(
-          s"Requested : ${peer.client.hostPortForLogging} : for hashes = $allHashes : and response hashes = ${data.map(_._1)}"
+        logger.debug(
+          s"Requested : ${peer.client.hostPortForLogging} : to endpoint = $endpoint : for hashes = ${requestHashes
+            .mkString(",")} : and response hashes = ${data.size}"
         )
         makeAttempt(filteredPeers, allHashes, innerHashes ++ data.map(_._1), response ++ data.map(_._2))
       }
     }
 
     makeAttempt(sortedPeers, hashes).handleErrorWith(
-      e => IO.delay(logger.info(s"Unexpected error while resolving hashes ${e.getMessage}")) *> IO.raiseError(e)
+      e => IO.delay(logger.error(s"Unexpected error while resolving hashes : ${e.getMessage}")) *> IO.raiseError(e)
     )
   }
 
@@ -332,11 +352,12 @@ class DataResolver extends StrictLogging {
     hashes: List[String],
     endpoint: String,
     peerApiClient: PeerApiClient
-  )(
-    contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[List[(String, T)]] =
-    peerApiClient.client
-      .getNonBlockingIO[List[(String, T)]](s"batch/$endpoint", timeout = apiTimeout)(contextToReturn)
+  )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[List[(String, T)]] =
+    peerApiClient.client.getNonBlockingIO[List[(String, T)]](
+      s"batch/$endpoint",
+      Map("ids" -> hashes.mkString(",")),
+      timeout = apiTimeout
+    )(contextToReturn)
 
   private[p2p] def resolveDataByDistanceFlat[T <: AnyRef](
     hashes: List[String],
@@ -362,7 +383,7 @@ object DataResolver extends DataResolver
 
 case class DataResolutionOutOfPeers(thisNode: String, endpoint: String, hashes: List[String], peers: Iterable[String])
     extends Exception(
-      s"node [$thisNode] Run out of peers when resolving: $endpoint with hash: $hashes following tried: $peers"
+      s"Node [$thisNode] run out of peers when resolving: $endpoint with hashes: $hashes following tried: $peers"
     )
 
 case class DataResolutionNoneResponse(endpoint: String, hash: String, client: PeerApiClient)

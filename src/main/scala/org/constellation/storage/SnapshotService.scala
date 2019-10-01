@@ -399,7 +399,7 @@ class SnapshotService[F[_]: Concurrent](
   private def applySnapshotTransactions(s: Snapshot, cbs: List[CheckpointBlockMetadata]): F[Unit] =
     for {
       txs <- cbs
-        .traverse(_.transactionsMerkleRoot.traverse(checkpointService.fetchTransactions).map(_.getOrElse(List())))
+        .traverse(_.transactionsMerkleRoot.traverse(checkpointService.fetchBatchTransactions).map(_.getOrElse(List())))
         .map(_.flatten)
 
       _ <- txs

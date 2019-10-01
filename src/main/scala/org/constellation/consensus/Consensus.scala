@@ -359,18 +359,16 @@ class Consensus[F[_]: Concurrent](
           t =>
             LiftIO[F].liftIO(
               dataResolver
-                .resolveDataByDistance[T](
+                .resolveBatchDataByDistance[T](
                   List(t._1._1),
                   dataType,
                   readyPeers.values.toList,
                   readyPeers.get(t._1._2.id)
                 )(contextShift)
-                .head
             )
         )
-      _ <- logger.debug(
-        s" ${roundData.roundId} $dataType resolved size ${resolved.size}"
-      )
+        .map(_.flatten)
+      _ <- logger.debug(s" ${roundData.roundId} $dataType resolved size ${resolved.size}")
     } yield resolved.map(resolvedMapper) ++ combined.flatMap(_._2)
 
   private[consensus] def mergeTxProposalsAndBroadcastBlock(): F[Unit] =
@@ -378,7 +376,7 @@ class Consensus[F[_]: Concurrent](
       allPeers <- LiftIO[F].liftIO(dao.peerInfo.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
       proposals <- transactionProposals.get
       transactions <- prepareConsensusData[Transaction, TransactionCacheData](
-        "transaction",
+        "transactions",
         proposals,
         allPeers, { p =>
           p.txHashes
