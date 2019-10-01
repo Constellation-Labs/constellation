@@ -81,7 +81,7 @@ class CheckpointServiceTest
       val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
 
       dao.checkpointService
-        .fetchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot.get)
+        .fetchBatchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot.get)
         .unsafeRunSync() shouldBe txs
     }
 

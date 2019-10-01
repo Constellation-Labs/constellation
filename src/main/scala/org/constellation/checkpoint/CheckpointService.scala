@@ -38,8 +38,10 @@ class CheckpointService[F[_]: Concurrent](
   val contextShift
     : ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki pass from F
 
-  def update(baseHash: String,
-             update: CheckpointCacheMetadata => CheckpointCacheMetadata): F[Option[CheckpointCacheMetadata]] =
+  def update(
+    baseHash: String,
+    update: CheckpointCacheMetadata => CheckpointCacheMetadata
+  ): F[Option[CheckpointCacheMetadata]] =
     memPool.update(baseHash, update)
 
   def put(cbCache: CheckpointCache): F[CheckpointCacheMetadata] =
@@ -60,7 +62,7 @@ class CheckpointService[F[_]: Concurrent](
 
   def convert(merkle: CheckpointCacheMetadata)(implicit dao: DAO): F[CheckpointCache] =
     for {
-      txs <- merkle.checkpointBlock.transactionsMerkleRoot.fold(List[Transaction]().pure[F])(fetchTransactions)
+      txs <- merkle.checkpointBlock.transactionsMerkleRoot.fold(List[Transaction]().pure[F])(fetchBatchTransactions)
       msgs <- merkle.checkpointBlock.messagesMerkleRoot.fold(List[ChannelMessage]().pure[F])(fetchMessages)
       notifications <- merkle.checkpointBlock.notificationsMerkleRoot
         .fold(List[PeerNotification]().pure[F])(fetchNotifications)
@@ -90,12 +92,34 @@ class CheckpointService[F[_]: Concurrent](
       .map(_.toList.sequence)
       .flatten
 
+  def fetchBatch[T, R](
+    merkleRoot: String,
+    service: MerkleStorageAlgebra[F, String, T],
+    mapper: T => R,
+    resolver: List[String] => F[List[T]]
+  ): F[List[R]] =
+    for {
+      hashes <- service.findHashesByMerkleRoot(merkleRoot)
+      lookupForHashes <- hashes.get.toList.traverse(hash => service.lookup(hash).map((hash, _)))
+      resolvedByLookup = lookupForHashes.filter(_._2.isDefined).map(_._2.get)
+      notResolvedByLookup = lookupForHashes.filter(_._2.isEmpty).map(_._1)
+      resolvedByFetch <- resolver(notResolvedByLookup)
+    } yield resolvedByFetch.map(mapper) ++ resolvedByLookup.map(mapper)
+
   def fetchTransactions(merkleRoot: String)(implicit dao: DAO): F[List[Transaction]] =
     fetch[TransactionCacheData, Transaction](
       merkleRoot,
       transactionService,
       (x: TransactionCacheData) => x.transaction,
       (s: String) => LiftIO[F].liftIO(DataResolver.resolveTransactionDefaults(s)(contextShift))
+    )
+
+  def fetchBatchTransactions(merkleRoot: String)(implicit dao: DAO): F[List[Transaction]] =
+    fetchBatch[TransactionCacheData, Transaction](
+      merkleRoot,
+      transactionService,
+      (x: TransactionCacheData) => x.transaction,
+      (s: List[String]) => LiftIO[F].liftIO(DataResolver.resolveBatchTransactionsDefaults(s)(contextShift))
     )
 
   def fetchMessages(merkleRoot: String)(implicit dao: DAO): F[List[ChannelMessage]] =

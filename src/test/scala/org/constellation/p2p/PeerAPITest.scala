@@ -258,7 +258,7 @@ class PeerAPITest
 
           Get(s"/batch/transactions?ids=$hashes") ~> peerAPI.commonEndpoints ~> check {
             status shouldEqual StatusCodes.OK
-            responseAs[List[(String, Option[TransactionCacheData])]].size shouldEqual 1
+            responseAs[List[(String, TransactionCacheData)]].size shouldEqual 1
           }
         }
 
@@ -271,7 +271,7 @@ class PeerAPITest
 
           Get(s"/batch/transactions?ids=$hashes") ~> peerAPI.commonEndpoints ~> check {
             status shouldEqual StatusCodes.OK
-            responseAs[List[(String, Option[TransactionCacheData])]].size shouldEqual 0
+            responseAs[List[(String, TransactionCacheData)]].size shouldEqual 0
           }
         }
       }

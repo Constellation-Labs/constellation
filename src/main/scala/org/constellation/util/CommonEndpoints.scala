@@ -10,6 +10,7 @@ import akka.http.scaladsl.unmarshalling.FromEntityUnmarshaller
 import akka.util.{ByteString, Timeout}
 import cats.effect.IO
 import cats.implicits._
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
@@ -134,9 +135,7 @@ trait CommonEndpoints extends Json4sSupport {
               .toList
               .traverse(id => dao.transactionService.lookup(id).map((id, _)))
               .map(_.filter(_._2.isDefined))
-          )(
-            complete(_)
-          )
+          )(complete(_))
         }
       } ~
       path("message" / Segment) { h =>
