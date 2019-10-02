@@ -18,6 +18,7 @@ import org.constellation.primitives._
 import org.constellation.storage._
 import org.constellation.util.{APIClient, HostPort, Metrics}
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.schema.Id
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
@@ -28,7 +29,7 @@ class CheckpointServiceTest
     with Matchers
     with BeforeAndAfter {
 
-  val readyFacilitators: Map[Schema.Id, PeerData] = prepareFacilitators()
+  val readyFacilitators: Map[Id, PeerData] = prepareFacilitators()
   val soe: SignedObservationEdge = mock[SignedObservationEdge]
 
   implicit val kp: KeyPair = makeKeyPair()
@@ -323,9 +324,9 @@ class CheckpointServiceTest
     dao
   }
 
-  private def prepareFacilitators(): Map[Schema.Id, PeerData] = {
+  private def prepareFacilitators(): Map[Id, PeerData] = {
 
-    val facilitatorId1 = Schema.Id("b")
+    val facilitatorId1 = Id("b")
     val peerData1: PeerData = mock[PeerData]
     peerData1.peerMetadata shouldReturn mock[PeerMetadata]
     peerData1.peerMetadata.id shouldReturn facilitatorId1

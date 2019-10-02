@@ -1,7 +1,7 @@
 package org.constellation.p2p
 
 import cats.effect.{ContextShift, IO}
-import org.constellation.primitives.Schema.Id
+import org.constellation.domain.schema.Id
 import org.constellation.util.{APIClient, PeerApiClient}
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig}
 import org.mockito.IdiomaticMockitoBase.Times

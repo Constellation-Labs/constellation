@@ -6,7 +6,8 @@ import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.TipData
 import org.constellation.p2p.PeerData
-import org.constellation.primitives.Schema.{CheckpointCacheMetadata, Height, Id}
+import org.constellation.primitives.Schema.{CheckpointCacheMetadata, Height}
+import org.constellation.domain.schema.Id
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats

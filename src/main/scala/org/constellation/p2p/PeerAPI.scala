@@ -18,6 +18,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.primitives.Schema._
+import org.constellation.domain.schema.Id
 import org.constellation.primitives._
 import org.constellation.storage._
 import org.constellation.util._
@@ -345,7 +346,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
       }
     }
 
-  private def ipLookup(address: InetSocketAddress): Option[Schema.Id] = {
+  private def ipLookup(address: InetSocketAddress): Option[Id] = {
     val ip = address.getAddress.getHostAddress
 
     def sameHost(p: PeerData) = p.peerMetadata.host == ip

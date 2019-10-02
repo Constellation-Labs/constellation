@@ -13,6 +13,7 @@ import org.constellation.consensus._
 import org.constellation.p2p.Cluster.Peers
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
+import org.constellation.domain.schema.Id
 import org.constellation.primitives._
 import org.constellation.rollback.CannotLoadSnapshotInfoFile
 import org.constellation.serializer.KryoSerializer

@@ -8,7 +8,7 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerRegistrationRequest
-import org.constellation.primitives.Schema._
+import org.constellation.domain.schema.Id
 import org.constellation.util.Metrics
 import org.constellation.ResourceInfo
 import org.constellation.domain.configuration.NodeConfig

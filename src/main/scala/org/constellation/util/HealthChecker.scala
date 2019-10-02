@@ -7,7 +7,8 @@ import io.chrisdavenport.log4cats.Logger
 import org.constellation.consensus.{ConsensusManager, Snapshot}
 import org.constellation.p2p.{DownloadProcess, PeerData}
 import org.constellation.primitives.ConcurrentTipService
-import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
+import org.constellation.primitives.Schema.{NodeState, NodeType}
+import org.constellation.domain.schema.Id
 import org.constellation.storage._
 import org.constellation.util.HealthChecker.maxOrZero
 import org.constellation.{ConstellationExecutionContext, DAO}

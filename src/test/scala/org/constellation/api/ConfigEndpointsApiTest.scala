@@ -9,7 +9,8 @@ import cats.effect.IO
 import org.constellation.crypto.KeyUtils
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.p2p.Cluster
-import org.constellation.primitives.Schema.{Id, NodeState}
+import org.constellation.primitives.Schema.NodeState
+import org.constellation.domain.schema.Id
 import org.constellation.util.Metrics
 import org.constellation.{API, DAO}
 import org.mockito.IdiomaticMockito

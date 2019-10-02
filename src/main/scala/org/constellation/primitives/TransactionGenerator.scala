@@ -10,7 +10,8 @@ import constellation._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.{AddressCacheData, Id, NodeState, NodeType}
+import org.constellation.primitives.Schema.{AddressCacheData, NodeState, NodeType}
+import org.constellation.domain.schema.Id
 import org.constellation.storage.ConsensusStatus.ConsensusStatus
 import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.storage.{AddressService, ConsensusStatus, TransactionService}
@@ -147,13 +148,13 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
       peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd)))
     )
 
-  private def peerData(peers: Set[Schema.Id]): F[List[PeerData]] =
+  private def peerData(peers: Set[Id]): F[List[PeerData]] =
     LiftIO[F].liftIO(dao.peerInfo(NodeType.Full).map(_.filterKeys(peers.contains).values.toList))
 
   private def observeTransaction(transaction: Transaction): F[TransactionCacheData] =
     transactionGossiping.observe(TransactionCacheData(transaction))
 
-  private def selectPeers(transactionCacheData: TransactionCacheData): F[Set[Schema.Id]] =
+  private def selectPeers(transactionCacheData: TransactionCacheData): F[Set[Id]] =
     transactionGossiping.selectPeers(transactionCacheData)(scala.util.Random)
 
   private def putTransaction(tx: Transaction): F[TransactionCacheData] =

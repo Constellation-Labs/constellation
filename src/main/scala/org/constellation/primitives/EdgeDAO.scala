@@ -14,6 +14,7 @@ import org.constellation.consensus._
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._
+import org.constellation.domain.schema.Id
 import org.constellation.rollback.RollbackService
 import org.constellation.storage._
 import org.constellation.storage.external.CloudStorage

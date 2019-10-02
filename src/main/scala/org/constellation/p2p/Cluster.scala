@@ -10,7 +10,8 @@ import constellation._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.p2p.PeerState.PeerState
 import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.{Id, NodeState}
+import org.constellation.primitives.Schema.NodeState
+import org.constellation.domain.schema.Id
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.primitives.{IPManager, Schema}
 import org.constellation.util.Logging._
@@ -504,7 +505,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
 object Cluster {
 
-  type Peers = Map[Schema.Id, PeerData]
+  type Peers = Map[Id, PeerData]
 
   def apply[F[_]: Concurrent: Logger: Timer: ContextShift](metrics: () => Metrics, ipManager: IPManager[F], dao: DAO) =
     new Cluster(ipManager, dao)

@@ -12,6 +12,7 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
+import org.constellation.domain.schema.Id
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Validation.EnrichedFuture

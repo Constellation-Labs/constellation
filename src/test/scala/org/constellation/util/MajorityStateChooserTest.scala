@@ -4,7 +4,7 @@ import cats.effect.{ContextShift, IO}
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConstellationExecutionContext
-import org.constellation.primitives.Schema.Id
+import org.constellation.domain.schema.Id
 import org.constellation.storage.RecentSnapshot
 import org.mockito.ArgumentMatchersSugar
 import org.scalatest.{FunSpecLike, Matchers}
