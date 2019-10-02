@@ -7,10 +7,8 @@ import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.softwaremill.sttp.SttpBackend
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
-import com.softwaremill.sttp.prometheus.PrometheusBackend
 import org.constellation.storage.RecentSnapshot
-import org.constellation.util.HostPort
-import org.scalatest.{BeforeAndAfterAll, FreeSpec, FreeSpecLike}
+import org.scalatest.{BeforeAndAfterAll, FreeSpecLike}
 
 import scala.concurrent.Future
 

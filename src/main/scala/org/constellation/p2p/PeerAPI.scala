@@ -6,10 +6,10 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{path, _}
-import akka.http.scaladsl.server.{Directive0, ExceptionHandler, Route}
+import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.util.Timeout
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import cats.implicits._
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
@@ -17,8 +17,8 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.consensus.{ConsensusRoute, _}
-import org.constellation.primitives.Schema._
 import org.constellation.domain.schema.Id
+import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage._
 import org.constellation.util._
@@ -26,8 +26,7 @@ import org.constellation.{ConstellationExecutionContext, DAO, ResourceInfo}
 import org.json4s.native
 import org.json4s.native.Serialization
 
-import scala.concurrent.Future
-import scala.util.{Failure, Random, Success}
+import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long)
 
@@ -269,16 +268,10 @@ class PeerAPI(override val ipManager: IPManager[IO])(
             }
         }
     }
-
-  private[p2p] def makeCallback(u: URI, entity: AnyRef) =
-    APIClient(u.getHost, u.getPort)(dao.backend, dao)
-      .postNonBlockingUnit(u.getPath, entity)
-
   private val blockBuildingRoundRoute =
     createRoute(ConsensusRoute.pathPrefix)(
       () => new ConsensusRoute(dao.consensusManager, dao.snapshotService, dao.backend).createBlockBuildingRoundRoutes()
     )
-
   private[p2p] val mixedEndpoints = {
     path("transaction") {
       put {
@@ -334,6 +327,10 @@ class PeerAPI(override val ipManager: IPManager[IO])(
       }
     }
 
+  private[p2p] def makeCallback(u: URI, entity: AnyRef) =
+    APIClient(u.getHost, u.getPort)(dao.backend, dao)
+      .postNonBlockingUnit(u.getPath, entity)
+
   private def getHostAndPortFromRemoteAddress(clientIP: RemoteAddress) =
     clientIP.toOption.map { z =>
       PeerIPData(z.getHostAddress, Some(clientIP.getPort()))
@@ -346,14 +343,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
       }
     }
 
-  private def ipLookup(address: InetSocketAddress): Option[Id] = {
-    val ip = address.getAddress.getHostAddress
-
-    def sameHost(p: PeerData) = p.peerMetadata.host == ip
-
-    dao.peerInfo.unsafeRunSync().find(p => sameHost(p._2)).map(_._1)
-  }
-
   def exceptionHandler: ExceptionHandler =
     ExceptionHandler {
       case e: Exception =>
@@ -362,4 +351,12 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           complete(HttpResponse(StatusCodes.InternalServerError))
         }
     }
+
+  private def ipLookup(address: InetSocketAddress): Option[Id] = {
+    val ip = address.getAddress.getHostAddress
+
+    def sameHost(p: PeerData) = p.peerMetadata.host == ip
+
+    dao.peerInfo.unsafeRunSync().find(p => sameHost(p._2)).map(_._1)
+  }
 }

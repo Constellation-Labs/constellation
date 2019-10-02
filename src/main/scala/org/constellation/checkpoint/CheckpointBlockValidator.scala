@@ -263,7 +263,7 @@ class CheckpointBlockValidator[F[_]: Sync](
                       tail ++ parents,
                       accu ++ cb.transactions.map(_.hash),
                       isIn
-                  )
+                    )
                 )
             }
 
