@@ -6,7 +6,8 @@ import java.util.Random
 
 import constellation._
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.Schema.{Id, SendToAddress}
+import org.constellation.primitives.Schema.SendToAddress
+import org.constellation.domain.schema.Id
 import org.constellation.primitives.Transaction
 import org.constellation.util.{APIClient, SignHelp}
 

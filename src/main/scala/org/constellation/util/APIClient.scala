@@ -4,7 +4,8 @@ import cats.effect.{Async, ContextShift, Effect, IO}
 import com.softwaremill.sttp._
 import com.typesafe.config.ConfigFactory
 import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
-import org.constellation.primitives.Schema.{Id, MetricsResult}
+import org.constellation.primitives.Schema.MetricsResult
+import org.constellation.domain.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.{ConstellationExecutionContext, DAO}
 import org.json4s.Formats

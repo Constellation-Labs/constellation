@@ -6,7 +6,8 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.ConsensusManager
 import org.constellation.p2p.{Cluster, DownloadProcess}
 import org.constellation.primitives.ConcurrentTipService
-import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
+import org.constellation.primitives.Schema.{NodeState, NodeType}
+import org.constellation.domain.schema.Id
 import org.constellation.storage.RecentSnapshot
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig}
 import org.mockito.cats.IdiomaticMockitoCats

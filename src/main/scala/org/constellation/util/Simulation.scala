@@ -7,6 +7,7 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.PeerMetadata
 import org.constellation.primitives.Schema._
+import org.constellation.domain.schema.Id
 import org.constellation.primitives._
 import org.slf4j.LoggerFactory
 
@@ -203,7 +204,7 @@ object Simulation {
             s =>
               s.forall { res =>
                 res.forall(_._2) && res.size == apis.size - 1
-            }
+              }
           )
       },
       maxRetries,

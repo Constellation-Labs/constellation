@@ -16,7 +16,8 @@ import org.constellation.consensus.ConsensusManager.{
   BroadcastUnionBlockProposal
 }
 import org.constellation.p2p.{DataResolver, PeerData, PeerNotification}
-import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, Id, TypedEdgeHash}
+import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, TypedEdgeHash}
+import org.constellation.domain.schema.Id
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage._
@@ -544,7 +545,7 @@ object Consensus {
     val TIMEOUT, BEHIND, FINISHED = Value
   }
 
-  case class FacilitatorId(id: Schema.Id) extends AnyVal
+  case class FacilitatorId(id: Id) extends AnyVal
   case class RoundId(id: String) extends AnyVal
 
   case class UnionProposals(state: StageState)

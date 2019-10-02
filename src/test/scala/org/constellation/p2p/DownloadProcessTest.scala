@@ -1,6 +1,7 @@
 package org.constellation.p2p
 import cats.effect.IO
 import org.constellation.consensus.{Snapshot, SnapshotInfo}
+import org.constellation.domain.schema.Id
 import org.constellation.primitives.Schema
 import org.constellation.serializer.KryoSerializer
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
@@ -20,7 +21,7 @@ class DownloadProcessTest extends FunSuite with IdiomaticMockito with ArgumentMa
 
   val snapInfo: SnapshotInfo = SnapshotInfo(new Snapshot("abc", Seq.empty[String]))
 
-  val peers: Map[Schema.Id, PeerData] = TestHelpers.prepareFacilitators(3)
+  val peers: Map[Id, PeerData] = TestHelpers.prepareFacilitators(3)
 
   val snapshotsProcessor: SnapshotsProcessor[IO] =
     new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotRandomly[IO])

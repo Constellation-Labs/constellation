@@ -15,6 +15,7 @@ import cats.implicits._
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
+import org.constellation.domain.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.VerificationStatus
 import org.constellation.util.{KeySerializeJSON, POWExt, SignHelpExt}

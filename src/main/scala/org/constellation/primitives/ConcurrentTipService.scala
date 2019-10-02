@@ -10,7 +10,8 @@ import io.chrisdavenport.log4cats.Logger
 import org.constellation.checkpoint.CheckpointParentService
 import org.constellation.consensus.TipData
 import org.constellation.p2p.PeerData
-import org.constellation.primitives.Schema.{Height, Id, SignedObservationEdge}
+import org.constellation.primitives.Schema.{Height, SignedObservationEdge}
+import org.constellation.domain.schema.Id
 import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
 import org.constellation.util.Logging._
 import org.constellation.util.Metrics

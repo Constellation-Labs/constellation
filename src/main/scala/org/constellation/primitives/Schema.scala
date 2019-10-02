@@ -6,6 +6,7 @@ import com.google.common.hash.Hashing
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.hexToPublicKey
+import org.constellation.domain.schema.Id
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 
@@ -253,31 +254,6 @@ object Schema {
   case class InternalHeartbeat(round: Long = 0L)
 
   case class MetricsResult(metrics: Map[String, String])
-
-  case class Id(hex: String) {
-
-    @transient
-    val short: String = hex.toString.slice(0, 5)
-
-    @transient
-    val medium: String = hex.toString.slice(0, 10)
-
-    @transient
-    lazy val address: String = KeyUtils.publicKeyToAddressString(toPublicKey)
-
-    @transient
-    lazy val toPublicKey: PublicKey = hexToPublicKey(hex)
-
-    @transient
-    lazy val bytes: Array[Byte] = KeyUtils.hex2bytes(hex)
-
-    @transient
-    lazy val bigInt: BigInt = BigInt(bytes)
-
-    @transient
-    lazy val distance: BigInt = BigInt(Hashing.sha256.hashBytes(toPublicKey.getEncoded).asBytes())
-
-  }
 
   case class Node(address: String, host: String, port: Int)
 
