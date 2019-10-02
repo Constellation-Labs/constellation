@@ -5,15 +5,14 @@ import java.time.LocalDateTime
 import cats.effect.{Concurrent, ContextShift, Sync, Timer}
 import cats.implicits._
 import com.softwaremill.sttp.Response
-import com.typesafe.config.Config
 import constellation._
 import io.chrisdavenport.log4cats.Logger
-import org.constellation.p2p.PeerState.PeerState
-import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.NodeState
 import org.constellation.domain.schema.Id
+import org.constellation.p2p.PeerState.PeerState
+import org.constellation.primitives.IPManager
+import org.constellation.primitives.Schema.NodeState
+import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.concurrency.SingleRef
-import org.constellation.primitives.{IPManager, Schema}
 import org.constellation.util.Logging._
 import org.constellation.util._
 import org.constellation.{ConstellationExecutionContext, DAO, PeerMetadata}
@@ -77,6 +76,19 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       "cluster_updatePeerNotifications"
     )
 
+  def updatePeerInfo(peerData: PeerData): F[Unit] =
+    logThread(
+      for {
+        _ <- peers.modify(p => (p + (peerData.client.id -> peerData), p))
+        ip = peerData.client.hostName
+        _ <- ipManager.addKnownIP(ip)
+        _ <- Logger[F].info(s"Added $ip to known peers.")
+        _ <- updateMetrics()
+        _ <- updatePersistentStore()
+      } yield (),
+      "cluster_updatePeerInfo"
+    )
+
   def removePeerRequest(hp: Option[HostPort], id: Option[Id]): F[Unit] = {
     def filter(p: Map[Id, PeerData]) = p.filter {
       case (pid, d) =>
@@ -104,6 +116,23 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       "cluster_removePeerRequest"
     )
   }
+
+  private def updateMetrics(): F[Unit] =
+    peers.get.flatMap { p =>
+      dao.metrics.updateMetricAsync[F](
+        "peers",
+        p.map {
+          case (idI, clientI) =>
+            val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort - 1}"
+            s"${idI.short} API: $addr"
+        }.mkString(" --- ")
+      )
+    }
+
+  private def updatePersistentStore(): F[Unit] =
+    peers.get.flatMap { p =>
+      Sync[F].delay(dao.peersInfoPath.write(p.values.toSeq.map(_.peerMetadata).json))
+    }
 
   def setNodeStatus(id: Id, state: NodeState): F[Unit] =
     logThread(
@@ -262,36 +291,6 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       "cluster_forgetPeer"
     )
 
-  def updatePeerInfo(peerData: PeerData): F[Unit] =
-    logThread(
-      for {
-        _ <- peers.modify(p => (p + (peerData.client.id -> peerData), p))
-        ip = peerData.client.hostName
-        _ <- ipManager.addKnownIP(ip)
-        _ <- Logger[F].info(s"Added $ip to known peers.")
-        _ <- updateMetrics()
-        _ <- updatePersistentStore()
-      } yield (),
-      "cluster_updatePeerInfo"
-    )
-
-  private def updateMetrics(): F[Unit] =
-    peers.get.flatMap { p =>
-      dao.metrics.updateMetricAsync[F](
-        "peers",
-        p.map {
-          case (idI, clientI) =>
-            val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort - 1}"
-            s"${idI.short} API: $addr"
-        }.mkString(" --- ")
-      )
-    }
-
-  private def updatePersistentStore(): F[Unit] =
-    peers.get.flatMap { p =>
-      Sync[F].delay(dao.peersInfoPath.write(p.values.toSeq.map(_.peerMetadata).json))
-    }
-
   def hostPort(hp: HostPort): F[Unit] =
     logThread(
       for {
@@ -417,6 +416,32 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       "cluster_addToPeer"
     )
 
+  def join(hp: HostPort): F[Unit] = {
+    implicit val ec = ConstellationExecutionContext.bounded
+
+    logThread(attemptRegisterPeer(hp) >> Sync[F].delay(Download.download()), "cluster_join")
+  }
+
+  def leave(gracefulShutdown: => F[Unit]): F[Unit] =
+    logThread(
+      for {
+        _ <- Logger[F].info("Trying to gracefully leave the cluster")
+
+        _ <- broadcastLeaveRequest()
+        _ <- setNodeState(NodeState.Leaving)
+        _ <- broadcastNodeState()
+
+        // TODO: use wkoszycki changes for waiting for last n snapshots
+        _ <- Timer[F].sleep(dao.processingConfig.leavingStandbyTimeout.seconds)
+
+        _ <- setNodeState(NodeState.Offline)
+        _ <- broadcastNodeState()
+
+        _ <- gracefulShutdown
+      } yield (),
+      "cluster_leave"
+    )
+
   def broadcastNodeState(): F[Unit] =
     logThread(
       getNodeState.flatMap { nodeState =>
@@ -454,32 +479,6 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
           .map(v => keys.zip(v).toMap)
       } yield res,
       "cluster_broadcast"
-    )
-
-  def join(hp: HostPort): F[Unit] = {
-    implicit val ec = ConstellationExecutionContext.bounded
-
-    logThread(attemptRegisterPeer(hp) >> Sync[F].delay(Download.download()), "cluster_join")
-  }
-
-  def leave(gracefulShutdown: => F[Unit]): F[Unit] =
-    logThread(
-      for {
-        _ <- Logger[F].info("Trying to gracefully leave the cluster")
-
-        _ <- broadcastLeaveRequest()
-        _ <- setNodeState(NodeState.Leaving)
-        _ <- broadcastNodeState()
-
-        // TODO: use wkoszycki changes for waiting for last n snapshots
-        _ <- Timer[F].sleep(dao.processingConfig.leavingStandbyTimeout.seconds)
-
-        _ <- setNodeState(NodeState.Offline)
-        _ <- broadcastNodeState()
-
-        _ <- gracefulShutdown
-      } yield (),
-      "cluster_leave"
     )
 
   private def broadcastLeaveRequest(): F[Unit] = {

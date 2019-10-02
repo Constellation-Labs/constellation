@@ -12,30 +12,28 @@ import org.scalatest.{BeforeAndAfterAll, CancelAfterFailure, FlatSpecLike}
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration.{FiniteDuration, _}
-import scala.concurrent.{Await, ExecutionContextExecutor, Future}
+import scala.concurrent.{Await, Future}
 
 class ClusterHealthCheckTest
     extends TestKit(ActorSystem("ClusterHealthCheckTest"))
     with FlatSpecLike
     with BeforeAndAfterAll
     with CancelAfterFailure {
-
-  override def afterAll {
-    TestKit.shutdownActorSystem(system)
-  }
+  val logger = Logger(LoggerFactory.getLogger(getClass.getName))
 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
 
   implicit val backend: SttpBackend[Future, Nothing] =
     PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
-
-  val logger = Logger(LoggerFactory.getLogger(getClass.getName))
-
   val (ignoreIPs, auxAPIs) = ComputeTestUtil.getAuxiliaryNodes()
 
   val apis: Seq[APIClient] = ComputeTestUtil.createApisFromIpFile(
     ignoreIPs
   )
+
+  override def afterAll {
+    TestKit.shutdownActorSystem(system)
+  }
 
   "All nodes" should "have valid metrics" in {
     HealthChecker.checkAllMetrics(apis) match {

@@ -12,27 +12,20 @@ import org.constellation.util.Simulation._
 import org.scalatest.{BeforeAndAfterAll, CancelAfterFailure, FlatSpecLike}
 import org.slf4j.LoggerFactory
 
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.Future
 
 class ClusterRestoreStateTest
     extends TestKit(ActorSystem("ClusterRestoreStateTest"))
     with FlatSpecLike
     with BeforeAndAfterAll
     with CancelAfterFailure {
-
-  override def afterAll {
-    TestKit.shutdownActorSystem(system)
-  }
+  val logger = Logger(LoggerFactory.getLogger(getClass.getName))
 
   implicit val materialize: ActorMaterializer = ActorMaterializer()
 
   implicit val backend: SttpBackend[Future, Nothing] =
     PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
-
-  val logger = Logger(LoggerFactory.getLogger(getClass.getName))
-
   val (ignoreIPs, auxAPIs) = ComputeTestUtil.getAuxiliaryNodes()
-
   val apis: Seq[APIClient] = ComputeTestUtil.createApisFromIpFile(ignoreIPs)
 
   val peerRequests: Seq[PeerMetadata] = apis.map { a =>
@@ -42,6 +35,10 @@ class ClusterRestoreStateTest
       a.id,
       resourceInfo = ResourceInfo(diskUsableBytes = 1073741824)
     )
+  }
+
+  override def afterAll {
+    TestKit.shutdownActorSystem(system)
   }
 
   "Cluster integration" should "should restore state" in {
