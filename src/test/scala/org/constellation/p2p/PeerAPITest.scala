@@ -132,14 +132,16 @@ class PeerAPITest
       val path = "/snapshot/verify"
 
       "should return correct state" in {
-        dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF List(
+        val recent = List(
           RecentSnapshot("snap2", 4),
           RecentSnapshot("snap1", 2)
         )
 
+        dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF recent
+
         Post(path, request) ~> peerAPI.postEndpoints ~> check {
           status shouldEqual StatusCodes.OK
-          responseAs[SnapshotVerification] shouldBe SnapshotVerification(SnapshotCorrect)
+          responseAs[SnapshotVerification] shouldBe SnapshotVerification(dao.id, SnapshotCorrect, recent)
         }
       }
 
@@ -148,16 +150,17 @@ class PeerAPITest
 
         Post(path, request) ~> peerAPI.postEndpoints ~> check {
           status shouldEqual StatusCodes.OK
-          responseAs[SnapshotVerification] shouldBe SnapshotVerification(SnapshotInvalid)
+          responseAs[SnapshotVerification] shouldBe SnapshotVerification(dao.id, SnapshotInvalid, List.empty)
         }
       }
 
       "should return height above state when given height is above current" in {
-        dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF List(RecentSnapshot("snap2", 1))
+        val recent = List(RecentSnapshot("snap2", 1))
+        dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF recent
 
         Post(path, request) ~> peerAPI.postEndpoints ~> check {
           status shouldEqual StatusCodes.OK
-          responseAs[SnapshotVerification] shouldBe SnapshotVerification(SnapshotHeightAbove)
+          responseAs[SnapshotVerification] shouldBe SnapshotVerification(dao.id, SnapshotHeightAbove, recent)
         }
       }
     }
@@ -300,6 +303,7 @@ class PeerAPITest
     val cluster = Cluster[IO](() => metrics, ipManager, dao)
     dao.cluster shouldReturn cluster
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
+    dao.peerInfo shouldReturnF Map()
 
     dao.snapshotService shouldReturn mock[SnapshotService[IO]]
     dao.checkpointAcceptanceService shouldReturn mock[CheckpointAcceptanceService[IO]]

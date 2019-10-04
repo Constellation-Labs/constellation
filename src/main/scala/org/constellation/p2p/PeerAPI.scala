@@ -117,12 +117,22 @@ class PeerAPI(override val ipManager: IPManager[IO])(
             APIDirective.handle(
               dao.snapshotBroadcastService.getRecentSnapshots
             ) { result =>
+              // TODO: wkoszycki maybe move it SnapshotBroadcastService ?
               val response = result match {
                 case lastSnap :: _ if lastSnap.height < s.height =>
-                  SnapshotVerification(VerificationStatus.SnapshotHeightAbove)
+                  if (lastSnap.height + dao.processingConfig.snapshotHeightRedownloadDelayInterval < s.height) {
+                    (IO
+                      .contextShift(ConstellationExecutionContext.bounded)
+                      .shift >> dao.snapshotBroadcastService.verifyRecentSnapshots()).unsafeRunAsyncAndForget
+                  }
+                  SnapshotVerification(dao.id, VerificationStatus.SnapshotHeightAbove, result)
                 case list if list.contains(RecentSnapshot(s.snapshot, s.height)) =>
-                  SnapshotVerification(VerificationStatus.SnapshotCorrect)
-                case _ => SnapshotVerification(VerificationStatus.SnapshotInvalid)
+                  SnapshotVerification(dao.id, VerificationStatus.SnapshotCorrect, result)
+                case _ =>
+                  (IO
+                    .contextShift(ConstellationExecutionContext.bounded)
+                    .shift >> dao.snapshotBroadcastService.verifyRecentSnapshots()).unsafeRunAsyncAndForget
+                  SnapshotVerification(dao.id, VerificationStatus.SnapshotInvalid, result)
               }
               complete(response)
             }
