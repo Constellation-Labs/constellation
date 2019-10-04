@@ -64,7 +64,7 @@ object ConstellationNode extends IOApp {
 
   private def getHostName[F[_]: Sync](cliConfig: CliConfig): F[String] = Sync[F].delay {
     Option(cliConfig.externalIp)
-      .map(_.getHostName)
+      .map(_.getHostAddress)
       .getOrElse(Try(File(LocalConfigFile).lines.mkString.x[LocalNodeConfig].externalIP).getOrElse("127.0.0.1"))
   }
 

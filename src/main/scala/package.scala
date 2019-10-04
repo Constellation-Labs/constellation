@@ -143,7 +143,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   }
 
   def pprintInet(inetSocketAddress: InetSocketAddress): String =
-    s"address: ${inetSocketAddress.getAddress}, hostname: ${inetSocketAddress.getHostName}, " +
+    s"address: ${inetSocketAddress.getAddress}, hostname: ${inetSocketAddress.getAddress.getHostAddress}, " +
       s"hostString: ${inetSocketAddress.getHostString}, port: ${inetSocketAddress.getPort}"
 
   implicit def pubKeyToAddress(key: PublicKey): AddressMetaData =
