@@ -355,20 +355,16 @@ class Consensus[F[_]: Concurrent](
       _ <- logger.debug(
         s"Consensus with id ${roundData.roundId} $dataType to resolve size ${toResolve.size} total size ${combined.size}"
       )
-      resolved <- toResolve
-        .traverse(
-          t =>
-            LiftIO[F].liftIO(
-              dataResolver
-                .resolveBatchDataByDistance[T](
-                  List(t._1._1),
-                  dataType,
-                  readyPeers.values.toList,
-                  readyPeers.get(t._1._2.id)
-                )(contextShift)
-            )
-        )
-        .map(_.flatten)
+
+      hashesToResolve = toResolve.map(_._1._1)
+      resolved <- LiftIO[F].liftIO(
+        dataResolver.resolveBatchDataByDistance[T](
+          hashesToResolve,
+          dataType,
+          readyPeers.values.toList
+        )(contextShift)
+      )
+
       _ <- logger.debug(s" ${roundData.roundId} $dataType resolved size ${resolved.size}")
     } yield resolved.map(resolvedMapper) ++ combined.flatMap(_._2)
 
