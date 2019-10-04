@@ -57,7 +57,7 @@
         <appender-ref ref="json"/>
     </logger>
 
-    <logger name="org.constellation" level="debug">
+    <logger name="org.constellation" level="info">
         <appender-ref ref="rollingFile"/>
         <appender-ref ref="console" />
     </logger>

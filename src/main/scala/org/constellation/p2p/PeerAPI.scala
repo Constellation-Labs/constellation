@@ -119,6 +119,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
             ) { result =>
               // TODO: wkoszycki maybe move it SnapshotBroadcastService ?
               val response = result match {
+                case Nil => SnapshotVerification(dao.id, VerificationStatus.SnapshotHeightAbove, result)
                 case lastSnap :: _ if lastSnap.height < s.height =>
                   if (lastSnap.height + dao.processingConfig.snapshotHeightRedownloadDelayInterval < s.height) {
                     (IO
@@ -277,7 +278,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
           implicit val random: Random = scala.util.Random
 
-          /* TEMPORARY DISABLED
+          /* TEMPORARY DISABLED todo: enable ignored tests as well org/constellation/p2p/PeerAPITest.scala:196
           val rebroadcast = for {
             tcd <- dao.transactionGossiping.observe(TransactionCacheData(gossip.tx, path = gossip.path))
             peers <- dao.transactionGossiping.selectPeers(tcd)

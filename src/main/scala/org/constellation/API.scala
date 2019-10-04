@@ -69,12 +69,12 @@ object ProcessingConfig {
     emptyTransactionsRounds = 2,
     amountTransactionsRounds = 2,
     metricCheckInterval = 10,
-    maxWidth = 4,
+    maxWidth = 6,
     maxMemPoolSize = 15,
     minPeerTimeAddedSeconds = 1,
     snapshotInterval = 2,
     snapshotHeightInterval = 2,
-    snapshotHeightDelayInterval = 1,
+    snapshotHeightDelayInterval = 4,
     roundsPerMessage = 1,
     leavingStandbyTimeout = 3
   )

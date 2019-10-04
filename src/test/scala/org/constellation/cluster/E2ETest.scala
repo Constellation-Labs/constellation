@@ -13,7 +13,10 @@ import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.RecentSnapshot
-import org.constellation.util.{APIClient, Simulation}
+import org.constellation.util.{APIClient, Metrics, Simulation}
+import scala.concurrent.duration._
+
+import scala.concurrent.Await
 
 class E2ETest extends E2E {
 
@@ -116,26 +119,26 @@ class E2ETest extends E2E {
     Simulation.disableCheckpointFormation(allAPIs)
     Simulation.logger.info("Stopping checkpoint formation to run parity check")
 
-//    TODO: Fix when  issue #527 is finished
-//    Simulation.awaitConditionMet(
-//      "Accepted checkpoint blocks number differs across the nodes",
-//      allAPIs.map { p =>
-//        val n = Await.result(p.metricsAsync, 5 seconds)(Metrics.checkpointAccepted)
-//        Simulation.logger.info(s"peer ${p.id} has $n accepted cbs")
-//        n
-//      }.distinct.size == 1,
-//      maxRetries = 10,
-//      delay = 10000
-//    )
-//
-//    Simulation.awaitConditionMet(
-//      "Accepted transactions number differs across the nodes",
-//      allAPIs.map { a =>
-//        Await.result(a.metricsAsync, 5 seconds).get("transactionAccepted").toList
-//      }.distinct.size == 1,
-//      maxRetries = 6,
-//      delay = 10000
-//    )
+//    TODO: It can fail when redownload occurs fix when  issue #527 is finished
+    Simulation.awaitConditionMet(
+      "Accepted checkpoint blocks number differs across the nodes",
+      allAPIs.map { p =>
+        val n = Await.result(p.metricsAsync, 5 seconds)(Metrics.checkpointAccepted)
+        Simulation.logger.info(s"peer ${p.id} has $n accepted cbs")
+        n
+      }.distinct.size == 1,
+      maxRetries = 10,
+      delay = 10000
+    )
+
+    Simulation.awaitConditionMet(
+      "Accepted transactions number differs across the nodes",
+      allAPIs.map { a =>
+        Await.result(a.metricsAsync, 5 seconds).get("transactionAccepted").toList
+      }.distinct.size == 1,
+      maxRetries = 6,
+      delay = 10000
+    )
 
     Simulation.awaitConditionMet(
       "Snapshot hashes differs across cluster",
@@ -154,6 +157,11 @@ class E2ETest extends E2E {
       _.simpleDownload()
     }
 
+    storedSnapshots.foreach { s =>
+      println("stored snaps =========")
+      s.foreach(ss => println(ss.snapshot.hash))
+    }
+
     // constellationAppSim.dumpJson(storedSnapshots)
     if (storeData) saveState(allAPIs)
 
@@ -163,7 +171,7 @@ class E2ETest extends E2E {
     val snaps = storedSnapshots.toSet.map { x: Seq[StoredSnapshot] => // May need to temporarily ignore messages for partitioning changes?
       x.map {
         _.checkpointCache.flatMap {
-          _.checkpointBlock
+          _.checkpointBlock.map(_.baseHash) // TODO: wkoszycki explain the reason behind CheckpointblockCache data distinct doesn't work
         }
       }.toSet
     }

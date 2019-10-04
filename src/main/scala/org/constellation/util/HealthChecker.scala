@@ -168,7 +168,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
     peers: Map[Id, PeerData]
   ): F[Unit] = {
     val reDownload = for {
-      _ <- Logger[F].info(s"[${dao.id.short}] Starting re-download process")
+      _ <- Logger[F].info(s"[${dao.id.short}] Starting re-download process ${diff.snapshotsToDownload.size}")
 
       _ <- downloader.setNodeState(NodeState.DownloadInProgress)
       _ <- Logger[F].debug(s"[${dao.id.short}] NodeState set to DownloadInProgress")
