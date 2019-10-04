@@ -123,18 +123,6 @@ trait CommonEndpoints extends Json4sSupport {
       path("transaction" / Segment) { h =>
         APIDirective.handle(dao.transactionService.lookup(h))(complete(_))
       } ~
-      path("batch" / "transactions") {
-        parameter("ids") { ids =>
-          dao.metrics.incrementMetric(Metrics.batchTransactionEndpoint)
-          APIDirective.handle(
-            ids
-              .split(",")
-              .toList
-              .traverse(id => dao.transactionService.lookup(id).map((id, _)))
-              .map(_.filter(_._2.isDefined))
-          )(complete(_))
-        }
-      } ~
       path("message" / Segment) { h =>
         APIDirective.handle(dao.messageService.memPool.lookup(h))(complete(_))
       } ~
@@ -147,5 +135,17 @@ trait CommonEndpoints extends Json4sSupport {
       path("observation" / Segment) { h =>
         APIDirective.handle(dao.observationService.lookup(h))(complete(_))
       }
+  }
+
+  val batchEndpoints: Route = post {
+    path("batch" / "transactions") {
+      entity(as[List[String]]) { ids =>
+        dao.metrics.incrementMetric(Metrics.batchTransactionEndpoint)
+
+        APIDirective.handle(
+          ids.traverse(id => dao.transactionService.lookup(id).map((id, _))).map(_.filter(_._2.isDefined))
+        )(complete(_))
+      }
+    }
   }
 }

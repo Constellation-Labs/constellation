@@ -247,13 +247,14 @@ class DataResolver extends StrictLogging {
     priorityClient: Option[PeerApiClient] = None
   )(
     contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[List[T]] = {
-    if (hashes.isEmpty) List.empty.pure[IO]
-
-    resolveBatchData[T](hashes, endpoint, priorityClient.toList ++ pool.sortBy { p =>
-      Distance.calculate(hashes.head, p.id)
-    })(contextToReturn)
-  }
+  )(implicit apiTimeout: Duration = 30.seconds, m: Manifest[T], dao: DAO): IO[List[T]] =
+    hashes match {
+      case Nil => List.empty.pure[IO]
+      case _ =>
+        resolveBatchData[T](hashes, endpoint, priorityClient.toList ++ pool.sortBy { p =>
+          Distance.calculate(hashes.head, p.id)
+        })(contextToReturn)
+    }
 
   private[p2p] def resolveData[T <: AnyRef](
     hash: String,
@@ -356,9 +357,9 @@ class DataResolver extends StrictLogging {
     endpoint: String,
     peerApiClient: PeerApiClient
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[List[(String, T)]] =
-    peerApiClient.client.getNonBlockingIO[List[(String, T)]](
+    peerApiClient.client.postNonBlockingIO[List[(String, T)]](
       s"batch/$endpoint",
-      Map("ids" -> hashes.mkString(",")),
+      hashes,
       timeout = apiTimeout
     )(contextToReturn)
 

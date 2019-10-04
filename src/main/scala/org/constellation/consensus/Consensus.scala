@@ -330,7 +330,7 @@ class Consensus[F[_]: Concurrent](
     } yield ()
   }
 
-  private[consensus] def prepareConsensusData[A, T <: AnyRef](
+  private[consensus] def prepareConsensusBatchData[A, T <: AnyRef](
     dataType: String,
     proposals: Map[FacilitatorId, LightTransactionsProposal],
     readyPeers: Map[Id, PeerApiClient],
@@ -340,9 +340,7 @@ class Consensus[F[_]: Concurrent](
     resolvedMapper: T => A
   )(implicit m: Manifest[T]): F[List[A]] =
     for {
-      _ <- logger.debug(
-        s" ${roundData.roundId} preparing $dataType "
-      )
+      _ <- logger.debug(s" ${roundData.roundId} preparing $dataType ")
       hashes = proposals.mapValues(mapHashes)
       combined <- (hashes + (roundData.facilitatorId -> (hashes
         .getOrElse(roundData.facilitatorId, Seq.empty) ++ startingHashes)))
@@ -355,7 +353,6 @@ class Consensus[F[_]: Concurrent](
       _ <- logger.debug(
         s"Consensus with id ${roundData.roundId} $dataType to resolve size ${toResolve.size} total size ${combined.size}"
       )
-
       hashesToResolve = toResolve.map(_._1._1)
       resolved <- LiftIO[F].liftIO(
         dataResolver.resolveBatchDataByDistance[T](
@@ -364,7 +361,46 @@ class Consensus[F[_]: Concurrent](
           readyPeers.values.toList
         )(contextShift)
       )
+      _ <- logger.debug(s" ${roundData.roundId} $dataType resolved size ${resolved.size}")
+    } yield resolved.map(resolvedMapper) ++ combined.flatMap(_._2)
 
+  private[consensus] def prepareConsensusData[A, T <: AnyRef](
+    dataType: String,
+    proposals: Map[FacilitatorId, LightTransactionsProposal],
+    readyPeers: Map[Id, PeerApiClient],
+    mapHashes: LightTransactionsProposal => Seq[String],
+    startingHashes: Traversable[String],
+    lookupService: String => F[Option[A]],
+    resolvedMapper: T => A
+  )(implicit m: Manifest[T]): F[List[A]] =
+    for {
+      _ <- logger.debug(s" ${roundData.roundId} preparing $dataType ")
+      hashes = proposals.mapValues(mapHashes)
+      combined <- (hashes + (roundData.facilitatorId -> (hashes
+        .getOrElse(roundData.facilitatorId, Seq.empty) ++ startingHashes)))
+        .map(x => x._2.map(t => (t, x._1)))
+        .flatten
+        .toList
+        .distinct
+        .traverse(x => lookupService(x._1).map((x, _)))
+      toResolve = combined.filter(_._2.isEmpty)
+      _ <- logger.debug(
+        s"Consensus with id ${roundData.roundId} $dataType to resolve size ${toResolve.size} total size ${combined.size}"
+      )
+      resolved <- toResolve
+        .traverse(
+          t =>
+            LiftIO[F].liftIO(
+              dataResolver
+                .resolveDataByDistance[T](
+                  List(t._1._1),
+                  dataType,
+                  readyPeers.values.toList,
+                  readyPeers.get(t._1._2.id)
+                )(contextShift)
+                .head
+            )
+        )
       _ <- logger.debug(s" ${roundData.roundId} $dataType resolved size ${resolved.size}")
     } yield resolved.map(resolvedMapper) ++ combined.flatMap(_._2)
 
@@ -372,7 +408,7 @@ class Consensus[F[_]: Concurrent](
     for {
       allPeers <- LiftIO[F].liftIO(dao.peerInfo.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
       proposals <- transactionProposals.get
-      transactions <- prepareConsensusData[Transaction, TransactionCacheData](
+      transactions <- prepareConsensusBatchData[Transaction, TransactionCacheData](
         "transactions",
         proposals,
         allPeers, { p =>

@@ -311,7 +311,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     decodeRequest {
       encodeResponse {
         // rejectBannedIP {
-        signEndpoints ~ commonEndpoints ~
+        signEndpoints ~ commonEndpoints ~ batchEndpoints ~
           withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.unbounded) {
             enforceKnownIP(address) {
               getEndpoints(address) ~ postEndpoints ~ mixedEndpoints ~ blockBuildingRoundRoute
