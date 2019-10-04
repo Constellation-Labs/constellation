@@ -184,12 +184,7 @@ class ConstellationNode(
 
   // Setup http server for peer API
   // TODO: Add shutdown mechanism
-  Http()
-    .bind(nodeConfig.httpInterface, nodeConfig.peerHttpPort)
-    .runWith(Sink.foreach { conn =>
-      val address = conn.remoteAddress
-      conn.handleWith(peerAPI.routes(address))
-    })
+  Http().bindAndHandle(peerAPI.routes, nodeConfig.httpInterface, nodeConfig.peerHttpPort)
 
   def shutdown(): Unit = {
     val gracefulShutdown = IO.delay(bindingFuture.foreach(_.unbind())(ConstellationExecutionContext.callbacks)) >>

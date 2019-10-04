@@ -3,7 +3,7 @@ package org.constellation
 import java.net.InetSocketAddress
 
 import akka.event.LoggingAdapter
-import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
+import akka.http.scaladsl.model.{HttpRequest, RemoteAddress, StatusCodes}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.RouteResult.{Complete, Rejected}
 import akka.http.scaladsl.server.{Directive, Directive0, Directive1, RouteResult}
@@ -51,8 +51,8 @@ object CustomDirectives {
 
     val ipManager: IPManager[IO]
 
-    def rejectBannedIP(address: InetSocketAddress): Directive0 = {
-      val ip = address.getAddress.getHostAddress
+    def rejectBannedIP(address: RemoteAddress): Directive0 = {
+      val ip = address.toOption.map(_.getHostAddress).getOrElse("unknown")
       val isBannedIP = ipManager.bannedIP(ip).unsafeRunSync
 
       if (isBannedIP) {
@@ -63,8 +63,8 @@ object CustomDirectives {
       }
     }
 
-    def enforceKnownIP(address: InetSocketAddress): Directive0 = {
-      val ip = address.getAddress.getHostAddress
+    def enforceKnownIP(address: RemoteAddress): Directive0 = {
+      val ip = address.toOption.map(_.getHostAddress).getOrElse("unknown")
       val isKnownIP = ipManager.knownIP(ip).unsafeRunSync
 
       if (isKnownIP) {
