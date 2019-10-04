@@ -599,7 +599,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   private val mainRoutes: Route = cors() {
     decodeRequest {
       encodeResponse {
-        getEndpoints ~ postEndpoints ~ configEndpoints ~ jsRequest ~ imageRoute ~ commonEndpoints ~ serveMainPage
+        getEndpoints ~ postEndpoints ~ configEndpoints ~ jsRequest ~ imageRoute ~ commonEndpoints ~ batchEndpoints ~ serveMainPage
       }
     }
   }

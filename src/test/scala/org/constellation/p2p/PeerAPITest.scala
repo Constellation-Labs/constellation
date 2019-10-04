@@ -244,7 +244,7 @@ class PeerAPITest
         }
       }
 
-      "GET transactions" - {
+      "POST transactions" - {
         "should return list of transactions if one of two transaction exists" in {
           val a = KeyUtils.makeKeyPair()
           val b = KeyUtils.makeKeyPair()
@@ -255,9 +255,9 @@ class PeerAPITest
           dao.transactionService.lookup("none") shouldReturnF None
           dao.peerInfo shouldReturnF Map()
 
-          val hashes = List("hash1", "none").mkString(",")
+          val hashes = List("hash1", "none")
 
-          Get(s"/batch/transactions?ids=$hashes") ~> peerAPI.commonEndpoints ~> check {
+          Post(s"/batch/transactions", hashes) ~> peerAPI.batchEndpoints ~> check {
             status shouldEqual StatusCodes.OK
             responseAs[List[(String, TransactionCacheData)]].size shouldEqual 1
           }
@@ -268,9 +268,9 @@ class PeerAPITest
           dao.transactionService.lookup(*) shouldReturnF None
           dao.peerInfo shouldReturnF Map()
 
-          val hashes = List("none1", "none2").mkString(",")
+          val hashes = List("none1", "none2")
 
-          Get(s"/batch/transactions?ids=$hashes") ~> peerAPI.commonEndpoints ~> check {
+          Post(s"/batch/transactions", hashes) ~> peerAPI.batchEndpoints ~> check {
             status shouldEqual StatusCodes.OK
             responseAs[List[(String, TransactionCacheData)]].size shouldEqual 0
           }
