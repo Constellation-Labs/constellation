@@ -40,21 +40,19 @@ class FacilitatorFilterTest
 
   describe("filter facilitators") {
     it("should return 2 facilitators") {
-      dao.concurrentTipService.getMinTipHeight(*) shouldReturnF 2
       val peers = TestHelpers.prepareFacilitators(5).toList
       peers.get(0).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node0"), 3L)
-      peers.get(1).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node1"), 3L)
-      peers.get(2).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node2"), 2L)
+      peers.get(1).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node1"), 2L)
+      peers.get(2).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node2"), 4L)
       peers.get(3).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node3"), 4L)
       peers.get(4).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node4"), 4L)
 
-      val facilitators = facilitatorFilter.filterPeers(peers.toMap, 2).unsafeRunSync()
+      val facilitators = facilitatorFilter.filterPeers(peers.toMap, 2, TipSoe(Seq.empty, 2L.some)).unsafeRunSync()
 
       facilitators.size shouldBe 2
     }
 
     it("should return 1 facilitator") {
-      dao.concurrentTipService.getMinTipHeight(*) shouldReturnF 1
       val peers = TestHelpers.prepareFacilitators(5).toList
       peers.get(0).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node0"), 4L)
       peers.get(1).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node1"), 4L)
@@ -62,13 +60,12 @@ class FacilitatorFilterTest
       peers.get(3).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node3"), 5L)
       peers.get(4).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node4"), 6L)
 
-      val facilitators = facilitatorFilter.filterPeers(peers.toMap, 2).unsafeRunSync()
+      val facilitators = facilitatorFilter.filterPeers(peers.toMap, 2, TipSoe(Seq.empty, 1L.some)).unsafeRunSync()
 
       facilitators.size shouldBe 1
     }
 
     it("should return 0 facilitators") {
-      dao.concurrentTipService.getMinTipHeight(*) shouldReturnF 2
       val peers = TestHelpers.prepareFacilitators(5).toList
       peers.get(0).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node0"), 5L)
       peers.get(1).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node1"), 6L)
@@ -76,7 +73,7 @@ class FacilitatorFilterTest
       peers.get(3).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node3"), 8L)
       peers.get(4).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node4"), 9L)
 
-      val facilitators = facilitatorFilter.filterPeers(peers.toMap, 2).unsafeRunSync()
+      val facilitators = facilitatorFilter.filterPeers(peers.toMap, 2, TipSoe(Seq.empty, 2L.some)).unsafeRunSync()
 
       facilitators.size shouldBe 0
     }
