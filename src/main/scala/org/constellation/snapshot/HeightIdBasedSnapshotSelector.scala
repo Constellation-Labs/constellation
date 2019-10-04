@@ -17,19 +17,31 @@ class HeightIdBasedSnapshotSelector(thisNodeId: Id, snapshotHeightRedownloadDela
   def selectSnapshotFromRecent(
     peersSnapshots: List[NodeSnapshots],
     ownSnapshots: List[RecentSnapshot]
-  ): Option[DownloadInfo] = {
-    val highestSnapshot = ownSnapshots.maxBy(_.height)
-    val correctSnapAtGivenHeight = selectCorrectRecentSnapshotAtGivenHeight(highestSnapshot, peersSnapshots)
-    val clusterWithCorrectState = selectMostRecentCorrectSnapshot(peersSnapshots :+ (thisNodeId, ownSnapshots))
-    if (correctSnapAtGivenHeight._1 == highestSnapshot && !isBelowInterval(highestSnapshot, clusterWithCorrectState._1))
-      None
-    else {
-      DownloadInfo(
-        createDiff(clusterWithCorrectState._1, ownSnapshots, clusterWithCorrectState._2),
-        clusterWithCorrectState._1
-      ).some
+  ): Option[DownloadInfo] =
+    (peersSnapshots, ownSnapshots) match {
+      case (_, Nil) =>
+        val clusterWithCorrectState = selectMostRecentCorrectSnapshot(peersSnapshots)
+        DownloadInfo(
+          createDiff(clusterWithCorrectState._1, ownSnapshots, clusterWithCorrectState._2),
+          clusterWithCorrectState._1
+        ).some
+      case (Nil, _) => None
+      case (_, _) =>
+        val highestSnapshot = ownSnapshots.maxBy(_.height)
+        val correctSnapAtGivenHeight = selectCorrectRecentSnapshotAtGivenHeight(highestSnapshot, peersSnapshots)
+        val clusterWithCorrectState = selectMostRecentCorrectSnapshot(peersSnapshots :+ (thisNodeId, ownSnapshots))
+        if (correctSnapAtGivenHeight._1 == highestSnapshot && !isBelowInterval(
+              highestSnapshot,
+              clusterWithCorrectState._1
+            ))
+          None
+        else {
+          DownloadInfo(
+            createDiff(clusterWithCorrectState._1, ownSnapshots, clusterWithCorrectState._2),
+            clusterWithCorrectState._1
+          ).some
+        }
     }
-  }
 
   /**
     * Handles cluster responses for newest broadcasted snapshot.
@@ -50,7 +62,8 @@ class HeightIdBasedSnapshotSelector(thisNodeId: Id, snapshotHeightRedownloadDela
     val correct = grouped.getOrElse(VerificationStatus.SnapshotCorrect, List.empty)
     // +1 because this node treat it as correct
     val maybeSelected = (invalid.size, correct.size + 1) match {
-      case (i, c) if i > c => selectMostRecentCorrectSnapshot(invalid.map(s => (s.id, s.recentSnapshot))).some
+      case (i, c) if i > c =>
+        selectMostRecentCorrectSnapshot(invalid.map(s => (s.id, s.recentSnapshot))).some
       case (i, c) if i < c => None
       case (i, c) if i == c =>
         val combined = invalid ++ correct
@@ -59,14 +72,18 @@ class HeightIdBasedSnapshotSelector(thisNodeId: Id, snapshotHeightRedownloadDela
           highestSnapshot,
           combined.map(x => (x.id, x.recentSnapshot))
         )
-        val clusterWithCorrectState = selectMostRecentCorrectSnapshot(
-          (invalid ++ correct).map(s => (s.id, s.recentSnapshot)) :+ (thisNodeId, ownSnapshots)
-        )
-        if (correctSnapAtGivenHeight._1 == highestSnapshot && !isBelowInterval(
-              highestSnapshot,
-              clusterWithCorrectState._1
-            )) None
-        else clusterWithCorrectState.some
+        val info =
+          ((invalid ++ correct).map(s => (s.id, s.recentSnapshot)) :+ (thisNodeId, ownSnapshots)).filter(_._2.nonEmpty)
+        if (info.nonEmpty) {
+          val clusterWithCorrectState = selectMostRecentCorrectSnapshot(info)
+          if (correctSnapAtGivenHeight._1 == highestSnapshot && !isBelowInterval(
+                highestSnapshot,
+                clusterWithCorrectState._1
+              )) None
+          else clusterWithCorrectState.some
+        } else {
+          None
+        }
     }
 
     maybeSelected.map { s =>

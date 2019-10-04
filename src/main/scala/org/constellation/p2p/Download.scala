@@ -32,13 +32,13 @@ object SnapshotsDownloader {
 
   def downloadSnapshotRandomly[F[_]: Concurrent](hash: String, pool: Iterable[APIClient])(
     implicit C: ContextShift[F]
-  ): F[StoredSnapshot] = {
+  ): F[Array[Byte]] = {
     val poolArray = pool.toArray
     val stopAt = Random.nextInt(poolArray.length)
 
-    def makeAttempt(index: Int): F[StoredSnapshot] =
+    def makeAttempt(index: Int): F[Array[Byte]] =
       getSnapshot(hash, poolArray(index)).handleErrorWith {
-        case e if index == stopAt => Sync[F].raiseError[StoredSnapshot](e)
+        case e if index == stopAt => Sync[F].raiseError[Array[Byte]](e)
         case _                    => makeAttempt((index + 1) % poolArray.length)
       }
 
@@ -47,16 +47,16 @@ object SnapshotsDownloader {
 
   def downloadSnapshotByDistance[F[_]: Concurrent](hash: String, pool: Iterable[APIClient])(
     implicit C: ContextShift[F]
-  ): F[StoredSnapshot] = {
+  ): F[Array[Byte]] = {
     val sortedPeers = pool.toSeq.sortBy(p => Distance.calculate(hash, p.id))
 
-    def makeAttempt(sortedPeers: Iterable[APIClient]): F[StoredSnapshot] =
+    def makeAttempt(sortedPeers: Iterable[APIClient]): F[Array[Byte]] =
       sortedPeers match {
         case Nil =>
-          Sync[F].raiseError[StoredSnapshot](new RuntimeException("Unable to download Snapshot from empty peer list"))
+          Sync[F].raiseError[Array[Byte]](new RuntimeException("Unable to download Snapshot from empty peer list"))
         case head :: tail =>
           getSnapshot(hash, head).handleErrorWith {
-            case e if tail.isEmpty => Sync[F].raiseError[StoredSnapshot](e)
+            case e if tail.isEmpty => Sync[F].raiseError[Array[Byte]](e)
             case _                 => makeAttempt(sortedPeers.tail)
           }
       }
@@ -67,20 +67,14 @@ object SnapshotsDownloader {
   private def getSnapshot[F[_]: Concurrent](hash: String, client: APIClient)(
     implicit snapshotTimeout: Duration,
     C: ContextShift[F]
-  ): F[StoredSnapshot] =
+  ): F[Array[Byte]] =
     client
       .getNonBlockingArrayByteF("storedSnapshot/" + hash, timeout = snapshotTimeout)(C)
-      .map(s => deserializeStoredSnapshot(s))
 
-  private def deserializeStoredSnapshot(storedSnapshotArrayBytes: Array[Byte]) =
-    Try(KryoSerializer.deserializeCast[StoredSnapshot](storedSnapshotArrayBytes)).toOption match {
-      case Some(value) => value
-      case None        => throw new Exception(s"Unable to parse storedSnapshot")
-    }
 }
 
 class SnapshotsProcessor[F[_]: Concurrent: Clock](
-  downloadSnapshot: (String, Iterable[APIClient]) => F[StoredSnapshot]
+  downloadSnapshot: (String, Iterable[APIClient]) => F[Array[Byte]]
 )(
   implicit dao: DAO,
   ec: ExecutionContext,
@@ -104,7 +98,8 @@ class SnapshotsProcessor[F[_]: Concurrent: Clock](
     ) // TODO: wkoszycki shouldn't we accept sequentially ?
   }
 
-  private def acceptSnapshot(snapshot: StoredSnapshot): F[Unit] =
+  private def acceptSnapshot(rawSnapshot: Array[Byte]): F[Unit] = {
+    val snapshot = deserializeStoredSnapshot(rawSnapshot)
     logThread(
       snapshot.checkpointCache.toList.traverse { c =>
         dao.metrics.incrementMetricAsync[F]("downloadedBlocks") >>
@@ -116,11 +111,18 @@ class SnapshotsProcessor[F[_]: Concurrent: Clock](
           C.evalOn(ConstellationExecutionContext.unbounded)(Sync[F].delay {
             better.files
               .File(dao.snapshotPath, snapshot.snapshot.hash)
-              .writeByteArray(KryoSerializer.serializeAnyRef(snapshot))
+              .writeByteArray(rawSnapshot)
           })
       }.void,
       "download_acceptSnapshot"
-    )
+    )}
+
+
+  private def deserializeStoredSnapshot(storedSnapshotArrayBytes: Array[Byte]) =
+    Try(KryoSerializer.deserializeCast[StoredSnapshot](storedSnapshotArrayBytes)).toOption match {
+      case Some(value) => value
+      case None        => throw new Exception(s"Unable to parse storedSnapshot")
+    }
 }
 
 class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: SnapshotsProcessor[F], cluster: Cluster[F])(

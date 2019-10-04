@@ -15,6 +15,25 @@ class HeightIdBasedSnapshotSelectorTest
   val thisNode = Id("bbb")
   val snapshotSelector = new HeightIdBasedSnapshotSelector(thisNode, 8)
 
+  test("selectSnapshotFromBroadcastResponses should handle empty inputs") {
+    snapshotSelector.selectSnapshotFromBroadcastResponses(List.empty, List.empty) shouldBe None
+  }
+
+  test("selectSnapshotFromRecent should handle empty inputs") {
+    snapshotSelector.selectSnapshotFromRecent(List.empty, List.empty) shouldBe None
+  }
+
+  test("selectSnapshotFromRecent should handle empty own snapshots") {
+    val peer1 =
+      (Id("peer1"), List(RecentSnapshot("snap10", 10), RecentSnapshot("snap8", 8), RecentSnapshot("snap6", 6)))
+    val peer2 =
+      (Id("peer2"), List(RecentSnapshot("differentSnap10", 10), RecentSnapshot("snap8", 8), RecentSnapshot("snap6", 6)))
+
+    snapshotSelector.selectSnapshotFromRecent(List(peer1, peer2), List.empty) shouldBe Some(
+      DownloadInfo(SnapshotDiff(List.empty, peer2._2, List(peer2._1)), peer2._2)
+    )
+  }
+
   test("selectCorrectRecentSnapshotAtGivenHeight should include self in majority calculations") {
     val own = RecentSnapshot("snap10", 10)
 
