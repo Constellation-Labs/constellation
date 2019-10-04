@@ -33,7 +33,7 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
     "merklePoolUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync()
   )
 
-  private[storage] def withLock[R](semaphoreName: String, thunk: F[R]): F[R] =
+  protected[storage] def withLock[R](semaphoreName: String, thunk: F[R]): F[R] =
     new SingleLock[F, R](semaphoreName, semaphores(semaphoreName))
       .use(thunk)
 

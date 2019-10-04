@@ -1,4 +1,4 @@
-package org.constellation.storage
+package org.constellation.domain.transaction
 
 import cats.effect.Concurrent
 import cats.implicits._

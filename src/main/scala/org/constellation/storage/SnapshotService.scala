@@ -9,6 +9,7 @@ import com.typesafe.scalalogging.StrictLogging
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 import org.constellation.consensus.{ConsensusManager, Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{CheckpointCache, NodeState}

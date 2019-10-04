@@ -7,6 +7,7 @@ import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.primitives.Schema.TransactionEdgeData
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}

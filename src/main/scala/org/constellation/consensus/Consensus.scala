@@ -18,6 +18,7 @@ import org.constellation.consensus.ConsensusManager.{
 import org.constellation.p2p.{DataResolver, PeerData, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, TypedEdgeHash}
 import org.constellation.domain.schema.Id
+import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage._
