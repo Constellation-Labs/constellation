@@ -9,12 +9,12 @@ import org.constellation.domain.schema.Id
 
 class FacilitatorFilter[F[_]: Concurrent: Logger](calculationContext: ContextShift[F], dao: DAO) {
 
-  def filterPeers(peers: Map[Id, PeerData], numFacilitatorPeers: Int): F[Map[Id, PeerData]] =
+  def filterPeers(peers: Map[Id, PeerData], numFacilitatorPeers: Int, tipSoe: TipSoe): F[Map[Id, PeerData]] =
     for {
-      ownHeight <- LiftIO[F].liftIO(ownHeight())
-      _ <- Logger[F].info(s"[${dao.id.short}] : [Facilitator Filter] : ownHeight = $ownHeight")
+      minTipHeight <- tipSoe.minHeight.getOrElse(0L).pure[F]
+      _ <- Logger[F].info(s"[${dao.id.short}] : [Facilitator Filter] : selected minTipHeight = $minTipHeight")
 
-      filteredPeers <- filterByHeight(peers.toList, ownHeight, numFacilitatorPeers)
+      filteredPeers <- filterByHeight(peers.toList, minTipHeight, numFacilitatorPeers)
       peerIds = filteredPeers.map(_._1)
       _ <- Logger[F].info(s"[${dao.id.short}] : [Facilitator Filter] : $peerIds : size = ${peerIds.size}")
     } yield peers.filter(peer => peerIds.contains(peer._1))
@@ -31,9 +31,9 @@ class FacilitatorFilter[F[_]: Concurrent: Logger](calculationContext: ContextShi
       val peer = peers.head
       val filteredPeers = peers.filterNot(_ == peer)
       val checkHeight = for {
-        facilitatorHeight <- getFacilitatorHeights(peer)
+        facilitatorHeight <- getFacilitatorNextSnapshotHeights(peer)
         _ <- Logger[F].info(
-          s"[${dao.id.short}] : [Facilitator Filter] : Checking facilitator with height : $facilitatorHeight"
+          s"[${dao.id.short}] : [Facilitator Filter] : Checking facilitator with next snapshot height : $facilitatorHeight"
         )
         height = facilitatorHeight._2
       } yield if (height <= ownHeight + 2) result :+ peer else result
@@ -41,9 +41,6 @@ class FacilitatorFilter[F[_]: Concurrent: Logger](calculationContext: ContextShi
       checkHeight.flatMap(updatedResult => filterByHeight(filteredPeers, ownHeight, numFacilitatorPeers, updatedResult))
     }
 
-  private def ownHeight(): IO[Long] =
-    dao.concurrentTipService.getMinTipHeight(None)
-
-  private def getFacilitatorHeights(facilitator: (Id, PeerData)): F[(Id, Long)] =
-    facilitator._2.client.getNonBlockingF[F, (Id, Long)]("heights/min")(calculationContext)
+  private def getFacilitatorNextSnapshotHeights(facilitator: (Id, PeerData)): F[(Id, Long)] =
+    facilitator._2.client.getNonBlockingF[F, (Id, Long)]("snapshot/nextHeight")(calculationContext)
 }
