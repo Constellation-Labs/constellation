@@ -4,17 +4,12 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{DataResolver, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, _}
 import org.constellation.primitives._
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
-import org.constellation.storage.{
-  MessageService,
-  NotificationService,
-  ObservationService,
-  SOEService,
-  TransactionService
-}
+import org.constellation.storage.{MessageService, NotificationService, ObservationService, SOEService}
 import org.constellation.{ConstellationExecutionContext, DAO}
 
 class CheckpointService[F[_]: Concurrent](

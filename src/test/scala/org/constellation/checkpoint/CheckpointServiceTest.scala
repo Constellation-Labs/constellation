@@ -20,6 +20,7 @@ import org.constellation.storage._
 import org.constellation.util.{APIClient, HostPort, Metrics}
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.schema.Id
+import org.constellation.domain.transaction.TransactionService
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 

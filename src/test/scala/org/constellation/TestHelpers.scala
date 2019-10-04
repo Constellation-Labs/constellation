@@ -14,6 +14,7 @@ import org.constellation.domain.configuration.NodeConfig
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.domain.schema.Id
+import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.{ConcurrentTipService, Schema}
 import org.constellation.storage._
 import org.constellation.util.{APIClient, HostPort, Metrics}

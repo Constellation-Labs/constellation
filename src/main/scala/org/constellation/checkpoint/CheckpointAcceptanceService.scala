@@ -6,6 +6,7 @@ import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.FinishedCheckpoint
+import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.primitives.concurrency.SingleRef

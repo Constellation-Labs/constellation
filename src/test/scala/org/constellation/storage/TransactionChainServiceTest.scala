@@ -5,6 +5,7 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConstellationExecutionContext
+import org.constellation.domain.transaction.TransactionChainService
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, FunSuite, Matchers}

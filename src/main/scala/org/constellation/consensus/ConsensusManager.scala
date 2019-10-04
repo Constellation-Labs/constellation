@@ -11,6 +11,7 @@ import org.constellation.consensus.Consensus._
 import org.constellation.p2p.{Cluster, DataResolver, PeerData, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, NodeType, SignedObservationEdgeCache}
 import org.constellation.domain.schema.Id
+import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
 import org.constellation.primitives.{ChannelMessage, CheckpointBlock, ConcurrentTipService, Transaction}
 import org.constellation.storage._

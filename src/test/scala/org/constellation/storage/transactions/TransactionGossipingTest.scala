@@ -5,9 +5,10 @@ import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.{Transaction, TransactionCacheData}
-import org.constellation.storage.{ConsensusStatus, TransactionChainService, TransactionService}
+import org.constellation.storage.ConsensusStatus
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

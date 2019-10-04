@@ -1,16 +1,16 @@
-package org.constellation.storage
+package org.constellation.domain.transaction
 
 import cats.effect._
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.Logger
+import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
+import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.storage.transactions.PendingTransactionsMemPool
-import org.constellation.DAO
-import org.constellation.primitives.Schema.CheckpointCache
-import org.constellation.storage.ConsensusStatus.ConsensusStatus
+import org.constellation.storage.{ConsensusService, ConsensusStatus}
 
 class TransactionService[F[_]: Concurrent: Logger](transactionChainService: TransactionChainService[F], dao: DAO)
     extends ConsensusService[F, TransactionCacheData] {
