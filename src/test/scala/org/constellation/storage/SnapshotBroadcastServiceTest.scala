@@ -5,7 +5,8 @@ import java.net.SocketTimeoutException
 import cats.implicits._
 import cats.effect.{ContextShift, IO, Timer}
 import org.constellation.p2p.{Cluster, PeerData}
-import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
+import org.constellation.primitives.Schema.{NodeState, NodeType}
+import org.constellation.domain.schema.Id
 import org.constellation.primitives.Schema
 import org.constellation.util.{APIClient, HealthChecker, HostPort}
 import org.constellation.{ConstellationExecutionContext, DAO, PeerMetadata, ProcessingConfig}
@@ -46,7 +47,7 @@ class SnapshotBroadcastServiceTest
   "broadcastSnapshot" - {
 
     "should broadcastSnapshots " in {
-      val readyFacilitators: Map[Schema.Id, PeerData] = Map(prepareFacilitator("a"), prepareFacilitator("b"))
+      val readyFacilitators: Map[Id, PeerData] = Map(prepareFacilitator("a"), prepareFacilitator("b"))
       dao.readyPeers(NodeType.Full) shouldReturnF readyFacilitators
       dao.processingConfig shouldReturn ProcessingConfig(maxInvalidSnapshotRate = 20)
       dao.cluster.getNodeState shouldReturnF NodeState.Ready
@@ -114,9 +115,9 @@ class SnapshotBroadcastServiceTest
 
   private def mockDAO: DAO = mock[DAO]
 
-  private def prepareFacilitator(id: String): (Schema.Id, PeerData) = {
+  private def prepareFacilitator(id: String): (Id, PeerData) = {
 
-    val facilitatorId = Schema.Id(id)
+    val facilitatorId = Id(id)
     val peerData: PeerData = mock[PeerData]
     peerData.peerMetadata shouldReturn mock[PeerMetadata]
     peerData.peerMetadata.id shouldReturn facilitatorId

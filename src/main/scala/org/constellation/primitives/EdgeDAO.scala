@@ -4,15 +4,24 @@ import java.util.concurrent.Semaphore
 
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
+import org.constellation.checkpoint.{
+  CheckpointAcceptanceService,
+  CheckpointBlockValidator,
+  CheckpointParentService,
+  CheckpointService
+}
 import org.constellation.consensus._
+import org.constellation.domain.configuration.NodeConfig
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._
+import org.constellation.domain.schema.Id
 import org.constellation.rollback.RollbackService
 import org.constellation.storage._
 import org.constellation.storage.external.CloudStorage
 import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.util.{Metrics, SnapshotWatcher}
-import org.constellation.{ConstellationExecutionContext, DAO, NodeConfig, ProcessingConfig}
+import org.constellation.transaction.TransactionValidator
+import org.constellation.util.{MajorityStateChooser, Metrics, SnapshotWatcher}
+import org.constellation.{ConstellationExecutionContext, DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
 
@@ -111,14 +120,19 @@ trait EdgeDAO {
   var transactionGenerator: TransactionGenerator[IO] = _
   var observationService: ObservationService[IO] = _
   var checkpointService: CheckpointService[IO] = _
+  var checkpointParentService: CheckpointParentService[IO] = _
+  var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
   var snapshotService: SnapshotService[IO] = _
   var concurrentTipService: ConcurrentTipService[IO] = _
+  var checkpointBlockValidator: CheckpointBlockValidator[IO] = _
+  var transactionValidator: TransactionValidator[IO] = _
   var rateLimiting: RateLimiting[IO] = _
   var addressService: AddressService[IO] = _
   var snapshotBroadcastService: SnapshotBroadcastService[IO] = _
   var snapshotWatcher: SnapshotWatcher = _
   var rollbackService: RollbackService[IO] = _
   var cloudStorage: CloudStorage[IO] = _
+  var majorityStateChooser: MajorityStateChooser[IO] = _
 
   var consensusRemoteSender: ConsensusRemoteSender[IO] = _
   var consensusManager: ConsensusManager[IO] = _

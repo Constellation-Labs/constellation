@@ -1,4 +1,4 @@
-package org.constellation.storage
+package org.constellation.checkpoint
 
 import java.security.KeyPair
 
@@ -8,14 +8,17 @@ import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import constellation.{createDummyTransaction, createTransaction}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation._
 import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.makeKeyPair
 import org.constellation.p2p.{Cluster, PeerData, PeerNotification}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.storage._
 import org.constellation.util.{APIClient, HostPort, Metrics}
-import org.constellation._
+import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.schema.Id
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
@@ -26,7 +29,7 @@ class CheckpointServiceTest
     with Matchers
     with BeforeAndAfter {
 
-  val readyFacilitators: Map[Schema.Id, PeerData] = prepareFacilitators()
+  val readyFacilitators: Map[Id, PeerData] = prepareFacilitators()
   val soe: SignedObservationEdge = mock[SignedObservationEdge]
 
   implicit val kp: KeyPair = makeKeyPair()
@@ -79,7 +82,7 @@ class CheckpointServiceTest
       val storedCB = dao.checkpointService.memPool.lookup(fullData.checkpointBlock.get.baseHash).unsafeRunSync().get
 
       dao.checkpointService
-        .fetchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot.get)
+        .fetchBatchTransactions(storedCB.checkpointBlock.transactionsMerkleRoot.get)
         .unsafeRunSync() shouldBe txs
     }
 
@@ -128,7 +131,7 @@ class CheckpointServiceTest
           .pure(Some(CheckpointCache(Some(c))))
       }
 
-      dao.checkpointService
+      dao.checkpointAcceptanceService
         .accept(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
         .unsafeRunSync()
       dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
@@ -155,7 +158,7 @@ class CheckpointServiceTest
           .pure(Some(CheckpointCache(Some(c))))
       }
 
-      dao.checkpointService
+      dao.checkpointAcceptanceService
         .accept(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
         .unsafeRunSync()
       dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
@@ -203,7 +206,7 @@ class CheckpointServiceTest
     val tx2 = mock[Transaction]
     tx2.hash shouldReturn "tx2"
 
-    (dao.transactionService.put(TransactionCacheData(tx1), ConsensusStatus.Accepted) *>
+    (dao.transactionService.put(TransactionCacheData(tx1), ConsensusStatus.Accepted) >>
       dao.transactionService.put(TransactionCacheData(tx2), ConsensusStatus.Accepted))
       .unsafeRunSync()
 
@@ -217,7 +220,7 @@ class CheckpointServiceTest
     val notification2 = mock[PeerNotification]
     notification2.hash shouldReturn "notification2"
 
-    (dao.notificationService.memPool.put(notification1.hash, notification1) *>
+    (dao.notificationService.memPool.put(notification1.hash, notification1) >>
       dao.notificationService.memPool.put(notification2.hash, notification2))
       .unsafeRunSync()
 
@@ -233,7 +236,7 @@ class CheckpointServiceTest
     msg2.signedMessageData shouldReturn mock[SignedData[ChannelMessageData]]
     msg2.signedMessageData.hash shouldReturn "msg2"
 
-    (dao.messageService.memPool.put(msg1.signedMessageData.hash, ChannelMessageMetadata(msg1)) *>
+    (dao.messageService.memPool.put(msg1.signedMessageData.hash, ChannelMessageMetadata(msg1)) >>
       dao.messageService.memPool.put(msg2.signedMessageData.hash, ChannelMessageMetadata(msg2)))
       .unsafeRunSync()
     Seq(msg1, msg2)
@@ -277,7 +280,7 @@ class CheckpointServiceTest
     dao.observationService shouldReturn os
 
     val rl = mock[RateLimiting[IO]]
-    val cs = new CheckpointService[IO](dao, ts, ms, ns, os, cts, rl)
+    val cs = new CheckpointService[IO](dao, ts, ms, ns, os)
     dao.checkpointService shouldReturn cs
 
     val keyPair = KeyUtils.makeKeyPair()
@@ -321,9 +324,9 @@ class CheckpointServiceTest
     dao
   }
 
-  private def prepareFacilitators(): Map[Schema.Id, PeerData] = {
+  private def prepareFacilitators(): Map[Id, PeerData] = {
 
-    val facilitatorId1 = Schema.Id("b")
+    val facilitatorId1 = Id("b")
     val peerData1: PeerData = mock[PeerData]
     peerData1.peerMetadata shouldReturn mock[PeerMetadata]
     peerData1.peerMetadata.id shouldReturn facilitatorId1

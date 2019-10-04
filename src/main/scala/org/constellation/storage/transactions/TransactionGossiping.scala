@@ -5,7 +5,7 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
-import org.constellation.primitives.Schema.Id
+import org.constellation.domain.schema.Id
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.storage.{ConsensusStatus, TransactionService}
 import org.constellation.util.Logging._

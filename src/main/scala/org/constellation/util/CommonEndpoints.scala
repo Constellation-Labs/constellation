@@ -10,6 +10,7 @@ import akka.http.scaladsl.unmarshalling.FromEntityUnmarshaller
 import akka.util.{ByteString, Timeout}
 import cats.effect.IO
 import cats.implicits._
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
@@ -17,6 +18,7 @@ import org.constellation.consensus.{Snapshot, SnapshotInfo}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.primitives.Schema.NodeType.NodeType
+import org.constellation.primitives.TransactionCacheData
 import org.constellation.serializer.KryoSerializer
 import org.json4s.native.Serialization
 
@@ -57,6 +59,9 @@ trait CommonEndpoints extends Json4sSupport {
         } yield maybeHeights.flatMap(_.flatMap(_.height))
 
         APIDirective.handle(calculateHeights)(complete(_))
+      } ~
+      path("heights" / "min") {
+        APIDirective.handle(dao.concurrentTipService.getMinTipHeight(None).map((dao.id, _)))(complete(_))
       } ~
       path("snapshotHashes") {
         complete(Snapshot.snapshotHashes())
@@ -121,6 +126,17 @@ trait CommonEndpoints extends Json4sSupport {
       } ~
       path("transaction" / Segment) { h =>
         APIDirective.handle(dao.transactionService.lookup(h))(complete(_))
+      } ~
+      path("batch" / "transactions") {
+        parameter("ids") { ids =>
+          APIDirective.handle(
+            ids
+              .split(",")
+              .toList
+              .traverse(id => dao.transactionService.lookup(id).map((id, _)))
+              .map(_.filter(_._2.isDefined))
+          )(complete(_))
+        }
       } ~
       path("message" / Segment) { h =>
         APIDirective.handle(dao.messageService.memPool.lookup(h))(complete(_))

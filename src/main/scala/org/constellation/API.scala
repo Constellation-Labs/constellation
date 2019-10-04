@@ -28,6 +28,7 @@ import org.constellation.p2p.{ChangePeerState, Download}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
+import org.constellation.domain.schema.Id
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util._
@@ -90,18 +91,18 @@ case class ProcessingConfig(
   snapshotTriggeringTimeSeconds: Int = 2,
   formUndersizedCheckpointAfterSeconds: Int = 30,
   numFacilitatorPeers: Int = 2,
-  maxTransactionsPerRound: Int = 30,
+  maxTransactionsPerRound: Int = 3,
   emptyTransactionsRounds: Int = 5,
   amountTransactionsRounds: Int = 5,
   metricCheckInterval: Int = 10,
   maxMemPoolSize: Int = 35000,
   minPeerTimeAddedSeconds: Int = 30,
   maxActiveTipsAllowedInMemory: Int = 1000,
-  maxAcceptedCBHashesInMemory: Int = 5000,
+  maxAcceptedCBHashesInMemory: Int = 50000,
   peerHealthCheckInterval: Int = 30,
   peerDiscoveryInterval: Int = 60,
   snapshotHeightInterval: Int = 2,
-  snapshotHeightDelayInterval: Int = 2,
+  snapshotHeightDelayInterval: Int = 60,
   snapshotHeightRedownloadDelayInterval: Int = 4,
   snapshotInterval: Int = 2,
   formCheckpointTimeout: Int = 60,
@@ -473,7 +474,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           def changeStateToReady: IO[Unit] = dao.cluster.setNodeState(NodeState.Ready)
           def broadcastState: IO[Unit] = dao.cluster.broadcastNodeState()
 
-          APIDirective.handle(changeStateToReady *> broadcastState)(_ => complete(StatusCodes.OK))
+          APIDirective.handle(changeStateToReady >> broadcastState)(_ => complete(StatusCodes.OK))
         } ~
         path("peerHealthCheck") {
           val resetTimeout = 1.second
@@ -543,7 +544,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           entity(as[PeerMetadata]) { pm =>
             (IO
               .contextShift(ConstellationExecutionContext.bounded)
-              .shift *> dao.cluster.addPeerMetadata(pm)).unsafeRunAsyncAndForget
+              .shift >> dao.cluster.addPeerMetadata(pm)).unsafeRunAsyncAndForget
 
             complete(StatusCodes.OK)
           }

@@ -6,6 +6,7 @@ import com.softwaremill.sttp.Response
 import com.typesafe.config.Config
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.Consensus.ConsensusStage.ConsensusStage
 import org.constellation.consensus.Consensus.StageState.StageState
 import org.constellation.consensus.Consensus._
@@ -16,6 +17,7 @@ import org.constellation.consensus.ConsensusManager.{
 }
 import org.constellation.p2p.{DataResolver, PeerData, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, TypedEdgeHash}
+import org.constellation.domain.schema.Id
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage._
@@ -30,7 +32,7 @@ class Consensus[F[_]: Concurrent](
   arbitraryMessages: Seq[(ChannelMessage, Int)],
   dataResolver: DataResolver,
   transactionService: TransactionService[F],
-  checkpointService: CheckpointService[F],
+  checkpointAcceptanceService: CheckpointAcceptanceService[F],
   messageService: MessageService[F],
   observationService: ObservationService[F],
   remoteSender: ConsensusRemoteSender[F],
@@ -78,7 +80,7 @@ class Consensus[F[_]: Concurrent](
         notifications,
         observations.map(_.hash)
       )
-      _ <- remoteCall.shift *> remoteSender.broadcastLightTransactionProposal(
+      _ <- remoteCall.shift >> remoteSender.broadcastLightTransactionProposal(
         BroadcastLightTransactionProposal(roundData.roundId, roundData.peers, proposal)
       )
       _ <- addTransactionProposal(proposal)
@@ -200,10 +202,9 @@ class Consensus[F[_]: Concurrent](
     val checkpointBlock = sameBlocks.head._2
     val uniques = proposals.groupBy(_._2.baseHash).size
 
-    val cache =
-      CheckpointCache(Some(checkpointBlock), height = checkpointBlock.calculateHeight())
-
     for {
+      maybeHeight <- checkpointAcceptanceService.calculateHeight(checkpointBlock)
+      cache = CheckpointCache(Some(checkpointBlock), height = maybeHeight)
       _ <- dao.metrics.incrementMetricAsync(
         "acceptMajorityCheckpointBlockSelectedCount_" + proposals.size
       )
@@ -216,7 +217,7 @@ class Consensus[F[_]: Concurrent](
           s" with obs ${checkpointBlock.observations.map(_.hash)} " +
           s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height}"
       )
-      acceptedBlock <- checkpointService
+      acceptedBlock <- checkpointAcceptanceService
         .accept(cache)
         .map { _ =>
           (Option(checkpointBlock), Seq.empty[String])
@@ -249,7 +250,7 @@ class Consensus[F[_]: Concurrent](
         }
       _ <- if (acceptedBlock._1.isEmpty) Sync[F].pure(List.empty[Response[Unit]])
       else
-        remoteCall.shift *> broadcastSignedBlockToNonFacilitators(
+        remoteCall.shift >> broadcastSignedBlockToNonFacilitators(
           FinishedCheckpoint(cache, proposals.keySet.map(_.id))
         )
       transactionsToReturn <- getOwnTransactionsToReturn.map(
@@ -322,62 +323,85 @@ class Consensus[F[_]: Concurrent](
       _ <- dao.metrics.incrementMetricAsync(
         "resolveMajorityCheckpointBlockUniquesCount_" + uniques
       )
-      _ <- remoteCall.shift *> remoteSender.broadcastSelectedUnionBlock(
+      _ <- remoteCall.shift >> remoteSender.broadcastSelectedUnionBlock(
         BroadcastSelectedUnionBlock(roundData.roundId, roundData.peers, selectedCheckpointBlock)
       )
       _ <- addSelectedBlockProposal(selectedCheckpointBlock)
     } yield ()
   }
 
-  private[consensus] def mergeTxProposalsAndBroadcastBlock(): F[Unit] =
+  private[consensus] def prepareConsensusData[A, T <: AnyRef](
+    dataType: String,
+    proposals: Map[FacilitatorId, LightTransactionsProposal],
+    readyPeers: Map[Id, PeerApiClient],
+    mapHashes: LightTransactionsProposal => Seq[String],
+    startingHashes: Traversable[String],
+    lookupService: String => F[Option[A]],
+    resolvedMapper: T => A
+  )(implicit m: Manifest[T]): F[List[A]] =
     for {
       _ <- logger.debug(
-        s" ${roundData.roundId} merge transactions proposal"
+        s" ${roundData.roundId} preparing $dataType "
       )
-      readyPeers <- LiftIO[F].liftIO(dao.readyPeers.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
-      proposals <- transactionProposals.get
-      idsTxs = (
-        proposals.keySet,
-        proposals.values.map(_.txHashes).toList.flatten.union(roundData.transactions.map(_.hash)).distinct
-      )
-      txs <- idsTxs._2.traverse(t => transactionService.lookup(t).map((t, _)))
-      _ <- logger.debug(
-        s" ${roundData.roundId} transactions proposal_size all txs ${idsTxs._2.size} lookup size ${txs.flatMap(_._2).size}"
-      )
-      resolved <- txs
-        .filter(_._2.isEmpty)
-        .traverse(
-          t =>
-            LiftIO[F].liftIO(
-              dataResolver
-                .resolveTransactionDefaults(
-                  t._1,
-                  readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList.headOption,
-                  roundData.roundId.some
-                )(contextShift)
-                .map(_.transaction)
-            )
-        )
-      _ <- logger.debug(
-        s" ${roundData.roundId} transactions proposal_size ${proposals.size} values size ${idsTxs._2.size} lookup size ${txs.size} resolved ${resolved.size}"
-      )
-      msgs <- proposals.values
-        .flatMap(_.messages)
+      hashes = proposals.mapValues(mapHashes)
+      combined <- (hashes + (roundData.facilitatorId -> (hashes
+        .getOrElse(roundData.facilitatorId, Seq.empty) ++ startingHashes)))
+        .map(x => x._2.map(t => (t, x._1)))
+        .flatten
         .toList
-        .traverse(m => messageService.lookup(m).map((m, _)))
-      resolvedMsg <- msgs
-        .filter(_._2.isEmpty)
+        .distinct
+        .traverse(x => lookupService(x._1).map((x, _)))
+      toResolve = combined.filter(_._2.isEmpty)
+      _ <- logger.debug(
+        s"Consensus with id ${roundData.roundId} $dataType to resolve size ${toResolve.size} total size ${combined.size}"
+      )
+      resolved <- toResolve
         .traverse(
           t =>
             LiftIO[F].liftIO(
               dataResolver
-                .resolveMessageDefaults(
-                  t._1,
-                  readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList.headOption
+                .resolveBatchDataByDistance[T](
+                  List(t._1._1),
+                  dataType,
+                  readyPeers.values.toList,
+                  readyPeers.get(t._1._2.id)
                 )(contextShift)
-                .map(_.channelMessage)
             )
         )
+        .map(_.flatten)
+      _ <- logger.debug(s" ${roundData.roundId} $dataType resolved size ${resolved.size}")
+    } yield resolved.map(resolvedMapper) ++ combined.flatMap(_._2)
+
+  private[consensus] def mergeTxProposalsAndBroadcastBlock(): F[Unit] =
+    for {
+      allPeers <- LiftIO[F].liftIO(dao.peerInfo.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
+      proposals <- transactionProposals.get
+      transactions <- prepareConsensusData[Transaction, TransactionCacheData](
+        "transactions",
+        proposals,
+        allPeers, { p =>
+          p.txHashes
+        },
+        roundData.transactions.map(_.hash), { s =>
+          transactionService.lookup(s).map(_.map(_.transaction))
+        }, { tcd =>
+          tcd.transaction
+        }
+      )
+
+      messages <- prepareConsensusData[ChannelMessage, ChannelMessageMetadata](
+        "message",
+        proposals,
+        allPeers, { p =>
+          p.messages
+        },
+        Seq.empty[String], { s =>
+          messageService.lookup(s).map(_.map(_.channelMessage))
+        }, { cmm =>
+          cmm.channelMessage
+        }
+      ).map(_.union(roundData.messages)) // TODO: wkoszycki include messages to resolve them
+
       notifications = proposals
         .flatMap(_._2.notifications)
         .toSet
@@ -387,30 +411,31 @@ class Consensus[F[_]: Concurrent](
         .flatMap(_._2.exHashes)
         .toList
         .traverse(o => observationService.lookup(o).map((o, _)))
-      resolvedObs <- observations
-        .filter(_._2.isEmpty)
-        .traverse { ex =>
-          LiftIO[F].liftIO(
-            dataResolver.resolveObservation(
-              ex._1,
-              readyPeers.values.filter(r => idsTxs._1.contains(FacilitatorId(r.id))).toList,
-              None
-            )(contextShift)
-          )
+      resolvedObs <- prepareConsensusData[Observation, Observation](
+        "observation",
+        proposals,
+        allPeers, { p =>
+          p.exHashes
+        },
+        roundData.observations.map(_.hash), { s =>
+          observationService.lookup(s)
+        }, { o =>
+          o
         }
+      )
       proposal = UnionBlockProposal(
         roundData.roundId,
         FacilitatorId(dao.id),
         CheckpointBlock.createCheckpointBlock(
-          resolved ++ txs.flatMap(_._2.map(_.transaction)),
+          transactions,
           roundData.tipsSOE.soe
             .map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash, Some(soe.baseHash))),
-          resolvedMsg.union(msgs.flatMap(_._2.map(_.channelMessage))).union(roundData.messages).distinct,
+          messages,
           notifications,
           observations.flatMap(_._2) ++ resolvedObs
         )(dao.keyPair)
       )
-      _ <- remoteCall.shift *> remoteSender.broadcastBlockUnion(
+      _ <- remoteCall.shift >> remoteSender.broadcastBlockUnion(
         BroadcastUnionBlockProposal(roundData.roundId, roundData.peers, proposal)
       )
       _ <- addBlockProposal(proposal)
@@ -520,7 +545,7 @@ object Consensus {
     val TIMEOUT, BEHIND, FINISHED = Value
   }
 
-  case class FacilitatorId(id: Schema.Id) extends AnyVal
+  case class FacilitatorId(id: Id) extends AnyVal
   case class RoundId(id: String) extends AnyVal
 
   case class UnionProposals(state: StageState)

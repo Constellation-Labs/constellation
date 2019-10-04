@@ -10,15 +10,18 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointResponse}
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.Schema.{CheckpointCache, Height, Id, NodeState}
-import org.constellation.primitives.{IPManager, TransactionCacheData, TransactionGossip}
+import org.constellation.domain.configuration.NodeConfig
+import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
+import org.constellation.domain.schema.Id
+import org.constellation.primitives.{IPManager, Transaction, TransactionCacheData, TransactionGossip}
 import org.constellation.storage.VerificationStatus.{SnapshotCorrect, SnapshotHeightAbove, SnapshotInvalid}
 import org.constellation.storage._
 import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.{APIClient, Metrics}
-import org.constellation.{DAO, Fixtures, NodeConfig}
+import org.constellation.{DAO, Fixtures}
 import org.json4s.native
 import org.json4s.native.Serialization
 import org.mockito.cats.IdiomaticMockitoCats
@@ -240,6 +243,39 @@ class PeerAPITest
           }
         }
       }
+
+      "GET transactions" - {
+        "should return list of transactions if one of two transaction exists" in {
+          val a = KeyUtils.makeKeyPair()
+          val b = KeyUtils.makeKeyPair()
+          val tx = createTransaction(a.address, b.address, 5L, a)
+
+          dao.transactionService shouldReturn mock[TransactionService[IO]]
+          dao.transactionService.lookup("hash1") shouldReturnF Some(new TransactionCacheData(tx))
+          dao.transactionService.lookup("none") shouldReturnF None
+          dao.peerInfo shouldReturnF Map()
+
+          val hashes = List("hash1", "none").mkString(",")
+
+          Get(s"/batch/transactions?ids=$hashes") ~> peerAPI.commonEndpoints ~> check {
+            status shouldEqual StatusCodes.OK
+            responseAs[List[(String, TransactionCacheData)]].size shouldEqual 1
+          }
+        }
+
+        "should return empty list if transactions are not exist" in {
+          dao.transactionService shouldReturn mock[TransactionService[IO]]
+          dao.transactionService.lookup(*) shouldReturnF None
+          dao.peerInfo shouldReturnF Map()
+
+          val hashes = List("none1", "none2").mkString(",")
+
+          Get(s"/batch/transactions?ids=$hashes") ~> peerAPI.commonEndpoints ~> check {
+            status shouldEqual StatusCodes.OK
+            responseAs[List[(String, TransactionCacheData)]].size shouldEqual 0
+          }
+        }
+      }
     }
   }
 
@@ -266,8 +302,8 @@ class PeerAPITest
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
 
     dao.snapshotService shouldReturn mock[SnapshotService[IO]]
-    dao.checkpointService shouldReturn mock[CheckpointService[IO]]
-    dao.checkpointService.accept(any[FinishedCheckpoint])(dao) shouldReturn IO({
+    dao.checkpointAcceptanceService shouldReturn mock[CheckpointAcceptanceService[IO]]
+    dao.checkpointAcceptanceService.accept(any[FinishedCheckpoint]) shouldReturn IO({
       Thread.sleep(2000)
     })
     dao

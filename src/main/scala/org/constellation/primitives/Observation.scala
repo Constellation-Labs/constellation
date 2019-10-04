@@ -2,7 +2,7 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
-import org.constellation.primitives.Schema.Id
+import org.constellation.domain.schema.Id
 import org.constellation.storage.ConsensusObject
 import org.constellation.util.Signable
 import constellation._

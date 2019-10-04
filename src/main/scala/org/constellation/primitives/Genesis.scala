@@ -11,6 +11,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema._
+import org.constellation.domain.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.ConsensusStatus
 import org.constellation.util.AccountBalance
@@ -99,11 +100,11 @@ object Genesis extends StrictLogging {
   def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = false)(implicit dao: DAO): Unit = {
     // Store hashes for the edges
 
-    (go.genesis.storeSOE() *>
-      go.initialDistribution.storeSOE() *>
-      go.initialDistribution2.storeSOE() *>
-      IO(go.genesis.store(CheckpointCache(Some(go.genesis), height = Some(Height(0, 0))))) *>
-      IO(go.initialDistribution.store(CheckpointCache(Some(go.initialDistribution), height = Some(Height(1, 1))))) *>
+    (go.genesis.storeSOE() >>
+      go.initialDistribution.storeSOE() >>
+      go.initialDistribution2.storeSOE() >>
+      IO(go.genesis.store(CheckpointCache(Some(go.genesis), height = Some(Height(0, 0))))) >>
+      IO(go.initialDistribution.store(CheckpointCache(Some(go.initialDistribution), height = Some(Height(1, 1))))) >>
       IO(go.initialDistribution2.store(CheckpointCache(Some(go.initialDistribution2), height = Some(Height(1, 1))))))
       .unsafeRunSync()
 

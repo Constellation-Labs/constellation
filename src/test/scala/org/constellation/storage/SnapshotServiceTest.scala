@@ -4,8 +4,10 @@ import better.files.File
 import cats.effect.{ContextShift, IO, Timer}
 import org.constellation._
 import cats.implicits._
+import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.{ConsensusManager, RandomData, Snapshot, SnapshotInfo}
-import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeState}
+import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
+import org.constellation.domain.schema.Id
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats

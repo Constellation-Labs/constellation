@@ -1,46 +1,47 @@
 package org.constellation.primitives
+
 import cats.effect.{ContextShift, IO, Timer}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.checkpoint.{CheckpointParentService, CheckpointService}
 import org.constellation.consensus.RandomData
+import org.constellation.domain.configuration.NodeConfig
 import org.constellation.primitives.Schema.{CheckpointCacheMetadata, EdgeHashType, Height, TypedEdgeHash}
-import org.constellation.storage.{CheckpointService, SOEService}
+import org.constellation.storage.SOEService
 import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
+import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{FunSpecLike, Matchers}
 
-class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatchersSugar with Matchers {
+class TipServiceTest
+    extends FunSpecLike
+    with IdiomaticMockito
+    with IdiomaticMockitoCats
+    with ArgumentMatchersSugar
+    with Matchers {
 
   implicit val dao: DAO = prepareDAO()
   implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
   implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
 
+  val facilitatorFilter: FacilitatorFilter[IO] = mock[FacilitatorFilter[IO]]
+
   def prepareDAO(): DAO = {
-    val dao = mock[DAO]
-
-    val checkpointService = mock[CheckpointService[IO]]
-    checkpointService.lookup(*) shouldReturn IO.pure[Option[CheckpointCacheMetadata]](None)
-    val metrics = mock[Metrics]
-    metrics.incrementMetricAsync[IO](*)(*) shouldReturn IO.unit
-    metrics.updateMetricAsync[IO](*, any[Int])(*) shouldReturn IO.unit
-
-    metrics.updateMetricAsync[IO]("activeTips", 2).unsafeRunSync()
-
-    dao.metrics shouldReturn metrics
-    dao.miscLogger shouldReturn Logger("MiscLogger")
-    dao.soeService shouldReturn new SOEService[IO]()
-    dao.checkpointService shouldReturn checkpointService
-    dao
+    val d = new DAO()
+    d.initialize(NodeConfig(primaryKeyPair = Fixtures.tempKey5))
+    d.metrics = new Metrics(200)(d)
+    d
   }
 
   describe("TrieBasedTipService") {
 
     it("limits maximum number of tips") {
       val limit = 6
-      val concurrentTipService = new ConcurrentTipService[IO](limit, 10, 2, 2, 30, dao)
+      val concurrentTipService =
+        new ConcurrentTipService[IO](limit, 10, 2, 2, 30, dao.checkpointParentService, dao, facilitatorFilter)
 
       val cbs = createIndexedCBmocks(limit * 3, { i =>
         createCBMock(i.toString)
@@ -56,7 +57,8 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
 
     it("removes the tip ") {
       val maxTipUsage = 500
-      val concurrentTipService = new ConcurrentTipService[IO](6, 10, maxTipUsage, 2, 30, dao)
+      val concurrentTipService =
+        new ConcurrentTipService[IO](6, 10, maxTipUsage, 2, 30, dao.checkpointParentService, dao, facilitatorFilter)
 
       RandomData.go.initialDistribution
         .storeSOE()
@@ -78,7 +80,8 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
     }
     it("safely updates a tip ") {
       val maxTipUsage = 10
-      val concurrentTipService = new ConcurrentTipService[IO](6, 4, maxTipUsage, 0, 30, dao)
+      val concurrentTipService =
+        new ConcurrentTipService[IO](6, 4, maxTipUsage, 0, 30, dao.checkpointParentService, dao, facilitatorFilter)
 
       RandomData.go.initialDistribution
         .storeSOE()
@@ -118,7 +121,7 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
 
   private def createCBMock(hash: String) = {
     val cb = mock[CheckpointBlock]
-    cb.parentSOEBaseHashes shouldReturn Seq.empty
+    cb.parentSOEHashes shouldReturn Seq.empty
 //    cb.transactions shouldReturn Seq.empty
     cb.baseHash shouldReturn hash
     cb
@@ -131,6 +134,6 @@ class TipServiceTest extends FunSpecLike with IdiomaticMockito with ArgumentMatc
     cbs: List[CheckpointBlock],
     func: CheckpointBlock => IO[Any]
   ) =
-    cbs.map(IO.shift *> func(_))
+    cbs.map(IO.shift >> func(_))
 
 }

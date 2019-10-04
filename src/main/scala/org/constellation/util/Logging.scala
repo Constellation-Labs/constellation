@@ -18,15 +18,15 @@ object Logging {
     operationName: String
   )(implicit L: Logger[F], B: Bracket[F, Throwable]): F[A] =
     B.bracket(
-      startLog(operationName) *> clock
+      startLog(operationName) >> clock
     )(_ => fa)(clk1 => clock.flatMap(finishedLog(operationName, clk1, _)))
 
   def logThread[A](fa: IO[A], operationName: String)(implicit L: Logger[IO]): IO[A] =
-    (startLog(operationName) *> clock[IO])
+    (startLog(operationName) >> clock[IO])
       .bracket(_ => fa)(clk1 => clock[IO].flatMap(finishedLog(operationName, clk1, _)))
 
   def logThread[A](fa: IO[A], operationName: String, logger: com.typesafe.scalalogging.Logger): IO[A] =
-    (IO(startLog(operationName, logger)) *> clock[IO])
+    (IO(startLog(operationName, logger)) >> clock[IO])
       .bracket(_ => fa)(clk1 => clock[IO].flatMap(clk2 => IO(finishedLog(operationName, clk1, clk2, logger))))
 
   private def startLog[F[_]](operationName: String)(implicit L: Logger[F]) =

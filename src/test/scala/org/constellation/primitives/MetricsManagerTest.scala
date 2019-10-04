@@ -7,7 +7,8 @@ import akka.testkit.TestKit
 import com.typesafe.scalalogging.Logger
 import io.prometheus.client.CollectorRegistry
 import org.constellation.util.Metrics
-import org.constellation.{DAO, NodeConfig}
+import org.constellation.DAO
+import org.constellation.domain.configuration.NodeConfig
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 
 class MetricsManagerTest()
@@ -28,8 +29,6 @@ class MetricsManagerTest()
   implicit val dao: DAO = new DAO()
   dao.initialize(NodeConfig(allowLocalhostPeers = true, hostName = "", peerHttpPort = 0))
   logger.info("DAO actor initialized")
-
-  dao.metrics = new Metrics()
 
   logger.info("MetricsManager actor initialized")
 

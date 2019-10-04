@@ -7,7 +7,7 @@ import akka.testkit.{ImplicitSender, TestKit}
 import akka.util.Timeout
 import org.scalatest._
 
-import org.constellation.primitives.Schema.Id
+import org.constellation.domain.schema.Id
 
 case class AnotherPublicKey(c: Id, seq: Seq[PublicKey])
 

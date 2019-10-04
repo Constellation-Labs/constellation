@@ -1,18 +1,18 @@
 package org.constellation.util
 
-import cats.effect.{Async, ContextShift, IO, LiftIO}
-import cats.implicits._
+import cats.effect.{Async, ContextShift, Effect, IO}
 import com.softwaremill.sttp._
 import com.typesafe.config.ConfigFactory
-import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
-import org.constellation.primitives.Schema.{GenesisObservation, Id, MetricsResult}
+import org.constellation.primitives.Schema.MetricsResult
+import org.constellation.domain.schema.Id
 import org.constellation.serializer.KryoSerializer
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.json4s.Formats
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
 object APIClient {
 
@@ -71,18 +71,37 @@ class APIClient private (
     KryoSerializer.deserializeCast[T](resp.unsafeBody)
   }
 
-  def getNonBlockingBytesKryo[T <: AnyRef](
+  def getNonBlockingArrayByteIO(
     suffix: String,
     queryParams: Map[String, String] = Map(),
     timeout: Duration = 15.seconds
-  )(contextToReturn: ContextShift[IO]): IO[T] =
+  )(
+    contextToReturn: ContextShift[IO]
+  ): IO[Array[Byte]] =
     contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[IO].async { cb =>
       httpWithAuth(suffix, queryParams, timeout)(Method.GET)
         .response(asByteArray)
         .send()
         .onComplete {
-          case Success(value) => cb(Right(KryoSerializer.deserializeCast[T](value.unsafeBody)))
-          case Failure(error) => cb(Left(error))
+          case Success(value: Response[Array[Byte]]) =>
+            value.body.fold(err => cb(Left(new Exception(err))), body => cb(Right(body)))
+          case Failure(error: Throwable) => cb(Left(error))
+        }(ConstellationExecutionContext.unbounded)
+    })
+
+  def getNonBlockingArrayByteF[F[_]: Async](
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds
+  )(contextToReturn: ContextShift[F]): F[Array[Byte]] =
+    contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[F].async { cb =>
+      httpWithAuth(suffix, queryParams, timeout)(Method.GET)
+        .response(asByteArray)
+        .send()
+        .onComplete {
+          case Success(value: Response[Array[Byte]]) =>
+            value.body.fold(err => cb(Left(new Exception(err))), body => cb(Right(body)))
+          case Failure(error: Throwable) => cb(Left(error))
         }(ConstellationExecutionContext.unbounded)
     })
 

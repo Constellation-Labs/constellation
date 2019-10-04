@@ -104,28 +104,28 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
       p <- pending.update(key, fn).flatTap(_ => Logger[F].debug(s"ConsensusService pendingUpdate with hash=${key}"))
       i <- p
         .fold(
-          Logger[F].debug(s"ConsensusService inConsensusUpdate with hash=${key}") *> withLock(
+          Logger[F].debug(s"ConsensusService inConsensusUpdate with hash=${key}") >> withLock(
             "inConsensusUpdate",
             inConsensus.update(key, fn)
           )
         )(curr => Sync[F].pure(Some(curr)))
       ac <- i
         .fold(
-          Logger[F].debug(s"ConsensusService acceptedUpdate with hash=${key}") *> withLock(
+          Logger[F].debug(s"ConsensusService acceptedUpdate with hash=${key}") >> withLock(
             "acceptedUpdate",
             accepted.update(key, fn)
           )
         )(curr => Sync[F].pure(Some(curr)))
       a <- ac
         .fold(
-          Logger[F].debug(s"ConsensusService arbitraryUpdate with hash=${key}") *> withLock(
+          Logger[F].debug(s"ConsensusService arbitraryUpdate with hash=${key}") >> withLock(
             "arbitraryUpdate",
             arbitrary.update(key, fn)
           )
         )(curr => Sync[F].pure(Some(curr)))
       result <- a
         .fold(
-          Logger[F].debug(s"ConsensusService unknownUpdate with hash=${key}") *> withLock(
+          Logger[F].debug(s"ConsensusService unknownUpdate with hash=${key}") >> withLock(
             "unknownUpdate",
             unknown.update(key, fn)
           )
@@ -133,9 +133,9 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
     } yield result
 
   def accept(a: A, cpc: Option[CheckpointCache] = None): F[Unit] =
-    put(a, ConsensusStatus.Accepted, cpc) *>
-      withLock("inConsensusUpdate", inConsensus.remove(a.hash)) *>
-      withLock("unknownUpdate", unknown.remove(a.hash)) *>
+    put(a, ConsensusStatus.Accepted, cpc) >>
+      withLock("inConsensusUpdate", inConsensus.remove(a.hash)) >>
+      withLock("unknownUpdate", unknown.remove(a.hash)) >>
       withLock("arbitraryUpdate", arbitrary.remove(a.hash))
         .flatTap(
           _ =>
@@ -182,7 +182,7 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
       .traverse(inConsensus.lookup)
       .map(_.flatten)
       .flatMap { txs =>
-        txs.traverse(tx => withLock("inConsensusUpdate", inConsensus.remove(tx.hash))) *>
+        txs.traverse(tx => withLock("inConsensusUpdate", inConsensus.remove(tx.hash))) >>
           txs.traverse(tx => put(tx, ConsensusStatus.Unknown))
       }
       .flatTap(txs => Logger[F].debug(s"ConsensusService clear and add to unknown  with hashes=${txs.map(_.hash)}"))
@@ -192,7 +192,7 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
       .traverse(inConsensus.lookup)
       .map(_.flatten)
       .flatMap { txs =>
-        txs.traverse(tx => withLock("inConsensusUpdate", inConsensus.remove(tx.hash))) *>
+        txs.traverse(tx => withLock("inConsensusUpdate", inConsensus.remove(tx.hash))) >>
           txs.traverse(tx => put(tx))
       }
       .flatTap(txs => Logger[F].debug(s"ConsensusService returningToPending with hashes=${txs.map(_.hash)}"))

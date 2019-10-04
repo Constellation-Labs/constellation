@@ -6,8 +6,8 @@ java "-Dcom.sun.management.jmxremote" \
 "-Dcom.sun.management.jmxremote.authenticate=false" \
 "-Dcom.sun.management.jmxremote.ssl=false" \
 "-XX:+HeapDumpOnOutOfMemoryError" \
-"-Xmx2G" \
+"-Xmx3G" \
 -Djava.rmi.server.hostname=$(cat external_host_ip) \
 -agentlib:jdwp=transport=dt_socket,server=y,address=8000,suspend=n \
--jar dag.jar --ip=$(cat external_host_ip) --port=8999
+-jar dag.jar --ip=$(cat external_host_ip) --port=9000
 

@@ -3,29 +3,39 @@ package org.constellation
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import cats.effect.{Concurrent, ContextShift, IO}
+import cats.effect.{Concurrent, ContextShift, IO, Timer}
 import com.softwaremill.sttp.SttpBackend
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
-import com.typesafe.scalalogging.{Logger, StrictLogging}
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.checkpoint.{
+  CheckpointAcceptanceService,
+  CheckpointBlockValidator,
+  CheckpointParentService,
+  CheckpointService
+}
 import org.constellation.consensus.{ConsensusManager, ConsensusRemoteSender, ConsensusScheduler, ConsensusWatcher}
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
+import org.constellation.domain.configuration.NodeConfig
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
+import org.constellation.domain.schema.Id
 import org.constellation.primitives._
 import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
 import org.constellation.storage._
-import org.constellation.storage.external.{CloudStorage, GcpStorage}
+import org.constellation.storage.external.GcpStorage
 import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.util.{HealthChecker, HostPort, LoggingSttpBackend, SnapshotWatcher}
-import scala.concurrent.duration._
+import org.constellation.transaction.TransactionValidator
+import org.constellation.util.{HealthChecker, HostPort, MajorityStateChooser, SnapshotWatcher}
+
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLogging {
 
@@ -91,24 +101,13 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     }
 
     idDir.createDirectoryIfNotExists(createParents = true)
-    messageHashStore = SwayDBDatastore.duplicateCheckStore(this, "message_hash_store")
-    checkpointHashStore = SwayDBDatastore.duplicateCheckStore(this, "checkpoint_hash_store")
 
-    implicit val ioTimer = IO.timer(ConstellationExecutionContext.unbounded)
+    implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
     rateLimiting = new RateLimiting[IO]
 
     transactionService = new TransactionService[IO](this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
-
-    concurrentTipService = new ConcurrentTipService[IO](
-      processingConfig.maxActiveTipsAllowedInMemory,
-      processingConfig.maxWidth,
-      processingConfig.maxTipUsage,
-      processingConfig.numFacilitatorPeers,
-      processingConfig.minPeerTimeAddedSeconds,
-      this
-    )
 
     observationService = new ObservationService[IO](this)
     checkpointService = new CheckpointService[IO](
@@ -116,9 +115,21 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       transactionService,
       messageService,
       notificationService,
-      observationService,
-      concurrentTipService,
-      rateLimiting
+      observationService
+    )
+    checkpointParentService = new CheckpointParentService(soeService, checkpointService, this)
+    concurrentTipService = new ConcurrentTipService[IO](
+      processingConfig.maxActiveTipsAllowedInMemory,
+      processingConfig.maxWidth,
+      processingConfig.maxTipUsage,
+      processingConfig.numFacilitatorPeers,
+      processingConfig.minPeerTimeAddedSeconds,
+      checkpointParentService,
+      this,
+      new FacilitatorFilter[IO](
+        IO.contextShift(ConstellationExecutionContext.bounded),
+        this
+      )
     )
     addressService = new AddressService[IO]()(Concurrent(IO.ioConcurrentEffect), () => metrics)
 
@@ -126,37 +137,34 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     cluster = Cluster[IO](() => metrics, ipManager, this)
 
     consensusRemoteSender = new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded))
-    consensusManager = new ConsensusManager[IO](
-      transactionService,
-      concurrentTipService,
-      checkpointService,
-      soeService,
-      messageService,
-      observationService,
-      consensusRemoteSender,
-      cluster,
-      this,
-      ConfigUtil.config,
-      IO.contextShift(ConstellationExecutionContext.unbounded),
-      IO.contextShift(ConstellationExecutionContext.bounded)
-    )
 
-    consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
+    majorityStateChooser = new MajorityStateChooser[IO]()
 
     snapshotBroadcastService = {
       val snapshotProcessor =
-        new SnapshotsProcessor(SnapshotsDownloader.downloadSnapshotByDistance)(
+        new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotByDistance[IO])(
+          Concurrent(IO.ioConcurrentEffect),
+          ioTimer.clock,
           this,
-          ConstellationExecutionContext.bounded
+          ConstellationExecutionContext.bounded,
+          IO.contextShift(ConstellationExecutionContext.bounded)
         )
-      val downloadProcess = new DownloadProcess(snapshotProcessor)(this, ConstellationExecutionContext.bounded)
+      val downloadProcess = new DownloadProcess[IO](snapshotProcessor, cluster)(
+        Concurrent(IO.ioConcurrentEffect),
+        ioTimer,
+        ioTimer.clock,
+        this,
+        ConstellationExecutionContext.bounded,
+        IO.contextShift(ConstellationExecutionContext.bounded)
+      )
       new SnapshotBroadcastService[IO](
         new HealthChecker[IO](
           this,
           concurrentTipService,
           consensusManager,
           IO.contextShift(ConstellationExecutionContext.bounded),
-          downloadProcess
+          downloadProcess,
+          majorityStateChooser
         ),
         cluster,
         IO.contextShift(ConstellationExecutionContext.bounded),
@@ -176,6 +184,44 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       consensusManager,
       this
     )
+
+    transactionValidator = new TransactionValidator[IO](transactionService)
+    checkpointBlockValidator = new CheckpointBlockValidator[IO](
+      addressService,
+      snapshotService,
+      checkpointParentService,
+      transactionValidator,
+      this
+    )
+
+    checkpointAcceptanceService = new CheckpointAcceptanceService[IO](
+      addressService,
+      transactionService,
+      concurrentTipService,
+      snapshotService,
+      checkpointService,
+      checkpointParentService,
+      checkpointBlockValidator,
+      rateLimiting,
+      this
+    )
+
+    consensusManager = new ConsensusManager[IO](
+      transactionService,
+      concurrentTipService,
+      checkpointService,
+      checkpointAcceptanceService,
+      soeService,
+      messageService,
+      observationService,
+      consensusRemoteSender,
+      cluster,
+      this,
+      ConfigUtil.config,
+      IO.contextShift(ConstellationExecutionContext.unbounded),
+      IO.contextShift(ConstellationExecutionContext.bounded)
+    )
+    consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
 
     transactionGenerator =
       TransactionGenerator[IO](addressService, transactionGossiping, transactionService, cluster, this)
@@ -205,10 +251,46 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   def leavingPeers: IO[Map[Id, PeerData]] =
     peerInfo.map(_.filter(eqNodeState(NodeState.Leaving)))
 
+  def terminateConsensuses(): IO[Unit] =
+    consensusManager.terminateConsensuses() // TODO: wkoszycki temporary fix to check cluster stability
+
+  def getActiveMinHeight: IO[Option[Long]] =
+    consensusManager.getActiveMinHeight // TODO: wkoszycki temporary fix to check cluster stability
+
   def readyFacilitatorsAsync: IO[Map[Id, PeerData]] =
     readyPeers(NodeType.Full).map(_.filter {
       case (_, pd) =>
         pd.peerMetadata.timeAdded < (System
           .currentTimeMillis() - processingConfig.minPeerTimeAddedSeconds * 1000)
     })
+
+  def enableSimulateEndpointTimeout(): Unit = {
+    simulateEndpointTimeout = true
+    metrics.updateMetric("simulateEndpointTimeout", simulateEndpointTimeout.toString)
+  }
+
+  def disableSimulateEndpointTimeout(): Unit = {
+    simulateEndpointTimeout = false
+    metrics.updateMetric("simulateEndpointTimeout", simulateEndpointTimeout.toString)
+  }
+
+  def enableRandomTransactions(): Unit = {
+    generateRandomTX = true
+    metrics.updateMetric("generateRandomTX", generateRandomTX.toString)
+  }
+
+  def disableRandomTransactions(): Unit = {
+    generateRandomTX = false
+    metrics.updateMetric("generateRandomTX", generateRandomTX.toString)
+  }
+
+  def enableCheckpointFormation(): Unit = {
+    formCheckpoints = true
+    metrics.updateMetric("checkpointFormation", formCheckpoints.toString)
+  }
+
+  def disableCheckpointFormation(): Unit = {
+    formCheckpoints = false
+    metrics.updateMetric("checkpointFormation", formCheckpoints.toString)
+  }
 }

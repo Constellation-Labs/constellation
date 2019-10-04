@@ -189,29 +189,33 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) extends Periodic[Unit](
     countMetrics.get(key).map(_.get())
 
   // Temporary, for debugging only. Would cause a problem with many peers
+  def updateBalanceMetrics(): IO[Unit] =
+    for {
+      peers <- dao.peerInfo
+      allAddresses = peers.map(_._1.address).toSeq :+ dao.selfAddressStr
 
-  def updateBalanceMetrics(): Unit = {
+      balancesBySnapshot <- balancesBySnapshotMetrics(allAddresses)
+      balances <- balancesMetrics(allAddresses)
 
-    val peers = dao.peerInfo.unsafeRunSync().toSeq
+      _ <- updateMetricAsync[IO]("balancesBySnapshot", balancesBySnapshot.sorted.mkString(", "))
+      _ <- updateMetricAsync[IO]("balancesBySnapshot", balances.sorted.mkString(", "))
+    } yield ()
 
-    val allAddresses = peers.map { _._1.address } :+ dao.selfAddressStr
+  private def balancesBySnapshotMetrics(allAddresses: Seq[String]) =
+    allAddresses.toList.traverse { address =>
+      dao.addressService
+        .lookup(address)
+        .map(_.map(_.balanceByLatestSnapshot).getOrElse(0L))
+        .map(address.slice(0, 8) + " " + _)
+    }
 
-    val balancesBySnapshotMetrics = allAddresses.map { a =>
-      val balance = dao.addressService.lookup(a).unsafeRunSync().map { _.balanceByLatestSnapshot }.getOrElse(0L)
-      a.slice(0, 8) + " " + balance
-    }.sorted
-      .mkString(", ")
-
-    val balancesMetrics = allAddresses.map { a =>
-      val balance = dao.addressService.lookup(a).unsafeRunSync().map { _.balance }.getOrElse(0L)
-      a.slice(0, 8) + " " + balance
-    }.sorted
-      .mkString(", ")
-
-    updateMetric("balancesBySnapshot", balancesBySnapshotMetrics)
-    updateMetric("balances", balancesMetrics)
-
-  }
+  private def balancesMetrics(allAddresses: Seq[String]) =
+    allAddresses.toList.traverse { address =>
+      dao.addressService
+        .lookup(address)
+        .map(_.map(_.balance).getOrElse(0L))
+        .map(address.slice(0, 8) + " " + _)
+    }
 
   private def updateTransactionAcceptedMetrics(): IO[Unit] =
     IO { rateCounter.calculate(countMetrics.get("transactionAccepted").map { _.get() }.getOrElse(0L)) }
@@ -233,14 +237,14 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) extends Periodic[Unit](
       .void
 
   private def updatePeriodicMetrics(): IO[Unit] =
-    IO { updateBalanceMetrics() } *>
-      updateTransactionAcceptedMetrics() *>
-      updateObservationServiceMetrics() *>
-      updateMetricAsync[IO]("nodeCurrentTimeMS", System.currentTimeMillis().toString) *>
-      updateMetricAsync[IO]("nodeCurrentDate", new DateTime().toString()) *>
-      updateMetricAsync[IO]("metricsRound", round) *>
-      dao.addressService.size().flatMap(size => updateMetricAsync[IO]("addressCount", size)) *>
-      updateMetricAsync[IO]("channelCount", dao.threadSafeMessageMemPool.activeChannels.size) *>
+    updateBalanceMetrics >>
+      updateTransactionAcceptedMetrics() >>
+      updateObservationServiceMetrics() >>
+      updateMetricAsync[IO]("nodeCurrentTimeMS", System.currentTimeMillis().toString) >>
+      updateMetricAsync[IO]("nodeCurrentDate", new DateTime().toString()) >>
+      updateMetricAsync[IO]("metricsRound", round) >>
+      dao.addressService.size().flatMap(size => updateMetricAsync[IO]("addressCount", size)) >>
+      updateMetricAsync[IO]("channelCount", dao.threadSafeMessageMemPool.activeChannels.size) >>
       updateTransactionServiceMetrics()
 
   /**

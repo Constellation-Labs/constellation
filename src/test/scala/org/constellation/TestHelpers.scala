@@ -6,11 +6,14 @@ import better.files.File
 import cats.effect.IO
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.Logger
+import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.ConsensusRemoteSender
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.makeKeyPair
+import org.constellation.domain.configuration.NodeConfig
 import org.constellation.p2p.{Cluster, PeerData}
-import org.constellation.primitives.Schema.{Id, NodeState, NodeType}
+import org.constellation.primitives.Schema.{NodeState, NodeType}
+import org.constellation.domain.schema.Id
 import org.constellation.primitives.{ConcurrentTipService, Schema}
 import org.constellation.storage._
 import org.constellation.util.{APIClient, HostPort, Metrics}
@@ -19,23 +22,30 @@ import org.mockito.cats.IdiomaticMockitoCats
 
 object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
 
-  def prepareRealDao(facilitators: Map[Schema.Id, PeerData] = prepareFacilitators(1)): DAO = {
+  def prepareRealDao(facilitators: Map[Id, PeerData] = prepareFacilitators(1)): DAO = {
     val dao: DAO = new DAO {
       override def readyPeers: IO[
         Map[Id, PeerData]
       ] = IO.pure(facilitators)
+      override val keyPair = Fixtures.tempKey
     }
+
     dao.initialize()
-    dao.metrics = new Metrics()(dao)
+
+    dao.metrics = {
+      implicit val d: DAO = dao
+      new Metrics()
+    }
+
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
     dao
   }
 
-  def prepareFacilitators(size: Int): Map[Schema.Id, PeerData] =
+  def prepareFacilitators(size: Int): Map[Id, PeerData] =
     Seq
       .fill(size) {
         val hash = randomHash
-        val facilitatorId1 = Schema.Id(hash)
+        val facilitatorId1 = Id(hash)
         val peerData1: PeerData = mock[PeerData]
         peerData1.peerMetadata shouldReturn mock[PeerMetadata]
         peerData1.peerMetadata.id shouldReturn facilitatorId1
@@ -53,7 +63,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
 
   def randomHash: String = Hashing.sha256.hashBytes(UUID.randomUUID().toString.getBytes).toString
 
-  def prepareMockedDAO(facilitators: Map[Schema.Id, PeerData] = prepareFacilitators(1)): DAO = {
+  def prepareMockedDAO(facilitators: Map[Id, PeerData] = prepareFacilitators(1)): DAO = {
     import constellation._
 
     implicit val kp: KeyPair = makeKeyPair()

@@ -6,9 +6,11 @@ import cats.implicits._
 import com.typesafe.config.Config
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
 import org.constellation.consensus.Consensus._
 import org.constellation.p2p.{Cluster, DataResolver, PeerData, PeerNotification}
-import org.constellation.primitives.Schema.{CheckpointCache, Id, NodeType, SignedObservationEdgeCache}
+import org.constellation.primitives.Schema.{CheckpointCache, NodeType, SignedObservationEdgeCache}
+import org.constellation.domain.schema.Id
 import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
 import org.constellation.primitives.{ChannelMessage, CheckpointBlock, ConcurrentTipService, Transaction}
 import org.constellation.storage._
@@ -21,6 +23,7 @@ class ConsensusManager[F[_]: Concurrent](
   transactionService: TransactionService[F],
   concurrentTipService: ConcurrentTipService[F],
   checkpointService: CheckpointService[F],
+  checkpointAcceptanceService: CheckpointAcceptanceService[F],
   soeService: SOEService[F],
   messageService: MessageService[F],
   observationService: ObservationService[F],
@@ -81,7 +84,7 @@ class ConsensusManager[F[_]: Concurrent](
           roundData._3,
           new DataResolver,
           transactionService,
-          checkpointService,
+          checkpointAcceptanceService,
           messageService,
           observationService,
           remoteSender,
@@ -199,7 +202,7 @@ class ConsensusManager[F[_]: Concurrent](
           arbitraryMsgs,
           new DataResolver,
           transactionService,
-          checkpointService,
+          checkpointAcceptanceService,
           messageService,
           observationService,
           remoteSender,

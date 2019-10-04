@@ -74,8 +74,8 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
       val tx2 = createTransaction("b")
       val tx3 = createTransaction("c")
 
-      (memPool.put("a", tx1) *>
-        memPool.put("b", tx2) *>
+      (memPool.put("a", tx1) >>
+        memPool.put("b", tx2) >>
         memPool.put("c", tx3)).unsafeRunSync
 
       memPool.pull(2).unsafeRunSync shouldBe List(tx1, tx2).some
@@ -89,8 +89,8 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
       val tx2 = createTransaction("b", fee = 1L.some)
       val tx3 = createTransaction("c", fee = 5L.some)
 
-      (memPool.put("a", tx1) *>
-        memPool.put("b", tx2) *>
+      (memPool.put("a", tx1) >>
+        memPool.put("b", tx2) >>
         memPool.put("c", tx3)).unsafeRunSync
 
       memPool.pull(2).unsafeRunSync shouldBe List(tx3, tx1).some

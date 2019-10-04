@@ -1,10 +1,8 @@
 package org.constellation.primitives
 
-import java.security.{KeyPair, PublicKey}
+import java.security.KeyPair
 
-import org.constellation.DAO
-import org.constellation.crypto.KeyUtils
-import org.constellation.crypto.KeyUtils.hexToPublicKey
+import org.constellation.domain.schema.Id
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.util._
 
@@ -252,22 +250,6 @@ object Schema {
   case class InternalHeartbeat(round: Long = 0L)
 
   case class MetricsResult(metrics: Map[String, String])
-
-  case class Id(hex: String) {
-
-    def short: String = hex.toString.slice(0, 5)
-
-    def medium: String = hex.toString.slice(0, 10)
-
-    def address: String = KeyUtils.publicKeyToAddressString(toPublicKey)
-
-    def toPublicKey: PublicKey = hexToPublicKey(hex)
-
-    def bytes: Array[Byte] = KeyUtils.hex2bytes(hex)
-
-    def bigInt: BigInt = BigInt(bytes)
-
-  }
 
   case class Node(address: String, host: String, port: Int)
 

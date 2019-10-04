@@ -8,9 +8,10 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.crypto.KeyUtils
 import org.constellation.p2p.PeerRegistrationRequest
-import org.constellation.primitives.Schema._
+import org.constellation.domain.schema.Id
 import org.constellation.util.Metrics
-import org.constellation.{NodeConfig, ResourceInfo}
+import org.constellation.ResourceInfo
+import org.constellation.domain.configuration.NodeConfig
 
 case class LocalNodeConfig(
   externalIP: String
@@ -21,8 +22,6 @@ trait NodeData {
   @volatile var nodeConfig: NodeConfig
 
   var metrics: Metrics = _
-  var messageHashStore: swaydb.Set[String] = _
-  var checkpointHashStore: swaydb.Set[String] = _
 
   val miscLogger = Logger("MiscLogger")
 
@@ -69,33 +68,4 @@ trait NodeData {
   def updateKeyPair(kp: KeyPair): Unit =
     nodeConfig = nodeConfig.copy(primaryKeyPair = kp)
 
-  def enableSimulateEndpointTimeout(): Unit = {
-    simulateEndpointTimeout = true
-    metrics.updateMetric("simulateEndpointTimeout", simulateEndpointTimeout.toString)
-  }
-
-  def disableSimulateEndpointTimeout(): Unit = {
-    simulateEndpointTimeout = false
-    metrics.updateMetric("simulateEndpointTimeout", simulateEndpointTimeout.toString)
-  }
-
-  def enableRandomTransactions(): Unit = {
-    generateRandomTX = true
-    metrics.updateMetric("generateRandomTX", generateRandomTX.toString)
-  }
-
-  def disableRandomTransactions(): Unit = {
-    generateRandomTX = false
-    metrics.updateMetric("generateRandomTX", generateRandomTX.toString)
-  }
-
-  def enableCheckpointFormation(): Unit = {
-    formCheckpoints = true
-    metrics.updateMetric("checkpointFormation", formCheckpoints.toString)
-  }
-
-  def disableCheckpointFormation(): Unit = {
-    formCheckpoints = false
-    metrics.updateMetric("checkpointFormation", formCheckpoints.toString)
-  }
 }
