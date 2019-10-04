@@ -7,6 +7,8 @@ import org.constellation.DAO
 import org.constellation.p2p.PeerData
 import org.constellation.domain.schema.Id
 
+import scala.util.Random
+
 class FacilitatorFilter[F[_]: Concurrent: Logger](calculationContext: ContextShift[F], dao: DAO) {
 
   def filterPeers(peers: Map[Id, PeerData], numFacilitatorPeers: Int, tipSoe: TipSoe): F[Map[Id, PeerData]] =
@@ -14,7 +16,7 @@ class FacilitatorFilter[F[_]: Concurrent: Logger](calculationContext: ContextShi
       minTipHeight <- tipSoe.minHeight.getOrElse(0L).pure[F]
       _ <- Logger[F].info(s"[${dao.id.short}] : [Facilitator Filter] : selected minTipHeight = $minTipHeight")
 
-      filteredPeers <- filterByHeight(peers.toList, minTipHeight, numFacilitatorPeers)
+      filteredPeers <- filterByHeight(Random.shuffle(peers.toList), minTipHeight, numFacilitatorPeers)
       peerIds = filteredPeers.map(_._1)
       _ <- Logger[F].info(s"[${dao.id.short}] : [Facilitator Filter] : $peerIds : size = ${peerIds.size}")
     } yield peers.filter(peer => peerIds.contains(peer._1))
