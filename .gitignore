@@ -11,6 +11,7 @@ site/
 .floo*
 swaydb-stress-test.log
 terraform/default-*
+terraform/custom-image-*
 .dag
 *.log
 /logs
