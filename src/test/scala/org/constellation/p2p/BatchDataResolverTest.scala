@@ -27,7 +27,7 @@ class BatchDataResolverTest
     it("should return data from first peer") {
       val hashes = List("x01", "x02", "x03")
       val firstMockApiClient: APIClient = mock[APIClient]
-      firstMockApiClient.getNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
+      firstMockApiClient.postNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
         hashes.map(h => (h, "resolved"))
       val peers = List(PeerApiClient(Id("first"), firstMockApiClient))
 
@@ -39,10 +39,10 @@ class BatchDataResolverTest
     it("should return data collecting from two peers") {
       val hashes = List("x01", "x02", "x03")
       val firstMockApiClient: APIClient = mock[APIClient]
-      firstMockApiClient.getNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
+      firstMockApiClient.postNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
         List(("x01", "resolved"), ("x03", "resolved"))
       val secondMockApiClient: APIClient = mock[APIClient]
-      secondMockApiClient.getNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
+      secondMockApiClient.postNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
         List(("x02", "resolved"))
       val peers =
         List(PeerApiClient(Id("first"), firstMockApiClient), PeerApiClient(Id("second"), secondMockApiClient))
@@ -55,10 +55,10 @@ class BatchDataResolverTest
     it("should raise error if data is not available") {
       val hashes = List("x01", "x02", "x03")
       val firstMockApiClient: APIClient = mock[APIClient]
-      firstMockApiClient.getNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
+      firstMockApiClient.postNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
         List(("x01", "resolved"))
       val secondMockApiClient: APIClient = mock[APIClient]
-      secondMockApiClient.getNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
+      secondMockApiClient.postNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
         List(("x02", "resolved"))
       val peers =
         List(PeerApiClient(Id("first"), firstMockApiClient), PeerApiClient(Id("second"), secondMockApiClient))
@@ -71,13 +71,13 @@ class BatchDataResolverTest
     it("should stop collecting data if has all responses") {
       val hashes = List("x01", "x02", "x03")
       val firstMockApiClient: APIClient = mock[APIClient]
-      firstMockApiClient.getNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
+      firstMockApiClient.postNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
         List(("x01", "resolved"))
       val secondMockApiClient: APIClient = mock[APIClient]
-      secondMockApiClient.getNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
+      secondMockApiClient.postNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
         List(("x02", "resolved"), ("x03", "resolved"))
       val thirdMockApiClient: APIClient = mock[APIClient]
-      thirdMockApiClient.getNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
+      thirdMockApiClient.postNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *) shouldReturnF
         List()
       val peers = List(
         PeerApiClient(Id("first"), firstMockApiClient),
@@ -87,9 +87,9 @@ class BatchDataResolverTest
 
       DataResolver.resolveBatchData[String](hashes, "endpoint", peers)(contextShift).unsafeRunSync()
 
-      firstMockApiClient.getNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *).wasCalled(once)
-      secondMockApiClient.getNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *).wasCalled(once)
-      thirdMockApiClient.getNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *).wasCalled(Times(0))
+      firstMockApiClient.postNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *).wasCalled(once)
+      secondMockApiClient.postNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *).wasCalled(once)
+      thirdMockApiClient.postNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *).wasCalled(Times(0))
     }
   }
 }
