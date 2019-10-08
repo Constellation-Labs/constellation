@@ -128,7 +128,8 @@ lazy val coreDependencies = Seq(
   ("com.typesafe.slick" %% "slick" % "3.3.2").withSources().withJavadoc(),
   "com.h2database" % "h2" % "1.4.199",
   "net.logstash.logback" % "logstash-logback-encoder" % "5.1",
-  "com.google.cloud" % "google-cloud-storage" % "1.91.0"
+  "com.google.cloud" % "google-cloud-storage" % "1.91.0",
+  "com.amazonaws" % "aws-java-sdk" % "1.11.648"
 ) ++ sttpDependencies
 
 //Test dependencies
@@ -153,6 +154,7 @@ Test / logBuffered := false
 
 assemblyMergeStrategy in assembly := {
   case "logback.xml"                                       => MergeStrategy.first
+  case x if x.contains("io.netty.versions.properties")     => MergeStrategy.discard
   case PathList(xs @ _*) if xs.last == "module-info.class" => MergeStrategy.first
   case x =>
     val oldStrategy = (assemblyMergeStrategy in assembly).value

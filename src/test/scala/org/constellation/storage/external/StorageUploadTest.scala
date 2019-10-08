@@ -6,7 +6,7 @@ import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures}
 import org.scalatest.{FunSuite, Matchers}
 
-class GcpStorageUploadTest extends FunSuite with Matchers {
+class StorageUploadTest extends FunSuite with Matchers {
 
   implicit val dao: DAO = new DAO
 

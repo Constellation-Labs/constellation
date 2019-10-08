@@ -5,7 +5,7 @@ sealed trait CloudStorageException extends Throwable {
 }
 
 object CannotGetConfigProperty {
-  def apply(exception: Throwable) = new CannotGetService(s"Cannot get config property : ${exception.getMessage}")
+  def apply(exception: Throwable) = new CannotGetConfigProperty(s"Cannot get config property : ${exception.getMessage}")
 }
 
 case class CannotGetConfigProperty(errorMessage: String) extends CloudStorageException {
@@ -29,7 +29,7 @@ case class CannotGetBucket(errorMessage: String) extends CloudStorageException {
 }
 
 object CannotUploadFile {
-  def apply(exception: Throwable) = new CannotGetBucket(s"Cannot upload file : ${exception.getMessage}")
+  def apply(exception: Throwable) = new CannotUploadFile(s"Cannot upload file : ${exception.getMessage}")
 }
 
 case class CannotUploadFile(errorMessage: String) extends CloudStorageException {
