@@ -51,8 +51,10 @@ object CustomDirectives {
 
     val ipManager: IPManager[IO]
 
-    def rejectBannedIP(address: RemoteAddress): Directive0 = {
-      val ip = address.toOption.map(_.getHostAddress).getOrElse("unknown")
+    def rejectBannedIP(extractedIP: RemoteAddress, socketAddress: InetSocketAddress): Directive0 = {
+      val ip = extractedIP.toOption
+        .map(_.getHostAddress)
+        .getOrElse(socketAddress.getAddress.getHostAddress)
       val isBannedIP = ipManager.bannedIP(ip).unsafeRunSync
 
       if (isBannedIP) {
@@ -63,8 +65,10 @@ object CustomDirectives {
       }
     }
 
-    def enforceKnownIP(address: RemoteAddress): Directive0 = {
-      val ip = address.toOption.map(_.getHostAddress).getOrElse("unknown")
+    def enforceKnownIP(extractedIP: RemoteAddress, socketAddress: InetSocketAddress): Directive0 = {
+      val ip = extractedIP.toOption
+        .map(_.getHostAddress)
+        .getOrElse(socketAddress.getAddress.getHostAddress)
       val isKnownIP = ipManager.knownIP(ip).unsafeRunSync
 
       if (isKnownIP) {

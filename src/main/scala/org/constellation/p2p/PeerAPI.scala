@@ -305,8 +305,8 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     }
   }
 
-  def routes: Route =
-    extractClientIP { address =>
+  def routes(socketAddress: InetSocketAddress): Route =
+    extractClientIP { extractedIP =>
       // val id = ipLookup(address) causes circular dependencies and cluster with 6 nodes unable to start due to timeouts. Consider reopen #391
       // TODO: pass id down and use it if needed
       decodeRequest {
@@ -314,7 +314,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           // rejectBannedIP {
           signEndpoints ~ commonEndpoints ~ batchEndpoints ~
             withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.unbounded) {
-              enforceKnownIP(address) {
+              enforceKnownIP(extractedIP, socketAddress) {
                 postEndpoints ~ mixedEndpoints ~ blockBuildingRoundRoute
               }
             }
