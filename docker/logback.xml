@@ -1,0 +1,21 @@
+<configuration>
+    <jmxConfigurator/>
+
+    <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %highlight(%-5level) %cyan(%logger{15}) - %msg %n</pattern>
+        </encoder>
+    </appender>
+
+    <logger level="debug" name="akka.monitor.instrumentation" />
+    <logger level="debug" name="io.kontainers.micrometer" />
+
+    <logger level="debug" name="APIClient" additivity="false">
+        <appender-ref ref="apiclient"/>
+    </logger>
+
+    <logger name="org.constellation" level="info">
+        <appender-ref ref="console" />
+    </logger>
+
+</configuration>
