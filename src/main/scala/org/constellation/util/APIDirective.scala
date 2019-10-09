@@ -1,5 +1,7 @@
 package org.constellation.util
 
+import java.net.InetSocketAddress
+
 import cats.effect.IO
 import akka.http.scaladsl.server.{Directive1, Directives}
 import org.constellation.ConstellationExecutionContext.{bounded, callbacks, unbounded}
@@ -26,5 +28,21 @@ object APIDirective {
     ec: ExecutionContext = unbounded
   ): Directive1[Try[A]] =
     Directives.onComplete(eval(ioa, ec))
+
+  def extractIP(
+    socketAddress: InetSocketAddress
+  ): Directive1[String] = Directives.extractClientIP.map { extractedIP =>
+    extractedIP.toOption
+      .map(_.getHostAddress)
+      .getOrElse(socketAddress.getAddress.getHostAddress)
+  }
+
+  def extractHostPort(
+    socketAddress: InetSocketAddress
+  ): Directive1[HostPort] = Directives.extractClientIP.map { extractedIP =>
+    extractedIP.toOption
+      .map(ip => HostPort(ip.getHostAddress, extractedIP.getPort))
+      .getOrElse(HostPort(socketAddress.getAddress.getHostAddress, socketAddress.getPort))
+  }
 
 }

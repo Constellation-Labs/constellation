@@ -11,6 +11,7 @@ import cats.effect.IO
 import com.google.common.util.concurrent.RateLimiter
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import org.constellation.primitives.IPManager
+import org.constellation.util.APIDirective
 
 import scala.util.Try
 
@@ -36,8 +37,8 @@ object CustomDirectives {
 
   trait Throttle {
 
-    def throttle(tps: Double): Directive0 =
-      extractClientIP.flatMap { ip =>
+    def throttle(socketAddress: InetSocketAddress, tps: Double): Directive0 =
+      APIDirective.extractIP(socketAddress).flatMap { ip =>
         val rateLimiter = Limiters.getInstance(tps)
         if (rateLimiter.tryAcquire(1)) {
           pass
@@ -51,10 +52,7 @@ object CustomDirectives {
 
     val ipManager: IPManager[IO]
 
-    def rejectBannedIP(extractedIP: RemoteAddress, socketAddress: InetSocketAddress): Directive0 = {
-      val ip = extractedIP.toOption
-        .map(_.getHostAddress)
-        .getOrElse(socketAddress.getAddress.getHostAddress)
+    def rejectBannedIP(ip: String): Directive0 = {
       val isBannedIP = ipManager.bannedIP(ip).unsafeRunSync
 
       if (isBannedIP) {
@@ -65,10 +63,7 @@ object CustomDirectives {
       }
     }
 
-    def enforceKnownIP(extractedIP: RemoteAddress, socketAddress: InetSocketAddress): Directive0 = {
-      val ip = extractedIP.toOption
-        .map(_.getHostAddress)
-        .getOrElse(socketAddress.getAddress.getHostAddress)
+    def enforceKnownIP(ip: String): Directive0 = {
       val isKnownIP = ipManager.knownIP(ip).unsafeRunSync
 
       if (isKnownIP) {
