@@ -59,7 +59,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
   private val config: Config = ConfigFactory.load()
-  private val signEndpoints =
+  private def signEndpoints(socketAddress: InetSocketAddress) =
     post {
       path("status") {
         entity(as[SetNodeStatus]) { sns =>
@@ -75,21 +75,15 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           }
         } ~
         path("register") {
-          extractClientIP { clientIP =>
+          APIDirective.extractIP(socketAddress) { ip =>
             entity(as[PeerRegistrationRequest]) { request =>
-              val hostAddress = clientIP.toOption.map { _.getHostAddress }
               logger.debug(
-                s"Received peer registration request $request on $clientIP $hostAddress ${clientIP.toOption} ${clientIP.toIP}"
+                s"Received peer registration request $request on $ip"
               )
-              val maybeData = getHostAndPortFromRemoteAddress(clientIP)
-              maybeData match {
-                case Some(PeerIPData(host, _)) =>
-                  logger.debug("Parsed host and port, sending peer manager request")
-                  APIDirective.handle(dao.cluster.pendingRegistration(host, request))(_ => complete(StatusCodes.OK))
-                case None =>
-                  logger.warn(s"Failed to parse host and port for $request")
-                  complete(StatusCodes.BadRequest)
-              }
+              logger.debug("Parsed host, sending peer manager request")
+              APIDirective.handle(dao.cluster.pendingRegistration(ip, request))(
+                _ => complete(StatusCodes.OK)
+              )
             }
           }
         } ~
@@ -115,7 +109,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           }
         }
       }
-  private[p2p] val postEndpoints =
+  private[p2p] def postEndpoints(socketAddress: InetSocketAddress) =
     post {
       pathPrefix("snapshot") {
         path("verify") {
@@ -179,23 +173,15 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           }
         } ~
         path("deregister") {
-          extractClientIP { clientIP =>
-            entity(as[PeerUnregister]) { request =>
-              val maybeData = getHostAndPortFromRemoteAddress(clientIP)
-              maybeData match {
-                case Some(PeerIPData(host, portOption)) =>
-                  APIDirective.handle(dao.cluster.deregister(request.host, request.port, request.id)) { _ =>
-                    complete(StatusCodes.OK)
-                  }
-                case None =>
-                  complete(StatusCodes.BadRequest)
-              }
+          entity(as[PeerUnregister]) { request =>
+            APIDirective.handle(dao.cluster.deregister(request.host, request.port, request.id)) { _ =>
+              complete(StatusCodes.OK)
             }
           }
         } ~
         pathPrefix("request") {
           path("signature") {
-            extractClientIP { ip =>
+            APIDirective.extractIP(socketAddress) { ip =>
               entity(as[SignatureRequest]) { sr =>
                 onComplete(
                   EdgeProcessor.handleSignatureRequest(sr)
@@ -209,7 +195,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         pathPrefix("finished") {
           path("checkpoint") {
 
-            extractClientIP { ip =>
+            APIDirective.extractIP(socketAddress) { ip =>
               entity(as[FinishedCheckpoint]) { fc =>
                 optionalHeaderValueByName("ReplyTo") { replyToOpt =>
                   val baseHash = fc.checkpointCacheData.checkpointBlock.map(_.baseHash)
@@ -306,16 +292,16 @@ class PeerAPI(override val ipManager: IPManager[IO])(
   }
 
   def routes(socketAddress: InetSocketAddress): Route =
-    extractClientIP { extractedIP =>
+    APIDirective.extractIP(socketAddress) { ip =>
       // val id = ipLookup(address) causes circular dependencies and cluster with 6 nodes unable to start due to timeouts. Consider reopen #391
       // TODO: pass id down and use it if needed
       decodeRequest {
         encodeResponse {
           // rejectBannedIP {
-          signEndpoints ~ commonEndpoints ~ batchEndpoints ~
+          signEndpoints(socketAddress) ~ commonEndpoints ~ batchEndpoints ~
             withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.unbounded) {
-              enforceKnownIP(extractedIP, socketAddress) {
-                postEndpoints ~ mixedEndpoints ~ blockBuildingRoundRoute
+              enforceKnownIP(ip) {
+                postEndpoints(socketAddress) ~ mixedEndpoints ~ blockBuildingRoundRoute
               }
             }
         }
@@ -325,11 +311,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
   private[p2p] def makeCallback(u: URI, entity: AnyRef) =
     APIClient(u.getHost, u.getPort)(dao.backend, dao)
       .postNonBlockingUnit(u.getPath, entity)
-
-  private def getHostAndPortFromRemoteAddress(clientIP: RemoteAddress) =
-    clientIP.toOption.map { z =>
-      PeerIPData(z.getHostAddress, Some(clientIP.getPort()))
-    }
 
   private def createRoute(path: String)(routeFactory: () => Route): Route =
     pathPrefix(path) {
