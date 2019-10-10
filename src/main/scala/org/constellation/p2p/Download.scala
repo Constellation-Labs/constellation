@@ -93,30 +93,17 @@ class SnapshotsProcessor[F[_]: Concurrent: Clock](
         dao.metrics.incrementMetricAsync("downloadedSnapshots") >> dao.metrics.incrementMetricAsync(
           Metrics.snapshotCount
         )
-      }.flatMap(acceptSnapshot),
+      }.flatMap(acceptSnapshot(hash, _)),
       "download_processSnapshot"
     ) // TODO: wkoszycki shouldn't we accept sequentially ?
   }
 
-  private def acceptSnapshot(rawSnapshot: Array[Byte]): F[Unit] = {
-    val snapshot = deserializeStoredSnapshot(rawSnapshot)
-    logThread(
-      snapshot.checkpointCache.toList.traverse { c =>
-        dao.metrics.incrementMetricAsync[F]("downloadedBlocks") >>
-          dao.metrics.incrementMetricAsync[F](Metrics.checkpointAccepted) >>
-          c.checkpointBlock
-            .traverse(
-              _.transactions.toList.map(_ => dao.metrics.incrementMetricAsync("transactionAccepted")).sequence
-            ) >>
-          C.evalOn(ConstellationExecutionContext.unbounded)(Sync[F].delay {
-            better.files
-              .File(dao.snapshotPath, snapshot.snapshot.hash)
-              .writeByteArray(rawSnapshot)
-          })
-      }.void,
-      "download_acceptSnapshot"
-    )}
-
+  private def acceptSnapshot(hash: String, rawSnapshot: Array[Byte]): F[Unit] =
+    C.evalOn(ConstellationExecutionContext.unbounded)(Sync[F].delay {
+      better.files
+        .File(dao.snapshotPath, hash)
+        .writeByteArray(rawSnapshot)
+    })
 
   private def deserializeStoredSnapshot(storedSnapshotArrayBytes: Array[Byte]) =
     Try(KryoSerializer.deserializeCast[StoredSnapshot](storedSnapshotArrayBytes)).toOption match {
