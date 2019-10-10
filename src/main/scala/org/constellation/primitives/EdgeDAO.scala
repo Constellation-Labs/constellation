@@ -12,9 +12,11 @@ import org.constellation.checkpoint.{
 }
 import org.constellation.consensus._
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._
 import org.constellation.domain.schema.Id
+import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.rollback.RollbackService
 import org.constellation.storage._
 import org.constellation.storage.external.CloudStorage
@@ -133,6 +135,8 @@ trait EdgeDAO {
   var rollbackService: RollbackService[IO] = _
   var cloudStorage: CloudStorage[IO] = _
   var majorityStateChooser: MajorityStateChooser[IO] = _
+  var peerHealthCheck: PeerHealthCheck[IO] = _
+  var peerHealthCheckWatcher: PeerHealthCheckWatcher = _
 
   var consensusRemoteSender: ConsensusRemoteSender[IO] = _
   var consensusManager: ConsensusManager[IO] = _

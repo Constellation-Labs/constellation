@@ -21,11 +21,13 @@ import org.constellation.consensus.{ConsensusManager, ConsensusRemoteSender, Con
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.domain.schema.Id
+import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.primitives._
 import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
@@ -136,6 +138,9 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     ipManager = IPManager[IO]()
     cluster = Cluster[IO](() => metrics, ipManager, this)
+
+    peerHealthCheck = PeerHealthCheck[IO](cluster)
+    peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck)
 
     consensusRemoteSender = new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded))
 

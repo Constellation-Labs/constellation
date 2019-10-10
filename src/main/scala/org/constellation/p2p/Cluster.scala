@@ -28,8 +28,6 @@ case class PeerData(
   notification: Seq[PeerNotification] = Seq.empty
 )
 
-case class PeerHealthCheck(status: Map[Id, Boolean])
-
 case class PendingRegistration(ip: String, request: PeerRegistrationRequest)
 
 case class Deregistration(ip: String, port: Int, id: Id)
@@ -276,6 +274,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       "cluster_deregister"
     )
 
+  // mwadon: Is it correct implementation?
   def forgetPeer(pd: PeerData): F[Unit] =
     logThread(
       for {
@@ -283,12 +282,28 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         pm = pd.peerMetadata
         _ <- ipManager.removeKnownIP(pm.host)
         _ <- p.get(pm.id).traverse { peer =>
-          updatePeerInfo(
-            peer.copy(notification = peer.notification ++ Seq(PeerNotification(pm.id, PeerState.Leave)))
-          )
+          val peerData = peer.copy(notification = peer.notification ++ Seq(PeerNotification(pm.id, PeerState.Leave)))
+          peers.modify(p => (p + (peerData.client.id -> peerData), p))
         }
+        _ <- updateMetrics()
+        _ <- updatePersistentStore()
       } yield (),
       "cluster_forgetPeer"
+    )
+
+  def removeDeadPeer(pd: PeerData): F[Unit] =
+    logThread(
+      for {
+        p <- peers.getUnsafe
+        pm = pd.peerMetadata
+
+        _ <- ipManager.removeKnownIP(pm.host)
+        _ <- peers.modify(a => (a - pm.id, a - pm.id))
+
+        _ <- updateMetrics()
+        _ <- updatePersistentStore()
+      } yield (),
+      "cluster_removeDeadPeer"
     )
 
   def hostPort(hp: HostPort): F[Unit] =
