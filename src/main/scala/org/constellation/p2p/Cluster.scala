@@ -437,6 +437,12 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         _ <- setNodeState(NodeState.Offline)
         _ <- broadcastNodeState()
 
+        ips <- ipManager.listKnownIPs
+        _ <- ips.toList.traverse(ipManager.removeKnownIP)
+        _ <- peers.modify(_ => (Map.empty, Map.empty))
+        _ <- updateMetrics()
+        _ <- updatePersistentStore()
+
         _ <- gracefulShutdown
       } yield (),
       "cluster_leave"

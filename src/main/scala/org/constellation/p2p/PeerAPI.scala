@@ -98,7 +98,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         path("leave") {
           (IO
             .contextShift(ConstellationExecutionContext.bounded)
-            .shift >> IO(dao.node.shutdown())).unsafeRunAsyncAndForget
+            .shift >> dao.cluster.leave(IO.unit)).unsafeRunAsyncAndForget
           complete(StatusCodes.OK)
         }
     } ~
