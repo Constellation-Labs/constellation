@@ -46,7 +46,11 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       _ <- maybeDownload.fold(Sync[F].unit)(
         d =>
           cluster.isNodeReady
-            .ifM(healthChecker.startReDownload(d.diff, peers) >> recentSnapshots.set(d.recentStateToSet), Sync[F].unit)
+            .ifM(
+              healthChecker.startReDownload(d.diff, peers.filter(p => d.diff.peers.contains(p._1))) >> recentSnapshots
+                .set(d.recentStateToSet),
+              Sync[F].unit
+            )
       )
     } yield ()
 
@@ -59,7 +63,11 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       _ <- maybeDownload.fold(Sync[F].unit)(
         d =>
           cluster.isNodeReady
-            .ifM(healthChecker.startReDownload(d.diff, peers) >> recentSnapshots.set(d.recentStateToSet), Sync[F].unit)
+            .ifM(
+              healthChecker.startReDownload(d.diff, peers.filter(p => d.diff.peers.contains(p._1))) >> recentSnapshots
+                .set(d.recentStateToSet),
+              Sync[F].unit
+            )
       )
     } yield ()
 
