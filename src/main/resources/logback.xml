@@ -3,11 +3,6 @@
 
     <appender name="metrics" class="io.prometheus.client.logback.InstrumentedAppender" />
 
-    <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %highlight(%-5level) %cyan(%logger{15}) - %msg %n</pattern>
-        </encoder>
-    </appender>
 
     <property name="HOME_LOG" value="logs/app.log"/>
     <appender name="rollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
@@ -59,7 +54,6 @@
 
     <logger name="org.constellation" level="debug">
         <appender-ref ref="rollingFile"/>
-        <appender-ref ref="console" />
     </logger>
 
     <root level="info">
