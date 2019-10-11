@@ -54,6 +54,7 @@ resource "google_compute_instance" "default" {
 
   metadata_startup_script = <<SCRIPT
     sudo apt update
+    sudo apt -yq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confnew install filebeat
   SCRIPT
 
   service_account {
@@ -75,6 +76,18 @@ resource "google_compute_instance" "default" {
   provisioner "file" {
     source = "setup.sh"
     destination = "/tmp/setup.sh"
+
+    connection {
+      host = self.network_interface.0.access_config.0.nat_ip
+      type = "ssh"
+      user = var.ssh_user
+      timeout = "90s"
+    }
+  }
+
+  provisioner "file" {
+    content = templatefile("modules/instance/templates/filebeat.yml.tpl", { es_ip = var.grafana_ip })
+    destination = "/tmp/filebeat.yml"
 
     connection {
       host = self.network_interface.0.access_config.0.nat_ip
@@ -110,6 +123,8 @@ resource "google_compute_instance" "default" {
 
   provisioner "remote-exec" {
     inline = [
+      "sudo cp /tmp/filebeat.yml /etc/filebeat/filebeat.yml",
+      "sudo service filebeat restart",
       "sudo systemctl start constellation"
     ]
     connection {
