@@ -28,6 +28,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.domain.schema.Id
 import org.constellation.primitives._
 import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
+import org.constellation.snapshot.HeightIdBasedSnapshotSelector
 import org.constellation.storage._
 import org.constellation.storage.external.GcpStorage
 import org.constellation.storage.transactions.TransactionGossiping
@@ -140,37 +141,45 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     majorityStateChooser = new MajorityStateChooser[IO]()
 
-    snapshotBroadcastService = {
-      val snapshotProcessor =
-        new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotByDistance[IO])(
-          Concurrent(IO.ioConcurrentEffect),
-          ioTimer.clock,
-          this,
-          ConstellationExecutionContext.bounded,
-          IO.contextShift(ConstellationExecutionContext.bounded)
-        )
-      val downloadProcess = new DownloadProcess[IO](snapshotProcessor, cluster)(
+    val snapshotProcessor =
+      new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotByDistance[IO])(
         Concurrent(IO.ioConcurrentEffect),
-        ioTimer,
         ioTimer.clock,
         this,
         ConstellationExecutionContext.bounded,
         IO.contextShift(ConstellationExecutionContext.bounded)
       )
+    val downloadProcess = new DownloadProcess[IO](snapshotProcessor, cluster)(
+      Concurrent(IO.ioConcurrentEffect),
+      ioTimer,
+      ioTimer.clock,
+      this,
+      ConstellationExecutionContext.bounded,
+      IO.contextShift(ConstellationExecutionContext.bounded)
+    )
+
+    val healthChecker = new HealthChecker[IO](
+      this,
+      concurrentTipService,
+      consensusManager,
+      IO.contextShift(ConstellationExecutionContext.bounded),
+      downloadProcess,
+      majorityStateChooser
+    )
+
+    val snapshotSelector =
+      new HeightIdBasedSnapshotSelector(this.id, processingConfig.snapshotHeightRedownloadDelayInterval)
+    snapshotBroadcastService = {
+
       new SnapshotBroadcastService[IO](
-        new HealthChecker[IO](
-          this,
-          concurrentTipService,
-          consensusManager,
-          IO.contextShift(ConstellationExecutionContext.bounded),
-          downloadProcess,
-          majorityStateChooser
-        ),
+        healthChecker,
         cluster,
+        snapshotSelector,
         IO.contextShift(ConstellationExecutionContext.bounded),
         this
       )
     }
+
     snapshotWatcher = new SnapshotWatcher(snapshotBroadcastService)
 
     snapshotService = SnapshotService[IO](

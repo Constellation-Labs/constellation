@@ -14,11 +14,11 @@ class FacilitatorFilter[F[_]: Concurrent: Logger](calculationContext: ContextShi
   def filterPeers(peers: Map[Id, PeerData], numFacilitatorPeers: Int, tipSoe: TipSoe): F[Map[Id, PeerData]] =
     for {
       minTipHeight <- tipSoe.minHeight.getOrElse(0L).pure[F]
-      _ <- Logger[F].info(s"[${dao.id.short}] : [Facilitator Filter] : selected minTipHeight = $minTipHeight")
+      _ <- Logger[F].debug(s"[${dao.id.short}] : [Facilitator Filter] : selected minTipHeight = $minTipHeight")
 
       filteredPeers <- filterByHeight(Random.shuffle(peers.toList), minTipHeight, numFacilitatorPeers)
       peerIds = filteredPeers.map(_._1)
-      _ <- Logger[F].info(s"[${dao.id.short}] : [Facilitator Filter] : $peerIds : size = ${peerIds.size}")
+      _ <- Logger[F].debug(s"[${dao.id.short}] : [Facilitator Filter] : $peerIds : size = ${peerIds.size}")
     } yield peers.filter(peer => peerIds.contains(peer._1))
 
   private def filterByHeight(
@@ -34,7 +34,7 @@ class FacilitatorFilter[F[_]: Concurrent: Logger](calculationContext: ContextShi
       val filteredPeers = peers.filterNot(_ == peer)
       val checkHeight = for {
         facilitatorHeight <- getFacilitatorNextSnapshotHeights(peer)
-        _ <- Logger[F].info(
+        _ <- Logger[F].debug(
           s"[${dao.id.short}] : [Facilitator Filter] : Checking facilitator with next snapshot height : $facilitatorHeight"
         )
         height = facilitatorHeight._2

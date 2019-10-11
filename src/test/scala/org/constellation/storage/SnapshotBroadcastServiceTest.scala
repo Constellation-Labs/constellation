@@ -8,6 +8,7 @@ import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.domain.schema.Id
 import org.constellation.primitives.Schema
+import org.constellation.snapshot.SnapshotSelector
 import org.constellation.util.{APIClient, HealthChecker, HostPort}
 import org.constellation.{ConstellationExecutionContext, DAO, PeerMetadata, ProcessingConfig}
 import org.mockito.cats.IdiomaticMockitoCats
@@ -29,16 +30,19 @@ class SnapshotBroadcastServiceTest
 
   var dao: DAO = _
   val healthChecker = mock[HealthChecker[IO]]
+  val snapshotSelector = mock[SnapshotSelector]
   var snapshotBroadcastService: SnapshotBroadcastService[IO] = _
 
   before {
     dao = mockDAO
     dao.processingConfig shouldReturn ProcessingConfig(recentSnapshotNumber = 3)
     dao.cluster shouldReturn mock[Cluster[IO]]
+
     healthChecker.checkClusterConsistency(*) shouldReturn IO.pure[Option[List[RecentSnapshot]]](None)
     snapshotBroadcastService = new SnapshotBroadcastService[IO](
       healthChecker,
       dao.cluster,
+      snapshotSelector,
       contextShift,
       dao
     )
@@ -54,19 +58,18 @@ class SnapshotBroadcastServiceTest
 
       readyFacilitators(Id("a")).client
         .postNonBlockingF[IO, SnapshotVerification](*, *, *, *)(*)(*, *, *) shouldReturn IO.pure(
-        SnapshotVerification(
-          VerificationStatus.SnapshotCorrect
-        )
+        SnapshotVerification(Id("a"), VerificationStatus.SnapshotCorrect, List.empty)
       )
 
       readyFacilitators(Id("b")).client
         .postNonBlockingF[IO, SnapshotVerification](*, *, *, *)(*)(*, *, *) shouldReturn IO
         .raiseError[SnapshotVerification](new SocketTimeoutException("timeout"))
 
+      snapshotSelector.selectSnapshotFromBroadcastResponses(*, *) shouldReturn None
       val response = snapshotBroadcastService.broadcastSnapshot("snap1", 2)
       response.unsafeRunSync()
 
-      healthChecker.checkClusterConsistency(*).wasNever(called)
+      healthChecker.startReDownload(*, *).wasNever(called)
     }
   }
   "shouldRunClusterCheck" - {
@@ -74,17 +77,17 @@ class SnapshotBroadcastServiceTest
     "should return true when minimum invalid response were reached" in {
       snapshotBroadcastService.shouldRunClusterCheck(
         List(
-          SnapshotVerification(VerificationStatus.SnapshotCorrect).some,
-          SnapshotVerification(VerificationStatus.SnapshotInvalid).some,
-          SnapshotVerification(VerificationStatus.SnapshotInvalid).some
+          SnapshotVerification(Id("a"), VerificationStatus.SnapshotCorrect, List.empty).some,
+          SnapshotVerification(Id("b"), VerificationStatus.SnapshotInvalid, List.empty).some,
+          SnapshotVerification(Id("c"), VerificationStatus.SnapshotInvalid, List.empty).some
         )
       ) shouldBe true
     }
     "should return false when minimum invalid response were not reached" in {
       snapshotBroadcastService.shouldRunClusterCheck(
         List(
-          SnapshotVerification(VerificationStatus.SnapshotCorrect).some,
-          SnapshotVerification(VerificationStatus.SnapshotInvalid).some
+          SnapshotVerification(Id("a"), VerificationStatus.SnapshotCorrect, List.empty).some,
+          SnapshotVerification(Id("b"), VerificationStatus.SnapshotInvalid, List.empty).some
         )
       ) shouldBe false
     }
@@ -93,7 +96,7 @@ class SnapshotBroadcastServiceTest
         List(
           None,
           None,
-          SnapshotVerification(VerificationStatus.SnapshotInvalid).some
+          SnapshotVerification(Id("a"), VerificationStatus.SnapshotInvalid, List.empty).some
         )
       ) shouldBe false
     }

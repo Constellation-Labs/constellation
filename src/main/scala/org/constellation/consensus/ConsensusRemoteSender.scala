@@ -77,7 +77,9 @@ class ConsensusRemoteSender[F[_]: Concurrent](
           .flatTap(
             r =>
               Sync[F]
-                .delay(logger.info(s"Consensus ${roundId} sending msg ${msg}  code ${r.code} and text ${r.statusText}"))
+                .delay(
+                  logger.debug(s"Consensus ${roundId} sending msg ${msg}  code ${r.code} and text ${r.statusText}")
+                )
           )
     )
 

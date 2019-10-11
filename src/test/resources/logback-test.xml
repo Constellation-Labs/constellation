@@ -13,7 +13,7 @@
         </encoder>
     </appender>
 
-    <logger name="org.constellation" level="info" />
+    <logger name="org.constellation" level="debug" />
 
     <logger level="info" name="APIClient" additivity="false">
         <appender-ref ref="apiclient" />

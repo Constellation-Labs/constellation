@@ -217,6 +217,7 @@ class ValidationSpec
   go.genesis.store(CheckpointCache(Some(go.genesis)))
   go.initialDistribution.store(CheckpointCache(Some(go.initialDistribution)))
   go.initialDistribution2.store(CheckpointCache(Some(go.initialDistribution2)))
+  dao.metrics = new Metrics()
   dao.snapshotService
     .setSnapshot(
       SnapshotInfo(
