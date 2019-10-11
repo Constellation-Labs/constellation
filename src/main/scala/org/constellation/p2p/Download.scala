@@ -206,27 +206,28 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
 
   private def getSnapshotClient(peers: Peers) = peers.head._2.client.pure[F]
 
-  private[p2p] def getMajoritySnapshot(peers: Peers): F[SnapshotInfo] =
-    peers.values
-      .map(peerData => peerData.client)
-      .toList
-      .traverse(
-        client =>
-          client
-            .getNonBlockingArrayByteF("info", timeout = 5.seconds)(C)
-            .map(snapshotInfoArrayBytes => deserializeSnapshotInfo(snapshotInfoArrayBytes).some)
+  private[p2p] def getMajoritySnapshot(peers: Peers): F[SnapshotInfo] = {
+
+    def makeAttempt(clients: List[PeerData]): F[Array[Byte]] =
+      clients match {
+        case Nil =>
+          Sync[F].raiseError[Array[Byte]](
+            new Exception(
+              s"[${dao.id.short}] Unable to get majority snapshot run out of peers, peers size ${peers.size}"
+            )
+          )
+        case head :: tail =>
+          head.client
+            .getNonBlockingArrayByteF("info", timeout = 8.seconds)(C)
             .handleErrorWith(e => {
               Sync[F]
                 .delay(logger.info(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
-                Sync[F].pure[Option[SnapshotInfo]](None)
+                makeAttempt(tail)
             })
-      )
-      .map(
-        snapshots =>
-          if (snapshots.count(_.isEmpty) > (snapshots.size / 2))
-            throw new Exception(s"[${dao.id.short}] Unable to get majority snapshot ${snapshots.filter(_.isEmpty)}")
-          else snapshots.flatten.groupBy(_.snapshot.hash).maxBy(_._2.size)._2.head
-      )
+      }
+
+    makeAttempt(peers.values.toList).map(deserializeSnapshotInfo)
+  }
 
   private def deserializeSnapshotInfo(byteArray: Array[Byte]) =
     Try(KryoSerializer.deserializeCast[SnapshotInfo](byteArray)).toOption match {
