@@ -40,6 +40,7 @@ class ConsensusManager[F[_]: Concurrent](
   implicit val shadowDAO: DAO = dao
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+  val maxCheckpointFormationThreshold = ConfigUtil.constellation.getInt("consensus.maxCheckpointFormationThreshold")
 
   val timeout: Long =
     ConfigUtil.getDurationFromConfig("constellation.consensus.form-checkpoint-blocks-timeout").toMillis
@@ -153,7 +154,7 @@ class ConsensusManager[F[_]: Concurrent](
   def createRoundData(roundId: RoundId): F[(RoundData, Seq[(Transaction, Int)], Seq[(ChannelMessage, Int)])] =
     for {
       transactions <- transactionService
-        .pullForConsensus(dao.processingConfig.maxCheckpointFormationThreshold)
+        .pullForConsensus(maxCheckpointFormationThreshold)
       facilitators <- LiftIO[F].liftIO(dao.readyFacilitatorsAsync)
       tips <- concurrentTipService.pull(facilitators)(dao.metrics)
       _ <- if (tips.isEmpty)

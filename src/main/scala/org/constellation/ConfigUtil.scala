@@ -11,6 +11,7 @@ import scala.util.Try
 object ConfigUtil {
 
   val config: Config = ConfigFactory.load().resolve()
+  val constellation = config.getConfig("constellation")
 
   val snapshotSizeDiskLimit: lang.Long =
     Try(config.getBytes("constellation.snapshot-size-disk-limit")).getOrElse(java.lang.Long.valueOf(1000000))

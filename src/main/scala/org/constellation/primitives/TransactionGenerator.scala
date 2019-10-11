@@ -17,7 +17,7 @@ import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.storage.{AddressService, ConsensusStatus, TransactionService}
 import org.constellation.util.Distance
 import org.constellation.util.Logging._
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.util.{Failure, Random, Success}
 
@@ -30,8 +30,11 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
 ) {
 
   private final val roundCounter = new AtomicInteger(0)
-  private final val emptyRounds = dao.processingConfig.emptyTransactionsRounds
-  private final val transactionsRounds = dao.processingConfig.amountTransactionsRounds
+  private final val emptyRounds = ConfigUtil.constellation.getInt("transaction.generator.emptyTransactionsRounds")
+  private final val maxTransactionsPerRound =
+    ConfigUtil.constellation.getInt("transaction.generator.maxTransactionsPerRound")
+  private final val transactionsRounds =
+    ConfigUtil.constellation.getInt("transaction.generator.amountTransactionsRounds")
 
   val multiAddressGenerationMode = false
   val requiredBalance = 10000000
@@ -162,7 +165,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
 
   private def numberOfTransaction(peers: Seq[(Id, PeerData)]): F[Int] =
     roundCounter.getAndIncrement() match {
-      case x if x < transactionsRounds                 => dao.processingConfig.maxTransactionsPerRound.pure[F]
+      case x if x < transactionsRounds                 => maxTransactionsPerRound.pure[F]
       case y if y < (transactionsRounds + emptyRounds) => 0.pure[F]
       case _ =>
         roundCounter.set(0)

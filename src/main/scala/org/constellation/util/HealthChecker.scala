@@ -11,7 +11,7 @@ import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.domain.schema.Id
 import org.constellation.storage._
 import org.constellation.util.HealthChecker.maxOrZero
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 class MetricFailure(message: String) extends Exception(message)
 case class HeightEmpty(nodeId: String) extends MetricFailure(s"Empty height found for node: $nodeId")
@@ -77,6 +77,12 @@ class HealthChecker[F[_]: Concurrent: Logger](
 
   implicit val shadedDao: DAO = dao
 
+  val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
+  val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
+
+  val snapshotHeightRedownloadDelayInterval: Int =
+    ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
+
   def checkClusterConsistency(ownSnapshots: List[RecentSnapshot]): F[Option[List[RecentSnapshot]]] = {
     val check = for {
       _ <- Logger[F].info(s"[${dao.id.short}] Re-download checking cluster consistency")
@@ -134,7 +140,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
 
       if (maxHeightsOfMinimumFacilitators.nonEmpty)
         concurrentTipService.clearStaleTips(
-          maxHeightsOfMinimumFacilitators.keySet.min + dao.processingConfig.snapshotHeightInterval
+          maxHeightsOfMinimumFacilitators.keySet.min + snapshotHeightInterval
         )
       else Logger[F].debug("[Clear staletips] staletips Not enough data to determine height")
     } else
@@ -159,7 +165,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
     ownSnapshots.exists(r => recent.get(r.height).exists(_ != r.hash))
 
   private def isBelowInterval(ownSnapshots: List[RecentSnapshot], snapshotsToDownload: List[RecentSnapshot]) =
-    (maxOrZero(ownSnapshots) + dao.processingConfig.snapshotHeightRedownloadDelayInterval) < maxOrZero(
+    (maxOrZero(ownSnapshots) + snapshotHeightRedownloadDelayInterval) < maxOrZero(
       snapshotsToDownload
     )
 
