@@ -124,6 +124,7 @@ class CheckpointServiceTest
       val blocks = Seq(cb1, cb2)
 
       blocks.foreach { c =>
+        println(c.soeHash)
         peer.getNonBlockingIO[Option[SignedObservationEdgeCache]](eqTo(s"soe/${c.soeHash}"), *, *)(*)(*, *) shouldReturn IO
           .pure(Some(SignedObservationEdgeCache(c.soe)))
 
@@ -307,6 +308,10 @@ class CheckpointServiceTest
   private def prepareRealDao(): DAO = {
     val dao: DAO = new DAO {
       override def readyPeers: IO[
+        Map[Id, PeerData]
+      ] = IO.pure(readyFacilitators)
+
+      override def peerInfo: IO[
         Map[Id, PeerData]
       ] = IO.pure(readyFacilitators)
     }
