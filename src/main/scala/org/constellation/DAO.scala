@@ -19,15 +19,14 @@ import org.constellation.checkpoint.{
 }
 import org.constellation.consensus.{ConsensusManager, ConsensusRemoteSender, ConsensusScheduler, ConsensusWatcher}
 import org.constellation.crypto.SimpleWalletLike
-import org.constellation.datastore.swaydb.SwayDBDatastore
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.p2p.PeerHealthCheck
+import org.constellation.domain.schema.Id
+import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
-import org.constellation.domain.schema.Id
-import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.primitives._
 import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
