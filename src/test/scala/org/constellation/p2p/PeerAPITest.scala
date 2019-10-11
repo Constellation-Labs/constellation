@@ -1,8 +1,11 @@
 package org.constellation.p2p
 
+import java.net.InetSocketAddress
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
+import akka.util.Timeout
 import better.files.File
 import cats.effect.IO
 import com.softwaremill.sttp.Response
@@ -51,6 +54,7 @@ class PeerAPITest
 
   var dao: DAO = _
   var peerAPI: PeerAPI = _
+  val socketAddress = new InetSocketAddress("localhost", 9001)
 
   before {
     dao = prepareDao()
@@ -72,7 +76,7 @@ class PeerAPITest
 
       val req = FinishedCheckpoint(CheckpointCache(None), Set.empty)
 
-      Post("/finished/checkpoint", req) ~> addHeader("ReplyTo", reply) ~> peerAPI.postEndpoints ~> check {
+      Post("/finished/checkpoint", req) ~> addHeader("ReplyTo", reply) ~> peerAPI.postEndpoints(socketAddress) ~> check {
         status shouldEqual StatusCodes.Accepted
       }
 
@@ -82,13 +86,14 @@ class PeerAPITest
 
     "return accepted on finishing checkpoint and make no reply with callback" in {
       dao.snapshotService.getNextHeightInterval shouldReturnF 2
+      implicit def default(implicit system: ActorSystem) = RouteTestTimeout(5.seconds)
       val req = FinishedCheckpoint(CheckpointCache(None, 0, Some(Height(1, 1))), Set.empty)
-      Post("/finished/checkpoint", req) ~> peerAPI.postEndpoints ~> check {
+      Post("/finished/checkpoint", req) ~> peerAPI.postEndpoints(socketAddress) ~> check {
         status shouldEqual StatusCodes.Accepted
       }
     }
     "should handle reply message" in {
-      Post("/finished/reply", FinishedCheckpointResponse(true)) ~> peerAPI.postEndpoints ~> check {
+      Post("/finished/reply", FinishedCheckpointResponse(true)) ~> peerAPI.postEndpoints(socketAddress) ~> check {
         status shouldEqual StatusCodes.OK
       }
     }
@@ -139,7 +144,7 @@ class PeerAPITest
 
         dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF recent
 
-        Post(path, request) ~> peerAPI.postEndpoints ~> check {
+        Post(path, request) ~> peerAPI.postEndpoints(socketAddress) ~> check {
           status shouldEqual StatusCodes.OK
           responseAs[SnapshotVerification] shouldBe SnapshotVerification(dao.id, SnapshotCorrect, recent)
         }
@@ -148,7 +153,7 @@ class PeerAPITest
       "should return snapshot above  when there no recent snapshots given" in {
         dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF List.empty
 
-        Post(path, request) ~> peerAPI.postEndpoints ~> check {
+        Post(path, request) ~> peerAPI.postEndpoints(socketAddress) ~> check {
           status shouldEqual StatusCodes.OK
           responseAs[SnapshotVerification] shouldBe SnapshotVerification(dao.id, SnapshotHeightAbove, List.empty)
         }
@@ -159,7 +164,7 @@ class PeerAPITest
         dao.processingConfig shouldReturn ProcessingConfig()
         dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF recent
 
-        Post(path, request) ~> peerAPI.postEndpoints ~> check {
+        Post(path, request) ~> peerAPI.postEndpoints(socketAddress) ~> check {
           status shouldEqual StatusCodes.OK
           responseAs[SnapshotVerification] shouldBe SnapshotVerification(dao.id, SnapshotHeightAbove, recent)
         }
