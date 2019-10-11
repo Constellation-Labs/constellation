@@ -7,8 +7,9 @@ import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.primitives.Schema.TransactionEdgeData
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
-import org.constellation.primitives.{Transaction, TransactionCacheData}
+import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
 import org.constellation.storage.ConsensusStatus.ConsensusStatus
 import org.constellation.util.Metrics
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -32,8 +33,14 @@ class TransactionServiceTest
   var txService: TransactionService[IO] = _
 
   val hash = "ipsum"
-  val tx = mock[TransactionCacheData]
+
+  val tx: TransactionCacheData = mock[TransactionCacheData]
   tx.hash shouldReturn hash
+  tx.transaction shouldReturn mock[Transaction]
+  tx.transaction.hash shouldReturn hash
+  tx.transaction.edge shouldReturn mock[Edge[TransactionEdgeData]]
+  tx.transaction.edge.data shouldReturn mock[TransactionEdgeData]
+  tx.transaction.edge.data.fee shouldReturn Some(1L)
 
   before {
     dao = mockDAO
