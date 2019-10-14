@@ -12,6 +12,7 @@ import org.constellation.checkpoint.{
 }
 import org.constellation.consensus._
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._

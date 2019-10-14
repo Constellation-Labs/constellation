@@ -7,9 +7,9 @@ import cats.data.ValidatedNel
 import cats.implicits._
 import constellation._
 import org.constellation.DAO
+import org.constellation.domain.consensus.ConsensusObject
 import org.constellation.primitives.Schema.{Address, TransactionEdgeData}
 import org.constellation.domain.schema.Id
-import org.constellation.storage.ConsensusObject
 import org.constellation.util.HashSignature
 
 case class TransactionCacheData(

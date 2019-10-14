@@ -208,7 +208,7 @@ class PeerAPITest
           val a = KeyUtils.makeKeyPair()
           val b = KeyUtils.makeKeyPair()
 
-          val tx = createTransaction(a.address, b.address, 5L, a)
+          val tx = Fixtures.makeTransaction(a.address, b.address, 5L, a)
 
           Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints ~> check {
             dao.transactionGossiping.observe(*).was(called)
@@ -219,7 +219,7 @@ class PeerAPITest
           val a = KeyUtils.makeKeyPair()
           val b = KeyUtils.makeKeyPair()
 
-          val tx = createTransaction(a.address, b.address, 5L, a)
+          val tx = Fixtures.makeTransaction(a.address, b.address, 5L, a)
           val tcd = mock[TransactionCacheData]
 
           val id = Fixtures.id2
@@ -246,7 +246,7 @@ class PeerAPITest
           val a = KeyUtils.makeKeyPair()
           val b = KeyUtils.makeKeyPair()
 
-          val tx = createTransaction(a.address, b.address, 5L, a)
+          val tx = Fixtures.makeTransaction(a.address, b.address, 5L, a)
 
           Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints ~> check {
             status shouldEqual StatusCodes.OK
@@ -258,7 +258,7 @@ class PeerAPITest
         "should return list of transactions if one of two transaction exists" in {
           val a = KeyUtils.makeKeyPair()
           val b = KeyUtils.makeKeyPair()
-          val tx = createTransaction(a.address, b.address, 5L, a)
+          val tx = Fixtures.makeTransaction(a.address, b.address, 5L, a)
 
           dao.transactionService shouldReturn mock[TransactionService[IO]]
           dao.transactionService.lookup("hash1") shouldReturnF Some(new TransactionCacheData(tx))

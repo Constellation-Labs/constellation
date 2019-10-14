@@ -8,14 +8,15 @@ import cats.effect.{Async, Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.Logger
+import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{AddressCacheData, NodeState, NodeType}
 import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.storage.ConsensusStatus.ConsensusStatus
+import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
 import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.storage.{AddressService, ConsensusStatus}
+import org.constellation.storage.AddressService
 import org.constellation.util.Distance
 import org.constellation.util.Logging._
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
@@ -107,18 +108,16 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
     else generateSingleAddressTransaction(peers)
 
   private def generateSingleAddressTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] =
-    Sync[F].delay {
-      createTransaction(
-        dao.selfAddressStr,
-        randomAddressFromPeers(peers),
-        randomAmount(rangeAmount),
-        dao.keyPair,
-        normalized = false
-      )
-    }
+    transactionService.createTransaction(
+      dao.selfAddressStr,
+      randomAddressFromPeers(peers),
+      randomAmount(rangeAmount),
+      dao.keyPair,
+      normalized = false
+    )
 
   private def generateMultipleAddressTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] =
-    balancesForAddresses.map(
+    balancesForAddresses.flatMap(
       addresses =>
         if (checkAddressesHaveSufficient(addresses)) generateMultipleAddressTransactionWithSufficent(addresses, peers)
         else generateMultipleAddressTransactionWithoutSufficent(addresses, peers)
@@ -127,15 +126,16 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
   private def generateMultipleAddressTransactionWithSufficent(
     addresses: Seq[(String, Option[AddressCacheData])],
     peers: Seq[(Id, PeerData)]
-  ): Transaction =
-    createTransaction(dao.selfAddressStr, randomAddressFrom(addresses), randomAmount(rangeAmount), dao.keyPair)
+  ): F[Transaction] =
+    transactionService
+      .createTransaction(dao.selfAddressStr, randomAddressFrom(addresses), randomAmount(rangeAmount), dao.keyPair)
 
   private def generateMultipleAddressTransactionWithoutSufficent(
     addresses: Seq[(String, Option[AddressCacheData])],
     peers: Seq[(Id, PeerData)]
-  ): Transaction = {
+  ): F[Transaction] = {
     val source = getSourceAddressForTxWithoutSufficient(addresses)
-    createTransaction(
+    transactionService.createTransaction(
       source,
       randomAddressFromPeers(peers),
       randomAmount(rangeAmount),

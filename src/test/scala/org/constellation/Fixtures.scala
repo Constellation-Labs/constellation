@@ -4,10 +4,13 @@ import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
 import java.util.Random
 
+import cats.effect.{ContextShift, IO}
 import constellation._
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Schema.SendToAddress
 import org.constellation.domain.schema.Id
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.primitives.Transaction
 import org.constellation.util.{APIClient, SignHelp}
 
@@ -15,9 +18,14 @@ import scala.concurrent.ExecutionContext
 
 object Fixtures {
 
+  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val logger = Slf4jLogger.getLogger[IO]
+
   val kp: KeyPair = KeyUtils.makeKeyPair()
   val kp1: KeyPair = KeyUtils.makeKeyPair()
-  val tx: Transaction = SignHelp.createTransaction(kp.address, kp1.address, 1L, kp)
+
+  val tx: Transaction =
+    TransactionService.createTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
 
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()
@@ -55,15 +63,22 @@ object Fixtures {
 
   def getRandomElement[T](list: Seq[T], random: Random): T = list(random.nextInt(list.length))
 
-  def dummyTx(data: DAO, amt: Long = 1L, src: Id = id): Transaction = {
-    val sendRequest = SendToAddress(src.address, amt)
-    createTransaction(data.selfAddressStr, sendRequest.dst, sendRequest.amountActual, data.keyPair)
-  }
+  def dummyTx(data: DAO, amt: Long = 1L, src: Id = id): Transaction =
+    TransactionService
+      .createTransaction[IO](data.selfAddressStr, src.address, amt, data.keyPair)(
+        TransactionChainService[IO]
+      )
+      .unsafeRunSync
 
-  def makeTransaction(srcAddressString: String, destinationAddressString: String, amt: Long, keyPair: KeyPair) = {
-    val sendRequest = SendToAddress(destinationAddressString, amt)
-    createTransaction(srcAddressString, sendRequest.dst, sendRequest.amountActual, keyPair)
-  }
+  def makeTransaction(srcAddressString: String, destinationAddressString: String, amt: Long, keyPair: KeyPair) =
+    TransactionService
+      .createTransaction[IO](srcAddressString, destinationAddressString, amt, keyPair)(
+        TransactionChainService[IO]
+      )
+      .unsafeRunSync
+
+  def makeDummyTransaction(src: String, dst: String, keyPair: KeyPair) =
+    TransactionService.createDummyTransaction(src, dst, keyPair)(TransactionChainService[IO]).unsafeRunSync
 
   def getAPIClient(hostName: String, httpPort: Int)(implicit dao: DAO, executionContext: ExecutionContext) = {
     val api = APIClient(host = hostName, port = httpPort)(dao.backend, dao)

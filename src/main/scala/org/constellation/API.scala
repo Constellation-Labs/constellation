@@ -502,19 +502,18 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           entity(as[SendToAddress]) { sendRequest =>
             logger.info(s"send transaction to address $sendRequest")
 
-            val tx = createTransaction(
-              dao.selfAddressStr,
-              sendRequest.dst,
-              sendRequest.amountActual,
-              dao.keyPair,
-              normalized = false
-            )
+            val io = dao.transactionService
+              .createTransaction(
+                dao.selfAddressStr,
+                sendRequest.dst,
+                sendRequest.amountActual,
+                dao.keyPair,
+                normalized = false
+              )
+              .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
+              .map(_.hash)
 
-            dao.transactionService
-              .put(TransactionCacheData(tx))
-              .unsafeRunSync()
-
-            complete(tx.hash)
+            APIDirective.handle(io)(complete(_))
           }
         } ~
         path("restore") {

@@ -1,5 +1,7 @@
 package org.constellation.domain.transaction
 
+import java.security.KeyPair
+
 import cats.effect._
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
@@ -7,20 +9,26 @@ import constellation._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
-import org.constellation.primitives.Schema.CheckpointCache
-import org.constellation.primitives.TransactionCacheData
+import org.constellation.domain.consensus.{ConsensusService, ConsensusStatus}
+import org.constellation.primitives.Schema.{
+  CheckpointCache,
+  EdgeHashType,
+  ObservationEdge,
+  TransactionEdgeData,
+  TypedEdgeHash
+}
+import org.constellation.primitives.{Edge, Schema, Transaction, TransactionCacheData}
 import org.constellation.storage.transactions.PendingTransactionsMemPool
-import org.constellation.storage.{ConsensusService, ConsensusStatus}
 
 class TransactionService[F[_]: Concurrent: Logger](transactionChainService: TransactionChainService[F], dao: DAO)
     extends ConsensusService[F, TransactionCacheData] {
 
-  protected[storage] val pending = new PendingTransactionsMemPool[F](Semaphore.in[IO, F](1).unsafeRunSync())
+  protected[domain] val pending = new PendingTransactionsMemPool[F](Semaphore.in[IO, F](1).unsafeRunSync())
 
   override def accept(tx: TransactionCacheData, cpc: Option[CheckpointCache] = None): F[Unit] =
     super
       .accept(tx, cpc)
-//      .flatMap(_ => transactionChainService.observeTransaction(tx.transaction.src.address, tx.transaction.hash)) // TODO: Uncomment for transaction chain validation
+      .flatMap(_ => transactionChainService.observeTransaction(tx.transaction.src.address, tx.transaction.hash))
       .void
       .flatTap(_ => Sync[F].delay(dao.metrics.incrementMetric("transactionAccepted")))
       .flatTap(_ => Logger[F].debug(s"Accepting transaction=${tx.hash}"))
@@ -35,37 +43,69 @@ class TransactionService[F[_]: Concurrent: Logger](transactionChainService: Tran
 
   override def pullForConsensus(maxCount: Int): F[List[TransactionCacheData]] =
     count(status = ConsensusStatus.Pending).flatMap {
-      case 0L => dummyTransaction(1)
+      case 0L => createDummyTransactions(1)
       case _  => super.pullForConsensus(maxCount)
     }
 
-  // TODO: Uncomment for transaction chain validation
-  /*
-  override def put(
-    tx: TransactionCacheData,
-    as: ConsensusStatus,
-    cpc: Option[CheckpointCache] = None
-  ): F[TransactionCacheData] =
-    as match {
-      case ConsensusStatus.Pending =>
-        for {
-          t <- transactionChainService.getNext(tx.transaction.src.address)
-          result <- super
-            .put(tx.copy(transaction = tx.transaction.copy(previousHash = t._1, count = t._2)), as, cpc)
-        } yield result
-
-      case _ => super.put(tx, as, cpc)
-    }
-   */
-
-  def dummyTransaction(count: Int): F[List[TransactionCacheData]] =
+  def createDummyTransactions(count: Int): F[List[TransactionCacheData]] =
     List
       .fill(count)(
-        createDummyTransaction(dao.selfAddressStr, KeyUtils.makeKeyPair().getPublic.toId.address, dao.keyPair)
+        TransactionService
+          .createDummyTransaction(dao.selfAddressStr, KeyUtils.makeKeyPair().getPublic.toId.address, dao.keyPair)(
+            transactionChainService
+          )
+          .map(TransactionCacheData(_))
       )
-      .map(TransactionCacheData(_))
-      .traverse(tx => inConsensus.put(tx.hash, tx))
+      .sequence
+      .flatMap(_.traverse(tx => inConsensus.put(tx.hash, tx)))
 
   def removeConflicting(txs: List[String]): F[Unit] =
     pending.remove(txs.toSet) >> unknown.remove(txs.toSet)
+
+  def createTransaction(
+    src: String,
+    dst: String,
+    amount: Long,
+    keyPair: KeyPair,
+    normalized: Boolean = true,
+    dummy: Boolean = false
+  ): F[Transaction] =
+    TransactionService.createTransaction(src, dst, amount, keyPair, normalized, dummy)(transactionChainService)
+
+}
+
+object TransactionService {
+
+  def createTransaction[F[_]: Concurrent](
+    src: String,
+    dst: String,
+    amount: Long,
+    keyPair: KeyPair,
+    normalized: Boolean = true,
+    dummy: Boolean = false
+  )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
+    val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
+
+    val txData = TransactionEdgeData(amount = amountToUse)
+
+    val oe = ObservationEdge(
+      Seq(
+        TypedEdgeHash(src, EdgeHashType.AddressHash),
+        TypedEdgeHash(dst, EdgeHashType.AddressHash)
+      ),
+      TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
+    )
+
+    val soe = signedObservationEdge(oe)(keyPair)
+
+    for {
+      next <- transactionChainService.getNext(src)
+      tx = Transaction(Edge(oe, soe, txData), next._1, next._2, dummy)
+    } yield tx
+  }
+
+  def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair)(
+    transactionChainService: TransactionChainService[F]
+  ): F[Transaction] =
+    createTransaction[F](src, dst, 0L, keyPair, normalized = false, dummy = true)(transactionChainService)
 }

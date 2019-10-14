@@ -11,8 +11,9 @@ import org.constellation.consensus.ConsensusManager.{
   BroadcastSelectedUnionBlock,
   BroadcastUnionBlockProposal
 }
+import org.constellation.domain.observation.Observation
 import org.constellation.p2p.PeerData
-import org.constellation.primitives.{ChannelMessage, Observation, TipSoe, Transaction}
+import org.constellation.primitives.{ChannelMessage, TipSoe, Transaction}
 
 class ConsensusRemoteSender[F[_]: Concurrent](
   contextShift: ContextShift[F]

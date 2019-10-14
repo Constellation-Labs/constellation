@@ -93,8 +93,9 @@ class SnapshotServiceTest
       val dao = TestHelpers.prepareRealDao()
       val snapshotService = dao.snapshotService
 
-      val cb1 = RandomData.randomBlock(RandomData.startingTips)
-      val cb2 = RandomData.randomBlock(RandomData.startingTips)
+      val go = RandomData.go()(dao)
+      val cb1 = RandomData.randomBlock(RandomData.startingTips(go)(dao))
+      val cb2 = RandomData.randomBlock(RandomData.startingTips(go)(dao))
       val cbs = Seq(CheckpointCache(cb1.some, 0, None), CheckpointCache(cb2.some, 0, None))
 
       val snapshot = Snapshot("lastSnapHash", cbs.flatMap(_.checkpointBlock.map(_.baseHash)))
