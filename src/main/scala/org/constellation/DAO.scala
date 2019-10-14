@@ -20,6 +20,7 @@ import org.constellation.checkpoint.{
 import org.constellation.consensus.{ConsensusManager, ConsensusRemoteSender, ConsensusScheduler, ConsensusWatcher}
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.p2p._

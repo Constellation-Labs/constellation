@@ -11,6 +11,7 @@ import org.constellation.consensus.ConsensusRemoteSender
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.makeKeyPair
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.observation.ObservationService
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.domain.schema.Id

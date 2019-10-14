@@ -1,23 +1,15 @@
-package org.constellation.storage
+package org.constellation.domain.consensus
 
-import cats.effect.{Concurrent, ContextShift, IO, Sync}
 import cats.effect.concurrent.Semaphore
-import io.chrisdavenport.log4cats.Logger
+import cats.effect.{Concurrent, ContextShift, IO, Sync}
 import cats.implicits._
+import io.chrisdavenport.log4cats.Logger
 import org.constellation.ConstellationExecutionContext
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives.concurrency.SingleLock
-import org.constellation.storage.ConsensusStatus.ConsensusStatus
+import ConsensusStatus.ConsensusStatus
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
-
-object ConsensusStatus extends Enumeration {
-  type ConsensusStatus = Value
-  val Pending, Arbitrary, InConsensus, Accepted, Unknown = Value
-}
-
-trait ConsensusObject {
-  def hash: String
-}
+import org.constellation.storage.{PendingMemPool, StorageService}
 
 abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
     extends MerkleStorageAlgebra[F, String, A] {
@@ -25,7 +17,7 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
 
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
-  val semaphores = Map(
+  val semaphores: Map[String, Semaphore[F]] = Map(
     "arbitraryUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
     "inConsensusUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
     "acceptedUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
@@ -33,15 +25,15 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
     "merklePoolUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync()
   )
 
-  protected[storage] def withLock[R](semaphoreName: String, thunk: F[R]): F[R] =
+  protected[domain] def withLock[R](semaphoreName: String, thunk: F[R]): F[R] =
     new SingleLock[F, R](semaphoreName, semaphores(semaphoreName))
       .use(thunk)
 
-  protected[storage] val pending: PendingMemPool[F, String, A]
-  protected[storage] val arbitrary = new StorageService[F, A](Some(240))
-  protected[storage] val inConsensus = new StorageService[F, A](Some(240))
-  protected[storage] val accepted = new StorageService[F, A](Some(240))
-  protected[storage] val unknown = new StorageService[F, A](Some(240))
+  protected[domain] val pending: PendingMemPool[F, String, A]
+  protected[domain] val arbitrary = new StorageService[F, A](Some(240))
+  protected[domain] val inConsensus = new StorageService[F, A](Some(240))
+  protected[domain] val accepted = new StorageService[F, A](Some(240))
+  protected[domain] val unknown = new StorageService[F, A](Some(240))
 
   def getArbitrary: F[Map[String, A]] = arbitrary.toMap()
 

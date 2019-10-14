@@ -8,6 +8,7 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
 import org.constellation.consensus.Consensus._
+import org.constellation.domain.observation.ObservationService
 import org.constellation.p2p.{Cluster, DataResolver, PeerData, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, NodeType, SignedObservationEdgeCache}
 import org.constellation.domain.schema.Id

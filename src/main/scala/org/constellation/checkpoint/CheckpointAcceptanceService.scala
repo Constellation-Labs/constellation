@@ -144,7 +144,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
           }
 
           validation <- checkpointBlockValidator.simpleValidation(cb)
-          _ <- if (!validation.isValid) Sync[F].raiseError[Unit](new Exception("CB to accept not valid"))
+          _ <- if (!validation.isValid) Sync[F].raiseError[Unit](new Exception(s"CB to accept not valid: $validation"))
           else Sync[F].unit
           _ <- LiftIO[F].liftIO(cb.storeSOE()(dao))
           maybeHeight <- checkpointParentService.calculateHeight(cb).map(h => if (h.isEmpty) checkpoint.height else h)

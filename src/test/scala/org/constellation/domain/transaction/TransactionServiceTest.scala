@@ -1,20 +1,19 @@
-package org.constellation.storage
+package org.constellation.domain.transaction
 
 import java.util.concurrent.Executors
 
 import cats.effect.{ContextShift, IO}
-import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
-import org.constellation.primitives.Schema.TransactionEdgeData
-import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
+import org.constellation.domain.consensus.ConsensusStatus
+import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
+import org.constellation.primitives.Schema.{Address, TransactionEdgeData}
 import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
-import org.constellation.storage.ConsensusStatus.ConsensusStatus
 import org.constellation.util.Metrics
-import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 import scala.concurrent.duration._
@@ -39,6 +38,7 @@ class TransactionServiceTest
   val tx: TransactionCacheData = mock[TransactionCacheData]
   tx.hash shouldReturn hash
   tx.transaction shouldReturn mock[Transaction]
+  tx.transaction.src shouldReturn Address("src")
   tx.transaction.hash shouldReturn hash
   tx.transaction.edge shouldReturn mock[Edge[TransactionEdgeData]]
   tx.transaction.edge.data shouldReturn mock[TransactionEdgeData]
@@ -343,7 +343,7 @@ class TransactionServiceTest
       val cs = IO.contextShift(ec)
 
       val puts = (1 to totalExpected).toList
-        .map(_ => constellation.createTransaction(Fixtures.id1.address, Fixtures.id2.address, 1L, Fixtures.tempKey))
+        .map(_ => Fixtures.makeTransaction(Fixtures.id1.address, Fixtures.id2.address, 1L, Fixtures.tempKey))
         .map(TransactionCacheData(_))
         .traverse(tx => cs.shift >> txService.put(tx))
 

@@ -5,10 +5,10 @@ import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.transaction.TransactionService
+import org.constellation.domain.consensus.ConsensusStatus
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.{Transaction, TransactionCacheData}
-import org.constellation.storage.ConsensusStatus
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -49,7 +49,7 @@ class TransactionGossipingTest
     val txService = spy(new TransactionService[IO](txChain, dao))
     val gossiping = new TransactionGossiping[IO](txService, 2, dao)
 
-    val t = constellation.createTransaction("a", "b", 1L, Fixtures.tempKey, false)
+    val t = Fixtures.makeTransaction("a", "b", 1L, Fixtures.tempKey)
     val tx = TransactionCacheData(transaction = t, path = Set(Fixtures.id2, Fixtures.id3))
 
     gossiping.observe(tx).unsafeRunSync

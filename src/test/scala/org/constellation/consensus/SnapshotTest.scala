@@ -57,8 +57,11 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
   }
 
   private def randomHash = Hashing.sha256.hashBytes(UUID.randomUUID().toString.getBytes).toString
+  private val genesis = RandomData.go()
   private def randomCB =
     CheckpointBlock
-      .createCheckpointBlockSOE(Seq.fill(10)(RandomData.randomTransaction), RandomData.startingTips)(Fixtures.tempKey1)
+      .createCheckpointBlockSOE(Seq.fill(10)(RandomData.randomTransaction), RandomData.startingTips(genesis))(
+        Fixtures.tempKey1
+      )
 
 }

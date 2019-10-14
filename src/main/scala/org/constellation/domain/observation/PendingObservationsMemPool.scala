@@ -1,9 +1,8 @@
-package org.constellation.storage
+package org.constellation.domain.observation
 
 import cats.effect.Concurrent
 import cats.implicits._
-import org.constellation.primitives.Observation
-import org.constellation.primitives.concurrency.SingleRef
+import org.constellation.storage.PendingMemPool
 
 class PendingObservationsMemPool[F[_]: Concurrent]() extends PendingMemPool[F, String, Observation] {
 

@@ -7,7 +7,6 @@ import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
-import constellation.createTransaction
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointBlockValidator._
@@ -22,7 +21,7 @@ import org.constellation.primitives.{CheckpointBlock, IPManager, Transaction}
 import org.constellation.storage._
 import org.constellation.transaction.TransactionValidator
 import org.constellation.util.{HashSignature, Metrics}
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalamock.scalatest.MockFactory
@@ -202,6 +201,8 @@ class ValidationSpec
   implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
   implicit val cs = IO.contextShift(ConstellationExecutionContext.bounded)
 
+  val genesis = go()
+
   val checkpointBlockValidator: CheckpointBlockValidator[IO] =
     new CheckpointBlockValidator[IO](
       dao.addressService,
@@ -259,9 +260,9 @@ class ValidationSpec
         )
 
         val cbInit1 =
-          CheckpointBlock.createCheckpointBlockSOE(txs1.toSeq, startingTips)
+          CheckpointBlock.createCheckpointBlockSOE(txs1.toSeq, startingTips(genesis))
         val cbInit2 =
-          CheckpointBlock.createCheckpointBlockSOE(txs2.toSeq, startingTips)
+          CheckpointBlock.createCheckpointBlockSOE(txs2.toSeq, startingTips(genesis))
 
         cbInit1.store(CheckpointCache(Some(cbInit1)))
         cbInit2.store(CheckpointCache(Some(cbInit2)))
@@ -271,29 +272,29 @@ class ValidationSpec
         val tips = Seq(cbInit1.soe, cbInit2.soe)
 
         // First group
-        val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
+        val tx1 = Fixtures.makeTransaction(getAddress(a), getAddress(b), 75L, a)
         val cb1 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx1), tips)
 
-        val tx2 = createTransaction(getAddress(a), getAddress(b), 75L, a)
+        val tx2 = Fixtures.makeTransaction(getAddress(a), getAddress(b), 75L, a)
         val cb2 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx2), tips)
 
-        val tx3 = createTransaction(getAddress(d), getAddress(e), 5L, d)
+        val tx3 = Fixtures.makeTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb3 =
           CheckpointBlock.createCheckpointBlockSOE(Seq(tx3), Seq(cb1.soe, cb2.soe))
 
         // Second group
-        val tx4 = createTransaction(getAddress(c), getAddress(a), 75L, c)
+        val tx4 = Fixtures.makeTransaction(getAddress(c), getAddress(a), 75L, c)
         val cb4 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx4), tips)
 
-        val tx5 = createTransaction(getAddress(c), getAddress(a), 75L, c)
+        val tx5 = Fixtures.makeTransaction(getAddress(c), getAddress(a), 75L, c)
         val cb5 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx5), tips)
 
-        val tx6 = createTransaction(getAddress(d), getAddress(e), 5L, d)
+        val tx6 = Fixtures.makeTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb6 =
           CheckpointBlock.createCheckpointBlockSOE(Seq(tx6), Seq(cb4.soe, cb5.soe))
 
         // Tip
-        val tx7 = createTransaction(getAddress(d), getAddress(e), 5L, d)
+        val tx7 = Fixtures.makeTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb7 =
           CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))
 
@@ -311,11 +312,11 @@ class ValidationSpec
         val _ :: a :: b :: c :: _ = kp
 
         val txs = Seq(
-          createTransaction(getAddress(a), getAddress(b), 75L, a),
-          createTransaction(getAddress(c), getAddress(b), 75L, c)
+          Fixtures.makeTransaction(getAddress(a), getAddress(b), 75L, a),
+          Fixtures.makeTransaction(getAddress(c), getAddress(b), 75L, c)
         )
 
-        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(genesis))
 
         fill(
           Map(
@@ -333,10 +334,10 @@ class ValidationSpec
         val kp = keyPairs.take(4)
         val _ :: a :: b :: c :: _ = kp
 
-        val tx = createTransaction(getAddress(a), getAddress(b), 75L, a)
+        val tx = Fixtures.makeTransaction(getAddress(a), getAddress(b), 75L, a)
         val txs = Seq(tx, tx)
 
-        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(genesis))
 
         fill(
           Map(
@@ -354,11 +355,11 @@ class ValidationSpec
         val _ :: a :: b :: c :: _ = kp
 
         val txs = Seq(
-          createTransaction(getAddress(a), getAddress(b), 75L, a),
-          createTransaction(getAddress(b), getAddress(c), -5L, b)
+          Fixtures.makeTransaction(getAddress(a), getAddress(b), 75L, a),
+          Fixtures.makeTransaction(getAddress(b), getAddress(c), -5L, b)
         )
 
-        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(genesis))
 
         fill(
           Map(
@@ -377,11 +378,11 @@ class ValidationSpec
         val _ :: a :: b :: c :: _ = kp
 
         val txs = Seq(
-          createTransaction(getAddress(a), getAddress(b), 75L, a),
-          createTransaction(getAddress(b), getAddress(c), 0L, b)
+          Fixtures.makeTransaction(getAddress(a), getAddress(b), 75L, a),
+          Fixtures.makeTransaction(getAddress(b), getAddress(c), 0L, b)
         )
 
-        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)(keyPairs.head)
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(genesis))(keyPairs.head)
 
         fill(
           Map(
@@ -400,11 +401,11 @@ class ValidationSpec
         val _ :: a :: b :: c :: _ = kp
 
         val txs = Seq(
-          createTransaction(getAddress(a), getAddress(b), 75L, a),
-          createTransaction(getAddress(a), getAddress(c), 75L, a)
+          Fixtures.makeTransaction(getAddress(a), getAddress(b), 75L, a),
+          Fixtures.makeTransaction(getAddress(a), getAddress(c), 75L, a)
         )
 
-        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(genesis))
 
         assert(!checkpointBlockValidator.simpleValidation(cb).unsafeRunSync().isValid)
       }
@@ -416,11 +417,11 @@ class ValidationSpec
         val _ :: a :: b :: c :: _ = kp
 
         val txs = Seq(
-          createTransaction(getAddress(a), getAddress(b), 75L, a),
-          createTransaction(getAddress(a), getAddress(c), 75L, a)
+          Fixtures.makeTransaction(getAddress(a), getAddress(b), 75L, a),
+          Fixtures.makeTransaction(getAddress(a), getAddress(c), 75L, a)
         )
 
-        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips)
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(genesis))
 
         fill(
           Map(
@@ -447,11 +448,11 @@ class ValidationSpec
           )
         )
 
-        val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
-        val cb1 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx1), startingTips)
+        val tx1 = Fixtures.makeTransaction(getAddress(a), getAddress(b), 75L, a)
+        val cb1 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx1), startingTips(genesis))
 
-        val tx2 = createTransaction(getAddress(a), getAddress(c), 75L, a)
-        val cb2 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx2), startingTips)
+        val tx2 = Fixtures.makeTransaction(getAddress(a), getAddress(c), 75L, a)
+        val cb2 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx2), startingTips(genesis))
 
         if (checkpointBlockValidator.simpleValidation(cb1).unsafeRunSync().isValid) {
           cb1.transactions.toList
@@ -487,9 +488,9 @@ class ValidationSpec
         )
 
         val cbInit1 =
-          CheckpointBlock.createCheckpointBlockSOE(txs1.toSeq, startingTips)
+          CheckpointBlock.createCheckpointBlockSOE(txs1.toSeq, startingTips(genesis))
         val cbInit2 =
-          CheckpointBlock.createCheckpointBlockSOE(txs2.toSeq, startingTips)
+          CheckpointBlock.createCheckpointBlockSOE(txs2.toSeq, startingTips(genesis))
 
         cbInit1.store(CheckpointCache(Some(cbInit1)))
         cbInit2.store(CheckpointCache(Some(cbInit2)))
@@ -499,29 +500,29 @@ class ValidationSpec
         val tips = Seq(cbInit1.soe, cbInit2.soe)
 
         // First group
-        val tx1 = createTransaction(getAddress(a), getAddress(b), 75L, a)
+        val tx1 = Fixtures.makeTransaction(getAddress(a), getAddress(b), 75L, a)
         val cb1 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx1), tips)
 
-        val tx2 = createTransaction(getAddress(a), getAddress(b), 75L, a)
+        val tx2 = Fixtures.makeTransaction(getAddress(a), getAddress(b), 75L, a)
         val cb2 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx2), tips)
 
-        val tx3 = createTransaction(getAddress(d), getAddress(e), 5L, d)
+        val tx3 = Fixtures.makeTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb3 =
           CheckpointBlock.createCheckpointBlockSOE(Seq(tx3), Seq(cb1.soe, cb2.soe))
 
         // Second group
-        val tx4 = createTransaction(getAddress(c), getAddress(a), 75L, c)
+        val tx4 = Fixtures.makeTransaction(getAddress(c), getAddress(a), 75L, c)
         val cb4 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx4), tips)
 
-        val tx5 = createTransaction(getAddress(c), getAddress(a), 75L, c)
+        val tx5 = Fixtures.makeTransaction(getAddress(c), getAddress(a), 75L, c)
         val cb5 = CheckpointBlock.createCheckpointBlockSOE(Seq(tx5), tips)
 
-        val tx6 = createTransaction(getAddress(d), getAddress(e), 5L, d)
+        val tx6 = Fixtures.makeTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb6 =
           CheckpointBlock.createCheckpointBlockSOE(Seq(tx6), Seq(cb4.soe, cb5.soe))
 
         // Tip
-        val tx7 = createTransaction(getAddress(d), getAddress(e), 5L, d)
+        val tx7 = Fixtures.makeTransaction(getAddress(d), getAddress(e), 5L, d)
         val cb7 =
           CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))
 

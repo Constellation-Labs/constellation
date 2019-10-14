@@ -7,9 +7,9 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.Fixtures.{id1, id2, id3}
 import org.constellation.consensus.RandomData
 import org.constellation.trust._
-
 import org.scalatest.FlatSpec
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
+import org.constellation.{DAO, TestHelpers}
 
 import scala.collection.JavaConverters._
 import scala.util.Random
@@ -23,7 +23,9 @@ class RewardsTest extends FlatSpec {
 
   import RandomData._
 
-  val dummyCb = randomBlock(startingTips, keyPairs.head)
+  implicit val dao: DAO = TestHelpers.prepareRealDao()
+
+  val dummyCb = randomBlock(startingTips(go()), keyPairs.head)
   val acceptedCbRound1 = Seq(randomTransaction, randomTransaction)
   val acceptedCbRound2 = Seq(randomTransaction, randomTransaction)
 
@@ -63,10 +65,12 @@ class RewardsTest extends FlatSpec {
 
   def setupEigenTrust = {
     val eigenTrust = new EigenTrustJ()
-    eigenTrust.initialize(0.5D.asInstanceOf[Object],
-                          0.5D.asInstanceOf[Object],
-                          10.asInstanceOf[Object],
-                          0.1.asInstanceOf[Object])
+    eigenTrust.initialize(
+      0.5d.asInstanceOf[Object],
+      0.5d.asInstanceOf[Object],
+      10.asInstanceOf[Object],
+      0.1.asInstanceOf[Object]
+    )
     eigenTrust.setRandomGenerator(new DefaultRandomGenerator(0))
     eigenTrust
   }
@@ -156,7 +160,7 @@ class RewardsTest extends FlatSpec {
   "Performance" should "accurately calculate diffs as Experiences" in {
     val testSnapshotWindow = Seq(
       MetaCheckpointBlock(consensusRound1, None, acceptedCbRound1, dummyCb.checkpoint),
-      MetaCheckpointBlock(consensusRound2, None, acceptedCbRound2, dummyCb.checkpoint),
+      MetaCheckpointBlock(consensusRound2, None, acceptedCbRound2, dummyCb.checkpoint)
     )
     val correctResult = Map(1 -> 0.0, 2 -> 0.0, 3 -> 0.5)
     val res = performanceExperience(testSnapshotWindow)

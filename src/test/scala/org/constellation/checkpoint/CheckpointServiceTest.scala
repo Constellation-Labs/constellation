@@ -6,7 +6,6 @@ import better.files.File
 import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
-import constellation.{createDummyTransaction, createTransaction}
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation._
@@ -19,8 +18,10 @@ import org.constellation.primitives._
 import org.constellation.storage._
 import org.constellation.util.{APIClient, HostPort, Metrics}
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.consensus.ConsensusStatus
+import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.schema.Id
-import org.constellation.domain.transaction.TransactionService
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
@@ -106,21 +107,22 @@ class CheckpointServiceTest
     "should accept cb resolving parents soeHashes and cb baseHashes recursively" in {
       val go = Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair)
       Genesis.acceptGenesis(go, setAsTips = true)
+      println(dao.addressService.toMap.unsafeRunSync)
 
       val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
 
       val cb1 = makeBlock(
         startingTips,
-        transactions = Seq(createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
+        transactions = Seq(Fixtures.makeTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
       )
 
       val cb2 = makeBlock(
         startingTips,
-        transactions = Seq(createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
+        transactions = Seq(Fixtures.makeTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
       )
       val cb3 = makeBlock(
         Seq(cb1.soe, cb2.soe),
-        transactions = Seq(createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
+        transactions = Seq(Fixtures.makeTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
       )
 
       val peer = readyFacilitators(Id("b")).client
@@ -180,7 +182,9 @@ class CheckpointServiceTest
 
   private def makeBlock(
     tips: Seq[SignedObservationEdge],
-    transactions: Seq[Transaction] = Seq(createDummyTransaction(dao.selfAddressStr, dao.dummyAddress, dao.keyPair))
+    transactions: Seq[Transaction] = Seq(
+      Fixtures.makeDummyTransaction(dao.selfAddressStr, dao.dummyAddress, dao.keyPair)
+    )
   ): CheckpointBlock =
     CheckpointBlock.createCheckpointBlock(
       transactions,

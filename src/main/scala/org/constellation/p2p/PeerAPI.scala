@@ -158,6 +158,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         path("faucet") {
           entity(as[SendToAddress]) { sendRequest =>
             // TODO: Add limiting
+            // TODO: Chain
             if (sendRequest.amountActual < (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor) &&
                 dao.addressService
                   .lookup(dao.selfAddressStr)
@@ -165,13 +166,15 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   .map { _.balance }
                   .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)) {
 
-              val tx = createTransaction(
-                dao.selfAddressStr,
-                sendRequest.dst,
-                sendRequest.amountActual,
-                dao.keyPair,
-                normalized = false
-              )
+              val tx = dao.transactionService
+                .createTransaction(
+                  dao.selfAddressStr,
+                  sendRequest.dst,
+                  sendRequest.amountActual,
+                  dao.keyPair,
+                  normalized = false
+                )
+                .unsafeRunSync()
               logger.debug(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
 
               dao.transactionService.put(TransactionCacheData(tx)).unsafeRunAsync(_ => ())
