@@ -7,7 +7,7 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.checkpoint.CheckpointService
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 import org.constellation.consensus.{ConsensusManager, Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.NodeState.NodeState
@@ -40,6 +40,8 @@ class SnapshotService[F[_]: Concurrent](
 
   val totalNumCBsInSnapshots: SingleRef[F, Long] = SingleRef(0L)
   val lastSnapshotHeight: SingleRef[F, Int] = SingleRef(0)
+  val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
+  val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
 
   def exists(hash: String): F[Boolean] =
     for {
@@ -136,7 +138,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- EitherT.liftF(
         Sync[F].delay(
           logger.debug(
-            s"conclude snapshot: ${nextSnapshot.lastSnapshot} with height ${nextHeightInterval - dao.processingConfig.snapshotHeightDelayInterval}"
+            s"conclude snapshot: ${nextSnapshot.lastSnapshot} with height ${nextHeightInterval - snapshotHeightDelayInterval}"
           )
         )
       )
@@ -154,7 +156,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- EitherT.liftF(
         broadcastService.broadcastSnapshot(
           nextSnapshot.lastSnapshot,
-          nextHeightInterval - dao.processingConfig.snapshotHeightInterval
+          nextHeightInterval - snapshotHeightInterval
         )
       )
     } yield ()
@@ -221,7 +223,6 @@ class SnapshotService[F[_]: Concurrent](
     minTipHeight: Long
   ): EitherT[F, SnapshotError, Unit] =
     EitherT {
-      val snapshotHeightDelayInterval = dao.processingConfig.snapshotHeightDelayInterval
 
       dao.metrics.updateMetricAsync[F]("minTipHeight", minTipHeight.toString) >>
         Sync[F].pure {
@@ -249,7 +250,7 @@ class SnapshotService[F[_]: Concurrent](
 
   def getNextHeightInterval: F[Long] =
     lastSnapshotHeight.get
-      .map(_ + dao.processingConfig.snapshotHeightInterval)
+      .map(_ + snapshotHeightInterval)
 
   private def getBlocksWithinHeightInterval(nextHeightInterval: Long): F[List[Option[CheckpointCache]]] =
     for {
@@ -339,7 +340,7 @@ class SnapshotService[F[_]: Concurrent](
     for {
       accepted <- acceptedCBSinceSnapshot.get
       height <- lastSnapshotHeight.get
-      nextHeight = height + dao.processingConfig.snapshotHeightInterval
+      nextHeight = height + snapshotHeightInterval
 
       _ <- dao.metrics.updateMetricAsync("acceptedCBSinceSnapshot", accepted.size)
       _ <- dao.metrics.updateMetricAsync("lastSnapshotHeight", height)

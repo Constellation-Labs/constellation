@@ -23,7 +23,7 @@ import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Random, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 object SnapshotsDownloader {
 
@@ -230,9 +230,13 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
   }
 
   private def deserializeSnapshotInfo(byteArray: Array[Byte]) =
-    Try(KryoSerializer.deserializeCast[SnapshotInfo](byteArray)).toOption match {
-      case Some(value) => value
-      case None        => throw new Exception(s"[${dao.id.short}] Unable to parse snapshotInfo")
+    Try(KryoSerializer.deserializeCast[SnapshotInfo](byteArray)) match {
+      case Success(value) => value
+      case Failure(exception) =>
+        throw new Exception(
+          s"[${dao.id.short}] Unable to parse snapshotInfo due to: ${exception.getMessage}",
+          exception
+        )
     }
 
   private def downloadAndProcessSnapshotsFirstPass(snapshotHashes: Seq[String])(

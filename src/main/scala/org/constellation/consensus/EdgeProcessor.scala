@@ -1,7 +1,7 @@
 package org.constellation.consensus
 
 import java.io.IOException
-import java.nio.file.Path
+import java.nio.file.{NoSuchFileException, Path}
 
 import better.files.File
 import cats.data.NonEmptyList
@@ -95,7 +95,7 @@ object EdgeProcessor extends StrictLogging {
     implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.bounded
 
     val transactions = dao.transactionService
-      .pullForConsensus(dao.processingConfig.maxCheckpointFormationThreshold)
+      .pullForConsensus(ConfigUtil.constellation.getInt("consensus.maxCheckpointFormationThreshold"))
       .map(_.map(_.transaction))
       .unsafeRunSync()
 
@@ -286,13 +286,16 @@ object Snapshot extends StrictLogging {
       _ <- if (shouldSendSnapshotsToCloud(snapshotPath)) {
         sendSnapshotsToCloud[F](snapshots)
       } else Sync[F].unit
-      _ <- snapshots.traverse { snapId =>
+      _ <- snapshots.distinct.traverse { snapId =>
         withMetric(
           Sync[F].delay {
             logger.debug(
               s"[${dao.id.short}] removing snapshot at path ${Paths.get(snapshotPath, snapId).toAbsolutePath.toString}"
             )
             Files.delete(Paths.get(snapshotPath, snapId))
+          }.handleErrorWith {
+            case e: NoSuchFileException =>
+              Sync[F].delay(logger.warn(s"Snapshot to delete doesn't exist: ${e.getMessage}"))
           },
           "deleteSnapshot"
         )

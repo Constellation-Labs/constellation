@@ -12,6 +12,7 @@ site/
 swaydb-stress-test.log
 terraform/default-*
 terraform/custom-image-*
+terraform/docker-highmem-*
 .dag
 *.log
 /logs

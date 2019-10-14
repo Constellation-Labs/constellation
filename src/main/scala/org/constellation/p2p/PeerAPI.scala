@@ -22,7 +22,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.storage._
 import org.constellation.util._
-import org.constellation.{ConstellationExecutionContext, DAO, ResourceInfo}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO, ResourceInfo}
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -58,6 +58,8 @@ class PeerAPI(override val ipManager: IPManager[IO])(
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
+  val snapshotHeightRedownloadDelayInterval =
+    ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
   private val config: Config = ConfigFactory.load()
   private def signEndpoints(socketAddress: InetSocketAddress) =
     post {
@@ -121,7 +123,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               val response = result match {
                 case Nil => SnapshotVerification(dao.id, VerificationStatus.SnapshotHeightAbove, result)
                 case lastSnap :: _ if lastSnap.height < s.height =>
-                  if (lastSnap.height + dao.processingConfig.snapshotHeightRedownloadDelayInterval < s.height) {
+                  if (lastSnap.height + snapshotHeightRedownloadDelayInterval < s.height) {
                     (IO
                       .contextShift(ConstellationExecutionContext.bounded)
                       .shift >> dao.snapshotBroadcastService.verifyRecentSnapshots()).unsafeRunAsyncAndForget

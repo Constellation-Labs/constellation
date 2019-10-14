@@ -151,7 +151,7 @@ class ConstellationNode(
   )(dao, dao.cluster)
 
   val transactionGeneratorTrigger = new TransactionGeneratorTrigger(
-    dao.processingConfig.randomTransactionLoopTimeSeconds
+    ConfigUtil.constellation.getInt("transaction.generator.randomTransactionLoopTimeSeconds")
   )
 
   val ipManager = IPManager[IO]()(IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)))
