@@ -84,8 +84,8 @@ class ConsensusRoute(
           APIDirective.onHandle(participate) {
             case Failure(err: SnapshotHeightAboveTip) =>
               complete(StatusCodes.custom(400, err.getMessage))
-            case Failure(_) =>
-              complete(StatusCodes.InternalServerError)
+            case Failure(e) =>
+              complete(StatusCodes.InternalServerError, e.getMessage)
             case Success(res) =>
               (IO.contextShift(ConstellationExecutionContext.bounded).shift >> consensusManager
                 .continueRoundParticipation(res._1, res._2)).unsafeRunAsyncAndForget()

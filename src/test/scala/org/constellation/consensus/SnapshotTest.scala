@@ -20,6 +20,15 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
   dao.initialize(NodeConfig(primaryKeyPair = Fixtures.tempKey5))
   dao.metrics = new Metrics(200)
 
+  test("should remove snapshot distinctly and suppress not found messages") {
+    val ss =
+      StoredSnapshot(Snapshot(randomHash, Seq.fill(50)(randomHash)), Seq.fill(50)(CheckpointCache(Some(randomCB))))
+    Snapshot.writeSnapshot[IO](ss).unsafeRunSync()
+    Snapshot
+      .removeSnapshots[IO](List(ss.snapshot.hash, ss.snapshot.hash), dao.snapshotPath.pathAsString)
+      .unsafeRunSync()
+  }
+
   test("should remove old snapshots but not recent when needed") {
     val snaps = List.fill(3)(
       StoredSnapshot(Snapshot(randomHash, Seq.fill(50)(randomHash)), Seq.fill(50)(CheckpointCache(Some(randomCB))))
