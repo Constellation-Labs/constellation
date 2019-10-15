@@ -2,7 +2,7 @@ package org.constellation.p2p
 
 import java.time.LocalDateTime
 
-import cats.effect.{Concurrent, ContextShift, Sync, Timer}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
 import com.softwaremill.sttp.Response
 import constellation._
@@ -21,7 +21,7 @@ import scala.concurrent.duration._
 import scala.util.Random
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
-
+case class SetStateResult(oldState: NodeState, isNewSet: Boolean)
 case class PeerData(
   peerMetadata: PeerMetadata,
   client: APIClient,
@@ -55,7 +55,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
   implicit val shadedDao: DAO = dao
 
-  def isNodeReady: F[Boolean] = nodeState.get.map(_ == NodeState.Ready)
+  dao.metrics.updateMetricAsync[IO]("nodeState", initialState.toString).unsafeRunAsync(_ => ())
 
   def getPeerInfo: F[Map[Id, PeerData]] = peers.get
 
@@ -443,14 +443,12 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         _ <- Logger[F].info("Trying to gracefully leave the cluster")
 
         _ <- broadcastLeaveRequest()
-        _ <- setNodeState(NodeState.Leaving)
-        _ <- broadcastNodeState()
+        _ <- compareAndSet(NodeState.all, NodeState.Leaving)
 
         // TODO: use wkoszycki changes for waiting for last n snapshots
         _ <- Timer[F].sleep(dao.processingConfig.leavingStandbyTimeout.seconds)
 
-        _ <- setNodeState(NodeState.Offline)
-        _ <- broadcastNodeState()
+        _ <- compareAndSet(NodeState.all, NodeState.Offline)
 
         ips <- ipManager.listKnownIPs
         _ <- ips.toList.traverse(ipManager.removeKnownIP)
@@ -463,17 +461,34 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       "cluster_leave"
     )
 
-  def broadcastNodeState(): F[Unit] =
+  def broadcastNodeState(nodeState: NodeState): F[Unit] =
     logThread(
-      getNodeState.flatMap { nodeState =>
-        broadcast(_.postNonBlockingUnitF("status", SetNodeStatus(dao.id, nodeState))(C))
-      }.flatTap {
+      broadcast(_.postNonBlockingUnitF("status", SetNodeStatus(dao.id, nodeState))(C)).flatTap {
         _.filter(_._2.isLeft).toList.traverse {
           case (id, e) => Logger[F].warn(s"Unable to propagate status to node ID: $id")
         }
       }.void,
       "cluster_broadcastNodeState"
     )
+
+  def compareAndSet(expected: NodeState, newState: NodeState): F[SetStateResult] =
+    compareAndSet(Set(expected), newState)
+
+  def compareAndSet(expected: Set[NodeState], newState: NodeState): F[SetStateResult] =
+    nodeState.modify { current =>
+      if (expected.contains(current)) (newState, SetStateResult(current, isNewSet = true))
+      else (current, SetStateResult(current, isNewSet = false))
+    }.flatTap(
+        res =>
+          if (res.isNewSet) LiftIO[F].liftIO(dao.metrics.updateMetricAsync[IO]("nodeState", newState.toString))
+          else Sync[F].unit
+      )
+      .flatTap(
+        res =>
+          if (res.isNewSet && NodeState.broadcastStates.contains(newState) && NodeState.broadcastStates
+                .contains(res.oldState)) broadcastNodeState(newState)
+          else Sync[F].unit
+      )
 
   def getNodeState: F[NodeState] = nodeState.get
 
@@ -507,6 +522,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     broadcast(c => c.postNonBlockingUnitF("deregister", peerUnregister(c))(C)).void
   }
 
+  @deprecated(message = "Use compareAndSet instead")
   def setNodeState(state: NodeState): F[Unit] =
     nodeState.modify(oldState => (state, oldState)).flatMap { oldState =>
       Logger[F].debug(s"Changing node state from $oldState to $state")

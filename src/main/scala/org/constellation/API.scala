@@ -24,7 +24,7 @@ import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.crypto.KeyUtils
-import org.constellation.p2p.{ChangePeerState, Download}
+import org.constellation.p2p.{ChangePeerState, Download, SetStateResult}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
@@ -456,10 +456,16 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           }
         } ~
         path("ready") {
-          def changeStateToReady: IO[Unit] = dao.cluster.setNodeState(NodeState.Ready)
-          def broadcastState: IO[Unit] = dao.cluster.broadcastNodeState()
+          def changeStateToReady: IO[SetStateResult] = dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready)
 
-          APIDirective.handle(changeStateToReady >> broadcastState)(_ => complete(StatusCodes.OK))
+          APIDirective.onHandle(changeStateToReady) {
+            case Success(SetStateResult(_, true))  => complete(StatusCodes.OK)
+            case Success(SetStateResult(_, false)) => complete(StatusCodes.Conflict)
+            case Failure(error) =>
+              logger.error(s"Can't transition state to ${error.getMessage}", error)
+              complete(StatusCodes.InternalServerError)
+          }
+
         } ~
         path("peerHealthCheck") {
           val resetTimeout = 1.second

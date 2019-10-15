@@ -126,7 +126,6 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) extends Periodic[Unit](
   val init = for {
     currentTime <- cats.effect.Clock[IO].realTime(duration.MILLISECONDS)
     _ <- updateMetricAsync[IO]("id", dao.id.hex)
-    _ <- dao.cluster.getNodeState.map(_.toString).flatMap(updateMetricAsync[IO]("nodeState", _))
     _ <- updateMetricAsync[IO]("address", dao.selfAddressStr)
     _ <- updateMetricAsync[IO]("nodeStartTimeMS", currentTime.toString)
     _ <- updateMetricAsync[IO]("nodeStartDate", new DateTime(currentTime).toString)

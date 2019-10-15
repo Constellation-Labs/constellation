@@ -5,6 +5,7 @@ import cats.implicits._
 import com.typesafe.config.Config
 import org.constellation.consensus.ConsensusManager.{ConsensusError, ConsensusStartError}
 import org.constellation.p2p.Cluster
+import org.constellation.primitives.Schema.NodeState
 import org.constellation.util.PeriodicIO
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
@@ -33,9 +34,15 @@ class ConsensusScheduler(
 
   override def trigger(): IO[Unit] =
     (dao.formCheckpoints, dao.nodeConfig.isGenesisNode) match {
-      case (false, _)    => skip
-      case (true, true)  => cluster.isNodeReady.ifM(edgeConsensus, skip)
-      case (true, false) => cluster.isNodeReady.ifM(crossTalkConsensus, skip)
+      case (false, _) => skip
+      case (true, true) =>
+        cluster.getNodeState
+          .map(state => NodeState.canStartOwnConsensus(state))
+          .ifM(edgeConsensus, skip)
+      case (true, false) =>
+        cluster.getNodeState
+          .map(state => NodeState.canStartOwnConsensus(state))
+          .ifM(crossTalkConsensus, skip)
     }
 
   schedule(ConfigUtil.getDurationFromConfig("constellation.consensus.start-own-interval", 10 seconds, config))

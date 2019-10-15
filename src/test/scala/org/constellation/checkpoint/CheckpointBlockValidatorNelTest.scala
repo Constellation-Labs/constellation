@@ -20,7 +20,7 @@ import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.primitives.{CheckpointBlock, IPManager, Transaction}
 import org.constellation.storage._
 import org.constellation.util.{HashSignature, Metrics}
-import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalamock.scalatest.MockFactory
@@ -191,9 +191,9 @@ class ValidationSpec
 
   import RandomData._
 
-  implicit val dao: DAO = new DAO()
+  implicit val dao: DAO = TestHelpers.prepareRealDao()
+
   implicit val materializer: ActorMaterializer = ActorMaterializer()
-  dao.initialize(NodeConfig())
   implicit val keyPair: KeyPair = keyPairs.head
 
   implicit val logger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]

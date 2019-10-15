@@ -147,7 +147,8 @@ class ConstellationNode(
 ) extends StrictLogging {
 
   implicit val dao: DAO = new DAO()
-
+  dao.nodeConfig = nodeConfig
+  dao.metrics = new Metrics(periodSeconds = nodeConfig.processingConfig.metricCheckInterval)
   dao.initialize(nodeConfig)
 
   dao.node = this
@@ -157,8 +158,6 @@ class ConstellationNode(
   logger.info(
     s"Node init with API ${nodeConfig.httpInterface} ${nodeConfig.httpPort} peerPort: ${nodeConfig.peerHttpPort}"
   )
-
-  dao.metrics = new Metrics(periodSeconds = dao.processingConfig.metricCheckInterval)
 
   val snapshotTrigger = new SnapshotTrigger(
     dao.processingConfig.snapshotTriggeringTimeSeconds
@@ -269,7 +268,8 @@ class ConstellationNode(
     logger.info("Creating genesis block")
     Genesis.start()
     logger.info(s"Genesis block hash ${dao.genesisBlock.map { _.soeHash }.getOrElse("")}")
-    dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
+
+    dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunAsync(_ => ())
   }
 
 //  Keeping disabled for now -- going to only use midDb for the time being.

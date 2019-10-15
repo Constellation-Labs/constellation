@@ -12,11 +12,11 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils.makeKeyPair
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
-import org.constellation.p2p.{Cluster, PeerData}
-import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.primitives.{ConcurrentTipService, Schema}
+import org.constellation.p2p.{Cluster, PeerData}
+import org.constellation.primitives.ConcurrentTipService
+import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.storage._
 import org.constellation.util.{APIClient, HostPort, Metrics}
 import org.mockito.IdiomaticMockito
@@ -24,20 +24,23 @@ import org.mockito.cats.IdiomaticMockitoCats
 
 object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
 
-  def prepareRealDao(facilitators: Map[Id, PeerData] = prepareFacilitators(1)): DAO = {
+  def prepareRealDao(
+    facilitators: Map[Id, PeerData] = prepareFacilitators(1),
+    nodeConfig: NodeConfig = NodeConfig()
+  ): DAO = {
     val dao: DAO = new DAO {
       override def readyPeers: IO[
         Map[Id, PeerData]
       ] = IO.pure(facilitators)
-      override val keyPair = Fixtures.tempKey
+
+      override def peerInfo: IO[
+        Map[Id, PeerData]
+      ] = IO.pure(facilitators)
     }
 
-    dao.initialize()
-
-    dao.metrics = {
-      implicit val d: DAO = dao
-      new Metrics()
-    }
+    dao.nodeConfig = nodeConfig
+    dao.metrics = new Metrics(nodeConfig.processingConfig.metricCheckInterval)(dao)
+    dao.initialize(nodeConfig)
 
     dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
     dao
@@ -117,7 +120,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
     dao.metrics shouldReturn metrics
 
     val cluster = mock[Cluster[IO]]
-    cluster.isNodeReady shouldReturnF true
+    cluster.getNodeState shouldReturnF NodeState.Ready
     dao.cluster shouldReturn cluster
 
     dao.miscLogger shouldReturn Logger("miscLogger")
