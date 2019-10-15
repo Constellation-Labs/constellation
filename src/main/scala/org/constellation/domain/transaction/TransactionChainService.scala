@@ -39,5 +39,5 @@ class TransactionChainService[F[_]: Concurrent] {
 }
 
 object TransactionChainService {
-  def apply[F[_]: Concurrent: Logger]: TransactionChainService[F] = new TransactionChainService[F]()
+  def apply[F[_]: Concurrent]: TransactionChainService[F] = new TransactionChainService[F]()
 }
