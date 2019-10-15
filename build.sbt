@@ -1,5 +1,6 @@
 import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 import sbt.Keys.mainClass
+import E2E._
 
 enablePlugins(JavaAgent, JavaAppPackaging)
 //addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
@@ -142,7 +143,7 @@ lazy val testDependencies = Seq(
   "org.mockito" %% "mockito-scala-cats" % versions.mockito,
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
-).map(_ % "it,test")
+).map(_ % "it,test,e2e")
 
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
 testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-u", "target/test-results/scalatest")
@@ -173,6 +174,7 @@ lazy val root = (project in file("."))
   .dependsOn(protobuf)
   .disablePlugins(plugins.JUnitXmlReportPlugin)
   .configs(IntegrationTest)
+  .configs(E2ETest)
   .enablePlugins(BuildInfoPlugin)
   .settings(
     buildInfoKeys := Seq[BuildInfoKey](
@@ -187,6 +189,7 @@ lazy val root = (project in file("."))
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
     commonSettings,
     coreSettings,
+    E2E.e2eSettings,
     Defaults.itSettings,
     libraryDependencies ++= (coreDependencies ++ testDependencies),
     mainClass := Some("org.constellation.ConstellationNode")
