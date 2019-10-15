@@ -2,16 +2,15 @@ package org.constellation.domain.transaction
 
 import cats.effect.Concurrent
 import cats.implicits._
-import io.chrisdavenport.log4cats.Logger
 import org.constellation.primitives.concurrency.SingleRef
 
-class TransactionChainService[F[_]: Concurrent: Logger] {
+class TransactionChainService[F[_]: Concurrent] {
   // TODO: Make sure to clean-up those properly
   private[domain] val lastTransactionCount: SingleRef[F, Long] = SingleRef(0)
   private[domain] val addressCount: SingleRef[F, Map[String, Long]] = SingleRef(Map.empty[String, Long])
   private[domain] val lastTxHash: SingleRef[F, Map[String, String]] = SingleRef(Map.empty[String, String])
 
-  def getNext(address: String): F[(String, Long)] =
+  def incrementAndGet(address: String): F[(String, Long)] =
     lastTransactionCount
       .modify(count => (count + 1, count + 1))
       .flatMap(count => lastTransactionHash(address).map(_.getOrElse("")).map(a => (a, count)))
@@ -34,7 +33,7 @@ class TransactionChainService[F[_]: Concurrent: Logger] {
       (a, a.getOrElse(address, 0))
     }
 
-  def setLastTransactionHash(address: String, hash: String): F[String] =
+  private def setLastTransactionHash(address: String, hash: String): F[String] =
     lastTxHash
       .unsafeModify(m => (m ++ Map(address -> hash), hash))
 }

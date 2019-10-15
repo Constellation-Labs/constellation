@@ -99,7 +99,7 @@ object TransactionService {
     val soe = signedObservationEdge(oe)(keyPair)
 
     for {
-      next <- transactionChainService.getNext(src)
+      next <- transactionChainService.incrementAndGet(src)
       tx = Transaction(Edge(oe, soe, txData), next._1, next._2, dummy)
     } yield tx
   }
