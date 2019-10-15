@@ -14,9 +14,9 @@ import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.RecentSnapshot
 import org.constellation.util.{APIClient, Metrics, Simulation}
-import scala.concurrent.duration._
 
 import scala.concurrent.Await
+import scala.concurrent.duration._
 
 class E2ETest extends E2E {
 
